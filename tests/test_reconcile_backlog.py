@@ -24,11 +24,11 @@ class TestExpandRelativeLinksForTracker(unittest.TestCase):
     def setUp(self):
         self.workspace_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
         self.github_rules = {
-            "meta": {"upstream_repository": "gintatkinson/DEAP-spec-core"},
+            "meta": {"upstream_repository": "gintatkinson/DEAP01-spec-core"},
             "tracker_rules": {"provider": "github"}
         }
         self.gitlab_rules = {
-            "meta": {"upstream_repository": "gintatkinson/DEAP-spec-core"},
+            "meta": {"upstream_repository": "gintatkinson/DEAP01-spec-core"},
             "tracker_rules": {"provider": "gitlab"}
         }
 
@@ -42,9 +42,9 @@ class TestExpandRelativeLinksForTracker(unittest.TestCase):
         )
         spec_path = os.path.join(self.workspace_dir, "docs", "features", "feat-01.md")
         mock_remote_info = {
-            "raw": "https://github.com/gintatkinson/DEAP-spec-core.git",
+            "raw": "https://github.com/gintatkinson/DEAP01-spec-core.git",
             "is_gitlab": False,
-            "project_path": "gintatkinson/DEAP-spec-core",
+            "project_path": "gintatkinson/DEAP01-spec-core",
             "server_url": "https://github.com",
             "host": "github.com"
         }
@@ -58,19 +58,19 @@ class TestExpandRelativeLinksForTracker(unittest.TestCase):
             )
 
         self.assertIn(
-            "[Rule](https://github.com/gintatkinson/DEAP-spec-core/blob/main/rules/sysml-ssot-completeness.md)",
+            "[Rule](https://github.com/gintatkinson/DEAP01-spec-core/blob/main/rules/sysml-ssot-completeness.md)",
             expanded
         )
         self.assertIn(
-            "[Doc](https://github.com/gintatkinson/DEAP-spec-core/blob/main/docs/architecture/blueprints/DEAP_MODEL.sysml)",
+            "[Doc](https://github.com/gintatkinson/DEAP01-spec-core/blob/main/docs/architecture/blueprints/DEAP_MODEL.sysml)",
             expanded
         )
         self.assertIn(
-            "[Epic 1](https://github.com/gintatkinson/DEAP-spec-core/blob/main/docs/epics/epic-01.md)",
+            "[Epic 1](https://github.com/gintatkinson/DEAP01-spec-core/blob/main/docs/epics/epic-01.md)",
             expanded
         )
         self.assertIn(
-            "[Section](https://github.com/gintatkinson/DEAP-spec-core/blob/main/docs/features/feat-02.md#acceptance-criteria)",
+            "[Section](https://github.com/gintatkinson/DEAP01-spec-core/blob/main/docs/features/feat-02.md#acceptance-criteria)",
             expanded
         )
 
@@ -81,9 +81,9 @@ class TestExpandRelativeLinksForTracker(unittest.TestCase):
         )
         spec_path = os.path.join(self.workspace_dir, "docs", "features", "feat-01.md")
         mock_remote_info = {
-            "raw": "https://gitlab.com/gintatkinson/DEAP-spec-core.git",
+            "raw": "https://gitlab.com/gintatkinson/DEAP01-spec-core.git",
             "is_gitlab": True,
-            "project_path": "gintatkinson/DEAP-spec-core",
+            "project_path": "gintatkinson/DEAP01-spec-core",
             "server_url": "https://gitlab.com",
             "host": "gitlab.com"
         }
@@ -97,11 +97,11 @@ class TestExpandRelativeLinksForTracker(unittest.TestCase):
             )
 
         self.assertIn(
-            "[Rule](https://gitlab.com/gintatkinson/DEAP-spec-core/-/blob/main/rules/sysml-ssot-completeness.md)",
+            "[Rule](https://gitlab.com/gintatkinson/DEAP01-spec-core/-/blob/main/rules/sysml-ssot-completeness.md)",
             expanded
         )
         self.assertIn(
-            "[Parent Epic](https://gitlab.com/gintatkinson/DEAP-spec-core/-/blob/main/docs/epics/epic-01.md)",
+            "[Parent Epic](https://gitlab.com/gintatkinson/DEAP01-spec-core/-/blob/main/docs/epics/epic-01.md)",
             expanded
         )
 
@@ -155,11 +155,11 @@ class TestExpandRelativeLinksForTracker(unittest.TestCase):
             mock_provider.edit_issue.assert_called_once()
             called_content = mock_provider.edit_issue.call_args[0][1]
             self.assertIn(
-                "https://github.com/gintatkinson/DEAP-spec-core/blob/main/rules/sysml-ssot-completeness.md",
+                "https://github.com/gintatkinson/DEAP01-spec-core/blob/main/rules/sysml-ssot-completeness.md",
                 called_content
             )
             self.assertIn(
-                "https://github.com/gintatkinson/DEAP-spec-core/blob/main/docs/epics/epic-01.md",
+                "https://github.com/gintatkinson/DEAP01-spec-core/blob/main/docs/epics/epic-01.md",
                 called_content
             )
         finally:
@@ -461,7 +461,7 @@ class TestSanitizeLatexDelimitersForTracker(unittest.TestCase):
 
             rules = {
                 "tracker_rules": {"provider": "github"},
-                "meta": {"upstream_repository": "gintatkinson/DEAP-spec-core"}
+                "meta": {"upstream_repository": "gintatkinson/DEAP01-spec-core"}
             }
 
             with patch("reconcile_backlog.get_current_branch", return_value="main"):

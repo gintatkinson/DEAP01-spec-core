@@ -274,6 +274,6 @@ The `deap-harness` CLI exposes a local REST/WebSocket sidecar daemon (`http://lo
 
 ## 7. Downstream Integration & Maintenance Plan
 
-1. **Repository Target**: Hosted centrally under `docs/architecture/blueprints/DEAP_DEEPSEEK_HARNESS_INTEGRATION_BLUEPRINT.md` in [`DEAP-spec-core`](https://github.com/gintatkinson/DEAP-spec-core).
+1. **Repository Target**: Hosted centrally under `docs/architecture/blueprints/DEAP_DEEPSEEK_HARNESS_INTEGRATION_BLUEPRINT.md` in [`DEAP01-spec-core`](https://github.com/gintatkinson/DEAP01-spec-core).
 2. **Backlog Reconciliation**: Integrated into `DEAP_SPECIFICATIONS_SITEMAP.md` as a Tier-1 architecture blueprint.
 3. **Execution Script**: Implementation entry point provided via `scripts/deap_harness.py` for downstream project installation.

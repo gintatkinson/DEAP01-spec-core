@@ -104,7 +104,7 @@ is found, HALT and escalate as a blocker. Do not substitute direct coordinator w
 - You are strictly forbidden from commingling unrelated or multi-phase tasks in a single cumulative walkthrough. Unrelated changes or follow-up tasks must be treated as separate atomic packages with their own implementation plans, git branches/commits, and walkthroughs.
 
 ## Mandatory Upstream Tooling Bug Reporting
-- If a bug, edge case, or limitation is identified in the shared pipeline scripts (e.g., `verify_model_coverage.py`, `reconcile_backlog.py`), the executing agent is strictly required to file a corresponding defect report upstream on the `DEAP-spec-core`.
+- If a bug, edge case, or limitation is identified in the shared pipeline scripts (e.g., `verify_model_coverage.py`, `reconcile_backlog.py`), the executing agent is strictly required to file a corresponding defect report upstream on the `DEAP01-spec-core`.
 - Agents must not silently apply local-only patches to pipeline scripts without filing an upstream synchronization issue.
 
 ## Documentation Integrity — No Wholesale Replacement Without Approval
@@ -168,7 +168,7 @@ is found, HALT and escalate as a blocker. Do not substitute direct coordinator w
 - **Optimism bias is prohibited**: agents must cite empirical output of live payload inspection before declaring completion.
 
 ## Downstream Single Source of Truth (SSOT) & Clean Baseline Mandate
-- **No Master Blueprint Duplication**: Downstream projects MUST NOT duplicate or copy master core blueprint files (`DEAP_MASTER_ARCHITECTURE.md`, `THREE_TIER_GOVERNANCE_BLUEPRINT.md`, `DEAP_SYSML_V2_SAFETY_MODEL_SPECIFICATION.sysml`). Central specification blueprints belong exclusively in the upstream specification repository (`DEAP-spec-core`).
+- **No Master Blueprint Duplication**: Downstream projects MUST NOT duplicate or copy master core blueprint files (`DEAP_MASTER_ARCHITECTURE.md`, `THREE_TIER_GOVERNANCE_BLUEPRINT.md`, `DEAP_SYSML_V2_SAFETY_MODEL_SPECIFICATION.sysml`). Central specification blueprints belong exclusively in the upstream specification repository (`DEAP01-spec-core`).
 - **Mandatory Repository `.gitignore`**: All downstream projects and workspace repositories MUST include a root `.gitignore` file.
 - **Zero `.DS_Store` Policy**: OS artifact metadata files (`.DS_Store`) are strictly forbidden in git index and working tree across all repositories. Automated cleanup and linter gates enforce zero `.DS_Store` presence.
 

@@ -55,7 +55,7 @@ DEFAULT_CODEBASE_RULES = {
     "meta": {
         "version": "1.0.0",
         "description": "Default pipeline and codebase compliance rules",
-        "upstream_repository": "gintatkinson/DEAP-spec-core",
+        "upstream_repository": "gintatkinson/DEAP01-spec-core",
     },
     "tracker_rules": {
         "provider": "github",
@@ -314,7 +314,7 @@ def parse_git_remote_url(remote_url: str) -> Dict[str, Any]:
     Parse a git remote origin URL into its components:
     - raw: raw URL string
     - is_gitlab: True if domain contains 'gitlab'
-    - project_path: repository path (e.g. 'gintatkinson/DEAP-spec-core' or 'group/subgroup/project')
+    - project_path: repository path (e.g. 'gintatkinson/DEAP01-spec-core' or 'group/subgroup/project')
     - server_url: base server URL (e.g. 'https://gitlab.com' or 'https://gitlab.internal.corp')
     - host: domain host name (e.g. 'gitlab.com' or 'github.com')
     """
@@ -1660,8 +1660,8 @@ def get_upstream_repository(rules, workspace_dir):
     if git_repo:
         return git_repo
     if rules and isinstance(rules, dict):
-        return rules.get("meta", {}).get("upstream_repository", "gintatkinson/DEAP-spec-core")
-    return "gintatkinson/DEAP-spec-core"
+        return rules.get("meta", {}).get("upstream_repository", "gintatkinson/DEAP01-spec-core")
+    return "gintatkinson/DEAP01-spec-core"
 
 def format_issue_reference(issue_id, tracker_rules):
     issue_id_str = str(issue_id)
@@ -2093,7 +2093,7 @@ def get_blob_url_base(rules=None, workspace_dir=None, branch=None):
     if workspace_dir is None:
         workspace_dir = find_workspace_dir(os.getcwd())
 
-    upstream_repo = get_upstream_repository(rules, workspace_dir) or "gintatkinson/DEAP-spec-core"
+    upstream_repo = get_upstream_repository(rules, workspace_dir) or "gintatkinson/DEAP01-spec-core"
     provider_name = detect_tracker_provider(rules=rules, workspace_dir=workspace_dir)
 
     if not branch or branch == "HEAD":
@@ -2192,6 +2192,7 @@ def rewrite_header_repository_urls(content, active_repo, rules=None, workspace_d
             (url_owner_lower == active_owner and url_repo_lower == active_name) or
             (url_repo_lower == active_name) or
             (url_repo_lower == "deap-spec-core") or
+            (url_repo_lower == "deap01-spec-core") or
             ("pipeline-repo" in url_repo_lower)
         )
 
@@ -2219,7 +2220,7 @@ def sanitize_source_references(content, workspace_dir=None, rules=None):
     if workspace_dir is None:
         workspace_dir = find_workspace_dir(os.getcwd())
 
-    upstream_repo = get_upstream_repository(rules, workspace_dir) or "gintatkinson/DEAP-spec-core"
+    upstream_repo = get_upstream_repository(rules, workspace_dir) or "gintatkinson/DEAP01-spec-core"
     content = rewrite_header_repository_urls(content, upstream_repo, rules=rules, workspace_dir=workspace_dir)
     branch = get_current_branch(workspace_dir)
     if not branch or branch == "HEAD":
@@ -3625,7 +3626,7 @@ def main():
     parser.add_argument(
         "--project",
         default=None,
-        help="GitLab project path or numeric ID (e.g. 'gintatkinson/DEAP-spec-core' or CI_PROJECT_PATH).",
+        help="GitLab project path or numeric ID (e.g. 'gintatkinson/DEAP01-spec-core' or CI_PROJECT_PATH).",
     )
     parser.add_argument(
         "--jira-url",

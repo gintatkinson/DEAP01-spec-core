@@ -264,6 +264,5 @@ If a tool command (linter or reconciler) fails during implementation:
 3. **Automated Upstream Reporting**: If the step fails and you suspect it is due to a bug in the pipeline tooling, you MUST automatically file a bug report upstream:
    - Locating the latest diagnostic payload JSON at `.pipeline/diagnostics/repro_payload_[timestamp].json`.
    - Running the command:
-     `gh issue create --repo gintatkinson/DEAP-spec-core --title "Tooling Bug: [Command] failed" --body-file [payload_path] --label "bug"`
+     `gh issue create --repo gintatkinson/DEAP01-spec-core --title "Tooling Bug: [Command] failed" --body-file [payload_path] --label "bug"`
 4. Escalate to the user with the issue URL and error context.
-

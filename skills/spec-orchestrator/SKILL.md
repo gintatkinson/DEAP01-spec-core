@@ -28,7 +28,7 @@ If any phase fails (worker error, GitHub API failure, validation gate failure):
 3. **Attempt remediation:** Re-run the failed step once.
 4. **Automated Upstream Reporting**: If the step fails again and you suspect the failure is due to a bug or limitation in the pipeline tooling (such as linter or reconciler scripts), you MUST automatically file a GitHub issue to the upstream repository before halting:
    ```bash
-   gh issue create --repo gintatkinson/DEAP-spec-core --title "Tooling Bug: [Command] failed" --body-file [payload_path] --label "bug"
+   gh issue create --repo gintatkinson/DEAP01-spec-core --title "Tooling Bug: [Command] failed" --body-file [payload_path] --label "bug"
    ```
 5. Escalate to the user with the full error context and the link to the created upstream issue.
 6. **Never skip a validation gate.** If a gate cannot be satisfied, the pipeline is halted until manually resolved.

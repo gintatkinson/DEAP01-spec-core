@@ -26,10 +26,10 @@ from reconcile_backlog import (
 
 class TestGitLabRemoteParser(unittest.TestCase):
     def test_parse_https_url(self):
-        url = "https://gitlab.com/gintatkinson/DEAP-spec-core.git"
+        url = "https://gitlab.com/gintatkinson/DEAP01-spec-core.git"
         info = parse_git_remote_url(url)
         self.assertTrue(info["is_gitlab"])
-        self.assertEqual(info["project_path"], "gintatkinson/DEAP-spec-core")
+        self.assertEqual(info["project_path"], "gintatkinson/DEAP01-spec-core")
         self.assertEqual(info["server_url"], "https://gitlab.com")
         self.assertEqual(info["host"], "gitlab.com")
 
@@ -42,17 +42,17 @@ class TestGitLabRemoteParser(unittest.TestCase):
         self.assertEqual(info["host"], "gitlab.internal.corp")
 
     def test_parse_ssh_scp_style(self):
-        url = "git@gitlab.com:gintatkinson/DEAP-spec-core.git"
+        url = "git@gitlab.com:gintatkinson/DEAP01-spec-core.git"
         info = parse_git_remote_url(url)
         self.assertTrue(info["is_gitlab"])
-        self.assertEqual(info["project_path"], "gintatkinson/DEAP-spec-core")
+        self.assertEqual(info["project_path"], "gintatkinson/DEAP01-spec-core")
         self.assertEqual(info["server_url"], "https://gitlab.com")
 
     def test_parse_github_url(self):
-        url = "https://github.com/gintatkinson/DEAP-spec-core.git"
+        url = "https://github.com/gintatkinson/DEAP01-spec-core.git"
         info = parse_git_remote_url(url)
         self.assertFalse(info["is_gitlab"])
-        self.assertEqual(info["project_path"], "gintatkinson/DEAP-spec-core")
+        self.assertEqual(info["project_path"], "gintatkinson/DEAP01-spec-core")
         self.assertEqual(info["server_url"], "https://github.com")
 
 
@@ -359,7 +359,7 @@ class TestMultiProviderBacklogLinkSynthesis(unittest.TestCase):
         """Assert GitLab blob URL uses /-/blob/ syntax when provider is gitlab."""
         from reconcile_backlog import reconcile_epic_checklists
         rules = {
-            "meta": {"upstream_repository": "gintatkinson/DEAP-spec-core"},
+            "meta": {"upstream_repository": "gintatkinson/DEAP01-spec-core"},
             "tracker_rules": {
                 "provider": "gitlab",
                 "server_url": "https://gitlab.com",
@@ -390,7 +390,7 @@ class TestMultiProviderBacklogLinkSynthesis(unittest.TestCase):
             updated_content = f.read()
 
         # Must synthesize GitLab blob URL format with /-/blob/
-        expected_url = "https://gitlab.com/gintatkinson/DEAP-spec-core/-/blob/main/docs/features/feat-01-auth.md"
+        expected_url = "https://gitlab.com/gintatkinson/DEAP01-spec-core/-/blob/main/docs/features/feat-01-auth.md"
         self.assertIn(expected_url, updated_content)
         self.assertNotIn("/blob/main/docs/features/feat-01-auth.md", updated_content.replace("/-/blob/", "/REPLACED/"))
 
@@ -436,7 +436,7 @@ class TestMultiProviderBacklogLinkSynthesis(unittest.TestCase):
         """Assert GitHub blob URL uses /blob/ syntax when provider is github."""
         from reconcile_backlog import reconcile_epic_checklists
         rules = {
-            "meta": {"upstream_repository": "gintatkinson/DEAP-spec-core"},
+            "meta": {"upstream_repository": "gintatkinson/DEAP01-spec-core"},
             "tracker_rules": {
                 "provider": "github",
             }
@@ -465,20 +465,20 @@ class TestMultiProviderBacklogLinkSynthesis(unittest.TestCase):
         with open(self.epic_path, "r", encoding="utf-8") as f:
             updated_content = f.read()
 
-        expected_url = "https://github.com/gintatkinson/DEAP-spec-core/blob/main/docs/features/feat-01-auth.md"
+        expected_url = "https://github.com/gintatkinson/DEAP01-spec-core/blob/main/docs/features/feat-01-auth.md"
         self.assertIn(expected_url, updated_content)
 
     def test_sanitize_source_references_gitlab(self):
         """Assert sanitize_source_references produces GitLab blob URLs when provider is gitlab."""
         from reconcile_backlog import sanitize_source_references
         rules = {
-            "meta": {"upstream_repository": "gintatkinson/DEAP-spec-core"},
+            "meta": {"upstream_repository": "gintatkinson/DEAP01-spec-core"},
             "tracker_rules": {"provider": "gitlab"}
         }
-        raw_text = "See file:///workspace/DEAP-spec-core/docs/features/feat-01-auth.md for details."
+        raw_text = "See file:///workspace/DEAP01-spec-core/docs/features/feat-01-auth.md for details."
         with patch("reconcile_backlog.get_current_branch", return_value="main"):
-            sanitized = sanitize_source_references(raw_text, workspace_dir="/workspace/DEAP-spec-core", rules=rules)
-        self.assertIn("https://gitlab.com/gintatkinson/DEAP-spec-core/-/blob/main/docs/features/feat-01-auth.md", sanitized)
+            sanitized = sanitize_source_references(raw_text, workspace_dir="/workspace/DEAP01-spec-core", rules=rules)
+        self.assertIn("https://gitlab.com/gintatkinson/DEAP01-spec-core/-/blob/main/docs/features/feat-01-auth.md", sanitized)
 
     def test_get_blob_url_base_jira_with_gitlab_remote(self):
         """Assert Jira tracker with GitLab remote produces GitLab blob URL base."""

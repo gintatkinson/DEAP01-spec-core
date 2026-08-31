@@ -193,7 +193,7 @@ def parse_stpa_ucas(content: str) -> List[Dict[str, Any]]:
                     if not any(u["id"] == synthesized_id for u in ucas):
                         ucas.append({
                             "id": synthesized_id,
-                            "controller": "FlightSafetyController",
+                            "controller": "SafetyController",
                             "control_action": active_action,
                             "category": col_guideword,
                             "context": col_context,
@@ -382,6 +382,10 @@ def _derive_formal_rta_expression(uca: Dict[str, Any]) -> str:
     Synthesizes a mathematically verifiable formal assertion predicate expression
     from an STPA UCA context, guide word, and control action.
     """
+    for field in ("formal_expression", "expression", "predicate", "invariant", "assert_expression"):
+        if uca.get(field):
+            return str(uca[field]).strip()
+
     uca_id = uca.get("id", "")
     context = uca.get("context", "")
     action = uca.get("control_action", "")
@@ -395,9 +399,15 @@ def _derive_formal_rta_expression(uca: Dict[str, Any]) -> str:
     clean_ctx = re.sub(r'\\le', '<=', clean_ctx)
     clean_ctx = re.sub(r'\\ge', '>=', clean_ctx)
 
+    # Check for timeout / link loss invariants
+    if "tloss" in clean_ctx.lower() or "t_loss" in clean_ctx.lower() or "timeout" in clean_ctx.lower():
+        return "lossDuration <= timeoutLimit"
+
     if "not providing" in category:
-        if "c2" in clean_ctx.lower() or "loss" in clean_ctx.lower() or "link" in clean_ctx.lower():
+        if "30" in clean_ctx or "bvlos" in clean_ctx.lower():
             return "c2LinkLossDuration < 30.0"
+        elif "c2" in clean_ctx.lower() or "loss" in clean_ctx.lower() or "link" in clean_ctx.lower():
+            return "lossDuration <= timeoutLimit"
         elif "pressure" in clean_ctx.lower() or "bar" in clean_ctx.lower():
             return "railPressure >= 13.0"
         elif "distance" in clean_ctx.lower() or "boundary" in clean_ctx.lower():
@@ -409,8 +419,10 @@ def _derive_formal_rta_expression(uca: Dict[str, Any]) -> str:
             return "altitudeAGL > 2.0"
         elif "cruise" in clean_ctx.lower():
             return "flightPhase != Cruise"
-        else:
+        elif "corridor" in clean_ctx.lower() or "boundary" in clean_ctx.lower():
             return "boundaryInBounds == true"
+        else:
+            return "systemStateValid == true"
     elif "too late" in category:
         if "soc" in clean_ctx.lower() or "battery" in clean_ctx.lower():
             return "batterySoC >= 0.20"
@@ -424,7 +436,10 @@ def _derive_formal_rta_expression(uca: Dict[str, Any]) -> str:
         else:
             return "commandHoldDuration >= minRequiredDuration"
     elif "applied too long" in category:
-        return "turnHoldDuration <= maxTurnDuration"
+        if "turn" in clean_ctx.lower():
+            return "turnHoldDuration <= maxTurnDuration"
+        else:
+            return "actionDuration <= maxAllowedDuration"
     else:
         return "systemParameter <= maxThreshold"
 
@@ -493,7 +508,7 @@ def compile_fmeca_to_constraint(fmeca: Dict[str, Any]) -> Any:
         "is_assertion": False,
         "doc": doc
     }
-def compile_stpa_to_ast(content: str, package_name: str = "AutonomousUAS_SafetyConstraints") -> Any:
+def compile_stpa_to_ast(content: str, package_name: str = "System_SafetyConstraints") -> Any:
     """
     Compiles STPA and FMECA hazard analyses into a canonical SysMLPackage AST containing
     formal `assert constraint` and `constraint def` nodes.
@@ -520,7 +535,7 @@ def compile_stpa_to_ast(content: str, package_name: str = "AutonomousUAS_SafetyC
     }
 
 
-def compile_stpa_to_sysml(content: str, package_name: str = "AutonomousUAS_SafetyConstraints") -> str:
+def compile_stpa_to_sysml(content: str, package_name: str = "System_SafetyConstraints") -> str:
     """
     Compiles STPA hazard matrices and FMECA modes into textual SysML v2 model notation.
     """
@@ -613,7 +628,7 @@ def extract_use_cases_from_markdown(content: str, filename: str = "") -> List[An
                 base = os.path.splitext(os.path.basename(filename))[0]
                 name = _to_pascal_case(base)
             else:
-                name = "AutonomousUseCase"
+                name = "SystemUseCase"
 
     name = _sanitize_id(name)
     if name and name[0].isdigit():
@@ -1586,11 +1601,11 @@ def reverse_sync_specs_to_sysml(
                 pkg = None
 
     if pkg is None:
-        root_name = "AutonomousUAS_SSOT"
+        root_name = "System_SSOT"
         if schema_path:
             root_name = os.path.splitext(os.path.basename(schema_path))[0]
         if SysMLPackage:
-            pkg = SysMLPackage(name=root_name, doc="Single Source of Truth for Autonomous UAS Infrastructure Safety")
+            pkg = SysMLPackage(name=root_name, doc="Single Source of Truth for System Architecture and Safety Model")
         else:
             pkg = {
                 "name": root_name,

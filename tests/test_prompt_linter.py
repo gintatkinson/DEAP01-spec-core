@@ -23,7 +23,7 @@ class TestSubagentPromptLinter(unittest.TestCase):
 
     def setUp(self):
         self.valid_prompt = """
-You are a context-isolated Feature Implementation Worker for DEAP-spec-core.
+You are a context-isolated Feature Implementation Worker for DEAP01-spec-core.
 
 Task: Implement FEAT-01 (Flight Guidance Computer).
 

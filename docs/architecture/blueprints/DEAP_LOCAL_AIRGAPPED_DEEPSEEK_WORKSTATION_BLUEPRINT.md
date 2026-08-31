@@ -689,6 +689,6 @@ python3 scripts/verify_downstream_baseline.py --no-domain
 
 ## 10. Downstream Integration & Maintenance Plan
 
-1. **Repository Anchoring**: Maintained as an authoritative Tier-1 infrastructure blueprint under `docs/architecture/blueprints/DEAP_LOCAL_AIRGAPPED_DEEPSEEK_WORKSTATION_BLUEPRINT.md` in [`DEAP-spec-core`](https://github.com/gintatkinson/DEAP-spec-core).
+1. **Repository Anchoring**: Maintained as an authoritative Tier-1 infrastructure blueprint under `docs/architecture/blueprints/DEAP_LOCAL_AIRGAPPED_DEEPSEEK_WORKSTATION_BLUEPRINT.md` in [`DEAP01-spec-core`](https://github.com/gintatkinson/DEAP01-spec-core).
 2. **Master Sitemap Registration**: Registered in `docs/architecture/DEAP_SPECIFICATIONS_SITEMAP.md` under Section 1 Authoritative Architecture & Blueprint Documents.
 3. **Execution Script Alignment**: Synchronized with `scripts/deap_harness.py` for automated hardware profile detection and GTT memory boundary validation.

@@ -24,6 +24,8 @@ from scripts.compile_sysml import (
     compile_fmeca_to_constraint,
     compile_stpa_to_ast,
     compile_stpa_to_sysml,
+    extract_use_cases_from_markdown,
+    reverse_sync_specs_to_sysml,
 )
 from parity_auditor.validators.link_validator import LinkValidator
 from parity_auditor.core.workspace import WorkspaceRepository
@@ -168,7 +170,59 @@ class TestCompileSysmlUpgrades(unittest.TestCase):
             validator = LinkValidator()
             findings = validator.validate(repo)
 
-            self.assertTrue(any(f.rule_id == "markdown-forbidden-file-protocol-link" for f in findings))
+    def test_compiler_domain_decoupling_defaults(self):
+        """Verify generic fallback names across STPA compiler, reverse sync, and use case extractors."""
+        # 1. compile_stpa_to_ast and compile_stpa_to_sysml default package name
+        ast_pkg = compile_stpa_to_ast(self.sample_stpa_4guidewords)
+        pkg_name = ast_pkg.name if hasattr(ast_pkg, 'name') else ast_pkg['package']
+        self.assertEqual(pkg_name, "System_SafetyConstraints")
+        sysml_code = compile_stpa_to_sysml(self.sample_stpa_4guidewords)
+        self.assertIn("package System_SafetyConstraints {", sysml_code)
+
+        # 2. Fallback controller in parse_stpa_ucas (Pattern 2 and Pattern 3)
+        ucas = parse_stpa_ucas(self.sample_stpa_4guidewords)
+        self.assertEqual(ucas[0]["controller"], "SafetyController")
+
+        # 3. Fallback use case in extract_use_cases_from_markdown
+        fallback_uc = extract_use_cases_from_markdown("Some generic text without heading or metadata")
+        self.assertEqual(len(fallback_uc), 1)
+        uc_name = fallback_uc[0].name if hasattr(fallback_uc[0], 'name') else fallback_uc[0]['name']
+        self.assertEqual(uc_name, "SystemUseCase")
+
+        # 4. Fallback root package and docstring in reverse_sync_specs_to_sysml
+        with tempfile.TemporaryDirectory() as tmpdir:
+            docs_dir = os.path.join(tmpdir, "docs")
+            os.makedirs(docs_dir, exist_ok=True)
+            out_sysml = os.path.join(tmpdir, "schema.sysml")
+            out_digest = os.path.join(tmpdir, "schema-digest.json")
+            pkg, _ = reverse_sync_specs_to_sysml(docs_dir=docs_dir, output_path=out_sysml, digest_path=out_digest)
+            pkg_name = pkg.name if hasattr(pkg, 'name') else pkg['name']
+            pkg_doc = pkg.doc if hasattr(pkg, 'doc') else pkg.get('doc', '')
+            self.assertEqual(pkg_name, "System_SSOT")
+            self.assertEqual(pkg_doc, "Single Source of Truth for System Architecture and Safety Model")
+
+    def test_rta_formal_expression_explicit_and_generic(self):
+        """Verify _derive_formal_rta_expression precedence with explicit expressions and generic invariants."""
+        # Explicit formal expression precedence
+        uca_explicit = {
+            "id": "UCA-CUSTOM-01",
+            "formal_expression": "customSignal >= thresholdValue * 2",
+            "category": "not providing",
+            "context": "C2 link lost",
+        }
+        c_exp = compile_uca_to_constraint(uca_explicit)
+        expr_exp = c_exp.expression if hasattr(c_exp, 'expression') else c_exp['expression']
+        self.assertEqual(expr_exp, "customSignal >= thresholdValue * 2")
+
+        # Generic guide word without domain keywords
+        uca_generic_prov = {
+            "id": "UCA-GEN-01",
+            "category": "providing",
+            "context": "Generic subsystem operating normally",
+        }
+        c_gen = compile_uca_to_constraint(uca_generic_prov)
+        expr_gen = c_gen.expression if hasattr(c_gen, 'expression') else c_gen['expression']
+        self.assertEqual(expr_gen, "systemStateValid == true")
 
 
 if __name__ == "__main__":

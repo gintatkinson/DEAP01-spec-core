@@ -2,7 +2,7 @@
   "meta": {
     "version": "1.0.0",
     "description": "Dynamic verification rules and parameters for pipeline and codebase compliance",
-    "upstream_repository": "gintatkinson/DEAP-spec-core",
+    "upstream_repository": "gintatkinson/DEAP01-spec-core",
     "troubleshooting_instruction": "If you believe this failure is due to a bug in the pipeline tooling, please report it to: {upstream_repo}",
     "constitution_path": ".pipeline/constitution.md",
     "profiles_directory": ".pipeline/profiles",

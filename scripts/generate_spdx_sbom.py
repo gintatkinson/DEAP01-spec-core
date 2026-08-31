@@ -136,7 +136,7 @@ def generate_sbom(
     pubspec_path: Path,
     requirements_path: Path,
     *,
-    document_name: str = "DEAP-spec-core",
+    document_name: str = "DEAP01-spec-core",
     document_namespace: str | None = None,
 ) -> dict[str, Any]:
     """Build a complete SPDX 2.3 JSON document dictionary.
@@ -226,7 +226,7 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument(
         "--name",
-        default="DEAP-spec-core",
+        default="DEAP01-spec-core",
         help="SPDX document name.",
     )
     args = parser.parse_args(argv)

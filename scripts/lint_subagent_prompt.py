@@ -2,7 +2,7 @@
 """
 Subagent Prompt Payload Linter
 
-Validates agent prompt text against canonical DEAP-spec-core invariants:
+Validates agent prompt text against canonical DEAP01-spec-core invariants:
 1. Mandatory view_file directive on SKILL.md before running actions (as step 1 / prerequisite).
 2. Mandatory single-item micro-task scope (max 1 Epic, 1 Feature, 1 User Story, or 1 Use Case).
 3. Mandatory defect filing directive supporting both 'gh issue create' and 'glab issue create'.
@@ -141,7 +141,7 @@ def lint_subagent_prompt(prompt_text: str) -> List[str]:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Subagent Prompt Payload Linter for DEAP-spec-core",
+        description="Subagent Prompt Payload Linter for DEAP01-spec-core",
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument("input", nargs="?", default=None, help="Prompt text string or file path containing prompt payload")

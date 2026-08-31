@@ -112,7 +112,7 @@ def parse_git_remote_url(remote_url: str) -> Dict[str, Any]:
     Parse a git remote origin URL into its components:
     - raw: raw URL string
     - is_gitlab: True if domain contains 'gitlab'
-    - project_path: repository path (e.g. 'gintatkinson/DEAP-spec-core' or 'group/subgroup/project')
+    - project_path: repository path (e.g. 'gintatkinson/DEAP01-spec-core' or 'group/subgroup/project')
     - server_url: base server URL (e.g. 'https://gitlab.com' or 'https://gitlab.internal.corp')
     - host: domain host name (e.g. 'gitlab.com' or 'github.com')
     """

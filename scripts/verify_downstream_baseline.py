@@ -844,7 +844,7 @@ class _DomainAgnosticASTVisitor(ast.NodeVisitor):
 def check_domain_agnostic_ast_cleanliness(repo_root):
     """Check 19: Domain-Agnostic AST Cleanliness Gate.
 
-    Verify that upstream DEAP-spec-core tools, scripts, and validator modules contain
+    Verify that upstream DEAP01-spec-core tools, scripts, and validator modules contain
     zero static/hardcoded parameter dictionaries (e.g. GROUND_TRUTH = {...}, EXPECTED_SPECS = {...},
     DOMAIN_PARAMS = {...}), and that all parameter extraction dynamically queries workspace.schemas
     or schema/*.sysml AST nodes without hardcoded domain concept constants.

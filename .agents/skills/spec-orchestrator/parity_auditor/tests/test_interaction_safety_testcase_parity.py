@@ -244,7 +244,7 @@ def test_compile_stpa_to_sysml_and_ast():
     assert fmecas[0]["id"] == "FMECA-UAS-01"
 
     sysml_code = compile_stpa_to_sysml(SAMPLE_STPA_MATRIX)
-    assert "package AutonomousUAS_SafetyConstraints" in sysml_code
+    assert "package System_SafetyConstraints" in sysml_code
     assert "assert constraint Assert_UCA_UAS_01" in sysml_code
     assert "assert constraint Assert_UCA_UAS_02" in sysml_code
     assert "constraint def Constraint_FMECA_UAS_01" in sysml_code

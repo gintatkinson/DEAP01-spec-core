@@ -72,7 +72,7 @@ pyang --version
 
 ```bash
 git clone <repository-url>
-cd DEAP-spec-core
+cd DEAP01-spec-core
 ```
 
 ### Test that the compiler is importable

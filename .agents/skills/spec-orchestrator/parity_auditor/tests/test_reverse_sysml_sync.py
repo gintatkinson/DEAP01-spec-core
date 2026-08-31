@@ -382,7 +382,7 @@ def test_reverse_extraction_stpa_hazards_to_sysml_assertions():
     pkg = compile_stpa_to_ast(SAMPLE_STPA_MATRIX_MD)
     assert len(pkg.constraint_defs) == 3
     sysml_text = pkg.to_sysml()
-    assert "package AutonomousUAS_SafetyConstraints {" in sysml_text
+    assert "package System_SafetyConstraints {" in sysml_text
     assert "assert constraint Assert_UCA_UAS_01 {" in sysml_text
     assert "assert constraint Assert_UCA_UAS_02 {" in sysml_text
     assert "constraint def Constraint_FMECA_UAS_01 {" in sysml_text
@@ -465,7 +465,7 @@ def test_end_to_end_compile_sysml_reverse_sync_cli():
 
         # Verify parsed schema contains all entities
         pkg = SysMLParser.parse_file(out_sysml)
-        assert pkg.name == "AutonomousUAS_SSOT"
+        assert pkg.name == "System_SSOT"
         assert len(pkg.use_case_defs) == 1
         assert len(pkg.interaction_defs) == 1
         assert len(pkg.test_case_defs) == 1
@@ -516,7 +516,8 @@ def test_idempotent_roundtrip_synchronization():
             docs_dir=docs_dir,
             schema_path=out_sysml,
             output_path=out_sysml,
-            digest_path=out_digest
+            digest_path=out_digest,
+            allow_schema_overwrite=True
         )
         with open(out_sysml, "r", encoding="utf-8") as f:
             sysml_pass2 = f.read()
@@ -526,7 +527,8 @@ def test_idempotent_roundtrip_synchronization():
             docs_dir=docs_dir,
             schema_path=out_sysml,
             output_path=out_sysml,
-            digest_path=out_digest
+            digest_path=out_digest,
+            allow_schema_overwrite=True
         )
         with open(out_sysml, "r", encoding="utf-8") as f:
             sysml_pass3 = f.read()
