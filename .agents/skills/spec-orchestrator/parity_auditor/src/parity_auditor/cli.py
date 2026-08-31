@@ -15,32 +15,65 @@ import json
 import shutil
 from typing import Set, List
 
-from .core.workspace import WorkspaceRepository, extract_metadata_from_content
-from .parsers.schema_router import parse_schema_file
-from .validators.uml import UmlValidator
-from .validators.behavioral import BehavioralValidator
-from .validators.codebase import CodebaseValidator
-from .validators.docs import DocsValidator
-from .validators.dependency_validator import DependencyValidator
-from .validators.sync_validator import SyncValidator
-from .validators.schema_mapping_validator import SchemaMappingValidator
-from .validators.profile_scoping_validator import ProfileScopingValidator
-from .validators.test_completeness_validator import TestCompletenessValidator
-from .validators.logical_ui_validator import LogicalUiValidator
-from .validators.cardinality_validator import SchemaCardinalityValidator
-from .validators.mermaid_syntax_validator import MermaidSyntaxValidator
-from .validators.katex_validator import KatexValidator
-from .validators.spec_filename_validator import SpecFilenameValidator
-from .validators.spec_title_uniqueness_validator import SpecTitleUniquenessValidator
-from .validators.source_reference_validator import SourceReferenceValidator
-from .validators.link_validator import LinkValidator
-from .validators.docstring_validator import DocstringValidator
-from .validators.profile_compliance_validator import ProfileComplianceValidator
-from .validators.concept_provenance_validator import ConceptProvenanceValidator
-from .validators.safety_trace_validator import SafetyTraceValidator
-from .validators.doc_metadata_validator import DocMetadataValidator
-from .utils.diagnostics import serialize_diagnostics
-from .utils.comment_utils import strip_comments_and_strings
+try:
+    from .core.workspace import WorkspaceRepository, extract_metadata_from_content
+    from .parsers.schema_router import parse_schema_file
+    from .validators.uml import UmlValidator
+    from .validators.behavioral import BehavioralValidator
+    from .validators.codebase import CodebaseValidator
+    from .validators.docs import DocsValidator
+    from .validators.dependency_validator import DependencyValidator
+    from .validators.sync_validator import SyncValidator
+    from .validators.schema_mapping_validator import SchemaMappingValidator
+    from .validators.profile_scoping_validator import ProfileScopingValidator
+    from .validators.test_completeness_validator import TestCompletenessValidator
+    from .validators.logical_ui_validator import LogicalUiValidator
+    from .validators.cardinality_validator import SchemaCardinalityValidator
+    from .validators.mermaid_syntax_validator import MermaidSyntaxValidator
+    from .validators.katex_validator import KatexValidator
+    from .validators.spec_filename_validator import SpecFilenameValidator
+    from .validators.spec_title_uniqueness_validator import SpecTitleUniquenessValidator
+    from .validators.source_reference_validator import SourceReferenceValidator
+    from .validators.link_validator import LinkValidator
+    from .validators.docstring_validator import DocstringValidator
+    from .validators.profile_compliance_validator import ProfileComplianceValidator
+    from .validators.concept_provenance_validator import ConceptProvenanceValidator
+    from .validators.safety_trace_validator import SafetyTraceValidator
+    from .validators.doc_metadata_validator import DocMetadataValidator
+    from .validators.icd_completeness_validator import ICDCompletenessValidator
+    from .utils.diagnostics import serialize_diagnostics
+    from .utils.comment_utils import strip_comments_and_strings
+except (ImportError, ValueError):
+    _src_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    if _src_dir not in sys.path:
+        sys.path.insert(0, _src_dir)
+    from parity_auditor.core.workspace import WorkspaceRepository, extract_metadata_from_content
+    from parity_auditor.parsers.schema_router import parse_schema_file
+    from parity_auditor.validators.uml import UmlValidator
+    from parity_auditor.validators.behavioral import BehavioralValidator
+    from parity_auditor.validators.codebase import CodebaseValidator
+    from parity_auditor.validators.docs import DocsValidator
+    from parity_auditor.validators.dependency_validator import DependencyValidator
+    from parity_auditor.validators.sync_validator import SyncValidator
+    from parity_auditor.validators.schema_mapping_validator import SchemaMappingValidator
+    from parity_auditor.validators.profile_scoping_validator import ProfileScopingValidator
+    from parity_auditor.validators.test_completeness_validator import TestCompletenessValidator
+    from parity_auditor.validators.logical_ui_validator import LogicalUiValidator
+    from parity_auditor.validators.cardinality_validator import SchemaCardinalityValidator
+    from parity_auditor.validators.mermaid_syntax_validator import MermaidSyntaxValidator
+    from parity_auditor.validators.katex_validator import KatexValidator
+    from parity_auditor.validators.spec_filename_validator import SpecFilenameValidator
+    from parity_auditor.validators.spec_title_uniqueness_validator import SpecTitleUniquenessValidator
+    from parity_auditor.validators.source_reference_validator import SourceReferenceValidator
+    from parity_auditor.validators.link_validator import LinkValidator
+    from parity_auditor.validators.docstring_validator import DocstringValidator
+    from parity_auditor.validators.profile_compliance_validator import ProfileComplianceValidator
+    from parity_auditor.validators.concept_provenance_validator import ConceptProvenanceValidator
+    from parity_auditor.validators.safety_trace_validator import SafetyTraceValidator
+    from parity_auditor.validators.doc_metadata_validator import DocMetadataValidator
+    from parity_auditor.validators.icd_completeness_validator import ICDCompletenessValidator
+    from parity_auditor.utils.diagnostics import serialize_diagnostics
+    from parity_auditor.utils.comment_utils import strip_comments_and_strings
 
 def sanitize_github_token_env():
     """
@@ -220,7 +253,9 @@ def _main_impl():
     parser = argparse.ArgumentParser(description="Model Coverage Parity Audit CLI")
     parser.add_argument("schema_dir", nargs="?", help="Path to schema directory")
     parser.add_argument("features_dir", nargs="?", help="Path to feature specs directory")
+    parser.add_argument("--workspace", help="Path to workspace directory")
     parser.add_argument("--spec-only", action="store_true", help="Run in specification-only mode, bypassing codebase checks")
+    parser.add_argument("--schema-only", action="store_true", help="Run in schema/specification-only mode, bypassing codebase checks")
     parser.add_argument("--allow-missing-specs", action="store_true", default=True, help="Skip exiting with status code 1 when there are missing specification files")
     parser.add_argument("--no-allow-missing-specs", dest="allow_missing_specs", action="store_false", help="Exit with error code when specification files are missing (strict mode)")
     parser.add_argument("--ignore-issues", help="Comma-separated list of issue numbers or ranges to ignore (e.g., 14,16-18)")
@@ -235,18 +270,23 @@ def _main_impl():
     parser.add_argument("--sysml", action="store_true", help="Run SysML v2 model coverage parity validation")
     
     args = parser.parse_args()
+    if args.schema_only:
+        args.spec_only = True
     
-    # 1. Locate workspace directory dynamically starting from current working directory
+    # 1. Locate workspace directory dynamically starting from current working directory or explicit argument
     workspace_dir = None
-    curr = os.getcwd()
-    while True:
-        if os.path.exists(os.path.join(curr, ".pipeline", "logical-ui", "codebase_rules.json")):
-            workspace_dir = curr
-            break
-        parent = os.path.dirname(curr)
-        if parent == curr:
-            break
-        curr = parent
+    if args.workspace:
+        workspace_dir = os.path.abspath(args.workspace)
+    else:
+        curr = os.getcwd()
+        while True:
+            if os.path.exists(os.path.join(curr, ".pipeline", "logical-ui", "codebase_rules.json")):
+                workspace_dir = curr
+                break
+            parent = os.path.dirname(curr)
+            if parent == curr:
+                break
+            curr = parent
         
     # Fall back to script's directory traversal if not found in cwd hierarchy
     if not workspace_dir:
@@ -1014,8 +1054,19 @@ def _main_impl():
     else:
         print("Success: Document metadata tables and frontmatter valid across all markdown documents.")
 
+    print("\n=== ICD Completeness & Signal Flow Parity Audit ===")
+    icd_completeness_validator = ICDCompletenessValidator()
+    icd_completeness_errors = _scope_findings(icd_completeness_validator.validate(repo, schemas_dir=schema_dir), getattr(args, 'only', None))
+    if icd_completeness_errors:
+        print("[!] ICD Completeness Violations Identified:")
+        for err in icd_completeness_errors:
+            print(f"  - {err}")
+        has_failed = True
+    else:
+        print("Success: Level 1C ICD port connectivity, N² matrix, and signal dictionary verified.")
+
     if has_failed:
-        all_errors = (uml_errors or []) + (behavioral_errors or []) + (codebase_errors or []) + (doc_errors or []) + (dependency_errors or []) + (sync_errors or []) + (schema_mapping_errors or []) + (profile_scoping_errors or []) + (test_completeness_errors or []) + (cardinality_errors or []) + (spec_filename_errors or []) + (spec_title_errors or []) + (mermaid_syntax_errors or []) + (katex_errors or []) + (logical_ui_errors or []) + (docstring_errors or []) + (profile_compliance_errors or []) + (package_allocation_errors or []) + (feature_op_errors or []) + (interaction_errors or []) + (safety_constraint_errors or []) + (acceptance_test_errors or []) + (missing_spec_errors or []) + (source_ref_errors or []) + (link_errors or []) + (concept_provenance_errors or []) + (safety_trace_errors or []) + (doc_metadata_errors or [])
+        all_errors = (uml_errors or []) + (behavioral_errors or []) + (codebase_errors or []) + (doc_errors or []) + (dependency_errors or []) + (sync_errors or []) + (schema_mapping_errors or []) + (profile_scoping_errors or []) + (test_completeness_errors or []) + (cardinality_errors or []) + (spec_filename_errors or []) + (spec_title_errors or []) + (mermaid_syntax_errors or []) + (katex_errors or []) + (logical_ui_errors or []) + (docstring_errors or []) + (profile_compliance_errors or []) + (package_allocation_errors or []) + (feature_op_errors or []) + (interaction_errors or []) + (safety_constraint_errors or []) + (acceptance_test_errors or []) + (missing_spec_errors or []) + (source_ref_errors or []) + (link_errors or []) + (concept_provenance_errors or []) + (safety_trace_errors or []) + (doc_metadata_errors or []) + (icd_completeness_errors or [])
         compiled_errors = all_errors
         target_file = None
         snippet_content = None

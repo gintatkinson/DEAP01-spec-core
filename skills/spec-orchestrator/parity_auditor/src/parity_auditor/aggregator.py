@@ -47,6 +47,7 @@ from .validators.plan_validator import PlanValidator
 from .validators.concept_provenance_validator import ConceptProvenanceValidator
 from .validators.safety_trace_validator import SafetyTraceValidator
 from .validators.doc_metadata_validator import DocMetadataValidator
+from .validators.icd_completeness_validator import ICDCompletenessValidator
 
 # Validators migrated to structured findings. Un-migrated validators are deliberately
 # excluded rather than included and silently ungroupable — see `coverage_note`.
@@ -78,6 +79,7 @@ AGGREGATING_VALIDATORS = (
     ConceptProvenanceValidator,
     SafetyTraceValidator,
     DocMetadataValidator,
+    ICDCompletenessValidator,
 )
 # SyncValidator is migrated to structured findings but deliberately absent: it shells
 # out to the issue tracker, and `pipeline-tooling.md` § Validation Gates forbids network

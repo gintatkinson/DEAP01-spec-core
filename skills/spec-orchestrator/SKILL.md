@@ -16,7 +16,7 @@ metadata:
 
 This skill enables you to act as the **Master Orchestrator Agent**. You are responsible for executing an end-to-end "Digital Engineering Pipeline" that systematically transforms a protocol standard (e.g., IETF, 3GPP, IEEE, CAMARA) into a deterministic GitHub repository matrix using UML OOA/OOD methodologies.
 
-You will accomplish this by coordinating the sequential execution of three specialized Worker skills.
+You will accomplish this by coordinating the sequential execution of specialized Worker skills across all specification phases (Phases 1, 1.5, 2, and 3).
 
 > [!NOTE]
 > This orchestrator handles **specification generation** (Phases 1-5). For **feature implementation**, use the separate `feature-driven-implementation` skill which provides subagent-driven TDD execution discipline.
@@ -59,8 +59,9 @@ Before beginning orchestration, verify you have:
 
 To prevent context drift, contamination, and confirmation bias, **every individual specification item (Epic, Feature, User Story, and Use Case) MUST be processed by a new, fresh subagent with an isolated context.**
 
-- **Mandatory Subagent Dispatch for Specification Phases**: The Master Orchestrator (Coordinator) MUST dispatch Phase Worker subagents (TypeName: `self`) for Phase 1, Phase 2, and Phase 3:
+- **Mandatory Subagent Dispatch for Specification Phases**: The Master Orchestrator (Coordinator) MUST dispatch Phase Worker subagents (TypeName: `self`) for Phase 1, Phase 1.5, Phase 2, and Phase 3:
   * Phase 1: `Structural Spec Worker`
+  * Phase 1.5: `Interface Spec Worker (Worker ICD)`
   * Phase 2: `Behavioral Spec Worker`
   * Phase 3: `System Interaction Spec Worker`
 - **Coordinator Direct Writing Lock**: The Coordinator is strictly forbidden from directly performing schema parsing, drafting, or issue uploads in its main conversation context. All such operations must be delegated to the Worker subagents.
@@ -113,6 +114,45 @@ Phases NOT marked `[P]` are strictly sequential — the validation gate of phase
 
 > **Single-agent runtimes (Cascade/Windsurf/Devin):** Ignore `[P]` markers and execute all phases sequentially. Even in single-agent environments, item-level subagent isolation must be simulated by manually resetting/clearing prior context (e.g., providing explicit instructions to ignore previous items and focus only on the current target's schema/text) for each item drafted.
 
+## Multi-Agent Orchestration Lifecycle
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Coord as "Master Orchestrator (Coordinator)"
+    participant W_A as "Phase 1: Structural Spec Worker"
+    participant W_ICD as "Phase 1.5: Interface Spec Worker"
+    participant W_B as "Phase 2: Behavioral Spec Worker"
+    participant W_C as "Phase 3: System Interaction Spec Worker"
+    participant W_D as "Phase 4: Reconciliation & Verification"
+
+    Note over Coord,W_A: Phase 1 - Structural Extraction
+    Coord->>W_A: Dispatch Schema Parsing Task (.pipeline/schema.sysml)
+    W_A->>W_A: Extract Packages & PartDefs (Epics & Features)
+    W_A-->>Coord: Return Generated Epics & Features (docs/epics/, docs/features/)
+
+    Note over Coord,W_ICD: Phase 1.5 - Logical ICD Synthesis
+    Coord->>W_ICD: Dispatch Interface Extraction Task (.pipeline/schema.sysml)
+    W_ICD->>W_ICD: Parse port def, connection, interface def & item flow nodes
+    W_ICD->>W_ICD: Synthesize ICD_01_SYSTEM_INTERFACE_MATRIX.md & ICD_02_MASTER_SIGNAL_DICTIONARY.md
+    W_ICD-->>Coord: Return Level 1C ICD Suite (docs/interfaces/)
+
+    Note over Coord,W_B: Phase 2 - Behavioral Extraction
+    Coord->>W_B: Dispatch Behavioral Task (action def, state def, port def)
+    W_B->>W_B: Synthesize User Stories & Statecharts (docs/user-stories/)
+    W_B-->>Coord: Return BDD Scenarios & Sequence Lifelines
+
+    Note over Coord,W_C: Phase 3 - System Interaction Extraction
+    Coord->>W_C: Dispatch Use Case Task (use case def)
+    W_C->>W_C: Synthesize UML Use Cases & Realization Matrix (docs/use-cases/)
+    W_C-->>Coord: Return Elaborated Use Cases
+
+    Note over Coord,W_D: Phase 4 - Reconciliation & Parity Verification
+    Coord->>W_D: Trigger compile_sysml.py --reverse-sync
+    Coord->>W_D: Trigger reconcile_backlog.py & Gate 23 (ICD Completeness)
+    W_D-->>Coord: Verification PASS (100% Model Parity)
+```
+
 ## Phase 0: Pre-Flight / Pre-computation
 1. **SysML v2 Ingestion & AST Digest**: Ingest input schemas (OMG IDL, AUTOSAR ARXML, Protobuf, OpenAPI, or native SysML v2) using `sysmlv2_ingest.py` to produce canonical `.pipeline/schema.sysml` and `.pipeline/schema-digest.json`. This generates formal AST nodes (`package`, `part def`, `item def`, `action def`, `state def`, `port def`, `requirement def`, and `use case def`) establishing the 100% Single Source of Truth for Phases 1–3 per `rules/sysml-ssot-completeness.md`.
 2. **YANG Compilation (conditional)**: If `.yang` files are present in the schema directory, run the YANG-to-LUI compiler to generate the UI layout:
@@ -137,7 +177,19 @@ Phases NOT marked `[P]` are strictly sequential — the validation gate of phase
       ```bash
       ./skills/spec-orchestrator/scripts/verify_model_coverage.py --spec-only
       ```
-4. **Validation Gate**: You MUST wait for the Phase 1 execution to fully complete. The agent must successfully create all Feature issues FIRST, capture their IDs, inject them into the Epic markdown, and then create the Epic issue. Query GitHub (`gh issue list --limit 1000 --state all --json number,title,state,labels`) to verify the new Epics and Features exist and are properly interlinked. Once this validation passes, **execute Phase 2 immediately without pausing for user approval.**
+4. **Validation Gate**: You MUST wait for the Phase 1 execution to fully complete. The agent must successfully create all Feature issues FIRST, capture their IDs, inject them into the Epic markdown, and then create the Epic issue. Query GitHub (`gh issue list --limit 1000 --state all --json number,title,state,labels`) to verify the new Epics and Features exist and are properly interlinked. Once this validation passes, **execute Phase 1.5 immediately without pausing for user approval.**
+
+## Phase 1.5: Interface Extraction & Logical ICD Engineering (Worker ICD)
+1. **Trigger / Dispatch**: The Coordinator MUST invoke a fresh subagent (TypeName: `self`, Role: `Interface Spec Worker`) with the `spec-icd-engineering` skill and `.pipeline/schema.sysml`, appending the keyword `PROCEED` to authorize execution.
+2. **Execution**: The `Interface Spec Worker` subagent parses AST `port def`, `connection`, `interface def`, and `item flow` nodes from `.pipeline/schema.sysml`. Generates `docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md` (Topological graph and N² Matrix) and `docs/interfaces/ICD_02_MASTER_SIGNAL_DICTIONARY.md` (Signal Dictionary). Registers the ICD suite under the `icd` issue label using `./skills/spec-orchestrator/scripts/create_issue.sh "<local-md-file>" "icd" "<Extract_Title_From_YAML_Metadata>"`, runs immediate verification check (`gh issue view <ID> --json body`) to ensure its body is fully populated in the tracker, and commits/pushes the changes.
+3. **Wait & Verify**: The Coordinator waits for the subagent to report completion, reads its final report, and:
+   a. Query the `git diff` to identify the generated file paths in `docs/interfaces/`.
+   b. Run a file read check (`view_file`) on the newly generated ICD markdown files (`docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md` and `docs/interfaces/ICD_02_MASTER_SIGNAL_DICTIONARY.md`) to verify formatting compliance (such as Mermaid diagrams, N² Matrix, and Signal Flow tables).
+   c. Run the ICD completeness validator locally:
+      ```bash
+      python3 skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/icd_completeness_validator.py
+      ```
+4. **Validation Gate**: Runs `parity_auditor/validators/icd_completeness_validator.py` (Gate 23) ensuring 100% port contract parity, zero dangling ports, and registers the ICD suite under the `icd` issue label. Verify that the ICD issues have been created in GitHub and that all port interfaces and signals are fully accounted for. Once this validation passes, **execute Phase 2 immediately without pausing for user approval.**
 
 ## Phase 2 `[P]`: Behavioral Extraction - User Stories (Worker B)
 1. **Trigger / Dispatch**: The Coordinator MUST invoke a fresh subagent (TypeName: `self`, Role: `Behavioral Spec Worker`) with the `spec-user-story-engineering` skill and the text/path of the target specification document, appending the keyword `PROCEED` to authorize execution.
@@ -201,7 +253,7 @@ Phases NOT marked `[P]` are strictly sequential — the validation gate of phase
      ./scripts/reconcile_backlog.py --provider gitlab --gitlab-url https://gitlab.internal.defense.gov --project uas-group/uas-infrastructure-safety
      ```
    - **Environment Variables**: Provider detection automatically selects GitLab if `GITLAB_CI` or `CI_SERVER_URL` is set, resolving authentication from `GITLAB_TOKEN`, `GL_TOKEN`, or `CI_JOB_TOKEN`.
-3. **Trigger Model Coverage & 22-Gate Parity Lock Verification**: Run the automated UML compliance and coverage linter tool:
+3. **Trigger Model Coverage & 23-Gate Parity Lock Verification**: Run the automated UML compliance and coverage linter tool:
    ```bash
    ./skills/spec-orchestrator/scripts/verify_model_coverage.py [schema_dir] [features_dir] --spec-only
    ```
@@ -214,8 +266,8 @@ Phases NOT marked `[P]` are strictly sequential — the validation gate of phase
    - The backlog script parses frontmatter using PyYAML to prevent block erasure, performs dependency issue hallucination checks, queries tracker issues (via GitHub CLI or GitLab REST API v4), syncs checkbox states in local markdown, and marks completed Epics, User Stories, and Use Cases as `Fixed / Resolved` by applying the `status:fixed-resolved` (GitHub) or `status::fixed-resolved` (GitLab) label with an evidence comment. It leaves them open: `.pipeline/constitution.md:161` reserves `Closed` for Product Owner validation (#309).
      > [!IMPORTANT]
      > **Canonical Source of Truth & Phase 4 Scope**: The tracker is the canonical source of truth and must remain fully populated at all times during the specification lifecycle. Phase 4 backlog reconciliation is a secondary verification gate (syncing checkbox lists, cross-links, and marking completed items `Fixed / Resolved`), rather than a deferred publisher of primary issue bodies. Do not defer the publishing of primary issue bodies to Phase 4.
-   - The coverage linter parses raw schemas and SysML v2 AST models, builds class/sequence/use-case diagram symbol tables from Mermaid blocks, verifies 100% schema coverage across all 22 verification gates, and validates OMG UML 2.5.1 metamodel conformance and cross-view semantic rules.
-5. **Validation Gate**: All scripts must execute successfully with exit code 0. Ensure that all completed tasks have been correctly updated/synced to GitHub or GitLab, all UML diagrams are validated as fully compliant, all 22 parity gates pass, and the overall model coverage is verified at exactly 100%. Once this validation passes, **execute Phase 5 immediately without pausing for user approval.**
+   - The coverage linter parses raw schemas and SysML v2 AST models, builds class/sequence/use-case diagram symbol tables from Mermaid blocks, verifies 100% schema coverage across all 23 verification gates (including Gate 23 ICD completeness verification), and validates OMG UML 2.5.1 metamodel conformance and cross-view semantic rules.
+5. **Validation Gate**: All scripts must execute successfully with exit code 0. Ensure that all completed tasks have been correctly updated/synced to GitHub or GitLab, all UML diagrams are validated as fully compliant, all 23 parity gates pass, and the overall model coverage is verified at exactly 100%. Once this validation passes, **execute Phase 5 immediately without pausing for user approval.**
 
 ## Phase 5: Final Reporting
 1. Summarize the end-to-end pipeline execution for the user.

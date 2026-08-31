@@ -16,3 +16,4 @@ from .plan_validator import PlanValidator
 from .concept_provenance_validator import ConceptProvenanceValidator
 from .safety_trace_validator import SafetyTraceValidator
 from .doc_metadata_validator import DocMetadataValidator
+from .icd_completeness_validator import ICDCompletenessValidator
