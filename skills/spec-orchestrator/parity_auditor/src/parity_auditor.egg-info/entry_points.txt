@@ -1,0 +1,2 @@
+[console_scripts]
+parity-auditor = parity_auditor.cli:main

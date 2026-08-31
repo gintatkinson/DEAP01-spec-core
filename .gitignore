@@ -1,0 +1,34 @@
+# Copyright Gint Atkinson, gint.atkinson@gmail.com
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+.tessl/
+scratch/
+
+# Credentials & local env configuration
+.env
+.env.local
+.env.*
+*define*.json
+config.json
+benchmark_results.jsonl
+
+# Node dependencies & build artifacts
+node_modules/
+package-lock.json
+dist/
+build/
+.dart_tool/
+.pub/
+.flutter-plugins*
+app_flutter_release.zip
+
+# Diagnostics and reproduction payloads
+.pipeline/diagnostics/
+
+# Virtualenvs are per-machine and must never be committed. The previous one was
+# 1453 tracked files pinned to Python 3.9.6 and to /Applications/Xcode.app paths,
+# so it was broken on every machine but one and shipped an EOL runtime (#294).
+.venv/
+venv/

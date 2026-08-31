@@ -1,0 +1,125 @@
+{
+  "meta": {
+    "version": "1.0.0",
+    "schema_name": "generic_dashboard"
+  },
+  "theme": {
+    "modes": ["light", "dark", "system"],
+    "colors": {
+      "primary_accent": "color.brand.primary",
+      "background": {
+        "light": "color.background.light",
+        "dark": "color.background.dark"
+      },
+      "surface": {
+        "light": "color.surface.light",
+        "dark": "color.surface.dark"
+      }
+    },
+    "typography": {
+      "fonts": ["token.font.primary", "token.font.secondary", "system-ui"],
+      "scale": "high-density"
+    }
+  },
+  "navigation": {
+    "sidebar": {
+      "collapsible": true,
+      "default_expanded": true,
+      "items": "navigation.sidebar.items"
+    }
+  },
+  "layout": {
+    "root_container": {
+      "type": "SidebarLayout",
+      "id": "main_shell",
+      "children": [
+        {
+          "type": "HierarchyTreeSelector",
+          "id": "resource_tree",
+          "props": {
+            "width": "spacing.layout-sidebar-width",
+            "hierarchy": [
+              {
+                "id": "CategoryA",
+                "label": "Category A",
+                "children": [
+                  { "id": "ItemA1", "label": "Item A1" },
+                  { "id": "ItemA2", "label": "Item A2" }
+                ]
+              },
+              {
+                "id": "CategoryB",
+                "label": "Category B",
+                "children": [
+                  { "id": "ItemB1", "label": "Item B1" }
+                ]
+              }
+            ]
+          },
+          "bindings": {
+            "data_source": "provider:generic-hierarchy-provider",
+            "selection_target": "selected_managed_object"
+          }
+        },
+        {
+          "type": "SplitWorkspace",
+          "id": "workspace_split",
+          "props": {
+            "axis": "vertical",
+            "resizable": true,
+            "default_ratio": 0.5,
+            "reconfigurable": true,
+            "min_size_pixels": "spacing.layout-min-pane-size"
+          },
+          "children": [
+            {
+              "type": "TopographicalView",
+              "id": "topology_pane",
+              "props": {
+                "dimensions": 2,
+                "enable_time_playback": true,
+                "interactive": true,
+                "allow_pan_zoom": true
+              },
+              "bindings": {
+                "data_source": "schema:generic-topology/topology[@id='selected_entity']",
+                "selection_target": "active_focused_node",
+                "coordinate_mapping": {
+                  "x": "position/dim_0",
+                  "y": "position/dim_1",
+                  "z": "position/dim_2"
+                },
+                "depth_selector": {
+                  "default_hops": 1,
+                  "max_hops": 3
+                },
+                "relationship_filters": [
+                  "parent",
+                  "child",
+                  "peer"
+                ]
+              }
+            },
+            {
+              "type": "TableView",
+              "id": "elements_view"
+            },
+            {
+              "type": "TabbedContainer",
+              "id": "details_and_relations_tab",
+              "props": {
+                "tab_position": "bottom"
+              },
+              "children": [
+                {
+                  "type": "PropertyGrid",
+                  "id": "properties_view"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
