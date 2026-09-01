@@ -139,6 +139,111 @@ def lint_subagent_prompt(prompt_text: str) -> List[str]:
     return errors
 
 
+def validate_subagent_preflight(prompt_text: str) -> tuple[bool, str]:
+    """
+    Executes the Subagent Self-Rejection Pre-Flight Gate check.
+
+    Verifies that:
+    1. Prompt payload is non-empty.
+    2. Prompt contains zero truncation / summarization markers ('[...]', '[summarized]', '[truncated]').
+    3. Prompt contains zero forbidden issue closure commands ('gh issue close', 'glab issue close').
+    4. Prompt declares the repository classification (e.g. 'UPSTREAM_SPEC_CORE_COMPILER' or 'Repository Classification:').
+    5. Prompt begins with the instruction to execute `view_file` on `SKILL.md` by exact path as step 1 / first action, before any line-level code steering.
+    6. Prompt contains zero leading line-level steering or premature edits ahead of the step 1 skill read directive.
+    7. Prompt respects single-item micro-task scope.
+
+    Returns:
+        (True, "") if prompt passes pre-flight gate.
+        (False, "ERROR: Prompt rejected: <reason>") if prompt is rejected.
+    """
+    if not prompt_text or not isinstance(prompt_text, str) or not prompt_text.strip():
+        return False, "ERROR: Prompt rejected: prompt payload is empty or whitespace-only"
+
+    # Check for truncation/summarization markers
+    truncation_patterns = [
+        (r'\[\s*\.\.\.\s*\]', "elided ellipsis '[...]'"),
+        (r'\[\s*summarized?\s*\]', "'[summarized]'"),
+        (r'\[\s*truncated?\s*\]', "'[truncated]'"),
+        (r'\bsummarized\s+(?:prompt|instructions?|directives?|payload)\b', "summarized prompt marker"),
+        (r'\btruncated\s+(?:prompt|instructions?|directives?|payload)\b', "truncated prompt marker"),
+    ]
+    for pat, desc in truncation_patterns:
+        if re.search(pat, prompt_text, re.IGNORECASE):
+            return False, f"ERROR: Prompt rejected: prompt truncation/summarization detected ({desc})"
+
+    # Check for forbidden issue closure commands
+    if re.search(r'\b(?:gh|glab)\s+issue\s+close\b', prompt_text, re.IGNORECASE):
+        return False, "ERROR: Prompt rejected: forbidden issue closure command"
+
+    # Check for repository classification
+    has_classification = bool(
+        re.search(r'(?:Repository\s*Classification|Classification)\s*:\s*[A-Za-z0-9_]+', prompt_text, re.IGNORECASE)
+        or "UPSTREAM_SPEC_CORE_COMPILER" in prompt_text
+        or "REPO_CLASSIFICATION" in prompt_text
+    )
+    if not has_classification:
+        return False, "ERROR: Prompt rejected: missing repository classification"
+
+    # Check for view_file on SKILL.md
+    has_view_file = "view_file" in prompt_text
+    has_skill_md = bool(re.search(r'\bSKILL\.md\b', prompt_text, re.IGNORECASE))
+    if not (has_view_file and has_skill_md):
+        return False, "ERROR: Prompt rejected: missing view_file directive on SKILL.md"
+
+    # Check that view_file on SKILL.md is instructed as step 1 / first action
+    step1_pattern = re.search(
+        r'(?:step\s*1|very\s*first\s*step|first\s*step|as\s*its\s*very\s*first\s*step|before\s*(?:running|executing|any|proceeding|all)\s*(?:actions|tools|commands|steps|work)?|prerequisite|must\s*read).*view_file.*SKILL\.md|view_file.*SKILL\.md.*(?:step\s*1|very\s*first\s*step|first\s*step|as\s*its\s*very\s*first\s*step|before\s*(?:running|executing|any|proceeding|all)\s*(?:actions|tools|commands|steps|work)?|prerequisite|first)',
+        prompt_text,
+        re.IGNORECASE | re.DOTALL
+    )
+    if not step1_pattern:
+        return False, "ERROR: Prompt rejected: missing step 1 directive for view_file on SKILL.md"
+
+    # Check for leading line-level steering before the view_file on SKILL.md directive
+    view_file_pos = prompt_text.find("view_file")
+    preceding_text = prompt_text[:view_file_pos]
+    leading_steering_patterns = [
+        r'\b(?:replace|edit|modify|delete|change)\s+lines?\s+\d+',
+        r'\b(?:replace|edit|modify)\s+line\s+\d+\s+with\b',
+        r'\bapply\s+the\s+following\s+diff\b',
+        r'```diff\b',
+        r'\bhere\s+is\s+the\s+(?:code|fix|patch)\s+to\s+apply\b',
+        r'\bjust\s+(?:change|replace|edit)\b',
+    ]
+    for pat in leading_steering_patterns:
+        if re.search(pat, preceding_text, re.IGNORECASE):
+            return False, "ERROR: Prompt rejected: leading line-level steering detected"
+
+    # Check single-item micro-task scope
+    raw_epics = re.findall(r'\b(?:EPIC|Epic)-[A-Za-z0-9_]+\b', prompt_text)
+    raw_features = re.findall(r'\b(?:FEAT|FEATURE|Feat|Feature)-[A-Za-z0-9_]+\b', prompt_text)
+    raw_stories = re.findall(r'\b(?:US|UserStory|Story)-[A-Za-z0-9_]+\b', prompt_text)
+    raw_use_cases = re.findall(r'\b(?:UC|UseCase)-[A-Za-z0-9_]+\b', prompt_text)
+
+    unique_epics = set(e.upper() for e in raw_epics)
+    unique_features = set(f.upper() for f in raw_features)
+    unique_stories = set(s.upper() for s in raw_stories)
+    unique_use_cases = set(u.upper() for u in raw_use_cases)
+
+    if len(unique_epics) > 1 or len(unique_features) > 1 or len(unique_stories) > 1 or len(unique_use_cases) > 1:
+        return False, "ERROR: Prompt rejected: micro-task scope violation"
+
+    batch_patterns = [
+        r'\ball\s+(?:epics|features|user\s*stories|use\s*cases)\b',
+        r'\bmultiple\s+(?:epics|features|user\s*stories|use\s*cases)\b',
+        r'\bbatch\s+(?:process|processing|execution|generation|mode)\b',
+    ]
+    for pat in batch_patterns:
+        if re.search(pat, prompt_text, re.IGNORECASE):
+            return False, "ERROR: Prompt rejected: micro-task scope violation"
+
+    return True, ""
+
+
+lint_prompt_text = lint_subagent_prompt
+
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Subagent Prompt Payload Linter for DEAP01-spec-core",
