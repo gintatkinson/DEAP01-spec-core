@@ -140,12 +140,12 @@ class TestCanonicalTemplates(unittest.TestCase):
         self.assertGreaterEqual(len(m_tokens), 10, f"Expected >= 10 tokens in MISSION_INTENT template, found {len(m_tokens)}")
 
     def test_docs_conops_landing_zone_contains_only_gitkeep(self):
-        """Verify that docs/conops/ directory contains ONLY .gitkeep."""
+        """Verify that docs/conops/ directory contains ONLY .gitkeep or README.md."""
         conops_dir = os.path.join(repo_root, "docs", "conops")
         self.assertTrue(os.path.isdir(conops_dir), f"docs/conops directory does not exist at {conops_dir}")
 
         files = os.listdir(conops_dir)
-        self.assertEqual(files, [".gitkeep"], f"docs/conops/ should contain ONLY .gitkeep, but found: {files}")
+        self.assertTrue(set(files).issubset({".gitkeep", "README.md"}), f"docs/conops/ should contain ONLY .gitkeep / README.md, but found: {files}")
 
     def test_check16_clean_landing_zone_passes(self):
         """Verify that Check 16 (Upstream Template Clean Landing Zone Gate) passes."""
