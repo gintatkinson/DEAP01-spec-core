@@ -1,524 +1,337 @@
 | **Attribute** | **Value** |
 | :--- | :--- |
-| **Document Title** | Master Turnkey Handover: OpenCode & DeepSeek-R1 Execution Architecture |
-| **Document ID** | DEAP-HANDOFF-OPENCODE-001 |
-| **Upstream Core Repository** | `DEAP01-spec-core` (`/Users/perkunas/jail/DEAP01-spec-core`) |
-| **Downstream Workspace** | `uas-004` (`/Users/perkunas/jail/uas-004`) |
-| **Target Engine / LLM** | DeepSeek-R1 / `deepseek-reasoner` via OpenCode |
+| **Document Title** | Master Turnkey Handover: Upstream Compiler Core Engineering & Quality Gate Architecture |
+| **Document ID** | DEAP-HANDOFF-OPENCODE-CORE-001 |
+| **Repository** | `DEAP01-spec-core` (`UPSTREAM_SPEC_CORE_COMPILER`) |
+| **Target Engine** | DeepSeek-R1 / OpenCode |
 | **Date** | 2026-09-01 |
 | **Status** | Authoritative Active Handover |
-| **GitHub Issue Reference** | https://github.com/gintatkinson/DEAP01-spec-core/issues/69 |
+| **Baseline Commit** | `4629ce9` on `origin/main` (351/351 tests pass, 19/19 gates pass) |
+| **Upstream Defect Reference** | https://github.com/gintatkinson/DEAP01-spec-core/issues/69 |
 
-# Master Turnkey Handover: OpenCode & DeepSeek-R1 Execution Architecture
+# Master Turnkey Handover: Upstream Compiler Core Engineering & Quality Gate Architecture
 
-> **Purpose:** Authoritative, turnkey technical specification, failure post-mortem, architecture blueprint, and step-by-step execution protocol for the incoming AI agent operating within **OpenCode** powered by **DeepSeek-R1 (`deepseek-reasoner`)**. This document guarantees zero context drift, zero mode collapse, 100% mathematical determinism, and flawless downstream delivery of the Avenger 5 safety and system specifications in `uas-004`.
+> **Purpose:** Authoritative turnkey technical specification, failure post-mortem, component architecture inventory, and active engineering work packages for an incoming AI agent operating within **OpenCode** powered by **DeepSeek-R1 (`deepseek-reasoner`)** inside the upstream compiler core repository (`DEAP01-spec-core`). This document establishes the foundational architectural invariants, explains historical failure mechanisms, and outlines the implementation tasks required to maintain 100% mathematical determinism, pure schema-driven compilation, and rigorous quality gate enforcement across the DEAP framework.
 
 ---
 
-## 0. Mandatory Agent Initialization & Context Invariants
+## 0. Mandatory Post-Install Initialization Protocol (Steps 0–5)
+
+Every incoming AI agent initializing within the `DEAP01-spec-core` repository MUST execute the following sequential initialization protocol (Steps 0 through 5) prior to performing any code edits, running tools, or executing compiler tasks.
 
 ```mermaid
 flowchart TD
-    S0["Step 0: Repository Classification & Sentinel Check (.pipeline/upstream/)"] --> S1["Step 1: Constitution & Quality Gate Ingestion (.pipeline/constitution.md)"]
-    S1 --> S2["Step 2: Skills & Subagent Protocols (skills/)"]
-    S3["Step 3: Pure Schema-Driven Compiler Invariant (Zero Domain Concepts in Upstream)"] --> S4["Step 4: Upstream vs Downstream Workspace Boundary Isolation"]
-    S2 --> S3
-    S4 --> EXEC["Ready for Work Package Execution in uas-004"]
+    S0["Step 0: Sentinel Check\n(.pipeline/upstream/ presence)"] --> S1["Step 1: Constitution & Quality Gate Ingestion\n(.pipeline/constitution.md)"]
+    S1 --> S2["Step 2: Skills & Execution Protocols\n(skills/ directories)"]
+    S2 --> S3["Step 3: Pure Schema-Driven Compiler Invariant\n(Zero Hardcoded Domain Concepts)"]
+    S3 --> S4["Step 4: Clean Landing Zone Mandate\n(schema/, docs/epics/, docs/features/, docs/safety/)"]
+    S4 --> S5["Step 5: Tracker Synchronization\n(scripts/reconcile_backlog.py)"]
+    S5 --> RDY["Ready for Upstream Work Package Execution"]
 ```
 
-### Step 0: Repository Classification & Sentinel Indicator
-Every incoming agent initializing in any DEAP environment MUST immediately check for the presence of the sentinel indicator directory `.pipeline/upstream/`:
+### Step 0: Repository Classification & Sentinel Check
+Check for the presence of the sentinel indicator directory `.pipeline/upstream/`:
+- **State:** `.pipeline/upstream/` is **PRESENT**.
+- **Classification:** `UPSTREAM_SPEC_CORE_COMPILER` mode (`DEAP01-spec-core`).
+- **Core Invariant:** The repository is the abstract Model-Based Systems Engineering (MBSE) compiler, linter harness, and distribution pipeline template. It MUST remain 100% domain-agnostic. Concrete system specifications, customer domain models, and platform-specific names MUST NEVER be committed to upstream core branches.
 
-- **Case A: `.pipeline/upstream/` is PRESENT $\longrightarrow$ `UPSTREAM_SPEC_CORE_COMPILER` Mode (`DEAP01-spec-core`)**
-  - The repository is the abstract Model-Based Systems Engineering (MBSE) compiler and distribution pipeline template.
-  - **Invariant:** Strictly prohibited from containing customer domain models, concrete project specifications, or hardcoded platform constants.
-  - Landing zones (`schema/`, `docs/conops/`, `docs/safety/`, `docs/epics/`, `docs/features/`, `docs/user-stories/`, `docs/use-cases/`) MUST remain clean containing only `.gitkeep` and `README.md`.
-  - All validator tools, parsers, and test suites must operate dynamically against arbitrary SysML v2 / YANG / Proto schemas.
-
-- **Case B: `.pipeline/upstream/` is ABSENT $\longrightarrow$ `Downstream Customer Project Mode` (`uas-004`)**
-  - The repository is a concrete customer application / system delivery workspace.
-  - Authorized for full domain specification compilation, SysML v2 domain modeling (`schema/Avenger5.sysml`), safety matrix synthesis (`docs/safety/`), interface specifications (`docs/icd/`), and software implementations (`app_flutter/`, `web_react/`, or embedded targets).
-
-### Step 1: Constitution & Governance Invariants
-- **Action:** Read [`.pipeline/constitution.md`](.pipeline/constitution.md).
-- **Rule:** The Constitution and automated quality gates are **immutable ground truth standards**.
-- **Anti-Goalpost-Moving Mandate:** An agent MUST NEVER modify the Constitution, alter validation thresholds, weaken linters, or soften test assertions to force failing or incomplete code to pass. If an artifact fails a quality gate, the artifact is what must be repaired.
+### Step 1: Constitution & Quality Gate Ingestion
+- **Action:** Read and ingest [`.pipeline/constitution.md`](.pipeline/constitution.md).
+- **Rule:** The Constitution and its automated validation gates represent **immutable ground truth standards**.
+- **Anti-Goalpost-Moving Mandate:** An agent MUST NEVER modify the Constitution, alter validation thresholds, weaken linters, or soften test assertions to force failing or incomplete code to pass. If an artifact fails a quality gate, the artifact or the compiler generating it is what must be repaired.
 
 ### Step 2: Skills & Execution Protocols
-- **Action:** Ingest and adhere to the specialized skills in `skills/`:
-  - [`skills/spec-orchestrator/SKILL.md`](skills/spec-orchestrator/SKILL.md): End-to-end multi-agent protocol orchestration.
-  - [`skills/feature-driven-implementation/SKILL.md`](skills/feature-driven-implementation/SKILL.md): Subagent-driven TDD implementation.
-  - [`skills/adversarial-code-auditor/SKILL.md`](skills/adversarial-code-auditor/SKILL.md): Mandatory 5 Whys failure analysis and defect filing.
-  - [`skills/debug-protocol/SKILL.md`](skills/debug-protocol/SKILL.md): Systematic 8-step RED-GREEN-REFACTOR bug loop.
+Ingest and strictly adhere to the standardized skill protocols located in `skills/`:
+1. [`skills/spec-orchestrator/SKILL.md`](skills/spec-orchestrator/SKILL.md): Orchestrates end-to-end multi-agent protocol specification engineering (Phases 1, 1.5, 2, 3, 4, 5).
+2. [`skills/feature-driven-implementation/SKILL.md`](skills/feature-driven-implementation/SKILL.md): Governs subagent-driven Test-Driven Development (TDD) implementation discipline.
+3. [`skills/adversarial-code-auditor/SKILL.md`](skills/adversarial-code-auditor/SKILL.md): Enforces mandatory 5 Whys root cause analysis, 4-pillar correctness auditing, and 7-section defect report filing on any failure.
+4. [`skills/debug-protocol/SKILL.md`](skills/debug-protocol/SKILL.md): Implements the systematic 8-step RED-GREEN-REFACTOR defect remediation cycle.
 
 ### Step 3: Pure Schema-Driven Compiler Invariant
-- **Rule:** `DEAP01-spec-core` contains zero static/hardcoded parameter dictionaries (e.g. `GROUND_TRUTH = {...}`, `EXPECTED_SPECS = {...}`, `DOMAIN_PARAMS = {...}`).
-- All parameter extraction across the compiler stack dynamically queries `workspace.schemas` or `schema/*.sysml` AST nodes.
+- **Rule:** `DEAP01-spec-core` MUST contain zero static or hardcoded domain dictionaries (e.g. `GROUND_TRUTH = {...}`, `EXPECTED_SPECS = {...}`, `DOMAIN_PARAMS = {...}`).
+- **AST Principle:** All compiler passes, AST builders, and validators MUST derive entities, ports, signals, control actions, and safety constraints dynamically from formal input schemas (`*.sysml`, `*.yang`, `*.proto`, `*.yaml`, `*.arxml`).
 
-### Step 4: Downstream Workspace Separation
-- **Upstream Compiler Core:** `/Users/perkunas/jail/DEAP01-spec-core` (Git branch: `main`, 351/351 tests pass, 19/19 baseline gates pass).
-- **Downstream Workspace:** `/Users/perkunas/jail/uas-004` (Target workspace for Avenger 5 tactical loitering munition UAS specifications).
+### Step 4: Clean Landing Zone Mandate
+In `UPSTREAM_SPEC_CORE_COMPILER` mode, all target specification landing zones must remain clean distribution templates containing only `.gitkeep` and template `README.md` files:
+- `schema/`
+- `docs/epics/`
+- `docs/features/`
+- `docs/user-stories/`
+- `docs/use-cases/`
+- `docs/safety/`
+- `docs/interfaces/`
+
+Enforced by Checks 16, 17, and 18 in `scripts/verify_downstream_baseline.py`.
+
+### Step 5: Tracker Synchronization
+Verify issue tracking synchronization mechanisms using `scripts/reconcile_backlog.py` in `--offline` mode (or via configured GitHub/GitLab providers) to ensure backlog integrity and cross-view traceability.
 
 ---
 
-## 1. Detailed Post-Mortem of Prior Failures (Why the Previous Session Broke)
+## 1. Detailed Post-Mortem of Upstream Tooling Weaknesses
 
-An adversarial retrospective of prior agent execution sessions revealed four catastrophic failure modes that stalled specification synthesis:
+An adversarial engineering audit of the upstream compiler toolchain identified four distinct tooling defects that enabled shallow specification generation, false-positive gate passes, and context corruption in downstream workspaces.
 
 ```mermaid
 flowchart TD
-    subgraph "Prior Failure Modes (Root Cause Analysis)"
-        F1["Defect 1: 16-UCA Combinatorial Mode Collapse\n(Autoregressive Context Decay from 84 to 16 UCAs)"]
-        F2["Defect 2: Weak Regex CI Quality Gate\n(Superficial regex passed truncated specs)"]
-        F3["Defect 3: Cloud Safety Filter Collisions\n(Gemini API aborting on ESAD/fuzing terms)"]
-        F4["Defect 4: Context Satiation & Token Gravitation\n(Chat context bloating led to hardcoding)"]
+    subgraph "Identified Upstream Defects (Root Cause)"
+        D1["Defect 1: Weak Regex Linter Blindspot in Check 17\n(Isolated string matches passed 4- & 16-UCA stubs)"]
+        D2["Defect 2: Tautological Test Harness & Pipeline Mock\n(Embedded 4-UCA synthetic mock in installer/tests)"]
+        D3["Defect 3: Generative LLM Context Satiation & Filter Collisions\n(Autoregressive attention decay & cloud censorship)"]
+        D4["Defect 4: Context Contamination across Boundaries\n(Downstream platform nouns leaking upstream)"]
     end
 
-    subgraph "OpenCode + DeepSeek-R1 Architecture Resolution"
-        R1["Deterministic Python AST Matrix Generator\n(scripts/compile_uas_specifications.py)"]
-        R2["Hardened AST & Table-Aware Verification Gate\n(Checks 10..19 in verify_downstream_baseline.py)"]
-        R3["Unfiltered DeepSeek-R1 via OpenCode\n(Zero safety filter censorship on defense terms)"]
-        R4["Item-Level Subagent Context Isolation\n(Python dispatch_subagent.py with clean context)"]
+    subgraph "Upstream Architecture Hardening Solutions"
+        S1["Work Package 1: Structural Table AST Linter in Check 17\n(Full markdown table parser & dynamic cardinality check)"]
+        S2["Work Package 2: Test Suite & Bootstrap Decontamination\n(Purge synthetic 4-UCA mock, add adversarial tests)"]
+        S3["Work Package 3: Abstract AST STPA Transpiler\n(Deterministic Cartesian product generator & 10-proof engine)"]
+        S4["Work Package 4: Domain Cleanliness Gates 18 & 19\n(Hardened AST token scanners preventing domain leaks)"]
     end
 
-    F1 ==> R1
-    F2 ==> R2
-    F3 ==> R3
-    F4 ==> R4
+    D1 ==> S1
+    D2 ==> S2
+    D3 ==> S3
+    D4 ==> S4
 ```
 
-### Defect 1: The 16-UCA Regression & Autoregressive Attention Decay
-- **Mechanism:** Under System-Theoretic Process Analysis (STPA), evaluating a 7-tier control hierarchy with 21 downward Control Actions ($CA-01$ through $CA-21$) against the 4 canonical STPA guide words (Omission, Commission, Timing/Sequencing, Duration/Magnitude) demands an exact Cartesian product cardinality:
-  $$\begin{aligned} |\mathcal{U}| = |\mathcal{A}| \times |\mathcal{G}| = 21 \times 4 = 84 \text{ UCAs} \end{aligned}$$
-- **Failure:** When previous agents attempted to generate this matrix via unconstrained autoregressive LLM completion in a single markdown document, the model suffered from **attention degradation and context satiation**. After emitting approximately 16 rows, the attention weights diluted, and the model prematurely closed the table, dropping from 84 fully analyzed UCAs to a shallow 16-row stub. Critical hazards—including actuator runaway, delayed capacitor bleed-down discharge, and interlock watchdog timeouts—were completely omitted.
+### Defect 1: Weak Regex Linter Blindspot in Check 17
+- **Location:** `scripts/verify_downstream_baseline.py:578-671`
+- **Root Cause:** The legacy implementation of `check_uca_categories()` used naive global regular expressions:
+  ```python
+  # Legacy check:
+  if not re.search(r'\b(?:not\s+provid(?:ing|ed)|omission)\b', content, re.IGNORECASE):
+      missing_categories.append("1. Not providing causes hazard")
+  ```
+- **Vulnerability:** An isolated markdown file containing a shallow 4-UCA or 16-UCA stub satisfied the linter as long as each keyword (`omission`, `commission`, `timing`, `duration`) occurred at least once anywhere in the document. The linter failed to parse markdown table structures, failed to verify row counts, and did not evaluate dynamic Cartesian product cardinality against the control actions defined in the system architecture.
+- **Downstream Impact:** Downstream pipelines generated severely truncated safety matrices (e.g. 16 UCAs instead of the mathematically required 84 UCAs), yet Check 17 reported `Success: Check 17 verified`, masking the omission of critical safety hazards.
 
-### Defect 2: Weak Regex Check 17 Linter
-- **Mechanism:** The legacy CI verification script used a weak regex pattern (`re.search(r'UCA-\d+', content)` and checking if words like `omission`, `commission`, `timing`, `duration` appeared anywhere in the text).
-- **Failure:** The linter passed a 16-row stub because at least one `UCA-XX` and the four guide words were present in the file. This provided a false sense of compliance while 80% of the safety analysis was missing.
-- **Resolution:** Gate 17 in `scripts/verify_downstream_baseline.py` is now **hardened with structural table parsing**: it parses markdown tables, verifies that all 4 STPA failure mode categories are actively covered across rows, validates 15+ FMECA rows with RPN calculations, checks for all 24 SORA OSOs (`OSO-01` through `OSO-24`), and enforces exact UCA cardinality.
+### Defect 2: Tautological Test Harness & Pipeline Bootstrap Mock
+- **Location:** `tests/test_safety_integrity.py:24-100` and `scripts/install_pipeline.sh:825-930`
+- **Root Cause:** Both the test suite and the pipeline installation script hardcoded a synthetic mock generator `generate_valid_stpa_matrix_content()` that emitted exactly 4 hardcoded UCAs (`UCA-01` through `UCA-04`).
+- **Vulnerability:** The upstream test suite asserted that Check 17 passed on this 4-UCA mock. Consequently, any attempt to harden Check 17 to require full Cartesian coverage broke the upstream test suite itself. The installer distributed this shallow mock to downstream workspaces, setting a defective baseline across projects.
 
-### Defect 3: Google Gemini API Safety Filter Collisions
-- **Mechanism:** High-integrity defense systems governed by **MIL-STD-882E Task 106** and **NATO STANAG 4187** necessarily require formal specifications of Electronic Safe and Arm Devices (ESAD), high-voltage firing circuits ($1200\text{ V}$ capacitor banks), pyrotechnic gas deployers, squib initiators, and shaped-charge warheads.
-- **Failure:** Google Gemini API endpoints triggered `HARM_CATEGORY_DANGEROUS_CONTENT` safety filter violations on legitimate defense safety terms, aborting subagent execution midway and generating truncated JSON responses.
-- **Resolution:** Migrating execution to **OpenCode with DeepSeek-R1 (`deepseek-reasoner`)** completely eliminates commercial safety filter collisions, enabling uninterrupted, deep chain-of-thought mathematical reasoning on defense and aerospace engineering protocols.
+### Defect 3: Generative LLM Context Satiation & Cloud Safety Filter Fragility
+- **Mechanism:** In complex safety-critical systems with $N$ controllers and $M$ downward control actions, System-Theoretic Process Analysis (STPA) requires evaluating each action across the 4 STPA guide words:
+  $$\begin{aligned} |\mathcal{U}| = \sum_{p \in \mathcal{P}} |\mathcal{A}(p)| \times |\mathcal{G}| = 4 \times \sum_{p \in \mathcal{P}} |\mathcal{A}(p)| \end{aligned}$$
+  For 21 control actions, this yields $|\mathcal{U}| = 84$ distinct Unsafe Control Actions.
+- **Failure:** Autoregressive LLMs attempting to draft this table in a single conversational turn suffer from **attention weight degradation and context satiation**, prematurely closing tables after 12 to 16 rows. Furthermore, proprietary cloud LLM APIs frequently trigger automated safety filters when processing defense, kinetic containment, or fuzing terminology.
+- **Architectural Remedy:** Safety matrix generation must be offloaded to local, deterministic AST compiler engines (`scripts/compile_sysml.py`), with item-level subagent isolation for individual narrative rationales.
 
-### Defect 4: Context Satiation & Token Gravitation
-- **Mechanism:** Prior agents loaded hundreds of kilobytes of unstructured documentation and logs into their primary chat context. As the context filled, token gravitation caused the LLM to hallucinate shortcuts, write ad-hoc hardcoded dictionaries, and bypass the SysML v2 Single Source of Truth (SSOT).
-- **Resolution:** Strict enforcement of **Item-Level Subagent Context Isolation** (`python3 scripts/dispatch_subagent.py`) where each specification item (Feature, Story, Proof, ICD) is authored by a fresh subagent possessing only its target AST node and formal template.
+### Defect 4: Context Contamination across Repository Boundaries
+- **Mechanism:** During multi-repository workflows, platform-specific names, customer domain concepts, or concrete vehicle parameters accidentally leaked into upstream core documentation, blueprints, or test assertions.
+- **Architectural Remedy:** Enforcement of strict domain-agnostic AST cleanliness linters (Checks 18 and 19 in `scripts/verify_downstream_baseline.py` and `tests/test_check_no_domain_config.py`).
 
 ---
 
-## 2. The Two Repositories & Current Clean Ground Truth State
+## 2. Upstream Core Architecture & Component Inventory
 
-### 2.1 Upstream Core Repository (`DEAP01-spec-core`)
-- **Location:** `/Users/perkunas/jail/DEAP01-spec-core`
-- **Validation State:**
-  - `python3 -m unittest discover -s tests`: **351/351 tests pass (exit code 0)**.
-  - `python3 scripts/verify_downstream_baseline.py`: **19/19 baseline gates pass (exit code 0)**.
-- **Master Blueprint:** `docs/architecture/blueprints/DEAP_DETERMINISTIC_SAFETY_SPECIFICATION_COMPILER_BLUEPRINT.md` (authoritative reference for the 10-Pillar Safety Architecture, 10 Formal Proofs, and Air-Gapped execution).
-- **Clean Distribution Integrity:** Upstream landing zones (`docs/conops/`, `docs/safety/`, `docs/epics/`, `docs/features/`, `docs/user-stories/`, `docs/use-cases/`, and `schema/`) are 100% clean of domain pollution, containing only `.gitkeep` and `README.md`.
-
-### 2.2 Downstream Customer Workspace (`uas-004`)
-- **Location:** `/Users/perkunas/jail/uas-004`
-- **Target System:** Avenger 5 Tactical Loitering Munition UAS ($40.0\text{ kg}$ MTOM, $35.0\text{ m/s}$ cruise speed, $50\text{ km}$ operational radius, STANAG 4187 ESAD).
-- **Clean Room Ground Truth Assets:**
-  1. **Parameter Extraction Catalog:** `.pipeline/diagnostics/avenger5_extracted_parameters.json` (59.4 KB, 100% parameter extraction across 15 subsystem groups).
-  2. **Normative SysML v2 Metamodel:** `schema/Avenger5.sysml` (1,304 lines, 315 AST nodes: 18 parts, 27 ports, 40 actions, 22 requirements, 22 testcases, 4 states, 19 constraints, 12 items).
+The `DEAP01-spec-core` repository provides the compiler toolchains, quality gate harnesses, parity auditors, and MBSE architectural blueprints for the entire DEAP ecosystem.
 
 ```mermaid
-classDiagram
-    class Avenger5_SystemRoot {
-        +Mass total_mass = 40.0 kg
-        +Speed v_cruise = 35.0 m/s
-        +Speed v_stall = 18.0 m/s
-        +Length wingspan = 2.4 m
-        +Distance operational_radius = 50.0 km
-    }
-    class PrimaryFlightComputer_FCC {
-        +executePrimaryControlLoop()
-        +processSensorFusion()
-        +evaluateFlightEnvelope()
-    }
-    class CertifiedSafetyNet_CSN {
-        +evaluateControlBarrierFunction()
-        +commandSimplexOverride()
-        +executeRecoveryAttitude()
-    }
-    class GuidanceComputer_CUF {
-        +calculateTrajectorySetpoint()
-        +computeDAADeconfliction()
-    }
-    class ElectronicSafeArmDevice_ESAD {
-        +Voltage fire_bus_voltage = 1200.0 V
-        +executeSafeBleedDown()
-        +verifyDualOpticalInterlocks()
-    }
-    class EmergencyDecelerationUnit {
-        +Area chute_area = 12.5 m2
-        +deployParachuteSquib()
-    }
+graph TD
+    subgraph "Upstream Compiler Core (DEAP01-spec-core)"
+        subgraph "Compiler Engines"
+            C1["scripts/compile_sysml.py\n(SysML v2 AST, STPA Compiler, Reverse Sync)"]
+            C2["scripts/compile_yang.py\n(YANG to Logical UI Transpiler)"]
+            C3["skills/spec-orchestrator/scripts/sysmlv2_ast.py\n(Canonical AST Data Models)"]
+        end
 
-    Avenger5_SystemRoot *-- PrimaryFlightComputer_FCC
-    Avenger5_SystemRoot *-- CertifiedSafetyNet_CSN
-    Avenger5_SystemRoot *-- GuidanceComputer_CUF
-    Avenger5_SystemRoot *-- ElectronicSafeArmDevice_ESAD
-    Avenger5_SystemRoot *-- EmergencyDecelerationUnit
+        subgraph "Quality Gate Harness"
+            Q1["scripts/verify_downstream_baseline.py\n(Checks 10–19 Baseline Harness)"]
+            Q2["tests/test_baseline.py\n(Core Quality Suite)"]
+        end
+
+        subgraph "Parity Auditor Suite (skills/spec-orchestrator/parity_auditor/)"
+            G23["Gate 23: icd_completeness_validator.py\n(Port Contract & Signal Parity)"]
+            G24["Gate 24: operational_allocation_validator.py\n(Operational-to-Resource Allocation)"]
+            G25["Gate 25: standards_measurement_validator.py\n(SI 7-D Parameter Metrology)"]
+            G26["Gate 26: conops_completeness_validator.py\n(ConOps & Mission Intent Completeness)"]
+        end
+
+        subgraph "Distribution & Installation"
+            I1["scripts/install_pipeline.sh\n(Shell Distribution Installer)"]
+            I2["scripts/install_pipeline.py\n(Python Distribution Installer)"]
+            I3["scripts/reconcile_backlog.py\n(Multi-Provider Tracker Engine)"]
+        end
+
+        subgraph "Master Architectural Blueprints (docs/architecture/blueprints/)"
+            BP["11 Abstract MBSE Blueprints\n(SysML SSOT, Safety Compiler, DeepSeek Harness, etc.)"]
+        end
+    end
+
+    C3 --> C1
+    C1 --> G23
+    C1 --> G24
+    C1 --> G25
+    C1 --> G26
+    Q1 --> G23
+    Q1 --> G24
+    Q1 --> G25
+    Q1 --> G26
 ```
+
+### 2.1 Compiler Engines
+- **[`scripts/compile_sysml.py`](scripts/compile_sysml.py):**
+  - Textual SysML v2 AST parser and model compiler.
+  - STPA-to-SysML safety constraint compiler (`constraint def` / `assert constraint`).
+  - Run-Time Assurance (RTA) invariant synthesizer for Simulink Design Verifier (SLDV) and Embedded Coder.
+  - Closed-loop bidirectional reverse synchronization (`--reverse-sync`).
+- **[`scripts/compile_yang.py`](scripts/compile_yang.py):**
+  - Ingests RFC/IETF YANG models and transpiles container, list, and leaf hierarchies into `logical-layout.json` for frontend consumption.
+- **[`skills/spec-orchestrator/scripts/sysmlv2_ast.py`](skills/spec-orchestrator/scripts/sysmlv2_ast.py):**
+  - Canonical Python AST data classes: `PartDef`, `PortDef`, `ActionDef`, `SysMLOperationDef`, `SysMLCapabilityDef`, `SysMLInteractionDef`, `SysMLConstraintDef`, `SysMLTestCaseDef`, `RequirementDef`, `StateDef`, `UseCaseDef`, `ItemDef`, `SysMLPackage`, and `SysMLParser`.
+
+### 2.2 Quality Gate Harness (Checks 10–19)
+The baseline verification script [`scripts/verify_downstream_baseline.py`](scripts/verify_downstream_baseline.py) executes 10 foundational quality checks:
+
+| Check ID | Verification Function | Description & Invariant |
+| :--- | :--- | :--- |
+| **Check 10** | `check_gitignore_exists()` | Verifies `.gitignore` exists in repository root with standard exclusions. |
+| **Check 11** | `check_no_ds_store_files()` | Ensures zero `.DS_Store` binary metadata files exist in tree. |
+| **Check 12** | `check_no_duplicate_master_blueprints()` | Verifies no duplicated blueprint copies exist in downstream paths. |
+| **Check 13** | `check_latex_katex_syntax()` | Validates KaTeX/LaTeX syntax across all markdown files in repository. |
+| **Check 14** | `check_downstream_instructions_exist()` | Verifies `README.md`, agent instructions, and `rules/sysml-ssot-completeness.md`. |
+| **Check 15** | `check_reconcile_backlog_tooling_exists()` | Verifies `scripts/reconcile_backlog.py` is present, non-empty, and executable. |
+| **Check 16** | `check_upstream_template_clean_landing_zones()` | Validates clean landing zones for `schema/`, `docs/epics/`, `docs/features/`, `docs/user-stories/`, `docs/use-cases/`. |
+| **Check 17** | `check_safety_integrity_and_sora_completeness()` | Validates clean upstream `docs/safety/` or downstream 8-pillar STPA/FMECA/SORA specification. |
+| **Check 18** | `check_upstream_architecture_blueprints_clean()` | Validates abstract blueprints contain zero domain concept papers or concrete SysML models. |
+| **Check 19** | `check_domain_agnostic_ast_cleanliness()` | Enforces zero hardcoded domain tokens across all upstream compiler and validation scripts. |
+
+### 2.3 Parity Auditor Suite (Gates 23–26)
+Located in [`skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/`](skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/):
+- **Gate 23 ([`icd_completeness_validator.py`](skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/icd_completeness_validator.py)):** Enforces 100% topological port contract parity, zero dangling ports, and signal dictionary completeness.
+- **Gate 24 ([`operational_allocation_validator.py`](skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/operational_allocation_validator.py)):** Validates operational activity to system resource allocation (`/// OperationalAllocation: [...]`).
+- **Gate 25 ([`standards_measurement_validator.py`](skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/standards_measurement_validator.py)):** Validates ISO 80000 / SI 7-dimensional parameter metrology, value bounds, and unit traceability.
+- **Gate 26 ([`conops_completeness_validator.py`](skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/conops_completeness_validator.py)):** Validates 10 mandatory ConOps sections and METL roster completeness (ISO 29148 / NATO STANAG 4586 / OMG UAF).
+
+### 2.4 Pipeline Installers & Backlog Reconciler
+- **[`scripts/install_pipeline.sh`](scripts/install_pipeline.sh) & [`scripts/install_pipeline.py`](scripts/install_pipeline.py):** Turnkey distribution installers that bootstrap downstream workspaces with git hooks, validation linters, skills, and configuration templates.
+- **[`scripts/reconcile_backlog.py`](scripts/reconcile_backlog.py):** Multi-provider backlog reconciler supporting GitHub Issues, GitLab Issues (including self-hosted/air-gapped instances), and offline dry-run synchronization.
+
+### 2.5 Master Architectural Blueprints
+Located in [`docs/architecture/blueprints/`](docs/architecture/blueprints/):
+1. `DEAP_DEEPSEEK_HARNESS_INTEGRATION_BLUEPRINT.md`: DeepSeek-R1 harness integration and subagent dispatching architecture.
+2. `DEAP_DETERMINISTIC_SAFETY_SPECIFICATION_COMPILER_BLUEPRINT.md`: Mathematical specification for STPA/FMECA/SORA deterministic compilers.
+3. `DEAP_LOCAL_AIRGAPPED_DEEPSEEK_WORKSTATION_BLUEPRINT.md`: Local workstation deployment architecture for air-gapped environments.
+4. `DEAP_LOGICAL_INTERFACE_SPECIFICATION_BLUEPRINT.md`: ICD Level 1C topological and signal dictionary synthesis architecture.
+5. `DEAP_MULTI_TOOLCHAIN_SYNTHESIS_ARCHITECTURE.md`: Integration bridges for MATLAB/Simulink, SLDV, Embedded Coder, and ROS2/PX4.
+6. `DEAP_SYSML_V2_INGESTION_ENGINE_BLUEPRINT.md`: AST ingestion engine for OMG IDL, AUTOSAR ARXML, Protobuf, OpenAPI, and SysML v2.
+7. `MULTI_PROVIDER_GITLAB_INFRASTRUCTURE_ARCHITECTURE.md`: Multi-provider git governance and air-gapped GitLab CI/CD architecture.
+8. `PERSISTENCE_ARCHITECTURE.md`: Long-term specification persistence and cryptographic hash chaining.
+9. `RUNTIME_METADATA_ENGINE.md`: Dynamic runtime metadata extraction and schema mapping.
+10. `SAFETY_CRITICAL_REALTIME_UI_FRAMEWORK.md`: Real-time safety-critical UI binding and layout verification.
+11. `SYSML_SSOT_BIDIRECTIONAL_SYNCHRONIZATION_ARCHITECTURE.md`: Mathematical bidirectional synchronization between SysML AST and Markdown backlogs.
 
 ---
 
-## 3. The 3 Mandatory Work Packages to Complete in Downstream `uas-004`
+## 3. Active Upstream Engineering Work Packages
+
+The incoming AI agent is tasked with executing four prioritized upstream engineering work packages to resolve historical tooling weaknesses and establish turnkey compiler capabilities.
 
 ```mermaid
-flowchart LR
-    WP1["Work Package 1:\n10-Pillar Safety Analysis\n(docs/safety/STPA_MATRIX.md\n& docs/safety/HAZARD_LOG.md)"]
-    WP2["Work Package 2:\nISO 29148 CONOPS & METL\n(docs/conops/CONOPS.md\n& docs/conops/MISSION_INTENT.md)"]
-    WP3["Work Package 3:\nLevel 1C Logical ICDs\n(docs/icd/ICD_01_SYSTEM_INTERFACE_MATRIX.md\n& docs/icd/ICD_02_MASTER_SIGNAL_DICTIONARY.md)"]
-
-    WP1 --> V1["Quality Gate 17 (Safety Integrity & SORA)"]
-    WP2 --> V2["Quality Gate 24 (Op-to-Res Allocation)"]
-    WP3 --> V3["Quality Gate 23 (ICD Completeness)"]
-
-    V1 & V2 & V3 --> PASS["Downstream Baseline Conformance Verified (Exit Code 0)"]
+gantt
+    title Upstream Compiler Core Work Packages
+    dateFormat  YYYY-MM-DD
+    section Work Package 1
+    Harden Check 17 Linter (Table AST Parser)       :wp1, 2026-09-01, 1d
+    section Work Package 2
+    Test Suite & Bootstrap Decontamination          :wp2, after wp1, 1d
+    section Work Package 3
+    Abstract AST STPA Transpiler & Proofs           :wp3, after wp2, 1d
+    section Work Package 4
+    Domain Cleanliness Gates 18 & 19 Hardening      :wp4, after wp3, 1d
 ```
+
+### Work Package 1: Hardening Check 17 Linter (Structural Table AST Parser)
+- **Target File:** `scripts/verify_downstream_baseline.py`
+- **Objective:** Replace naive regex string searches in `validate_safety_matrix_content()` and `check_uca_categories()` with structural, table-aware AST parsing.
+- **Detailed Requirements:**
+  1. **Dynamic Set Equality Validation:**
+     Parse markdown tables under Pillar 4 (Unsafe Control Actions) and verify that the number of distinct UCAs satisfies:
+     $$\begin{aligned} |\mathcal{U}| \ge 4 \times \sum_{p \in \mathcal{P}} |\mathcal{A}(p)| \end{aligned}$$
+     where control actions $\mathcal{A}(p)$ are extracted from the system architecture.
+  2. **Row-Level STPA Guide Word Verification:**
+     Verify that every table row explicitly maps to one of the 4 STPA failure mode categories:
+     - Not providing causes hazard (Omission)
+     - Providing causes hazard (Commission)
+     - Providing too early, too late, or out of order (Timing/Sequencing)
+     - Stopped too soon or applied too long (Duration/Magnitude)
+  3. **SORA OSO-01..24 Completeness:**
+     Verify that all 24 Operational Safety Objectives are present with assigned robustness levels:
+     $$\begin{aligned} \mathcal{O}_{\text{required}} = \{\text{OSO-01}, \text{OSO-02}, \dots, \text{OSO-24}\} \subseteq \mathcal{O}_{\text{matrix}} \end{aligned}$$
+  4. **Formal 5-Part Mathematical Proof Structure:**
+     Verify that every Safety Constraint under Pillar 6 contains the 5 formal proof components:
+     $$\begin{aligned} \forall sc \in \mathcal{SC}, \quad \text{Proof}(sc) = \langle \text{Hypothesis}, \text{Invariant}, \text{Proof Step}, \text{SLDV Assertion}, \text{Q.E.D.} \rangle \end{aligned}$$
+
+### Work Package 2: Test Suite & Bootstrap Decontamination
+- **Target Files:** `tests/test_safety_integrity.py` and `scripts/install_pipeline.sh`
+- **Objective:** Eliminate tautological 4-UCA mock generators and replace with robust, adversarial structural tests.
+- **Detailed Requirements:**
+  1. **Purge Synthetic 4-UCA Mock:**
+     Remove `generate_valid_stpa_matrix_content()` emitting 4-UCA stubs from both `tests/test_safety_integrity.py` and `scripts/install_pipeline.sh`.
+  2. **Adversarial Regression Tests:**
+     Implement test cases that assert:
+     - Check 17 rejects truncated 4-UCA and 16-UCA matrices when the control architecture defines more control actions.
+     - Check 17 rejects safety constraints lacking 5-part mathematical proof structure.
+     - Check 17 passes on structurally complete matrices with full Cartesian product coverage.
+
+### Work Package 3: Abstract AST STPA Transpiler & 10-Proof Generator
+- **Target File:** `scripts/compile_sysml.py`
+- **Objective:** Implement dynamic Cartesian product expansion and formal proof compilation in the SysML v2 compiler.
+- **Detailed Requirements:**
+  1. **Dynamic Cartesian Expansion:**
+     Transpile AST `port def` and `action def` nodes into the complete set of Unsafe Control Actions:
+     $$\begin{aligned} \mathcal{U} = \{(a, g) \mid a \in \mathcal{A}, g \in \mathcal{G}\} \end{aligned}$$
+  2. **SysML v2 Formal Assertion Synthesis:**
+     Compile each safety constraint into formal SysML v2 `constraint def` and `assert constraint` expressions:
+     ```sysml
+     constraint def SC_01_Constraint {
+         in attribute command_active : Boolean;
+         in attribute threshold_exceeded : Boolean;
+         return : Boolean = not (threshold_exceeded and not command_active);
+     }
+     ```
+  3. **MATLAB / Simulink Design Verifier (SLDV) Export:**
+     Generate formal verification hooks and proof certificates.
+
+### Work Package 4: Domain Cleanliness Gates 18 & 19 Hardening
+- **Target Files:** `scripts/verify_downstream_baseline.py` and `tests/test_check_no_domain_config.py`
+- **Objective:** Harden negative linters to guarantee zero leakage of customer domain models or platform nouns into upstream core files.
+- **Detailed Requirements:**
+  1. **Check 18 Hardening:** Scan `docs/architecture/blueprints/` to ensure all 11 blueprints remain pure abstract architectures without platform-specific names.
+  2. **Check 19 Hardening:** Scan all compiler source files, skills, and tests to verify zero hardcoded domain constants.
 
 ---
 
-### Work Package 1: Compile 10-Pillar Production Safety Analysis
+## 4. Operational Verification & TDD Workflow in OpenCode
 
-The downstream safety analysis MUST be compiled into `docs/safety/STPA_MATRIX.md` (or modular files in `docs/safety/`) and cross-linked in `docs/safety/HAZARD_LOG.md`.
+Incoming AI agents must adhere to strict Test-Driven Development (TDD) discipline when implementing work packages within `DEAP01-spec-core`.
 
-#### Pillar 1: 5 System Losses ($\mathcal{L}$) with MIL-STD-882E Severity Levels
-$$\begin{aligned} \mathcal{L} = \{ L-1, L-2, L-3, L-4, L-5 \} \end{aligned}$$
-
-| Loss ID | System Loss Title & Description | MIL-STD-882E Severity Category | Quantitative Rate Target |
-| :--- | :--- | :--- | :--- |
-| **L-1** | Loss of human life or permanent disabling injury | Category I (Catastrophic) | $P < 10^{-7}\text{ / flight hr}$ |
-| **L-2** | Mid-air collision with crewed aircraft or critical civil infrastructure | Category I (Catastrophic) | $P < 10^{-7}\text{ / flight hr}$ |
-| **L-3** | Total uncontained hull loss and high-velocity ground impact | Category II (Critical) | $P < 10^{-5}\text{ / flight hr}$ |
-| **L-4** | Inadvertent high-energy firing release, squib ignition, or collateral strike | Category I / II (Catastrophic / Critical) | $P < 10^{-9}\text{ / command cycle}$ |
-| **L-5** | Unintended containment boundary penetration or mission failure | Category III (Moderate / Major) | $P < 10^{-4}\text{ / flight hr}$ |
-
-#### Pillar 2: All 14 Domain Hazards ($\mathcal{H}$) and Operational Triggers
-$$\begin{aligned} \mathcal{H} = \{ H-1, H-2, \dots, H-14 \} \end{aligned}$$
-
-| Hazard ID | Hazard Title | Associated Losses | Operational Trigger Conditions |
-| :--- | :--- | :--- | :--- |
-| **H-1** | Spatial Geofence Containment Boundary Breach | **L-1**, **L-2**, **L-5** | State estimator divergence, GNSS spoofing, guidance runaway. |
-| **H-2** | Well-Clear Separation Boundary Violation | **L-2** | Closing intruder velocity exceeds horizon, late evasive trigger. |
-| **H-3** | Dynamic Flight Instability or Aerodynamic Stall | **L-1**, **L-3** | Airspeed drops below $18.0\text{ m/s}$, servo hard-over, structural stall. |
-| **H-4** | High-Energy Battery Pack Thermal Runaway | **L-1**, **L-3** | Internal cell short circuit, overcurrent discharge, cell $T > 60.0^\circ\text{C}$. |
-| **H-5** | Redundant C2 Datalink Loss Exceeding Watchdog | **L-1**, **L-2**, **L-5** | RF jamming, antenna pointing lock loss, timeout $> 3.0\text{ s}$. |
-| **H-6** | Inadvertent High-Voltage Bus Arming | **L-1**, **L-4** | Firing circuit energized prior to verified safe separation distance. |
-| **H-7** | Premature Optical Fire Trigger / Squib Ignition | **L-1**, **L-4** | Electrostatic discharge, software race condition during rail launch. |
-| **H-8** | High-Voltage Safe Bleed-Down Discharge Failure | **L-1**, **L-4** | Bleed resistor switch open-circuit; residual voltage $> 50.0\text{ V}$ on abort. |
-| **H-9** | Primary Sensor Triad Corruption (Pitot/IMU/Baro) | **L-1**, **L-2**, **L-3** | Dynamic probe icing, gyro bias step drift, uncompensated latency. |
-| **H-10** | ASTM F3269-17 RTA Simplex Switchover Failure | **L-1**, **L-3**, **L-5** | Certified monitor deadlock; hardware switch stuck in CUF mode. |
-| **H-11** | Emergency Parachute Deployment Failure | **L-1**, **L-3** | Initiator squib open circuit, bridle entanglement, low altitude. |
-| **H-12** | Command Uplink Telecommand Corrupted / Replayed | **L-1**, **L-2**, **L-4** | Cryptographic key desynchronization, bad checksum accepted. |
-| **H-13** | RTOS Scheduler Execution Deadline Overrun | **L-1**, **L-3** | Inner attitude control loop execution time exceeds $2.5\text{ ms}$ deadline. |
-| **H-14** | Primary Power Distribution Unit Bus Brownout | **L-1**, **L-3** | DC-DC converter thermal trip, avionics rail drops below $10.8\text{ V}$. |
-
-#### Pillar 3: 7-Tier Hierarchical Control Structure DAG
-The control structure connects 7 tiers via 21 Control Actions ($CA-01..21$) downward and 21 Feedbacks ($FB-01..21$) upward:
-- **Tier 1:** Remote Mission Commander / Operator
-- **Tier 2:** Ground Control Station (GCS)
-- **Tier 3:** Autonomous Guidance Computer (CUF)
-- **Tier 4:** Certified Safety Net (CSN) & ASTM F3269-17 Simplex Switch
-- **Tier 5:** Primary Flight Control Computer (FCC) & Electronic Safe/Arm Device (ESAD)
-- **Tier 6:** Physical Actuators & Plant (Servos, Motors, Parachute Squib, Bleed Circuit)
-- **Tier 7:** Controlled Physical Process & Environmental Dynamics
-
-#### Pillar 4: Exhaustive 84-UCA Combinatorial Grid
-The incoming agent MUST emit the complete $21 \times 4 = 84$ UCA table. Every control action ($CA-01$ to $CA-21$) is mapped to all 4 STPA guide words:
-1. **Not Providing Causes Hazard (Omission)**
-2. **Providing Causes Hazard (Commission)**
-3. **Providing Too Early / Too Late / Out of Order (Timing/Order)**
-4. **Stopped Too Soon / Applied Too Long (Duration/Magnitude)**
-
-```
-UCA Index Overview:
-- CA-01 (Terminal Arm Command)          -> UCA-01, UCA-02, UCA-03, UCA-04
-- CA-02 (System Abort Command)           -> UCA-05, UCA-06, UCA-07, UCA-08
-- CA-03 (Flight Plan Upload)             -> UCA-09, UCA-10, UCA-11, UCA-12
-- CA-04 (Manual Pilot Override)          -> UCA-13, UCA-14, UCA-15, UCA-16
-- CA-05 (Emergency Stop Termination)     -> UCA-17, UCA-18, UCA-19, UCA-20
-- CA-06 (Guidance Setpoint Vector)       -> UCA-21, UCA-22, UCA-23, UCA-24
-- CA-07 (Guidance DAA Maneuver)          -> UCA-25, UCA-26, UCA-27, UCA-28
-- CA-08 (Geofence Return Vector)         -> UCA-29, UCA-30, UCA-31, UCA-32
-- CA-09 (Guidance Arm Trigger)           -> UCA-33, UCA-34, UCA-35, UCA-36
-- CA-10 (RTA Simplex Switchover)         -> UCA-37, UCA-38, UCA-39, UCA-40
-- CA-11 (RTA Level Recovery Action)      -> UCA-41, UCA-42, UCA-43, UCA-44
-- CA-12 (RTA Bleed-Down Discharge Signal)-> UCA-45, UCA-46, UCA-47, UCA-48
-- CA-13 (Throttle Demand Setpoint)       -> UCA-49, UCA-50, UCA-51, UCA-52
-- CA-14 (Primary Surface Servo Pulse)    -> UCA-53, UCA-54, UCA-55, UCA-56
-- CA-15 (Differential Torque Command)    -> UCA-57, UCA-58, UCA-59, UCA-60
-- CA-16 (Recovery Arrestor Deploy)       -> UCA-61, UCA-62, UCA-63, UCA-64
-- CA-17 (ESAD Charge Enable)             -> UCA-65, UCA-66, UCA-67, UCA-68
-- CA-18 (Optical Fire Pulse)             -> UCA-69, UCA-70, UCA-71, UCA-72
-- CA-19 (Discharge Bleed Switch Close)   -> UCA-73, UCA-74, UCA-75, UCA-76
-- CA-20 (Parachute Ejection Squib Pulse) -> UCA-77, UCA-78, UCA-79, UCA-80
-- CA-21 (C2 Lost-Link Mode Engage)       -> UCA-81, UCA-82, UCA-83, UCA-84
+```mermaid
+flowchart TD
+    RED["1. RED Phase\nWrite failing regression test capturing defect invariant\n(pytest tests/test_*.py)"] --> GREEN["2. GREEN Phase\nImplement minimal surgical fix in compiler/linter\n(scripts/*.py)"]
+    GREEN --> REFACTOR["3. REFACTOR & VERIFY Phase\nRun full test suite & baseline gates\n(verify_downstream_baseline.py)"]
+    REFACTOR --> AUDIT["4. PARITY AUDIT Phase\nVerify zero regressions across all 19 gates & 351 tests"]
 ```
 
-#### Pillar 5: 40+ Multi-Factor Loss Scenarios ($\mathcal{LS}$)
-- Categorized across 5 causal spaces:
-  1. Sensor & IMU Drift / Calibration Failure ($LS-01..10$)
-  2. Actuator Jamming & Dynamic Aeroelastic Flutter ($LS-11..20$)
-  3. RTOS Scheduler Inversion & Simplex Latency Jitter ($LS-21..30$)
-  4. Environmental Wind Shear & Thermal Battery Stress ($LS-31..35$)
-  5. ESAD Optical Interlock & Arming Logic Faults ($LS-36..45$)
+### 4.1 Canonical Command Execution Matrix
 
-#### Pillar 6: Formal Mathematical Safety Constraints ($\mathcal{SC}$)
-Bound to SysML v2 `requirement def REQ_AV5_*` and `test case def TC_AV5_*`:
-- **SC-01 (Attitude Invariant):** $\theta_{\min} \le \theta(t) \le \theta_{\max}$ and $|\phi(t)| \le \phi_{\max}$ (bound to `REQ_AV5_001`).
-- **SC-02 (RTA Simplex Latency Invariant):** $T_{\text{switch}} \le 20.0\text{ ms}$ (bound to `REQ_AV5_002`).
-- **SC-03 (High-Voltage Safe Bleed-Down Invariant):** $V_e(t) \le 50.0\text{ V}$ within $t \le 5.0\text{ s}$ (bound to `REQ_AV5_003`).
-- **SC-04 (DAA Well-Clear Invariant):** $D_{\text{sep}} \ge 1200.0\text{ m} \lor H_{\text{sep}} \ge 137.0\text{ m}$ (bound to `REQ_AV5_004`).
+Execute all verification commands from the repository root using relative paths:
 
-#### Pillar 7: 22-Component FMECA Matrix (MIL-STD-1629A)
-- Evaluates 22 physical PartDefs from `schema/Avenger5.sysml` across Severity ($S=1..5$), Occurrence ($O=1..5$), Detection ($D=1..5$), and Risk Priority Number ($\text{RPN} = S \times O \times D$).
-- Components include: Primary FCC MCU (`FM-01`), CSN Safety Net MCU (`FM-02`), Triple IMU (`FM-03`), Dual GNSS (`FM-05`), Pitot-Static Sensor (`FM-07`), Spatial Radar (`FM-09`), Optical EO/IR (`FM-10`), C2 Transceiver (`FM-11`), Battery Pack (`FM-13`), ESC Inverter (`FM-14`), Brushless Motor (`FM-15`), Elevator Servos (`FM-16`), Aileron Servos (`FM-17`), Firing Capacitor (`FM-18`), Optical Interlock (`FM-19`), Bleed Discharge Switch (`FM-20`), Parachute Squib (`FM-21`), PDU Regulators (`FM-22`).
+| Verification Target | Command Line Execution | Success Criteria |
+| :--- | :--- | :--- |
+| **Baseline Quality Gates (10–19)** | `python3 scripts/verify_downstream_baseline.py` | Exit code 0, 19/19 checks pass. |
+| **Core Pytest Test Suite** | `python3 -m pytest tests/` | Exit code 0, 351/351 tests pass. |
+| **Isolated Safety Integrity Suite** | `python3 -m pytest tests/test_safety_integrity.py` | Exit code 0, all tests pass. |
+| **Domain Cleanliness Suite** | `python3 -m pytest tests/test_check_no_domain_config.py` | Exit code 0, all tests pass. |
+| **SysML Compiler Upgrade Suite** | `python3 -m pytest tests/test_compile_sysml_upgrades.py` | Exit code 0, all tests pass. |
+| **Gate 23 (ICD Completeness)** | `python3 skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/icd_completeness_validator.py` | Exit code 0, 100% port parity. |
+| **Gate 24 (Operational Allocation)**| `python3 skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/operational_allocation_validator.py` | Exit code 0, 100% allocation parity. |
+| **Gate 25 (Standards Metrology)** | `python3 skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/standards_measurement_validator.py` | Exit code 0, 100% SI metrology valid. |
+| **Gate 26 (ConOps Completeness)** | `python3 skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/conops_completeness_validator.py` | Exit code 0, all sections valid. |
+| **Offline Backlog Reconciler** | `python3 scripts/reconcile_backlog.py --offline` | Exit code 0, zero desync errors. |
 
-#### Pillar 8: SORA v2.5 Assessment (SAIL IV-VI) & 24 OSOs (`OSO-01..24`)
-- **Operational Risk Assessment:**
-  - MTOM: $40.0\text{ kg}$, Characteristic Dimension: $2.4\text{ m}$, Max Speed: $55.0\text{ m/s}$.
-  - Intrinsic GRC: **GRC 4** (Controlled ground area / low density).
-  - Mitigations: **M1** (Strategic Geofencing, $-1$), **M2** (Emergency Parachute Deceleration, $-1$) $\longrightarrow$ **Residual GRC: 2**.
-  - Initial Airspace: **ARC-b** $\longrightarrow$ Tactical DAA Mitigation $\longrightarrow$ **Residual ARC-b**.
-  - Target Specific Assurance and Integrity Level: **SAIL IV-VI**.
-- **Complete 24 OSO Matrix:** Fully documented compliance roster covering `OSO-01` through `OSO-24` with High/Medium robustness levels.
-
-#### Pillar 9: ASTM F3269-17 RTA Simplex Architecture & Formal 5-Part Proof Suite ($T-01..10$)
-Each of the 10 formal theorems MUST be written in the canonical 5-part format:
-1. **Formal Theorem Statement**
-2. **Symbolic Derivation in Aligned KaTeX** (`$$ \begin{aligned} ... \end{aligned} $$`)
-3. **Where and Operational Parameters Table with SI Units ($\mathbb{Z}^7$)**
-4. **Step-by-Step Numerical Proof Evaluation**
-5. **Simulink Design Verifier (SLDV) Temporal Assertion Binding**
-
-```
-Theorems:
-- T-01: Terminal Impact Kinetic Energy & Dissipation Invariant (E_density <= 28.5 J/cm2)
-- T-02: Unpowered Glide Reach & Spatial Containment Buffer Invariant (R_glide <= 23.0 km)
-- T-03: Control Barrier Function (CBF) Forward Invariance (B_dot + gamma*B >= 0)
-- T-04: High-Voltage RC Transient Discharge & Safe Bleed-Down (V_e(5s) <= 50.0 V)
-- T-05: Pneumatic Rail Acceleration Separation Velocity (V_sep >= 1.20 * V_stall = 21.6 m/s)
-- T-06: Line-of-Sight RF Electromagnetic Link Budget & Watchdog (Margin >= 12.0 dB, Timeout <= 3.0 s)
-- T-07: Battery Thermal Runaway & Dynamic RTL Energy Reserve (T_cell <= 60.0 C, SoC >= SoC_crit)
-- T-08: Spatial Detect-and-Avoid (DAA) Modified Tau Miss Distance (tau_mod >= 35.0 s)
-- T-09: Dive Dynamic Pressure Aeroelastic Loading & FOV Retention (q_max <= 1850.0 Pa)
-- T-10: Multi-Channel Continuous-Time Markov Chain (CTMC) Reliability (P_cat <= 10^-7 / hr)
-```
-
-#### Pillar 10: Master Hazard Log Bidirectional Traceability Graph
-- Documented in `docs/safety/HAZARD_LOG.md`.
-- Maintains 100% closed-loop mathematical traceability:
-  $$\begin{aligned} \mathcal{L}_a \longleftrightarrow \mathcal{H}_b \longleftrightarrow \mathcal{U}_c \longleftrightarrow \mathcal{LS}_d \longleftrightarrow \mathcal{SC}_e \longleftrightarrow \mathcal{R}_f \longleftrightarrow \mathcal{T}_g \end{aligned}$$
-
----
-
-### Work Package 2: Compile ISO 29148 CONOPS & METL MISSION_INTENT
-
-#### 1. 12-Section ISO/IEC/IEEE 29148:2018 Concept of Operations (`docs/conops/CONOPS.md`)
-1. **Scope and System Identification** (Avenger 5 Tactical Loitering Munition UAS).
-2. **Operational Context & Operational Theater** (Contested electronic environments, adverse weather).
-3. **User Needs & Stakeholder Communities** (RPIC, Safety Officer, Range Safety, Airspace Authority).
-4. **Operational Scenarios & Mission Life Cycle** (Pre-flight BIT, Rail Launch, Climb, Loiter/DAA, Terminal Dive, Containment Abort, Parachute Recovery).
-5. **Operational Constraints & Envelopes** (Flight levels, airspeed bounds $18.0..55.0\text{ m/s}$, RF line-of-sight).
-6. **Operational Safety & Security Policies** (Dual authorization, STANAG 4187 arming, zero-trust cryptographic uplink).
-7. **Support & Maintenance Concepts** (Field LRU replacement, battery storage safety).
-8. **Personnel & Training Concepts** (Certified operator qualification, simulator check-rides).
-9. **Organizational Interfaces & Command Hierarchy** (GCS to UAS command chains).
-10. **Environmental Impact & Spectrum Compatibility** (Acoustic minimization, non-hazardous composite casing).
-11. **Verification & Validation Concept** (MIL-STD-882E Task 106 hazard tracking, HIL bench testing).
-12. **Retirement & Safe Disposal Concept** (Pyrotechnic inerting, cryptographic key zeroization).
-
-#### 2. 10-Section METL Mission Intent (`docs/conops/MISSION_INTENT.md`)
-- `METL-01`: Launch Acceleration & Safe Separation Stroke ($V_{\text{sep}} \ge 21.6\text{ m/s}$).
-- `METL-02`: Autonomous Waypoint Navigation & Spatial Geofence Containment.
-- `METL-03`: Tactical Detect-and-Avoid (DAA) Airspace Deconfliction.
-- `METL-04`: Redundant C2 Link Maintenance & Lost-Link Fail-Safe Execution.
-- `METL-05`: Sensor EO/IR Turret Deployment & Target Tracking.
-- `METL-06`: ASTM F3269-17 RTA Simplex Safety Net Monitoring.
-- `METL-07`: Dual-Stage Electronic Safe and Arm Device (ESAD) Interlocking.
-- `METL-08`: Terminal Dive Guidance & Dynamic Pressure Regulation.
-- `METL-09`: Safe Mission Abort & High-Voltage Bleed-Down Discharge ($t \le 5.0\text{ s}$).
-- `METL-10`: Emergency Parachute Deployment & Low-Energy Touchdown Recovery.
-
----
-
-### Work Package 3: Level 1C Logical Interface Specifications (ICDs)
-
-#### 1. System Interface Matrix (`docs/icd/ICD_01_SYSTEM_INTERFACE_MATRIX.md`)
-- **Topological Interconnection Graph:** Fenced Mermaid `flowchart TD` showing all 18 subsystem nodes and physical bus interconnects.
-- **Canonical $N^2$ Subsystem Interaction Matrix:** 18x18 grid mapping all 27 typed port contracts.
-- **Port Definition Roster:** 8-column table detailing Port ID, Owning PartDef, Port Name, Direction, Type, Protocol Standard, Multiplicity, and Termination.
-- **Connector Binding Roster:** 7-column table detailing Connector ID, Source Port, Dest Port, Conveyed Item, Latency Ceiling, Reliability, and Transfer Mode.
-
-#### 2. Master Signal Flow Dictionary (`docs/icd/ICD_02_MASTER_SIGNAL_DICTIONARY.md`)
-- **11-Column Master Signal Roster:**
-  1. Signal ID (`SIG-SRC-DST-NNN`)
-  2. Source Port (`PORT_AV5_*`)
-  3. Destination Port (`PORT_AV5_*`)
-  4. Conveyed Item / Message Type
-  5. Data Type & Bit Width (Float32, Int16, Uint8, Boolean)
-  6. Physical Dynamic Range ($[v_{\min}, v_{\max}]$)
-  7. SI Unit Profile ($\mathbb{Z}^7$)
-  8. Update Rate ($f\text{ Hz}$) / Aperiodic Latency
-  9. Max Allowable Latency ($\tau_{\text{latency,max}}$ in ms)
-  10. Safety Level & Hazard Link (DO-178C DAL B / SIL-2, linked to $H-1..14$)
-  11. SysML v2 AST Provenance Pointer (`schema/Avenger5.sysml#Lxxx`)
-- **Transport Protocols Covered:** RS-485 Serial Bus, CAN-Bus 2.0B / CAN-FD, PWM Servo Control Rails, Discrete Optically Isolated Lines, Ethernet / IP Telemetry.
-
----
-
-## 4. Deterministic Python AST Compiler Architecture (`scripts/compile_uas_specifications.py`)
-
-To prevent token exhaustion and attention decay during markdown synthesis, the incoming agent in OpenCode is strongly advised to construct a deterministic compilation script in `uas-004`:
-
-```python
-#!/usr/bin/env python3
-"""
-Deterministic Specification Compiler for Downstream UAS Workspace (uas-004).
-Parses schema/Avenger5.sysml and avenger5_extracted_parameters.json, then
-synthesizes 100% compliant markdown specification artifacts with zero token truncation.
-"""
-
-import json
-import os
-import re
-
-def load_parameters(param_path: str) -> dict:
-    with open(param_path, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-def generate_84_uca_table(control_actions: list) -> str:
-    guide_words = [
-        ("Not Providing", "omitted when required by operational logic"),
-        ("Providing", "provided erroneously under invalid conditions"),
-        ("Too Early / Late / Out of Order", "provided with desynchronized timing or phase lag"),
-        ("Stopped Too Soon / Too Long", "held continuously past validated duration")
-    ]
-    lines = [
-        "| UCA ID | Control Action | STPA Guide Word | Operational Failure Context | Associated Hazards |",
-        "| :--- | :--- | :--- | :--- | :--- |"
-    ]
-    uca_idx = 1
-    for ca_id, ca_name, hazard_refs in control_actions:
-        for gw, failure_desc in guide_words:
-            lines.append(
-                f"| **UCA-{uca_idx:02d}** | {ca_id}: {ca_name} | {gw} | "
-                f"Control action {ca_name} is {failure_desc}, precipitating system risk. | {hazard_refs} |"
-            )
-            uca_idx += 1
-    return "\n".join(lines)
-
-def main():
-    print("Executing Deterministic UAS Specification Compiler...")
-    # 1. Ingest Ground Truth AST & Diagnostics
-    # 2. Synthesize docs/safety/STPA_MATRIX.md (84 UCAs, 24 OSOs, 22 FMECAs, 10 Proofs)
-    # 3. Synthesize docs/conops/CONOPS.md & MISSION_INTENT.md
-    # 4. Synthesize docs/icd/ICD_01_SYSTEM_INTERFACE_MATRIX.md & ICD_02_MASTER_SIGNAL_DICTIONARY.md
-    print("Compilation complete. 100% specification parity achieved.")
-
-if __name__ == "__main__":
-    main()
-```
-
----
-
-## 5. Verification Protocols & Quality Gate Execution
-
-Once the specifications are synthesized in `uas-004`, the incoming agent MUST execute the comprehensive verification baseline script from `DEAP01-spec-core` against the downstream workspace:
-
-```bash
-# Execute verification gate from uas-004
-python3 /Users/perkunas/jail/DEAP01-spec-core/scripts/verify_downstream_baseline.py /Users/perkunas/jail/uas-004
-```
-
-### Quality Gate Check Roster (Must Exit Code 0)
-- **Check 10:** `.gitignore` exists in repository root.
-- **Check 11:** Zero `.DS_Store` files in working tree or git index.
-- **Check 12:** Zero duplicate master core blueprints in downstream repository.
-- **Check 13:** KaTeX / LaTeX mathematical syntax valid (balanced `$$`, balanced `\begin{aligned}` and `\end{aligned}`, zero bare `&` outside alignment environments, zero `\begin{align}`).
-- **Check 14:** `README.md`, agent instructions (`AGENTS.md` / `CLAUDE.md`), and `rules/sysml-ssot-completeness.md` exist.
-- **Check 15:** `scripts/reconcile_backlog.py` exists, is non-empty, and is executable.
-- **Check 16:** Clean landing zones (applicable to upstream; downstream is verified clean of stray templates).
-- **Check 17 (Hardened Safety Integrity Gate):**
-  - All 8 primary STPA/FMECA/SORA pillars verified in `docs/safety/`.
-  - Cardinality check: **Exhaustive UCA coverage across all 4 failure modes (Omission, Commission, Timing/Order, Duration/Magnitude)**.
-  - Cardinality check: **15+ FMECA rows with RPN calculations ($S \times O \times D$)**.
-  - Cardinality check: **All 24 SORA OSOs (`OSO-01` through `OSO-24`) present with GRC and ARC assessments**.
-  - Architecture check: **ASTM F3269-17 RTA Simplex pattern and MATLAB/Simulink/SLDV hooks present**.
-- **Check 18:** Upstream blueprint domain cleanliness verified.
-- **Check 19:** Domain-agnostic AST cleanliness verified.
-
-### Parity Auditor Specialized Gates
-- **Gate 23 (ICD Completeness):**
-  ```bash
-  python3 /Users/perkunas/jail/DEAP01-spec-core/skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/icd_completeness_validator.py
-  ```
-- **Gate 24 (Operational-to-Resource Allocation):**
-  ```bash
-  python3 /Users/perkunas/jail/DEAP01-spec-core/skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/operational_allocation_validator.py
-  ```
-- **Gate 25 (Standards & Measurement Taxonomy):**
-  ```bash
-  python3 /Users/perkunas/jail/DEAP01-spec-core/skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/standards_measurement_validator.py
-  ```
-
----
-
-## 6. Mathematical Syntax & KaTeX Formatting Standards
-
-All display equations in all generated markdown files MUST strictly conform to the KaTeX syntax rules enforced by Check 13:
-
-1. **Enclosure:** Dedicated lines opening and closing with `$$`.
-2. **Alignment Environment:** Use `\begin{aligned}` and `\end{aligned}` exclusively. Never use `\begin{align}` or `\begin{align*}`.
-3. **Alignment Operator (`&`):** Bare `&` characters are strictly forbidden outside alignment environments.
-4. **Parameter Descriptions:** Follow every equation block with a dedicated CommonMark table or bulleted list titled `Where and Operational Parameters:`.
-
-```markdown
-$$
-\begin{aligned}
-v_{\mathrm{term}} &= \sqrt{\frac{2 \cdot M \cdot g}{\rho \cdot C_d \cdot A_{\mathrm{chute}}}} \\
-E_{\mathrm{impact}} &= \frac{1}{2} \cdot M \cdot v_{\mathrm{term}}^2 = \frac{M^2 \cdot g}{\rho \cdot C_d \cdot A_{\mathrm{chute}}}
-\end{aligned}
-$$
-
-Where and Operational Parameters:
-- $M$ is the system total mass in kilograms ($40.0\text{ kg}$).
-- $g$ is the acceleration due to gravity ($9.80665\text{ m/s}^2$).
-- $\rho$ is the atmospheric air density ($1.225\text{ kg/m}^3$).
-- $C_d$ is the parachute drag coefficient ($1.75$).
-- $A_{\mathrm{chute}}$ is the projected canopy surface area ($12.5\text{ m}^2$).
-```
-
----
-
-## 7. Execution Checklist for Incoming OpenCode Agent
-
-```markdown
-- [ ] 1. Initialize session in OpenCode using engine DeepSeek-R1 (`deepseek-reasoner`).
-- [ ] 2. Verify repository context:
-      - Upstream Core: `/Users/perkunas/jail/DEAP01-spec-core` (Mode: UPSTREAM_SPEC_CORE_COMPILER)
-      - Downstream Workspace: `/Users/perkunas/jail/uas-004` (Mode: Downstream Customer Delivery)
-- [ ] 3. Ingest Ground Truth in uas-004:
-      - Read `.pipeline/diagnostics/avenger5_extracted_parameters.json`
-      - Read `schema/Avenger5.sysml`
-- [ ] 4. Execute Work Package 1 (10-Pillar Safety Specification):
-      - Compile `docs/safety/STPA_MATRIX.md` (84 UCAs, 24 OSOs, 22 FMECAs, 10 Formal Proofs, ASTM F3269-17 RTA).
-      - Compile `docs/safety/HAZARD_LOG.md` (Bidirectional Traceability Graph).
-- [ ] 5. Execute Work Package 2 (ISO 29148 CONOPS & METL):
-      - Compile 12-Section `docs/conops/CONOPS.md`.
-      - Compile 10-Section `docs/conops/MISSION_INTENT.md` (METL-01..10).
-- [ ] 6. Execute Work Package 3 (Level 1C Logical ICDs):
-      - Compile `docs/icd/ICD_01_SYSTEM_INTERFACE_MATRIX.md` (Topological graph, N² matrix, 27 ports).
-      - Compile `docs/icd/ICD_02_MASTER_SIGNAL_DICTIONARY.md` (Master signal roster).
-- [ ] 7. Run Verification Baseline:
-      - `python3 /Users/perkunas/jail/DEAP01-spec-core/scripts/verify_downstream_baseline.py /Users/perkunas/jail/uas-004`
-      - Confirm exit code 0 across all checks (Checks 10..19).
-- [ ] 8. Run Parity Auditor Validators (Gates 23, 24, 25).
-- [ ] 9. Final Report & Clean Git Commit in uas-004.
-```
+### 4.2 Subagent Dispatch Discipline
+- All multi-file refactoring, schema transpilation, and large-scale specification analysis tasks MUST be dispatched to fresh, context-isolated subagents using `skills/spec-orchestrator/` and `skills/feature-driven-implementation/`.
+- The coordinator agent MUST NOT execute uncurated raw dumps or ad-hoc speculative writing in the master context.
+- Every defect discovered during execution MUST trigger the mandatory adversarial audit protocol ([`skills/adversarial-code-auditor/SKILL.md`](skills/adversarial-code-auditor/SKILL.md)) and debug protocol ([`skills/debug-protocol/SKILL.md`](skills/debug-protocol/SKILL.md)).
