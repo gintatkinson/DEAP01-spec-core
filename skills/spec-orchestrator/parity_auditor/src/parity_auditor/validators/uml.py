@@ -70,46 +70,29 @@ def find_unresolved_placeholders(content: str, patterns=None):
                 yield lineno, label, line.strip()
                 break
 
-import sys
 import yaml
 from typing import Optional, Set, Tuple
 
-# Import SysML v2 AST classes safely
-try:
-    from sysmlv2_ast import (
-        SysMLPackage, SysMLParser, SysMLCapabilityDef, ActionDef,
-        SysMLOperationDef, SysMLConstraintDef, SysMLInteractionDef,
-        SysMLTestCaseDef, RequirementDef, PartDef, AttributeDef
-    )
-except ImportError:
-    try:
-        from skills.spec_orchestrator.scripts.sysmlv2_ast import (
-            SysMLPackage, SysMLParser, SysMLCapabilityDef, ActionDef,
-            SysMLOperationDef, SysMLConstraintDef, SysMLInteractionDef,
-            SysMLTestCaseDef, RequirementDef, PartDef, AttributeDef
-        )
-    except ImportError:
-        _script_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "scripts"))
-        if _script_dir not in sys.path:
-            sys.path.insert(0, _script_dir)
-        try:
-            from sysmlv2_ast import (
-                SysMLPackage, SysMLParser, SysMLCapabilityDef, ActionDef,
-                SysMLOperationDef, SysMLConstraintDef, SysMLInteractionDef,
-                SysMLTestCaseDef, RequirementDef, PartDef, AttributeDef
-            )
-        except ImportError:
-            SysMLPackage = None
-            SysMLParser = None
-            SysMLCapabilityDef = None
-            ActionDef = None
-            SysMLOperationDef = None
-            SysMLConstraintDef = None
-            SysMLInteractionDef = None
-            SysMLTestCaseDef = None
-            RequirementDef = None
-            PartDef = None
-            AttributeDef = None
+# Import SysML v2 AST classes via the fail-closed loader (refs #76): resolve
+# the real scripts dir or raise ImportError — never bind None silently.
+from ..utils.sysml_loader import load_sysml_ast_members
+
+_sysml_ast = load_sysml_ast_members([
+    "SysMLPackage", "SysMLParser", "SysMLCapabilityDef", "ActionDef",
+    "SysMLOperationDef", "SysMLConstraintDef", "SysMLInteractionDef",
+    "SysMLTestCaseDef", "RequirementDef", "PartDef", "AttributeDef",
+])
+SysMLPackage = _sysml_ast.SysMLPackage
+SysMLParser = _sysml_ast.SysMLParser
+SysMLCapabilityDef = _sysml_ast.SysMLCapabilityDef
+ActionDef = _sysml_ast.ActionDef
+SysMLOperationDef = _sysml_ast.SysMLOperationDef
+SysMLConstraintDef = _sysml_ast.SysMLConstraintDef
+SysMLInteractionDef = _sysml_ast.SysMLInteractionDef
+SysMLTestCaseDef = _sysml_ast.SysMLTestCaseDef
+RequirementDef = _sysml_ast.RequirementDef
+PartDef = _sysml_ast.PartDef
+AttributeDef = _sysml_ast.AttributeDef
 
 
 def _find_sysml_files_in_repo(repo: WorkspaceRepository, schemas_dir: Optional[str] = None) -> List[str]:

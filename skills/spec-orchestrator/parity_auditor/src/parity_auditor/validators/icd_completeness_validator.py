@@ -27,31 +27,19 @@ except (ImportError, ValueError):
     from parity_auditor.core.findings import Finding
     from parity_auditor.core.workspace import WorkspaceRepository
 
-# Import SysML v2 AST classes safely if available
-try:
-    from sysmlv2_ast import (
-        SysMLPackage, SysMLParser, PartDef, PortDef, ItemDef, AttributeDef
-    )
-except ImportError:
-    try:
-        from skills.spec_orchestrator.scripts.sysmlv2_ast import (
-            SysMLPackage, SysMLParser, PartDef, PortDef, ItemDef, AttributeDef
-        )
-    except ImportError:
-        _script_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "scripts"))
-        if _script_dir not in sys.path:
-            sys.path.insert(0, _script_dir)
-        try:
-            from sysmlv2_ast import (
-                SysMLPackage, SysMLParser, PartDef, PortDef, ItemDef, AttributeDef
-            )
-        except ImportError:
-            SysMLPackage = None
-            SysMLParser = None
-            PartDef = None
-            PortDef = None
-            ItemDef = None
-            AttributeDef = None
+# Import SysML v2 AST classes via the fail-closed loader (refs #76): resolve
+# the real scripts dir or raise ImportError — never bind None silently.
+from ..utils.sysml_loader import load_sysml_ast_members
+
+_sysml_ast = load_sysml_ast_members([
+    "SysMLPackage", "SysMLParser", "PartDef", "PortDef", "ItemDef", "AttributeDef",
+])
+SysMLPackage = _sysml_ast.SysMLPackage
+SysMLParser = _sysml_ast.SysMLParser
+PartDef = _sysml_ast.PartDef
+PortDef = _sysml_ast.PortDef
+ItemDef = _sysml_ast.ItemDef
+AttributeDef = _sysml_ast.AttributeDef
 
 
 @dataclass
