@@ -1,5 +1,10 @@
 # UML Compliance Audit Report: Gaps & Missing UML Support
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-08-31 |
+
 This report consolidates the findings of 5 specialized adversarial subagents deployed to analyze the digital engineering pipeline's UML support, specification templates, and automated linter gates. It enumerates all structural, behavioral, system interaction, traceability, and linter-level defects and provides actionable recommendations.
 
 ---

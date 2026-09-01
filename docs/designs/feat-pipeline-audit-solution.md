@@ -1,5 +1,10 @@
 # Walkthrough: Dynamic Schema Parsing, Config-Driven Behavioral Triggers, and Protocol-Agnostic Governance
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-08-31 |
+
 This walkthrough details the changes made to generalize the digital systems engineering pipeline's specification templates, linter validation gates, and constitution initialization logic, ensuring that the pipeline dynamically processes any schema or standard at runtime instead of hardcoding assumptions for YANG or IETF RFCs.
 
 ---

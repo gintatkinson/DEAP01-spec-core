@@ -1,5 +1,6 @@
 ---
-title: "Solution — Upstream Repository Repair and Installer Guard"
+title: "Solution: Upstream Repository Repair and Installer Guard"
+version: "1.0.0"
 type: "solution-walkthrough"
 date: "2026-08-05"
 branch: "docs/part-q-r-governance-record"

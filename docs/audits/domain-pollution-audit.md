@@ -1,5 +1,10 @@
 # Domain Pollution Audit Report
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-08-31 |
+
 | File Path | Line Number | Snippet | Decontamination / Refactoring Actions |
 |---|---|---|---|
 | `implementation_plan.md` | 11 | `1.  All files across the entire repository (including `app_flutter/`, `web_react/`, `.pipeline/`, `....` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |

@@ -1,5 +1,10 @@
 # Solution Walkthrough: Feature 55 Zero Code-Gen Dynamic PropertyGrid Adapter
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-08-31 |
+
 This document summarizes the changes, components implemented, and verification details for Feature 55.
 
 ## 1. Overview of Changes

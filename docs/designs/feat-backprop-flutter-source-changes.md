@@ -1,5 +1,10 @@
 # Solution Walkthrough: Back-propagation of Flutter Application Source Changes
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-08-31 |
+
 This document details the back-propagation of downstream enhancements and features for the Flutter application codebase located under [app_flutter/](../../app_flutter/).
 
 ---

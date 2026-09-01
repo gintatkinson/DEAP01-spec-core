@@ -1,5 +1,10 @@
 # Code Audit: UI Thread Synchronization, Time-State Machines, and Memory-Sharing Models
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-08-31 |
+
 **Audited Documents:**
 * `docs/decisions/spatial_temporal_4d_ui_proposal.md`
 * `docs/decisions/spatial_temporal_4d_ui_analysis.md`

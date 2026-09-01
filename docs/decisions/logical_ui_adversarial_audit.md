@@ -1,5 +1,10 @@
 # Adversarial Audit & Design Report: Logical UI (LUI) Layer & GPGPU Architecture
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-08-31 |
+
 **Date**: 2026-06-16
 **Status**: APPROVED / DOCUMENTED
 **Target Configurations**: Tier 1.5 Logical UI Specifications (`.pipeline/logical-ui/*`), Platform Profiles (`.pipeline/profiles/*`), and Project Constitution (`.pipeline/constitution.md`)

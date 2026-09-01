@@ -1,5 +1,10 @@
 # Solution Walkthrough: Cleanup of Stale Domain Features
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-08-31 |
+
 This document details the cleanup of stale domain feature specifications and outlines the architectural alignment with the pipeline's dynamic layout and validation systems.
 
 ## 1. Overview of Changes

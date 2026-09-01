@@ -1,5 +1,10 @@
 # Design: Isolated Subagent Lifecycles & Constraint-Driven Alternate Flows
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-08-31 |
+
 This document details the design and implementation of context-isolated subagent execution in the specification engineering pipeline, alongside constraint-driven validation rules for Use Case alternate/exception flows and codebase compliance.
 
 ---

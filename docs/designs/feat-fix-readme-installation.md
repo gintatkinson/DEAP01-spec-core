@@ -1,5 +1,10 @@
 # Solution Walkthrough: README Installation Guide Fix
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-08-31 |
+
 This document details the fix applied to the clone commands in the project's README installation instructions and explains the technical rationale for this adjustment.
 
 ---

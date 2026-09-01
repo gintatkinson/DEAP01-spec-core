@@ -5,6 +5,7 @@ issue_id: 375
 project: "Digital Engineering Agent Platform (DEAP)"
 date: "2026-08-10"
 status: "approved"
+version: "1.0.0"
 ---
 
 # Six Mechanical Enforcement Gates Solution Blueprint

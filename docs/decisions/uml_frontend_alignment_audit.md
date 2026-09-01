@@ -1,5 +1,10 @@
 # Adversarial Audit Report: UML Class Diagram Alignment with React TypeScript & Flutter Dart
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-08-31 |
+
 **Date**: 2026-06-18  
 **Status**: APPROVED / AUDITED  
 **Auditor**: Adversarial Software Architecture Auditor  

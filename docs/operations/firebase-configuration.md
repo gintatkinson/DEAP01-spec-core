@@ -1,5 +1,10 @@
 # Firebase Configuration Guide
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-08-31 |
+
 > How to run the app with Firebase Firestore as the data source,
 > using either a local emulator or a cloud project.
 

@@ -1,5 +1,10 @@
 # Solution Walkthrough: Downstream Baseline Seeding and Compliance Framework
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-08-31 |
+
 This document outlines the solution design, script descriptions, Project Constitution amendments, Code Realization Table, and baseline verification results for Feature 44.
 
 ---

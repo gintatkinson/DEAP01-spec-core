@@ -1,5 +1,10 @@
 # Upstream Decontamination & Baseline Refactor Report
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-08-31 |
+
 **Repository**: `gintatkinson/DEAP-spec-core`  
 **Location**: `docs/decisions/upstream_decontamination_baseline_report.md`  
 **Branch**: `main`  

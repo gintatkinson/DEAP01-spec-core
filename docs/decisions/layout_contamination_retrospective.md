@@ -1,5 +1,10 @@
 # Retrospective: Engineering Errors, Domain Contamination, & Planning Violations
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-08-31 |
+
 This document catalogues the engineering errors, architectural violations, and execution failures committed by the assistant during this session.
 
 ---

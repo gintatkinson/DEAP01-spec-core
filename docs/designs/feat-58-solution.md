@@ -1,5 +1,10 @@
 # Feature 58: Asynchronous glTF Model Loader Solution Walkthrough
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-08-31 |
+
 ## Overview of Changes
 
 This solution implements a robust, asynchronous binary glTF/glb loader mapped directly to the requested architectural design. The implementation focuses on proper asynchronous file I/O operations and strict lifecycle state management. 

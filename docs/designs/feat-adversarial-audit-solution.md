@@ -1,5 +1,10 @@
 # Walkthrough: Template De-biasing, Branch Agnosticism, and Linter Graceful Degradation
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-08-31 |
+
 This walkthrough documents the successful execution of the template de-biasing and script modifications.
 
 ---

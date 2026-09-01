@@ -1,5 +1,10 @@
 # Solution Walkthrough: Back-propagation of Downstream Changes
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-08-31 |
+
 This document details the changes back-propagated from downstream repositories, including the import of the `adversarial-code-auditor` skill and the modularization of the `parity_auditor` tool to support optional React rules, allowing single-platform codebases to validate cleanly.
 
 ---

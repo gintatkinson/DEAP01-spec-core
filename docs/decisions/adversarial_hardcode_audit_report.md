@@ -1,5 +1,10 @@
 # Adversarial Audit Report: Pipeline Hardcoded Logic & Assumptions
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-08-31 |
+
 This report compiles the exhaustive findings from the 5 concurrent adversarial subagents dispatched to audit the digital pipeline repository for hardcoded protocol-specific parameters, directory structures, platforms, and tool assumptions.
 
 ---

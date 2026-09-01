@@ -1,5 +1,10 @@
 # YANG Compiler Guide
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-09-01 |
+
 > Build-time tool that transforms YANG schema files into platform-agnostic
 > `logical-layout.json` for the generic UI shell.
 
@@ -291,9 +296,11 @@ top-level sections: `meta`, `theme`, `navigation`, `layout`, and `attributes`.
 
 | Field | Description |
 |---|---|
-| `version` | Always `"1.0.0"` (hardcoded in the compiler) |
+| `version` | `1.0.0` |
 | `schema_name` | Basename of the input YANG file without extension |
 | `yang_source` | Absolute filesystem path to the source YANG file (for audit trail) |
+
+The `version` value is always `"1.0.0"` (hardcoded in the compiler).
 
 ### 5.2. Theme Section
 

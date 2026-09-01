@@ -1,11 +1,12 @@
 ---
-title: "Defect Inventory — full-tree sweep"
+title: "Defect Inventory"
+version: "1.0.0"
 date: "2026-08-05"
 scope: "DEAP-spec-core @ 4a4e2b5"
 method: "read-only sweep; no fixes applied in this pass"
 ---
 
-# Defect Inventory — 2026-08-05
+# Defect Inventory
 
 Full-tree sweep, commissioned after an earlier count of 31 was judged too low. It was.
 

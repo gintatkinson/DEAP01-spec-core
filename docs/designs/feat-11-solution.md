@@ -1,5 +1,10 @@
 # Solution Walkthrough: Feature 11 Multi-Dimensional GPGPU Topology Canvas
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-08-31 |
+
 This document summarizes the changes, components implemented, and verification details for Feature 11.
 
 ## 1. Overview of Changes

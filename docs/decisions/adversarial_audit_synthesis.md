@@ -1,5 +1,10 @@
 # Adversarial Audit Synthesis: UML Schema & Validation Engine Critique
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-08-31 |
+
 This report consolidates and prioritizes the architectural, syntactic, and verification-level defects identified by the 5 specialized adversarial auditing agents. It provides a structured implementation path to resolve rendering issues, linter bypasses, type safety failures, and data schema gaps.
 
 ---

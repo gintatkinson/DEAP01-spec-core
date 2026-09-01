@@ -3,6 +3,7 @@ title: "SysML v2 Universal Intermediate Representation (IR) Architecture Solutio
 type: "design"
 platform: "sysmlv2-universal"
 version: "1.0.0"
+date: "2026-08-31"
 ---
 
 # SysML v2 Universal Intermediate Representation (IR) Architecture Solution Blueprint

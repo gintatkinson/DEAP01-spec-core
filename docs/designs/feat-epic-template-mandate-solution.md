@@ -1,5 +1,10 @@
 # Walkthrough: Epic Template Mandate & UML Validation Gate
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-08-31 |
+
 ## Overview
 This document records the systemic fix applied to the zero-defect digital engineering pipeline to enforce UML diagram completeness at the Epic level. By updating the prompt rules and adding explicit validation checks, we prevent the generation of diagram-less Epics.
 

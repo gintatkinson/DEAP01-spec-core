@@ -1,5 +1,10 @@
 # 4-Stage Input Validation & Zero-Loss Propagation Architecture Blueprint
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-08-31 |
+
 ## Overview
 
 The **Deterministic Input Validation & Zero-Loss Propagation Architecture** enforces strict engineering discipline, complete line-by-line file ingestion, and zero-loss requirement propagation across the `DEAP-spec-core` ecosystem.

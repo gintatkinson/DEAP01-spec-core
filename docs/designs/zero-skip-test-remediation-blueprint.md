@@ -5,6 +5,7 @@ issue_id: 376
 project: "Digital Engineering Agent Platform (DEAP)"
 date: "2026-08-11"
 status: "approved"
+version: "1.0.0"
 ---
 
 # Zero-Skip Test Suite Remediation Architecture Blueprint

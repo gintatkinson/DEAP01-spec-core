@@ -1,5 +1,10 @@
 # Documentation Completion Plan
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-08-31 |
+
 Audit date: 2026-06-30
 Scope: all `.md` files, Dart `///` doc comments in `app_flutter/lib/`
 

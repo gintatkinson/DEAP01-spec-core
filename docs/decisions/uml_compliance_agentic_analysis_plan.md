@@ -1,5 +1,10 @@
 # Implementation Plan - UML Metamodel Conformance for Specifications
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-08-31 |
+
 This plan details the methodology, subagent configurations, analysis criteria, and report structure to execute a deep adversarial audit of the digital systems engineering pipeline. The objective is to evaluate whether the generated specifications and their templates conform strictly to the **OMG UML 2.5.1 Metamodel** regarding their **Structure, Definition, Content, and Associated Diagrams**.
 
 ---

@@ -1,5 +1,10 @@
 # Specification-to-Code Parity Audit Report
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-08-31 |
+
 **Audit Date:** 2026-07-18  
 **Auditor Signature:** `spec-implementation-auditor`  
 **Workspace:** `.`  

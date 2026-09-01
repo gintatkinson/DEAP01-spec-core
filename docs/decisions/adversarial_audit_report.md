@@ -1,5 +1,10 @@
 # Forensic Audit Report: Hardcoded Standards vs. Dynamic Runtime Ingestion
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-08-31 |
+
 This report compiles the findings from the three specialized adversarial subagents dispatched to analyze why the pipeline initialization and verification layers assume specific standards (like YANG/RFC 8345) instead of processing them dynamically at runtime. It isolates the root causes, traces the workspace git history, and documents the direct architectural conflict between skill mandates and evaluation validation gates.
 
 ---

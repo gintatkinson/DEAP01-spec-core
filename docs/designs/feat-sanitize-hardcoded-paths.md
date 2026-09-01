@@ -1,5 +1,10 @@
 # Solution Walkthrough: Sanitization of Hardcoded Developer Paths
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-08-31 |
+
 This document details the changes made to sanitize hardcoded developer-specific absolute paths within the repository's skill definitions, ensuring portability and correct execution across downstream workspace environments.
 
 ## 1. Overview of Changes

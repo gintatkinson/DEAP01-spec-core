@@ -1,5 +1,10 @@
 # Solution Walkthrough - Issue #65 Baseline Verification Customizations
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-08-31 |
+
 This document summarizes the changes, verification proof, and Code Realization Table for Issue #65: Baseline Verification Customizations.
 
 ## Changes Overview

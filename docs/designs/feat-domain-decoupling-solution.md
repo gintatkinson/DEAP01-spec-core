@@ -1,5 +1,10 @@
 # Solution Walkthrough: Domain Decoupling and Dynamic Layout/Validation
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-08-31 |
+
 This document details the solution walkthrough for the domain decoupling and dynamic layout/validation implementation.
 
 ---

@@ -4,6 +4,7 @@ type: design
 issue_id: 375
 platform: multi-platform
 status: approved
+version: 1.0.0
 created: 2026-08-09
 ---
 

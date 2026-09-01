@@ -143,7 +143,7 @@ Every generated ICD document MUST open with the following exact table structure:
 | **Type** | icd |
 | **Interface Level** | Level 1C Logical Interface |
 | **Generation Mode** | subagent |
-| **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
+| **Specification Source** | `schema/model.sysml` |
 
 # Level 1C: System Interface Matrix & Topological Connectivity
 
@@ -183,7 +183,7 @@ flowchart TD
 | `CONN-01` | `PORT-SUBA-DATA_OUT` | `PORT-SUBB-DATA_IN` | Continuous Stream | 10.0 | High | TelemetryStatePacket |
 
 ## 6. Source References
-Structural Schema: [Target Schema File](../../schema/model.sysml)
+Structural Schema: `schema/model.sysml`
 Normative Specification: [Normative Document Link](link-to-specification)
 ````
 
@@ -199,7 +199,7 @@ Normative Specification: [Normative Document Link](link-to-specification)
 | **Type** | icd |
 | **Interface Level** | Level 1C Logical Interface |
 | **Generation Mode** | subagent |
-| **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
+| **Specification Source** | `schema/model.sysml` |
 
 # Level 1C: Master Signal Flow Dictionary & Safety Invariants
 
@@ -235,7 +235,7 @@ Where and Operational Parameters:
 | `SIG-SUBA-SUBB-003` | Critical (DAL-A) | **H-3** | Inadvertent arming prohibited | Assert safe default (false) on link interruption |
 
 ## 5. Source References
-Structural Schema: [Target Schema File](../../schema/model.sysml)
+Structural Schema: `schema/model.sysml`
 Normative Specification: [Normative Document Link](link-to-specification)
 ````
 

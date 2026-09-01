@@ -1,5 +1,10 @@
 # Solution Walkthrough: Feature 45 YANG Schema Decomposition Heuristics
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-08-31 |
+
 This document describes the design, architectural components, code realization, and testing plan for the YANG Schema Decomposition Heuristics (Feature 45).
 
 ---

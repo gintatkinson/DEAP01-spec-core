@@ -1,5 +1,10 @@
 # Incident Retrospective: Workspace Pollution & Failed SSH Fix
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-08-31 |
+
 ## 1. Context & Background
 During the feature implementation phase of the digital systems engineering pipeline, automated compliance testing was required to verify the UML linter, alternate flows validation, and codebase bypass loophole checks. 
 

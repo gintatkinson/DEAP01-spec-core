@@ -1,5 +1,10 @@
 # Solution Walkthrough: Onboarding Instructions Update
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-08-31 |
+
 This document details the update applied to the onboarding instructions in the feature-driven-implementation skill and explains the technical rationale for this adjustment.
 
 ---

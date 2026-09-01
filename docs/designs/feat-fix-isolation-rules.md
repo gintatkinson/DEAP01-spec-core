@@ -1,5 +1,10 @@
 # Solution Walkthrough: Context Isolation and Skill Fidelity Rules
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-08-31 |
+
 This document details the additions made to the project-scoped rules in order to enforce strict context isolation and skill fidelity, preventing cross-talk, memory leakage, and instruction drift among agents.
 
 ---

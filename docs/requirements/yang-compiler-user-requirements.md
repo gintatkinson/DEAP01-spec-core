@@ -1,5 +1,10 @@
 # YANG Compiler: User Requirements & Acceptance Tests
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-08-31 |
+
 ## User Story
 
 As a domain engineer, I want to take a YANG data model file and automatically generate a working UI layout so that I don't have to manually edit `logical-layout.json` or write any Dart/Flutter code.

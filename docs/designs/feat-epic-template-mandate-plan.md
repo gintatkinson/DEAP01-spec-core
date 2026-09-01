@@ -1,5 +1,10 @@
 # Implementation Plan: Safe Workspace Restoration & Epic Reconstruction
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-08-31 |
+
 This plan details the steps to safely reconstruct the target restoration workspace (e.g. `<jail_dir>/digipipe-tst16`) and regenerate the Geographic Location Epic (`epic-01-geo-location.md`) with the required UML Class and State Machine diagrams.
 
 To comply with the **Workspace Boundary Isolation** rules, we will **not** scan adjacent directories or search the user's files. Instead, we will reconstruct the workspace by pulling files from the active repository (our workspace) and downloading specifications directly from the remote issue tracker (the canonical source of truth).

@@ -1,5 +1,10 @@
 # API Reference
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-08-31 |
+
 > Public interfaces and classes for extending the platform.
 
 ## Core Abstractions

@@ -1,5 +1,10 @@
 # Domain Deployment Guide
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-08-31 |
+
 > How to take this generic Flutter platform and configure it for your specific domain (e.g., a library's book catalog, a hospital's patient records, a warehouse's inventory).
 
 ## Table of Contents
