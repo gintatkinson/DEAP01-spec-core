@@ -1,5 +1,10 @@
 # Architecture Blueprint: YANG-Driven Logical UI (LUI) Pipeline
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-09-01 |
+
 **Date**: June 2026
 **Status**: APPROVED / MANDATED FOR SPRINT 1
 **Target Environments**: React Web (Vite), Flutter (Desktop/Web), CI/CD Build Pipelines

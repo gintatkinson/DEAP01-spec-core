@@ -1,6 +1,7 @@
 ---
 identifier: DEAP-BLUEPRINT-SYSML-003
-title: "SysML v2 Ingestion Engine & triple-pipeline Model-Based Software Engineering Solution Blueprint"
+title: "SysML v2 Ingestion Engine Solution Blueprint (DEAP-BLUEPRINT-SYSML-003)"
+version: "1.0.0"
 status: "APPROVED / PRODUCTION-GRADE"
 created: "2026-08-10"
 target_regulatory_frameworks:

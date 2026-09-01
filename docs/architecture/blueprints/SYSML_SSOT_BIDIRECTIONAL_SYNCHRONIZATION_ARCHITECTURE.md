@@ -2,6 +2,11 @@
 
 # Architecture Blueprint: SysML v2 Single Source of Truth (SSOT) & Closed-Loop Bidirectional Synchronization Architecture
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 2.0.0 |
+| **Date** | 2026-09-01 |
+
 - **Document Version**: 2.0.0
 - **Classification**: Normative Architectural Blueprint
 - **Authority**: SysML v2 Model-as-SSOT & Non-Drifting Elaboration Invariant (`rules/sysml-ssot-completeness.md`)

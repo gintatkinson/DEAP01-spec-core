@@ -1,5 +1,10 @@
 # DO-178C (DAL A/B) / DO-254 / ARINC 661 Safety-Critical Real-Time UI Framework Architectural Blueprint
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-09-01 |
+
 > **Document Identifier:** `DEAP-BLUEPRINT-SAFETY-UI-001`  
 > **Status:** `APPROVED / PRODUCTION-GRADE`  
 > **Classification:** `Safety-Critical Real-Time Display Architecture Specification`  

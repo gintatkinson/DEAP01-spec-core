@@ -1,5 +1,10 @@
 # DEAP Local Air-Gapped DeepSeek Workstation Infrastructure Blueprint
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-09-01 |
+
 > **Document Identifier:** `DEAP-BLUEPRINT-WORKSTATION-001`  
 > **Status:** `APPROVED / PRODUCTION-GRADE`  
 > **Classification:** `Air-Gapped Local Hardware Infrastructure & DeepSeek Engine Deployment`  

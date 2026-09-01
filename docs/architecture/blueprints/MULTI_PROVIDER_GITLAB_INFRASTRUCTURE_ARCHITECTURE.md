@@ -1,5 +1,10 @@
 # DEAP Multi-Provider Infrastructure Architecture: Native GitLab & Self-Hosted Integration
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-09-01 |
+
 > **Document Identifier:** `DEAP-BLUEPRINT-GITLAB-001`  
 > **Status:** `APPROVED / PRODUCTION-GRADE`  
 > **Classification:** `Enterprise Multi-Provider DevOps & Issue Tracker Architecture Specification`  

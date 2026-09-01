@@ -1,5 +1,10 @@
 # DEAP Multi-Toolchain Synthesis & Formal Verification Architecture
 
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Version** | 1.0.0 |
+| **Date** | 2026-09-01 |
+
 > **Document Identifier:** `DEAP-BLUEPRINT-TOOLCHAIN-001`  
 > **Status:** `APPROVED / PRODUCTION-GRADE`  
 > **Classification:** `Multi-Toolchain Synthesis, Formal Verification & Execution Framework Blueprint`  
