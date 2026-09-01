@@ -546,101 +546,108 @@ class ConopsCompletenessValidator(IValidator):
 
     def synthesize_canonical_template(self, output_path: Union[str, Path]) -> bool:
         """Synthesizes domain-neutral CONOPS_CANONICAL_TEMPLATE.md."""
-        template_text = """| Attribute | Value |
+        res_path = Path(__file__).resolve().parents[4] / "resources" / "CONOPS_CANONICAL_TEMPLATE.md"
+        if res_path.is_file():
+            template_text = res_path.read_text(encoding="utf-8")
+        else:
+            template_text = """| Attribute | Value |
 | :--- | :--- |
-| **Title** | Concept of Operations (ConOps): [System or Architecture Name] |
-| **Version** | 1.0.0 |
-| **Date** | 2026-09-01 |
+| **Title** | Concept of Operations (ConOps): {{SYSTEM_IDENTIFIER}} |
+| **Version** | {{DOCUMENT_VERSION}} |
+| **Date** | {{DOCUMENT_DATE}} |
 
-# Concept of Operations (ConOps): [System or Architecture Name]
+# Concept of Operations (ConOps): {{SYSTEM_IDENTIFIER}}
 
 ## 1. Scope & System Identification
-- **System Identifier:** `[AutonomousSystemArchetype]`
-- **Operational Domain:** `[UAF::OperationalDomain::DomainClassification]`
-- **Operational Boundaries:** [Define physical, spatial, and operational boundary limits]
-- **Stakeholder Roster:** [Primary Operator, Safety Officer, Certification Authority]
+- **System Identifier:** `{{SYSTEM_IDENTIFIER}}`
+- **Operational Domain:** `{{OPERATIONAL_DOMAIN}}`
+- **Operational Boundaries:** {{OPERATIONAL_BOUNDARIES}}
+- **Stakeholder Roster:** {{STAKEHOLDER_ROSTER}}
 
 ## 2. Normative Standards & Regulatory Baseline
 | Standard ID | Issuing Body | Title / Baseline | Applicable Clauses |
 | :--- | :--- | :--- | :--- |
 | ISO/IEC/IEEE 29148:2018 | ISO/IEEE | Systems and Software Engineering — Requirements Engineering | §6.4.2 ConOps & §6.4.3 OpsCon |
 | OMG UAF v1.2 / v2.0 | OMG | Unified Architecture Framework | Operational Domain (Op-*) |
-| NATO STANAG 4586 | NATO | Standard Interfaces of UAV Control System (UCS) | Interoperability Profiles |
+| NATO STANAG 4586 | NATO | Standard Interfaces of Autonomous Control Systems | Interoperability Profiles |
 | JARUS SORA v2.5 | JARUS | Specific Operations Risk Assessment | Annex B (Ground Risk & GRB) |
-| RTCA DO-178C / DO-254 | RTCA | Software and Airborne Electronic Hardware Considerations | Safety Assurance |
+| RTCA DO-178C / DO-254 | RTCA | Software and Electronic Hardware Considerations | Safety Assurance |
 
 ## 3. Current Situation & Deficiency Analysis (Predecessors)
-- **Current Operational Baseline:** [Describe existing capability / predecessor systems]
-- **Operational Deficiencies:** [Catalog deficiencies and quantified operational impact]
+- **Current Operational Baseline:** {{CURRENT_OPERATIONAL_BASELINE}}
+- **Operational Deficiencies:** {{OPERATIONAL_DEFICIENCIES}}
 
 ## 4. Operational Justification & Priority Matrix (Trade-Offs)
-- **Mission Drivers & Value Proposition:** [Define operational justification and stakeholder needs]
-- **Trade-Off Analysis:** [Quantified trade-offs across capability, weight, endurance, and cost]
+- **Mission Drivers & Value Proposition:** {{MISSION_DRIVERS_AND_VALUE_PROPOSITION}}
+- **Trade-Off Analysis:** {{TRADE_OFF_ANALYSIS}}
 
 ## 5. Operational Modes & Lifecycle Stages
-Formal state/mode transitions across $\\Phi_{\\mathrm{lifecycle}}$:
-- **Phase_Startup:** System power-on Built-In-Test (BIT) and calibration.
-- **Phase_NominalExecution:** Active mission execution and waypoint tracking.
-- **Phase_DegradedMode:** Subsystem failure with operational mitigations.
-- **Phase_ContingencyFailsafe:** Autonomous safety containment and return-to-base.
-- **Phase_SecureShutdown:** Safe power down and secure telemetry storage.
-- **Phase_MaintenanceMode:** Diagnostics, calibration, and software updates.
+Formal operational lifecycle stages across $\\Phi_{\\mathrm{lifecycle}}$:
+- **Phase_Startup:** {{PHASE_STARTUP_DESCRIPTION}}
+- **Phase_NominalExecution:** {{PHASE_NOMINAL_EXECUTION_DESCRIPTION}}
+- **Phase_DegradedMode:** {{PHASE_DEGRADED_MODE_DESCRIPTION}}
+- **Phase_ContingencyFailsafe:** {{PHASE_CONTINGENCY_FAILSAFE_DESCRIPTION}}
+- **Phase_SecureShutdown:** {{PHASE_SECURE_SHUTDOWN_DESCRIPTION}}
+- **Phase_MaintenanceMode:** {{PHASE_MAINTENANCE_MODE_DESCRIPTION}}
 
 ## 6. 4D Operational Volume & SORA Ground Risk Buffer Mathematics
 $$
 \\begin{aligned}
-V_{\\mathrm{4D}} &= V_{\\mathrm{FlightGeometry}} \\cup V_{\\mathrm{ContingencyVolume}} \\cup V_{\\mathrm{GRB}} \\\\
-R_{\\mathrm{GRB}} &= h_{\\mathrm{max}} \\cdot \\tan(\\theta_{\\mathrm{impact}}) + v_{\\mathrm{wind,max}} \\cdot \\sqrt{\\frac{2 h_{\\mathrm{max}}}{g}}
+V_{\\mathrm{4D}} &= V_{\\mathrm{SpatialGeometry}} \\cup V_{\\mathrm{ContingencyVolume}} \\cup V_{\\mathrm{GRB}} \\\\
+R_{\\mathrm{GRB}} &= h_{\\mathrm{max}} \\cdot \\tan(\\theta_{\\mathrm{impact}}) + v_{\\mathrm{wind,max}} \\cdot \\sqrt{\\frac{2 h_{\\mathrm{max}}}{g}} + d_{\\mathrm{glide,max}}
 \\end{aligned}
 $$
 
 | Parameter | Symbol | Value | Units | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| Max Altitude AGL | h_max | 120.0 | m | Maximum operating ceiling above ground |
-| Impact Angle | theta_impact | 45.0 | deg | SORA 1:1 rule worst-case impact vector |
-| Max Wind Speed | v_wind_max | 15.0 | m/s | Maximum operational wind limit |
-| Gravitational Accel | g | 9.80665 | m/s^2 | Standard gravitational acceleration |
-| Ground Risk Buffer Radius | R_GRB | 200.0 | m | Declared ground risk buffer radius |
-| Terminal Velocity | v_terminal | 25.0 | m/s | Estimated unpowered descent terminal velocity |
-| Impact Kinetic Energy | E_impact | 1562.5 | J | Kinetic energy at ground impact |
+| Max Altitude / Ceiling | h_max | {{H_MAX_M}} | m | Maximum operating ceiling above reference surface |
+| Impact Angle | theta_impact | {{THETA_IMPACT_DEG}} | deg | Worst-case operational trajectory impact angle |
+| Max Wind Speed | v_wind_max | {{V_WIND_MAX_MPS}} | m/s | Maximum operational wind speed limit |
+| Gravitational Accel | g | {{G_ACCEL_MPS2}} | m/s^2 | Standard gravitational acceleration constant |
+| Maximum Glide Distance | d_glide_max | {{D_GLIDE_MAX_M}} | m | Maximum unpowered lateral displacement margin |
+| Ground Risk Buffer Radius | R_GRB | {{R_GRB_METERS}} | m | Declared ground risk buffer containment radius |
+| Terminal Velocity | v_terminal | {{V_TERMINAL_MPS}} | m/s | Estimated unpowered descent terminal velocity |
+| Impact Kinetic Energy | E_impact | {{E_IMPACT_JOULES}} | J | Kinetic energy at operational boundary impact |
 
 ## 7. OMG UAF Operational Activity Taxonomy
 | Activity ID | Activity Name | Description | Gate 24 Allocation Tag |
 | :--- | :--- | :--- | :--- |
-| OA-01 | SystemInitialization | Executes power-on Built-In-Tests | `/// OperationalAllocation: [OA-01]` |
-| OA-02 | ExecuteTrajectoryTracking | Performs closed-loop waypoint guidance | `/// OperationalAllocation: [OA-02]` |
-| OA-03 | HealthMonitoring | Performs continuous cross-channel sanity checks | `/// OperationalAllocation: [OA-03]` |
+| OA-01 | {{OA_01_ACTIVITY_NAME}} | {{OA_01_DESCRIPTION}} | `/// OperationalAllocation: [OA-01]` |
+| OA-02 | {{OA_02_ACTIVITY_NAME}} | {{OA_02_DESCRIPTION}} | `/// OperationalAllocation: [OA-02]` |
+| OA-03 | {{OA_03_ACTIVITY_NAME}} | {{OA_03_DESCRIPTION}} | `/// OperationalAllocation: [OA-03]` |
 
 ## 8. Operational Information Exchange (Op-Tx) Matrix
 | Exchange ID | Source Node | Destination Node | Information Item | Data Rate | Max Latency | Criticality |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| OpTx-01 | PrimarySensorSubsystem | ControllerLogicSubsystem | PrimarySensorState | 100 Hz | 5 ms | High (DAL-A) |
-| OpTx-02 | ControllerLogicSubsystem | ActuatorSubsystem | ActuatorDemandValue | 200 Hz | 2.5 ms | High (DAL-A) |
+| OpTx-01 | {{OPTX_01_SOURCE_NODE}} | {{OPTX_01_DEST_NODE}} | {{OPTX_01_INFO_ITEM}} | {{OPTX_01_DATA_RATE}} | {{OPTX_01_MAX_LATENCY}} | {{OPTX_01_CRITICALITY}} |
+| OpTx-02 | {{OPTX_02_SOURCE_NODE}} | {{OPTX_02_DEST_NODE}} | {{OPTX_02_INFO_ITEM}} | {{OPTX_02_DATA_RATE}} | {{OPTX_02_MAX_LATENCY}} | {{OPTX_02_CRITICALITY}} |
 
 ## 9. Operational Environments & Constraints
-- **Ambient Temperature:** $-20^\\circ\\text{C}$ to $+50^\\circ\\text{C}$.
-- **Precipitation Limit:** $5\\text{ mm/hr}$ continuous rain.
-- **RF Environment:** GNSS-degraded operations with fallback to dead reckoning.
+- **Ambient Temperature:** {{AMBIENT_TEMPERATURE_RANGE}}
+- **Environmental Ingress:** {{ENVIRONMENTAL_INGRESS_RATING}}
+- **Electromagnetic / RF Environment:** {{RF_ENVIRONMENT_CONSTRAINTS}}
+- **Physical Spatial Constraints:** {{PHYSICAL_SPATIAL_CONSTRAINTS}}
 
 ## 10. Multi-Threaded Operational Scenarios
-- **Scenario 1 (Nominal):** Normal takeoff, waypoint traversal, mission payload capture, and precision landing.
-- **Scenario 2 (Degraded Sensor):** Primary IMU glitch triggers fallback to secondary optical sensor.
+- **Scenario 1 (Nominal Execution):** {{SCENARIO_1_NOMINAL_THREAD}}
+- **Scenario 2 (Degraded Mode & Mitigation):** {{SCENARIO_2_DEGRADED_THREAD}}
+- **Scenario 3 (Contingency Recovery):** {{SCENARIO_3_CONTINGENCY_THREAD}}
 
 ## 11. Maintenance & Sustainment Concepts (O/I/D Maintenance)
-- **O-Level (Organizational):** Pre-flight pre-arm checklist, battery hot-swap, visual propeller inspection.
-- **I-Level (Intermediate):** Actuator servo calibration, sensor recalibration, LRU modular replacement.
-- **D-Level (Depot):** Airframe structural overhaul, composite NDI testing, flight controller recertification.
+- **O-Level (Organizational):** {{O_LEVEL_MAINTENANCE_DESCRIPTION}}
+- **I-Level (Intermediate):** {{I_LEVEL_MAINTENANCE_DESCRIPTION}}
+- **D-Level (Depot):** {{D_LEVEL_MAINTENANCE_DESCRIPTION}}
 
-## 12. 7-Row Emergency Decision & Contingency Matrix (MBD Simulink Integration & Traceability)
+## 12. 7-Row Emergency Decision & Contingency Matrix
 | Trigger ID | Contingency Trigger | Detection Mechanism | Automated Containment Action | Failsafe State | Max Response Time | HITL Role |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `EMG-01` | Lost C2 Link | Heartbeat loss > 5.0 s | Execute autonomous lost-link loiter / return | `Contingency_LostLinkReturn` | 0.50 s | Monitor / Override |
-| `EMG-02` | GNSS Navigation Loss | FOM > 3.0 or RAIM Alert | Switch to dead-reckoning / optical odometry | `Contingency_DeadReckoning` | 0.10 s | Monitor / Override |
-| `EMG-03` | Propulsion Failure | RPM drop / Over-current | Execute glide to nearest secondary divert site | `Contingency_EmergencyGlide` | 0.05 s | Informed |
-| `EMG-04` | Critical Sensor Fault | Cross-channel disparity | Revert to simplex failsafe sensor mode | `Degraded_SensorFailsafe` | 0.05 s | Monitor |
-| `EMG-05` | Geofence Breach Alert | Boundary proximity < 50 m | Execute emergency turnaround maneuver | `Contingency_GeofenceContainment` | 0.20 s | Monitor / Override |
-| `EMG-06` | Structural Anomaly | Vibration threshold exceeded | Throttle reduction and immediate landing | `Contingency_PrecautionaryLand` | 0.50 s | Monitor / Override |
-| `EMG-07` | Flight Termination Cmd | Encrypted abort signal | Deploy parachute / instant motor cutoff | `Emergency_FlightTermination` | 0.02 s | Initiator |
+| `EMG-01` | {{EMG_01_TRIGGER_NAME}} | {{EMG_01_DETECTION_MECHANISM}} | {{EMG_01_CONTAINMENT_ACTION}} | `{{EMG_01_FAILSAFE_STATE}}` | {{EMG_01_MAX_RESPONSE_TIME}} | {{EMG_01_HITL_ROLE}} |
+| `EMG-02` | {{EMG_02_TRIGGER_NAME}} | {{EMG_02_DETECTION_MECHANISM}} | {{EMG_02_CONTAINMENT_ACTION}} | `{{EMG_02_FAILSAFE_STATE}}` | {{EMG_02_MAX_RESPONSE_TIME}} | {{EMG_02_HITL_ROLE}} |
+| `EMG-03` | {{EMG_03_TRIGGER_NAME}} | {{EMG_03_DETECTION_MECHANISM}} | {{EMG_03_CONTAINMENT_ACTION}} | `{{EMG_03_FAILSAFE_STATE}}` | {{EMG_03_MAX_RESPONSE_TIME}} | {{EMG_03_HITL_ROLE}} |
+| `EMG-04` | {{EMG_04_TRIGGER_NAME}} | {{EMG_04_DETECTION_MECHANISM}} | {{EMG_04_CONTAINMENT_ACTION}} | `{{EMG_04_FAILSAFE_STATE}}` | {{EMG_04_MAX_RESPONSE_TIME}} | {{EMG_04_HITL_ROLE}} |
+| `EMG-05` | {{EMG_05_TRIGGER_NAME}} | {{EMG_05_DETECTION_MECHANISM}} | {{EMG_05_CONTAINMENT_ACTION}} | `{{EMG_05_FAILSAFE_STATE}}` | {{EMG_05_MAX_RESPONSE_TIME}} | {{EMG_05_HITL_ROLE}} |
+| `EMG-06` | {{EMG_06_TRIGGER_NAME}} | {{EMG_06_DETECTION_MECHANISM}} | {{EMG_06_CONTAINMENT_ACTION}} | `{{EMG_06_FAILSAFE_STATE}}` | {{EMG_06_MAX_RESPONSE_TIME}} | {{EMG_06_HITL_ROLE}} |
+| `EMG-07` | {{EMG_07_TRIGGER_NAME}} | {{EMG_07_DETECTION_MECHANISM}} | {{EMG_07_CONTAINMENT_ACTION}} | `{{EMG_07_FAILSAFE_STATE}}` | {{EMG_07_MAX_RESPONSE_TIME}} | {{EMG_07_HITL_ROLE}} |
 """
         out_p = Path(output_path)
         out_p.parent.mkdir(parents=True, exist_ok=True)
@@ -798,68 +805,72 @@ class MissionIntentCompletenessValidator(IValidator):
 
     def synthesize_canonical_template(self, output_path: Union[str, Path]) -> bool:
         """Synthesizes domain-neutral MISSION_INTENT_CANONICAL_TEMPLATE.md."""
-        template_text = """| Attribute | Value |
+        res_path = Path(__file__).resolve().parents[4] / "resources" / "MISSION_INTENT_CANONICAL_TEMPLATE.md"
+        if res_path.is_file():
+            template_text = res_path.read_text(encoding="utf-8")
+        else:
+            template_text = """| Attribute | Value |
 | :--- | :--- |
-| **Title** | Tactical Mission Intent & Execution Plan: [Mission / System Name] |
-| **Version** | 1.0.0 |
-| **Date** | 2026-09-01 |
+| **Title** | Tactical Mission Intent & Execution Plan: {{MISSION_SYSTEM_NAME}} |
+| **Version** | {{DOCUMENT_VERSION}} |
+| **Date** | {{DOCUMENT_DATE}} |
 
-# Tactical Mission Intent & Execution Plan: [Mission / System Name]
+# Tactical Mission Intent & Execution Plan: {{MISSION_SYSTEM_NAME}}
 
 ## 1. Commander's Intent & Operational Objectives
-- **Operational Purpose:** [State high-level operational objective and tactical mission intent]
-- **Key Tasks:** [Enumerate mandatory mission milestones and operational phases]
-- **End State:** [Define certified safe recovery condition and mission success criteria]
+- **Operational Purpose:** {{OPERATIONAL_PURPOSE}}
+- **Key Tasks:** {{KEY_MISSION_TASKS}}
+- **End State:** {{MISSION_END_STATE}}
 
 ## 2. Mission Essential Task List (METL)
 | Task ID | Task Name | Condition Statement | Standard Metric | Verification Method | Gate 24 Allocation Tag |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `MET-01` | PreFlightSystemCheckout | Pre-launch power on | 100% PBIT pass in < 30 s | Automated BIT Log | `/// OperationalAllocation: [MET-01]` |
-| `MET-02` | AutonomousIngressTransit | En-route nominal corridor | Cross-track error < 2.0 m | Flight Log Review | `/// OperationalAllocation: [MET-02]` |
-| `MET-03` | AreaSurveillanceOrbit | On-station target orbit | Orbit radius 100 m +/- 5 m | Telemetry Stream | `/// OperationalAllocation: [MET-03]` |
-| `MET-04` | AutonomousAreaSearch | Wide area search mode | 95% ground area coverage | Map Coverage Log | `/// OperationalAllocation: [MET-04]` |
-| `MET-05` | SafeReturnAndDivert | Return to recovery point | Touchdown error < 1.0 m | Visual / RTK Log | `/// OperationalAllocation: [MET-05]` |
-| `MET-06` | PostMissionDataOffload | Post-landing shutdown | Secure telemetry offload | Hash Verification | `/// OperationalAllocation: [MET-06]` |
+| `MET-01` | {{MET_01_TASK_NAME}} | {{MET_01_CONDITION}} | {{MET_01_STANDARD}} | {{MET_01_VERIFICATION}} | `/// OperationalAllocation: [MET-01]` |
+| `MET-02` | {{MET_02_TASK_NAME}} | {{MET_02_CONDITION}} | {{MET_02_STANDARD}} | {{MET_02_VERIFICATION}} | `/// OperationalAllocation: [MET-02]` |
+| `MET-03` | {{MET_03_TASK_NAME}} | {{MET_03_CONDITION}} | {{MET_03_STANDARD}} | {{MET_03_VERIFICATION}} | `/// OperationalAllocation: [MET-03]` |
+| `MET-04` | {{MET_04_TASK_NAME}} | {{MET_04_CONDITION}} | {{MET_04_STANDARD}} | {{MET_04_VERIFICATION}} | `/// OperationalAllocation: [MET-04]` |
+| `MET-05` | {{MET_05_TASK_NAME}} | {{MET_05_CONDITION}} | {{MET_05_STANDARD}} | {{MET_05_VERIFICATION}} | `/// OperationalAllocation: [MET-05]` |
+| `MET-06` | {{MET_06_TASK_NAME}} | {{MET_06_CONDITION}} | {{MET_06_STANDARD}} | {{MET_06_VERIFICATION}} | `/// OperationalAllocation: [MET-06]` |
 
 ## 3. Measures of Effectiveness (MoE) & Measures of Performance (MoP) Metrics
 | Metric ID | Metric Type | Metric Name | Formulation / Equation | Threshold | Objective | Unit |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| MoE-01 | MoE | Mission Area Coverage Ratio | A_covered / A_total | 0.90 | 0.99 | Dimensionless |
-| MoP-01 | MoP | Cross-Track Waypoint Deviation | max || p_act - p_cmd ||_2D | 5.0 | 1.0 | m |
-| MoP-02 | MoP | Telemetry Latency Bound | tau_transport | 50.0 | 10.0 | ms |
+| MoE-01 | MoE | {{MOE_01_NAME}} | {{MOE_01_EQUATION}} | {{MOE_01_THRESHOLD}} | {{MOE_01_OBJECTIVE}} | {{MOE_01_UNIT}} |
+| MoP-01 | MoP | {{MOP_01_NAME}} | {{MOP_01_EQUATION}} | {{MOP_01_THRESHOLD}} | {{MOP_01_OBJECTIVE}} | {{MOP_01_UNIT}} |
+| MoP-02 | MoP | {{MOP_02_NAME}} | {{MOP_02_EQUATION}} | {{MOP_02_THRESHOLD}} | {{MOP_02_OBJECTIVE}} | {{MOP_02_UNIT}} |
 
 ## 4. Threat & Electronic Warfare (EW) / Cyber Environment Matrix
 | Threat ID | Threat Vector | Description | Severity | Autonomous Mitigation Rule |
 | :--- | :--- | :--- | :--- | :--- |
-| THR-01 | GNSS Spoofing / Jamming | Loss of carrier lock or pseudo-range jump | High | Revert to optical dead-reckoning and IMU integration |
-| THR-02 | RF Link Interception / Jamming | C2 uplink SNR < 6 dB | Medium | Switch frequency-hopping channel or activate PACE alternate link |
-| THR-03 | Cyber Ingress Attempt | Unauthorized packet on telemetry port | Critical | Immediate port isolation and cryptographic key cycle |
+| THR-01 | {{THR_01_VECTOR}} | {{THR_01_DESCRIPTION}} | {{THR_01_SEVERITY}} | {{THR_01_MITIGATION_RULE}} |
+| THR-02 | {{THR_02_VECTOR}} | {{THR_02_DESCRIPTION}} | {{THR_02_SEVERITY}} | {{THR_02_MITIGATION_RULE}} |
+| THR-03 | {{THR_03_VECTOR}} | {{THR_03_DESCRIPTION}} | {{THR_03_SEVERITY}} | {{THR_03_MITIGATION_RULE}} |
 
 ## 5. PACE C2 Link Communications Plan
 | PACE Tier | Link Medium | Frequency Band | Nominal Data Rate | Heartbeat Timeout | Priority / Role |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Primary** | Point-to-Point COFDM | 5.8 GHz ISM | 10.0 Mbps | 2.0 s | Video & High-rate Telemetry |
-| **Alternate** | Cellular LTE / 5G VPN | Band 28 / 700 MHz | 2.0 Mbps | 3.0 s | Encrypted Cloud Relay |
-| **Contingency** | 900 MHz FHSS Radio | 915 MHz ISM | 115.2 kbps | 5.0 s | Essential C2 Commands Only |
-| **Emergency** | Satellite Iridium SBD | 1.6 GHz L-Band | 2.4 kbps | 10.0 s | Emergency Flight Termination & Geo-Beacon |
+| **Primary** | {{PACE_PRIMARY_MEDIUM}} | {{PACE_PRIMARY_BAND}} | {{PACE_PRIMARY_DATA_RATE}} | {{PACE_PRIMARY_TIMEOUT}} | {{PACE_PRIMARY_ROLE}} |
+| **Alternate** | {{PACE_ALTERNATE_MEDIUM}} | {{PACE_ALTERNATE_BAND}} | {{PACE_ALTERNATE_DATA_RATE}} | {{PACE_ALTERNATE_TIMEOUT}} | {{PACE_ALTERNATE_ROLE}} |
+| **Contingency** | {{PACE_CONTINGENCY_MEDIUM}} | {{PACE_CONTINGENCY_BAND}} | {{PACE_CONTINGENCY_DATA_RATE}} | {{PACE_CONTINGENCY_TIMEOUT}} | {{PACE_CONTINGENCY_ROLE}} |
+| **Emergency** | {{PACE_EMERGENCY_MEDIUM}} | {{PACE_EMERGENCY_BAND}} | {{PACE_EMERGENCY_DATA_RATE}} | {{PACE_EMERGENCY_TIMEOUT}} | {{PACE_EMERGENCY_ROLE}} |
 
 ## 6. Rules of Engagement (ROE) & Weapon/Sensor Interlocks
-- **ROE-01:** System shall not execute autonomous descent below $30\\text{ m}$ without positive ground clearance confirmation.
-- **ROE-02:** Optical sensor active tracking requires human-in-the-loop (HITL) confirmation.
-- **ROE-03:** Automated flight termination sequence requires dual authorization key verification.
+- **ROE-01:** {{ROE_01_RULE_STATEMENT}}
+- **ROE-02:** {{ROE_02_RULE_STATEMENT}}
+- **ROE-03:** {{ROE_03_RULE_STATEMENT}}
 
 ## 7. Airspace Deconfliction & U-space Dynamic Geo-Zones
-- **Primary Geofence Corridor:** Outer polygon bounding perimeter with $50\\text{ m}$ warning buffer.
-- **Keep-Out Zones (Dynamic):** Populated area buffer circles ($R = 300\\text{ m}$) marked NO-FLY.
-- **Separation Minima:** Maintain $150\\text{ m}$ vertical and $500\\text{ m}$ horizontal separation from uncoordinated traffic.
+- **Primary Boundary Perimeter:** {{PRIMARY_BOUNDARY_PERIMETER}}
+- **Dynamic Exclusion Zones:** {{DYNAMIC_EXCLUSION_ZONES}}
+- **Separation Minima:** {{SEPARATION_MINIMA}}
 
 ## 8. Go/No-Go Decision Matrix
 | Check ID | Phase | Parameter / Check | Threshold Condition | Sensor / Mechanism | Go / No-Go Action |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| GNG-01 | Pre-Launch | Battery State of Charge | >= 95.0% | Smart Battery BMS | Abort Launch if < 95% |
-| GNG-02 | Pre-Launch | Wind Velocity | <= 12.0 m/s | Ground Anemometer | Hold Launch if > 12 m/s |
-| GNG-03 | In-Flight | Navigation FOM | <= 2.0 | GPS Receiver HDOP | Initiate Loiter if > 2.0 |
-| GNG-04 | In-Flight | Motor Temperature | <= 85.0 degC | ESC Thermistor | Divert to Base if > 85 degC |
+| GNG-01 | {{GNG_01_PHASE}} | {{GNG_01_PARAMETER}} | {{GNG_01_THRESHOLD}} | {{GNG_01_MECHANISM}} | {{GNG_01_ACTION}} |
+| GNG-02 | {{GNG_02_PHASE}} | {{GNG_02_PARAMETER}} | {{GNG_02_THRESHOLD}} | {{GNG_02_MECHANISM}} | {{GNG_02_ACTION}} |
+| GNG-03 | {{GNG_03_PHASE}} | {{GNG_03_PARAMETER}} | {{GNG_03_THRESHOLD}} | {{GNG_03_MECHANISM}} | {{GNG_03_ACTION}} |
+| GNG-04 | {{GNG_04_PHASE}} | {{GNG_04_PARAMETER}} | {{GNG_04_THRESHOLD}} | {{GNG_04_MECHANISM}} | {{GNG_04_ACTION}} |
 
 ## 9. Bingo Energy Mathematics & Secondary Divert Protocols
 $$
@@ -871,20 +882,20 @@ $$
 
 | Energy Parameter | Symbol | Value | Units | Constraint Rule |
 | :--- | :--- | :--- | :--- | :--- |
-| Total Pack Capacity | E_capacity | 500.0 | kJ | Total nominal battery stored energy |
-| Return Transit Energy | E_return | 150.0 | kJ | Energy required for primary return trajectory |
-| Secondary Divert Energy | E_divert | 60.0 | kJ | Energy required to divert to secondary recovery site |
-| Mandatory Statutory Reserve | E_reserve | 100.0 | kJ | 20.0% statutory reserve threshold |
-| Contingency Buffer | E_contingency | 40.0 | kJ | Holding pattern & go-around reserve |
-| Total Bingo Threshold | E_bingo | 350.0 | kJ | Critical return threshold (E_current <= E_bingo -> Divert) |
+| Total Storage Capacity | E_capacity | {{E_CAPACITY_JOULES}} | J | Total nominal energy storage capacity |
+| Return Transit Energy | E_return | {{E_RETURN_JOULES}} | J | Energy required for primary return trajectory |
+| Secondary Divert Energy | E_divert | {{E_DIVERT_JOULES}} | J | Energy required to divert to secondary recovery site |
+| Mandatory Statutory Reserve | E_reserve | {{E_RESERVE_JOULES}} | J | Statutory reserve threshold (E_reserve >= 0.20 * E_capacity) |
+| Contingency Buffer | E_contingency | {{E_CONTINGENCY_JOULES}} | J | Dynamic operational contingency energy reserve |
+| Total Bingo Threshold | E_bingo | {{E_BINGO_THRESHOLD_JOULES}} | J | Critical return threshold condition |
 
 ## 10. Gate 24 MissionTask Traceability Tags (Allocation Tags)
-- `/// OperationalAllocation: [MET-01_PreFlightSystemCheckout]`
-- `/// OperationalAllocation: [MET-02_AutonomousIngressTransit]`
-- `/// OperationalAllocation: [MET-03_AreaSurveillanceOrbit]`
-- `/// OperationalAllocation: [MET-04_AutonomousAreaSearch]`
-- `/// OperationalAllocation: [MET-05_SafeReturnAndDivert]`
-- `/// OperationalAllocation: [MET-06_PostMissionDataOffload]`
+- `/// OperationalAllocation: [MET-01]`
+- `/// OperationalAllocation: [MET-02]`
+- `/// OperationalAllocation: [MET-03]`
+- `/// OperationalAllocation: [MET-04]`
+- `/// OperationalAllocation: [MET-05]`
+- `/// OperationalAllocation: [MET-06]`
 """
         out_p = Path(output_path)
         out_p.parent.mkdir(parents=True, exist_ok=True)

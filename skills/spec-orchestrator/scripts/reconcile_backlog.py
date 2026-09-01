@@ -86,8 +86,10 @@ DEFAULT_CODEBASE_RULES = {
         },
         "close_comments": {
             "epic": "Epic completed. All constituent features successfully delivered and verified.",
+            "feature": "Resolved. All acceptance criteria and verification tasks for feature '{title}' have been completed and verified.",
             "user_story": "Resolved. All dependent features/tasks for BDD scenario '{title}' have been completed and verified.",
-            "use_case": "Resolved. All dependent user stories and features for use case '{title}' are completed."
+            "use_case": "Resolved. All dependent user stories and features for use case '{title}' are completed.",
+            "compiler": "Resolved. Compiler backlog test target(s) '{test_targets}' completed and verified."
         },
         "commands": {
             "list_issues": [
@@ -193,8 +195,10 @@ DEFAULT_GITLAB_TRACKER_RULES = {
     },
     "close_comments": {
         "epic": "Epic completed. All constituent features successfully delivered and verified.",
+        "feature": "Resolved. All acceptance criteria and verification tasks for feature '{title}' have been completed and verified.",
         "user_story": "Resolved. All dependent features/tasks for BDD scenario '{title}' have been completed and verified.",
-        "use_case": "Resolved. All dependent user stories and features for use case '{title}' are completed."
+        "use_case": "Resolved. All dependent user stories and features for use case '{title}' are completed.",
+        "compiler": "Resolved. Compiler backlog test target(s) '{test_targets}' completed and verified."
     },
     "commands": {
         "list_issues": [
@@ -297,8 +301,10 @@ DEFAULT_JIRA_TRACKER_RULES = {
     },
     "close_comments": {
         "epic": "Epic completed. All constituent features successfully delivered and verified.",
+        "feature": "Resolved. All acceptance criteria and verification tasks for feature '{title}' have been completed and verified.",
         "user_story": "Resolved. All dependent features/tasks for BDD scenario '{title}' have been completed and verified.",
-        "use_case": "Resolved. All dependent user stories and features for use case '{title}' are completed."
+        "use_case": "Resolved. All dependent user stories and features for use case '{title}' are completed.",
+        "compiler": "Resolved. Compiler backlog test target(s) '{test_targets}' completed and verified."
     }
 }
 
@@ -1788,7 +1794,12 @@ def extract_title(filepath):
         with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
             content = f.read(2048)  # Read first 2KB
         
-        # Try finding title in YAML frontmatter
+        # Try finding title in table or YAML frontmatter
+        table_title_match = re.search(r'^\s*\|\s*\*\*Title\*\*\s*\|\s*(.*?)\s*\|\s*$', content, re.MULTILINE | re.IGNORECASE)
+        if table_title_match:
+            return table_title_match.group(1).strip()
+
+        title_match = re.search(r'^title:\s*(["\']?)(.*?)\1\s*$', content, re.MULTILINE)
         title_match = re.search(r'^title:\s*(["\']?)(.*?)\1\s*$', content, re.MULTILINE)
         if title_match:
             return title_match.group(2).strip()
@@ -2008,6 +2019,23 @@ def update_checklist_in_file(filepath, issue_dict, rules=None):
     return updated_content, (has_deps and all_deps_closed)
 
 def convert_frontmatter_to_table(content):
+    if not content:
+        return content
+        
+    stripped = content.lstrip()
+    if (
+        stripped.startswith("| Attribute | Specification Detail |")
+        or stripped.startswith("| Metadata | Value |")
+    ):
+        return content
+
+    cleaned_comments = re.sub(r'^<!--.*?-->\s*', '', content, flags=re.DOTALL).lstrip()
+    if (
+        cleaned_comments.startswith("| Attribute | Specification Detail |")
+        or cleaned_comments.startswith("| Metadata | Value |")
+    ):
+        return content
+
     if not content.startswith("---"):
         return content
     
@@ -2027,8 +2055,8 @@ def convert_frontmatter_to_table(content):
         return content
     
     table_lines = [
-        "| Metadata | Value |",
-        "| --- | --- |"
+        "| Attribute | Specification Detail |",
+        "| :--- | :--- |"
     ]
     
     for key, value in data.items():
@@ -2040,8 +2068,8 @@ def convert_frontmatter_to_table(content):
             val = str(value)
         
         val = val.replace('\n', '<br>').replace('|', '\\|')
-        key_str = str(key).replace('\n', '<br>').replace('|', '\\|')
-        table_lines.append(f"| **{key_str}** | {val} |")
+        label = str(key).replace('_', ' ').title()
+        table_lines.append(f"| **{label}** | {val} |")
         
     table_text = "\n".join(table_lines) + "\n\n"
     return table_text + body_text
@@ -2733,6 +2761,411 @@ def resolve_issue_on_tracker(issue_num, comment, rules=None, provider_adapter=No
         ]
         subprocess.run(cmd, check=True, capture_output=True, timeout=30)
 
+
+def is_upstream_repository(workspace_dir: Optional[str] = None) -> bool:
+    """
+    Check if the workspace is an Upstream Specification Core Compiler repository
+    characterized by abstract compiler tooling and clean landing zones.
+    """
+    ws = workspace_dir or os.getcwd()
+    env_type = os.environ.get("DEAP_REPOSITORY_TYPE")
+    if env_type and env_type.strip() == "UPSTREAM_SPEC_CORE_COMPILER":
+        return True
+    upstream_marker = os.path.join(ws, ".pipeline", "upstream")
+    if os.path.exists(upstream_marker):
+        return True
+    return False
+
+
+def extract_test_targets_from_text(text: str) -> List[str]:
+    """
+    Extract test target specifications from markdown issue text / description / annotations.
+    Supports:
+    - HTML comments: <!-- test-target: path --> or <!-- test-targets: path1, path2 -->
+    - Key-value lines: Test-Target: path or Test-Targets: path1, path2 (case-insensitive)
+    - Key-value lines: @test-target: path or @test-targets: path1, path2
+    - Markdown section: ## Test Targets with bullet list
+    """
+    if not text:
+        return []
+    targets = []
+
+    # 1. HTML comment annotations: <!-- test-target: ... --> or <!-- test-targets: ... -->
+    html_matches = re.findall(r'<!--\s*test[-_]targets?:\s*([^\n>]+?)\s*-->', text, re.IGNORECASE)
+    for m in html_matches:
+        parts = [p.strip().strip('`"\'') for p in re.split(r'[,;\s]+', m.strip()) if p.strip()]
+        targets.extend(parts)
+
+    # 2. Key-value line annotations: (?:^|\n)\s*(?:@)?test[-_]targets?:\s*([^\n]+)
+    kv_matches = re.findall(r'(?:^|\n)\s*(?:@)?test[-_]targets?:\s*([^\n]+)', text, re.IGNORECASE)
+    for m in kv_matches:
+        if "-->" in m:
+            continue
+        parts = [p.strip().strip('`"\'') for p in re.split(r'[,;\s]+', m.strip()) if p.strip()]
+        targets.extend(parts)
+
+    # 3. Markdown section with bullets: ## Test Targets\n- target1\n- target2
+    section_match = re.search(r'#+\s+Test\s+Targets?\s*\n((?:\s*[-*]\s+[^\n]+\n?)+)', text, re.IGNORECASE)
+    if section_match:
+        bullet_lines = section_match.group(1).splitlines()
+        for line in bullet_lines:
+            line_match = re.match(r'\s*[-*]\s+(.+)', line)
+            if line_match:
+                item = line_match.group(1).strip().strip('`"\'')
+                parts = [p.strip().strip('`"\'') for p in re.split(r'[,;]+', item) if p.strip()]
+                targets.extend(parts)
+
+    # Deduplicate while preserving insertion order
+    seen = set()
+    result = []
+    for t in targets:
+        clean_t = t.strip().strip('`"\'')
+        if clean_t and clean_t not in seen:
+            seen.add(clean_t)
+            result.append(clean_t)
+    return result
+
+
+def load_compiler_backlog_manifest(
+    workspace_dir: Optional[str] = None,
+    manifest_path: Optional[str] = None,
+    rules: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Dict[str, Any]]:
+    """
+    Load mapping between compiler backlog issue numbers and their test targets.
+    Normalizes to:
+    {
+        "<issue_id>": {
+            "test_targets": ["tests/test_foo.py", ...],
+            "title": "...",
+            "description": "..."
+        }
+    }
+    """
+    ws = workspace_dir or os.getcwd()
+    manifest_data = None
+
+    if manifest_path and os.path.exists(manifest_path):
+        try:
+            with open(manifest_path, "r", encoding="utf-8") as f:
+                if manifest_path.endswith((".yaml", ".yml")):
+                    manifest_data = yaml.safe_load(f)
+                else:
+                    manifest_data = json.load(f)
+        except Exception as e:
+            print(f"Warning: Failed to load manifest from {manifest_path}: {e}", file=sys.stderr)
+
+    if manifest_data is None and rules and isinstance(rules, dict):
+        manifest_data = (
+            rules.get("compiler_backlog_manifest")
+            or rules.get("upstream_backlog_manifest")
+            or rules.get("backlog_manifest")
+        )
+
+    if manifest_data is None:
+        candidate_paths = [
+            os.path.join(ws, ".pipeline", "compiler_backlog_manifest.json"),
+            os.path.join(ws, ".pipeline", "backlog_manifest.json"),
+            os.path.join(ws, ".pipeline", "upstream_backlog_manifest.json"),
+            os.path.join(ws, "compiler_backlog_manifest.json"),
+            os.path.join(ws, "backlog_manifest.json"),
+            os.path.join(ws, ".pipeline", "compiler_backlog_manifest.yaml"),
+            os.path.join(ws, ".pipeline", "compiler_backlog_manifest.yml"),
+        ]
+        for cp in candidate_paths:
+            if os.path.exists(cp):
+                try:
+                    with open(cp, "r", encoding="utf-8") as f:
+                        if cp.endswith((".yaml", ".yml")):
+                            manifest_data = yaml.safe_load(f)
+                        else:
+                            manifest_data = json.load(f)
+                    if manifest_data:
+                        break
+                except Exception as e:
+                    print(f"Warning: Failed to load manifest from {cp}: {e}", file=sys.stderr)
+
+    if not manifest_data:
+        return {}
+
+    normalized = {}
+    if isinstance(manifest_data, dict):
+        for raw_id, val in manifest_data.items():
+            issue_key = str(raw_id).strip().lstrip("#")
+            if isinstance(val, list):
+                normalized[issue_key] = {"test_targets": val}
+            elif isinstance(val, str):
+                normalized[issue_key] = {"test_targets": [val]}
+            elif isinstance(val, dict):
+                entry = dict(val)
+                if "test_targets" not in entry:
+                    if "test_target" in entry:
+                        entry["test_targets"] = [entry["test_target"]]
+                    elif "tests" in entry:
+                        entry["test_targets"] = entry["tests"] if isinstance(entry["tests"], list) else [entry["tests"]]
+                    else:
+                        entry["test_targets"] = []
+                normalized[issue_key] = entry
+    elif isinstance(manifest_data, list):
+        for item in manifest_data:
+            if not isinstance(item, dict):
+                continue
+            raw_id = item.get("issue_id") or item.get("issue_number") or item.get("number") or item.get("id") or item.get("issue")
+            if raw_id is None:
+                continue
+            issue_key = str(raw_id).strip().lstrip("#")
+            entry = dict(item)
+            if "test_targets" not in entry:
+                if "test_target" in entry:
+                    entry["test_targets"] = [entry["test_target"]]
+                elif "tests" in entry:
+                    entry["test_targets"] = entry["tests"] if isinstance(entry["tests"], list) else [entry["tests"]]
+                else:
+                    entry["test_targets"] = []
+            normalized[issue_key] = entry
+
+    return normalized
+
+
+def execute_test_target(
+    target: str,
+    workspace_dir: Optional[str] = None,
+    test_executor: Optional[Any] = None,
+) -> Tuple[bool, str]:
+    """
+    Execute a test target.
+    Returns (success_bool, output_str).
+    """
+    ws = workspace_dir or os.getcwd()
+    if test_executor is not None:
+        if callable(test_executor):
+            try:
+                res = test_executor(target, ws)
+                if isinstance(res, tuple) and len(res) == 2:
+                    return bool(res[0]), str(res[1])
+                elif isinstance(res, bool):
+                    return res, ("OK" if res else "FAILED")
+                return bool(res), str(res)
+            except Exception as e:
+                return False, f"Test executor exception on '{target}': {e}"
+
+    clean_target = target.strip()
+    if clean_target.startswith(("python ", "python3 ", "pytest ")):
+        cmd = clean_target.split()
+    else:
+        cmd = [sys.executable, "-m", "unittest", clean_target]
+
+    try:
+        res = subprocess.run(
+            cmd,
+            cwd=ws,
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+        combined_output = (res.stdout or "") + "\n" + (res.stderr or "")
+        return (res.returncode == 0, combined_output)
+    except subprocess.TimeoutExpired:
+        return (False, f"Test execution timed out after 180s: {' '.join(cmd)}")
+    except Exception as e:
+        return (False, f"Test execution failed with error: {e}")
+
+
+def reconcile_upstream_compiler_backlog(
+    workspace_dir: Optional[str] = None,
+    rules: Optional[Dict[str, Any]] = None,
+    provider_adapter: Optional[Any] = None,
+    manifest: Optional[Union[Dict[str, Any], List[Dict[str, Any]]]] = None,
+    manifest_path: Optional[str] = None,
+    test_executor: Optional[Any] = None,
+    dry_run: bool = False,
+) -> Dict[str, Any]:
+    """
+    Reconcile compiler backlog issues in upstream repositories with clean landing zones.
+    Maps tracker issues to test targets via manifest or annotations, executes test targets,
+    and transitions passing issues to status:fixed-resolved.
+    """
+    ws = workspace_dir or os.getcwd()
+    if rules is None:
+        rules = load_codebase_rules(ws)
+
+    # 1. Load manifest mappings
+    manifest_map = {}
+    if manifest:
+        if isinstance(manifest, dict):
+            for k, v in manifest.items():
+                issue_key = str(k).strip().lstrip("#")
+                if isinstance(v, list):
+                    manifest_map[issue_key] = {"test_targets": v}
+                elif isinstance(v, str):
+                    manifest_map[issue_key] = {"test_targets": [v]}
+                elif isinstance(v, dict):
+                    entry = dict(v)
+                    if "test_targets" not in entry:
+                        if "test_target" in entry:
+                            entry["test_targets"] = [entry["test_target"]]
+                        else:
+                            entry["test_targets"] = []
+                    manifest_map[issue_key] = entry
+        elif isinstance(manifest, list):
+            for item in manifest:
+                if isinstance(item, dict):
+                    raw_id = item.get("issue_id") or item.get("issue_number") or item.get("number") or item.get("id") or item.get("issue")
+                    if raw_id is not None:
+                        issue_key = str(raw_id).strip().lstrip("#")
+                        entry = dict(item)
+                        if "test_targets" not in entry:
+                            if "test_target" in entry:
+                                entry["test_targets"] = [entry["test_target"]]
+                            else:
+                                entry["test_targets"] = []
+                        manifest_map[issue_key] = entry
+    else:
+        manifest_map = load_compiler_backlog_manifest(workspace_dir=ws, manifest_path=manifest_path, rules=rules)
+
+    # 2. Retrieve issues from tracker
+    issues = []
+    if provider_adapter:
+        try:
+            issues = provider_adapter.list_issues()
+        except Exception as e:
+            print(f"Warning: Failed to fetch issues from provider adapter: {e}", file=sys.stderr)
+    else:
+        try:
+            issues = get_all_issues(rules)
+        except Exception as e:
+            print(f"Warning: Failed to fetch issues: {e}", file=sys.stderr)
+
+    tracker_rules = rules.get("tracker_rules", {}) if rules else {}
+    keys = tracker_rules.get("keys", {})
+    id_key = keys.get("issue_id", "number")
+    title_key = keys.get("title", "title")
+    labels_key = keys.get("labels", "labels")
+    state_key = keys.get("state", "state")
+
+    issue_dict = {}
+    for iss in issues:
+        raw_id = iss.get(id_key) or iss.get("number") or iss.get("iid") or iss.get("key")
+        if raw_id is not None:
+            issue_dict[str(raw_id).strip().lstrip("#")] = iss
+            if isinstance(raw_id, int):
+                issue_dict[raw_id] = iss
+            elif isinstance(raw_id, str) and raw_id.isdigit():
+                issue_dict[int(raw_id)] = iss
+
+    all_issue_ids = set(manifest_map.keys())
+    for k in issue_dict.keys():
+        all_issue_ids.add(str(k).strip().lstrip("#"))
+
+    close_comments = tracker_rules.get("close_comments", {})
+    comment_template = (
+        close_comments.get("compiler")
+        or close_comments.get("upstream_compiler")
+        or "Resolved. Compiler backlog test target(s) '{test_targets}' completed and verified."
+    )
+
+    processed_count = 0
+    passed_count = 0
+    failed_count = 0
+    skipped_count = 0
+    resolved_ids = []
+    results_detail = {}
+
+    for issue_id_str in sorted(all_issue_ids, key=lambda x: int(x) if x.isdigit() else x):
+        issue_record = issue_dict.get(issue_id_str)
+        if issue_record is None and issue_id_str.isdigit():
+            issue_record = issue_dict.get(int(issue_id_str))
+
+        if issue_record:
+            state_val = str(issue_record.get(state_key, "")).upper()
+            closed_val = keys.get("closed_state_value", "CLOSED").upper()
+            if state_val == closed_val:
+                continue
+
+        test_targets = []
+        if issue_id_str in manifest_map:
+            manifest_targets = manifest_map[issue_id_str].get("test_targets", [])
+            test_targets.extend(manifest_targets)
+
+        if issue_record:
+            body_text = issue_record.get("body") or issue_record.get("description") or ""
+            annotation_targets = extract_test_targets_from_text(body_text)
+            for at in annotation_targets:
+                if at not in test_targets:
+                    test_targets.append(at)
+
+        if not test_targets:
+            continue
+
+        processed_count += 1
+        issue_num: Any = int(issue_id_str) if issue_id_str.isdigit() else issue_id_str
+
+        if issue_record and is_already_resolved(issue_record, rules):
+            print(f"  [Skipped] Issue #{issue_num} already marked {get_resolved_label(rules)}.")
+            skipped_count += 1
+            results_detail[issue_num] = {
+                "status": "already_resolved",
+                "test_targets": test_targets,
+                "passed": True,
+            }
+            continue
+
+        all_passed = True
+        test_outputs = []
+        for target in test_targets:
+            success, output = execute_test_target(target, workspace_dir=ws, test_executor=test_executor)
+            test_outputs.append({"target": target, "success": success, "output": output})
+            if not success:
+                all_passed = False
+                break
+
+        if all_passed:
+            passed_count += 1
+            resolved_ids.append(issue_num)
+            results_detail[issue_num] = {
+                "status": "resolved",
+                "test_targets": test_targets,
+                "passed": True,
+                "outputs": test_outputs,
+            }
+            formatted_targets = ", ".join(test_targets)
+            comment_text = comment_template.format(
+                test_targets=formatted_targets,
+                title=issue_record.get(title_key, f"Issue #{issue_num}") if issue_record else f"Issue #{issue_num}",
+            )
+            print(f"  [Pass] Issue #{issue_num} verified passing test targets: {formatted_targets}")
+            if not dry_run:
+                resolve_issue_on_tracker(
+                    issue_num,
+                    comment_text,
+                    rules=rules,
+                    provider_adapter=provider_adapter,
+                )
+                if issue_record:
+                    resolved_label = get_resolved_label(rules)
+                    labels_list = issue_record.setdefault(labels_key, [])
+                    if isinstance(labels_list, list):
+                        labels_list.append({"name": resolved_label})
+        else:
+            failed_count += 1
+            results_detail[issue_num] = {
+                "status": "failed",
+                "test_targets": test_targets,
+                "passed": False,
+                "outputs": test_outputs,
+            }
+            print(f"  [Fail] Issue #{issue_num} test target failed.")
+
+    return {
+        "processed": processed_count,
+        "passed": passed_count,
+        "failed": failed_count,
+        "skipped": skipped_count,
+        "resolved": resolved_ids,
+        "results": results_detail,
+    }
+
+
 def blocked_specs_from_linter_output(output_text, workspace_dir, rules=None):
     """Specification files the linter rejected, from its output.
 
@@ -2767,17 +3200,142 @@ def get_current_branch(workspace_dir):
         return res.stdout.strip()
     return "master"
 
+def extract_metadata_from_content(content: str) -> Dict[str, Any]:
+    if not content:
+        return {}
+
+    # 1. Parse native Markdown tables starting with '| Attribute | Specification Detail |' or '| Metadata | Value |'
+    table_header_re = re.compile(
+        r'^\s*\|\s*(?:Attribute|Metadata)\s*\|\s*(?:Specification Detail|Value)\s*\|\s*$',
+        re.IGNORECASE | re.MULTILINE
+    )
+    table_header_match = table_header_re.search(content)
+    if table_header_match:
+        data: Dict[str, Any] = {}
+        table_start_idx = table_header_match.start()
+        lines = content[table_start_idx:].splitlines()
+        
+        in_table = False
+        for i, line in enumerate(lines):
+            line_str = line.strip()
+            if not line_str.startswith("|") or not line_str.endswith("|"):
+                if in_table:
+                    break
+                continue
+
+            if i == 0 or table_header_re.match(line_str):
+                in_table = True
+                continue
+
+            # Skip table separator row (| :--- | :--- |)
+            if re.match(r'^\s*\|\s*:?-+:?\s*\|\s*:?-+:?\s*\|\s*$', line_str):
+                continue
+
+            parts = [p.strip() for p in line_str.split("|")]
+            if len(parts) >= 4:
+                raw_key = parts[1].strip()
+                raw_val = parts[2].strip()
+
+                # Clean markdown formatting from key
+                clean_key = re.sub(r'[*`_]', '', raw_key).strip()
+                # Normalize key to snake_case
+                norm_key = re.sub(r'[\s\-]+', '_', clean_key.lower())
+                norm_key = re.sub(r'[^a-z0-9_]', '', norm_key).strip('_')
+
+                if not norm_key:
+                    continue
+
+                # Specific key normalizations
+                if norm_key in ("issue_id", "issueid", "id"):
+                    norm_key = "issue_id"
+                elif norm_key in ("parent_epic", "parentepic", "parent_epic_id", "epic"):
+                    norm_key = "epic"
+                elif norm_key in ("specification_source", "spec_source", "specsource"):
+                    norm_key = "spec_source"
+                elif norm_key in ("sysml_test_case", "test_case", "testcase"):
+                    norm_key = "sysml_test_case"
+                elif norm_key in ("sysml_interaction", "interaction"):
+                    norm_key = "sysml_interaction"
+                elif norm_key in ("schema_containers", "schemacontainers", "schema_container"):
+                    norm_key = "schema_containers"
+                elif norm_key in ("interface_type", "interfacetype"):
+                    norm_key = "interface_type"
+                elif norm_key in ("generation_mode", "generationmode"):
+                    norm_key = "generation_mode"
+
+                val: Any = raw_val
+                # Convert issue_id to int (stripping # or quotes)
+                if norm_key == "issue_id":
+                    clean_id = re.sub(r'["\'#]', '', str(val)).strip()
+                    if clean_id.isdigit():
+                        val = int(clean_id)
+                    else:
+                        val = clean_id
+                else:
+                    val = val.replace(r'\|', '|')
+                    if norm_key in ("labels", "tags", "realizes"):
+                        if val.startswith("[") and val.endswith("]"):
+                            val = [item.strip().strip('"\'`') for item in val[1:-1].split(",") if item.strip()]
+                        elif "," in val:
+                            val = [item.strip().strip('"\'`') for item in val.split(",") if item.strip()]
+                        elif val:
+                            val = [val.strip().strip('"\'`')]
+                        else:
+                            val = []
+                    elif norm_key == "schema_containers":
+                        clean_str = val.strip().strip('"\'`')
+                        if clean_str.startswith("[") and clean_str.endswith("]"):
+                            val = [item.strip().strip('"\'`') for item in clean_str[1:-1].split(",") if item.strip()]
+                        elif "," in clean_str:
+                            val = [item.strip().strip('"\'`') for item in clean_str.split(",") if item.strip()]
+                        elif clean_str:
+                            val = [clean_str]
+                        else:
+                            val = []
+                    elif norm_key == "interface_type":
+                        clean_str = val.strip().strip('"\'`')
+                        if clean_str.startswith("[") and clean_str.endswith("]"):
+                            val = [item.strip().strip('"\'`') for item in clean_str[1:-1].split(",") if item.strip()]
+                        elif "," in clean_str:
+                            val = [item.strip().strip('"\'`') for item in clean_str.split(",") if item.strip()]
+
+                data[norm_key] = val
+                if norm_key == "epic":
+                    data["parent_epic"] = val
+                elif norm_key == "spec_source":
+                    data["specification_source"] = val
+                elif norm_key == "sysml_test_case":
+                    data["test_case"] = val
+                    data["test_cases"] = [val] if isinstance(val, str) else val
+
+        if data:
+            return data
+
+    # 2. Retain legacy YAML frontmatter fallback
+    if content.startswith("---"):
+        parts = content.split("---", 2)
+        if len(parts) >= 3:
+            frontmatter_text = parts[1]
+            try:
+                data = yaml.safe_load(frontmatter_text.replace('\x01', ''))
+                if isinstance(data, dict):
+                    if "issue_id" in data:
+                        raw_id = data["issue_id"]
+                        clean_id = re.sub(r'["\'#]', '', str(raw_id)).strip()
+                        if clean_id.isdigit():
+                            data["issue_id"] = int(clean_id)
+                    return data
+            except Exception as e:
+                print(f"Error parsing legacy YAML frontmatter: {e}")
+
+    return {}
+
+
 def extract_metadata(filepath):
     try:
         with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
             content = f.read()
-        if content.startswith("---"):
-            parts = content.split("---", 2)
-            if len(parts) >= 3:
-                frontmatter_text = parts[1]
-                data = yaml.safe_load(frontmatter_text.replace('\x01', ''))
-                if isinstance(data, dict):
-                    return data
+        return extract_metadata_from_content(content)
     except Exception as e:
         print(f"Error parsing metadata from {filepath}: {e}")
     return {}
@@ -3501,6 +4059,18 @@ def main():
         action="store_true",
         help="Run in offline mode without contacting external tracker.",
     )
+    parser.add_argument(
+        "--manifest",
+        "--compiler-manifest",
+        dest="manifest",
+        default=None,
+        help="Path to compiler backlog manifest JSON/YAML mapping issues to test targets.",
+    )
+    parser.add_argument(
+        "--upstream",
+        action="store_true",
+        help="Force upstream compiler backlog reconciliation mode.",
+    )
     args = parser.parse_args()
 
     sanitize_github_token_env()
@@ -3582,6 +4152,20 @@ def main():
             print("Please ensure issue tracker CLI / API is authenticated and configured.")
             sys.exit(1)
 
+        if is_upstream_repository(workspace_dir) or getattr(args, "upstream", False) or getattr(args, "manifest", None):
+            print("Reconciling upstream compiler backlog issues against test targets...")
+            upstream_res = reconcile_upstream_compiler_backlog(
+                workspace_dir=workspace_dir,
+                rules=rules,
+                provider_adapter=provider_adapter,
+                manifest_path=getattr(args, "manifest", None),
+            )
+            print(
+                f"Upstream compiler backlog reconciliation: {upstream_res['passed']} passed, "
+                f"{upstream_res['failed']} failed, {upstream_res['skipped']} skipped, "
+                f"{len(upstream_res['resolved'])} resolved."
+            )
+
         tracker_rules = rules.get("tracker_rules", {}) if rules else {}
         keys = tracker_rules.get("keys", {})
         id_key = keys.get("issue_id", "number")
@@ -3591,6 +4175,7 @@ def main():
         
         close_comments = tracker_rules.get("close_comments", {})
         epic_comment = close_comments.get("epic", "Epic completed. All constituent features successfully delivered and verified.")
+        feature_comment_template = close_comments.get("feature", "Resolved. All acceptance criteria and verification tasks for feature '{title}' have been completed and verified.")
         story_comment_template = close_comments.get("user_story", "Resolved. All dependent features/tasks for BDD scenario '{title}' have been completed and verified.")
         usecase_comment_template = close_comments.get("use_case", "Resolved. All dependent user stories and features for use case '{title}' are completed.")
 
@@ -3906,12 +4491,23 @@ def main():
                     item_type="Feature", claimed=claimed_issues,
                 )
                 if issue_num is not None:
+                    _, completed = update_checklist_in_file(filepath, issue_dict, rules)
                     is_open = str(issue_dict[issue_num][state_key]).upper() == keys.get("open_state_value", "OPEN").upper()
                     if is_open:
                         sync_issue_body_to_tracker(
                             issue_num, filepath, issue_type="Feature", rules=rules,
                             issue_record=issue_dict[issue_num], provider_adapter=provider_adapter,
                         )
+                        if completed and not is_already_resolved(issue_dict[issue_num], rules):
+                            resolve_issue_on_tracker(
+                                issue_num,
+                                feature_comment_template.format(title=title),
+                                rules=rules,
+                                provider_adapter=provider_adapter,
+                            )
+                            issue_dict[issue_num].setdefault("labels", []).append(
+                                {"name": get_resolved_label(rules)}
+                            )
                 else:
                     print(
                         f"Warning: No Feature issue on the tracker for {filename} — "
