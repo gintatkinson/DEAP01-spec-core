@@ -21,17 +21,36 @@ You will accomplish this by coordinating the sequential execution of specialized
 > [!NOTE]
 > This orchestrator handles **specification generation** (Phases 1-5). For **feature implementation**, use the separate `feature-driven-implementation` skill which provides subagent-driven TDD execution discipline.
 
-## Error Recovery
-If any phase fails (worker error, GitHub API failure, validation gate failure):
-1. **Do not proceed** to the next phase.
-2. **Log the exact error** (stderr, exit code, GitHub API response).
-3. **Attempt remediation:** Re-run the failed step once.
-4. **Automated Upstream Reporting**: If the step fails again and you suspect the failure is due to a bug or limitation in the pipeline tooling (such as linter or reconciler scripts), you MUST automatically file a GitHub issue to the upstream repository before halting:
-   ```bash
-   gh issue create --repo gintatkinson/DEAP01-spec-core --title "Tooling Bug: [Command] failed" --body-file [payload_path] --label "bug"
-   ```
-5. Escalate to the user with the full error context and the link to the created upstream issue.
-6. **Never skip a validation gate.** If a gate cannot be satisfied, the pipeline is halted until manually resolved.
+## Error Recovery & Mandatory Adversarial Audit
+
+If any phase, worker, compiler, or validation gate fails during orchestration (worker error, schema parsing fault, GitHub/GitLab API failure, parity auditor failure, or gate rejection):
+
+1. **Strict Prohibition of Ad-Hoc Triage & CLI Dumps**:
+   - The coordinator MUST NOT perform ad-hoc triage, speculative manual patching, or uncurated raw CLI dumps into the chat context.
+   - The coordinator is strictly locked from attempting ad-hoc direct writes to bypass failures.
+
+2. **Mandatory Adversarial Audit Subagent Dispatch**:
+   - The coordinator MUST immediately dispatch a fresh, context-isolated subagent with Role `Adversarial Code Auditor` (TypeName: `adversarial_auditor`) adopting `skills/adversarial-code-auditor/SKILL.md` (instructed to execute `view_file` on `skills/adversarial-code-auditor/SKILL.md` as its very first step).
+   - The adversarial auditor subagent performs systematic root cause investigation:
+     * **5 Whys Analysis**: Drills down through 5 Whys of causality to isolate the exact structural, behavioral, or compiler flaw.
+     * **4-Pillar Correctness Audit**: Audits the failure across the 4 pillars (Memory Safety, Resource Lifecycle, Concurrency, Test Integrity / Semantic Traceability).
+     * **Offline Mermaid Syntax Verification**: Validates all generated architectural / sequence diagrams against the offline syntax gate (Check 7 offline syntax gate per `rules/platform-independence.md`) before filing.
+     * **7-Section Defect Report**: Formats the finding strictly according to the canonical 7-section defect report skeleton (`## 1. Context and References`, `## 2. Root Cause Analysis (5 Whys)`, `## 3. Correctness Analysis`, `## 4. UML Diagrams`, `## 5. Affected Callers / Downstream Impact`, `## 6. Proposed Correction`, `## 7. Relationship to Existing Issues`, terminating with `## Audit Source`).
+   - **Automated Defect Publication**: The subagent publishes the verified 7-section defect report to the issue tracker:
+     * **GitHub**: `gh issue create --repo [REPO] --title "[AUDIT] [file.ext]: [description]" --label "bug" --body-file [payload_path]`
+     * **GitLab**: `glab issue create --repo [REPO] --title "[AUDIT] [file.ext]: [description]" --label "type::bug" --description "$(< [payload_path])"` (or via direct GitLab REST API v4 in CI/offline environments).
+
+3. **Remediation Dispatch via Debug Protocol (TDD RED-GREEN Fix)**:
+   - Once the defect issue is registered on the tracker, the coordinator MUST dispatch a context-isolated subagent with Role `Micro-Task Implementer` (TypeName: `code_modifier_worker`) adopting `skills/debug-protocol/SKILL.md` to execute the systematic 8-step bug loop.
+   - The subagent follows the strict TDD RED-GREEN-REFACTOR cycle:
+     * **RED**: Write an isolated, failing regression test capturing the exact defect invariant. Run it and verify it fails with the expected error.
+     * **GREEN**: Implement the minimal, surgical fix to make the test pass.
+     * **REFACTOR / VERIFY**: Run full test suites and validation gates to confirm zero regressions.
+   - Once verified, the subagent updates the issue and marks it `Fixed / Resolved` (e.g. `status:fixed-resolved` label on GitHub or `status::fixed-resolved` on GitLab). Issue closure is strictly reserved for Product Owner review (`.pipeline/constitution.md:161`).
+
+4. **Invariants & Escalation**:
+   - **Never skip a validation gate.** If a gate cannot be satisfied, the pipeline remains halted until systematically resolved and verified.
+   - **Automated Upstream Reporting**: If the failure is due to a pipeline tooling bug in `DEAP01-spec-core` (linter, reconciler, or parser), file an upstream defect report (`gh issue create --repo gintatkinson/DEAP01-spec-core --title "Tooling Bug: [Command] failed" --body-file [payload_path] --label "bug"`) and escalate to the human operator with the issue URL.
 
 ## Pre-Flight Git Repository Verification
 Before performing any orchestration steps, the agent MUST run `git ls-files` on:
