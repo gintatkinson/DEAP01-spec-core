@@ -14,6 +14,8 @@ import shutil
 import signal
 import subprocess
 import sys
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Tuple
 
 TIMEOUT_SECONDS = 600
 GIT_TIMEOUT_SECONDS = 30
@@ -607,10 +609,548 @@ def check_sora_osos(content: str) -> list:
             missing.append(oso_id)
     return missing
 
-def validate_safety_matrix_content(content: str) -> list:
+# ---------------------------------------------------------------------------
+# Structural Table-Aware AST Validation (Check 17)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class STPARowAST:
+    """Typed AST record for a single Unsafe Control Action (UCA) markdown table row."""
+
+    uca_id: str
+    controller: str
+    control_action: str
+    guide_word: str
+    hazard_ref: str = ""
+    loss_ref: str = ""
+    safety_constraint: str = ""
+    line_number: int = 0
+
+
+@dataclass
+class SORAOsoAST:
+    """Typed AST record for a single SORA Operational Safety Objective table row."""
+
+    oso_id: str
+    robustness_level: str
+    justification: str
+    mitigation_ref: str
+    line_number: int
+
+
+@dataclass
+class ProofBlockAST:
+    """Typed AST record for a formal safety theorem block and its 5-part structure."""
+
+    theorem_id: str
+    proposition: str = ""
+    assumptions: str = ""
+    barrier_function: str = ""
+    derivation: str = ""
+    conclusion: str = ""
+    line_number: int = 0
+
+
+@dataclass
+class ASTValidationReport:
+    """Aggregated Check 17 AST validation report."""
+
+    is_conforming: bool = True
+    total_uca_rows: int = 0
+    expected_uca_rows: int = 0
+    missing_permutations: List[str] = field(default_factory=list)
+    missing_osos: List[str] = field(default_factory=list)
+    malformed_proofs: List[str] = field(default_factory=list)
+    syntax_errors: List[str] = field(default_factory=list)
+
+    def format_cli_summary(self) -> str:
+        """Format a one-line CLI summary of the AST validation outcome."""
+        summary = (
+            f"Check 17 AST validation: {self.total_uca_rows} UCA row(s) parsed, "
+            f"{self.expected_uca_rows} expected Cartesian permutation(s)"
+        )
+        if self.missing_permutations:
+            summary += f", {len(self.missing_permutations)} missing permutation(s)"
+        if self.missing_osos:
+            summary += f", {len(self.missing_osos)} missing SORA OSO(s)"
+        if self.malformed_proofs:
+            summary += f", {len(self.malformed_proofs)} malformed proof block(s)"
+        return summary
+
+
+# Canonical STPA guide words are methodology constants, not domain concepts.
+# Order matters: timing/duration rules precede the generic providing rule so
+# phrases such as "Providing too early" classify to GW-3 rather than GW-2.
+STPA_GUIDE_WORD_RULES = [
+    ("GW-1", "Not providing causes hazard", re.compile(r"not\s+provid|omission", re.IGNORECASE)),
+    ("GW-3", "Providing too early, too late, or out of order", re.compile(r"too\s+early|too\s+late|out\s+of\s+order|timing|early/late", re.IGNORECASE)),
+    ("GW-4", "Stopped too soon or applied too long", re.compile(r"stopped\s+too\s+soon|applied\s+too\s+long|stopped\s+early|duration", re.IGNORECASE)),
+    ("GW-2", "Providing causes hazard", re.compile(r"providing|commission", re.IGNORECASE)),
+]
+STPA_GUIDE_WORD_ORDER = {gw_id: index for index, (gw_id, _label, _pattern) in enumerate(STPA_GUIDE_WORD_RULES)}
+STPA_GUIDE_WORD_LABELS = {gw_id: label for gw_id, label, _pattern in STPA_GUIDE_WORD_RULES}
+
+# Schema-less structural floor: 4 canonical STPA guide words x 4 (controller,
+# control action) pair instances. Model-backed validation derives the true
+# Cartesian cardinality from the schema instead of applying this floor.
+MIN_STRUCTURAL_UCA_ROWS = 16
+
+
+def classify_uca_guide_word(cell_text: str) -> Optional[Tuple[str, str]]:
+    """Classify a UCA guide word cell into one of the 4 canonical STPA failure modes."""
+    for gw_id, label, pattern in STPA_GUIDE_WORD_RULES:
+        if pattern.search(cell_text):
+            return gw_id, label
+    return None
+
+
+def _load_sysml_parser():
+    """Import the shared SysML v2 parser from scripts/compile_sysml.py (parsing logic is never duplicated)."""
+    try:
+        from scripts.compile_sysml import parse_sysml
+        return parse_sysml
+    except ImportError:
+        from compile_sysml import parse_sysml
+        return parse_sysml
+
+
+def _discover_sysml_model_text(repo_root: Optional[str]) -> Optional[str]:
+    """Locate and read the authoritative SysML v2 model (schema/*.sysml or .pipeline/schema.sysml)."""
+    if not repo_root or not os.path.isdir(repo_root):
+        return None
+    schema_dir = os.path.join(repo_root, "schema")
+    if os.path.isdir(schema_dir):
+        for name in sorted(os.listdir(schema_dir)):
+            if name.endswith(".sysml"):
+                try:
+                    with open(os.path.join(schema_dir, name), "r", encoding="utf-8") as handle:
+                        return handle.read()
+                except OSError:
+                    continue
+    pipeline_model = os.path.join(repo_root, ".pipeline", "schema.sysml")
+    if os.path.isfile(pipeline_model):
+        try:
+            with open(pipeline_model, "r", encoding="utf-8") as handle:
+                return handle.read()
+        except OSError:
+            pass
+    return None
+
+
+class MarkdownTableASTParser:
+    """Structural markdown table tokenizer producing typed AST records.
+
+    Tables are split into discrete column cells mapped by header keywords; no
+    global regex keyword heuristics over the whole document are used.
+    """
+
+    @staticmethod
+    def _split_row(line: str):
+        stripped = line.strip()
+        if not (stripped.startswith("|") and stripped.endswith("|")):
+            return None
+        return [cell.strip() for cell in stripped[1:-1].split("|")]
+
+    @staticmethod
+    def _is_separator_row(cells) -> bool:
+        if not cells or not all(cells):
+            return False
+        return all(re.fullmatch(r":?-{1,}:?", cell) for cell in cells)
+
+    @classmethod
+    def _iter_tables(cls, text: str):
+        """Yield (header_cells, data_rows) for each well-formed markdown table in text."""
+        lines = text.splitlines()
+        index = 0
+        while index < len(lines):
+            header = cls._split_row(lines[index])
+            if header is None:
+                index += 1
+                continue
+            probe = index + 1
+            if probe >= len(lines):
+                break
+            separator = cls._split_row(lines[probe])
+            if not cls._is_separator_row(separator):
+                index += 1
+                continue
+            probe += 1
+            data_rows = []
+            while probe < len(lines):
+                row_cells = cls._split_row(lines[probe])
+                if row_cells is None:
+                    break
+                data_rows.append((row_cells, probe + 1))
+                probe += 1
+            yield header, data_rows
+            index = probe
+
+    @staticmethod
+    def _column_index(header, keywords):
+        for index, cell in enumerate(header):
+            lowered = cell.lower()
+            if any(keyword in lowered for keyword in keywords):
+                return index
+        return None
+
+    @classmethod
+    def parse_stpa_table(cls, text: str) -> List[STPARowAST]:
+        """Parse UCA rows from markdown tables headed by control action / guide word columns."""
+        rows: List[STPARowAST] = []
+        for header, data_rows in cls._iter_tables(text):
+            header_text = " ".join(cell.lower() for cell in header)
+            if "uca" not in header_text:
+                continue
+            if "guide word" not in header_text and "control action" not in header_text:
+                continue
+            col_uca = cls._column_index(header, ("uca id", "uca"))
+            col_controller = cls._column_index(header, ("controller",))
+            col_action = cls._column_index(header, ("control action", "action"))
+            col_guide = cls._column_index(header, ("guide word",))
+            col_hazard = cls._column_index(header, ("hazard",))
+            col_loss = cls._column_index(header, ("loss",))
+            col_constraint = cls._column_index(header, ("constraint",))
+
+            def cell_for(cells, col):
+                return cells[col] if col is not None and col < len(cells) else ""
+
+            for cells, line_number in data_rows:
+                if not any(cells):
+                    continue
+                rows.append(STPARowAST(
+                    uca_id=cell_for(cells, col_uca),
+                    controller=cell_for(cells, col_controller),
+                    control_action=cell_for(cells, col_action),
+                    guide_word=cell_for(cells, col_guide),
+                    hazard_ref=cell_for(cells, col_hazard),
+                    loss_ref=cell_for(cells, col_loss),
+                    safety_constraint=cell_for(cells, col_constraint),
+                    line_number=line_number,
+                ))
+        return rows
+
+    @staticmethod
+    def _oso_id_cell(cell: str) -> Optional[str]:
+        match = re.fullmatch(r"(OSO-\d{1,2})", cell.strip(), re.IGNORECASE)
+        return match.group(1).upper() if match else None
+
+    @classmethod
+    def parse_sora_table(cls, text: str) -> List[SORAOsoAST]:
+        """Parse SORA OSO evaluation rows from markdown tables headed by an OSO column."""
+        rows: List[SORAOsoAST] = []
+        for header, data_rows in cls._iter_tables(text):
+            header_text = " ".join(cell.lower() for cell in header)
+            if "oso" not in header_text and "operational safety objective" not in header_text:
+                continue
+            col_id = cls._column_index(header, ("oso id", "oso"))
+            col_robust = cls._column_index(header, ("robust",))
+            col_just = cls._column_index(header, ("justification",))
+            col_mit = cls._column_index(header, ("mitigation",))
+
+            def cell_for(cells, col):
+                return cells[col] if col is not None and col < len(cells) else ""
+
+            for cells, line_number in data_rows:
+                if not any(cells):
+                    continue
+                if col_id is None or col_id >= len(cells):
+                    continue
+                oso_id = cls._oso_id_cell(cells[col_id])
+                if oso_id is None:
+                    continue
+                rows.append(SORAOsoAST(
+                    oso_id=oso_id,
+                    robustness_level=cell_for(cells, col_robust),
+                    justification=cell_for(cells, col_just),
+                    mitigation_ref=cell_for(cells, col_mit),
+                    line_number=line_number,
+                ))
+        return rows
+
+    @classmethod
+    def parse_proof_blocks(cls, text: str) -> List[ProofBlockAST]:
+        """Parse formal theorem blocks and their canonical 5-part structure.
+
+        Part labels are recognized in both "Part N — Keyword" and numbered
+        "N. Keyword" styles; keyword families must match the part number.
+        """
+        block_start = re.compile(r"^\s*#{2,4}\s+.*\bTheorem\b", re.IGNORECASE)
+        heading_line = re.compile(r"^\s*#{1,6}\s+\S")
+        part_match = re.compile(r"Part\s*(\d)", re.IGNORECASE)
+        numbered_part = re.compile(r"^\s*(\d+)[.)]\s+")
+        blocks: List[ProofBlockAST] = []
+        current: Optional[ProofBlockAST] = None
+
+        def finish():
+            nonlocal current
+            if current is not None:
+                blocks.append(current)
+                current = None
+
+        for line_number, raw_line in enumerate(text.splitlines(), start=1):
+            line = raw_line.strip()
+            if block_start.match(line):
+                finish()
+                id_match = re.search(r"\b([A-Z]+-\d+)\b", line)
+                current = ProofBlockAST(
+                    theorem_id=id_match.group(1) if id_match else f"Theorem@{line_number}",
+                    line_number=line_number,
+                )
+                continue
+            if current is not None:
+                if heading_line.match(line):
+                    finish()
+                    continue
+                part = part_match.search(line)
+                if part:
+                    part_number = int(part.group(1))
+                else:
+                    numbered = numbered_part.match(line)
+                    if not numbered:
+                        continue
+                    part_number = int(numbered.group(1))
+                    if part_number > 5:
+                        continue
+                lowered = line.lower()
+                if part_number == 1 and ("proposition" in lowered or "statement" in lowered):
+                    current.proposition = line
+                elif part_number == 2 and "assumption" in lowered:
+                    current.assumptions = line
+                elif part_number == 3 and ("invariant" in lowered or "barrier" in lowered):
+                    current.barrier_function = line
+                elif part_number == 4 and ("deriv" in lowered or "inductive" in lowered):
+                    current.derivation = line
+                elif part_number == 5 and ("conclusion" in lowered or "q.e.d" in lowered or "qed" in lowered):
+                    current.conclusion = line
+        finish()
+        return blocks
+
+
+class CartesianProductValidator:
+    """Set-theoretic validator: UCA Cartesian completeness, SORA OSO coverage, and proof structure."""
+
+    @classmethod
+    def verify_cartesian_completeness(cls, uca_rows: List[STPARowAST], expected_actions: List[str]) -> ASTValidationReport:
+        """Verify every (control action x guide word) permutation has at least one UCA row."""
+        report = ASTValidationReport()
+        report.total_uca_rows = len(uca_rows)
+        unique_actions = []
+        for action in expected_actions:
+            if action not in unique_actions:
+                unique_actions.append(action)
+        report.expected_uca_rows = 4 * len(unique_actions)
+        if not unique_actions:
+            return report
+
+        found = set()
+        for row in uca_rows:
+            matched_action = None
+            for action in unique_actions:
+                if re.search(rf"\b{re.escape(action)}\b", row.control_action, re.IGNORECASE):
+                    matched_action = action
+                    break
+            if matched_action is None:
+                continue
+            classified = classify_uca_guide_word(row.guide_word)
+            if classified is None:
+                continue
+            found.add((matched_action, classified[0]))
+
+        expected = set()
+        for action in unique_actions:
+            for gw_id, _label, _pattern in STPA_GUIDE_WORD_RULES:
+                expected.add((action, gw_id))
+
+        missing = sorted(
+            expected - found,
+            key=lambda pair: (pair[0], STPA_GUIDE_WORD_ORDER[pair[1]]),
+        )
+        report.missing_permutations = [
+            f"{action} x {gw_id} ({STPA_GUIDE_WORD_LABELS[gw_id]})" for action, gw_id in missing
+        ]
+        report.is_conforming = not report.missing_permutations
+        return report
+
+    @classmethod
+    def verify_sora_oso_coverage(cls, oso_records: List[SORAOsoAST]) -> ASTValidationReport:
+        """Verify structural coverage of all 24 SORA Operational Safety Objectives (OSO-01..OSO-24)."""
+        report = ASTValidationReport()
+        found_ids = {record.oso_id.upper() for record in oso_records}
+        report.missing_osos = [
+            f"OSO-{index:02d}" for index in range(1, 25) if f"OSO-{index:02d}" not in found_ids
+        ]
+        report.is_conforming = not report.missing_osos
+        return report
+
+    @classmethod
+    def verify_proof_structure(cls, proof_blocks: List[ProofBlockAST]) -> ASTValidationReport:
+        """Verify each theorem block carries the canonical 5-part mathematical proof structure."""
+        report = ASTValidationReport()
+        part_labels = {1: "Proposition", 2: "Assumptions", 3: "Invariant", 4: "Derivation", 5: "Conclusion"}
+        attributes = {
+            1: lambda block: block.proposition,
+            2: lambda block: block.assumptions,
+            3: lambda block: block.barrier_function,
+            4: lambda block: block.derivation,
+            5: lambda block: block.conclusion,
+        }
+        for block in proof_blocks:
+            for part_number in (1, 2, 3, 4, 5):
+                if not attributes[part_number](block):
+                    report.malformed_proofs.append(
+                        f"{block.theorem_id}: Missing Part {part_number} {part_labels[part_number]}"
+                    )
+        report.is_conforming = not report.malformed_proofs
+        return report
+
+
+def validate_safety_matrix_ast(content: str, model_text: Optional[str] = None) -> Tuple[List[str], ASTValidationReport, Optional[List[str]]]:
+    """Run structural AST validation of the safety matrix, optionally against the authoritative SysML model.
+
+    When no model text is supplied (schema-less downstream inputs), guide-word
+    completeness is enforced over the (controller, control action) pairs derived
+    from the UCA table itself and the canonical 5-part proof structure is
+    enforced on every parsed theorem block; the full Cartesian cardinality
+    comparison against the schema remains model-gated.
+
+    Returns (violation_strings, report, expected_control_actions_or_none).
+    """
+    errors: List[str] = []
+    report = ASTValidationReport()
+
+    stpa_rows = MarkdownTableASTParser.parse_stpa_table(content)
+    oso_rows = MarkdownTableASTParser.parse_sora_table(content)
+    proof_blocks = MarkdownTableASTParser.parse_proof_blocks(content)
+
+    expected_actions: Optional[List[str]] = None
+    if model_text:
+        parse_sysml = _load_sysml_parser()
+        try:
+            model_ast = parse_sysml(model_text)
+        except Exception as exc:
+            errors.append(f"Safety AST violation: Failed to parse SysML v2 model ({exc}).")
+            broken = ASTValidationReport(is_conforming=False, syntax_errors=[str(exc)])
+            return errors, broken, None
+        expected_actions = sorted({str(name) for name in model_ast.get("action_defs", [])})
+
+    if expected_actions:
+        cartesian_report = CartesianProductValidator.verify_cartesian_completeness(stpa_rows, expected_actions)
+        report.total_uca_rows = cartesian_report.total_uca_rows
+        report.expected_uca_rows = cartesian_report.expected_uca_rows
+        if not stpa_rows:
+            errors.append(
+                "Pillar 4 violation: No structural UCA table rows could be parsed from the safety matrix; "
+                f"expected {report.expected_uca_rows} permutations ({len(expected_actions)} control actions x 4 guide words)."
+            )
+        elif cartesian_report.missing_permutations:
+            report.missing_permutations.extend(cartesian_report.missing_permutations)
+            shown = cartesian_report.missing_permutations[:15]
+            listing = "\n".join(f"    - {item}" for item in shown)
+            remaining = len(cartesian_report.missing_permutations) - len(shown)
+            if remaining > 0:
+                listing += f"\n    - ... and {remaining} more"
+            found_combos = report.expected_uca_rows - len(cartesian_report.missing_permutations)
+            errors.append(
+                f"Pillar 4 violation: UCA Cartesian completeness failure — expected {report.expected_uca_rows} "
+                f"permutations ({len(expected_actions)} control actions x 4 guide words), found {found_combos} "
+                f"unique combinations. Missing permutations:\n{listing}"
+            )
+    elif stpa_rows and not model_text:
+        derived_actions = []
+        for row in stpa_rows:
+            if row.control_action and row.control_action not in derived_actions:
+                derived_actions.append(row.control_action)
+        cartesian_report = CartesianProductValidator.verify_cartesian_completeness(stpa_rows, derived_actions)
+        report.total_uca_rows = cartesian_report.total_uca_rows
+        report.expected_uca_rows = cartesian_report.expected_uca_rows
+        if cartesian_report.missing_permutations:
+            report.missing_permutations.extend(cartesian_report.missing_permutations)
+            shown = cartesian_report.missing_permutations[:15]
+            listing = "\n".join(f"    - {item}" for item in shown)
+            remaining = len(cartesian_report.missing_permutations) - len(shown)
+            if remaining > 0:
+                listing += f"\n    - ... and {remaining} more"
+            found_combos = report.expected_uca_rows - len(cartesian_report.missing_permutations)
+            errors.append(
+                f"Pillar 4 violation: UCA guide-word completeness failure — expected {report.expected_uca_rows} "
+                f"permutations ({len(derived_actions)} control actions x 4 guide words), found {found_combos} "
+                f"unique combinations. Missing permutations:\n{listing}"
+            )
+        if report.total_uca_rows < MIN_STRUCTURAL_UCA_ROWS:
+            errors.append(
+                f"Pillar 4 violation: UCA Cartesian matrix truncation — found {report.total_uca_rows} UCA row(s); "
+                f"minimum required is {MIN_STRUCTURAL_UCA_ROWS} permutations (4 control actions x 4 guide words)."
+            )
+
+    if model_text:
+        sora_report = CartesianProductValidator.verify_sora_oso_coverage(oso_rows)
+        report.missing_osos.extend(sora_report.missing_osos)
+        if sora_report.missing_osos:
+            errors.append(
+                f"Pillar 8 violation: Missing mandatory SORA Operational Safety Objectives: "
+                f"{', '.join(sora_report.missing_osos)}."
+            )
+
+    if proof_blocks:
+        proof_report = CartesianProductValidator.verify_proof_structure(proof_blocks)
+        report.malformed_proofs.extend(proof_report.malformed_proofs)
+        for message in proof_report.malformed_proofs:
+            errors.append(f"Formal proof violation: {message}.")
+
+    report.is_conforming = not errors
+    return errors, report, expected_actions
+
+
+def _validate_aggregate_safety_content(aggregate_safety_content: str, repo_root: Optional[str] = None) -> Tuple[list, Optional[ASTValidationReport]]:
+    """Run pillar validation plus structural AST validation.
+
+    The structural AST validation is model-optional: when a SysML model is
+    discoverable under repo_root, the full Cartesian cardinality is compared
+    against the model's action definitions; without a model, guide-word
+    completeness is enforced against the (controller, control action) pairs
+    derived from the UCA table itself and the 5-part proof structure is
+    enforced on parsed theorem blocks.
+
+    Returns (violation_strings, ast_report_or_none).
+    """
+    errors: List[str] = []
+    ast_report: Optional[ASTValidationReport] = None
+
+    model_text = None
+    if repo_root:
+        model_text = _discover_sysml_model_text(repo_root)
+
+    ast_errors, ast_report, _expected_actions = validate_safety_matrix_ast(aggregate_safety_content, model_text)
+    errors.extend(ast_errors)
+
+    errors.extend(_validate_safety_matrix_pillars(aggregate_safety_content, ast_path_active=model_text is not None))
+    return errors, ast_report
+
+
+def validate_safety_matrix_content(content: str, repo_root: Optional[str] = None) -> list:
     """Validate 8-pillar schema, 24 SORA OSOs, 15+ FMECA rows, 4 UCA categories, ASTM F3269-17 RTA, and MATLAB/Simulink hooks.
 
+    Structural table-aware AST validation is model-optional. When a SysML v2
+    model is discoverable under repo_root (schema/*.sysml or .pipeline/schema.sysml),
+    dynamic Cartesian product set equality against the model's action definitions
+    supersedes the legacy regex keyword checks; without a model, guide-word
+    completeness over table-derived (controller, control action) pairs and the
+    5-part proof structure are still enforced structurally, while the legacy
+    regex scans remain the fallback for pillar presence and SORA OSO coverage.
+
     Returns a list of violation error strings (empty if valid).
+    """
+    errors, _ast_report = _validate_aggregate_safety_content(content, repo_root)
+    return errors
+
+
+def _validate_safety_matrix_pillars(content: str, ast_path_active: bool = False) -> list:
+    """Validate the 8-pillar schema presence checks (regex-based) plus structural counts.
+
+    When ast_path_active is True, the shallow regex UCA-category and SORA-OSO
+    scans are skipped because the structural AST validation already supersedes
+    them; the regex checks remain the fallback for schema-less legacy inputs.
     """
     errors = []
 
@@ -629,9 +1169,10 @@ def validate_safety_matrix_content(content: str) -> list:
     # Pillar 4: Unsafe Control Actions (UCA-1..N)
     if not (re.search(r'Unsafe\s+Control\s+Actions?', content, re.IGNORECASE) or re.search(r'\bUCA-\d+\b', content)):
         errors.append("Pillar 4 violation: Missing Unsafe Control Actions ($UCA-1..N$).")
-    missing_uca_cats = check_uca_categories(content)
-    if missing_uca_cats:
-        errors.append(f"Pillar 4 violation: Missing UCA failure mode categories: {', '.join(missing_uca_cats)}.")
+    if not ast_path_active:
+        missing_uca_cats = check_uca_categories(content)
+        if missing_uca_cats:
+            errors.append(f"Pillar 4 violation: Missing UCA failure mode categories: {', '.join(missing_uca_cats)}.")
 
     # Pillar 5: Loss Scenarios (LS-1..N)
     if not (re.search(r'Loss\s+Scenarios?|Causal\s+Scenarios?', content, re.IGNORECASE) and re.search(r'\bLS-\d+\b|\$LS-\d+', content)):
@@ -656,9 +1197,10 @@ def validate_safety_matrix_content(content: str) -> list:
         errors.append("Pillar 8 violation: Missing SORA SAIL risk assessment.")
     if not (re.search(r'\bGRC\b|Ground\s+Risk\s+Class', content, re.IGNORECASE) and re.search(r'\bARC\b|Air\s+Risk\s+Class', content, re.IGNORECASE)):
         errors.append("Pillar 8 violation: Missing GRC (Ground Risk Class) or ARC (Air Risk Class) determinations.")
-    missing_osos = check_sora_osos(content)
-    if missing_osos:
-        errors.append(f"Pillar 8 violation: Missing mandatory SORA Operational Safety Objectives: {', '.join(missing_osos)}.")
+    if not ast_path_active:
+        missing_osos = check_sora_osos(content)
+        if missing_osos:
+            errors.append(f"Pillar 8 violation: Missing mandatory SORA Operational Safety Objectives: {', '.join(missing_osos)}.")
 
     # ASTM F3269-17 RTA Architecture
     if not (re.search(r'ASTM\s+F3269', content, re.IGNORECASE) and re.search(r'Run-Time\s+Assurance|\bRTA\b|Safety\s+Net', content, re.IGNORECASE)):
@@ -735,7 +1277,7 @@ def check_safety_integrity_and_sora_completeness(repo_root):
             all_errors.append(f"Failed to read {rel_path}: {e}")
 
     aggregate_safety_content = "\n\n---\n\n".join(combined_content)
-    file_errors = validate_safety_matrix_content(aggregate_safety_content)
+    file_errors, ast_report = _validate_aggregate_safety_content(aggregate_safety_content, repo_root=repo_root)
     for err in file_errors:
         all_errors.append(f"docs/safety/ (aggregate specifications): {err}")
 
@@ -745,6 +1287,8 @@ def check_safety_integrity_and_sora_completeness(repo_root):
             print(f"  - {err}", file=sys.stderr)
         sys.exit(1)
 
+    if ast_report is not None:
+        print(ast_report.format_cli_summary())
     print("Success: Check 17 verified (Safety Integrity Quality Gate: 8 pillars, 24 SORA OSOs, 15+ FMECA rows, 4 UCA categories, ASTM F3269-17 RTA, and MATLAB/Simulink hooks).")
 
 def verify_upstream_blueprint_domain_cleanliness(target_dir):
