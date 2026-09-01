@@ -45,7 +45,7 @@ Descope decision (split-fix): issue #72's body pins the proof suite to domain nu
 - C4 GREEN: FMECA recurrence (RPN = S×O×D from generic categorical input), 24-OSO roster generation from configuration (codebase_rules.json), SLDV assertion writer.
 - C5 VERIFY: performance + determinism tests green; full scoped pytest for compile_sysml.
 
-Domain-specific residual: physical parameter catalogs, STANAG 4187/ESAD specifics, rail-launch equations and real-world GRC/ARC values are routed to the domain distribution repo — documented in WP-F tracker updates.
+Domain-specific residual: physical parameter catalogs, STANAG 4187/ESAD specifics, rail-launch equations and real-world GRC/ARC values are routed to the **UAV safety domain distribution repo** — the domain template repository that scripts/install_pipeline.sh installs into customer workspaces (exact owner/slug to be recorded once a routable URL is supplied). Upstream keeps only the abstract engine; the domain repo supplies its own schemas and parameter catalogs, which parameterize compile_sysml.py --stpa-transpile at install time.
 
 ## 4. Work Package D — Blueprint ratification hygiene (fixes #73)
 
