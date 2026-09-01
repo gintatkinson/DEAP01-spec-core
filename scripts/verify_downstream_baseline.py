@@ -747,6 +747,48 @@ def check_safety_integrity_and_sora_completeness(repo_root):
 
     print("Success: Check 17 verified (Safety Integrity Quality Gate: 8 pillars, 24 SORA OSOs, 15+ FMECA rows, 4 UCA categories, ASTM F3269-17 RTA, and MATLAB/Simulink hooks).")
 
+def verify_upstream_blueprint_domain_cleanliness(target_dir):
+    """Check 18: Upstream Blueprint Domain Cleanliness Gate.
+
+    Verify that upstream DEAP01-spec-core architecture blueprints contain zero concrete
+    domain platform concept papers or domain SysML models (e.g. *FLIGHT_SYSTEMS*,
+    *UAS_INFRASTRUCTURE*, *FRONTEND_SYSTEMS*, *SAFETY_MODEL*.sysml).
+    """
+    upstream_marker = os.path.join(target_dir, ".pipeline", "upstream")
+    if not (os.path.isdir(upstream_marker) or os.path.isfile(upstream_marker)):
+        print("Success: Check 18 verified (Downstream repository detected — skipping upstream blueprint domain cleanliness gate).")
+        return
+
+    blueprints_dir = os.path.join(target_dir, "docs", "architecture", "blueprints")
+    if not os.path.isdir(blueprints_dir):
+        print("Success: Check 18 verified (docs/architecture/blueprints/ not present).")
+        return
+
+    forbidden_patterns = [
+        re.compile(r"flight[-_]?systems", re.IGNORECASE),
+        re.compile(r"uas[-_]?infrastructure", re.IGNORECASE),
+        re.compile(r"frontend[-_]?systems", re.IGNORECASE),
+        re.compile(r"safety[-_]?model", re.IGNORECASE),
+        re.compile(r"\.sysml$", re.IGNORECASE),
+        re.compile(r"concept[-_]?paper", re.IGNORECASE),
+    ]
+
+    violations = []
+    for root, dirs, files in os.walk(blueprints_dir):
+        dirs[:] = [d for d in dirs if d not in EXCLUDED_DIRS]
+        for f in files:
+            rel_path = os.path.relpath(os.path.join(root, f), target_dir)
+            if any(pattern.search(f) for pattern in forbidden_patterns):
+                violations.append(rel_path)
+
+    if violations:
+        print(f"ERROR: Check 18 failed: Upstream blueprints contain concrete domain platform concept papers or sysml models: {', '.join(violations)}", file=sys.stderr)
+        sys.exit(1)
+
+    print("Success: Check 18 verified (Upstream architecture blueprints are clean with zero domain concept papers or sysml models).")
+
+check_upstream_blueprint_domain_cleanliness = verify_upstream_blueprint_domain_cleanliness
+
 class _DomainAgnosticASTVisitor(ast.NodeVisitor):
     """AST visitor enforcing pure schema-driven parameter extraction and zero static domain specs."""
 
@@ -899,8 +941,10 @@ def check_domain_agnostic_ast_cleanliness(repo_root):
 
     print("Success: Check 19 verified (Domain-Agnostic AST Cleanliness Gate passed — pure dynamic schema AST architecture verified).")
 
-def _run_verification(args, dest, repo_root, is_flutter, is_react):
-    # Run Checks 10, 11, 12, 13, 14, 15, 16, 17, and 19
+def run_all_checks(repo_root=None):
+    """Run all baseline checks (Checks 10 through 19)."""
+    if repo_root is None:
+        repo_root = os.getcwd()
     check_gitignore_exists(repo_root)
     check_no_ds_store_files(repo_root)
     check_no_duplicate_master_blueprints(repo_root)
@@ -909,7 +953,12 @@ def _run_verification(args, dest, repo_root, is_flutter, is_react):
     check_reconcile_backlog_tooling_exists(repo_root)
     check_upstream_template_clean_landing_zones(repo_root)
     check_safety_integrity_and_sora_completeness(repo_root)
+    verify_upstream_blueprint_domain_cleanliness(repo_root)
     check_domain_agnostic_ast_cleanliness(repo_root)
+
+def _run_verification(args, dest, repo_root, is_flutter, is_react):
+    # Run Checks 10, 11, 12, 13, 14, 15, 16, 17, 18, and 19
+    run_all_checks(repo_root)
 
     if is_flutter:
         print(f"Verifying conformance for platform 'flutter' at '{dest}'...")

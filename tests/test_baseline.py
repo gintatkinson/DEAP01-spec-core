@@ -7,7 +7,17 @@ import os
 import re
 import subprocess
 import tempfile
+import unittest
 import pytest
+
+repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if repo_root not in sys.path:
+    sys.path.insert(0, repo_root)
+
+from scripts.verify_downstream_baseline import (
+    verify_upstream_blueprint_domain_cleanliness,
+    run_all_checks,
+)
 
 def test_python_runtime_environment():
     """Verify Python runtime version and core interpreter executable exist and function."""
@@ -290,3 +300,108 @@ def test_gitignore_excludes_pipeline_diagnostics():
     assert ".pipeline/diagnostics/" in lines or ".pipeline/diagnostics" in lines, (
         ".gitignore does not contain .pipeline/diagnostics/"
     )
+
+
+def test_upstream_blueprint_domain_cleanliness_clean_upstream():
+    """Verify Check 18 passes on the clean upstream repository."""
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if not os.path.isdir(repo_root):
+        repo_root = os.getcwd()
+    verify_upstream_blueprint_domain_cleanliness(repo_root)
+
+
+def test_upstream_blueprint_domain_cleanliness_skips_downstream():
+    """Verify Check 18 skips cleanly when no upstream marker is present."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Downstream repo (no .pipeline/upstream)
+        blueprints_dir = os.path.join(tmpdir, "docs", "architecture", "blueprints")
+        os.makedirs(blueprints_dir, exist_ok=True)
+        # Even with domain files present, downstream check should skip
+        with open(os.path.join(blueprints_dir, "DEAP_FLIGHT_SYSTEMS_SAFETY_CONCEPT_PAPER.md"), "w", encoding="utf-8") as f:
+            f.write("# Flight Systems Concept Paper\n")
+        with open(os.path.join(blueprints_dir, "DEAP_SYSML_V2_SAFETY_MODEL_SPECIFICATION.sysml"), "w", encoding="utf-8") as f:
+            f.write("package SafetyModel {}\n")
+
+        # Should not raise SystemExit
+        verify_upstream_blueprint_domain_cleanliness(tmpdir)
+
+
+def test_upstream_blueprint_domain_cleanliness_detects_domain_concept_papers_and_sysml():
+    """Verify Check 18 detects and rejects domain platform concept papers and sysml models in upstream blueprints."""
+    test_filenames = [
+        "DEAP_FLIGHT_SYSTEMS_SAFETY_CONCEPT_PAPER.md",
+        "DEAP_UAS_INFRASTRUCTURE_SAFETY_CONCEPT_PAPER.md",
+        "DEAP_PIPELINE_0_FRONTEND_SYSTEMS_SAFETY_BLUEPRINT.md",
+        "DEAP_SYSML_V2_SAFETY_MODEL_SPECIFICATION.sysml",
+        "FLIGHT_SYSTEMS_BLUEPRINT.md",
+        "UAS_INFRASTRUCTURE_ARCH.md",
+        "FRONTEND_SYSTEMS_SPEC.md",
+        "CUSTOM_SAFETY_MODEL.sysml",
+        "AUTONOMY_CONCEPT_PAPER.md",
+    ]
+
+    for bad_file in test_filenames:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            upstream_marker = os.path.join(tmpdir, ".pipeline", "upstream")
+            os.makedirs(upstream_marker, exist_ok=True)
+
+            blueprints_dir = os.path.join(tmpdir, "docs", "architecture", "blueprints")
+            os.makedirs(blueprints_dir, exist_ok=True)
+
+            with open(os.path.join(blueprints_dir, bad_file), "w", encoding="utf-8") as f:
+                f.write(f"# Polluted domain concept paper {bad_file}\n")
+
+            with pytest.raises(SystemExit) as exc_info:
+                verify_upstream_blueprint_domain_cleanliness(tmpdir)
+            assert exc_info.value.code == 1
+
+
+class TestCheck18BlueprintDomainCleanliness(unittest.TestCase):
+    """Unit tests for Check 18 (Upstream Blueprint Domain Cleanliness Gate)."""
+
+    def test_clean_upstream_passes(self):
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if not os.path.isdir(repo_root):
+            repo_root = os.getcwd()
+        verify_upstream_blueprint_domain_cleanliness(repo_root)
+
+    def test_downstream_skips(self):
+        test_upstream_blueprint_domain_cleanliness_skips_downstream()
+
+    def test_failure_injection_domain_concept_papers_and_sysml(self):
+        test_filenames = [
+            "DEAP_FLIGHT_SYSTEMS_SAFETY_CONCEPT_PAPER.md",
+            "DEAP_UAS_INFRASTRUCTURE_SAFETY_CONCEPT_PAPER.md",
+            "DEAP_PIPELINE_0_FRONTEND_SYSTEMS_SAFETY_BLUEPRINT.md",
+            "DEAP_SYSML_V2_SAFETY_MODEL_SPECIFICATION.sysml",
+            "FLIGHT_SYSTEMS_BLUEPRINT.md",
+            "UAS_INFRASTRUCTURE_ARCH.md",
+            "FRONTEND_SYSTEMS_SPEC.md",
+            "CUSTOM_SAFETY_MODEL.sysml",
+            "AUTONOMY_CONCEPT_PAPER.md",
+        ]
+        for bad_file in test_filenames:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                upstream_marker = os.path.join(tmpdir, ".pipeline", "upstream")
+                os.makedirs(upstream_marker, exist_ok=True)
+
+                blueprints_dir = os.path.join(tmpdir, "docs", "architecture", "blueprints")
+                os.makedirs(blueprints_dir, exist_ok=True)
+
+                with open(os.path.join(blueprints_dir, bad_file), "w", encoding="utf-8") as f:
+                    f.write(f"# Polluted domain concept paper {bad_file}\n")
+
+                with self.assertRaises(SystemExit) as cm:
+                    verify_upstream_blueprint_domain_cleanliness(tmpdir)
+                self.assertEqual(cm.exception.code, 1)
+
+    def test_run_all_checks_includes_check_18(self):
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if not os.path.isdir(repo_root):
+            repo_root = os.getcwd()
+        run_all_checks(repo_root)
+
+
+if __name__ == "__main__":
+    unittest.main()
+
