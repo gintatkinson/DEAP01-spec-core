@@ -114,7 +114,7 @@ Execution-delegation note: per AGENTS.md § Strict Coordinator Tool Locking (iss
 - R1: Which domain-specific distribution repo receives the WP-C residual catalog (physical parameters, STANAG 4187 specifics)? Default: document as a new issue in that repo when identity is provided.
 - R2: Full-suite runs `python3 -m unittest discover -s tests` mutate tracker state (test_upstream_reconcile.py). Plan uses scoped pytest invocations; confirm acceptable to never run bare discover during this work.
 - R3: Issue #68 was auto-marked `status:fixed-resolved` by the earlier suite run (its tests pass and it remains open) — accepted as-is unless you object.
-- R4 (BLOCKER, current): The active runtime's tool list exposes NO context-isolated subagent dispatch capability (session tools: bash, edit, glob, grep, read, skill, webfetch, websearch, write — no dispatch tool; opencode config in `~/.config/opencode/` defines no agents/permissions for dispatch). AGENTS.md § Mandatory Subagent Dispatch ("a runtime that lacks a capability is a blocker to be escalated... never a licence for the coordinator to do the work itself") plus § Strict Coordinator Tool Locking (issue #312 scope: documentation repair is a repository write, so coordinator direct file-writing is locked) forbid coordinator-direct editing of `docs/architecture/MASTER_OPENCODE_AGENT_HANDOVER.md`. Unblock options requested: (a) explicit user authorization for coordinator-direct editing of this documentation-only package in this runtime, (b) an AGENTS.md amendment, or (c) a dispatch-capable runtime/subagent configuration.
+- R4 (RESOLVED): the coordinator session exposes the context-isolated dispatch capability (task tool, subagent types general/explore) and every write in this plan was executed through fresh dispatches; the earlier blocker report was a runtime misreading and was overcome by re-dispatch clarification.
 
 ## 11. Wave-2 addendum (approved under PROCEED continuous execution)
 
@@ -125,5 +125,57 @@ Gate-blocking parity-auditor findings discovered during WP-A/E verification, res
 
 Success criterion (gate exit 0 for the upstream workspace):
 `PYTHONPATH=skills/spec-orchestrator/parity_auditor/src python3 -m parity_auditor.cli --workspace . --allow-missing-specs`
+
+## Phase 2 — Domain Chain Materialization & Downstream Tooling Sync
+
+> Status: APPROVED (PROCEED, 2026-09-01; A3 CI drift-check included)
+
+### 2.0 Verified facts (live GitHub API, 2026-09-01)
+
+| Repo | Role | Created | Fork? | Tooling state |
+| --- | --- | --- | --- | --- |
+| gintatkinson/DEAP01-spec-core | upstream core (this repo) | — | — | fixed: main b5bc0b6..2716a7a |
+| gintatkinson/DEAP-avionic-flight-safety | intended domain parent | 2026-08-06 18:31:52Z | no | pre-fix (no MarkdownTableASTParser); README wrongly declares identifier DEAP-uas-infrastructure-safety |
+| gintatkinson/DEAP-uas-infrastructure-safety | intended domain child | 2026-08-06 18:32:14Z | no | pre-fix; README self-consistent |
+| UAS-001 / UAS-002 | leaf customer workspaces | — | private | — |
+
+GitHub has no API to link existing repos as forks: lineage is materialized via managed metadata + a derived-by-bootstrap protocol (not destructive re-forking).
+
+### 2.1 Target architecture (user-confirmed domain split)
+
+- **Tier 0**: DEAP01-spec-core — abstract MBSE compiler core, zero domain content (hard invariant).
+- **Tier 1**: DEAP-avionic-flight-safety — COMMON AVIATION SAFETY domain distribution template. Home of general aviation standards inventory and shared domain artifacts (DO-178C/DO-254, ARP4754A/ARP4761, generic MIL-STD-882E hazard practice, common flight-safety control patterns, generic FMECA/CTMC proof taxonomies). Parent of the UAS chain and of any future aviation-domain children.
+- **Tier 2**: DEAP-uas-infrastructure-safety — UAS-specific distribution template, derived from the parent. Home of UAS-specific standards (JARUS SORA v2.5, ASTM F3269-17 RTA, ASTM F3411-22a Remote ID, RTCA DO-365B DAA), UAS schemas, and parameter catalog frameworks. This is the template `install_pipeline.sh` installs into customer workspaces (UAS-001, UAS-002, and the future leaf project).
+- **Propagation rule**: domain-independent tooling flows core → parent → child → leaf installs. Common-aviation content lives in the parent, UAS-only content in the child. Neither domain content nor customer data ever flows back into the core.
+
+### 2.2 Work packages (strictly serial: L0 → L1 → L2 → S1 → S2 → C → T → V)
+
+All work happens in fresh clones under the system scratch path (`/var/folders/.../opencode/domain-sync/`), never inside this workspace (forbidden test-workspace rule). Every work package is executed by a fresh context-isolated implementer subagent with the mandatory skill-read directive, governance preamble, and PROCEED token; coordinator performs verification, not implementation.
+
+- **WP-L0 — Recon & sync manifest**: in both domain-repo clones, read AGENTS.md/README.md/.pipeline layout, diff key tooling files vs upstream (sha/size + symbol probes: MarkdownTableASTParser, generate_valid_stpa_matrix_content, is_upstream_compiler_repo), enumerate every divergent file. Output: `sync-manifest.md` (scratch only). No repo writes.
+- **WP-L1 — Parent identity & lineage (avionic-flight-safety)**: replace README identifier/role block: identifier DEAP-avionic-flight-safety, role PARENT_DOMAIN_DISTRIBUTION_TEMPLATE, domain = Common Aviation Safety Standards (list the general frameworks above), remove the UAS-repo identifier copy; add `.pipeline/lineage.json` = {self, tier: 1, role: domain_parent, upstream: DEAP01-spec-core, upstream_sync_ref: <sha at sync>, children: [DEAP-uas-infrastructure-safety]}; add `docs/domain/DOMAIN_SCOPE.md` (standards inventory, zero customer content). Verify repo's own pre-sync gates still pass (no regression from doc-only change). Neutral commit, push.
+- **WP-L2 — Child identity & lineage (uas-infrastructure-safety)**: keep UAS README identity; add "Parent domain: DEAP-avionic-flight-safety (common aviation standards)" derived-from note; add `.pipeline/lineage.json` = {self, tier: 2, role: domain_child, parent: DEAP-avionic-flight-safety, upstream: DEAP01-spec-core (via parent)}. Gate check, neutral commit, push.
+- **WP-S1 — Core→parent tooling sync**: propagate ONLY tooling + shared governance files (not upstream-specific docs): scripts/verify_downstream_baseline.py, scripts/compile_sysml.py, scripts/install_pipeline.sh, tests/test_safety_integrity.py, tests/test_check17_ast.py, tests/test_mock_generator_purge.py, tests/test_compile_sysml_stpa_transpiler.py, tests/fixtures/, skills/spec-orchestrator/parity_auditor/** (incl. __main__.py + upstream-mode + tests), skills/spec-icd-engineering/SKILL.md. Method: cherry-pick upstream commits 5027eb5, a0b8f7e, 3c8deff, f7e58b9, and the relevant doc portions where those files exist identically pre-fix. Conflicts must be resolved surgically; no weakening of gates. Then apply the wave-4 style additive metadata sweep to THAT repo's flagged docs. Verification in the parent clone: scoped pytest green, verify_downstream_baseline.py checks 10–19 exit 0, parity audit (upstream mode now shipping) exit 0, reconcile offline clean. Neutral commit, push.
+- **WP-S2 — Parent→child tooling sync**: identical fixed set applied to uas-infrastructure-safety (source = parent repo post-WP-S1), same verification battery, neutral commit, push.
+- **WP-C — Domain residual catalog split** (issue #72 residuals):
+  - Common-aviation items (generic standards mappings, ARP4754A/4761 process artifacts, generic FMECA/CTMC and 6-DOF proof taxonomy) → documented as abstract catalogs in DEAP-avionic-flight-safety `docs/domain/`.
+  - UAS-specific items (SORA GRC/ARC + 24-OSO mapping frameworks, F3269-17 RTA/Simplex patterns, F3411 Remote ID, DO-365B DAA, STANAG 4187 safety-reference notes) → DEAP-uas-infrastructure-safety `docs/domain/`.
+  - Concrete vehicle numeric catalogs (masses, voltages, envelopes) → NEVER in any template repo; they arrive with each customer's schema at install time.
+- **WP-T — Tracker operations**: open issues in avionic-flight-safety ("lineage materialization", "tooling sync from core <sha-range>", "README identity correction") and in uas-infrastructure-safety (lineage + sync + parent linkage), each with evidence summary; no issue is closed; labels per repo conventions; duplicate check before filing.
+- **WP-V — Cross-repo Definition of Done verification** (coordinator): batteries run in all three repos: upstream remains green; parent and child each show scoped pytest green, baseline exit 0, parity audit exit 0, `git diff origin/main` empty, lineage.json present, README identifiers correct, landing zones clean. Final walkthrough report.
+
+### 2.3 Guardrails
+
+- Neutral commit citations in every repo; no auto-close keywords; no issue closures (PO authority).
+- Serial execution enforced (user-authorization-lock / serial-execution); no parallel implementers touching the same repo checkout.
+- Item-level subagent isolation; retry protocol (two consecutive failures → escalate).
+- Scoped pytest only (never bare `unittest discover` in repos with tracker-touching tests).
+
+### 2.4 Approval questions
+
+- A1 (default: yes): lineage = metadata + derived-by-bootstrap protocol + periodic sync, without destructive re-forking.
+- A2 (default: yes): propagate the full upstream tooling set to BOTH domain repos (parent first).
+- A3 (open): add a GitHub Actions drift-check workflow in the domain repos comparing pinned tooling shas against core (recommended — prevents the 10:51Z-vs-14:10Z staleness we found from recurring). In scope or deferred?
+- A4 (default: as §2.2 WP-C): confirm the residual split table (common aviation → parent; UAS-specific → child; vehicle numerics → customer schema only).
 
 Approval required: reply PROCEED (or request plan changes) to authorize execution. On approval, all work packages run continuously to completion per AGENTS.md Continuous Execution Gate.
