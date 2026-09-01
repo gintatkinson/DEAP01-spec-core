@@ -9,6 +9,14 @@ class TestCompletenessValidator(IValidator):
     def validate(self, repo: WorkspaceRepository, **kwargs) -> List[str]:
         errors = []
         workspace_dir = repo.workspace_dir
+
+        # Upstream compiler repository exemption: test completeness is checked
+        # against app test files (_test.dart, *.test.ts, ...) of the target
+        # codebases. With no client codebases configured, the absence of those
+        # files is a configuration state, not a defect.
+        if repo.is_upstream_compiler_repo() and not repo.has_configured_target_code_directories():
+            print("Note: Upstream compiler repository mode. Skipping test-completeness check (no target code directories).")
+            return []
         
         test_files = []
         exclusions = {".git", ".agents", "skills", ".pipeline", ".tessl-plugin", "node_modules", "build", "dist"}

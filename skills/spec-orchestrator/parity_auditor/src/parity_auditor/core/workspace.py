@@ -4,6 +4,40 @@ import re
 from typing import Dict, List, Set, Optional, Any
 from .models import CodebaseRules, FeatureFile, load_from_dict
 
+UPSTREAM_COMPILER_REPO_TYPE = "UPSTREAM_SPEC_CORE_COMPILER"
+
+
+def is_upstream_compiler_repo(workspace_dir: str) -> bool:
+    """
+    Detect an Upstream Specification Core Compiler repository.
+
+    Mirrors ``reconcile_backlog.py``'s detection (issue #68 mechanism) and the
+    repository-classification sentinel documented in ``.pipeline/constitution.md``
+    and ``AGENTS.md``: the presence of a ``.pipeline/upstream`` marker inside the
+    workspace, or the ``DEAP_REPOSITORY_TYPE`` environment variable set to
+    ``UPSTREAM_SPEC_CORE_COMPILER``.
+    """
+    env_type = os.environ.get("DEAP_REPOSITORY_TYPE")
+    if env_type and env_type.strip() == UPSTREAM_COMPILER_REPO_TYPE:
+        return True
+    upstream_marker = os.path.join(os.path.abspath(workspace_dir), ".pipeline", "upstream")
+    return os.path.exists(upstream_marker)
+
+
+def has_configured_target_code_directories(repo: "WorkspaceRepository") -> bool:
+    """
+    True when at least one configured client-codebase target directory
+    (react or flutter) exists inside the workspace.
+    """
+    rules = repo.get_codebase_rules()
+    if rules is None:
+        return False
+    for name in (rules.target_directories.react, rules.target_directories.flutter):
+        if name and os.path.isdir(os.path.join(repo.workspace_dir, name)):
+            return True
+    return False
+
+
 class WorkspaceRepository:
     def __init__(self, workspace_dir: Optional[str] = None):
         if not workspace_dir:
@@ -25,6 +59,12 @@ class WorkspaceRepository:
                 break
             curr = parent
         return os.path.abspath(start_path)
+
+    def is_upstream_compiler_repo(self) -> bool:
+        return is_upstream_compiler_repo(self.workspace_dir)
+
+    def has_configured_target_code_directories(self) -> bool:
+        return has_configured_target_code_directories(self)
 
     def get_codebase_rules_path(self) -> str:
         rules_path = os.environ.get("CODEBASE_RULES_PATH")

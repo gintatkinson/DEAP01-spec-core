@@ -22,6 +22,17 @@ from ..utils.spec_titles import normalize_spec_title
 
 class SyncValidator(IValidator):
     def validate(self, repo: WorkspaceRepository, **kwargs) -> List[str]:
+        # Upstream compiler repository exemption: docs/epics and docs/features are
+        # clean landing zones BY DESIGN and feature issues without local
+        # specification files are upstream tooling features tracked via git commits
+        # rather than markdown specs. Mirrors the reconciler's upstream-mode
+        # exemption of the same class of findings (issue #68 mechanism, issues
+        # #74/#73/#72/#70/#67/#64/#62/#61/#60/#59).
+        if repo.is_upstream_compiler_repo() and not repo.has_configured_target_code_directories():
+            print("Note: Upstream compiler repository mode. Skipping out-of-sync "
+                  "missing-local-specification findings for upstream tooling feature issues.")
+            return []
+
         rules = repo.get_codebase_rules()
         tracker_rules = rules.tracker_rules
         backlog_dirs = rules.backlog_directories

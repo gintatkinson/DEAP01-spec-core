@@ -384,9 +384,21 @@ def _main_impl():
     epics_dir = os.path.join(repo.workspace_dir, epics_dir_rel) if epics_dir_rel else None
         
     has_failed = False
+    # Upstream compiler repository mode: this workspace is the upstream
+    # Specification Core Compiler (sentinel: .pipeline/upstream), whose landing
+    # zones are clean and which has no client app codebases BY DESIGN. See the
+    # Clean Landing Zone Invariant in .pipeline/constitution.md and the
+    # #68 reconciler exemption.
+    upstream_mode = repo.is_upstream_compiler_repo() and not repo.has_configured_target_code_directories()
+
     print("=== Model Coverage Parity Audit ===")
     print(f"Scanning schemas in: {schema_dir}")
     print(f"Scanning feature specifications in: {features_dir}\n")
+    if upstream_mode:
+        print("[*] UPSTREAM COMPILER REPOSITORY MODE ENGAGED - skipped stages: "
+              "missing-local-specification out-of-sync finding, "
+              "empty-codebase Schema Mapping, empty-codebase Profile Scoping, "
+              "empty-codebase Test Completeness.")
     
     # 1. Parse all modules
     modules = {}
@@ -459,34 +471,38 @@ def _main_impl():
             open_issues = [issue for issue in open_issues if issue.get("number") in local_issue_ids]
 
     missing_specs = []
-    for issue in open_issues:
-        issue_number = issue.get("number")
-        issue_title = issue.get("title", "")
-        found = False
-        for f in features:
-            fm_data = extract_metadata_from_content(f.content)
-            if fm_data and fm_data.get("issue_id") == issue_number:
-                found = True
-                break
-
-            # Existing filename check as fallback only when no metadata present
-            if not fm_data:
-                basename = os.path.splitext(f.filename)[0]
-                m = re.search(r'(?:^|\D)(\d+)(?:$|\D)', basename)
-                if m and int(m.group(1)) == issue_number:
+    missing_spec_errors = []
+    if not upstream_mode:
+        for issue in open_issues:
+            issue_number = issue.get("number")
+            issue_title = issue.get("title", "")
+            found = False
+            for f in features:
+                fm_data = extract_metadata_from_content(f.content)
+                if fm_data and fm_data.get("issue_id") == issue_number:
                     found = True
                     break
-        if not found:
-            missing_specs.append(f"Issue #{issue_number}: '{issue_title}'")
-            
-    missing_spec_errors = []
-    if missing_specs:
-        print("[!] Missing local specification files for open feature issues:")
-        for spec in missing_specs:
-            print(f"  - {spec}")
-        if not args.allow_missing_specs:
-            missing_spec_errors = missing_specs[:]
-            has_failed = True
+
+                # Existing filename check as fallback only when no metadata present
+                if not fm_data:
+                    basename = os.path.splitext(f.filename)[0]
+                    m = re.search(r'(?:^|\D)(\d+)(?:$|\D)', basename)
+                    if m and int(m.group(1)) == issue_number:
+                        found = True
+                        break
+            if not found:
+                missing_specs.append(f"Issue #{issue_number}: '{issue_title}'")
+
+        if missing_specs:
+            print("[!] Missing local specification files for open feature issues:")
+            for spec in missing_specs:
+                print(f"  - {spec}")
+            if not args.allow_missing_specs:
+                missing_spec_errors = missing_specs[:]
+                has_failed = True
+    else:
+        print("Note: Missing-local-specification cross-reference skipped: docs/features is a " 
+              "clean landing zone in the upstream compiler repository (interior tooling features, issues #74/#73/#72/#70/#67/#64/#62/#61/#60/#59).")
         
     epic_files = []
     if epics_dir and os.path.exists(epics_dir):

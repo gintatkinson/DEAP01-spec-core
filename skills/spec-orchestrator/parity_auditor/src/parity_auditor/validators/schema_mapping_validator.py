@@ -8,6 +8,13 @@ from ..parsers.schema_router import parse_schema_file
 
 class SchemaMappingValidator(IValidator):
     def validate(self, repo: WorkspaceRepository, **kwargs) -> List[str]:
+        # Upstream compiler repository exemption: no app_flutter/web_react client
+        # codebase exists by design, so an empty codebase is a configuration state,
+        # not a defect (Clean Landing Zone Invariant, .pipeline/constitution.md).
+        if repo.is_upstream_compiler_repo() and not repo.has_configured_target_code_directories():
+            print("Note: Upstream compiler repository mode. Skipping empty-codebase schema-mapping check.")
+            return []
+
         rules = repo.get_codebase_rules()
         backlog_dirs = rules.backlog_directories
         target_dirs = rules.target_directories
