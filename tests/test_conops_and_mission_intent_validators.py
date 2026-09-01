@@ -483,7 +483,7 @@ class TestConOpsAndMissionIntentValidators(unittest.TestCase):
             with open(os.path.join(pipeline_dir, "codebase_rules.json"), "w", encoding="utf-8") as f:
                 f.write("""{
   "meta": {
-    "upstream_repository": "gintatkinson/uas-003"
+    "upstream_repository": "acme/example-project"
   },
   "backlog_directories": {
     "schemas": "schema",

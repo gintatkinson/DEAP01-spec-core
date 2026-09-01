@@ -1200,7 +1200,7 @@ def main():
     except Exception:
         import traceback
         traceback.print_exc()
-        upstream_repo = os.environ.get("UPSTREAM_REPOSITORY") or os.environ.get("GIT_REMOTE_ORIGIN") or "gintatkinson/uas-003"
+        upstream_repo = os.environ.get("UPSTREAM_REPOSITORY") or os.environ.get("GIT_REMOTE_ORIGIN") or "gintatkinson/DEAP01-spec-core"
         try:
             script_dir = os.path.dirname(os.path.abspath(__file__))
             workspace_dir = None
