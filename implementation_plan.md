@@ -171,6 +171,19 @@ All work happens in fresh clones under the system scratch path (`/var/folders/..
 - Item-level subagent isolation; retry protocol (two consecutive failures → escalate).
 - Scoped pytest only (never bare `unittest discover` in repos with tracker-touching tests).
 
+## Phase 3 — `.agents/skills` Symlink Remediation (approved-under-PROCEED, 2026-09-01)
+
+> Status: APPROVED via user directive (full step list + PROCEED, 2026-09-01). Scope: `.agents/skills/` tree conversion + one upstream tooling issue. `skills/` content untouched. No unittest discover.
+
+Defect: `.agents/skills/` is a stale divergent copy of `skills/` (older SKILL.md variants; outdated `parity_auditor` hardcodes `gintatkinson/uas-003` at `.agents/skills/spec-orchestrator/parity_auditor/src/parity_auditor/cli.py`). `rules/document-references.md` documents `.agents/skills` as a tracked symlink (git mode 120000 → `../skills`).
+
+Work packages:
+- P3-1 RED evidence: `diff -rq skills .agents/skills | head -20`; `rg -n 'uas-003' .agents/skills`.
+- P3-2 Convert to symlink: `git rm -r --cached .agents/skills`; `rm -rf .agents/skills`; `ln -s ../skills .agents/skills`; `git add .agents/skills`. Verify `git ls-files -s` mode 120000, `ls -la .agents/`, SKILL.md line-count equality, zero `uas-003` hits.
+- P3-3 Gates: `python3 -m pytest tests/test_skill_path_references.py -q`; `python3 scripts/verify_downstream_baseline.py`; `PYTHONPATH=skills/spec-orchestrator/parity_auditor/src python3 -m parity_auditor.cli --workspace . --allow-missing-specs`. Fallback if a test pins non-symlink mode: revert to byte-identical rsync copy and commit that instead.
+- P3-4 Report-only issue for the latent `cardinality_validator` SysML parser fallback binding `None` (not fixed here).
+- P3-5 Commit + push: neutral citations, verify `git diff origin/main` empty.
+
 ### 2.4 Approval questions
 
 - A1 (default: yes): lineage = metadata + derived-by-bootstrap protocol + periodic sync, without destructive re-forking.

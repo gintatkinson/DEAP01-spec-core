@@ -1,1 +1,0 @@
-"""spec-orchestrator scripts package."""
