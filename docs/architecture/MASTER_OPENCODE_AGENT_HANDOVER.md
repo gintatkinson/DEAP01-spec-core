@@ -5,6 +5,7 @@
 | **Repository** | `DEAP01-spec-core` (`UPSTREAM_SPEC_CORE_COMPILER`) |
 | **Target Engine** | DeepSeek-R1 / OpenCode |
 | **Date** | 2026-09-01 |
+| **Version** | 1.0.0 |
 | **Status** | Authoritative Active Handover |
 | **Baseline Commit** | `4629ce9` on `origin/main` (351/351 tests pass, 19/19 gates pass) |
 | **Upstream Defect Reference** | https://github.com/gintatkinson/DEAP01-spec-core/issues/69 |
@@ -21,11 +22,11 @@ Every incoming AI agent initializing within the `DEAP01-spec-core` repository MU
 
 ```mermaid
 flowchart TD
-    S0["Step 0: Sentinel Check\n(.pipeline/upstream/ presence)"] --> S1["Step 1: Constitution & Quality Gate Ingestion\n(.pipeline/constitution.md)"]
-    S1 --> S2["Step 2: Skills & Execution Protocols\n(skills/ directories)"]
+    S0["Step 0: Sentinel Check\n(".pipeline/upstream/ presence")"] --> S1["Step 1: Constitution & Quality Gate Ingestion\n(".pipeline/constitution.md")"]
+    S1 --> S2["Step 2: Skills & Execution Protocols\n("skills/ directories")"]
     S2 --> S3["Step 3: Pure Schema-Driven Compiler Invariant\n(Zero Hardcoded Domain Concepts)"]
-    S3 --> S4["Step 4: Clean Landing Zone Mandate\n(schema/, docs/epics/, docs/features/, docs/safety/)"]
-    S4 --> S5["Step 5: Tracker Synchronization\n(scripts/reconcile_backlog.py)"]
+    S3 --> S4["Step 4: Clean Landing Zone Mandate\n("schema/, docs/epics/, docs/features/, docs/safety/")"]
+    S4 --> S5["Step 5: Tracker Synchronization\n("scripts/reconcile_backlog.py")"]
     S5 --> RDY["Ready for Upstream Work Package Execution"]
 ```
 
@@ -76,7 +77,7 @@ An adversarial engineering audit of the upstream compiler toolchain identified f
 flowchart TD
     subgraph "Identified Upstream Defects (Root Cause)"
         D1["Defect 1: Weak Regex Linter Blindspot in Check 17\n(Isolated string matches passed 4- & 16-UCA stubs)"]
-        D2["Defect 2: Tautological Test Harness & Pipeline Mock\n(Embedded 4-UCA synthetic mock in installer/tests)"]
+        D2["Defect 2: Tautological Test Harness & Pipeline Mock\n("Embedded 4-UCA synthetic mock in installer/tests")"]
         D3["Defect 3: Generative LLM Context Satiation & Filter Collisions\n(Autoregressive attention decay & cloud censorship)"]
         D4["Defect 4: Context Contamination across Boundaries\n(Downstream platform nouns leaking upstream)"]
     end
@@ -309,7 +310,7 @@ Incoming AI agents must adhere to strict Test-Driven Development (TDD) disciplin
 
 ```mermaid
 flowchart TD
-    RED["1. RED Phase\nWrite failing regression test capturing defect invariant\n(pytest tests/test_*.py)"] --> GREEN["2. GREEN Phase\nImplement minimal surgical fix in compiler/linter\n(scripts/*.py)"]
+    RED["1. RED Phase\nWrite failing regression test capturing defect invariant\n("pytest tests/test_*.py")"] --> GREEN["2. GREEN Phase\nImplement minimal surgical fix in compiler/linter\n("scripts/*.py")"]
     GREEN --> REFACTOR["3. REFACTOR & VERIFY Phase\nRun full test suite & baseline gates\n(verify_downstream_baseline.py)"]
     REFACTOR --> AUDIT["4. PARITY AUDIT Phase\nVerify zero regressions across all 19 gates & 351 tests"]
 ```
