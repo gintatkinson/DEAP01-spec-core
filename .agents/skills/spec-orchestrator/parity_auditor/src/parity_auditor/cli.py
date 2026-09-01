@@ -41,6 +41,9 @@ try:
     from .validators.safety_trace_validator import SafetyTraceValidator
     from .validators.doc_metadata_validator import DocMetadataValidator
     from .validators.icd_completeness_validator import ICDCompletenessValidator
+    from .validators.operational_allocation_validator import OperationalAllocationValidator
+    from .validators.standards_measurement_validator import StandardsAndMeasurementValidator
+    from .validators.conops_completeness_validator import ConopsCompletenessValidator, MissionIntentCompletenessValidator
     from .utils.diagnostics import serialize_diagnostics
     from .utils.comment_utils import strip_comments_and_strings
 except (ImportError, ValueError):
@@ -72,6 +75,9 @@ except (ImportError, ValueError):
     from parity_auditor.validators.safety_trace_validator import SafetyTraceValidator
     from parity_auditor.validators.doc_metadata_validator import DocMetadataValidator
     from parity_auditor.validators.icd_completeness_validator import ICDCompletenessValidator
+    from parity_auditor.validators.operational_allocation_validator import OperationalAllocationValidator
+    from parity_auditor.validators.standards_measurement_validator import StandardsAndMeasurementValidator
+    from parity_auditor.validators.conops_completeness_validator import ConopsCompletenessValidator, MissionIntentCompletenessValidator
     from parity_auditor.utils.diagnostics import serialize_diagnostics
     from parity_auditor.utils.comment_utils import strip_comments_and_strings
 
@@ -268,6 +274,11 @@ def _main_impl():
                              "without blocking on unrelated drafts (issues #331, #321).")
     parser.add_argument("--scope-all", action="store_true", help="Check against ALL open feature issues (entire repo, not just local specs)")
     parser.add_argument("--sysml", action="store_true", help="Run SysML v2 model coverage parity validation")
+    parser.add_argument("--gate", help="Run specific quality gate (e.g. 26)")
+    parser.add_argument("--check-conops", help="Path to ConOps file to check")
+    parser.add_argument("--check-mission-intent", help="Path to Mission Intent file to check")
+    parser.add_argument("--synthesize-templates", action="store_true", help="Synthesize canonical ConOps and Mission Intent templates")
+    parser.add_argument("--output-dir", help="Output directory for synthesized templates (default: docs/conops/)")
     
     args = parser.parse_args()
     if args.schema_only:
@@ -309,6 +320,19 @@ def _main_impl():
     
     # 2. Initialize WorkspaceRepository with the determined workspace_dir
     repo = WorkspaceRepository(workspace_dir)
+
+    if args.synthesize_templates:
+        out_dir = args.output_dir or os.path.join(repo.workspace_dir, "docs", "conops")
+        os.makedirs(out_dir, exist_ok=True)
+        c_val = ConopsCompletenessValidator()
+        m_val = MissionIntentCompletenessValidator()
+        c_path = os.path.join(out_dir, "CONOPS_CANONICAL_TEMPLATE.md")
+        m_path = os.path.join(out_dir, "MISSION_INTENT_CANONICAL_TEMPLATE.md")
+        c_val.synthesize_canonical_template(c_path)
+        m_val.synthesize_canonical_template(m_path)
+        print(f"Synthesized canonical ConOps template: {c_path}")
+        print(f"Synthesized canonical Mission Intent template: {m_path}")
+        sys.exit(0)
     
     # 3. Check if the codebase rules file exists
     rules_path = repo.get_codebase_rules_path()
@@ -1065,8 +1089,51 @@ def _main_impl():
     else:
         print("Success: Level 1C ICD port connectivity, N² matrix, and signal dictionary verified.")
 
+    print("\n=== Operational-to-Resource Allocation Audit (Gate 24) ===")
+    operational_allocation_validator = OperationalAllocationValidator()
+    operational_allocation_errors = _scope_findings(operational_allocation_validator.validate(repo), getattr(args, 'only', None))
+    if operational_allocation_errors:
+        print("[!] Operational-to-Resource Allocation Violations Identified:")
+        for err in operational_allocation_errors:
+            print(f"  - {err}")
+        has_failed = True
+    else:
+        print("Success: Operational-to-Resource Allocation (Theorem 1 and Theorem 2) verified.")
+
+    print("\n=== Standards & SI 7D Parameter Metrology Audit (Gate 25) ===")
+    standards_measurement_validator = StandardsAndMeasurementValidator()
+    standards_measurement_errors = _scope_findings(standards_measurement_validator.validate(repo), getattr(args, 'only', None))
+    if standards_measurement_errors:
+        print("[!] Standards & Parameter Metrology Violations Identified:")
+        for err in standards_measurement_errors:
+            print(f"  - {err}")
+        has_failed = True
+    else:
+        print("Success: Standards taxonomy lattice and SI 7D parameter metrology verified.")
+
+    print("\n=== ConOps & Mission Intent Completeness Audit (Gate 26) ===")
+    conops_validator = ConopsCompletenessValidator()
+    conops_errors = _scope_findings(conops_validator.validate(repo), getattr(args, 'only', None))
+    if conops_errors:
+        print("[!] ConOps Completeness Violations Identified:")
+        for err in conops_errors:
+            print(f"  - {err}")
+        has_failed = True
+    else:
+        print("Success: 12-Section ConOps completeness and SORA GRB / Emergency determinism verified.")
+
+    mission_intent_validator = MissionIntentCompletenessValidator()
+    mission_intent_errors = _scope_findings(mission_intent_validator.validate(repo), getattr(args, 'only', None))
+    if mission_intent_errors:
+        print("[!] Mission Intent Completeness Violations Identified:")
+        for err in mission_intent_errors:
+            print(f"  - {err}")
+        has_failed = True
+    else:
+        print("Success: 10-Section Mission Intent completeness and Bingo Energy math verified.")
+
     if has_failed:
-        all_errors = (uml_errors or []) + (behavioral_errors or []) + (codebase_errors or []) + (doc_errors or []) + (dependency_errors or []) + (sync_errors or []) + (schema_mapping_errors or []) + (profile_scoping_errors or []) + (test_completeness_errors or []) + (cardinality_errors or []) + (spec_filename_errors or []) + (spec_title_errors or []) + (mermaid_syntax_errors or []) + (katex_errors or []) + (logical_ui_errors or []) + (docstring_errors or []) + (profile_compliance_errors or []) + (package_allocation_errors or []) + (feature_op_errors or []) + (interaction_errors or []) + (safety_constraint_errors or []) + (acceptance_test_errors or []) + (missing_spec_errors or []) + (source_ref_errors or []) + (link_errors or []) + (concept_provenance_errors or []) + (safety_trace_errors or []) + (doc_metadata_errors or []) + (icd_completeness_errors or [])
+        all_errors = (uml_errors or []) + (behavioral_errors or []) + (codebase_errors or []) + (doc_errors or []) + (dependency_errors or []) + (sync_errors or []) + (schema_mapping_errors or []) + (profile_scoping_errors or []) + (test_completeness_errors or []) + (cardinality_errors or []) + (spec_filename_errors or []) + (spec_title_errors or []) + (mermaid_syntax_errors or []) + (katex_errors or []) + (logical_ui_errors or []) + (docstring_errors or []) + (profile_compliance_errors or []) + (package_allocation_errors or []) + (feature_op_errors or []) + (interaction_errors or []) + (safety_constraint_errors or []) + (acceptance_test_errors or []) + (missing_spec_errors or []) + (source_ref_errors or []) + (link_errors or []) + (concept_provenance_errors or []) + (safety_trace_errors or []) + (doc_metadata_errors or []) + (icd_completeness_errors or []) + (operational_allocation_errors or []) + (standards_measurement_errors or []) + (conops_errors or []) + (mission_intent_errors or [])
         compiled_errors = all_errors
         target_file = None
         snippet_content = None
