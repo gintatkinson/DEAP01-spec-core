@@ -234,67 +234,41 @@ The connectivity graph visualizes all directional data and command flows between
 
 ```mermaid
 flowchart TD
-    subgraph GCS ["Ground Control Station - GCS"]
-        P_GCS_CMD["PORT-GCS-CMD_OUT"]
-        P_GCS_TLM["PORT-GCS-TLM_IN"]
+    subgraph SEN ["SensorProcessingSubsystem - ResourcePerformer: Sensor Processing Subsystem"]
+        P_SEN_TELEM["PORT-SEN-TELEM_OUT"]
     end
 
-    subgraph FCC ["Flight Control Computer - FCC"]
-        P_FCC_CMD["PORT-FCC-CMD_IN"]
-        P_FCC_NAV["PORT-FCC-NAV_IN"]
-        P_FCC_AIR["PORT-FCC-AIR_IN"]
-        P_FCC_ACT["PORT-FCC-ACT_OUT"]
-        P_FCC_TLM["PORT-FCC-TLM_OUT"]
+    subgraph CTL ["ControllerLogicSubsystem - ResourcePerformer: Controller Logic Subsystem"]
+        P_CTL_TELEM["PORT-CTL-TELEM_IN"]
+        P_CTL_CMD["PORT-CTL-CMD_OUT"]
     end
 
-    subgraph INS ["Inertial Navigation System - INS"]
-        P_INS_NAV["PORT-INS-NAV_OUT"]
-    end
-
-    subgraph ADS ["Air Data System - ADS"]
-        P_ADS_AIR["PORT-ADS-AIR_OUT"]
-    end
-
-    subgraph ACT ["Actuation and Propulsion Subsystem - ACT"]
+    subgraph ACT ["ActuationDriverSubsystem - ResourcePerformer: Actuation Driver Subsystem"]
         P_ACT_CMD["PORT-ACT-CMD_IN"]
-        P_ACT_FB["PORT-ACT-FB_OUT"]
     end
 
-    P_GCS_CMD -->|"CONN-01 (Uplink Commands)"| P_FCC_CMD
-    P_INS_NAV -->|"CONN-02 (Nav State Telemetry)"| P_FCC_NAV
-    P_ADS_AIR -->|"CONN-03 (Air Data Telemetry)"| P_FCC_AIR
-    P_FCC_ACT -->|"CONN-04 (Surface Demands)"| P_ACT_CMD
-    P_ACT_FB -->|"CONN-05 (Actuator Feedback)"| P_FCC_NAV
-    P_FCC_TLM -->|"CONN-06 (Downlink Telemetry)"| P_GCS_TLM
+    P_SEN_TELEM -->|"CONN-01 (Sensor State Stream)"| P_CTL_TELEM
+    P_CTL_CMD -->|"CONN-02 (Actuator Demand Stream)"| P_ACT_CMD
 ```
 
 #### 3.1.2 Canonical N² Subsystem Interface Matrix
 The N² matrix provides a rigorous, compact representation of all inter-subsystem data flows. Subsystems are placed along the main diagonal. Transmitting subsystems output along rows; receiving subsystems input along columns. Off-diagonal cells contain the exact connection identifiers and transmitted signal counts.
 
-| Subsystem | 1. GCS | 2. FCC | 3. INS | 4. ADS | 5. ACT |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **1. GCS** | **[ Ground Control ]** | CONN-01 (12 Signals) | — | — | — |
-| **2. FCC** | CONN-06 (48 Signals) | **[ Flight Control ]** | — | — | CONN-04 (8 Signals) |
-| **3. INS** | — | CONN-02 (18 Signals) | **[ Inertial Nav ]** | — | — |
-| **4. ADS** | — | CONN-03 (10 Signals) | — | **[ Air Data ]** | — |
-| **5. ACT** | — | CONN-05 (8 Signals) | — | — | **[ Actuation ]** |
+| Subsystem | 1. SEN | 2. CTL | 3. ACT |
+| :--- | :--- | :--- | :--- |
+| **1. SEN** | **[ Sensor Processing ]** | CONN-01 (3 Signals) | — |
+| **2. CTL** | — | **[ Controller Logic ]** | CONN-02 (3 Signals) |
+| **3. ACT** | — | — | **[ Actuation Driver ]** |
 
 #### 3.1.3 Port Definition Roster Table Structure
 The port roster defines every logical port across all system boundaries:
 
 | Port ID | Subsystem | Port Name | Direction | Port Type | Multiplicity | Protocol Profile |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `PORT-GCS-CMD_OUT` | GCS | FlightCommandOut | OUT | CommandPort | 1 | AsyncEvent |
-| `PORT-GCS-TLM_IN` | GCS | TelemetryIn | IN | TelemetryPort | 1 | PeriodicStream |
-| `PORT-FCC-CMD_IN` | FCC | UplinkCommandIn | IN | CommandPort | 1 | AsyncEvent |
-| `PORT-FCC-NAV_IN` | FCC | NavigationStateIn | IN | DataPort | 1 | PeriodicStream |
-| `PORT-FCC-AIR_IN` | FCC | AirDataIn | IN | DataPort | 1 | PeriodicStream |
-| `PORT-FCC-ACT_OUT` | FCC | ActuatorDemandOut | OUT | CommandPort | 4 | RealTimeSync |
-| `PORT-FCC-TLM_OUT` | FCC | VehicleTelemetryOut | OUT | TelemetryPort | 1 | PeriodicStream |
-| `PORT-INS-NAV_OUT` | INS | NavSolutionOut | OUT | DataPort | 1 | PeriodicStream |
-| `PORT-ADS-AIR_OUT` | ADS | AirMetricsOut | OUT | DataPort | 1 | PeriodicStream |
-| `PORT-ACT-CMD_IN` | ACT | SurfaceDemandIn | IN | CommandPort | 4 | RealTimeSync |
-| `PORT-ACT-FB_OUT` | ACT | SurfaceFeedbackOut | OUT | DataPort | 4 | PeriodicStream |
+| `PORT-SEN-TELEM_OUT` | SensorProcessingSubsystem | SensorTelemetryOut | OUT | TelemetryPort | 1 | PeriodicStream |
+| `PORT-CTL-TELEM_IN` | ControllerLogicSubsystem | SensorTelemetryIn | IN | TelemetryPort | 1 | PeriodicStream |
+| `PORT-CTL-CMD_OUT` | ControllerLogicSubsystem | ActuatorCommandOut | OUT | CommandPort | 1 | RealTimeSync |
+| `PORT-ACT-CMD_IN` | ActuationDriverSubsystem | ActuatorCommandIn | IN | CommandPort | 1 | RealTimeSync |
 
 ### 3.2 `ICD_02_MASTER_SIGNAL_DICTIONARY.md` Specification
 
@@ -313,24 +287,29 @@ Every signal entry in the Master Signal Dictionary must strictly adhere to the t
 7. **Valid Range:** Precise mathematical domain interval `[min, max]` or discrete enumeration literal set.
 8. **Update Rate:** Periodic frequency in plain text `f Hz` (e.g., `50 Hz`, `100 Hz`) or aperiodic timing bound `Aperiodic [tau_min, tau_max] ms`.
 9. **Safe Default Value:** Deterministic value assigned during cold initialization, link interruption, sensor fault, or emergency failsafe state.
-10. **Schema Citation:** Exact normative provenance pointer to Level 0 source schema (`schema/extracted/filename.yang#Lnn` or `models/flight.sysml#Lnn`).
+10. **Schema Citation:** Exact normative provenance pointer to Level 0 source schema (`schema/extracted/filename.yang#Lnn` or `models/system.sysml#Lnn`).
 
 #### 3.2.2 Canonical Signal Flow Table Example
 
 | Signal ID | Signal Name | Source Port | Dest Port | Data Type | SI Units | Valid Range | Update Rate | Safe Default Value | Schema Citation |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `SIG-INS-FCC-001` | TrueAirspeedVelocity | `PORT-INS-NAV_OUT` | `PORT-FCC-NAV_IN` | Float32 | m/s | [0.0, 150.0] | 100 Hz | 0.0 | `schema/extracted/nav.yang#L45` |
-| `SIG-INS-FCC-002` | RollAttitudeAngle | `PORT-INS-NAV_OUT` | `PORT-FCC-NAV_IN` | Float32 | rad | [-3.14159, 3.14159] | 100 Hz | 0.0 | `schema/extracted/nav.yang#L58` |
-| `SIG-INS-FCC-003` | PitchAttitudeAngle | `PORT-INS-NAV_OUT` | `PORT-FCC-NAV_IN` | Float32 | rad | [-1.57079, 1.57079] | 100 Hz | 0.0 | `schema/extracted/nav.yang#L72` |
-| `SIG-INS-FCC-004` | YawAttitudeAngle | `PORT-INS-NAV_OUT` | `PORT-FCC-NAV_IN` | Float32 | rad | [0.0, 6.28318] | 100 Hz | 0.0 | `schema/extracted/nav.yang#L86` |
-| `SIG-ADS-FCC-001` | StaticAirPressure | `PORT-ADS-AIR_OUT` | `PORT-FCC-AIR_IN` | Float32 | Pa | [20000.0, 110000.0] | 50 Hz | 101325.0 | `schema/extracted/air.yang#L12` |
-| `SIG-ADS-FCC-002` | DynamicAirPressure | `PORT-ADS-AIR_OUT` | `PORT-FCC-AIR_IN` | Float32 | Pa | [0.0, 15000.0] | 50 Hz | 0.0 | `schema/extracted/air.yang#L26` |
-| `SIG-FCC-ACT-001` | ElevatorPositionDemand | `PORT-FCC-ACT_OUT` | `PORT-ACT-CMD_IN` | Float32 | rad | [-0.52359, 0.52359] | 100 Hz | 0.0 | `schema/extracted/fcc.yang#L110` |
-| `SIG-FCC-ACT-002` | AileronLeftPositionDemand | `PORT-FCC-ACT_OUT` | `PORT-ACT-CMD_IN` | Float32 | rad | [-0.43633, 0.43633] | 100 Hz | 0.0 | `schema/extracted/fcc.yang#L124` |
-| `SIG-FCC-ACT-003` | AileronRightPositionDemand | `PORT-FCC-ACT_OUT` | `PORT-ACT-CMD_IN` | Float32 | rad | [-0.43633, 0.43633] | 100 Hz | 0.0 | `schema/extracted/fcc.yang#L138` |
-| `SIG-FCC-ACT-004` | RudderPositionDemand | `PORT-FCC-ACT_OUT` | `PORT-ACT-CMD_IN` | Float32 | rad | [-0.52359, 0.52359] | 100 Hz | 0.0 | `schema/extracted/fcc.yang#L152` |
-| `SIG-GCS-FCC-001` | ArmFlightControlCommand | `PORT-GCS-CMD_OUT` | `PORT-FCC-CMD_IN` | Bool | dimensionless | [false, true] | Aperiodic [10, 500] ms | false | `schema/extracted/gcs.yang#L33` |
-| `SIG-FCC-GCS-001` | AutopilotFlightState | `PORT-FCC-TLM_OUT` | `PORT-GCS-TLM_IN` | Enum | dimensionless | [DISARMED, ARMED, ENGAGED, FAILSAFE] | 20 Hz | DISARMED | `schema/extracted/fcc.yang#L210` |
+| `SIG-SEN-CTL-001` | PrimarySensorState | `PORT-SEN-TELEM_OUT` | `PORT-CTL-TELEM_IN` | Float32 | V | [0.0, 100.0] | 100 Hz | 0.0 | `schema/extracted/sensor.yang#L45` |
+| `SIG-SEN-CTL-002` | OperationalRateSignal | `PORT-SEN-TELEM_OUT` | `PORT-CTL-TELEM_IN` | Float32 | rad/s | [-50.0, 50.0] | 100 Hz | 0.0 | `schema/extracted/sensor.yang#L58` |
+| `SIG-SEN-CTL-003` | EnvironmentalMetric | `PORT-SEN-TELEM_OUT` | `PORT-CTL-TELEM_IN` | Float32 | Pa | [0.0, 1000.0] | 50 Hz | 0.0 | `schema/extracted/sensor.yang#L72` |
+| `SIG-CTL-ACT-001` | PrimaryActuatorDemand | `PORT-CTL-CMD_OUT` | `PORT-ACT-CMD_IN` | Float32 | dimensionless | [-1.0, 1.0] | 200 Hz | 0.0 | `schema/extracted/controller.yang#L110` |
+| `SIG-CTL-ACT-002` | AuxiliaryActuatorDemand | `PORT-CTL-CMD_OUT` | `PORT-ACT-CMD_IN` | Float32 | dimensionless | [-1.0, 1.0] | 200 Hz | 0.0 | `schema/extracted/controller.yang#L124` |
+| `SIG-CTL-ACT-003` | PowerEnableDemand | `PORT-CTL-CMD_OUT` | `PORT-ACT-CMD_IN` | Float32 | dimensionless | [0.0, 1.0] | 100 Hz | 0.0 | `schema/extracted/controller.yang#L138` |
+
+#### 3.2.3 Safety-Critical Signal Allocation & STPA Hazard Mapping Example
+
+| Signal ID | Safety Criticality | Hazard Ref | Safety Constraint | Failsafe Action |
+| :--- | :--- | :--- | :--- | :--- |
+| `SIG-SEN-CTL-001` | DAL-A / SIL-3 | **H-1** | Loss of System Control & Boundary Violation | Clamp to safe default (0.0 V) and transition controller to safe state |
+| `SIG-SEN-CTL-002` | DAL-A / SIL-3 | **H-2** | Sensor Invalidation & Slew Saturation | Revert to safe default (0.0 rad/s) and engage rate dampening fallback |
+| `SIG-SEN-CTL-003` | DAL-B / SIL-2 | **H-4** | Environmental Monitoring Failure | Assert safe default (0.0 Pa) and raise environmental advisory flag |
+| `SIG-CTL-ACT-001` | DAL-A / SIL-3 | **H-3** | Actuator Command Saturation | Limit command within [-1.0, 1.0] and clamp to safe neutral default (0.0) |
+| `SIG-CTL-ACT-002` | DAL-A / SIL-3 | **H-3** | Actuator Command Saturation | Limit command within [-1.0, 1.0] and clamp to safe neutral default (0.0) |
+| `SIG-CTL-ACT-003` | DAL-A / SIL-3 | **H-1** | Loss of System Control & Boundary Violation | Disable power output and clamp safe default (0.0) on link failure |
 
 ---
 

@@ -86,8 +86,8 @@ The Worker ICD synthesizes two primary Level 1C engineering artifacts in `docs/i
 
 1. **Item Flow Projection & Signal Registration**:
    - For every discrete data field and leaf node conveyed across an item flow, synthesize a canonical `ItemFlowNode` record.
-   - Assign a globally unique, hierarchical Signal ID: `SIG-<SRC_SUBSYS>-<DST_SUBSYS>-<NNN>` (zero-padded 3-digit index, e.g. `SIG-INS-FCC-001`).
-   - Format Signal Name in canonical `UpperCamelCase` (e.g. `TrueAirspeedVelocity`, `ElevatorPositionDemand`).
+   - Assign a globally unique, hierarchical Signal ID: `SIG-<SRC_SUBSYS>-<DST_SUBSYS>-<NNN>` (zero-padded 3-digit index, e.g. `SIG-SEN-CTL-001`).
+   - Format Signal Name in canonical `UpperCamelCase` (e.g. `PrimarySensorSignal`, `ActuatorCommandSignal`).
    - Bind foreign key references to declared Source Port (`PORT-*`) and Destination Port (`PORT-*`) in `ICD_01`.
 
 2. **Interface Contract Attributes (10 Canonical Columns)**:
@@ -101,7 +101,7 @@ The Worker ICD synthesizes two primary Level 1C engineering artifacts in `docs/i
    - **Valid Range**: Mathematical domain interval `[min, max]` or discrete enumeration literal set
    - **Update Rate**: Periodic rate in plain text `f Hz` (e.g. `50 Hz`, `100 Hz`) or aperiodic timing bound `Aperiodic [tau_min, tau_max] ms`
    - **Safe Default Value**: Deterministic value during cold initialization, link loss, sensor fault, or emergency failsafe state (e.g. `0.0`, `false`, `DISARMED`, `101325.0`)
-   - **Schema Citation**: Exact provenance pointer to Level 0 source model (`schema/extracted/nav.yang#L45` or `models/flight.sysml#L120`)
+   - **Schema Citation**: Exact provenance pointer to Level 0 source model (`schema/extracted/sensor.yang#L45` or `models/system.sysml#L120`)
 
 3. **Safety Criticality & STPA Invariants**:
    - Identify all safety-critical signals impacting flight safety, system state machines, or hazard mitigation.
