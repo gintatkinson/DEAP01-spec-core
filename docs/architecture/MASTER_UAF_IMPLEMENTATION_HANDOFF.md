@@ -27,16 +27,16 @@
   - If `.pipeline/upstream/` is **ABSENT** $\longrightarrow$ **`Downstream Customer Project Mode`**. Authorized for customer feature implementation and domain codebase delivery.
 
 ### Step 1: Read Governance Constitution
-- **Action:** Execute `view_file` on [`.pipeline/constitution.md`](file:///Users/perkunas/jail/DEAP01-spec-core/.pipeline/constitution.md) to ingest the platform-independent functional governance layer, the 16 active quality gates, and zero-mocking persistence mandates.
+- **Action:** Execute `view_file` on [`.pipeline/constitution.md`](.pipeline/constitution.md) to ingest the platform-independent functional governance layer, the 16 active quality gates, and zero-mocking persistence mandates.
 
 ### Step 2: Load Project Skills
-- **Action:** Execute `view_file` on [`skills/feature-driven-implementation/SKILL.md`](file:///Users/perkunas/jail/DEAP01-spec-core/skills/feature-driven-implementation/SKILL.md) and [`skills/spec-orchestrator/SKILL.md`](file:///Users/perkunas/jail/DEAP01-spec-core/skills/spec-orchestrator/SKILL.md) to initialize feature-driven implementation protocols, RED-GREEN-REFACTOR TDD cycle discipline, and review gates.
+- **Action:** Execute `view_file` on [`skills/feature-driven-implementation/SKILL.md`](skills/feature-driven-implementation/SKILL.md) and [`skills/spec-orchestrator/SKILL.md`](skills/spec-orchestrator/SKILL.md) to initialize feature-driven implementation protocols, RED-GREEN-REFACTOR TDD cycle discipline, and review gates.
 
 ### Step 3: Load Governance Rules
-- **Action:** Ingest [`.agents/AGENTS.md`](file:///Users/perkunas/jail/DEAP01-spec-core/.agents/AGENTS.md) and [`rules/`](file:///Users/perkunas/jail/DEAP01-spec-core/rules) to enforce project-scoped agentic rules, context-isolated subagent dispatch loops (`python3 scripts/dispatch_subagent.py`), role boundary locks, and native CommonMark metadata table integrity.
+- **Action:** Ingest [`.agents/AGENTS.md`](.agents/AGENTS.md) and [`rules/`](rules) to enforce project-scoped agentic rules, context-isolated subagent dispatch loops (`python3 scripts/dispatch_subagent.py`), role boundary locks, and native CommonMark metadata table integrity.
 
 ### Step 4: Load Platform Profile
-- **Action:** Read the target platform execution profiles under [`.pipeline/profiles/`](file:///Users/perkunas/jail/DEAP01-spec-core/.pipeline/profiles) to establish platform-specific build, test, and lifecycle constraints.
+- **Action:** Read the target platform execution profiles under [`.pipeline/profiles/`](.pipeline/profiles) to establish platform-specific build, test, and lifecycle constraints.
 
 ### Step 5: Bootstrap Tracker Labels
 - **Action:** Verify that repository issue tracker labels are synchronized and operational by running `python3 scripts/reconcile_backlog.py --offline` or `python3 skills/spec-orchestrator/scripts/bootstrap_tracker_labels.py --dry-run`.
