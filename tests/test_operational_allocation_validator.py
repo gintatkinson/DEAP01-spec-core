@@ -225,6 +225,123 @@ Class GuidanceEngine { ... }
             self.assertIn("OA-01", matrix_md)
             self.assertIn("FEAT_01.md", matrix_md)
 
+    def test_fresh_downstream_workspace_with_conops_and_no_features_passes(self):
+        """Verify that a fresh downstream workspace with CONOPS but zero feature specifications does not emit orphan errors."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            features_dir = os.path.join(tmpdir, "docs", "features")
+            os.makedirs(conops_dir, exist_ok=True)
+            os.makedirs(features_dir, exist_ok=True)
+
+            conops_md = """# Concept of Operations (CONOPS)
+## Operational Lifecycle Phases
+- **Phase 1: Startup**
+- **Phase 2: ActiveExecution**
+- **Phase 3: SecureShutdown**
+
+## Operational Activities Roster
+| Activity ID | Name | Description |
+| :--- | :--- | :--- |
+| `OA-01` | System Initialization | Boot sequence |
+| `OA-02` | Guidance Loop Execution | Compute |
+"""
+            with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
+                f.write(conops_md)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            validator = OperationalAllocationValidator()
+            errors = validator.validate(repo)
+            self.assertEqual(errors, [])
+
+    def test_fresh_downstream_workspace_with_allow_missing_specs_true_passes(self):
+        """Verify that allow_missing_specs=True suppresses orphan-activity errors in pre-feature stage."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            os.makedirs(conops_dir, exist_ok=True)
+
+            conops_md = """# Concept of Operations (CONOPS)
+## Operational Activities
+| Activity ID | Name | Description |
+| :--- | :--- | :--- |
+| `OA-01` | System Initialization | Boot sequence |
+"""
+            with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
+                f.write(conops_md)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            validator = OperationalAllocationValidator()
+            errors = validator.validate(repo, allow_missing_specs=True)
+            self.assertEqual(errors, [])
+
+    def test_workspace_with_features_strictly_enforces_orphan_activities(self):
+        """Verify that when feature specifications exist, unallocated operational activities are flagged as fatal errors."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            features_dir = os.path.join(tmpdir, "docs", "features")
+            os.makedirs(conops_dir, exist_ok=True)
+            os.makedirs(features_dir, exist_ok=True)
+
+            conops_md = """# CONOPS
+## Operational Activities
+| Activity ID | Name | Description |
+| :--- | :--- | :--- |
+| `OA-01` | System Initialization | Boot sequence |
+| `OA-02` | Guidance Compute | Guidance |
+"""
+            with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
+                f.write(conops_md)
+
+            # Feature only allocates OA-01
+            feat_md = """# Feature 01
+/// OperationalAllocation: [OA-01]
+"""
+            with open(os.path.join(features_dir, "FEAT_01.md"), "w", encoding="utf-8") as f:
+                f.write(feat_md)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            validator = OperationalAllocationValidator()
+            errors = validator.validate(repo, allow_missing_specs=False)
+
+            self.assertEqual(len(errors), 1)
+            self.assertEqual(errors[0].rule_id, "operational-allocation-orphan-activity")
+            self.assertIn("OA-02", str(errors[0]))
+
+    def test_phantom_tags_strictly_enforced_even_if_allow_missing_specs(self):
+        """Verify that phantom tags are always flagged regardless of allow_missing_specs setting."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            schema_dir = os.path.join(tmpdir, "schema")
+            os.makedirs(conops_dir, exist_ok=True)
+            os.makedirs(schema_dir, exist_ok=True)
+
+            conops_md = """# CONOPS
+## Operational Activities
+| Activity ID | Name | Description |
+| :--- | :--- | :--- |
+| `OA-01` | Initialization | System boot |
+"""
+            with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
+                f.write(conops_md)
+
+            # Schema file allocates phantom tag OA-99
+            sysml_content = """package Allocations {
+    part def TestPart {
+        doc /* /// OperationalAllocation: [OA-99] */
+    }
+}
+"""
+            with open(os.path.join(schema_dir, "test.sysml"), "w", encoding="utf-8") as f:
+                f.write(sysml_content)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            validator = OperationalAllocationValidator()
+            errors = validator.validate(repo, allow_missing_specs=True)
+
+            self.assertEqual(len(errors), 1)
+            self.assertEqual(errors[0].rule_id, "operational-allocation-phantom-tag")
+            self.assertIn("OA-99", str(errors[0]))
+
 
 if __name__ == "__main__":
     unittest.main()
+

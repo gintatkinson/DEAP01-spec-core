@@ -304,6 +304,44 @@ class OperationalAllocationValidator(IValidator):
 
         return allocated_tags, raw_tag_map
 
+    def _has_feature_specifications(self, repo: WorkspaceRepository) -> bool:
+        """
+        Determines whether the workspace has authored feature specifications.
+        """
+        if hasattr(repo, "get_features") and callable(getattr(repo, "get_features")):
+            try:
+                feats = repo.get_features()
+                if feats:
+                    return True
+            except Exception:
+                pass
+
+        workspace_dir = repo.workspace_dir
+        rules = repo.get_codebase_rules()
+        backlog = rules.backlog_directories if rules else None
+        features_rel = getattr(backlog, "features", "docs/features") if backlog else "docs/features"
+        features_dir = os.path.join(workspace_dir, features_rel)
+
+        if os.path.isdir(features_dir):
+            try:
+                feat_files = repo.get_feature_files(features_dir)
+                if feat_files:
+                    return True
+            except Exception:
+                pass
+
+            for root, _, files in os.walk(features_dir):
+                for f in files:
+                    if f.endswith(".md") and f != "README.md":
+                        full_p = os.path.join(root, f)
+                        try:
+                            if os.path.getsize(full_p) > 0:
+                                return True
+                        except OSError:
+                            pass
+
+        return False
+
     def validate(self, repo: WorkspaceRepository, **kwargs) -> List[Finding]:
         r"""
         Verifies Operational-to-Resource Allocation mathematical theorems:
@@ -317,21 +355,31 @@ class OperationalAllocationValidator(IValidator):
         if not ops_universe and not allocated_tags:
             return []
 
+        allow_missing_specs: bool = kwargs.get("allow_missing_specs", False)
+        has_features: bool = self._has_feature_specifications(repo)
+
+        # Stage-awareness: if allow_missing_specs is True or no feature specifications
+        # have been authored yet in the workspace (and len(allocated_tags) == 0), treat
+        # the workspace as being in the pre-feature / ConOps lifecycle stage and do not
+        # emit false orphan-allocation findings (Theorem 1).
+        skip_orphan_check = allow_missing_specs or (not has_features and len(allocated_tags) == 0)
+
         findings: List[Finding] = []
 
-        # Theorem 1: Zero Orphan Activities
-        orphan_activities = sorted(set(ops_universe.keys()) - set(allocated_tags.keys()))
-        for orphan in orphan_activities:
-            loc = ops_locations.get(orphan, "docs/conops/CONOPS.md")
-            disp_name = ops_universe.get(orphan, orphan)
-            findings.append(Finding(
-                "operational-allocation-orphan-activity",
-                f"Operational activity or lifecycle phase '{disp_name}' ({orphan}) defined at {loc} has zero allocated resources (Theorem 1 violation: O_orphan != ∅). Missing '/// OperationalAllocation: [{orphan}]' tag in specifications or SysML model.",
-                location=loc,
-                detail={"orphan_id": orphan, "display_name": disp_name, "location": loc}
-            ))
+        # Theorem 1: Zero Orphan Activities (enforced when not in pre-feature stage)
+        if not skip_orphan_check:
+            orphan_activities = sorted(set(ops_universe.keys()) - set(allocated_tags.keys()))
+            for orphan in orphan_activities:
+                loc = ops_locations.get(orphan, "docs/conops/CONOPS.md")
+                disp_name = ops_universe.get(orphan, orphan)
+                findings.append(Finding(
+                    "operational-allocation-orphan-activity",
+                    f"Operational activity or lifecycle phase '{disp_name}' ({orphan}) defined at {loc} has zero allocated resources (Theorem 1 violation: O_orphan != ∅). Missing '/// OperationalAllocation: [{orphan}]' tag in specifications or SysML model.",
+                    location=loc,
+                    detail={"orphan_id": orphan, "display_name": disp_name, "location": loc}
+                ))
 
-        # Theorem 2: Zero Phantom Tags
+        # Theorem 2: Zero Phantom Tags (strictly enforced)
         phantom_tags = sorted(set(allocated_tags.keys()) - set(ops_universe.keys()))
         for phantom in phantom_tags:
             locs = allocated_tags.get(phantom, ["unknown"])

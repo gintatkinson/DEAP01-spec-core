@@ -1107,7 +1107,7 @@ def _main_impl():
 
     print("\n=== Operational-to-Resource Allocation Audit (Gate 24) ===")
     operational_allocation_validator = OperationalAllocationValidator()
-    operational_allocation_errors = _scope_findings(operational_allocation_validator.validate(repo), getattr(args, 'only', None))
+    operational_allocation_errors = _scope_findings(operational_allocation_validator.validate(repo, allow_missing_specs=getattr(args, 'allow_missing_specs', True)), getattr(args, 'only', None))
     if operational_allocation_errors:
         print("[!] Operational-to-Resource Allocation Violations Identified:")
         for err in operational_allocation_errors:
