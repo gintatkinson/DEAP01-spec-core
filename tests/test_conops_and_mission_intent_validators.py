@@ -2,6 +2,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest.mock import MagicMock
 
 repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if repo_root not in sys.path:
@@ -275,6 +276,119 @@ class TestConOpsAndMissionIntentValidators(unittest.TestCase):
 
             self.assertEqual(len(mission_findings), 1)
             self.assertEqual(mission_findings[0].rule_id, "mission-intent-corpus-missing")
+
+    def test_mock_downstream_missing_conops_dir_emits_findings(self):
+        """Mock WorkspaceRepository in downstream mode emits findings when docs/conops is missing."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mock_repo = MagicMock(spec=WorkspaceRepository)
+            mock_repo.workspace_dir = tmpdir
+            mock_repo.is_upstream_compiler_repo.return_value = False
+
+            conops_val = ConopsCompletenessValidator()
+            mission_val = MissionIntentCompletenessValidator()
+
+            conops_findings = conops_val.validate(mock_repo)
+            mission_findings = mission_val.validate(mock_repo)
+
+            self.assertEqual(len(conops_findings), 1)
+            self.assertEqual(conops_findings[0].rule_id, "conops-corpus-missing")
+            self.assertEqual(conops_findings[0].location, "docs/conops")
+
+            self.assertEqual(len(mission_findings), 1)
+            self.assertEqual(mission_findings[0].rule_id, "mission-intent-corpus-missing")
+            self.assertEqual(mission_findings[0].location, "docs/conops")
+
+    def test_mock_downstream_missing_canonical_documents_emits_findings(self):
+        """Mock WorkspaceRepository in downstream mode emits findings when CONOPS.md or MISSION_INTENT.md is missing."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            os.makedirs(conops_dir, exist_ok=True)
+
+            mock_repo = MagicMock(spec=WorkspaceRepository)
+            mock_repo.workspace_dir = tmpdir
+            mock_repo.is_upstream_compiler_repo.return_value = False
+
+            conops_val = ConopsCompletenessValidator()
+            mission_val = MissionIntentCompletenessValidator()
+
+            # Case 1: Empty conops directory
+            self.assertEqual(len(conops_val.validate(mock_repo)), 1)
+            self.assertEqual(conops_val.validate(mock_repo)[0].rule_id, "conops-corpus-missing")
+            self.assertEqual(len(mission_val.validate(mock_repo)), 1)
+            self.assertEqual(mission_val.validate(mock_repo)[0].rule_id, "mission-intent-corpus-missing")
+
+            # Case 2: Only valid MISSION_INTENT.md present (CONOPS.md missing)
+            with open(os.path.join(conops_dir, "MISSION_INTENT.md"), "w", encoding="utf-8") as f:
+                f.write(_get_valid_mission_intent_content())
+
+            conops_findings = conops_val.validate(mock_repo)
+            mission_findings = mission_val.validate(mock_repo)
+            self.assertEqual(len(conops_findings), 1)
+            self.assertEqual(conops_findings[0].rule_id, "conops-corpus-missing")
+            self.assertEqual(mission_findings, [])
+
+            # Case 3: Only valid CONOPS.md present (MISSION_INTENT.md missing)
+            os.remove(os.path.join(conops_dir, "MISSION_INTENT.md"))
+            with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
+                f.write(_get_valid_conops_content())
+
+            conops_findings = conops_val.validate(mock_repo)
+            mission_findings = mission_val.validate(mock_repo)
+            self.assertEqual(conops_findings, [])
+            self.assertEqual(len(mission_findings), 1)
+            self.assertEqual(mission_findings[0].rule_id, "mission-intent-corpus-missing")
+
+            # Case 4: Only template files present
+            os.remove(os.path.join(conops_dir, "CONOPS.md"))
+            with open(os.path.join(conops_dir, "CONOPS_CANONICAL_TEMPLATE.md"), "w", encoding="utf-8") as f:
+                f.write("# Template")
+            with open(os.path.join(conops_dir, "MISSION_INTENT_CANONICAL_TEMPLATE.md"), "w", encoding="utf-8") as f:
+                f.write("# Template")
+
+            self.assertEqual(len(conops_val.validate(mock_repo)), 1)
+            self.assertEqual(conops_val.validate(mock_repo)[0].rule_id, "conops-corpus-missing")
+            self.assertEqual(len(mission_val.validate(mock_repo)), 1)
+            self.assertEqual(mission_val.validate(mock_repo)[0].rule_id, "mission-intent-corpus-missing")
+
+    def test_mock_upstream_missing_conops_corpus_and_documents_return_empty(self):
+        """Mock WorkspaceRepository in upstream mode returns [] when docs/conops or canonical documents are missing."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mock_repo = MagicMock(spec=WorkspaceRepository)
+            mock_repo.workspace_dir = tmpdir
+            mock_repo.is_upstream_compiler_repo.return_value = True
+
+            conops_val = ConopsCompletenessValidator()
+            mission_val = MissionIntentCompletenessValidator()
+
+            # Case 1: Missing docs/conops directory
+            self.assertEqual(conops_val.validate(mock_repo), [])
+            self.assertEqual(mission_val.validate(mock_repo), [])
+
+            # Case 2: Empty docs/conops directory
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            os.makedirs(conops_dir, exist_ok=True)
+            self.assertEqual(conops_val.validate(mock_repo), [])
+            self.assertEqual(mission_val.validate(mock_repo), [])
+
+            # Case 3: Only CONOPS.md present
+            with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
+                f.write(_get_valid_conops_content())
+            self.assertEqual(conops_val.validate(mock_repo), [])
+            self.assertEqual(mission_val.validate(mock_repo), [])
+
+            # Case 4: Only MISSION_INTENT.md present
+            os.remove(os.path.join(conops_dir, "CONOPS.md"))
+            with open(os.path.join(conops_dir, "MISSION_INTENT.md"), "w", encoding="utf-8") as f:
+                f.write(_get_valid_mission_intent_content())
+            self.assertEqual(conops_val.validate(mock_repo), [])
+            self.assertEqual(mission_val.validate(mock_repo), [])
+
+            # Case 5: Only templates present
+            os.remove(os.path.join(conops_dir, "MISSION_INTENT.md"))
+            with open(os.path.join(conops_dir, "CONOPS_CANONICAL_TEMPLATE.md"), "w", encoding="utf-8") as f:
+                f.write("# Template")
+            self.assertEqual(conops_val.validate(mock_repo), [])
+            self.assertEqual(mission_val.validate(mock_repo), [])
 
     def test_valid_conops_and_mission_intent_passes_100_percent(self):
         """Fully compliant CONOPS.md (12 sections) and MISSION_INTENT.md (10 sections) return 0 findings."""
