@@ -1,3 +1,9 @@
+| Attribute | Value |
+| :--- | :--- |
+| **Title** | User Classes, Stakeholder Taxonomy & Operational Lifecycle Modes |
+| **Version** | 1.0.0 |
+| **Date** | 2026-09-02 |
+
 ## 4. User Classes, Stakeholder Taxonomy & Operational Lifecycle Modes
 
 ### 4.1 Stakeholder Roster

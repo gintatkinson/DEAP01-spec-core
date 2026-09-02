@@ -1,3 +1,9 @@
+| Attribute | Value |
+| :--- | :--- |
+| **Title** | Multi-Threaded Operational Scenarios & Mission Timelines |
+| **Version** | 1.0.0 |
+| **Date** | 2026-09-02 |
+
 ## 9. Multi-Threaded Operational Scenarios & Mission Timelines
 
 ### 9.1 Scenario SCN-01: Nominal Ingress & Perimeter Survey Execution

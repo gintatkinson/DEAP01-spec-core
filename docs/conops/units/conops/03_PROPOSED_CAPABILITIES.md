@@ -1,3 +1,9 @@
+| Attribute | Value |
+| :--- | :--- |
+| **Title** | Proposed Capabilities & Operational Justification (Trade-Offs) |
+| **Version** | 1.0.0 |
+| **Date** | 2026-09-02 |
+
 ## 3. Proposed Capabilities & Operational Justification (Trade-Offs)
 
 ### 3.1 Justification for Proposed Architectural Changes

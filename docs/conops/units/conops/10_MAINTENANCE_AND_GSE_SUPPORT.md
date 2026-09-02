@@ -1,21 +1,20 @@
+| Attribute | Value |
+| :--- | :--- |
+| **Title** | Maintenance & Ground Support Equipment (GSE) Concepts |
+| **Version** | 1.0.0 |
+| **Date** | 2026-09-02 |
+
 ## 10. Maintenance & Ground Support Equipment (GSE) Concepts
 
 ### 10.1 Three-Tier Maintenance Model (O-Level, I-Level, D-Level)
 The maintenance and sustainment concept is structured into three discrete, formalized tiers adhering to military and civil aerospace maintenance standards (ISO/IEC/IEEE 29148:2018 §5.2.4 and FAA Order 8900.1):
 
-```
-+-----------------------------------------------------------------------------------+
-|                        THREE-TIER MAINTENANCE ARCHITECTURE                        |
-+---------------------+-------------------------------+-----------------------------+
-| O-Level             | I-Level                       | D-Level                     |
-| (Organizational)    | (Intermediate)                | (Depot / Factory)           |
-+---------------------+-------------------------------+-----------------------------+
-| - Pre/Post-flight   | - Sensor boresight optical cal| - Composite NDI structural  |
-| - Battery hot-swap  | - Actuator servo replacement  | - Motor stator rewinds      |
-| - Propeller torque  | - Firmware flashing & harness | - Full avionics recert      |
-| - Visual check      | - Module LRU swap (< 15 min)  | - High-G crash rebuild      |
-+---------------------+-------------------------------+-----------------------------+
-```
+| O-Level (Organizational) | I-Level (Intermediate) | D-Level (Depot / Factory) |
+| :--- | :--- | :--- |
+| Pre/Post-flight | Sensor boresight optical cal | Composite NDI structural |
+| Battery hot-swap | Actuator servo replacement | Motor stator rewinds |
+| Propeller torque | Firmware flashing & harness | Full avionics recert |
+| Visual check | Module LRU swap (< 15 min) | High-G crash rebuild |
 
 1. **Organizational-Level (O-Level) Maintenance:**
    - **Scope & Location:** Executed directly at the forward operating base or field staging area by certified Maintenance Technicians (`UC-04`).

@@ -1,3 +1,9 @@
+| Attribute | Value |
+| :--- | :--- |
+| **Title** | OMG UAF Operational Activity Taxonomy |
+| **Version** | 1.0.0 |
+| **Date** | 2026-09-02 |
+
 ## 6. OMG UAF Operational Activity Taxonomy
 
 ### 6.1 Operational Activity Decomposition
@@ -19,19 +25,13 @@ Every operational activity is bound to a machine-verifiable Gate 24 allocation t
 ### 6.2 Performer Node Allocation Matrix
 The following matrix demonstrates 100% allocation coverage across system nodes:
 
-```
-+---------------------------------------------------------------------------------------------------+
-|                        OMG UAF OPERATIONAL ACTIVITY ALLOCATION MATRIX                            |
-+------------------------------+--------------------+--------------------+--------------------------+
-| System Performer Node        | Node Type          | Primary Resource   | Allocated Activities     |
-+------------------------------+--------------------+--------------------+--------------------------+
-| Air Vehicle Avionics Node    | Cyber-Physical Air | Dual Cortex-R5 FCC | OA-01, OA-02, OA-04      |
-| Optical/Thermal Payload Node | Sensor Edge Node   | Edge Vision AI SoC | OA-03                    |
-| Safety Watchdog Node         | Critical Hardware  | Independent FPGA   | OA-04, OA-05, OA-06      |
-| PACE Transceiver Node        | Datalink Router    | SDR RF Modem + SIM | OA-07                    |
-| Ground Control Station Node  | Ground Performer   | Rugged Workstation | OA-01, OA-05, OA-07, OA-08|
-+------------------------------+--------------------+--------------------+--------------------------+
-```
+| System Performer Node | Node Type | Primary Resource | Allocated Activities |
+| :--- | :--- | :--- | :--- |
+| Air Vehicle Avionics Node | Cyber-Physical Air | Dual Cortex-R5 FCC | OA-01, OA-02, OA-04 |
+| Optical/Thermal Payload Node | Sensor Edge Node | Edge Vision AI SoC | OA-03 |
+| Safety Watchdog Node | Critical Hardware | Independent FPGA | OA-04, OA-05, OA-06 |
+| PACE Transceiver Node | Datalink Router | SDR RF Modem + SIM | OA-07 |
+| Ground Control Station Node | Ground Performer | Rugged Workstation | OA-01, OA-05, OA-07, OA-08 |
 
 ### 6.3 Operational Traceability Invariant
 Per DEAP Governance Rule `rules/conops-mission-intent-integrity.md`, all downstream SysML v2 architectural blocks, Stateflow behavioral charts, and DO-178C software requirement units must carry direct traceability back to these eight canonical operational activities using the formalized allocation syntax:

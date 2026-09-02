@@ -1,3 +1,9 @@
+| Attribute | Value |
+| :--- | :--- |
+| **Title** | Operational Environments & MIL-STD-810H Environmental Envelopes |
+| **Version** | 1.0.0 |
+| **Date** | 2026-09-02 |
+
 ## 8. Operational Environments & MIL-STD-810H Environmental Envelopes
 
 ### 8.1 Climatic & Thermal Operating Envelopes (-40°C to +55°C)

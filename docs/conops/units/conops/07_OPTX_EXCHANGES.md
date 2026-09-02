@@ -1,3 +1,9 @@
+| Attribute | Value |
+| :--- | :--- |
+| **Title** | Operational Information Exchange (Op-Tx) Matrix |
+| **Version** | 1.0.0 |
+| **Date** | 2026-09-02 |
+
 ## 7. Operational Information Exchange (Op-Tx) Matrix
 
 ### 7.1 Inter-Node Communication Architecture

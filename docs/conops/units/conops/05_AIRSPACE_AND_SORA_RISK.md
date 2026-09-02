@@ -1,3 +1,9 @@
+| Attribute | Value |
+| :--- | :--- |
+| **Title** | 4D Operational Volume & SORA Risk Assessment |
+| **Version** | 1.0.0 |
+| **Date** | 2026-09-02 |
+
 ## 5. 4D Operational Volume & SORA v2.5 Risk Assessment
 
 ### 5.1 4D Spatial-Temporal Operational Volume Formulation

@@ -1,3 +1,9 @@
+| Attribute | Value |
+| :--- | :--- |
+| **Title** | Current Situation, Deficiency Analysis & Operational Motivation |
+| **Version** | 1.0.0 |
+| **Date** | 2026-09-02 |
+
 ## 2. Current Situation, Deficiency Analysis & Operational Motivation
 
 ### 2.1 Current Operational Baseline (Predecessors)
@@ -20,18 +26,12 @@ Analysis of historical mission logs, field incident reports, and operator debrie
 ### 2.3 Legacy System Deficiencies & Technical Limitations
 In accordance with ISO/IEC/IEEE 29148:2018 §5.2.4, system deficiencies are categorized across technical, operational, and human domains:
 
-```
-+-------------------------------------------------------------------------------+
-|                        LEGACY SYSTEM DEFICIENCY TAXONOMY                      |
-+-----------------------+-------------------------------+-----------------------+
-|  Technical Domain     |      Operational Domain       |     Human Domain      |
-+-----------------------+-------------------------------+-----------------------+
-| - Single-string IMU   | - No dynamic geofencing       | - High NASA-TLX load  |
-| - Lack of RTOS bounds | - No automated U-space link   | - Disjointed displays |
-| - Unshielded EMI/RF   | - Manual flight log extract   | - Fatiguing piloting  |
-| - Non-IP67 enclosures | - 45-minute turnaround        | - Complex calibration |
-+-----------------------+-------------------------------+-----------------------+
-```
+| Technical Domain | Operational Domain | Human Domain |
+| :--- | :--- | :--- |
+| Single-string IMU | No dynamic geofencing | High NASA-TLX load |
+| Lack of RTOS bounds | No automated U-space link | Disjointed displays |
+| Unshielded EMI/RF | Manual flight log extract | Fatiguing piloting |
+| Non-IP67 enclosures | 45-minute turnaround | Complex calibration |
 
 1. **Technical Deficiencies:**
    - **Avionics & Compute:** Lack of hard real-time operating system (RTOS) guarantees; flight control loops executed on non-deterministic microcontrollers subject to task starvation and priority inversion.

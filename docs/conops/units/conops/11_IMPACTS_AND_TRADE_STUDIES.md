@@ -1,3 +1,9 @@
+| Attribute | Value |
+| :--- | :--- |
+| **Title** | Operational Impacts, System Limitations & Documented Trade Studies |
+| **Version** | 1.0.0 |
+| **Date** | 2026-09-02 |
+
 ## 11. Operational Impacts, System Limitations & Documented Trade Studies
 
 ### 11.1 Operational Workflow & Deployment Impacts
