@@ -265,6 +265,86 @@ PROCEED
         self.assertIn("ERROR: Prompt rejected", reason)
         self.assertIn("forbidden issue closure command", reason)
 
+    def test_non_compiler_repository_classifications_accepted(self):
+        """Verify pre-flight gate dynamically accepts valid repository classifications for non-compiler roles."""
+        valid_classifications = [
+            "PARENT_DOMAIN_DISTRIBUTION_TEMPLATE",
+            "CHILD_DOMAIN_DISTRIBUTION_TEMPLATE",
+            "DEAP-avionic-flight-safety",
+            "DEAP-uas-infrastructure-safety",
+            "DOWNSTREAM_APPLICATION_WORKSPACE",
+            "DOWNSTREAM_CUSTOMER_WORKSPACE",
+            "DOWNSTREAM_PROJECT",
+            "LEAF_WORKSPACE",
+            "DOMAIN_PARENT",
+            "DOMAIN_CHILD",
+        ]
+        for classification in valid_classifications:
+            # Test raw and markdown-formatted variants
+            prompts = [
+                f"""Role: Domain Worker
+Repository Classification: {classification}
+Target: src/domain_module.py
+1. Step 1: Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` as your very first step before executing any file edits, commands, or tools.
+PROCEED
+""",
+                f"""Role: Domain Worker
+**Repository Classification:** `{classification}`
+Target: src/domain_module.py
+1. Step 1: Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` as your very first step before executing any file edits, commands, or tools.
+PROCEED
+""",
+                f"""Role: Domain Worker
+**Classification**: `{classification}`
+Target: src/domain_module.py
+1. Step 1: Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` as your very first step before executing any file edits, commands, or tools.
+PROCEED
+""",
+                f"""Role: Domain Worker
+Repository Scope: You are operating within classification `{classification}`.
+Target: src/domain_module.py
+1. Step 1: Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` as your very first step before executing any file edits, commands, or tools.
+PROCEED
+""",
+            ]
+            for p in prompts:
+                passed, reason = validate_subagent_preflight(p)
+                self.assertTrue(
+                    passed,
+                    f"Expected classification '{classification}' to pass preflight, but got rejection: {reason}\nPrompt:\n{p}",
+                )
+                self.assertEqual(reason, "")
+
+    def test_step1_phrasing_and_ordering_variations_accepted(self):
+        """Verify semantic validation accepts valid phrasing, ordering, and whitespace variations for Step 1 view_file on SKILL.md."""
+        phrasing_variants = [
+            "1. Step 1: Execute `view_file` on `/opt/deap/skills/feature-driven-implementation/SKILL.md` as your very first step before executing any file edits, commands, or tools.",
+            "Step 1: Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` before taking any action.",
+            "1. Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` as step 1 before running any tools.",
+            "1. Execute `view_file` as step 1 on `skills/feature-driven-implementation/SKILL.md` before proceeding.",
+            "**Step 1**: Run `view_file` on `skills/feature-driven-implementation/SKILL.md` prior to tool execution.",
+            "Prerequisite: Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` before executing commands.",
+            "Must read: `view_file` on `skills/feature-driven-implementation/SKILL.md` as very first step.",
+            "Directs `view_file` on `SKILL.md` as step 1 / first action.",
+            "1. `view_file` on `skills/feature-driven-implementation/SKILL.md` as step 1.",
+        ]
+        for directive in phrasing_variants:
+            prompt = f"""You are a subagent.
+Repository Classification: UPSTREAM_SPEC_CORE_COMPILER
+Target: scripts/lint_subagent_prompt.py
+
+Mandatory Instructions:
+{directive}
+2. Implement the required changes.
+PROCEED
+"""
+            passed, reason = validate_subagent_preflight(prompt)
+            self.assertTrue(
+                passed,
+                f"Expected directive '{directive}' to pass preflight, but got rejection: {reason}",
+            )
+            self.assertEqual(reason, "")
+
 
 class TestDispatchSubagentPreFlightFidelity(unittest.TestCase):
     """Verifies that dispatch_subagent.py generates prompts conforming to the pre-flight gate."""

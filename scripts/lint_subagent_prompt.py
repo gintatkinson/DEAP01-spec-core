@@ -84,6 +84,154 @@ def check_mandate_fidelity(prompt_text: str, rules_path: str = SUBDAGENT_DISPATC
     return True, coverage, [], None
 
 
+def check_step1_skill_directive(prompt_text: str) -> bool:
+    """
+    Semantically verifies that the prompt instructs executing `view_file` on `SKILL.md`
+    as step 1 / first action / prerequisite before performing actions or tools.
+    Supports flexible phrasing, ordering, markdown formatting, and whitespace.
+    """
+    if not prompt_text or not isinstance(prompt_text, str):
+        return False
+    has_view_file = bool(re.search(r'\bview_file\b', prompt_text))
+    has_skill_md = bool(re.search(r'\bSKILL\.md\b', prompt_text, re.IGNORECASE))
+    if not (has_view_file and has_skill_md):
+        return False
+
+    step_indicator_patterns = [
+        r'\b(?:step\s*1|very\s*first\s*step|first\s*step|first\s*action)\b',
+        r'\bas\s+(?:its\s+|your\s+)?(?:very\s+)?first\s+(?:step|action)\b',
+        r'\bas\s+step\s*1\b',
+        r'\b(?:prerequisite|must\s*read)\b',
+        r'\b(?:before|prior\s+to)\s+(?:taking|running|executing|performing|proceeding|all|any)\b',
+    ]
+
+    for pattern in step_indicator_patterns:
+        if re.search(f"{pattern}.*?view_file.*?SKILL\\.md", prompt_text, re.IGNORECASE | re.DOTALL):
+            return True
+        if re.search(f"{pattern}.*?SKILL\\.md.*?view_file", prompt_text, re.IGNORECASE | re.DOTALL):
+            return True
+        if re.search(f"view_file.*?{pattern}.*?SKILL\\.md", prompt_text, re.IGNORECASE | re.DOTALL):
+            return True
+        if re.search(f"view_file.*?SKILL\\.md.*?{pattern}", prompt_text, re.IGNORECASE | re.DOTALL):
+            return True
+        if re.search(f"SKILL\\.md.*?view_file.*?{pattern}", prompt_text, re.IGNORECASE | re.DOTALL):
+            return True
+        if re.search(f"SKILL\\.md.*?{pattern}.*?view_file", prompt_text, re.IGNORECASE | re.DOTALL):
+            return True
+
+    return False
+
+
+def check_repository_classification(prompt_text: str) -> bool:
+    """
+    Semantically verifies that the prompt contains a valid repository classification
+    indicator matching workspace lineage / configuration or standard role classifications.
+    Supports markdown bolding, backticks, quotes, and hyphens.
+    """
+    if not prompt_text or not isinstance(prompt_text, str):
+        return False
+
+    classification_field_pattern = re.search(
+        r'(?:'
+        r'(?:\*{1,2}|`|#+\s*)?(?:Repository\s*Classification|Repo\s*Classification|Classification)(?:\*{1,2}|`|:)*\s*[:=\-]?\s*[`"\']?([A-Za-z0-9_\-\.]+)[`"\']?'
+        r'|'
+        r'operating\s+within\s+classification\s+[`"\']?([A-Za-z0-9_\-\.]+)[`"\']?'
+        r'|'
+        r'within\s+classification\s+[`"\']?([A-Za-z0-9_\-\.]+)[`"\']?'
+        r'|'
+        r'classification\s*[:=\-]\s*[`"\']?([A-Za-z0-9_\-\.]+)[`"\']?'
+        r')',
+        prompt_text,
+        re.IGNORECASE
+    )
+    if classification_field_pattern:
+        for grp_idx in range(1, len(classification_field_pattern.groups()) + 1):
+            val = classification_field_pattern.group(grp_idx)
+            if val and len(val.strip()) > 0:
+                return True
+
+    known_classifications = [
+        "UPSTREAM_SPEC_CORE_COMPILER",
+        "PARENT_DOMAIN_DISTRIBUTION_TEMPLATE",
+        "CHILD_DOMAIN_DISTRIBUTION_TEMPLATE",
+        "DOWNSTREAM_APPLICATION_WORKSPACE",
+        "DOWNSTREAM_CUSTOMER_WORKSPACE",
+        "DOWNSTREAM_PROJECT",
+        "DOWNSTREAM_APPLICATION",
+        "DOWNSTREAM_WORKSPACE",
+        "LEAF_WORKSPACE",
+        "LEAF_CUSTOMER_WORKSPACE",
+        "CUSTOMER_APPLICATION_WORKSPACE",
+        "DOMAIN_PARENT",
+        "DOMAIN_CHILD",
+        "REPO_CLASSIFICATION",
+    ]
+    for kc in known_classifications:
+        if kc in prompt_text:
+            return True
+
+    return False
+
+
+def check_leading_code_steering(prompt_text: str) -> bool:
+    """
+    Returns True if leading line-level code steering is detected before the Step 1 skill instruction.
+    Returns False if clean (no leading steering).
+    """
+    if not prompt_text or not isinstance(prompt_text, str):
+        return False
+
+    view_file_pos = prompt_text.find("view_file")
+    if view_file_pos == -1:
+        return False
+
+    preceding_text = prompt_text[:view_file_pos]
+    leading_steering_patterns = [
+        r'\b(?:replace|edit|modify|delete|change|patch|update)\s+lines?\s+\d+',
+        r'\b(?:replace|edit|modify|patch|update)\s+line\s+\d+\s+with\b',
+        r'\bapply\s+the\s+following\s+(?:diff|patch|code|changes?)\b',
+        r'```diff\b',
+        r'\bhere\s+is\s+the\s+(?:code|fix|patch|diff)\s+to\s+apply\b',
+        r'\bjust\s+(?:change|replace|edit|modify|delete)\b',
+        r'\bpaste\s+this\s+(?:code|diff|patch)\b',
+    ]
+    for pat in leading_steering_patterns:
+        if re.search(pat, preceding_text, re.IGNORECASE):
+            return True
+    return False
+
+
+def mask_mandate_text(prompt_text: str) -> str:
+    """
+    Masks out pre-flight checklist text and rule quotations so that verbatim
+    or slightly formatted mandate text is never flagged as a truncation indicator.
+    """
+    if not prompt_text:
+        return ""
+    scan_text = re.sub(r"\s+", " ", prompt_text).strip()
+    requirements, _err = load_mandate_requirements()
+    if requirements:
+        for req_text in requirements:
+            norm_req = re.sub(r"\s+", " ", req_text).strip()
+            scan_text = scan_text.replace(norm_req, " ")
+            unquoted_req = re.sub(r"[`'\"]", "", norm_req)
+            scan_text = scan_text.replace(unquoted_req, " ")
+
+    scan_text = re.sub(
+        r'Zero\s+`?\[\.\.\.\]`?,\s*`?\[summarized\]`?,\s*or\s*`?\[truncated\]`?\s*markers',
+        " ",
+        scan_text,
+        flags=re.IGNORECASE,
+    )
+    scan_text = re.sub(
+        r'Zero\s+\[\.\.\.\],\s*\[summarized\],\s*or\s*\[truncated\]\s*markers',
+        " ",
+        scan_text,
+        flags=re.IGNORECASE,
+    )
+    return scan_text
+
+
 def lint_subagent_prompt(prompt_text: str) -> List[str]:
     """
     Validates a subagent prompt payload and returns a list of violation error messages.
@@ -106,21 +254,12 @@ def lint_subagent_prompt(prompt_text: str) -> List[str]:
         return errors
 
     # Check (a): Mandatory view_file directive on SKILL.md before running actions
-    has_view_file = "view_file" in prompt_text
-    has_skill_md = bool(re.search(r'\bSKILL\.md\b', prompt_text, re.IGNORECASE))
-    step1_pattern = re.search(
-        r'(?:step\s*1|very\s*first\s*step|first\s*step|as\s*its\s*very\s*first\s*step|before\s*(?:running|executing|any|proceeding|all)\s*(?:actions|tools|commands|steps|work)?|prerequisite|must\s*read).*view_file.*SKILL\.md|view_file.*SKILL\.md.*(?:step\s*1|very\s*first\s*step|first\s*step|as\s*its\s*very\s*first\s*step|before\s*(?:running|executing|any|proceeding|all)\s*(?:actions|tools|commands|steps|work)?|prerequisite|first)',
-        prompt_text,
-        re.IGNORECASE | re.DOTALL
-    )
-
-    if not (has_view_file and has_skill_md and step1_pattern):
+    if not check_step1_skill_directive(prompt_text):
         errors.append(
             "Prompt missing mandatory directive to execute 'view_file' on 'SKILL.md' before running actions or tools."
         )
 
     # Check (b): Mandatory single-item micro-task scope (max 1 Epic, 1 Feature, 1 User Story, or 1 Use Case)
-    # Extract distinct identifiers
     raw_epics = re.findall(r'\b(?:EPIC|Epic)-[A-Za-z0-9_]+\b', prompt_text)
     raw_features = re.findall(r'\b(?:FEAT|FEATURE|Feat|Feature)-[A-Za-z0-9_]+\b', prompt_text)
     raw_stories = re.findall(r'\b(?:US|UserStory|Story)-[A-Za-z0-9_]+\b', prompt_text)
@@ -184,16 +323,7 @@ def lint_subagent_prompt(prompt_text: str) -> List[str]:
         errors.append("Prompt missing mandatory 'PROCEED' authorization token.")
 
     # Check (e): Truncation / summarization indicators.
-    # The corpus-quoted pre-flight Requirement rows are masked out of the scan so
-    # that verbatim mandate text (e.g. "Zero `[...]`, `[summarized]`, or
-    # `[truncated]` markers") is never itself read as a truncation indicator.
-    truncation_scan_text = re.sub(r"\s+", " ", prompt_text).strip()
-    requirements, _mandate_corpus_error = load_mandate_requirements()
-    if requirements:
-        for req_text in requirements:
-            truncation_scan_text = truncation_scan_text.replace(
-                re.sub(r"\s+", " ", req_text).strip(), " "
-            )
+    truncation_scan_text = mask_mandate_text(prompt_text)
     truncation_patterns = [
         (r'\[\s*\.\.\.\s*\]', "elided ellipsis '[...]'"),
         (r'\[\s*summarized?\s*\]', "'[summarized]'"),
@@ -212,9 +342,6 @@ def lint_subagent_prompt(prompt_text: str) -> List[str]:
         )
 
     # Check (g): Corpus-sourced mandate fidelity (rules/subagent-dispatch-standards.md).
-    # Every one of the six pre-flight Requirements must be present verbatim
-    # (whitespace-normalized). Coverage below 100 percent fails, naming the missing
-    # Requirements. An unreadable corpus at gate time fails closed.
     fidelity_ok, fidelity_coverage, fidelity_missing, fidelity_error = check_mandate_fidelity(prompt_text)
     if fidelity_error:
         errors.append(f"Mandate fidelity gate failed closed: {fidelity_error}")
@@ -249,16 +376,7 @@ def validate_subagent_preflight(prompt_text: str) -> tuple[bool, str]:
         return False, "ERROR: Prompt rejected: prompt payload is empty or whitespace-only"
 
     # Check for truncation/summarization markers.
-    # The corpus-quoted pre-flight Requirement rows are masked out of the scan so
-    # that verbatim mandate text (e.g. "Zero `[...]`, `[summarized]`, or
-    # `[truncated]` markers") is never itself read as a truncation indicator.
-    truncation_scan_text = re.sub(r"\s+", " ", prompt_text).strip()
-    requirements, _mandate_corpus_error = load_mandate_requirements()
-    if requirements:
-        for req_text in requirements:
-            truncation_scan_text = truncation_scan_text.replace(
-                re.sub(r"\s+", " ", req_text).strip(), " "
-            )
+    truncation_scan_text = mask_mandate_text(prompt_text)
     truncation_patterns = [
         (r'\[\s*\.\.\.\s*\]', "elided ellipsis '[...]'"),
         (r'\[\s*summarized?\s*\]', "'[summarized]'"),
@@ -275,43 +393,22 @@ def validate_subagent_preflight(prompt_text: str) -> tuple[bool, str]:
         return False, "ERROR: Prompt rejected: forbidden issue closure command"
 
     # Check for repository classification
-    has_classification = bool(
-        re.search(r'(?:Repository\s*Classification|Classification)\s*:\s*[A-Za-z0-9_]+', prompt_text, re.IGNORECASE)
-        or "UPSTREAM_SPEC_CORE_COMPILER" in prompt_text
-        or "REPO_CLASSIFICATION" in prompt_text
-    )
-    if not has_classification:
+    if not check_repository_classification(prompt_text):
         return False, "ERROR: Prompt rejected: missing repository classification"
 
     # Check for view_file on SKILL.md
-    has_view_file = "view_file" in prompt_text
+    has_view_file = bool(re.search(r'\bview_file\b', prompt_text))
     has_skill_md = bool(re.search(r'\bSKILL\.md\b', prompt_text, re.IGNORECASE))
     if not (has_view_file and has_skill_md):
         return False, "ERROR: Prompt rejected: missing view_file directive on SKILL.md"
 
     # Check that view_file on SKILL.md is instructed as step 1 / first action
-    step1_pattern = re.search(
-        r'(?:step\s*1|very\s*first\s*step|first\s*step|as\s*its\s*very\s*first\s*step|before\s*(?:running|executing|any|proceeding|all)\s*(?:actions|tools|commands|steps|work)?|prerequisite|must\s*read).*view_file.*SKILL\.md|view_file.*SKILL\.md.*(?:step\s*1|very\s*first\s*step|first\s*step|as\s*its\s*very\s*first\s*step|before\s*(?:running|executing|any|proceeding|all)\s*(?:actions|tools|commands|steps|work)?|prerequisite|first)',
-        prompt_text,
-        re.IGNORECASE | re.DOTALL
-    )
-    if not step1_pattern:
+    if not check_step1_skill_directive(prompt_text):
         return False, "ERROR: Prompt rejected: missing step 1 directive for view_file on SKILL.md"
 
     # Check for leading line-level steering before the view_file on SKILL.md directive
-    view_file_pos = prompt_text.find("view_file")
-    preceding_text = prompt_text[:view_file_pos]
-    leading_steering_patterns = [
-        r'\b(?:replace|edit|modify|delete|change)\s+lines?\s+\d+',
-        r'\b(?:replace|edit|modify)\s+line\s+\d+\s+with\b',
-        r'\bapply\s+the\s+following\s+diff\b',
-        r'```diff\b',
-        r'\bhere\s+is\s+the\s+(?:code|fix|patch)\s+to\s+apply\b',
-        r'\bjust\s+(?:change|replace|edit)\b',
-    ]
-    for pat in leading_steering_patterns:
-        if re.search(pat, preceding_text, re.IGNORECASE):
-            return False, "ERROR: Prompt rejected: leading line-level steering detected"
+    if check_leading_code_steering(prompt_text):
+        return False, "ERROR: Prompt rejected: leading line-level steering detected"
 
     # Check single-item micro-task scope
     raw_epics = re.findall(r'\b(?:EPIC|Epic)-[A-Za-z0-9_]+\b', prompt_text)

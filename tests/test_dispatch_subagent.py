@@ -15,13 +15,17 @@ PROJECT_ROOT = os.path.abspath(os.path.join(TEST_DIR, ".."))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
+import json
+import shutil
+
 from scripts.dispatch_subagent import (
     dispatch_subagent,
     generate_subagent_prompt,
     validate_skill_path,
     construct_prompt_template,
+    resolve_repository_classification,
 )
-from scripts.lint_subagent_prompt import lint_prompt_text, lint_subagent_prompt
+from scripts.lint_subagent_prompt import lint_prompt_text, lint_subagent_prompt, validate_subagent_preflight
 
 
 class TestDispatchSubagent(unittest.TestCase):
@@ -204,6 +208,159 @@ class TestDispatchSubagent(unittest.TestCase):
         self.assertNotEqual(res.returncode, 0)
         self.assertIn("Error dispatching subagent", res.stderr)
         self.assertIn("multiple Features detected", res.stderr)
+
+
+    def test_resolve_classification_explicit_override(self):
+        """Verify explicit classification parameter takes top priority."""
+        res = resolve_repository_classification(explicit_classification="CUSTOM_CLASSIFICATION")
+        self.assertEqual(res, "CUSTOM_CLASSIFICATION")
+
+    def test_resolve_classification_env_var_override(self):
+        """Verify DEAP_REPOSITORY_TYPE and REPO_CLASSIFICATION env vars override workspace defaults (Issue #90)."""
+        # Test DEAP_REPOSITORY_TYPE
+        os.environ["DEAP_REPOSITORY_TYPE"] = "PARENT_DOMAIN_DISTRIBUTION_TEMPLATE"
+        try:
+            res = resolve_repository_classification()
+            self.assertEqual(res, "PARENT_DOMAIN_DISTRIBUTION_TEMPLATE")
+        finally:
+            os.environ.pop("DEAP_REPOSITORY_TYPE", None)
+
+        # Test REPO_CLASSIFICATION
+        os.environ["REPO_CLASSIFICATION"] = "CHILD_DOMAIN_DISTRIBUTION_TEMPLATE"
+        try:
+            res = resolve_repository_classification()
+            self.assertEqual(res, "CHILD_DOMAIN_DISTRIBUTION_TEMPLATE")
+        finally:
+            os.environ.pop("REPO_CLASSIFICATION", None)
+
+    def test_resolve_classification_from_lineage_json_parent_domain(self):
+        """Verify dynamic detection of PARENT_DOMAIN_DISTRIBUTION_TEMPLATE from lineage.json (Issue #87)."""
+        temp_ws = tempfile.mkdtemp(prefix="deap_test_ws_")
+        try:
+            pipe_dir = os.path.join(temp_ws, ".pipeline")
+            os.makedirs(pipe_dir, exist_ok=True)
+            lineage_data = {
+                "self": "DEAP-avionic-flight-safety",
+                "tier": 1,
+                "role": "PARENT_DOMAIN_DISTRIBUTION_TEMPLATE",
+                "upstream": "gintatkinson/DEAP01-spec-core",
+            }
+            with open(os.path.join(pipe_dir, "lineage.json"), "w", encoding="utf-8") as f:
+                json.dump(lineage_data, f)
+
+            res = resolve_repository_classification(base_dir=temp_ws)
+            self.assertEqual(res, "PARENT_DOMAIN_DISTRIBUTION_TEMPLATE")
+        finally:
+            shutil.rmtree(temp_ws, ignore_errors=True)
+
+    def test_resolve_classification_from_lineage_json_child_domain(self):
+        """Verify dynamic detection of CHILD_DOMAIN_DISTRIBUTION_TEMPLATE from lineage.json (Issue #87)."""
+        temp_ws = tempfile.mkdtemp(prefix="deap_test_ws_")
+        try:
+            pipe_dir = os.path.join(temp_ws, ".pipeline")
+            os.makedirs(pipe_dir, exist_ok=True)
+            lineage_data = {
+                "self": "DEAP-uas-infrastructure-safety",
+                "tier": 2,
+                "role": "CHILD_DOMAIN_DISTRIBUTION_TEMPLATE",
+                "parent": "gintatkinson/DEAP-avionic-flight-safety",
+            }
+            with open(os.path.join(pipe_dir, "lineage.json"), "w", encoding="utf-8") as f:
+                json.dump(lineage_data, f)
+
+            res = resolve_repository_classification(base_dir=temp_ws)
+            self.assertEqual(res, "CHILD_DOMAIN_DISTRIBUTION_TEMPLATE")
+        finally:
+            shutil.rmtree(temp_ws, ignore_errors=True)
+
+    def test_resolve_classification_from_lineage_json_downstream_workspace(self):
+        """Verify dynamic detection of DOWNSTREAM_APPLICATION_WORKSPACE from lineage.json (Issue #87)."""
+        temp_ws = tempfile.mkdtemp(prefix="deap_test_ws_")
+        try:
+            pipe_dir = os.path.join(temp_ws, ".pipeline")
+            os.makedirs(pipe_dir, exist_ok=True)
+            lineage_data = {
+                "self": "UAS-001",
+                "tier": 3,
+                "role": "DOWNSTREAM_APPLICATION_WORKSPACE",
+            }
+            with open(os.path.join(pipe_dir, "lineage.json"), "w", encoding="utf-8") as f:
+                json.dump(lineage_data, f)
+
+            res = resolve_repository_classification(base_dir=temp_ws)
+            self.assertEqual(res, "DOWNSTREAM_APPLICATION_WORKSPACE")
+        finally:
+            shutil.rmtree(temp_ws, ignore_errors=True)
+
+    def test_resolve_classification_from_constitution_md(self):
+        """Verify dynamic detection of classification from .pipeline/constitution.md (Issue #87)."""
+        temp_ws = tempfile.mkdtemp(prefix="deap_test_ws_")
+        try:
+            pipe_dir = os.path.join(temp_ws, ".pipeline")
+            os.makedirs(pipe_dir, exist_ok=True)
+            constitution_text = """# Constitution
+> **Repository Role:** `DOWNSTREAM_APPLICATION_WORKSPACE`
+"""
+            with open(os.path.join(pipe_dir, "constitution.md"), "w", encoding="utf-8") as f:
+                f.write(constitution_text)
+
+            res = resolve_repository_classification(base_dir=temp_ws)
+            self.assertEqual(res, "DOWNSTREAM_APPLICATION_WORKSPACE")
+        finally:
+            shutil.rmtree(temp_ws, ignore_errors=True)
+
+    def test_resolve_classification_downstream_without_upstream_marker(self):
+        """Verify workspace without .pipeline/upstream defaults to DOWNSTREAM_APPLICATION_WORKSPACE."""
+        temp_ws = tempfile.mkdtemp(prefix="deap_test_ws_")
+        try:
+            pipe_dir = os.path.join(temp_ws, ".pipeline")
+            os.makedirs(pipe_dir, exist_ok=True)
+            res = resolve_repository_classification(base_dir=temp_ws)
+            self.assertEqual(res, "DOWNSTREAM_APPLICATION_WORKSPACE")
+        finally:
+            shutil.rmtree(temp_ws, ignore_errors=True)
+
+    def test_generate_subagent_prompt_dynamic_classification_parent_domain(self):
+        """Verify prompt generated in parent domain workspace contains PARENT_DOMAIN_DISTRIBUTION_TEMPLATE."""
+        temp_ws = tempfile.mkdtemp(prefix="deap_test_ws_")
+        try:
+            # Setup mock workspace with lineage.json and skill
+            pipe_dir = os.path.join(temp_ws, ".pipeline")
+            os.makedirs(pipe_dir, exist_ok=True)
+            with open(os.path.join(pipe_dir, "lineage.json"), "w", encoding="utf-8") as f:
+                json.dump({"role": "PARENT_DOMAIN_DISTRIBUTION_TEMPLATE", "tier": 1}, f)
+
+            prompt = generate_subagent_prompt(
+                skill=self.skill_feature,
+                target=self.target_file,
+                base_dir=temp_ws,
+            )
+
+            self.assertIn("Repository Classification: PARENT_DOMAIN_DISTRIBUTION_TEMPLATE", prompt)
+            self.assertIn("You are operating within classification `PARENT_DOMAIN_DISTRIBUTION_TEMPLATE`", prompt)
+            self.assertEqual(lint_prompt_text(prompt), [])
+            preflight_ok, reason = validate_subagent_preflight(prompt)
+            self.assertTrue(preflight_ok, f"Preflight rejected prompt: {reason}")
+        finally:
+            shutil.rmtree(temp_ws, ignore_errors=True)
+
+    def test_generate_subagent_prompt_dynamic_classification_env_override(self):
+        """Verify prompt generated with DEAP_REPOSITORY_TYPE override reflects in prompt preamble (Issue #90)."""
+        os.environ["DEAP_REPOSITORY_TYPE"] = "CHILD_DOMAIN_DISTRIBUTION_TEMPLATE"
+        try:
+            prompt = generate_subagent_prompt(
+                skill=self.skill_feature,
+                target=self.target_file,
+                base_dir=PROJECT_ROOT,
+            )
+
+            self.assertIn("Repository Classification: CHILD_DOMAIN_DISTRIBUTION_TEMPLATE", prompt)
+            self.assertIn("You are operating within classification `CHILD_DOMAIN_DISTRIBUTION_TEMPLATE`", prompt)
+            self.assertEqual(lint_prompt_text(prompt), [])
+            preflight_ok, reason = validate_subagent_preflight(prompt)
+            self.assertTrue(preflight_ok, f"Preflight rejected prompt: {reason}")
+        finally:
+            os.environ.pop("DEAP_REPOSITORY_TYPE", None)
 
 
 if __name__ == "__main__":

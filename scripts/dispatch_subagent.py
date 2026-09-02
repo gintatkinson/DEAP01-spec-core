@@ -11,7 +11,9 @@ Usage:
 """
 
 import argparse
+import json
 import os
+import re
 import sys
 import uuid
 from typing import Optional, List
@@ -102,13 +104,158 @@ def validate_skill_path(skill_path: str, base_dir: Optional[str] = None) -> str:
     return cleaned_path
 
 
+def resolve_repository_classification(
+    base_dir: Optional[str] = None,
+    explicit_classification: Optional[str] = None,
+) -> str:
+    """
+    Dynamically determines the repository classification for subagent dispatch.
+
+    Resolution Precedence:
+    1. Explicit classification argument (if provided and non-empty).
+    2. Environment variable overrides:
+       - `DEAP_REPOSITORY_TYPE`
+       - `REPO_CLASSIFICATION`
+       - `REPOSITORY_CLASSIFICATION`
+    3. Workspace lineage metadata: `.pipeline/lineage.json` (or `lineage.json`).
+       Inspects `classification`, `role`, or `tier` fields.
+    4. Project constitution / README metadata: `.pipeline/constitution.md`, `constitution.md`, or `README.md`.
+       Inspects for explicit repository classification/role declarations.
+    5. Upstream sentinel: `.pipeline/upstream` -> `UPSTREAM_SPEC_CORE_COMPILER`.
+    6. Default fallback:
+       - `DOWNSTREAM_APPLICATION_WORKSPACE` if no upstream sentinel in workspace.
+       - `UPSTREAM_SPEC_CORE_COMPILER` if in core repo.
+
+    Args:
+        base_dir: Optional base directory to search for metadata files.
+        explicit_classification: Optional explicitly provided classification.
+
+    Returns:
+        The resolved repository classification string.
+    """
+    # 1. Explicit classification argument
+    if explicit_classification is not None and isinstance(explicit_classification, str):
+        cleaned = explicit_classification.strip()
+        if cleaned:
+            return cleaned
+
+    # 2. Environment variable overrides (Issue #90)
+    for env_var in ("DEAP_REPOSITORY_TYPE", "REPO_CLASSIFICATION", "REPOSITORY_CLASSIFICATION"):
+        env_val = os.environ.get(env_var)
+        if env_val and env_val.strip():
+            return env_val.strip()
+
+    # Determine candidate search directories
+    if base_dir:
+        search_dirs = [os.path.abspath(base_dir)]
+    else:
+        search_dirs = [os.path.abspath(os.getcwd())]
+        if PROJECT_ROOT not in search_dirs:
+            search_dirs.append(PROJECT_ROOT)
+
+    for ws in search_dirs:
+        # 3. Check lineage.json (Issue #87)
+        lineage_candidates = [
+            os.path.join(ws, ".pipeline", "lineage.json"),
+            os.path.join(ws, "lineage.json"),
+        ]
+        for lineage_path in lineage_candidates:
+            if os.path.isfile(lineage_path):
+                try:
+                    with open(lineage_path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    if isinstance(data, dict):
+                        # Check explicit classification field
+                        if data.get("classification") and isinstance(data["classification"], str):
+                            cls_str = data["classification"].strip()
+                            if cls_str:
+                                return cls_str
+                        # Check role field
+                        if data.get("role") and isinstance(data["role"], str):
+                            role_str = data["role"].strip()
+                            role_norm = role_str.lower().replace("-", "_")
+                            if role_norm in ("parent_domain_distribution_template", "domain_parent", "parent_domain_template"):
+                                return "PARENT_DOMAIN_DISTRIBUTION_TEMPLATE"
+                            elif role_norm in ("child_domain_distribution_template", "domain_child", "child_domain_template"):
+                                return "CHILD_DOMAIN_DISTRIBUTION_TEMPLATE"
+                            elif role_norm in ("downstream_application_workspace", "application_workspace", "downstream_workspace", "workspace"):
+                                return "DOWNSTREAM_APPLICATION_WORKSPACE"
+                            elif role_norm in ("upstream_spec_core_compiler", "upstream_core", "upstream_compiler", "spec_core_compiler"):
+                                return "UPSTREAM_SPEC_CORE_COMPILER"
+                            else:
+                                return role_str
+                        # Check tier field
+                        if "tier" in data:
+                            tier = data["tier"]
+                            if tier == 0 or tier == "0":
+                                return "UPSTREAM_SPEC_CORE_COMPILER"
+                            elif tier == 1 or tier == "1":
+                                return "PARENT_DOMAIN_DISTRIBUTION_TEMPLATE"
+                            elif tier == 2 or tier == "2":
+                                return "CHILD_DOMAIN_DISTRIBUTION_TEMPLATE"
+                            elif isinstance(tier, int) and tier >= 3:
+                                return "DOWNSTREAM_APPLICATION_WORKSPACE"
+                except Exception:
+                    pass
+
+        # 4. Check .pipeline/constitution.md, constitution.md, or README.md (Issue #87)
+        meta_candidates = [
+            os.path.join(ws, ".pipeline", "constitution.md"),
+            os.path.join(ws, "constitution.md"),
+            os.path.join(ws, "README.md"),
+        ]
+        for meta_path in meta_candidates:
+            if os.path.isfile(meta_path):
+                try:
+                    with open(meta_path, "r", encoding="utf-8") as f:
+                        meta_content = f.read()
+                    role_match = re.search(
+                        r'(?:Repository\s*(?:Role|Classification)|Classification)[*`\s]*[:=][*`\s]*([A-Za-z0-9_]+)',
+                        meta_content,
+                        re.IGNORECASE,
+                    )
+                    if role_match:
+                        matched_role = role_match.group(1).strip()
+                        matched_norm = matched_role.lower().replace("-", "_")
+                        if matched_norm in ("parent_domain_distribution_template", "domain_parent"):
+                            return "PARENT_DOMAIN_DISTRIBUTION_TEMPLATE"
+                        elif matched_norm in ("child_domain_distribution_template", "domain_child"):
+                            return "CHILD_DOMAIN_DISTRIBUTION_TEMPLATE"
+                        elif matched_norm in ("downstream_application_workspace", "application_workspace"):
+                            return "DOWNSTREAM_APPLICATION_WORKSPACE"
+                        elif matched_norm in ("upstream_spec_core_compiler", "upstream_core"):
+                            return "UPSTREAM_SPEC_CORE_COMPILER"
+                        elif matched_role:
+                            return matched_role
+                except Exception:
+                    pass
+
+        # 5. Check .pipeline/upstream sentinel marker
+        upstream_marker = os.path.join(ws, ".pipeline", "upstream")
+        if os.path.exists(upstream_marker):
+            return "UPSTREAM_SPEC_CORE_COMPILER"
+
+    # 6. Fallback check: If workspace has no upstream marker, detect downstream workspace
+    if base_dir:
+        upstream_marker = os.path.join(os.path.abspath(base_dir), ".pipeline", "upstream")
+        if not os.path.exists(upstream_marker):
+            return "DOWNSTREAM_APPLICATION_WORKSPACE"
+
+    # Default to UPSTREAM_SPEC_CORE_COMPILER if we are in core repo with .pipeline/upstream
+    if os.path.exists(os.path.join(PROJECT_ROOT, ".pipeline", "upstream")):
+        return "UPSTREAM_SPEC_CORE_COMPILER"
+
+    return DEFAULT_CLASSIFICATION
+
+
 def construct_prompt_template(
     skill_path: str,
     target: str,
     role: str = DEFAULT_ROLE,
     subagent_type: str = DEFAULT_TYPE,
-    classification: str = DEFAULT_CLASSIFICATION,
+    classification: Optional[str] = None,
     instructions: Optional[str] = None,
+    base_dir: Optional[str] = None,
 ) -> str:
     """
     Constructs the standard non-negotiable prompt template for subagent dispatch.
@@ -125,12 +272,18 @@ def construct_prompt_template(
         target: Target file, directory, or specification item.
         role: Descriptive role of the subagent.
         subagent_type: Subagent type identifier.
-        classification: Repository classification.
+        classification: Optional repository classification (dynamically resolved if None).
         instructions: Optional additional instructions.
+        base_dir: Optional base directory to search for workspace metadata.
 
     Returns:
         The generated prompt text.
     """
+    resolved_classification = resolve_repository_classification(
+        base_dir=base_dir,
+        explicit_classification=classification,
+    )
+
     extra_block = ""
     if instructions and instructions.strip():
         extra_block = f"\nTask Details:\n{instructions.strip()}\n"
@@ -150,12 +303,12 @@ def construct_prompt_template(
 
 Role: {role}
 Subagent Type: {subagent_type}
-Repository Classification: {classification}
+Repository Classification: {resolved_classification}
 Target: {target}
 
 Mandatory Instructions:
 1. Step 1: Execute `view_file` on `{skill_path}` as your very first step before executing any file edits, commands, or tools. Strictly follow its instruction guidelines and formatting templates.
-2. Repository Scope: You are operating within classification `{classification}`. Maintain all repository invariants and domain boundaries.
+2. Repository Scope: You are operating within classification `{resolved_classification}`. Maintain all repository invariants and domain boundaries.
 3. Micro-Task Scope: Focus exclusively on target `{target}` within a single-item micro-task scope.
 4. Engineering Standards: Follow test-driven development (RED-GREEN-REFACTOR) cycle discipline and strict verification before completion.
 5. Defect Reporting: If any defects, anomalies, or bugs are detected, record them using `gh issue create` (GitHub) or `glab issue create` (GitLab). Issue closure is strictly reserved for Product Owner review.
@@ -170,7 +323,7 @@ def generate_subagent_prompt(
     target: str,
     role: str = DEFAULT_ROLE,
     subagent_type: str = DEFAULT_TYPE,
-    classification: str = DEFAULT_CLASSIFICATION,
+    classification: Optional[str] = None,
     instructions: Optional[str] = None,
     base_dir: Optional[str] = None,
 ) -> str:
@@ -182,9 +335,9 @@ def generate_subagent_prompt(
         target: Target file or specification item.
         role: Descriptive role of the subagent.
         subagent_type: Subagent type identifier.
-        classification: Repository classification.
+        classification: Optional repository classification (dynamically resolved if None).
         instructions: Optional custom instructions.
-        base_dir: Optional base directory for skill resolution.
+        base_dir: Optional base directory for skill resolution and workspace metadata.
 
     Returns:
         The validated prompt text.
@@ -197,14 +350,19 @@ def generate_subagent_prompt(
         raise ValueError("Target path or specification item must be a non-empty string.")
 
     valid_skill_path = validate_skill_path(skill, base_dir=base_dir)
+    resolved_classification = resolve_repository_classification(
+        base_dir=base_dir,
+        explicit_classification=classification,
+    )
 
     prompt_text = construct_prompt_template(
         skill_path=valid_skill_path,
         target=target.strip(),
         role=role.strip() if role else DEFAULT_ROLE,
         subagent_type=subagent_type.strip() if subagent_type else DEFAULT_TYPE,
-        classification=classification.strip() if classification else DEFAULT_CLASSIFICATION,
+        classification=resolved_classification,
         instructions=instructions,
+        base_dir=base_dir,
     )
 
     # Validate generated prompt using lint_prompt_text
@@ -225,7 +383,7 @@ def dispatch_subagent(
     target: str,
     role: str = DEFAULT_ROLE,
     subagent_type: str = DEFAULT_TYPE,
-    classification: str = DEFAULT_CLASSIFICATION,
+    classification: Optional[str] = None,
     output: Optional[str] = None,
     instructions: Optional[str] = None,
     base_dir: Optional[str] = None,
@@ -238,10 +396,10 @@ def dispatch_subagent(
         target: Target file or specification item.
         role: Descriptive role of the subagent.
         subagent_type: Subagent type identifier.
-        classification: Repository classification.
+        classification: Optional repository classification (dynamically resolved if None).
         output: Optional path to write payload file.
         instructions: Optional custom instructions.
-        base_dir: Optional base directory for skill resolution.
+        base_dir: Optional base directory for skill resolution and workspace metadata.
 
     Returns:
         The path to the generated payload file.
@@ -314,8 +472,8 @@ def main():
     )
     parser.add_argument(
         "--classification",
-        default=DEFAULT_CLASSIFICATION,
-        help=f"Repository classification (default: '{DEFAULT_CLASSIFICATION}')",
+        default=None,
+        help="Repository classification (default: dynamically resolved from workspace / environment)",
     )
     parser.add_argument(
         "--output",

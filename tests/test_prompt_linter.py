@@ -68,6 +68,28 @@ PROCEED
         errors = lint_subagent_prompt(self.valid_prompt)
         self.assertEqual(errors, [])
 
+    def test_valid_prompt_with_non_compiler_classification(self):
+        """Verify that prompts targeting non-compiler roles pass linting."""
+        for classification in ["PARENT_DOMAIN_DISTRIBUTION_TEMPLATE", "CHILD_DOMAIN_DISTRIBUTION_TEMPLATE", "DOWNSTREAM_APPLICATION_WORKSPACE"]:
+            prompt = self.valid_prompt.replace("UPSTREAM_SPEC_CORE_COMPILER", classification)
+            errors = lint_subagent_prompt(prompt)
+            self.assertEqual(errors, [], f"Classification {classification} had unexpected errors: {errors}")
+
+    def test_valid_prompt_with_step1_phrasing_variations(self):
+        """Verify that prompts with valid step 1 variations pass linting."""
+        variations = [
+            "1. Step 1: Execute `view_file` on `skills/spec-orchestrator/SKILL.md` as your very first step before executing any file edits, commands, or tools.",
+            "1. Execute `view_file` on `skills/spec-orchestrator/SKILL.md` as step 1 before performing any actions.",
+            "1. Execute `view_file` as step 1 on `skills/spec-orchestrator/SKILL.md` before performing any actions.",
+            "Step 1: Execute `view_file` on `skills/spec-orchestrator/SKILL.md` before taking any action.",
+            "Prerequisite: Execute `view_file` on `skills/spec-orchestrator/SKILL.md` before running actions.",
+        ]
+        base_step1 = "1. Step 1: Execute `view_file` on `skills/spec-orchestrator/SKILL.md` as your very first step before performing any actions."
+        for var in variations:
+            prompt = self.valid_prompt.replace(base_step1, var)
+            errors = lint_subagent_prompt(prompt)
+            self.assertEqual(errors, [], f"Step 1 variation '{var}' had unexpected errors: {errors}")
+
     def test_missing_view_file_skill_md_directive(self):
         """Verify that missing view_file directive on SKILL.md as step 1 is flagged."""
         prompt = """
