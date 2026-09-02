@@ -16,7 +16,7 @@ metadata:
 
 This skill enables you to act as the **Master Orchestrator Agent**. You are responsible for executing an end-to-end "Digital Engineering Pipeline" that systematically transforms a protocol standard (e.g., IETF, 3GPP, IEEE, CAMARA) into a deterministic GitHub repository matrix using UML OOA/OOD methodologies.
 
-You will accomplish this by coordinating the sequential execution of specialized Worker skills across all specification phases (Phases 1, 1.5, 2, and 3).
+You will accomplish this by coordinating the sequential execution of specialized Worker skills across all specification phases (Phases 0.5, 1, 1.5, 2, and 3).
 
 > [!NOTE]
 > This orchestrator handles **specification generation** (Phases 1-5). For **feature implementation**, use the separate `feature-driven-implementation` skill which provides subagent-driven TDD execution discipline.
@@ -73,12 +73,14 @@ Before beginning orchestration, verify you have:
 3. *(Optional)* A project constitution at `.pipeline/constitution.md`. If present, read it and apply platform/domain constraints to all worker dispatches.
 4. The SysML v2 SSOT completeness and bidirectional synchronization rules in `rules/sysml-ssot-completeness.md` and `docs/architecture/blueprints/SYSML_SSOT_BIDIRECTIONAL_SYNCHRONIZATION_ARCHITECTURE.md`.
 5. The Standardized Operator Usage Prompt Catalog in `docs/OPERATOR_PROMPT_CATALOG.md`.
+6. Applicable regulatory, safety, and domain standards for Phase 0.5 Normative-Completeness Research (e.g., ISO/IEC/IEEE 29148, NATO STANAG 4586, RTCA DO-178C / DO-254, SAE ARP4754A / ARP4761, MIL-STD-882E, JARUS SORA v2.5, ASTM F3269-17 / F3411-22a, RTCA DO-365B).
 
 ## Item-Level Subagent Context Isolation
 
 To prevent context drift, contamination, and confirmation bias, **every individual specification item (Epic, Feature, User Story, and Use Case) MUST be processed by a new, fresh subagent with an isolated context.**
 
-- **Mandatory Subagent Dispatch for Specification Phases**: The Master Orchestrator (Coordinator) MUST dispatch Phase Worker subagents (TypeName: `self`) for Phase 1, Phase 1.5, Phase 2, and Phase 3:
+- **Mandatory Subagent Dispatch for Specification Phases**: The Master Orchestrator (Coordinator) MUST dispatch Phase Worker subagents (TypeName: `self`) for Phase 0.5, Phase 1, Phase 1.5, Phase 2, and Phase 3:
+  * Phase 0.5: `Normative Research Worker`
   * Phase 1: `Structural Spec Worker`
   * Phase 1.5: `Interface Spec Worker (Worker ICD)`
   * Phase 2: `Behavioral Spec Worker`
@@ -139,11 +141,18 @@ Phases NOT marked `[P]` are strictly sequential — the validation gate of phase
 sequenceDiagram
     autonumber
     participant Coord as "Master Orchestrator (Coordinator)"
+    participant W_R as "Phase 0.5: Normative Research Worker"
     participant W_A as "Phase 1: Structural Spec Worker"
     participant W_ICD as "Phase 1.5: Interface Spec Worker"
     participant W_B as "Phase 2: Behavioral Spec Worker"
     participant W_C as "Phase 3: System Interaction Spec Worker"
     participant W_D as "Phase 4: Reconciliation & Verification"
+
+    Note over Coord,W_R: Phase 0.5 - Normative-Completeness Research
+    Coord->>W_R: Dispatch Normative Research Task (Regulatory & Domain Standards)
+    W_R->>W_R: Ingest Standards & Map Clause-Level Requirements
+    W_R->>W_R: Synthesize RESEARCH_INVENTORY.md & Declared-Total Population Register
+    W_R-->>Coord: Return Cited Research Inventory & Clause Population Register (docs/research/)
 
     Note over Coord,W_A: Phase 1 - Structural Extraction
     Coord->>W_A: Dispatch Schema Parsing Task (.pipeline/schema.sysml)
@@ -185,6 +194,22 @@ sequenceDiagram
    - **Layout Manifest Must Parse**: the manifest MUST be well-formed JSON. A manifest that does not parse is reported as such, not treated as an empty layout — an empty layout would report every binding as naming a component that is not instantiated, which points at the Features instead of at the file that is actually broken.
    - **Tabbed Containers Accept Only Tabular Children**: a `TabbedContainer` node MUST declare a `children` list, and every child MUST be a `TableView`, `PropertyGrid` or `DensityTable`. Tabs present a set of comparable records; a non-tabular child in a tab strip has no meaningful rendering.
    - **Features Directory Must Exist**: the configured `backlog_directories.features` path MUST exist. There is nothing to validate bindings for otherwise, and a silent pass would be indistinguishable from a fully-bound backlog.
+
+## Phase 0.5: Normative-Completeness Research Step (Worker Research)
+1. **Trigger / Dispatch**: The Coordinator MUST invoke a fresh subagent (TypeName: `self`, Role: `Normative Research Worker`) with the target domain/protocol requirements, applicable regulatory standards list, and standard template paths (`skills/spec-orchestrator/resources/RESEARCH_INVENTORY_CANONICAL_TEMPLATE.md`), appending the keyword `PROCEED` to authorize execution.
+2. **Normative Research Protocol**:
+   - **Standards Identification & Ingestion**: Systematically identify, ingest, and catalog all applicable regulatory, safety, and domain standards governing the target domain (e.g. ISO/IEC/IEEE 29148, NATO STANAG 4586, RTCA DO-178C / DO-254, SAE ARP4754A / ARP4761, MIL-STD-882E, JARUS SORA v2.5, ASTM F3269-17 / F3411-22a, RTCA DO-365B).
+   - **Clause-Level Extraction & Mapping**: Perform rigorous clause-level extraction to map mandatory requirements, safety constraints, hazard mitigations, operational rules, METL tasks, and control patterns directly to specific public clauses (e.g. `ISO/IEC/IEEE 29148:2018 §6.4.2`, `RTCA DO-178C §6.3.1`, `STANAG 4586 Annex B §2.1`).
+   - **Mandatory Output Artifacts**:
+     * **Cited Research Inventory** (`docs/research/RESEARCH_INVENTORY.md`): Synthesize a comprehensive research inventory document based on `skills/spec-orchestrator/resources/RESEARCH_INVENTORY_CANONICAL_TEMPLATE.md` (or template in `skills/spec-orchestrator/resources/`), capturing document metadata, issuing bodies, full standard titles, revision baselines, and formal references.
+     * **Declared-Total Population Register**: Catalog all applicable normative obligations, safety constraints, METL tasks, and control patterns with formal public clause citations in a structured, queryable register within `docs/research/RESEARCH_INVENTORY.md`.
+3. **Traceability Rule & Prohibition of Un-Cited Additions**:
+   - **Strict Traceability Mandate**: Every added obligation, hazard, control action, or catalog entry MUST carry a public clause citation; un-cited additions are strictly prohibited.
+   - **Prohibition of Un-Cited Additions**: Un-cited or speculative additions lacking verifiable clause citations are strictly prohibited across all specification deliverables.
+4. **Wait & Verify**: The Coordinator waits for the subagent to report completion, reads its final report, and:
+   a. Verifies that `docs/research/RESEARCH_INVENTORY.md` exists and is fully populated with zero placeholder tokens.
+   b. Performs a sampling audit (`view_file`) on `docs/research/RESEARCH_INVENTORY.md` to confirm all cited standards, clauses, and population register entries conform to the mandatory traceability rule.
+5. **Validation Gate**: Verify that `docs/research/RESEARCH_INVENTORY.md` is committed and contains a complete Declared-Total Population Register with 100% public clause citations. Once this validation passes, **execute Phase 1 immediately without pausing for user approval.**
 
 ## Phase 1: Structural Extraction (Worker A)
 1. **Trigger / Dispatch**: The Coordinator MUST invoke a fresh subagent (TypeName: `self`, Role: `Structural Spec Worker`) with the `schema-specification-engineering` skill and the path to the target structural schema files, appending the keyword `PROCEED` to authorize execution.
