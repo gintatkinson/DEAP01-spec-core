@@ -21,8 +21,8 @@ Enforces:
    10 Mandatory Sections for Mission Intent (MISSION_INTENT.md):
    - 1. Commander's Intent & Operational Objectives
    - 2. Mission Essential Task List (METL MET-01..N)
-   - 3. Measures of Effectiveness (MoE) & Measures of Performance (MoP) Metrics (INCOSE SEH v5.0 §3.3.1 / §3.3.2)
-   - 4. Multi-Domain Operational Threat Matrix (Kinetic, Mechanical, Environmental, EW/Cyber)
+   - 3. Measures of Effectiveness (MoE) & Measures of Performance (MoP) Metrics
+   - 4. Threat & Electronic Warfare (EW) / Cyber Environment Matrix
    - 5. PACE C2 Link Communications Plan (Primary, Alternate, Contingency, Emergency)
    - 6. Rules of Engagement (ROE) & Weapon/Sensor Interlocks
    - 7. Airspace Deconfliction & U-space Dynamic Geo-Zones
@@ -683,7 +683,7 @@ class MissionIntentCompletenessValidator(IValidator):
         {"num": 1, "title": "Commander's Intent & Operational Objectives", "aliases": ["commander's intent", "operational objectives", "purpose", "mission intent"]},
         {"num": 2, "title": "Mission Essential Task List (METL)", "aliases": ["mission essential task list", "metl", "met-", "essential tasks"]},
         {"num": 3, "title": "Measures of Effectiveness (MoE) & Measures of Performance (MoP) Metrics", "aliases": ["measures of effectiveness", "measures of performance", "moe", "mop", "moe/mop", "metrics"]},
-        {"num": 4, "title": "Multi-Domain Operational Threat Matrix", "aliases": ["multi-domain operational threat matrix", "multi-domain threat matrix", "threat & electronic warfare", "threat", "electronic warfare", "ew matrix", "cyber environment", "threat matrix"]},
+        {"num": 4, "title": "Threat & Electronic Warfare (EW) / Cyber Environment Matrix", "aliases": ["threat", "electronic warfare", "ew matrix", "cyber environment", "threat matrix"]},
         {"num": 5, "title": "PACE C2 Link Communications Plan", "aliases": ["pace c2", "pace plan", "pace communications plan", "c2 link communications plan", "pace"]},
         {"num": 6, "title": "Rules of Engagement (ROE) & Weapon/Sensor Interlocks", "aliases": ["rules of engagement", "roe", "weapon/sensor interlocks", "sensor interlocks", "roe interlocks", "interlocks"]},
         {"num": 7, "title": "Airspace Deconfliction & U-space Dynamic Geo-Zones", "aliases": ["airspace deconfliction", "u-space", "geo-zones", "dynamic geo-zones", "airspace", "geofence"]},
@@ -821,42 +821,6 @@ class MissionIntentCompletenessValidator(IValidator):
                         detail={"task_id": task_id},
                     ))
 
-        # Section 4: Multi-Domain Operational Threat Matrix Completeness
-        if 4 in matched_sections:
-            _, sec4_line, sec4_content = matched_sections[4]
-            sec4_tables, _ = _parse_commonmark_tables(sec4_content)
-
-            found_domains: Set[str] = set()
-
-            def _scan_domain(text: str) -> None:
-                if re.search(r'\b(?:kinetic|thr-kin)\b', text, re.IGNORECASE):
-                    found_domains.add("Kinetic")
-                if re.search(r'\b(?:mechanical|thr-mec)\b', text, re.IGNORECASE):
-                    found_domains.add("Mechanical")
-                if re.search(r'\b(?:environmental|thr-env)\b', text, re.IGNORECASE):
-                    found_domains.add("Environmental")
-                if re.search(r'\b(?:ew\b|cyber\b|electronic\s+warfare|thr-ewc)\b', text, re.IGNORECASE):
-                    found_domains.add("EW/Cyber")
-
-            if sec4_tables:
-                for tbl in sec4_tables:
-                    for row in tbl:
-                        row_str = " ".join(row.values())
-                        _scan_domain(row_str)
-
-            # Also scan raw section content
-            _scan_domain(sec4_content)
-
-            required_domains = ["Kinetic", "Mechanical", "Environmental", "EW/Cyber"]
-            missing_domains = [d for d in required_domains if d not in found_domains]
-            if missing_domains:
-                findings.append(Finding(
-                    "mission-threat-domain-missing",
-                    f"Section 4 Multi-Domain Operational Threat Matrix is missing required threat domain(s): {', '.join(missing_domains)} in '{rel_path}'.",
-                    location=f"{rel_path}:{sec4_line}",
-                    detail={"missing_domains": missing_domains, "found_domains": list(found_domains)},
-                ))
-
         # Section 9: Bingo Energy Mathematics & Reserve Ratio Validation
         if 9 in matched_sections:
             _, sec9_line, sec9_content = matched_sections[9]
@@ -900,7 +864,7 @@ class MissionIntentCompletenessValidator(IValidator):
         if res_path.is_file():
             template_text = res_path.read_text(encoding="utf-8")
         else:
-            template_text = r"""| Attribute | Value |
+            template_text = """| Attribute | Value |
 | :--- | :--- |
 | **Title** | Tactical Mission Intent & Execution Plan: {{MISSION_SYSTEM_NAME}} |
 | **Version** | {{DOCUMENT_VERSION}} |
@@ -924,33 +888,18 @@ class MissionIntentCompletenessValidator(IValidator):
 | `MET-06` | {{MET_06_TASK_NAME}} | {{MET_06_CONDITION}} | {{MET_06_STANDARD}} | {{MET_06_VERIFICATION}} | `/// OperationalAllocation: [MET-06]` |
 
 ## 3. Measures of Effectiveness (MoE) & Measures of Performance (MoP) Metrics
-Measures of Effectiveness (MoE) and Measures of Performance (MoP) are formulated in accordance with INCOSE Systems Engineering Handbook v5.0 (§3.3.1 Needs and Requirements Definition Process, §3.3.2 System Requirements Definition Process).
-
 | Metric ID | Metric Type | Metric Name | Formulation / Equation | Threshold | Objective | Unit |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | MoE-01 | MoE | {{MOE_01_NAME}} | {{MOE_01_EQUATION}} | {{MOE_01_THRESHOLD}} | {{MOE_01_OBJECTIVE}} | {{MOE_01_UNIT}} |
 | MoP-01 | MoP | {{MOP_01_NAME}} | {{MOP_01_EQUATION}} | {{MOP_01_THRESHOLD}} | {{MOP_01_OBJECTIVE}} | {{MOP_01_UNIT}} |
 | MoP-02 | MoP | {{MOP_02_NAME}} | {{MOP_02_EQUATION}} | {{MOP_02_THRESHOLD}} | {{MOP_02_OBJECTIVE}} | {{MOP_02_UNIT}} |
 
-## 4. Multi-Domain Operational Threat Matrix
-| Threat ID | Threat Domain | Threat Vector | Technical Description | Severity | Detection Mechanism | Autonomous Mitigation Rule | Public Clause Citation |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `THR-KIN-01` | Kinetic | {{THR_KIN_01_VECTOR}} | {{THR_KIN_01_DESCRIPTION}} | {{THR_KIN_01_SEVERITY}} | {{THR_KIN_01_DETECTION}} | {{THR_KIN_01_MITIGATION_RULE}} | {{THR_KIN_01_CLAUSE_CITATION}} |
-| `THR-KIN-02` | Kinetic | {{THR_KIN_02_VECTOR}} | {{THR_KIN_02_DESCRIPTION}} | {{THR_KIN_02_SEVERITY}} | {{THR_KIN_02_DETECTION}} | {{THR_KIN_02_MITIGATION_RULE}} | {{THR_KIN_02_CLAUSE_CITATION}} |
-| `THR-KIN-03` | Kinetic | {{THR_KIN_03_VECTOR}} | {{THR_KIN_03_DESCRIPTION}} | {{THR_KIN_03_SEVERITY}} | {{THR_KIN_03_DETECTION}} | {{THR_KIN_03_MITIGATION_RULE}} | {{THR_KIN_03_CLAUSE_CITATION}} |
-| `THR-KIN-04` | Kinetic | {{THR_KIN_04_VECTOR}} | {{THR_KIN_04_DESCRIPTION}} | {{THR_KIN_04_SEVERITY}} | {{THR_KIN_04_DETECTION}} | {{THR_KIN_04_MITIGATION_RULE}} | {{THR_KIN_04_CLAUSE_CITATION}} |
-| `THR-MEC-01` | Mechanical | {{THR_MEC_01_VECTOR}} | {{THR_MEC_01_DESCRIPTION}} | {{THR_MEC_01_SEVERITY}} | {{THR_MEC_01_DETECTION}} | {{THR_MEC_01_MITIGATION_RULE}} | {{THR_MEC_01_CLAUSE_CITATION}} |
-| `THR-MEC-02` | Mechanical | {{THR_MEC_02_VECTOR}} | {{THR_MEC_02_DESCRIPTION}} | {{THR_MEC_02_SEVERITY}} | {{THR_MEC_02_DETECTION}} | {{THR_MEC_02_MITIGATION_RULE}} | {{THR_MEC_02_CLAUSE_CITATION}} |
-| `THR-MEC-03` | Mechanical | {{THR_MEC_03_VECTOR}} | {{THR_MEC_03_DESCRIPTION}} | {{THR_MEC_03_SEVERITY}} | {{THR_MEC_03_DETECTION}} | {{THR_MEC_03_MITIGATION_RULE}} | {{THR_MEC_03_CLAUSE_CITATION}} |
-| `THR-MEC-04` | Mechanical | {{THR_MEC_04_VECTOR}} | {{THR_MEC_04_DESCRIPTION}} | {{THR_MEC_04_SEVERITY}} | {{THR_MEC_04_DETECTION}} | {{THR_MEC_04_MITIGATION_RULE}} | {{THR_MEC_04_CLAUSE_CITATION}} |
-| `THR-ENV-01` | Environmental | {{THR_ENV_01_VECTOR}} | {{THR_ENV_01_DESCRIPTION}} | {{THR_ENV_01_SEVERITY}} | {{THR_ENV_01_DETECTION}} | {{THR_ENV_01_MITIGATION_RULE}} | {{THR_ENV_01_CLAUSE_CITATION}} |
-| `THR-ENV-02` | Environmental | {{THR_ENV_02_VECTOR}} | {{THR_ENV_02_DESCRIPTION}} | {{THR_ENV_02_SEVERITY}} | {{THR_ENV_02_DETECTION}} | {{THR_ENV_02_MITIGATION_RULE}} | {{THR_ENV_02_CLAUSE_CITATION}} |
-| `THR-ENV-03` | Environmental | {{THR_ENV_03_VECTOR}} | {{THR_ENV_03_DESCRIPTION}} | {{THR_ENV_03_SEVERITY}} | {{THR_ENV_03_DETECTION}} | {{THR_ENV_03_MITIGATION_RULE}} | {{THR_ENV_03_CLAUSE_CITATION}} |
-| `THR-ENV-04` | Environmental | {{THR_ENV_04_VECTOR}} | {{THR_ENV_04_DESCRIPTION}} | {{THR_ENV_04_SEVERITY}} | {{THR_ENV_04_DETECTION}} | {{THR_ENV_04_MITIGATION_RULE}} | {{THR_ENV_04_CLAUSE_CITATION}} |
-| `THR-EWC-01` | EW / Cyber | {{THR_EWC_01_VECTOR}} | {{THR_EWC_01_DESCRIPTION}} | {{THR_EWC_01_SEVERITY}} | {{THR_EWC_01_DETECTION}} | {{THR_EWC_01_MITIGATION_RULE}} | {{THR_EWC_01_CLAUSE_CITATION}} |
-| `THR-EWC-02` | EW / Cyber | {{THR_EWC_02_VECTOR}} | {{THR_EWC_02_DESCRIPTION}} | {{THR_EWC_02_SEVERITY}} | {{THR_EWC_02_DETECTION}} | {{THR_EWC_02_MITIGATION_RULE}} | {{THR_EWC_02_CLAUSE_CITATION}} |
-| `THR-EWC-03` | EW / Cyber | {{THR_EWC_03_VECTOR}} | {{THR_EWC_03_DESCRIPTION}} | {{THR_EWC_03_SEVERITY}} | {{THR_EWC_03_DETECTION}} | {{THR_EWC_03_MITIGATION_RULE}} | {{THR_EWC_03_CLAUSE_CITATION}} |
-| `THR-EWC-04` | EW / Cyber | {{THR_EWC_04_VECTOR}} | {{THR_EWC_04_DESCRIPTION}} | {{THR_EWC_04_SEVERITY}} | {{THR_EWC_04_DETECTION}} | {{THR_EWC_04_MITIGATION_RULE}} | {{THR_EWC_04_CLAUSE_CITATION}} |
+## 4. Threat & Electronic Warfare (EW) / Cyber Environment Matrix
+| Threat ID | Threat Vector | Description | Severity | Autonomous Mitigation Rule |
+| :--- | :--- | :--- | :--- | :--- |
+| THR-01 | {{THR_01_VECTOR}} | {{THR_01_DESCRIPTION}} | {{THR_01_SEVERITY}} | {{THR_01_MITIGATION_RULE}} |
+| THR-02 | {{THR_02_VECTOR}} | {{THR_02_DESCRIPTION}} | {{THR_02_SEVERITY}} | {{THR_02_MITIGATION_RULE}} |
+| THR-03 | {{THR_03_VECTOR}} | {{THR_03_DESCRIPTION}} | {{THR_03_SEVERITY}} | {{THR_03_MITIGATION_RULE}} |
 
 ## 5. PACE C2 Link Communications Plan
 | PACE Tier | Link Medium | Frequency Band | Nominal Data Rate | Heartbeat Timeout | Priority / Role |
@@ -980,10 +929,10 @@ Measures of Effectiveness (MoE) and Measures of Performance (MoP) are formulated
 
 ## 9. Bingo Energy Mathematics & Secondary Divert Protocols
 $$
-\begin{aligned}
-E_{\mathrm{bingo}}(t) &= E_{\mathrm{return}}(\mathbf{p}(t), \mathbf{p}_{\mathrm{dest}}) + E_{\mathrm{divert}}(\mathbf{p}_{\mathrm{dest}}, \mathbf{p}_{\mathrm{alt}}) + E_{\mathrm{reserve}} + E_{\mathrm{contingency}} \\
-E_{\mathrm{reserve}} &\ge 0.20 \cdot E_{\mathrm{capacity}}
-\end{aligned}
+\\begin{aligned}
+E_{\\mathrm{bingo}}(t) &= E_{\\mathrm{return}}(\\mathbf{p}(t), \\mathbf{p}_{\\mathrm{dest}}) + E_{\\mathrm{divert}}(\\mathbf{p}_{\\mathrm{dest}}, \\mathbf{p}_{\\mathrm{alt}}) + E_{\\mathrm{reserve}} + E_{\\mathrm{contingency}} \\\\
+E_{\\mathrm{reserve}} &\\ge 0.20 \\cdot E_{\\mathrm{capacity}}
+\\end{aligned}
 $$
 
 | Energy Parameter | Symbol | Value | Units | Constraint Rule |
