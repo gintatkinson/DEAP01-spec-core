@@ -59,6 +59,17 @@ except (ImportError, ValueError):
     from parity_auditor.validators.coverage_digest_validator import _normalize_obligation_id, _parse_obligation_tags
 
 
+def _is_probable_obligation_token(token: str) -> bool:
+    cleaned = re.sub(r'[*`_\[\]\'"]', '', token).strip()
+    if "/" in cleaned or not cleaned:
+        return False
+    if re.match(r'^(?:OBL|SAF|INT|EXT|MET|CTL|HAZ|REQ|STD|NORM|DO|ARP|MIL)[-_]\w+', cleaned, re.IGNORECASE):
+        return True
+    if re.match(r'^(?:OBL|SAF|INT|EXT|MET|CTL|HAZ|REQ|STD|NORM)\d+', cleaned, re.IGNORECASE):
+        return True
+    return False
+
+
 def _parse_witness_tags(text: str) -> List[str]:
     """
     Parses obligation witness tags from comments, docstrings, or code lines.
@@ -76,19 +87,22 @@ def _parse_witness_tags(text: str) -> List[str]:
     """
     tags: List[str] = []
 
-    # Bracketed patterns
+    # Bracketed patterns with (pattern, is_generic_realises)
     patterns = [
-        re.compile(r'///\s*(?:ObligationWitness|TestWitness|CodeWitness|SpecWitness|ModelWitness|ObligationAllocation|RealisesObligation|Obligation|Realises)\s*:\s*\[([^\]]+)\]', re.IGNORECASE),
-        re.compile(r'@witness\s*\(\s*([^\)]+)\s*\)', re.IGNORECASE),
-        re.compile(r'@obligation\s*\(\s*([^\)]+)\s*\)', re.IGNORECASE),
+        (re.compile(r'///\s*(?:ObligationWitness|TestWitness|CodeWitness|SpecWitness|ModelWitness|ObligationAllocation|RealisesObligation|Obligation)\s*:\s*\[([^\]]+)\]', re.IGNORECASE), False),
+        (re.compile(r'///\s*Realises\s*:\s*\[([^\]]+)\]', re.IGNORECASE), True),
+        (re.compile(r'@witness\s*\(\s*([^\)]+)\s*\)', re.IGNORECASE), False),
+        (re.compile(r'@obligation\s*\(\s*([^\)]+)\s*\)', re.IGNORECASE), False),
     ]
 
-    for pat in patterns:
+    for pat, is_generic_realises in patterns:
         for match in pat.finditer(text):
             raw_list = match.group(1)
             for part in raw_list.split(","):
                 token = part.strip()
                 if token:
+                    if is_generic_realises and not _is_probable_obligation_token(token):
+                        continue
                     norm = _normalize_obligation_id(token)
                     if norm and norm not in tags:
                         tags.append(norm)
@@ -296,7 +310,6 @@ class ObligationWitnessValidator(IValidator):
             os.path.join(workspace_dir, "tests"),
             os.path.join(workspace_dir, "test"),
             os.path.join(workspace_dir, "app_flutter", "test"),
-            os.path.join(workspace_dir, "skills", "spec-orchestrator", "parity_auditor", "tests"),
         ]
 
         test_exts = (".py", ".dart", ".ts", ".tsx", ".js")

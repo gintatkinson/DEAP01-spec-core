@@ -81,6 +81,17 @@ def _normalize_obligation_id(raw_id: str) -> str:
     return cleaned if cleaned else raw.upper()
 
 
+def _is_probable_obligation_token(token: str) -> bool:
+    cleaned = re.sub(r'[*`_\[\]\'"]', '', token).strip()
+    if "/" in cleaned or not cleaned:
+        return False
+    if re.match(r'^(?:OBL|SAF|INT|EXT|MET|CTL|HAZ|REQ|STD|NORM|DO|ARP|MIL)[-_]\w+', cleaned, re.IGNORECASE):
+        return True
+    if re.match(r'^(?:OBL|SAF|INT|EXT|MET|CTL|HAZ|REQ|STD|NORM)\d+', cleaned, re.IGNORECASE):
+        return True
+    return False
+
+
 def _parse_obligation_tags(text: str) -> List[str]:
     """
     Parses obligation realization tags from Markdown specifications or doc comments.
@@ -95,22 +106,23 @@ def _parse_obligation_tags(text: str) -> List[str]:
     """
     tags: List[str] = []
 
-    # Tag patterns with brackets: /// Tag: [OBL-01, SAF-01]
+    # Tag patterns with brackets: (pattern, is_generic_realises)
     patterns = [
-        re.compile(r'///\s*ObligationAllocation\s*:\s*\[([^\]]+)\]', re.IGNORECASE),
-        re.compile(r'///\s*ObligationWitness\s*:\s*\[([^\]]+)\]', re.IGNORECASE),
-        re.compile(r'///\s*RealisesObligation\s*:\s*\[([^\]]+)\]', re.IGNORECASE),
-        re.compile(r'///\s*Obligation\s*:\s*\[([^\]]+)\]', re.IGNORECASE),
-        re.compile(r'///\s*Realises\s*:\s*\[([^\]]+)\]', re.IGNORECASE),
+        (re.compile(r'///\s*ObligationAllocation\s*:\s*\[([^\]]+)\]', re.IGNORECASE), False),
+        (re.compile(r'///\s*ObligationWitness\s*:\s*\[([^\]]+)\]', re.IGNORECASE), False),
+        (re.compile(r'///\s*RealisesObligation\s*:\s*\[([^\]]+)\]', re.IGNORECASE), False),
+        (re.compile(r'///\s*Obligation\s*:\s*\[([^\]]+)\]', re.IGNORECASE), False),
+        (re.compile(r'///\s*Realises\s*:\s*\[([^\]]+)\]', re.IGNORECASE), True),
     ]
 
-    for pat in patterns:
+    for pat, is_generic_realises in patterns:
         for match in pat.finditer(text):
             raw_list = match.group(1)
             for part in raw_list.split(","):
                 token = part.strip()
                 if token:
-                    # Filter out non-obligation UML realizations if matching class names
+                    if is_generic_realises and not _is_probable_obligation_token(token):
+                        continue
                     norm = _normalize_obligation_id(token)
                     if norm and norm not in tags:
                         tags.append(norm)

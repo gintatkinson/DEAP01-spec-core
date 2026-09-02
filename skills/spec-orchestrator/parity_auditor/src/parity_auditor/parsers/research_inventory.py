@@ -27,7 +27,7 @@ from ..core.models import (
 
 
 CLAUSE_LOCATOR_PATTERN = re.compile(
-    r'(?:§+|(?:\b(?:section|clause|annex|task|app\.|appendix|table|article|chapter|part)\b))\s*[a-zA-Z0-9\.\-_]+',
+    r'(?:§+|(?:\b(?:section|clause|annex|task|appendix|table|article|chapter|part)\b|\bapp(?:\.|\b)))\s*[a-zA-Z0-9\.\-_]+',
     re.IGNORECASE,
 )
 
