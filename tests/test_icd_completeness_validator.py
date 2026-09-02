@@ -141,18 +141,33 @@ def _get_valid_mission_intent_content() -> str:
 | `MET-06` | PostMissionDataOffload | Post-landing shutdown | Secure telemetry offload | Hash Verification | `/// OperationalAllocation: [MET-06]` |
 
 ## 3. Measures of Effectiveness (MoE) & Measures of Performance (MoP) Metrics
+Measures of Effectiveness (MoE) and Measures of Performance (MoP) are formulated in accordance with INCOSE Systems Engineering Handbook v5.0 (§3.3.1 Needs and Requirements Definition Process, §3.3.2 System Requirements Definition Process).
+
 | Metric ID | Metric Type | Metric Name | Formulation / Equation | Threshold | Objective | Unit |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | MoE-01 | MoE | Mission Area Coverage Ratio | A_covered / A_total | 0.90 | 0.99 | Dimensionless |
 | MoP-01 | MoP | Cross-Track Waypoint Deviation | max norm(p_act - p_cmd)_2D | 5.0 | 1.0 | m |
 | MoP-02 | MoP | Telemetry Latency Bound | tau_transport | 50.0 | 10.0 | ms |
 
-## 4. Threat & Electronic Warfare (EW) / Cyber Environment Matrix
-| Threat ID | Threat Vector | Description | Severity | Autonomous Mitigation Rule |
-| :--- | :--- | :--- | :--- | :--- |
-| THR-01 | GNSS Spoofing / Jamming | Loss of carrier lock or pseudo-range jump | High | Revert to optical dead-reckoning and IMU integration |
-| THR-02 | RF Link Interception / Jamming | C2 uplink SNR < 6 dB | Medium | Switch frequency-hopping channel or activate PACE alternate link |
-| THR-03 | Cyber Ingress Attempt | Unauthorized packet on telemetry port | Critical | Immediate port isolation and cryptographic key cycle |
+## 4. Multi-Domain Operational Threat Matrix
+| Threat ID | Threat Domain | Threat Vector | Technical Description | Severity | Detection Mechanism | Autonomous Mitigation Rule | Public Clause Citation |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `THR-KIN-01` | Kinetic | Ballistic projectile intercept | High-velocity physical impact trajectory | Critical | Optical/radar trajectory tracker | Execute evasive lateral displacement maneuver | MIL-STD-882E Task 205 |
+| `THR-KIN-02` | Kinetic | Close-proximity collision | Uncooperative vehicle close-proximity track | High | Proximity lidar / vision bounding box | Altitude separation climb and vector divergence | RTCA DO-365B §2.2.4 |
+| `THR-KIN-03` | Kinetic | Ground debris field | Fragment dispersal in operational zone | High | Acoustic / optical blast detector | Immediate vertical climb to safe standoff altitude | SORA v2.5 Annex B |
+| `THR-KIN-04` | Kinetic | Net / entangling projectile | Low-velocity physical entangling device | Medium | Vision optical flow anomaly sensor | Throttle surge and aggressive breakout attitude | MIL-STD-882E Task 201 |
+| `THR-MEC-01` | Mechanical | Actuator / motor jam | Motor bearing seizure or control surface lock | Critical | RPM feedback disparity & current spike | Differential thrust compensation and divert to base | DO-178C §6.3 |
+| `THR-MEC-02` | Mechanical | Structural fatigue fracture | Spar micro-fracture under high-g load | High | Accelerometer harmonic vibration monitor | Load reduction factor and speed clamp | ARP4761 App. L |
+| `THR-MEC-03` | Mechanical | Payload release mechanism failure | Solenoid unlatch timeout or jam | Medium | Microswitch latch position sensor | Abort drop sequence and return with payload secured | MIL-STD-882E Task 205 |
+| `THR-MEC-04` | Mechanical | Landing gear deployment stall | Actuator current overload prior to lock | Medium | Limit switch telemetry timeout | Cycle gear actuator and route to secondary turf strip | STANAG 4586 §4.1 |
+| `THR-ENV-01` | Environmental | Severe convective wind gust | Microburst exceeding operational ceiling | High | Pitot-static differential air data spike | Transition to high-stability penetration attitude | ASTM F3269-17 §5.2 |
+| `THR-ENV-02` | Environmental | Surface icing accumulation | Freezing moisture accretion on lifting surfaces | High | Optical ice detector / lift degradation ratio | Activate thermal de-icing and descend below freezing level | ARP4754A §5.0 |
+| `THR-ENV-03` | Environmental | Heavy precipitation ingress | Moisture penetration past IP67 seal barrier | Medium | Internal humidity / liquid ingress sensor | Isolate non-essential telemetry buses and RTB | SORA v2.5 Annex B |
+| `THR-ENV-04` | Environmental | Extreme thermal throttling | Ambient temperature exceeding ESC thermal bound | Medium | Internal thermocouple array | Reduce continuous power draw and divert | DO-254 §11.0 |
+| `THR-EWC-01` | EW / Cyber | GNSS spoofing / carrier jamming | Pseudo-range jump or carrier C/N0 collapse | High | RAIM integrity alert / multi-constellation disparity | Revert to optical dead-reckoning and IMU fusion | RTCA DO-365B §2.2.5 |
+| `THR-EWC-02` | EW / Cyber | C2 link RF jamming | Uplink SNR degradation below link margin | High | Automatic packet error rate (PER) monitor | Switch to frequency-hopping alternate PACE tier | STANAG 4586 §3.2 |
+| `THR-EWC-03` | EW / Cyber | Telemetry packet injection | Unauthenticated frames on command port | Critical | Cryptographic HMAC validation failure | Drop unauthorized frames, cycle crypto keys, isolate port | ISO/IEC/IEEE 29148 §8.4 |
+| `THR-EWC-04` | EW / Cyber | Supply chain firmware tampering | Unauthorized firmware signature hash | Critical | Secure Boot hardware root of trust (RoT) | Lock bootloader, halt flight computer, log alert | DO-178C §11.0 |
 
 ## 5. PACE C2 Link Communications Plan
 | PACE Tier | Link Medium | Frequency Band | Nominal Data Rate | Heartbeat Timeout | Priority / Role |

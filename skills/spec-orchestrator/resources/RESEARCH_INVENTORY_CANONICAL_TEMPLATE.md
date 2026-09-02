@@ -16,6 +16,8 @@
 | Standard / Baseline ID | Issuing Body | Title | Applicable Clauses | Obligation Category | Declared Total | Clause Citation |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | ISO/IEC/IEEE 29148:2018 | ISO/IEC/IEEE | Systems and Software Engineering — Requirements Engineering | §6.4.2 ConOps, §6.4.3 OpsCon, §8.4 System Requirements | Requirements Engineering | 3 | ISO/IEC/IEEE 29148:2018 §6.4.2, §6.4.3, §8.4 |
+| INCOSE-SEH-V5 | INCOSE | Systems Engineering Handbook v5.0 (ISBN: 978-1-119-81429-0) | §3.3.1 Needs & Req Definition, §3.3.2 System Req Definition, §3.3.4 Architecture, §9.2 Decision Analysis | Systems Engineering Baseline | 4 | INCOSE SE Handbook v5.0 §3.3.1, §3.3.2, §3.3.4, §9.2 |
+| INCOSE-GWR-V4 | INCOSE | Guide for Writing Requirements (INCOSE-TP-2010-006-04) | Rules R1–R44 Characteristics & Attributes | Requirements Quality Rules | 2 | INCOSE GWR v4 Rules R1–R44 |
 | NATO STANAG 4586 | NATO | Standard Interfaces of Autonomous Control Systems | Interoperability Profiles & DLI/VCI Interfaces | Interoperability | 2 | STANAG 4586 Ed. 4 §3.2, §4.1 |
 | RTCA DO-178C / DO-254 | RTCA / EUROCAE | Software and Electronic Hardware Considerations in Airborne Systems | §6.3 Software Architecture, §11.0 Software Life Cycle Data | Safety Assurance | 2 | DO-178C §6.3, DO-254 §11.0 |
 | SAE ARP4754A / ARP4761 | SAE | Guidelines for Development of Civil Aircraft and Systems / Safety Assessment | §5.0 System Safety Assessment, FHA/PSSA/SSA | Safety Assessment | 2 | ARP4754A §5.0, ARP4761 App. L |
@@ -51,6 +53,8 @@ All external additions, proprietary extensions, and domain-specific baselines MU
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | `OBL-01` | {{OBL_01_STANDARD_ID}} | {{OBL_01_CLAUSE_CITATION}} | {{OBL_01_CLAUSE_TITLE}} | Phase 1 (Structural) | `docs/features/{{OBL_01_FEATURE_SLUG}}.md` |
 | `OBL-02` | {{OBL_02_STANDARD_ID}} | {{OBL_02_CLAUSE_CITATION}} | {{OBL_02_CLAUSE_TITLE}} | Phase 1.5 (Interfaces) | `docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md` |
+| `OBL-03` | INCOSE-SEH-V5 | INCOSE SE Handbook v5.0 §3.3.1, §3.3.2, §3.3.4, §9.2 | §3.3.1 Needs & Requirements, §3.3.2 System Requirements, §3.3.4 Architecture, §9.2 Decision Analysis | Phase 1 / 3 | `docs/conops/MISSION_INTENT.md` |
+| `OBL-04` | INCOSE-GWR-V4 | INCOSE GWR v4 Rules R1–R44 | Requirements Characteristics, Attributes, and Writing Rules R1–R44 | Phase 1 / 2 | `docs/features/{{OBL_01_FEATURE_SLUG}}.md` |
 | `SAF-01` | {{SAF_01_STANDARD_ID}} | {{SAF_01_CLAUSE_CITATION}} | {{SAF_01_CLAUSE_TITLE}} | Phase 2 (Behavioral) | `docs/user-stories/{{SAF_01_STORY_SLUG}}.md` |
 | `SAF-02` | {{SAF_02_STANDARD_ID}} | {{SAF_02_CLAUSE_CITATION}} | {{SAF_02_CLAUSE_TITLE}} | Phase 2 (Behavioral) | `docs/safety/STPA_SYSTEM_THEORETIC_PROCESS_ANALYSIS.md` |
 | `MET-01` | {{MET_01_STANDARD_ID}} | {{MET_01_CLAUSE_CITATION}} | {{MET_01_CLAUSE_TITLE}} | Phase 3 (Interaction) | `docs/use-cases/{{MET_01_USECASE_SLUG}}.md` |

@@ -22,18 +22,33 @@
 | `MET-06` | {{MET_06_TASK_NAME}} | {{MET_06_CONDITION}} | {{MET_06_STANDARD}} | {{MET_06_VERIFICATION}} | `/// OperationalAllocation: [MET-06]` |
 
 ## 3. Measures of Effectiveness (MoE) & Measures of Performance (MoP) Metrics
+Measures of Effectiveness (MoE) and Measures of Performance (MoP) are formulated in accordance with INCOSE Systems Engineering Handbook v5.0 (§3.3.1 Needs and Requirements Definition Process, §3.3.2 System Requirements Definition Process).
+
 | Metric ID | Metric Type | Metric Name | Formulation / Equation | Threshold | Objective | Unit |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | MoE-01 | MoE | {{MOE_01_NAME}} | {{MOE_01_EQUATION}} | {{MOE_01_THRESHOLD}} | {{MOE_01_OBJECTIVE}} | {{MOE_01_UNIT}} |
 | MoP-01 | MoP | {{MOP_01_NAME}} | {{MOP_01_EQUATION}} | {{MOP_01_THRESHOLD}} | {{MOP_01_OBJECTIVE}} | {{MOP_01_UNIT}} |
 | MoP-02 | MoP | {{MOP_02_NAME}} | {{MOP_02_EQUATION}} | {{MOP_02_THRESHOLD}} | {{MOP_02_OBJECTIVE}} | {{MOP_02_UNIT}} |
 
-## 4. Threat & Electronic Warfare (EW) / Cyber Environment Matrix
-| Threat ID | Threat Vector | Description | Severity | Autonomous Mitigation Rule |
-| :--- | :--- | :--- | :--- | :--- |
-| THR-01 | {{THR_01_VECTOR}} | {{THR_01_DESCRIPTION}} | {{THR_01_SEVERITY}} | {{THR_01_MITIGATION_RULE}} |
-| THR-02 | {{THR_02_VECTOR}} | {{THR_02_DESCRIPTION}} | {{THR_02_SEVERITY}} | {{THR_02_MITIGATION_RULE}} |
-| THR-03 | {{THR_03_VECTOR}} | {{THR_03_DESCRIPTION}} | {{THR_03_SEVERITY}} | {{THR_03_MITIGATION_RULE}} |
+## 4. Multi-Domain Operational Threat Matrix
+| Threat ID | Threat Domain | Threat Vector | Technical Description | Severity | Detection Mechanism | Autonomous Mitigation Rule | Public Clause Citation |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `THR-KIN-01` | Kinetic | {{THR_KIN_01_VECTOR}} | {{THR_KIN_01_DESCRIPTION}} | {{THR_KIN_01_SEVERITY}} | {{THR_KIN_01_DETECTION}} | {{THR_KIN_01_MITIGATION_RULE}} | {{THR_KIN_01_CLAUSE_CITATION}} |
+| `THR-KIN-02` | Kinetic | {{THR_KIN_02_VECTOR}} | {{THR_KIN_02_DESCRIPTION}} | {{THR_KIN_02_SEVERITY}} | {{THR_KIN_02_DETECTION}} | {{THR_KIN_02_MITIGATION_RULE}} | {{THR_KIN_02_CLAUSE_CITATION}} |
+| `THR-KIN-03` | Kinetic | {{THR_KIN_03_VECTOR}} | {{THR_KIN_03_DESCRIPTION}} | {{THR_KIN_03_SEVERITY}} | {{THR_KIN_03_DETECTION}} | {{THR_KIN_03_MITIGATION_RULE}} | {{THR_KIN_03_CLAUSE_CITATION}} |
+| `THR-KIN-04` | Kinetic | {{THR_KIN_04_VECTOR}} | {{THR_KIN_04_DESCRIPTION}} | {{THR_KIN_04_SEVERITY}} | {{THR_KIN_04_DETECTION}} | {{THR_KIN_04_MITIGATION_RULE}} | {{THR_KIN_04_CLAUSE_CITATION}} |
+| `THR-MEC-01` | Mechanical | {{THR_MEC_01_VECTOR}} | {{THR_MEC_01_DESCRIPTION}} | {{THR_MEC_01_SEVERITY}} | {{THR_MEC_01_DETECTION}} | {{THR_MEC_01_MITIGATION_RULE}} | {{THR_MEC_01_CLAUSE_CITATION}} |
+| `THR-MEC-02` | Mechanical | {{THR_MEC_02_VECTOR}} | {{THR_MEC_02_DESCRIPTION}} | {{THR_MEC_02_SEVERITY}} | {{THR_MEC_02_DETECTION}} | {{THR_MEC_02_MITIGATION_RULE}} | {{THR_MEC_02_CLAUSE_CITATION}} |
+| `THR-MEC-03` | Mechanical | {{THR_MEC_03_VECTOR}} | {{THR_MEC_03_DESCRIPTION}} | {{THR_MEC_03_SEVERITY}} | {{THR_MEC_03_DETECTION}} | {{THR_MEC_03_MITIGATION_RULE}} | {{THR_MEC_03_CLAUSE_CITATION}} |
+| `THR-MEC-04` | Mechanical | {{THR_MEC_04_VECTOR}} | {{THR_MEC_04_DESCRIPTION}} | {{THR_MEC_04_SEVERITY}} | {{THR_MEC_04_DETECTION}} | {{THR_MEC_04_MITIGATION_RULE}} | {{THR_MEC_04_CLAUSE_CITATION}} |
+| `THR-ENV-01` | Environmental | {{THR_ENV_01_VECTOR}} | {{THR_ENV_01_DESCRIPTION}} | {{THR_ENV_01_SEVERITY}} | {{THR_ENV_01_DETECTION}} | {{THR_ENV_01_MITIGATION_RULE}} | {{THR_ENV_01_CLAUSE_CITATION}} |
+| `THR-ENV-02` | Environmental | {{THR_ENV_02_VECTOR}} | {{THR_ENV_02_DESCRIPTION}} | {{THR_ENV_02_SEVERITY}} | {{THR_ENV_02_DETECTION}} | {{THR_ENV_02_MITIGATION_RULE}} | {{THR_ENV_02_CLAUSE_CITATION}} |
+| `THR-ENV-03` | Environmental | {{THR_ENV_03_VECTOR}} | {{THR_ENV_03_DESCRIPTION}} | {{THR_ENV_03_SEVERITY}} | {{THR_ENV_03_DETECTION}} | {{THR_ENV_03_MITIGATION_RULE}} | {{THR_ENV_03_CLAUSE_CITATION}} |
+| `THR-ENV-04` | Environmental | {{THR_ENV_04_VECTOR}} | {{THR_ENV_04_DESCRIPTION}} | {{THR_ENV_04_SEVERITY}} | {{THR_ENV_04_DETECTION}} | {{THR_ENV_04_MITIGATION_RULE}} | {{THR_ENV_04_CLAUSE_CITATION}} |
+| `THR-EWC-01` | EW / Cyber | {{THR_EWC_01_VECTOR}} | {{THR_EWC_01_DESCRIPTION}} | {{THR_EWC_01_SEVERITY}} | {{THR_EWC_01_DETECTION}} | {{THR_EWC_01_MITIGATION_RULE}} | {{THR_EWC_01_CLAUSE_CITATION}} |
+| `THR-EWC-02` | EW / Cyber | {{THR_EWC_02_VECTOR}} | {{THR_EWC_02_DESCRIPTION}} | {{THR_EWC_02_SEVERITY}} | {{THR_EWC_02_DETECTION}} | {{THR_EWC_02_MITIGATION_RULE}} | {{THR_EWC_02_CLAUSE_CITATION}} |
+| `THR-EWC-03` | EW / Cyber | {{THR_EWC_03_VECTOR}} | {{THR_EWC_03_DESCRIPTION}} | {{THR_EWC_03_SEVERITY}} | {{THR_EWC_03_DETECTION}} | {{THR_EWC_03_MITIGATION_RULE}} | {{THR_EWC_03_CLAUSE_CITATION}} |
+| `THR-EWC-04` | EW / Cyber | {{THR_EWC_04_VECTOR}} | {{THR_EWC_04_DESCRIPTION}} | {{THR_EWC_04_SEVERITY}} | {{THR_EWC_04_DETECTION}} | {{THR_EWC_04_MITIGATION_RULE}} | {{THR_EWC_04_CLAUSE_CITATION}} |
 
 ## 5. PACE C2 Link Communications Plan
 | PACE Tier | Link Medium | Frequency Band | Nominal Data Rate | Heartbeat Timeout | Priority / Role |
