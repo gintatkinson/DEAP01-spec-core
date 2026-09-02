@@ -168,6 +168,19 @@ def test_reconcile_backlog_tooling_accessible():
     assert res.returncode == 0, f"scripts/reconcile_backlog.py failed with exit code {res.returncode}:\nSTDOUT:\n{res.stdout}\nSTDERR:\n{res.stderr}"
     assert "Traceback" not in res.stderr, f"scripts/reconcile_backlog.py produced unhandled exception:\n{res.stderr}"
 
+def test_setup_git_hooks_help_accessible():
+    """Verify scripts/setup_git_hooks.py --help prints usage cleanly without error or side effects."""
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if not os.path.isdir(repo_root):
+        repo_root = os.getcwd()
+
+    script_path = os.path.join(repo_root, "scripts", "setup_git_hooks.py")
+    assert os.path.isfile(script_path), f"scripts/setup_git_hooks.py missing at {repo_root}"
+
+    res = subprocess.run([sys.executable, script_path, "--help"], cwd=repo_root, capture_output=True, text=True, timeout=10)
+    assert res.returncode == 0, f"scripts/setup_git_hooks.py --help failed with exit code {res.returncode}:\n{res.stderr}"
+    assert "usage:" in res.stdout, "Expected usage message in --help output"
+
 def test_sysml_ssot_completeness_rule_accessible():
     """Verify rules/sysml-ssot-completeness.md exists, is non-empty, and satisfies governance requirements."""
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -257,6 +270,18 @@ def test_zero_machine_paths_in_repository():
         if rel_path == "tests/test_baseline.py":
             continue
         file_path = os.path.join(repo_root, rel_path)
+        if os.path.islink(file_path):
+            try:
+                link_target = os.readlink(file_path)
+                match = pattern.search(link_target)
+                if match:
+                    violations.append(f"{rel_path} (symlink target: {link_target})")
+            except Exception as e:
+                violations.append(f"Failed to read symlink {rel_path}: {e}")
+            if os.path.isdir(file_path) or not os.path.exists(file_path):
+                continue
+        if os.path.isdir(file_path):
+            continue
         try:
             with open(file_path, "r", encoding="utf-8", errors="ignore") as file_obj:
                 for line_idx, line in enumerate(file_obj, start=1):
@@ -267,6 +292,59 @@ def test_zero_machine_paths_in_repository():
             violations.append(f"Failed to read {rel_path}: {e}")
 
     assert not violations, f"Found hardcoded machine paths in repository:\n" + "\n".join(violations[:20])
+
+def test_zero_machine_paths_symlink_safety():
+    """Verify that relative directory/file symlinks and dirty symlink targets are correctly processed."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # 1. Clean relative directory symlink
+        target_dir = os.path.join(tmpdir, "target_dir")
+        os.makedirs(target_dir, exist_ok=True)
+        link_dir = os.path.join(tmpdir, "link_dir")
+        os.symlink("target_dir", link_dir)
+
+        # 2. Clean relative file symlink
+        target_file = os.path.join(tmpdir, "target_file.txt")
+        with open(target_file, "w", encoding="utf-8") as f:
+            f.write("clean content\n")
+        link_file = os.path.join(tmpdir, "link_file.txt")
+        os.symlink("target_file.txt", link_file)
+
+        # 3. Dirty symlink target with machine path
+        fake_machine_path = "/" + "Users/" + "dev/secret"
+        dirty_link = os.path.join(tmpdir, "dirty_link")
+        os.symlink(fake_machine_path, dirty_link)
+
+        user_prefix = "/" + "Users/"
+        jail_prefix = "/" + "jail/"
+        pattern = re.compile(rf"({user_prefix}[a-zA-Z0-9_-]+|{jail_prefix}[a-zA-Z0-9_-]+|file:///{user_prefix})")
+
+        violations = []
+        for rel_path in ["link_dir", "link_file.txt", "dirty_link"]:
+            file_path = os.path.join(tmpdir, rel_path)
+            if os.path.islink(file_path):
+                try:
+                    link_target = os.readlink(file_path)
+                    match = pattern.search(link_target)
+                    if match:
+                        violations.append(f"{rel_path} (symlink target: {link_target})")
+                except Exception as e:
+                    violations.append(f"Failed to read symlink {rel_path}: {e}")
+                if os.path.isdir(file_path) or not os.path.exists(file_path):
+                    continue
+            if os.path.isdir(file_path):
+                continue
+            try:
+                with open(file_path, "r", encoding="utf-8", errors="ignore") as file_obj:
+                    for line_idx, line in enumerate(file_obj, start=1):
+                        match = pattern.search(line)
+                        if match:
+                            violations.append(f"{rel_path}:{line_idx}: {line.strip()}")
+            except Exception as e:
+                violations.append(f"Failed to read {rel_path}: {e}")
+
+        assert len(violations) == 1, f"Expected exactly 1 violation for dirty symlink, got: {violations}"
+        assert "dirty_link" in violations[0]
+
 
 def test_installer_excludes_pipeline_diagnostics():
     """Verify that scripts/install_pipeline.sh explicitly excludes/removes .pipeline/diagnostics."""

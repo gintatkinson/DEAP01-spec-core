@@ -5,6 +5,7 @@ Removes pre-commit and pre-push hooks to prevent auto-triggered compiler runs.
 Appends whitelist rules to .gitignore and stages pipeline directories.
 """
 
+import argparse
 import os
 import subprocess
 import sys
@@ -98,5 +99,13 @@ def setup_git_hooks():
     _whitelist_infrastructure(repo_root)
 
 
-if __name__ == "__main__":
+def main():
+    parser = argparse.ArgumentParser(
+        description="Clean up Git hooks and whitelist pipeline infrastructure directories."
+    )
+    parser.parse_args()
     setup_git_hooks()
+
+
+if __name__ == "__main__":
+    main()
