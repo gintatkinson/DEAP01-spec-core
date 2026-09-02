@@ -19,6 +19,7 @@ import json
 import shutil
 
 from scripts.dispatch_subagent import (
+    DEFAULT_CLASSIFICATION,
     dispatch_subagent,
     generate_subagent_prompt,
     validate_skill_path,
@@ -361,6 +362,77 @@ class TestDispatchSubagent(unittest.TestCase):
             self.assertTrue(preflight_ok, f"Preflight rejected prompt: {reason}")
         finally:
             os.environ.pop("DEAP_REPOSITORY_TYPE", None)
+
+    def test_default_classification_is_not_hardcoded_upstream(self):
+        """Verify DEFAULT_CLASSIFICATION is not hardcoded to UPSTREAM_SPEC_CORE_COMPILER (Issue #87)."""
+        self.assertNotEqual(DEFAULT_CLASSIFICATION, "UPSTREAM_SPEC_CORE_COMPILER")
+        self.assertEqual(DEFAULT_CLASSIFICATION, "DOWNSTREAM_APPLICATION_WORKSPACE")
+
+    def test_resolve_classification_downstream_workspace_cwd_without_upstream_marker(self):
+        """Verify when cwd is a downstream workspace without .pipeline/upstream, classification is DOWNSTREAM_APPLICATION_WORKSPACE (Issue #87)."""
+        temp_ws = tempfile.mkdtemp(prefix="deap_test_downstream_ws_")
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(temp_ws)
+            res = resolve_repository_classification()
+            self.assertEqual(res, "DOWNSTREAM_APPLICATION_WORKSPACE")
+            self.assertNotEqual(res, "UPSTREAM_SPEC_CORE_COMPILER")
+        finally:
+            os.chdir(old_cwd)
+            shutil.rmtree(temp_ws, ignore_errors=True)
+
+    def test_resolve_classification_with_upstream_sentinel_marker_present(self):
+        """Verify workspace with .pipeline/upstream sentinel derives UPSTREAM_SPEC_CORE_COMPILER (Issue #87)."""
+        temp_ws = tempfile.mkdtemp(prefix="deap_test_upstream_ws_")
+        try:
+            upstream_dir = os.path.join(temp_ws, ".pipeline", "upstream")
+            os.makedirs(upstream_dir, exist_ok=True)
+            res = resolve_repository_classification(base_dir=temp_ws)
+            self.assertEqual(res, "UPSTREAM_SPEC_CORE_COMPILER")
+        finally:
+            shutil.rmtree(temp_ws, ignore_errors=True)
+
+    def test_resolve_classification_never_falls_back_to_static_upstream_when_downstream_metadata_present(self):
+        """Verify resolve_repository_classification derives downstream from lineage metadata even when cwd has metadata (Issue #87)."""
+        temp_ws = tempfile.mkdtemp(prefix="deap_test_downstream_")
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(temp_ws)
+            pipe_dir = os.path.join(temp_ws, ".pipeline")
+            os.makedirs(pipe_dir, exist_ok=True)
+            with open(os.path.join(pipe_dir, "lineage.json"), "w", encoding="utf-8") as f:
+                json.dump({"role": "DOWNSTREAM_APPLICATION_WORKSPACE"}, f)
+            res = resolve_repository_classification()
+            self.assertEqual(res, "DOWNSTREAM_APPLICATION_WORKSPACE")
+            self.assertNotEqual(res, "UPSTREAM_SPEC_CORE_COMPILER")
+        finally:
+            os.chdir(old_cwd)
+            shutil.rmtree(temp_ws, ignore_errors=True)
+
+    def test_generate_subagent_prompt_in_downstream_workspace_without_upstream_marker(self):
+        """Verify subagent prompt generated in downstream workspace derives DOWNSTREAM_APPLICATION_WORKSPACE (Issue #87)."""
+        temp_ws = tempfile.mkdtemp(prefix="deap_test_downstream_prompt_")
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(temp_ws)
+            prompt = generate_subagent_prompt(
+                skill=self.skill_feature,
+                target="src/downstream_component.py",
+                base_dir=PROJECT_ROOT,
+            )
+            # When base_dir is explicitly passed as PROJECT_ROOT, it will resolve from PROJECT_ROOT.
+            # But when base_dir points to downstream workspace:
+            prompt_downstream = generate_subagent_prompt(
+                skill=os.path.join(PROJECT_ROOT, self.skill_feature),
+                target="src/downstream_component.py",
+                base_dir=temp_ws,
+            )
+            self.assertIn("Repository Classification: DOWNSTREAM_APPLICATION_WORKSPACE", prompt_downstream)
+            self.assertNotIn("Repository Classification: UPSTREAM_SPEC_CORE_COMPILER", prompt_downstream)
+            self.assertEqual(lint_prompt_text(prompt_downstream), [])
+        finally:
+            os.chdir(old_cwd)
+            shutil.rmtree(temp_ws, ignore_errors=True)
 
 
 if __name__ == "__main__":

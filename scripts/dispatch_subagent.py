@@ -52,7 +52,7 @@ except ImportError:
         load_mandate_requirements = None
 
 
-DEFAULT_CLASSIFICATION = "UPSTREAM_SPEC_CORE_COMPILER"
+DEFAULT_CLASSIFICATION = "DOWNSTREAM_APPLICATION_WORKSPACE"
 DEFAULT_ROLE = "Context-Isolated Worker"
 DEFAULT_TYPE = "code_modifier_worker"
 
@@ -124,7 +124,7 @@ def resolve_repository_classification(
     5. Upstream sentinel: `.pipeline/upstream` -> `UPSTREAM_SPEC_CORE_COMPILER`.
     6. Default fallback:
        - `DOWNSTREAM_APPLICATION_WORKSPACE` if no upstream sentinel in workspace.
-       - `UPSTREAM_SPEC_CORE_COMPILER` if in core repo.
+       - `UPSTREAM_SPEC_CORE_COMPILER` if `.pipeline/upstream` sentinel is present in workspace.
 
     Args:
         base_dir: Optional base directory to search for metadata files.
@@ -149,9 +149,11 @@ def resolve_repository_classification(
     if base_dir:
         search_dirs = [os.path.abspath(base_dir)]
     else:
-        search_dirs = [os.path.abspath(os.getcwd())]
-        if PROJECT_ROOT not in search_dirs:
-            search_dirs.append(PROJECT_ROOT)
+        cwd = os.path.abspath(os.getcwd())
+        if cwd == PROJECT_ROOT or cwd.startswith(PROJECT_ROOT + os.sep):
+            search_dirs = [cwd, PROJECT_ROOT]
+        else:
+            search_dirs = [cwd]
 
     for ws in search_dirs:
         # 3. Check lineage.json (Issue #87)
@@ -234,16 +236,6 @@ def resolve_repository_classification(
         upstream_marker = os.path.join(ws, ".pipeline", "upstream")
         if os.path.exists(upstream_marker):
             return "UPSTREAM_SPEC_CORE_COMPILER"
-
-    # 6. Fallback check: If workspace has no upstream marker, detect downstream workspace
-    if base_dir:
-        upstream_marker = os.path.join(os.path.abspath(base_dir), ".pipeline", "upstream")
-        if not os.path.exists(upstream_marker):
-            return "DOWNSTREAM_APPLICATION_WORKSPACE"
-
-    # Default to UPSTREAM_SPEC_CORE_COMPILER if we are in core repo with .pipeline/upstream
-    if os.path.exists(os.path.join(PROJECT_ROOT, ".pipeline", "upstream")):
-        return "UPSTREAM_SPEC_CORE_COMPILER"
 
     return DEFAULT_CLASSIFICATION
 
