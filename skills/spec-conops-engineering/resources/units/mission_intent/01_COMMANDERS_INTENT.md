@@ -1,6 +1,6 @@
 | Attribute | Value |
 | :--- | :--- |
-| **Title** | Tactical Mission Intent: Commander's Intent & Operational Objectives |
+| **Title** | Tactical Mission Intent: Operational Purpose & Objectives |
 | **Version** | 1.0.0 |
 | **Date** | 2026-09-02 |
 
@@ -8,23 +8,23 @@
 
 ## 1. Commander's Intent & Operational Objectives
 
-- **Operational Purpose:** The primary operational purpose of the tactical autonomous cyber-physical system is to execute persistent, autonomous, multi-sensor intelligence, surveillance, reconnaissance (ISR), tactical target tracking, kinetic engagement, and corridor security within bounded operational volumes, operating under rigorous autonomous control with multi-tier command and control (C2) link redundancy and deterministic failsafe containment.
+- **Operational Purpose:** The primary operational purpose of the tactical autonomous cyber-physical system is to execute persistent, autonomous state trajectory traversal, multi-modal sensor data acquisition, edge state inference, dynamic boundary deconfliction, and precision task execution within bounded operational state spaces, operating under rigorous autonomous control with multi-tier command and control (C2) communications redundancy and deterministic failsafe containment.
 - **Key Tasks:**
-  - Execute pre-flight Built-In-Test (BIT) self-diagnostics, calibration, and cryptographic link binding within $t_{\mathrm{PBIT}} \le \tau_{\mathrm{PBIT\_max}}$ of power activation.
-  - Conduct autonomous ingress transit along designated 3D flight corridors while maintaining strict lateral and vertical containment within $h_{\mathrm{operating\_ceiling}}$.
-  - Perform real-time multi-spectral electro-optical / infrared (EO/IR) surveillance and persistent orbit tracking over target areas of interest.
-  - Maintain continuous DAA (Detect and Avoid) Well-Clear separation minima from cooperative and non-cooperative airspace participants.
-  - Stream encrypted sensor telemetry across the primary C2 link with automatic failover across alternate, contingency, and emergency PACE tiers.
-  - Enforce dual-consent cryptographic arming and positive target identification (PID) interlocks ($C_{\mathrm{PID}} \ge C_{\mathrm{PID\_threshold}}$) prior to terminal engagement or target designation.
-  - Continuously compute closed-loop Bingo energy state and execute autonomous return-to-base (RTB) or secondary divert routing upon reaching safety thresholds ($E(t) \le E_{\mathrm{bingo}}(t)$).
-  - Perform precision autonomous recovery and post-flight cryptographic data zeroization and diagnostic offload.
-- **End State:** All assigned surveillance and strike corridor waypoints fully traversed and verified; zero unauthorized geofence boundary excursions; zero unmitigated collision hazards; all target tracks positively identified through multi-spectral fusion ($C_{\mathrm{PID}} \ge C_{\mathrm{PID\_threshold}}$); and successful recovery at the primary base or designated secondary divert landing site with residual energy strictly satisfying $E_{\mathrm{reserve}} \ge \text{Ratio}_{\mathrm{reserve\_min}} \cdot E_{\mathrm{capacity}}$.
+  - Execute pre-operation Built-In-Test (BIT) self-diagnostics, calibration, and cryptographic link binding within $t_{\mathrm{PBIT}} \le \tau_{\mathrm{PBIT\_max}}$ of power activation.
+  - Conduct autonomous transit along designated multi-dimensional state corridors while maintaining strict state boundary containment within $x_{\mathrm{operating\_max}}$.
+  - Perform real-time multi-modal sensor processing and persistent state tracking over designated operational zones.
+  - Maintain continuous boundary deconfliction and separation minima from non-cooperative external entities.
+  - Stream encrypted system telemetry across the primary C2 link with automatic failover across alternate, contingency, and emergency PACE tiers.
+  - Enforce dual-consent cryptographic authorization and positive condition verification ($C_{\mathrm{condition}} \ge C_{\mathrm{threshold}}$) prior to executing high-consequence operational tasks.
+  - Continuously compute closed-loop dynamic resource state and execute autonomous return-to-base (RTB) or secondary divert routing upon reaching safety thresholds ($R(t) \le R_{\mathrm{threshold}}(t)$).
+  - Perform precision autonomous arrival, actuator safe locking, cryptographic data zeroization, and diagnostic log offloading.
+- **End State:** All assigned operational corridor waypoints fully traversed and verified; zero unauthorized state boundary excursions; zero unmitigated collision or interference hazards; all state conditions positively identified and verified ($C_{\mathrm{condition}} \ge C_{\mathrm{threshold}}$); and successful recovery at the primary base or designated secondary divert recovery site with residual resources strictly satisfying $R_{\mathrm{reserve}} \ge \text{Ratio}_{\mathrm{reserve\_min}} \cdot R_{\mathrm{capacity}}$.
 
 ### 1.1 Normative Baseline & Doctrinal Authority
 This Tactical Mission Intent specification tree is authored in strict compliance with:
-- **NATO STANAG 4586 Edition 3**: Standard Interfaces of UAV Control System (UCS) for NATO UAV Interoperability.
+- **ISO/IEC/IEEE 29148:2018**: Systems and Software Engineering — Life Cycle Processes — Requirements Engineering (§5.2.4, §6.4.2).
 - **INCOSE Systems Engineering Handbook v5.0**: Technical Planning, System Requirements Definition, and Mission Analysis Processes (§3.2, §3.3).
-- **CJCSI 3500.02H**: Universal Joint Task List (UJTL) and Mission Essential Task List (METL) construction methodology.
+- **OMG Unified Architecture Framework (UAF) v2.0**: Operational Domain Architecture and Process Taxonomy.
 - **MIL-STD-882E**: Department of Defense Standard Practice for System Safety (§4.3, Hazard Identification and Mitigation).
-- **JARUS SORA v2.5**: Specific Operations Risk Assessment (Annex B, Containment and Risk Buffers).
-- **RTCA DO-365B**: Minimum Operational Performance Standards (MOPS) for Detect and Avoid (DAA) Systems.
+- **IEEE Std 1558-2020**: Standard for System Architecture and Interface Definitions.
+- **NIST SP 800-82r3**: Guide to Operational Technology (OT) Security.

@@ -6,14 +6,14 @@
 
 ## 5. PACE C2 Link Communications Plan
 
-In accordance with NATO STANAG 4586 (§4.5) and RTCA DO-362A, Command and Control (C2) link robustness is maintained through a four-tier Primary, Alternate, Contingency, Emergency (PACE) communications architecture with automated failover and hysteresis stabilization.
+In accordance with IEEE Std 1558-2020 and MIL-STD-188-220E, Command and Control (C2) communications robustness is maintained through a four-tier Primary, Alternate, Contingency, Emergency (PACE) communications architecture with automated failover and hysteresis stabilization.
 
 | PACE Tier | Link Medium | Frequency Band (f_band) | Nominal Data Rate (Rate_nom) | Heartbeat Timeout (tau_timeout) | Failover Hysteresis (tau_hysteresis) | Priority / Role | Public Clause Citation |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Primary** | Point-to-Point High-Bandwidth RF Link | f_band_Primary | Rate_nom_Primary | tau_timeout_Primary | tau_hysteresis_Primary | Full Payload Video & High-Rate Telemetry | NATO STANAG 4586 §4.5 |
-| **Alternate** | Encrypted Cellular / Network Tunnel | f_band_Alternate | Rate_nom_Alternate | tau_timeout_Alternate | tau_hysteresis_Alternate | Robust Flight Telemetry & Tactical C2 Relay | MIL-STD-188-220E §5.3 |
-| **Contingency** | Robust Narrowband RF Command Link | f_band_Contingency | Rate_nom_Contingency | tau_timeout_Contingency | tau_hysteresis_Contingency | Essential Safety Commands & Emergency C2 | RTCA DO-362A §2.2 |
-| **Emergency** | Autonomous Return-to-Base & Satellite Beacon | f_band_Emergency | Rate_nom_Emergency | tau_timeout_Emergency | tau_hysteresis_Emergency | Autonomous Lost-Link Rally Navigation & Emergency Beacon | JARUS SORA v2.5 Annex E |
+| **Primary** | Point-to-Point High-Bandwidth Data Link | f_band_Primary | Rate_nom_Primary | tau_timeout_Primary | tau_hysteresis_Primary | Full Payload Data & High-Rate Telemetry | IEEE Std 1558-2020 §4.5 |
+| **Alternate** | Encrypted Network / Infrastructure Tunnel | f_band_Alternate | Rate_nom_Alternate | tau_timeout_Alternate | tau_hysteresis_Alternate | Robust Telemetry & Tactical C2 Relay | MIL-STD-188-220E §5.3 |
+| **Contingency** | Robust Narrowband Command Channel | f_band_Contingency | Rate_nom_Contingency | tau_timeout_Contingency | tau_hysteresis_Contingency | Essential Safety Commands & Emergency C2 | IEEE Std 1558-2020 §4.5 |
+| **Emergency** | Autonomous Return & Emergency Beacon | f_band_Emergency | Rate_nom_Emergency | tau_timeout_Emergency | tau_hysteresis_Emergency | Autonomous Lost-Link Navigation & Emergency Beacon | MIL-STD-882E §4.3 |
 
 ### 5.1 Failover State Transition Dynamics
 
