@@ -103,7 +103,16 @@ def main():
     parser = argparse.ArgumentParser(
         description="Clean up Git hooks and whitelist pipeline infrastructure directories."
     )
-    parser.parse_args()
+    parser.add_argument(
+        "--install",
+        action="store_true",
+        help="Install git hooks and whitelist infrastructure",
+    )
+    args = parser.parse_args()
+    if not args.install:
+        parser.print_help(sys.stderr)
+        sys.exit(1)
+
     setup_git_hooks()
 
 
