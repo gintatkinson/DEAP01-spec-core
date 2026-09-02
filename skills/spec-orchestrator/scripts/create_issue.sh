@@ -3,6 +3,11 @@
 # Usage: ./create_issue.sh <body-file> <label> <title> <repo>
 set -euo pipefail
 
+if [ "$#" -lt 3 ]; then
+    echo "Usage: $0 <body-file> <label> <title> [repo]" >&2
+    exit 1
+fi
+
 LOCAL_FILE="$1"
 LABEL="$2"
 TITLE="$3"
