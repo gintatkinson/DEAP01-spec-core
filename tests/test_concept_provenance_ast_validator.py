@@ -244,6 +244,50 @@ Guidance is performed via Optical mode.
         self.assertTrue(any("quantumfluxdamper" in m.lower() or "quantum flux damper" in m.lower() for m in mismatches))
         self.assertTrue(any("0x55" in m and "INITIALIZE_CRYO" in m for m in mismatches))
 
+    def test_ast_metamodel_filters_delimiters_and_pins_and_glossary(self):
+        """Verify AST extraction and graph comparison ignore markdown delimiters, integer pins, and glossary definitions."""
+        validator = ConceptProvenanceValidator()
+        comparator = ASTMetamodelGraphComparator()
+
+        gt_root = TypedASTNode(node_id="gt_root", node_type="Root", name="GroundTruth")
+        # Prohibited property in schema
+        gt_root.children.append(TypedASTNode(
+            node_id="gt_p1",
+            node_type="Property",
+            name="recovery_system",
+            properties={"normalized_name": "recoverysystem", "enabled": False},
+            value="None",
+            source_file="schema/extracted/oem.md"
+        ))
+
+        cand_content = """# ConOps Document
+
+## 1. System Connector Pinouts
+| Pin | Signal | Description |
+| :--- | :--- | :--- |
+| 1 | +28VDC | Main Bus Power |
+| 2 | GND | Power Return |
+| 3 | RS422_TX+ | Telemetry Out |
+
+## 2. Acronyms and Glossary Definitions
+| Term | Definition |
+| :--- | :--- |
+| recovery_system | An emergency recovery parachute system |
+| PBIT | Power-on Built-in Test |
+
+## 3. Operations Procedure
+| Step | Action |
+| :--- | :--- |
+| 1 | Power on system bus |
+| 2 | Execute pre-flight calibration |
+"""
+        cand_root = validator.extract_concept_graph(cand_content, "docs/conops/conops.md", gt_root)
+
+        # No normative contradiction should be extracted from pinout tables, glossary tables, or step tables
+        mismatches = comparator.compare_graphs(gt_root, cand_root)
+        self.assertEqual(len(mismatches), 0, f"Expected 0 mismatches but got: {mismatches}")
+
 
 if __name__ == "__main__":
     unittest.main()
+

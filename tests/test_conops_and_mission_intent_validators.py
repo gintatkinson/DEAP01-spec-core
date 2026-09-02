@@ -230,12 +230,51 @@ class TestConOpsAndMissionIntentValidators(unittest.TestCase):
     def test_clean_upstream_landing_zones_pass_gracefully(self):
         """Clean upstream workspace with empty landing zone returns zero findings."""
         with tempfile.TemporaryDirectory() as tmpdir:
+            os.makedirs(os.path.join(tmpdir, ".pipeline", "upstream"), exist_ok=True)
             repo = WorkspaceRepository(workspace_dir=tmpdir)
             conops_val = ConopsCompletenessValidator()
             mission_val = MissionIntentCompletenessValidator()
 
             self.assertEqual(conops_val.validate(repo), [])
             self.assertEqual(mission_val.validate(repo), [])
+
+    def test_downstream_missing_conops_corpus_fails(self):
+        """Downstream workspace missing docs/conops returns fail-closed corpus-missing findings."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Downstream workspace: no .pipeline/upstream marker
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            conops_val = ConopsCompletenessValidator()
+            mission_val = MissionIntentCompletenessValidator()
+
+            conops_findings = conops_val.validate(repo)
+            mission_findings = mission_val.validate(repo)
+
+            self.assertEqual(len(conops_findings), 1)
+            self.assertEqual(conops_findings[0].rule_id, "conops-corpus-missing")
+            self.assertEqual(conops_findings[0].location, "docs/conops")
+
+            self.assertEqual(len(mission_findings), 1)
+            self.assertEqual(mission_findings[0].rule_id, "mission-intent-corpus-missing")
+            self.assertEqual(mission_findings[0].location, "docs/conops")
+
+    def test_downstream_empty_conops_dir_fails(self):
+        """Downstream workspace with empty docs/conops returns fail-closed corpus-missing findings."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            os.makedirs(conops_dir, exist_ok=True)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            conops_val = ConopsCompletenessValidator()
+            mission_val = MissionIntentCompletenessValidator()
+
+            conops_findings = conops_val.validate(repo)
+            mission_findings = mission_val.validate(repo)
+
+            self.assertEqual(len(conops_findings), 1)
+            self.assertEqual(conops_findings[0].rule_id, "conops-corpus-missing")
+
+            self.assertEqual(len(mission_findings), 1)
+            self.assertEqual(mission_findings[0].rule_id, "mission-intent-corpus-missing")
 
     def test_valid_conops_and_mission_intent_passes_100_percent(self):
         """Fully compliant CONOPS.md (12 sections) and MISSION_INTENT.md (10 sections) return 0 findings."""
@@ -411,6 +450,64 @@ class TestConOpsAndMissionIntentValidators(unittest.TestCase):
             alloc_errors = [f for f in findings if f.rule_id == "mission-metl-unallocated"]
             self.assertTrue(len(alloc_errors) >= 1)
             self.assertIn("MET-04", str(alloc_errors[0]))
+
+    def test_mission_intent_metl_task_suffix_and_words_handling(self):
+        """METL tasks with suffixes (e.g. METL-01-A, MET-02-B) and template placeholders do not cause phantom unallocated findings."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            os.makedirs(conops_dir, exist_ok=True)
+
+            content = _get_valid_mission_intent_content()
+            # Replace MET-01 with METL-01-A and MET-02 with MET-02-B in table, Section 10, and add descriptive text / template tokens
+            content = content.replace("`MET-01`", "`METL-01-A`")
+            content = content.replace("`/// OperationalAllocation: [MET-01]`", "`/// OperationalAllocation: [METL-01-A]`")
+            content = content.replace("- `/// OperationalAllocation: [MET-01]`", "- `/// OperationalAllocation: [METL-01-A]`")
+            content = content.replace("`MET-02`", "`MET-02-B`")
+            content = content.replace("`/// OperationalAllocation: [MET-02]`", "`/// OperationalAllocation: [MET-02-B]`")
+            content = content.replace("- `/// OperationalAllocation: [MET-02]`", "- `/// OperationalAllocation: [MET-02-B]`")
+
+            # Add template tokens and trailing descriptive text inside Section 2
+            content = content.replace(
+                "## 2. Mission Essential Task List (METL)",
+                "## 2. Mission Essential Task List (METL)\n\n"
+                "- **METL-01-A**: System initial BIT checkout.\n"
+                "- Note: {{MET_01_TASK_NAME}} placeholder token should not be parsed as task ID.\n"
+                "- Trailing words: MET-02-B-nominal-profile should not swallow words.\n"
+            )
+
+            with open(os.path.join(conops_dir, "MISSION_INTENT.md"), "w", encoding="utf-8") as f:
+                f.write(content)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            mission_val = MissionIntentCompletenessValidator()
+            findings = mission_val.validate(repo)
+
+            alloc_errors = [f for f in findings if f.rule_id == "mission-metl-unallocated"]
+            self.assertEqual(alloc_errors, [], f"Unexpected unallocated METL findings: {alloc_errors}")
+
+    def test_mission_intent_metl_task_suffix_unallocated_fails(self):
+        """Unallocated METL task with suffix (METL-01-A) triggers finding 'mission-metl-unallocated'."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            os.makedirs(conops_dir, exist_ok=True)
+
+            content = _get_valid_mission_intent_content()
+            content = content.replace("`MET-01`", "`METL-01-A`")
+            # Strip allocation tag for METL-01-A
+            content = content.replace("`/// OperationalAllocation: [MET-01]`", "—")
+            content = content.replace("- `/// OperationalAllocation: [MET-01]`\n", "")
+
+            with open(os.path.join(conops_dir, "MISSION_INTENT.md"), "w", encoding="utf-8") as f:
+                f.write(content)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            mission_val = MissionIntentCompletenessValidator()
+            findings = mission_val.validate(repo)
+
+            alloc_errors = [f for f in findings if f.rule_id == "mission-metl-unallocated"]
+            self.assertTrue(len(alloc_errors) >= 1)
+            self.assertIn("METL-01-A", str(alloc_errors[0]))
+            self.assertEqual(alloc_errors[0].detail.get("task_id"), "METL-01-A")
 
     def test_template_synthesis(self):
         """Verify synthesis of domain-neutral canonical templates."""

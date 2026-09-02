@@ -395,7 +395,13 @@ class ConopsCompletenessValidator(IValidator):
         conops_dir = os.path.join(workspace_dir, "docs", "conops")
 
         if not os.path.isdir(conops_dir):
-            return []
+            if repo.is_upstream_compiler_repo():
+                return []
+            return [Finding(
+                "conops-corpus-missing",
+                "ConOps corpus directory 'docs/conops' is missing in workspace.",
+                location="docs/conops",
+            )]
 
         # Find CONOPS file(s)
         conops_files: List[str] = []
@@ -405,7 +411,13 @@ class ConopsCompletenessValidator(IValidator):
                     conops_files.append(os.path.join(root, f))
 
         if not conops_files:
-            return []
+            if repo.is_upstream_compiler_repo():
+                return []
+            return [Finding(
+                "conops-corpus-missing",
+                "No valid ConOps specification document ('CONOPS*.md') found in 'docs/conops'.",
+                location="docs/conops",
+            )]
 
         for c_file in conops_files:
             rel_path = os.path.relpath(c_file, workspace_dir)
@@ -689,7 +701,13 @@ class MissionIntentCompletenessValidator(IValidator):
         conops_dir = os.path.join(workspace_dir, "docs", "conops")
 
         if not os.path.isdir(conops_dir):
-            return []
+            if repo.is_upstream_compiler_repo():
+                return []
+            return [Finding(
+                "mission-intent-corpus-missing",
+                "Mission Intent corpus directory 'docs/conops' is missing in workspace.",
+                location="docs/conops",
+            )]
 
         mission_files: List[str] = []
         for root, _, files in os.walk(conops_dir):
@@ -698,7 +716,13 @@ class MissionIntentCompletenessValidator(IValidator):
                     mission_files.append(os.path.join(root, f))
 
         if not mission_files:
-            return []
+            if repo.is_upstream_compiler_repo():
+                return []
+            return [Finding(
+                "mission-intent-corpus-missing",
+                "No valid Mission Intent specification document ('MISSION_INTENT*.md') found in 'docs/conops'.",
+                location="docs/conops",
+            )]
 
         for m_file in mission_files:
             rel_path = os.path.relpath(m_file, workspace_dir)
@@ -750,18 +774,47 @@ class MissionIntentCompletenessValidator(IValidator):
         # Section 2 & 10: METL Roster & Gate 24 Allocation Traceability (Theorem 3)
         if 2 in matched_sections:
             _, sec2_line, sec2_content = matched_sections[2]
-            # Extract declared MET-XX tasks
-            met_task_matches = re.finditer(r'\b(MET-0*[0-9]+[A-Za-z0-9_-]*)\b', sec2_content, re.IGNORECASE)
-            declared_met_tasks = sorted(list({m.group(1).upper() for m in met_task_matches}))
+            declared_met_tasks: Set[str] = set()
+
+            # 1. Parse tables if present in Section 2
+            sec2_tables, _ = _parse_commonmark_tables(sec2_content)
+            for tbl in sec2_tables:
+                for row in tbl:
+                    task_val = (
+                        row.get("task_id")
+                        or row.get("id")
+                        or row.get("task")
+                        or row.get("metl_id")
+                        or row.get("met_id")
+                    )
+                    if not task_val and row:
+                        first_k = list(row.keys())[0]
+                        task_val = row[first_k]
+                    if task_val:
+                        clean_val = re.sub(r'[*`_]', '', task_val).strip()
+                        m = re.match(r'^((?:METL|MET)-0*[0-9]+(?:-[A-Za-z0-9]+|[A-Za-z])?)$', clean_val, re.IGNORECASE)
+                        if m:
+                            declared_met_tasks.add(m.group(1).upper())
+
+            # 2. Extract declared MET/METL tasks from text lines / bullet points
+            met_task_matches = re.finditer(
+                r'\b((?:METL|MET)-0*[0-9]+(?:-[A-Za-z0-9]{1,4}|[A-Za-z])?)\b',
+                sec2_content,
+                re.IGNORECASE,
+            )
+            for m in met_task_matches:
+                declared_met_tasks.add(m.group(1).upper())
+
+            sorted_tasks = sorted(list(declared_met_tasks))
 
             # Check allocation tags across the document
-            for task_id in declared_met_tasks:
-                # Look for '/// OperationalAllocation: [ ... task_id ... ]' in Section 2, Section 10, or document
-                tag_pattern = rf'///\s*OperationalAllocation\s*:\s*\[[^\]]*{re.escape(task_id)}[^\]]*\]'
+            for task_id in sorted_tasks:
+                # Look for '/// OperationalAllocation: [ ... task_id ... ]' or '/// OperationalAllocation: task_id'
+                tag_pattern = rf'///\s*OperationalAllocation\s*:\s*(?:\[[^\]]*(?<![A-Za-z0-9_-]){re.escape(task_id)}(?![A-Za-z0-9_-])[^\]]*\]|(?<![A-Za-z0-9_-]){re.escape(task_id)}(?![A-Za-z0-9_-]))'
                 if not re.search(tag_pattern, content, re.IGNORECASE):
                     findings.append(Finding(
                         "mission-metl-unallocated",
-                        f"Mission Essential Task '{task_id}' declared in Section 2 has no valid Gate 24 allocation tag ('/// OperationalAllocation: [{task_id}_...]') in '{rel_path}'.",
+                        f"Mission Essential Task '{task_id}' declared in Section 2 has no valid Gate 24 allocation tag ('/// OperationalAllocation: [{task_id}]') in '{rel_path}'.",
                         location=f"{rel_path}:{sec2_line}",
                         detail={"task_id": task_id},
                     ))

@@ -366,7 +366,136 @@ The ESAD bus executes Opcode 0x11 for PBIT and Opcode 0x10 for Exchange.
             self.assertEqual(contra_errors, [])
             self.assertEqual(errors, [])
 
+    def test_markdown_table_delimiters_ignored_without_phantom_contradictions(self):
+        """Verify that markdown table delimiters (e.g. :---, ---:, :---:, |---|---|) do not trigger phantom contradictions."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            extracted_dir = os.path.join(schema_dir, "extracted")
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            os.makedirs(extracted_dir, exist_ok=True)
+            os.makedirs(conops_dir, exist_ok=True)
+
+            with open(os.path.join(extracted_dir, "oem_specs.md"), "w", encoding="utf-8") as f:
+                f.write("""# OEM Specs
+| Property | Value | Notes |
+| :--- | :---: | ---: |
+| system_mass | 1800.0 kg | Nominal gross mass |
+| Recovery system | None | Direct landing only |
+""")
+
+            conops_content = """# Concept of Operations
+<!-- Source: schema/extracted/oem_specs.md -->
+
+| Subsystem | Metric | Target |
+| :--- | :---: | ---: |
+| Structure | system_mass | 1800.0 |
+| Recovery | Method | Conventional Landing |
+"""
+            with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
+                f.write(conops_content)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            validator = ConceptProvenanceValidator()
+            errors = validator.validate(repo)
+            self.assertEqual(errors, [])
+
+    def test_integer_pin_numbers_filtered_out_from_contradiction_extraction(self):
+        """Verify that integer pin numbers and pinout tables are filtered out from value contradiction extraction."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            extracted_dir = os.path.join(schema_dir, "extracted")
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            os.makedirs(extracted_dir, exist_ok=True)
+            os.makedirs(conops_dir, exist_ok=True)
+
+            with open(os.path.join(extracted_dir, "connector_icd.md"), "w", encoding="utf-8") as f:
+                f.write("""# Connector ICD
+| Pin | Signal | Function |
+| :--- | :--- | :--- |
+| 1 | +28VDC | Main power input |
+| 2 | GND | Power return |
+| 3 | RS485_TX | Differential transmit |
+| 4 | RS485_RX | Differential receive |
+
+- Pin 1: Power supply 28V
+- Pin 2: Ground
+""")
+
+            conops_content = """# Concept of Operations
+<!-- Source: schema/extracted/connector_icd.md -->
+
+## Sequence of Operations
+| Step | Action |
+| :--- | :--- |
+| 1 | Apply bus power |
+| 2 | Run initial health check |
+| 3 | Synchronize telemetry |
+| 4 | Ready state |
+
+Interface wiring follows:
+- Pin 1: Bus power connection
+- Pin 2: Ground return
+"""
+            with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
+                f.write(conops_content)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            validator = ConceptProvenanceValidator()
+            errors = validator.validate(repo)
+            self.assertEqual(errors, [])
+
+    def test_glossary_and_definitions_section_isolated_without_contradictions(self):
+        """Verify that glossary, acronyms, and terminology definitions are isolated from value contradiction extraction."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            extracted_dir = os.path.join(schema_dir, "extracted")
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            os.makedirs(extracted_dir, exist_ok=True)
+            os.makedirs(conops_dir, exist_ok=True)
+
+            with open(os.path.join(extracted_dir, "oem_baseline.md"), "w", encoding="utf-8") as f:
+                f.write("""# OEM Baseline
+| Property | Value |
+|---|---|
+| system_mass | 1800.0 kg |
+| Recovery system | None |
+
+- Control surfaces: Ruddervator configuration
+- Opcode 0x11: PBIT
+- Opcode 0x10: Exchange
+""")
+
+            # ConOps has a Glossary explaining what a ballistic parachute and elevons are,
+            # but the normative architecture adheres strictly to OEM baseline.
+            conops_content = """# Concept of Operations
+<!-- Source: schema/extracted/oem_baseline.md -->
+
+## 1. Glossary & Terminology
+| Term | Definition |
+| :--- | :--- |
+| Ballistic Parachute | Pyrotechnic emergency recovery system deployed in contingency |
+| Elevon | Aerodynamic flight surface combining pitch and roll controls |
+| PBIT | Periodic Built-In Test routine |
+
+- **Ballistic Parachute**: Emergency deceleration mechanism.
+- **Elevon**: Movable wing control surface.
+
+## 2. Normative Architecture
+The vehicle has a system_mass = 1800.0 kg.
+Pitch and yaw control are governed by ruddervator surfaces on the V-tail empennage.
+No parachute is installed; safe recovery relies on conventional runway landing.
+The ESAD bus executes Opcode 0x11 for PBIT and Opcode 0x10 for Exchange.
+"""
+            with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
+                f.write(conops_content)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            validator = ConceptProvenanceValidator()
+            errors = validator.validate(repo)
+            self.assertEqual(errors, [])
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

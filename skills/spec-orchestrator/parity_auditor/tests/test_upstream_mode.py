@@ -45,6 +45,10 @@ from parity_auditor.validators.profile_scoping_validator import ProfileScopingVa
 from parity_auditor.validators.test_completeness_validator import TestCompletenessValidator
 from parity_auditor.validators.mermaid_syntax_validator import MermaidSyntaxValidator
 from parity_auditor.validators.link_validator import LinkValidator
+from parity_auditor.validators.conops_completeness_validator import (
+    ConopsCompletenessValidator,
+    MissionIntentCompletenessValidator,
+)
 
 
 def _write_rules(workspace_dir, **overrides):
@@ -208,6 +212,30 @@ def test_empty_codebase_validators_still_report_without_upstream_marker(tmp_path
     schema_errors = SchemaMappingValidator().validate(repo)
     all_messages = [str(e) for e in schema_errors]
     assert any("Codebase is empty" in m for m in all_messages), all_messages
+
+
+def test_conops_and_mission_intent_skip_in_upstream_mode(tmp_path, monkeypatch):
+    os.makedirs(tmp_path / ".pipeline" / "upstream", exist_ok=True)
+    repo = WorkspaceRepository(str(tmp_path))
+
+    conops_errors = ConopsCompletenessValidator().validate(repo)
+    mission_errors = MissionIntentCompletenessValidator().validate(repo)
+
+    assert conops_errors == []
+    assert mission_errors == []
+
+
+def test_conops_and_mission_intent_fail_closed_without_upstream_marker(tmp_path, monkeypatch):
+    monkeypatch.delenv("DEAP_REPOSITORY_TYPE", raising=False)
+    repo = WorkspaceRepository(str(tmp_path))
+
+    conops_errors = ConopsCompletenessValidator().validate(repo)
+    mission_errors = MissionIntentCompletenessValidator().validate(repo)
+
+    assert len(conops_errors) == 1
+    assert conops_errors[0].rule_id == "conops-corpus-missing"
+    assert len(mission_errors) == 1
+    assert mission_errors[0].rule_id == "mission-intent-corpus-missing"
 
 
 # ---------------------------------------------------------------------------
