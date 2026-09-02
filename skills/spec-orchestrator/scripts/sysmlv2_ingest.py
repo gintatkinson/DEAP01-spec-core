@@ -61,7 +61,9 @@ def detect_format(schema_path: str, content: str) -> str:
     elif "openapi" in content or "swagger" in content or '"paths":' in content:
         return "openapi"
 
-    return "idl"
+    raise ValueError(
+        f"Unsupported schema format for '{schema_path}'. Supported formats: .sysml, .idl, .arxml/.xml, .proto, .json/.yaml/.yml."
+    )
 
 
 def ingest_schema(
@@ -101,8 +103,9 @@ def ingest_schema(
         translator = OpenAPITranslator()
         pkg = translator.translate(content_text, default_name=file_basename)
     else:
-        translator = IDLTranslator()
-        pkg = translator.translate(content_text, default_name=file_basename)
+        raise ValueError(
+            f"Unsupported schema format '{format_type}' for '{schema_path}'. Supported formats: .sysml, .idl, .arxml/.xml, .proto, .json/.yaml/.yml."
+        )
 
     sysml_text = pkg.to_sysml()
 

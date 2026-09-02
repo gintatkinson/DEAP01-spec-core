@@ -33,6 +33,8 @@ This platform explicitly declares **MATLAB / Simulink / Stateflow / Embedded Cod
 
 ## 2. Supported Schema & Modeling Standards
 
+The `schema/` directory accepts only supported formal schema formats (`.sysml`, `.idl`, `.arxml`/`.xml`, `.proto`, and `.json`/`.yaml`/`.yml`). Ingestion and compilation fail closed with an explicit error on unsupported file extensions or unrecognized payloads (e.g. `.pdf`, `.docx`, `.exe`), preventing silent format misclassification.
+
 | Standard / Format | Modeling Scope | AST Mapping Primitives | Compiler Ingestion & Validation |
 | :--- | :--- | :--- | :--- |
 | **SysML v2 (OMG)** | Systems architecture, behavior, requirements | `package`, `part def`, `port def`, `action def`, `state def`, `requirement def` | Bidirectional SSOT synchronization, full-AST compilation, invariant proving via SLDV hooks. |
