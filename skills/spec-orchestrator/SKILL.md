@@ -16,7 +16,7 @@ metadata:
 
 This skill enables you to act as the **Master Orchestrator Agent**. You are responsible for executing an end-to-end "Digital Engineering Pipeline" that systematically transforms a protocol standard (e.g., IETF, 3GPP, IEEE, CAMARA) into a deterministic GitHub repository matrix using UML OOA/OOD methodologies.
 
-You will accomplish this by coordinating the sequential execution of specialized Worker skills across all specification phases (Phases 0.5, 1, 1.5, 2, and 3).
+You will accomplish this by coordinating the sequential execution of specialized Worker skills across all specification phases (Phases 0.5, 0.75, 1, 1.5, 2, and 3).
 
 > [!NOTE]
 > This orchestrator handles **specification generation** (Phases 1-5). For **feature implementation**, use the separate `feature-driven-implementation` skill which provides subagent-driven TDD execution discipline.
@@ -79,8 +79,9 @@ Before beginning orchestration, verify you have:
 
 To prevent context drift, contamination, and confirmation bias, **every individual specification item (Epic, Feature, User Story, and Use Case) MUST be processed by a new, fresh subagent with an isolated context.**
 
-- **Mandatory Subagent Dispatch for Specification Phases**: The Master Orchestrator (Coordinator) MUST dispatch Phase Worker subagents (TypeName: `self`) for Phase 0.5, Phase 1, Phase 1.5, Phase 2, and Phase 3:
+- **Mandatory Subagent Dispatch for Specification Phases**: The Master Orchestrator (Coordinator) MUST dispatch Phase Worker subagents (TypeName: `self`) for Phase 0.5, Phase 0.75, Phase 1, Phase 1.5, Phase 2, and Phase 3:
   * Phase 0.5: `Normative Research Worker`
+  * Phase 0.75: `ConOps & Mission Intent Tree Worker (Worker ConOps)`
   * Phase 1: `Structural Spec Worker`
   * Phase 1.5: `Interface Spec Worker (Worker ICD)`
   * Phase 2: `Behavioral Spec Worker`
@@ -142,6 +143,7 @@ sequenceDiagram
     autonumber
     participant Coord as "Master Orchestrator (Coordinator)"
     participant W_R as "Phase 0.5: Normative Research Worker"
+    participant W_CO as "Phase 0.75: ConOps & Mission Intent Tree Worker"
     participant W_A as "Phase 1: Structural Spec Worker"
     participant W_ICD as "Phase 1.5: Interface Spec Worker"
     participant W_B as "Phase 2: Behavioral Spec Worker"
@@ -153,6 +155,13 @@ sequenceDiagram
     W_R->>W_R: Ingest Standards & Map Clause-Level Requirements
     W_R->>W_R: Synthesize RESEARCH_INVENTORY.md & Declared-Total Population Register
     W_R-->>Coord: Return Cited Research Inventory & Clause Population Register (docs/research/)
+
+    Note over Coord,W_CO: Phase 0.75 - ConOps & Mission Intent Tree Engineering
+    Coord->>W_CO: Dispatch ConOps & Mission Intent Task (docs/research/, schemas)
+    W_CO->>W_CO: Ingest Operational Intent, FMECA & SORA Baselines
+    W_CO->>W_CO: Synthesize Modular Units (docs/conops/units/conops/, docs/conops/units/mission_intent/)
+    W_CO->>W_CO: Execute assemble_conops.py & Gate 26 Completeness Validation
+    W_CO-->>Coord: Return Verified CONOPS.md & MISSION_INTENT.md (docs/conops/)
 
     Note over Coord,W_A: Phase 1 - Structural Extraction
     Coord->>W_A: Dispatch Schema Parsing Task (.pipeline/schema.sysml)
@@ -209,7 +218,20 @@ sequenceDiagram
 4. **Wait & Verify**: The Coordinator waits for the subagent to report completion, reads its final report, and:
    a. Verifies that `docs/research/RESEARCH_INVENTORY.md` exists and is fully populated with zero placeholder tokens.
    b. Performs a sampling audit (`view_file`) on `docs/research/RESEARCH_INVENTORY.md` to confirm all cited standards, clauses, and population register entries conform to the mandatory traceability rule.
-5. **Validation Gate**: Verify that `docs/research/RESEARCH_INVENTORY.md` is committed and contains a complete Declared-Total Population Register with 100% public clause citations. Once this validation passes, **execute Phase 1 immediately without pausing for user approval.**
+5. **Validation Gate**: Verify that `docs/research/RESEARCH_INVENTORY.md` is committed and contains a complete Declared-Total Population Register with 100% public clause citations. Once this validation passes, **execute Phase 0.75 immediately without pausing for user approval.**
+
+## Phase 0.75: Hierarchical ConOps & Mission Intent Tree Engineering (Worker ConOps)
+1. **Trigger / Dispatch**: The Coordinator MUST invoke a fresh subagent (TypeName: `self`, Role: `ConOps & Mission Intent Tree Worker`) with the `spec-conops-engineering` skill and paths to input schemas (`schema/`, `.pipeline/schema.sysml`), `docs/research/RESEARCH_INVENTORY.md`, FMECA failure modes, SORA risk classes, and user operational intent, appending the keyword `PROCEED` to authorize execution.
+2. **Execution**: The `ConOps & Mission Intent Tree Worker` subagent ingests operational intent, system architecture, FMECA failure modes, SORA risk profiles, and `docs/research/RESEARCH_INVENTORY.md`. It extracts discrete units adhering to `.pipeline/schemas/conops_specification_schema.json` (12 canonical units under `docs/conops/units/conops/`) and `.pipeline/schemas/mission_intent_specification_schema.json` (10 canonical units under `docs/conops/units/mission_intent/`). It enforces pure open schema generation ($N \ge N_{\mathrm{min}}$) with zero static row caps, open multi-domain threat taxonomy (Kinetic, Mechanical, Environmental, EW/Cyber, Power/Thermal, Optical, Human), KaTeX math formulas, and 100% public clause citations. It executes deterministic modular assembly via `python3 scripts/assemble_conops.py --input-dir docs/conops/units/ --output-dir docs/conops/`, validating unit integrity, TOC generation, and internal links. Registers the ConOps suite under the `conops` issue label using `./skills/spec-orchestrator/scripts/create_issue.sh`, runs immediate verification checks to confirm the tracker body is fully populated, and commits/pushes the changes.
+3. **Wait & Verify**: The Coordinator waits for the subagent to report completion, reads its final report, and:
+   a. Query the `git diff` to identify the generated file paths in `docs/conops/units/` and `docs/conops/`.
+   b. Run a file read check (`view_file`) on the compiled specification markdown files (`docs/conops/CONOPS.md` and `docs/conops/MISSION_INTENT.md`) to verify formatting compliance (such as KaTeX math blocks, 4D volume / SORA parameters, emergency decision matrix, METL task roster, MoE/MoP formulas, PACE C2 plan, and Bingo energy dynamics).
+   c. Run the ConOps assembly verification and completeness validator locally:
+      ```bash
+      python3 scripts/assemble_conops.py --input-dir docs/conops/units/ --output-dir docs/conops/ --verify
+      python3 -m unittest tests.test_conops_and_mission_intent_validators
+      ```
+4. **Validation Gate**: Runs `parity_auditor/validators/conops_completeness_validator.py` (Gate 26), ensuring 100% ConOps and Mission Intent section completeness, SORA Ground Risk Buffer calculation validity, 20% statutory Bingo energy reserve compliance, 7-row emergency decision matrix determinism, and verified Gate 24 operational allocation tags. Verify that ConOps-allocated obligations are witnessed in `RESEARCH_INVENTORY.md` (Gate 28 and Gate 29). Verify that ConOps and Mission Intent issues are created in GitHub/GitLab with fully populated bodies. Once this validation passes, **execute Phase 1 immediately without pausing for user approval.**
 
 ## Phase 1: Structural Extraction (Worker A)
 1. **Trigger / Dispatch**: The Coordinator MUST invoke a fresh subagent (TypeName: `self`, Role: `Structural Spec Worker`) with the `schema-specification-engineering` skill and the path to the target structural schema files, appending the keyword `PROCEED` to authorize execution.
