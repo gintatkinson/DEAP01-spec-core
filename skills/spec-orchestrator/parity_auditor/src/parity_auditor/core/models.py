@@ -298,3 +298,76 @@ class FeatureFile:
     labels: List[str]
     content: str
     frontmatter: Dict[str, Any] = field(default_factory=dict)
+
+# Cited Research Inventory & Declared-Total Population Register Models (CORE #97)
+@dataclass
+class NormativeStandard:
+    standard_id: str
+    issuing_body: str
+    title: str
+    applicable_clauses: str
+    obligation_category: str
+    declared_total: int
+    clause_citation: str
+    raw: Dict[str, str] = field(default_factory=dict)
+
+@dataclass
+class PopulationRegisterEntry:
+    category: str
+    standard_id: str
+    obligation_count: int
+    verification_mechanism: str
+    clause_citation: str
+    obligation_id: Optional[str] = None
+    target_metric: Optional[str] = None
+    raw: Dict[str, str] = field(default_factory=dict)
+
+@dataclass
+class ExternalAdditionEntry:
+    category: str
+    standard_id: str
+    declared_total: int
+    verification_mechanism: str
+    clause_citation: str
+    extension_id: Optional[str] = None
+    target_metric: Optional[str] = None
+    justification: Optional[str] = None
+    raw: Dict[str, str] = field(default_factory=dict)
+
+@dataclass
+class ClauseAllocationEntry:
+    population_id: str
+    standard_id: str
+    clause_citation: str
+    clause_title: str
+    specification_phase: str
+    downstream_spec_file: str
+    raw: Dict[str, str] = field(default_factory=dict)
+
+@dataclass
+class ResearchInventoryDocument:
+    filepath: str = ""
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    standards: List[NormativeStandard] = field(default_factory=list)
+    population_register: List[PopulationRegisterEntry] = field(default_factory=list)
+    external_additions: List[ExternalAdditionEntry] = field(default_factory=list)
+    clause_allocations: List[ClauseAllocationEntry] = field(default_factory=list)
+    gap_analysis: Dict[str, Any] = field(default_factory=dict)
+    parse_errors: List[str] = field(default_factory=list)
+
+    def get_totals_by_standard(self) -> Dict[str, int]:
+        totals: Dict[str, int] = {}
+        for std in self.standards:
+            totals[std.standard_id] = totals.get(std.standard_id, 0) + std.declared_total
+        return totals
+
+    def get_totals_by_category(self) -> Dict[str, int]:
+        totals: Dict[str, int] = {}
+        for std in self.standards:
+            cat = std.obligation_category or "Uncategorized"
+            totals[cat] = totals.get(cat, 0) + std.declared_total
+        return totals
+
+    def get_total_declared_obligations(self) -> int:
+        return sum(std.declared_total for std in self.standards)
+

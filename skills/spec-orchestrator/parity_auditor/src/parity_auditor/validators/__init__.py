@@ -20,3 +20,5 @@ from .icd_completeness_validator import ICDCompletenessValidator
 from .operational_allocation_validator import OperationalAllocationValidator
 from .standards_measurement_validator import StandardsAndMeasurementValidator, StandardsMeasurementValidator
 from .conops_completeness_validator import ConopsCompletenessValidator, MissionIntentCompletenessValidator
+from .research_inventory_validator import ResearchInventoryValidator
+

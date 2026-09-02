@@ -51,6 +51,7 @@ from .validators.icd_completeness_validator import ICDCompletenessValidator
 from .validators.operational_allocation_validator import OperationalAllocationValidator
 from .validators.standards_measurement_validator import StandardsAndMeasurementValidator
 from .validators.conops_completeness_validator import ConopsCompletenessValidator, MissionIntentCompletenessValidator
+from .validators.research_inventory_validator import ResearchInventoryValidator
 
 # Validators migrated to structured findings. Un-migrated validators are deliberately
 # excluded rather than included and silently ungroupable — see `coverage_note`.
@@ -87,7 +88,9 @@ AGGREGATING_VALIDATORS = (
     StandardsAndMeasurementValidator,
     ConopsCompletenessValidator,
     MissionIntentCompletenessValidator,
+    ResearchInventoryValidator,
 )
+
 # SyncValidator is migrated to structured findings but deliberately absent: it shells
 # out to the issue tracker, and `pipeline-tooling.md` § Validation Gates forbids network
 # egress inside a blocking gate. See AGGREGATION_EXEMPT in

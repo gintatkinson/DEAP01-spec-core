@@ -44,6 +44,7 @@ try:
     from .validators.operational_allocation_validator import OperationalAllocationValidator
     from .validators.standards_measurement_validator import StandardsAndMeasurementValidator
     from .validators.conops_completeness_validator import ConopsCompletenessValidator, MissionIntentCompletenessValidator
+    from .validators.research_inventory_validator import ResearchInventoryValidator
     from .utils.diagnostics import serialize_diagnostics
     from .utils.comment_utils import strip_comments_and_strings
 except (ImportError, ValueError):
@@ -78,8 +79,10 @@ except (ImportError, ValueError):
     from parity_auditor.validators.operational_allocation_validator import OperationalAllocationValidator
     from parity_auditor.validators.standards_measurement_validator import StandardsAndMeasurementValidator
     from parity_auditor.validators.conops_completeness_validator import ConopsCompletenessValidator, MissionIntentCompletenessValidator
+    from parity_auditor.validators.research_inventory_validator import ResearchInventoryValidator
     from parity_auditor.utils.diagnostics import serialize_diagnostics
     from parity_auditor.utils.comment_utils import strip_comments_and_strings
+
 
 def sanitize_github_token_env():
     """
@@ -1148,8 +1151,20 @@ def _main_impl():
     else:
         print("Success: 10-Section Mission Intent completeness and Bingo Energy math verified.")
 
+    print("\n=== Cited Research Inventory & Declared-Total Population Register Audit (Gate 27) ===")
+    research_inventory_validator = ResearchInventoryValidator()
+    research_inventory_errors = _scope_findings(research_inventory_validator.validate(repo), getattr(args, 'only', None))
+    if research_inventory_errors:
+        print("[!] Cited Research Inventory Violations Identified:")
+        for err in research_inventory_errors:
+            print(f"  - {err}")
+        has_failed = True
+    else:
+        print("Success: Cited research inventory schema and declared-total population register verified.")
+
     if has_failed:
-        all_errors = (uml_errors or []) + (behavioral_errors or []) + (codebase_errors or []) + (doc_errors or []) + (dependency_errors or []) + (sync_errors or []) + (schema_mapping_errors or []) + (profile_scoping_errors or []) + (test_completeness_errors or []) + (cardinality_errors or []) + (spec_filename_errors or []) + (spec_title_errors or []) + (mermaid_syntax_errors or []) + (katex_errors or []) + (logical_ui_errors or []) + (docstring_errors or []) + (profile_compliance_errors or []) + (package_allocation_errors or []) + (feature_op_errors or []) + (interaction_errors or []) + (safety_constraint_errors or []) + (acceptance_test_errors or []) + (missing_spec_errors or []) + (source_ref_errors or []) + (link_errors or []) + (concept_provenance_errors or []) + (safety_trace_errors or []) + (doc_metadata_errors or []) + (icd_completeness_errors or []) + (operational_allocation_errors or []) + (standards_measurement_errors or []) + (conops_errors or []) + (mission_intent_errors or [])
+        all_errors = (uml_errors or []) + (behavioral_errors or []) + (codebase_errors or []) + (doc_errors or []) + (dependency_errors or []) + (sync_errors or []) + (schema_mapping_errors or []) + (profile_scoping_errors or []) + (test_completeness_errors or []) + (cardinality_errors or []) + (spec_filename_errors or []) + (spec_title_errors or []) + (mermaid_syntax_errors or []) + (katex_errors or []) + (logical_ui_errors or []) + (docstring_errors or []) + (profile_compliance_errors or []) + (package_allocation_errors or []) + (feature_op_errors or []) + (interaction_errors or []) + (safety_constraint_errors or []) + (acceptance_test_errors or []) + (missing_spec_errors or []) + (source_ref_errors or []) + (link_errors or []) + (concept_provenance_errors or []) + (safety_trace_errors or []) + (doc_metadata_errors or []) + (icd_completeness_errors or []) + (operational_allocation_errors or []) + (standards_measurement_errors or []) + (conops_errors or []) + (mission_intent_errors or []) + (research_inventory_errors or [])
+
         compiled_errors = all_errors
         target_file = None
         snippet_content = None
