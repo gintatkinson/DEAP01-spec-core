@@ -19,7 +19,7 @@ from typing import Dict, List, Optional, Tuple
 
 TIMEOUT_SECONDS = 600
 GIT_TIMEOUT_SECONDS = 30
-EXCLUDED_DIRS = {".git", "node_modules", ".dart_tool", "build"}
+EXCLUDED_DIRS = {".git", "node_modules", ".dart_tool", "build", "units"}
 
 def _terminate_process_group(proc):
     """Terminate process group cleanly with SIGTERM followed by SIGKILL fallback."""

@@ -19,7 +19,7 @@ from parity_auditor.validators.conops_completeness_validator import (
 from scripts.verify_downstream_baseline import check_upstream_template_clean_landing_zones
 
 
-UPSTREAM_CLEAN_ALLOWLIST = {".gitkeep", "README.md"}
+UPSTREAM_CLEAN_ALLOWLIST = {".gitkeep", "README.md", "units"}
 
 DOWNSTREAM_CANONICAL_CONOPS_DELIVERABLES = {"MISSION_INTENT.md", "CONOPS.md"}
 
