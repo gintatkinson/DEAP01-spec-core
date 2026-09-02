@@ -792,18 +792,20 @@ class MissionIntentCompletenessValidator(IValidator):
                         task_val = row[first_k]
                     if task_val:
                         clean_val = re.sub(r'[*`_]', '', task_val).strip()
-                        m = re.match(r'^((?:METL|MET)-0*[0-9]+(?:-[A-Za-z0-9]+|[A-Za-z])?)$', clean_val, re.IGNORECASE)
+                        m = re.search(r'\b(MET-0*[0-9]+)\b', clean_val, re.IGNORECASE)
                         if m:
-                            declared_met_tasks.add(m.group(1).upper())
+                            num = int(m.group(1).split("-")[1])
+                            declared_met_tasks.add(f"MET-{num:02d}")
 
-            # 2. Extract declared MET/METL tasks from text lines / bullet points
+            # 2. Extract declared MET tasks from text lines / bullet points
             met_task_matches = re.finditer(
-                r'\b((?:METL|MET)-0*[0-9]+(?:-[A-Za-z0-9]{1,4}|[A-Za-z])?)\b',
+                r'\b(MET-0*[0-9]+)\b',
                 sec2_content,
                 re.IGNORECASE,
             )
             for m in met_task_matches:
-                declared_met_tasks.add(m.group(1).upper())
+                num = int(m.group(1).split("-")[1])
+                declared_met_tasks.add(f"MET-{num:02d}")
 
             sorted_tasks = sorted(list(declared_met_tasks))
 

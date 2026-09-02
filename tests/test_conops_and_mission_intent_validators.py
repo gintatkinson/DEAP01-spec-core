@@ -451,29 +451,36 @@ class TestConOpsAndMissionIntentValidators(unittest.TestCase):
             self.assertTrue(len(alloc_errors) >= 1)
             self.assertIn("MET-04", str(alloc_errors[0]))
 
-    def test_mission_intent_metl_task_suffix_and_words_handling(self):
-        """METL tasks with suffixes (e.g. METL-01-A, MET-02-B) and template placeholders do not cause phantom unallocated findings."""
+    def test_mission_intent_metl_task_prose_suffixes_extract_digits_only(self):
+        """METL tasks with prose suffixes (e.g. MET-01-OperationalPayload, MET-02-FlightGuidance) extract digits-only IDs (MET-01, MET-02) satisfied by standard allocation tags."""
         with tempfile.TemporaryDirectory() as tmpdir:
             conops_dir = os.path.join(tmpdir, "docs", "conops")
             os.makedirs(conops_dir, exist_ok=True)
 
             content = _get_valid_mission_intent_content()
-            # Replace MET-01 with METL-01-A and MET-02 with MET-02-B in table, Section 10, and add descriptive text / template tokens
-            content = content.replace("`MET-01`", "`METL-01-A`")
-            content = content.replace("`/// OperationalAllocation: [MET-01]`", "`/// OperationalAllocation: [METL-01-A]`")
-            content = content.replace("- `/// OperationalAllocation: [MET-01]`", "- `/// OperationalAllocation: [METL-01-A]`")
-            content = content.replace("`MET-02`", "`MET-02-B`")
-            content = content.replace("`/// OperationalAllocation: [MET-02]`", "`/// OperationalAllocation: [MET-02-B]`")
-            content = content.replace("- `/// OperationalAllocation: [MET-02]`", "- `/// OperationalAllocation: [MET-02-B]`")
+            # Replace MET-01, MET-02, MET-03 in table with suffixed prose
+            content = content.replace("`MET-01`", "`MET-01-OperationalPayload`")
+            content = content.replace("`MET-02`", "`MET-02-FlightGuidance`")
+            content = content.replace("`MET-03`", "`MET-3-PayloadTelepresence`")
 
-            # Add template tokens and trailing descriptive text inside Section 2
+            # Add bullet points with hyphens and prose in Section 2
             content = content.replace(
                 "## 2. Mission Essential Task List (METL)",
                 "## 2. Mission Essential Task List (METL)\n\n"
-                "- **METL-01-A**: System initial BIT checkout.\n"
+                "- **MET-01-OperationalPayload**: System initial payload activation.\n"
+                "- **MET-02-FlightGuidance**: En-route corridor navigation.\n"
+                "- **MET-3-PayloadTelepresence**: Real-time downlink telemetry.\n"
                 "- Note: {{MET_01_TASK_NAME}} placeholder token should not be parsed as task ID.\n"
-                "- Trailing words: MET-02-B-nominal-profile should not swallow words.\n"
+                "- Trailing words: MET-02-FlightGuidance-nominal-profile should not swallow words.\n"
             )
+
+            # Allocation tags in Section 10 remain standard digits-only tags:
+            # /// OperationalAllocation: [MET-01]
+            # /// OperationalAllocation: [MET-02]
+            # /// OperationalAllocation: [MET-03]
+            # /// OperationalAllocation: [MET-04]
+            # /// OperationalAllocation: [MET-05]
+            # /// OperationalAllocation: [MET-06]
 
             with open(os.path.join(conops_dir, "MISSION_INTENT.md"), "w", encoding="utf-8") as f:
                 f.write(content)
@@ -485,15 +492,16 @@ class TestConOpsAndMissionIntentValidators(unittest.TestCase):
             alloc_errors = [f for f in findings if f.rule_id == "mission-metl-unallocated"]
             self.assertEqual(alloc_errors, [], f"Unexpected unallocated METL findings: {alloc_errors}")
 
-    def test_mission_intent_metl_task_suffix_unallocated_fails(self):
-        """Unallocated METL task with suffix (METL-01-A) triggers finding 'mission-metl-unallocated'."""
+    def test_mission_intent_metl_task_prose_suffix_unallocated_fails_with_digits_only_id(self):
+        """Unallocated METL task declared with prose suffix (MET-01-OperationalPayload) reports failure with digits-only ID ('MET-01')."""
         with tempfile.TemporaryDirectory() as tmpdir:
             conops_dir = os.path.join(tmpdir, "docs", "conops")
             os.makedirs(conops_dir, exist_ok=True)
 
             content = _get_valid_mission_intent_content()
-            content = content.replace("`MET-01`", "`METL-01-A`")
-            # Strip allocation tag for METL-01-A
+            # Replace MET-01 with MET-01-OperationalPayload in table
+            content = content.replace("`MET-01`", "`MET-01-OperationalPayload`")
+            # Strip allocation tag for MET-01 from Section 2 and Section 10
             content = content.replace("`/// OperationalAllocation: [MET-01]`", "—")
             content = content.replace("- `/// OperationalAllocation: [MET-01]`\n", "")
 
@@ -506,8 +514,10 @@ class TestConOpsAndMissionIntentValidators(unittest.TestCase):
 
             alloc_errors = [f for f in findings if f.rule_id == "mission-metl-unallocated"]
             self.assertTrue(len(alloc_errors) >= 1)
-            self.assertIn("METL-01-A", str(alloc_errors[0]))
-            self.assertEqual(alloc_errors[0].detail.get("task_id"), "METL-01-A")
+            # Must strictly be digits-only normalized ID 'MET-01'
+            self.assertEqual(alloc_errors[0].detail.get("task_id"), "MET-01")
+            self.assertIn("MET-01", str(alloc_errors[0]))
+            self.assertNotIn("OPERATIONALPAYLOAD", str(alloc_errors[0]))
 
     def test_template_synthesis(self):
         """Verify synthesis of domain-neutral canonical templates."""
