@@ -234,7 +234,7 @@ If a test fails with an unexpected error during Step 3, follow the 4-phase debug
 ### Step 4: Verification & Testing
 1. **Assertion-Based Automation:** When writing or updating tests, do not rely on basic smoke tests. Add explicit assertions that query return values, object states, or output trees for the presence of the new fields or data properties. For any modified domain models, mandate regression assertions on existing tests for operations on modified domain models to verify field preservation through every constructor, `copyWith`, and `valueWriter` path.
 2. **Full Compilation Build:** Run local tests and run a full compilation build of the entire application (e.g. `flutter build` or `npm run build` as specified by the platform profile) to ensure it compiles without errors and is completely ready to run.
-3. **Parity Auditor Gate:** Mandate running `python3 -m parity_auditor` as a blocking gate before completing any implementation task.
+3. **Parity Auditor Gate:** Mandate running PYTHONPATH=skills/spec-orchestrator/parity_auditor/src python3 -m parity_auditor.cli --workspace . --allow-missing-specs as a blocking gate before completing any implementation task.
 4. **Evidence of Completion:** Paste actual raw test output / build output as proof. Do not summarize — show the raw output.
 5. Provide **precise, step-by-step human manual testing instructions** in the verification section. The instructions must guide the user on exactly what commands, scripts, or interface interactions to execute, what inputs to feed, and what specific output (e.g., payload, log entry, UI state change, database record) to inspect to verify correctness.
 6. **Independent Subagent Validation Check (or Single-Agent Fallback Self-Audit):**
