@@ -319,18 +319,6 @@ class CoverageDigestValidator(IValidator):
                             realized_map.setdefault(t, []).append(loc)
                             raw_map.setdefault(t, []).append(loc)
 
-        # 3. Incorporate Section 5 Clause Allocations from RESEARCH_INVENTORY.md if present
-        if doc and doc.clause_allocations:
-            for alloc in doc.clause_allocations:
-                if alloc.population_id and alloc.downstream_spec_file:
-                    pop_id = _normalize_obligation_id(alloc.population_id)
-                    spec_rel = alloc.downstream_spec_file.strip("`* ")
-                    spec_abs = os.path.join(workspace_dir, spec_rel)
-                    if os.path.exists(spec_abs) or os.path.isabs(spec_rel):
-                        loc = f"{spec_rel}:Section5"
-                        if loc not in realized_map.get(pop_id, []):
-                            realized_map.setdefault(pop_id, []).append(loc)
-
         return realized_map, raw_map
 
     def build_coverage_digest(
@@ -463,24 +451,58 @@ class CoverageDigestValidator(IValidator):
                     )
                 )
 
-        # 2. Stage-awareness for Unrealized Obligations:
-        # If allow_missing_specs is True or workspace is in fresh/pre-feature stage, skip unrealized checks
-        skip_unrealized = allow_missing_specs or (not has_features and len(realized_map) == 0)
+        # 2. Obligation Realization Enforcement (Gate 28, Issue #110):
+        alloc_target_map: Dict[str, str] = {}
+        alloc_phase_map: Dict[str, str] = {}
+        for alloc in doc.clause_allocations:
+            if alloc.population_id:
+                norm_p = _normalize_obligation_id(alloc.population_id)
+                if alloc.downstream_spec_file:
+                    alloc_target_map[norm_p] = alloc.downstream_spec_file.strip("`* ")
+                if alloc.specification_phase:
+                    alloc_phase_map[norm_p] = alloc.specification_phase.strip("`* ")
 
-        if not skip_unrealized:
-            realized_ids = set(k for k in realized_map.keys() if k in declared_ids)
-            unrealized_ids = sorted(declared_ids - realized_ids)
-            for un_id in unrealized_ids:
-                info = declared_map.get(un_id, {})
-                std = info.get("standard_id", "Unknown Standard")
-                cat = info.get("category", "Normative Obligation")
-                cit = info.get("clause_citation", "")
+        realized_ids = set(k for k in realized_map.keys() if k in declared_ids)
+        unrealized_ids = sorted(declared_ids - realized_ids)
+
+        for un_id in unrealized_ids:
+            info = declared_map.get(un_id, {})
+            std = info.get("standard_id", "Unknown Standard")
+            cat = info.get("category", "Normative Obligation")
+            cit = info.get("clause_citation", "")
+            target_spec = alloc_target_map.get(un_id, "")
+            phase_spec = alloc_phase_map.get(un_id, "")
+
+            target_abs = os.path.join(workspace_dir, target_spec) if target_spec else ""
+            target_exists = bool(target_abs and os.path.exists(target_abs))
+            is_conops_target = bool(
+                target_spec and (
+                    "CONOPS" in target_spec.upper()
+                    or "MISSION_INTENT" in target_spec.upper()
+                    or "Phase 1" in phase_spec
+                )
+            )
+
+            # Enforce realization:
+            # - When allow_missing_specs is False (strict mode: all declared obligations must be realized)
+            # - When target spec file exists in workspace (completed specification target)
+            # - When target is ConOps / Mission Intent / Phase 1 (mandatory structural phase)
+            # - When feature specs exist and target is a feature spec
+            should_enforce = (
+                not allow_missing_specs
+                or target_exists
+                or is_conops_target
+                or (has_features and target_spec.startswith("docs/features"))
+            )
+
+            if should_enforce:
+                target_desc = target_spec if target_spec else "workspace specifications"
                 findings.append(
                     Finding(
-                        rule_id="coverage-digest-unrealized-obligation",
-                        message=f"Declared obligation '{un_id}' ({cat}, Standard: {std}, Citation: '{cit}') has zero realized specifications in workspace.",
+                        rule_id="coverage-digest-obligation-unrealized",
+                        message=f"Declared obligation '{un_id}' ({cat}, Standard: {std}, Citation: '{cit}') allocated to '{target_desc}' has zero realized specifications in workspace.",
                         location="docs/research/RESEARCH_INVENTORY.md",
-                        detail={"obligation_id": un_id, "standard_id": std, "category": cat},
+                        detail={"obligation_id": un_id, "standard_id": std, "category": cat, "target": target_desc},
                     )
                 )
 

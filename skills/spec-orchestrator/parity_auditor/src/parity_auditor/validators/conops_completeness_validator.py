@@ -44,14 +44,20 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Union
 try:
     from .base import IValidator
     from ..core.findings import Finding
-    from ..core.workspace import WorkspaceRepository
+    from ..core.workspace import WorkspaceRepository, extract_metadata_from_content
+    from ..parsers.research_inventory import parse_research_inventory
+    from .coverage_digest_validator import _normalize_obligation_id, _parse_obligation_tags
+    from .obligation_witness_validator import _parse_witness_tags
 except (ImportError, ValueError):
     _src_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
     if _src_dir not in sys.path:
         sys.path.insert(0, _src_dir)
     from parity_auditor.validators.base import IValidator
     from parity_auditor.core.findings import Finding
-    from parity_auditor.core.workspace import WorkspaceRepository
+    from parity_auditor.core.workspace import WorkspaceRepository, extract_metadata_from_content
+    from parity_auditor.parsers.research_inventory import parse_research_inventory
+    from parity_auditor.validators.coverage_digest_validator import _normalize_obligation_id, _parse_obligation_tags
+    from parity_auditor.validators.obligation_witness_validator import _parse_witness_tags
 
 
 # =============================================================================
@@ -432,14 +438,66 @@ class ConopsCompletenessValidator(IValidator):
                 ))
                 continue
 
-            findings.extend(self._validate_conops_text(content, rel_path))
+            findings.extend(self._validate_conops_text(content, rel_path, repo=repo))
 
         return findings
 
-    def _validate_conops_text(self, content: str, rel_path: str) -> List[Finding]:
+    def _validate_conops_text(self, content: str, rel_path: str, repo: Optional[WorkspaceRepository] = None) -> List[Finding]:
         findings: List[Finding] = []
         sections = _extract_markdown_sections(content)
         tables, malformed_lines = _parse_commonmark_tables(content)
+
+        # Check for allocated obligations from RESEARCH_INVENTORY.md (Gate 26, Issue #109)
+        if "TEMPLATE" not in rel_path.upper():
+            inventory_file = None
+            if repo is not None:
+                inventory_file = os.path.join(repo.workspace_dir, "docs", "research", "RESEARCH_INVENTORY.md")
+            else:
+                candidate = os.path.join("docs", "research", "RESEARCH_INVENTORY.md")
+                if os.path.isfile(candidate):
+                    inventory_file = candidate
+
+            if inventory_file and os.path.isfile(inventory_file):
+                try:
+                    with open(inventory_file, "r", encoding="utf-8") as inv_f:
+                        inv_doc = parse_research_inventory(inv_f.read())
+
+                    # Extract document's realized/witnessed tags
+                    doc_tags = set(_parse_witness_tags(content) + _parse_obligation_tags(content))
+                    fm = extract_metadata_from_content(content)
+                    if fm:
+                        for key in ("obligations", "normative_obligations", "allocated_obligations", "obligation_id"):
+                            val = fm.get(key)
+                            if isinstance(val, list):
+                                for item in val:
+                                    norm = _normalize_obligation_id(str(item))
+                                    if norm:
+                                        doc_tags.add(norm)
+                            elif isinstance(val, str):
+                                norm = _normalize_obligation_id(val)
+                                if norm:
+                                    doc_tags.add(norm)
+
+                    # Find all obligations allocated to CONOPS in clause allocations
+                    for alloc in inv_doc.clause_allocations:
+                        if alloc.population_id and alloc.downstream_spec_file:
+                            spec_target = alloc.downstream_spec_file.strip("`* ")
+                            target_base = os.path.basename(spec_target).upper()
+                            is_conops_target = (
+                                target_base.startswith("CONOPS")
+                                or os.path.normpath(spec_target) == os.path.normpath(rel_path)
+                            )
+                            if is_conops_target:
+                                norm_id = _normalize_obligation_id(alloc.population_id)
+                                if norm_id not in doc_tags:
+                                    findings.append(Finding(
+                                        "conops-obligation-unwitnessed",
+                                        f"ConOps document '{rel_path}' is missing mandatory witness/realization tag for allocated obligation '{norm_id}' ({alloc.clause_citation or alloc.standard_id}).",
+                                        location=rel_path,
+                                        detail={"obligation_id": norm_id, "file": rel_path, "standard_id": alloc.standard_id},
+                                    ))
+                except Exception:
+                    pass
 
         # Check for malformed tables
         for m_line in malformed_lines:
@@ -737,14 +795,67 @@ class MissionIntentCompletenessValidator(IValidator):
                 ))
                 continue
 
-            findings.extend(self._validate_mission_text(content, rel_path))
+            findings.extend(self._validate_mission_text(content, rel_path, repo=repo))
 
         return findings
 
-    def _validate_mission_text(self, content: str, rel_path: str) -> List[Finding]:
+    def _validate_mission_text(self, content: str, rel_path: str, repo: Optional[WorkspaceRepository] = None) -> List[Finding]:
         findings: List[Finding] = []
         sections = _extract_markdown_sections(content)
         tables, malformed_lines = _parse_commonmark_tables(content)
+
+        # Check for allocated obligations from RESEARCH_INVENTORY.md (Gate 26, Issue #109)
+        if "TEMPLATE" not in rel_path.upper():
+            inventory_file = None
+            if repo is not None:
+                inventory_file = os.path.join(repo.workspace_dir, "docs", "research", "RESEARCH_INVENTORY.md")
+            else:
+                candidate = os.path.join("docs", "research", "RESEARCH_INVENTORY.md")
+                if os.path.isfile(candidate):
+                    inventory_file = candidate
+
+            if inventory_file and os.path.isfile(inventory_file):
+                try:
+                    with open(inventory_file, "r", encoding="utf-8") as inv_f:
+                        inv_doc = parse_research_inventory(inv_f.read())
+
+                    # Extract document's realized/witnessed tags
+                    doc_tags = set(_parse_witness_tags(content) + _parse_obligation_tags(content))
+                    fm = extract_metadata_from_content(content)
+                    if fm:
+                        for key in ("obligations", "normative_obligations", "allocated_obligations", "obligation_id"):
+                            val = fm.get(key)
+                            if isinstance(val, list):
+                                for item in val:
+                                    norm = _normalize_obligation_id(str(item))
+                                    if norm:
+                                        doc_tags.add(norm)
+                            elif isinstance(val, str):
+                                norm = _normalize_obligation_id(val)
+                                if norm:
+                                    doc_tags.add(norm)
+
+                    # Find all obligations allocated to MISSION_INTENT in clause allocations
+                    for alloc in inv_doc.clause_allocations:
+                        if alloc.population_id and alloc.downstream_spec_file:
+                            spec_target = alloc.downstream_spec_file.strip("`* ")
+                            target_base = os.path.basename(spec_target).upper()
+                            is_mission_target = (
+                                "MISSION_INTENT" in target_base
+                                or "MISSIONINTENT" in target_base
+                                or os.path.normpath(spec_target) == os.path.normpath(rel_path)
+                            )
+                            if is_mission_target:
+                                norm_id = _normalize_obligation_id(alloc.population_id)
+                                if norm_id not in doc_tags:
+                                    findings.append(Finding(
+                                        "mission-intent-obligation-unwitnessed",
+                                        f"Mission Intent document '{rel_path}' is missing mandatory witness/realization tag for allocated obligation '{norm_id}' ({alloc.clause_citation or alloc.standard_id}).",
+                                        location=rel_path,
+                                        detail={"obligation_id": norm_id, "file": rel_path, "standard_id": alloc.standard_id},
+                                    ))
+                except Exception:
+                    pass
 
         # Check for malformed tables
         for m_line in malformed_lines:

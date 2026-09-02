@@ -294,17 +294,6 @@ class ObligationWitnessValidator(IValidator):
                             else:
                                 registry.phantom_witnesses.setdefault(t, []).append(loc)
 
-        # Incorporate Section 5 mappings as Spec Witnesses if the downstream file exists
-        for alloc in doc.clause_allocations:
-            if alloc.population_id and alloc.downstream_spec_file:
-                pop_id = _normalize_obligation_id(alloc.population_id)
-                spec_rel = alloc.downstream_spec_file.strip("`* ")
-                spec_abs = os.path.join(workspace_dir, spec_rel)
-                if os.path.exists(spec_abs) or os.path.isabs(spec_rel):
-                    loc = f"{spec_rel}:Section5"
-                    if pop_id in registry.records and loc not in registry.records[pop_id].spec_witnesses:
-                        registry.records[pop_id].spec_witnesses.append(loc)
-
         # 3. Scan Test Witnesses (W_test)
         test_dirs = [
             os.path.join(workspace_dir, "tests"),
@@ -435,6 +424,17 @@ class ObligationWitnessValidator(IValidator):
         has_features: bool = self._has_feature_specifications(repo)
         has_codebase: bool = repo.has_configured_target_code_directories()
 
+        # Build Section 5 allocation map
+        alloc_target_map: Dict[str, str] = {}
+        alloc_phase_map: Dict[str, str] = {}
+        for alloc in doc.clause_allocations:
+            if alloc.population_id:
+                norm_p = _normalize_obligation_id(alloc.population_id)
+                if alloc.downstream_spec_file:
+                    alloc_target_map[norm_p] = alloc.downstream_spec_file.strip("`* ")
+                if alloc.specification_phase:
+                    alloc_phase_map[norm_p] = alloc.specification_phase.strip("`* ")
+
         # 1. Theorem 2: Zero Phantom Witnesses (strictly enforced across all files)
         for phantom, locs in registry.phantom_witnesses.items():
             for loc in locs:
@@ -447,43 +447,75 @@ class ObligationWitnessValidator(IValidator):
                     )
                 )
 
-        # 2. Obligation Witness Completeness
-        # Skip unwitnessed checks in fresh workspaces or pre-feature lifecycle stage
-        skip_unwitnessed = allow_missing_specs or (not has_features and registry.total_witnessed() == 0)
+        # 2. Obligation Witness Completeness (Gate 29, Issue #111):
+        for ob_id, rec in sorted(registry.records.items()):
+            target_spec = alloc_target_map.get(ob_id, "")
+            phase_spec = alloc_phase_map.get(ob_id, "")
+            target_abs = os.path.join(workspace_dir, target_spec) if target_spec else ""
+            target_exists = bool(target_abs and os.path.exists(target_abs))
+            is_conops_target = bool(
+                target_spec and (
+                    "CONOPS" in target_spec.upper()
+                    or "MISSION_INTENT" in target_spec.upper()
+                    or "Phase 1" in phase_spec
+                )
+            )
 
-        if not skip_unwitnessed:
-            for ob_id, rec in sorted(registry.records.items()):
-                # Check Spec Witnesses (always required once feature specs exist)
+            if target_spec:
+                is_witnessed_in_assigned = any(
+                    target_spec in w_loc or os.path.normpath(w_loc.split(":")[0]) == os.path.normpath(target_spec)
+                    for w_loc in rec.spec_witnesses
+                )
+            else:
+                is_witnessed_in_assigned = len(rec.spec_witnesses) > 0
+
+            # Determine whether to enforce spec witness
+            should_enforce_spec = (
+                not allow_missing_specs
+                or target_exists
+                or is_conops_target
+                or (has_features and target_spec.startswith("docs/features"))
+                or len(rec.spec_witnesses) > 0
+                or is_witnessed_in_assigned
+            )
+
+            if should_enforce_spec and not is_witnessed_in_assigned:
+                loc = target_spec if target_exists else "docs/research/RESEARCH_INVENTORY.md"
                 if len(rec.spec_witnesses) == 0:
+                    msg = f"Declared obligation '{ob_id}' ({rec.category}, Standard: {rec.standard_id}) has zero specification witnesses in workspace."
+                    if target_spec:
+                        msg += f" (expected in '{target_spec}')"
+                else:
+                    msg = f"Declared obligation '{ob_id}' ({rec.category}, Standard: {rec.standard_id}) is assigned to '{target_spec}' in Section 5 but is not witnessed in that specification document."
+                findings.append(
+                    Finding(
+                        rule_id="obligation-unwitnessed",
+                        message=msg,
+                        location=loc,
+                        detail={"obligation_id": ob_id, "standard_id": rec.standard_id, "assigned_spec": target_spec},
+                    )
+                )
+
+            # If in implementation / codebase mode and not spec-only: check test and code witnesses
+            if has_codebase and not spec_only and not repo.is_upstream_compiler_repo() and not allow_missing_specs:
+                if len(rec.test_witnesses) == 0:
                     findings.append(
                         Finding(
-                            rule_id="obligation-witness-unwitnessed-obligation",
-                            message=f"Declared obligation '{ob_id}' ({rec.category}, Standard: {rec.standard_id}) has zero specification witnesses in workspace.",
+                            rule_id="obligation-witness-missing-test-witness",
+                            message=f"Declared obligation '{ob_id}' ({rec.category}, Standard: {rec.standard_id}) has zero automated test witnesses in workspace test suite.",
                             location="docs/research/RESEARCH_INVENTORY.md",
                             detail={"obligation_id": ob_id, "standard_id": rec.standard_id},
                         )
                     )
-
-                # If in implementation / codebase mode and not spec-only: check test and code witnesses
-                if has_codebase and not spec_only and not repo.is_upstream_compiler_repo():
-                    if len(rec.test_witnesses) == 0:
-                        findings.append(
-                            Finding(
-                                rule_id="obligation-witness-missing-test-witness",
-                                message=f"Declared obligation '{ob_id}' ({rec.category}, Standard: {rec.standard_id}) has zero automated test witnesses in workspace test suite.",
-                                location="docs/research/RESEARCH_INVENTORY.md",
-                                detail={"obligation_id": ob_id, "standard_id": rec.standard_id},
-                            )
+                if (len(rec.code_witnesses) + len(rec.model_witnesses)) == 0:
+                    findings.append(
+                        Finding(
+                            rule_id="obligation-witness-missing-code-witness",
+                            message=f"Declared obligation '{ob_id}' ({rec.category}, Standard: {rec.standard_id}) has zero implementation or discrete model witnesses in codebase.",
+                            location="docs/research/RESEARCH_INVENTORY.md",
+                            detail={"obligation_id": ob_id, "standard_id": rec.standard_id},
                         )
-                    if (len(rec.code_witnesses) + len(rec.model_witnesses)) == 0:
-                        findings.append(
-                            Finding(
-                                rule_id="obligation-witness-missing-code-witness",
-                                message=f"Declared obligation '{ob_id}' ({rec.category}, Standard: {rec.standard_id}) has zero implementation or discrete model witnesses in codebase.",
-                                location="docs/research/RESEARCH_INVENTORY.md",
-                                detail={"obligation_id": ob_id, "standard_id": rec.standard_id},
-                            )
-                        )
+                    )
 
         return findings
 

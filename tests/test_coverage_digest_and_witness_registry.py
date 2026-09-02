@@ -299,7 +299,7 @@ class TestObligationWitnessValidator(unittest.TestCase):
         self.validator = ObligationWitnessValidator()
 
     def test_witness_registry_validation_in_clean_workspace(self):
-        """In a workspace with spec, test, and code witnesses, all obligations are registered."""
+        """In a workspace with spec, test, and code witnesses matching assigned documents, all obligations pass cleanly."""
         with tempfile.TemporaryDirectory() as tmpdir:
             os.makedirs(os.path.join(tmpdir, ".pipeline", "logical-ui"), exist_ok=True)
             with open(os.path.join(tmpdir, ".pipeline", "logical-ui", "codebase_rules.json"), "w") as f:
@@ -309,10 +309,20 @@ class TestObligationWitnessValidator(unittest.TestCase):
             with open(os.path.join(tmpdir, "docs", "research", "RESEARCH_INVENTORY.md"), "w") as f:
                 f.write(SAMPLE_RESEARCH_INVENTORY)
 
-            # Spec files
+            # Spec files matching Section 5 allocations
+            os.makedirs(os.path.join(tmpdir, "docs", "conops"), exist_ok=True)
+            with open(os.path.join(tmpdir, "docs", "conops", "CONOPS.md"), "w") as f:
+                f.write("# ConOps\n/// ObligationWitness: [OBL-01]\n")
+
             os.makedirs(os.path.join(tmpdir, "docs", "features"), exist_ok=True)
-            with open(os.path.join(tmpdir, "docs", "features", "feat-01.md"), "w") as f:
-                f.write("# Feat 01\n/// ObligationWitness: [OBL-01, OBL-02, SAF-01, SAF-02, INT-01, EXT-01]\n")
+            with open(os.path.join(tmpdir, "docs", "features", "feat-01-requirements.md"), "w") as f:
+                f.write("# Feat 01\n/// ObligationWitness: [OBL-02]\n")
+            with open(os.path.join(tmpdir, "docs", "features", "feat-02-safety.md"), "w") as f:
+                f.write("# Feat 02\n/// ObligationWitness: [SAF-01, SAF-02]\n")
+            with open(os.path.join(tmpdir, "docs", "features", "feat-03-dli.md"), "w") as f:
+                f.write("# Feat 03\n/// ObligationWitness: [INT-01]\n")
+            with open(os.path.join(tmpdir, "docs", "features", "feat-04-rta.md"), "w") as f:
+                f.write("# Feat 04\n/// ObligationWitness: [EXT-01]\n")
 
             # Test files
             os.makedirs(os.path.join(tmpdir, "tests"), exist_ok=True)
@@ -359,6 +369,50 @@ class TestObligationWitnessValidator(unittest.TestCase):
             phantom_findings = [f for f in findings if "phantom" in f.rule_id or "phantom" in str(f).lower()]
             self.assertGreaterEqual(len(phantom_findings), 1)
             self.assertTrue(any("OBL-GHOST-42" in str(f) or "GHOST-42" in str(f) for f in phantom_findings))
+
+    def test_witness_registry_flags_unwitnessed_conops_obligation_even_with_allow_missing_specs(self):
+        """When an obligation is allocated to CONOPS.md, missing witness in CONOPS.md emits obligation-unwitnessed."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            os.makedirs(os.path.join(tmpdir, ".pipeline", "logical-ui"), exist_ok=True)
+            with open(os.path.join(tmpdir, ".pipeline", "logical-ui", "codebase_rules.json"), "w") as f:
+                f.write('{"meta": {"upstream_repository": "gintatkinson/DEAP01-spec-core"}}\n')
+
+            os.makedirs(os.path.join(tmpdir, "docs", "research"), exist_ok=True)
+            with open(os.path.join(tmpdir, "docs", "research", "RESEARCH_INVENTORY.md"), "w") as f:
+                f.write(SAMPLE_RESEARCH_INVENTORY)
+
+            # CONOPS.md exists but has no witness tag for OBL-01
+            os.makedirs(os.path.join(tmpdir, "docs", "conops"), exist_ok=True)
+            with open(os.path.join(tmpdir, "docs", "conops", "CONOPS.md"), "w") as f:
+                f.write("# ConOps without obligations\n")
+
+            repo = WorkspaceRepository(tmpdir)
+            findings = self.validator.validate(repo, allow_missing_specs=True)
+            unwitnessed = [f for f in findings if f.rule_id == "obligation-unwitnessed"]
+            self.assertGreaterEqual(len(unwitnessed), 1)
+            self.assertTrue(any("OBL-01" in str(f) for f in unwitnessed))
+
+    def test_coverage_digest_flags_unrealized_conops_obligation_even_with_allow_missing_specs(self):
+        """When an obligation is allocated to CONOPS.md, missing realization tag emits coverage-digest-obligation-unrealized."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            os.makedirs(os.path.join(tmpdir, ".pipeline", "logical-ui"), exist_ok=True)
+            with open(os.path.join(tmpdir, ".pipeline", "logical-ui", "codebase_rules.json"), "w") as f:
+                f.write('{"meta": {"upstream_repository": "gintatkinson/DEAP01-spec-core"}}\n')
+
+            os.makedirs(os.path.join(tmpdir, "docs", "research"), exist_ok=True)
+            with open(os.path.join(tmpdir, "docs", "research", "RESEARCH_INVENTORY.md"), "w") as f:
+                f.write(SAMPLE_RESEARCH_INVENTORY)
+
+            os.makedirs(os.path.join(tmpdir, "docs", "conops"), exist_ok=True)
+            with open(os.path.join(tmpdir, "docs", "conops", "CONOPS.md"), "w") as f:
+                f.write("# ConOps without obligations\n")
+
+            repo = WorkspaceRepository(tmpdir)
+            cov_val = CoverageDigestValidator()
+            findings = cov_val.validate(repo, allow_missing_specs=True)
+            unrealized = [f for f in findings if f.rule_id == "coverage-digest-obligation-unrealized"]
+            self.assertGreaterEqual(len(unrealized), 1)
+            self.assertTrue(any("OBL-01" in str(f) for f in unrealized))
 
 
 class TestAggregatorAndCliRegistration(unittest.TestCase):

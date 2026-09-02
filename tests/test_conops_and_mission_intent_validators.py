@@ -730,6 +730,238 @@ class TestConOpsAndMissionIntentValidators(unittest.TestCase):
             self.assertEqual(res.returncode, 0, f"CLI execution failed with stdout:\n{res.stdout}\nstderr:\n{res.stderr}")
             self.assertIn("ConOps & Mission Intent Completeness Audit", res.stdout)
 
+    def test_conops_missing_allocated_obligation_fails(self):
+        """When RESEARCH_INVENTORY.md allocates an obligation to CONOPS.md, missing witness tag emits conops-obligation-unwitnessed."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            research_dir = os.path.join(tmpdir, "docs", "research")
+            os.makedirs(conops_dir, exist_ok=True)
+            os.makedirs(research_dir, exist_ok=True)
+
+            inventory_content = """# Research Inventory
+## 2. Normative Standards & Baseline Documents Inventory
+| Standard / Baseline ID | Issuing Body | Title | Applicable Clauses | Obligation Category | Declared Total | Clause Citation |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| ISO/IEC/IEEE 29148:2018 | ISO | RE | §6.4.2 | Requirements | 1 | §6.4.2 |
+
+## 3. Declared-Total Population Register
+| Obligation ID | Category | Standard ID | Target Metric / Obligation Count | Verification Mechanism | Public Clause Citation |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `OBL-01` | Requirements | ISO/IEC/IEEE 29148:2018 | 1 | Inspection | §6.4.2 |
+
+## 5. Clause-Level Allocation & Traceability Matrix
+| Population ID | Standard ID | Clause Citation | Clause Title / Requirement Excerpt | Specification Phase | Downstream Spec File / Tag |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `OBL-01` | ISO/IEC/IEEE 29148:2018 | §6.4.2 | ConOps Req | Phase 1 (Structural) | `docs/conops/CONOPS.md` |
+"""
+            with open(os.path.join(research_dir, "RESEARCH_INVENTORY.md"), "w", encoding="utf-8") as f:
+                f.write(inventory_content)
+
+            # CONOPS.md has all 12 sections but NO tag for OBL-01
+            with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
+                f.write(_get_valid_conops_content())
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            conops_val = ConopsCompletenessValidator()
+            findings = conops_val.validate(repo)
+
+            unwitnessed = [f for f in findings if f.rule_id == "conops-obligation-unwitnessed"]
+            self.assertEqual(len(unwitnessed), 1)
+            self.assertEqual(unwitnessed[0].detail.get("obligation_id"), "OBL-01")
+
+    def test_conops_with_witnessed_allocated_obligation_passes(self):
+        """When CONOPS.md includes witness tag for allocated obligation, conops-obligation-unwitnessed is not emitted."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            research_dir = os.path.join(tmpdir, "docs", "research")
+            os.makedirs(conops_dir, exist_ok=True)
+            os.makedirs(research_dir, exist_ok=True)
+
+            inventory_content = """# Research Inventory
+## 2. Normative Standards & Baseline Documents Inventory
+| Standard / Baseline ID | Issuing Body | Title | Applicable Clauses | Obligation Category | Declared Total | Clause Citation |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| ISO/IEC/IEEE 29148:2018 | ISO | RE | §6.4.2 | Requirements | 1 | §6.4.2 |
+
+## 3. Declared-Total Population Register
+| Obligation ID | Category | Standard ID | Target Metric / Obligation Count | Verification Mechanism | Public Clause Citation |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `OBL-01` | Requirements | ISO/IEC/IEEE 29148:2018 | 1 | Inspection | §6.4.2 |
+
+## 5. Clause-Level Allocation & Traceability Matrix
+| Population ID | Standard ID | Clause Citation | Clause Title / Requirement Excerpt | Specification Phase | Downstream Spec File / Tag |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `OBL-01` | ISO/IEC/IEEE 29148:2018 | §6.4.2 | ConOps Req | Phase 1 (Structural) | `docs/conops/CONOPS.md` |
+"""
+            with open(os.path.join(research_dir, "RESEARCH_INVENTORY.md"), "w", encoding="utf-8") as f:
+                f.write(inventory_content)
+
+            # CONOPS.md has witness tag for OBL-01
+            conops_txt = _get_valid_conops_content() + "\n/// Realises: [OBL-01]\n"
+            with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
+                f.write(conops_txt)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            conops_val = ConopsCompletenessValidator()
+            findings = conops_val.validate(repo)
+
+            unwitnessed = [f for f in findings if f.rule_id == "conops-obligation-unwitnessed"]
+            self.assertEqual(len(unwitnessed), 0)
+
+    def test_mission_intent_missing_allocated_obligation_fails(self):
+        """When RESEARCH_INVENTORY.md allocates an obligation to MISSION_INTENT.md, missing witness tag emits mission-intent-obligation-unwitnessed."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            research_dir = os.path.join(tmpdir, "docs", "research")
+            os.makedirs(conops_dir, exist_ok=True)
+            os.makedirs(research_dir, exist_ok=True)
+
+            inventory_content = """# Research Inventory
+## 2. Normative Standards & Baseline Documents Inventory
+| Standard / Baseline ID | Issuing Body | Title | Applicable Clauses | Obligation Category | Declared Total | Clause Citation |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| NATO STANAG 4586 | NATO | UCS | §3.2 | Interoperability | 1 | §3.2 |
+
+## 3. Declared-Total Population Register
+| Obligation ID | Category | Standard ID | Target Metric / Obligation Count | Verification Mechanism | Public Clause Citation |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `INT-01` | Interoperability | NATO STANAG 4586 | 1 | Test | §3.2 |
+
+## 5. Clause-Level Allocation & Traceability Matrix
+| Population ID | Standard ID | Clause Citation | Clause Title / Requirement Excerpt | Specification Phase | Downstream Spec File / Tag |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `INT-01` | NATO STANAG 4586 | §3.2 | DLI Interface | Phase 1 (Structural) | `docs/conops/MISSION_INTENT.md` |
+"""
+            with open(os.path.join(research_dir, "RESEARCH_INVENTORY.md"), "w", encoding="utf-8") as f:
+                f.write(inventory_content)
+
+            # MISSION_INTENT.md has all 10 sections but NO tag for INT-01
+            with open(os.path.join(conops_dir, "MISSION_INTENT.md"), "w", encoding="utf-8") as f:
+                f.write(_get_valid_mission_intent_content())
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            mission_val = MissionIntentCompletenessValidator()
+            findings = mission_val.validate(repo)
+
+            unwitnessed = [f for f in findings if f.rule_id == "mission-intent-obligation-unwitnessed"]
+            self.assertEqual(len(unwitnessed), 1)
+            self.assertEqual(unwitnessed[0].detail.get("obligation_id"), "INT-01")
+
+    def test_mission_intent_with_witnessed_allocated_obligation_passes(self):
+        """When MISSION_INTENT.md includes witness tag for allocated obligation, mission-intent-obligation-unwitnessed is not emitted."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            research_dir = os.path.join(tmpdir, "docs", "research")
+            os.makedirs(conops_dir, exist_ok=True)
+            os.makedirs(research_dir, exist_ok=True)
+
+            inventory_content = """# Research Inventory
+## 2. Normative Standards & Baseline Documents Inventory
+| Standard / Baseline ID | Issuing Body | Title | Applicable Clauses | Obligation Category | Declared Total | Clause Citation |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| NATO STANAG 4586 | NATO | UCS | §3.2 | Interoperability | 1 | §3.2 |
+
+## 3. Declared-Total Population Register
+| Obligation ID | Category | Standard ID | Target Metric / Obligation Count | Verification Mechanism | Public Clause Citation |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `INT-01` | Interoperability | NATO STANAG 4586 | 1 | Test | §3.2 |
+
+## 5. Clause-Level Allocation & Traceability Matrix
+| Population ID | Standard ID | Clause Citation | Clause Title / Requirement Excerpt | Specification Phase | Downstream Spec File / Tag |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `INT-01` | NATO STANAG 4586 | §3.2 | DLI Interface | Phase 1 (Structural) | `docs/conops/MISSION_INTENT.md` |
+"""
+            with open(os.path.join(research_dir, "RESEARCH_INVENTORY.md"), "w", encoding="utf-8") as f:
+                f.write(inventory_content)
+
+            # MISSION_INTENT.md has witness tag for INT-01
+            mission_txt = _get_valid_mission_intent_content() + "\n/// ObligationWitness: [INT-01]\n"
+            with open(os.path.join(conops_dir, "MISSION_INTENT.md"), "w", encoding="utf-8") as f:
+                f.write(mission_txt)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            mission_val = MissionIntentCompletenessValidator()
+            findings = mission_val.validate(repo)
+
+            unwitnessed = [f for f in findings if f.rule_id == "mission-intent-obligation-unwitnessed"]
+            self.assertEqual(len(unwitnessed), 0)
+
+    def test_cli_integration_fails_when_conops_obligation_unwitnessed(self):
+        """Verify CLI fails closed (exit code 1) when an allocated ConOps obligation is unwitnessed."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            research_dir = os.path.join(tmpdir, "docs", "research")
+            schema_dir = os.path.join(tmpdir, "schema")
+            pipeline_dir = os.path.join(tmpdir, ".pipeline", "logical-ui")
+            os.makedirs(conops_dir, exist_ok=True)
+            os.makedirs(research_dir, exist_ok=True)
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(pipeline_dir, exist_ok=True)
+
+            inventory_content = """# Research Inventory
+## 2. Normative Standards & Baseline Documents Inventory
+| Standard / Baseline ID | Issuing Body | Title | Applicable Clauses | Obligation Category | Declared Total | Clause Citation |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| ISO/IEC/IEEE 29148:2018 | ISO | RE | §6.4.2 | Requirements | 1 | §6.4.2 |
+
+## 3. Declared-Total Population Register
+| Obligation ID | Category | Standard ID | Target Metric / Obligation Count | Verification Mechanism | Public Clause Citation |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `OBL-01` | Requirements | ISO/IEC/IEEE 29148:2018 | 1 | Inspection | §6.4.2 |
+
+## 5. Clause-Level Allocation & Traceability Matrix
+| Population ID | Standard ID | Clause Citation | Clause Title / Requirement Excerpt | Specification Phase | Downstream Spec File / Tag |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `OBL-01` | ISO/IEC/IEEE 29148:2018 | §6.4.2 | ConOps Req | Phase 1 (Structural) | `docs/conops/CONOPS.md` |
+"""
+            with open(os.path.join(research_dir, "RESEARCH_INVENTORY.md"), "w", encoding="utf-8") as f:
+                f.write(inventory_content)
+
+            with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
+                f.write(_get_valid_conops_content())
+
+            with open(os.path.join(conops_dir, "MISSION_INTENT.md"), "w", encoding="utf-8") as f:
+                f.write(_get_valid_mission_intent_content())
+
+            sysml_content = """package SystemSSOT {
+    doc /* /// OperationalAllocation: [OA-01, OA-02, OA-03, Phase_Startup, Phase_NominalExecution, Phase_DegradedMode, Phase_ContingencyFailsafe, Phase_SecureShutdown, Phase_MaintenanceMode] */
+}
+"""
+            with open(os.path.join(schema_dir, "model.sysml"), "w", encoding="utf-8") as f:
+                f.write(sysml_content)
+
+            with open(os.path.join(pipeline_dir, "codebase_rules.json"), "w", encoding="utf-8") as f:
+                f.write("""{
+  "meta": {
+    "upstream_repository": "acme/example-project"
+  },
+  "backlog_directories": {
+    "schemas": "schema",
+    "features": "docs/features",
+    "epics": "docs/epics"
+  },
+  "target_directories": {
+    "react": "",
+    "flutter": ""
+  },
+  "tracker_rules": {}
+}""")
+
+            cli_py = os.path.join(repo_root, "skills", "spec-orchestrator", "parity_auditor", "src", "parity_auditor", "cli.py")
+            import subprocess
+            res = subprocess.run(
+                [sys.executable, cli_py, "--workspace", tmpdir, "--schema-only"],
+                capture_output=True,
+                text=True
+            )
+            self.assertEqual(res.returncode, 1, f"Expected CLI failure, but got exit code {res.returncode}:\n{res.stdout}")
+            self.assertTrue(
+                "conops-obligation-unwitnessed" in res.stdout
+                or "coverage-digest-obligation-unrealized" in res.stdout
+                or "obligation-unwitnessed" in res.stdout
+                or "ConOps Completeness Violations Identified" in res.stdout
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
