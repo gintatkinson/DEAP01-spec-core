@@ -21,4 +21,6 @@ from .operational_allocation_validator import OperationalAllocationValidator
 from .standards_measurement_validator import StandardsAndMeasurementValidator, StandardsMeasurementValidator
 from .conops_completeness_validator import ConopsCompletenessValidator, MissionIntentCompletenessValidator
 from .research_inventory_validator import ResearchInventoryValidator
+from .coverage_digest_validator import CoverageDigestValidator
+from .obligation_witness_validator import ObligationWitnessValidator, ObligationWitnessRegistry
 

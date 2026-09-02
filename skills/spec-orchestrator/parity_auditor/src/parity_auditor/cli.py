@@ -45,6 +45,8 @@ try:
     from .validators.standards_measurement_validator import StandardsAndMeasurementValidator
     from .validators.conops_completeness_validator import ConopsCompletenessValidator, MissionIntentCompletenessValidator
     from .validators.research_inventory_validator import ResearchInventoryValidator
+    from .validators.coverage_digest_validator import CoverageDigestValidator
+    from .validators.obligation_witness_validator import ObligationWitnessValidator
     from .utils.diagnostics import serialize_diagnostics
     from .utils.comment_utils import strip_comments_and_strings
 except (ImportError, ValueError):
@@ -80,6 +82,8 @@ except (ImportError, ValueError):
     from parity_auditor.validators.standards_measurement_validator import StandardsAndMeasurementValidator
     from parity_auditor.validators.conops_completeness_validator import ConopsCompletenessValidator, MissionIntentCompletenessValidator
     from parity_auditor.validators.research_inventory_validator import ResearchInventoryValidator
+    from parity_auditor.validators.coverage_digest_validator import CoverageDigestValidator
+    from parity_auditor.validators.obligation_witness_validator import ObligationWitnessValidator
     from parity_auditor.utils.diagnostics import serialize_diagnostics
     from parity_auditor.utils.comment_utils import strip_comments_and_strings
 
@@ -281,7 +285,9 @@ def _main_impl():
     parser.add_argument("--check-conops", help="Path to ConOps file to check")
     parser.add_argument("--check-mission-intent", help="Path to Mission Intent file to check")
     parser.add_argument("--synthesize-templates", action="store_true", help="Synthesize canonical ConOps and Mission Intent templates")
-    parser.add_argument("--output-dir", help="Output directory for synthesized templates (default: docs/conops/)")
+    parser.add_argument("--synthesize-coverage-digest", action="store_true", help="Synthesize COVERAGE_DIGEST.md report")
+    parser.add_argument("--synthesize-witness-registry", action="store_true", help="Synthesize OBLIGATION_WITNESS_REGISTRY.md report")
+    parser.add_argument("--output-dir", help="Output directory for synthesized documents (default: docs/conops/ or docs/research/)")
     
     args = parser.parse_args()
     if args.schema_only:
@@ -336,6 +342,27 @@ def _main_impl():
         print(f"Synthesized canonical ConOps template: {c_path}")
         print(f"Synthesized canonical Mission Intent template: {m_path}")
         sys.exit(0)
+
+    if args.synthesize_coverage_digest:
+        out_dir = args.output_dir or os.path.join(repo.workspace_dir, "docs", "research")
+        os.makedirs(out_dir, exist_ok=True)
+        cov_val = CoverageDigestValidator()
+        cov_path = os.path.join(out_dir, "COVERAGE_DIGEST.md")
+        with open(cov_path, "w", encoding="utf-8") as f:
+            f.write(cov_val.synthesize_coverage_digest(repo))
+        print(f"Synthesized Coverage Digest report: {cov_path}")
+        sys.exit(0)
+
+    if args.synthesize_witness_registry:
+        out_dir = args.output_dir or os.path.join(repo.workspace_dir, "docs", "research")
+        os.makedirs(out_dir, exist_ok=True)
+        wit_val = ObligationWitnessValidator()
+        wit_path = os.path.join(out_dir, "OBLIGATION_WITNESS_REGISTRY.md")
+        with open(wit_path, "w", encoding="utf-8") as f:
+            f.write(wit_val.synthesize_witness_registry(repo))
+        print(f"Synthesized Obligation-Witness Registry: {wit_path}")
+        sys.exit(0)
+
     
     # 3. Check if the codebase rules file exists
     rules_path = repo.get_codebase_rules_path()
@@ -1162,8 +1189,41 @@ def _main_impl():
     else:
         print("Success: Cited research inventory schema and declared-total population register verified.")
 
+    print("\n=== Coverage-Digest Population Audit (Gate 28) ===")
+    coverage_digest_validator = CoverageDigestValidator()
+    coverage_digest_errors = _scope_findings(
+        coverage_digest_validator.validate(repo, allow_missing_specs=getattr(args, 'allow_missing_specs', True)),
+        getattr(args, 'only', None)
+    )
+    if coverage_digest_errors:
+        print("[!] Coverage Digest Violations Identified:")
+        for err in coverage_digest_errors:
+            print(f"  - {err}")
+        has_failed = True
+    else:
+        print("Success: Coverage digest population metrics and realized obligations verified.")
+
+    print("\n=== Obligation-Witness Registry Audit (Gate 29) ===")
+    obligation_witness_validator = ObligationWitnessValidator()
+    obligation_witness_errors = _scope_findings(
+        obligation_witness_validator.validate(
+            repo,
+            allow_missing_specs=getattr(args, 'allow_missing_specs', True),
+            spec_only=getattr(args, 'spec_only', False),
+        ),
+        getattr(args, 'only', None)
+    )
+    if obligation_witness_errors:
+        print("[!] Obligation Witness Registry Violations Identified:")
+        for err in obligation_witness_errors:
+            print(f"  - {err}")
+        has_failed = True
+    else:
+        print("Success: Multi-dimensional obligation witness registry verified.")
+
     if has_failed:
-        all_errors = (uml_errors or []) + (behavioral_errors or []) + (codebase_errors or []) + (doc_errors or []) + (dependency_errors or []) + (sync_errors or []) + (schema_mapping_errors or []) + (profile_scoping_errors or []) + (test_completeness_errors or []) + (cardinality_errors or []) + (spec_filename_errors or []) + (spec_title_errors or []) + (mermaid_syntax_errors or []) + (katex_errors or []) + (logical_ui_errors or []) + (docstring_errors or []) + (profile_compliance_errors or []) + (package_allocation_errors or []) + (feature_op_errors or []) + (interaction_errors or []) + (safety_constraint_errors or []) + (acceptance_test_errors or []) + (missing_spec_errors or []) + (source_ref_errors or []) + (link_errors or []) + (concept_provenance_errors or []) + (safety_trace_errors or []) + (doc_metadata_errors or []) + (icd_completeness_errors or []) + (operational_allocation_errors or []) + (standards_measurement_errors or []) + (conops_errors or []) + (mission_intent_errors or []) + (research_inventory_errors or [])
+        all_errors = (uml_errors or []) + (behavioral_errors or []) + (codebase_errors or []) + (doc_errors or []) + (dependency_errors or []) + (sync_errors or []) + (schema_mapping_errors or []) + (profile_scoping_errors or []) + (test_completeness_errors or []) + (cardinality_errors or []) + (spec_filename_errors or []) + (spec_title_errors or []) + (mermaid_syntax_errors or []) + (katex_errors or []) + (logical_ui_errors or []) + (docstring_errors or []) + (profile_compliance_errors or []) + (package_allocation_errors or []) + (feature_op_errors or []) + (interaction_errors or []) + (safety_constraint_errors or []) + (acceptance_test_errors or []) + (missing_spec_errors or []) + (source_ref_errors or []) + (link_errors or []) + (concept_provenance_errors or []) + (safety_trace_errors or []) + (doc_metadata_errors or []) + (icd_completeness_errors or []) + (operational_allocation_errors or []) + (standards_measurement_errors or []) + (conops_errors or []) + (mission_intent_errors or []) + (research_inventory_errors or []) + (coverage_digest_errors or []) + (obligation_witness_errors or [])
+
 
         compiled_errors = all_errors
         target_file = None

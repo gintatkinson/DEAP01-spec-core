@@ -52,6 +52,8 @@ from .validators.operational_allocation_validator import OperationalAllocationVa
 from .validators.standards_measurement_validator import StandardsAndMeasurementValidator
 from .validators.conops_completeness_validator import ConopsCompletenessValidator, MissionIntentCompletenessValidator
 from .validators.research_inventory_validator import ResearchInventoryValidator
+from .validators.coverage_digest_validator import CoverageDigestValidator
+from .validators.obligation_witness_validator import ObligationWitnessValidator
 
 # Validators migrated to structured findings. Un-migrated validators are deliberately
 # excluded rather than included and silently ungroupable — see `coverage_note`.
@@ -89,6 +91,8 @@ AGGREGATING_VALIDATORS = (
     ConopsCompletenessValidator,
     MissionIntentCompletenessValidator,
     ResearchInventoryValidator,
+    CoverageDigestValidator,
+    ObligationWitnessValidator,
 )
 
 # SyncValidator is migrated to structured findings but deliberately absent: it shells

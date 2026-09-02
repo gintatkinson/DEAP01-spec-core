@@ -371,3 +371,140 @@ class ResearchInventoryDocument:
     def get_total_declared_obligations(self) -> int:
         return sum(std.declared_total for std in self.standards)
 
+
+# Coverage-Digest & Obligation-Witness Models (CORE #98, closing #92 & #93)
+@dataclass
+class CoverageDigest:
+    """
+    Coverage Digest tracking population metrics against declared obligations (Gate 28 / #92).
+    """
+    total_declared_obligations: int = 0
+    total_realized_obligations: int = 0
+    realization_percentage: float = 0.0
+    declared_by_standard: Dict[str, int] = field(default_factory=dict)
+    realized_by_standard: Dict[str, int] = field(default_factory=dict)
+    declared_by_category: Dict[str, int] = field(default_factory=dict)
+    realized_by_category: Dict[str, int] = field(default_factory=dict)
+    obligation_realization_map: Dict[str, List[str]] = field(default_factory=dict)
+    unrealized_obligations: List[str] = field(default_factory=list)
+    phantom_realizations: List[str] = field(default_factory=list)
+
+    def is_fully_realized(self) -> bool:
+        """Returns True if every declared obligation is realized with zero phantom realizations."""
+        return (
+            self.total_declared_obligations > 0
+            and len(self.unrealized_obligations) == 0
+            and len(self.phantom_realizations) == 0
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "total_declared_obligations": self.total_declared_obligations,
+            "total_realized_obligations": self.total_realized_obligations,
+            "realization_percentage": round(self.realization_percentage, 2),
+            "declared_by_standard": dict(self.declared_by_standard),
+            "realized_by_standard": dict(self.realized_by_standard),
+            "declared_by_category": dict(self.declared_by_category),
+            "realized_by_category": dict(self.realized_by_category),
+            "obligation_realization_map": {k: list(v) for k, v in self.obligation_realization_map.items()},
+            "unrealized_obligations": list(self.unrealized_obligations),
+            "phantom_realizations": list(self.phantom_realizations),
+            "is_fully_realized": self.is_fully_realized(),
+        }
+
+    def generate_markdown_summary(self) -> str:
+        lines: List[str] = [
+            "| Metric Parameter | Value | Compliance Status |",
+            "| :--- | :--- | :--- |",
+            f"| Declared Total Obligations | {self.total_declared_obligations} | Baseline |",
+            f"| Realized Total Obligations | {self.total_realized_obligations} | {'Conforming' if len(self.unrealized_obligations) == 0 else 'Gaps Identified'} |",
+            f"| Population Realization Coverage | {self.realization_percentage:.1f}% | {'100% Conforming' if self.realization_percentage >= 100.0 else 'Incomplete'} |",
+            f"| Phantom Realizations | {len(self.phantom_realizations)} | {'Zero (Conforming)' if len(self.phantom_realizations) == 0 else 'Non-Conforming'} |",
+            f"| Unrealized Obligations | {len(self.unrealized_obligations)} | {'Zero (Conforming)' if len(self.unrealized_obligations) == 0 else 'Non-Conforming'} |",
+        ]
+        return "\n".join(lines)
+
+
+@dataclass
+class ObligationWitnessRecord:
+    """
+    Multidimensional witness tracking record for an individual obligation (Gate 29 / #93).
+    """
+    obligation_id: str
+    standard_id: str = ""
+    category: str = ""
+    clause_citation: str = ""
+    verification_mechanism: str = ""
+    spec_witnesses: List[str] = field(default_factory=list)
+    test_witnesses: List[str] = field(default_factory=list)
+    code_witnesses: List[str] = field(default_factory=list)
+    model_witnesses: List[str] = field(default_factory=list)
+
+    @property
+    def total_witnesses(self) -> int:
+        return len(self.spec_witnesses) + len(self.test_witnesses) + len(self.code_witnesses) + len(self.model_witnesses)
+
+    @property
+    def is_witnessed(self) -> bool:
+        return self.total_witnesses > 0
+
+    @property
+    def is_fully_witnessed(self) -> bool:
+        has_spec = len(self.spec_witnesses) > 0
+        has_test = len(self.test_witnesses) > 0
+        has_impl = (len(self.code_witnesses) + len(self.model_witnesses)) > 0
+        return has_spec and has_test and has_impl
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "obligation_id": self.obligation_id,
+            "standard_id": self.standard_id,
+            "category": self.category,
+            "clause_citation": self.clause_citation,
+            "verification_mechanism": self.verification_mechanism,
+            "spec_witnesses": list(self.spec_witnesses),
+            "test_witnesses": list(self.test_witnesses),
+            "code_witnesses": list(self.code_witnesses),
+            "model_witnesses": list(self.model_witnesses),
+            "total_witnesses": self.total_witnesses,
+            "is_witnessed": self.is_witnessed,
+            "is_fully_witnessed": self.is_fully_witnessed(),
+        }
+
+
+@dataclass
+class ObligationWitnessRegistry:
+    """
+    Obligation-Witness Registry managing all obligation witnesses across the workspace (Gate 29 / #93).
+    """
+    records: Dict[str, ObligationWitnessRecord] = field(default_factory=dict)
+    phantom_witnesses: Dict[str, List[str]] = field(default_factory=dict)
+
+    def get_record(self, obligation_id: str) -> Optional[ObligationWitnessRecord]:
+        return self.records.get(obligation_id)
+
+    def total_declared(self) -> int:
+        return len(self.records)
+
+    def total_witnessed(self) -> int:
+        return sum(1 for r in self.records.values() if r.is_witnessed)
+
+    def total_fully_witnessed(self) -> int:
+        return sum(1 for r in self.records.values() if r.is_fully_witnessed)
+
+    def witness_coverage_percentage(self) -> float:
+        if not self.records:
+            return 100.0
+        return (self.total_witnessed() / len(self.records)) * 100.0
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "total_declared": self.total_declared(),
+            "total_witnessed": self.total_witnessed(),
+            "total_fully_witnessed": self.total_fully_witnessed(),
+            "witness_coverage_percentage": round(self.witness_coverage_percentage(), 2),
+            "records": {k: v.to_dict() for k, v in self.records.items()},
+            "phantom_witnesses": {k: list(v) for k, v in self.phantom_witnesses.items()},
+        }
+
+
