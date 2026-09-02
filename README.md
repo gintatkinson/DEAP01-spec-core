@@ -14,7 +14,14 @@
 
 The **Digital Engineering Agent Platform Core Specification Compiler (`DEAP01-spec-core`)** is the upstream abstract systems engineering compiler and multi-agent verification framework for DEAP. It provides deterministic translation, model-based validation, bidirectional synchronization, and quality gate enforcement bridging formal engineering models (SysML v2, YANG, IDL, ARXML, OpenAPI, Protobuf) with downstream Agile specification backlogs and autonomous code generation.
 
-Operating purely on Abstract Syntax Tree (AST) tokens without hardcoding domain concepts, `DEAP01-spec-core` serves as the upstream parent compiler from which domain-specific distribution templates (e.g. `DEAP-uas-infrastructure-safety`, automotive, medical, and telecommunications) and downstream customer projects are derived via `scripts/install_pipeline.sh`.
+Operating purely on Abstract Syntax Tree (AST) tokens without hardcoding domain concepts, `DEAP01-spec-core` serves as the upstream parent compiler (`UPSTREAM_SPEC_CORE_COMPILER`) from which domain-specific distribution templates (e.g. `DEAP-uas-infrastructure-safety`, automotive, medical, and telecommunications) and downstream customer projects are derived via `scripts/install_pipeline.sh` or Direct Copy.
+
+### 1.2 Upstream Compiler vs. Downstream Application Workspace Boundary
+
+The DEAP framework strictly delineates the boundary between the upstream specification compiler and downstream application workspaces:
+- **Upstream Spec Core Compiler (`DEAP01-spec-core`):** Abstract, domain-agnostic specification compiler and multi-agent verification platform. Operates with the sentinel `.pipeline/upstream/` directory present. All upstream landing zones (`docs/conops/`, `docs/safety/`, `docs/epics/`, `docs/features/`, `docs/user-stories/`, `docs/use-cases/`, `schema/`) remain pristine with zero concrete domain specifications or domain-specific `.sysml` files.
+- **Downstream Application Workspaces (e.g. `DEAP-uas-infrastructure-safety`):** Concrete domain application repositories derived from `DEAP01-spec-core`. Turnkey installation or manual setup removes `.pipeline/upstream/`, transitioning the project into `DOWNSTREAM_CUSTOMER_PROJECT` mode to enable concrete flight controllers, safety statecharts, ROS2/PX4 modules, and domain test suites.
+- **Illustrative Schema Payloads:** Any concrete flight controller, unmanned aircraft system (UAS), Detect-and-Avoid (DAA), STPA hazard analysis, or domain safety examples presented throughout this README and documentation are strictly **illustrative schema payloads** demonstrating compiler ingestion, AST synthesis, projection, and verification capabilities.
 
 ---
 
@@ -53,17 +60,55 @@ DEAP supports decoupled downstream implementation profiles residing under `.pipe
 All architecture blueprints, concept papers, SysML v2 models, and specifications for DEAP are hosted centrally in the Single Source of Truth repository: **[DEAP01-spec-core](https://github.com/gintatkinson/DEAP01-spec-core)** and in repository blueprints.
 
 ### Canonical Specifications & Architecture Blueprints:
+- **Deterministic Safety Specification Compiler Blueprint**: [DEAP_DETERMINISTIC_SAFETY_SPECIFICATION_COMPILER_BLUEPRINT.md](docs/architecture/blueprints/DEAP_DETERMINISTIC_SAFETY_SPECIFICATION_COMPILER_BLUEPRINT.md) (`DEAP-BLUEPRINT-SAFETY-004`)
+- **SysML v2 Ingestion Engine Blueprint**: [DEAP_SYSML_V2_INGESTION_ENGINE_BLUEPRINT.md](docs/architecture/blueprints/DEAP_SYSML_V2_INGESTION_ENGINE_BLUEPRINT.md) (`DEAP-BLUEPRINT-SYSML-003`)
+- **Multi-Toolchain Synthesis Architecture**: [DEAP_MULTI_TOOLCHAIN_SYNTHESIS_ARCHITECTURE.md](docs/architecture/blueprints/DEAP_MULTI_TOOLCHAIN_SYNTHESIS_ARCHITECTURE.md)
+- **Bidirectional SysML v2 Synchronization Blueprint**: [SYSML_SSOT_BIDIRECTIONAL_SYNCHRONIZATION_ARCHITECTURE.md](docs/architecture/blueprints/SYSML_SSOT_BIDIRECTIONAL_SYNCHRONIZATION_ARCHITECTURE.md) (`DEAP-BLUEPRINT-SYSML-SSOT-001`)
 - **Logical Interface Specification Blueprint**: [DEAP_LOGICAL_INTERFACE_SPECIFICATION_BLUEPRINT.md](docs/architecture/blueprints/DEAP_LOGICAL_INTERFACE_SPECIFICATION_BLUEPRINT.md) (`DEAP-BLUEPRINT-LOGICAL-ICD-001`)
 - **Multi-Provider GitLab Infrastructure Blueprint**: [MULTI_PROVIDER_GITLAB_INFRASTRUCTURE_ARCHITECTURE.md](docs/architecture/blueprints/MULTI_PROVIDER_GITLAB_INFRASTRUCTURE_ARCHITECTURE.md) (`DEAP-BLUEPRINT-GITLAB-001`)
-- **Bidirectional SysML v2 Synchronization Blueprint**: [SYSML_SSOT_BIDIRECTIONAL_SYNCHRONIZATION_ARCHITECTURE.md](docs/architecture/blueprints/SYSML_SSOT_BIDIRECTIONAL_SYNCHRONIZATION_ARCHITECTURE.md) (`DEAP-BLUEPRINT-SYSML-SSOT-001`)
 - **Persistence Architecture Blueprint**: [PERSISTENCE_ARCHITECTURE.md](docs/architecture/blueprints/PERSISTENCE_ARCHITECTURE.md)
 - **Safety-Critical Real-Time UI Framework**: [SAFETY_CRITICAL_REALTIME_UI_FRAMEWORK.md](docs/architecture/blueprints/SAFETY_CRITICAL_REALTIME_UI_FRAMEWORK.md) (`DEAP-BLUEPRINT-SAFETY-UI-001`)
+- **Runtime Metadata Engine Blueprint**: [RUNTIME_METADATA_ENGINE.md](docs/architecture/blueprints/RUNTIME_METADATA_ENGINE.md)
+- **SpecKit Native Integration Blueprint**: [SPECKIT_NATIVE_INTEGRATION.md](docs/architecture/blueprints/SPECKIT_NATIVE_INTEGRATION.md)
+- **Local Air-Gapped DeepSeek Workstation Blueprint**: [DEAP_LOCAL_AIRGAPPED_DEEPSEEK_WORKSTATION_BLUEPRINT.md](docs/architecture/blueprints/DEAP_LOCAL_AIRGAPPED_DEEPSEEK_WORKSTATION_BLUEPRINT.md)
+- **DeepSeek Harness Integration Blueprint**: [DEAP_DEEPSEEK_HARNESS_INTEGRATION_BLUEPRINT.md](docs/architecture/blueprints/DEAP_DEEPSEEK_HARNESS_INTEGRATION_BLUEPRINT.md)
 
-### Repository Tree:
+### Repository Trees:
+
+#### Upstream Spec Core Compiler (`DEAP01-spec-core`):
+```
+DEAP01-spec-core/
+├── .agents/
+│   ├── AGENTS.md                  # Project-scoped agentic governance rules & delegation gates
+│   └── skills -> ../skills        # Project skills symlink
+├── .pipeline/
+│   ├── upstream/                  # Sentinel directory marking UPSTREAM_SPEC_CORE_COMPILER role
+│   ├── constitution.md            # Platform-independent functional safety governance tier
+│   └── profiles/                  # Multi-platform execution profiles (ros2_cpp, px4_module, etc.)
+├── docs/
+│   ├── architecture/
+│   │   └── blueprints/            # Canonical architecture specifications & multi-provider blueprints
+│   ├── conops/                    # Abstract landing zone (.gitkeep)
+│   ├── safety/                    # Abstract landing zone (.gitkeep)
+│   ├── epics/                     # Abstract landing zone (.gitkeep)
+│   ├── features/                  # Abstract landing zone (.gitkeep)
+│   ├── user-stories/              # Abstract landing zone (.gitkeep)
+│   └── use-cases/                 # Abstract landing zone (.gitkeep)
+├── rules/                         # Abstract verification & governance rules
+├── schema/                        # Abstract landing zone (.gitkeep)
+├── scripts/                       # Turnkey installer, compiler, and parity verification scripts
+├── skills/                        # Multi-agent orchestrator & implementation skills
+├── tests/                         # Baseline, AST parser, and compiler verification test suites
+├── pyproject.toml                 # Pytest & toolchain configuration
+└── README.md                      # Upstream compiler master specification & usage guide
+```
+
+#### Downstream Customer Project Workspace (e.g. `DEAP-uas-infrastructure-safety`):
 ```
 DEAP-uas-infrastructure-safety/
 ├── .agents/
-│   └── AGENTS.md                  # Project-scoped agentic governance rules & delegation gates
+│   ├── AGENTS.md                  # Project-scoped agentic governance rules & delegation gates
+│   └── skills -> ../skills        # Project skills symlink
 ├── .pipeline/
 │   ├── constitution.md            # Platform-independent functional safety governance tier
 │   └── profiles/
@@ -74,12 +119,10 @@ DEAP-uas-infrastructure-safety/
 │   ├── safety/                    # STPA hazard analysis, FMECA & SORA SAIL landing zone
 │   └── architecture/
 │       └── blueprints/            # Canonical architecture specifications & multi-provider blueprints
-├── schema/
-│   └── README.md                  # Input structural schemas & SysML v2 models guide
-├── tests/
-│   └── test_uas_safety_governance.py      # Automated UAS safety compliance & MBSE test suite
+├── schema/                        # Domain-specific structural schemas & SysML v2 models
+├── tests/                         # Application tests & UAS safety compliance test suite
 ├── pyproject.toml                 # Pytest & verification configuration
-└── README.md                      # Platform master specification & usage guide
+└── README.md                      # Downstream project master specification & usage guide
 ```
 
 ---
@@ -163,6 +206,9 @@ fi
 rm -rf ./.tmp-pipeline
 mkdir -p ./docs/conops ./docs/safety ./docs/architecture/blueprints ./docs/epics ./docs/features ./docs/user-stories ./docs/use-cases ./.pipeline/contracts ./.pipeline/domain_specs ./.pipeline/profiles
 
+# Verify pipeline directories, agent configuration, and skills
+test -d ./.pipeline && test -d ./skills && test -d ./.agents/skills && echo "Pipeline directories (.pipeline, skills, .agents/skills) verified successfully."
+
 # Configure for GitLab (if applicable)
 python3 -c "
 import json, os
@@ -197,7 +243,7 @@ After copying the pipeline, configure Gemini / Antigravity to load the skills an
    2. **Load Project Skills**: Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` (and any active skills under `skills/` or `.agents/skills/`) to initialize feature-driven implementation protocols and review gates.
    3. **Load Governance Rules**: Ingest `AGENTS.md` (or `.agents/AGENTS.md`) and `rules/` to enforce project-scoped agentic rules, context-isolated subagent dispatch loops, and role boundary locks.
    4. **Load Platform Profile**: Read the target platform execution profile (`.pipeline/profiles/ros2_cpp.md` for ROS2 C++ Real-Time Nodes or `.pipeline/profiles/px4_module.md` for PX4 Autopilot Flight Modules) to establish platform-specific build, test, and lifecycle constraints.
-   5. **Bootstrap Tracker Labels**: Verify that repository issue tracker labels are synchronized and operational by running `python3 scripts/reconcile_backlog.py` or verifying label bootstrapping status.
+   5. **Bootstrap Tracker Labels**: Verify that repository issue tracker labels are synchronized and operational by running `python3 skills/spec-orchestrator/scripts/bootstrap_tracker_labels.py --dry-run` or verifying label bootstrapping status.
 
 ### 5.5 AGENTS.md Setup
 
@@ -269,7 +315,7 @@ The DEAP platform features a unified, zero-dependency **Tracker Abstraction Arch
 #### Authentication Resolution Hierarchy:
 1. **GitLab**: Checks `GITLAB_TOKEN` $\rightarrow$ `GL_TOKEN` $\rightarrow$ `CI_JOB_TOKEN`. If connecting to a self-hosted or private air-gapped instance, specify `GITLAB_URL` (e.g. `export GITLAB_URL="https://gitlab.internal.defense.gov"`).
 2. **GitHub**: Checks `GITHUB_TOKEN` $\rightarrow$ `GH_TOKEN` $\rightarrow$ `gh auth token`.
-3. **Offline / Mock Mode**: Specify `--mock` or run without tokens in air-gapped evaluation environments.
+3. **Offline Mode**: Specify `--offline` or run without tokens in air-gapped evaluation environments (add `--upstream` when reconciling the upstream compiler repository itself).
 
 ### 6.2 Backlog Reconciliation CLI Usage
 
@@ -285,8 +331,8 @@ python3 scripts/reconcile_backlog.py --provider gitlab
 # Reconcile against Self-Hosted / Air-Gapped GitLab Instance
 python3 scripts/reconcile_backlog.py --provider gitlab --gitlab-url https://gitlab.internal.defense.gov
 
-# Perform Dry-Run Reconciliation (No remote mutation)
-python3 scripts/reconcile_backlog.py --provider gitlab --dry-run
+# Perform Offline Reconciliation (No remote mutation)
+python3 scripts/reconcile_backlog.py --provider gitlab --offline
 ```
 
 ### 6.3 GitLab Scoped Label Lifecycle (`key::value`)
@@ -321,16 +367,16 @@ $$\text{Pipeline} = \text{Stage}_{\text{lint}} \xrightarrow{\text{pass}} \text{S
 
 ## 7. Closed-Loop Bidirectional SysML v2 Compilation (Zero Drift)
 
-To eliminate specification-model drift between systems engineering models and agile software backlogs, DEAP implements an automated **Closed-Loop Bidirectional SysML v2 Compilation & Synchronization Engine**. The canonical SysML v2 model (`docs/architecture/blueprints/DEAP_MODEL.sysml` or `schema/*.sysml`) serves as the Single Source of Truth (SSOT).
+To eliminate specification-model drift between systems engineering models and agile software backlogs, DEAP implements an automated **Closed-Loop Bidirectional SysML v2 Compilation & Synchronization Engine**. The canonical SysML v2 model (`.pipeline/schema.sysml` or `schema/*.sysml`) serves as the Single Source of Truth (SSOT).
 
 ### 7.1 Bidirectional Compilation & Verification Commands
 
 ```bash
 # 1. Forward AST Ingestion: Compile SysML v2 formal model into agile specification scaffolding
-python3 skills/spec-orchestrator/scripts/sysmlv2_ingest.py --schema docs/architecture/blueprints/DEAP_MODEL.sysml
+python3 skills/spec-orchestrator/scripts/sysmlv2_ingest.py --schema schema/model.sysml
 
 # 2. Reverse AST Closed-Loop Synchronization: Extract markdown spec deltas back into SysML v2 SSOT
-python3 scripts/compile_sysml.py --reverse-sync --docs docs/ --schema docs/architecture/blueprints/DEAP_MODEL.sysml --out .pipeline/schema.sysml
+python3 scripts/compile_sysml.py --reverse-sync --docs docs/ --schema schema/model.sysml --out .pipeline/schema.sysml
 
 # 3. 22-Gate Mechanical Parity Lock: Verify 100% semantic alignment across all artifacts
 python3 skills/spec-orchestrator/scripts/verify_model_coverage.py --spec-only
@@ -362,6 +408,8 @@ This platform explicitly declares **MATLAB / Simulink / Stateflow / Embedded Cod
 ## 8. Pipeline 0: Pre-Spec Safety Engineering Execution Workflow
 
 Pipeline 0 (**Pre-Spec Safety Engineering Engine**) serves as the front-end systems engineering, hazard identification, and safety modeling pipeline within the Digital Engineering Agent Platform (DEAP) framework. Operating prior to downstream Agile backlog projection (Pipeline 1) and automated code synthesis (Pipeline 2), Pipeline 0 ingests unstructured customer intent, mission flight profiles, and airspace constraints to produce normative safety specifications, STPA/FMECA analysis, SORA SAIL assurance models, and SysML v2 textual AST artifacts.
+
+> **Illustrative Schema Payloads Note:** All flight mission profiles, UAS airframe parameters, and STPA hazard analysis examples referenced in Pipeline 0 workflows below are illustrative domain schema payloads demonstrating front-end AST ingestion, STPA synthesis, and serialized AST contract generation. `DEAP01-spec-core` is the upstream abstract specification compiler.
 
 ### 8.1 Master-Worker Subagent Topology
 
@@ -514,7 +562,7 @@ Formalize the CONOPS (`CONOPS.md`), STPA hazard matrices, FMECA ratings, and SOR
    - KaTeX / LaTeX Math Formatting Mandate: Ensure any statechart/mathematical transition guards and formal expressions follow standard escaping and valid KaTeX blocks (all multi-line aligned equations MUST be enclosed in `\begin{aligned} ... \end{aligned}` within `$$` delimiters on dedicated lines; bare alignment tabs `&` outside an alignment environment and `\begin{align*}` are strictly forbidden). Markdown Table Math Prohibition Rule: Strictly ban `$ ... $` and `$$ ... $$` LaTeX math delimiters inside table headers, rows, and cells; plain text and Unicode (e.g. `Initial S`, `ΔV`, `λ`, `°C`, `≥`, `≤`, `→`, `10⁻⁶`) must be used instead, with 1:1 column count match between header and delimiter rows.
 
 2. Output Requirements:
-   - Generate `DEAP_MODEL.sysml` under `docs/architecture/blueprints/DEAP_MODEL.sysml`.
+   - Generate `DEAP_MODEL.sysml` under `schema/DEAP_MODEL.sysml` (or `.pipeline/schema.sysml`).
    - Generate `pipeline0_handoff_contract.json` under `.pipeline/contracts/pipeline0_handoff_contract.json` for downstream Pipeline 1 Agile projection and Pipeline 2 code generation.
 
 PROCEED
