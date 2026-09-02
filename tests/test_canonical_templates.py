@@ -1,6 +1,7 @@
 import os
 import re
 import sys
+import tempfile
 import unittest
 
 repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -16,6 +17,39 @@ from parity_auditor.validators.conops_completeness_validator import (
     MissionIntentCompletenessValidator,
 )
 from scripts.verify_downstream_baseline import check_upstream_template_clean_landing_zones
+
+
+UPSTREAM_CLEAN_ALLOWLIST = {".gitkeep", "README.md"}
+
+DOWNSTREAM_CANONICAL_CONOPS_DELIVERABLES = {"MISSION_INTENT.md", "CONOPS.md"}
+
+
+def _is_downstream_workspace(root):
+    """Return True when the workspace at root is a downstream customer workspace.
+
+    Upstream distribution template / compiler repos carry the
+    .pipeline/upstream sentinel directory; downstream customer workspaces
+    (installed via scripts/install_pipeline.sh) do not. The Clean Landing
+    Zone Invariant applies strictly to upstream template repos only —
+    concrete ConOps deliverables are constitutionally authorized in
+    downstream workspaces (see .pipeline/constitution.md, Core System
+    Boundaries & Invariants, and scripts/verify_downstream_baseline.py
+    check_upstream_template_clean_landing_zones).
+    """
+    return not os.path.isdir(os.path.join(root, ".pipeline", "upstream"))
+
+
+def _conops_landing_zone_allowlist(root):
+    """Return the docs/conops landing-zone allowlist for the workspace class.
+
+    Downstream customer workspaces may hold the canonical ConOps
+    deliverables rendered from the abstract templates (MISSION_INTENT.md,
+    CONOPS.md); upstream template repos must keep the strict
+    clean-landing-zone rule (.gitkeep / README.md only).
+    """
+    if _is_downstream_workspace(root):
+        return UPSTREAM_CLEAN_ALLOWLIST | DOWNSTREAM_CANONICAL_CONOPS_DELIVERABLES
+    return UPSTREAM_CLEAN_ALLOWLIST
 
 
 FORBIDDEN_DOMAIN_NOUNS = [
@@ -53,7 +87,9 @@ class TestCanonicalTemplates(unittest.TestCase):
     Test suite for Issue #67: Permanent Abstract Templates.
     Verifies that CONOPS and Mission Intent canonical templates exist,
     parse cleanly via Gate 26, contain zero domain nouns, use parameter tokens {{...}},
-    are mirrored in .agents/, and that docs/conops/ is a clean landing zone with only .gitkeep.
+    are mirrored in .agents/, and that docs/conops/ is a clean landing zone with only .gitkeep
+    for upstream template repos (downstream customer workspaces may hold the authorized
+    MISSION_INTENT.md / CONOPS.md deliverables).
     """
 
     def setUp(self):
@@ -140,12 +176,82 @@ class TestCanonicalTemplates(unittest.TestCase):
         self.assertGreaterEqual(len(m_tokens), 10, f"Expected >= 10 tokens in MISSION_INTENT template, found {len(m_tokens)}")
 
     def test_docs_conops_landing_zone_contains_only_gitkeep(self):
-        """Verify that docs/conops/ directory contains ONLY .gitkeep or README.md."""
+        """Verify that docs/conops/ contains only classification-authorized files.
+
+        Upstream template repos (this core repo carries the .pipeline/upstream
+        sentinel) must keep docs/conops/ clean with ONLY .gitkeep / README.md.
+        """
         conops_dir = os.path.join(repo_root, "docs", "conops")
         self.assertTrue(os.path.isdir(conops_dir), f"docs/conops directory does not exist at {conops_dir}")
 
         files = os.listdir(conops_dir)
-        self.assertTrue(set(files).issubset({".gitkeep", "README.md"}), f"docs/conops/ should contain ONLY .gitkeep / README.md, but found: {files}")
+        allowlist = _conops_landing_zone_allowlist(repo_root)
+        self.assertTrue(set(files).issubset(allowlist), f"docs/conops/ should contain ONLY files in {allowlist}, but found: {files}")
+
+    def test_landing_zone_exempts_authorized_conops_deliverables_downstream(self):
+        """Downstream customer workspaces permit MISSION_INTENT.md + CONOPS.md in docs/conops/.
+
+        Regression guard for the false gate failure where a conformant
+        downstream leaf carrying the constitutionally authorized ConOps
+        deliverables failed the landing-zone assertion (strict upstream rule).
+        """
+        with tempfile.TemporaryDirectory(prefix="canonical_lz_downstream_") as tmp:
+            for variant in ("no_pipeline", "pipeline_without_upstream_sentinel"):
+                with self.subTest(variant=variant):
+                    fake_root = os.path.join(tmp, variant)
+                    conops_dir = os.path.join(fake_root, "docs", "conops")
+                    os.makedirs(conops_dir)
+                    if variant == "pipeline_without_upstream_sentinel":
+                        os.makedirs(os.path.join(fake_root, ".pipeline"))
+                    for name in [".gitkeep", "MISSION_INTENT.md", "CONOPS.md"]:
+                        with open(os.path.join(conops_dir, name), "w", encoding="utf-8") as f:
+                            f.write(f"# {name} downstream deliverable\n")
+
+                    self.assertTrue(_is_downstream_workspace(fake_root))
+                    files = set(os.listdir(conops_dir))
+                    allowlist = _conops_landing_zone_allowlist(fake_root)
+                    self.assertTrue(
+                        files.issubset(allowlist),
+                        f"Downstream workspaces must permit authorized ConOps deliverables; {files} outside {allowlist}",
+                    )
+
+    def test_landing_zone_rejects_stray_files_downstream(self):
+        """Even downstream, docs/conops/ rejects stray files beyond the canonical deliverables."""
+        with tempfile.TemporaryDirectory(prefix="canonical_lz_stray_") as tmp:
+            fake_root = os.path.join(tmp, "downstream_leaf")
+            conops_dir = os.path.join(fake_root, "docs", "conops")
+            os.makedirs(conops_dir)
+            for name in [".gitkeep", "MISSION_INTENT.md", "CONOPS.md", "STRAY_NOTES.md"]:
+                with open(os.path.join(conops_dir, name), "w", encoding="utf-8") as f:
+                    f.write(f"# {name}\n")
+
+            files = set(os.listdir(conops_dir))
+            allowlist = _conops_landing_zone_allowlist(fake_root)
+            stray = files - allowlist
+            self.assertEqual(stray, {"STRAY_NOTES.md"}, f"Downstream landing zone must reject stray files, but the assertion would clear: {files}")
+            self.assertFalse(files.issubset(allowlist))
+
+    def test_landing_zone_stays_strict_for_upstream_template_repo(self):
+        """Upstream template repos keep the strict only-.gitkeep/README rule for docs/conops/."""
+        with tempfile.TemporaryDirectory(prefix="canonical_lz_upstream_") as tmp:
+            fake_root = os.path.join(tmp, "upstream_template")
+            conops_dir = os.path.join(fake_root, "docs", "conops")
+            os.makedirs(conops_dir)
+            os.makedirs(os.path.join(fake_root, ".pipeline", "upstream"))
+            for name in [".gitkeep", "MISSION_INTENT.md", "CONOPS.md"]:
+                with open(os.path.join(conops_dir, name), "w", encoding="utf-8") as f:
+                    f.write(f"# {name}\n")
+
+            self.assertFalse(_is_downstream_workspace(fake_root))
+            allowlist = _conops_landing_zone_allowlist(fake_root)
+            self.assertEqual(allowlist, UPSTREAM_CLEAN_ALLOWLIST)
+            files = set(os.listdir(conops_dir))
+            violation = files - allowlist
+            self.assertEqual(
+                violation,
+                {"MISSION_INTENT.md", "CONOPS.md"},
+                f"Upstream template repo must reject concrete ConOps deliverables in docs/conops/: {files}",
+            )
 
     def test_check16_clean_landing_zone_passes(self):
         """Verify that Check 16 (Upstream Template Clean Landing Zone Gate) passes."""
