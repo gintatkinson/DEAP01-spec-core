@@ -18,7 +18,11 @@ PROJECT_ROOT = os.path.abspath(os.path.join(TEST_DIR, ".."))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from scripts.lint_subagent_prompt import lint_subagent_prompt
+from scripts.lint_subagent_prompt import (
+    lint_subagent_prompt,
+    check_repository_classification,
+    validate_subagent_preflight,
+)
 
 
 class TestSubagentPromptLinter(unittest.TestCase):
@@ -70,10 +74,101 @@ PROCEED
 
     def test_valid_prompt_with_non_compiler_classification(self):
         """Verify that prompts targeting non-compiler roles pass linting."""
-        for classification in ["PARENT_DOMAIN_DISTRIBUTION_TEMPLATE", "CHILD_DOMAIN_DISTRIBUTION_TEMPLATE", "DOWNSTREAM_APPLICATION_WORKSPACE"]:
+        for classification in [
+            "PARENT_DOMAIN_DISTRIBUTION_TEMPLATE",
+            "CHILD_DOMAIN_DISTRIBUTION_TEMPLATE",
+            "DOWNSTREAM_APPLICATION_WORKSPACE",
+            "DOWNSTREAM_CUSTOMER_PROJECT",
+        ]:
             prompt = self.valid_prompt.replace("UPSTREAM_SPEC_CORE_COMPILER", classification)
             errors = lint_subagent_prompt(prompt)
             self.assertEqual(errors, [], f"Classification {classification} had unexpected errors: {errors}")
+
+    def test_repository_classification_acceptance(self):
+        """Verify check_repository_classification accepts valid classification indicators across workspace types."""
+        valid_samples = [
+            "Repository Classification: UPSTREAM_SPEC_CORE_COMPILER",
+            "Repository Classification: PARENT_DOMAIN_DISTRIBUTION_TEMPLATE",
+            "Repository Classification: CHILD_DOMAIN_DISTRIBUTION_TEMPLATE",
+            "Repository Classification: DOWNSTREAM_CUSTOMER_PROJECT",
+            "Repository Classification: DOWNSTREAM_APPLICATION_WORKSPACE",
+            "Repository Classification: DOWNSTREAM_CUSTOMER_WORKSPACE",
+            "Repository Classification: CUSTOMER_PROJECT_X",
+            "**Repository Classification:** `DOWNSTREAM_CUSTOMER_PROJECT`",
+            "**Classification**: `DOWNSTREAM_CUSTOMER_PROJECT`",
+            "### Repository Classification: DOWNSTREAM_CUSTOMER_PROJECT",
+            "operating within classification `DOWNSTREAM_CUSTOMER_PROJECT`",
+            "within classification 'PARENT_DOMAIN_DISTRIBUTION_TEMPLATE'",
+            "Classification: DOWNSTREAM_CUSTOMER_PROJECT",
+            "Classification = DOWNSTREAM_CUSTOMER_PROJECT",
+            "Classification - DOWNSTREAM_CUSTOMER_PROJECT",
+            "This prompt targets DOWNSTREAM_CUSTOMER_PROJECT workspace.",
+            "This prompt targets DOWNSTREAM_APPLICATION_WORKSPACE.",
+            "This prompt targets PARENT_DOMAIN_DISTRIBUTION_TEMPLATE.",
+            "This prompt targets CHILD_DOMAIN_DISTRIBUTION_TEMPLATE.",
+        ]
+        for sample in valid_samples:
+            self.assertTrue(
+                check_repository_classification(sample),
+                f"Expected classification to be accepted for: {sample!r}"
+            )
+
+    def test_repository_classification_rejection_when_absent_or_empty(self):
+        """Verify check_repository_classification rejects absent or empty classification declarations."""
+        invalid_samples = [
+            "",
+            "   ",
+            "Task: Implement FEAT-01.\nTarget: scripts/dispatch_subagent.py",
+            "Repository Classification:\nTarget: scripts/dispatch_subagent.py",
+            "Repository Classification:   \nTarget: scripts/dispatch_subagent.py",
+            "Repository Classification: \"\"\nTarget: scripts/dispatch_subagent.py",
+            "Repository Classification: ''\nTarget: scripts/dispatch_subagent.py",
+            "Classification:\nTarget: scripts/dispatch_subagent.py",
+            "Repo Classification:   \n",
+            "**Repository Classification:** \n",
+        ]
+        for sample in invalid_samples:
+            self.assertFalse(
+                check_repository_classification(sample),
+                f"Expected classification to be rejected for: {sample!r}"
+            )
+
+    def test_validate_subagent_preflight_classification_acceptance_and_rejection(self):
+        """Verify validate_subagent_preflight accepts valid workspace classifications and rejects empty."""
+        base_prompt = """You are a context-isolated subagent.
+{classification_line}
+Target: scripts/dispatch_subagent.py
+
+Mandatory Instructions:
+1. Step 1: Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` as your very first step before executing any file edits, commands, or tools.
+2. Micro-Task Scope: Focus exclusively on target `scripts/dispatch_subagent.py`.
+3. Defect Reporting: Record defects with `gh issue create` and `glab issue create`.
+
+PROCEED
+"""
+        for cls_line in [
+            "Repository Classification: DOWNSTREAM_CUSTOMER_PROJECT",
+            "Repository Classification: DOWNSTREAM_APPLICATION_WORKSPACE",
+            "Repository Classification: PARENT_DOMAIN_DISTRIBUTION_TEMPLATE",
+            "Repository Classification: CHILD_DOMAIN_DISTRIBUTION_TEMPLATE",
+            "**Repository Classification**: `DOWNSTREAM_CUSTOMER_PROJECT`",
+            "operating within classification `DOWNSTREAM_CUSTOMER_PROJECT`",
+        ]:
+            prompt = base_prompt.format(classification_line=cls_line)
+            passed, reason = validate_subagent_preflight(prompt)
+            self.assertTrue(passed, f"Expected pass for {cls_line!r}, got: {reason}")
+
+        for empty_cls in [
+            "Repository Classification:",
+            "Repository Classification:   ",
+            "Classification:",
+            "**Repository Classification:**",
+        ]:
+            prompt = base_prompt.format(classification_line=empty_cls)
+            passed, reason = validate_subagent_preflight(prompt)
+            self.assertFalse(passed, f"Expected rejection for empty classification {empty_cls!r}")
+            self.assertIn("missing repository classification", reason)
+
 
     def test_valid_prompt_with_step1_phrasing_variations(self):
         """Verify that prompts with valid step 1 variations pass linting."""

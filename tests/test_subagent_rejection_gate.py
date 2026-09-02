@@ -205,6 +205,19 @@ PROCEED
         self.assertIn("ERROR: Prompt rejected", reason)
         self.assertIn("missing repository classification", reason)
 
+    def test_empty_classification_header_rejected(self):
+        """Verify prompt with empty repository classification header is rejected."""
+        prompt = """Role: Micro-Task Implementer
+Repository Classification:
+Target: scripts/dispatch_subagent.py
+1. Step 1: Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` before taking actions.
+PROCEED
+"""
+        passed, reason = validate_subagent_preflight(prompt)
+        self.assertFalse(passed)
+        self.assertIn("ERROR: Prompt rejected", reason)
+        self.assertIn("missing repository classification", reason)
+
     def test_leading_line_level_steering_rejected(self):
         """Verify prompt with line-level code steering ahead of Step 1 is rejected."""
         prompt = """You are a subagent.
@@ -274,6 +287,7 @@ PROCEED
             "DEAP-uas-infrastructure-safety",
             "DOWNSTREAM_APPLICATION_WORKSPACE",
             "DOWNSTREAM_CUSTOMER_WORKSPACE",
+            "DOWNSTREAM_CUSTOMER_PROJECT",
             "DOWNSTREAM_PROJECT",
             "LEAF_WORKSPACE",
             "DOMAIN_PARENT",

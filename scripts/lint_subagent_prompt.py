@@ -131,29 +131,12 @@ def check_repository_classification(prompt_text: str) -> bool:
     if not prompt_text or not isinstance(prompt_text, str):
         return False
 
-    classification_field_pattern = re.search(
-        r'(?:'
-        r'(?:\*{1,2}|`|#+\s*)?(?:Repository\s*Classification|Repo\s*Classification|Classification)(?:\*{1,2}|`|:)*\s*[:=\-]?\s*[`"\']?([A-Za-z0-9_\-\.]+)[`"\']?'
-        r'|'
-        r'operating\s+within\s+classification\s+[`"\']?([A-Za-z0-9_\-\.]+)[`"\']?'
-        r'|'
-        r'within\s+classification\s+[`"\']?([A-Za-z0-9_\-\.]+)[`"\']?'
-        r'|'
-        r'classification\s*[:=\-]\s*[`"\']?([A-Za-z0-9_\-\.]+)[`"\']?'
-        r')',
-        prompt_text,
-        re.IGNORECASE
-    )
-    if classification_field_pattern:
-        for grp_idx in range(1, len(classification_field_pattern.groups()) + 1):
-            val = classification_field_pattern.group(grp_idx)
-            if val and len(val.strip()) > 0:
-                return True
-
+    # Check known classification keywords anywhere in prompt text
     known_classifications = [
         "UPSTREAM_SPEC_CORE_COMPILER",
         "PARENT_DOMAIN_DISTRIBUTION_TEMPLATE",
         "CHILD_DOMAIN_DISTRIBUTION_TEMPLATE",
+        "DOWNSTREAM_CUSTOMER_PROJECT",
         "DOWNSTREAM_APPLICATION_WORKSPACE",
         "DOWNSTREAM_CUSTOMER_WORKSPACE",
         "DOWNSTREAM_PROJECT",
@@ -162,13 +145,29 @@ def check_repository_classification(prompt_text: str) -> bool:
         "LEAF_WORKSPACE",
         "LEAF_CUSTOMER_WORKSPACE",
         "CUSTOMER_APPLICATION_WORKSPACE",
+        "CUSTOMER_PROJECT",
         "DOMAIN_PARENT",
         "DOMAIN_CHILD",
         "REPO_CLASSIFICATION",
+        "REPOSITORY_CLASSIFICATION",
     ]
     for kc in known_classifications:
         if kc in prompt_text:
             return True
+
+    # Header / explicit field declaration patterns (evaluated line-by-line / same-line)
+    field_patterns = [
+        r'^[ \t]*(?:\*{1,2}|_{1,2}|`|#+\s*)?(?:Repository\s*Classification|Repo\s*Classification|Classification)(?:\*{1,2}|_{1,2}|`|:)*[ \t]*[:=\-]?[ \t]*(?:\*{1,2}|_{1,2}|`)*[ \t]*[`"\']?([A-Za-z0-9_\-\.]+)[`"\']?',
+        r'\boperating\s+within\s+classification[ \t]*[:=\-]?[ \t]*[`"\']?([A-Za-z0-9_\-\.]+)[`"\']?',
+        r'\bwithin\s+classification[ \t]*[:=\-]?[ \t]*[`"\']?([A-Za-z0-9_\-\.]+)[`"\']?',
+        r'\bclassification[ \t]*[:=\-][ \t]*[`"\']?([A-Za-z0-9_\-\.]+)[`"\']?',
+    ]
+    for pattern in field_patterns:
+        match = re.search(pattern, prompt_text, re.IGNORECASE | re.MULTILINE)
+        if match:
+            val = match.group(1)
+            if val and len(val.strip()) > 0:
+                return True
 
     return False
 
