@@ -8,12 +8,12 @@
 
 In accordance with NATO STANAG 4586 (§4.5) and RTCA DO-362A, Command and Control (C2) link robustness is maintained through a four-tier Primary, Alternate, Contingency, Emergency (PACE) communications architecture with automated failover and hysteresis stabilization.
 
-| PACE Tier | Link Medium | Frequency Band | Nominal Data Rate | Heartbeat Timeout | Failover Hysteresis | Priority / Role | Public Clause Citation |
+| PACE Tier | Link Medium | Frequency Band (f_band) | Nominal Data Rate (Rate_nom) | Heartbeat Timeout (tau_timeout) | Failover Hysteresis (tau_hysteresis) | Priority / Role | Public Clause Citation |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Primary** | Point-to-Point COFDM | 5.8 GHz ISM (5725–5875 MHz) | 15.0 Mbps | 1.5 s | 500 ms | Full Payload HD Video & High-Rate 100 Hz Telemetry | NATO STANAG 4586 §4.5 |
-| **Alternate** | Frequency-Hopping Spread Spectrum (FHSS) | 915 MHz ISM (902–928 MHz) | 115.2 kbps | 3.0 s | 1000 ms | Long-Range Robust Flight Telemetry & Tactical C2 | MIL-STD-188-220E §5.3 |
-| **Contingency** | Cellular LTE / 5G VPN & SATCOM Relay | Band 28 (700 MHz) & Iridium L-Band (1.6 GHz) | 256.0 kbps / 2.4 kbps | 5.0 s | 2000 ms | Beyond-Line-Of-Sight (BLOS) Telemetry & Safety Commands | RTCA DO-362A §2.2 |
-| **Emergency** | Autonomous Return-to-Home & UHF Beacon | 433 MHz UHF / Internal Autonomous Flight Exec | 1.2 kbps / Autonomous | 10.0 s | 5000 ms | Autonomous Lost-Link Rally Navigation & Emergency Beacon | JARUS SORA v2.5 Annex E |
+| **Primary** | Point-to-Point High-Bandwidth RF Link | f_band_Primary | Rate_nom_Primary | tau_timeout_Primary | tau_hysteresis_Primary | Full Payload Video & High-Rate Telemetry | NATO STANAG 4586 §4.5 |
+| **Alternate** | Encrypted Cellular / Network Tunnel | f_band_Alternate | Rate_nom_Alternate | tau_timeout_Alternate | tau_hysteresis_Alternate | Robust Flight Telemetry & Tactical C2 Relay | MIL-STD-188-220E §5.3 |
+| **Contingency** | Robust Narrowband RF Command Link | f_band_Contingency | Rate_nom_Contingency | tau_timeout_Contingency | tau_hysteresis_Contingency | Essential Safety Commands & Emergency C2 | RTCA DO-362A §2.2 |
+| **Emergency** | Autonomous Return-to-Base & Satellite Beacon | f_band_Emergency | Rate_nom_Emergency | tau_timeout_Emergency | tau_hysteresis_Emergency | Autonomous Lost-Link Rally Navigation & Emergency Beacon | JARUS SORA v2.5 Annex E |
 
 ### 5.1 Failover State Transition Dynamics
 
@@ -31,14 +31,14 @@ $$
 
 Where and Operational Parameters:
 
-| Parameter | Symbol | Nominal Value | Units | Constraint / Rule |
+| Parameter | Symbol | Units | Constraint / Rule | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| Active Link Loss Duration | Delta t_loss | Dynamic | s | Measured elapsed duration since last authenticated frame |
-| Primary Heartbeat Timeout | tau_timeout,Primary | 1.5 | s | Timeout triggering fallback to Alternate tier |
-| Alternate Heartbeat Timeout | tau_timeout,Alternate | 3.0 | s | Timeout triggering fallback to Contingency tier |
-| Contingency Heartbeat Timeout | tau_timeout,Contingency | 5.0 | s | Timeout triggering fallback to Emergency tier |
-| Emergency Heartbeat Timeout | tau_timeout,Emergency | 10.0 | s | Timeout initiating definitive autonomous return-to-base |
-| Re-acquisition Hysteresis Window | tau_hysteresis | 5.0 | s | Continuous stable link duration required before up-tier promotion |
+| Active Link Loss Duration | Delta t_loss | s | Measured Online | Measured elapsed duration since last authenticated frame |
+| Primary Heartbeat Timeout | tau_timeout_Primary | s | tau_timeout_Primary > 0 | Timeout triggering fallback to Alternate tier |
+| Alternate Heartbeat Timeout | tau_timeout_Alternate | s | tau_timeout_Alternate > tau_timeout_Primary | Timeout triggering fallback to Contingency tier |
+| Contingency Heartbeat Timeout | tau_timeout_Contingency | s | tau_timeout_Contingency > tau_timeout_Alternate | Timeout triggering fallback to Emergency tier |
+| Emergency Heartbeat Timeout | tau_timeout_Emergency | s | tau_timeout_Emergency > tau_timeout_Contingency | Timeout initiating definitive autonomous return-to-base |
+| Re-acquisition Hysteresis Window | tau_hysteresis | s | tau_hysteresis > 0 | Continuous stable link duration required before up-tier promotion |
 
 ### 5.2 Cryptographic Security & Link Integrity
-All PACE communication tiers employ hardware-accelerated AES-256-GCM authenticated encryption with monotonic sequence counters to eliminate eavesdropping, man-in-the-middle packet tampering, and replay injection in compliance with NIST SP 800-82r3.
+All PACE communication tiers employ authenticated encryption with monotonic sequence counters to eliminate eavesdropping, packet tampering, and replay injection in compliance with NIST SP 800-82r3.

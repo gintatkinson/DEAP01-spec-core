@@ -8,17 +8,17 @@
 
 ## 1. Commander's Intent & Operational Objectives
 
-- **Operational Purpose:** The primary operational purpose of the tactical autonomous cyber-physical system is to execute persistent, autonomous, multi-sensor intelligence, surveillance, reconnaissance (ISR), target tracking, and tactical corridor security within bounded operational volumes, operating under rigorous autonomous control with multi-tier command and control (C2) link redundancy and deterministic failsafe containment.
+- **Operational Purpose:** The primary operational purpose of the tactical autonomous cyber-physical system is to execute persistent, autonomous, multi-sensor intelligence, surveillance, reconnaissance (ISR), tactical target tracking, kinetic engagement, and corridor security within bounded operational volumes, operating under rigorous autonomous control with multi-tier command and control (C2) link redundancy and deterministic failsafe containment.
 - **Key Tasks:**
-  - Execute pre-flight Built-In-Test (BIT) self-diagnostics, calibration, and cryptographic link binding within 30 seconds of power activation.
-  - Conduct autonomous ingress transit along designated 3D flight corridors while maintaining strict lateral and vertical containment.
+  - Execute pre-flight Built-In-Test (BIT) self-diagnostics, calibration, and cryptographic link binding within $t_{\mathrm{PBIT}} \le \tau_{\mathrm{PBIT\_max}}$ of power activation.
+  - Conduct autonomous ingress transit along designated 3D flight corridors while maintaining strict lateral and vertical containment within $h_{\mathrm{operating\_ceiling}}$.
   - Perform real-time multi-spectral electro-optical / infrared (EO/IR) surveillance and persistent orbit tracking over target areas of interest.
   - Maintain continuous DAA (Detect and Avoid) Well-Clear separation minima from cooperative and non-cooperative airspace participants.
-  - Stream encrypted high-rate sensor telemetry across the primary C2 link with seamless automatic failover across alternate, contingency, and emergency PACE tiers.
-  - Enforce dual-consent cryptographic arming and positive target identification (PID) interlocks prior to sensor lock or target designation.
-  - Continuously compute closed-loop Bingo energy state and execute autonomous return-to-base (RTB) or secondary divert routing upon reaching safety thresholds.
+  - Stream encrypted sensor telemetry across the primary C2 link with automatic failover across alternate, contingency, and emergency PACE tiers.
+  - Enforce dual-consent cryptographic arming and positive target identification (PID) interlocks ($C_{\mathrm{PID}} \ge C_{\mathrm{PID\_threshold}}$) prior to terminal engagement or target designation.
+  - Continuously compute closed-loop Bingo energy state and execute autonomous return-to-base (RTB) or secondary divert routing upon reaching safety thresholds ($E(t) \le E_{\mathrm{bingo}}(t)$).
   - Perform precision autonomous recovery and post-flight cryptographic data zeroization and diagnostic offload.
-- **End State:** All assigned surveillance corridor waypoints fully traversed and verified; zero unauthorized geofence boundary excursions; zero unmitigated collision hazards; all target tracks positively identified through multi-spectral fusion; and successful recovery at the primary base or designated secondary divert landing site with residual energy strictly exceeding the mandatory 20.0% statutory reserve threshold ($E_{\mathrm{reserve}} \ge 0.20 \cdot E_{\mathrm{capacity}}$).
+- **End State:** All assigned surveillance and strike corridor waypoints fully traversed and verified; zero unauthorized geofence boundary excursions; zero unmitigated collision hazards; all target tracks positively identified through multi-spectral fusion ($C_{\mathrm{PID}} \ge C_{\mathrm{PID\_threshold}}$); and successful recovery at the primary base or designated secondary divert landing site with residual energy strictly satisfying $E_{\mathrm{reserve}} \ge \text{Ratio}_{\mathrm{reserve\_min}} \cdot E_{\mathrm{capacity}}$.
 
 ### 1.1 Normative Baseline & Doctrinal Authority
 This Tactical Mission Intent specification tree is authored in strict compliance with:

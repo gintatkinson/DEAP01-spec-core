@@ -17,80 +17,80 @@ This Concept of Operations (ConOps) defines the operational architecture, stakeh
 | **Document Version** | 1.0.0 |
 | **Publication Date** | 2026-09-02 |
 | **Security Classification** | Unclassified / Public Specification Baseline |
-| **Target System Realization** | Multi-Mission Cyber-Physical Autonomous Unmanned Aircraft System (UAS) |
+| **Target System Realization** | Multi-Mission Cyber-Physical Autonomous System |
 | **Authoring Organization** | DEAP Systems Engineering & Operational Architecture Working Group |
-| **Regulatory Baseline** | JARUS SORA v2.5 (Specific Category) / EASA Easy Access Rules for UAS / FAA Part 107/108 |
+| **Regulatory Baseline** | JARUS SORA v2.5 (Specific Category) / EASA Easy Access Rules / FAA Operational Authorizations |
 
 ### 1.2 System Classification & Operational Purpose
 - **System Identifier:** `AutonomousSystemArchetype`
 - **Operational Domain:** `UAF::OperationalDomain::CivilSecurityAndMonitoring`
-- **Primary Operational Mission:** The system is engineered to execute autonomous, long-endurance perimeter surveillance, multi-spectral optical/thermal reconnaissance, environmental anomaly detection, real-time telemetry streaming, and automated dynamic geofence containment in complex, high-reliability civil and tactical operational domains.
+- **Primary Operational Mission:** The system is engineered to execute autonomous, long-endurance perimeter surveillance, multi-spectral optical/thermal reconnaissance, environmental anomaly detection, real-time telemetry streaming, tactical strike/target engagement, and automated dynamic geofence containment in complex, high-reliability civil and tactical operational domains.
 - **Core Mission Capabilities:**
-  1. Autonomous waypoint navigation, corridor traversal, and on-station surveillance orbiting.
-  2. Multi-sensor data fusion combining dual GNSS receivers, triple-redundant inertial measurement units (IMUs), barometric altimetry, and optical flow odometry.
-  3. Real-time high-definition electro-optical / infrared (EO/IR) video compression and edge neural telemetry inference.
-  4. Deterministic failsafe state machine ensuring sub-200 ms autonomous containment upon critical contingency detection.
+  1. Autonomous waypoint navigation, corridor traversal, and on-station surveillance orbiting within parameterized performance envelopes.
+  2. Multi-sensor data fusion combining multi-constellation satellite navigation receivers, redundant inertial measurement units (IMUs), barometric altimetry, and optical flow odometry.
+  3. Real-time high-definition electro-optical / infrared (EO/IR) sensor streaming and edge neural telemetry inference.
+  4. Deterministic failsafe state machine ensuring autonomous containment within the maximum containment response time threshold $\tau_{\mathrm{containment}}$ upon critical contingency detection.
 
 ### 1.3 System Boundary & Physical/Legal Envelopes
-The operational system boundary encompasses all physical, logical, communications, and organizational elements required to conduct end-to-end autonomous surveillance operations:
-- **Physical Flight Envelope:** Bounded air volume extending from ground level ($0\text{ m}$ AGL) up to a maximum operating ceiling of $120.0\text{ m}$ ($393.7\text{ ft}$) AGL.
-- **Lateral Operating Boundary:** Designated operational perimeter polygon enclosed within a verified $200.0\text{ m}$ Ground Risk Buffer ($R_{\mathrm{GRB}}$) containment envelope.
-- **C2 RF Datalink Envelope:** Primary line-of-sight command and control (C2) operational radius of $15.0\text{ km}$ from the Ground Control Station (GCS) node, backed by cellular LTE/5G VPN and emergency satellite communication relays.
-- **Regulatory & Jurisdictional Boundary:** Governed under JARUS SORA v2.5 Specific Category operations, EASA standard scenarios (STS-01/STS-02), and national civil aviation authority (CAA) operating waivers.
+The operational system boundary encompasses all physical, logical, communications, and organizational elements required to conduct end-to-end autonomous mission operations:
+- **Physical Flight Envelope:** Bounded operational volume extending from ground level ($h_{\mathrm{min}}$) up to the parametric maximum operating ceiling $h_{\mathrm{operating\_ceiling}}$.
+- **Lateral Operating Boundary:** Designated operational perimeter polygon enclosed within a verified parametric Ground Risk Buffer ($R_{\mathrm{GRB}}$) containment envelope.
+- **C2 RF Datalink Envelope:** Primary line-of-sight command and control (C2) operational radius defined by $\text{Range}_{\mathrm{max}}(\text{Link}_{\mathrm{C2}})$ from the Ground Control Station (GCS) node, backed by alternate network links and emergency satellite communication relays.
+- **Regulatory & Jurisdictional Boundary:** Governed under JARUS SORA v2.5 Specific Category operations, civil aviation standard scenarios, and national civil aviation authority (CAA) operating waivers.
 
 ### 1.4 Operational Context Diagram
 The following Unified Architecture Framework (UAF) operational context diagram defines the external interfaces, performer nodes, and primary interaction channels:
 
 ```mermaid
 flowchart TB
-    subgraph SpaceSegment["Space & Satellite Segment"]
-        GNSS["GNSS Constellation<br/>(GPS / Galileo / BeiDou)"]
-        SATCOM["Iridium Satellite Network<br/>(Emergency SBD Link)"]
+    subgraph SpaceSegment["Space & External Positioning Segment"]
+        ExternalPositioning["External Positioning Constellation<br/>(InterfacePort[GNSSConstellation])"]
+        SatcomRelay["Satellite Communication Network<br/>(InterfacePort[EmergencySatcomRelay])"]
     end
 
-    subgraph AirSegment["Air Vehicle Node (UAS Archetype)"]
-        AV_FC["Flight Control Computer (FCC)<br/>(DO-178C DAL-A Autopilot)"]
-        AV_SENS["Sensor Array<br/>(Triple IMU / Baro / Radar)"]
-        AV_PAYLOAD["EO/IR Gimbal Payload<br/>(Edge Neural Processor)"]
-        AV_COMM["PACE Datalink Transceiver<br/>(COFDM / Cellular / FHSS)"]
-        AV_FTS["Flight Termination System<br/>(Independent Parachute Watchdog)"]
+    subgraph AirSegment["System Under Design (PerformerNode[AirVehicleNode])"]
+        FCC["Flight Control Computer (FCC)<br/>(PerformerNode[FlightGuidanceAutopilot])"]
+        SensorArray["Integrated Sensor Suite<br/>(PerformerNode[NavigationSensorArray])"]
+        PayloadNode["Mission Payload System<br/>(PerformerNode[PayloadSystem])"]
+        DatalinkTransceiver["PACE Datalink Transceiver<br/>(InterfacePort[C2Datalink])"]
+        SafetyWatchdog["Independent Safety Watchdog<br/>(PerformerNode[FlightTerminationWatchdog])"]
     end
 
-    subgraph GroundSegment["Ground Control Station (GCS) Node"]
-        GCS_C2["C2 Mission Console<br/>(STANAG 4586 DLI / CCI)"]
-        GCS_ANT["Tracking Antenna Mast<br/>(Dual-Band COFDM / 4G)"]
-        GSE_BAT["Ground Support Equipment<br/>(Battery Charging & BIT Rig)"]
+    subgraph GroundSegment["Control Station Segment (PerformerNode[GroundControlStation])"]
+        C2Console["C2 Mission Console<br/>(PerformerNode[C2MissionConsole])"]
+        AntennaArray["Antenna Tracking System<br/>(InterfacePort[DirectionalAntenna])"]
+        GSEHub["Ground Support Equipment Hub<br/>(PerformerNode[GSEChargingAndDiagnostics])"]
     end
 
     subgraph UserSegment["Operational Human Roles"]
-        RPIC["Remote Pilot in Command (RPIC)<br/>(Supervisory Authority)"]
-        PO["Payload Operator (PO)<br/>(Sensor Tasking & Analysis)"]
-        MC["Mission Commander (MC)<br/>(Sortie & ROE Release)"]
-        MT["Maintenance Technician (MT)<br/>(O-Level & Pre-Flight BIT)"]
-        VO["Visual Observer (VO)<br/>(Airspace Surveillance)"]
+        RPIC["Remote Pilot in Command (RPIC)<br/>(HumanRole[SupervisoryAuthority])"]
+        PO["Payload Operator (PO)<br/>(HumanRole[PayloadSpecialist])"]
+        MC["Mission Commander (MC)<br/>(HumanRole[MissionCommander])"]
+        MT["Maintenance Technician (MT)<br/>(HumanRole[MaintenanceTechnician])"]
+        VO["Visual Observer (VO)<br/>(HumanRole[AirspaceObserver])"]
     end
 
     subgraph ExternalSegment["External Operational Entities"]
-        UTM["U-Space / UTM Service Provider<br/>(Dynamic Geo-Zones & Tracking)"]
-        ATM["Civil Air Traffic Control (ATC)<br/>(Emergency Airspace Coordination)"]
-        EMERG["First Responders & Safety Services<br/>(Emergency Response Plan ERP)"]
+        UTM["U-Space / UTM Service Provider<br/>(InterfacePort[UTMService])"]
+        ATM["Air Traffic Management (ATM/ATC)<br/>(InterfacePort[ATMCoordination])"]
+        ERP_Entity["Emergency Services & Safety Entities<br/>(InterfacePort[ERPCoordination])"]
     end
 
-    GNSS -->|"L1/L2/L5 RF Signals"| AV_SENS
-    AV_COMM ---|"Primary COFDM / FHSS C2 Link"| GCS_ANT
-    AV_COMM ---|"Alternate LTE/5G VPN Link"| GCS_C2
-    AV_COMM ---|"Emergency SBD Link"| SATCOM
-    GCS_ANT --- GCS_C2
+    ExternalPositioning -->|"Positioning Broadcasts"| SensorArray
+    DatalinkTransceiver ---|"Primary RF Datalink"| AntennaArray
+    DatalinkTransceiver ---|"Alternate Network Link"| C2Console
+    DatalinkTransceiver ---|"Emergency Satellite Link"| SatcomRelay
+    AntennaArray --- C2Console
     
-    RPIC ---|"Supervisory Flight Command"| GCS_C2
-    PO ---|"Payload Telemetry & Steering"| GCS_C2
-    MC -->|"Mission Authorization & ROE"| RPIC
-    MT -->|"O-Level Pre-Flight Checklist"| GSE_BAT
-    VO -->|"Traffic Advisory Voice Link"| RPIC
+    RPIC ---|"Supervisory Control"| C2Console
+    PO ---|"Payload Telemetry & Tasking"| C2Console
+    MC -->|"Mission Authorization & ROE Release"| RPIC
+    MT -->|"Pre-Flight BIT Verification"| GSEHub
+    VO -->|"Airspace Advisory Link"| RPIC
 
-    GCS_C2 ---|"AFTN / REST API"| UTM
-    RPIC ---|"VHF Airband Voice Link"| ATM
-    MC -->|"ERP Emergency Notification"| EMERG
+    C2Console ---|"Flight Coordination API"| UTM
+    RPIC ---|"Voice Coordination Link"| ATM
+    MC -->|"Emergency Notification Link"| ERP_Entity
 ```
 
 ### 1.5 Normative Standards & Regulatory Baseline
