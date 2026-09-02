@@ -1,0 +1,26 @@
+| Attribute | Value |
+| :--- | :--- |
+| **Title** | Tactical Mission Intent: Multi-Domain Threat Matrix |
+| **Version** | 1.0.0 |
+| **Date** | 2026-09-02 |
+
+## 4. Threat & Electronic Warfare (EW) / Cyber Environment Matrix
+
+In accordance with MIL-STD-882E (§4.3) and NATO STANAG 4586, the system operates across contested, multi-domain operating environments. The threat matrix establishes deterministic autonomous mitigation rules spanning all operational threat domains.
+
+| Threat ID | Domain | Threat Vector | Technical Description | Severity | Detection Mechanism | Autonomous Mitigation Rule | Public Clause Citation |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `THR-01` | Kinetic | Uncooperative Air Traffic Encounter | Non-cooperative intruder aircraft penetrating Well-Clear separation envelope | Critical | DO-365B DAA Radar & ADS-B In receiver fusion | Execute autonomous horizontal/vertical deconfliction turn away from collision vector | RTCA DO-365B §2.2.4 |
+| `THR-02` | Kinetic | Ground Ballistic / Fragment Impact | High-velocity projectile or debris causing sudden airframe perforations | Critical | 3-axis accelerometer shock spike (> 8g) and sudden acoustic pressure wave | Isolate affected control surfaces, trim flight envelope, and initiate RTB | MIL-STD-882E §4.3 Table 1 |
+| `THR-03` | Mechanical | Flight Control Actuator Jamming | Mechanical binding or servo motor failure on primary control surface | Catastrophic | Servo current draw spike (> 3.5A) and angular error disparity (> 5.0 deg) | Reconfigure dynamic control allocation matrix to differential thrust/secondary surfaces | SAE ARP4761 §4.1 |
+| `THR-04` | Mechanical | Propeller Blade Delamination / Flutter | Structural micro-fracture causing high-frequency rotor vibration | Critical | High-frequency FFT accelerometer resonance (> 120 Hz, > 1.5g RMS) | Reduce motor RPM by 25%, level wings, and execute immediate precautionary land | MIL-STD-882E §4.3 Table 1 |
+| `THR-05` | Propulsion / Power | Battery Cell Thermal Runaway | Internal dendrite short causing rapid exothermic temperature rise in pack | Catastrophic | BMS thermistor array rate of rise (> 2.0 degC/s or T > 65.0 degC) | Disconnect compromised pack via solid-state pyrofuse and divert to uninhabited clearing | RTCA DO-311A §2.4 |
+| `THR-06` | Propulsion / Power | ESC Inverter MOSFET Over-Temp | Sustained high-current climb inducing electronic speed controller thermal choke | Moderate | ESC junction temperature sensor reading > 95.0 degC | Throttle back climb profile, increase cooling airspeed, and initiate shallow glide | MIL-STD-882E §4.3 Table 1 |
+| `THR-07` | Environmental | Severe Microburst / Wind Shear | Sudden localized vertical downdraft (> 8.0 m/s) exceeding climb capability | Critical | Barometric altimeter rate-of-sink combined with Pitot dynamic pressure drop | Command max continuous thrust, set best climb pitch angle (Vy), and turn 90 deg | JARUS SORA v2.5 Annex B |
+| `THR-08` | Environmental | Airframe & Pitot Probe Icing | Supercooled liquid droplet accumulation causing aerodynamic stall and airspeed loss | Critical | Dynamic-to-static pressure ratio anomaly and heated pitot impedance delta | Engage electrical anti-icing heater bus and command immediate descent below freezing level | SAE ARP890 §3.1 |
+| `THR-09` | Electronic Warfare | GNSS Spoofing & Pseudo-Range Injection | Adversarial coherent GNSS signal spoofing injecting false coordinates | Critical | Carrier-to-Noise (C/N0) anomaly, RAIM parity failure, and IMU-GNSS velocity disparity | Revert navigation SSOT to Visual-Inertial Odometry (VIO) and initiate PACE loiter | NATO STANAG 4586 Annex B §3.2 |
+| `THR-10` | Electronic Warfare | RF Command Uplink Jamming | Broadband high-power jamming across primary 5.8 GHz ISM band | High | Uplink Signal-to-Noise Ratio (SNR) < 3.0 dB and missing heartbeat > 1.5 s | Autonomous failover to Alternate 915 MHz FHSS link within <= 500 ms | MIL-STD-461G RS103 §4.3 |
+| `THR-11` | Cyber | Telemetry MITM Injection / Replay | Malicious packet injection on command port lacking valid cryptographic signature | Critical | AES-256-GCM authentication tag failure or sequence counter replay violation | Immediately drop packet, increment security defect log, and blacklist source MAC/IP | NIST SP 800-82r3 §5.2 |
+| `THR-12` | Cyber | Flight Firmware Tampering Attempt | Unauthorized memory modification or corrupted flash sector during runtime | Catastrophic | Hardware Root-of-Trust secure boot / runtime memory hash mismatch | Lock execution into immutable ROM failsafe bootloader and execute flight termination | DO-326A / ED-202A §3.2 |
+| `THR-13` | Optical | High-Energy Laser Sensor Blinding | Directed optical energy dazzling or burning EO/IR camera focal plane arrays | Moderate | Focal plane array pixel saturation (> 99% pixels saturated at max intensity) | Command rapid optical filter shutter engagement and switch primary tracking to Radar | MIL-STD-882E §4.3 Table 1 |
+| `THR-14` | Human | Ground Station Inadvertent Dual Override | Discrepant simultaneous commands from primary and secondary GCS consoles | Moderate | Command sequence priority collision flag and mismatched token signature | Enforce single-master GCS token lock; reject conflicting command; prompt confirmation | NATO STANAG 4586 §3.8 |
