@@ -60,15 +60,12 @@ $$
 ## 7. OMG UAF Operational Activity Taxonomy
 | Activity ID | Activity Name | Description | Gate 24 Allocation Tag |
 | :--- | :--- | :--- | :--- |
-| OA-01 | {{OA_01_ACTIVITY_NAME}} | {{OA_01_DESCRIPTION}} | `/// OperationalAllocation: [OA-01]` |
-| OA-02 | {{OA_02_ACTIVITY_NAME}} | {{OA_02_DESCRIPTION}} | `/// OperationalAllocation: [OA-02]` |
-| OA-03 | {{OA_03_ACTIVITY_NAME}} | {{OA_03_DESCRIPTION}} | `/// OperationalAllocation: [OA-03]` |
+| OA-01 | {{OA_ACTIVITY_NAME}} | {{OA_DESCRIPTION}} | `/// OperationalAllocation: [OA-01]` |
 
 ## 8. Operational Information Exchange (Op-Tx) Matrix
 | Exchange ID | Source Node | Destination Node | Information Item | Data Rate | Max Latency | Criticality |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| OpTx-01 | {{OPTX_01_SOURCE_NODE}} | {{OPTX_01_DEST_NODE}} | {{OPTX_01_INFO_ITEM}} | {{OPTX_01_DATA_RATE}} | {{OPTX_01_MAX_LATENCY}} | {{OPTX_01_CRITICALITY}} |
-| OpTx-02 | {{OPTX_02_SOURCE_NODE}} | {{OPTX_02_DEST_NODE}} | {{OPTX_02_INFO_ITEM}} | {{OPTX_02_DATA_RATE}} | {{OPTX_02_MAX_LATENCY}} | {{OPTX_02_CRITICALITY}} |
+| OpTx-01 | {{OPTX_SOURCE_NODE}} | {{OPTX_DEST_NODE}} | {{OPTX_INFO_ITEM}} | {{OPTX_DATA_RATE}} | {{OPTX_MAX_LATENCY}} | {{OPTX_CRITICALITY}} |
 
 ## 9. Operational Environments & Constraints
 - **Ambient Temperature:** {{AMBIENT_TEMPERATURE_RANGE}}
@@ -77,9 +74,9 @@ $$
 - **Physical Spatial Constraints:** {{PHYSICAL_SPATIAL_CONSTRAINTS}}
 
 ## 10. Multi-Threaded Operational Scenarios
-- **Scenario 1 (Nominal Execution):** {{SCENARIO_1_NOMINAL_THREAD}}
-- **Scenario 2 (Degraded Mode & Mitigation):** {{SCENARIO_2_DEGRADED_THREAD}}
-- **Scenario 3 (Contingency Recovery):** {{SCENARIO_3_CONTINGENCY_THREAD}}
+- **Scenario 1 (Nominal Execution):** {{SCENARIO_NOMINAL_THREAD}}
+- **Scenario 2 (Degraded Mode & Mitigation):** {{SCENARIO_DEGRADED_THREAD}}
+- **Scenario 3 (Contingency Recovery):** {{SCENARIO_CONTINGENCY_THREAD}}
 
 ## 11. Maintenance & Sustainment Concepts (O/I/D Maintenance)
 - **O-Level (Organizational):** {{O_LEVEL_MAINTENANCE_DESCRIPTION}}
@@ -89,10 +86,10 @@ $$
 ## 12. 7-Row Emergency Decision & Contingency Matrix
 | Trigger ID | Contingency Trigger | Detection Mechanism | Automated Containment Action | Failsafe State | Max Response Time | HITL Role |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `EMG-01` | {{EMG_01_TRIGGER_NAME}} | {{EMG_01_DETECTION_MECHANISM}} | {{EMG_01_CONTAINMENT_ACTION}} | `{{EMG_01_FAILSAFE_STATE}}` | {{EMG_01_MAX_RESPONSE_TIME}} | {{EMG_01_HITL_ROLE}} |
-| `EMG-02` | {{EMG_02_TRIGGER_NAME}} | {{EMG_02_DETECTION_MECHANISM}} | {{EMG_02_CONTAINMENT_ACTION}} | `{{EMG_02_FAILSAFE_STATE}}` | {{EMG_02_MAX_RESPONSE_TIME}} | {{EMG_02_HITL_ROLE}} |
-| `EMG-03` | {{EMG_03_TRIGGER_NAME}} | {{EMG_03_DETECTION_MECHANISM}} | {{EMG_03_CONTAINMENT_ACTION}} | `{{EMG_03_FAILSAFE_STATE}}` | {{EMG_03_MAX_RESPONSE_TIME}} | {{EMG_03_HITL_ROLE}} |
-| `EMG-04` | {{EMG_04_TRIGGER_NAME}} | {{EMG_04_DETECTION_MECHANISM}} | {{EMG_04_CONTAINMENT_ACTION}} | `{{EMG_04_FAILSAFE_STATE}}` | {{EMG_04_MAX_RESPONSE_TIME}} | {{EMG_04_HITL_ROLE}} |
-| `EMG-05` | {{EMG_05_TRIGGER_NAME}} | {{EMG_05_DETECTION_MECHANISM}} | {{EMG_05_CONTAINMENT_ACTION}} | `{{EMG_05_FAILSAFE_STATE}}` | {{EMG_05_MAX_RESPONSE_TIME}} | {{EMG_05_HITL_ROLE}} |
-| `EMG-06` | {{EMG_06_TRIGGER_NAME}} | {{EMG_06_DETECTION_MECHANISM}} | {{EMG_06_CONTAINMENT_ACTION}} | `{{EMG_06_FAILSAFE_STATE}}` | {{EMG_06_MAX_RESPONSE_TIME}} | {{EMG_06_HITL_ROLE}} |
-| `EMG-07` | {{EMG_07_TRIGGER_NAME}} | {{EMG_07_DETECTION_MECHANISM}} | {{EMG_07_CONTAINMENT_ACTION}} | `{{EMG_07_FAILSAFE_STATE}}` | {{EMG_07_MAX_RESPONSE_TIME}} | {{EMG_07_HITL_ROLE}} |
+| `EMG-01` | {{EMG_TRIGGER_NAME}} | {{EMG_DETECTION_MECHANISM}} | {{EMG_CONTAINMENT_ACTION}} | `{{EMG_FAILSAFE_STATE}}` | {{EMG_MAX_RESPONSE_TIME}} | {{EMG_HITL_ROLE}} |
+| `EMG-02` | {{EMG_TRIGGER_NAME}} | {{EMG_DETECTION_MECHANISM}} | {{EMG_CONTAINMENT_ACTION}} | `{{EMG_FAILSAFE_STATE}}` | {{EMG_MAX_RESPONSE_TIME}} | {{EMG_HITL_ROLE}} |
+| `EMG-03` | {{EMG_TRIGGER_NAME}} | {{EMG_DETECTION_MECHANISM}} | {{EMG_CONTAINMENT_ACTION}} | `{{EMG_FAILSAFE_STATE}}` | {{EMG_MAX_RESPONSE_TIME}} | {{EMG_HITL_ROLE}} |
+| `EMG-04` | {{EMG_TRIGGER_NAME}} | {{EMG_DETECTION_MECHANISM}} | {{EMG_CONTAINMENT_ACTION}} | `{{EMG_FAILSAFE_STATE}}` | {{EMG_MAX_RESPONSE_TIME}} | {{EMG_HITL_ROLE}} |
+| `EMG-05` | {{EMG_TRIGGER_NAME}} | {{EMG_DETECTION_MECHANISM}} | {{EMG_CONTAINMENT_ACTION}} | `{{EMG_FAILSAFE_STATE}}` | {{EMG_MAX_RESPONSE_TIME}} | {{EMG_HITL_ROLE}} |
+| `EMG-06` | {{EMG_TRIGGER_NAME}} | {{EMG_DETECTION_MECHANISM}} | {{EMG_CONTAINMENT_ACTION}} | `{{EMG_FAILSAFE_STATE}}` | {{EMG_MAX_RESPONSE_TIME}} | {{EMG_HITL_ROLE}} |
+| `EMG-07` | {{EMG_TRIGGER_NAME}} | {{EMG_DETECTION_MECHANISM}} | {{EMG_CONTAINMENT_ACTION}} | `{{EMG_FAILSAFE_STATE}}` | {{EMG_MAX_RESPONSE_TIME}} | {{EMG_HITL_ROLE}} |

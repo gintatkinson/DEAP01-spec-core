@@ -1,0 +1,485 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.deap.org/schemas/conops_specification_schema.json",
+  "title": "Concept of Operations (ConOps) Specification Schema",
+  "description": "Draft 2020-12 JSON Schema defining the complete data contract for Concept of Operations (ConOps) specifications in accordance with ISO/IEC/IEEE 29148:2018, OMG UAF v1.2/v2.0, and JARUS SORA v2.5.",
+  "type": "object",
+  "required": [
+    "metadata",
+    "operational_context",
+    "deficiencies",
+    "proposed_capabilities",
+    "user_classes",
+    "airspace_sora",
+    "uaf_activities",
+    "optx_exchanges",
+    "environmental_envelopes",
+    "scenarios",
+    "maintenance",
+    "emergency_matrix"
+  ],
+  "properties": {
+    "metadata": {
+      "type": "object",
+      "description": "Document metadata and formal governance attributes.",
+      "required": [
+        "system_identifier",
+        "version",
+        "date"
+      ],
+      "properties": {
+        "system_identifier": {
+          "type": "string",
+          "description": "Unique system identifier or title (e.g., AutonomousSystemArchetype)."
+        },
+        "version": {
+          "type": "string",
+          "description": "Document semantic version (e.g., 1.0.0)."
+        },
+        "date": {
+          "type": "string",
+          "description": "ISO 8601 publication or release date (YYYY-MM-DD)."
+        },
+        "title": {
+          "type": "string",
+          "description": "Full formal title of the Concept of Operations document."
+        },
+        "author": {
+          "type": "string",
+          "description": "Designated author, team, or engineering organization."
+        },
+        "classification": {
+          "type": "string",
+          "description": "Information security classification marking."
+        },
+        "target_system": {
+          "type": "string",
+          "description": "Target cyber-physical system or product realization identifier."
+        }
+      },
+      "additionalProperties": true
+    },
+    "operational_context": {
+      "type": "object",
+      "description": "Section 1: Scope, domain context, boundaries, and stakeholder roster.",
+      "required": [
+        "operational_domain",
+        "operational_boundaries",
+        "stakeholder_roster"
+      ],
+      "properties": {
+        "scope": {
+          "type": "string",
+          "description": "High-level summary of operational scope."
+        },
+        "operational_domain": {
+          "type": "string",
+          "description": "Formal domain classification (e.g., UAF::OperationalDomain::CivilSecurityAndMonitoring)."
+        },
+        "operational_boundaries": {
+          "type": "string",
+          "description": "Physical, legal, and operational boundaries of the system."
+        },
+        "stakeholder_roster": {
+          "type": "string",
+          "description": "Identified stakeholders, operators, regulators, and support personnel."
+        }
+      },
+      "additionalProperties": true
+    },
+    "deficiencies": {
+      "type": "object",
+      "description": "Section 3: Current operational baseline and deficiency analysis.",
+      "required": [
+        "current_operational_baseline",
+        "operational_deficiencies"
+      ],
+      "properties": {
+        "current_operational_baseline": {
+          "type": "string",
+          "description": "Description of current legacy or predecessor operations."
+        },
+        "operational_deficiencies": {
+          "type": "string",
+          "description": "Exhaustive breakdown of technical, human, and operational deficiencies."
+        }
+      },
+      "additionalProperties": true
+    },
+    "proposed_capabilities": {
+      "type": "object",
+      "description": "Section 4: Operational justification, value proposition, and trade-off analysis.",
+      "required": [
+        "mission_drivers",
+        "trade_off_analysis"
+      ],
+      "properties": {
+        "mission_drivers": {
+          "type": "string",
+          "description": "Core drivers and requirements demanding new capabilities."
+        },
+        "value_proposition": {
+          "type": "string",
+          "description": "Quantified or qualitative operational value delivered."
+        },
+        "trade_off_analysis": {
+          "type": "string",
+          "description": "Formal engineering trade-offs evaluated across design alternatives."
+        }
+      },
+      "additionalProperties": true
+    },
+    "user_classes": {
+      "type": "array",
+      "description": "Formal user and operator classes interacting with the system.",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "player_or_operator",
+          "interfacing_stakeholder",
+          "characteristics",
+          "training_type",
+          "constraint_source"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique user class identifier (e.g., UC-01)."
+          },
+          "title": {
+            "type": "string",
+            "description": "Descriptive title of the user class."
+          },
+          "player_or_operator": {
+            "type": "string",
+            "description": "Classification as direct operator, player, supervisor, or automated agent."
+          },
+          "interfacing_stakeholder": {
+            "type": "string",
+            "description": "External stakeholder organizations or regulatory interfaces."
+          },
+          "characteristics": {
+            "type": "string",
+            "description": "Operational traits, expected experience, and responsibility scope."
+          },
+          "training_type": {
+            "type": "string",
+            "description": "Formal qualification, certification, or training standard."
+          },
+          "constraint_source": {
+            "type": "string",
+            "description": "Regulatory or normative requirement source governing this role."
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "airspace_sora": {
+      "type": "object",
+      "description": "Section 6: 4D Operational Volume and SORA Ground Risk Buffer mathematics.",
+      "required": [
+        "h_max_m",
+        "theta_impact_deg",
+        "v_wind_max_mps",
+        "g_accel_mps2",
+        "r_grb_meters"
+      ],
+      "properties": {
+        "h_max_m": {
+          "type": "number",
+          "description": "Maximum operational ceiling / altitude above reference surface (m)."
+        },
+        "theta_impact_deg": {
+          "type": "number",
+          "description": "Worst-case operational trajectory impact angle (degrees)."
+        },
+        "v_wind_max_mps": {
+          "type": "number",
+          "description": "Maximum operational wind speed limit (m/s)."
+        },
+        "g_accel_mps2": {
+          "type": "number",
+          "description": "Gravitational acceleration constant (m/s^2)."
+        },
+        "d_glide_max_m": {
+          "type": "number",
+          "description": "Maximum unpowered lateral displacement margin (m)."
+        },
+        "r_grb_meters": {
+          "type": "number",
+          "description": "Declared Ground Risk Buffer radius (m)."
+        },
+        "v_terminal_mps": {
+          "type": "number",
+          "description": "Estimated unpowered descent terminal velocity (m/s)."
+        },
+        "e_impact_joules": {
+          "type": "number",
+          "description": "Estimated kinetic energy at operational boundary impact (J)."
+        },
+        "ground_risk_class": {
+          "type": "string",
+          "description": "JARUS SORA Ground Risk Class designation (e.g., GRC-3)."
+        }
+      },
+      "additionalProperties": true
+    },
+    "uaf_activities": {
+      "type": "array",
+      "description": "Section 7: OMG UAF Operational Activity Taxonomy with Gate 24 allocation tags.",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "description",
+          "allocation_tag"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique activity identifier (e.g., OA-01)."
+          },
+          "name": {
+            "type": "string",
+            "description": "Formal activity name matching UAF operational activity definition."
+          },
+          "description": {
+            "type": "string",
+            "description": "Technical description of the operational activity."
+          },
+          "allocation_tag": {
+            "type": "string",
+            "description": "Gate 24 allocation tag (e.g., /// OperationalAllocation: [OA-01])."
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "optx_exchanges": {
+      "type": "array",
+      "description": "Section 8: Operational Information Exchange (Op-Tx) Matrix.",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "source_node",
+          "destination_node",
+          "information_element",
+          "throughput",
+          "max_latency"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique information exchange identifier (e.g., OpTx-01)."
+          },
+          "source_node": {
+            "type": "string",
+            "description": "Originating node or operational performer."
+          },
+          "destination_node": {
+            "type": "string",
+            "description": "Receiving node or operational performer."
+          },
+          "information_element": {
+            "type": "string",
+            "description": "Name or payload type of the exchanged information."
+          },
+          "throughput": {
+            "type": "string",
+            "description": "Expected exchange frequency or bandwidth throughput (e.g., 100 Hz, 10 Mbps)."
+          },
+          "max_latency": {
+            "type": "string",
+            "description": "Maximum allowable end-to-end transport latency (e.g., 5 ms)."
+          },
+          "criticality": {
+            "type": "string",
+            "description": "Safety / assurance criticality level (e.g., High, DAL-A)."
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "environmental_envelopes": {
+      "type": "object",
+      "description": "Section 9: Operational environments, physical envelopes, and constraints.",
+      "required": [
+        "ambient_temperature",
+        "environmental_ingress",
+        "rf_environment",
+        "physical_spatial_constraints"
+      ],
+      "properties": {
+        "ambient_temperature": {
+          "type": "string",
+          "description": "Operating ambient temperature range."
+        },
+        "environmental_ingress": {
+          "type": "string",
+          "description": "Ingress protection rating (e.g., IP67) or precipitation constraints."
+        },
+        "rf_environment": {
+          "type": "string",
+          "description": "Electromagnetic interference, GNSS-denial, and RF constraints."
+        },
+        "physical_spatial_constraints": {
+          "type": "string",
+          "description": "Spatial clearance, staging dimensions, or launch footprint."
+        }
+      },
+      "additionalProperties": true
+    },
+    "scenarios": {
+      "type": "array",
+      "description": "Section 10: Multi-threaded operational scenarios and mission timelines.",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "steps"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique scenario identifier (e.g., SCN-01)."
+          },
+          "title": {
+            "type": "string",
+            "description": "Descriptive title of the operational scenario thread."
+          },
+          "steps": {
+            "type": "array",
+            "description": "Sequential or concurrent scenario steps.",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": [
+                "step_num",
+                "elapsed_time",
+                "actor",
+                "action",
+                "expected_result",
+                "exit_criterion"
+              ],
+              "properties": {
+                "step_num": {
+                  "type": [
+                    "integer",
+                    "string"
+                  ],
+                  "description": "Sequential step index number."
+                },
+                "elapsed_time": {
+                  "type": "string",
+                  "description": "Relative or absolute elapsed timeline marker (e.g., T+00:00:00)."
+                },
+                "actor": {
+                  "type": "string",
+                  "description": "Responsible actor, subsystem, or human role."
+                },
+                "action": {
+                  "type": "string",
+                  "description": "Action executed during this timeline step."
+                },
+                "expected_result": {
+                  "type": "string",
+                  "description": "Observed system state or output."
+                },
+                "exit_criterion": {
+                  "type": "string",
+                  "description": "Mandatory gate or transition criterion to advance to next step."
+                }
+              },
+              "additionalProperties": true
+            }
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "maintenance": {
+      "type": "object",
+      "description": "Section 11: Maintenance and sustainment concepts (O/I/D Maintenance levels).",
+      "required": [
+        "o_level",
+        "i_level",
+        "d_level"
+      ],
+      "properties": {
+        "o_level": {
+          "type": "string",
+          "description": "Organizational-level maintenance activities and pre-flight inspections."
+        },
+        "i_level": {
+          "type": "string",
+          "description": "Intermediate-level maintenance, calibration, and modular LRU replacement."
+        },
+        "d_level": {
+          "type": "string",
+          "description": "Depot-level structural overhaul, deep inspection, and recertification."
+        }
+      },
+      "additionalProperties": true
+    },
+    "emergency_matrix": {
+      "type": "array",
+      "description": "Section 12: 7-Row Emergency Decision and Contingency Matrix.",
+      "minItems": 7,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "trigger_event",
+          "detection_mechanism",
+          "primary_failsafe_state",
+          "max_response_time",
+          "authority_role"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Canonical emergency trigger identifier (e.g., EMG-01..EMG-07)."
+          },
+          "trigger_event": {
+            "type": "string",
+            "description": "Contingency trigger name or condition."
+          },
+          "detection_mechanism": {
+            "type": "string",
+            "description": "Sensor, watchdog, or BIT mechanism detecting the anomaly."
+          },
+          "primary_failsafe_state": {
+            "type": "string",
+            "description": "Deterministic failsafe recovery state or autonomous mitigation mode."
+          },
+          "max_response_time": {
+            "type": [
+              "string",
+              "number"
+            ],
+            "description": "Maximum allowable response / containment latency."
+          },
+          "authority_role": {
+            "type": "string",
+            "description": "Human-in-the-loop (HITL) authority or autonomous authority designation."
+          },
+          "automated_containment_action": {
+            "type": "string",
+            "description": "Autonomous action taken immediately upon trigger detection."
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

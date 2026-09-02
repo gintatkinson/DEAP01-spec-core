@@ -682,15 +682,12 @@ $$
 ## 7. OMG UAF Operational Activity Taxonomy
 | Activity ID | Activity Name | Description | Gate 24 Allocation Tag |
 | :--- | :--- | :--- | :--- |
-| OA-01 | {{OA_01_ACTIVITY_NAME}} | {{OA_01_DESCRIPTION}} | `/// OperationalAllocation: [OA-01]` |
-| OA-02 | {{OA_02_ACTIVITY_NAME}} | {{OA_02_DESCRIPTION}} | `/// OperationalAllocation: [OA-02]` |
-| OA-03 | {{OA_03_ACTIVITY_NAME}} | {{OA_03_DESCRIPTION}} | `/// OperationalAllocation: [OA-03]` |
+| OA-01 | {{OA_ACTIVITY_NAME}} | {{OA_DESCRIPTION}} | `/// OperationalAllocation: [OA-01]` |
 
 ## 8. Operational Information Exchange (Op-Tx) Matrix
 | Exchange ID | Source Node | Destination Node | Information Item | Data Rate | Max Latency | Criticality |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| OpTx-01 | {{OPTX_01_SOURCE_NODE}} | {{OPTX_01_DEST_NODE}} | {{OPTX_01_INFO_ITEM}} | {{OPTX_01_DATA_RATE}} | {{OPTX_01_MAX_LATENCY}} | {{OPTX_01_CRITICALITY}} |
-| OpTx-02 | {{OPTX_02_SOURCE_NODE}} | {{OPTX_02_DEST_NODE}} | {{OPTX_02_INFO_ITEM}} | {{OPTX_02_DATA_RATE}} | {{OPTX_02_MAX_LATENCY}} | {{OPTX_02_CRITICALITY}} |
+| OpTx-01 | {{OPTX_SOURCE_NODE}} | {{OPTX_DEST_NODE}} | {{OPTX_INFO_ITEM}} | {{OPTX_DATA_RATE}} | {{OPTX_MAX_LATENCY}} | {{OPTX_CRITICALITY}} |
 
 ## 9. Operational Environments & Constraints
 - **Ambient Temperature:** {{AMBIENT_TEMPERATURE_RANGE}}
@@ -699,9 +696,9 @@ $$
 - **Physical Spatial Constraints:** {{PHYSICAL_SPATIAL_CONSTRAINTS}}
 
 ## 10. Multi-Threaded Operational Scenarios
-- **Scenario 1 (Nominal Execution):** {{SCENARIO_1_NOMINAL_THREAD}}
-- **Scenario 2 (Degraded Mode & Mitigation):** {{SCENARIO_2_DEGRADED_THREAD}}
-- **Scenario 3 (Contingency Recovery):** {{SCENARIO_3_CONTINGENCY_THREAD}}
+- **Scenario 1 (Nominal Execution):** {{SCENARIO_NOMINAL_THREAD}}
+- **Scenario 2 (Degraded Mode & Mitigation):** {{SCENARIO_DEGRADED_THREAD}}
+- **Scenario 3 (Contingency Recovery):** {{SCENARIO_CONTINGENCY_THREAD}}
 
 ## 11. Maintenance & Sustainment Concepts (O/I/D Maintenance)
 - **O-Level (Organizational):** {{O_LEVEL_MAINTENANCE_DESCRIPTION}}
@@ -711,13 +708,13 @@ $$
 ## 12. 7-Row Emergency Decision & Contingency Matrix
 | Trigger ID | Contingency Trigger | Detection Mechanism | Automated Containment Action | Failsafe State | Max Response Time | HITL Role |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `EMG-01` | {{EMG_01_TRIGGER_NAME}} | {{EMG_01_DETECTION_MECHANISM}} | {{EMG_01_CONTAINMENT_ACTION}} | `{{EMG_01_FAILSAFE_STATE}}` | {{EMG_01_MAX_RESPONSE_TIME}} | {{EMG_01_HITL_ROLE}} |
-| `EMG-02` | {{EMG_02_TRIGGER_NAME}} | {{EMG_02_DETECTION_MECHANISM}} | {{EMG_02_CONTAINMENT_ACTION}} | `{{EMG_02_FAILSAFE_STATE}}` | {{EMG_02_MAX_RESPONSE_TIME}} | {{EMG_02_HITL_ROLE}} |
-| `EMG-03` | {{EMG_03_TRIGGER_NAME}} | {{EMG_03_DETECTION_MECHANISM}} | {{EMG_03_CONTAINMENT_ACTION}} | `{{EMG_03_FAILSAFE_STATE}}` | {{EMG_03_MAX_RESPONSE_TIME}} | {{EMG_03_HITL_ROLE}} |
-| `EMG-04` | {{EMG_04_TRIGGER_NAME}} | {{EMG_04_DETECTION_MECHANISM}} | {{EMG_04_CONTAINMENT_ACTION}} | `{{EMG_04_FAILSAFE_STATE}}` | {{EMG_04_MAX_RESPONSE_TIME}} | {{EMG_04_HITL_ROLE}} |
-| `EMG-05` | {{EMG_05_TRIGGER_NAME}} | {{EMG_05_DETECTION_MECHANISM}} | {{EMG_05_CONTAINMENT_ACTION}} | `{{EMG_05_FAILSAFE_STATE}}` | {{EMG_05_MAX_RESPONSE_TIME}} | {{EMG_05_HITL_ROLE}} |
-| `EMG-06` | {{EMG_06_TRIGGER_NAME}} | {{EMG_06_DETECTION_MECHANISM}} | {{EMG_06_CONTAINMENT_ACTION}} | `{{EMG_06_FAILSAFE_STATE}}` | {{EMG_06_MAX_RESPONSE_TIME}} | {{EMG_06_HITL_ROLE}} |
-| `EMG-07` | {{EMG_07_TRIGGER_NAME}} | {{EMG_07_DETECTION_MECHANISM}} | {{EMG_07_CONTAINMENT_ACTION}} | `{{EMG_07_FAILSAFE_STATE}}` | {{EMG_07_MAX_RESPONSE_TIME}} | {{EMG_07_HITL_ROLE}} |
+| `EMG-01` | {{EMG_TRIGGER_NAME}} | {{EMG_DETECTION_MECHANISM}} | {{EMG_CONTAINMENT_ACTION}} | `{{EMG_FAILSAFE_STATE}}` | {{EMG_MAX_RESPONSE_TIME}} | {{EMG_HITL_ROLE}} |
+| `EMG-02` | {{EMG_TRIGGER_NAME}} | {{EMG_DETECTION_MECHANISM}} | {{EMG_CONTAINMENT_ACTION}} | `{{EMG_FAILSAFE_STATE}}` | {{EMG_MAX_RESPONSE_TIME}} | {{EMG_HITL_ROLE}} |
+| `EMG-03` | {{EMG_TRIGGER_NAME}} | {{EMG_DETECTION_MECHANISM}} | {{EMG_CONTAINMENT_ACTION}} | `{{EMG_FAILSAFE_STATE}}` | {{EMG_MAX_RESPONSE_TIME}} | {{EMG_HITL_ROLE}} |
+| `EMG-04` | {{EMG_TRIGGER_NAME}} | {{EMG_DETECTION_MECHANISM}} | {{EMG_CONTAINMENT_ACTION}} | `{{EMG_FAILSAFE_STATE}}` | {{EMG_MAX_RESPONSE_TIME}} | {{EMG_HITL_ROLE}} |
+| `EMG-05` | {{EMG_TRIGGER_NAME}} | {{EMG_DETECTION_MECHANISM}} | {{EMG_CONTAINMENT_ACTION}} | `{{EMG_FAILSAFE_STATE}}` | {{EMG_MAX_RESPONSE_TIME}} | {{EMG_HITL_ROLE}} |
+| `EMG-06` | {{EMG_TRIGGER_NAME}} | {{EMG_DETECTION_MECHANISM}} | {{EMG_CONTAINMENT_ACTION}} | `{{EMG_FAILSAFE_STATE}}` | {{EMG_MAX_RESPONSE_TIME}} | {{EMG_HITL_ROLE}} |
+| `EMG-07` | {{EMG_TRIGGER_NAME}} | {{EMG_DETECTION_MECHANISM}} | {{EMG_CONTAINMENT_ACTION}} | `{{EMG_FAILSAFE_STATE}}` | {{EMG_MAX_RESPONSE_TIME}} | {{EMG_HITL_ROLE}} |
 """
         out_p = Path(output_path)
         out_p.parent.mkdir(parents=True, exist_ok=True)
@@ -991,26 +988,18 @@ class MissionIntentCompletenessValidator(IValidator):
 ## 2. Mission Essential Task List (METL)
 | Task ID | Task Name | Condition Statement | Standard Metric | Verification Method | Gate 24 Allocation Tag |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `MET-01` | {{MET_01_TASK_NAME}} | {{MET_01_CONDITION}} | {{MET_01_STANDARD}} | {{MET_01_VERIFICATION}} | `/// OperationalAllocation: [MET-01]` |
-| `MET-02` | {{MET_02_TASK_NAME}} | {{MET_02_CONDITION}} | {{MET_02_STANDARD}} | {{MET_02_VERIFICATION}} | `/// OperationalAllocation: [MET-02]` |
-| `MET-03` | {{MET_03_TASK_NAME}} | {{MET_03_CONDITION}} | {{MET_03_STANDARD}} | {{MET_03_VERIFICATION}} | `/// OperationalAllocation: [MET-03]` |
-| `MET-04` | {{MET_04_TASK_NAME}} | {{MET_04_CONDITION}} | {{MET_04_STANDARD}} | {{MET_04_VERIFICATION}} | `/// OperationalAllocation: [MET-04]` |
-| `MET-05` | {{MET_05_TASK_NAME}} | {{MET_05_CONDITION}} | {{MET_05_STANDARD}} | {{MET_05_VERIFICATION}} | `/// OperationalAllocation: [MET-05]` |
-| `MET-06` | {{MET_06_TASK_NAME}} | {{MET_06_CONDITION}} | {{MET_06_STANDARD}} | {{MET_06_VERIFICATION}} | `/// OperationalAllocation: [MET-06]` |
+| `MET-01` | {{MET_TASK_NAME}} | {{MET_CONDITION}} | {{MET_STANDARD}} | {{MET_VERIFICATION}} | `/// OperationalAllocation: [MET-01]` |
 
 ## 3. Measures of Effectiveness (MoE) & Measures of Performance (MoP) Metrics
 | Metric ID | Metric Type | Metric Name | Formulation / Equation | Threshold | Objective | Unit |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| MoE-01 | MoE | {{MOE_01_NAME}} | {{MOE_01_EQUATION}} | {{MOE_01_THRESHOLD}} | {{MOE_01_OBJECTIVE}} | {{MOE_01_UNIT}} |
-| MoP-01 | MoP | {{MOP_01_NAME}} | {{MOP_01_EQUATION}} | {{MOP_01_THRESHOLD}} | {{MOP_01_OBJECTIVE}} | {{MOP_01_UNIT}} |
-| MoP-02 | MoP | {{MOP_02_NAME}} | {{MOP_02_EQUATION}} | {{MOP_02_THRESHOLD}} | {{MOP_02_OBJECTIVE}} | {{MOP_02_UNIT}} |
+| MoE-01 | MoE | {{MOE_NAME}} | {{MOE_EQUATION}} | {{MOE_THRESHOLD}} | {{MOE_OBJECTIVE}} | {{MOE_UNIT}} |
+| MoP-01 | MoP | {{MOP_NAME}} | {{MOP_EQUATION}} | {{MOP_THRESHOLD}} | {{MOP_OBJECTIVE}} | {{MOP_UNIT}} |
 
 ## 4. Threat & Electronic Warfare (EW) / Cyber Environment Matrix
 | Threat ID | Threat Vector | Description | Severity | Autonomous Mitigation Rule |
 | :--- | :--- | :--- | :--- | :--- |
-| THR-01 | {{THR_01_VECTOR}} | {{THR_01_DESCRIPTION}} | {{THR_01_SEVERITY}} | {{THR_01_MITIGATION_RULE}} |
-| THR-02 | {{THR_02_VECTOR}} | {{THR_02_DESCRIPTION}} | {{THR_02_SEVERITY}} | {{THR_02_MITIGATION_RULE}} |
-| THR-03 | {{THR_03_VECTOR}} | {{THR_03_DESCRIPTION}} | {{THR_03_SEVERITY}} | {{THR_03_MITIGATION_RULE}} |
+| THR-01 | {{THR_VECTOR}} | {{THR_DESCRIPTION}} | {{THR_SEVERITY}} | {{THR_MITIGATION_RULE}} |
 
 ## 5. PACE C2 Link Communications Plan
 | PACE Tier | Link Medium | Frequency Band | Nominal Data Rate | Heartbeat Timeout | Priority / Role |
@@ -1021,9 +1010,7 @@ class MissionIntentCompletenessValidator(IValidator):
 | **Emergency** | {{PACE_EMERGENCY_MEDIUM}} | {{PACE_EMERGENCY_BAND}} | {{PACE_EMERGENCY_DATA_RATE}} | {{PACE_EMERGENCY_TIMEOUT}} | {{PACE_EMERGENCY_ROLE}} |
 
 ## 6. Rules of Engagement (ROE) & Weapon/Sensor Interlocks
-- **ROE-01:** {{ROE_01_RULE_STATEMENT}}
-- **ROE-02:** {{ROE_02_RULE_STATEMENT}}
-- **ROE-03:** {{ROE_03_RULE_STATEMENT}}
+- **ROE-01:** {{ROE_RULE_STATEMENT}}
 
 ## 7. Airspace Deconfliction & U-space Dynamic Geo-Zones
 - **Primary Boundary Perimeter:** {{PRIMARY_BOUNDARY_PERIMETER}}
@@ -1033,10 +1020,7 @@ class MissionIntentCompletenessValidator(IValidator):
 ## 8. Go/No-Go Decision Matrix
 | Check ID | Phase | Parameter / Check | Threshold Condition | Sensor / Mechanism | Go / No-Go Action |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| GNG-01 | {{GNG_01_PHASE}} | {{GNG_01_PARAMETER}} | {{GNG_01_THRESHOLD}} | {{GNG_01_MECHANISM}} | {{GNG_01_ACTION}} |
-| GNG-02 | {{GNG_02_PHASE}} | {{GNG_02_PARAMETER}} | {{GNG_02_THRESHOLD}} | {{GNG_02_MECHANISM}} | {{GNG_02_ACTION}} |
-| GNG-03 | {{GNG_03_PHASE}} | {{GNG_03_PARAMETER}} | {{GNG_03_THRESHOLD}} | {{GNG_03_MECHANISM}} | {{GNG_03_ACTION}} |
-| GNG-04 | {{GNG_04_PHASE}} | {{GNG_04_PARAMETER}} | {{GNG_04_THRESHOLD}} | {{GNG_04_MECHANISM}} | {{GNG_04_ACTION}} |
+| GNG-01 | {{GNG_PHASE}} | {{GNG_PARAMETER}} | {{GNG_THRESHOLD}} | {{GNG_MECHANISM}} | {{GNG_ACTION}} |
 
 ## 9. Bingo Energy Mathematics & Secondary Divert Protocols
 $$
@@ -1057,11 +1041,6 @@ $$
 
 ## 10. Gate 24 MissionTask Traceability Tags (Allocation Tags)
 - `/// OperationalAllocation: [MET-01]`
-- `/// OperationalAllocation: [MET-02]`
-- `/// OperationalAllocation: [MET-03]`
-- `/// OperationalAllocation: [MET-04]`
-- `/// OperationalAllocation: [MET-05]`
-- `/// OperationalAllocation: [MET-06]`
 """
         out_p = Path(output_path)
         out_p.parent.mkdir(parents=True, exist_ok=True)

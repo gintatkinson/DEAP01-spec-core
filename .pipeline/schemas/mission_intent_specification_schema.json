@@ -1,0 +1,400 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec.deap.org/schemas/mission_intent_specification_schema.json",
+  "title": "Tactical Mission Intent Specification Schema",
+  "description": "Draft 2020-12 JSON Schema defining the complete data contract for Tactical Mission Intent specifications in accordance with NATO STANAG 4586, INCOSE SE Handbook, and CJCSI 3500.02 METL guidelines.",
+  "type": "object",
+  "required": [
+    "commanders_intent",
+    "metl_tasks",
+    "incose_moe_mop",
+    "threat_matrix",
+    "pace_c2_plan",
+    "roe_interlocks",
+    "airspace_geozones",
+    "go_no_go_matrix",
+    "bingo_energy_math",
+    "allocation_tags"
+  ],
+  "properties": {
+    "commanders_intent": {
+      "type": "object",
+      "description": "Section 1: Commander's Intent and High-Level Operational Objectives.",
+      "required": [
+        "operational_purpose",
+        "key_tasks",
+        "end_state"
+      ],
+      "properties": {
+        "operational_purpose": {
+          "type": "string",
+          "description": "Primary military or civil purpose of the mission."
+        },
+        "key_tasks": {
+          "type": "string",
+          "description": "Core mission tasks that must be executed to achieve intent."
+        },
+        "end_state": {
+          "type": "string",
+          "description": "Required end-state conditions denoting successful mission completion."
+        }
+      },
+      "additionalProperties": true
+    },
+    "metl_tasks": {
+      "type": "array",
+      "description": "Section 2: Mission Essential Task List (METL) with Gate 24 allocation tags.",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "task_name",
+          "condition",
+          "standard_metric",
+          "verification_method",
+          "allocation_tag"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique METL task identifier (e.g., MET-01)."
+          },
+          "task_name": {
+            "type": "string",
+            "description": "Standardized task title matching doctrinal taxonomy."
+          },
+          "condition": {
+            "type": "string",
+            "description": "Operational conditions under which the task is initiated."
+          },
+          "standard_metric": {
+            "type": "string",
+            "description": "Quantitative standard or performance threshold defining success."
+          },
+          "verification_method": {
+            "type": "string",
+            "description": "Verification method used to validate task execution."
+          },
+          "allocation_tag": {
+            "type": "string",
+            "description": "Gate 24 allocation tag (e.g., /// OperationalAllocation: [MET-01])."
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "incose_moe_mop": {
+      "type": "array",
+      "description": "Section 3: Measures of Effectiveness (MoE) and Measures of Performance (MoP) Metrics.",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "parameter_name",
+          "katex_formula",
+          "threshold_value",
+          "objective_value",
+          "measurement_unit"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Metric identifier (e.g., MoE-01, MoP-01)."
+          },
+          "type": {
+            "type": "string",
+            "description": "Metric classification (MoE or MoP)."
+          },
+          "parameter_name": {
+            "type": "string",
+            "description": "Formal engineering name of the metric."
+          },
+          "katex_formula": {
+            "type": "string",
+            "description": "Mathematical formula defining the metric (KaTeX/LaTeX format)."
+          },
+          "threshold_value": {
+            "type": [
+              "string",
+              "number"
+            ],
+            "description": "Minimum acceptable threshold value."
+          },
+          "objective_value": {
+            "type": [
+              "string",
+              "number"
+            ],
+            "description": "Target objective value for optimal operation."
+          },
+          "measurement_unit": {
+            "type": "string",
+            "description": "Standard engineering unit of measurement (e.g., m, ms, ratio, Dimensionless)."
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "threat_matrix": {
+      "type": "array",
+      "description": "Section 4: Threat, Electronic Warfare (EW), and Cyber Environment Matrix.",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "domain",
+          "vector",
+          "technical_description",
+          "severity_category",
+          "detection_mechanism",
+          "autonomous_mitigation_rule",
+          "public_clause_citation"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique threat identifier (e.g., THR-01)."
+          },
+          "domain": {
+            "type": "string",
+            "description": "Threat domain from open taxonomy (e.g., Electronic Warfare, Cyber, Kinetic, RF, Environmental)."
+          },
+          "vector": {
+            "type": "string",
+            "description": "Threat attack vector or anomaly modality."
+          },
+          "technical_description": {
+            "type": "string",
+            "description": "Detailed engineering description of the threat."
+          },
+          "severity_category": {
+            "type": "string",
+            "description": "Severity categorization (e.g., Low, Medium, High, Critical)."
+          },
+          "detection_mechanism": {
+            "type": "string",
+            "description": "Mechanism or sensor utilized to identify the threat."
+          },
+          "autonomous_mitigation_rule": {
+            "type": "string",
+            "description": "Deterministic rule executed autonomously to counter or isolate the threat."
+          },
+          "public_clause_citation": {
+            "type": "string",
+            "description": "Formal normative or regulatory clause citation."
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "pace_c2_plan": {
+      "type": "array",
+      "description": "Section 5: PACE C2 Communications Plan (Primary, Alternate, Contingency, Emergency).",
+      "minItems": 4,
+      "items": {
+        "type": "object",
+        "required": [
+          "tier",
+          "frequency_band",
+          "data_rate",
+          "timeout",
+          "failover_hysteresis"
+        ],
+        "properties": {
+          "tier": {
+            "type": "string",
+            "enum": [
+              "Primary",
+              "Alternate",
+              "Contingency",
+              "Emergency"
+            ],
+            "description": "PACE hierarchy tier."
+          },
+          "link_medium": {
+            "type": "string",
+            "description": "Physical transmission medium / protocol (e.g., COFDM, LTE/5G, FHSS Radio, Satellite)."
+          },
+          "frequency_band": {
+            "type": "string",
+            "description": "Operating RF frequency band."
+          },
+          "data_rate": {
+            "type": "string",
+            "description": "Nominal bandwidth data rate."
+          },
+          "timeout": {
+            "type": [
+              "string",
+              "number"
+            ],
+            "description": "Link loss heartbeat timeout threshold."
+          },
+          "failover_hysteresis": {
+            "type": [
+              "string",
+              "number"
+            ],
+            "description": "Hysteresis window or stabilization time before switching tiers."
+          },
+          "priority_role": {
+            "type": "string",
+            "description": "Primary role and payload responsibility."
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "roe_interlocks": {
+      "type": "array",
+      "description": "Section 6: Rules of Engagement (ROE) and Weapon/Sensor Interlocks.",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "rule_statement",
+          "interlock_condition"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique ROE identifier (e.g., ROE-01)."
+          },
+          "rule_statement": {
+            "type": "string",
+            "description": "Plain-text normative statement of the rule."
+          },
+          "interlock_condition": {
+            "type": "string",
+            "description": "Formal logical condition or interlock predicate."
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "airspace_geozones": {
+      "type": "object",
+      "description": "Section 7: Airspace Deconfliction and U-space Dynamic Geo-Zones.",
+      "required": [
+        "primary_boundary_perimeter",
+        "dynamic_exclusion_zones",
+        "separation_minima"
+      ],
+      "properties": {
+        "primary_boundary_perimeter": {
+          "type": "string",
+          "description": "Geographical perimeter boundary polygon."
+        },
+        "dynamic_exclusion_zones": {
+          "type": "string",
+          "description": "Dynamic no-fly zones, pop-up keep-out buffers, and temporary flight restrictions."
+        },
+        "separation_minima": {
+          "type": "string",
+          "description": "Minimum lateral and vertical deconfliction distance from other airspace participants."
+        }
+      },
+      "additionalProperties": true
+    },
+    "go_no_go_matrix": {
+      "type": "array",
+      "description": "Section 8: Go/No-Go Decision Matrix.",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "phase",
+          "parameter",
+          "threshold_condition",
+          "sensor_or_mechanism",
+          "action"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique check identifier (e.g., GNG-01)."
+          },
+          "phase": {
+            "type": "string",
+            "description": "Operational phase (e.g., Pre-Launch, In-Flight, Post-Mission)."
+          },
+          "parameter": {
+            "type": "string",
+            "description": "Monitored parameter or readiness check."
+          },
+          "threshold_condition": {
+            "type": "string",
+            "description": "Passing threshold condition."
+          },
+          "sensor_or_mechanism": {
+            "type": "string",
+            "description": "Sensor or diagnostic mechanism evaluating the condition."
+          },
+          "action": {
+            "type": "string",
+            "description": "Deterministic Go or No-Go decision action upon threshold violation."
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "bingo_energy_math": {
+      "type": "object",
+      "description": "Section 9: Bingo Energy Mathematics and Secondary Divert Protocols.",
+      "required": [
+        "e_capacity_joules",
+        "e_return_joules",
+        "e_divert_joules",
+        "e_reserve_joules",
+        "e_contingency_joules",
+        "e_bingo_threshold_joules"
+      ],
+      "properties": {
+        "e_capacity_joules": {
+          "type": "number",
+          "description": "Total nominal energy storage capacity (J)."
+        },
+        "e_return_joules": {
+          "type": "number",
+          "description": "Energy required for primary return trajectory (J)."
+        },
+        "e_divert_joules": {
+          "type": "number",
+          "description": "Energy required to divert to secondary recovery site (J)."
+        },
+        "e_reserve_joules": {
+          "type": "number",
+          "description": "Mandatory statutory energy reserve (J) >= 20% of capacity."
+        },
+        "e_contingency_joules": {
+          "type": "number",
+          "description": "Dynamic operational contingency energy buffer (J)."
+        },
+        "e_bingo_threshold_joules": {
+          "type": "number",
+          "description": "Total critical return threshold energy (J)."
+        },
+        "statutory_reserve_ratio": {
+          "type": "number",
+          "description": "Calculated statutory reserve ratio (must be >= 0.20)."
+        }
+      },
+      "additionalProperties": true
+    },
+    "allocation_tags": {
+      "type": "array",
+      "description": "Section 10: Gate 24 MissionTask Traceability Tags.",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "description": "Operational allocation tag (e.g., /// OperationalAllocation: [MET-01])."
+      }
+    }
+  },
+  "additionalProperties": true
+}

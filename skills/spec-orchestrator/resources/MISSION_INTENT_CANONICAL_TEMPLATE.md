@@ -14,26 +14,18 @@
 ## 2. Mission Essential Task List (METL)
 | Task ID | Task Name | Condition Statement | Standard Metric | Verification Method | Gate 24 Allocation Tag |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `MET-01` | {{MET_01_TASK_NAME}} | {{MET_01_CONDITION}} | {{MET_01_STANDARD}} | {{MET_01_VERIFICATION}} | `/// OperationalAllocation: [MET-01]` |
-| `MET-02` | {{MET_02_TASK_NAME}} | {{MET_02_CONDITION}} | {{MET_02_STANDARD}} | {{MET_02_VERIFICATION}} | `/// OperationalAllocation: [MET-02]` |
-| `MET-03` | {{MET_03_TASK_NAME}} | {{MET_03_CONDITION}} | {{MET_03_STANDARD}} | {{MET_03_VERIFICATION}} | `/// OperationalAllocation: [MET-03]` |
-| `MET-04` | {{MET_04_TASK_NAME}} | {{MET_04_CONDITION}} | {{MET_04_STANDARD}} | {{MET_04_VERIFICATION}} | `/// OperationalAllocation: [MET-04]` |
-| `MET-05` | {{MET_05_TASK_NAME}} | {{MET_05_CONDITION}} | {{MET_05_STANDARD}} | {{MET_05_VERIFICATION}} | `/// OperationalAllocation: [MET-05]` |
-| `MET-06` | {{MET_06_TASK_NAME}} | {{MET_06_CONDITION}} | {{MET_06_STANDARD}} | {{MET_06_VERIFICATION}} | `/// OperationalAllocation: [MET-06]` |
+| `MET-01` | {{MET_TASK_NAME}} | {{MET_CONDITION}} | {{MET_STANDARD}} | {{MET_VERIFICATION}} | `/// OperationalAllocation: [MET-01]` |
 
 ## 3. Measures of Effectiveness (MoE) & Measures of Performance (MoP) Metrics
 | Metric ID | Metric Type | Metric Name | Formulation / Equation | Threshold | Objective | Unit |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| MoE-01 | MoE | {{MOE_01_NAME}} | {{MOE_01_EQUATION}} | {{MOE_01_THRESHOLD}} | {{MOE_01_OBJECTIVE}} | {{MOE_01_UNIT}} |
-| MoP-01 | MoP | {{MOP_01_NAME}} | {{MOP_01_EQUATION}} | {{MOP_01_THRESHOLD}} | {{MOP_01_OBJECTIVE}} | {{MOP_01_UNIT}} |
-| MoP-02 | MoP | {{MOP_02_NAME}} | {{MOP_02_EQUATION}} | {{MOP_02_THRESHOLD}} | {{MOP_02_OBJECTIVE}} | {{MOP_02_UNIT}} |
+| MoE-01 | MoE | {{MOE_NAME}} | {{MOE_EQUATION}} | {{MOE_THRESHOLD}} | {{MOE_OBJECTIVE}} | {{MOE_UNIT}} |
+| MoP-01 | MoP | {{MOP_NAME}} | {{MOP_EQUATION}} | {{MOP_THRESHOLD}} | {{MOP_OBJECTIVE}} | {{MOP_UNIT}} |
 
 ## 4. Threat & Electronic Warfare (EW) / Cyber Environment Matrix
 | Threat ID | Threat Vector | Description | Severity | Autonomous Mitigation Rule |
 | :--- | :--- | :--- | :--- | :--- |
-| THR-01 | {{THR_01_VECTOR}} | {{THR_01_DESCRIPTION}} | {{THR_01_SEVERITY}} | {{THR_01_MITIGATION_RULE}} |
-| THR-02 | {{THR_02_VECTOR}} | {{THR_02_DESCRIPTION}} | {{THR_02_SEVERITY}} | {{THR_02_MITIGATION_RULE}} |
-| THR-03 | {{THR_03_VECTOR}} | {{THR_03_DESCRIPTION}} | {{THR_03_SEVERITY}} | {{THR_03_MITIGATION_RULE}} |
+| THR-01 | {{THR_VECTOR}} | {{THR_DESCRIPTION}} | {{THR_SEVERITY}} | {{THR_MITIGATION_RULE}} |
 
 ## 5. PACE C2 Link Communications Plan
 | PACE Tier | Link Medium | Frequency Band | Nominal Data Rate | Heartbeat Timeout | Priority / Role |
@@ -44,9 +36,7 @@
 | **Emergency** | {{PACE_EMERGENCY_MEDIUM}} | {{PACE_EMERGENCY_BAND}} | {{PACE_EMERGENCY_DATA_RATE}} | {{PACE_EMERGENCY_TIMEOUT}} | {{PACE_EMERGENCY_ROLE}} |
 
 ## 6. Rules of Engagement (ROE) & Weapon/Sensor Interlocks
-- **ROE-01:** {{ROE_01_RULE_STATEMENT}}
-- **ROE-02:** {{ROE_02_RULE_STATEMENT}}
-- **ROE-03:** {{ROE_03_RULE_STATEMENT}}
+- **ROE-01:** {{ROE_RULE_STATEMENT}}
 
 ## 7. Airspace Deconfliction & U-space Dynamic Geo-Zones
 - **Primary Boundary Perimeter:** {{PRIMARY_BOUNDARY_PERIMETER}}
@@ -56,10 +46,7 @@
 ## 8. Go/No-Go Decision Matrix
 | Check ID | Phase | Parameter / Check | Threshold Condition | Sensor / Mechanism | Go / No-Go Action |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| GNG-01 | {{GNG_01_PHASE}} | {{GNG_01_PARAMETER}} | {{GNG_01_THRESHOLD}} | {{GNG_01_MECHANISM}} | {{GNG_01_ACTION}} |
-| GNG-02 | {{GNG_02_PHASE}} | {{GNG_02_PARAMETER}} | {{GNG_02_THRESHOLD}} | {{GNG_02_MECHANISM}} | {{GNG_02_ACTION}} |
-| GNG-03 | {{GNG_03_PHASE}} | {{GNG_03_PARAMETER}} | {{GNG_03_THRESHOLD}} | {{GNG_03_MECHANISM}} | {{GNG_03_ACTION}} |
-| GNG-04 | {{GNG_04_PHASE}} | {{GNG_04_PARAMETER}} | {{GNG_04_THRESHOLD}} | {{GNG_04_MECHANISM}} | {{GNG_04_ACTION}} |
+| GNG-01 | {{GNG_PHASE}} | {{GNG_PARAMETER}} | {{GNG_THRESHOLD}} | {{GNG_MECHANISM}} | {{GNG_ACTION}} |
 
 ## 9. Bingo Energy Mathematics & Secondary Divert Protocols
 $$
@@ -80,8 +67,3 @@ $$
 
 ## 10. Gate 24 MissionTask Traceability Tags (Allocation Tags)
 - `/// OperationalAllocation: [MET-01]`
-- `/// OperationalAllocation: [MET-02]`
-- `/// OperationalAllocation: [MET-03]`
-- `/// OperationalAllocation: [MET-04]`
-- `/// OperationalAllocation: [MET-05]`
-- `/// OperationalAllocation: [MET-06]`
