@@ -16,6 +16,7 @@ prompt discipline:
 import io
 import json
 import os
+import re
 import sys
 import tempfile
 import unittest
@@ -28,6 +29,24 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from scripts.lint_subagent_prompt import lint_prompt_text, validate_subagent_preflight
+
+
+def _corpus_requirements() -> List[str]:
+    """
+    Parse the six Requirement cells of the pre-flight checklist body verbatim
+    from rules/subagent-dispatch-standards.md (mirrors the corpora pattern in
+    tests/test_prompt_linter.py).
+    """
+    rules_path = os.path.join(PROJECT_ROOT, "rules", "subagent-dispatch-standards.md")
+    with open(rules_path, "r", encoding="utf-8") as f:
+        lines = f.read().splitlines()
+    requirements = []
+    for line in lines:
+        if re.match(r"^\|\s*\d+\.\s", line):
+            cells = [c.strip() for c in line.split("|")]
+            if len(cells) > 3 and cells[2]:
+                requirements.append(cells[2])
+    return requirements
 
 
 def _extract_prompts_from_value(value: Any) -> List[str]:
@@ -243,7 +262,8 @@ class TestTranscriptAuditProcessGate(unittest.TestCase):
     """
 
     def setUp(self):
-        self.valid_prompt_1 = """You are an isolated Subagent for DEAP01-spec-core.
+        checklist = "\n".join(f"- {row}" for row in _corpus_requirements())
+        self.valid_prompt_1 = f"""You are an isolated Subagent for DEAP01-spec-core.
 Repository Classification: UPSTREAM_SPEC_CORE_COMPILER
 Target: scripts/dispatch_subagent.py
 
@@ -253,9 +273,12 @@ Mandatory Instructions:
 3. Report any defects using `gh issue create` or `glab issue create`.
 4. Run validation checks.
 
+Normative Pre-Flight Checklist (verbatim from rules/subagent-dispatch-standards.md):
+{checklist}
+
 PROCEED
 """
-        self.valid_prompt_2 = """You are an isolated Validator Subagent for DEAP01-spec-core.
+        self.valid_prompt_2 = f"""You are an isolated Validator Subagent for DEAP01-spec-core.
 Repository Classification: UPSTREAM_SPEC_CORE_COMPILER
 Target: docs/designs/feat-01-solution.md
 
@@ -263,6 +286,9 @@ Instructions:
 1. Step 1: Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` as your very first step.
 2. Verify that all structural identifiers in FEAT-02 match codebase definitions.
 3. File issues using `gh issue create` and `glab issue create` if discrepancies found.
+
+Normative Pre-Flight Checklist (verbatim from rules/subagent-dispatch-standards.md):
+{checklist}
 
 PROCEED
 """

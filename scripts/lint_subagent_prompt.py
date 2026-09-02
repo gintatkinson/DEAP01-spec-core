@@ -8,6 +8,8 @@ Validates agent prompt text against canonical DEAP01-spec-core invariants:
 3. Mandatory defect filing directive supporting both 'gh issue create' and 'glab issue create'.
 4. Mandatory 'PROCEED' authorization token.
 5. Zero truncation/summarization markers and zero forbidden issue close commands.
+6. Corpus-sourced mandate fidelity (six pre-flight Requirements verbatim from
+   rules/subagent-dispatch-standards.md, coverage 100 percent).
 
 Usage:
     python3 scripts/lint_subagent_prompt.py <file_or_string>
@@ -19,6 +21,67 @@ import os
 import re
 import argparse
 from typing import List
+
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+SUBDAGENT_DISPATCH_STANDARDS_PATH = os.path.join(
+    PROJECT_ROOT, "rules", "subagent-dispatch-standards.md"
+)
+
+
+def load_mandate_requirements(rules_path: str = SUBDAGENT_DISPATCH_STANDARDS_PATH):
+    """
+    Parse the six pre-flight checklist Requirement cells verbatim from the rules corpus.
+
+    Returns:
+        (requirements, error) where requirements is the list of verbatim Requirement
+        strings, or None with a fail-closed error message when the corpus file is
+        unreadable or contains no parseable Requirements at gate time.
+    """
+    try:
+        with open(rules_path, "r", encoding="utf-8") as f:
+            rules_text = f.read()
+    except OSError as exc:
+        return None, f"mandatory rules corpus unreadable at gate time: {rules_path} ({exc})"
+    requirements = []
+    for line in rules_text.splitlines():
+        if re.match(r"^\|\s*\d+\.\s", line):
+            cells = [c.strip() for c in line.split("|")]
+            if len(cells) > 3 and cells[2]:
+                requirements.append(cells[2])
+    if not requirements:
+        return None, f"mandatory rules corpus contains no parseable pre-flight Requirements: {rules_path}"
+    return requirements, None
+
+
+def check_mandate_fidelity(prompt_text: str, rules_path: str = SUBDAGENT_DISPATCH_STANDARDS_PATH):
+    """
+    Corpus-sourced mandate fidelity gate.
+
+    Runtime-parses the six pre-flight Requirements verbatim from
+    rules/subagent-dispatch-standards.md and computes coverage = present/total
+    over the whitespace-normalized payload. Fails closed when the corpus file
+    cannot be read at gate time.
+
+    Returns:
+        (ok, coverage, missing, error): ok is False when any Requirement is
+        absent from the payload or when the corpus is unreadable.
+    """
+    if not prompt_text or not isinstance(prompt_text, str) or not prompt_text.strip():
+        return False, 0.0, [], "prompt payload is empty or whitespace-only"
+    requirements, gate_error = load_mandate_requirements(rules_path)
+    if gate_error:
+        return False, 0.0, [], gate_error
+    normalized_prompt = re.sub(r"\s+", " ", prompt_text).strip()
+    missing = [
+        req for req in requirements
+        if re.sub(r"\s+", " ", req).strip() not in normalized_prompt
+    ]
+    coverage = (len(requirements) - len(missing)) / len(requirements)
+    if missing:
+        return False, coverage, missing, None
+    return True, coverage, [], None
 
 
 def lint_subagent_prompt(prompt_text: str) -> List[str]:
@@ -33,6 +96,8 @@ def lint_subagent_prompt(prompt_text: str) -> List[str]:
     d) Mandatory `PROCEED` authorization token.
     e) Untruncated payload (no `[...]`, `[summarized]`, etc.).
     f) Zero forbidden issue closures (`gh issue close`, `glab issue close`).
+    g) Corpus-sourced mandate fidelity (all six pre-flight Requirements verbatim
+       from rules/subagent-dispatch-standards.md, coverage 100 percent).
     """
     errors: List[str] = []
 
@@ -118,7 +183,17 @@ def lint_subagent_prompt(prompt_text: str) -> List[str]:
     if not has_proceed:
         errors.append("Prompt missing mandatory 'PROCEED' authorization token.")
 
-    # Check (e): Truncation / summarization indicators
+    # Check (e): Truncation / summarization indicators.
+    # The corpus-quoted pre-flight Requirement rows are masked out of the scan so
+    # that verbatim mandate text (e.g. "Zero `[...]`, `[summarized]`, or
+    # `[truncated]` markers") is never itself read as a truncation indicator.
+    truncation_scan_text = re.sub(r"\s+", " ", prompt_text).strip()
+    requirements, _mandate_corpus_error = load_mandate_requirements()
+    if requirements:
+        for req_text in requirements:
+            truncation_scan_text = truncation_scan_text.replace(
+                re.sub(r"\s+", " ", req_text).strip(), " "
+            )
     truncation_patterns = [
         (r'\[\s*\.\.\.\s*\]', "elided ellipsis '[...]'"),
         (r'\[\s*summarized?\s*\]', "'[summarized]'"),
@@ -127,7 +202,7 @@ def lint_subagent_prompt(prompt_text: str) -> List[str]:
         (r'\btruncated\s+(?:prompt|instructions?|directives?|payload)\b', "truncated prompt marker"),
     ]
     for pat, desc in truncation_patterns:
-        if re.search(pat, prompt_text, re.IGNORECASE):
+        if re.search(pat, truncation_scan_text, re.IGNORECASE):
             errors.append(f"Prompt payload contains forbidden truncation/summarization indicator: {desc}.")
 
     # Check (f): Forbidden issue closure commands
@@ -135,6 +210,20 @@ def lint_subagent_prompt(prompt_text: str) -> List[str]:
         errors.append(
             "Prompt payload contains forbidden 'gh/glab issue close' directive (issue closure is reserved for Product Owner review)."
         )
+
+    # Check (g): Corpus-sourced mandate fidelity (rules/subagent-dispatch-standards.md).
+    # Every one of the six pre-flight Requirements must be present verbatim
+    # (whitespace-normalized). Coverage below 100 percent fails, naming the missing
+    # Requirements. An unreadable corpus at gate time fails closed.
+    fidelity_ok, fidelity_coverage, fidelity_missing, fidelity_error = check_mandate_fidelity(prompt_text)
+    if fidelity_error:
+        errors.append(f"Mandate fidelity gate failed closed: {fidelity_error}")
+    elif not fidelity_ok:
+        for req in fidelity_missing:
+            errors.append(
+                f"Mandate fidelity violation: missing mandatory Requirement verbatim from "
+                f"rules/subagent-dispatch-standards.md: '{req}' (coverage {fidelity_coverage:.0%})"
+            )
 
     return errors
 
@@ -159,7 +248,17 @@ def validate_subagent_preflight(prompt_text: str) -> tuple[bool, str]:
     if not prompt_text or not isinstance(prompt_text, str) or not prompt_text.strip():
         return False, "ERROR: Prompt rejected: prompt payload is empty or whitespace-only"
 
-    # Check for truncation/summarization markers
+    # Check for truncation/summarization markers.
+    # The corpus-quoted pre-flight Requirement rows are masked out of the scan so
+    # that verbatim mandate text (e.g. "Zero `[...]`, `[summarized]`, or
+    # `[truncated]` markers") is never itself read as a truncation indicator.
+    truncation_scan_text = re.sub(r"\s+", " ", prompt_text).strip()
+    requirements, _mandate_corpus_error = load_mandate_requirements()
+    if requirements:
+        for req_text in requirements:
+            truncation_scan_text = truncation_scan_text.replace(
+                re.sub(r"\s+", " ", req_text).strip(), " "
+            )
     truncation_patterns = [
         (r'\[\s*\.\.\.\s*\]', "elided ellipsis '[...]'"),
         (r'\[\s*summarized?\s*\]', "'[summarized]'"),
@@ -168,7 +267,7 @@ def validate_subagent_preflight(prompt_text: str) -> tuple[bool, str]:
         (r'\btruncated\s+(?:prompt|instructions?|directives?|payload)\b', "truncated prompt marker"),
     ]
     for pat, desc in truncation_patterns:
-        if re.search(pat, prompt_text, re.IGNORECASE):
+        if re.search(pat, truncation_scan_text, re.IGNORECASE):
             return False, f"ERROR: Prompt rejected: prompt truncation/summarization detected ({desc})"
 
     # Check for forbidden issue closure commands

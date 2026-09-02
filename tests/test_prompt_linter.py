@@ -3,7 +3,10 @@
 Unit tests for Subagent Prompt Payload Linter (`scripts/lint_subagent_prompt.py`).
 """
 
+import contextlib
+import io
 import os
+import re
 import sys
 import tempfile
 import subprocess
@@ -21,20 +24,44 @@ from scripts.lint_subagent_prompt import lint_subagent_prompt
 class TestSubagentPromptLinter(unittest.TestCase):
     """Test suite for subagent prompt linting rules and CLI."""
 
-    def setUp(self):
-        self.valid_prompt = """
-You are a context-isolated Feature Implementation Worker for DEAP01-spec-core.
+    RULES_PATH = os.path.join(PROJECT_ROOT, "rules", "subagent-dispatch-standards.md")
 
-Task: Implement FEAT-01 (Flight Guidance Computer).
+    @staticmethod
+    def _corpus_requirements():
+        """Parse the six Requirement cells of the pre-flight checklist body verbatim."""
+        with open(TestSubagentPromptLinter.RULES_PATH, "r", encoding="utf-8") as f:
+            lines = f.read().splitlines()
+        requirements = []
+        for line in lines:
+            if re.match(r"^\|\s*\d+\.\s", line):
+                cells = [c.strip() for c in line.split("|")]
+                if len(cells) > 3 and cells[2]:
+                    requirements.append(cells[2])
+        return requirements
+
+    @staticmethod
+    def _build_prompt(checklist_rows):
+        checklist = "\n".join(f"- {row}" for row in checklist_rows)
+        return f"""
+You are a context-isolated Feature Implementation Worker for DEAP-spec-core.
+Repository Classification: UPSTREAM_SPEC_CORE_COMPILER
+
+Task: Implement FEAT-01.
+
+Normative Pre-Flight Checklist (verbatim from rules/subagent-dispatch-standards.md):
+{checklist}
 
 Instructions:
-1. Step 1: Execute `view_file` on `skills/spec-orchestrator/SKILL.md` before performing any actions.
+1. Step 1: Execute `view_file` on `skills/spec-orchestrator/SKILL.md` as your very first step before performing any actions.
 2. Implement the logical operations and unit tests for FEAT-01.
 3. If defects or anomalies are detected, record them using `gh issue create` (GitHub) or `glab issue create` (GitLab).
 4. Run validation checks.
 
 PROCEED
 """
+
+    def setUp(self):
+        self.valid_prompt = self._build_prompt(self._corpus_requirements())
 
     def test_valid_prompt_passes(self):
         """Verify that a compliant prompt payload passes with zero lint errors."""
@@ -198,6 +225,102 @@ PROCEED
         res = subprocess.run(cmd, capture_output=True, text=True)
         self.assertNotEqual(res.returncode, 0)
         self.assertIn("FAILED", res.stderr)
+
+
+class TestMandateFidelityGate(unittest.TestCase):
+    """Corpus-sourced mandate fidelity gate tests (rules/subagent-dispatch-standards.md)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.requirements = TestSubagentPromptLinter._corpus_requirements()
+
+    @staticmethod
+    def _build(payload_rows):
+        return TestSubagentPromptLinter._build_prompt(payload_rows)
+
+    def test_mandate_fidelity_accepts_all_six_requirements_verbatim(self):
+        """A payload containing all six Requirements verbatim must pass with zero lint errors."""
+        payload = self._build(self.requirements)
+        errors = lint_subagent_prompt(payload)
+        self.assertEqual(errors, [])
+
+    def test_mandate_fidelity_rejects_dropped_paraphrased_requirements_naming_them(self):
+        """Dropping two Requirements and paraphrasing them must fail, naming exactly those two."""
+        dropped = [
+            "Contains verbatim repository classification",
+            "Max 1 Epic, Feature, Story, or Use Case",
+        ]
+        paraphrased = [
+            "States the repository class of the codebase",
+            "Work on a single specification item at a time",
+        ]
+        rows = [r for r in self.requirements if r not in dropped] + paraphrased
+        payload = self._build(rows)
+        errors = lint_subagent_prompt(payload)
+        fidelity_errors = [e for e in errors if "mandate fidelity violation" in e.lower()]
+        self.assertEqual(len(fidelity_errors), 2)
+        for expected in dropped:
+            self.assertTrue(
+                any(expected in e for e in fidelity_errors),
+                f"missing Requirement '{expected}' not named in fidelity errors: {fidelity_errors}",
+            )
+
+    def test_mandate_fidelity_fails_closed_when_rules_corpus_unreadable(self):
+        """The gate must fail closed when rules/subagent-dispatch-standards.md cannot be read."""
+        backup_path = TestSubagentPromptLinter.RULES_PATH + ".unittest-backup"
+        os.rename(TestSubagentPromptLinter.RULES_PATH, backup_path)
+        try:
+            errors = lint_subagent_prompt(self._build(self.requirements))
+            self.assertTrue(
+                any("subagent-dispatch-standards" in e for e in errors),
+                f"expected fail-closed error naming the rules corpus, got: {errors}",
+            )
+        finally:
+            os.rename(backup_path, TestSubagentPromptLinter.RULES_PATH)
+        sane_errors = lint_subagent_prompt(self._build(self.requirements))
+        self.assertEqual(sane_errors, [])
+
+    def test_pre_dispatch_abort_path_halts_with_nonzero_exit(self):
+        """A mocked outgoing payload failing the fidelity gate must HALT pre-write-out with non-zero exit."""
+        from unittest import mock
+
+        from scripts import dispatch_subagent
+
+        laundered_payload = """
+You are a context-isolated subagent operating under the DEAP Engineering Framework.
+
+Role: Worker
+Subagent Type: code_modifier_worker
+Repository Classification: UPSTREAM_SPEC_CORE_COMPILER
+Target: src/module.py
+
+Mandatory Instructions:
+1. Step 1: Execute `view_file` on `skills/spec-orchestrator/SKILL.md` as your very first step before executing any file edits, commands, or tools.
+2. Micro-Task Scope: you may condense the instructions to save tokens.
+3. Defect Reporting: use `gh issue create` (GitHub) or `glab issue create` (GitLab).
+
+PROCEED
+"""
+        out_path = os.path.join(tempfile.gettempdir(), "dispatch_gate_test_out.md")
+        if os.path.exists(out_path):
+            os.remove(out_path)
+        stderr_buf = io.StringIO()
+        with mock.patch.object(dispatch_subagent, "generate_subagent_prompt", return_value=laundered_payload):
+            with contextlib.redirect_stderr(stderr_buf):
+                with self.assertRaises(SystemExit) as cm:
+                    dispatch_subagent.dispatch_subagent(
+                        skill="skills/spec-orchestrator/SKILL.md",
+                        target="src/module.py",
+                        output=out_path,
+                    )
+        self.assertNotEqual(cm.exception.code, 0)
+        self.assertIn("HALT", stderr_buf.getvalue())
+        self.assertFalse(
+            os.path.exists(out_path),
+            "payload file must not be written when the mandate fidelity gate HALTs pre-dispatch",
+        )
+        if os.path.exists(out_path):
+            os.remove(out_path)
 
 
 if __name__ == "__main__":

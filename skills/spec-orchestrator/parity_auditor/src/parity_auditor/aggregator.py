@@ -20,7 +20,7 @@ seventh, and only because one reader happened to hold all seven in mind at once.
 
 import os
 from dataclasses import dataclass, field
-from typing import Dict, List, Sequence
+from typing import Dict, List, Optional, Sequence
 
 from .core.findings import Finding, unmigrated_count
 from .core.workspace import WorkspaceRepository
@@ -157,10 +157,26 @@ def collect(workspace_paths: Sequence[str]) -> AggregateReport:
         corpus.append(label)
 
         repo = WorkspaceRepository(workspace_dir=abs_path)
+        dispatch_payload_text: Optional[str] = None
+        dispatch_payload_path = os.environ.get("DISPATCH_PAYLOAD_PATH")
+        if dispatch_payload_path and os.path.isfile(os.path.abspath(dispatch_payload_path)):
+            try:
+                with open(
+                    os.path.abspath(dispatch_payload_path), "r", encoding="utf-8"
+                ) as payload_file:
+                    dispatch_payload_text = payload_file.read()
+            except OSError:
+                dispatch_payload_text = None
         findings: List[str] = []
         for validator_cls in AGGREGATING_VALIDATORS:
             try:
-                findings.extend(validator_cls().validate(repo))
+                validator_kwargs: Dict[str, str] = {}
+                if (
+                    validator_cls is DispatchPreambleValidator
+                    and dispatch_payload_text is not None
+                ):
+                    validator_kwargs["prompt_text"] = dispatch_payload_text
+                findings.extend(validator_cls().validate(repo, **validator_kwargs))
             except Exception as exc:  # a broken workspace must not abort the corpus
                 findings.append(
                     Finding(

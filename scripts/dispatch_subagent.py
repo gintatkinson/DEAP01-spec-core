@@ -25,15 +25,29 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 try:
-    from scripts.lint_subagent_prompt import lint_prompt_text, lint_subagent_prompt, validate_subagent_preflight
+    from scripts.lint_subagent_prompt import (
+        lint_prompt_text,
+        lint_subagent_prompt,
+        validate_subagent_preflight,
+        check_mandate_fidelity,
+        load_mandate_requirements,
+    )
 except ImportError:
     try:
-        from lint_subagent_prompt import lint_prompt_text, lint_subagent_prompt, validate_subagent_preflight
+        from lint_subagent_prompt import (
+            lint_prompt_text,
+            lint_subagent_prompt,
+            validate_subagent_preflight,
+            check_mandate_fidelity,
+            load_mandate_requirements,
+        )
     except ImportError:
         # Fallback if imported from another context
         lint_prompt_text = None
         lint_subagent_prompt = None
         validate_subagent_preflight = None
+        check_mandate_fidelity = None
+        load_mandate_requirements = None
 
 
 DEFAULT_CLASSIFICATION = "UPSTREAM_SPEC_CORE_COMPILER"
@@ -121,6 +135,17 @@ def construct_prompt_template(
     if instructions and instructions.strip():
         extra_block = f"\nTask Details:\n{instructions.strip()}\n"
 
+    checklist_block = ""
+    if load_mandate_requirements is not None:
+        requirements, requirement_error = load_mandate_requirements()
+        if requirements:
+            checklist_lines = [f"- {req}" for req in requirements]
+            checklist_block = (
+                "\nNormative Pre-Flight Checklist (verbatim from `rules/subagent-dispatch-standards.md`):\n"
+                + "\n".join(checklist_lines)
+                + "\n"
+            )
+
     prompt = f"""You are a context-isolated subagent operating under the DEAP Engineering Framework.
 
 Role: {role}
@@ -133,8 +158,8 @@ Mandatory Instructions:
 2. Repository Scope: You are operating within classification `{classification}`. Maintain all repository invariants and domain boundaries.
 3. Micro-Task Scope: Focus exclusively on target `{target}` within a single-item micro-task scope.
 4. Engineering Standards: Follow test-driven development (RED-GREEN-REFACTOR) cycle discipline and strict verification before completion.
-5. Defect Reporting: If any defects, anomalies, or bugs are detected, record them using `gh issue create` (GitHub) or `glab issue create` (GitLab). Issue closure is strictly reserved for Product Owner review.{extra_block}
-
+5. Defect Reporting: If any defects, anomalies, or bugs are detected, record them using `gh issue create` (GitHub) or `glab issue create` (GitLab). Issue closure is strictly reserved for Product Owner review.
+{checklist_block}{extra_block}
 PROCEED
 """
     return prompt
@@ -230,6 +255,22 @@ def dispatch_subagent(
         instructions=instructions,
         base_dir=base_dir,
     )
+
+    if check_mandate_fidelity is not None:
+        fidelity_ok, fidelity_coverage, fidelity_missing, fidelity_error = check_mandate_fidelity(prompt_text)
+        if not fidelity_ok:
+            if fidelity_error:
+                fidelity_detail = fidelity_error
+            else:
+                fidelity_detail = "missing mandatory Requirements: " + "; ".join(
+                    f"'{req}'" for req in fidelity_missing
+                )
+            print(
+                f"HALT: mandate fidelity gate rejected outgoing payload "
+                f"(coverage {fidelity_coverage:.0%}): {fidelity_detail}",
+                file=sys.stderr,
+            )
+            sys.exit(2)
 
     output_path = output
     if not output_path:
