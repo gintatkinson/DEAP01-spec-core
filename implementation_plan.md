@@ -192,3 +192,64 @@ Work packages:
 - A4 (default: as §2.2 WP-C): confirm the residual split table (common aviation → parent; UAS-specific → child; vehicle numerics → customer schema only).
 
 Approval required: reply PROCEED (or request plan changes) to authorize execution. On approval, all work packages run continuously to completion per AGENTS.md Continuous Execution Gate.
+
+---
+
+## Phase 4 — Documentation Drift Audit & Installation/Run-Instruction Correction (docs-only atomic pass)
+
+> Status: AWAITING USER APPROVAL. Evidence captured in session 2026-09-02 (read-only audit complete; zero doc edits applied yet).
+> Scope: documentation-only. Targets: core `README.md`, `docs/operations/yang-compiler-guide.md`, `AGENTS.md`/`.agents/AGENTS.md` entry-point command sections (core + domain clones), parent/child `README.md` + `AGENTS.md` entry points. NO script/validator/non-doc file modified in this pass. Commits: core `docs: align installation and run instructions with current pipeline behavior`; parent/child `docs: sync installation and run instructions with core pipeline behavior` (neutral, no auto-close keywords). Push per repo; `git diff origin/main` empty per repo.
+
+### 4.1 Verified tool ground truth (empirical, this session)
+
+- `python3 scripts/reconcile_backlog.py --help` exit 0: flags `docs_dir [--provider {github,gitlab,jira,auto}] [--gitlab-url] [--project] [--jira-*] [--offline] [--manifest|--compiler-manifest] [--upstream]`. **No `--dry-run` (exit 2 "unrecognized arguments"), no `--mock` (exit 2; zero `--mock` in source).**
+- `python3 scripts/reconcile_backlog.py --offline --upstream` exit 0: "Pre-reconciliation linter validation passed… Upstream compiler backlog reconciliation: 0 passed, 0 failed… Backlog reconciliation complete." (No Document Metadata warnings emitted for target docs.)
+- `python3 scripts/verify_downstream_baseline.py --no-domain` exit 0 (Checks 10–19 pass; "Master core / upstream repository detected"). Side effect observed: moves local tag `restoration-point`; tag restored to `93757fb` after run; working tree re-verified clean.
+- `python3 skills/spec-orchestrator/scripts/verify_model_coverage.py --spec-only --allow-missing-specs --workspace .` exit 0 — prints `[*] UPSTREAM COMPILER REPOSITORY MODE ENGAGED - skipped stages: missing-local-specification …, empty-codebase Schema Mapping, empty-codebase Profile Scoping, empty-codebase Test Completeness.` (verify_model_coverage.py is a wrapper calling parity_auditor.cli.main; `--spec-only/--allow-missing-specs/--workspace` exist on parity_auditor cli.)
+- `python3 scripts/compile_yang.py --help` output matches docs/operations/yang-compiler-guide.md §2 block **verbatim** (usage + `-i/--input`, `-o/--output` aliases). No drift in that file's compiler commands.
+- `python3 scripts/compile_sysml.py --help`: `--reverse-sync`, `--docs/--docs-dir`, `--schema/--schema-path`, `--out/--output` (default `.pipeline/schema.sysml`), `--digest`, `--stpa`, `--stpa-transpile`, … — README §7.1 flags valid.
+- `python3 skills/spec-orchestrator/scripts/sysmlv2_ingest.py --help`: positional `schema_pos` + `--schema`, `--format`, `--out` (default `.pipeline/schema.sysml`), `--digest` — README §7.1 flag `--schema` valid.
+- `python3 skills/spec-orchestrator/scripts/bootstrap_tracker_labels.py --help` exit 0: `--provider {auto,github,gitlab} --repo --project --gitlab-url --token --dry-run --offline` — `--dry-run` valid here (README does not document its flags; no change needed).
+- `bash skills/spec-orchestrator/scripts/create_issue.sh` (no args) → exit 1, `line 6: $1: unbound variable` (gated; `set -euo pipefail`). Usage: `./create_issue.sh <body-file> <label> <title> <repo>`.
+- `bash scripts/install_pipeline.sh --help` exit 0 (usage shows `-p/--provider`, `-t/--tracker`, `--gitlab-url`, `--gitlab-group`, `--jira-*`, `-h/--help`; positional TARGET_DIR default `.`, accepted at any position via default case). README `<target_dir>` first form valid.
+- `python3 -m parity_auditor` from repo root → **exit 1** `No module named parity_auditor.__main__; 'parity_auditor' is a package and cannot be directly executed` (stale `UNKNOWN.egg-info` in `skills/spec-orchestrator/parity_auditor/`). With `PYTHONPATH=skills/spec-orchestrator/parity_auditor/src` → exit 0, `usage: __main__.py …` (`__main__.py` exists). → needs-tooling-decision T2.
+- HAZARD (T1): `python3 scripts/setup_git_hooks.py --help` does NOT print help — the script ignores all arguments and executed the hook install (appended 12 whitelist entries to `.gitignore`, staged ~120 `.pipeline/diagnostics/*.json`, created `.git/hooks/pre-commit`). Footprint fully restored by coordinator (`git restore --staged .`, `git restore .gitignore`, `rm .git/hooks/pre-commit`); workspace re-verified clean (HEAD `75556ce`).
+- Structures: core `.pipeline/` has NO `lineage.json` (correct); parent/child have it — parent `{"self":"DEAP-avionic-flight-safety","tier":1,"role":"PARENT_DOMAIN_DISTRIBUTION_TEMPLATE","upstream":"gintatkinson/DEAP01-spec-core","upstream_sync_ref":"cb2a223",...}`, child `{"self":"DEAP-uas-infrastructure-safety","tier":2,"parent":"gintatkinson/DEAP-avionic-flight-safety",...}` — undocumented in either domain README.
+- Core `docs/conops/`: `.gitkeep` only (strict clean — correct). Parent/child `docs/conops/`: `.gitkeep` + `README.md` (exemption-consistent).
+- Core `docs/domain/` absent (correct); parent/child `docs/domain/` = `DOMAIN_SCOPE.md` + `SYNTHESIS_RESIDUALS.md` on disk, undocumented in READMEs.
+- Core `schema/`: `.gitkeep` only; parent/child `schema/` also contain `README.md`. `docs/architecture/blueprints/DEAP_MODEL.sysml` absent in ALL THREE repos. `tests/test_uas_safety_governance.py` absent in all three. Core has no `docs/safety/`; parent/child do.
+- Core `.agents/skills` IS the documented tracked symlink (`../skills`). Parent/child `.agents/skills` are stale PHYSICAL copies (out of doc scope → T3). `skills/spec-orchestrator/resources/` (canonical templates) present in core + child, ABSENT in parent (T4).
+- Parent clone: remote `origin` = `gintatkinson/DEAP-avionic-flight-safety` (correct), up to date with `origin/main`, but carries a pre-existing staged-uncommitted `tests/test_canonical_templates.py` (not touched by this pass — user decision). Child clone: `origin` = `gintatkinson/DEAP-uas-infrastructure-safety`, clean, up to date.
+
+### 4.2 DRIFT REGISTER (classification: doc-wrong = D, tooling hazard = T, needs-tooling-decision = NTD)
+
+| # | Repo | File:Line | Doc says | Tool/disk reality | Class | Proposed correction |
+| --- | --- | --- | --- | --- | --- | --- |
+| R1 | core | README.md:272 | "Offline / Mock Mode: Specify `--mock`" | no `--mock` flag; `--offline` exists (exit 2 probe) | D | Replace sentence: offline mode = `--offline` (add `--upstream` for the compiler repo itself) |
+| R2 | core(+parent,child) | README.md:289/293/295 | `--provider gitlab --dry-run` "Dry-Run (No remote mutation)" | flag removed/never existed; `--offline` is the no-remote-mutation mode | D | Use `--offline`; add `--offline --upstream` example |
+| R3 | core(+parent,child) | README.md:324 | SSOT = `docs/architecture/blueprints/DEAP_MODEL.sysml` or `schema/*.sysml` | neither exists; SSOT artifact = `.pipeline/schema.sysml` (default `--out` of ingest/compile) derived by ingestion | D | Rewrite sentence: SSOT `.pipeline/schema.sysml`, derived from user-provided schema via `sysmlv2_ingest.py` / `compile_sysml.py` |
+| R4 | core(+parent,child) | README.md:330,333 | example `--schema docs/architecture/blueprints/DEAP_MODEL.sysml` | dangling path (absent everywhere) | D | Placeholder `<model>.sysml` + one-line "model supplied by customer schema; no concrete model ships upstream" |
+| R5 | core | README.md:64–83 | Repository Tree titled `DEAP-uas-infrastructure-safety/`, `docs/safety/`, `schema/README.md`, `tests/test_uas_safety_governance.py` | none exist in core | D | Retitle tree as installed downstream workspace example; correct `schema/` + `tests/` entries |
+| R5p/5c | parent/child | README.md tree block | same block; parent titled with child repo; `test_uas_safety_governance.py` absent in both (child `schema/README.md` + `docs/safety/` DO exist) | D | Per-repo minimal entry fixes (title for parent; test line both) |
+| R6 | core | README.md:539 | `"$schema": "https://deap.engine/schemas/…"` fabricated URI | no such registry | D | Mark illustrative (small prose note) |
+| R7 | core(+parent,child) | README.md:200/204/206 | "Bootstrap Tracker Labels … running `python3 scripts/reconcile_backlog.py`" | reconcile does not bootstrap labels; `bootstrap_tracker_labels.py` does (`--dry-run`/`--offline` verified) | D | Point at `bootstrap_tracker_labels.py --dry-run` |
+| R8 | core | yang-compiler-guide.md §6/§7 | `app_flutter/` commands | `app_flutter/` exists only in downstream workspaces | D | Additive note: downstream-consumer path |
+| R9 | parent | AGENTS.md:112 | `--repo gintatkinson/DEAP-spec-core` | repo does not exist; correct `gintatkinson/DEAP01-spec-core` (child AGENTS.md:112 + core correct) | D | Fix repo name |
+| R10 | parent | README.md:135–141 | Remote bootstrap clones `DEAP-uas-infrastructure-safety` (child) | parent identity = `DEAP-avionic-flight-safety` | D | Clone parent repo in all three lines |
+| R11 | parent,child | README.md (structure section) | no mention of lineage/domain dirs | `.pipeline/lineage.json` + `docs/domain/` exist on disk | D | Additive documentation-on-source note (contents verified) |
+| R12 | core | README.md (no normative sentence) | no schema-contract sentence | schema/ = machine schemas only; normative docs → customer `docs/conops`/`docs/safety`; `.pipeline/schema.sysml` derived via ingestion | D | Additive 3-sentence contract block under §4, plus one-line conops landing behavior (upstream strict-clean; downstream allows MISSION_INTENT.md/CONOPS.md per `tests/test_canonical_templates.py` exemption) |
+| T1 | core | scripts/setup_git_hooks.py | n/a (doc fine) | argblind: any args (incl `--help`) execute install + `git add` side effects | NTD | Upstream defect issue + one-line README §5.3 warning; no script patch |
+| T2 | core | SKILL.md:237 | `python3 -m parity_auditor` gate | fails from clean root (stale egg-info); works via PYTHONPATH/install | NTD | README/§7 note + SKILL.md amendment (skills/ outside doc targets — requires approval) |
+| T3 | parent,child | `.agents/skills` | documented symlink reference form (rules/document-references.md; core P3) | physical divergent copies on disk in both domain repos | NTD | Out of doc scope; flag for tooling sync pass |
+| T4 | parent | `skills/spec-orchestrator/resources/` | canonical templates (present core+child) | missing in parent | NTD | Out of doc scope; flag |
+| T5 | parent clone | staged `tests/test_canonical_templates.py` | n/a | pre-existing uncommitted staged file from prior session | NTD | Left untouched; user decision (do not commingle) |
+
+### 4.3 Execution note (delegation lock)
+
+This session's tool list exposes NO context-isolated subagent dispatch capability (no task/dispatch tool). Per `.agents/AGENTS.md` § Mandatory Subagent Dispatch / Strict Coordinator Tool Locking (issue #312 — documentation repair is a repository write), coordinator direct writes are forbidden and absence of the capability is a HALT/escalate blocker, not a licence to write directly. Everything above is therefore registered and awaiting: (a) plan approval, (b) user decision on the delegation mechanism (runtime exposing dispatch, `scripts/dispatch_subagent.py` subprocess flow, or an explicit recorded waiver for this documentation-only pass).
+
+### 4.4 Verification battery (runs after approved edits; evidence to be pasted into final report)
+
+- core: `python3 scripts/reconcile_backlog.py --offline --upstream` (expect exit 0, zero new Document Metadata violations for edited docs; README/yang guide have no metadata gate — stated); `python3 skills/spec-orchestrator/scripts/verify_model_coverage.py --spec-only --allow-missing-specs --workspace .` exit 0 + upstream-mode notice; `python3 scripts/verify_downstream_baseline.py --no-domain` exit 0 (restore `restoration-point` tag to pre-run value afterwards); `python3 scripts/compile_yang.py --help` unchanged.
+- parent/child: `python3 scripts/reconcile_backlog.py --offline --upstream` (capture, incl. any domain-mode notice), `verify_downstream_baseline.py --no-domain` (same tag restore), parity wrapper `--spec-only --allow-missing-specs --workspace .` (capture exit; template findings recorded, not auto-fixed).
+- Each repo: commit (messages above, neutral), push, `git diff origin/main` empty, paste push output + shas. Walkthrough + final report per Atomic Work gate. Parent remains with its unrelated staged file untouched.
