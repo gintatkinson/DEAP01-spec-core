@@ -98,7 +98,7 @@ $$
 \end{aligned}
 $$
 
-Where and Operational Parameters:
+- Parameter Definitions & Engineering Units:
 
 | Symbol / Variable | Coordinate Frame | Description | Engineering Unit |
 | :--- | :--- | :--- | :--- |

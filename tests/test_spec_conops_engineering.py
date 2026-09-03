@@ -95,34 +95,34 @@ class TestSpecConopsEngineering(unittest.TestCase):
 
         # 12 ConOps unit files
         conops_units = [
-            "01_scope.md",
-            "02_standards.md",
-            "03_deficiencies.md",
-            "04_capabilities.md",
-            "05_lifecycle.md",
-            "06_sora.md",
-            "07_uaf_activities.md",
-            "08_optx_matrix.md",
-            "09_environments.md",
-            "10_scenarios.md",
-            "11_maintenance.md",
-            "12_emergency_matrix.md",
+            "01_METADATA_AND_OVERVIEW.md",
+            "02_DEFICIENCIES_AND_MOTIVATION.md",
+            "03_PROPOSED_CAPABILITIES.md",
+            "04_USER_CLASSES_AND_STAKEHOLDERS.md",
+            "05_AIRSPACE_AND_SORA_RISK.md",
+            "06_UAF_OPERATIONAL_ACTIVITIES.md",
+            "07_OPTX_EXCHANGES.md",
+            "08_ENVIRONMENTAL_MIL_STD_810H.md",
+            "09_SCENARIOS_AND_TIMELINES.md",
+            "10_MAINTENANCE_AND_GSE_SUPPORT.md",
+            "11_IMPACTS_AND_TRADE_STUDIES.md",
+            "12_EMERGENCY_DECISION_MATRIX.md",
         ]
         for unit in conops_units:
             self.assertIn(unit, content, f"Missing ConOps unit '{unit}' in skill documentation")
 
         # 10 Mission Intent unit files
         mission_units = [
-            "01_intent.md",
-            "02_metl.md",
-            "03_moe_mop.md",
-            "04_threats.md",
-            "05_pace.md",
-            "06_roe.md",
-            "07_airspace.md",
-            "08_gng.md",
-            "09_bingo.md",
-            "10_tags.md",
+            "01_COMMANDERS_INTENT.md",
+            "02_MISSION_ESSENTIAL_TASK_LIST.md",
+            "03_INCOSE_MOE_MOP_MATH.md",
+            "04_MULTI_DOMAIN_THREAT_MATRIX.md",
+            "05_PACE_C2_PLAN.md",
+            "06_ROE_SAFETY_INTERLOCKS.md",
+            "07_AIRSPACE_GEOZONES.md",
+            "08_GO_NO_GO_MATRIX.md",
+            "09_BINGO_ENERGY_MATH.md",
+            "10_OPERATIONAL_ALLOCATION_TAGS.md",
         ]
         for unit in mission_units:
             self.assertIn(unit, content, f"Missing Mission Intent unit '{unit}' in skill documentation")
@@ -187,6 +187,12 @@ class TestSpecConopsEngineering(unittest.TestCase):
         self.assertIn("NATO STANAG 4586", content)
         self.assertIn("MIL-STD-882E", content)
         self.assertIn("JARUS SORA v2.5", content)
+
+        # Modular Unit Storage canonical uppercase filenames
+        self.assertIn("01_METADATA_AND_OVERVIEW.md", content)
+        self.assertIn("12_EMERGENCY_DECISION_MATRIX.md", content)
+        self.assertIn("01_COMMANDERS_INTENT.md", content)
+        self.assertIn("10_OPERATIONAL_ALLOCATION_TAGS.md", content)
 
     def test_orchestrator_phase_0_75_integration(self):
         """Verify spec-orchestrator/SKILL.md integrates Phase 0.75 in lifecycle and diagram."""
@@ -418,8 +424,8 @@ class TestSpecConopsEngineering(unittest.TestCase):
         self.assertIn("Mathematical Sensitivity Analysis Formulation (Trade Study 3)", content)
         self.assertIn(r"E_k(m) &= \frac{1}{2} m v_{\mathrm{term}}^2(m) = \frac{m^2 g}{\rho S C_d}", content)
 
-        # Parameter Tables ("Where and Operational Parameters:")
-        self.assertEqual(content.count("Where and Operational Parameters:"), 3)
+        # Parameter Tables ("- Parameter Definitions & Engineering Units:")
+        self.assertEqual(content.count("- Parameter Definitions & Engineering Units:"), 3)
 
         # KaTeX Rendering Integrity check
         cleaned = re.sub(r"```.*?```|~~~.*?~~~", "", content, flags=re.DOTALL)

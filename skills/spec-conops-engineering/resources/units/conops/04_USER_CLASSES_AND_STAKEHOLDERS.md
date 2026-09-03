@@ -47,7 +47,7 @@ $$
 \end{aligned}
 $$
 
-Where and Operational Parameters:
+- Parameter Definitions & Engineering Units:
 - TLX_composite: Overall weighted composite cognitive workload score on a [0, 100] scale.
 - w_i: Normalized weighting coefficient for dimension i, where the sum of all w_i equals 1.0.
 - S_i: Raw subjective workload rating score for dimension i on a scale of [0, 100].
@@ -80,7 +80,7 @@ t_{\mathrm{daily}} &\le t_{\mathrm{daily\_max}}
 \end{aligned}
 $$
 
-Where and Operational Parameters:
+- Parameter Definitions & Engineering Units:
 - t_shift: Continuous supervisory console duty duration per shift (hr).
 - t_shift_max: Maximum permissible continuous console duty time (t_shift <= 4.0 hr).
 - t_rest: Mandatory rest break duration between consecutive console shifts (min).
@@ -155,7 +155,7 @@ P_{\mathrm{loss}} &\le P_{\mathrm{loss\_max}}
 \end{aligned}
 $$
 
-Where and Operational Parameters:
+- Parameter Definitions & Engineering Units:
 - tau_handoff: Total elapsed duration of the 4-way cryptographic handoff sequence (s).
 - tau_timeout: Maximum allowable timeout window before automatic abort (tau_timeout = 5.0 s).
 - t_RTT: Round-trip transport latency between SecondaryConsole and VehicleController (ms).

@@ -29,6 +29,8 @@ from parity_auditor.validators.conops_completeness_validator import (
     PaceC2LinkPlan,
     calculate_sora_grb_radius,
     calculate_bingo_energy_reserve_ratio,
+    TEMPLATE_PLACEHOLDER_REGEX,
+    _find_unresolved_template_placeholders,
 )
 
 
@@ -1652,7 +1654,282 @@ class TestConOpsAndMissionIntentValidators(unittest.TestCase):
         for term in forbidden_terms:
             self.assertNotIn(term, code.lower(), f"Validator code should be domain-agnostic; found '{term}'.")
 
+    def test_conops_unresolved_template_placeholders_fails(self):
+        """
+        Verify that ConOps containing unresolved template placeholders ({{...}})
+        fails validation with 'conops-unresolved-template-placeholders', reporting
+        exact list of tags and line numbers with CRITICAL severity.
+        Reference Fixes #142.
+        """
+        full_content = _get_valid_conops_content()
+        lines = full_content.splitlines()
+        # Inject placeholder tokens at specific locations
+        lines[54] = "- **System Identifier:** `{{SYSTEM_IDENTIFIER}}`"
+        lines[55] = "- **Operational Domain:** `{{OPERATIONAL_DOMAIN}}`"
+        content_with_placeholders = "\n".join(lines)
+
+        val = ConopsCompletenessValidator()
+        findings = val._validate_conops_text(content_with_placeholders, "docs/conops/CONOPS.md")
+        placeholder_findings = [f for f in findings if f.rule_id == "conops-unresolved-template-placeholders"]
+        self.assertEqual(len(placeholder_findings), 1)
+        finding = placeholder_findings[0]
+
+        # Verify severity and detail attributes
+        self.assertEqual(finding.detail.get("severity"), "CRITICAL")
+        self.assertEqual(finding.detail.get("file"), "docs/conops/CONOPS.md")
+        self.assertIn("{{SYSTEM_IDENTIFIER}}", finding.detail.get("unresolved_tags", []))
+        self.assertIn("{{OPERATIONAL_DOMAIN}}", finding.detail.get("unresolved_tags", []))
+        self.assertIn(55, finding.detail.get("line_numbers", []))
+        self.assertIn(56, finding.detail.get("line_numbers", []))
+
+        # Verify finding message content
+        self.assertIn("{{SYSTEM_IDENTIFIER}}", str(finding))
+        self.assertIn("{{OPERATIONAL_DOMAIN}}", str(finding))
+        self.assertIn("55", str(finding))
+        self.assertIn("56", str(finding))
+
+    def test_mission_intent_unresolved_template_placeholders_fails(self):
+        """
+        Verify that Mission Intent containing unresolved template placeholders ({{...}})
+        fails validation with 'mission-unresolved-template-placeholders', reporting
+        exact list of tags and line numbers with CRITICAL severity.
+        Reference Fixes #142.
+        """
+        full_content = _get_valid_mission_intent_content()
+        lines = full_content.splitlines()
+        # Inject placeholder tokens
+        lines[21] = "The tactical platform {{MISSION_SYSTEM_NAME}} executes {{OPERATIONAL_PURPOSE}}."
+        lines[148] = "| Total Pack Capacity | E_capacity | {{E_CAPACITY_JOULES}} | kJ | Total nominal battery stored energy |"
+        content_with_placeholders = "\n".join(lines)
+
+        val = MissionIntentCompletenessValidator()
+        findings = val._validate_mission_text(content_with_placeholders, "docs/conops/MISSION_INTENT.md")
+        placeholder_findings = [f for f in findings if f.rule_id == "mission-unresolved-template-placeholders"]
+        self.assertEqual(len(placeholder_findings), 1)
+        finding = placeholder_findings[0]
+
+        # Verify severity and detail attributes
+        self.assertEqual(finding.detail.get("severity"), "CRITICAL")
+        self.assertEqual(finding.detail.get("file"), "docs/conops/MISSION_INTENT.md")
+        self.assertIn("{{MISSION_SYSTEM_NAME}}", finding.detail.get("unresolved_tags", []))
+        self.assertIn("{{OPERATIONAL_PURPOSE}}", finding.detail.get("unresolved_tags", []))
+        self.assertIn("{{E_CAPACITY_JOULES}}", finding.detail.get("unresolved_tags", []))
+        self.assertIn(22, finding.detail.get("line_numbers", []))
+        self.assertIn(149, finding.detail.get("line_numbers", []))
+
+        # Verify finding message content
+        self.assertIn("{{MISSION_SYSTEM_NAME}}", str(finding))
+        self.assertIn("{{E_CAPACITY_JOULES}}", str(finding))
+        self.assertIn("22", str(finding))
+        self.assertIn("149", str(finding))
+
+    def test_clean_substituted_conops_and_mission_intent_pass_placeholder_check(self):
+        """
+        Verify that clean substituted ConOps and Mission Intent specifications
+        pass placeholder validation with zero placeholder findings.
+        Reference Fixes #142.
+        """
+        conops_content = _get_valid_conops_content()
+        mission_content = _get_valid_mission_intent_content()
+
+        conops_val = ConopsCompletenessValidator()
+        mission_val = MissionIntentCompletenessValidator()
+
+        conops_findings = conops_val._validate_conops_text(conops_content, "docs/conops/CONOPS.md")
+        mission_findings = mission_val._validate_mission_text(mission_content, "docs/conops/MISSION_INTENT.md")
+
+        c_placeholders = [f for f in conops_findings if f.rule_id == "conops-unresolved-template-placeholders"]
+        m_placeholders = [f for f in mission_findings if f.rule_id == "mission-unresolved-template-placeholders"]
+
+        self.assertEqual(len(c_placeholders), 0)
+        self.assertEqual(len(m_placeholders), 0)
+
+    def test_template_placeholder_helper_functions(self):
+        """
+        Unit test _find_unresolved_template_placeholders helper and TEMPLATE_PLACEHOLDER_REGEX.
+        Reference Fixes #142.
+        """
+        test_text = (
+            "Header with {{TAG_ONE}} and {{TAG_TWO}}\n"
+            "Line without tags\n"
+            "Line with {{TAG_THREE_123}}\n"
+            "Line with invalid {single_brace} and {{}}\n"
+        )
+        matches = _find_unresolved_template_placeholders(test_text)
+        self.assertEqual(len(matches), 3)
+        self.assertEqual(matches[0], (1, "{{TAG_ONE}}"))
+        self.assertEqual(matches[1], (1, "{{TAG_TWO}}"))
+        self.assertEqual(matches[2], (3, "{{TAG_THREE_123}}"))
+
+        clean_text = "Standard markdown text with no template tokens."
+        self.assertEqual(_find_unresolved_template_placeholders(clean_text), [])
+
+    def test_conops_workspace_repo_validation_fails_on_unresolved_placeholders(self):
+        """
+        Verify ConopsCompletenessValidator.validate(repo) returns Finding with
+        rule 'conops-unresolved-template-placeholders' when CONOPS.md contains placeholder tokens.
+        Reference Fixes #142.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            os.makedirs(conops_dir, exist_ok=True)
+
+            conops_with_placeholder = _get_valid_conops_content().replace(
+                "`AutonomousSystemArchetype`", "`{{SYSTEM_IDENTIFIER}}`", 1
+            )
+            with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
+                f.write(conops_with_placeholder)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            val = ConopsCompletenessValidator()
+            findings = val.validate(repo)
+            placeholder_findings = [f for f in findings if f.rule_id == "conops-unresolved-template-placeholders"]
+            self.assertEqual(len(placeholder_findings), 1)
+            self.assertEqual(placeholder_findings[0].detail.get("severity"), "CRITICAL")
+            self.assertIn("{{SYSTEM_IDENTIFIER}}", placeholder_findings[0].detail.get("unresolved_tags", []))
+
+    def test_mission_intent_workspace_repo_validation_fails_on_unresolved_placeholders(self):
+        """
+        Verify MissionIntentCompletenessValidator.validate(repo) returns Finding with
+        rule 'mission-unresolved-template-placeholders' when MISSION_INTENT.md contains placeholder tokens.
+        Reference Fixes #142.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            os.makedirs(conops_dir, exist_ok=True)
+
+            mission_with_placeholder = _get_valid_mission_intent_content().replace(
+                "Tactical Mission Intent & Execution Plan", "Tactical Mission Intent: {{MISSION_SYSTEM_NAME}}", 1
+            )
+            with open(os.path.join(conops_dir, "MISSION_INTENT.md"), "w", encoding="utf-8") as f:
+                f.write(mission_with_placeholder)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            val = MissionIntentCompletenessValidator()
+            findings = val.validate(repo)
+            placeholder_findings = [f for f in findings if f.rule_id == "mission-unresolved-template-placeholders"]
+            self.assertEqual(len(placeholder_findings), 1)
+            self.assertEqual(placeholder_findings[0].detail.get("severity"), "CRITICAL")
+            self.assertIn("{{MISSION_SYSTEM_NAME}}", placeholder_findings[0].detail.get("unresolved_tags", []))
+
+    def test_cli_integration_fails_when_conops_has_unresolved_template_placeholders(self):
+        """
+        Verify CLI fails closed (exit code 1) when CONOPS.md contains unresolved template placeholders.
+        Reference Fixes #142.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            schema_dir = os.path.join(tmpdir, "schema")
+            pipeline_dir = os.path.join(tmpdir, ".pipeline", "logical-ui")
+            os.makedirs(conops_dir, exist_ok=True)
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(pipeline_dir, exist_ok=True)
+
+            conops_with_placeholder = _get_valid_conops_content().replace(
+                "`AutonomousSystemArchetype`", "`{{SYSTEM_IDENTIFIER}}`", 1
+            )
+
+            with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
+                f.write(conops_with_placeholder)
+
+            with open(os.path.join(conops_dir, "MISSION_INTENT.md"), "w", encoding="utf-8") as f:
+                f.write(_get_valid_mission_intent_content())
+
+            sysml_content = """package SystemSSOT {
+    doc /* /// OperationalAllocation: [OA-01, OA-02, OA-03, Phase_Startup, Phase_NominalExecution, Phase_DegradedMode, Phase_ContingencyFailsafe, Phase_SecureShutdown, Phase_MaintenanceMode] */
+}
+"""
+            with open(os.path.join(schema_dir, "model.sysml"), "w", encoding="utf-8") as f:
+                f.write(sysml_content)
+
+            with open(os.path.join(pipeline_dir, "codebase_rules.json"), "w", encoding="utf-8") as f:
+                f.write("""{
+  "meta": {
+    "upstream_repository": "acme/example-project"
+  },
+  "backlog_directories": {
+    "schemas": "schema",
+    "features": "docs/features",
+    "epics": "docs/epics"
+  },
+  "target_directories": {
+    "react": "",
+    "flutter": ""
+  },
+  "tracker_rules": {}
+}""")
+
+            cli_py = os.path.join(repo_root, "skills", "spec-orchestrator", "parity_auditor", "src", "parity_auditor", "cli.py")
+            import subprocess
+            res = subprocess.run(
+                [sys.executable, cli_py, "--workspace", tmpdir, "--schema-only"],
+                capture_output=True,
+                text=True
+            )
+            self.assertNotEqual(res.returncode, 0, f"Expected non-zero returncode, got {res.returncode}. Output: {res.stdout}\n{res.stderr}")
+            self.assertIn("ConOps Completeness Violations Identified", res.stdout)
+            self.assertIn("{{SYSTEM_IDENTIFIER}}", res.stdout + res.stderr)
+
+    def test_cli_integration_fails_when_mission_intent_has_unresolved_template_placeholders(self):
+        """
+        Verify CLI fails closed (exit code 1) when MISSION_INTENT.md contains unresolved template placeholders.
+        Reference Fixes #142.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            schema_dir = os.path.join(tmpdir, "schema")
+            pipeline_dir = os.path.join(tmpdir, ".pipeline", "logical-ui")
+            os.makedirs(conops_dir, exist_ok=True)
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(pipeline_dir, exist_ok=True)
+
+            mission_with_placeholder = _get_valid_mission_intent_content().replace(
+                "Tactical Mission Intent & Execution Plan", "Tactical Mission Intent: {{MISSION_SYSTEM_NAME}}", 1
+            )
+
+            with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
+                f.write(_get_valid_conops_content())
+
+            with open(os.path.join(conops_dir, "MISSION_INTENT.md"), "w", encoding="utf-8") as f:
+                f.write(mission_with_placeholder)
+
+            sysml_content = """package SystemSSOT {
+    doc /* /// OperationalAllocation: [OA-01, OA-02, OA-03, Phase_Startup, Phase_NominalExecution, Phase_DegradedMode, Phase_ContingencyFailsafe, Phase_SecureShutdown, Phase_MaintenanceMode] */
+}
+"""
+            with open(os.path.join(schema_dir, "model.sysml"), "w", encoding="utf-8") as f:
+                f.write(sysml_content)
+
+            with open(os.path.join(pipeline_dir, "codebase_rules.json"), "w", encoding="utf-8") as f:
+                f.write("""{
+  "meta": {
+    "upstream_repository": "acme/example-project"
+  },
+  "backlog_directories": {
+    "schemas": "schema",
+    "features": "docs/features",
+    "epics": "docs/epics"
+  },
+  "target_directories": {
+    "react": "",
+    "flutter": ""
+  },
+  "tracker_rules": {}
+}""")
+
+            cli_py = os.path.join(repo_root, "skills", "spec-orchestrator", "parity_auditor", "src", "parity_auditor", "cli.py")
+            import subprocess
+            res = subprocess.run(
+                [sys.executable, cli_py, "--workspace", tmpdir, "--schema-only"],
+                capture_output=True,
+                text=True
+            )
+            self.assertNotEqual(res.returncode, 0, f"Expected non-zero returncode, got {res.returncode}. Output: {res.stdout}\n{res.stderr}")
+            self.assertIn("Mission Intent Completeness Violations Identified", res.stdout)
+            self.assertIn("{{MISSION_SYSTEM_NAME}}", res.stdout + res.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

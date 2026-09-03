@@ -82,10 +82,39 @@ FORBIDDEN_DOMAIN_NOUNS = [
 ]
 
 
+CANONICAL_CONOPS_UNIT_FILENAMES = [
+    "01_METADATA_AND_OVERVIEW.md",
+    "02_DEFICIENCIES_AND_MOTIVATION.md",
+    "03_PROPOSED_CAPABILITIES.md",
+    "04_USER_CLASSES_AND_STAKEHOLDERS.md",
+    "05_AIRSPACE_AND_SORA_RISK.md",
+    "06_UAF_OPERATIONAL_ACTIVITIES.md",
+    "07_OPTX_EXCHANGES.md",
+    "08_ENVIRONMENTAL_MIL_STD_810H.md",
+    "09_SCENARIOS_AND_TIMELINES.md",
+    "10_MAINTENANCE_AND_GSE_SUPPORT.md",
+    "11_IMPACTS_AND_TRADE_STUDIES.md",
+    "12_EMERGENCY_DECISION_MATRIX.md",
+]
+
+CANONICAL_MISSION_INTENT_UNIT_FILENAMES = [
+    "01_COMMANDERS_INTENT.md",
+    "02_MISSION_ESSENTIAL_TASK_LIST.md",
+    "03_INCOSE_MOE_MOP_MATH.md",
+    "04_MULTI_DOMAIN_THREAT_MATRIX.md",
+    "05_PACE_C2_PLAN.md",
+    "06_ROE_SAFETY_INTERLOCKS.md",
+    "07_AIRSPACE_GEOZONES.md",
+    "08_GO_NO_GO_MATRIX.md",
+    "09_BINGO_ENERGY_MATH.md",
+    "10_OPERATIONAL_ALLOCATION_TAGS.md",
+]
+
+
 class TestCanonicalTemplates(unittest.TestCase):
     """
-    Test suite for Issue #67: Permanent Abstract Templates.
-    Verifies that CONOPS and Mission Intent canonical templates exist,
+    Test suite for Issue #67: Permanent Abstract Templates and Issue #145: Canonical Unit Filenames.
+    Verifies that CONOPS and Mission Intent canonical templates and modular units exist,
     parse cleanly via Gate 26, contain zero domain nouns, use parameter tokens {{...}},
     are mirrored in .agents/, and that docs/conops/ is a clean landing zone with only .gitkeep
     for upstream template repos (downstream customer workspaces may hold the authorized
@@ -97,6 +126,29 @@ class TestCanonicalTemplates(unittest.TestCase):
         self.mission_src = os.path.join(repo_root, "skills", "spec-orchestrator", "resources", "MISSION_INTENT_CANONICAL_TEMPLATE.md")
         self.conops_mirror = os.path.join(repo_root, ".agents", "skills", "spec-orchestrator", "resources", "CONOPS_CANONICAL_TEMPLATE.md")
         self.mission_mirror = os.path.join(repo_root, ".agents", "skills", "spec-orchestrator", "resources", "MISSION_INTENT_CANONICAL_TEMPLATE.md")
+
+    def test_canonical_unit_filenames_exist_and_mirrored(self):
+        """Verify that all 12 ConOps and 10 Mission Intent canonical uppercase units exist and match mirrors (Issue #145)."""
+        conops_units_dir = os.path.join(repo_root, "skills", "spec-conops-engineering", "resources", "units", "conops")
+        mission_units_dir = os.path.join(repo_root, "skills", "spec-conops-engineering", "resources", "units", "mission_intent")
+        agents_conops_dir = os.path.join(repo_root, ".agents", "skills", "spec-conops-engineering", "resources", "units", "conops")
+        agents_mission_dir = os.path.join(repo_root, ".agents", "skills", "spec-conops-engineering", "resources", "units", "mission_intent")
+
+        for fname in CANONICAL_CONOPS_UNIT_FILENAMES:
+            src = os.path.join(conops_units_dir, fname)
+            mirror = os.path.join(agents_conops_dir, fname)
+            self.assertTrue(os.path.isfile(src), f"Missing canonical ConOps unit: {src}")
+            self.assertTrue(os.path.isfile(mirror), f"Missing mirrored ConOps unit: {mirror}")
+            with open(src, "r", encoding="utf-8") as f1, open(mirror, "r", encoding="utf-8") as f2:
+                self.assertEqual(f1.read(), f2.read(), f"Content mismatch for ConOps unit {fname}")
+
+        for fname in CANONICAL_MISSION_INTENT_UNIT_FILENAMES:
+            src = os.path.join(mission_units_dir, fname)
+            mirror = os.path.join(agents_mission_dir, fname)
+            self.assertTrue(os.path.isfile(src), f"Missing canonical Mission Intent unit: {src}")
+            self.assertTrue(os.path.isfile(mirror), f"Missing mirrored Mission Intent unit: {mirror}")
+            with open(src, "r", encoding="utf-8") as f1, open(mirror, "r", encoding="utf-8") as f2:
+                self.assertEqual(f1.read(), f2.read(), f"Content mismatch for Mission Intent unit {fname}")
 
     def test_canonical_templates_exist_and_mirrored(self):
         """Verify that both canonical templates exist in resources/ and are mirrored in .agents/."""

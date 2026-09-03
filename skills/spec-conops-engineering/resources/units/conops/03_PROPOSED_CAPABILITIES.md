@@ -26,7 +26,7 @@ $$
 \end{aligned}
 $$
 
-Where and Operational Parameters:
+- Parameter Definitions & Engineering Units:
 - $\Delta \text{Range}$: Operational range expansion margin over legacy baseline ($\text{Range}_{\mathrm{proposed}} \ge \text{Range}_{\mathrm{threshold}}$).
 - $\Delta t_{\mathrm{turnaround}}$: Operational turnaround and servicing time reduction ($t_{\mathrm{turnaround,proposed}} \le t_{\mathrm{turnaround,target}}$).
 - $\Delta \tau_{\mathrm{response}}$: Containment and emergency response latency reduction ($\tau_{\mathrm{response,proposed}} \le \tau_{\mathrm{containment\_req}}$).

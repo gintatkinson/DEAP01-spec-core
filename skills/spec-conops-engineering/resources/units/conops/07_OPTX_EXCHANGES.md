@@ -45,7 +45,7 @@ $$
 \end{aligned}
 $$
 
-Where and Operational Parameters:
+- Parameter Definitions & Engineering Units:
 - $\text{Util}_{\mathrm{bus}}$: Total deterministic real-time bus utilization under worst-case burst conditions.
 - $N_{\mathrm{bus}}$: Total number of active periodic message streams allocated to the deterministic bus ($N_{\mathrm{bus}} = 7$).
 - $C_i$: Worst-case transmission time for message stream $i$ including bit-stuffing overhead.

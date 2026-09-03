@@ -20,7 +20,7 @@ A_o &= \frac{\mathrm{MTBM}}{\mathrm{MTBM} + \mathrm{MDT}} \\
 \end{aligned}
 $$
 
-Where and Operational Parameters:
+- Parameter Definitions & Engineering Units:
 
 | Parameter | Symbol | Units | Constraint / Rule | Description |
 | :--- | :--- | :--- | :--- | :--- |
@@ -42,7 +42,7 @@ $$
 \end{aligned}
 $$
 
-Where and Operational Parameters:
+- Parameter Definitions & Engineering Units:
 
 | Parameter | Symbol | Units | Constraint / Rule | Description |
 | :--- | :--- | :--- | :--- | :--- |
@@ -64,7 +64,7 @@ $$
 \end{aligned}
 $$
 
-Where and Operational Parameters:
+- Parameter Definitions & Engineering Units:
 
 | Parameter | Symbol | Units | Constraint / Rule | Description |
 | :--- | :--- | :--- | :--- | :--- |
@@ -86,7 +86,7 @@ C_{\mathrm{coverage}} &= \frac{\Omega_{\mathrm{surveyed}}}{\Omega_{\mathrm{total
 \end{aligned}
 $$
 
-Where and Operational Parameters:
+- Parameter Definitions & Engineering Units:
 
 | Parameter | Symbol | Units | Constraint / Rule | Description |
 | :--- | :--- | :--- | :--- | :--- |

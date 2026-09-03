@@ -70,18 +70,18 @@ The ConOps specification tree consists of 12 canonical modular units:
 
 | Unit Filename | Section Number & Title | JSON Schema Mapping | Mandatory Contents & Invariants |
 | :--- | :--- | :--- | :--- |
-| `01_scope.md` | `## 1. Scope & System Identification` | `operational_context`, `user_classes` | System ID, domain classification, physical/legal boundaries, stakeholder roster, user classes. |
-| `02_standards.md` | `## 2. Normative Standards & Regulatory Baseline` | `metadata` | Standards table citing ISO 29148, UAF, STANAG 4586, SORA v2.5, DO-178C, DO-254 with clauses. |
-| `03_deficiencies.md` | `## 3. Current Situation & Deficiency Analysis (Predecessors)` | `deficiencies` | Predecessor baseline, technical, operational, and human deficiencies. |
-| `04_capabilities.md` | `## 4. Operational Justification & Priority Matrix (Trade-Offs)` | `proposed_capabilities` | Mission drivers, value propositions, engineering trade-off evaluations. |
-| `05_lifecycle.md` | `## 5. Operational Modes & Lifecycle Stages` | `operational_context` | Formal operational lifecycle stages: Phase_Startup, Phase_NominalExecution, Phase_DegradedMode, Phase_ContingencyFailsafe, Phase_SecureShutdown, Phase_MaintenanceMode. |
-| `06_sora.md` | `## 6. 4D Operational Volume & SORA Ground Risk Buffer Mathematics` | `airspace_sora` | 4D volume mathematical formulation, Ground Risk Buffer ($R_{\mathrm{GRB}}$) equation, and SORA impact parameters table. |
-| `07_uaf_activities.md` | `## 7. OMG UAF Operational Activity Taxonomy` | `uaf_activities` | Open-ended UAF activity roster (`OA-01`..`OA-N`) with mandatory Gate 24 allocation tags (`/// OperationalAllocation: [OA-XX]`). |
-| `08_optx_matrix.md` | `## 8. Operational Information Exchange (Op-Tx) Matrix` | `optx_exchanges` | Information exchange roster (`OpTx-01`..`OpTx-N`) specifying source, destination, data rates, latency limits, criticality. |
-| `09_environments.md` | `## 9. Operational Environments & Constraints` | `environmental_envelopes` | Ambient temperature, ingress protection (IP), electromagnetic/RF environment, spatial clearance envelopes. |
-| `10_scenarios.md` | `## 10. Multi-Threaded Operational Scenarios` | `scenarios` | Nominal, degraded, and contingency scenario threads with sequential execution steps and exit criteria. |
-| `11_maintenance.md` | `## 11. Maintenance & Sustainment Concepts (O/I/D Maintenance)` | `maintenance` | Three-tier maintenance model: Organizational (O-Level), Intermediate (I-Level), Depot (D-Level). |
-| `12_emergency_matrix.md` | `## 12. 7-Row Emergency Decision & Contingency Matrix` | `emergency_matrix` | Canonical emergency triggers (`EMG-01`..`EMG-07`) with detection mechanisms, failsafe recovery states, max response times, and HITL authority roles. |
+| `01_METADATA_AND_OVERVIEW.md` | `## 1. Scope, System Identification & Normative Baseline` | `operational_context`, `user_classes` | System ID, domain classification, physical/legal boundaries, stakeholder roster, user classes. |
+| `02_DEFICIENCIES_AND_MOTIVATION.md` | `## 2. Current Situation, Deficiency Analysis & Operational Motivation` | `deficiencies` | Predecessor baseline, technical, operational, and human deficiencies. |
+| `03_PROPOSED_CAPABILITIES.md` | `## 3. Proposed Capabilities & Operational Justification (Trade-Offs)` | `proposed_capabilities` | Mission drivers, value propositions, engineering trade-off evaluations. |
+| `04_USER_CLASSES_AND_STAKEHOLDERS.md` | `## 4. User Classes, Stakeholder Taxonomy & Operational Lifecycle Modes` | `operational_context` | Formal operational lifecycle stages: Phase_Startup, Phase_NominalExecution, Phase_DegradedMode, Phase_ContingencyFailsafe, Phase_SecureShutdown, Phase_MaintenanceMode. |
+| `05_AIRSPACE_AND_SORA_RISK.md` | `## 5. Operational State Space, Boundary Containment & Risk Assessment` | `airspace_sora` | 4D volume mathematical formulation, Ground Risk Buffer ($R_{\mathrm{GRB}}$) equation, and SORA impact parameters table. |
+| `06_UAF_OPERATIONAL_ACTIVITIES.md` | `## 6. OMG UAF Operational Activity Taxonomy` | `uaf_activities` | Open-ended UAF activity roster (`OA-01`..`OA-N`) with mandatory Gate 24 allocation tags (`/// OperationalAllocation: [OA-XX]`). |
+| `07_OPTX_EXCHANGES.md` | `## 7. Operational Information Exchange (Op-Tx) Matrix` | `optx_exchanges` | Information exchange roster (`OpTx-01`..`OpTx-N`) specifying source, destination, data rates, latency limits, criticality. |
+| `08_ENVIRONMENTAL_MIL_STD_810H.md` | `## 8. Operational Environments & MIL-STD-810H Environmental Stress Qualification` | `environmental_envelopes` | Ambient temperature, ingress protection (IP), electromagnetic/RF environment, spatial clearance envelopes. |
+| `09_SCENARIOS_AND_TIMELINES.md` | `## 9. Multi-Threaded Operational Scenarios & System Timelines` | `scenarios` | Nominal, degraded, and contingency scenario threads with sequential execution steps and exit criteria. |
+| `10_MAINTENANCE_AND_GSE_SUPPORT.md` | `## 10. Maintenance & Sustainment Concepts (O/I/D Maintenance)` | `maintenance` | Three-tier maintenance model: Organizational (O-Level), Intermediate (I-Level), Depot (D-Level). |
+| `11_IMPACTS_AND_TRADE_STUDIES.md` | `## 11. Operational Impacts, System Limitations & Documented Trade Studies` | `proposed_capabilities` | Mission drivers, value propositions, engineering trade-off evaluations. |
+| `12_EMERGENCY_DECISION_MATRIX.md` | `## 12. 7-Row Emergency Decision & Contingency Matrix` | `emergency_matrix` | Canonical emergency triggers (`EMG-01`..`EMG-07`) with detection mechanisms, failsafe recovery states, max response times, and HITL authority roles. |
 
 ### 2.2 Tactical Mission Intent Modular Units (`docs/conops/units/mission_intent/`)
 
@@ -89,16 +89,16 @@ The Tactical Mission Intent specification tree consists of 10 canonical modular 
 
 | Unit Filename | Section Number & Title | JSON Schema Mapping | Mandatory Contents & Invariants |
 | :--- | :--- | :--- | :--- |
-| `01_intent.md` | `## 1. Commander's Intent & Operational Objectives` | `commanders_intent` | Operational purpose, key mission tasks, and desired end state. |
-| `02_metl.md` | `## 2. Mission Essential Task List (METL)` | `metl_tasks` | Doctrinal task list (`MET-01`..`MET-N`) with conditions, quantitative metrics, verification methods, and Gate 24 allocation tags. |
-| `03_moe_mop.md` | `## 3. Measures of Effectiveness (MoE) & Measures of Performance (MoP) Metrics` | `incose_moe_mop` | INCOSE SEH v5.0 metrics table with KaTeX mathematical formulas, Threshold and Objective performance values, and engineering units. |
-| `04_threats.md` | `## 4. Threat & Electronic Warfare (EW) / Cyber Environment Matrix` | `threat_matrix` | Open multi-domain threat matrix across Kinetic, Mechanical, Environmental, EW/Cyber, Power/Thermal, Optical, and Human domains with public clause citations. |
-| `05_pace.md` | `## 5. PACE C2 Link Communications Plan` | `pace_c2_plan` | 4-tier PACE communications plan (Primary, Alternate, Contingency, Emergency) with frequency bands, bandwidth, heartbeat timeouts, and failover hysteresis. |
-| `06_roe.md` | `## 6. Rules of Engagement (ROE) & Weapon/Sensor Interlocks` | `roe_interlocks` | Normative rules of engagement and logical interlock predicates (`ROE-01`..`ROE-N`). |
-| `07_airspace.md` | `## 7. Airspace Deconfliction & U-space Dynamic Geo-Zones` | `airspace_geozones` | Primary boundary perimeter, dynamic exclusion/keep-out zones, and horizontal/vertical separation minima. |
-| `08_gng.md` | `## 8. Go/No-Go Decision Matrix` | `go_no_go_matrix` | Operational phase checks (`GNG-01`..`GNG-N`), threshold conditions, sensors/mechanisms, and deterministic Go/No-Go actions. |
-| `09_bingo.md` | `## 9. Bingo Energy Mathematics & Secondary Divert Protocols` | `bingo_energy_math` | Bingo energy dynamics formulation ($E_{\mathrm{bingo}}(t)$), statutory reserve ratio constraint ($\ge 20\%$), and energy parameter table. |
-| `10_tags.md` | `## 10. Gate 24 MissionTask Traceability Tags` | `allocation_tags` | Comprehensive listing of Gate 24 allocation tags (`/// OperationalAllocation: [MET-XX]`) for cross-model traceability. |
+| `01_COMMANDERS_INTENT.md` | `## 1. Commander's Intent & Operational Objectives` | `commanders_intent` | Operational purpose, key mission tasks, and desired end state. |
+| `02_MISSION_ESSENTIAL_TASK_LIST.md` | `## 2. Mission Essential Task List (METL)` | `metl_tasks` | Doctrinal task list (`MET-01`..`MET-N`) with conditions, quantitative metrics, verification methods, and Gate 24 allocation tags. |
+| `03_INCOSE_MOE_MOP_MATH.md` | `## 3. Measures of Effectiveness (MoE) & Measures of Performance (MoP) Metrics` | `incose_moe_mop` | INCOSE SEH v5.0 metrics table with KaTeX mathematical formulas, Threshold and Objective performance values, and engineering units. |
+| `04_MULTI_DOMAIN_THREAT_MATRIX.md` | `## 4. Threat & Electronic Warfare (EW) / Cyber Environment Matrix` | `threat_matrix` | Open multi-domain threat matrix across Kinetic, Mechanical, Environmental, EW/Cyber, Power/Thermal, Optical, and Human domains with public clause citations. |
+| `05_PACE_C2_PLAN.md` | `## 5. PACE C2 Link Communications Plan` | `pace_c2_plan` | 4-tier PACE communications plan (Primary, Alternate, Contingency, Emergency) with frequency bands, bandwidth, heartbeat timeouts, and failover hysteresis. |
+| `06_ROE_SAFETY_INTERLOCKS.md` | `## 6. Rules of Engagement (ROE) & Weapon/Sensor Interlocks` | `roe_interlocks` | Normative rules of engagement and logical interlock predicates (`ROE-01`..`ROE-N`). |
+| `07_AIRSPACE_GEOZONES.md` | `## 7. Airspace Deconfliction & U-space Dynamic Geo-Zones` | `airspace_geozones` | Primary boundary perimeter, dynamic exclusion/keep-out zones, and horizontal/vertical separation minima. |
+| `08_GO_NO_GO_MATRIX.md` | `## 8. Go/No-Go Decision Matrix` | `go_no_go_matrix` | Operational phase checks (`GNG-01`..`GNG-N`), threshold conditions, sensors/mechanisms, and deterministic Go/No-Go actions. |
+| `09_BINGO_ENERGY_MATH.md` | `## 9. Bingo Energy Mathematics & Secondary Divert Protocols` | `bingo_energy_math` | Bingo energy dynamics formulation ($E_{\mathrm{bingo}}(t)$), statutory reserve ratio constraint ($\ge 20\%$), and energy parameter table. |
+| `10_OPERATIONAL_ALLOCATION_TAGS.md` | `## 10. Gate 24 MissionTask Traceability Tags` | `allocation_tags` | Comprehensive listing of Gate 24 allocation tags (`/// OperationalAllocation: [MET-XX]`) for cross-model traceability. |
 
 ---
 
@@ -110,29 +110,29 @@ The `Worker ConOps` writes individual modular files under the dedicated unit dir
 docs/conops/
 └── units/
     ├── conops/
-    │   ├── 01_scope.md
-    │   ├── 02_standards.md
-    │   ├── 03_deficiencies.md
-    │   ├── 04_capabilities.md
-    │   ├── 05_lifecycle.md
-    │   ├── 06_sora.md
-    │   ├── 07_uaf_activities.md
-    │   ├── 08_optx_matrix.md
-    │   ├── 09_environments.md
-    │   ├── 10_scenarios.md
-    │   ├── 11_maintenance.md
-    │   └── 12_emergency_matrix.md
+    │   ├── 01_METADATA_AND_OVERVIEW.md
+    │   ├── 02_DEFICIENCIES_AND_MOTIVATION.md
+    │   ├── 03_PROPOSED_CAPABILITIES.md
+    │   ├── 04_USER_CLASSES_AND_STAKEHOLDERS.md
+    │   ├── 05_AIRSPACE_AND_SORA_RISK.md
+    │   ├── 06_UAF_OPERATIONAL_ACTIVITIES.md
+    │   ├── 07_OPTX_EXCHANGES.md
+    │   ├── 08_ENVIRONMENTAL_MIL_STD_810H.md
+    │   ├── 09_SCENARIOS_AND_TIMELINES.md
+    │   ├── 10_MAINTENANCE_AND_GSE_SUPPORT.md
+    │   ├── 11_IMPACTS_AND_TRADE_STUDIES.md
+    │   └── 12_EMERGENCY_DECISION_MATRIX.md
     └── mission_intent/
-        ├── 01_intent.md
-        ├── 02_metl.md
-        ├── 03_moe_mop.md
-        ├── 04_threats.md
-        ├── 05_pace.md
-        ├── 06_roe.md
-        ├── 07_airspace.md
-        ├── 08_gng.md
-        ├── 09_bingo.md
-        └── 10_tags.md
+        ├── 01_COMMANDERS_INTENT.md
+        ├── 02_MISSION_ESSENTIAL_TASK_LIST.md
+        ├── 03_INCOSE_MOE_MOP_MATH.md
+        ├── 04_MULTI_DOMAIN_THREAT_MATRIX.md
+        ├── 05_PACE_C2_PLAN.md
+        ├── 06_ROE_SAFETY_INTERLOCKS.md
+        ├── 07_AIRSPACE_GEOZONES.md
+        ├── 08_GO_NO_GO_MATRIX.md
+        ├── 09_BINGO_ENERGY_MATH.md
+        └── 10_OPERATIONAL_ALLOCATION_TAGS.md
 ```
 
 ### Unit Authoring Invariants:
@@ -157,7 +157,7 @@ The `Worker ConOps` must strictly enforce the following repository rules:
   * UAF Activities: $N \ge 1$ activity entries.
 
 ### 4.2 Open Multi-Domain Threat Taxonomy
-The threat matrix (`04_threats.md`) must cover multi-domain threats across all canonical operational domains:
+The threat matrix (`04_MULTI_DOMAIN_THREAT_MATRIX.md`) must cover multi-domain threats across all canonical operational domains:
 1. **Kinetic**: Projectiles, collisions, interceptors, physical debris.
 2. **Mechanical**: Structural fatigue, actuator jamming, motor bearing seizure, propeller delamination.
 3. **Power / Thermal**: Battery thermal runaway, ESC over-temperature, power distribution rail collapse.
@@ -173,9 +173,9 @@ Per [`rules/latex-katex-integrity.md`](../../rules/latex-katex-integrity.md):
 - **Display Math Blocks**: All mathematical formulations must be placed inside dedicated display blocks using `$$ \begin{aligned} ... \end{aligned} $$` on separate newlines.
 - **Pure Symbolic Math**: Do NOT embed physical unit macros (e.g. `\text{ m}`, `\text{ m/s}`, `\text{ J}`) inside LaTeX math blocks. Units must be defined in the accompanying parameter table.
 - **No Table Math Delimiters**: Never use `$ ... $` or `$$ ... $$` math delimiters inside Markdown table cells. Use standard plain text and Unicode characters (e.g., `h_max m`, `deg`, `m/s`, `J`, `tau_max ms`).
-- **Where and Parameter Tables**: Display equations must be immediately followed by a parameter definition table specifying symbols, values, units, and engineering descriptions.
+- **Parameter Definitions & Engineering Units Tables**: Display equations must be immediately followed by a parameter definition table specifying symbols, values, units, and engineering descriptions.
 
-#### Example: SORA Ground Risk Buffer Formulation (`06_sora.md`)
+#### Example: SORA Ground Risk Buffer Formulation (`05_AIRSPACE_AND_SORA_RISK.md`)
 $$
 \begin{aligned}
 V_{\mathrm{4D}} &= V_{\mathrm{SpatialGeometry}} \cup V_{\mathrm{ContingencyVolume}} \cup V_{\mathrm{GRB}} \\
@@ -194,7 +194,7 @@ $$
 | Terminal Velocity | v_terminal | 25.0 | m/s | Estimated unpowered descent terminal velocity |
 | Impact Kinetic Energy | E_impact | 1562.5 | J | Kinetic energy at operational boundary impact |
 
-#### Example: Bingo Energy Dynamics Formulation (`09_bingo.md`)
+#### Example: Bingo Energy Dynamics Formulation (`09_BINGO_ENERGY_MATH.md`)
 $$
 \begin{aligned}
 E_{\mathrm{bingo}}(t) &= E_{\mathrm{return}}(\mathbf{p}(t), \mathbf{p}_{\mathrm{dest}}) + E_{\mathrm{divert}}(\mathbf{p}_{\mathrm{dest}}, \mathbf{p}_{\mathrm{alt}}) + E_{\mathrm{reserve}} + E_{\mathrm{contingency}} \\

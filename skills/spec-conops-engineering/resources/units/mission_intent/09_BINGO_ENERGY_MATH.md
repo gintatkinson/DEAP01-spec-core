@@ -28,7 +28,7 @@ R_{\mathrm{divert}}(\mathbf{p}_{\mathrm{dest}}, \mathbf{p}_{\mathrm{alt}}) &= \f
 \end{aligned}
 $$
 
-Where and Operational Parameters:
+- Parameter Definitions & Engineering Units:
 
 | Energy Parameter | Symbol | Value | Units | Constraint Rule | Public Clause Citation |
 | :--- | :--- | :--- | :--- | :--- | :--- |

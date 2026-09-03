@@ -18,7 +18,7 @@ R_{\mathrm{buffer}} &= v_{\mathrm{max}} \cdot t_{\mathrm{resp}} + \frac{v_{\math
 \end{aligned}
 $$
 
-Where and Operational Parameters:
+- Parameter Definitions & Engineering Units:
 
 | Parameter | Symbol | Units | Constraint / Derivation Rule | Description |
 | :--- | :--- | :--- | :--- | :--- |
@@ -51,7 +51,7 @@ d_{\mathrm{impact}} &= h_{\mathrm{max}} \cdot \tan(\theta_{\mathrm{impact}}) + d
 \end{aligned}
 $$
 
-Where and Operational Parameters:
+- Parameter Definitions & Engineering Units:
 - $t_{\mathrm{fall}}$: Ballistic free-fall duration from maximum operational altitude $h_{\mathrm{max}}$ to ground plane under gravitational acceleration $g$.
 - $d_{\mathrm{wind}}$: Lateral aerodynamic wind drift distance driven by crosswind speed $v_{\mathrm{wind}}$ over fall duration $t_{\mathrm{fall}}$.
 - $d_{\mathrm{impact}}$: Total impact trajectory radius combining ballistic ground displacement ($h_{\mathrm{max}} \cdot \tan(\theta_{\mathrm{impact}})$ with 1:1 rule $\theta_{\mathrm{impact}} = 45^\circ$), wind drift distance $d_{\mathrm{wind}}$, and maximum glide margin $d_{\mathrm{glide,max}}$.
@@ -107,7 +107,7 @@ E_{k,\mathrm{mitigated}} &= \frac{1}{2} m v_{\mathrm{terminal,parachute}}^2
 \end{aligned}
 $$
 
-Where and Operational Parameters:
+- Parameter Definitions & Engineering Units:
 
 | Parameter | Symbol | Nominal Value | Units | Constraint / Derivation Rule | Description |
 | :--- | :--- | :--- | :--- | :--- | :--- |

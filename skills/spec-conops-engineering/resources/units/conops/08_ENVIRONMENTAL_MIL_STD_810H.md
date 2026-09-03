@@ -18,7 +18,7 @@ $$
 \end{aligned}
 $$
 
-Where and Operational Parameters:
+- Parameter Definitions & Engineering Units:
 - E_env: State vector of active ambient environmental stress parameters.
 - E_min, E_max: Lower and upper boundaries of the certified operational and storage environmental envelope.
 - P_amb: Ambient atmospheric pressure (kPa).

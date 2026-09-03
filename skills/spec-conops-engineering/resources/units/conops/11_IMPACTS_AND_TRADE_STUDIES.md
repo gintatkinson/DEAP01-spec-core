@@ -61,7 +61,7 @@ S_j(w_{\mathrm{cold}}) &= \sum_{i \neq \mathrm{cold}} w_i s_{ij} + w_{\mathrm{co
 \end{aligned}
 $$
 
-Where and Operational Parameters:
+- Parameter Definitions & Engineering Units:
 
 | Parameter | Symbol | Expression / Value | Units | Description |
 | :--- | :--- | :--- | :--- | :--- |
@@ -106,7 +106,7 @@ S_j(P_{\mathrm{jam}}) &= \sum_{i \neq \mathrm{jam}} w_i s_{ij} + w_{\mathrm{jam}
 \end{aligned}
 $$
 
-Where and Operational Parameters:
+- Parameter Definitions & Engineering Units:
 
 | Parameter | Symbol | Expression / Value | Units | Description |
 | :--- | :--- | :--- | :--- | :--- |
@@ -151,7 +151,7 @@ E_k(m) &= \frac{1}{2} m v_{\mathrm{term}}^2(m) = \frac{m^2 g}{\rho S C_d}
 \end{aligned}
 $$
 
-Where and Operational Parameters:
+- Parameter Definitions & Engineering Units:
 
 | Parameter | Symbol | Expression / Value | Units | Description |
 | :--- | :--- | :--- | :--- | :--- |

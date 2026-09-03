@@ -225,6 +225,26 @@ def _extract_sora_parameters(sec6_content: str) -> Tuple[Optional[float], Option
 
 
 # =============================================================================
+# Template Placeholder Detection (Gate 26, Fixes #142)
+# =============================================================================
+
+TEMPLATE_PLACEHOLDER_REGEX = re.compile(r"\{\{[A-Za-z0-9_]+\}\}")
+
+
+def _find_unresolved_template_placeholders(content: str) -> List[Tuple[int, str]]:
+    """
+    Finds all unresolved template placeholder tokens matching r"\{\{[A-Za-z0-9_]+\}\}"
+    in the given content.
+    Returns list of (line_number, placeholder_token) tuples.
+    """
+    results: List[Tuple[int, str]] = []
+    for idx, line in enumerate(content.splitlines(), start=1):
+        for match in TEMPLATE_PLACEHOLDER_REGEX.finditer(line):
+            results.append((idx, match.group(0)))
+    return results
+
+
+# =============================================================================
 # Domain Models for ConOps & Mission Intent
 # =============================================================================
 
@@ -660,6 +680,27 @@ class ConopsCompletenessValidator(IValidator):
                                     ))
                 except Exception:
                     pass
+
+        # Check for un-substituted template placeholders (Gate 26, Fixes #142)
+        if "TEMPLATE" not in rel_path.upper():
+            unresolved = _find_unresolved_template_placeholders(content)
+            if unresolved:
+                unresolved_tags = [tag for _, tag in unresolved]
+                unique_tags = sorted(list(set(unresolved_tags)))
+                line_numbers = sorted(list(set(line for line, _ in unresolved)))
+                first_line = unresolved[0][0]
+                findings.append(Finding(
+                    "conops-unresolved-template-placeholders",
+                    f"ConOps specification '{rel_path}' contains {len(unresolved)} unresolved template placeholder token(s): {', '.join(unique_tags)} at line(s) {', '.join(str(l) for l in line_numbers)}.",
+                    location=f"{rel_path}:{first_line}",
+                    detail={
+                        "severity": "CRITICAL",
+                        "unresolved_tags": unique_tags,
+                        "line_numbers": line_numbers,
+                        "placeholders": [f"{tag} (line {line})" for line, tag in unresolved],
+                        "file": rel_path,
+                    },
+                ))
 
         # Check density, tables, and Mermaid structures for non-templates (Gate 26, Fixes #130)
         if "TEMPLATE" not in rel_path.upper():
@@ -1264,6 +1305,27 @@ class MissionIntentCompletenessValidator(IValidator):
                                     ))
                 except Exception:
                     pass
+
+        # Check for un-substituted template placeholders (Gate 26, Fixes #142)
+        if "TEMPLATE" not in rel_path.upper():
+            unresolved = _find_unresolved_template_placeholders(content)
+            if unresolved:
+                unresolved_tags = [tag for _, tag in unresolved]
+                unique_tags = sorted(list(set(unresolved_tags)))
+                line_numbers = sorted(list(set(line for line, _ in unresolved)))
+                first_line = unresolved[0][0]
+                findings.append(Finding(
+                    "mission-unresolved-template-placeholders",
+                    f"Mission Intent specification '{rel_path}' contains {len(unresolved)} unresolved template placeholder token(s): {', '.join(unique_tags)} at line(s) {', '.join(str(l) for l in line_numbers)}.",
+                    location=f"{rel_path}:{first_line}",
+                    detail={
+                        "severity": "CRITICAL",
+                        "unresolved_tags": unique_tags,
+                        "line_numbers": line_numbers,
+                        "placeholders": [f"{tag} (line {line})" for line, tag in unresolved],
+                        "file": rel_path,
+                    },
+                ))
 
         # Check line density floor for non-templates (Gate 26, Fixes #130)
         if "TEMPLATE" not in rel_path.upper():

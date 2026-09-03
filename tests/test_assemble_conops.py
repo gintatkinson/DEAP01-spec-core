@@ -1,8 +1,10 @@
 """
-Unit and integration tests for assemble_conops.py deterministic assembly engine.
-Addresses Issues #113 and #114.
+Unit and integration tests for assemble_conops.py deterministic assembly engine
+and SysML AST Parameter Binding Engine.
+Addresses Issues #113, #114, and Fixes #143.
 """
 
+import json
 import os
 import re
 import subprocess
@@ -16,12 +18,15 @@ if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
 from scripts.assemble_conops import (
+    RAW_TOKEN_FINDER,
+    SysMLParameterBindingEngine,
     assemble_conops,
     assemble_document,
-    validate_unit_integrity,
-    generate_table_of_contents,
-    verify_markdown_links,
+    bind_parameters,
     extract_headings,
+    generate_table_of_contents,
+    validate_unit_integrity,
+    verify_markdown_links,
 )
 
 
@@ -29,43 +34,35 @@ def _create_sample_conops_units(units_dir: str, with_placeholders: bool = False,
     """Populates mock conops unit files in units_dir."""
     os.makedirs(units_dir, exist_ok=True)
 
-    token_val = "{{SYSTEM_IDENTIFIER}}" if with_placeholders else "AutonomousSurveillanceUAS"
+    token_val = "{{SYSTEM_IDENTIFIER}}" if with_placeholders else "AutonomousCyberPhysicalSystem"
 
     units = {
-        "01_scope.md": f"""# Concept of Operations (ConOps): {token_val}
+        "01_METADATA_AND_OVERVIEW.md": f"""# Concept of Operations (ConOps): {token_val}
 
 ## 1. Scope & System Identification
 - **System Identifier:** `{token_val}`
-- **Operational Domain:** `UAF::OperationalDomain::CivilSecurityAndMonitoring`
-- **Operational Boundaries:** Defined polygon within designated flight test range.
-- **Stakeholder Roster:** Range Safety Officer, Remote Pilot in Command, Payload Specialist.
+- **Operational Domain:** `UAF::OperationalDomain::AutonomousMonitoring`
+- **Operational Boundaries:** Defined polygon within designated operational range.
+- **Stakeholder Roster:** Range Safety Officer, Remote Operator in Command, Payload Specialist.
 """,
-        "02_standards.md": """## 2. Normative Standards & Regulatory Baseline
-| Standard ID | Issuing Body | Title / Baseline | Applicable Clauses |
-| :--- | :--- | :--- | :--- |
-| ISO/IEC/IEEE 29148:2018 | ISO/IEEE | Systems and Software Engineering — Requirements Engineering | §6.4.2 ConOps & §6.4.3 OpsCon |
-| OMG UAF v1.2 / v2.0 | OMG | Unified Architecture Framework | Operational Domain (Op-*) |
-| NATO STANAG 4586 | NATO | Standard Interfaces of Autonomous Control Systems | Interoperability Profiles |
-| JARUS SORA v2.5 | JARUS | Specific Operations Risk Assessment | Annex B (Ground Risk & GRB) |
-""",
-        "03_deficiencies.md": """## 3. Current Situation & Deficiency Analysis (Predecessors)
-- **Current Operational Baseline:** Manual line-of-sight visual piloting with analog telemetry.
+        "02_DEFICIENCIES_AND_MOTIVATION.md": """## 2. Current Situation & Deficiency Analysis (Predecessors)
+- **Current Operational Baseline:** Manual line-of-sight tele-operation with analog telemetry.
 - **Operational Deficiencies:** Lack of autonomous failsafe containment, range limited by line-of-sight.
 """,
-        "04_capabilities.md": """## 4. Operational Justification & Priority Matrix (Trade-Offs)
+        "03_PROPOSED_CAPABILITIES.md": """## 3. Operational Justification & Priority Matrix (Trade-Offs)
 - **Mission Drivers & Value Proposition:** High-tempo continuous perimeter monitoring with automated geo-fencing.
 - **Trade-Off Analysis:** Dedicated satellite backup link vs battery payload mass budget.
 """,
-        "05_lifecycle.md": """## 5. Operational Modes & Lifecycle Stages
+        "04_USER_CLASSES_AND_STAKEHOLDERS.md": """## 4. Operational Modes & Lifecycle Stages
 Formal operational lifecycle stages across $\\Phi_{\\mathrm{lifecycle}}$:
 - **Phase_Startup:** Built-In-Test self-check and navigation calibration.
 - **Phase_NominalExecution:** Automated waypoint tracking and payload monitoring.
 - **Phase_DegradedMode:** Sensor redundancy failsafe mode.
 - **Phase_ContingencyFailsafe:** Autonomous return-to-base and controlled containment.
-- **Phase_SecureShutdown:** Post-flight payload encryption and shutdown.
+- **Phase_SecureShutdown:** Post-mission payload encryption and shutdown.
 - **Phase_MaintenanceMode:** Diagnostic telemetry analysis and component swap.
 """,
-        "06_sora.md": """## 6. 4D Operational Volume & SORA Ground Risk Buffer Mathematics
+        "05_AIRSPACE_AND_SORA_RISK.md": """## 5. 4D Operational Volume & SORA Ground Risk Buffer Mathematics
 $$
 \\begin{aligned}
 V_{\\mathrm{4D}} &= V_{\\mathrm{SpatialGeometry}} \\cup V_{\\mathrm{ContingencyVolume}} \\cup V_{\\mathrm{GRB}} \\\\
@@ -84,35 +81,43 @@ $$
 | Terminal Velocity | v_terminal | 25.0 | m/s | Estimated unpowered descent terminal velocity |
 | Impact Kinetic Energy | E_impact | 1562.5 | J | Kinetic energy at operational boundary impact |
 """,
-        "07_uaf_activities.md": """## 7. OMG UAF Operational Activity Taxonomy
+        "06_UAF_OPERATIONAL_ACTIVITIES.md": """## 6. OMG UAF Operational Activity Taxonomy
 | Activity ID | Activity Name | Description | Gate 24 Allocation Tag |
 | :--- | :--- | :--- | :--- |
 | OA-01 | PreFlightBIT | Executes power-on Built-In-Tests and sensor calibration | `/// OperationalAllocation: [OA-01]` |
 | OA-02 | ExecuteTrajectoryTracking | Performs closed-loop waypoint guidance along corridor | `/// OperationalAllocation: [OA-02]` |
 """,
-        "08_optx_matrix.md": """## 8. Operational Information Exchange (Op-Tx) Matrix
+        "07_OPTX_EXCHANGES.md": """## 7. Operational Information Exchange (Op-Tx) Matrix
 | Exchange ID | Source Node | Destination Node | Information Item | Data Rate | Max Latency | Criticality |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | OpTx-01 | PrimarySensorSubsystem | ControllerLogicSubsystem | PrimarySensorState | 100 Hz | 5 ms | High (DAL-A) |
 | OpTx-02 | ControllerLogicSubsystem | ActuatorSubsystem | ActuatorDemandValue | 200 Hz | 2.5 ms | High (DAL-A) |
 """,
-        "09_environments.md": """## 9. Operational Environments & Constraints
+        "08_ENVIRONMENTAL_MIL_STD_810H.md": """## 8. Operational Environments & Constraints
 - **Ambient Temperature:** -20 degC to +50 degC
 - **Environmental Ingress:** IP67 environmental sealing
 - **Electromagnetic / RF Environment:** Resilient against intentional GNSS denial
 - **Physical Spatial Constraints:** Launch footprint < 3m x 3m
 """,
-        "10_scenarios.md": """## 10. Multi-Threaded Operational Scenarios
+        "09_SCENARIOS_AND_TIMELINES.md": """## 9. Multi-Threaded Operational Scenarios
 - **Scenario 1 (Nominal Execution):** Autonomous pre-flight BIT, launch, corridor survey, and precision recovery.
 - **Scenario 2 (Degraded Mode & Mitigation):** Primary GPS loss triggers optical odometry navigation fallback.
 - **Scenario 3 (Contingency Recovery):** Total C2 lost-link triggers return-to-base rally point sequence.
 """,
-        "11_maintenance.md": """## 11. Maintenance & Sustainment Concepts (O/I/D Maintenance)
+        "10_MAINTENANCE_AND_GSE_SUPPORT.md": """## 10. Maintenance & Sustainment Concepts (O/I/D Maintenance)
 - **O-Level (Organizational):** Pre-flight visual check, battery hot-swap, BIT verification.
 - **I-Level (Intermediate):** Actuator servo calibration, sensor recalibration, modular LRU swap.
-- **D-Level (Depot):** Airframe structural overhaul, composite NDI inspection, flight computer recertification.
+- **D-Level (Depot):** Chassis structural overhaul, NDI inspection, computer recertification.
 """,
-        "12_emergency_matrix.md": """## 12. 7-Row Emergency Decision & Contingency Matrix
+        "11_IMPACTS_AND_TRADE_STUDIES.md": """## 11. Normative Standards & Regulatory Baseline
+| Standard ID | Issuing Body | Title / Baseline | Applicable Clauses |
+| :--- | :--- | :--- | :--- |
+| ISO/IEC/IEEE 29148:2018 | ISO/IEEE | Systems and Software Engineering — Requirements Engineering | §6.4.2 ConOps & §6.4.3 OpsCon |
+| OMG UAF v1.2 / v2.0 | OMG | Unified Architecture Framework | Operational Domain (Op-*) |
+| NATO STANAG 4586 | NATO | Standard Interfaces of Autonomous Control Systems | Interoperability Profiles |
+| JARUS SORA v2.5 | JARUS | Specific Operations Risk Assessment | Annex B (Ground Risk & GRB) |
+""",
+        "12_EMERGENCY_DECISION_MATRIX.md": """## 12. 7-Row Emergency Decision & Contingency Matrix
 | Trigger ID | Contingency Trigger | Detection Mechanism | Automated Containment Action | Failsafe State | Max Response Time | HITL Role |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | `EMG-01` | Lost C2 Link | Heartbeat loss > 5.0 s | Execute autonomous lost-link loiter / return | `Contingency_LostLinkReturn` | 0.50 s | Monitor / Override |
@@ -121,7 +126,7 @@ $$
 | `EMG-04` | Critical Sensor Fault | Cross-channel disparity | Revert to simplex failsafe sensor mode | `Degraded_SensorFailsafe` | 0.05 s | Monitor |
 | `EMG-05` | Geofence Breach Alert | Boundary proximity < 50 m | Execute emergency turnaround maneuver | `Contingency_GeofenceContainment` | 0.20 s | Monitor / Override |
 | `EMG-06` | Structural Anomaly | Vibration threshold exceeded | Throttle reduction and immediate landing | `Contingency_PrecautionaryLand` | 0.50 s | Monitor / Override |
-| `EMG-07` | Flight Termination Cmd | Encrypted abort signal | Deploy parachute / instant motor cutoff | `Emergency_FlightTermination` | 0.02 s | Initiator |
+| `EMG-07` | Flight Termination Cmd | Encrypted abort signal | Deploy containment / instant motor cutoff | `Emergency_FlightTermination` | 0.02 s | Initiator |
 """,
     }
 
@@ -137,35 +142,35 @@ def _create_sample_mission_intent_units(units_dir: str, with_placeholders: bool 
     """Populates mock mission intent unit files in units_dir."""
     os.makedirs(units_dir, exist_ok=True)
 
-    token_val = "{{MISSION_SYSTEM_NAME}}" if with_placeholders else "AutonomousSurveillanceUAS"
+    token_val = "{{MISSION_SYSTEM_NAME}}" if with_placeholders else "AutonomousCyberPhysicalSystem"
 
     units = {
-        "01_intent.md": f"""# Tactical Mission Intent & Execution Plan: {token_val}
+        "01_COMMANDERS_INTENT.md": f"""# Tactical Mission Intent & Execution Plan: {token_val}
 
 ## 1. Commander's Intent & Operational Objectives
 - **Operational Purpose:** Execute autonomous wide-area perimeter surveillance and monitoring.
-- **Key Tasks:** Secure takeoff, transit surveillance corridor, stream sensor telemetry, return to base.
+- **Key Tasks:** Secure startup, transit surveillance corridor, stream sensor telemetry, return to base.
 - **End State:** All survey waypoints verified, zero geofence breaches, safe recovery with >20% reserve energy.
 """,
-        "02_metl.md": """## 2. Mission Essential Task List (METL)
+        "02_MISSION_ESSENTIAL_TASK_LIST.md": """## 2. Mission Essential Task List (METL)
 | Task ID | Task Name | Condition Statement | Standard Metric | Verification Method | Gate 24 Allocation Tag |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | `MET-01` | PreFlightSystemCheckout | Pre-launch power on | 100% PBIT pass in < 30 s | Automated BIT Log | `/// OperationalAllocation: [MET-01]` |
 | `MET-02` | AutonomousIngressTransit | En-route nominal corridor | Cross-track error < 2.0 m | Flight Log Review | `/// OperationalAllocation: [MET-02]` |
 """,
-        "03_moe_mop.md": """## 3. Measures of Effectiveness (MoE) & Measures of Performance (MoP) Metrics
+        "03_INCOSE_MOE_MOP_MATH.md": """## 3. Measures of Effectiveness (MoE) & Measures of Performance (MoP) Metrics
 | Metric ID | Metric Type | Metric Name | Formulation / Equation | Threshold | Objective | Unit |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | MoE-01 | MoE | Mission Area Coverage Ratio | A_covered / A_total | 0.90 | 0.99 | Dimensionless |
 | MoP-01 | MoP | Cross-Track Waypoint Deviation | max norm(p_act - p_cmd)_2D | 5.0 | 1.0 | m |
 | MoP-02 | MoP | Telemetry Latency Bound | tau_transport | 50.0 | 10.0 | ms |
 """,
-        "04_threats.md": """## 4. Threat & Electronic Warfare (EW) / Cyber Environment Matrix
+        "04_MULTI_DOMAIN_THREAT_MATRIX.md": """## 4. Threat & Electronic Warfare (EW) / Cyber Environment Matrix
 | Threat ID | Threat Vector | Description | Severity | Autonomous Mitigation Rule |
 | :--- | :--- | :--- | :--- | :--- |
 | THR-01 | GNSS Spoofing / Jamming | Loss of carrier lock or pseudo-range jump | High | Revert to optical dead-reckoning and IMU integration |
 """,
-        "05_pace.md": """## 5. PACE C2 Link Communications Plan
+        "05_PACE_C2_PLAN.md": """## 5. PACE C2 Link Communications Plan
 | PACE Tier | Link Medium | Frequency Band | Nominal Data Rate | Heartbeat Timeout | Priority / Role |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Primary** | Point-to-Point COFDM | 5.8 GHz ISM | 10.0 Mbps | 2.0 s | Video & High-rate Telemetry |
@@ -173,20 +178,20 @@ def _create_sample_mission_intent_units(units_dir: str, with_placeholders: bool 
 | **Contingency** | 900 MHz FHSS Radio | 915 MHz ISM | 115.2 kbps | 5.0 s | Essential C2 Commands Only |
 | **Emergency** | Satellite Iridium SBD | 1.6 GHz L-Band | 2.4 kbps | 10.0 s | Emergency Flight Termination & Geo-Beacon |
 """,
-        "06_roe.md": """## 6. Rules of Engagement (ROE) & Weapon/Sensor Interlocks
+        "06_ROE_SAFETY_INTERLOCKS.md": """## 6. Rules of Engagement (ROE) & Weapon/Sensor Interlocks
 - **ROE-01:** System shall not execute autonomous descent below 30 m without positive ground radar clearance.
 """,
-        "07_airspace.md": """## 7. Airspace Deconfliction & U-space Dynamic Geo-Zones
+        "07_AIRSPACE_GEOZONES.md": """## 7. Airspace Deconfliction & U-space Dynamic Geo-Zones
 - **Primary Boundary Perimeter:** Outer polygon bounding perimeter with 50 m warning buffer.
 - **Dynamic Exclusion Zones:** Populated area buffer circles (R = 300 m) marked NO-FLY.
 - **Separation Minima:** Maintain 150 m vertical and 500 m horizontal separation from non-cooperative targets.
 """,
-        "08_gng.md": """## 8. Go/No-Go Decision Matrix
+        "08_GO_NO_GO_MATRIX.md": """## 8. Go/No-Go Decision Matrix
 | Check ID | Phase | Parameter / Check | Threshold Condition | Sensor / Mechanism | Go / No-Go Action |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | GNG-01 | Pre-Launch | Battery State of Charge | >= 95.0% | Smart Battery BMS | Abort Launch if < 95% |
 """,
-        "09_bingo.md": """## 9. Bingo Energy Mathematics & Secondary Divert Protocols
+        "09_BINGO_ENERGY_MATH.md": """## 9. Bingo Energy Mathematics & Secondary Divert Protocols
 $$
 \\begin{aligned}
 E_{\\mathrm{bingo}}(t) &= E_{\\mathrm{return}}(\\mathbf{p}(t), \\mathbf{p}_{\\mathrm{dest}}) + E_{\\mathrm{divert}}(\\mathbf{p}_{\\mathrm{dest}}, \\mathbf{p}_{\\mathrm{alt}}) + E_{\\mathrm{reserve}} + E_{\\mathrm{contingency}} \\\\
@@ -203,7 +208,7 @@ $$
 | Contingency Buffer | E_contingency | 40000.0 | J | Dynamic operational contingency energy reserve |
 | Total Bingo Threshold | E_bingo | 350000.0 | J | Critical return threshold condition |
 """,
-        "10_tags.md": """## 10. Gate 24 MissionTask Traceability Tags (Allocation Tags)
+        "10_OPERATIONAL_ALLOCATION_TAGS.md": """## 10. Gate 24 MissionTask Traceability Tags (Allocation Tags)
 - `/// OperationalAllocation: [MET-01]`
 - `/// OperationalAllocation: [MET-02]`
 """,
@@ -216,7 +221,7 @@ $$
 
 class TestAssembleConops(unittest.TestCase):
     """
-    Test suite for scripts/assemble_conops.py deterministic assembly engine (Issues #113, #114).
+    Test suite for scripts/assemble_conops.py deterministic assembly engine (Issues #113, #114, #143).
     """
 
     def test_extract_headings_and_generate_toc(self):
@@ -255,7 +260,7 @@ Standards list.
             self.assertTrue(any("is empty" in err for err in errors))
 
     def test_validate_unit_integrity_detects_unresolved_placeholder_tokens(self):
-        """Verify that unresolved template placeholder tokens trigger unit integrity errors."""
+        """Verify that unresolved template placeholder tokens trigger unit integrity errors when no param engine is active."""
         with tempfile.TemporaryDirectory() as tmpdir:
             unit_file = os.path.join(tmpdir, "01_unit.md")
             with open(unit_file, "w", encoding="utf-8") as f:
@@ -374,6 +379,289 @@ Standards list.
                 text=True,
             )
             self.assertEqual(res_verify.returncode, 0, f"Verify CLI failed: {res_verify.stderr}\nstdout: {res_verify.stdout}")
+
+
+class TestSysMLParameterBindingEngine(unittest.TestCase):
+    """
+    Unit and integration tests for SysMLParameterBindingEngine (Issue #143).
+    """
+
+    def test_parameter_engine_initialization_with_dict(self):
+        """Verify initialization with direct parameter values."""
+        engine = SysMLParameterBindingEngine(
+            parameter_values={"SYSTEM_IDENTIFIER": "CustomPlatform", "V_CRUISE_NOMINAL_MPS": "30.0"},
+            auto_detect=False,
+        )
+        self.assertEqual(engine.resolve_token("SYSTEM_IDENTIFIER"), "CustomPlatform")
+        self.assertEqual(engine.resolve_token("V_CRUISE_NOMINAL_MPS"), "30.0")
+
+    def test_parameter_engine_nested_dictionary_ingestion(self):
+        """Verify ingestion of nested configuration dictionaries."""
+        nested = {
+            "metadata": {
+                "system_name": "AutonomousEdgeNode",
+                "version": "2.1.0",
+            },
+            "parameters": {
+                "V_CRUISE_NOMINAL_MPS": "28.5",
+                "CEILING_MAX_M": "4500.0",
+                "MASS_FRACTION_PAYLOAD_PCT": "12.0",
+            },
+        }
+        engine = SysMLParameterBindingEngine(parameter_values=nested, auto_detect=False)
+        self.assertEqual(engine.resolve_token("SYSTEM_IDENTIFIER"), "AutonomousEdgeNode")
+        self.assertEqual(engine.resolve_token("V_CRUISE_NOMINAL_MPS"), "28.5")
+        self.assertEqual(engine.resolve_token("CEILING_MAX_M"), "4500.0")
+        self.assertEqual(engine.resolve_token("MASS_FRACTION_PAYLOAD_PCT"), "12.0")
+
+    def test_parameter_engine_json_file_ingestion(self):
+        """Verify parameter ingestion from an external JSON file."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            json_path = os.path.join(tmpdir, "custom_params.json")
+            data = {
+                "system_identifier": "DistributedSensorArray",
+                "TOTAL_MTOW_KG": "48.0",
+                "INGRESS_PROTECTION_RATING": "IP68",
+                "M501_OP_HIGH_TEMP_C": "60.0",
+            }
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+
+            engine = SysMLParameterBindingEngine(config_path=json_path, auto_detect=False)
+            self.assertEqual(engine.resolve_token("SYSTEM_IDENTIFIER"), "DistributedSensorArray")
+            self.assertEqual(engine.resolve_token("TOTAL_MTOW_KG"), "48.0")
+            self.assertEqual(engine.resolve_token("INGRESS_PROTECTION_RATING"), "IP68")
+            self.assertEqual(engine.resolve_token("M501_OP_HIGH_TEMP_C"), "60.0")
+
+    def test_parameter_engine_sysml_ast_ingestion(self):
+        """Verify SysML v2 textual AST parsing and semantic alias mapping."""
+        sysml_code = """
+        package AutonomousRoboticVehicle {
+            attribute mtow : Real = 45.0;
+            attribute v_cruise : Real = 22.0;
+            attribute max_altitude : Real = 3500.0;
+            attribute temp_min : Real = -25.0;
+            attribute temp_max : Real = 60.0;
+            assert constraint SpeedLimit { v_max <= 40.0 }
+        }
+        """
+        engine = SysMLParameterBindingEngine(auto_detect=False)
+        engine.ingest_sysml_text(sysml_code)
+
+        self.assertEqual(engine.resolve_token("SYSTEM_IDENTIFIER"), "AutonomousRoboticVehicle")
+        self.assertEqual(engine.resolve_token("TOTAL_MTOW_KG"), "45.0")
+        self.assertEqual(engine.resolve_token("V_CRUISE_NOMINAL_MPS"), "22.0")
+        self.assertEqual(engine.resolve_token("CEILING_MAX_M"), "3500.0")
+        self.assertEqual(engine.resolve_token("H_MAX_M"), "3500.0")
+        self.assertEqual(engine.resolve_token("TEMP_MIN_DEGC"), "-25.0")
+        self.assertEqual(engine.resolve_token("TEMP_MAX_DEGC"), "60.0")
+
+    def test_parameter_engine_auto_detection_schema_digest(self):
+        """Verify auto-detection of .pipeline/schema-digest.json in workspace."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            pipeline_dir = os.path.join(tmpdir, ".pipeline")
+            os.makedirs(pipeline_dir, exist_ok=True)
+            digest_path = os.path.join(pipeline_dir, "schema-digest.json")
+
+            digest_content = {
+                "sha256": "abc12345",
+                "system_name": "PipelineIngestedSystem",
+                "parameters": {
+                    "TOTAL_MTOW_KG": "65.0",
+                    "C2_RANGE_NOMINAL_KM": "75.0",
+                },
+            }
+            with open(digest_path, "w", encoding="utf-8") as f:
+                json.dump(digest_content, f)
+
+            engine = SysMLParameterBindingEngine(workspace_dir=tmpdir, auto_detect=True)
+            self.assertEqual(engine.resolve_token("SYSTEM_IDENTIFIER"), "PipelineIngestedSystem")
+            self.assertEqual(engine.resolve_token("TOTAL_MTOW_KG"), "65.0")
+            self.assertEqual(engine.resolve_token("C2_RANGE_NOMINAL_KM"), "75.0")
+
+    def test_substitute_canonical_template_placeholders(self):
+        """Verify substitution of all canonical template placeholders with sensible defaults."""
+        engine = SysMLParameterBindingEngine(auto_detect=False)
+
+        sample_template = """
+# System: {{SYSTEM_IDENTIFIER}}
+- Version: {{DOCUMENT_VERSION}}
+- Date: {{DOCUMENT_DATE}}
+- Security: {{SECURITY_CLASSIFICATION}}
+- Target Realization: {{TARGET_SYSTEM_REALIZATION}}
+- Authoring Org: {{AUTHORING_ORGANIZATION}}
+- Mass Airframe: {{MASS_FRACTION_AIRFRAME_PCT}}% ({{MASS_BUDGET_AIRFRAME_KG}} kg)
+- Cruise Velocity: {{V_CRUISE_NOMINAL_MPS}} m/s
+- Ceiling: {{CEILING_MAX_M}} m
+- Ambient Temp Range: {{AMBIENT_TEMPERATURE_RANGE}}
+- SORA Ground Risk Buffer: {{R_GRB_METERS}} m
+- Bingo Energy Capacity: {{E_CAPACITY_JOULES}} J
+- M-500 Limits: {{M500_OP_LIMIT}}
+- M-501 Limits: {{M501_OP_LIMIT}}
+- M-514 Vibration: {{M514_OP_LIMIT}}
+- Maintenance SLA: {{RAPID_TURNAROUND_SLA_MIN}} min
+- Inline Default Weight: {{TLX_WEIGHT_MD:0.25}}
+- Inline Default Timeout: {{HANDOFF_TIMEOUT_SEC:5.0}}
+"""
+        resolved = engine.substitute(sample_template)
+
+        self.assertNotIn("{{", resolved)
+        self.assertNotIn("}}", resolved)
+        self.assertIn("AutonomousCyberPhysicalSystem", resolved)
+        self.assertIn("1.0.0", resolved)
+        self.assertIn("UNCLASSIFIED // PUBLIC RELEASE", resolved)
+        self.assertIn("30.0%", resolved)
+        self.assertIn("15.0 kg", resolved)
+        self.assertIn("25.0 m/s", resolved)
+        self.assertIn("5000.0 m", resolved)
+        self.assertIn("200.0 m", resolved)
+        self.assertIn("500000.0 J", resolved)
+        self.assertIn("0.25", resolved)
+        self.assertIn("5.0", resolved)
+
+    def test_bind_parameters_convenience_helper(self):
+        """Verify bind_parameters convenience function."""
+        text = "System identifier is {{SYSTEM_IDENTIFIER}} with ceiling {{CEILING_MAX_M}} m."
+        res = bind_parameters(text, {"SYSTEM_IDENTIFIER": "CustomAlpha", "CEILING_MAX_M": "6000.0"})
+        self.assertEqual(res, "System identifier is CustomAlpha with ceiling 6000.0 m.")
+
+    def test_assemble_document_with_parameter_binding_resolves_placeholders(self):
+        """Verify assemble_document substitutes template placeholders during assembly."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            conops_units_dir = os.path.join(tmpdir, "conops")
+            _create_sample_conops_units(conops_units_dir, with_placeholders=True)
+
+            engine = SysMLParameterBindingEngine(
+                parameter_values={"SYSTEM_IDENTIFIER": "AutonomousPatrolSystem"},
+                auto_detect=False,
+            )
+
+            doc_text, errors = assemble_document(
+                units_dir=conops_units_dir,
+                doc_title="Concept of Operations (ConOps)",
+                params=engine,
+            )
+            self.assertEqual(errors, [], f"Assemble document had errors: {errors}")
+            self.assertIn("Concept of Operations (ConOps): AutonomousPatrolSystem", doc_text)
+            self.assertIn("- **System Identifier:** `AutonomousPatrolSystem`", doc_text)
+            self.assertNotIn("{{SYSTEM_IDENTIFIER}}", doc_text)
+
+    def test_assemble_conops_with_custom_params_dict(self):
+        """Verify assemble_conops full pipeline with custom parameter dictionary."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            input_dir = os.path.join(tmpdir, "units")
+            output_dir = os.path.join(tmpdir, "out")
+
+            conops_units_dir = os.path.join(input_dir, "conops")
+            mission_units_dir = os.path.join(input_dir, "mission_intent")
+
+            _create_sample_conops_units(conops_units_dir, with_placeholders=True)
+            _create_sample_mission_intent_units(mission_units_dir, with_placeholders=True)
+
+            custom_params = {
+                "SYSTEM_IDENTIFIER": "ModularInspectionSystem",
+                "MISSION_SYSTEM_NAME": "ModularInspectionSystem",
+                "DOCUMENT_VERSION": "3.0.0",
+            }
+
+            success = assemble_conops(
+                input_dir=input_dir,
+                output_dir=output_dir,
+                verify_only=False,
+                params=custom_params,
+            )
+            self.assertTrue(success)
+
+            conops_file = os.path.join(output_dir, "CONOPS.md")
+            mission_file = os.path.join(output_dir, "MISSION_INTENT.md")
+
+            with open(conops_file, "r", encoding="utf-8") as f:
+                c_text = f.read()
+            with open(mission_file, "r", encoding="utf-8") as f:
+                m_text = f.read()
+
+            self.assertIn("ModularInspectionSystem", c_text)
+            self.assertIn("ModularInspectionSystem", m_text)
+            self.assertNotIn("{{SYSTEM_IDENTIFIER}}", c_text)
+            self.assertNotIn("{{MISSION_SYSTEM_NAME}}", m_text)
+
+    def test_cli_params_flag(self):
+        """Verify CLI execution with --params <path> flag."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            input_dir = os.path.join(tmpdir, "units")
+            output_dir = os.path.join(tmpdir, "out")
+            params_file = os.path.join(tmpdir, "domain_params.json")
+
+            conops_units_dir = os.path.join(input_dir, "conops")
+            mission_units_dir = os.path.join(input_dir, "mission_intent")
+
+            _create_sample_conops_units(conops_units_dir, with_placeholders=True)
+            _create_sample_mission_intent_units(mission_units_dir, with_placeholders=True)
+
+            with open(params_file, "w", encoding="utf-8") as f:
+                json.dump({"SYSTEM_IDENTIFIER": "CLISystemUnderTest", "MISSION_SYSTEM_NAME": "CLISystemUnderTest"}, f)
+
+            script_path = os.path.join(REPO_ROOT, "scripts", "assemble_conops.py")
+
+            res = subprocess.run(
+                [
+                    sys.executable,
+                    script_path,
+                    "--input-dir",
+                    input_dir,
+                    "--output-dir",
+                    output_dir,
+                    "--params",
+                    params_file,
+                ],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(res.returncode, 0, f"CLI --params failed: {res.stderr}\nstdout: {res.stdout}")
+
+            conops_out = os.path.join(output_dir, "CONOPS.md")
+            with open(conops_out, "r", encoding="utf-8") as f:
+                c_text = f.read()
+            self.assertIn("CLISystemUnderTest", c_text)
+            self.assertNotIn("{{SYSTEM_IDENTIFIER}}", c_text)
+
+    def test_canonical_resource_units_assembly_passes_cleanly(self):
+        """Verify end-to-end assembly on actual canonical resource units in skills/spec-conops-engineering/resources/units."""
+        res_units_dir = os.path.join(REPO_ROOT, "skills", "spec-conops-engineering", "resources", "units")
+        if not os.path.isdir(res_units_dir):
+            self.skipTest(f"Resource units dir not found at {res_units_dir}")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = os.path.join(tmpdir, "out")
+            success = assemble_conops(
+                input_dir=res_units_dir,
+                output_dir=out_dir,
+                verify_only=False,
+            )
+            self.assertTrue(success, "assemble_conops failed on canonical resource units")
+
+            conops_path = os.path.join(out_dir, "CONOPS.md")
+            mission_path = os.path.join(out_dir, "MISSION_INTENT.md")
+
+            self.assertTrue(os.path.isfile(conops_path))
+            self.assertTrue(os.path.isfile(mission_path))
+
+            with open(conops_path, "r", encoding="utf-8") as f:
+                conops_text = f.read()
+            with open(mission_path, "r", encoding="utf-8") as f:
+                mission_text = f.read()
+
+            # Verify zero unresolved placeholders
+            self.assertEqual(RAW_TOKEN_FINDER.findall(conops_text), [])
+            self.assertEqual(RAW_TOKEN_FINDER.findall(mission_text), [])
+
+            # Verify all 12 ConOps sections present
+            for sec_num in range(1, 13):
+                self.assertIn(f"## {sec_num}.", conops_text)
+
+            # Verify all 10 Mission Intent sections present
+            for sec_num in range(1, 11):
+                self.assertIn(f"## {sec_num}.", mission_text)
 
 
 if __name__ == "__main__":

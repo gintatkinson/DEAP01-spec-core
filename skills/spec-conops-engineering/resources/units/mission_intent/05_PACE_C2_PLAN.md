@@ -29,7 +29,7 @@ $$
 \end{aligned}
 $$
 
-Where and Operational Parameters:
+- Parameter Definitions & Engineering Units:
 
 | Parameter | Symbol | Units | Constraint / Rule | Description |
 | :--- | :--- | :--- | :--- | :--- |

@@ -75,7 +75,7 @@ class TestEnvironmentalMilStd810HUnit(unittest.TestCase):
         self.assertIn(r"\mathbf{E}_{\mathrm{env}} &\in [\mathbf{E}_{\mathrm{min}}, \mathbf{E}_{\mathrm{max}}]", self.content)
         self.assertIn(r"\begin{aligned}", self.content)
         self.assertIn(r"\end{aligned}", self.content)
-        self.assertIn("Where and Operational Parameters:", self.content)
+        self.assertIn("Parameter Definitions & Engineering Units:", self.content)
         for sym in ["E_env", "E_min", "E_max", "P_amb", "T_amb", "T_gradient", "I_solar", "R_precip", "RH_ambient", "C_salt", "C_particulate", "S_vib(f)", "a_shock", "delta_ice", "E_EMC"]:
             self.assertIn(sym, self.content)
 
