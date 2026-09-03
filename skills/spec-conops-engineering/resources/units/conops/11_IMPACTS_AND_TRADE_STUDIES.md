@@ -8,7 +8,7 @@
 ## 11. Operational Impacts, System Limitations & Documented Trade Studies
 
 ### 11.1 Operational Workflow & Deployment Impacts
-The transition from legacy manual systems to the Abstract Cyber-Physical System Archetype introduces substantial positive impacts across operational workflows:
+The transition from legacy manual systems to {{SYSTEM_IDENTIFIER}} introduces substantial positive impacts across operational workflows:
 1. **Reduced Crew Staging Footprint:** The operational crew footprint required to maintain continuous operations is minimized through supervisory automation (1 System Operator and 1 Payload / Data Specialist).
 2. **Automated Pre-Operation Staging:** Preparation time is compressed to $t_{\text{prep}} \le \tau_{\text{prep\_target}}$ (nominal $\tau_{\text{prep\_target}} = {{PREP_TIME_TARGET_S}}$ s) due to automated digital PBIT routines and tool-less modular interfaces.
 3. **Automated External Coordination:** Integration with external data services automates operational plan registration, dynamic boundary deconfliction, and electronic conspicuity broadcast.

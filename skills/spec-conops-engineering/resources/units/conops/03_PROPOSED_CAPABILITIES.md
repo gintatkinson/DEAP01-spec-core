@@ -7,14 +7,14 @@
 ## 3. Proposed Capabilities & Operational Justification (Trade-Offs)
 
 ### 3.1 Justification for Proposed Architectural Changes
-To resolve the critical deficiencies of predecessor systems and meet statutory safety requirements, the Abstract Cyber-Physical System Archetype transitions the operational paradigm from manual direct control to certified supervisory autonomous execution. This architectural evolution is justified by:
+To resolve the critical deficiencies of predecessor systems and meet statutory safety requirements, {{SYSTEM_IDENTIFIER}} transitions the operational paradigm from manual direct control to certified supervisory autonomous execution. This architectural evolution is justified by:
 1. **Deterministic RTOS Safety-Critical Core:** Implementation of a deterministic safety-critical core architecture executing on a fault-tolerant multi-core processor with memory protection unit (MPU) isolation.
 2. **Multi-Tiered PACE Communications Architecture:** Deployment of a 4-tier communication plan (Primary Point-to-Point link, Alternate high-bandwidth network channel, Contingency robust narrowband link, and Emergency resilient channel) ensuring unbroken command and control integrity.
 3. **Sub-Second Failsafe Containment:** Integration of an independent hardware safety watchdog capable of detecting cross-channel sensor disparities, loss of communication, or state boundary breaches, and triggering deterministic containment actions within $t_{\mathrm{resp}} \le \tau_{\text{containment\_req}}$.
 4. **Edge Neural Telemetry Processing:** High-efficiency edge computing accelerator executing real-time state classification, multi-sensor odometry, and automated feature tracking without saturating low-bandwidth telemetry downlinks.
 
 ### 3.2 Functional Superiority & Operational Value Proposition
-The proposed archetype provides quantifiable functional superiority over the legacy baseline across operational endurance, turnaround tempo, containment response, environmental robustness, and operator cognitive workload:
+The proposed architecture provides quantifiable functional superiority over the legacy baseline across operational endurance, turnaround tempo, containment response, environmental robustness, and operator cognitive workload:
 
 $$
 \begin{aligned}
@@ -33,7 +33,7 @@ $$
 - $\Delta \text{Disturbance}$: Dynamic disturbance tolerance and environmental resistance expansion ($\text{IP}_{xy} \ge \text{IP}_{\mathrm{req}}$).
 - $\Delta \text{TLX}$: NASA Task Load Index cognitive workload reduction ($\text{TLX}_{\mathrm{proposed}} \le \text{TLX}_{\text{nominal\_max}}$).
 
-| Operational Pillar | Legacy Baseline (Predecessor) | Proposed Autonomous Archetype | Superiority Delta Formula | Threshold Improvement Bound | Operational Value Delivered |
+| Operational Pillar | Legacy Baseline (Predecessor) | Proposed {{SYSTEM_IDENTIFIER}} | Superiority Delta Formula | Threshold Improvement Bound | Operational Value Delivered |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Operational Range & Coverage** | Range_legacy (Direct Line-of-Sight R_manual) | Range_proposed (Certified Autonomous Corridor Range_max(Link_C2)) | ΔRange = Range_proposed - Range_legacy | ΔRange > 0 (Range_proposed >= Range_threshold) | Enables wide-area state space coverage without requiring local human operator proximity. |
 | **Turnaround & Relaunch Tempo** | t_turnaround_legacy (Manual Inspection & Servicing) | t_turnaround_proposed (Modular Hot-Swap & Automated PBIT) | Δt_turnaround = t_turnaround_proposed - t_turnaround_legacy | Δt_turnaround < 0 (t_turnaround_proposed <= t_turnaround_target) | Minimizes ground servicing intervals, enabling sustained high-cadence operational sortie cycles. |

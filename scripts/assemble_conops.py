@@ -87,11 +87,21 @@ class SysMLParameterBindingEngine:
         config_path: Optional[str] = None,
         workspace_dir: Optional[str] = None,
         auto_detect: bool = True,
+        domain: Optional[str] = None,
     ):
         self.workspace_dir = os.path.abspath(workspace_dir or os.getcwd())
         self.parameter_bindings: Dict[str, str] = {}
         self._explicit_keys: Set[str] = set()
         self.inferred_system_identifier: Optional[str] = None
+        self.detected_domain: str = domain or "aviation"
+        self.is_non_aircraft: bool = False
+        self.is_civilian: bool = False
+
+        if domain:
+            self.parameter_bindings["DOMAIN_TYPE"] = domain
+            self.parameter_bindings["TARGET_DOMAIN"] = domain
+            self._explicit_keys.add("DOMAIN_TYPE")
+            self._explicit_keys.add("TARGET_DOMAIN")
 
         if auto_detect:
             self.auto_discover_sources(self.workspace_dir)
@@ -102,12 +112,103 @@ class SysMLParameterBindingEngine:
         if parameter_values:
             self.ingest_dictionary(parameter_values)
 
+        self.detected_domain = self._detect_domain_type()
+        self.parameter_bindings["DETECTED_DOMAIN"] = self.detected_domain
+        self.parameter_bindings["DOMAIN_TYPE"] = self.detected_domain
+
         self._derive_operational_intent()
         self._derive_mass_budgets()
         self._derive_quadratic_physics()
         self._derive_energy_budgets()
         self._derive_domain_regulatory_standards()
         self._derive_domain_ontology()
+
+    @property
+    def domain(self) -> str:
+        return getattr(self, "detected_domain", "aviation")
+
+    @domain.setter
+    def domain(self, val: str) -> None:
+        self.detected_domain = val
+
+    def _detect_domain_type(self) -> str:
+        """
+        Detects operational domain type: aviation, medical, rail, marine, space, industrial.
+        Fixes Issue #175.
+        """
+        # 1. Explicit domain in parameter bindings
+        explicit = (
+            self.parameter_bindings.get("DOMAIN_TYPE")
+            or self.parameter_bindings.get("TARGET_DOMAIN")
+            or self.parameter_bindings.get("DOMAIN")
+        )
+        if explicit:
+            exp_clean = str(explicit).lower().strip()
+            for dom in ("medical", "rail", "marine", "space", "industrial", "aviation"):
+                if dom in exp_clean:
+                    return dom
+
+        # 2. Check domain_config.json in workspace
+        for cfg_rel in (
+            "schema/domain_config.json",
+            ".pipeline/domain_config.json",
+            "domain_config.json",
+            ".agents/domain_config.json",
+        ):
+            curr = self.workspace_dir
+            for _ in range(5):
+                cfg_path = os.path.join(curr, cfg_rel)
+                if os.path.isfile(cfg_path):
+                    try:
+                        with open(cfg_path, "r", encoding="utf-8") as f:
+                            cfg = json.load(f)
+                        dom_val = (
+                            cfg.get("domain")
+                            or cfg.get("domain_type")
+                            or cfg.get("operational_domain")
+                            or cfg.get("system_type")
+                            or ""
+                        ).lower()
+                        for dom in ("medical", "rail", "marine", "space", "industrial", "aviation"):
+                            if dom in dom_val:
+                                return dom
+                    except Exception:
+                        pass
+                parent = os.path.dirname(curr)
+                if parent == curr:
+                    break
+                curr = parent
+
+        # 3. Parameter bindings and inferred identifiers
+        domain_str = (
+            self.parameter_bindings.get("OPERATIONAL_DOMAIN")
+            or self.parameter_bindings.get("DOMAIN")
+            or ""
+        ).lower()
+        sys_str = (
+            self.parameter_bindings.get("SYSTEM_IDENTIFIER")
+            or self.parameter_bindings.get("SYSTEM_NAME")
+            or self.inferred_system_identifier
+            or ""
+        ).lower()
+        platform_type = (self.parameter_bindings.get("PLATFORM_TYPE") or "").lower()
+        ws_str = self.workspace_dir.lower()
+        combined = f"{domain_str} {sys_str} {platform_type} {ws_str}"
+
+        if any(w in combined for w in ("medical", "surgical", "healthcare", "patient", "clinical", "hospital", "laparoscop", "trocar")):
+            return "medical"
+        if any(w in combined for w in ("rail", "locomotive", "train", "shunting", "metro", "tramway", "rolling stock", "railway", "track circuit")):
+            return "rail"
+        if any(w in combined for w in ("marine", "subsea", "maritime", "underwater", "auv", "rov", "usv", "uuv", "vessel", "naval", "ocean", "bathymetr")):
+            return "marine"
+        if any(w in combined for w in ("aviation", "uav", "uas", "drone", "evtol", "aircraft", "aerial", "flight", "airspace", "sora", "aerospace")):
+            return "aviation"
+        if any(w in combined for w in ("satellite", "cubesat", "orbital", "spacecraft", "launch", "leo", "geo", "adcs", "orbit", "space ")):
+            return "space"
+        if any(w in combined for w in ("agv", "forklift", "warehouse", "logistics", "industrial truck", "amr", "material handling", "vda 5050", "ugv")):
+            return "industrial"
+
+        return "aviation"
 
     def _get_mtow_value(self) -> float:
         """Extracts numerical MTOW from bound parameters or fallback default (50.0 kg)."""
@@ -117,6 +218,7 @@ class SysMLParameterBindingEngine:
             or self.parameter_bindings.get("MTOW_MAX_KG")
             or self.parameter_bindings.get("SYSTEM_MASS_MAX_KG")
             or self.parameter_bindings.get("OPERATIONAL_MASS_KG")
+            or self.parameter_bindings.get("SYSTEM_MASS_KG")
         )
         if mtow_raw is not None:
             try:
@@ -129,7 +231,7 @@ class SysMLParameterBindingEngine:
     def _derive_mass_budgets(self) -> None:
         """
         Dynamically calculates subsystem mass budget values from TOTAL_MTOW_KG.
-        Fixes Issue #161.
+        Fixes Issues #161, #177.
 
         Subsystems:
           - MASS_BUDGET_AIRFRAME_KG = round(0.30 * mtow, 2)
@@ -138,7 +240,7 @@ class SysMLParameterBindingEngine:
           - MASS_BUDGET_ENERGY_KG = round(0.20 * mtow, 2)
           - MASS_BUDGET_PAYLOAD_KG = round(0.07 * mtow, 2)
           - MASS_BUDGET_CONTAINMENT_KG = round(mtow - (airframe + avionics + propulsion + energy + payload), 2)
-        Ensures the 6 partition rows strictly sum to TOTAL_MTOW_KG for any vehicle mass.
+        Ensures the 6 partition rows strictly sum to TOTAL_MTOW_KG (100.0%) for any vehicle mass.
         """
         mtow = self._get_mtow_value()
 
@@ -165,61 +267,148 @@ class SysMLParameterBindingEngine:
         if "MASS_BUDGET_CONTAINMENT_KG" not in self._explicit_keys:
             self.parameter_bindings["MASS_BUDGET_CONTAINMENT_KG"] = str(containment)
 
+        if "MASS_FRACTION_AIRFRAME_PCT" not in self._explicit_keys:
+            self.parameter_bindings["MASS_FRACTION_AIRFRAME_PCT"] = "30.0"
+        if "MASS_FRACTION_AVIONICS_PCT" not in self._explicit_keys:
+            self.parameter_bindings["MASS_FRACTION_AVIONICS_PCT"] = "15.0"
+        if "MASS_FRACTION_PROPULSION_PCT" not in self._explicit_keys:
+            self.parameter_bindings["MASS_FRACTION_PROPULSION_PCT"] = "25.0"
+        if "MASS_FRACTION_ENERGY_PCT" not in self._explicit_keys:
+            self.parameter_bindings["MASS_FRACTION_ENERGY_PCT"] = "20.0"
+        if "MASS_FRACTION_PAYLOAD_PCT" not in self._explicit_keys:
+            self.parameter_bindings["MASS_FRACTION_PAYLOAD_PCT"] = "7.0"
+        if "MASS_FRACTION_CONTAINMENT_PCT" not in self._explicit_keys:
+            self.parameter_bindings["MASS_FRACTION_CONTAINMENT_PCT"] = "3.0"
+
     def _derive_quadratic_physics(self) -> None:
         """
-        Closed-Form Quadratic Physics Solver (Fixes #168).
+        Closed-Form Quadratic Physics Solver (Fixes #168, #178).
         Calculates:
           v_calc = sqrt(2 * m * g / (rho * S * C_d))
           E_k_calc = 0.5 * m * v_calc^2
-        Binds calculated values to template tokens so table values always match the mathematical formula.
+        Binds calculated values to template tokens from declared medium density and geometry,
+        ensuring formula-table parity.
         """
         m = self._get_mtow_value()
         g = 9.80665
-        rho = 1.225
-        cd = 1.75
+
+        # Medium density rho based on domain and explicit bindings (ISA sea level default 1.225 kg/m^3 for Section 5.2 SORA kinetic energy derivations)
+        default_rho = 1.225
+        if self.domain == "marine":
+            default_rho = 1025.0
+        elif self.domain == "space":
+            default_rho = 1e-12
+
+        rho_raw = (
+            self.parameter_bindings.get("AIR_DENSITY_KGM3")
+            or self.parameter_bindings.get("FLUID_DENSITY_KGM3")
+            or self.parameter_bindings.get("RHO_MEDIUM")
+            or self.parameter_bindings.get("RHO")
+        )
+        rho = default_rho
+        if rho_raw is not None:
+            try:
+                m_rho = re.search(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?", str(rho_raw))
+                if m_rho:
+                    rho = float(m_rho.group(0))
+            except Exception:
+                pass
+
+        if "AIR_DENSITY_KGM3" not in self._explicit_keys:
+            self.parameter_bindings["AIR_DENSITY_KGM3"] = str(rho)
+        if "FLUID_DENSITY_KGM3" not in self._explicit_keys:
+            self.parameter_bindings["FLUID_DENSITY_KGM3"] = str(rho)
+        if "RHO_MEDIUM" not in self._explicit_keys:
+            self.parameter_bindings["RHO_MEDIUM"] = str(rho)
+        if "G_ACCEL_MPS2" not in self._explicit_keys:
+            self.parameter_bindings["G_ACCEL_MPS2"] = str(g)
 
         # Bind system mass tokens
         self.parameter_bindings["SYSTEM_MASS_KG"] = str(m)
         self.parameter_bindings["SYSTEM_MASS"] = str(m)
 
-        # Check drag coefficient
-        cd_raw = self.parameter_bindings.get("PARACHUTE_DRAG_COEFFICIENT") or self.parameter_bindings.get("C_D_PARACHUTE")
-        if cd_raw:
+        # Reference frontal area S_ref and drag coefficient C_D
+        s_ref_raw = self.parameter_bindings.get("FRONTAL_AREA_M2") or self.parameter_bindings.get("S_REF")
+        s_ref = 0.18
+        if s_ref_raw:
             try:
-                m_cd = re.search(r"[-+]?\d*\.?\d+", str(cd_raw))
-                if m_cd:
-                    cd = float(m_cd.group(0))
+                m_sref = re.search(r"[-+]?\d*\.?\d+", str(s_ref_raw))
+                if m_sref:
+                    s_ref = float(m_sref.group(0))
             except Exception:
                 pass
 
-        # Check canopy area S
-        s_raw = (
+        cd_unmit_raw = self.parameter_bindings.get("DRAG_COEFFICIENT") or self.parameter_bindings.get("C_D")
+        cd_unmit = 0.45
+        if cd_unmit_raw:
+            try:
+                m_cdunmit = re.search(r"[-+]?\d*\.?\d+", str(cd_unmit_raw))
+                if m_cdunmit:
+                    cd_unmit = float(m_cdunmit.group(0))
+            except Exception:
+                pass
+
+        if "FRONTAL_AREA_M2" not in self._explicit_keys:
+            self.parameter_bindings["FRONTAL_AREA_M2"] = str(s_ref)
+        if "DRAG_COEFFICIENT" not in self._explicit_keys:
+            self.parameter_bindings["DRAG_COEFFICIENT"] = str(cd_unmit)
+
+        # Unmitigated terminal velocity and kinetic energy
+        if rho > 0 and s_ref > 0 and cd_unmit > 0:
+            v_term_unmit = round(((2.0 * m * g) / (rho * s_ref * cd_unmit)) ** 0.5, 2)
+            ek_unmit = round(0.5 * m * (v_term_unmit ** 2), 1)
+        else:
+            v_term_unmit = 0.0
+            ek_unmit = 0.0
+
+        if "V_TERMINAL_UNMITIGATED_MPS" not in self._explicit_keys:
+            self.parameter_bindings["V_TERMINAL_UNMITIGATED_MPS"] = str(v_term_unmit)
+            self.parameter_bindings["V_TERMINAL_UNMITIGATED"] = str(v_term_unmit)
+        if "E_K_UNMITIGATED_JOULES" not in self._explicit_keys:
+            self.parameter_bindings["E_K_UNMITIGATED_JOULES"] = str(ek_unmit)
+            self.parameter_bindings["E_K_UNMITIGATED"] = str(ek_unmit)
+
+        # Mitigated parachute / recovery parameters
+        cd_mit = 1.75
+        cd_mit_raw = self.parameter_bindings.get("PARACHUTE_DRAG_COEFFICIENT") or self.parameter_bindings.get("C_D_PARACHUTE")
+        if cd_mit_raw:
+            try:
+                m_cdmit = re.search(r"[-+]?\d*\.?\d+", str(cd_mit_raw))
+                if m_cdmit:
+                    cd_mit = float(m_cdmit.group(0))
+            except Exception:
+                pass
+
+        s_mit_raw = (
             self.parameter_bindings.get("PARACHUTE_AREA_M2")
             or self.parameter_bindings.get("PARACHUTE_CANOPY_AREA_M2")
             or self.parameter_bindings.get("PARACHUTE_CANOPY_AREA")
             or self.parameter_bindings.get("S_CANOPY")
             or self.parameter_bindings.get("S_CANOPY_M2")
         )
-        s = None
-        if s_raw:
+        s_mit = None
+        if s_mit_raw:
             try:
-                m_s = re.search(r"[-+]?\d*\.?\d+", str(s_raw))
-                if m_s:
-                    s = float(m_s.group(0))
+                m_smit = re.search(r"[-+]?\d*\.?\d+", str(s_mit_raw))
+                if m_smit:
+                    s_mit = float(m_smit.group(0))
             except Exception:
                 pass
 
-        if s is None or s <= 0:
+        if s_mit is None or s_mit <= 0:
             target_v = 1.6483
-            s = round((2.0 * m * g) / (rho * cd * (target_v ** 2)), 2)
+            if rho > 0:
+                s_mit = round((2.0 * m * g) / (rho * cd_mit * (target_v ** 2)), 2)
+            else:
+                s_mit = 1.0
             if "PARACHUTE_AREA_M2" not in self._explicit_keys:
-                self.parameter_bindings["PARACHUTE_AREA_M2"] = str(s)
+                self.parameter_bindings["PARACHUTE_AREA_M2"] = str(s_mit)
             if "S_CANOPY" not in self._explicit_keys:
-                self.parameter_bindings["S_CANOPY"] = str(s)
+                self.parameter_bindings["S_CANOPY"] = str(s_mit)
             if "PARACHUTE_CANOPY_AREA_M2" not in self._explicit_keys:
-                self.parameter_bindings["PARACHUTE_CANOPY_AREA_M2"] = str(s)
+                self.parameter_bindings["PARACHUTE_CANOPY_AREA_M2"] = str(s_mit)
 
-        denom = rho * s * cd
+        denom = rho * s_mit * cd_mit
         if denom > 0 and m > 0:
             v_calc = round(((2.0 * m * g) / denom) ** 0.5, 2)
             ek_calc = round(0.5 * m * (v_calc ** 2), 1)
@@ -228,11 +417,11 @@ class SysMLParameterBindingEngine:
             ek_calc = 34.0
 
         if "S_CANOPY" not in self._explicit_keys:
-            self.parameter_bindings["S_CANOPY"] = str(s)
+            self.parameter_bindings["S_CANOPY"] = str(s_mit)
         if "PARACHUTE_AREA_M2" not in self._explicit_keys:
-            self.parameter_bindings["PARACHUTE_AREA_M2"] = str(s)
+            self.parameter_bindings["PARACHUTE_AREA_M2"] = str(s_mit)
         if "PARACHUTE_CANOPY_AREA_M2" not in self._explicit_keys:
-            self.parameter_bindings["PARACHUTE_CANOPY_AREA_M2"] = str(s)
+            self.parameter_bindings["PARACHUTE_CANOPY_AREA_M2"] = str(s_mit)
 
         if "V_TERMINAL_PARACHUTE_MPS" not in self._explicit_keys:
             self.parameter_bindings["V_TERMINAL_PARACHUTE_MPS"] = str(v_calc)
@@ -244,58 +433,48 @@ class SysMLParameterBindingEngine:
             self.parameter_bindings["E_K_MITIGATED"] = str(ek_calc)
             self.parameter_bindings["MITIGATED_KINETIC_ENERGY_J"] = str(ek_calc)
         if "PARACHUTE_DRAG_COEFFICIENT" not in self._explicit_keys:
-            self.parameter_bindings["PARACHUTE_DRAG_COEFFICIENT"] = str(cd)
-            self.parameter_bindings["C_D_PARACHUTE"] = str(cd)
+            self.parameter_bindings["PARACHUTE_DRAG_COEFFICIENT"] = str(cd_mit)
+            self.parameter_bindings["C_D_PARACHUTE"] = str(cd_mit)
     def _derive_domain_regulatory_standards(self) -> None:
         """
-        Dynamically derives DOMAIN_REGULATORY_STANDARDS_TABLE_ROWS based on OPERATIONAL_DOMAIN,
-        SYSTEM_IDENTIFIER, REGULATORY_STANDARDS, or domain config (Issues #163, #164, #169).
+        Dynamically derives DOMAIN_REGULATORY_STANDARDS_TABLE_ROWS based on detected domain,
+        SYSTEM_IDENTIFIER, REGULATORY_STANDARDS, or domain config (Issues #163, #164, #169, #175).
         """
         if "DOMAIN_REGULATORY_STANDARDS_TABLE_ROWS" in self._explicit_keys:
             return
 
-        domain_str = (
-            self.parameter_bindings.get("OPERATIONAL_DOMAIN")
-            or self.parameter_bindings.get("DOMAIN")
-            or ""
-        ).lower()
-        sys_str = (
-            self.parameter_bindings.get("SYSTEM_IDENTIFIER")
-            or self.inferred_system_identifier
-            or ""
-        ).lower()
-        combined = f"{domain_str} {sys_str}"
+        dom = getattr(self, "detected_domain", "aviation")
 
         # Medical domain
-        if any(w in combined for w in ("medical", "surgical", "healthcare", "patient", "clinical", "hospital")):
+        if dom == "medical":
             rows = [
                 "| IEC 62304:2006+AMD1:2015 Class C | IEC | Medical device software — Software life cycle processes | §4.3 Software safety classification, §5.2 Software development planning, §7.1 Software risk management |",
                 "| ISO 14971:2019 | ISO | Medical devices — Application of risk management to medical devices | §4.4 Risk management plan, §5.4 Risk estimation, §7.1 Risk control option analysis |",
                 "| IEC 60601-1-8:2020 | IEC | Medical electrical equipment — Part 1-8: General requirements for basic safety and essential performance — Collateral Standard: Alarm systems | §6.3 Alarm condition categories, §6.8 Alarm signals, §6.9 Alarm limits |",
             ]
         # Rail domain
-        elif any(w in combined for w in ("rail", "locomotive", "train", "shunting", "metro", "tramway", "rolling stock")):
+        elif dom == "rail":
             rows = [
                 "| EN 50126:2017 | CENELEC | Railway Applications — The Specification and Demonstration of Reliability, Availability, Maintainability and Safety (RAMS) | §6.2 RAMS lifecycle processes, §7.3 Risk assessment and safety requirements |",
                 "| EN 50128:2011/A2:2020 SIL 4 | CENELEC | Railway applications — Communication, signalling and processing systems — Software for railway control and protection systems | §6.3 Software safety integrity levels (SIL 4), §7.5 Software verification and testing |",
                 "| EN 50129:2018 | CENELEC | Railway applications — Communication, signalling and processing systems — Safety related electronic systems for signalling | §5.2 Safety management for electronic systems, §6.3 Hardware safety integrity, §7.1 Safety acceptance |",
             ]
         # Space domain
-        elif any(w in combined for w in ("space", "satellite", "cubesat", "orbital", "spacecraft", "launch", "leo", "geo")):
+        elif dom == "space":
             rows = [
                 "| ECSS-E-ST-40C | ECSS | Space engineering — Software | §5.2 Software life cycle, §5.8 Software verification and validation, §6.3 Space software safety requirements |",
                 "| NASA-STD-8739.8 | NASA | Software Assurance Standard for NASA Programs and Projects | §4.2 Safety-critical software assurance, §5.3 Independent Verification and Validation (IV&V) |",
                 "| ECSS-E-ST-10C | ECSS | Space engineering — System engineering general requirements | §5.2 System engineering process, §6.2 Verification and product assurance processes |",
             ]
         # AGV / Forklift / Warehouse logistics domain
-        elif any(w in combined for w in ("agv", "forklift", "warehouse", "logistics", "industrial truck", "amr", "material handling")):
+        elif dom == "industrial":
             rows = [
                 "| ISO 3691-4:2023 | ISO | Industrial trucks — Safety requirements and verification — Part 4: Driverless industrial trucks and their systems | §4.2 Automated path containment, §4.3 Personnel detection and active obstacle avoidance, §5.2 Safety interlocks |",
                 "| IEC 61508 SIL 3 | IEC | Functional Safety of Electrical/Electronic/Programmable Electronic Safety-related Systems | Part 1 §6.2 Management of functional safety, Part 2 §7.4 Hardware safety integrity (SIL 3), Part 3 §7.4 Software design |",
                 "| VDA 5050 | VDA / VDMA | AGV Communication Interface — Interface for the communication between automated guided vehicles (AGV) and a master control | §4.0 MQTT message formats, §5.2 Dynamic order execution, §6.3 Instant action and e-stop commands |",
             ]
         # Subsea / Maritime domain
-        elif any(w in combined for w in ("subsea", "maritime", "marine", "underwater", "auv", "rov", "usv", "uuv", "vessel", "naval", "ocean")):
+        elif dom == "marine":
             rows = [
                 "| DNV-GL-ST-E403 | DNV GL | Subsea power and automation systems | §3.2 Subsea electrical and control system safety, §4.4 Redundant power and containment architectures |",
                 "| ISO 13628-6 | ISO | Petroleum and natural gas industries — Design and operation of subsea production systems — Part 6: Subsea production control systems | §5.2 Environmental qualification, §6.3 Pressure containment and emergency release interlocks |",
@@ -318,12 +497,32 @@ class SysMLParameterBindingEngine:
     def _derive_energy_budgets(self) -> None:
         """
         Derives consistent energy, nominal power, peak power, and Bingo threshold budgets.
+        Fixes Issue #179 (First-Law Energy Conservation).
         Ensures:
           E_capacity_joules >= P_nominal_watts * (t_endurance_hours * 3600.0)
           E_bingo = E_return + E_divert + E_reserve + E_contingency
           E_reserve / E_capacity >= 0.20
         """
-        # 1. Determine battery capacity in kWh and Joules
+        # 1. Determine endurance in hours
+        t_hours = None
+        if "ENDURANCE_HOURS" in self.parameter_bindings:
+            try:
+                t_hours = float(self.parameter_bindings["ENDURANCE_HOURS"])
+            except ValueError:
+                pass
+        elif "ENDURANCE_NOMINAL_MIN" in self.parameter_bindings:
+            try:
+                t_hours = float(self.parameter_bindings["ENDURANCE_NOMINAL_MIN"]) / 60.0
+            except ValueError:
+                pass
+
+        if t_hours is None or t_hours <= 0:
+            t_hours = 2.0
+
+        t_sec = t_hours * 3600.0
+        t_min = round(t_hours * 60.0, 1)
+
+        # 2. Determine battery capacity in Joules and kWh
         e_joules = None
         if "BATTERY_CAPACITY_JOULES" in self.parameter_bindings:
             try:
@@ -341,28 +540,26 @@ class SysMLParameterBindingEngine:
             except ValueError:
                 pass
 
-        if e_joules is None or e_joules <= 0:
-            e_joules = 500000.0
+        p_nom_raw = self.parameter_bindings.get("TOTAL_POWER_NOMINAL_W") or self.parameter_bindings.get("POWER_NOMINAL_W")
+        p_nom_specified = None
+        if p_nom_raw:
+            try:
+                p_nom_specified = float(p_nom_raw)
+            except ValueError:
+                pass
+
+        if e_joules is None:
+            if p_nom_specified is not None and p_nom_specified > 0:
+                e_joules = round((p_nom_specified * t_sec) / 0.70, 1)
+            else:
+                e_joules = 500000.0
+
+        # Enforce First-Law Energy Conservation: E_capacity >= P_nominal * t_sec
+        min_e_required = (p_nom_specified or (0.70 * (e_joules / t_sec))) * t_sec
+        if e_joules < min_e_required:
+            e_joules = round(min_e_required / 0.70, 1)
 
         e_kwh = round(e_joules / 3.6e6, 4)
-
-        # 2. Determine endurance in hours
-        t_hours = None
-        if "ENDURANCE_HOURS" in self.parameter_bindings:
-            try:
-                t_hours = float(self.parameter_bindings["ENDURANCE_HOURS"])
-            except ValueError:
-                pass
-        elif "ENDURANCE_NOMINAL_MIN" in self.parameter_bindings:
-            try:
-                t_hours = float(self.parameter_bindings["ENDURANCE_NOMINAL_MIN"]) / 60.0
-            except ValueError:
-                pass
-
-        if t_hours is None or t_hours <= 0:
-            t_hours = 2.0
-
-        t_min = round(t_hours * 60.0, 1)
 
         self.parameter_bindings["BATTERY_CAPACITY_KWH"] = str(e_kwh)
         self.parameter_bindings["E_CAPACITY_KWH"] = str(e_kwh)
@@ -374,8 +571,12 @@ class SysMLParameterBindingEngine:
         self.parameter_bindings["ENDURANCE_MIN_MIN"] = str(t_min)
 
         # 3. Derive sustainable nominal and peak power
-        p_sustainable = e_joules / (t_hours * 3600.0)
-        p_nom = round(0.70 * p_sustainable, 1)
+        p_sustainable = e_joules / t_sec
+        if p_nom_specified is not None and p_nom_specified > 0 and p_nom_specified <= p_sustainable:
+            p_nom = p_nom_specified
+        else:
+            p_nom = round(0.70 * p_sustainable, 1)
+
         if p_nom <= 0:
             p_nom = 100.0
         p_peak = round(2.0 * p_nom, 1)
@@ -389,6 +590,14 @@ class SysMLParameterBindingEngine:
             self.parameter_bindings["TOTAL_POWER_NOMINAL_W"] = str(p_nom)
         if "TOTAL_POWER_PEAK_W" not in self._explicit_keys:
             self.parameter_bindings["TOTAL_POWER_PEAK_W"] = str(p_peak)
+        if "POWER_NOMINAL_AIRFRAME_W" not in self._explicit_keys:
+            self.parameter_bindings["POWER_NOMINAL_AIRFRAME_W"] = "0.0"
+        if "POWER_PEAK_AIRFRAME_W" not in self._explicit_keys:
+            self.parameter_bindings["POWER_PEAK_AIRFRAME_W"] = "0.0"
+        if "POWER_NOMINAL_ENERGY_W" not in self._explicit_keys:
+            self.parameter_bindings["POWER_NOMINAL_ENERGY_W"] = "0.0"
+        if "POWER_PEAK_ENERGY_W" not in self._explicit_keys:
+            self.parameter_bindings["POWER_PEAK_ENERGY_W"] = "0.0"
         if "POWER_NOMINAL_PROPULSION_W" not in self._explicit_keys:
             self.parameter_bindings["POWER_NOMINAL_PROPULSION_W"] = str(p_prop)
         if "POWER_PEAK_PROPULSION_W" not in self._explicit_keys:
@@ -408,6 +617,8 @@ class SysMLParameterBindingEngine:
 
         # 4. Derive Bingo energy partitions
         e_reserve = round(0.20 * e_joules, 1)
+        if e_reserve / e_joules < 0.20:
+            e_reserve = round(0.20 * e_joules + 0.1, 1)
         e_return = round(0.35 * e_joules, 1)
         e_divert = round(0.15 * e_joules, 1)
         e_contingency = round(0.10 * e_joules, 1)
@@ -422,65 +633,143 @@ class SysMLParameterBindingEngine:
 
     def _derive_domain_ontology(self) -> None:
         """
-        Derives platform-specific and civilian/military ontology tokens (Solver 5).
+        Derives platform-specific and civilian/military ontology tokens for all 6 domains (Solver 5).
+        Fixes Issue #175.
         """
-        domain_str = (
-            self.parameter_bindings.get("OPERATIONAL_DOMAIN")
-            or self.parameter_bindings.get("DOMAIN")
-            or ""
-        ).lower()
-        sys_str = (
-            self.parameter_bindings.get("SYSTEM_IDENTIFIER")
-            or self.inferred_system_identifier
-            or ""
-        ).lower()
-        ws_str = self.workspace_dir.lower()
-        combined = f"{domain_str} {sys_str} {ws_str}"
+        dom = getattr(self, "detected_domain", "aviation")
 
-        is_non_aircraft = any(
-            k in combined
-            for k in (
-                "ground", "rail", "medical", "subsea", "space", "ugv", "locomotive",
-                "surgical", "auv", "cubesat", "satellite", "agv", "forklift", "underwater",
-                "surface vessel", "maritime", "run_03", "run_04", "run_05", "run_06", "run_07", "run_08", "run_09",
-            )
-        )
-        is_civilian = any(
-            k in combined
-            for k in (
-                "medical", "agv", "rail", "surgical", "forklift", "locomotive", "logistics",
-                "civilian", "hospital", "patient", "warehouse", "run_07", "run_08", "run_09",
-            )
-        )
+        is_non_aircraft = dom in ("medical", "rail", "marine", "space", "industrial")
+        is_civilian = dom in ("medical", "rail", "marine", "space", "industrial")
 
         self.is_non_aircraft = is_non_aircraft
         self.is_civilian = is_civilian
 
-        if is_non_aircraft:
-            self.parameter_bindings["STRUCTURE_PARTITION_LABEL"] = "Primary Chassis & Structural Assembly"
-            self.parameter_bindings["FAILSAFE_CONTAINMENT_NAME"] = "failsafe emergency containment / brake actuator"
+        # Domain-specific ontology derivations
+        if dom == "medical":
+            self.parameter_bindings["STRUCTURE_PARTITION_LABEL"] = "Surgeon Console Ergonomic Chassis & Arm Assembly"
+            self.parameter_bindings["FAILSAFE_CONTAINMENT_NAME"] = "electromagnetic joint brake / emergency power cutoff actuator"
+            self.parameter_bindings["ALTITUDE_UNIT"] = "mm"
+            self.parameter_bindings["V_STALL_MAX_MPS"] = "0.0"
+            self.parameter_bindings["V_STALL_NOMINAL_MPS"] = "0.0"
+            self.parameter_bindings["REMOTE_ID_HEADER"] = "IEC 60601-1 Medical Device Telemetry & Identification"
+            self.parameter_bindings["REMOTE_ID_STANDARD_BODY"] = "Direct medical telemetry and device identification conforming to IEC 62304 Class C and IEC 60601-1 standards."
+            self.parameter_bindings["TIER4_CONTAINMENT_DESC"] = "electromagnetic joint brake clamp or immediate surgical power cutoff"
+            self.parameter_bindings["FAILSAFE_DESCENT_SYSTEM"] = "emergency joint brake and power isolation system"
+            self.parameter_bindings["RECOVERY_DEVICE_TERM"] = "failsafe joint brake"
+            self.parameter_bindings["RECOVERY_SUB"] = "brake"
+            self.parameter_bindings["PARACHUTE_SYMBOL_CD"] = "C_d"
+            self.parameter_bindings["PARACHUTE_SYMBOL_V"] = "v_{\\mathrm{terminal}}"
+            self.parameter_bindings["PARACHUTE_PARAM_NAME_S"] = "Instrument Reference Cross-Section"
+            self.parameter_bindings["PARACHUTE_PARAM_NAME_CD"] = "Fluid Resistance Coefficient"
+            self.parameter_bindings["PARACHUTE_PARAM_SYM_CD"] = "C_d"
+            self.parameter_bindings["PARACHUTE_PARAM_NAME_V"] = "Terminal Joint Velocity"
+            self.parameter_bindings["PARACHUTE_PARAM_SYM_V"] = "v_terminal"
+            self.parameter_bindings["EMERGENCY_IGNITION_DESC"] = "Emergency Surgical Power Isolation Command"
+            self.parameter_bindings["CONTAINMENT_SQUIB_ACTION"] = "Emergency Joint Brake & Power Cutoff Command"
+            self.parameter_bindings["OPTX13_NAME"] = "BroadcastMedicalDeviceTelemetry"
+            self.parameter_bindings["OPTX13_SOURCE"] = "MedicalDeviceIdentification"
+            self.parameter_bindings["OPTX13_PROTOCOL_DESC"] = "Digitally Signed Medical Telemetry (DICOM/HL7 per IEC 62304)"
+            self.parameter_bindings["ALTITUDE_TELEMETRY"] = "Manipulator Tip Position (X/Y/Z)"
+        elif dom == "rail":
+            self.parameter_bindings["STRUCTURE_PARTITION_LABEL"] = "Locomotive Heavy Chassis & Underframe Structure"
+            self.parameter_bindings["FAILSAFE_CONTAINMENT_NAME"] = "pneumatic train brake pipe venting / automatic coupler emergency release"
             self.parameter_bindings["ALTITUDE_UNIT"] = "m"
             self.parameter_bindings["V_STALL_MAX_MPS"] = "0.0"
             self.parameter_bindings["V_STALL_NOMINAL_MPS"] = "0.0"
-            self.parameter_bindings["REMOTE_ID_HEADER"] = "Direct Broadcast Telemetry Identification & Tracking"
-            self.parameter_bindings["REMOTE_ID_STANDARD_BODY"] = "Direct connectionless RF broadcast in accordance with ISO/IEC/IEEE 29148 and spatial telemetry tracking standards."
-            self.parameter_bindings["TIER4_CONTAINMENT_DESC"] = "emergency stop or instant power cutoff"
-            self.parameter_bindings["FAILSAFE_DESCENT_SYSTEM"] = "emergency containment deceleration system"
-            self.parameter_bindings["RECOVERY_DEVICE_TERM"] = "containment deceleration device"
-            self.parameter_bindings["RECOVERY_SUB"] = "recovery"
+            self.parameter_bindings["REMOTE_ID_HEADER"] = "Automatic Equipment Identification (AEI) & ETCS Balise Telemetry"
+            self.parameter_bindings["REMOTE_ID_STANDARD_BODY"] = "Direct wayside tracking and identification in accordance with EN 50128 SIL 4 and IEEE 1474.1 CBTC standards."
+            self.parameter_bindings["TIER4_CONTAINMENT_DESC"] = "pneumatic emergency brake pipe venting or traction power cutoff"
+            self.parameter_bindings["FAILSAFE_DESCENT_SYSTEM"] = "pneumatic emergency brake venting system"
+            self.parameter_bindings["RECOVERY_DEVICE_TERM"] = "pneumatic emergency brake"
+            self.parameter_bindings["RECOVERY_SUB"] = "brake"
             self.parameter_bindings["PARACHUTE_SYMBOL_CD"] = "C_d"
             self.parameter_bindings["PARACHUTE_SYMBOL_V"] = "v_{\\mathrm{terminal}}"
-            self.parameter_bindings["PARACHUTE_PARAM_NAME_S"] = "Recovery Reference Area"
-            self.parameter_bindings["PARACHUTE_PARAM_NAME_CD"] = "Recovery Drag Coefficient"
+            self.parameter_bindings["PARACHUTE_PARAM_NAME_S"] = "Locomotive Frontal Area"
+            self.parameter_bindings["PARACHUTE_PARAM_NAME_CD"] = "Train Aerodynamic Drag Coefficient"
             self.parameter_bindings["PARACHUTE_PARAM_SYM_CD"] = "C_d"
-            self.parameter_bindings["PARACHUTE_PARAM_NAME_V"] = "Recovery Terminal Velocity"
+            self.parameter_bindings["PARACHUTE_PARAM_NAME_V"] = "Terminal Rolling Velocity"
             self.parameter_bindings["PARACHUTE_PARAM_SYM_V"] = "v_terminal"
-            self.parameter_bindings["EMERGENCY_IGNITION_DESC"] = "Emergency Containment / Power Cutoff Command"
-            self.parameter_bindings["CONTAINMENT_SQUIB_ACTION"] = "Emergency Power Isolation & Mechanical Brake Command"
-            self.parameter_bindings["OPTX13_NAME"] = "BroadcastDirectIdentificationTelemetry"
-            self.parameter_bindings["OPTX13_SOURCE"] = "BroadcastDirectIdentification"
-            self.parameter_bindings["OPTX13_PROTOCOL_DESC"] = "Digitally Signed Public Direct Broadcast (Direct Telemetry per ISO/IEC 29148)"
-            self.parameter_bindings["ALTITUDE_TELEMETRY"] = "Position Elevation / Depth"
+            self.parameter_bindings["EMERGENCY_IGNITION_DESC"] = "Emergency Train Brake Pipe Venting Command"
+            self.parameter_bindings["CONTAINMENT_SQUIB_ACTION"] = "Emergency Train Brake Pipe Venting & Traction Cutoff Command"
+            self.parameter_bindings["OPTX13_NAME"] = "BroadcastTrainIdentificationTelemetry"
+            self.parameter_bindings["OPTX13_SOURCE"] = "TrainIdentification"
+            self.parameter_bindings["OPTX13_PROTOCOL_DESC"] = "Digitally Signed Train Telemetry (ETCS / AEI RFID per EN 50128)"
+            self.parameter_bindings["ALTITUDE_TELEMETRY"] = "Track Elevation / Chainage"
+        elif dom == "marine":
+            self.parameter_bindings["STRUCTURE_PARTITION_LABEL"] = "Pressure-Tolerant Titanium & Syntactic Foam Hull"
+            self.parameter_bindings["FAILSAFE_CONTAINMENT_NAME"] = "positive buoyancy ballast drop-weight / ascent actuator"
+            self.parameter_bindings["ALTITUDE_UNIT"] = "m Depth"
+            self.parameter_bindings["V_STALL_MAX_MPS"] = "0.0"
+            self.parameter_bindings["V_STALL_NOMINAL_MPS"] = "0.0"
+            self.parameter_bindings["REMOTE_ID_HEADER"] = "Maritime AIS & Underwater Acoustic USBL Transponder ID"
+            self.parameter_bindings["REMOTE_ID_STANDARD_BODY"] = "Direct subsea acoustic and surface AIS identification conforming to DNV-GL-ST-E403 and IMO COLREGs standards."
+            self.parameter_bindings["TIER4_CONTAINMENT_DESC"] = "galvanic ballast drop-weight release or thruster power cutoff"
+            self.parameter_bindings["FAILSAFE_DESCENT_SYSTEM"] = "positive buoyancy ballast release system"
+            self.parameter_bindings["RECOVERY_DEVICE_TERM"] = "positive buoyancy drop-weight"
+            self.parameter_bindings["RECOVERY_SUB"] = "drop-weight"
+            self.parameter_bindings["PARACHUTE_SYMBOL_CD"] = "C_d"
+            self.parameter_bindings["PARACHUTE_SYMBOL_V"] = "v_{\\mathrm{ascent}}"
+            self.parameter_bindings["PARACHUTE_PARAM_NAME_S"] = "Hydrodynamic Reference Cross-Section"
+            self.parameter_bindings["PARACHUTE_PARAM_NAME_CD"] = "Hydrodynamic Drag Coefficient"
+            self.parameter_bindings["PARACHUTE_PARAM_SYM_CD"] = "C_d"
+            self.parameter_bindings["PARACHUTE_PARAM_NAME_V"] = "Terminal Buoyant Ascent Velocity"
+            self.parameter_bindings["PARACHUTE_PARAM_SYM_V"] = "v_ascent"
+            self.parameter_bindings["EMERGENCY_IGNITION_DESC"] = "Galvanic Ballast Release & Thruster Cutoff Command"
+            self.parameter_bindings["CONTAINMENT_SQUIB_ACTION"] = "Galvanic Ballast Drop & Power Isolation Command"
+            self.parameter_bindings["OPTX13_NAME"] = "BroadcastMaritimeIdentificationTelemetry"
+            self.parameter_bindings["OPTX13_SOURCE"] = "MaritimeIdentification"
+            self.parameter_bindings["OPTX13_PROTOCOL_DESC"] = "Digitally Signed Subsea Telemetry (USBL Acoustic / AIS per DNV-GL)"
+            self.parameter_bindings["ALTITUDE_TELEMETRY"] = "Bathymetric Depth"
+        elif dom == "space":
+            self.parameter_bindings["STRUCTURE_PARTITION_LABEL"] = "Spacecraft Space-Grade Aluminum Chassis & Structural Panels"
+            self.parameter_bindings["FAILSAFE_CONTAINMENT_NAME"] = "autonomous de-orbit propulsion / reaction wheel passivation"
+            self.parameter_bindings["ALTITUDE_UNIT"] = "km Orbital Altitude"
+            self.parameter_bindings["V_STALL_MAX_MPS"] = "0.0"
+            self.parameter_bindings["V_STALL_NOMINAL_MPS"] = "0.0"
+            self.parameter_bindings["REMOTE_ID_HEADER"] = "Space Tracking & Ephemeris Telemetry Identification"
+            self.parameter_bindings["REMOTE_ID_STANDARD_BODY"] = "Direct space telemetry and ephemeris tracking in accordance with ECSS-E-ST-40C and NASA-STD-8739.8 standards."
+            self.parameter_bindings["TIER4_CONTAINMENT_DESC"] = "de-orbit retro-burn execution or battery passivation"
+            self.parameter_bindings["FAILSAFE_DESCENT_SYSTEM"] = "autonomous de-orbit propulsion system"
+            self.parameter_bindings["RECOVERY_DEVICE_TERM"] = "de-orbit thruster"
+            self.parameter_bindings["RECOVERY_SUB"] = "de-orbit"
+            self.parameter_bindings["PARACHUTE_SYMBOL_CD"] = "C_d"
+            self.parameter_bindings["PARACHUTE_SYMBOL_V"] = "v_{\\mathrm{reentry}}"
+            self.parameter_bindings["PARACHUTE_PARAM_NAME_S"] = "Spacecraft Drag Reference Cross-Section"
+            self.parameter_bindings["PARACHUTE_PARAM_NAME_CD"] = "Orbital Drag Coefficient"
+            self.parameter_bindings["PARACHUTE_PARAM_SYM_CD"] = "C_d"
+            self.parameter_bindings["PARACHUTE_PARAM_NAME_V"] = "Terminal Orbital Demise Velocity"
+            self.parameter_bindings["PARACHUTE_PARAM_SYM_V"] = "v_reentry"
+            self.parameter_bindings["EMERGENCY_IGNITION_DESC"] = "Autonomous De-Orbit Retro-Burn Command"
+            self.parameter_bindings["CONTAINMENT_SQUIB_ACTION"] = "De-Orbit Retro-Burn & Battery Passivation Command"
+            self.parameter_bindings["OPTX13_NAME"] = "BroadcastSpaceTrackingTelemetry"
+            self.parameter_bindings["OPTX13_SOURCE"] = "SpaceTrackingIdentification"
+            self.parameter_bindings["OPTX13_PROTOCOL_DESC"] = "Digitally Signed CCSDS Space Telemetry per ECSS-E-ST-40C"
+            self.parameter_bindings["ALTITUDE_TELEMETRY"] = "Orbital Altitude / Ephemeris"
+        elif dom == "industrial":
+            self.parameter_bindings["STRUCTURE_PARTITION_LABEL"] = "Heavy-Duty Welded Steel AGV Chassis & Mast Assembly"
+            self.parameter_bindings["FAILSAFE_CONTAINMENT_NAME"] = "optical safety lidar field stop / electromagnetic friction brake"
+            self.parameter_bindings["ALTITUDE_UNIT"] = "m"
+            self.parameter_bindings["V_STALL_MAX_MPS"] = "0.0"
+            self.parameter_bindings["V_STALL_NOMINAL_MPS"] = "0.0"
+            self.parameter_bindings["REMOTE_ID_HEADER"] = "VDA 5050 AGV Telemetry & RFID Floor Identification"
+            self.parameter_bindings["REMOTE_ID_STANDARD_BODY"] = "Direct warehouse telemetry and vehicle identification in accordance with ISO 3691-4:2023 and VDA 5050 standards."
+            self.parameter_bindings["TIER4_CONTAINMENT_DESC"] = "optical safety field emergency stop or drive motor power cutoff"
+            self.parameter_bindings["FAILSAFE_DESCENT_SYSTEM"] = "electromagnetic safety braking system"
+            self.parameter_bindings["RECOVERY_DEVICE_TERM"] = "electromagnetic safety brake"
+            self.parameter_bindings["RECOVERY_SUB"] = "brake"
+            self.parameter_bindings["PARACHUTE_SYMBOL_CD"] = "C_d"
+            self.parameter_bindings["PARACHUTE_SYMBOL_V"] = "v_{\\mathrm{terminal}}"
+            self.parameter_bindings["PARACHUTE_PARAM_NAME_S"] = "Vehicle Frontal Cross-Section"
+            self.parameter_bindings["PARACHUTE_PARAM_NAME_CD"] = "Aerodynamic / Rolling Resistance Coefficient"
+            self.parameter_bindings["PARACHUTE_PARAM_SYM_CD"] = "C_d"
+            self.parameter_bindings["PARACHUTE_PARAM_NAME_V"] = "Terminal Deceleration Velocity"
+            self.parameter_bindings["PARACHUTE_PARAM_SYM_V"] = "v_terminal"
+            self.parameter_bindings["EMERGENCY_IGNITION_DESC"] = "Emergency Drive Power Cutoff & Mechanical Brake Command"
+            self.parameter_bindings["CONTAINMENT_SQUIB_ACTION"] = "Emergency Power Isolation & Spring-Applied Brake Command"
+            self.parameter_bindings["OPTX13_NAME"] = "BroadcastIndustrialVehicleTelemetry"
+            self.parameter_bindings["OPTX13_SOURCE"] = "IndustrialVehicleIdentification"
+            self.parameter_bindings["OPTX13_PROTOCOL_DESC"] = "Digitally Signed Industrial Telemetry (VDA 5050 MQTT per ISO 3691-4)"
+            self.parameter_bindings["ALTITUDE_TELEMETRY"] = "Fork Lift Height"
         else:
             self.parameter_bindings["STRUCTURE_PARTITION_LABEL"] = "Airframe Structure"
             self.parameter_bindings["FAILSAFE_CONTAINMENT_NAME"] = "ballistic parachute recovery / containment actuator"
@@ -659,6 +948,10 @@ class SysMLParameterBindingEngine:
                     if kind in ("package", "system") and not self.inferred_system_identifier:
                         self.inferred_system_identifier = name.strip()
 
+        self.detected_domain = self._detect_domain_type()
+        self.parameter_bindings["DETECTED_DOMAIN"] = self.detected_domain
+        self.parameter_bindings["DOMAIN_TYPE"] = self.detected_domain
+
         self._derive_operational_intent()
         self._derive_mass_budgets()
         self._derive_quadratic_physics()
@@ -835,10 +1128,14 @@ class SysMLParameterBindingEngine:
 
     def auto_discover_sources(self, root_dir: str) -> None:
         """Auto-detects parameter dictionaries and SysML AST symbols across repository root."""
-        search_dirs = [root_dir]
-        parent = os.path.dirname(root_dir)
-        if parent and parent != root_dir:
-            search_dirs.append(parent)
+        search_dirs = []
+        curr = os.path.abspath(root_dir)
+        for _ in range(5):
+            search_dirs.append(curr)
+            parent = os.path.dirname(curr)
+            if parent == curr:
+                break
+            curr = parent
 
         candidate_paths = []
         for sdir in search_dirs:
@@ -1813,39 +2110,108 @@ class SysMLParameterBindingEngine:
                 break
             current = updated
 
-        # Cross-Domain Ontology Sanitization for Non-Aircraft / Civilian Domains
-        if getattr(self, "is_non_aircraft", False):
-            # 1. Replace word parachute / Parachute
-            current = re.sub(r"\bparachute\b", "recovery system", current)
-            current = re.sub(r"\bParachute\b", "Recovery System", current)
-            current = re.sub(r"\bPARACHUTE\b", "RECOVERY", current)
-            # 2. Replace altitude AGL / m AGL
+        dom = getattr(self, "detected_domain", "aviation")
+
+        # Domain-Specific Ontology Sanitization & Zero-Domain Invariants (Fixes #174, #175, #180)
+        if dom == "medical":
+            current = re.sub(r"\bparachute\b", "failsafe joint brake", current, flags=re.IGNORECASE)
+            current = re.sub(r"\bPARACHUTE\b", "JOINT_BRAKE", current)
+            current = re.sub(r"\b(?:altitude\s+AGL|m\s+AGL)\b", "mm", current, flags=re.IGNORECASE)
+            current = re.sub(r"ASTM\s+F3411(?:-22a)?", "IEC 62304 / ISO 14971", current)
+            current = re.sub(r"\bRemote\s+ID\b", "Medical Equipment Telemetry & ID", current)
+            current = re.sub(r"\bairframe\b", "surgeon console chassis", current, flags=re.IGNORECASE)
+            current = re.sub(r"\bflight\s+plan\b", "surgical procedure workflow", current, flags=re.IGNORECASE)
+            current = re.sub(r"\bflight\s+guidance\b", "manipulator trajectory guidance", current, flags=re.IGNORECASE)
+            current = re.sub(r"\bflight\s+controller\b", "surgical console controller", current, flags=re.IGNORECASE)
+            current = re.sub(r"\blanding\s+zone\b", "sterile field docking zone", current, flags=re.IGNORECASE)
+            current = re.sub(r"\blanding\s+pad\b", "patient cart docking area", current, flags=re.IGNORECASE)
+            current = re.sub(r"\\mathrm\{parachute\}", r"\\mathrm{brake}", current)
+            current = re.sub(r"C_d_parachute", "C_d", current)
+            current = re.sub(r"v_terminal_parachute", "v_terminal", current)
+        elif dom == "rail":
+            current = re.sub(r"\bparachute\b", "pneumatic emergency brake", current, flags=re.IGNORECASE)
+            current = re.sub(r"\bPARACHUTE\b", "EMERGENCY_BRAKE", current)
             current = re.sub(r"\b(?:altitude\s+AGL|m\s+AGL)\b", "m", current, flags=re.IGNORECASE)
-            # 3. Replace ASTM F3411 / Remote ID
+            current = re.sub(r"ASTM\s+F3411(?:-22a)?", "EN 50128 SIL 4", current)
+            current = re.sub(r"\bRemote\s+ID\b", "Automatic Equipment Identification (AEI)", current)
+            current = re.sub(r"\bairframe\b", "locomotive chassis & underframe", current, flags=re.IGNORECASE)
+            current = re.sub(r"\bflight\s+plan\b", "train shunting route plan", current, flags=re.IGNORECASE)
+            current = re.sub(r"\bflight\s+guidance\b", "train automatic protection guidance", current, flags=re.IGNORECASE)
+            current = re.sub(r"\bflight\s+controller\b", "train control unit", current, flags=re.IGNORECASE)
+            current = re.sub(r"\blanding\s+zone\b", "classification yard siding", current, flags=re.IGNORECASE)
+            current = re.sub(r"\blanding\s+pad\b", "depot staging track", current, flags=re.IGNORECASE)
+            current = re.sub(r"\\mathrm\{parachute\}", r"\\mathrm{brake}", current)
+            current = re.sub(r"C_d_parachute", "C_d", current)
+            current = re.sub(r"v_terminal_parachute", "v_terminal", current)
+        elif dom == "marine":
+            current = re.sub(r"\bparachute\b", "positive buoyancy drop-weight", current, flags=re.IGNORECASE)
+            current = re.sub(r"\bPARACHUTE\b", "DROP_WEIGHT", current)
+            current = re.sub(r"\b(?:altitude\s+AGL|m\s+AGL)\b", "m Depth", current, flags=re.IGNORECASE)
+            current = re.sub(r"ASTM\s+F3411(?:-22a)?", "DNV-GL-ST-E403", current)
+            current = re.sub(r"\bRemote\s+ID\b", "Maritime AIS & USBL Telemetry", current)
+            current = re.sub(r"\bairframe\b", "pressure-tolerant subsea hull", current, flags=re.IGNORECASE)
+            current = re.sub(r"5\.8\s*GHz\s*Wi-?Fi", "10-30 kHz Acoustic Modem", current, flags=re.IGNORECASE)
+            current = re.sub(r"\\mathrm\{parachute\}", r"\\mathrm{drop\_weight}", current)
+            current = re.sub(r"C_d_parachute", "C_d", current)
+            current = re.sub(r"v_terminal_parachute", "v_ascent", current)
+        elif dom == "space":
+            current = re.sub(r"\bparachute\b", "autonomous de-orbit propulsion", current, flags=re.IGNORECASE)
+            current = re.sub(r"\bPARACHUTE\b", "DEORBIT_THRUSTER", current)
+            current = re.sub(r"\b(?:altitude\s+AGL|m\s+AGL)\b", "km", current, flags=re.IGNORECASE)
+            current = re.sub(r"ASTM\s+F3411(?:-22a)?", "ECSS-E-ST-40C", current)
+            current = re.sub(r"\bRemote\s+ID\b", "Space Ephemeris & Telemetry ID", current)
+            current = re.sub(r"\bairframe\b", "spacecraft structure", current, flags=re.IGNORECASE)
+            current = re.sub(r"\\mathrm\{parachute\}", r"\\mathrm{deorbit}", current)
+            current = re.sub(r"C_d_parachute", "C_d", current)
+            current = re.sub(r"v_terminal_parachute", "v_reentry", current)
+        elif dom == "industrial":
+            current = re.sub(r"\bparachute\b", "optical safety lidar field stop", current, flags=re.IGNORECASE)
+            current = re.sub(r"\bPARACHUTE\b", "SAFETY_BRAKE", current)
+            current = re.sub(r"\b(?:altitude\s+AGL|m\s+AGL)\b", "m", current, flags=re.IGNORECASE)
+            current = re.sub(r"ASTM\s+F3411(?:-22a)?", "ISO 3691-4 / VDA 5050", current)
+            current = re.sub(r"\bRemote\s+ID\b", "VDA 5050 Vehicle Identification", current)
+            current = re.sub(r"\bairframe\b", "heavy-duty AGV chassis", current, flags=re.IGNORECASE)
+            current = re.sub(r"\bflight\s+plan\b", "VDA 5050 warehouse route order", current, flags=re.IGNORECASE)
+            current = re.sub(r"\bflight\s+guidance\b", "AGV autonomous path guidance", current, flags=re.IGNORECASE)
+            current = re.sub(r"\bflight\s+controller\b", "AGV safety controller", current, flags=re.IGNORECASE)
+            current = re.sub(r"\\mathrm\{parachute\}", r"\\mathrm{brake}", current)
+            current = re.sub(r"C_d_parachute", "C_d", current)
+            current = re.sub(r"v_terminal_parachute", "v_terminal", current)
+        elif getattr(self, "is_non_aircraft", False):
+            current = re.sub(r"\bparachute\b", "recovery system", current, flags=re.IGNORECASE)
+            current = re.sub(r"\bPARACHUTE\b", "RECOVERY", current)
+            current = re.sub(r"\b(?:altitude\s+AGL|m\s+AGL)\b", "m", current, flags=re.IGNORECASE)
             current = re.sub(r"ASTM\s+F3411(?:-22a)?", "ISO/IEC 29148", current)
             current = re.sub(r"\bRemote\s+ID\b", "Direct Broadcast Identification", current)
-            # 4. Replace airframe / Airframe
-            current = re.sub(r"\bairframe\b", "chassis", current)
-            current = re.sub(r"\bAirframe\b", "Chassis", current)
-            # 5. Fix any residual LaTeX subscript parachute
+            current = re.sub(r"\bairframe\b", "chassis", current, flags=re.IGNORECASE)
             current = re.sub(r"\\mathrm\{parachute\}", r"\\mathrm{recovery}", current)
             current = re.sub(r"C_d_parachute", "C_d", current)
             current = re.sub(r"v_terminal_parachute", "v_terminal", current)
 
         if getattr(self, "is_civilian", False):
-            # 1. Replace ROE-01..06 with SAF-01..06
             for idx in range(1, 7):
                 current = re.sub(rf"\bROE-0{idx}\b", f"SAF-0{idx}", current)
                 current = re.sub(rf"\bROE_0{idx}\b", f"SAF_0{idx}", current)
-            # 2. Replace Rules of Engagement
             current = re.sub(r"Rules of Engagement(?:\s*\(ROE\))?", "Operational Safety Interlocks", current)
             current = re.sub(r"rules of engagement", "operational safety interlocks", current)
-            # 3. Replace PID (standalone word)
             current = re.sub(r"\bPID\b", "PCV", current)
-            # 4. Replace military tactical phrases
             current = re.sub(r"\bweapons release\b", "high-consequence actuation", current, flags=re.IGNORECASE)
             current = re.sub(r"\bcollateral damage\b", "adjacent operational risk", current, flags=re.IGNORECASE)
             current = re.sub(r"\bpositive identification\b", "positive condition verification", current, flags=re.IGNORECASE)
+
+        # Residual archetype string elimination (Issue #180)
+        sys_target = (
+            self.parameter_bindings.get("SYSTEM_IDENTIFIER")
+            or self.parameter_bindings.get("SYSTEM_NAME")
+            or self.inferred_system_identifier
+            or "Autonomous Cyber-Physical System"
+        )
+        current = current.replace("the Abstract Cyber-Physical System Archetype", f"the {sys_target}")
+        current = current.replace("The Abstract Cyber-Physical System Archetype", f"The {sys_target}")
+        current = current.replace("an Abstract Cyber-Physical System Archetype", f"the {sys_target}")
+        current = current.replace("Abstract Cyber-Physical System Archetype", sys_target)
+        current = current.replace("Autonomous Cyber-Physical System Archetype", sys_target)
+        current = current.replace("AutonomousSystemArchetype", sys_target)
 
         return current
 
@@ -2168,37 +2534,59 @@ def assemble_conops(
     output_dir: str,
     verify_only: bool = False,
     params: Optional[Union[Dict[str, Any], str, SysMLParameterBindingEngine]] = None,
+    domain: Optional[str] = None,
 ) -> bool:
     """
-    Orchestrates the assembly, parameter binding, and validation of both CONOPS.md and MISSION_INTENT.md.
-    Fixes Issues #143, #148.
+    Orchestrates the assembly, parameter binding, and validation of both CONOPS.md and MISSION_INTENT.md
+    with domain-aware routing.
+    Fixes Issues #143, #148, #174, #175, #177, #178, #179, #180.
     """
-    print(f"[*] ConOps Assembly Engine starting: input='{input_dir}', output='{output_dir}', verify_only={verify_only}")
-
-    # Determine paths
-    conops_units_dir = os.path.join(input_dir, "conops")
-    if not os.path.isdir(conops_units_dir) and os.path.isdir(os.path.join(input_dir, "units", "conops")):
-        conops_units_dir = os.path.join(input_dir, "units", "conops")
-
-    mission_units_dir = os.path.join(input_dir, "mission_intent")
-    if not os.path.isdir(mission_units_dir) and os.path.isdir(os.path.join(input_dir, "units", "mission_intent")):
-        mission_units_dir = os.path.join(input_dir, "units", "mission_intent")
+    print(f"[*] ConOps Assembly Engine starting: input='{input_dir}', output='{output_dir}', verify_only={verify_only}, domain={domain}")
 
     # Resolve parameter binding engine
     if isinstance(params, SysMLParameterBindingEngine):
         param_engine = params
+        if domain:
+            param_engine.detected_domain = domain
+            param_engine.parameter_bindings["DETECTED_DOMAIN"] = domain
+            param_engine.parameter_bindings["DOMAIN_TYPE"] = domain
     elif isinstance(params, dict):
-        param_engine = SysMLParameterBindingEngine(parameter_values=params, workspace_dir=input_dir, auto_detect=True)
+        param_engine = SysMLParameterBindingEngine(parameter_values=params, workspace_dir=input_dir, auto_detect=True, domain=domain)
     elif isinstance(params, str):
-        param_engine = SysMLParameterBindingEngine(config_path=params, workspace_dir=input_dir, auto_detect=True)
+        param_engine = SysMLParameterBindingEngine(config_path=params, workspace_dir=input_dir, auto_detect=True, domain=domain)
     else:
-        param_engine = SysMLParameterBindingEngine(workspace_dir=input_dir, auto_detect=True)
+        param_engine = SysMLParameterBindingEngine(workspace_dir=input_dir, auto_detect=True, domain=domain)
+
+    detected_dom = domain or getattr(param_engine, "detected_domain", "aviation")
+
+    # Domain routing: check domain-native unit packages first, then fallback to standard directory
+    conops_units_dir = None
+    for candidate in (
+        os.path.join(input_dir, detected_dom, "conops"),
+        os.path.join(input_dir, "units", detected_dom, "conops"),
+        os.path.join(input_dir, "conops"),
+        os.path.join(input_dir, "units", "conops"),
+    ):
+        if os.path.isdir(candidate):
+            conops_units_dir = candidate
+            break
+
+    mission_units_dir = None
+    for candidate in (
+        os.path.join(input_dir, detected_dom, "mission_intent"),
+        os.path.join(input_dir, "units", detected_dom, "mission_intent"),
+        os.path.join(input_dir, "mission_intent"),
+        os.path.join(input_dir, "units", "mission_intent"),
+    ):
+        if os.path.isdir(candidate):
+            mission_units_dir = candidate
+            break
 
     all_errors: List[str] = []
 
     # 1. Assemble CONOPS.md
-    if os.path.isdir(conops_units_dir):
-        print(f"[*] Assembling Concept of Operations from '{conops_units_dir}'...")
+    if conops_units_dir and os.path.isdir(conops_units_dir):
+        print(f"[*] Assembling Concept of Operations from '{conops_units_dir}' [domain={detected_dom}]...")
         conops_doc, conops_errs = assemble_document(
             units_dir=conops_units_dir,
             doc_title="Concept of Operations (ConOps)",
@@ -2214,11 +2602,11 @@ def assemble_conops(
                 f.write(conops_doc)
             print(f"[+] Successfully wrote compiled ConOps to '{out_file}'.")
     else:
-        print(f"[-] ConOps units directory not found at '{conops_units_dir}'. Skipping CONOPS.md assembly.")
+        print(f"[-] ConOps units directory not found in '{input_dir}'. Skipping CONOPS.md assembly.")
 
     # 2. Assemble MISSION_INTENT.md
-    if os.path.isdir(mission_units_dir):
-        print(f"[*] Assembling Tactical Mission Intent from '{mission_units_dir}'...")
+    if mission_units_dir and os.path.isdir(mission_units_dir):
+        print(f"[*] Assembling Tactical Mission Intent from '{mission_units_dir}' [domain={detected_dom}]...")
         mission_doc, mission_errs = assemble_document(
             units_dir=mission_units_dir,
             doc_title="Tactical Mission Intent & Execution Plan",
@@ -2234,7 +2622,7 @@ def assemble_conops(
                 f.write(mission_doc)
             print(f"[+] Successfully wrote compiled Mission Intent to '{out_file}'.")
     else:
-        print(f"[-] Mission Intent units directory not found at '{mission_units_dir}'. Skipping MISSION_INTENT.md assembly.")
+        print(f"[-] Mission Intent units directory not found in '{input_dir}'. Skipping MISSION_INTENT.md assembly.")
 
     if all_errors:
         print("\n[!] ConOps Assembly Errors encountered:")
@@ -2251,13 +2639,19 @@ def main() -> int:
         description="Deterministic ConOps & Mission Intent Assembly Engine (ISO 29148 / NATO STANAG 4586 / OMG UAF)."
     )
     parser.add_argument(
+        "workspace",
+        nargs="?",
+        default=None,
+        help="Target workspace or project directory (optional positional argument).",
+    )
+    parser.add_argument(
         "--input-dir",
-        default="docs/conops/units",
+        default=None,
         help="Input directory containing 'conops/' and 'mission_intent/' unit markdown directories (default: docs/conops/units).",
     )
     parser.add_argument(
         "--output-dir",
-        default="docs/conops",
+        default=None,
         help="Output directory where assembled CONOPS.md and MISSION_INTENT.md are written (default: docs/conops).",
     )
     parser.add_argument(
@@ -2270,14 +2664,46 @@ def main() -> int:
         default=None,
         help="Path to JSON parameter dictionary or schema file (auto-detects .pipeline/schema-digest.json or schema/domain_config.json if not specified).",
     )
+    parser.add_argument(
+        "--domain",
+        default=None,
+        choices=["aviation", "medical", "rail", "marine", "space", "industrial"],
+        help="Target operational domain (aviation, medical, rail, marine, space, industrial). Auto-detected if not specified.",
+    )
 
     args = parser.parse_args()
 
+    workspace = os.path.abspath(args.workspace) if args.workspace else os.getcwd()
+
+    input_dir = args.input_dir
+    if not input_dir:
+        for cand in (
+            os.path.join(workspace, "docs", "conops", "units"),
+            os.path.join(workspace, "docs", "conops"),
+            os.path.join(workspace, "units"),
+            workspace,
+        ):
+            if os.path.isdir(cand):
+                if (
+                    os.path.isdir(os.path.join(cand, "conops"))
+                    or os.path.isdir(os.path.join(cand, "mission_intent"))
+                    or any(os.path.isdir(os.path.join(cand, d, "conops")) for d in ("aviation", "medical", "rail", "marine", "space", "industrial"))
+                ):
+                    input_dir = cand
+                    break
+        if not input_dir:
+            input_dir = os.path.join(workspace, "docs", "conops", "units")
+
+    output_dir = args.output_dir
+    if not output_dir:
+        output_dir = os.path.join(workspace, "docs", "conops")
+
     success = assemble_conops(
-        input_dir=args.input_dir,
-        output_dir=args.output_dir,
+        input_dir=input_dir,
+        output_dir=output_dir,
         verify_only=args.verify,
         params=args.params,
+        domain=args.domain,
     )
     return 0 if success else 1
 

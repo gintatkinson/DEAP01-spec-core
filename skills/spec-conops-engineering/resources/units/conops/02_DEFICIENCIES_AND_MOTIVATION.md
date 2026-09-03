@@ -58,7 +58,7 @@ In accordance with ISO/IEC/IEEE 29148:2018 §5.2.4 and MIL-STD-882E System Safet
 3. **Fatigue-Induced Input Disparity:** Extended shift durations ($t_{\mathrm{shift}} > t_{\text{shift\_max}}$) induce vigilance decay, increasing the probability of erroneous mode selections or conflicting control inputs without automated safety envelope interlocks.
 
 ### 2.4 Mission Drivers & User Operational Problems
-The primary mission drivers compelling the development of the Abstract Cyber-Physical System Archetype include:
+The primary mission drivers compelling the development of {{SYSTEM_IDENTIFIER}} include:
 - **Statutory Regulatory Mandates:** Safety authorities require formal compliance with rigorous safety cases, verifiable containment buffer calculations, and certified software assurance.
 - **Continuous System Availability:** Critical operations require unbroken state tracking coverage across the operational range $\text{Range}_{\mathrm{max}}(\text{Link}_{\mathrm{C2}})$ with autonomous asset handoffs.
 - **Adverse Environmental Readiness:** The system must operate reliably across extreme climatic envelopes ($[T_{\text{op\_min}}, T_{\text{op\_max}}]$, $\text{IP}_{xy}$ sealing, and dynamic disturbance limits per MIL-STD-810H).

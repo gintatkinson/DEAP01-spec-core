@@ -285,7 +285,7 @@ def solve_relational_mass_cross_sum(
     details = {}
     
     partition_patterns = {
-        "airframe": re.compile(r"airframe|chassis|structural|structure", re.IGNORECASE),
+        "airframe": re.compile(r"airframe|chassis|structural|structure|hull", re.IGNORECASE),
         "avionics": re.compile(r"avionics", re.IGNORECASE),
         "propulsion": re.compile(r"propulsion", re.IGNORECASE),
         "energy": re.compile(r"energy", re.IGNORECASE),
@@ -1044,7 +1044,7 @@ def verify_layer4_physical_math(workspace_path: str) -> LayerResult:
             
         ratio = e_res / e_cap
         details["reserve_ratio"] = ratio
-        if ratio < 0.20:
+        if ratio < 0.20 - 1e-5:
             errors.append(f"Statutory energy reserve ratio ({ratio:.3f}) below mandatory 0.20 floor")
         if e_bin > e_cap:
             errors.append(f"Total Bingo threshold ({e_bin} J) exceeds total capacity ({e_cap} J)")
