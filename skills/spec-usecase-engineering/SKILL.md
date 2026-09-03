@@ -66,7 +66,7 @@ You should invoke this skill ONLY after the behavioral User Stories have been ex
     - **Pure Symbolic Mathematical Separation Rule**: When operational scenarios, safety boundaries, performance requirements, or system invariants involve mathematical equations:
       - Display math blocks (`$$ \begin{aligned} ... \end{aligned} $$`) MUST express **pure symbolic equations only**.
       - Strictly prohibit embedding physical unit macros (`\text{ ms}`, `\text{ kg}`, `\text{ m/s}`, etc.) inside display math equations.
-      - Mandate that all physical values, numerical limits, operational constants, and engineering units are defined in the accompanying "Where and Operational Parameters:" text section immediately following the equation block.
+      - Mandate that all physical values, numerical limits, operational constants, and engineering units are defined in the accompanying "- Parameter Definitions & Engineering Units:" text section immediately following the equation block.
       - Strictly prohibit dangling operators (such as `/` with no denominator) and unescaped underscores inside `\text{}` (mandating `\text{yaw-disturbance}` or structured subscripts like `\Delta v_{\text{yaw,dist}}`).
       - Multi-line aligned equations MUST use `\begin{aligned} ... \end{aligned}` inside `$$` delimiters on dedicated lines.
     - **Markdown Generation:** Write the Use Case as a local markdown file (e.g., `docs/use-cases/uc-01-register-core-entity.md`).
@@ -154,7 +154,7 @@ D_{separation} &\ge D_{min,safe}
 \end{aligned}
 $$
 
-Where and Operational Parameters:
+- Parameter Definitions & Engineering Units:
 - $T_{reaction}$: System reaction and failover response time.
 - $T_{max,allowed}$: Maximum allowable latency limit (e.g. 50 ms).
 - $D_{separation}$: Separation distance between vehicles.

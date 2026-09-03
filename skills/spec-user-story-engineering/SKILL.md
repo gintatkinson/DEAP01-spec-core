@@ -85,7 +85,7 @@ For every BDD scenario and acceptance criteria set, you MUST generate and link t
     - **Pure Symbolic Mathematical Separation Rule**: When specifying mathematical derivations, calculations, kinematic equations, or control laws:
       - Display math blocks (`$$ \begin{aligned} ... \end{aligned} $$`) MUST express **pure symbolic equations only**.
       - Strictly prohibit embedding physical unit macros (`\text{ ms}`, `\text{ kg}`, `\text{ m/s}`, etc.) inside display math equations.
-      - Mandate that all physical values, numerical limits, constants, calibration thresholds, and engineering units are defined in the accompanying "Where and Operational Parameters:" text section immediately following the equation.
+      - Mandate that all physical values, numerical limits, constants, calibration thresholds, and engineering units are defined in the accompanying "- Parameter Definitions & Engineering Units:" text section immediately following the equation.
       - Strictly prohibit dangling operators (such as `/` with no denominator) and unescaped underscores inside `\text{}` (mandating `\text{yaw-disturbance}` or structured subscripts like `\Delta v_{\text{yaw,dist}}`).
       - Multi-line aligned equations MUST use `\begin{aligned} ... \end{aligned}` inside `$$` delimiters on dedicated lines.
     - **Tandem Elaboration & Zero Model Drift:** Any newly derived operations, algorithmic methods, state transitions, port interactions, or verification test cases identified during User Story modeling MUST be reflected back into the SysML v2 model (`.pipeline/schema.sysml`) as `interaction def`, `action def`, `state def`, `port def`, or `test case def` elements per `rules/sysml-ssot-completeness.md`.
@@ -192,7 +192,7 @@ P_{mech} &= \tau \cdot \omega
 \end{aligned}
 $$
 
-Where and Operational Parameters:
+- Parameter Definitions & Engineering Units:
 - $E_{total}$: Total mechanical energy of the system.
 - $E_{kinetic}$: Kinetic energy ($\frac{1}{2} m v^2$).
 - $E_{potential}$: Potential energy ($m g h$).

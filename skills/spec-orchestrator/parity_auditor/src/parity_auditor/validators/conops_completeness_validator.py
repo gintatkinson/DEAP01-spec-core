@@ -22,7 +22,7 @@ Enforces:
    - 1. Commander's Intent & Operational Objectives
    - 2. Mission Essential Task List (METL MET-01..N)
    - 3. Measures of Effectiveness (MoE) & Measures of Performance (MoP) Metrics
-   - 4. Threat & Electronic Warfare (EW) / Cyber Environment Matrix
+   - 4. Multi-Domain Operational Threat & Contested Environment Matrix
    - 5. PACE C2 Link Communications Plan (Primary, Alternate, Contingency, Emergency)
    - 6. Rules of Engagement (ROE) & Weapon/Sensor Interlocks
    - 7. Airspace Deconfliction & U-space Dynamic Geo-Zones
@@ -1177,7 +1177,7 @@ class MissionIntentCompletenessValidator(IValidator):
         {"num": 1, "title": "Commander's Intent & Operational Objectives", "aliases": ["commander's intent", "operational objectives", "purpose", "mission intent"]},
         {"num": 2, "title": "Mission Essential Task List (METL)", "aliases": ["mission essential task list", "metl", "met-", "essential tasks"]},
         {"num": 3, "title": "Measures of Effectiveness (MoE) & Measures of Performance (MoP) Metrics", "aliases": ["measures of effectiveness", "measures of performance", "moe", "mop", "moe/mop", "metrics"]},
-        {"num": 4, "title": "Threat & Electronic Warfare (EW) / Cyber Environment Matrix", "aliases": ["threat", "electronic warfare", "ew matrix", "cyber environment", "threat matrix"]},
+        {"num": 4, "title": "Multi-Domain Operational Threat & Contested Environment Matrix", "aliases": ["threat", "multi-domain threat", "electronic warfare", "ew matrix", "cyber environment", "threat matrix", "contested environment"]},
         {"num": 5, "title": "PACE C2 Link Communications Plan", "aliases": ["pace c2", "pace plan", "pace communications plan", "c2 link communications plan", "pace"]},
         {"num": 6, "title": "Rules of Engagement (ROE) & Weapon/Sensor Interlocks", "aliases": ["rules of engagement", "roe", "weapon/sensor interlocks", "sensor interlocks", "roe interlocks", "interlocks"]},
         {"num": 7, "title": "Airspace Deconfliction & U-space Dynamic Geo-Zones", "aliases": ["airspace deconfliction", "u-space", "geo-zones", "dynamic geo-zones", "airspace", "geofence"]},
@@ -1507,7 +1507,7 @@ class MissionIntentCompletenessValidator(IValidator):
 | MoE-01 | MoE | {{MOE_NAME}} | {{MOE_EQUATION}} | {{MOE_THRESHOLD}} | {{MOE_OBJECTIVE}} | {{MOE_UNIT}} |
 | MoP-01 | MoP | {{MOP_NAME}} | {{MOP_EQUATION}} | {{MOP_THRESHOLD}} | {{MOP_OBJECTIVE}} | {{MOP_UNIT}} |
 
-## 4. Threat & Electronic Warfare (EW) / Cyber Environment Matrix
+## 4. Multi-Domain Operational Threat & Contested Environment Matrix
 | Threat ID | Threat Domain | Threat Vector | Technical Description | Severity | Detection Mechanism | Autonomous Mitigation Rule | Public Clause Citation |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | `THR-KIN-01` | Kinetic | {{THR_KIN_VECTOR}} | {{THR_KIN_DESCRIPTION}} | Critical | Proximity lidar / vision bounding box | Execute evasive lateral displacement maneuver | MIL-STD-882E §4.3 |

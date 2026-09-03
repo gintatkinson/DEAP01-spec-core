@@ -221,7 +221,7 @@ $$
 \end{aligned}
 $$
 
-Where and Operational Parameters:
+- Parameter Definitions & Engineering Units:
 - $\tau_{\mathrm{transport}}$: End-to-end signal transport latency from source port to destination port.
 - $\tau_{\mathrm{latency,max}}$: Maximum allowable transport latency threshold (e.g. 10.0 ms).
 - $\Delta v_{\mathrm{signal}}$: Maximum rate of change between consecutive signal samples.
@@ -260,7 +260,7 @@ To maintain pure platform independence and prevent premature hardware coupling:
 Per [`rules/latex-katex-integrity.md`](rules/latex-katex-integrity.md):
 - **Pure Symbolic Display Math**: All display math blocks must use `$$ \begin{aligned} ... \end{aligned} $$` on dedicated newlines expressing pure symbolic relations only.
 - **Prohibition of Embedded Physical Unit Macros**: Embedding physical unit macros (e.g. `\text{ ms}`, `\text{ kg}`, `\text{ m/s}`, `\text{ Hz}`) inside display math equations is strictly prohibited.
-- **Mandatory "Where and Operational Parameters" Section**: All physical values, numerical limits, constants, and engineering units must be defined in the accompanying prose or list immediately following the display math block.
+- **Mandatory "Parameter Definitions & Engineering Units" Section**: All physical values, numerical limits, constants, and engineering units must be defined in the accompanying prose or list immediately following the display math block.
 - **Markdown Table Math Prohibition**: Strictly prohibit `$ ... $` and `$$ ... $$` math delimiters inside Markdown table headers, delimiter rows, and data cells. Use plain text and standard Unicode characters (e.g. `f Hz`, `tau_max ms`, `[min, max]`, `ΔV`, `λ`, `°C`, `≥`, `≤`).
 - **Markdown Table Column Count Consistency**: Maintain exact 1:1 column count match between header rows and delimiter rows across all tables.
 - **No Unescaped Underscores**: Unescaped underscores inside `\text{}` blocks are forbidden (use hyphenated text `\text{latency-max}` or subscripts `\tau_{\mathrm{latency,max}}`).

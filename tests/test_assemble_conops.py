@@ -165,7 +165,7 @@ def _create_sample_mission_intent_units(units_dir: str, with_placeholders: bool 
 | MoP-01 | MoP | Cross-Track Waypoint Deviation | max norm(p_act - p_cmd)_2D | 5.0 | 1.0 | m |
 | MoP-02 | MoP | Telemetry Latency Bound | tau_transport | 50.0 | 10.0 | ms |
 """,
-        "04_MULTI_DOMAIN_THREAT_MATRIX.md": """## 4. Threat & Electronic Warfare (EW) / Cyber Environment Matrix
+        "04_MULTI_DOMAIN_THREAT_MATRIX.md": """## 4. Multi-Domain Operational Threat & Contested Environment Matrix
 | Threat ID | Threat Vector | Description | Severity | Autonomous Mitigation Rule |
 | :--- | :--- | :--- | :--- | :--- |
 | THR-01 | GNSS Spoofing / Jamming | Loss of carrier lock or pseudo-range jump | High | Revert to optical dead-reckoning and IMU integration |

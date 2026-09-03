@@ -587,7 +587,7 @@ def _get_valid_mission_intent_content() -> str:
     lines.append("| MoP-03 | MoP | Emergency Containment Reaction Time | t_detect_to_actuate | 0.10 | 0.02 | s |")
     lines.append("| MoP-04 | MoP | Energy Consumption Rate | P_average | 450.0 | 350.0 | W |")
     lines.append("")
-    lines.append("## 4. Threat & Electronic Warfare (EW) / Cyber Environment Matrix")
+    lines.append("## 4. Multi-Domain Operational Threat & Contested Environment Matrix")
     lines.append("")
     lines.append("### 4.1 Multi-Domain Threat Matrix (10 Operational Domains)")
     lines.append("Threat vectors across all 10 canonical domains are analyzed with public clause citations:")
@@ -1213,13 +1213,13 @@ class TestConOpsAndMissionIntentValidators(unittest.TestCase):
 
             content = _get_valid_mission_intent_content()
             # Replace 10-domain threat matrix with only EW and Cyber rows
-            sparse_sec4 = """## 4. Threat & Electronic Warfare (EW) / Cyber Environment Matrix
+            sparse_sec4 = """## 4. Multi-Domain Operational Threat & Contested Environment Matrix
 | Threat ID | Threat Domain | Threat Vector | Technical Description | Severity | Detection Mechanism | Autonomous Mitigation Rule | Public Clause Citation |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | `THR-EWC-01` | EW | GNSS carrier jamming | C/N0 drop | High | RAIM alert | Revert to inertial dead-reckoning | STANAG 4586 §3.2 |
 | `THR-CYB-01` | Cyber | Telemetry packet injection | Unauthenticated frames | Critical | HMAC failure | Drop unauthorized frames | NIST SP 800-82r3 §5.2 |
 """
-            content_sparse = re.sub(r'## 4\. Threat[\s\S]*?(?=## 5\.)', sparse_sec4, content)
+            content_sparse = re.sub(r'## 4\.[^\n]*[\s\S]*?(?=## 5\.)', sparse_sec4, content)
 
             with open(os.path.join(conops_dir, "MISSION_INTENT.md"), "w", encoding="utf-8") as f:
                 f.write(content_sparse)

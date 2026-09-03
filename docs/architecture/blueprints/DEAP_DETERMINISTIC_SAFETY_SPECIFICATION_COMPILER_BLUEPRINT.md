@@ -76,7 +76,7 @@ $$
 \end{aligned}
 $$
 
-Where and Operational Parameters:
+- Parameter Definitions & Engineering Units:
 - $|\mathcal{U}|$ is the total cardinality of Unsafe Control Actions.
 - $\mathcal{P}_{\mathrm{control}} \subseteq \mathcal{P}$ is the set of controlling PartDefs in the AST model.
 - $|\mathcal{A}(p)|$ is the number of downward ActionDefs declared for controlling part $p$.
@@ -479,7 +479,7 @@ $$
 \end{aligned}
 $$
 
-Where and Operational Parameters:
+- Parameter Definitions & Engineering Units:
 - $\theta(t)$ is the instantaneous pitch angle relative to the local reference frame.
 - $\phi(t)$ is the instantaneous roll angle relative to the local reference frame.
 - $\theta_{\mathrm{min}}$ is the lower pitch boundary.
@@ -495,7 +495,7 @@ T_{\mathrm{switch}} = t_{\mathrm{csn,active}} - t_{\mathrm{barrier,violated}} \l
 \end{aligned}
 $$
 
-Where and Operational Parameters:
+- Parameter Definitions & Engineering Units:
 - $t_{\mathrm{barrier,violated}}$ is the timestamp at which $B(\mathbf{x}) < 0$ is first evaluated.
 - $t_{\mathrm{csn,active}}$ is the timestamp at which the Certified Safety Net assumes active control of actuator outputs.
 - $\Delta t_{\mathrm{max}}$ is the maximum allowable switchover latency bound.
@@ -509,7 +509,7 @@ V_e(t) = V_0 \cdot \exp\left( -\frac{t}{R_{\mathrm{bleed}} \cdot C_{\mathrm{fire
 \end{aligned}
 $$
 
-Where and Operational Parameters:
+- Parameter Definitions & Engineering Units:
 - $V_0$ is the initial peak charged voltage across the capacitor bank.
 - $R_{\mathrm{bleed}}$ is the resistance of the discharge bleed circuit.
 - $C_{\mathrm{fire}}$ is the capacitance of the high-voltage capacitor bank.
@@ -525,7 +525,7 @@ $$
 \end{aligned}
 $$
 
-Where and Operational Parameters:
+- Parameter Definitions & Engineering Units:
 - $D_{\mathrm{sep}}(t)$ is the instantaneous horizontal distance between plants.
 - $\dot{D}_{\mathrm{sep}}(t)$ is the closing range rate.
 - $D_{\mathrm{mod}}$ is the modified distance threshold.
@@ -543,7 +543,7 @@ $$
 \end{aligned}
 $$
 
-Where and Operational Parameters:
+- Parameter Definitions & Engineering Units:
 - $S$ is the Severity score ($1 = \text{Negligible}, 5 = \text{Catastrophic}$).
 - $O$ is the Occurrence probability score ($1 = \text{Extremely Remote}, 5 = \text{Frequent}$).
 - $D$ is the Detection difficulty score ($1 = \text{Immediate Auto-Detection}, 5 = \text{Undetected Hidden Failure}$).
@@ -688,7 +688,7 @@ Bidirectional Traceability Completeness Invariant:
 Every formal proof in the DEAP suite strictly follows the canonical 5-part structure:
 1. **Formal Theorem / Invariant Statement ($T_i$)**
 2. **Symbolic Derivation in Aligned KaTeX** (pure symbolic display math enclosed in `$$ \begin{aligned} ... \end{aligned} $$` on dedicated lines)
-3. **Where and Operational Parameters Table with SI Units ($\mathbb{Z}^7$)**
+3. **Parameter Definitions & Engineering Units Table with SI Units ($\mathbb{Z}^7$)**
 4. **Step-by-Step Numerical Proof Evaluation with abstract parameter bindings**
 5. **Simulink Design Verifier (SLDV) Temporal Assertion Binding**
 
@@ -715,7 +715,7 @@ E_{\mathrm{density}} &= \frac{E_{\mathrm{impact}}}{A_{\mathrm{frontal}}} = \frac
 \end{aligned}
 $$
 
-#### 3. Where and Operational Parameters Table with SI Units ($\mathbb{Z}^7$)
+#### 3. Parameter Definitions & Engineering Units Table with SI Units ($\mathbb{Z}^7$)
 
 | Symbol | Parameter Description | Base SI Dimension | Numerical Value | SI Engineering Unit |
 | :--- | :--- | :--- | :--- | :--- |
@@ -768,7 +768,7 @@ t_{\mathrm{glide}} &= \frac{H_0}{V_{\mathrm{sink}}} = \frac{H_0}{V_{\mathrm{best
 \end{aligned}
 $$
 
-#### 3. Where and Operational Parameters Table with SI Units ($\mathbb{Z}^7$)
+#### 3. Parameter Definitions & Engineering Units Table with SI Units ($\mathbb{Z}^7$)
 
 | Symbol | Parameter Description | Base SI Dimension | Numerical Value | SI Engineering Unit |
 | :--- | :--- | :--- | :--- | :--- |
@@ -825,7 +825,7 @@ B(\mathbf{x}) &= d_{\mathrm{bound}}^2 - \|\mathbf{p} - \mathbf{p}_{\mathrm{cente
 \end{aligned}
 $$
 
-#### 3. Where and Operational Parameters Table with SI Units ($\mathbb{Z}^7$)
+#### 3. Parameter Definitions & Engineering Units Table with SI Units ($\mathbb{Z}^7$)
 
 | Symbol | Parameter Description | Base SI Dimension | Numerical Value | SI Engineering Unit |
 | :--- | :--- | :--- | :--- | :--- |
@@ -876,7 +876,7 @@ t_{\mathrm{safe}} &= -\tau_{\mathrm{bleed}} \cdot \ln\left( \frac{V_{\mathrm{saf
 \end{aligned}
 $$
 
-#### 3. Where and Operational Parameters Table with SI Units ($\mathbb{Z}^7$)
+#### 3. Parameter Definitions & Engineering Units Table with SI Units ($\mathbb{Z}^7$)
 
 | Symbol | Parameter Description | Base SI Dimension | Numerical Value | SI Engineering Unit |
 | :--- | :--- | :--- | :--- | :--- |
@@ -930,7 +930,7 @@ V_{\mathrm{sep}} &= \sqrt{ \frac{2 \cdot \left( W_{\mathrm{piston}} - W_{\mathrm
 \end{aligned}
 $$
 
-#### 3. Where and Operational Parameters Table with SI Units ($\mathbb{Z}^7$)
+#### 3. Parameter Definitions & Engineering Units Table with SI Units ($\mathbb{Z}^7$)
 
 | Symbol | Parameter Description | Base SI Dimension | Numerical Value | SI Engineering Unit |
 | :--- | :--- | :--- | :--- | :--- |
@@ -987,7 +987,7 @@ P_{\mathrm{rx}} &= P_{\mathrm{tx}} + G_{\mathrm{tx}} + G_{\mathrm{rx}} - \mathrm
 \end{aligned}
 $$
 
-#### 3. Where and Operational Parameters Table with SI Units ($\mathbb{Z}^7$)
+#### 3. Parameter Definitions & Engineering Units Table with SI Units ($\mathbb{Z}^7$)
 
 | Symbol | Parameter Description | Base SI Dimension | Numerical Value | SI Engineering Unit |
 | :--- | :--- | :--- | :--- | :--- |
@@ -1044,7 +1044,7 @@ M_{\mathrm{batt}} \cdot c_p \cdot \frac{dT_{\mathrm{cell}}}{dt} &= \dot{Q}_{\mat
 \end{aligned}
 $$
 
-#### 3. Where and Operational Parameters Table with SI Units ($\mathbb{Z}^7$)
+#### 3. Parameter Definitions & Engineering Units Table with SI Units ($\mathbb{Z}^7$)
 
 | Symbol | Parameter Description | Base SI Dimension | Numerical Value | SI Engineering Unit |
 | :--- | :--- | :--- | :--- | :--- |
@@ -1105,7 +1105,7 @@ d_{\mathrm{CPA}} &= \|\mathbf{r} + \mathbf{v}_{\mathrm{rel}} \cdot t_{\mathrm{CP
 \end{aligned}
 $$
 
-#### 3. Where and Operational Parameters Table with SI Units ($\mathbb{Z}^7$)
+#### 3. Parameter Definitions & Engineering Units Table with SI Units ($\mathbb{Z}^7$)
 
 | Symbol | Parameter Description | Base SI Dimension | Numerical Value | SI Engineering Unit |
 | :--- | :--- | :--- | :--- | :--- |
@@ -1158,7 +1158,7 @@ q_{\mathrm{max}} &= \frac{1}{2} \cdot \rho \cdot V_{\mathrm{dive,term}}^2 = \fra
 \end{aligned}
 $$
 
-#### 3. Where and Operational Parameters Table with SI Units ($\mathbb{Z}^7$)
+#### 3. Parameter Definitions & Engineering Units Table with SI Units ($\mathbb{Z}^7$)
 
 | Symbol | Parameter Description | Base SI Dimension | Numerical Value | SI Engineering Unit |
 | :--- | :--- | :--- | :--- | :--- |
@@ -1212,7 +1212,7 @@ P_{\mathrm{cat}}(T) &= P_{S2}(T) \approx \frac{2\lambda_1 \lambda_2}{\mu_1} \cdo
 \end{aligned}
 $$
 
-#### 3. Where and Operational Parameters Table with SI Units ($\mathbb{Z}^7$)
+#### 3. Parameter Definitions & Engineering Units Table with SI Units ($\mathbb{Z}^7$)
 
 | Symbol | Parameter Description | Base SI Dimension | Numerical Value | SI Engineering Unit |
 | :--- | :--- | :--- | :--- | :--- |
@@ -1447,7 +1447,7 @@ $$
 \end{aligned}
 $$
 
-Where and Operational Parameters:
+- Parameter Definitions & Engineering Units:
 - $\mathrm{PPL}_{\mathrm{FP16}}$ is the baseline perplexity on WikiText-2 ($5.206$).
 - $\mathrm{PPL}_{\mathrm{Q5\_K\_M}}$ is the quantized model perplexity ($5.214$).
 - Perplexity drift $\Delta \mathrm{PPL} < 0.009$ confirms complete preservation of logical inference and safety constraint derivation capability.

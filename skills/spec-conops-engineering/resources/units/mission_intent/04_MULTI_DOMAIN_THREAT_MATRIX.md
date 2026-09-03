@@ -4,7 +4,7 @@
 | **Version** | 1.0.0 |
 | **Date** | 2026-09-02 |
 
-## 4. Threat & Electronic Warfare (EW) / Cyber Environment Matrix
+## 4. Multi-Domain Operational Threat & Contested Environment Matrix
 
 In accordance with MIL-STD-882E (§4.3) and general hazard analysis models, the system operates across contested, multi-domain operating environments. The threat matrix establishes deterministic autonomous mitigation rules spanning six fundamental threat domains: Kinetic/Physical, Mechanical/Structural, Power/Thermal, Environmental, Electromagnetic/RF, and Cyber/Data Integrity.
 

@@ -113,7 +113,7 @@ For each Bounded Context, partition its subtree into cohesive functional feature
    - **Pure Symbolic Mathematical Separation Rule**: When extracting or specifying mathematical equations, physical dynamics, kinematics, or control laws:
       - Display math blocks (`$$ \begin{aligned} ... \end{aligned} $$`) MUST express **pure symbolic equations only**.
       - Strictly prohibit embedding physical unit macros (`\text{ ms}`, `\text{ kg}`, `\text{ m/s}`, `\text{ bar}`, `\text{ V}`, etc.) inside display math equations.
-      - Mandate that all physical values, numerical limits, constants, calibration thresholds, and engineering units are defined in the accompanying "Where and Operational Parameters:" text section immediately following the equation block.
+      - Mandate that all physical values, numerical limits, constants, calibration thresholds, and engineering units are defined in the accompanying "- Parameter Definitions & Engineering Units:" text section immediately following the equation block.
       - Strictly prohibit dangling operators (such as `/` with no denominator) and unescaped underscores inside `\text{}` (mandating `\text{yaw-disturbance}` or structured subscripts like `\Delta v_{\text{yaw,dist}}`).
       - Multi-line aligned equations MUST use `\begin{aligned} ... \end{aligned}` inside `$$` delimiters on dedicated lines.
     - **Draft the Feature Spec File:** Write the Feature as a local markdown file (e.g., `docs/features/feat-01-name.md`).
@@ -270,7 +270,7 @@ For each Bounded Context, partition its subtree into cohesive functional feature
    \end{aligned}
    $$
 
-   Where and Operational Parameters:
+   - Parameter Definitions & Engineering Units:
    - $x$: State vector representing system state variables.
    - $u$: Control input vector.
    - $t$: Time variable ($t \ge 0.0\text{ s}$).

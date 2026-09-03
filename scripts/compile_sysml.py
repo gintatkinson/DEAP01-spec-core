@@ -2596,7 +2596,7 @@ def _render_rta_architecture(proofs: List[Dict[str, str]]) -> str:
         lines.append("")
         lines.append(proof["derivation_block"])
         lines.append("")
-        lines.append("### Where and Operational Parameters Table")
+        lines.append("### Parameter Definitions & Engineering Units Table")
         lines.append("")
         lines.append(proof["table"])
         lines.append("")
