@@ -9,7 +9,7 @@ Executes a 2-Tier Semantic Verification Architecture (6 layers) across all 10 do
   Tier 2 (Semantic & Mathematical Physics Verification):
     - Layer 3 (Statutory Cardinality & Normative Standards): 16 Threat Vectors, 4 PACE tiers, >=12 MIL-STD-810H methods, 24 SORA OSOs, 7 Emergency rows, and Solver 4 (Normative Standards Cross-Checker: IEC 62304, EN 50128, ECSS, ISO 3691-4, DNV-GL).
     - Layer 4 (Closed-Form Physical & Math Solver): SORA kinetic energy (E_k <= 34.0J), Kalman covariance units & linear algebra dimensions, Bingo energy conservation, Solver 1 (Relational Table Mass Cross-Sum Solver), Solver 2 (Closed-Form Quadratic Physics Solver), and Solver 3 (Dimensional Scaling & Energy Conservation Engine).
-    - Layer 5 (Adversarial Invariant Verification & Ontology Scanner): Priority arbitration (P_EMG07 > ... > P_EMG01), failsafe non-destructive RTB, NIST SP 800-82r3 anti-replay, and Solver 5 (Forbidden Cross-Domain Ontology Scanner).
+    - Layer 5 (Adversarial Invariant Verification & Ontology Scanner): Priority arbitration (P_EMG07 > ... > P_EMG01), failsafe non-destructive RTB, NIST SP 800-82r3 anti-replay, Solver 5 (Forbidden Cross-Domain Ontology Scanner), Solver 6 (Positive Domain Lexicon Floor), and Solver 7 (Pairwise Anti-Plagiarism Gate).
     - Layer 6 (Baseline Parity & Model Coverage): verify_downstream_baseline.py and verify_model_coverage.py --spec-only.
 
 Generates:
@@ -58,6 +58,7 @@ class HarnessSummary:
     failed_domains: int
     execution_timestamp: str
     domain_results: List[DomainScorecard] = field(default_factory=list)
+    similarity_matrix: Dict[str, Dict[str, float]] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -866,6 +867,241 @@ def solve_forbidden_cross_domain_ontology(
 
 
 # ---------------------------------------------------------------------------
+# Solver 6: Positive Domain Lexicon Density Floor (Layer 5)
+# ---------------------------------------------------------------------------
+
+POSITIVE_DOMAIN_LEXICONS: Dict[str, List[str]] = {
+    "medical": [
+        "surgeon", "trocar", "master manipulator", "laparoscope",
+        "sterile drape", "end-effector", "haptic", "dicom", "hl7",
+    ],
+    "rail": [
+        "track circuit", "axle counter", "coupler", "shunting yard",
+        "brake pipe", "turnout", "bogie", "etcs", "balise",
+    ],
+    "marine": [
+        "bathymetry", "buoyancy engine", "usbl", "dvl", "ctd",
+        "transponder", "acoustic modem", "colregs", "seaway",
+    ],
+    "space": [
+        "adcs", "reaction wheel", "magnetorquer", "star tracker",
+        "lvlh", "orbital eclipse", "ccsds", "telemetry tracking",
+    ],
+    "industrial": [
+        "pallet", "fork mast", "docking", "vda 5050", "safety field",
+        "optical lidar", "curbside", "odometry",
+    ],
+    "aviation": [
+        "airframe", "flight controller", "airspace", "aerodynamic",
+        "wing", "avionics", "sora", "payload",
+    ],
+}
+
+
+def _term_to_regex(term: str) -> re.Pattern:
+    tokens = re.split(r"[\s\-]+", term.strip().lower())
+    last = tokens[-1]
+    if last == "colregs":
+        last_pat = r"colregs?"
+    elif last.endswith("s"):
+        last_pat = re.escape(last) + r"?"
+    else:
+        last_pat = re.escape(last) + r"(?:s|es)?"
+    parts = [re.escape(tok) for tok in tokens[:-1]] + [last_pat]
+    pat_str = r"\b" + r"[\s\-_]+".join(parts) + r"\b"
+    return re.compile(pat_str, re.IGNORECASE)
+
+
+def _infer_lexicon_domain_type(
+    domain_id: str, domain_type: Optional[str] = None, text: str = ""
+) -> Optional[str]:
+    if domain_type and domain_type.lower() in POSITIVE_DOMAIN_LEXICONS:
+        return domain_type.lower()
+    d_name = DOMAIN_NAMES.get(domain_id, domain_id)
+    combined = f"{domain_id} {d_name} {domain_type or ''}".lower()
+
+    rules = [
+        ("medical", ("medical", "surgical", "surgeon", "laparoscopic", "hospital", "healthcare", "run_07")),
+        ("rail", ("rail", "locomotive", "shunting", "train", "railway", "run_08")),
+        ("marine", ("marine", "maritime", "subsea", "underwater", "auv", "asv", "surface vessel", "vessel", "run_03", "run_04")),
+        ("space", ("space", "cubesat", "satellite", "spacecraft", "orbit", "leo", "constellation", "run_06")),
+        ("industrial", ("industrial", "agv", "forklift", "ugv", "ground delivery", "ground robot", "warehouse", "logistics", "run_05", "run_09")),
+        ("aviation", ("aviation", "aircraft", "uav", "uas", "aerial", "evtol", "fixed-wing", "interceptor", "air mobility", "run_01", "run_02", "run_10")),
+    ]
+
+    for dom_key, kw_tuple in rules:
+        if any(k in combined for k in kw_tuple):
+            return dom_key
+
+    if text:
+        text_head = text[:2000].lower()
+        for dom_key, kw_tuple in rules:
+            if any(k in text_head for k in kw_tuple):
+                return dom_key
+
+    return None
+
+
+def solve_positive_domain_lexicon_floor(
+    domain_id: str, domain_type: Optional[str], text: str
+) -> Tuple[bool, List[str], Dict[str, object]]:
+    """
+    Solver 6: Positive Domain Lexicon Density Floor (Layer 5).
+    Check that each domain matches at least 4 authentic domain-native terms:
+      - medical: surgeon, trocar, master manipulator, laparoscope, sterile drape, end-effector, haptic, dicom, hl7
+      - rail: track circuit, axle counter, coupler, shunting yard, brake pipe, turnout, bogie, etcs, balise
+      - marine: bathymetry, buoyancy engine, usbl, dvl, ctd, transponder, acoustic modem, colregs, seaway
+      - space: adcs, reaction wheel, magnetorquer, star tracker, lvlh, orbital eclipse, ccsds, telemetry tracking
+      - industrial: pallet, fork mast, docking, vda 5050, safety field, optical lidar, curbside, odometry
+      - aviation: airframe, flight controller, airspace, aerodynamic, wing, avionics, sora, payload
+    Fail Layer 5 if count < 4 with explicit missing terms list.
+    """
+    errors = []
+    details: Dict[str, object] = {}
+
+    resolved_type = _infer_lexicon_domain_type(domain_id, domain_type, text)
+    if not resolved_type or resolved_type not in POSITIVE_DOMAIN_LEXICONS:
+        errors.append(f"Unable to determine domain type for domain '{domain_id}' (domain_type='{domain_type}')")
+        return False, errors, details
+
+    target_terms = POSITIVE_DOMAIN_LEXICONS[resolved_type]
+    matched_terms = []
+
+    for term in target_terms:
+        rx = _term_to_regex(term)
+        if rx.search(text):
+            matched_terms.append(term)
+
+    missing_terms = [t for t in target_terms if t not in matched_terms]
+    matched_count = len(matched_terms)
+
+    details["domain_id"] = domain_id
+    details["domain_type"] = resolved_type
+    details["matched_terms"] = matched_terms
+    details["matched_count"] = matched_count
+    details["missing_terms"] = missing_terms
+    details["lexicon_floor"] = 4
+
+    if matched_count < 4:
+        errors.append(
+            f"Positive domain lexicon floor breach for domain '{domain_id}' ({resolved_type}): "
+            f"matched {matched_count} terms (< 4 required). "
+            f"Matched: {matched_terms}, Missing: {missing_terms}"
+        )
+        passed = False
+    else:
+        passed = True
+
+    return passed, errors, details
+
+
+# ---------------------------------------------------------------------------
+# Solver 7: Pairwise Anti-Plagiarism Gate (Layer 5)
+# ---------------------------------------------------------------------------
+
+def extract_substantive_sentences(text: str) -> Set[str]:
+    """
+    Extract substantive sentences (>= 4 words) from specification text.
+    Strips markdown formatting, headers, table pipes, and normalizes whitespace.
+    """
+    sentences = set()
+    raw_segments = re.split(r"(?<=[.!?])\s+|\n+|\|", text)
+    for seg in raw_segments:
+        cleaned = re.sub(r"^[\s#*\->|:]+", "", seg)
+        cleaned = re.sub(r"[\s|:]+$", "", cleaned)
+        cleaned = re.sub(r"[*_`~]", "", cleaned)
+        cleaned = cleaned.strip()
+
+        # Skip separator rows like --- or :---:
+        if not cleaned or all(c in "-: " for c in cleaned):
+            continue
+
+        words = re.findall(r"\b[A-Za-z0-9_-]+\b", cleaned)
+        if len(words) >= 4:
+            normalized_sentence = " ".join(words).lower()
+            sentences.add(normalized_sentence)
+    return sentences
+
+
+def solve_pairwise_domain_similarity(
+    domain_texts: Dict[str, str], max_threshold: float = 0.25
+) -> Tuple[bool, List[str], Dict[str, object]]:
+    """
+    Solver 7: Pairwise Anti-Plagiarism Gate (Layer 5).
+    Extracts substantive sentences (>= 4 words) from CONOPS.md + MISSION_INTENT.md
+    for all evaluated domain sandboxes.
+    Calculates pairwise Jaccard sentence similarity between all distinct physical domain pairs.
+    If similarity > max_threshold (25.0%), fails Layer 5 with explicit error showing overlap %.
+    """
+    errors = []
+    details: Dict[str, object] = {}
+
+    domain_sentences: Dict[str, Set[str]] = {}
+    for d_id, txt in domain_texts.items():
+        domain_sentences[d_id] = extract_substantive_sentences(txt)
+
+    sentence_counts = {d: len(s) for d, s in domain_sentences.items()}
+    details["sentence_counts"] = sentence_counts
+
+    domain_keys = sorted(domain_texts.keys())
+    similarity_matrix: Dict[str, Dict[str, float]] = {}
+    violations = []
+    max_sim = 0.0
+    max_pair = None
+
+    for i, d1 in enumerate(domain_keys):
+        if d1 not in similarity_matrix:
+            similarity_matrix[d1] = {}
+        similarity_matrix[d1][d1] = 1.0
+
+        for j in range(i + 1, len(domain_keys)):
+            d2 = domain_keys[j]
+            if d2 not in similarity_matrix:
+                similarity_matrix[d2] = {}
+
+            s1 = domain_sentences[d1]
+            s2 = domain_sentences[d2]
+
+            union = s1.union(s2)
+            if union:
+                inter = s1.intersection(s2)
+                jaccard = len(inter) / len(union)
+            else:
+                jaccard = 0.0
+
+            similarity_matrix[d1][d2] = round(jaccard, 4)
+            similarity_matrix[d2][d1] = round(jaccard, 4)
+
+            if jaccard > max_sim:
+                max_sim = jaccard
+                max_pair = (d1, d2)
+
+            if jaccard > max_threshold:
+                pct = jaccard * 100.0
+                threshold_pct = max_threshold * 100.0
+                err_msg = (
+                    f"Pairwise domain similarity between '{d1}' and '{d2}' is {pct:.2f}% "
+                    f"(exceeds {threshold_pct:.1f}% anti-plagiarism threshold)"
+                )
+                errors.append(err_msg)
+                violations.append({
+                    "domain_a": d1,
+                    "domain_b": d2,
+                    "similarity": round(jaccard, 4),
+                    "overlap_percentage": round(pct, 2),
+                })
+
+    details["similarity_matrix"] = similarity_matrix
+    details["max_similarity"] = round(max_sim, 4)
+    details["max_similarity_pair"] = max_pair
+    details["threshold"] = max_threshold
+    details["violations"] = violations
+
+    passed = len(errors) == 0
+    return passed, errors, details
+
+
+# ---------------------------------------------------------------------------
 # Layer 3: Statutory Cardinality & Normative Standards
 # ---------------------------------------------------------------------------
 
@@ -1084,8 +1320,11 @@ def verify_layer4_physical_math(workspace_path: str) -> LayerResult:
 # Layer 5: Adversarial Invariant Verification
 # ---------------------------------------------------------------------------
 
-def verify_layer5_adversarial_invariants(workspace_path: str) -> LayerResult:
-    """Verify priority arbitration, failsafe non-destructive RTB, NIST SP 800-82r3 anti-replay freshness, and ontology invariants."""
+def verify_layer5_adversarial_invariants(
+    workspace_path: str,
+    domain_texts: Optional[Dict[str, str]] = None,
+) -> LayerResult:
+    """Verify priority arbitration, failsafe non-destructive RTB, NIST SP 800-82r3 anti-replay freshness, ontology invariants, positive domain lexicon floor, and pairwise anti-plagiarism."""
     errors = []
     details = {}
     
@@ -1133,6 +1372,47 @@ def verify_layer5_adversarial_invariants(workspace_path: str) -> LayerResult:
     details["cross_domain_ontology"] = onto_details
     if not onto_passed:
         errors.extend(onto_errors)
+
+    # 5. Positive Domain Lexicon Density Floor (Solver 6)
+    domain_id = os.path.basename(os.path.abspath(workspace_path))
+    cfg_paths = [
+        os.path.join(workspace_path, "schema", "domain_config.json"),
+        os.path.join(workspace_path, "domain_config.json"),
+    ]
+    cfg = None
+    for p in cfg_paths:
+        if os.path.isfile(p):
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+                break
+            except Exception:
+                pass
+    domain_type = None
+    if cfg:
+        domain_type = cfg.get("OPERATIONAL_DOMAIN") or cfg.get("domain") or cfg.get("PLATFORM_TYPE")
+
+    combined_text = conops_c + "\n" + intent_c
+    lex_passed, lex_errors, lex_details = solve_positive_domain_lexicon_floor(
+        domain_id=domain_id,
+        domain_type=domain_type,
+        text=combined_text,
+    )
+    details["positive_lexicon_floor"] = lex_details
+    if not lex_passed:
+        errors.extend(lex_errors)
+
+    # 6. Pairwise Anti-Plagiarism Gate (Solver 7)
+    if domain_texts and len(domain_texts) >= 2:
+        sim_passed, sim_errors, sim_details = solve_pairwise_domain_similarity(domain_texts)
+        details["pairwise_similarity"] = {
+            "sentence_count": sim_details.get("sentence_counts", {}).get(domain_id, 0),
+            "max_similarity": sim_details.get("max_similarity", 0.0),
+        }
+        if not sim_passed:
+            for err in sim_errors:
+                if f"'{domain_id}'" in err:
+                    errors.append(err)
 
     passed = len(errors) == 0
     return LayerResult(
@@ -1196,7 +1476,9 @@ def verify_layer6_baseline_parity(workspace_path: str, core_root: str) -> LayerR
 # Workspace Evaluation Engine
 # ---------------------------------------------------------------------------
 
-def evaluate_domain_workspace(workspace_path: str, core_root: str) -> DomainScorecard:
+def evaluate_domain_workspace(
+    workspace_path: str, core_root: str, domain_texts: Optional[Dict[str, str]] = None
+) -> DomainScorecard:
     """Execute all 6 verification layers on a single domain workspace."""
     domain_id = os.path.basename(os.path.abspath(workspace_path))
     domain_name = DOMAIN_NAMES.get(domain_id, domain_id)
@@ -1206,7 +1488,7 @@ def evaluate_domain_workspace(workspace_path: str, core_root: str) -> DomainScor
     layers[2] = verify_layer2_syntax_purity(workspace_path)
     layers[3] = verify_layer3_cardinality(workspace_path)
     layers[4] = verify_layer4_physical_math(workspace_path)
-    layers[5] = verify_layer5_adversarial_invariants(workspace_path)
+    layers[5] = verify_layer5_adversarial_invariants(workspace_path, domain_texts=domain_texts)
     layers[6] = verify_layer6_baseline_parity(workspace_path, core_root)
     
     overall_passed = all(layer.passed for layer in layers.values())
@@ -1253,6 +1535,26 @@ def generate_markdown_report(summary: HarnessSummary) -> str:
         lines.append(f"| `{d.domain_id}` | **{d.domain_name}** | {l1} | {l2} | {l3} | {l4} | {l5} | {l6} | {overall} |")
         
     lines.append("")
+
+    if summary.similarity_matrix:
+        lines.append("## Pairwise Anti-Plagiarism & Cross-Domain Similarity Matrix")
+        lines.append("")
+        domain_keys = sorted(summary.similarity_matrix.keys())
+        header = "| Domain | " + " | ".join(f"`{k}`" for k in domain_keys) + " |"
+        sep = "| :--- | " + " | ".join(":---:" for _ in domain_keys) + " |"
+        lines.append(header)
+        lines.append(sep)
+        for d1 in domain_keys:
+            row_vals = []
+            for d2 in domain_keys:
+                val = summary.similarity_matrix[d1].get(d2, 0.0)
+                pct_str = f"{val * 100:.1f}%"
+                if d1 != d2 and val > 0.25:
+                    pct_str = f"**{pct_str}**"
+                row_vals.append(pct_str)
+            lines.append(f"| `{d1}` | " + " | ".join(row_vals) + " |")
+        lines.append("")
+
     lines.append("---")
     lines.append("")
     lines.append("## Detailed Layer Diagnostics per Domain")
@@ -1316,9 +1618,29 @@ class AcceptanceHarness:
         else:
             domain_paths = self.discover_domains()
 
+        # Collect text across all discovered domains for pairwise similarity
+        domain_texts: Dict[str, str] = {}
+        for dp in domain_paths:
+            d_id = os.path.basename(os.path.abspath(dp))
+            c_path = os.path.join(dp, "docs", "conops", "CONOPS.md")
+            i_path = os.path.join(dp, "docs", "conops", "MISSION_INTENT.md")
+            txt = ""
+            if os.path.exists(c_path):
+                with open(c_path, "r", encoding="utf-8", errors="ignore") as f:
+                    txt += f.read() + "\n"
+            if os.path.exists(i_path):
+                with open(i_path, "r", encoding="utf-8", errors="ignore") as f:
+                    txt += f.read()
+            domain_texts[d_id] = txt
+
+        similarity_matrix: Dict[str, Dict[str, float]] = {}
+        if len(domain_texts) >= 2:
+            _, _, sim_details = solve_pairwise_domain_similarity(domain_texts)
+            similarity_matrix = sim_details.get("similarity_matrix", {})
+
         results = []
         for dp in domain_paths:
-            scorecard = evaluate_domain_workspace(dp, self.core_root)
+            scorecard = evaluate_domain_workspace(dp, self.core_root, domain_texts=domain_texts)
             results.append(scorecard)
 
         passed_count = sum(1 for r in results if r.overall_passed)
@@ -1330,7 +1652,8 @@ class AcceptanceHarness:
             passed_domains=passed_count,
             failed_domains=failed_count,
             execution_timestamp=timestamp,
-            domain_results=results
+            domain_results=results,
+            similarity_matrix=similarity_matrix,
         )
 
 

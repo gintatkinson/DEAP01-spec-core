@@ -21,11 +21,15 @@ from scripts.e2e_acceptance_harness import (
     LayerResult,
     DomainScorecard,
     HarnessSummary,
+    POSITIVE_DOMAIN_LEXICONS,
     solve_relational_mass_cross_sum,
     solve_closed_form_quadratic_physics,
     solve_dimensional_energy_conservation,
     solve_normative_standards_cross_check,
     solve_forbidden_cross_domain_ontology,
+    solve_positive_domain_lexicon_floor,
+    extract_substantive_sentences,
+    solve_pairwise_domain_similarity,
     verify_layer1_delivery_gate,
     verify_layer2_syntax_purity,
     verify_layer3_cardinality,
@@ -286,6 +290,42 @@ class TestE2EAcceptanceHarnessLayers(unittest.TestCase):
         res = verify_layer5_adversarial_invariants(self.temp_dir)
         self.assertFalse(res.passed)
         self.assertTrue(any("priority" in e.lower() for e in res.errors))
+
+    def test_layer5_positive_lexicon_floor_failure(self):
+        # Purge aviation terms from CONOPS and Intent
+        with open(self.conops_file, "r", encoding="utf-8") as f:
+            c = f.read()
+        for term in ["Airframe", "Avionics", "Payload", "SORA", "airframe", "avionics", "payload", "sora"]:
+            c = c.replace(term, "GenericComponent")
+        with open(self.conops_file, "w", encoding="utf-8") as f:
+            f.write(c)
+
+        with open(self.intent_file, "r", encoding="utf-8") as f:
+            ic = f.read()
+        for term in ["Airframe", "Avionics", "Payload", "SORA", "airframe", "avionics", "payload", "sora"]:
+            ic = ic.replace(term, "GenericComponent")
+        with open(self.intent_file, "w", encoding="utf-8") as f:
+            f.write(ic)
+
+        res = verify_layer5_adversarial_invariants(self.temp_dir)
+        self.assertFalse(res.passed)
+        self.assertTrue(any("lexicon floor breach" in e for e in res.errors))
+
+    def test_layer5_pairwise_similarity_plagiarism_failure(self):
+        # Create domain_texts dictionary where temp_dir has 100% sentence overlap with a cloned domain
+        with open(self.conops_file, "r", encoding="utf-8") as f:
+            c = f.read()
+        with open(self.intent_file, "r", encoding="utf-8") as f:
+            ic = f.read()
+        txt = c + "\n" + ic
+        domain_id = os.path.basename(os.path.abspath(self.temp_dir))
+        domain_texts = {
+            domain_id: txt,
+            "run_02_plagiarized_clone": txt,
+        }
+        res = verify_layer5_adversarial_invariants(self.temp_dir, domain_texts=domain_texts)
+        self.assertFalse(res.passed)
+        self.assertTrue(any("anti-plagiarism" in e or "Pairwise domain similarity" in e for e in res.errors))
 
 
 # ---------------------------------------------------------------------------
@@ -716,6 +756,143 @@ class TestDeterministicSemanticSolvers(unittest.TestCase):
         self.assertFalse(passed)
         self.assertTrue(any("collateral damage" in e for e in errors))
 
+    # -----------------------------------------------------------------------
+    # Solver 6: Positive Domain Lexicon Density Floor
+    # -----------------------------------------------------------------------
+    def test_solver6_positive_lexicon_medical_success(self):
+        text = "The surgeon utilizes a trocar, laparoscope, master manipulator, sterile drape, and end-effector with haptic feedback, DICOM and HL7."
+        passed, errors, details = solve_positive_domain_lexicon_floor("run_07", "medical", text)
+        self.assertTrue(passed, f"Solver 6 medical failed: {errors}")
+        self.assertGreaterEqual(details["matched_count"], 4)
+        self.assertIn("surgeon", details["matched_terms"])
+
+    def test_solver6_positive_lexicon_medical_failure(self):
+        text = "The surgeon reviewed the DICOM image on the terminal."
+        passed, errors, details = solve_positive_domain_lexicon_floor("run_07", "medical", text)
+        self.assertFalse(passed)
+        self.assertEqual(details["matched_count"], 2)
+        self.assertTrue(any("lexicon floor breach" in e for e in errors))
+        self.assertIn("trocar", details["missing_terms"])
+
+    def test_solver6_positive_lexicon_rail_success(self):
+        text = "The track circuit communicates with the axle counter and coupler in the shunting yard. ETCS balises monitor speed."
+        passed, errors, details = solve_positive_domain_lexicon_floor("run_08", "rail", text)
+        self.assertTrue(passed, f"Solver 6 rail failed: {errors}")
+        self.assertGreaterEqual(details["matched_count"], 4)
+
+    def test_solver6_positive_lexicon_rail_failure(self):
+        text = "The rail train stopped at the station coupler."
+        passed, errors, details = solve_positive_domain_lexicon_floor("run_08", "rail", text)
+        self.assertFalse(passed)
+        self.assertLess(details["matched_count"], 4)
+
+    def test_solver6_positive_lexicon_marine_success(self):
+        text = "Bathymetry survey utilizing buoyancy engine, USBL, DVL, CTD, and transponder acoustic modem under COLREGs."
+        passed, errors, details = solve_positive_domain_lexicon_floor("run_03", "marine", text)
+        self.assertTrue(passed, f"Solver 6 marine failed: {errors}")
+        self.assertGreaterEqual(details["matched_count"], 4)
+
+    def test_solver6_positive_lexicon_marine_failure(self):
+        text = "The underwater vessel navigated the seaway."
+        passed, errors, details = solve_positive_domain_lexicon_floor("run_03", "marine", text)
+        self.assertFalse(passed)
+        self.assertLess(details["matched_count"], 4)
+
+    def test_solver6_positive_lexicon_space_success(self):
+        text = "ADCS reaction wheels and magnetorquers maintain pointing using star tracker in LVLH frame during orbital eclipse with CCSDS telemetry tracking."
+        passed, errors, details = solve_positive_domain_lexicon_floor("run_06", "space", text)
+        self.assertTrue(passed, f"Solver 6 space failed: {errors}")
+        self.assertGreaterEqual(details["matched_count"], 4)
+
+    def test_solver6_positive_lexicon_space_failure(self):
+        text = "The satellite payload transmitted telemetry."
+        passed, errors, details = solve_positive_domain_lexicon_floor("run_06", "space", text)
+        self.assertFalse(passed)
+        self.assertLess(details["matched_count"], 4)
+
+    def test_solver6_positive_lexicon_industrial_success(self):
+        text = "Pallet handling via fork mast during docking per VDA 5050 with safety field protection, optical lidar, and odometry."
+        passed, errors, details = solve_positive_domain_lexicon_floor("run_09", "industrial", text)
+        self.assertTrue(passed, f"Solver 6 industrial failed: {errors}")
+        self.assertGreaterEqual(details["matched_count"], 4)
+
+    def test_solver6_positive_lexicon_industrial_failure(self):
+        text = "The warehouse vehicle executed docking maneuvers."
+        passed, errors, details = solve_positive_domain_lexicon_floor("run_09", "industrial", text)
+        self.assertFalse(passed)
+        self.assertLess(details["matched_count"], 4)
+
+    def test_solver6_positive_lexicon_aviation_success(self):
+        text = "The airframe and flight controller navigate regulated airspace with aerodynamic wings, avionics, SORA, and payload."
+        passed, errors, details = solve_positive_domain_lexicon_floor("run_01", "aviation", text)
+        self.assertTrue(passed, f"Solver 6 aviation failed: {errors}")
+        self.assertGreaterEqual(details["matched_count"], 4)
+
+    def test_solver6_positive_lexicon_aviation_failure(self):
+        text = "The system carried a sensor payload."
+        passed, errors, details = solve_positive_domain_lexicon_floor("run_01", "aviation", text)
+        self.assertFalse(passed)
+        self.assertLess(details["matched_count"], 4)
+
+    # -----------------------------------------------------------------------
+    # Solver 7: Pairwise Anti-Plagiarism Gate
+    # -----------------------------------------------------------------------
+    def test_solver7_extract_substantive_sentences(self):
+        md_text = """
+# Header Line
+| Header 1 | Header 2 |
+| :--- | :--- |
+| **Short** | Hi |
+| **Long Cell** | This is a substantive table cell sentence describing the system. |
+
+This is the first substantive prose sentence. Here is the second detailed sentence with technical parameters.
+Short.
+- Item bullet point containing four words here.
+"""
+        sentences = extract_substantive_sentences(md_text)
+        self.assertIn("this is a substantive table cell sentence describing the system", sentences)
+        self.assertIn("this is the first substantive prose sentence", sentences)
+        self.assertIn("here is the second detailed sentence with technical parameters", sentences)
+        self.assertIn("item bullet point containing four words here", sentences)
+        self.assertNotIn("short", sentences)
+        self.assertNotIn("hi", sentences)
+
+    def test_solver7_pairwise_similarity_clean_success(self):
+        domain_texts = {
+            "medical_robot": "The surgical console operates with sterile drapes and trocars in laparoscopic theaters. Master manipulators provide haptic feedback.",
+            "rail_locomotive": "The autonomous rail shunting locomotive connects brake pipes and monitors axle counters. Bogie dynamics are governed by ETCS balises.",
+        }
+        passed, errors, details = solve_pairwise_domain_similarity(domain_texts, max_threshold=0.25)
+        self.assertTrue(passed, f"Solver 7 failed: {errors}")
+        self.assertEqual(len(errors), 0)
+        self.assertLessEqual(details["max_similarity"], 0.25)
+
+    def test_solver7_pairwise_similarity_plagiarism_failure(self):
+        shared_text = (
+            "The system operates with autonomous failover architecture.\n"
+            "All telemetry streams are cryptographically validated every cycle.\n"
+            "Emergency braking activates immediately upon watchdog signal loss.\n"
+            "Redundant power supplies maintain nominal operation during voltage dips.\n"
+            "Environmental testing conforms to standard procedures and thermal baselines."
+        )
+        domain_texts = {
+            "domain_alpha": shared_text + "\nDomain alpha specific distinct sentence here.",
+            "domain_beta": shared_text + "\nDomain beta specific distinct sentence here.",
+        }
+        passed, errors, details = solve_pairwise_domain_similarity(domain_texts, max_threshold=0.25)
+        self.assertFalse(passed)
+        self.assertGreater(details["max_similarity"], 0.25)
+        self.assertTrue(any("anti-plagiarism threshold" in e for e in errors))
+
+    def test_solver7_pairwise_similarity_custom_threshold(self):
+        shared_text = "Sentence one about system telemetry.\nSentence two about power supply distribution.\nSentence three about environmental validation."
+        domain_texts = {
+            "domain_a": shared_text + "\nSpecific sentence for domain A here.",
+            "domain_b": shared_text + "\nSpecific sentence for domain B here.",
+        }
+        passed, errors, details = solve_pairwise_domain_similarity(domain_texts, max_threshold=0.90)
+        self.assertTrue(passed)
+
 
 class TestScorecardAndReportGeneration(unittest.TestCase):
     def test_report_generation(self):
@@ -738,17 +915,20 @@ class TestScorecardAndReportGeneration(unittest.TestCase):
             passed_domains=1,
             failed_domains=0,
             execution_timestamp="2026-09-03T22:00:00Z",
-            domain_results=[domain]
+            domain_results=[domain],
+            similarity_matrix={"run_01": {"run_01": 1.0}}
         )
         md_text = generate_markdown_report(summary)
         self.assertIn("# Master 10-Domain E2E Acceptance Test Report", md_text)
         self.assertIn("Tactical ISR Fixed-Wing UAV", md_text)
+        self.assertIn("## Pairwise Anti-Plagiarism & Cross-Domain Similarity Matrix", md_text)
         self.assertIn("PASS", md_text)
 
         json_text = generate_json_scorecard(summary)
         data = json.loads(json_text)
         self.assertEqual(data["total_domains"], 1)
         self.assertEqual(data["passed_domains"], 1)
+        self.assertIn("similarity_matrix", data)
 
 
 if __name__ == "__main__":
