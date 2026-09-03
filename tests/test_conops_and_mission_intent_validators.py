@@ -31,6 +31,7 @@ from parity_auditor.validators.conops_completeness_validator import (
     calculate_bingo_energy_reserve_ratio,
     TEMPLATE_PLACEHOLDER_REGEX,
     _find_unresolved_template_placeholders,
+    _extract_markdown_sections_list,
 )
 
 
@@ -44,6 +45,21 @@ def _get_valid_conops_content() -> str:
     lines.append("| **Date** | 2026-09-01 |")
     lines.append("")
     lines.append("# Concept of Operations (ConOps): Autonomous Cyber-Physical System Archetype")
+    lines.append("")
+    lines.append("## Table of Contents")
+    lines.append("")
+    lines.append("- [1. Scope & System Identification](#1-scope--system-identification)")
+    lines.append("- [2. Normative Standards & Regulatory Baseline](#2-normative-standards--regulatory-baseline)")
+    lines.append("- [3. Current Situation & Deficiency Analysis (Predecessors)](#3-current-situation--deficiency-analysis-predecessors)")
+    lines.append("- [4. Operational Justification & Priority Matrix (Trade-Offs)](#4-operational-justification--priority-matrix-trade-offs)")
+    lines.append("- [5. Operational Modes & Lifecycle Stages](#5-operational-modes--lifecycle-stages)")
+    lines.append("- [6. 4D Operational Volume & SORA Ground Risk Buffer Mathematics](#6-4d-operational-volume--sora-ground-risk-buffer-mathematics)")
+    lines.append("- [7. OMG UAF Operational Activity Taxonomy](#7-omg-uaf-operational-activity-taxonomy)")
+    lines.append("- [8. Operational Information Exchange (Op-Tx) Matrix](#8-operational-information-exchange-op-tx-matrix)")
+    lines.append("- [9. Operational Environments & Constraints](#9-operational-environments--constraints)")
+    lines.append("- [10. Multi-Threaded Operational Scenarios](#10-multi-threaded-operational-scenarios)")
+    lines.append("- [11. Maintenance & Sustainment Concepts (O/I/D Maintenance)](#11-maintenance--sustainment-concepts-oid-maintenance)")
+    lines.append("- [12. 7-Row Emergency Decision & Contingency Matrix](#12-7-row-emergency-decision--contingency-matrix)")
     lines.append("")
     
     # Section 1
@@ -534,6 +550,19 @@ def _get_valid_mission_intent_content() -> str:
     lines.append("| **Date** | 2026-09-01 |")
     lines.append("")
     lines.append("# Tactical Mission Intent & Execution Plan")
+    lines.append("")
+    lines.append("## Table of Contents")
+    lines.append("")
+    lines.append("- [1. Commander's Intent & Operational Objectives](#1-commanders-intent--operational-objectives)")
+    lines.append("- [2. Mission Essential Task List (METL)](#2-mission-essential-task-list-metl)")
+    lines.append("- [3. Measures of Effectiveness (MoE) & Measures of Performance (MoP) Metrics](#3-measures-of-effectiveness-moe--measures-of-performance-mop-metrics)")
+    lines.append("- [4. Multi-Domain Operational Threat & Contested Environment Matrix](#4-multi-domain-operational-threat--contested-environment-matrix)")
+    lines.append("- [5. PACE C2 Link Communications Plan](#5-pace-c2-link-communications-plan)")
+    lines.append("- [6. Rules of Engagement (ROE) & Weapon/Sensor Interlocks](#6-rules-of-engagement-roe--weaponsensor-interlocks)")
+    lines.append("- [7. Airspace Deconfliction & U-space Dynamic Geo-Zones](#7-airspace-deconfliction--u-space-dynamic-geo-zones)")
+    lines.append("- [8. Go/No-Go Decision Matrix](#8-gono-go-decision-matrix)")
+    lines.append("- [9. Bingo Energy Mathematics & Secondary Divert Protocols](#9-bingo-energy-mathematics--secondary-divert-protocols)")
+    lines.append("- [10. Gate 24 MissionTask Traceability Tags (Allocation Tags)](#10-gate-24-missiontask-traceability-tags-allocation-tags)")
     lines.append("")
     lines.append("## 1. Commander's Intent & Operational Objectives")
     lines.append("")
@@ -1997,6 +2026,140 @@ class TestConOpsAndMissionIntentValidators(unittest.TestCase):
                 0,
                 f"EW domain label '{ew_label}' unexpectedly failed domain validation: {domain_findings}",
             )
+
+    def test_extract_markdown_sections_list_preserves_duplicates(self):
+        """Verify _extract_markdown_sections_list retains duplicate headings in order (Fixes #148)."""
+        sample_doc = """# Main Title
+## Table of Contents
+- [1. Scope](#1-scope)
+## 1. Scope & System Identification
+Scope body 1
+## 1. Scope & System Identification
+Scope body 2
+## 2. Normative Standards
+Standards body
+"""
+        sections_list = _extract_markdown_sections_list(sample_doc)
+        headings = [h for h, _, _ in sections_list]
+        self.assertEqual(
+            headings,
+            [
+                "Main Title",
+                "Table of Contents",
+                "1. Scope & System Identification",
+                "1. Scope & System Identification",
+                "2. Normative Standards",
+            ],
+            f"Sections list failed to preserve duplicate headings: {headings}",
+        )
+
+    def test_conops_duplicate_section_header_fails_with_critical_finding(self):
+        """Verify that injecting a duplicate section header in CONOPS fails Gate 26 with CRITICAL finding (Fixes #148)."""
+        base_conops = _get_valid_conops_content()
+        # Inject duplicate Section 1 header
+        dup_conops = base_conops.replace(
+            "## 1. Scope & System Identification",
+            "## 1. Scope & System Identification\n\nSome introductory text.\n\n## 1. Scope & System Identification",
+        )
+        val = ConopsCompletenessValidator()
+        findings = val._validate_conops_text(dup_conops, "docs/conops/CONOPS.md")
+        dup_findings = [f for f in findings if f.rule_id == "conops-duplicate-section-header"]
+        self.assertGreaterEqual(len(dup_findings), 1, "Expected duplicate section header finding in ConOps")
+        self.assertEqual(dup_findings[0].detail.get("severity"), "CRITICAL")
+        self.assertEqual(dup_findings[0].detail.get("section_number"), 1)
+
+    def test_mission_intent_duplicate_section_header_fails_with_critical_finding(self):
+        """Verify that injecting a duplicate section header in MISSION_INTENT fails Gate 26 with CRITICAL finding (Fixes #148)."""
+        base_mission = _get_valid_mission_intent_content()
+        # Inject duplicate Section 1 header
+        dup_mission = base_mission.replace(
+            "## 1. Commander's Intent & Operational Objectives",
+            "## 1. Commander's Intent & Operational Objectives\n\nSome introductory text.\n\n## 1. Commander's Intent & Operational Objectives",
+        )
+        val = MissionIntentCompletenessValidator()
+        findings = val._validate_mission_text(dup_mission, "docs/conops/MISSION_INTENT.md")
+        dup_findings = [f for f in findings if f.rule_id == "mission-duplicate-section-header"]
+        self.assertGreaterEqual(len(dup_findings), 1, "Expected duplicate section header finding in Mission Intent")
+        self.assertEqual(dup_findings[0].detail.get("severity"), "CRITICAL")
+        self.assertEqual(dup_findings[0].detail.get("section_number"), 1)
+
+    def test_conops_section_cardinality_mismatch_fails_on_extraneous_section(self):
+        """Verify that adding an extraneous 13th section in CONOPS fails cardinality validation (Fixes #148)."""
+        base_conops = _get_valid_conops_content()
+        extra_conops = base_conops + "\n\n## 13. Extraneous Architecture Section\nExtra content here.\n"
+        val = ConopsCompletenessValidator()
+        findings = val._validate_conops_text(extra_conops, "docs/conops/CONOPS.md")
+        card_findings = [f for f in findings if f.rule_id == "conops-section-cardinality-mismatch"]
+        self.assertEqual(len(card_findings), 1, f"Expected cardinality mismatch finding in ConOps: {findings}")
+        self.assertEqual(card_findings[0].detail.get("severity"), "CRITICAL")
+        self.assertEqual(card_findings[0].detail.get("expected_sections"), 12)
+        self.assertEqual(card_findings[0].detail.get("actual_sections"), 13)
+
+    def test_mission_intent_section_cardinality_mismatch_fails_on_extraneous_section(self):
+        """Verify that adding an extraneous 11th section in MISSION_INTENT fails cardinality validation (Fixes #148)."""
+        base_mission = _get_valid_mission_intent_content()
+        extra_mission = base_mission + "\n\n## 11. Extraneous Tactical Strategy Section\nExtra content here.\n"
+        val = MissionIntentCompletenessValidator()
+        findings = val._validate_mission_text(extra_mission, "docs/conops/MISSION_INTENT.md")
+        card_findings = [f for f in findings if f.rule_id == "mission-section-cardinality-mismatch"]
+        self.assertEqual(len(card_findings), 1, f"Expected cardinality mismatch finding in Mission Intent: {findings}")
+        self.assertEqual(card_findings[0].detail.get("severity"), "CRITICAL")
+        self.assertEqual(card_findings[0].detail.get("expected_sections"), 10)
+        self.assertEqual(card_findings[0].detail.get("actual_sections"), 11)
+
+    def test_conops_missing_table_of_contents_fails(self):
+        """Verify that omitting the Table of Contents in CONOPS fails with conops-toc-missing (Fixes #148)."""
+        base_conops = _get_valid_conops_content()
+        # Remove ## Table of Contents block
+        toc_pattern = r'## Table of Contents[\s\S]*?(?=## 1\. Scope)'
+        no_toc_conops = re.sub(toc_pattern, '', base_conops)
+        val = ConopsCompletenessValidator()
+        findings = val._validate_conops_text(no_toc_conops, "docs/conops/CONOPS.md")
+        toc_findings = [f for f in findings if f.rule_id == "conops-toc-missing"]
+        self.assertEqual(len(toc_findings), 1, f"Expected conops-toc-missing finding: {findings}")
+        self.assertEqual(toc_findings[0].detail.get("severity"), "CRITICAL")
+
+    def test_conops_incomplete_table_of_contents_fails(self):
+        """Verify that omitting mandatory section entry from Table of Contents in CONOPS fails with conops-toc-incomplete (Fixes #148)."""
+        base_conops = _get_valid_conops_content()
+        # Remove Section 12 from TOC
+        incomplete_toc_conops = base_conops.replace(
+            "- [12. 7-Row Emergency Decision & Contingency Matrix](#12-7-row-emergency-decision--contingency-matrix)\n",
+            "",
+        )
+        val = ConopsCompletenessValidator()
+        findings = val._validate_conops_text(incomplete_toc_conops, "docs/conops/CONOPS.md")
+        toc_findings = [f for f in findings if f.rule_id == "conops-toc-incomplete"]
+        self.assertEqual(len(toc_findings), 1, f"Expected conops-toc-incomplete finding: {findings}")
+        self.assertEqual(toc_findings[0].detail.get("severity"), "CRITICAL")
+        self.assertIn(12, toc_findings[0].detail.get("missing_sections", []))
+
+    def test_mission_intent_missing_table_of_contents_fails(self):
+        """Verify that omitting the Table of Contents in MISSION_INTENT fails with mission-toc-missing (Fixes #148)."""
+        base_mission = _get_valid_mission_intent_content()
+        # Remove ## Table of Contents block
+        toc_pattern = r'## Table of Contents[\s\S]*?(?=## 1\. Commander)'
+        no_toc_mission = re.sub(toc_pattern, '', base_mission)
+        val = MissionIntentCompletenessValidator()
+        findings = val._validate_mission_text(no_toc_mission, "docs/conops/MISSION_INTENT.md")
+        toc_findings = [f for f in findings if f.rule_id == "mission-toc-missing"]
+        self.assertEqual(len(toc_findings), 1, f"Expected mission-toc-missing finding: {findings}")
+        self.assertEqual(toc_findings[0].detail.get("severity"), "CRITICAL")
+
+    def test_mission_intent_incomplete_table_of_contents_fails(self):
+        """Verify that omitting mandatory section entry from Table of Contents in MISSION_INTENT fails with mission-toc-incomplete (Fixes #148)."""
+        base_mission = _get_valid_mission_intent_content()
+        # Remove Section 10 from TOC
+        incomplete_toc_mission = base_mission.replace(
+            "- [10. Gate 24 MissionTask Traceability Tags (Allocation Tags)](#10-gate-24-missiontask-traceability-tags-allocation-tags)\n",
+            "",
+        )
+        val = MissionIntentCompletenessValidator()
+        findings = val._validate_mission_text(incomplete_toc_mission, "docs/conops/MISSION_INTENT.md")
+        toc_findings = [f for f in findings if f.rule_id == "mission-toc-incomplete"]
+        self.assertEqual(len(toc_findings), 1, f"Expected mission-toc-incomplete finding: {findings}")
+        self.assertEqual(toc_findings[0].detail.get("severity"), "CRITICAL")
+        self.assertIn(10, toc_findings[0].detail.get("missing_sections", []))
 
 
 if __name__ == "__main__":

@@ -24,6 +24,35 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Union
 PLACEHOLDER_PATTERN = re.compile(r"\{\{([A-Za-z0-9_]+)(?::([^\}]*))?\}\}")
 RAW_TOKEN_FINDER = re.compile(r"\{\{[A-Za-z0-9_]+(?::[^\}]*)?\}\}")
 
+# Canonical unit file whitelists for deterministic ConOps & Mission Intent assembly (Issue #148)
+CANONICAL_CONOPS_UNITS: List[str] = [
+    "01_METADATA_AND_OVERVIEW.md",
+    "02_DEFICIENCIES_AND_MOTIVATION.md",
+    "03_PROPOSED_CAPABILITIES.md",
+    "04_USER_CLASSES_AND_STAKEHOLDERS.md",
+    "05_AIRSPACE_AND_SORA_RISK.md",
+    "06_UAF_OPERATIONAL_ACTIVITIES.md",
+    "07_OPTX_EXCHANGES.md",
+    "08_ENVIRONMENTAL_MIL_STD_810H.md",
+    "09_SCENARIOS_AND_TIMELINES.md",
+    "10_MAINTENANCE_AND_GSE_SUPPORT.md",
+    "11_IMPACTS_AND_TRADE_STUDIES.md",
+    "12_EMERGENCY_DECISION_MATRIX.md",
+]
+
+CANONICAL_MISSION_INTENT_UNITS: List[str] = [
+    "01_COMMANDERS_INTENT.md",
+    "02_MISSION_ESSENTIAL_TASK_LIST.md",
+    "03_INCOSE_MOE_MOP_MATH.md",
+    "04_MULTI_DOMAIN_THREAT_MATRIX.md",
+    "05_PACE_C2_PLAN.md",
+    "06_ROE_SAFETY_INTERLOCKS.md",
+    "07_AIRSPACE_GEOZONES.md",
+    "08_GO_NO_GO_MATRIX.md",
+    "09_BINGO_ENERGY_MATH.md",
+    "10_OPERATIONAL_ALLOCATION_TAGS.md",
+]
+
 
 class SysMLParameterBindingEngine:
     """
@@ -1190,6 +1219,8 @@ def extract_headings(content: str) -> List[Tuple[int, str, str]]:
             in_code_block = not in_code_block
             continue
         if stripped.startswith("$$"):
+            if len(stripped) > 2 and stripped.endswith("$$"):
+                continue
             in_math_block = not in_math_block
             continue
         if in_code_block or in_math_block:
@@ -1322,10 +1353,12 @@ def assemble_document(
     doc_version: Optional[str] = None,
     doc_date: Optional[str] = None,
     params: Optional[Union[Dict[str, Any], str, SysMLParameterBindingEngine]] = None,
+    canonical_whitelist: Optional[List[str]] = None,
 ) -> Tuple[str, List[str]]:
     """
     Compiles unit files located in units_dir into a single verified Markdown document with
     automated parameter binding, header table injection, TOC generation, and anchor validation.
+    Enforces canonical unit whitelists and skips deprecated/ghost files with a warning (Issue #148).
     Returns (compiled_document_text, error_list).
     """
     errors: List[str] = []
@@ -1342,10 +1375,30 @@ def assemble_document(
     else:
         param_engine = SysMLParameterBindingEngine(workspace_dir=units_dir, auto_detect=True)
 
-    # Find all .md files in units_dir sorted alphabetically/numerically
-    filenames = sorted([f for f in os.listdir(units_dir) if f.endswith(".md")])
-    if not filenames:
+    # Determine whitelist if not explicitly given
+    if canonical_whitelist is None:
+        norm_dir = os.path.normpath(units_dir).lower()
+        base_dir = os.path.basename(norm_dir)
+        if base_dir == "conops":
+            canonical_whitelist = CANONICAL_CONOPS_UNITS
+        elif base_dir in ("mission_intent", "missionintent"):
+            canonical_whitelist = CANONICAL_MISSION_INTENT_UNITS
+
+    # Find all .md files in units_dir
+    all_md_files = [f for f in os.listdir(units_dir) if f.endswith(".md")]
+    if not all_md_files:
         return "", [f"No markdown unit files (*.md) found in '{units_dir}'."]
+
+    if canonical_whitelist is not None:
+        whitelist_set = set(canonical_whitelist)
+        for f in sorted(all_md_files):
+            if f not in whitelist_set:
+                print(f"[Warning] Skipping non-canonical/deprecated unit file '{f}' in '{units_dir}'.")
+        filenames = [f for f in canonical_whitelist if f in all_md_files]
+        if not filenames:
+            return "", [f"No canonical unit files from whitelist found in '{units_dir}'."]
+    else:
+        filenames = sorted(all_md_files)
 
     unit_paths = [os.path.join(units_dir, f) for f in filenames]
 
@@ -1441,7 +1494,7 @@ def assemble_conops(
 ) -> bool:
     """
     Orchestrates the assembly, parameter binding, and validation of both CONOPS.md and MISSION_INTENT.md.
-    Fixes Issue #143.
+    Fixes Issues #143, #148.
     """
     print(f"[*] ConOps Assembly Engine starting: input='{input_dir}', output='{output_dir}', verify_only={verify_only}")
 
@@ -1473,6 +1526,7 @@ def assemble_conops(
             units_dir=conops_units_dir,
             doc_title="Concept of Operations (ConOps)",
             params=param_engine,
+            canonical_whitelist=CANONICAL_CONOPS_UNITS,
         )
         if conops_errs:
             all_errors.extend([f"[CONOPS] {err}" for err in conops_errs])
@@ -1492,6 +1546,7 @@ def assemble_conops(
             units_dir=mission_units_dir,
             doc_title="Tactical Mission Intent & Execution Plan",
             params=param_engine,
+            canonical_whitelist=CANONICAL_MISSION_INTENT_UNITS,
         )
         if mission_errs:
             all_errors.extend([f"[MISSION_INTENT] {err}" for err in mission_errs])

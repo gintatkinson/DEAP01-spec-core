@@ -18,6 +18,8 @@ if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
 from scripts.assemble_conops import (
+    CANONICAL_CONOPS_UNITS,
+    CANONICAL_MISSION_INTENT_UNITS,
     RAW_TOKEN_FINDER,
     SysMLParameterBindingEngine,
     assemble_conops,
@@ -662,6 +664,79 @@ class TestSysMLParameterBindingEngine(unittest.TestCase):
             # Verify all 10 Mission Intent sections present
             for sec_num in range(1, 11):
                 self.assertIn(f"## {sec_num}.", mission_text)
+
+    def test_assemble_conops_skips_and_warns_on_non_canonical_units(self):
+        """Verify assemble_document skips non-canonical / deprecated units and only compiles whitelisted units (Fixes #148)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            conops_units_dir = os.path.join(tmpdir, "conops")
+            _create_sample_conops_units(conops_units_dir, with_placeholders=False)
+
+            # Inject ghost/deprecated files
+            ghost_file_1 = os.path.join(conops_units_dir, "00_deprecated_preface.md")
+            ghost_file_2 = os.path.join(conops_units_dir, "13_extraneous_appendix.md")
+            ghost_file_3 = os.path.join(conops_units_dir, "deprecated_notes.md")
+
+            with open(ghost_file_1, "w", encoding="utf-8") as f:
+                f.write("## 0. Deprecated Preface\nGhost content 1\n")
+            with open(ghost_file_2, "w", encoding="utf-8") as f:
+                f.write("## 13. Extraneous Appendix\nGhost content 2\n")
+            with open(ghost_file_3, "w", encoding="utf-8") as f:
+                f.write("## Ghost Notes\nGhost content 3\n")
+
+            doc, errors = assemble_document(
+                units_dir=conops_units_dir,
+                doc_title="Concept of Operations (ConOps)",
+                canonical_whitelist=CANONICAL_CONOPS_UNITS,
+            )
+            self.assertEqual(errors, [], f"Unexpected errors during assembly: {errors}")
+            self.assertNotIn("Ghost content 1", doc)
+            self.assertNotIn("Ghost content 2", doc)
+            self.assertNotIn("Ghost content 3", doc)
+            self.assertNotIn("## 0. Deprecated Preface", doc)
+            self.assertNotIn("## 13. Extraneous Appendix", doc)
+
+            # Ensure all 12 canonical units are assembled
+            for sec_num in range(1, 13):
+                self.assertIn(f"## {sec_num}.", doc)
+
+    def test_assemble_conops_toc_contains_all_12_and_10_sections_with_valid_anchors(self):
+        """Verify assembled CONOPS and MISSION_INTENT generate a complete TOC with all sections and valid anchor links (Fixes #148)."""
+        res_units_dir = os.path.join(REPO_ROOT, "skills", "spec-conops-engineering", "resources", "units")
+        if not os.path.isdir(res_units_dir):
+            self.skipTest(f"Resource units dir not found at {res_units_dir}")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = os.path.join(tmpdir, "out")
+            success = assemble_conops(
+                input_dir=res_units_dir,
+                output_dir=out_dir,
+                verify_only=False,
+            )
+            self.assertTrue(success)
+
+            conops_path = os.path.join(out_dir, "CONOPS.md")
+            mission_path = os.path.join(out_dir, "MISSION_INTENT.md")
+
+            with open(conops_path, "r", encoding="utf-8") as f:
+                conops_text = f.read()
+            with open(mission_path, "r", encoding="utf-8") as f:
+                mission_text = f.read()
+
+            # Verify ConOps Table of Contents has all 12 sections
+            self.assertIn("## Table of Contents", conops_text)
+            toc_match_conops = re.search(r'## Table of Contents[\s\S]*?(?=## 1\.)', conops_text)
+            self.assertIsNotNone(toc_match_conops)
+            toc_conops = toc_match_conops.group(0)
+            for i in range(1, 13):
+                self.assertRegex(toc_conops, rf'\[(?:Section\s+)?{i}\.')
+
+            # Verify Mission Intent Table of Contents has all 10 sections
+            self.assertIn("## Table of Contents", mission_text)
+            toc_match_mission = re.search(r'## Table of Contents[\s\S]*?(?=## 1\.)', mission_text)
+            self.assertIsNotNone(toc_match_mission)
+            toc_mission = toc_match_mission.group(0)
+            for i in range(1, 11):
+                self.assertRegex(toc_mission, rf'\[(?:Section\s+)?{i}\.')
 
 
 if __name__ == "__main__":

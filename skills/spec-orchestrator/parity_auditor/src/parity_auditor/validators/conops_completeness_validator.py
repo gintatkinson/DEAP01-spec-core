@@ -232,7 +232,7 @@ TEMPLATE_PLACEHOLDER_REGEX = re.compile(r"\{\{[A-Za-z0-9_]+\}\}")
 
 
 def _find_unresolved_template_placeholders(content: str) -> List[Tuple[int, str]]:
-    """
+    r"""
     Finds all unresolved template placeholder tokens matching r"\{\{[A-Za-z0-9_]+\}\}"
     in the given content.
     Returns list of (line_number, placeholder_token) tuples.
@@ -389,22 +389,32 @@ class ValidationReport:
 # Parsing Utilities
 # =============================================================================
 
-def _extract_markdown_sections(text: str) -> Dict[str, Tuple[int, str]]:
+def _extract_markdown_sections_list(text: str) -> List[Tuple[str, int, str]]:
     """
-    Extracts top-level and H2 sections from markdown.
-    Returns mapping of section_heading -> (line_number, section_content).
+    Extracts top-level and H2 sections from markdown preserving list order and duplicate headers.
+    Returns list of tuples: (section_heading, line_number, section_content).
     """
-    sections: Dict[str, Tuple[int, str]] = {}
+    sections: List[Tuple[str, int, str]] = []
     lines = text.splitlines()
     current_heading = ""
     current_line = 1
     current_chunk: List[str] = []
+    in_code_block = False
 
     for idx, line in enumerate(lines, start=1):
-        m = re.match(r'^(#{1,2})\s+(.+)$', line.strip())
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            in_code_block = not in_code_block
+            current_chunk.append(line)
+            continue
+        if in_code_block:
+            current_chunk.append(line)
+            continue
+
+        m = re.match(r'^(#{1,2})\s+(.+)$', stripped)
         if m:
             if current_heading:
-                sections[current_heading] = (current_line, "\n".join(current_chunk))
+                sections.append((current_heading, current_line, "\n".join(current_chunk)))
             current_heading = m.group(2).strip()
             current_line = idx
             current_chunk = []
@@ -412,8 +422,21 @@ def _extract_markdown_sections(text: str) -> Dict[str, Tuple[int, str]]:
             current_chunk.append(line)
 
     if current_heading:
-        sections[current_heading] = (current_line, "\n".join(current_chunk))
+        sections.append((current_heading, current_line, "\n".join(current_chunk)))
 
+    return sections
+
+
+def _extract_markdown_sections(text: str) -> Dict[str, Tuple[int, str]]:
+    """
+    Extracts top-level and H2 sections from markdown.
+    Returns mapping of section_heading -> (line_number, section_content).
+    """
+    sections_list = _extract_markdown_sections_list(text)
+    sections: Dict[str, Tuple[int, str]] = {}
+    for heading, line_no, content in sections_list:
+        if heading not in sections:
+            sections[heading] = (line_no, content)
     return sections
 
 
@@ -478,29 +501,61 @@ def _parse_commonmark_tables(text: str) -> Tuple[List[List[Dict[str, str]]], Lis
     return tables, malformed_lines
 
 
+def _find_matching_sections_all(
+    sections_list: List[Tuple[str, int, str]],
+    sec_num: int,
+    canonical_name: str,
+    aliases: List[str],
+) -> List[Tuple[str, int, str]]:
+    """
+    Finds all sections matching section number or aliases from a sections list.
+    Preserves all matching occurrences to allow duplicate section detection.
+    """
+    matches: List[Tuple[str, int, str]] = []
+    num_pattern = rf'^(?:section\s+)?{sec_num}[.\s:\-—]'
+    any_num_pattern = r'^(?:section\s+)?[0-9]+[.\s:\-—]'
+
+    for heading, line_no, content in sections_list:
+        h_clean = heading.lower().strip()
+        if re.search(num_pattern, h_clean):
+            matches.append((heading, line_no, content))
+        elif not re.search(any_num_pattern, h_clean):
+            for alias in aliases:
+                if re.search(rf'\b{re.escape(alias.lower())}\b', h_clean):
+                    matches.append((heading, line_no, content))
+                    break
+    return matches
+
+
 def _find_matching_section(
-    sections: Dict[str, Tuple[int, str]],
+    sections: Union[Dict[str, Tuple[int, str]], List[Tuple[str, int, str]]],
     sec_num: int,
     canonical_name: str,
     aliases: List[str],
 ) -> Optional[Tuple[str, int, str]]:
     """
-    Finds a section in the parsed sections dictionary by matching section number or aliases.
+    Finds a section in the parsed sections dictionary or list by matching section number or aliases.
     Prioritizes direct section number prefix match before alias fallback.
     """
+    if isinstance(sections, list):
+        matches = _find_matching_sections_all(sections, sec_num, canonical_name, aliases)
+        return matches[0] if matches else None
+
     # Pass 1: Direct prefix match: e.g. "1. Scope", "## 1.", "1 - Scope", "Section 1:"
     num_pattern = rf'^(?:section\s+)?{sec_num}[.\s:\-—]'
     for heading, (line_no, content) in sections.items():
-        h_clean = heading.lower()
+        h_clean = heading.lower().strip()
         if re.search(num_pattern, h_clean):
             return heading, line_no, content
 
-    # Pass 2: Check alias matches
+    # Pass 2: Check alias matches for headings without section numbers
+    any_num_pattern = r'^(?:section\s+)?[0-9]+[.\s:\-—]'
     for heading, (line_no, content) in sections.items():
-        h_clean = heading.lower()
-        for alias in aliases:
-            if alias.lower() in h_clean:
-                return heading, line_no, content
+        h_clean = heading.lower().strip()
+        if not re.search(any_num_pattern, h_clean):
+            for alias in aliases:
+                if re.search(rf'\b{re.escape(alias.lower())}\b', h_clean):
+                    return heading, line_no, content
 
     return None
 
@@ -626,6 +681,7 @@ class ConopsCompletenessValidator(IValidator):
 
     def _validate_conops_text(self, content: str, rel_path: str, repo: Optional[WorkspaceRepository] = None) -> List[Finding]:
         findings: List[Finding] = []
+        sections_list = _extract_markdown_sections_list(content)
         sections = _extract_markdown_sections(content)
         tables, malformed_lines = _parse_commonmark_tables(content)
 
@@ -714,13 +770,131 @@ class ConopsCompletenessValidator(IValidator):
                 location=f"{rel_path}:{m_line}",
             ))
 
+        # Extract content sections (excluding TOC and top-level H1 title)
+        content_sections: List[Tuple[str, int, str]] = []
+        raw_lines = content.splitlines()
+        for h, l_num, c in sections_list:
+            if re.match(r'^(?:table\s+of\s+contents|toc)$', h.strip(), re.IGNORECASE):
+                continue
+            if 1 <= l_num <= len(raw_lines):
+                line_str = raw_lines[l_num - 1].strip()
+                if line_str.startswith("# ") and not line_str.startswith("## "):
+                    continue
+            content_sections.append((h, l_num, c))
+
+        # Check Table of Contents Completeness for non-templates (Fixes #148)
+        if "TEMPLATE" not in rel_path.upper():
+            toc_matches = [
+                s for s in sections_list
+                if re.match(r'^(?:table\s+of\s+contents|toc)$', s[0].strip(), re.IGNORECASE)
+            ]
+            if not toc_matches:
+                findings.append(Finding(
+                    "conops-toc-missing",
+                    f"ConOps specification '{rel_path}' is missing mandatory Table of Contents ('## Table of Contents').",
+                    location=rel_path,
+                    detail={"severity": "CRITICAL", "file": rel_path},
+                ))
+            else:
+                toc_heading, toc_line, toc_chunk = toc_matches[0]
+                missing_toc_sections: List[Tuple[int, str]] = []
+                for req in self.MANDATORY_SECTIONS:
+                    sec_num = req["num"]
+                    sec_title = req["title"]
+                    sec_aliases = req["aliases"]
+
+                    num_pattern_text = rf'\[(?:section\s+)?{sec_num}[.\s:\-—]'
+                    num_pattern_anchor = rf'\(#(?:section-)?{sec_num}[-_]'
+                    found_in_toc = bool(
+                        re.search(num_pattern_text, toc_chunk, re.IGNORECASE)
+                        or re.search(num_pattern_anchor, toc_chunk, re.IGNORECASE)
+                    )
+                    if not found_in_toc:
+                        for alias in sec_aliases:
+                            if re.search(rf'\[[^\]]*{re.escape(alias)}[^\]]*\]', toc_chunk, re.IGNORECASE):
+                                found_in_toc = True
+                                break
+
+                    if not found_in_toc:
+                        missing_toc_sections.append((sec_num, sec_title))
+
+                if missing_toc_sections:
+                    missing_str = ", ".join(f"Section {n} ('{t}')" for n, t in missing_toc_sections)
+                    findings.append(Finding(
+                        "conops-toc-incomplete",
+                        f"Table of Contents in '{rel_path}' is incomplete; missing {len(missing_toc_sections)} mandatory section(s): {missing_str}.",
+                        location=f"{rel_path}:{toc_line}",
+                        detail={
+                            "severity": "CRITICAL",
+                            "missing_sections": [n for n, _ in missing_toc_sections],
+                            "file": rel_path,
+                        },
+                    ))
+
+        # Check for Duplicate Section Headers (Fixes #148)
+        reported_duplicate_lines: Set[int] = set()
+        for req in self.MANDATORY_SECTIONS:
+            sec_num = req["num"]
+            sec_title = req["title"]
+            sec_aliases = req["aliases"]
+            matches = _find_matching_sections_all(content_sections, sec_num, sec_title, sec_aliases)
+            if len(matches) > 1:
+                for dup_heading, dup_line, _ in matches[1:]:
+                    reported_duplicate_lines.add(dup_line)
+                    findings.append(Finding(
+                        "conops-duplicate-section-header",
+                        f"Duplicate section header detected for Section {sec_num} ('{dup_heading}') at line {dup_line} in '{rel_path}'.",
+                        location=f"{rel_path}:{dup_line}",
+                        detail={
+                            "severity": "CRITICAL",
+                            "section_number": sec_num,
+                            "heading": dup_heading,
+                            "line": dup_line,
+                            "file": rel_path,
+                        },
+                    ))
+
+        seen_h2_headers: Dict[str, Tuple[int, str]] = {}
+        for h, l_num, _ in content_sections:
+            h_norm = re.sub(r'[*`_]', '', h).strip().lower()
+            if h_norm in seen_h2_headers:
+                if l_num not in reported_duplicate_lines:
+                    reported_duplicate_lines.add(l_num)
+                    findings.append(Finding(
+                        "conops-duplicate-section-header",
+                        f"Duplicate section header detected ('{h}') at line {l_num} in '{rel_path}'.",
+                        location=f"{rel_path}:{l_num}",
+                        detail={
+                            "severity": "CRITICAL",
+                            "heading": h,
+                            "line": l_num,
+                            "file": rel_path,
+                        },
+                    ))
+            else:
+                seen_h2_headers[h_norm] = (l_num, h)
+
+        # Check Exact Section Cardinality (Fixes #148)
+        if len(content_sections) != 12:
+            findings.append(Finding(
+                "conops-section-cardinality-mismatch",
+                f"ConOps specification '{rel_path}' has section cardinality mismatch (found {len(content_sections)} section(s); expected exactly 12 sections).",
+                location=rel_path,
+                detail={
+                    "severity": "CRITICAL",
+                    "expected_sections": 12,
+                    "actual_sections": len(content_sections),
+                    "file": rel_path,
+                },
+            ))
+
         # Check for 12 Mandatory Sections
         matched_sections: Dict[int, Tuple[str, int, str]] = {}
         for req in self.MANDATORY_SECTIONS:
             sec_num = req["num"]
             title = req["title"]
             aliases = req["aliases"]
-            res = _find_matching_section(sections, sec_num, title, aliases)
+            res = _find_matching_section(content_sections, sec_num, title, aliases)
             if res:
                 matched_sections[sec_num] = res
             else:
@@ -1250,6 +1424,7 @@ class MissionIntentCompletenessValidator(IValidator):
 
     def _validate_mission_text(self, content: str, rel_path: str, repo: Optional[WorkspaceRepository] = None) -> List[Finding]:
         findings: List[Finding] = []
+        sections_list = _extract_markdown_sections_list(content)
         sections = _extract_markdown_sections(content)
         tables, malformed_lines = _parse_commonmark_tables(content)
 
@@ -1346,13 +1521,131 @@ class MissionIntentCompletenessValidator(IValidator):
                 location=f"{rel_path}:{m_line}",
             ))
 
+        # Extract content sections (excluding TOC and top-level H1 title)
+        content_sections: List[Tuple[str, int, str]] = []
+        raw_lines = content.splitlines()
+        for h, l_num, c in sections_list:
+            if re.match(r'^(?:table\s+of\s+contents|toc)$', h.strip(), re.IGNORECASE):
+                continue
+            if 1 <= l_num <= len(raw_lines):
+                line_str = raw_lines[l_num - 1].strip()
+                if line_str.startswith("# ") and not line_str.startswith("## "):
+                    continue
+            content_sections.append((h, l_num, c))
+
+        # Check Table of Contents Completeness for non-templates (Fixes #148)
+        if "TEMPLATE" not in rel_path.upper():
+            toc_matches = [
+                s for s in sections_list
+                if re.match(r'^(?:table\s+of\s+contents|toc)$', s[0].strip(), re.IGNORECASE)
+            ]
+            if not toc_matches:
+                findings.append(Finding(
+                    "mission-toc-missing",
+                    f"Mission Intent specification '{rel_path}' is missing mandatory Table of Contents ('## Table of Contents').",
+                    location=rel_path,
+                    detail={"severity": "CRITICAL", "file": rel_path},
+                ))
+            else:
+                toc_heading, toc_line, toc_chunk = toc_matches[0]
+                missing_toc_sections: List[Tuple[int, str]] = []
+                for req in self.MANDATORY_SECTIONS:
+                    sec_num = req["num"]
+                    sec_title = req["title"]
+                    sec_aliases = req["aliases"]
+
+                    num_pattern_text = rf'\[(?:section\s+)?{sec_num}[.\s:\-—]'
+                    num_pattern_anchor = rf'\(#(?:section-)?{sec_num}[-_]'
+                    found_in_toc = bool(
+                        re.search(num_pattern_text, toc_chunk, re.IGNORECASE)
+                        or re.search(num_pattern_anchor, toc_chunk, re.IGNORECASE)
+                    )
+                    if not found_in_toc:
+                        for alias in sec_aliases:
+                            if re.search(rf'\[[^\]]*{re.escape(alias)}[^\]]*\]', toc_chunk, re.IGNORECASE):
+                                found_in_toc = True
+                                break
+
+                    if not found_in_toc:
+                        missing_toc_sections.append((sec_num, sec_title))
+
+                if missing_toc_sections:
+                    missing_str = ", ".join(f"Section {n} ('{t}')" for n, t in missing_toc_sections)
+                    findings.append(Finding(
+                        "mission-toc-incomplete",
+                        f"Table of Contents in '{rel_path}' is incomplete; missing {len(missing_toc_sections)} mandatory section(s): {missing_str}.",
+                        location=f"{rel_path}:{toc_line}",
+                        detail={
+                            "severity": "CRITICAL",
+                            "missing_sections": [n for n, _ in missing_toc_sections],
+                            "file": rel_path,
+                        },
+                    ))
+
+        # Check for Duplicate Section Headers (Fixes #148)
+        reported_duplicate_lines: Set[int] = set()
+        for req in self.MANDATORY_SECTIONS:
+            sec_num = req["num"]
+            sec_title = req["title"]
+            sec_aliases = req["aliases"]
+            matches = _find_matching_sections_all(content_sections, sec_num, sec_title, sec_aliases)
+            if len(matches) > 1:
+                for dup_heading, dup_line, _ in matches[1:]:
+                    reported_duplicate_lines.add(dup_line)
+                    findings.append(Finding(
+                        "mission-duplicate-section-header",
+                        f"Duplicate section header detected for Section {sec_num} ('{dup_heading}') at line {dup_line} in '{rel_path}'.",
+                        location=f"{rel_path}:{dup_line}",
+                        detail={
+                            "severity": "CRITICAL",
+                            "section_number": sec_num,
+                            "heading": dup_heading,
+                            "line": dup_line,
+                            "file": rel_path,
+                        },
+                    ))
+
+        seen_h2_headers: Dict[str, Tuple[int, str]] = {}
+        for h, l_num, _ in content_sections:
+            h_norm = re.sub(r'[*`_]', '', h).strip().lower()
+            if h_norm in seen_h2_headers:
+                if l_num not in reported_duplicate_lines:
+                    reported_duplicate_lines.add(l_num)
+                    findings.append(Finding(
+                        "mission-duplicate-section-header",
+                        f"Duplicate section header detected ('{h}') at line {l_num} in '{rel_path}'.",
+                        location=f"{rel_path}:{l_num}",
+                        detail={
+                            "severity": "CRITICAL",
+                            "heading": h,
+                            "line": l_num,
+                            "file": rel_path,
+                        },
+                    ))
+            else:
+                seen_h2_headers[h_norm] = (l_num, h)
+
+        # Check Exact Section Cardinality (Fixes #148)
+        if len(content_sections) != 10:
+            findings.append(Finding(
+                "mission-section-cardinality-mismatch",
+                f"Mission Intent specification '{rel_path}' has section cardinality mismatch (found {len(content_sections)} section(s); expected exactly 10 sections).",
+                location=rel_path,
+                detail={
+                    "severity": "CRITICAL",
+                    "expected_sections": 10,
+                    "actual_sections": len(content_sections),
+                    "file": rel_path,
+                },
+            ))
+
         # Check for 10 Mandatory Sections
         matched_sections: Dict[int, Tuple[str, int, str]] = {}
         for req in self.MANDATORY_SECTIONS:
             sec_num = req["num"]
             title = req["title"]
             aliases = req["aliases"]
-            res = _find_matching_section(sections, sec_num, title, aliases)
+            res = _find_matching_section(content_sections, sec_num, title, aliases)
             if res:
                 matched_sections[sec_num] = res
             else:
