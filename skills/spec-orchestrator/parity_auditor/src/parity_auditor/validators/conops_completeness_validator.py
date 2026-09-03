@@ -255,7 +255,7 @@ def _extract_markdown_sections(text: str) -> Dict[str, Tuple[int, str]]:
     current_chunk: List[str] = []
 
     for idx, line in enumerate(lines, start=1):
-        m = re.match(r'^(#{1,3})\s+(.+)$', line.strip())
+        m = re.match(r'^(#{1,2})\s+(.+)$', line.strip())
         if m:
             if current_heading:
                 sections[current_heading] = (current_line, "\n".join(current_chunk))
@@ -340,15 +340,18 @@ def _find_matching_section(
 ) -> Optional[Tuple[str, int, str]]:
     """
     Finds a section in the parsed sections dictionary by matching section number or aliases.
+    Prioritizes direct section number prefix match before alias fallback.
     """
+    # Pass 1: Direct prefix match: e.g. "1. Scope", "## 1.", "1 - Scope", "Section 1:"
+    num_pattern = rf'^(?:section\s+)?{sec_num}[.\s:\-—]'
     for heading, (line_no, content) in sections.items():
         h_clean = heading.lower()
-        # Direct prefix match: e.g. "1. Scope", "## 1.", "1 - Scope"
-        num_pattern = rf'^(?:section\s+)?{sec_num}[.\s:\-—]'
         if re.search(num_pattern, h_clean):
             return heading, line_no, content
-        
-        # Check alias matches
+
+    # Pass 2: Check alias matches
+    for heading, (line_no, content) in sections.items():
+        h_clean = heading.lower()
         for alias in aliases:
             if alias.lower() in h_clean:
                 return heading, line_no, content
@@ -390,6 +393,39 @@ class ConopsCompletenessValidator(IValidator):
         "EMG-05",  # Geofence Breach / Airspace Conflict
         "EMG-06",  # Structural / Actuation Anomaly
         "EMG-07",  # Flight Termination Command
+    ]
+
+    MANDATORY_EMERGENCY_SUBSECTIONS: List[Dict[str, Any]] = [
+        {
+            "num": "12.1",
+            "title": "Failsafe State Transition Semantics & Timing Guarantees",
+            "aliases": ["12.1", "failsafe state transition", "transition semantics", "timing guarantees", "priority arbitration"],
+        },
+        {
+            "num": "12.2",
+            "title": "Deterministic Emergency Statechart & State Machine",
+            "aliases": ["12.2", "emergency statechart", "emergency state machine", "deterministic emergency statechart", "state machine", "statechart"],
+        },
+        {
+            "num": "12.3",
+            "title": "Degraded Modes & Fallback Hierarchy",
+            "aliases": ["12.3", "degraded modes", "fallback hierarchy", "degradation modes", "multi-tier fallback"],
+        },
+        {
+            "num": "12.4",
+            "title": "Human-in-the-Loop (HITL) Authority & Override Protocols",
+            "aliases": ["12.4", "human-in-the-loop", "hitl authority", "override protocols", "hitl role", "human authority"],
+        },
+        {
+            "num": "12.5",
+            "title": "Autonomous Divert & Secondary Recovery Protocols",
+            "aliases": ["12.5", "autonomous divert", "secondary recovery", "divert protocols", "return-to-base", "rtb"],
+        },
+        {
+            "num": "12.6",
+            "title": "Post-Emergency Containment, Latching & Reset Procedures",
+            "aliases": ["12.6", "post-emergency containment", "latching & reset", "reset procedures", "ground reset", "containment & reset"],
+        },
     ]
 
     def __init__(self, strict_sora_math: bool = True) -> None:
@@ -587,18 +623,18 @@ class ConopsCompletenessValidator(IValidator):
                 emergency_rows = sec12_tables[0]
 
             found_triggers: Set[str] = set()
-            for r in emergency_rows:
-                # Find trigger token like EMG-01
-                full_row_str = " ".join(r.values())
-                m_emg = re.search(r'(EMG-0*[1-7])', full_row_str, re.IGNORECASE)
-                if m_emg:
-                    found_triggers.add(m_emg.group(1).upper().replace("-0", "-0" if len(m_emg.group(1).split("-")[1]) == 2 else "-0"))
-                for trig in self.CANONICAL_EMERGENCY_TRIGGERS:
-                    if trig in full_row_str.upper():
-                        found_triggers.add(trig)
-
-            # Fallback regex over raw section text if table structure differed
-            if len(found_triggers) < 7:
+            if sec12_tables:
+                for r in sec12_tables[0]:
+                    # Find trigger token like EMG-01
+                    full_row_str = " ".join(r.values())
+                    m_emg = re.search(r'(EMG-0*[1-7])', full_row_str, re.IGNORECASE)
+                    if m_emg:
+                        found_triggers.add(m_emg.group(1).upper().replace("-0", "-0" if len(m_emg.group(1).split("-")[1]) == 2 else "-0"))
+                    for trig in self.CANONICAL_EMERGENCY_TRIGGERS:
+                        if trig in full_row_str.upper():
+                            found_triggers.add(trig)
+            else:
+                # Fallback regex over raw section text if table missing
                 for trig in self.CANONICAL_EMERGENCY_TRIGGERS:
                     if re.search(rf'\b{trig}\b', sec12_content, re.IGNORECASE):
                         found_triggers.add(trig)
@@ -612,6 +648,78 @@ class ConopsCompletenessValidator(IValidator):
                     detail={"found_triggers": list(found_triggers), "missing_triggers": missing_triggers},
                 ))
 
+            # Validate Section 12 depth (subsections 12.1..12.6 + statechart)
+            findings.extend(self._validate_emergency_matrix_depth(content, rel_path, sec12_content, sec12_line))
+
+        return findings
+
+    def _validate_emergency_matrix_depth(
+        self,
+        content: str,
+        rel_path: str,
+        sec12_content: str,
+        sec12_line: int,
+    ) -> List[Finding]:
+        """
+        Validates depth of Section 12 (7-Row Emergency Decision & Contingency Matrix):
+        1. Mandatory subsections 12.1 through 12.6 presence.
+        2. Mandatory Mermaid statechart diagram in Section 12.
+        """
+        findings: List[Finding] = []
+        found_subsections: Set[str] = set()
+        missing_subsections: List[str] = []
+
+        heading_matches = re.findall(r'^(#{2,4})\s+(.+)$', sec12_content, re.MULTILINE)
+        headings_in_sec12 = [h[1].strip() for h in heading_matches]
+
+        for req in self.MANDATORY_EMERGENCY_SUBSECTIONS:
+            s_num = req["num"]
+            s_title = req["title"]
+            s_aliases = req["aliases"]
+            matched = False
+
+            # Direct regex match for subsection header (e.g. ### 12.1)
+            num_pattern = rf'###\s+{re.escape(s_num)}\b'
+            if re.search(num_pattern, sec12_content, re.IGNORECASE):
+                matched = True
+            else:
+                for h in headings_in_sec12:
+                    h_lower = h.lower()
+                    if s_num in h_lower:
+                        matched = True
+                        break
+                    for alias in s_aliases:
+                        if alias.lower() in h_lower:
+                            matched = True
+                            break
+                    if matched:
+                        break
+
+            if matched:
+                found_subsections.add(s_num)
+            else:
+                missing_subsections.append(f"{s_num} ({s_title})")
+
+        if missing_subsections:
+            findings.append(Finding(
+                "conops-emergency-depth-missing",
+                f"Section 12 Emergency Decision Matrix is missing required depth subsection(s): {', '.join(missing_subsections)} in '{rel_path}'.",
+                location=f"{rel_path}:{sec12_line}",
+                detail={"missing_subsections": missing_subsections, "found_subsections": list(found_subsections)},
+            ))
+
+        # Check for Mermaid Statechart Diagram in Section 12
+        has_statechart = bool(
+            re.search(r'```(?:mermaid)?\s*\n\s*(?:stateDiagram|stateDiagram-v2)\b', sec12_content, re.IGNORECASE)
+            or (re.search(r'```mermaid', sec12_content, re.IGNORECASE) and re.search(r'-->', sec12_content))
+        )
+        if not has_statechart:
+            findings.append(Finding(
+                "conops-emergency-statechart-missing",
+                f"Section 12 Emergency Decision Matrix (Subsection 12.2) is missing mandatory Mermaid statechart diagram (stateDiagram-v2) in '{rel_path}'.",
+                location=f"{rel_path}:{sec12_line}",
+            ))
+
         return findings
 
     def synthesize_canonical_template(self, output_path: Union[str, Path]) -> bool:
@@ -620,7 +728,7 @@ class ConopsCompletenessValidator(IValidator):
         if res_path.is_file():
             template_text = res_path.read_text(encoding="utf-8")
         else:
-            template_text = """| Attribute | Value |
+            template_text = r"""| Attribute | Value |
 | :--- | :--- |
 | **Title** | Concept of Operations (ConOps): {{SYSTEM_IDENTIFIER}} |
 | **Version** | {{DOCUMENT_VERSION}} |
@@ -652,7 +760,7 @@ class ConopsCompletenessValidator(IValidator):
 - **Trade-Off Analysis:** {{TRADE_OFF_ANALYSIS}}
 
 ## 5. Operational Modes & Lifecycle Stages
-Formal operational lifecycle stages across $\\Phi_{\\mathrm{lifecycle}}$:
+Formal operational lifecycle stages across $\Phi_{\mathrm{lifecycle}}$:
 - **Phase_Startup:** {{PHASE_STARTUP_DESCRIPTION}}
 - **Phase_NominalExecution:** {{PHASE_NOMINAL_EXECUTION_DESCRIPTION}}
 - **Phase_DegradedMode:** {{PHASE_DEGRADED_MODE_DESCRIPTION}}
@@ -662,10 +770,10 @@ Formal operational lifecycle stages across $\\Phi_{\\mathrm{lifecycle}}$:
 
 ## 6. 4D Operational Volume & SORA Ground Risk Buffer Mathematics
 $$
-\\begin{aligned}
-V_{\\mathrm{4D}} &= V_{\\mathrm{SpatialGeometry}} \\cup V_{\\mathrm{ContingencyVolume}} \\cup V_{\\mathrm{GRB}} \\\\
-R_{\\mathrm{GRB}} &= h_{\\mathrm{max}} \\cdot \\tan(\\theta_{\\mathrm{impact}}) + v_{\\mathrm{wind,max}} \\cdot \\sqrt{\\frac{2 h_{\\mathrm{max}}}{g}} + d_{\\mathrm{glide,max}}
-\\end{aligned}
+\begin{aligned}
+V_{\mathrm{4D}} &= V_{\mathrm{SpatialGeometry}} \cup V_{\mathrm{ContingencyVolume}} \cup V_{\mathrm{GRB}} \\
+R_{\mathrm{GRB}} &= h_{\mathrm{max}} \cdot \tan(\theta_{\mathrm{impact}}) + v_{\mathrm{wind,max}} \cdot \sqrt{\frac{2 h_{\mathrm{max}}}{g}} + d_{\mathrm{glide,max}}
+\end{aligned}
 $$
 
 | Parameter | Symbol | Value | Units | Description |
@@ -715,6 +823,60 @@ $$
 | `EMG-05` | {{EMG_TRIGGER_NAME}} | {{EMG_DETECTION_MECHANISM}} | {{EMG_CONTAINMENT_ACTION}} | `{{EMG_FAILSAFE_STATE}}` | {{EMG_MAX_RESPONSE_TIME}} | {{EMG_HITL_ROLE}} |
 | `EMG-06` | {{EMG_TRIGGER_NAME}} | {{EMG_DETECTION_MECHANISM}} | {{EMG_CONTAINMENT_ACTION}} | `{{EMG_FAILSAFE_STATE}}` | {{EMG_MAX_RESPONSE_TIME}} | {{EMG_HITL_ROLE}} |
 | `EMG-07` | {{EMG_TRIGGER_NAME}} | {{EMG_DETECTION_MECHANISM}} | {{EMG_CONTAINMENT_ACTION}} | `{{EMG_FAILSAFE_STATE}}` | {{EMG_MAX_RESPONSE_TIME}} | {{EMG_HITL_ROLE}} |
+
+### 12.1 Failsafe State Transition Semantics & Timing Guarantees
+$$
+\begin{aligned}
+P_{\mathrm{EMG-07}} > P_{\mathrm{EMG-03}} > P_{\mathrm{EMG-05}} > P_{\mathrm{EMG-06}} > P_{\mathrm{EMG-04}} > P_{\mathrm{EMG-02}} > P_{\mathrm{EMG-01}}
+\end{aligned}
+$$
+
+- **Priority Invariant:** Higher priority contingency triggers preempt lower priority states unconditionally.
+- **Deterministic Timing:** Maximum detection-to-actuation latency $t_{\mathrm{resp}} \le \tau_{\mathrm{deadline}}$ across all triggers.
+- **Fail-Safe Retention:** Non-reentrant emergency containment locks until authorized manual ground reset.
+
+### 12.2 Deterministic Emergency Statechart & State Machine
+```mermaid
+stateDiagram-v2
+    [*] --> Phase_Startup
+    Phase_Startup --> Phase_NominalExecution : BIT_Pass
+    Phase_NominalExecution --> Degraded_SensorFailsafe : EMG_04_SensorFault
+    Phase_NominalExecution --> Contingency_LostLinkReturn : EMG_01_LostC2
+    Phase_NominalExecution --> Contingency_DeadReckoning : EMG_02_GNSSLoss
+    Phase_NominalExecution --> Contingency_ResourceDivert : EMG_03_PowerDepletion
+    Phase_NominalExecution --> Contingency_GeofenceContainment : EMG_05_GeofenceBreach
+    Phase_NominalExecution --> Contingency_PrecautionaryHalt : EMG_06_StructuralAnomaly
+    Phase_NominalExecution --> Emergency_SafeStateTermination : EMG_07_AbortCommand
+    Degraded_SensorFailsafe --> Contingency_LostLinkReturn : LinkTimeout
+    Contingency_LostLinkReturn --> Phase_SecureShutdown : SafeContainment
+    Contingency_DeadReckoning --> Phase_SecureShutdown : SafeContainment
+    Contingency_ResourceDivert --> Phase_SecureShutdown : SafeContainment
+    Contingency_GeofenceContainment --> Contingency_ResourceDivert : ContainmentHold
+    Contingency_PrecautionaryHalt --> Phase_SecureShutdown : SafeStop
+    Emergency_SafeStateTermination --> Phase_SecureShutdown : ImpactSafe
+    Phase_SecureShutdown --> [*]
+```
+
+### 12.3 Degraded Modes & Fallback Hierarchy
+- **Tier 1 (Nominal Execution):** Full multi-sensor fusion, dual-channel C2 links, and nominal envelope margins.
+- **Tier 2 (Degraded Sensor Mode):** Single-sensor failure activates secondary observer and dead reckoning.
+- **Tier 3 (Contingency Link Mode):** Loss of primary C2 link triggers autonomous hold and return sequence.
+- **Tier 4 (Emergency Containment Mode):** Unrecoverable fault triggers ballistic containment deploy or instant power cutoff.
+
+### 12.4 Human-in-the-Loop (HITL) Authority & Override Protocols
+- **Supervisory Authority:** Operator retains positive manual override capability via independent emergency link.
+- **Dual-Consent Authentication:** Critical emergency termination (`EMG-07`) requires two-operator verified consent keys.
+- **Interlock Inhibit:** Safety computer rejects manual commands that violate dynamic geofence containment limits.
+
+### 12.5 Autonomous Divert & Secondary Recovery Protocols
+- **Primary Recovery:** Designated nominal operational site or recovery zone.
+- **Secondary Divert Sites:** Pre-surveyed alternate recovery coordinates evaluated dynamically against Bingo energy.
+- **Terrain Clearance:** All emergency divert trajectories maintain minimum statutory boundary separation.
+
+### 12.6 Post-Emergency Containment, Latching & Reset Procedures
+- **Safety Lockout:** Emergency shutdown latches all actuators and high-voltage buses in de-energized safe states.
+- **Non-Volatile Blackbox Offload:** Diagnostic fault logs, sensor telemetry, and watchdog stack traces are securely written to non-volatile flash.
+- **Authorized Ground Clearance:** Physical inspection and signed maintenance clearance required before clearing failsafe lock.
 """
         out_p = Path(output_path)
         out_p.parent.mkdir(parents=True, exist_ok=True)
@@ -745,6 +907,19 @@ class MissionIntentCompletenessValidator(IValidator):
         {"num": 8, "title": "Go/No-Go Decision Matrix", "aliases": ["go/no-go", "go-no-go", "go / no-go decision matrix", "go / no-go matrix", "gng-"]},
         {"num": 9, "title": "Bingo Energy Mathematics & Secondary Divert Protocols", "aliases": ["bingo energy", "secondary divert", "divert protocols", "bingo energy mathematics", "bingo", "divert"]},
         {"num": 10, "title": "Gate 24 MissionTask Traceability Tags", "aliases": ["gate 24", "missiontask traceability", "traceability tags", "allocation tags", "operationalallocation"]},
+    ]
+
+    MANDATORY_THREAT_DOMAINS: List[Dict[str, Any]] = [
+        {"name": "Kinetic", "pattern": r'\b(?:kinetic|thr-kin|ballistic|projectile|collision)\b'},
+        {"name": "Mechanical", "pattern": r'\b(?:mechanical|structural|thr-mec|actuator\s+jam|flutter)\b'},
+        {"name": "Power/Thermal", "pattern": r'\b(?:power/thermal|power\s*/\s*thermal|power\s+and\s+thermal|power|thermal|thr-pwr|thr-thm)\b'},
+        {"name": "Environmental", "pattern": r'\b(?:environmental|atmospheric|weather|icing|precipitation|gust|thr-env)\b'},
+        {"name": "EW", "pattern": r'\b(?:ew\b|electronic\s+warfare|rf\s+jamming|gnss\s+jamming|thr-ew|thr-ewc)\b'},
+        {"name": "Cyber", "pattern": r'\b(?:cyber\b|cybersecurity|data\s+integrity|packet\s+injection|firmware\s+tampering|thr-cyb)\b'},
+        {"name": "Optical", "pattern": r'\b(?:optical|laser\s+blinding|dazzling|camera\s+saturation|thr-opt)\b'},
+        {"name": "Signature", "pattern": r'\b(?:signature|acoustic|infrared|rcs\b|radar\s+cross-section|thr-sig|thr-ac)\b'},
+        {"name": "Human Factors", "pattern": r'\b(?:human\s+factors|human|operator\s+fatigue|pilot|input\s+disparity|thr-hum)\b'},
+        {"name": "CBRN", "pattern": r'\b(?:cbrn\b|chemical|biological|radiological|nuclear|toxic|hazardous\s+contamination|thr-cbrn)\b'},
     ]
 
     def __init__(self, strict_bingo_math: bool = True) -> None:
@@ -929,6 +1104,11 @@ class MissionIntentCompletenessValidator(IValidator):
                         detail={"task_id": task_id},
                     ))
 
+        # Section 4: Multi-Domain Operational Threat Matrix Density (10 domains)
+        if 4 in matched_sections:
+            _, sec4_line, sec4_content = matched_sections[4]
+            findings.extend(self._validate_threat_matrix_density(content, rel_path, sec4_content, sec4_line))
+
         # Section 9: Bingo Energy Mathematics & Reserve Ratio Validation
         if 9 in matched_sections:
             _, sec9_line, sec9_content = matched_sections[9]
@@ -966,13 +1146,55 @@ class MissionIntentCompletenessValidator(IValidator):
 
         return findings
 
+    def _validate_threat_matrix_density(
+        self,
+        content: str,
+        rel_path: str,
+        sec4_content: str,
+        sec4_line: int,
+    ) -> List[Finding]:
+        """
+        Validates density of Section 4 (Multi-Domain Operational Threat Matrix):
+        Ensures all 10 canonical operational domains are covered.
+        """
+        findings: List[Finding] = []
+        sec4_tables, _ = _parse_commonmark_tables(sec4_content)
+        found_domains: Set[str] = set()
+
+        def _scan_domain(text: str) -> None:
+            for domain_spec in self.MANDATORY_THREAT_DOMAINS:
+                d_name = domain_spec["name"]
+                d_pattern = domain_spec["pattern"]
+                if re.search(d_pattern, text, re.IGNORECASE):
+                    found_domains.add(d_name)
+
+        if sec4_tables:
+            for tbl in sec4_tables:
+                for row in tbl:
+                    row_str = " ".join(row.values())
+                    _scan_domain(row_str)
+
+        # Also scan raw section content
+        _scan_domain(sec4_content)
+
+        missing_domains = [d["name"] for d in self.MANDATORY_THREAT_DOMAINS if d["name"] not in found_domains]
+        if missing_domains:
+            findings.append(Finding(
+                "mission-threat-domain-missing",
+                f"Section 4 Multi-Domain Operational Threat Matrix is missing required threat domain(s): {', '.join(missing_domains)} in '{rel_path}'.",
+                location=f"{rel_path}:{sec4_line}",
+                detail={"missing_domains": missing_domains, "found_domains": list(found_domains)},
+            ))
+
+        return findings
+
     def synthesize_canonical_template(self, output_path: Union[str, Path]) -> bool:
         """Synthesizes domain-neutral MISSION_INTENT_CANONICAL_TEMPLATE.md."""
         res_path = Path(__file__).resolve().parents[4] / "resources" / "MISSION_INTENT_CANONICAL_TEMPLATE.md"
         if res_path.is_file():
             template_text = res_path.read_text(encoding="utf-8")
         else:
-            template_text = """| Attribute | Value |
+            template_text = r"""| Attribute | Value |
 | :--- | :--- |
 | **Title** | Tactical Mission Intent & Execution Plan: {{MISSION_SYSTEM_NAME}} |
 | **Version** | {{DOCUMENT_VERSION}} |
@@ -997,9 +1219,18 @@ class MissionIntentCompletenessValidator(IValidator):
 | MoP-01 | MoP | {{MOP_NAME}} | {{MOP_EQUATION}} | {{MOP_THRESHOLD}} | {{MOP_OBJECTIVE}} | {{MOP_UNIT}} |
 
 ## 4. Threat & Electronic Warfare (EW) / Cyber Environment Matrix
-| Threat ID | Threat Vector | Description | Severity | Autonomous Mitigation Rule |
-| :--- | :--- | :--- | :--- | :--- |
-| THR-01 | {{THR_VECTOR}} | {{THR_DESCRIPTION}} | {{THR_SEVERITY}} | {{THR_MITIGATION_RULE}} |
+| Threat ID | Threat Domain | Threat Vector | Technical Description | Severity | Detection Mechanism | Autonomous Mitigation Rule | Public Clause Citation |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `THR-KIN-01` | Kinetic | {{THR_KIN_VECTOR}} | {{THR_KIN_DESCRIPTION}} | Critical | Proximity lidar / vision bounding box | Execute evasive lateral displacement maneuver | MIL-STD-882E §4.3 |
+| `THR-MEC-01` | Mechanical | {{THR_MEC_VECTOR}} | {{THR_MEC_DESCRIPTION}} | Critical | Actuator telemetry / vibration monitor | Reconfigure dynamic control allocation matrix | MIL-STD-882E §4.3 |
+| `THR-PWR-01` | Power/Thermal | {{THR_PWR_VECTOR}} | {{THR_PWR_DESCRIPTION}} | Critical | BMS thermistor array / current sensor | Isolate faulted module and initiate divert | MIL-STD-882E §4.3 |
+| `THR-ENV-01` | Environmental | {{THR_ENV_VECTOR}} | {{THR_ENV_DESCRIPTION}} | High | Pitot air data / temperature sensor | Transition to high-stability penetration mode | MIL-STD-810H Method 514.8 |
+| `THR-EWC-01` | EW | {{THR_EW_VECTOR}} | {{THR_EW_DESCRIPTION}} | High | RAIM alert / SNR degradation | Switch frequency-hopping channel / alternate PACE | STANAG 4586 §3.2 |
+| `THR-CYB-01` | Cyber | {{THR_CYB_VECTOR}} | {{THR_CYB_DESCRIPTION}} | Critical | Cryptographic HMAC validation failure | Drop unauthorized frames, cycle crypto keys | NIST SP 800-82r3 §5.2 |
+| `THR-OPT-01` | Optical | {{THR_OPT_VECTOR}} | {{THR_OPT_DESCRIPTION}} | High | Optical sensor saturation / dazzle detector | Shutter sensor and switch to secondary modality | MIL-STD-882E §4.3 |
+| `THR-SIG-01` | Signature | {{THR_SIG_VECTOR}} | {{THR_SIG_DESCRIPTION}} | Medium | Acoustic / emission monitor | Reduce rotor RPM and optimize acoustic signature | MIL-STD-882E §4.3 |
+| `THR-HUM-01` | Human Factors | {{THR_HUM_VECTOR}} | {{THR_HUM_DESCRIPTION}} | High | Command rate disparity / syntax validator | Sanitize input commands and enforce interlocks | ISO/IEC/IEEE 29148 §6.4 |
+| `THR-CBRN-01` | CBRN | {{THR_CBRN_VECTOR}} | {{THR_CBRN_DESCRIPTION}} | High | Particulate / chemical sensor threshold | Seal enclosure air intake and route clear of plume | MIL-STD-810H Method 509.7 |
 
 ## 5. PACE C2 Link Communications Plan
 | PACE Tier | Link Medium | Frequency Band | Nominal Data Rate | Heartbeat Timeout | Priority / Role |
@@ -1024,10 +1255,10 @@ class MissionIntentCompletenessValidator(IValidator):
 
 ## 9. Bingo Energy Mathematics & Secondary Divert Protocols
 $$
-\\begin{aligned}
-E_{\\mathrm{bingo}}(t) &= E_{\\mathrm{return}}(\\mathbf{p}(t), \\mathbf{p}_{\\mathrm{dest}}) + E_{\\mathrm{divert}}(\\mathbf{p}_{\\mathrm{dest}}, \\mathbf{p}_{\\mathrm{alt}}) + E_{\\mathrm{reserve}} + E_{\\mathrm{contingency}} \\\\
-E_{\\mathrm{reserve}} &\\ge 0.20 \\cdot E_{\\mathrm{capacity}}
-\\end{aligned}
+\begin{aligned}
+E_{\mathrm{bingo}}(t) &= E_{\mathrm{return}}(\mathbf{p}(t), \mathbf{p}_{\mathrm{dest}}) + E_{\mathrm{divert}}(\mathbf{p}_{\mathrm{dest}}, \mathbf{p}_{\mathrm{alt}}) + E_{\mathrm{reserve}} + E_{\mathrm{contingency}} \\
+E_{\mathrm{reserve}} &\ge 0.20 \cdot E_{\mathrm{capacity}}
+\end{aligned}
 $$
 
 | Energy Parameter | Symbol | Value | Units | Constraint Rule |

@@ -14,7 +14,9 @@ This governance standard is aligned with:
 - **ISO/IEC/IEEE 29148:2018**: Systems and software engineering — Requirements engineering (§6.4.2 ConOps and §6.4.3 OpsCon).
 - **INCOSE Systems Engineering Handbook v5.0**: Measures of Effectiveness (MoE), Measures of Performance (MoP), and Operational Scenario Engineering.
 - **NATO STANAG 4586**: Standard Interfaces of UAV Control System (UCS) for NATO UAV Interoperability.
-- **MIL-STD-882E**: Department of Defense Standard Practice: System Safety and Hazard Analysis.
+- **MIL-STD-882E**: Department of Defense Standard Practice: System Safety and Hazard Analysis (Task 202: Operational Hazard Analysis).
+- **SAE ARP4761 / ARP4754A**: Guidelines and Methods for Conducting the Safety Assessment Process on Civil Airborne Systems and Equipment (§3: Functional Hazard Assessment).
+- **MIL-STD-1629A**: Procedures for Performing a Failure Mode, Effects and Criticality Analysis (Method 101: Functional FMECA, Method 102: Piece-Part Hardware FMECA).
 - **JARUS SORA v2.5**: Specific Operations Risk Assessment, 4D Operational Volume, and Ground Risk Buffer (GRB) calculation.
 - **OMG UAF v1.2 / v2.0**: Unified Architecture Framework Operational Domain Views (Op-Pr, Op-Tx, Op-Is).
 
@@ -39,14 +41,16 @@ Enforced offline by:
   * **Operational Information Exchanges (Op-Tx)**: Minimum 1 exchange ($N \ge 1$).
 
 ### 2. Open Multi-Domain Threat Taxonomy
-The Threat and Electronic Warfare / Cyber Environment Matrix MUST cover multi-domain threats across all seven canonical operational domains:
+The Threat and Electronic Warfare / Cyber Environment Matrix MUST cover multi-domain threats across all canonical operational domains:
 1. **Kinetic**: External projectiles, mid-air collisions, physical interceptors, ballistic fragmentation, ground obstacles.
 2. **Mechanical**: Structural flutter, fatigue failure, control surface/actuator jamming, motor bearing seizure, propeller delamination.
-3. **Environmental**: Extreme ambient temperature, severe turbulence/wind gusts exceeding airframe limits, icing/pitot probe freeze, lightning discharge, heavy precipitation, volcanic particulate.
-4. **EW / Cyber**: GNSS spoofing/jamming, RF command uplink jamming, telemetry sniffing, man-in-the-middle packet injection, unauthorized command injection, firmware tampering.
-5. **Power / Thermal**: Battery cell thermal runaway, power rail brownout, electronic speed controller (ESC) thermal throttling, generator disconnect.
+3. **Power / Thermal**: Battery cell thermal runaway, power rail brownout, electronic speed controller (ESC) thermal throttling, generator disconnect.
+4. **Environmental**: Extreme ambient temperature, severe turbulence/wind gusts exceeding airframe limits, icing/pitot probe freeze, lightning discharge, heavy precipitation, volcanic particulate.
+5. **EW / Cyber**: GNSS spoofing/jamming, RF command uplink jamming, telemetry sniffing, man-in-the-middle packet injection, unauthorized command injection, firmware tampering.
 6. **Optical**: High-energy laser blinding of optical tracking sensors, sensor dazzling, camera saturation, optical flow denial.
-7. **Human**: Ground operator input disparity, pilot fatigue, unauthorized control override, communication protocol desynchronization.
+7. **Signature / Acoustic**: Acoustic emission harmonics, infrared plume radiation, radar cross-section (RCS) observability.
+8. **Human Factors**: Ground operator input disparity, pilot fatigue, unauthorized control override, communication protocol desynchronization.
+9. **CBRN**: Chemical plumes, biological particulates, radiological contamination, toxic corrosive environments.
 
 Restricting threat analysis to an arbitrary single domain or omitting applicable threat vectors is strictly prohibited.
 
@@ -71,6 +75,30 @@ Per [`rules/latex-katex-integrity.md`](latex-katex-integrity.md):
 - **Deterministic Assembly Engine**: Master documents (`docs/conops/CONOPS.md` and `docs/conops/MISSION_INTENT.md`) MUST be compiled via `python3 scripts/assemble_conops.py`.
 - **Zero Placeholder Tokens**: Assembled specifications MUST contain zero unresolved `{{...}}` template tokens.
 - **Gate 24 Operational Allocation**: Every UAF Operational Activity (`OA-XX`) and METL Task (`MET-XX`) MUST define a machine-verifiable Gate 24 allocation tag (`/// OperationalAllocation: [OA-XX]` or `/// OperationalAllocation: [MET-XX]`) linking operational tasks to structural and behavioral SysML v2 AST elements.
+
+---
+
+## The 3-Tier Multi-Run Safety & Threat Derivation Lifecycle
+
+Safety, threat, and hazard derivation in DEAP follows a strict three-tier, multi-run architectural lifecycle to eliminate circular dependency deadlocks between operational concept definition and physical component selection:
+
+### Tier 1 (Run 1: Mission Intent / Concept Formulation)
+- **Primary Methodologies**: Functional Hazard Assessment (FHA) under **SAE ARP4761 §3** and Operational Hazard Analysis (OHA) under **MIL-STD-882E Task 202**.
+- **Derivation Mechanism**: Threats and operational hazards are derived systematically from declared **Mission Functions** (`Propel`, `Navigate`, `Communicate`, `Sense`, `Contain`) and **Operating Domains** (`Kinetic`, `Mechanical`, `Power/Thermal`, `Environmental`, `EW`, `Cyber`, `Optical`, `Signature`, `Human Factors`, `CBRN`) using standardized hazard guide words:
+  * `Loss`: Complete absence or cessation of the required mission function.
+  * `Degraded`: Sub-nominal capacity, reduced bandwidth, or inadequate control authority.
+  * `Intermittent`: Sporadic, discontinuous, or jittery functional execution.
+  * `Uncommanded`: Inadvertent, unrequested, or anomalous functional activation.
+- **Resolution & Scope Rule**: Run 1 **does NOT require piece-part BOM FMECA** (which creates a fatal circular dependency deadlock before physical hardware components are architected and selected). Instead, Run 1 strictly enforces 100% complete FHA and OHA functional hazard coverage across all declared mission functions and operational threat domains.
+
+### Tier 2 (Run 2: ConOps / Logical Architecture & SysML)
+- **Primary Methodologies**: Functional Failure Mode, Effects, and Criticality Analysis (FMECA) under **MIL-STD-1629A Method 101** and System-Theoretic Process Analysis (**STPA**).
+- **Derivation Mechanism**: Failure modes and safety constraints are derived from logical subsystem blocks, data bus interfaces (e.g. CAN, Ethernet, Serial), inter-subsystem control loops, and operational activity transitions (`OA-*`).
+- **Focus**: Logical interface boundaries, feedback loop delays, unsafe control actions (UCAs), and loss of functional redundancy.
+
+### Tier 3 (Run 3: Detailed Engineering & Physical BOM)
+- **Primary Methodologies**: Piece-Part Hardware Failure Mode, Effects, and Criticality Analysis (FMECA) under **MIL-STD-1629A Method 102**.
+- **Derivation Mechanism**: Calculates quantitative failure rates ($\lambda$) and criticality metrics ($C_r$) for specific physical hardware components, commercial-off-the-shelf (COTS) parts, electrical interconnects, and circuit components based on empirical reliability handbooks (e.g. MIL-HDBK-217F, NPRD-2016).
 
 ---
 

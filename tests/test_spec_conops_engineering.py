@@ -244,5 +244,37 @@ class TestSpecConopsEngineering(unittest.TestCase):
             )
 
 
+    def test_3_tier_safety_threat_derivation_lifecycle(self):
+        """Verify formal documentation of the 3-Tier Multi-Run Safety & Threat Derivation Lifecycle."""
+        for path in [CONOPS_SKILL_PATH, CONOPS_RULE_PATH]:
+            with open(path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            self.assertIn("The 3-Tier Multi-Run Safety & Threat Derivation Lifecycle", content)
+            self.assertIn("Tier 1 (Run 1: Mission Intent / Concept Formulation)", content)
+            self.assertIn("SAE ARP4761 §3", content)
+            self.assertIn("MIL-STD-882E Task 202", content)
+            self.assertIn("Tier 2 (Run 2: ConOps / Logical Architecture & SysML)", content)
+            self.assertIn("MIL-STD-1629A Method 101", content)
+            self.assertIn("Tier 3 (Run 3: Detailed Engineering & Physical BOM)", content)
+            self.assertIn("MIL-STD-1629A Method 102", content)
+
+            # Mission functions
+            for fn in ["Propel", "Navigate", "Communicate", "Sense", "Contain"]:
+                self.assertIn(fn, content)
+
+            # Operating domains
+            for dom in ["Kinetic", "Mechanical", "Power/Thermal", "Environmental", "EW", "Cyber", "Optical", "Signature", "Human Factors", "CBRN"]:
+                self.assertIn(dom, content)
+
+            # Hazard guide words
+            for gw in ["Loss", "Degraded", "Intermittent", "Uncommanded"]:
+                self.assertIn(gw, content)
+
+            # Circular dependency deadlock clarification
+            self.assertIn("circular dependency", content.lower())
+            self.assertIn("piece-part bom fmeca", content.lower())
+
+
 if __name__ == "__main__":
     unittest.main()

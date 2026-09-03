@@ -23,9 +23,18 @@
 | MoP-01 | MoP | {{MOP_NAME}} | {{MOP_EQUATION}} | {{MOP_THRESHOLD}} | {{MOP_OBJECTIVE}} | {{MOP_UNIT}} |
 
 ## 4. Threat & Electronic Warfare (EW) / Cyber Environment Matrix
-| Threat ID | Threat Vector | Description | Severity | Autonomous Mitigation Rule |
-| :--- | :--- | :--- | :--- | :--- |
-| THR-01 | {{THR_VECTOR}} | {{THR_DESCRIPTION}} | {{THR_SEVERITY}} | {{THR_MITIGATION_RULE}} |
+| Threat ID | Threat Domain | Threat Vector | Technical Description | Severity | Detection Mechanism | Autonomous Mitigation Rule | Public Clause Citation |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `THR-KIN-01` | Kinetic | {{THR_KIN_VECTOR}} | {{THR_KIN_DESCRIPTION}} | Critical | Proximity lidar / vision bounding box | Execute evasive lateral displacement maneuver | MIL-STD-882E §4.3 |
+| `THR-MEC-01` | Mechanical | {{THR_MEC_VECTOR}} | {{THR_MEC_DESCRIPTION}} | Critical | Actuator telemetry / vibration monitor | Reconfigure dynamic control allocation matrix | MIL-STD-882E §4.3 |
+| `THR-PWR-01` | Power/Thermal | {{THR_PWR_VECTOR}} | {{THR_PWR_DESCRIPTION}} | Critical | BMS thermistor array / current sensor | Isolate faulted module and initiate divert | MIL-STD-882E §4.3 |
+| `THR-ENV-01` | Environmental | {{THR_ENV_VECTOR}} | {{THR_ENV_DESCRIPTION}} | High | Pitot air data / temperature sensor | Transition to high-stability penetration mode | MIL-STD-810H Method 514.8 |
+| `THR-EWC-01` | EW | {{THR_EW_VECTOR}} | {{THR_EW_DESCRIPTION}} | High | RAIM alert / SNR degradation | Switch frequency-hopping channel / alternate PACE | STANAG 4586 §3.2 |
+| `THR-CYB-01` | Cyber | {{THR_CYB_VECTOR}} | {{THR_CYB_DESCRIPTION}} | Critical | Cryptographic HMAC validation failure | Drop unauthorized frames, cycle crypto keys | NIST SP 800-82r3 §5.2 |
+| `THR-OPT-01` | Optical | {{THR_OPT_VECTOR}} | {{THR_OPT_DESCRIPTION}} | High | Optical sensor saturation / dazzle detector | Shutter sensor and switch to secondary modality | MIL-STD-882E §4.3 |
+| `THR-SIG-01` | Signature | {{THR_SIG_VECTOR}} | {{THR_SIG_DESCRIPTION}} | Medium | Acoustic / emission monitor | Reduce actuator RPM and optimize signature | MIL-STD-882E §4.3 |
+| `THR-HUM-01` | Human Factors | {{THR_HUM_VECTOR}} | {{THR_HUM_DESCRIPTION}} | High | Command rate disparity / syntax validator | Sanitize input commands and enforce interlocks | ISO/IEC/IEEE 29148 §6.4 |
+| `THR-CBRN-01` | CBRN | {{THR_CBRN_VECTOR}} | {{THR_CBRN_DESCRIPTION}} | High | Particulate / chemical sensor threshold | Seal enclosure air intake and route clear of plume | MIL-STD-810H Method 509.7 |
 
 ## 5. PACE C2 Link Communications Plan
 | PACE Tier | Link Medium | Frequency Band | Nominal Data Rate | Heartbeat Timeout | Priority / Role |

@@ -30,3 +30,46 @@ $$
 
 2. **Deterministic Response Timing ($t_{\mathrm{resp}} \le \tau_{\mathrm{deadline}}$):** From initial sensor anomaly threshold crossing to containment command issuance on the actuator bus, the maximum propagation latency is guaranteed to remain strictly bounded by $t_{\mathrm{resp}} \le \tau_{\mathrm{deadline}}$ across all seven canonical triggers (with emergency termination executing within $t_{\mathrm{resp}} \le \tau_{\mathrm{deadline\_abort}}$).
 3. **Fail-Safe Retention:** Once a critical emergency state (`Emergency_SafeStateTermination` or `Contingency_ResourceDivert`) is triggered, the state machine is non-reentrant and locks until a physical post-operation ground reset and authorized Maintenance Technician clearance are performed.
+
+### 12.2 Deterministic Emergency Statechart & State Machine
+```mermaid
+stateDiagram-v2
+    [*] --> Phase_Startup
+    Phase_Startup --> Phase_NominalExecution : BIT_Pass
+    Phase_NominalExecution --> Degraded_SensorFailsafe : EMG_04_SensorFault
+    Phase_NominalExecution --> Contingency_LostLinkReturn : EMG_01_LostC2
+    Phase_NominalExecution --> Contingency_DeadReckoning : EMG_02_GNSSLoss
+    Phase_NominalExecution --> Contingency_ResourceDivert : EMG_03_PowerDepletion
+    Phase_NominalExecution --> Contingency_GeofenceContainment : EMG_05_GeofenceBreach
+    Phase_NominalExecution --> Contingency_PrecautionaryLand : EMG_06_StructuralAnomaly
+    Phase_NominalExecution --> Emergency_FlightTermination : EMG_07_AbortCommand
+    Degraded_SensorFailsafe --> Contingency_LostLinkReturn : LinkTimeout
+    Contingency_LostLinkReturn --> Phase_SecureShutdown : SafeTouchdown
+    Contingency_DeadReckoning --> Phase_SecureShutdown : SafeTouchdown
+    Contingency_ResourceDivert --> Phase_SecureShutdown : SafeTouchdown
+    Contingency_GeofenceContainment --> Contingency_ResourceDivert : ContainmentHold
+    Contingency_PrecautionaryLand --> Phase_SecureShutdown : Touchdown
+    Emergency_FlightTermination --> Phase_SecureShutdown : ImpactSafe
+    Phase_SecureShutdown --> [*]
+```
+
+### 12.3 Degraded Modes & Fallback Hierarchy
+- **Tier 1 (Nominal Execution):** Full multi-sensor fusion, dual-channel C2 links, and nominal envelope margins.
+- **Tier 2 (Degraded Sensor Mode):** Single-sensor failure activates secondary observer and dead reckoning.
+- **Tier 3 (Contingency Link Mode):** Loss of primary C2 link triggers autonomous hold and return-to-base sequence.
+- **Tier 4 (Emergency Containment Mode):** Unrecoverable fault triggers ballistic parachute deploy or instant motor cutoff.
+
+### 12.4 Human-in-the-Loop (HITL) Authority & Override Protocols
+- **Supervisory Authority:** Operator retains positive manual override capability via independent emergency link.
+- **Dual-Consent Authentication:** Critical flight termination (`EMG-07`) requires two-operator verified consent keys.
+- **Interlock Inhibit:** Flight computer rejects manual commands that violate dynamic geofence containment limits.
+
+### 12.5 Autonomous Divert & Secondary Recovery Protocols
+- **Primary Recovery:** Designated nominal landing site or recovery zone.
+- **Secondary Divert Sites:** Pre-surveyed alternate recovery coordinates evaluated dynamically against Bingo energy.
+- **Terrain Clearance:** All emergency divert trajectories maintain minimum statutory altitude separation.
+
+### 12.6 Post-Emergency Containment, Latching & Reset Procedures
+- **Safety Lockout:** Emergency shutdown latches all actuators and high-voltage buses in de-energized safe states.
+- **Non-Volatile Blackbox Offload:** Diagnostic fault logs, sensor telemetry, and watchdog stack traces are securely written to non-volatile flash.
+- **Authorized Ground Clearance:** Physical inspection and signed maintenance clearance required before clearing failsafe lock.

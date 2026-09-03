@@ -49,9 +49,11 @@ The `Worker ConOps` ingests and synthesizes the following foundational inputs:
    - Ingest `.pipeline/schema.sysml` and `.pipeline/schema-digest.json` to extract system boundaries, subsystems, and architectural partitions.
    - Ingest domain schemas under `schema/` (OMG IDL, Protobuf, ARXML, SysML v2).
 
-3. **Safety & Risk Baselines**:
-   - Ingest FMECA failure modes, hazard rosters, and JARUS SORA Ground Risk Class (GRC) / Air Risk Class (ARC) profiles.
+3. **Safety & Risk Baselines (3-Tier Lifecycle Integration)**:
+   - Ingest Tier 1 Functional Hazard Assessment (FHA per SAE ARP4761 §3) and Operational Hazard Analysis (OHA per MIL-STD-882E Task 202) covering declared mission functions (`Propel`, `Navigate`, `Communicate`, `Sense`, `Contain`).
+   - Ingest Tier 2 Functional FMECA & STPA (MIL-STD-1629A Method 101) failure modes, hazard rosters, and JARUS SORA Ground Risk Class (GRC) / Air Risk Class (ARC) profiles.
    - Extract containment boundaries, emergency failsafe states, and statutory energy reserve requirements.
+   - Note: Tier 3 Piece-Part BOM FMECA (MIL-STD-1629A Method 102) is performed during detailed physical engineering (Run 3) and is not required for Run 1 concept formulation.
 
 4. **User Operational Intent**:
    - Ingest operational purpose statements, stakeholder expectations, multi-threaded operational scenarios, and Commander's intent.
@@ -155,14 +157,16 @@ The `Worker ConOps` must strictly enforce the following repository rules:
   * UAF Activities: $N \ge 1$ activity entries.
 
 ### 4.2 Open Multi-Domain Threat Taxonomy
-The threat matrix (`04_threats.md`) must cover multi-domain threats across all 7 operational domains:
+The threat matrix (`04_threats.md`) must cover multi-domain threats across all canonical operational domains:
 1. **Kinetic**: Projectiles, collisions, interceptors, physical debris.
 2. **Mechanical**: Structural fatigue, actuator jamming, motor bearing seizure, propeller delamination.
-3. **Environmental**: Severe turbulence, icing, icing-induced pitot freeze, lightning strike, volcanic ash.
-4. **EW / Cyber**: GNSS jamming/spoofing, RF link interception, telemetry injection, malicious firmware ingress.
-5. **Power / Thermal**: Battery thermal runaway, ESC over-temperature, power distribution rail collapse.
+3. **Power / Thermal**: Battery thermal runaway, ESC over-temperature, power distribution rail collapse.
+4. **Environmental**: Severe turbulence, icing, icing-induced pitot freeze, lightning strike, volcanic ash.
+5. **EW / Cyber**: GNSS jamming/spoofing, RF link interception, telemetry injection, malicious firmware ingress.
 6. **Optical**: Laser blinding of electro-optical sensors, camera lens saturation, optical tracking denial.
-7. **Human**: Operator fatigue, command input disparity, unauthorized override attempts.
+7. **Signature / Acoustic**: Acoustic emission harmonics, infrared signature, radar cross-section observability.
+8. **Human Factors**: Operator fatigue, command input disparity, unauthorized override attempts.
+9. **CBRN**: Chemical plumes, toxic particulate, hazardous contamination.
 
 ### 4.3 KaTeX Mathematical Rendering Integrity
 Per [`rules/latex-katex-integrity.md`](../../rules/latex-katex-integrity.md):
@@ -210,6 +214,30 @@ $$
 ### 4.4 100% Public Clause Citations
 - Every threat mitigation, normative requirement, and operational task must cite authoritative public standards clauses (e.g. `ISO/IEC/IEEE 29148:2018 §6.4.2`, `NATO STANAG 4586 Annex B §3.2.1`, `JARUS SORA v2.5 Annex B §2.1`, `RTCA DO-178C §6.3.1`).
 - Speculative or un-cited additions are strictly forbidden.
+
+---
+
+## The 3-Tier Multi-Run Safety & Threat Derivation Lifecycle
+
+Safety, threat, and hazard derivation in DEAP follows a strict three-tier, multi-run architectural lifecycle to eliminate circular dependency deadlocks between operational concept definition and physical component selection:
+
+### Tier 1 (Run 1: Mission Intent / Concept Formulation)
+- **Primary Methodologies**: Functional Hazard Assessment (FHA) under **SAE ARP4761 §3** and Operational Hazard Analysis (OHA) under **MIL-STD-882E Task 202**.
+- **Derivation Mechanism**: Threats and operational hazards are derived systematically from declared **Mission Functions** (`Propel`, `Navigate`, `Communicate`, `Sense`, `Contain`) and **Operating Domains** (`Kinetic`, `Mechanical`, `Power/Thermal`, `Environmental`, `EW`, `Cyber`, `Optical`, `Signature`, `Human Factors`, `CBRN`) using standardized hazard guide words:
+  * `Loss`: Complete absence or cessation of the required mission function.
+  * `Degraded`: Sub-nominal capacity, reduced bandwidth, or inadequate control authority.
+  * `Intermittent`: Sporadic, discontinuous, or jittery functional execution.
+  * `Uncommanded`: Inadvertent, unrequested, or anomalous functional activation.
+- **Resolution & Scope Rule**: Run 1 **does NOT require piece-part BOM FMECA** (which creates a fatal circular dependency deadlock before physical hardware components are architected and selected). Instead, Run 1 strictly enforces 100% complete FHA and OHA functional hazard coverage across all declared mission functions and operational threat domains.
+
+### Tier 2 (Run 2: ConOps / Logical Architecture & SysML)
+- **Primary Methodologies**: Functional Failure Mode, Effects, and Criticality Analysis (FMECA) under **MIL-STD-1629A Method 101** and System-Theoretic Process Analysis (**STPA**).
+- **Derivation Mechanism**: Failure modes and safety constraints are derived from logical subsystem blocks, data bus interfaces (e.g., CAN, Ethernet, Serial), inter-subsystem control loops, and operational activity transitions (`OA-*`).
+- **Focus**: Logical interface boundaries, feedback loop delays, unsafe control actions (UCAs), and loss of functional redundancy.
+
+### Tier 3 (Run 3: Detailed Engineering & Physical BOM)
+- **Primary Methodologies**: Piece-Part Hardware Failure Mode, Effects, and Criticality Analysis (FMECA) under **MIL-STD-1629A Method 102**.
+- **Derivation Mechanism**: Calculates quantitative failure rates ($\lambda$) and criticality metrics ($C_r$) for specific physical hardware components, commercial-off-the-shelf (COTS) parts, electrical interconnects, and circuit components based on empirical reliability handbooks (e.g. MIL-HDBK-217F, NPRD-2016).
 
 ---
 

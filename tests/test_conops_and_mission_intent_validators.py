@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import tempfile
 import unittest
@@ -32,7 +33,7 @@ from parity_auditor.validators.conops_completeness_validator import (
 
 
 def _get_valid_conops_content() -> str:
-    return """| Attribute | Value |
+    return r"""| Attribute | Value |
 | :--- | :--- |
 | **Title** | Concept of Operations (ConOps): Autonomous Cyber-Physical System |
 | **Version** | 1.0.0 |
@@ -64,7 +65,7 @@ def _get_valid_conops_content() -> str:
 - **Trade-Off Analysis:** Redundant digital C2 link vs payload weight penalty.
 
 ## 5. Operational Modes & Lifecycle Stages
-Formal operational lifecycle stages across $\\Phi_{\\mathrm{lifecycle}}$:
+Formal operational lifecycle stages across $\Phi_{\mathrm{lifecycle}}$:
 - **Phase_Startup:** System power-on Built-In-Test (BIT) and calibration.
 - **Phase_NominalExecution:** Active mission execution and waypoint tracking.
 - **Phase_DegradedMode:** Subsystem failure with automated failsafe mitigation.
@@ -75,10 +76,10 @@ Formal operational lifecycle stages across $\\Phi_{\\mathrm{lifecycle}}$:
 ## 6. 4D Operational Volume & SORA Ground Risk Buffer Mathematics
 4D spatial-temporal envelope:
 $$
-\\begin{aligned}
-V_{\\mathrm{4D}} &= V_{\\mathrm{FlightGeometry}} \\cup V_{\\mathrm{ContingencyVolume}} \\cup V_{\\mathrm{GRB}} \\\\
-R_{\\mathrm{GRB}} &= h_{\\mathrm{max}} \\cdot \\tan(\\theta_{\\mathrm{impact}}) + v_{\\mathrm{wind,max}} \\cdot \\sqrt{\\frac{2 h_{\\mathrm{max}}}{g}}
-\\end{aligned}
+\begin{aligned}
+V_{\mathrm{4D}} &= V_{\mathrm{FlightGeometry}} \cup V_{\mathrm{ContingencyVolume}} \cup V_{\mathrm{GRB}} \\
+R_{\mathrm{GRB}} &= h_{\mathrm{max}} \cdot \tan(\theta_{\mathrm{impact}}) + v_{\mathrm{wind,max}} \cdot \sqrt{\frac{2 h_{\mathrm{max}}}{g}}
+\end{aligned}
 $$
 
 | Parameter | Symbol | Value | Units | Description |
@@ -105,8 +106,8 @@ $$
 | OpTx-02 | ControllerLogicSubsystem | ActuatorSubsystem | ActuatorDemandValue | 200 Hz | 2.5 ms | High (DAL-A) |
 
 ## 9. Operational Environments & Constraints
-- **Ambient Temperature:** $-20^\\circ\\text{C}$ to $+50^\\circ\\text{C}$.
-- **Precipitation Limit:** $5\\text{ mm/hr}$ continuous rain.
+- **Ambient Temperature:** $-20^\circ\text{C}$ to $+50^\circ\text{C}$.
+- **Precipitation Limit:** $5\text{ mm/hr}$ continuous rain.
 - **RF Environment:** GNSS-degraded operations with fallback to dead reckoning.
 
 ## 10. Multi-Threaded Operational Scenarios
@@ -128,11 +129,65 @@ $$
 | `EMG-05` | Geofence Breach Alert | Boundary proximity < 50 m | Execute emergency turnaround maneuver | `Contingency_GeofenceContainment` | 0.20 s | Monitor / Override |
 | `EMG-06` | Structural Anomaly | Vibration threshold exceeded | Throttle reduction and immediate landing | `Contingency_PrecautionaryLand` | 0.50 s | Monitor / Override |
 | `EMG-07` | Flight Termination Cmd | Encrypted abort signal | Deploy parachute / instant motor cutoff | `Emergency_FlightTermination` | 0.02 s | Initiator |
+
+### 12.1 Failsafe State Transition Semantics & Timing Guarantees
+$$
+\begin{aligned}
+P_{\mathrm{EMG-07}} > P_{\mathrm{EMG-03}} > P_{\mathrm{EMG-05}} > P_{\mathrm{EMG-06}} > P_{\mathrm{EMG-04}} > P_{\mathrm{EMG-02}} > P_{\mathrm{EMG-01}}
+\end{aligned}
+$$
+
+- **Priority Invariant:** Higher priority contingency triggers preempt lower priority states unconditionally.
+- **Deterministic Timing:** Maximum detection-to-actuation latency $t_{\mathrm{resp}} \le \tau_{\mathrm{deadline}}$ across all triggers.
+- **Fail-Safe Retention:** Non-reentrant emergency containment locks until authorized manual ground reset.
+
+### 12.2 Deterministic Emergency Statechart & State Machine
+```mermaid
+stateDiagram-v2
+    [*] --> Phase_Startup
+    Phase_Startup --> Phase_NominalExecution : BIT_Pass
+    Phase_NominalExecution --> Degraded_SensorFailsafe : EMG_04_SensorFault
+    Phase_NominalExecution --> Contingency_LostLinkReturn : EMG_01_LostC2
+    Phase_NominalExecution --> Contingency_DeadReckoning : EMG_02_GNSSLoss
+    Phase_NominalExecution --> Contingency_ResourceDivert : EMG_03_PowerDepletion
+    Phase_NominalExecution --> Contingency_GeofenceContainment : EMG_05_GeofenceBreach
+    Phase_NominalExecution --> Contingency_PrecautionaryLand : EMG_06_StructuralAnomaly
+    Phase_NominalExecution --> Emergency_FlightTermination : EMG_07_AbortCommand
+    Degraded_SensorFailsafe --> Contingency_LostLinkReturn : LinkTimeout
+    Contingency_LostLinkReturn --> Phase_SecureShutdown : SafeTouchdown
+    Contingency_DeadReckoning --> Phase_SecureShutdown : SafeTouchdown
+    Contingency_ResourceDivert --> Phase_SecureShutdown : SafeTouchdown
+    Contingency_GeofenceContainment --> Contingency_ResourceDivert : ContainmentHold
+    Contingency_PrecautionaryLand --> Phase_SecureShutdown : Touchdown
+    Emergency_FlightTermination --> Phase_SecureShutdown : ImpactSafe
+    Phase_SecureShutdown --> [*]
+```
+
+### 12.3 Degraded Modes & Fallback Hierarchy
+- **Tier 1 (Nominal Execution):** Full multi-sensor fusion, dual-channel C2 links, and nominal envelope margins.
+- **Tier 2 (Degraded Sensor Mode):** Single-sensor failure activates secondary observer and dead reckoning.
+- **Tier 3 (Contingency Link Mode):** Loss of primary C2 link triggers autonomous hold and return-to-base sequence.
+- **Tier 4 (Emergency Containment Mode):** Unrecoverable fault triggers ballistic parachute deploy or instant motor cutoff.
+
+### 12.4 Human-in-the-Loop (HITL) Authority & Override Protocols
+- **Supervisory Authority:** Operator retains positive manual override capability via independent emergency link.
+- **Dual-Consent Authentication:** Critical flight termination (`EMG-07`) requires two-operator verified consent keys.
+- **Interlock Inhibit:** Flight computer rejects manual commands that violate dynamic geofence containment limits.
+
+### 12.5 Autonomous Divert & Secondary Recovery Protocols
+- **Primary Recovery:** Designated nominal landing site or recovery zone.
+- **Secondary Divert Sites:** Pre-surveyed alternate recovery coordinates evaluated dynamically against Bingo energy.
+- **Terrain Clearance:** All emergency divert trajectories maintain minimum statutory altitude separation.
+
+### 12.6 Post-Emergency Containment, Latching & Reset Procedures
+- **Safety Lockout:** Emergency shutdown latches all actuators and high-voltage buses in de-energized safe states.
+- **Non-Volatile Blackbox Offload:** Diagnostic fault logs, sensor telemetry, and watchdog stack traces are securely written to non-volatile flash.
+- **Authorized Ground Clearance:** Physical inspection and signed maintenance clearance required before clearing failsafe lock.
 """
 
 
 def _get_valid_mission_intent_content() -> str:
-    return """| Attribute | Value |
+    return r"""| Attribute | Value |
 | :--- | :--- |
 | **Title** | Tactical Mission Intent & Execution Plan |
 | **Version** | 1.0.0 |
@@ -163,11 +218,18 @@ def _get_valid_mission_intent_content() -> str:
 | MoP-02 | MoP | Telemetry Latency Bound | tau_transport | 50.0 | 10.0 | ms |
 
 ## 4. Threat & Electronic Warfare (EW) / Cyber Environment Matrix
-| Threat ID | Threat Vector | Description | Severity | Autonomous Mitigation Rule |
-| :--- | :--- | :--- | :--- | :--- |
-| THR-01 | GNSS Spoofing / Jamming | Loss of carrier lock or pseudo-range jump | High | Revert to optical dead-reckoning and IMU integration |
-| THR-02 | RF Link Interception / Jamming | C2 uplink SNR < 6 dB | Medium | Switch frequency-hopping channel or activate PACE alternate link |
-| THR-03 | Cyber Ingress Attempt | Unauthorized packet on telemetry port | Critical | Immediate port isolation and cryptographic key cycle |
+| Threat ID | Threat Domain | Threat Vector | Technical Description | Severity | Detection Mechanism | Autonomous Mitigation Rule | Public Clause Citation |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `THR-KIN-01` | Kinetic | Ballistic projectile intercept | High-velocity physical impact trajectory | Critical | Optical/radar trajectory tracker | Execute evasive lateral displacement maneuver | MIL-STD-882E §4.3 |
+| `THR-MEC-01` | Mechanical | Actuator / motor jam | Motor bearing seizure or control surface lock | Critical | RPM feedback disparity & current spike | Differential thrust compensation and divert to base | MIL-STD-882E §4.3 |
+| `THR-PWR-01` | Power/Thermal | Battery cell thermal runaway | Internal cell short circuit causing thermal rise | Catastrophic | BMS thermistor array temperature trip | Disconnect faulted pack module and route to divert site | MIL-STD-882E §4.3 |
+| `THR-ENV-01` | Environmental | Severe convective wind gust | Sudden microburst exceeding flight stability envelope | High | Pitot-static air data velocity spike | Transition to high-stability penetration attitude | MIL-STD-810H Method 514.8 |
+| `THR-EWC-01` | EW | GNSS carrier jamming | C/N0 signal drop below tracking threshold | High | RAIM integrity alarm & signal-to-noise monitor | Revert to optical dead-reckoning and alternate PACE tier | STANAG 4586 §3.2 |
+| `THR-CYB-01` | Cyber | Telemetry packet injection | Unauthenticated frames on command uplink port | Critical | Cryptographic HMAC validation failure | Drop unauthorized frames, cycle crypto keys, isolate port | NIST SP 800-82r3 §5.2 |
+| `THR-OPT-01` | Optical | Directed laser blinding | High-intensity optical dazzle on vision tracker | High | Optical sensor pixel saturation detector | Deploy mechanical shutter filter and switch sensor modality | MIL-STD-882E §4.3 |
+| `THR-SIG-01` | Signature | Acoustic emission resonance | Airframe acoustic signature spike in quiet zone | Medium | Internal acoustic microphone / vibration transducer | Throttle back rotor RPM schedule to reduce observability | MIL-STD-882E §4.3 |
+| `THR-HUM-01` | Human Factors | Command input disparity | Conflicting pilot mode override command sequence | High | Command rate-of-change and state validity monitor | Enforce flight envelope protection and interlock rules | ISO/IEC/IEEE 29148 §6.4 |
+| `THR-CBRN-01` | CBRN | Corrosive aerosol plume | Ingress into toxic chemical atmospheric cloud | High | Optical particulate counter and chemical transducer | Seal internal avionics bay vents and initiate emergency divert | MIL-STD-810H Method 509.7 |
 
 ## 5. PACE C2 Link Communications Plan
 | PACE Tier | Link Medium | Frequency Band | Nominal Data Rate | Heartbeat Timeout | Priority / Role |
@@ -178,14 +240,14 @@ def _get_valid_mission_intent_content() -> str:
 | **Emergency** | Satellite Iridium SBD | 1.6 GHz L-Band | 2.4 kbps | 10.0 s | Emergency Flight Termination & Geo-Beacon |
 
 ## 6. Rules of Engagement (ROE) & Weapon/Sensor Interlocks
-- **ROE-01:** System shall not execute autonomous descent below $30\\text{ m}$ without positive ground radar clearance.
+- **ROE-01:** System shall not execute autonomous descent below $30\text{ m}$ without positive ground radar clearance.
 - **ROE-02:** Optical sensor laser pointer requires active human-in-the-loop (HITL) authorization key.
 - **ROE-03:** Automated flight termination sequence requires two-person rule confirmation.
 
 ## 7. Airspace Deconfliction & U-space Dynamic Geo-Zones
-- **Primary Geofence Corridor:** Outer polygon bounding perimeter with $50\\text{ m}$ warning buffer.
-- **Keep-Out Zones (Dynamic):** Populated area buffer circles ($R = 300\\text{ m}$) marked NO-FLY.
-- **Separation Minima:** Maintain $150\\text{ m}$ vertical and $500\\text{ m}$ horizontal separation from non-cooperative targets.
+- **Primary Geofence Corridor:** Outer polygon bounding perimeter with $50\text{ m}$ warning buffer.
+- **Keep-Out Zones (Dynamic):** Populated area buffer circles ($R = 300\text{ m}$) marked NO-FLY.
+- **Separation Minima:** Maintain $150\text{ m}$ vertical and $500\text{ m}$ horizontal separation from non-cooperative targets.
 
 ## 8. Go/No-Go Decision Matrix
 | Check ID | Phase | Parameter / Check | Threshold Condition | Sensor / Mechanism | Go / No-Go Action |
@@ -198,10 +260,10 @@ def _get_valid_mission_intent_content() -> str:
 ## 9. Bingo Energy Mathematics & Secondary Divert Protocols
 Bingo Energy dynamics model:
 $$
-\\begin{aligned}
-E_{\\mathrm{bingo}}(t) &= E_{\\mathrm{return}}(\\mathbf{p}(t), \\mathbf{p}_{\\mathrm{dest}}) + E_{\\mathrm{divert}}(\\mathbf{p}_{\\mathrm{dest}}, \\mathbf{p}_{\\mathrm{alt}}) + E_{\\mathrm{reserve}} + E_{\\mathrm{contingency}} \\\\
-E_{\\mathrm{reserve}} &\\ge 0.20 \\cdot E_{\\mathrm{capacity}}
-\\end{aligned}
+\begin{aligned}
+E_{\mathrm{bingo}}(t) &= E_{\mathrm{return}}(\mathbf{p}(t), \mathbf{p}_{\mathrm{dest}}) + E_{\mathrm{divert}}(\mathbf{p}_{\mathrm{dest}}, \mathbf{p}_{\mathrm{alt}}) + E_{\mathrm{reserve}} + E_{\mathrm{contingency}} \\
+E_{\mathrm{reserve}} &\ge 0.20 \cdot E_{\mathrm{capacity}}
+\end{aligned}
 $$
 
 | Energy Parameter | Symbol | Value | Units | Constraint Rule |
@@ -658,6 +720,131 @@ class TestConOpsAndMissionIntentValidators(unittest.TestCase):
 
             for sec_idx in range(1, 11):
                 self.assertIn(f"## {sec_idx}.", m_txt)
+
+            # Assert subsections 12.1 through 12.6 and statechart presence in synthesized ConOps
+            for sub_idx in range(1, 7):
+                self.assertIn(f"### 12.{sub_idx}", c_txt)
+            self.assertIn("stateDiagram-v2", c_txt)
+
+            # Assert 10 threat domains presence in synthesized Mission Intent
+            threat_domains = [
+                "Kinetic", "Mechanical", "Power/Thermal", "Environmental",
+                "EW", "Cyber", "Optical", "Signature", "Human Factors", "CBRN"
+            ]
+            for domain in threat_domains:
+                self.assertIn(domain, m_txt)
+
+    def test_conops_missing_emergency_depth_subsections_fails(self):
+        """ConOps missing subsections 12.3..12.6 fails with conops-emergency-depth-missing."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            os.makedirs(conops_dir, exist_ok=True)
+
+            content = _get_valid_conops_content()
+            # Truncate after 12.2 (removing 12.3..12.6)
+            idx_12_3 = content.find("### 12.3")
+            self.assertNotEqual(idx_12_3, -1)
+            content_truncated = content[:idx_12_3]
+
+            with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
+                f.write(content_truncated)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            conops_val = ConopsCompletenessValidator()
+            findings = conops_val.validate(repo)
+
+            depth_errors = [f for f in findings if f.rule_id == "conops-emergency-depth-missing"]
+            self.assertEqual(len(depth_errors), 1)
+            missing = depth_errors[0].detail.get("missing_subsections", [])
+            self.assertTrue(any("12.3" in m for m in missing))
+            self.assertTrue(any("12.4" in m for m in missing))
+            self.assertTrue(any("12.5" in m for m in missing))
+            self.assertTrue(any("12.6" in m for m in missing))
+
+    def test_conops_missing_emergency_statechart_fails(self):
+        """ConOps missing Mermaid statechart in Section 12 fails with conops-emergency-statechart-missing."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            os.makedirs(conops_dir, exist_ok=True)
+
+            content = _get_valid_conops_content()
+            # Remove Mermaid stateDiagram-v2 block
+            content_no_chart = re.sub(r'```mermaid[\s\S]*?```', '', content)
+
+            with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
+                f.write(content_no_chart)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            conops_val = ConopsCompletenessValidator()
+            findings = conops_val.validate(repo)
+
+            chart_errors = [f for f in findings if f.rule_id == "conops-emergency-statechart-missing"]
+            self.assertEqual(len(chart_errors), 1)
+
+    def test_conops_complete_emergency_depth_and_statechart_passes(self):
+        """ConOps with complete Section 12 depth and Mermaid statechart passes Gate 26 validation."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            os.makedirs(conops_dir, exist_ok=True)
+
+            with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
+                f.write(_get_valid_conops_content())
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            conops_val = ConopsCompletenessValidator()
+            findings = conops_val.validate(repo)
+
+            self.assertEqual(findings, [])
+
+    def test_mission_intent_missing_threat_domains_fails(self):
+        """Mission Intent missing required threat domains fails with mission-threat-domain-missing."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            os.makedirs(conops_dir, exist_ok=True)
+
+            content = _get_valid_mission_intent_content()
+            # Replace 10-domain threat matrix with only EW and Cyber rows
+            sparse_sec4 = """## 4. Threat & Electronic Warfare (EW) / Cyber Environment Matrix
+| Threat ID | Threat Domain | Threat Vector | Technical Description | Severity | Detection Mechanism | Autonomous Mitigation Rule | Public Clause Citation |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `THR-EWC-01` | EW | GNSS carrier jamming | C/N0 drop | High | RAIM alert | Revert to inertial dead-reckoning | STANAG 4586 §3.2 |
+| `THR-CYB-01` | Cyber | Telemetry packet injection | Unauthenticated frames | Critical | HMAC failure | Drop unauthorized frames | NIST SP 800-82r3 §5.2 |
+"""
+            content_sparse = re.sub(r'## 4\. Threat[\s\S]*?(?=## 5\.)', sparse_sec4, content)
+
+            with open(os.path.join(conops_dir, "MISSION_INTENT.md"), "w", encoding="utf-8") as f:
+                f.write(content_sparse)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            mission_val = MissionIntentCompletenessValidator()
+            findings = mission_val.validate(repo)
+
+            threat_errors = [f for f in findings if f.rule_id == "mission-threat-domain-missing"]
+            self.assertEqual(len(threat_errors), 1)
+            missing = threat_errors[0].detail.get("missing_domains", [])
+            self.assertIn("Kinetic", missing)
+            self.assertIn("Mechanical", missing)
+            self.assertIn("Power/Thermal", missing)
+            self.assertIn("Environmental", missing)
+            self.assertIn("Optical", missing)
+            self.assertIn("Signature", missing)
+            self.assertIn("Human Factors", missing)
+            self.assertIn("CBRN", missing)
+
+    def test_mission_intent_complete_10_domain_threat_matrix_passes(self):
+        """Mission Intent with all 10 threat domains passes Gate 26 threat matrix density validation."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            os.makedirs(conops_dir, exist_ok=True)
+
+            with open(os.path.join(conops_dir, "MISSION_INTENT.md"), "w", encoding="utf-8") as f:
+                f.write(_get_valid_mission_intent_content())
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            mission_val = MissionIntentCompletenessValidator()
+            findings = mission_val.validate(repo)
+
+            self.assertEqual(findings, [])
 
     def test_sora_math_helper(self):
         """Verify SORA Ground Risk Buffer calculation helper."""
