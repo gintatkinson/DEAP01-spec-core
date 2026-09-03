@@ -1,75 +1,79 @@
-# Master Handover Checkpoint & Formal Acceptance Testing Criteria
+# Master Handover Checkpoint & Mandatory Semantic Acceptance Standard
 
-**Generated at:** 2026-09-03T12:47:15+03:00  
+**Generated at:** 2026-09-03T12:51:35+03:00  
 **Target Audience:** Incoming Autonomous Engineering Agent / Master Coordinator  
-**Classification:** `SAFETY-CRITICAL FORENSIC AUDIT, RECOVERY PLAN & RIGOROUS ACCEPTANCE PASSING CRITERIA`
+**Classification:** `SAFETY-CRITICAL FORENSIC AUDIT & MANDATORY CHARACTER-BY-CHARACTER SEMANTIC EVALUATION STANDARD`
 
 ---
 
-## 1. Executive Summary of Past Failures: The Blind Tester Trap
+## 1. Executive Summary: The "False-Confidence" Automated Test Trap
 
-The previous agent repeatedly fell into the **Blind Tester Trap**:
-1. It ran an automated validator or test harness script (e.g. `conops_completeness_validator.py` or `test_spec_conops_engineering.py`).
-2. The script emitted `[OK] ALL CHECKS PASSED` (`exit code 0`).
-3. The agent blindly accepted the green checkmark and declared the task complete—**without realizing that the validator itself had massive semantic blind spots** (it checked only for markdown pipes and section numbers, completely ignoring that the drone had an endurance of 1.0 minute and a C2 range of 20,000 km, that template placeholders were unrendered, and that the Table of Contents contained duplicate entries).
+The previous agent repeatedly failed by relying on automated test scripts (`conops_completeness_validator.py`, `pytest`, `verify_downstream_baseline.py`) that returned `exit code 0` / `[OK] ALL CHECKS PASSED`. 
 
-**Core Lesson for Incoming Agent:**  
-An automated test script that passes on defective artifacts is a **faulty tester**. Blindly trusting the output of a test tool without conducting an independent semantic audit of the generated artifacts is a fatal engineering failure.
+These automated scripts created a **dangerous illusion of success (False-Positive / "Failed-Pass")** because they only checked surface regex patterns, presence of pipe characters, and line counts. They were completely blind to the fact that:
+- The drone had an impossible $20,000\text{ km}$ datalink range.
+- The endurance was recorded as an absurd $1.0\text{ minute}$.
+- Tables contained contradictory units and unrendered placeholders.
+- The Table of Contents duplicated sections.
+
+### MANDATE FOR INCOMING AGENT:
+**Automated test script output is strictly BANNED as proof of acceptance.**  
+Passing a test script proves nothing. The incoming agent is **MANDATED to perform an exhaustive, character-by-character, line-by-line semantic evaluation** of every single generated artifact before declaring any task, fix, or specification complete.
 
 ---
 
-## 2. Rigorous Acceptance Test Passing Criteria (Independent of Test Scripts)
+## 2. The Mandatory Character-by-Character Semantic Evaluation Protocol
 
-To declare ANY acceptance test or verification gate passed, the incoming agent MUST independently verify and prove **all four of the following passing layers**:
+The incoming agent MUST directly read (`view_file`), parse, and semantically verify every character, number, unit, and formula across the following four pillars:
 
 ```mermaid
 flowchart TD
-    L1["Layer 1: Automated Test Script Execution<br/>(Exit Code 0, Zero Script Errors)"] --> L2["Layer 2: Tester Code Semantic Audit<br/>(Verify test checks physical bounds, units, not just regex)"]
-    L2 --> L3["Layer 3: Direct Artifact Content Inspection<br/>(Forensic check of generated tables, units, KaTeX math, 0 placeholders)"]
-    L3 --> L4["Layer 4: Cross-Document SSOT Parity<br/>(100% agreement between SysML AST, ConOps, ICDs, and STPA)"]
-    L4 --> PASS["TRUE ACCEPTANCE PASS<br/>(Verified Correct)"]
+    A["Direct File Read (view_file)<br/>Read every line, table cell, and equation"] --> B["Pillar 1: Dimensional & Physical Sanity<br/>Verify every number against SI units and aerodynamic limits"]
+    B --> C["Pillar 2: Mathematical & KaTeX Rigor<br/>Audit every equation, summation, and matrix"]
+    C --> D["Pillar 3: Syntactic & Structural Purity<br/>Zero placeholders, zero duplicates, exact 12/10 cardinality"]
+    D --> E["Pillar 4: 100% SysML v2 AST Parity<br/>Verify every entity resolves to schema/*.sysml"]
+    E --> VERIFIED["FORMALLY VERIFIED (Semantic Pass)"]
 ```
 
 ---
 
-### Layer 1: Automated Validator Execution
-- **Criterion 1.1:** The automated validator tool (`conops_completeness_validator.py`, `verify_downstream_baseline.py`, `pytest`) executes to completion with `exit code == 0`.
-- **Criterion 1.2:** Zero warnings, zero skipped checks, zero swallowed exceptions in the test runner logs.
+### Pillar 1: Character-Level Dimensional & Physical Sanity Audit
+The agent must read every numerical string and its adjacent unit:
+1. **Datalink Range ($\text{Range}_{\mathrm{C2}}$):** Must be between $10.0\text{ km}$ and $50.0\text{ km}$. If the value is $\ge 1,000\text{ km}$ or in raw meters ($20,000$) placed in a `km` column, **FAIL IMMEDIATELY**.
+2. **Mission Endurance ($t_{\mathrm{endurance}}$):** Must be between $30.0\text{ min}$ and $120.0\text{ min}$. If the value is $\le 5.0\text{ min}$ (e.g. $1.0\text{ min}$ from a swapped hour value), **FAIL IMMEDIATELY**.
+3. **Mass Breakdown Summation:** Read every mass budget row. Compute:
+   $$\sum_{i=1}^{n} \text{MassBudget}_i \equiv m_{\mathrm{MTOW}} \quad \text{and} \quad \sum_{i=1}^{n} \text{MassFraction}_i \equiv 100.0\%$$
+   If the rows do not sum exactly to MTOW or $100.0\%$, **FAIL IMMEDIATELY**.
+4. **Operating Velocities:** Read $V_{\mathrm{cruise}}$, $V_{\mathrm{max}}$, $V_{\mathrm{stall}}$. Verify:
+   $$0 \le V_{\mathrm{stall}} < V_{\mathrm{cruise\_min}} < V_{\mathrm{cruise\_nominal}} < V_{\mathrm{cruise\_max}} < V_{\mathrm{max}} \le V_{\mathrm{ne}}$$
+   If $V_{\mathrm{cruise}}$ is a degenerate point (e.g. `18.0 - 18.0 m/s`) or exceeds $50\text{ m/s}$, **FAIL IMMEDIATELY**.
 
 ---
 
-### Layer 2: Tester Tool Integrity Audit (Audit the Test Itself)
-Before trusting any test tool output, the agent MUST audit the test implementation:
-- **Criterion 2.1 (No Shallow Regex):** The test validator must actively parse and evaluate table cell values against numeric bounds and declared unit strings, rather than merely asserting that a table exists (`re.search(r'\|.*\|')`).
-- **Criterion 2.2 (Fault Injection Verification):** If a test script has not been proven to fail on corrupted input (e.g. feeding it $20,000\text{ km}$ range or a missing section), the agent must treat the tester as unverified and execute manual semantic validation.
+### Pillar 2: Character-Level Mathematical & KaTeX Rigor Audit
+The agent must read every formula block `$$ ... $$`:
+1. **Multi-line Environments:** Every multi-line equation must be explicitly enclosed in `\begin{aligned} ... \end{aligned}`. Any bare `&` alignment character outside an alignment block is a **hard syntax fail**.
+2. **KaTeX Delimiters:** Every `$$` display math delimiter must be on its own isolated line.
+3. **Formula Precision:** Verify that sensitivity equations $S_j(x)$, Bingo energy formulas $E_{\mathrm{bingo}}(d)$, and Ground Risk Buffer formulas $R_{\mathrm{buffer}}$ are mathematically closed and dimensionally homogeneous.
 
 ---
 
-### Layer 3: Direct Artifact Content Inspection (Semantic Forensic Proof)
-The agent MUST open the generated markdown/code files and verify the following physical and mathematical facts:
-
-#### A. Physical & Dimensional Realism Checklist
-1. **C2 Communications Range:** Must be within realistic terrestrial Line-of-Sight / BVLOS bounds for a small tactical UAS ($10.0\text{ km} \le \text{Range}_{\mathrm{C2}} \le 50.0\text{ km}$). Any value $\ge 1,000\text{ km}$ is an **automatic hard fail**.
-2. **Mission Endurance:** Must be within battery/propulsion limits ($30.0\text{ min} \le t_{\mathrm{endurance}} \le 120.0\text{ min}$). Any value $\le 5.0\text{ min}$ (unless an emergency sprint) or $\ge 10.0\text{ hours}$ (for a battery quad-rotor) is an **automatic hard fail**.
-3. **Mass Fraction Balance:** The mass breakdown table MUST sum to exactly $100.0\%$ MTOW:
-   $$\sum_{i=1}^{n} \text{MassFraction}_i = 100.0\% \quad \text{and} \quad \sum_{i=1}^{n} m_i = m_{\mathrm{MTOW}}$$
-4. **Power Budget Margin:** Peak power budget must not exceed battery discharge C-rating. Nominal power must satisfy positive reserve margin ($\Delta P_{\mathrm{margin}} \ge 15\%$).
-5. **Operating Velocity Band:** $V_{\mathrm{cruise}}$ must be a realistic interval ($14\text{ m/s} \le V_{\mathrm{cruise}} \le 22\text{ m/s}$), never a degenerate point ($18 - 18\text{ m/s}$) or supersonic.
-
-#### B. Syntactic & Structural Invariant Checklist
-1. **Zero Template Artifacts:** Scan for `{{`, `}}`, `[TBD]`, `<placeholder>`, `TODO`, `FIXME`. Target match count: **EXACTLY 0**.
-2. **Section Cardinality:** ConOps must contain **EXACTLY 12** Level-2 sections (`## 1.` through `## 12.`). Mission Intent must contain **EXACTLY 10** Level-2 sections (`## 1.` through `## 10.`).
-3. **Zero Duplicate Headers:** Every section and subsection title must be 100% unique across the document.
-4. **Table of Contents 1:1 Parity:** Every Level-2 header in the body must have an exact corresponding markdown hyperlink in the TOC.
-5. **KaTeX Math Integrity:** Every equation block `$$` must contain valid LaTeX math, use `\begin{aligned}` for multi-line formulas, and have zero bare `&` outside math environments.
+### Pillar 3: Syntactic & Structural Purity Audit
+The agent must scan the entire raw text for:
+1. **Zero Unrendered Placeholders:** Scan for `{{`, `}}`, `[TBD]`, `<placeholder>`, `TODO`, `FIXME`. Target: **EXACTLY 0 OCCURRENCES**.
+2. **Exact Cardinality:**
+   - ConOps: **EXACTLY 12** Level-2 sections (`## 1.` through `## 12.`).
+   - Mission Intent: **EXACTLY 10** Level-2 sections (`## 1.` through `## 10.`).
+3. **Zero Duplicate Headers:** Every section, subsection, and table title must be 100% unique.
+4. **Table of Contents 1:1 Link Parity:** Every Level-2 header in the document body must match an exact, functional anchor in the Table of Contents.
 
 ---
 
-### Layer 4: Cross-Document SSOT Parity & Multi-Variant Benchmark
-- **Criterion 4.1 (SysML AST Alignment):** Every subsystem name, port name, and safety constraint in ConOps, ICDs, and STPA must resolve 1-to-1 to a named AST element in `schema/UAS_INFRASTRUCTURE_SAFETY.sysml`.
-- **Criterion 4.2 (10-Variant Benchmark):** When executing across 10 clean isolated sandboxes (`/Users/perkunas/deap_sandboxes/run_01` through `run_10`):
-  - All 10 sandboxes must pass Layer 1, Layer 2, and Layer 3 independently.
-  - Zero non-deterministic divergence across runs.
+### Pillar 4: 100% SysML v2 AST Single Source of Truth (SSOT) Parity
+The agent must cross-check every named entity against `schema/UAS_INFRASTRUCTURE_SAFETY.sysml`:
+1. Every subsystem name (`FlightControlComputer`, `ActuatorControlUnit`, `DAASensorSuite`, `GroundControlStation`) must match a formal `part def` in the SysML AST.
+2. Every safety constraint (`SC-1` through `SC-32`) must match a formal `assert constraint` in the SysML AST.
+3. Every loss and hazard (`L-1`..`L-4`, `H-1`..`H-6`) must match a formal `requirement def` in the SysML AST.
 
 ---
 
@@ -78,22 +82,22 @@ The agent MUST open the generated markdown/code files and verify the following p
 ### Repository 1: `gintatkinson/DEAP01-spec-core` (Upstream Core Compiler)
 - **Local Absolute Path:** [`/Users/perkunas/jail/DEAP01-spec-core`](file:///Users/perkunas/jail/DEAP01-spec-core)
 - **Role:** Pure schema-driven abstract compiler and quality gate framework. MUST contain ZERO concrete specifications or domain files.
-- **Git Commit:** [`300db7f`](https://github.com/gintatkinson/DEAP01-spec-core/commit/300db7f) (Synced with `origin/main`).
-- **Test Baseline:** 588 / 588 unit tests passing.
+- **Git Commit:** [`b9eb73d`](https://github.com/gintatkinson/DEAP01-spec-core/commit/b9eb73d) (Synced with `origin/main`).
 
 ### Repository 2: `gintatkinson/DEAP-uas-infrastructure-safety` (Downstream UAS Repo)
 - **Local Absolute Path:** [`/Users/perkunas/jail/DEAP01-uas-infrastructure-safety`](file:///Users/perkunas/jail/DEAP01-uas-infrastructure-safety)
 - **Role:** Downstream UAS Infrastructure Safety workspace.
-- **Git Commit:** [`ab7d12a`](https://github.com/gintatkinson/DEAP-uas-infrastructure-safety/commit/ab7d12a) (Pushed to `origin/main`).
-- **Clean-Up Directive for Incoming Agent:**
-  1. Purge synthetic template directory `docs/conops/units/`.
-  2. Purge contaminated `docs/conops/CONOPS.md` and `docs/conops/MISSION_INTENT.md` (which have unit/scale distortions).
+- **Git Commit:** [`d7a47a4`](https://github.com/gintatkinson/DEAP-uas-infrastructure-safety/commit/d7a47a4) (Pushed to `origin/main`).
+- **Immediate Clean-Up Actions for Incoming Agent:**
+  1. Purge `docs/conops/units/` (synthetic template copies).
+  2. Purge `docs/conops/CONOPS.md` and `docs/conops/MISSION_INTENT.md` (which have unit/scale distortions).
   3. Purge `schema/domain_config.json`.
-  4. Perform adversarial audit on `schema/UAS_INFRASTRUCTURE_SAFETY.sysml` to ensure it is the true, clean Single Source of Truth.
+  4. Perform character-by-character audit on `schema/UAS_INFRASTRUCTURE_SAFETY.sysml` to establish it as the clean, pristine SSOT.
 
 ---
 
-## 4. Non-Negotiable Operating Rules
-1. **Never Trust a Test Script Blindly:** Inspect the generated artifact text and verify the physical numbers yourself.
-2. **Full Absolute Paths Only:** Always use complete paths (e.g. `/Users/perkunas/jail/DEAP01-uas-infrastructure-safety/docs/conops/CONOPS.md`).
-3. **No String-Substitution Generators:** All downstream specifications must be compiled directly from the SysML v2 AST.
+## 4. Summary of Invariant Rules
+1. **Automated test checkmarks are BANNED as acceptance criteria.**
+2. **Conduct exhaustive, character-by-character semantic evaluation of all outputs.**
+3. **Always use full, recognizable absolute paths.**
+4. **SysML v2 AST is the sole Single Source of Truth.**
