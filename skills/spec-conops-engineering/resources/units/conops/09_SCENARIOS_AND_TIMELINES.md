@@ -91,7 +91,7 @@ stateDiagram-v2
         [*] --> MultiModal_Sensing
         MultiModal_Sensing --> Feature_Fusion_Evaluation : SensorFrames_Captured
         Feature_Fusion_Evaluation --> Confidence_Scoring : CrossModal_Correlated
-        Confidence_Scoring --> [*] : C_PID >= C_threshold
+        Confidence_Scoring --> [*] : "C_PID >= C_threshold"
     }
     
     Phase_PID_InterlockCheck --> Phase_DualConsent_ArmingExecution : ROE_02_PID_Verified && ROE_05_Zone_Clear
@@ -102,7 +102,7 @@ stateDiagram-v2
         [*] --> Authorization_Request
         Authorization_Request --> DualKey_Submission_Pending : Token_Dispatched
         DualKey_Submission_Pending --> Cryptographic_Validation : Keys_Ingested
-        Cryptographic_Validation --> Terminal_Action_Armed : Signatures_Valid && Delta_t_arm <= tau_arm_max
+        Cryptographic_Validation --> Terminal_Action_Armed : "Signatures_Valid && Delta_t_arm <= tau_arm_max"
         Terminal_Action_Armed --> Action_Actuation_Fired : Execution_Trigger_Engaged
         Action_Actuation_Fired --> [*]
     }

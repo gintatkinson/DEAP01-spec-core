@@ -11,7 +11,7 @@
 The previous agent made severe architectural and judgment errors across both the upstream compiler (`DEAP01-spec-core`) and downstream domain repositories (`DEAP01-uas-infrastructure-safety`):
 
 1. **Host Filesystem / Local Ingestion Contamination**:
-   - The agent ingested unmanaged, unverified local files from `/Users/perkunas/` (`DEAP_SYSML_V2_SAFETY_MODEL_SPECIFICATION.sysml`, `DEAP_FLIGHT_SYSTEMS_SAFETY_CONCEPT_PAPER.txt`, `UDS-STP-FMECA/`, `UAV Safety Project WBS.docx`) directly into `DEAP01-uas-infrastructure-safety` without establishing cryptographic provenance, verifying whether they were stale/abandoned drafts, or conducting an adversarial audit.
+   - The agent ingested unmanaged, unverified local files from host storage (`DEAP_SYSML_V2_SAFETY_MODEL_SPECIFICATION.sysml`, `DEAP_FLIGHT_SYSTEMS_SAFETY_CONCEPT_PAPER.txt`, `UDS-STP-FMECA/`, `UAV Safety Project WBS.docx`) directly into `DEAP01-uas-infrastructure-safety` without establishing cryptographic provenance, verifying whether they were stale/abandoned drafts, or conducting an adversarial audit.
 2. **Synthetic Template Pollution in ConOps**:
    - The agent copied generic upstream template units (`skills/spec-conops-engineering/resources/units/`) into `DEAP01-uas-infrastructure-safety/docs/conops/units/`.
    - The agent then ran `assemble_conops.py` with a synthetic `domain_config.json` containing severe dimensional scaling mismatches, producing an assembled `CONOPS.md` (1,581 lines) and `MISSION_INTENT.md` (430 lines) full of blatant physical absurdities (e.g. $20,000\text{ km}$ C2 range for a $20\text{ kg}$ drone, $1.0\text{ minute}$ endurance).
@@ -24,13 +24,13 @@ The previous agent made severe architectural and judgment errors across both the
 ## 2. Inventory of Repositories & Current Git States
 
 ### Repository 1: `gintatkinson/DEAP01-spec-core` (Upstream Core Compiler)
-- **Local Absolute Path:** [`/Users/perkunas/jail/DEAP01-spec-core`](file:///Users/perkunas/jail/DEAP01-spec-core)
+- **Local Relative Path:** `../DEAP01-spec-core`
 - **Role:** Pure schema-driven abstract compiler and quality gate framework. MUST contain ZERO concrete specifications or domain files.
 - **Git Commit:** [`9ed9a85`](https://github.com/gintatkinson/DEAP01-spec-core/commit/9ed9a85) (100% clean, synced with `origin/main`).
 - **Test Baseline:** 588 / 588 unit tests passing.
 
 ### Repository 2: `gintatkinson/DEAP-uas-infrastructure-safety` (Contaminated Downstream Repo)
-- **Local Absolute Path:** [`/Users/perkunas/jail/DEAP01-uas-infrastructure-safety`](file:///Users/perkunas/jail/DEAP01-uas-infrastructure-safety)
+- **Local Relative Path:** `../DEAP01-uas-infrastructure-safety`
 - **Role:** Downstream UAS Infrastructure Safety workspace.
 - **Git Commit:** [`5fd008d`](https://github.com/gintatkinson/DEAP-uas-infrastructure-safety/commit/5fd008d) (Pushed to `origin/main`).
 - **Contaminated Files to Clean Up / Re-evaluate:**
@@ -42,7 +42,7 @@ The previous agent made severe architectural and judgment errors across both the
   - `docs/research/fmeca/` (Ingested unmanaged files).
 
 ### Repository 3: `gintatkinson/DEAP-avionic-flight-safety` (Downstream Avionics Repo)
-- **Local Absolute Path:** [`/Users/perkunas/jail/DEAP01-avionic-flight-safety`](file:///Users/perkunas/jail/DEAP01-avionic-flight-safety)
+- **Local Relative Path:** `../DEAP01-avionic-flight-safety`
 - **Role:** Downstream Airborne Flight Safety / DO-178C DAL-A workspace.
 - **Git Status:** Unpopulated clean landing zones.
 
@@ -74,5 +74,5 @@ The previous agent made severe architectural and judgment errors across both the
 
 ## 4. Key Rules to Remember
 - **SysML v2 is the SSOT**: Never generate specifications by string substitution on markdown templates. All data must derive from the SysML AST.
-- **Full Absolute Paths Required**: Always refer to files by their exact absolute paths (e.g. `/Users/perkunas/jail/DEAP01-uas-infrastructure-safety/schema/UAS_INFRASTRUCTURE_SAFETY.sysml`).
+- **Exact Relative Paths Required**: Always refer to files by their exact relative workspace paths (e.g. `../DEAP01-uas-infrastructure-safety/schema/UAS_INFRASTRUCTURE_SAFETY.sysml`).
 - **No Silent Assumptions**: Never pass a test based on `exit code 0`. Read and semantically verify the output.
