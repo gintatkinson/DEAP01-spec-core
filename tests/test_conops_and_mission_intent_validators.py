@@ -1928,8 +1928,79 @@ class TestConOpsAndMissionIntentValidators(unittest.TestCase):
             self.assertIn("Mission Intent Completeness Violations Identified", res.stdout)
             self.assertIn("{{MISSION_SYSTEM_NAME}}", res.stdout + res.stderr)
 
+    def test_conops_generalized_pugh_sensitivity_formulas_pass(self):
+        """
+        Verify that generalized sensitivity formulas including S_j(w_{\mathrm{cold}}),
+        S_j(P_{\mathrm{jam}}), S_j(w), S_j(w_i), S_j(m), S_{j}(w), and S_j[w]
+        pass Section 4 Pugh decision matrix validation.
+        Reference Fixes #146.
+        """
+        test_formulas = [
+            r"S_j(w_{\mathrm{cold}}) &= \sum_{i=1}^{M} w_{i,\mathrm{cold}} \cdot c_{ij}",
+            r"S_j(P_{\mathrm{jam}}) &= \sum_{i=1}^{M} w_i(P_{\mathrm{jam}}) \cdot c_{ij}",
+            r"S_j(w) &= \sum_{i=1}^{M} w_i \cdot c_{ij}",
+            r"S_j(w_i) &= \sum_{i=1}^{M} w_i \cdot c_{ij}",
+            r"S_j(m) &= \sum_{i=1}^{M} w_i(m) \cdot c_{ij}",
+            r"S_{j}(w) &= \sum_{i=1}^{M} w_i \cdot c_{ij}",
+            r"S_j[w] &= \sum_{i=1}^{M} w_i \cdot c_{ij}",
+        ]
+        base_conops = _get_valid_conops_content()
+        val = ConopsCompletenessValidator()
+
+        for formula in test_formulas:
+            custom_conops = re.sub(
+                r'S_j\(w\)\s*&=\s*\\sum_\{i=1\}\^\{M\}\s*w_i\s*\\cdot\s*c_\{ij\}',
+                lambda m, f=formula: f,
+                base_conops,
+            )
+            findings = val._validate_conops_text(custom_conops, "docs/conops/CONOPS.md")
+            sens_findings = [f for f in findings if f.rule_id == "conops-pugh-sensitivity-missing"]
+            self.assertEqual(
+                len(sens_findings),
+                0,
+                f"Formula '{formula}' unexpectedly failed sensitivity validation: {sens_findings}",
+            )
+
+    def test_mission_intent_ew_threat_domain_variations_pass(self):
+        """
+        Verify that EW domain variations including 'Electronic Warfare (EW) / Electromagnetic / RF',
+        'Electromagnetic/RF', 'Electromagnetic', 'Electronic Warfare', 'EW', 'rf jamming', 'gnss jamming',
+        'thr-ew', and 'thr-ewc' are all matched by the EW threat domain validator.
+        Reference Fixes #146.
+        """
+        ew_variations = [
+            "Electronic Warfare (EW) / Electromagnetic / RF",
+            "Electromagnetic/RF",
+            "Electromagnetic / RF",
+            "Electromagnetic",
+            "Electronic Warfare",
+            "EW",
+            "RF Jamming",
+            "GNSS Jamming",
+            "THR-EW",
+            "THR-EWC",
+        ]
+        base_mission = _get_valid_mission_intent_content()
+        val = MissionIntentCompletenessValidator()
+
+        for ew_label in ew_variations:
+            # Replace the EW row domain in the valid mission intent
+            custom_mission = re.sub(
+                r'\| `THR-EWC-01` \| [^|]+ \|',
+                f'| `THR-EWC-01` | {ew_label} |',
+                base_mission,
+            )
+            findings = val._validate_mission_text(custom_mission, "docs/conops/MISSION_INTENT.md")
+            domain_findings = [f for f in findings if f.rule_id == "mission-threat-domain-missing"]
+            self.assertEqual(
+                len(domain_findings),
+                0,
+                f"EW domain label '{ew_label}' unexpectedly failed domain validation: {domain_findings}",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
 

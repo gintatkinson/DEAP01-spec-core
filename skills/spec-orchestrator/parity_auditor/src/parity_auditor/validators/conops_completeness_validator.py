@@ -912,8 +912,8 @@ class ConopsCompletenessValidator(IValidator):
 
         # Check for LaTeX sensitivity equation S_j(w)
         has_sensitivity_formula = bool(
-            re.search(r'S[_\s]*\{?j\}?\s*(?:\(\s*w\s*\)|\[\s*w\s*\]|\(w_i\))', sec4_content)
-            or re.search(r'S[_\s]*\{?j\}?\s*(?:\(\s*w\s*\)|\[\s*w\s*\]|\(w_i\))', content)
+            re.search(r'S[_\s]*\{?j\}?\s*(?:\([^\)]+\)|\[[^\]]+\])', sec4_content)
+            or re.search(r'S[_\s]*\{?j\}?\s*(?:\([^\)]+\)|\[[^\]]+\])', content)
         )
         has_math_block = bool(
             re.search(r'\$\$[\s\S]*?S[_\s]*\{?j\}?[\s\S]*?\$\$', sec4_content)
@@ -1191,7 +1191,7 @@ class MissionIntentCompletenessValidator(IValidator):
         {"name": "Mechanical", "pattern": r'\b(?:mechanical|structural|thr-mec|actuator\s+jam|flutter)\b'},
         {"name": "Power/Thermal", "pattern": r'\b(?:power/thermal|power\s*/\s*thermal|power\s+and\s+thermal|power|thermal|thr-pwr|thr-thm)\b'},
         {"name": "Environmental", "pattern": r'\b(?:environmental|atmospheric|weather|icing|precipitation|gust|thr-env)\b'},
-        {"name": "EW", "pattern": r'\b(?:ew\b|electronic\s+warfare|rf\s+jamming|gnss\s+jamming|thr-ew|thr-ewc)\b'},
+        {"name": "EW", "pattern": r'\b(?:ew\b|electronic\s+warfare|electromagnetic(?:\s*/\s*rf)?|rf\s+jamming|gnss\s+jamming|thr-ew|thr-ewc)\b'},
         {"name": "Cyber", "pattern": r'\b(?:cyber\b|cybersecurity|data\s+integrity|packet\s+injection|firmware\s+tampering|thr-cyb)\b'},
         {"name": "Optical", "pattern": r'\b(?:optical|laser\s+blinding|dazzling|camera\s+saturation|thr-opt)\b'},
         {"name": "Signature", "pattern": r'\b(?:signature|acoustic|infrared|rcs\b|radar\s+cross-section|thr-sig|thr-ac)\b'},
