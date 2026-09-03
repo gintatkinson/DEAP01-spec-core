@@ -106,15 +106,13 @@ def main():
     parser.add_argument(
         "--install",
         action="store_true",
-        help="Install git hooks and whitelist infrastructure",
+        help="Install git hooks and whitelist infrastructure (default action)",
     )
-    args = parser.parse_args()
-    if not args.install:
-        parser.print_help(sys.stderr)
-        sys.exit(1)
+    parser.parse_args()
 
     setup_git_hooks()
 
 
 if __name__ == "__main__":
     main()
+

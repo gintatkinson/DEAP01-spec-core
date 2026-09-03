@@ -1,0 +1,31 @@
+# ==============================================================================
+# DEAP Production GitLab CI/CD Pipeline Specification
+# Standard: RTCA DO-178C / DO-331 / ISO 15288 / ASTM F3269-17
+# ==============================================================================
+
+stages:
+  - lint
+  - test
+
+variables:
+  PYTHONUNBUFFERED: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+default:
+  image: python:3.11-slim
+  before_script:
+    - python3 --version
+    - export PYTHONPATH=".:skills/spec-orchestrator/parity_auditor/src:$PYTHONPATH"
+    - if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+lint:downstream-baseline:
+  stage: lint
+  script:
+    - echo "=== Running Downstream Baseline Conformance Gate ==="
+    - python3 scripts/verify_downstream_baseline.py
+
+test:unit-and-parity:
+  stage: test
+  script:
+    - echo "=== Running Pytest Verification Suite ==="
+    - python3 -m pytest tests/

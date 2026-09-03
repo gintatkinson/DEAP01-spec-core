@@ -169,7 +169,6 @@ if [ ! -e "$TARGET_DIR/schema" ]; then
 fi
 cp -P "$INSTALLER_ROOT/requirements.txt" "$TARGET_DIR/" 2>/dev/null || true
 cp -P "$INSTALLER_ROOT/pyproject.toml" "$TARGET_DIR/" 2>/dev/null || true
-cp -P "$INSTALLER_ROOT/.gitlab-ci.yml" "$TARGET_DIR/" 2>/dev/null || true
 if [ -f "$TARGET_DIR/.gitignore" ]; then
   cat "$INSTALLER_ROOT/.gitignore" >> "$TARGET_DIR/.gitignore"
   # Deduplicate lines in .gitignore
@@ -206,6 +205,15 @@ chmod +x "$TARGET_DIR"/scripts/*.sh "$TARGET_DIR"/scripts/*.py 2>/dev/null || tr
 
 # Apply provider configurations if specified
 if [ "$PROVIDER" = "gitlab" ] || [ -n "$GITLAB_GROUP" ] || [ "$GITLAB_URL" != "https://gitlab.com" ]; then
+  if [ -f "$INSTALLER_ROOT/.pipeline/templates/.gitlab-ci.yml" ]; then
+    cp -P "$INSTALLER_ROOT/.pipeline/templates/.gitlab-ci.yml" "$TARGET_DIR/.gitlab-ci.yml"
+  elif [ -f "$INSTALLER_ROOT/.pipeline/.gitlab-ci.yml" ]; then
+    cp -P "$INSTALLER_ROOT/.pipeline/.gitlab-ci.yml" "$TARGET_DIR/.gitlab-ci.yml"
+  elif [ -f "$TARGET_DIR/.pipeline/templates/.gitlab-ci.yml" ]; then
+    cp -P "$TARGET_DIR/.pipeline/templates/.gitlab-ci.yml" "$TARGET_DIR/.gitlab-ci.yml"
+  elif [ -f "$TARGET_DIR/.pipeline/.gitlab-ci.yml" ]; then
+    cp -P "$TARGET_DIR/.pipeline/.gitlab-ci.yml" "$TARGET_DIR/.gitlab-ci.yml"
+  fi
   for rules_file in "$TARGET_DIR/.pipeline/logical-ui/codebase_rules.json" "$TARGET_DIR/codebase_rules.json"; do
     if [ -f "$rules_file" ]; then
       python3 -c "
@@ -813,7 +821,7 @@ fi
 echo "Safety integrity test fixtures verified present (zero synthetic content generated)."
 
 if [ -f "$TARGET_DIR/scripts/setup_git_hooks.py" ]; then
-  (cd "$TARGET_DIR" && python3 scripts/setup_git_hooks.py) || true
+  (cd "$TARGET_DIR" && python3 scripts/setup_git_hooks.py --install) || true
 fi
 
 # Automatically bootstrap issue tracker label taxonomy

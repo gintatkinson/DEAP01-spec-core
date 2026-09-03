@@ -223,7 +223,15 @@ rm -rf ./.pipeline/upstream
 cp -RP ./.tmp-pipeline/.agents ./
 cp -RP ./.tmp-pipeline/scripts ./
 cp -RP ./.tmp-pipeline/tests ./
-cp ./.tmp-pipeline/.gitlab-ci.yml ./
+if [ ! -f ./README.md ]; then
+  if [ -f ./.tmp-pipeline/README.md ]; then
+    cp ./.tmp-pipeline/README.md ./
+  fi
+fi
+# For GitLab Customer Projects:
+if [ -f ./.tmp-pipeline/.pipeline/templates/.gitlab-ci.yml ]; then
+  cp ./.tmp-pipeline/.pipeline/templates/.gitlab-ci.yml ./.gitlab-ci.yml
+fi
 if [ -f ./.gitignore ]; then
   cat ./.tmp-pipeline/.gitignore >> ./.gitignore
 else
