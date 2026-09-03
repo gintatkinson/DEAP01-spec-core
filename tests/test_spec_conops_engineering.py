@@ -33,6 +33,8 @@ CONOPS_09_SCENARIOS_PATH = os.path.join(REPO_ROOT, "skills", "spec-conops-engine
 AGENTS_CONOPS_09_SCENARIOS_PATH = os.path.join(REPO_ROOT, ".agents", "skills", "spec-conops-engineering", "resources", "units", "conops", "09_SCENARIOS_AND_TIMELINES.md")
 CONOPS_11_TRADE_STUDIES_PATH = os.path.join(REPO_ROOT, "skills", "spec-conops-engineering", "resources", "units", "conops", "11_IMPACTS_AND_TRADE_STUDIES.md")
 AGENTS_CONOPS_11_TRADE_STUDIES_PATH = os.path.join(REPO_ROOT, ".agents", "skills", "spec-conops-engineering", "resources", "units", "conops", "11_IMPACTS_AND_TRADE_STUDIES.md")
+CONOPS_07_OPTX_PATH = os.path.join(REPO_ROOT, "skills", "spec-conops-engineering", "resources", "units", "conops", "07_OPTX_EXCHANGES.md")
+
 
 
 
@@ -230,6 +232,7 @@ class TestSpecConopsEngineering(unittest.TestCase):
             ORCHESTRATOR_SKILL_PATH,
             CONOPS_01_OVERVIEW_PATH,
             CONOPS_04_USER_CLASSES_PATH,
+            CONOPS_07_OPTX_PATH,
         ]
 
         for path in files_to_check:
@@ -840,6 +843,42 @@ class TestSpecConopsEngineering(unittest.TestCase):
         self.assertIn(r"| $R_{\mathrm{buffer}}$ | Spatial Containment | Verified 1:1 parametric lateral containment safety buffer radius | $R_{\mathrm{buffer}} \ge 1.0 \times \text{Distance}_{\mathrm{containment}}$ | m | JARUS SORA v2.5 Step #2 |", content)
         self.assertIn(r"| $\text{Range}_{\mathrm{max}}(\text{Link}_{\mathrm{C2}})$ | C2 Comms Margin | Maximum certified C2 data link operational range | $\text{Range}_{\mathrm{max}} \ge \text{Range}_{\mathrm{nominal}}$ | km | RTCA DO-362A §2.2.1 |", content)
         self.assertIn(r"| $\tau_{\mathrm{containment}}$ | Emergency Response | Maximum allowable failsafe containment response time | $\tau_{\mathrm{containment}} \le 2.0$ | s | ASTM F3269-17 §7.1 |", content)
+
+    def test_section_7_3_optx_katex_math_notation(self):
+        """Verify Section 7.3 in 07_OPTX_EXCHANGES.md has valid KaTeX math formatting without unbracketed double subscripts (Fixes #152)."""
+        self.assertTrue(os.path.isfile(CONOPS_07_OPTX_PATH), f"Missing {CONOPS_07_OPTX_PATH}")
+        with open(CONOPS_07_OPTX_PATH, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        # Section 7.3 header
+        self.assertIn("### 7.3 Avionic Network Quality of Service (QoS) Stack Allocation", content)
+
+        # KaTeX math formatting in Section 7.3 formulas
+        self.assertIn(r"\text{Util}_{\text{bus}} &= \sum_{i=1}^{N_{\text{bus}}} \frac{C_i}{T_i} \le \text{Util}_{\text{bus\_max}}", content)
+        self.assertIn(r"$\text{Util}_{\text{bus}}$: Total deterministic real-time bus utilization under worst-case burst conditions.", content)
+        self.assertIn(r"$N_{\text{bus}}$: Total number of active periodic message streams", content)
+        self.assertIn(r"$T_i = 1 / f_{\text{rate}, i}$", content)
+        self.assertIn(r"$\text{Util}_{\text{bus\_max}}$: Maximum allowable bus utilization ceiling", content)
+        self.assertIn(r"$\text{Util}_{\text{bus\_max}} \le 0.60$", content)
+        self.assertIn(r"$t_{\text{failover}} \le \tau_{\text{bus\_failover\_max}}$", content)
+        self.assertIn(r"$\text{Throughput}_{\text{payload\_bus}} \ge 1.0\text{ Gbps}$", content)
+        self.assertIn(r"\tau_{\text{Primary\_max}}", content)
+        self.assertIn(r"\tau_{\text{Alternate\_max}}", content)
+        self.assertIn(r"\tau_{\text{Contingency\_max}}", content)
+        self.assertIn(r"\tau_{\text{Emergency\_max}}", content)
+        self.assertIn(r"$f_{\text{remote\_id\_rate}} = 1.0\text{ Hz}$ to $2.0\text{ Hz}$", content)
+        self.assertIn(r"\tau_{\text{remote\_id}} \le 200\text{ ms}", content)
+        self.assertIn(r"$t_{\text{actuate}} \le \tau_{\text{squib\_latency\_max}} \le 10\text{ ms}$", content)
+
+        # Ensure no invalid \mathrm subscript notations with raw/escaped underscores exist in Section 7.3
+        self.assertNotIn(r"\mathrm{bus", content)
+        self.assertNotIn(r"\mathrm{Primary", content)
+        self.assertNotIn(r"\mathrm{Alternate", content)
+        self.assertNotIn(r"\mathrm{Contingency", content)
+        self.assertNotIn(r"\mathrm{Emergency", content)
+        self.assertNotIn(r"\mathrm{remote", content)
+        self.assertNotIn(r"\mathrm{squib", content)
+        self.assertNotIn(r"\mathrm{payload", content)
 
 
 if __name__ == "__main__":

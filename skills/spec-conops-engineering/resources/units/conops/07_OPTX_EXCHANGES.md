@@ -41,38 +41,38 @@ To guarantee deterministic latency bounds, eliminate message collisions, and enf
 
 $$
 \begin{aligned}
-\text{Util}_{\mathrm{bus}} &= \sum_{i=1}^{N_{\mathrm{bus}}} \frac{C_i}{T_i} \le \text{Util}_{\mathrm{bus\_max}}
+\text{Util}_{\text{bus}} &= \sum_{i=1}^{N_{\text{bus}}} \frac{C_i}{T_i} \le \text{Util}_{\text{bus\_max}}
 \end{aligned}
 $$
 
 - Parameter Definitions & Engineering Units:
-- $\text{Util}_{\mathrm{bus}}$: Total deterministic real-time bus utilization under worst-case burst conditions.
-- $N_{\mathrm{bus}}$: Total number of active periodic message streams allocated to the deterministic bus ($N_{\mathrm{bus}} = 7$).
+- $\text{Util}_{\text{bus}}$: Total deterministic real-time bus utilization under worst-case burst conditions.
+- $N_{\text{bus}}$: Total number of active periodic message streams allocated to the deterministic bus ($N_{\text{bus}} = 7$).
 - $C_i$: Worst-case transmission time for message stream $i$ including bit-stuffing overhead.
-- $T_i$: Minimum period of message stream $i$ ($T_i = 1 / f_{\mathrm{rate}, i}$).
-- $\text{Util}_{\mathrm{bus\_max}}$: Maximum allowable bus utilization ceiling ($\text{Util}_{\mathrm{bus\_max}} \le 0.60$), ensuring a minimum $40\%$ bandwidth margin for asynchronous error handling and network management frames.
-- **Redundancy & Fault Isolation:** Dual-channel physical transceivers (Bus Alpha and Bus Bravo) operating in hot-standby with automatic babbling-node isolation, hardware loopback verification, and failover latency $t_{\mathrm{failover}} \le \tau_{\mathrm{bus\_failover\_max}}$.
+- $T_i$: Minimum period of message stream $i$ ($T_i = 1 / f_{\text{rate}, i}$).
+- $\text{Util}_{\text{bus\_max}}$: Maximum allowable bus utilization ceiling ($\text{Util}_{\text{bus\_max}} \le 0.60$), ensuring a minimum $40\%$ bandwidth margin for asynchronous error handling and network management frames.
+- **Redundancy & Fault Isolation:** Dual-channel physical transceivers (Bus Alpha and Bus Bravo) operating in hot-standby with automatic babbling-node isolation, hardware loopback verification, and failover latency $t_{\text{failover}} \le \tau_{\text{bus\_failover\_max}}$.
 
 #### 7.3.2 High-Speed Payload Bus (PCIe / Gigabit Ethernet / TSN IEEE 802.1Qbv)
 - **Allocated Exchanges:** `OpTx-06`, `OpTx-15`, and `OpTx-16`.
 - **Protocol Profile & Physical Medium:** IEEE 802.3ab 1000BASE-T Gigabit Ethernet with Time-Sensitive Networking (TSN IEEE 802.1Qbv Scheduled Traffic and IEEE 802.1Qav Credit-Based Shaper) / Peripheral Component Interconnect Express (PCIe Gen3/4 with DMA).
-- **QoS Partitioning & Bandwidth Guarantees:** Physical and logical segregation (dedicated Ethernet PHY and IEEE 802.1Q VLANs) completely isolates high-bandwidth sensor payload data from flight-critical control traffic. High-capacity zero-copy ring buffers and Direct Memory Access (DMA) ensure sustained payload throughput ($\text{Throughput}_{\mathrm{payload\_bus}} \ge 1.0\text{ Gbps}$) without inducing processor starvation or memory bus contention on the Core Controller.
+- **QoS Partitioning & Bandwidth Guarantees:** Physical and logical segregation (dedicated Ethernet PHY and IEEE 802.1Q VLANs) completely isolates high-bandwidth sensor payload data from flight-critical control traffic. High-capacity zero-copy ring buffers and Direct Memory Access (DMA) ensure sustained payload throughput ($\text{Throughput}_{\text{payload\_bus}} \ge 1.0\text{ Gbps}$) without inducing processor starvation or memory bus contention on the Core Controller.
 
 #### 7.3.3 Telemetry Wireless PACE Links (Primary, Alternate, Contingency, Emergency)
 - **Allocated Exchanges:** `OpTx-08`, `OpTx-09`, `OpTx-14`, and `OpTx-15`.
 - **Multi-Tier PACE Communication Stack:**
-  1. **Primary Link (COFDM Point-to-Point / 5.8 GHz ISM):** High-throughput channel carrying consolidated flight telemetry (`OpTx-08`) and real-time compressed video (`OpTx-15`) with nominal bandwidth $\ge 10.0\text{ Mbps}$ and transport latency $\le \tau_{\mathrm{Primary\_max}}$.
-  2. **Alternate Link (Cellular LTE/5G Encrypted VPN / Broadband Satcom):** Secure routed IP tunnel carrying telemetry (`OpTx-08`), UTM coordination updates (`OpTx-14`), and supervisory commands (`OpTx-09`) with bandwidth $\ge 2.0\text{ Mbps}$ and transport latency $\le \tau_{\mathrm{Alternate\_max}}$.
-  3. **Contingency Link (900 MHz FHSS Narrowband Radio):** Robust frequency-hopping datalink dedicated exclusively to essential C2 flight directives (`OpTx-09`) and heartbeat signals (`OpTx-08`) with bandwidth $\ge 115.2\text{ kbps}$ and transport latency $\le \tau_{\mathrm{Contingency\_max}}$.
-  4. **Emergency Link (Satellite Iridium SBD / Low-Frequency Beacon):** Ultra-reliable channel providing global beacon broadcast and dual-consent flight termination confirmations with bandwidth $\ge 2.4\text{ kbps}$ and transport latency $\le \tau_{\mathrm{Emergency\_max}}$.
+  1. **Primary Link (COFDM Point-to-Point / 5.8 GHz ISM):** High-throughput channel carrying consolidated flight telemetry (`OpTx-08`) and real-time compressed video (`OpTx-15`) with nominal bandwidth $\ge 10.0\text{ Mbps}$ and transport latency $\le \tau_{\text{Primary\_max}}$.
+  2. **Alternate Link (Cellular LTE/5G Encrypted VPN / Broadband Satcom):** Secure routed IP tunnel carrying telemetry (`OpTx-08`), UTM coordination updates (`OpTx-14`), and supervisory commands (`OpTx-09`) with bandwidth $\ge 2.0\text{ Mbps}$ and transport latency $\le \tau_{\text{Alternate\_max}}$.
+  3. **Contingency Link (900 MHz FHSS Narrowband Radio):** Robust frequency-hopping datalink dedicated exclusively to essential C2 flight directives (`OpTx-09`) and heartbeat signals (`OpTx-08`) with bandwidth $\ge 115.2\text{ kbps}$ and transport latency $\le \tau_{\text{Contingency\_max}}$.
+  4. **Emergency Link (Satellite Iridium SBD / Low-Frequency Beacon):** Ultra-reliable channel providing global beacon broadcast and dual-consent flight termination confirmations with bandwidth $\ge 2.4\text{ kbps}$ and transport latency $\le \tau_{\text{Emergency\_max}}$.
 - **QoS Failover & Security Protection:** Automated link quality monitor evaluating signal-to-noise ratio ($\text{SNR}$), packet loss rate ($\text{PLR}$), and heartbeat timeouts ($t_{\mathrm{loss}} > \tau_{\mathrm{timeout}}$). Failover transitions enforce hysteresis time $\Delta t_{\mathrm{hysteresis}}$ to prevent link flapping. All command channels enforce AES-256-GCM encryption, HMAC-SHA256 authentication, and anti-replay nonce tracking per NIST SP 800-82r3.
 
 #### 7.3.4 ASTM F3411 Direct Broadcast Remote ID
 - **Allocated Exchanges:** `OpTx-13`.
 - **Protocol Profile & Broadcast Mechanism:** Direct connectionless RF broadcast via Bluetooth 5.x Long Range (LE Coded PHY) and Wi-Fi Beacon Frames (IEEE 802.11 Direct Broadcast) in accordance with ASTM F3411-22a and ASD-STAN prEN 4709-002 standards.
-- **QoS & Timing Determinism:** Autonomous periodic broadcast scheduler issuing signed identification packets at $f_{\mathrm{remote\_id\_rate}} = 1.0\text{ Hz}$ to $2.0\text{ Hz}$ with latency $\tau_{\mathrm{remote\_id}} \le 200\text{ ms}$. Time synchronization referenced to UTC via GNSS epoch. Independent RF front-end prevents resource exhaustion by external datalinks, guaranteeing continuous identification broadcast even during lost-link contingency states.
+- **QoS & Timing Determinism:** Autonomous periodic broadcast scheduler issuing signed identification packets at $f_{\text{remote\_id\_rate}} = 1.0\text{ Hz}$ to $2.0\text{ Hz}$ with latency $\tau_{\text{remote\_id}} \le 200\text{ ms}$. Time synchronization referenced to UTC via GNSS epoch. Independent RF front-end prevents resource exhaustion by external datalinks, guaranteeing continuous identification broadcast even during lost-link contingency states.
 
 #### 7.3.5 Hardwired Failsafe Squib Lines & Safety Discretes
 - **Allocated Exchanges:** `OpTx-11` and `OpTx-12`.
 - **Physical & Electrical Topology:** Optoisolated, point-to-point discrete wiring and high-current solid-state power switches directly routed between the independent Safety Watchdog and emergency containment / actuator isolation hardware.
-- **Safety Interlock Architecture:** Dual-switch configuration incorporating independent high-side solid-state switch and low-side ground clamp with pull-down resistors. Actuation requires simultaneous coincidence of hardware interlock permissive signals and Safety Watchdog abort triggers, eliminating false-trigger vulnerability to EMI transients or processor brownouts. Guarantees deterministic sub-millisecond actuation ($t_{\mathrm{actuate}} \le \tau_{\mathrm{squib\_latency\_max}} \le 10\text{ ms}$) triggering ballistic recovery deployment, propulsion power cutoff, or emergency safe-state clamping.
+- **Safety Interlock Architecture:** Dual-switch configuration incorporating independent high-side solid-state switch and low-side ground clamp with pull-down resistors. Actuation requires simultaneous coincidence of hardware interlock permissive signals and Safety Watchdog abort triggers, eliminating false-trigger vulnerability to EMI transients or processor brownouts. Guarantees deterministic sub-millisecond actuation ($t_{\text{actuate}} \le \tau_{\text{squib\_latency\_max}} \le 10\text{ ms}$) triggering ballistic recovery deployment, propulsion power cutoff, or emergency safe-state clamping.
