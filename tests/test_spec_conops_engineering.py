@@ -815,6 +815,32 @@ class TestSpecConopsEngineering(unittest.TestCase):
         placeholders = re.findall(r"\{\{[A-Za-z0-9_]+(?::[^\}]*)?\}\}", content)
         self.assertGreaterEqual(len(placeholders), 5, f"Expected >= 5 parametric placeholders, found {len(placeholders)}")
 
+    def test_section_1_3_system_boundary_math_and_table(self):
+        """Verify Section 1.3 in 01_METADATA_AND_OVERVIEW.md has valid KaTeX math formatting and formal Parameter Definitions table (Fixes #151)."""
+        self.assertTrue(os.path.isfile(CONOPS_01_OVERVIEW_PATH), f"Missing {CONOPS_01_OVERVIEW_PATH}")
+        with open(CONOPS_01_OVERVIEW_PATH, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        # Section 1.3 header
+        self.assertIn("### 1.3 System Boundary & Operational State Space", content)
+
+        # KaTeX math formatting in Section 1.3 prose
+        self.assertIn(r"$\Omega_{\mathrm{state}} \subset \mathbb{R}^n$", content)
+        self.assertIn(r"$\mathbf{X}_{\mathrm{boundary}} = [\mathbf{x}_{\mathrm{min}}, \mathbf{x}_{\mathrm{max}}]^\top$", content)
+        self.assertIn(r"($R_{\mathrm{buffer}}$)", content)
+        self.assertIn(r"$\text{Range}_{\mathrm{max}}(\text{Link}_{\mathrm{C2}})$", content)
+
+        # Operational State Space Parameter Definitions & Engineering Units table
+        self.assertIn("- **Operational State Space Parameter Definitions & Engineering Units:**", content)
+        self.assertIn("| Symbol / Parameter | Domain / Context | Description | Dimension / Limits | Engineering Unit | Normative / Safety Basis |", content)
+        self.assertIn(r"| $\Omega_{\mathrm{state}}$ | State Space Domain | Admissible operational state space envelope ($\Omega_{\mathrm{state}} \subset \mathbb{R}^n$) | Compact subset of $\mathbb{R}^n$ ($n \ge 6$) | Dimensionless | ISO/IEC/IEEE 29148:2018 §6.4.2 |", content)
+        self.assertIn(r"| $\mathbf{X}_{\mathrm{boundary}}$ | State Vector Bounds | Bounding box of admissible vehicle operational states $[\mathbf{x}_{\mathrm{min}}, \mathbf{x}_{\mathrm{max}}]^\top$ | Bounded hyper-rectangle | Mixed SI Units | ASTM F3269-17 §6.2 |", content)
+        self.assertIn(r"| $\mathbf{x}_{\mathrm{min}}$ | State Lower Limit | Minimum permissible state vector threshold | $[\phi_{\min}, \lambda_{\min}, h_{\min}, u_{\min}, v_{\min}, w_{\min}]^\top$ | rad, rad, m, m/s | SORA Annex B M1 Mitigations |", content)
+        self.assertIn(r"| $\mathbf{x}_{\mathrm{max}}$ | State Upper Limit | Maximum permissible state vector threshold | $[\phi_{\max}, \lambda_{\max}, h_{\max}, u_{\max}, v_{\max}, w_{\max}]^\top$ | rad, rad, m, m/s | SORA Annex B M1 Mitigations |", content)
+        self.assertIn(r"| $R_{\mathrm{buffer}}$ | Spatial Containment | Verified 1:1 parametric lateral containment safety buffer radius | $R_{\mathrm{buffer}} \ge 1.0 \times \text{Distance}_{\mathrm{containment}}$ | m | JARUS SORA v2.5 Step #2 |", content)
+        self.assertIn(r"| $\text{Range}_{\mathrm{max}}(\text{Link}_{\mathrm{C2}})$ | C2 Comms Margin | Maximum certified C2 data link operational range | $\text{Range}_{\mathrm{max}} \ge \text{Range}_{\mathrm{nominal}}$ | km | RTCA DO-362A §2.2.1 |", content)
+        self.assertIn(r"| $\tau_{\mathrm{containment}}$ | Emergency Response | Maximum allowable failsafe containment response time | $\tau_{\mathrm{containment}} \le 2.0$ | s | ASTM F3269-17 §7.1 |", content)
+
 
 if __name__ == "__main__":
     unittest.main()
