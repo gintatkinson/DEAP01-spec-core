@@ -153,5 +153,111 @@ class TestEnvironmentalMilStd810HUnit(unittest.TestCase):
         )
 
 
+    def test_section_8_2_katex_math_notation(self):
+        """Verify Section 8.2 formulas across subsections 8.2.1-8.2.12 use valid KaTeX notation with \\text{...\\_...}."""
+        sec_8_2_match = re.search(
+            r"### 8\.2 Granular Test Method Breakdowns([\s\S]*?)(?=### 8\.3|$)",
+            self.content,
+        )
+        self.assertIsNotNone(sec_8_2_match, "Could not locate Section 8.2 in document")
+        sec_8_2_text = sec_8_2_match.group(1)
+
+        # Ensure no \mathrm{..._...} with unbracketed/unescaped math-mode underscores
+        mathrm_underscores = re.findall(r"\\mathrm\{[^}]*_[^}]*\}", sec_8_2_text)
+        self.assertEqual(
+            mathrm_underscores,
+            [],
+            f"Found invalid \\mathrm{{..._...}} notation in Section 8.2 (must use \\text{{...\\_...}}): {mathrm_underscores}",
+        )
+
+        # Expected formulas per subsection 8.2.1 through 8.2.12
+        expected_formulas = [
+            # 8.2.1
+            r"P_{\text{op\_min}}",
+            r"h_{\text{alt\_max}}",
+            r"P_{\text{store\_min}}",
+            r"h_{\text{store\_max}}",
+            r"\dot{P}_{\text{decomp\_max}}",
+            r"t_{\text{dwell}} \ge \tau_{\text{alt\_dwell\_min}}",
+            r"\Delta t \le \tau_{\text{decomp\_time}}",
+            # 8.2.2
+            r"T_{\text{op\_high\_max}}",
+            r"T_{\text{store\_high\_max}}",
+            r"\dot{T}_{\text{rise}} \le \dot{T}_{\text{rise\_max}}",
+            r"N_{\text{store\_cycles}}",
+            r"t_{\text{op\_high\_duration}}",
+            r"T_{\text{junction}} \le T_{\text{junction\_max}}",
+            r"f_{\text{control}} \ge f_{\text{control\_nominal}}",
+            # 8.2.3
+            r"T_{\text{op\_low\_min}}",
+            r"T_{\text{store\_low\_min}}",
+            r"t_{\text{cold\_soak}} \ge \tau_{\text{cold\_soak\_min}}",
+            r"t_{\text{cold\_op}} \ge \tau_{\text{cold\_op\_min}}",
+            r"t_{\text{start}} \le \tau_{\text{cold\_start\_max}}",
+            r"\Delta f / f_0 \le \epsilon_{\text{clk\_max}}",
+            # 8.2.4
+            r"\mathbf{T}_{\text{shock\_low}}",
+            r"\mathbf{T}_{\text{shock\_high}}",
+            r"t_{\text{transfer}} \le \tau_{\text{transfer\_max}}",
+            r"N_{\text{shock\_cycles}}",
+            r"t_{\text{dwell}} \ge \tau_{\text{shock\_dwell}}",
+            r"\Delta \theta_{\text{align}} \le \theta_{\text{tol\_max}}",
+            # 8.2.5
+            r"I_{\text{solar\_peak}} \le I_{\text{solar\_max}}",
+            r"T_{\text{solar\_amb}}",
+            r"N_{\text{solar\_cycles}}",
+            r"t_{\text{actinic}} \ge \tau_{\text{actinic\_min}}",
+            r"\Delta T_{\text{internal}} \le \Delta T_{\text{internal\_max}}",
+            # 8.2.6
+            r"R_{\text{precip}} \ge R_{\text{precip\_req}}",
+            r"v_{\text{wind}} \ge v_{\text{wind\_req}}",
+            r"t_{\text{exposure}} \ge \tau_{\text{rain\_face\_duration}}",
+            r"t_{\text{total}} \ge \tau_{\text{rain\_total\_min}}",
+            r"R_{\text{ins}} \ge R_{\text{ins\_min}}",
+            # 8.2.7
+            r"T_{\text{hum\_low}}",
+            r"T_{\text{hum\_high}}",
+            r"N_{\text{humid\_cycles}}",
+            r"t_{\text{humid\_total}} \ge \tau_{\text{humid\_total\_min}}",
+            r"t_{\text{post}} \le \tau_{\text{post\_humid\_check}}",
+            r"R_{\text{ins}} \ge R_{\text{ins\_min}}",
+            # 8.2.8
+            r"N_{\text{salt\_cycles}}",
+            r"t_{\text{salt\_total}} \ge \tau_{\text{salt\_total\_min}}",
+            r"R_{\text{bond}} \le R_{\text{bond\_max}}",
+            r"R_{\text{bond}} \le R_{\text{bond\_limit}}",
+            # 8.2.9
+            r"t_{\text{dust}} \ge \tau_{\text{dust\_duration}}",
+            r"t_{\text{sand}} \ge \tau_{\text{sand\_duration}}",
+            r"\Delta \text{Trans} \le \Delta \text{Trans}_{\text{sand\_max}}",
+            # 8.2.10
+            r"G_{\text{rms\_op}}",
+            r"G_{\text{rms\_endurance}}",
+            r"t_{\text{vib\_op}} \ge \tau_{\text{vib\_op\_axis}}",
+            r"t_{\text{vib\_endurance}} \ge \tau_{\text{vib\_endurance\_axis}}",
+            r"t_{\text{total}} \ge \tau_{\text{vib\_total\_min}}",
+            r"\tau_{\text{torque\_retention\_min}}",
+            r"e_{\text{state}} \le \epsilon_{\text{vib\_max}}",
+            r"\tau_{\text{chatter\_max}}",
+            # 8.2.11
+            r"a_{\text{shock\_peak}}",
+            r"\Delta v_{\text{shock}} \ge \Delta v_{\text{req}}",
+            r"a_{\text{crash\_peak}}",
+            # 8.2.12
+            r"T_{\text{ice\_amb}}",
+            r"\delta_{\text{ice}} \ge \delta_{\text{ice\_req}}",
+            r"t_{\text{soak}} \ge \tau_{\text{ice\_soak\_min}}",
+            r"t_{\text{clear}} \le \tau_{\text{clear\_max}}",
+        ]
+
+        for formula in expected_formulas:
+            self.assertIn(
+                formula,
+                sec_8_2_text,
+                f"Missing expected KaTeX formula '{formula}' in Section 8.2",
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
+
