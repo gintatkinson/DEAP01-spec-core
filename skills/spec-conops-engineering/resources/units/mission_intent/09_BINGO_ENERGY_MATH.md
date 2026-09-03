@@ -32,12 +32,12 @@ $$
 
 | Energy Parameter | Symbol | Value | Units | Constraint Rule | Public Clause Citation |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| Total Storage Capacity | E_capacity | 500000.0 | J | E_capacity > 0 (Total nominal energy capacity) | INCOSE SEH v5.0 §3.2 |
-| Return Transit Energy | E_return | 150000.0 | J | E_return = Integral(P_total dt) | INCOSE SEH v5.0 §3.2 |
-| Secondary Divert Energy | E_divert | 60000.0 | J | E_divert = (Distance / v_nominal) * P_nominal | INCOSE SEH v5.0 §3.2 |
-| Mandatory Statutory Reserve | E_reserve | 100000.0 | J | E_reserve >= Ratio_reserve_min * E_capacity (20.0% statutory reserve threshold) | INCOSE SEH v5.0 §3.2 |
-| Contingency Buffer | E_contingency | 40000.0 | J | E_contingency >= E_contingency_min | INCOSE SEH v5.0 §3.2 |
-| Total Bingo Threshold | E_bingo | 350000.0 | J | E_bingo = E_return + E_divert + E_reserve + E_contingency | INCOSE SEH v5.0 §3.2 |
+| Total Storage Capacity | E_capacity | {{E_CAPACITY_JOULES:500000.0}} | J | E_capacity > 0 (Total nominal energy capacity) | INCOSE SEH v5.0 §3.2 |
+| Return Transit Energy | E_return | {{E_RETURN_JOULES:150000.0}} | J | E_return = Integral(P_total dt) | INCOSE SEH v5.0 §3.2 |
+| Secondary Divert Energy | E_divert | {{E_DIVERT_JOULES:60000.0}} | J | E_divert = (Distance / v_nominal) * P_nominal | INCOSE SEH v5.0 §3.2 |
+| Mandatory Statutory Reserve | E_reserve | {{E_RESERVE_JOULES:100000.0}} | J | E_reserve >= Ratio_reserve_min * E_capacity (20.0% statutory reserve threshold) | INCOSE SEH v5.0 §3.2 |
+| Contingency Buffer | E_contingency | {{E_CONTINGENCY_JOULES:40000.0}} | J | E_contingency >= E_contingency_min | INCOSE SEH v5.0 §3.2 |
+| Total Bingo Threshold | E_bingo | {{E_BINGO_JOULES:350000.0}} | J | E_bingo = E_return + E_divert + E_reserve + E_contingency | INCOSE SEH v5.0 §3.2 |
 | Calculated Reserve Ratio | Ratio_reserve | 0.20 | Dimensionless | Ratio_reserve = E_reserve / E_capacity >= 0.20 | INCOSE SEH v5.0 §3.2 |
 
 ---

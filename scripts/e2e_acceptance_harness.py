@@ -2,17 +2,19 @@
 """
 End-to-End Acceptance Test Harness across Cyber-Physical Domain Workspaces.
 
-Executes a comprehensive 6-layer automated acceptance test suite across all 10 domain repositories:
-  Layer 1 (Delivery Gate 0): Physical presence, line counts, section line floors.
-  Layer 2 (Mechanical Syntax & Token Purity): 0 mustache tokens, 0 pseudovariables, 0 raw $ in tables, 0 KaTeX underscore syntax errors.
-  Layer 3 (Statutory Cardinality): 16 Threat Vectors, 4 PACE tiers, >=12 MIL-STD-810H methods, 24 SORA OSOs, 7 Emergency rows.
-  Layer 4 (Closed-Form Physical & Math Solver): SORA kinetic energy (E_k <= 34.0J), Kalman covariance units & linear algebra dimensions, Bingo energy conservation.
-  Layer 5 (Adversarial Invariant Verification): Priority arbitration (P_EMG07 > ... > P_EMG01), failsafe non-destructive RTB, NIST SP 800-82r3 anti-replay.
-  Layer 6 (Baseline Parity & Model Coverage): verify_downstream_baseline.py and verify_model_coverage.py --spec-only.
+Executes a 2-Tier Semantic Verification Architecture (6 layers) across all 10 domain repositories:
+  Tier 1 (Syntactic & Structural Integrity):
+    - Layer 1 (Delivery Gate 0): Physical presence, line counts, section line floors.
+    - Layer 2 (Mechanical Syntax & Token Purity): 0 mustache tokens, 0 pseudovariables, 0 raw $ in tables, 0 KaTeX underscore syntax errors.
+  Tier 2 (Semantic & Mathematical Physics Verification):
+    - Layer 3 (Statutory Cardinality & Normative Standards): 16 Threat Vectors, 4 PACE tiers, >=12 MIL-STD-810H methods, 24 SORA OSOs, 7 Emergency rows, and Solver 4 (Normative Standards Cross-Checker: IEC 62304, EN 50128, ECSS, ISO 3691-4, DNV-GL).
+    - Layer 4 (Closed-Form Physical & Math Solver): SORA kinetic energy (E_k <= 34.0J), Kalman covariance units & linear algebra dimensions, Bingo energy conservation, Solver 1 (Relational Table Mass Cross-Sum Solver), Solver 2 (Closed-Form Quadratic Physics Solver), and Solver 3 (Dimensional Scaling & Energy Conservation Engine).
+    - Layer 5 (Adversarial Invariant Verification & Ontology Scanner): Priority arbitration (P_EMG07 > ... > P_EMG01), failsafe non-destructive RTB, NIST SP 800-82r3 anti-replay, and Solver 5 (Forbidden Cross-Domain Ontology Scanner).
+    - Layer 6 (Baseline Parity & Model Coverage): verify_downstream_baseline.py and verify_model_coverage.py --spec-only.
 
 Generates:
-  - /Users/perkunas/test_projects/MASTER_E2E_ACCEPTANCE_REPORT.md
-  - /Users/perkunas/test_projects/acceptance_scorecard.json
+  - MASTER_E2E_ACCEPTANCE_REPORT.md
+  - acceptance_scorecard.json
 """
 
 import argparse
@@ -268,9 +270,607 @@ def verify_layer2_syntax_purity(workspace_path: str) -> LayerResult:
 # ---------------------------------------------------------------------------
 # Layer 3: Statutory Cardinality
 # ---------------------------------------------------------------------------
+# Deterministic Semantic Solvers (2-Tier Semantic Verification Architecture)
+# ---------------------------------------------------------------------------
+
+def solve_relational_mass_cross_sum(
+    conops_text: str, total_mtow: Optional[float] = None
+) -> Tuple[bool, List[str], Dict[str, object]]:
+    """
+    Solver 1: Relational Table Mass Cross-Sum Solver (Layer 4).
+    Parses Table 1.3.2 partition rows (Airframe, Avionics, Propulsion, Energy, Payload, Failsafe).
+    Asserts: abs(sum(partition_masses) - TOTAL_MTOW_KG) <= 0.01 kg.
+    """
+    errors = []
+    details = {}
+    
+    partition_patterns = {
+        "airframe": re.compile(r"airframe|chassis|structural|structure", re.IGNORECASE),
+        "avionics": re.compile(r"avionics", re.IGNORECASE),
+        "propulsion": re.compile(r"propulsion", re.IGNORECASE),
+        "energy": re.compile(r"energy", re.IGNORECASE),
+        "payload": re.compile(r"payload", re.IGNORECASE),
+        "failsafe": re.compile(r"(?:failsafe|containment)", re.IGNORECASE),
+    }
+    
+    table_rows = parse_markdown_table_rows(conops_text)
+    partition_masses: Dict[str, float] = {}
+    extracted_total_mtow = total_mtow
+    
+    for row in table_rows:
+        if not row:
+            continue
+        row_str = " ".join(row)
+        first_cell = row[0]
+        
+        # Check for Total MTOW row in Table 1.3.2 (ignore Pugh matrix or trade study tables)
+        if extracted_total_mtow is None and not re.search(r"pugh|trade|decision|score", row_str, re.IGNORECASE):
+            if (
+                re.search(r"\btotal(?:\s+system|\s+mtow|\s+integration|\s+mass)\b", first_cell, re.IGNORECASE)
+                or re.search(r"100\.0%\s*mtow", row_str, re.IGNORECASE)
+            ):
+                for cell in row[1:]:
+                    c_clean = cell.replace("**", "").replace("*", "").strip()
+                    if "%" in c_clean:
+                        continue
+                    m_val = re.search(r"^[-+]?(\d+(?:\.\d+)?)\s*(?:kg)?$", c_clean, re.IGNORECASE)
+                    if m_val:
+                        try:
+                            extracted_total_mtow = float(m_val.group(1))
+                            break
+                        except ValueError:
+                            pass
+        
+        # Check AST partitions
+        for p_key, p_pat in partition_patterns.items():
+            if p_key not in partition_masses and p_pat.search(first_cell) and not re.search(r"pugh|trade|decision|score|total", first_cell, re.IGNORECASE):
+                val_found = None
+                for cell in row[1:]:
+                    c_clean = cell.replace("**", "").replace("*", "").strip()
+                    if "%" in c_clean:
+                        continue
+                    m_val = re.search(r"^[-+]?(\d+(?:\.\d+)?)\s*(?:kg)?$", c_clean, re.IGNORECASE)
+                    if m_val:
+                        try:
+                            val_found = float(m_val.group(1))
+                            break
+                        except ValueError:
+                            pass
+                if val_found is not None:
+                    partition_masses[p_key] = val_found
+                    break
+
+    # If total MTOW not found from table, look for TOTAL_MTOW_KG or PL-01 parameter
+    if extracted_total_mtow is None:
+        m_mtow = re.search(r"TOTAL_MTOW(?:_KG)?\s*[:|=]?\s*([\d\.]+)", conops_text, re.IGNORECASE)
+        if not m_mtow:
+            m_mtow = re.search(
+                r"\|\s*\*\*PL-01\*\*\s*\|.*?\|\s*m_MTOW\s*\|.*?\|\s*([\d\.]+)\s*\|\s*kg",
+                conops_text,
+                re.IGNORECASE,
+            )
+        if not m_mtow:
+            m_mtow = re.search(r"m_MTOW\s*\|\s*<=?\s*([\d\.]+)", conops_text, re.IGNORECASE)
+        if m_mtow:
+            extracted_total_mtow = float(m_mtow.group(1))
+            
+    details["partition_masses"] = partition_masses
+    details["total_mtow_kg"] = extracted_total_mtow
+    
+    missing_partitions = [p for p in partition_patterns if p not in partition_masses]
+    if missing_partitions:
+        errors.append(f"Table 1.3.2 missing AST partition rows: {missing_partitions}")
+        
+    if extracted_total_mtow is None:
+        errors.append("TOTAL_MTOW_KG parameter / Table 1.3.2 total mass could not be determined")
+    elif not missing_partitions:
+        sum_mass = sum(partition_masses.values())
+        details["sum_partition_masses"] = sum_mass
+        diff = abs(sum_mass - extracted_total_mtow)
+        details["mass_cross_sum_diff"] = diff
+        if diff > 0.01:
+            errors.append(
+                f"Table 1.3.2 Mass Cross-Sum mismatch: sum of partitions ({sum_mass:.4f} kg) "
+                f"!= TOTAL_MTOW_KG ({extracted_total_mtow:.4f} kg), diff={diff:.4f} kg > 0.01 kg"
+            )
+            
+    passed = len(errors) == 0
+    return passed, errors, details
+
+
+def solve_closed_form_quadratic_physics(
+    conops_text: str
+) -> Tuple[bool, List[str], Dict[str, object]]:
+    """
+    Solver 2: Closed-Form Quadratic Physics Solver (Layer 4).
+    Extracts parameters m, S, C_d, rho, g from Section 5.2.
+    Calculates:
+      v_calc = sqrt(2 * m * g / (rho * S * C_d))
+      E_k_calc = 0.5 * m * v_calc^2
+    Asserts tabulated v_terminal and E_k_mitigated match calculated physics within +/- 5%.
+    """
+    errors = []
+    details = {}
+    
+    table_rows = parse_markdown_table_rows(conops_text)
+    
+    params: Dict[str, float] = {}
+    for row in table_rows:
+        if len(row) >= 3:
+            name = row[0].strip()
+            sym = row[1].strip()
+            val_str = row[2].strip()
+            m_val = re.search(r"^[-+]?(\d+(?:\.\d+)?)", val_str)
+            if not m_val:
+                continue
+            val = float(m_val.group(1))
+            
+            if sym == "m" or (re.search(r"operational\s+mass|system\s+mass", name, re.IGNORECASE) and not re.search(r"payload", name, re.IGNORECASE)):
+                if "m" not in params:
+                    params["m"] = val
+            elif sym == "g" or re.search(r"gravitational\s+acceleration", name, re.IGNORECASE):
+                params["g"] = val
+            elif sym in ("rho", r"\rho") or re.search(r"air\s+density|atmospheric\s+density", name, re.IGNORECASE):
+                params["rho"] = val
+            elif sym in ("S_canopy", "S") or (re.search(r"canopy\s+area|recovery\s+area", name, re.IGNORECASE) and not re.search(r"unmitigated|reference", name, re.IGNORECASE)):
+                if "S" not in params:
+                    params["S"] = val
+            elif sym in ("C_d_parachute", "C_D_parachute", "C_d", r"C_{d,\mathrm{parachute}}", r"C_d") or (re.search(r"(?:parachute|recovery)\s+drag\s+coefficient", name, re.IGNORECASE) and not re.search(r"unmitigated", name, re.IGNORECASE)):
+                if "C_d" not in params:
+                    params["C_d"] = val
+            elif sym in ("v_terminal_parachute", "v_terminal_p", "v_terminal", r"v_{\mathrm{terminal}}", r"v_{\mathrm{terminal,parachute}}") or ((re.search(r"(?:parachute|recovery|equilibrium\s+descent)\s+terminal\s+velocity", name, re.IGNORECASE) or re.search(r"terminal\s+velocity", name, re.IGNORECASE)) and not re.search(r"unmitigated", name, re.IGNORECASE) and not re.search(r"unmitigated", sym, re.IGNORECASE)):
+                if "v_terminal" not in params:
+                    params["v_terminal"] = val
+            elif sym in ("E_k_mitigated", "E_k") or (re.search(r"\bmitigated\s+kinetic\s+energy\b", name, re.IGNORECASE) and not re.search(r"\bunmitigated\b", name, re.IGNORECASE)):
+                if "E_k_mitigated" not in params:
+                    params["E_k_mitigated"] = val
+
+    if "g" not in params:
+        params["g"] = 9.80665
+    if "rho" not in params:
+        params["rho"] = 1.225
+        
+    details["extracted_parameters"] = params
+    
+    required_keys = ["m", "S", "C_d", "v_terminal", "E_k_mitigated"]
+    missing = [k for k in required_keys if k not in params]
+    if missing:
+        errors.append(f"Section 5.2 missing required parameters for quadratic physics solver: {missing}")
+    else:
+        m = params["m"]
+        g = params["g"]
+        rho = params["rho"]
+        S = params["S"]
+        C_d = params["C_d"]
+        v_tab = params["v_terminal"]
+        ek_tab = params["E_k_mitigated"]
+        
+        denom = rho * S * C_d
+        if denom <= 0:
+            errors.append(f"Invalid non-positive denominator in quadratic physics: rho*S*C_d={denom}")
+        else:
+            v_calc = ((2.0 * m * g) / denom) ** 0.5
+            E_k_calc = 0.5 * m * (v_calc ** 2)
+            
+            details["v_calc_mps"] = v_calc
+            details["E_k_calc_J"] = E_k_calc
+            
+            v_rel_err = abs(v_tab - v_calc) / v_calc
+            ek_rel_err = abs(ek_tab - E_k_calc) / E_k_calc
+            
+            details["v_rel_error"] = v_rel_err
+            details["E_k_rel_error"] = ek_rel_err
+            
+            if v_rel_err > 0.05:
+                errors.append(
+                    f"Tabulated terminal velocity v_terminal ({v_tab:.4f} m/s) deviates from calculated "
+                    f"quadratic physics ({v_calc:.4f} m/s) by {v_rel_err*100:.2f}% (> 5.0% tolerance)"
+                )
+            if ek_rel_err > 0.05:
+                errors.append(
+                    f"Tabulated mitigated kinetic energy E_k_mitigated ({ek_tab:.4f} J) deviates from calculated "
+                    f"quadratic physics ({E_k_calc:.4f} J) by {ek_rel_err*100:.2f}% (> 5.0% tolerance)"
+                )
+                
+    passed = len(errors) == 0
+    return passed, errors, details
+
+
+def solve_dimensional_energy_conservation(
+    conops_text: str, intent_text: str = ""
+) -> Tuple[bool, List[str], Dict[str, object]]:
+    """
+    Solver 3: Dimensional Scaling & Energy Conservation Engine (Layer 4).
+    Converts declared battery capacity in kWh to Joules (kWh * 3.6e6 J).
+    Asserts: E_capacity_joules >= P_nominal_watts * (t_endurance_hours * 3600).
+    """
+    errors = []
+    details = {}
+    
+    combined_text = conops_text + "\n" + intent_text
+    table_rows = parse_markdown_table_rows(combined_text)
+    
+    e_capacity_joules = None
+    p_nominal_watts = None
+    t_endurance_hours = None
+    
+    for row in table_rows:
+        if not row:
+            continue
+        row_str = " ".join(row)
+        cells_clean = [c.replace("**", "").replace("*", "").strip() for c in row]
+        
+        # 1. Total Storage Capacity (E_capacity)
+        if (
+            (len(row) >= 2 and (row[0].strip().lower() in ("total storage capacity", "battery capacity") or row[1].strip() in ("E_capacity", "E_storage")))
+            or (re.search(r"^\|\s*(?:Total Storage Capacity|Battery Capacity)\s*\|", row_str, re.IGNORECASE))
+        ) and not re.search(r"Ratio_reserve|reserve\s+ratio", row_str, re.IGNORECASE):
+            # Extract number from cells
+            for cell in cells_clean:
+                m_val = re.search(r"^[-+]?(\d+(?:\.\d+)?)\s*(?:kWh|kW\*h|kW-h|Wh|W\*h|MJ|kJ|J)?$", cell, re.IGNORECASE)
+                if m_val:
+                    try:
+                        num = float(m_val.group(1))
+                        row_u = row_str.lower()
+                        if "kwh" in row_u or "kw*h" in row_u or "kw-h" in row_u:
+                            e_capacity_joules = num * 3.6e6
+                        elif "wh" in row_u or "w*h" in row_u:
+                            e_capacity_joules = num * 3600.0
+                        elif "mj" in row_u:
+                            e_capacity_joules = num * 1e6
+                        elif "kj" in row_u:
+                            e_capacity_joules = num * 1000.0
+                        else:
+                            e_capacity_joules = num
+                        break
+                    except ValueError:
+                        pass
+
+        # 2. Nominal Power Budget (P_nominal)
+        # Check Table 1.3.2 Total row (Col 4 is Nominal Power Budget)
+        if any(re.search(r"Total\s+System(?:\s+Integration)?", c, re.IGNORECASE) for c in row):
+            if len(cells_clean) >= 5:
+                # Column 4: Nominal Power Budget (W)
+                m_val = re.search(r"^[-+]?(\d+(?:\.\d+)?)", cells_clean[4])
+                if m_val:
+                    try:
+                        p_nominal_watts = float(m_val.group(1))
+                    except ValueError:
+                        pass
+        elif (
+            len(row) >= 2 and (row[0].strip().lower() in ("nominal power", "nominal power budget") or row[1].strip() in ("P_nominal", "P_nom", "TOTAL_POWER_NOMINAL_W"))
+        ) and not re.search(r"E_divert|Distance|Integral", row_str, re.IGNORECASE):
+            for cell in cells_clean:
+                m_val = re.search(r"^[-+]?(\d+(?:\.\d+)?)\s*(?:W|kW)?$", cell, re.IGNORECASE)
+                if m_val:
+                    try:
+                        num = float(m_val.group(1))
+                        if "kw" in row_str.lower() and "kwh" not in row_str.lower():
+                            p_nominal_watts = num * 1000.0
+                        else:
+                            p_nominal_watts = num
+                        break
+                    except ValueError:
+                        pass
+
+        # 3. Mission Operational Endurance (t_endurance)
+        if any(re.search(r"\b(?:t_endurance|PL-09|Mission Operational Endurance)\b", c, re.IGNORECASE) for c in row):
+            # Look for float values
+            vals = []
+            for cell in cells_clean:
+                m_val = re.search(r"(?:>=|<=)?\s*(\d+(?:\.\d+)?)", cell)
+                if m_val:
+                    try:
+                        vals.append(float(m_val.group(1)))
+                    except ValueError:
+                        pass
+            if vals:
+                # Prefer the last extracted numeric value (often nominal target in Table 1.3.3)
+                target_val = vals[-1]
+                row_u = row_str.lower()
+                if "hour" in row_u or " hr" in row_u or " h " in row_u or row_u.endswith(" h") or row_u.endswith(" h |"):
+                    t_endurance_hours = target_val
+                elif "min" in row_u:
+                    t_endurance_hours = target_val / 60.0
+                elif "sec" in row_u or " s " in row_u or row_u.endswith(" s"):
+                    t_endurance_hours = target_val / 3600.0
+                else:
+                    t_endurance_hours = target_val if target_val <= 24.0 else target_val / 60.0
+
+    # Fallback regex search
+    if e_capacity_joules is None:
+        m_kwh = re.search(r"(?:battery\s+capacity|E_capacity)[^\n\d]*([\d\.]+)\s*kW[·\-\*]?h", combined_text, re.IGNORECASE)
+        if m_kwh:
+            e_capacity_joules = float(m_kwh.group(1)) * 3.6e6
+        else:
+            m_j = re.search(r"(?:E_capacity)[^\n\d]*([\d\.]+)\s*J", combined_text, re.IGNORECASE)
+            if m_j:
+                e_capacity_joules = float(m_j.group(1))
+
+    if p_nominal_watts is None:
+        m_pnom = re.search(r"\|\s*\*\*Total System Integration\*\*.*?\|\s*([\d\.]+)\s*\|\s*[\d\.]+\s*\|", conops_text)
+        if m_pnom:
+            p_nominal_watts = float(m_pnom.group(1))
+        else:
+            m_p = re.search(r"(?:P_nominal|Nominal\s+Power)[^\n\d]*([\d\.]+)\s*W", combined_text, re.IGNORECASE)
+            if m_p:
+                p_nominal_watts = float(m_p.group(1))
+
+    if t_endurance_hours is None:
+        m_end_h = re.search(r"t_endurance[^\n\d]*([\d\.]+)\s*(?:hours|h|hr)", combined_text, re.IGNORECASE)
+        if m_end_h:
+            t_endurance_hours = float(m_end_h.group(1))
+        else:
+            m_end_m = re.search(r"t_endurance[^\n\d]*([\d\.]+)\s*min", combined_text, re.IGNORECASE)
+            if m_end_m:
+                t_endurance_hours = float(m_end_m.group(1)) / 60.0
+
+    details["e_capacity_joules"] = e_capacity_joules
+    details["p_nominal_watts"] = p_nominal_watts
+    details["t_endurance_hours"] = t_endurance_hours
+
+    if e_capacity_joules is None:
+        errors.append("Declared energy storage capacity (E_capacity) missing from specifications")
+    if p_nominal_watts is None:
+        errors.append("Nominal power consumption (P_nominal) missing from specifications")
+    if t_endurance_hours is None:
+        errors.append("Mission operational endurance (t_endurance) missing from specifications")
+
+    if e_capacity_joules is not None and p_nominal_watts is not None and t_endurance_hours is not None:
+        is_space = any(k in combined_text.lower() for k in ("cubesat", "orbit", "spacecraft", "satellite"))
+        effective_endurance_h = t_endurance_hours
+        if is_space and t_endurance_hours > 24.0:
+            effective_endurance_h = 1.0  # Max orbital eclipse duration in LEO (35 min nominal)
+            
+        e_required_joules = p_nominal_watts * (effective_endurance_h * 3600.0)
+        details["e_required_joules"] = e_required_joules
+        details["energy_margin_joules"] = e_capacity_joules - e_required_joules
+        
+        if e_capacity_joules < e_required_joules:
+            errors.append(
+                f"Dimensional Energy Conservation Violation: Declared storage capacity "
+                f"({e_capacity_joules:.1f} J / {e_capacity_joules/3.6e6:.3f} kWh) is less than required "
+                f"mission energy ({e_required_joules:.1f} J / {e_required_joules/3.6e6:.3f} kWh) for "
+                f"P_nominal={p_nominal_watts:.1f} W over t_endurance={effective_endurance_h:.2f} h"
+            )
+
+    passed = len(errors) == 0
+    return passed, errors, details
+
+
+def solve_normative_standards_cross_check(
+    workspace_path: str, conops_text: str, domain_config: Optional[Dict] = None
+) -> Tuple[bool, List[str], Dict[str, object]]:
+    """
+    Solver 4: Normative Standards Cross-Checker (Layer 3).
+    Parses schema/domain_config.json for REGULATORY_STANDARDS or OPERATIONAL_DOMAIN.
+    Asserts declared standards (IEC 62304 for medical, EN 50128 for rail, ECSS for space,
+    ISO 3691-4 for AGV, DNV-GL for subsea) are cited in Section 1.5.
+    """
+    errors = []
+    details = {}
+    
+    cfg = domain_config
+    if cfg is None:
+        cfg_paths = [
+            os.path.join(workspace_path, "schema", "domain_config.json"),
+            os.path.join(workspace_path, "domain_config.json"),
+        ]
+        for p in cfg_paths:
+            if os.path.isfile(p):
+                try:
+                    with open(p, "r", encoding="utf-8") as f:
+                        cfg = json.load(f)
+                    break
+                except Exception as ex:
+                    errors.append(f"Failed to parse {p}: {ex}")
+    
+    sec_15_match = re.search(
+        r"###?\s*1\.5[^\n]*\n(.*?)(?=\n###?\s*1\.[6-9]|\n##\s*[2-9]|\Z)",
+        conops_text,
+        re.DOTALL | re.IGNORECASE,
+    )
+    sec_15_text = sec_15_match.group(1) if sec_15_match else conops_text
+    
+    domain_standards_map = {
+        "medical": ("IEC 62304", re.compile(r"\bIEC\s*62304\b", re.IGNORECASE)),
+        "rail": ("EN 50128", re.compile(r"\bEN\s*50128\b|\bEN\s*50126\b|\bEN\s*50129\b", re.IGNORECASE)),
+        "space": ("ECSS", re.compile(r"\bECSS\b", re.IGNORECASE)),
+        "agv": ("ISO 3691-4", re.compile(r"\bISO\s*3691-4\b|\bISO\s*3691\b", re.IGNORECASE)),
+        "subsea": ("DNV-GL", re.compile(r"\bDNV(?:-GL)?\b", re.IGNORECASE)),
+    }
+    
+    standards_to_check: List[Tuple[str, str]] = []
+    
+    if cfg:
+        reg_stds = cfg.get("REGULATORY_STANDARDS") or cfg.get("regulatory_standards")
+        if isinstance(reg_stds, list):
+            for std in reg_stds:
+                if isinstance(std, str):
+                    standards_to_check.append((std, "domain_config.json REGULATORY_STANDARDS"))
+        elif isinstance(reg_stds, dict):
+            for std in reg_stds.keys():
+                standards_to_check.append((std, "domain_config.json REGULATORY_STANDARDS"))
+                
+        op_domain = str(cfg.get("OPERATIONAL_DOMAIN") or cfg.get("operational_domain") or cfg.get("domain") or "").lower()
+        for d_key, (std_name, _) in domain_standards_map.items():
+            if d_key in op_domain:
+                standards_to_check.append((std_name, f"declared domain '{op_domain}'"))
+    
+    domain_id = os.path.basename(os.path.abspath(workspace_path)).lower()
+    domain_name = DOMAIN_NAMES.get(domain_id, domain_id).lower()
+    for d_key, (std_name, _) in domain_standards_map.items():
+        if d_key in domain_id or d_key in domain_name:
+            standards_to_check.append((std_name, f"inferred domain '{domain_id}'"))
+            
+    domain_alias_map = {
+        "surgical": ("IEC 62304", "surgical domain"),
+        "healthcare": ("IEC 62304", "healthcare domain"),
+        "locomotive": ("EN 50128", "locomotive rail domain"),
+        "shunting": ("EN 50128", "rail shunting domain"),
+        "cubesat": ("ECSS", "cubesat space domain"),
+        "satellite": ("ECSS", "satellite space domain"),
+        "orbit": ("ECSS", "orbital space domain"),
+        "forklift": ("ISO 3691-4", "forklift AGV domain"),
+        "auv": ("DNV-GL", "AUV subsea domain"),
+        "underwater": ("DNV-GL", "underwater subsea domain"),
+    }
+    for alias_key, (std_name, reason) in domain_alias_map.items():
+        if alias_key in domain_id or alias_key in domain_name:
+            standards_to_check.append((std_name, reason))
+
+    details["standards_checked"] = standards_to_check
+    
+    checked_set = set()
+    for std_name, reason in standards_to_check:
+        if std_name in checked_set:
+            continue
+        checked_set.add(std_name)
+        
+        std_pattern = re.compile(re.escape(std_name), re.IGNORECASE)
+        for _, (c_name, c_pat) in domain_standards_map.items():
+            if c_name == std_name:
+                std_pattern = c_pat
+                break
+                
+        if not std_pattern.search(sec_15_text):
+            errors.append(
+                f"Normative standard '{std_name}' required for {reason} is missing from CONOPS.md Section 1.5"
+            )
+            
+    passed = len(errors) == 0
+    return passed, errors, details
+
+
+def solve_forbidden_cross_domain_ontology(
+    workspace_path: str, conops_text: str, intent_text: str = "", domain_config: Optional[Dict] = None
+) -> Tuple[bool, List[str], Dict[str, object]]:
+    """
+    Solver 5: Forbidden Cross-Domain Ontology Scanner (Layer 5).
+    - For non-aircraft platforms (Ground, Rail, Medical, Subsea, Space):
+        reject `V_stall > 0`, `parachute`, `altitude AGL`, `airframe`, `ASTM F3411 Remote ID`.
+    - For civilian platforms (Medical, Logistics AGV, Rail):
+        reject `ROE-01..06`, `PID`, `weapons release`, `collateral damage`.
+    """
+    errors = []
+    details = {}
+    
+    cfg = domain_config
+    if cfg is None:
+        cfg_paths = [
+            os.path.join(workspace_path, "schema", "domain_config.json"),
+            os.path.join(workspace_path, "domain_config.json"),
+        ]
+        for p in cfg_paths:
+            if os.path.isfile(p):
+                try:
+                    with open(p, "r", encoding="utf-8") as f:
+                        cfg = json.load(f)
+                    break
+                except Exception:
+                    pass
+
+    domain_id = os.path.basename(os.path.abspath(workspace_path)).lower()
+    domain_name = DOMAIN_NAMES.get(domain_id, domain_id).lower()
+    combined_domain_info = f"{domain_id} {domain_name}"
+    if cfg:
+        combined_domain_info += f" {cfg.get('PLATFORM_TYPE', '')} {cfg.get('OPERATIONAL_DOMAIN', '')} {cfg.get('domain', '')}".lower()
+
+    non_aircraft_keywords = [
+        "ground", "rail", "medical", "subsea", "space", "ugv", "locomotive",
+        "surgical", "auv", "cubesat", "satellite", "agv", "forklift", "underwater",
+        "run_03", "run_05", "run_06", "run_07", "run_08", "run_09",
+    ]
+    civilian_keywords = [
+        "medical", "agv", "rail", "surgical", "forklift", "locomotive", "logistics",
+        "run_07", "run_08", "run_09", "civilian",
+    ]
+
+    is_non_aircraft = any(k in combined_domain_info for k in non_aircraft_keywords)
+    if cfg and "is_aircraft" in cfg:
+        is_non_aircraft = not cfg["is_aircraft"]
+
+    is_civilian = any(k in combined_domain_info for k in civilian_keywords)
+    if cfg and "is_civilian" in cfg:
+        is_civilian = cfg["is_civilian"]
+
+    details["is_non_aircraft"] = is_non_aircraft
+    details["is_civilian"] = is_civilian
+
+    combined_text = conops_text + "\n" + intent_text
+
+    # Rule A: Non-aircraft platforms
+    if is_non_aircraft:
+        # 1. V_stall > 0
+        v_stall_matches = re.findall(
+            r"V_stall\s*\|\s*<=?\s*([1-9]\d*(?:\.\d+)?|0\.\d*[1-9]\d*)",
+            combined_text,
+            re.IGNORECASE,
+        )
+        if not v_stall_matches:
+            v_stall_matches = re.findall(
+                r"V_stall\s*=\s*([1-9]\d*(?:\.\d+)?|0\.\d*[1-9]\d*)",
+                combined_text,
+                re.IGNORECASE,
+            )
+        if not v_stall_matches:
+            v_stall_matches = re.findall(
+                r"\|\s*Minimum Controllable / Stall Velocity\s*\|\s*V_stall\s*\|\s*<=?\s*([1-9]\d*(?:\.\d+)?|0\.\d*[1-9]\d*)",
+                combined_text,
+                re.IGNORECASE,
+            )
+        if v_stall_matches:
+            errors.append(
+                f"Forbidden ontology in non-aircraft domain: positive stall velocity 'V_stall = {v_stall_matches[0]} m/s' (> 0)"
+            )
+
+        # 2. parachute
+        if re.search(r"\bparachute\b", combined_text, re.IGNORECASE):
+            errors.append("Forbidden ontology in non-aircraft domain: references aeronautical 'parachute'")
+
+        # 3. altitude AGL
+        if re.search(r"\b(?:altitude\s+AGL|m\s+AGL)\b", combined_text, re.IGNORECASE):
+            errors.append("Forbidden ontology in non-aircraft domain: references aeronautical 'altitude AGL'")
+
+        # 4. airframe
+        if re.search(r"\bairframe\b", combined_text, re.IGNORECASE):
+            errors.append("Forbidden ontology in non-aircraft domain: references aeronautical 'airframe'")
+
+        # 5. ASTM F3411 Remote ID
+        if re.search(r"(?:ASTM\s+F3411|\bRemote\s+ID\b)", combined_text, re.IGNORECASE):
+            errors.append("Forbidden ontology in non-aircraft domain: references UAS standard 'ASTM F3411 Remote ID'")
+
+    # Rule B: Civilian platforms
+    if is_civilian:
+        # 1. ROE-01..06
+        roe_matches = re.findall(r"\bROE-0[1-6]\b", combined_text)
+        if roe_matches:
+            errors.append(
+                f"Forbidden ontology in civilian domain: references military Rules of Engagement {sorted(set(roe_matches))}"
+            )
+
+        # 2. PID
+        if re.search(r"\bPID\b", combined_text):
+            errors.append("Forbidden ontology in civilian domain: references military tactical Positive Identification ('PID')")
+
+        # 3. weapons release
+        if re.search(r"\bweapons?\s+release\b", combined_text, re.IGNORECASE):
+            errors.append("Forbidden ontology in civilian domain: references military 'weapons release'")
+
+        # 4. collateral damage
+        if re.search(r"\bcollateral\s+damage\b", combined_text, re.IGNORECASE):
+            errors.append("Forbidden ontology in civilian domain: references military 'collateral damage'")
+
+    passed = len(errors) == 0
+    return passed, errors, details
+
+
+# ---------------------------------------------------------------------------
+# Layer 3: Statutory Cardinality & Normative Standards
+# ---------------------------------------------------------------------------
 
 def verify_layer3_cardinality(workspace_path: str) -> LayerResult:
-    """Assert 16 Threat Vectors, 4 PACE tiers, 12 MIL-STD-810H methods, 24 SORA OSOs, 7 Emergency rows."""
+    """Assert 16 Threat Vectors, 4 PACE tiers, 12 MIL-STD-810H methods, 24 SORA OSOs, 7 Emergency rows, and Normative Standards."""
     errors = []
     details = {}
     
@@ -308,7 +908,6 @@ def verify_layer3_cardinality(workspace_path: str) -> LayerResult:
         errors.append(f"Found only {len(methods)} MIL-STD-810H methods (< 12 required): {methods}")
         
     # 4. 24 SORA OSOs (OSO-01..OSO-24)
-    # Check if safety specifications are present under docs/safety
     safety_files = []
     safety_dir = os.path.join(workspace_path, "docs", "safety")
     if os.path.isdir(safety_dir):
@@ -323,7 +922,6 @@ def verify_layer3_cardinality(workspace_path: str) -> LayerResult:
         expected_osos = [f"OSO-{i:02d}" for i in range(1, 25)]
         found_osos = [o for o in expected_osos if re.search(r"\b" + o + r"\b", combined_safety)]
         details["sora_osos_found"] = len(found_osos)
-        # If safety specifications exist on disk, enforce strict 24/24 presence
         if safety_files:
             missing_osos = [o for o in expected_osos if o not in found_osos]
             if missing_osos:
@@ -340,6 +938,12 @@ def verify_layer3_cardinality(workspace_path: str) -> LayerResult:
     if missing_emgs:
         errors.append(f"Missing Emergency Decision rows: {missing_emgs}")
 
+    # 6. Normative Standards Cross-Checker (Solver 4)
+    std_passed, std_errors, std_details = solve_normative_standards_cross_check(workspace_path, conops_c)
+    details["normative_standards"] = std_details
+    if not std_passed:
+        errors.extend(std_errors)
+
     passed = len(errors) == 0
     return LayerResult(
         layer_id=3,
@@ -355,7 +959,7 @@ def verify_layer3_cardinality(workspace_path: str) -> LayerResult:
 # ---------------------------------------------------------------------------
 
 def verify_layer4_physical_math(workspace_path: str) -> LayerResult:
-    """Validate SORA kinetic energy, Kalman filter covariance units & dimensions, Bingo energy conservation."""
+    """Validate SORA kinetic energy, Kalman filter covariance units & dimensions, Bingo energy conservation, mass partitions, and quadratic physics."""
     errors = []
     details = {}
     
@@ -374,13 +978,15 @@ def verify_layer4_physical_math(workspace_path: str) -> LayerResult:
     # 1. SORA Kinetic Energy Calculation (E_k <= 34.0J for GRC-1)
     m_ek = re.search(r"\|\s*Mitigated Kinetic Energy\s*\|\s*E_k_mitigated\s*\|\s*([\d\.]+)\s*\|\s*J", conops_c)
     if not m_ek:
-        # Fallback search for E_k in parameter table
         m_ek = re.search(r"E_k(?:_mitigated)?\s*\|\s*([\d\.]+)\s*\|\s*J", conops_c)
         
     if m_ek:
         ek = float(m_ek.group(1))
         details["mitigated_kinetic_energy_J"] = ek
-        if ek > 34.0:
+        m_grc = re.search(r"GRC-(\d+)", conops_c)
+        grc_level = int(m_grc.group(1)) if m_grc else None
+        is_aircraft = not any(k in conops_c.lower() for k in ("subsea", "maritime", "ugv", "ground delivery", "cubesat", "space", "surgical", "hospital", "locomotive", "rail", "forklift", "agv"))
+        if is_aircraft and (grc_level is None or grc_level == 1) and ek > 34.0:
             errors.append(f"Mitigated kinetic energy E_k ({ek} J) exceeds 34.0 J GRC-1 ceiling")
     else:
         errors.append("Mitigated Kinetic Energy E_k parameter definition not found in CONOPS.md")
@@ -446,6 +1052,24 @@ def verify_layer4_physical_math(workspace_path: str) -> LayerResult:
         missing_bingo = [k for k in bingo_keys if k not in bingo_values]
         errors.append(f"Missing Bingo energy parameters in MISSION_INTENT.md: {missing_bingo}")
 
+    # 4. Relational Table Mass Cross-Sum Solver (Solver 1)
+    mass_passed, mass_errors, mass_details = solve_relational_mass_cross_sum(conops_c)
+    details["mass_cross_sum"] = mass_details
+    if not mass_passed:
+        errors.extend(mass_errors)
+
+    # 5. Closed-Form Quadratic Physics Solver (Solver 2)
+    quad_passed, quad_errors, quad_details = solve_closed_form_quadratic_physics(conops_c)
+    details["quadratic_physics"] = quad_details
+    if not quad_passed:
+        errors.extend(quad_errors)
+
+    # 6. Dimensional Scaling & Energy Conservation Engine (Solver 3)
+    dim_passed, dim_errors, dim_details = solve_dimensional_energy_conservation(conops_c, intent_c)
+    details["dimensional_energy"] = dim_details
+    if not dim_passed:
+        errors.extend(dim_errors)
+
     passed = len(errors) == 0
     return LayerResult(
         layer_id=4,
@@ -461,7 +1085,7 @@ def verify_layer4_physical_math(workspace_path: str) -> LayerResult:
 # ---------------------------------------------------------------------------
 
 def verify_layer5_adversarial_invariants(workspace_path: str) -> LayerResult:
-    """Verify priority arbitration, failsafe non-destructive RTB, NIST SP 800-82r3 anti-replay freshness."""
+    """Verify priority arbitration, failsafe non-destructive RTB, NIST SP 800-82r3 anti-replay freshness, and ontology invariants."""
     errors = []
     details = {}
     
@@ -488,7 +1112,6 @@ def verify_layer5_adversarial_invariants(workspace_path: str) -> LayerResult:
         details["priority_arbitration"] = "Verified"
         
     # 2. Failsafe Non-Destructive RTB in Flight
-    # Asserts EMG-01 defines non-destructive return / loiter and EMG-07 defines termination / abort
     if not re.search(r"EMG-01.*?(?:return|loiter|rtb|hold)", conops_c, re.IGNORECASE | re.DOTALL):
         errors.append("EMG-01 failsafe state in CONOPS.md must specify non-destructive loiter / return-to-base")
     if not re.search(r"EMG-07.*?(?:flight\s+termination|abort|parachute|cutoff)", conops_c, re.IGNORECASE | re.DOTALL):
@@ -502,6 +1125,14 @@ def verify_layer5_adversarial_invariants(workspace_path: str) -> LayerResult:
         errors.append("Anti-replay freshness mechanisms (sequence counters, timestamps, nonces) missing from MISSION_INTENT.md")
     else:
         details["anti_replay_freshness"] = "Verified NIST SP 800-82r3 monotonic sequence counters"
+
+    # 4. Forbidden Cross-Domain Ontology Scanner (Solver 5)
+    onto_passed, onto_errors, onto_details = solve_forbidden_cross_domain_ontology(
+        workspace_path, conops_c, intent_c
+    )
+    details["cross_domain_ontology"] = onto_details
+    if not onto_passed:
+        errors.extend(onto_errors)
 
     passed = len(errors) == 0
     return LayerResult(
@@ -705,10 +1336,10 @@ class AcceptanceHarness:
 
 def main():
     parser = argparse.ArgumentParser(description="DEAP 6-Layer Automated E2E Acceptance Test Harness")
-    parser.add_argument("--projects-dir", default="/Users/perkunas/test_projects", help="Path to 10-domain test projects directory")
+    parser.add_argument("--projects-dir", default=os.path.expanduser("~/test_projects"), help="Path to 10-domain test projects directory")
     parser.add_argument("--target", default=None, help="Target a specific domain workspace path")
-    parser.add_argument("--report-md", default="/Users/perkunas/test_projects/MASTER_E2E_ACCEPTANCE_REPORT.md", help="Markdown report output path")
-    parser.add_argument("--scorecard-json", default="/Users/perkunas/test_projects/acceptance_scorecard.json", help="JSON scorecard output path")
+    parser.add_argument("--report-md", default=os.path.expanduser("~/test_projects/MASTER_E2E_ACCEPTANCE_REPORT.md"), help="Markdown report output path")
+    parser.add_argument("--scorecard-json", default=os.path.expanduser("~/test_projects/acceptance_scorecard.json"), help="JSON scorecard output path")
     parser.add_argument("--verbose", action="store_true", help="Print verbose per-layer logs")
     args = parser.parse_args()
 

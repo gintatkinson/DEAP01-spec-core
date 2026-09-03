@@ -57,7 +57,7 @@ stateDiagram-v2
 - **Tier 1 (Nominal Execution):** Full multi-sensor fusion, dual-channel C2 links, and nominal envelope margins.
 - **Tier 2 (Degraded Sensor Mode):** Single-sensor failure activates secondary observer and dead reckoning.
 - **Tier 3 (Contingency Link Mode):** Loss of primary C2 link triggers autonomous hold and return-to-base sequence.
-- **Tier 4 (Emergency Containment Mode):** Unrecoverable fault triggers ballistic parachute deploy or instant motor cutoff.
+- **Tier 4 (Emergency Containment Mode):** Unrecoverable fault triggers {{TIER4_CONTAINMENT_DESC:ballistic parachute deploy or instant motor cutoff}}.
 
 ### 12.4 Human-in-the-Loop (HITL) Authority & Override Protocols
 - **Supervisory Authority:** Operator retains positive manual override capability via independent emergency link.

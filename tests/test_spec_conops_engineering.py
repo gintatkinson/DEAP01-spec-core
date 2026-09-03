@@ -371,25 +371,20 @@ class TestSpecConopsEngineering(unittest.TestCase):
         for seg in segments:
             self.assertIn(seg, content)
 
-        # Section 1.5: Normative Standards & Regulatory Baseline Table (13 standards)
+        # Section 1.5: Normative Standards & Regulatory Baseline Table + Dynamic Injection Token
         self.assertIn("### 1.5 Normative Standards & Regulatory Baseline", content)
-        standards = [
-            "RTCA DO-178C (DAL-A)",
-            "RTCA DO-254",
-            "RTCA DO-365B",
-            "RTCA DO-362A",
+        universal_standards = [
+            "ISO/IEC/IEEE 29148:2018",
+            "INCOSE SEH v5.0",
+            "OMG UAF v2.0",
             "MIL-STD-882E",
             "MIL-STD-810H",
             "MIL-STD-461G",
-            "ISO/IEC/IEEE 29148:2018",
-            "ISO 26262:2018",
-            "ASTM F3411-22a",
-            "ASTM F3269-17",
-            "JARUS SORA v2.5",
             "NIST SP 800-82r3",
         ]
-        for std in standards:
+        for std in universal_standards:
             self.assertIn(std, content)
+        self.assertIn("{{DOMAIN_REGULATORY_STANDARDS_TABLE_ROWS}}", content)
 
         # Issue Tracking references
         self.assertIn("Fixes #117, #123, #128, #121", content)

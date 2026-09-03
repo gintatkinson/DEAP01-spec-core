@@ -874,6 +874,113 @@ class TestSysMLParameterBindingEngine(unittest.TestCase):
         self.assertEqual(engine.resolve_token("CORE_CAPABILITY_4"), expected_c4)
         self.assertEqual(engine.resolve_token("CORE_MISSION_CAPABILITIES"), expected_full)
 
+    def test_dynamic_mass_budget_synthesis_default_and_custom(self):
+        """Verify dynamic mass budget synthesis from TOTAL_MTOW_KG and strict partition sum (Fixes #161)."""
+        # 1. Default MTOW (50.0 kg)
+        engine_default = SysMLParameterBindingEngine(auto_detect=False)
+        self.assertEqual(engine_default.resolve_token("TOTAL_MTOW_KG"), "50.0")
+        self.assertEqual(engine_default.resolve_token("MASS_BUDGET_AIRFRAME_KG"), "15.0")
+        self.assertEqual(engine_default.resolve_token("MASS_BUDGET_AVIONICS_KG"), "7.5")
+        self.assertEqual(engine_default.resolve_token("MASS_BUDGET_PROPULSION_KG"), "12.5")
+        self.assertEqual(engine_default.resolve_token("MASS_BUDGET_ENERGY_KG"), "10.0")
+        self.assertEqual(engine_default.resolve_token("MASS_BUDGET_PAYLOAD_KG"), "3.5")
+        self.assertEqual(engine_default.resolve_token("MASS_BUDGET_CONTAINMENT_KG"), "1.5")
+
+        default_sum = (
+            float(engine_default.resolve_token("MASS_BUDGET_AIRFRAME_KG"))
+            + float(engine_default.resolve_token("MASS_BUDGET_AVIONICS_KG"))
+            + float(engine_default.resolve_token("MASS_BUDGET_PROPULSION_KG"))
+            + float(engine_default.resolve_token("MASS_BUDGET_ENERGY_KG"))
+            + float(engine_default.resolve_token("MASS_BUDGET_PAYLOAD_KG"))
+            + float(engine_default.resolve_token("MASS_BUDGET_CONTAINMENT_KG"))
+        )
+        self.assertAlmostEqual(default_sum, 50.0, places=4)
+
+        # 2. Custom MTOW = 25.0 kg
+        engine_25 = SysMLParameterBindingEngine(parameter_values={"TOTAL_MTOW_KG": "25.0"}, auto_detect=False)
+        self.assertEqual(engine_25.resolve_token("TOTAL_MTOW_KG"), "25.0")
+        self.assertEqual(engine_25.resolve_token("MASS_BUDGET_AIRFRAME_KG"), "7.5")
+        self.assertEqual(engine_25.resolve_token("MASS_BUDGET_AVIONICS_KG"), "3.75")
+        self.assertEqual(engine_25.resolve_token("MASS_BUDGET_PROPULSION_KG"), "6.25")
+        self.assertEqual(engine_25.resolve_token("MASS_BUDGET_ENERGY_KG"), "5.0")
+        self.assertEqual(engine_25.resolve_token("MASS_BUDGET_PAYLOAD_KG"), "1.75")
+        self.assertEqual(engine_25.resolve_token("MASS_BUDGET_CONTAINMENT_KG"), "0.75")
+
+        sum_25 = (
+            float(engine_25.resolve_token("MASS_BUDGET_AIRFRAME_KG"))
+            + float(engine_25.resolve_token("MASS_BUDGET_AVIONICS_KG"))
+            + float(engine_25.resolve_token("MASS_BUDGET_PROPULSION_KG"))
+            + float(engine_25.resolve_token("MASS_BUDGET_ENERGY_KG"))
+            + float(engine_25.resolve_token("MASS_BUDGET_PAYLOAD_KG"))
+            + float(engine_25.resolve_token("MASS_BUDGET_CONTAINMENT_KG"))
+        )
+        self.assertAlmostEqual(sum_25, 25.0, places=4)
+
+        # 3. Arbitrary non-integer MTOW = 13.7 kg
+        engine_arb = SysMLParameterBindingEngine(parameter_values={"TOTAL_MTOW_KG": "13.7"}, auto_detect=False)
+        sum_arb = (
+            float(engine_arb.resolve_token("MASS_BUDGET_AIRFRAME_KG"))
+            + float(engine_arb.resolve_token("MASS_BUDGET_AVIONICS_KG"))
+            + float(engine_arb.resolve_token("MASS_BUDGET_PROPULSION_KG"))
+            + float(engine_arb.resolve_token("MASS_BUDGET_ENERGY_KG"))
+            + float(engine_arb.resolve_token("MASS_BUDGET_PAYLOAD_KG"))
+            + float(engine_arb.resolve_token("MASS_BUDGET_CONTAINMENT_KG"))
+        )
+        self.assertAlmostEqual(sum_arb, 13.7, places=4)
+
+    def test_unit_conversion_and_semantic_aliases(self):
+        """Verify endurance unit conversion, battery capacity conversion, and semantic aliases (Fixes #162, #170)."""
+        params = {
+            "endurance_hours": 2.5,
+            "battery_capacity_kwh": 3.0,
+            "max_cruise_speed_ms": 28.0,
+            "stall_speed_ms": 13.5,
+            "wingspan_m": 3.2,
+            "parachute_area_m2": 45.0,
+        }
+        engine = SysMLParameterBindingEngine(parameter_values=params, auto_detect=False)
+
+        # Endurance: 2.5 hours -> 150.0 minutes
+        self.assertEqual(engine.resolve_token("ENDURANCE_NOMINAL_MIN"), "150.0")
+        self.assertEqual(engine.resolve_token("ENDURANCE_MIN_MIN"), "150.0")
+
+        # Battery capacity: 3.0 kWh -> 10800000.0 Joules
+        self.assertEqual(engine.resolve_token("BATTERY_CAPACITY_KWH"), "3.0")
+        self.assertEqual(engine.resolve_token("BATTERY_CAPACITY_JOULES"), "10800000.0")
+        self.assertEqual(engine.resolve_token("E_CAPACITY_JOULES"), "10800000.0")
+
+        # Aliases
+        self.assertEqual(engine.resolve_token("MAX_CRUISE_SPEED_MS"), "28.0")
+        self.assertEqual(engine.resolve_token("V_CRUISE_MAX_MPS"), "28.0")
+        self.assertEqual(engine.resolve_token("STALL_SPEED_MS"), "13.5")
+        self.assertEqual(engine.resolve_token("V_STALL_MAX_MPS"), "13.5")
+        self.assertEqual(engine.resolve_token("WINGSPAN_M"), "3.2")
+        self.assertEqual(engine.resolve_token("DIM_MAX_W_M"), "3.2")
+        self.assertEqual(engine.resolve_token("PARACHUTE_AREA_M2"), "45.0")
+        self.assertEqual(engine.resolve_token("S_CANOPY"), "45.0")
+
+    def test_closed_form_quadratic_physics_solver(self):
+        """Verify closed-form quadratic physics solver for Section 5.2 SORA parachute derivations (Fixes #168)."""
+        # Case 1: m = 25.0 kg, S_canopy = 84.18 m^2, C_d = 1.75
+        params = {
+            "TOTAL_MTOW_KG": 25.0,
+            "PARACHUTE_AREA_M2": 84.18,
+            "PARACHUTE_DRAG_COEFFICIENT": 1.75,
+        }
+        engine = SysMLParameterBindingEngine(parameter_values=params, auto_detect=False)
+
+        # v_calc = sqrt(2 * 25 * 9.80665 / (1.225 * 84.18 * 1.75)) = 1.6483 -> 1.65 m/s
+        # E_k_calc = 0.5 * 25 * 1.65^2 = 34.03 -> 34.0 J
+        self.assertEqual(engine.resolve_token("V_TERMINAL_PARACHUTE_MPS"), "1.65")
+        self.assertEqual(engine.resolve_token("E_K_MITIGATED_JOULES"), "34.0")
+
+        # Case 2: default synthesis with auto-calculated parachute area
+        engine_auto = SysMLParameterBindingEngine(parameter_values={"TOTAL_MTOW_KG": 50.0}, auto_detect=False)
+        v_term = float(engine_auto.resolve_token("V_TERMINAL_PARACHUTE_MPS"))
+        e_k = float(engine_auto.resolve_token("E_K_MITIGATED_JOULES"))
+        self.assertAlmostEqual(v_term, 1.65, places=1)
+        self.assertAlmostEqual(e_k, 0.5 * 50.0 * (v_term ** 2), places=1)
+
 
 if __name__ == "__main__":
     unittest.main()

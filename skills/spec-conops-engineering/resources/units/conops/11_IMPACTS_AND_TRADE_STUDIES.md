@@ -42,7 +42,7 @@ In accordance with INCOSE Systems Engineering Handbook v5.0 §4.3 (Decision Anal
 The quantitative INCOSE Pugh Decision Matrix evaluates the candidate energy storage architectures against weighted operational criteria (scale 1 to 5, where 1 = Unacceptable, 3 = Compliant Baseline, 5 = Optimal):
 
 | Evaluation Criterion | Criterion ID | Weight (w_i) | Option A: High-Discharge Cells (s_i1) | Option A: Weighted (w_i * s_i1) | Option B: High-Capacity with Heating (s_i2) [Selected] | Option B: Weighted (w_i * s_i2) | Option C: Solid-State Cells (s_i3) | Option C: Weighted (w_i * s_i3) |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | Gravimetric Energy Density (rho_energy) | C_1 | 0.25 | 2 (180 Wh/kg) | 0.50 | 4 (260 Wh/kg) | 1.00 | 5 (350 Wh/kg) | 1.25 |
 | Low-Temp Discharge at T_op_min (s_cold) | C_2 | 0.25 | 1 (Capacity Drop < 40%) | 0.25 | 4 (Thermal Heated > 85%) | 1.00 | 2 (High Impedance < 50%) | 0.50 |
 | Cycle Lifetime & Durability (N_cycles) | C_3 | 0.15 | 2 (300 cycles) | 0.30 | 5 (1000+ cycles) | 0.75 | 2 (350 cycles) | 0.30 |
@@ -87,7 +87,7 @@ $$
 The quantitative Pugh Decision Matrix evaluates compute and communications architectures across operational criteria (scale 1 to 5):
 
 | Evaluation Criterion | Criterion ID | Weight (w_i) | Option A: Centralized Streaming (s_i1) | Option A: Weighted (w_i * s_i1) | Option B: Edge Compute + Compression (s_i2) [Selected] | Option B: Weighted (w_i * s_i2) | Option C: Hybrid Adaptive Splitting (s_i3) | Option C: Weighted (w_i * s_i3) |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | Contested / Jammed RF Resilience (s_jam) | C_1 | 0.30 | 1 (Mission Failure on Loss) | 0.30 | 5 (Autonomous Full Capability) | 1.50 | 3 (Degraded Dynamic Fallback) | 0.90 |
 | Telemetry Bandwidth Consumption | C_2 | 0.20 | 1 (High > 10 Mbps raw) | 0.20 | 5 (Low < 250 kbps semantic) | 1.00 | 3 (Moderate ~ 2 Mbps) | 0.60 |
 | Real-Time Inference Latency (tau_infer) | C_3 | 0.20 | 2 (Transport + Station: 80 ms) | 0.40 | 4 (Local Edge: < 15 ms) | 0.80 | 3 (Variable 20-100 ms) | 0.60 |
@@ -132,7 +132,7 @@ $$
 The quantitative Pugh Decision Matrix evaluates safety containment architectures across operational criteria (scale 1 to 5):
 
 | Evaluation Criterion | Criterion ID | Weight (w_i) | Option A: Actuator Redundancy (s_i1) | Option A: Weighted (w_i * s_i1) | Option B: Failsafe Containment (s_i2) [Selected] | Option B: Weighted (w_i * s_i2) | Option C: Passive Crushable Structure (s_i3) | Option C: Weighted (w_i * s_i3) |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | Terminal Kinetic Energy Reduction (E_k <= E_thresh) | C_1 | 0.30 | 1 (Unmitigated Terminal v_term) | 0.30 | 5 (Decelerated to v_safe <= 5 m/s) | 1.50 | 2 (Marginal Impact Absorption) | 0.60 |
 | Catastrophic Bus & Structural Failure Mitigation | C_2 | 0.20 | 1 (Zero Protection on Bus Loss) | 0.20 | 5 (Independent Battery & Watchdog) | 1.00 | 2 (Structural Dissipation Only) | 0.40 |
 | SORA M2 / ARP4761 Certification Credit | C_3 | 0.20 | 2 (Partial Actuator Integrity) | 0.40 | 5 (Full High-Integrity M2 Credit) | 1.00 | 1 (No Standard Regulatory Credit) | 0.20 |
