@@ -98,6 +98,132 @@ def calculate_bingo_energy_reserve_ratio(
     return reserve_energy_j / total_capacity_j
 
 
+def _extract_bingo_energy_parameters(sec9_content: str) -> Tuple[Optional[float], Optional[float]]:
+    """
+    Extracts total capacity E_capacity and statutory reserve E_reserve from Section 9.
+    Uses table-aware extraction first to prevent false triggers on inequality constraints
+    (e.g., E_reserve >= 0.20 * E_capacity). Reference Fixes #130.
+    """
+    capacity_val: Optional[float] = None
+    reserve_val: Optional[float] = None
+
+    sec9_tables, _ = _parse_commonmark_tables(sec9_content)
+    for tbl in sec9_tables:
+        for row in tbl:
+            symbol = row.get("symbol", "").strip()
+            param_name = (row.get("energy_parameter") or row.get("parameter") or row.get("name") or "").strip()
+            val_str = (row.get("value") or row.get("val") or "").strip()
+
+            m_val = re.search(r'([0-9]+(?:\.[0-9]+)?)', val_str)
+            num_val: Optional[float] = None
+            if m_val:
+                try:
+                    num_val = float(m_val.group(1))
+                except ValueError:
+                    pass
+
+            if num_val is not None:
+                if re.search(r'\bE[_\s]*capacity\b', symbol, re.IGNORECASE) or re.search(r'\btotal\s+(?:storage\s+|pack\s+|battery\s+)?capacity\b', param_name, re.IGNORECASE):
+                    capacity_val = num_val
+                elif re.search(r'\bE[_\s]*reserve\b', symbol, re.IGNORECASE) or re.search(r'\b(?:mandatory\s+)?statutory\s+reserve\b', param_name, re.IGNORECASE) or (re.search(r'\breserve\s+energy\b', param_name, re.IGNORECASE) and not re.search(r'ratio|percent|rule|constraint', param_name, re.IGNORECASE)):
+                    reserve_val = num_val
+
+    # Fallback to regex on text if not extracted from tables (stripping display math formulas to avoid matching 0.20 in E_reserve >= 0.20 * E_capacity)
+    if capacity_val is None or reserve_val is None:
+        clean_text = re.sub(r'\$\$[\s\S]*?\$\$', '', sec9_content)
+
+        if capacity_val is None:
+            m_cap = re.search(r'E[_\s]*capacity\s*[:=\|]?\s*([0-9]+(?:\.[0-9]+)?)', clean_text, re.IGNORECASE)
+            if not m_cap:
+                m_cap = re.search(r'(?:total\s+capacity|pack\s+capacity|battery\s+capacity)\s*[:=\|]?\s*([0-9]+(?:\.[0-9]+)?)', clean_text, re.IGNORECASE)
+            if m_cap:
+                try:
+                    capacity_val = float(m_cap.group(1))
+                except ValueError:
+                    pass
+
+        if reserve_val is None:
+            m_res = re.search(r'E[_\s]*reserve\s*[:=\|]?\s*([0-9]+(?:\.[0-9]+)?)', clean_text, re.IGNORECASE)
+            if not m_res:
+                m_res = re.search(r'(?:statutory\s+reserve|reserve\s+energy)\s*[:=\|]?\s*([0-9]+(?:\.[0-9]+)?)', clean_text, re.IGNORECASE)
+            if m_res:
+                try:
+                    reserve_val = float(m_res.group(1))
+                except ValueError:
+                    pass
+
+    return capacity_val, reserve_val
+
+
+def _extract_sora_parameters(sec6_content: str) -> Tuple[Optional[float], Optional[float], float, Optional[float]]:
+    """
+    Extracts h_max, v_wind, theta_impact, and R_GRB from Section 6.
+    Uses table-aware extraction first. Reference Fixes #130.
+    """
+    h_max_val: Optional[float] = None
+    v_wind_val: Optional[float] = None
+    theta_val: float = 45.0
+    r_grb_val: Optional[float] = None
+
+    sec6_tables, _ = _parse_commonmark_tables(sec6_content)
+    for tbl in sec6_tables:
+        for row in tbl:
+            symbol = row.get("symbol", "").strip()
+            param_name = (row.get("parameter") or row.get("name") or "").strip()
+            val_str = (row.get("value") or row.get("val") or "").strip()
+
+            m_val = re.search(r'([0-9]+(?:\.[0-9]+)?)', val_str)
+            num_val: Optional[float] = None
+            if m_val:
+                try:
+                    num_val = float(m_val.group(1))
+                except ValueError:
+                    pass
+
+            if num_val is not None:
+                if re.search(r'\bh[_\s]*max\b', symbol, re.IGNORECASE) or re.search(r'\bmax(?:imum)?\s+altitude\b', param_name, re.IGNORECASE):
+                    h_max_val = num_val
+                elif re.search(r'\bv[_\s]*wind(?:[_\s]*max)?\b', symbol, re.IGNORECASE) or re.search(r'\bmax(?:imum)?\s+wind\b', param_name, re.IGNORECASE):
+                    v_wind_val = num_val
+                elif re.search(r'\btheta[_\s]*impact\b', symbol, re.IGNORECASE) or re.search(r'\bimpact\s+angle\b', param_name, re.IGNORECASE):
+                    theta_val = num_val
+                elif re.search(r'\bR[_\s]*GRB\b', symbol, re.IGNORECASE) or re.search(r'\bground\s+risk\s+buffer\b', param_name, re.IGNORECASE):
+                    r_grb_val = num_val
+
+    # Fallback to regex
+    if h_max_val is None:
+        m_h = re.search(r'h[_\s]*max[^\d]*([0-9]+(?:\.[0-9]+)?)', sec6_content, re.IGNORECASE)
+        if not m_h:
+            m_h = re.search(r'(?:max(?:imum)?\s+altitude|operating\s+ceiling)[^\d]*([0-9]+(?:\.[0-9]+)?)', sec6_content, re.IGNORECASE)
+        if m_h:
+            try:
+                h_max_val = float(m_h.group(1))
+            except ValueError:
+                pass
+
+    if v_wind_val is None:
+        m_w = re.search(r'v[_\s]*wind(?:[_\s]*max)?[^\d]*([0-9]+(?:\.[0-9]+)?)', sec6_content, re.IGNORECASE)
+        if not m_w:
+            m_w = re.search(r'(?:max(?:imum)?\s+wind|wind\s+limit|wind\s+speed)[^\d]*([0-9]+(?:\.[0-9]+)?)', sec6_content, re.IGNORECASE)
+        if m_w:
+            try:
+                v_wind_val = float(m_w.group(1))
+            except ValueError:
+                pass
+
+    if r_grb_val is None:
+        m_r = re.search(r'R[_\s]*GRB[^\d]*([0-9]+(?:\.[0-9]+)?)', sec6_content, re.IGNORECASE)
+        if not m_r:
+            m_r = re.search(r'(?:ground\s+risk\s+buffer\s+radius|buffer\s+radius)[^\d]*([0-9]+(?:\.[0-9]+)?)', sec6_content, re.IGNORECASE)
+        if m_r:
+            try:
+                r_grb_val = float(m_r.group(1))
+            except ValueError:
+                pass
+
+    return h_max_val, v_wind_val, theta_val, r_grb_val
+
+
 # =============================================================================
 # Domain Models for ConOps & Mission Intent
 # =============================================================================
@@ -535,6 +661,10 @@ class ConopsCompletenessValidator(IValidator):
                 except Exception:
                     pass
 
+        # Check density, tables, and Mermaid structures for non-templates (Gate 26, Fixes #130)
+        if "TEMPLATE" not in rel_path.upper():
+            findings.extend(self._validate_conops_density_and_structures(content, rel_path, tables=tables))
+
         # Check for malformed tables
         for m_line in malformed_lines:
             findings.append(Finding(
@@ -560,48 +690,15 @@ class ConopsCompletenessValidator(IValidator):
                     detail={"section_number": sec_num, "section_title": title},
                 ))
 
+        # Section 4: Operational Justification & Pugh Decision Matrix with S_j(w) Validation (Fixes #130)
+        if 4 in matched_sections and "TEMPLATE" not in rel_path.upper():
+            _, sec4_line, sec4_content = matched_sections[4]
+            findings.extend(self._validate_pugh_decision_matrix(content, rel_path, sec4_content, sec4_line))
+
         # Section 6: SORA 4D Volume & GRB Math Validation
         if 6 in matched_sections:
             _, sec6_line, sec6_content = matched_sections[6]
-            h_max_val: Optional[float] = None
-            v_wind_val: Optional[float] = None
-            theta_val: float = 45.0
-            r_grb_val: Optional[float] = None
-
-            # Extract parameters via regex from tables or text
-            m_h = re.search(r'h[_\s]*max[^\d]*([0-9]+(?:\.[0-9]+)?)', sec6_content, re.IGNORECASE)
-            if not m_h:
-                m_h = re.search(r'(?:max(?:imum)?\s+altitude|operating\s+ceiling)[^\d]*([0-9]+(?:\.[0-9]+)?)', sec6_content, re.IGNORECASE)
-            if m_h:
-                try:
-                    h_max_val = float(m_h.group(1))
-                except ValueError:
-                    pass
-
-            m_w = re.search(r'v[_\s]*wind(?:[_\s]*max)?[^\d]*([0-9]+(?:\.[0-9]+)?)', sec6_content, re.IGNORECASE)
-            if not m_w:
-                m_w = re.search(r'(?:max(?:imum)?\s+wind|wind\s+limit|wind\s+speed)[^\d]*([0-9]+(?:\.[0-9]+)?)', sec6_content, re.IGNORECASE)
-            if m_w:
-                try:
-                    v_wind_val = float(m_w.group(1))
-                except ValueError:
-                    pass
-
-            m_theta = re.search(r'theta[_\s]*impact[^\d]*([0-9]+(?:\.[0-9]+)?)', sec6_content, re.IGNORECASE)
-            if m_theta:
-                try:
-                    theta_val = float(m_theta.group(1))
-                except ValueError:
-                    pass
-
-            m_r = re.search(r'R[_\s]*GRB[^\d]*([0-9]+(?:\.[0-9]+)?)', sec6_content, re.IGNORECASE)
-            if not m_r:
-                m_r = re.search(r'(?:ground\s+risk\s+buffer\s+radius|buffer\s+radius)[^\d]*([0-9]+(?:\.[0-9]+)?)', sec6_content, re.IGNORECASE)
-            if m_r:
-                try:
-                    r_grb_val = float(m_r.group(1))
-                except ValueError:
-                    pass
+            h_max_val, v_wind_val, theta_val, r_grb_val = _extract_sora_parameters(sec6_content)
 
             if h_max_val is not None and v_wind_val is not None and r_grb_val is not None and self.strict_sora_math:
                 r_calc = calculate_sora_grb_radius(h_max_m=h_max_val, theta_impact_deg=theta_val, v_wind_max_mps=v_wind_val)
@@ -650,6 +747,145 @@ class ConopsCompletenessValidator(IValidator):
 
             # Validate Section 12 depth (subsections 12.1..12.6 + statechart)
             findings.extend(self._validate_emergency_matrix_depth(content, rel_path, sec12_content, sec12_line))
+
+        return findings
+
+    def _validate_conops_density_and_structures(
+        self,
+        content: str,
+        rel_path: str,
+        tables: Optional[List[List[Dict[str, str]]]] = None,
+    ) -> List[Finding]:
+        """
+        Validates structural density, markdown tables, and Mermaid diagrams in ConOps (Fixes #130):
+        1. Minimum line count floor: >= 800 lines (emits 'conops-density-insufficient' if violated).
+        2. Formal markdown tables: >= 8 tables (emits 'conops-tables-insufficient' if violated).
+        3. Mermaid diagrams: >= 3 diagrams, verifying presence of 'flowchart TB',
+           'sequenceDiagram', and 'stateDiagram-v2' (emits 'conops-mermaid-diagrams-insufficient' if violated).
+        """
+        findings: List[Finding] = []
+
+        # 1. Line count floor (>= 800 lines)
+        line_count = len(content.splitlines())
+        if line_count < 800:
+            findings.append(Finding(
+                "conops-density-insufficient",
+                f"ConOps specification '{rel_path}' has insufficient line density ({line_count} lines; minimum required: 800 lines).",
+                location=rel_path,
+                detail={"line_count": line_count, "min_required_lines": 800, "file": rel_path},
+            ))
+
+        # 2. Formal markdown tables (>= 8 tables)
+        if tables is None:
+            tables, _ = _parse_commonmark_tables(content)
+        table_count = len(tables)
+        if table_count < 8:
+            findings.append(Finding(
+                "conops-tables-insufficient",
+                f"ConOps specification '{rel_path}' contains {table_count} markdown table(s); minimum required: 8 formal tables.",
+                location=rel_path,
+                detail={"table_count": table_count, "min_required_tables": 8, "file": rel_path},
+            ))
+
+        # 3. Mermaid diagrams (>= 3 diagrams, verifying flowchart TB, sequenceDiagram, stateDiagram-v2)
+        mermaid_blocks = re.findall(r'```(?:mermaid)?\s*\n([\s\S]*?)```', content, re.IGNORECASE)
+        mermaid_matches = [
+            b for b in mermaid_blocks
+            if re.search(r'\b(?:flowchart|graph|sequenceDiagram|stateDiagram(?:-v2)?|classDiagram|erDiagram|gantt|pie|journey|gitGraph|quadrantChart|mindmap|timeline|zenuml|C4Context)\b', b, re.IGNORECASE)
+        ]
+        raw_mermaid_fences = len(re.findall(r'```mermaid\b', content, re.IGNORECASE))
+        total_diagrams = max(len(mermaid_matches), raw_mermaid_fences)
+
+        has_flowchart_tb = bool(
+            re.search(r'flowchart\s+TB\b', content, re.IGNORECASE)
+            or re.search(r'graph\s+TB\b', content, re.IGNORECASE)
+        )
+        has_sequence_diagram = bool(re.search(r'sequenceDiagram\b', content, re.IGNORECASE))
+        has_state_diagram = bool(
+            re.search(r'stateDiagram-v2\b', content, re.IGNORECASE)
+            or re.search(r'stateDiagram\b', content, re.IGNORECASE)
+        )
+
+        missing_diagrams: List[str] = []
+        if not has_flowchart_tb:
+            missing_diagrams.append("flowchart TB")
+        if not has_sequence_diagram:
+            missing_diagrams.append("sequenceDiagram")
+        if not has_state_diagram:
+            missing_diagrams.append("stateDiagram-v2")
+
+        if total_diagrams < 3 or missing_diagrams:
+            findings.append(Finding(
+                "conops-mermaid-diagrams-insufficient",
+                f"ConOps specification '{rel_path}' has insufficient Mermaid diagrams ({total_diagrams}/3 minimum required; missing: {', '.join(missing_diagrams) if missing_diagrams else 'total count < 3'}).",
+                location=rel_path,
+                detail={"diagram_count": total_diagrams, "min_required_diagrams": 3, "missing_types": missing_diagrams, "file": rel_path},
+            ))
+
+        return findings
+
+    def _validate_pugh_decision_matrix(
+        self,
+        content: str,
+        rel_path: str,
+        sec4_content: str,
+        sec4_line: int,
+    ) -> List[Finding]:
+        """
+        Validates Section 4 Operational Justification & Priority Matrix (Fixes #130):
+        1. Mandatory Pugh decision matrix table evaluating candidate architectures against criteria and weights.
+        2. Mandatory LaTeX sensitivity equation S_j(w) in display math block.
+        """
+        findings: List[Finding] = []
+
+        # Check for Pugh decision matrix
+        has_pugh_keyword = bool(
+            re.search(r'\bpugh\b', sec4_content, re.IGNORECASE)
+            or re.search(r'\bpugh\b', content, re.IGNORECASE)
+        )
+        sec4_tables, _ = _parse_commonmark_tables(sec4_content)
+        has_decision_table = False
+        for tbl in sec4_tables:
+            for row in tbl:
+                keys_and_vals = " ".join(list(row.keys()) + list(row.values())).lower()
+                if (
+                    "weight" in keys_and_vals
+                    or "score" in keys_and_vals
+                    or "criterion" in keys_and_vals
+                    or "criteria" in keys_and_vals
+                    or "datum" in keys_and_vals
+                    or "baseline" in keys_and_vals
+                ):
+                    has_decision_table = True
+                    break
+            if has_decision_table:
+                break
+
+        if not (has_pugh_keyword and (has_decision_table or sec4_tables)):
+            findings.append(Finding(
+                "conops-pugh-matrix-missing",
+                f"Section 4 Operational Justification & Priority Matrix is missing mandatory Pugh decision matrix in '{rel_path}'.",
+                location=f"{rel_path}:{sec4_line}",
+                detail={"file": rel_path, "section": 4},
+            ))
+
+        # Check for LaTeX sensitivity equation S_j(w)
+        has_sensitivity_formula = bool(
+            re.search(r'S[_\s]*\{?j\}?\s*(?:\(\s*w\s*\)|\[\s*w\s*\]|\(w_i\))', sec4_content)
+            or re.search(r'S[_\s]*\{?j\}?\s*(?:\(\s*w\s*\)|\[\s*w\s*\]|\(w_i\))', content)
+        )
+        has_math_block = bool(
+            re.search(r'\$\$[\s\S]*?S[_\s]*\{?j\}?[\s\S]*?\$\$', sec4_content)
+            or re.search(r'\$\$[\s\S]*?S[_\s]*\{?j\}?[\s\S]*?\$\$', content)
+        )
+
+        if not (has_sensitivity_formula and has_math_block):
+            findings.append(Finding(
+                "conops-pugh-sensitivity-missing",
+                f"Section 4 Operational Justification & Priority Matrix is missing mandatory LaTeX sensitivity equation S_j(w) for Pugh decision analysis in '{rel_path}'.",
+                location=f"{rel_path}:{sec4_line}",
+                detail={"file": rel_path, "section": 4},
+            ))
 
         return findings
 
@@ -1029,6 +1265,17 @@ class MissionIntentCompletenessValidator(IValidator):
                 except Exception:
                     pass
 
+        # Check line density floor for non-templates (Gate 26, Fixes #130)
+        if "TEMPLATE" not in rel_path.upper():
+            line_count = len(content.splitlines())
+            if line_count < 400:
+                findings.append(Finding(
+                    "mission-density-insufficient",
+                    f"Mission Intent specification '{rel_path}' has insufficient line density ({line_count} lines; minimum required: 400 lines).",
+                    location=rel_path,
+                    detail={"line_count": line_count, "min_required_lines": 400, "file": rel_path},
+                ))
+
         # Check for malformed tables
         for m_line in malformed_lines:
             findings.append(Finding(
@@ -1109,30 +1356,10 @@ class MissionIntentCompletenessValidator(IValidator):
             _, sec4_line, sec4_content = matched_sections[4]
             findings.extend(self._validate_threat_matrix_density(content, rel_path, sec4_content, sec4_line))
 
-        # Section 9: Bingo Energy Mathematics & Reserve Ratio Validation
+        # Section 9: Bingo Energy Mathematics & Reserve Ratio Validation (Fixes #130)
         if 9 in matched_sections:
             _, sec9_line, sec9_content = matched_sections[9]
-            capacity_val: Optional[float] = None
-            reserve_val: Optional[float] = None
-
-            # Regex search for E_capacity and E_reserve
-            m_cap = re.search(r'E[_\s]*capacity[^\d]*([0-9]+(?:\.[0-9]+)?)', sec9_content, re.IGNORECASE)
-            if not m_cap:
-                m_cap = re.search(r'(?:total\s+capacity|pack\s+capacity|battery\s+capacity)[^\d]*([0-9]+(?:\.[0-9]+)?)', sec9_content, re.IGNORECASE)
-            if m_cap:
-                try:
-                    capacity_val = float(m_cap.group(1))
-                except ValueError:
-                    pass
-
-            m_res = re.search(r'E[_\s]*reserve[^\d]*([0-9]+(?:\.[0-9]+)?)', sec9_content, re.IGNORECASE)
-            if not m_res:
-                m_res = re.search(r'(?:statutory\s+reserve|reserve\s+energy|energy\s+reserve)[^\d]*([0-9]+(?:\.[0-9]+)?)', sec9_content, re.IGNORECASE)
-            if m_res:
-                try:
-                    reserve_val = float(m_res.group(1))
-                except ValueError:
-                    pass
+            capacity_val, reserve_val = _extract_bingo_energy_parameters(sec9_content)
 
             if capacity_val is not None and reserve_val is not None and self.strict_bingo_math:
                 ratio = calculate_bingo_energy_reserve_ratio(total_capacity_j=capacity_val, reserve_energy_j=reserve_val)

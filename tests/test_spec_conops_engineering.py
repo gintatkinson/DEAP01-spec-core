@@ -23,6 +23,17 @@ CONOPS_SKILL_PATH = os.path.join(REPO_ROOT, "skills", "spec-conops-engineering",
 AGENTS_CONOPS_SKILL_PATH = os.path.join(REPO_ROOT, ".agents", "skills", "spec-conops-engineering", "SKILL.md")
 CONOPS_RULE_PATH = os.path.join(REPO_ROOT, "rules", "conops-mission-intent-integrity.md")
 ORCHESTRATOR_SKILL_PATH = os.path.join(REPO_ROOT, "skills", "spec-orchestrator", "SKILL.md")
+CONOPS_01_OVERVIEW_PATH = os.path.join(REPO_ROOT, "skills", "spec-conops-engineering", "resources", "units", "conops", "01_METADATA_AND_OVERVIEW.md")
+CONOPS_02_DEFICIENCIES_PATH = os.path.join(REPO_ROOT, "skills", "spec-conops-engineering", "resources", "units", "conops", "02_DEFICIENCIES_AND_MOTIVATION.md")
+AGENTS_CONOPS_02_DEFICIENCIES_PATH = os.path.join(REPO_ROOT, ".agents", "skills", "spec-conops-engineering", "resources", "units", "conops", "02_DEFICIENCIES_AND_MOTIVATION.md")
+CONOPS_04_USER_CLASSES_PATH = os.path.join(REPO_ROOT, "skills", "spec-conops-engineering", "resources", "units", "conops", "04_USER_CLASSES_AND_STAKEHOLDERS.md")
+AGENTS_CONOPS_04_USER_CLASSES_PATH = os.path.join(REPO_ROOT, ".agents", "skills", "spec-conops-engineering", "resources", "units", "conops", "04_USER_CLASSES_AND_STAKEHOLDERS.md")
+CONOPS_08_ENVIRONMENTAL_PATH = os.path.join(REPO_ROOT, "skills", "spec-conops-engineering", "resources", "units", "conops", "08_ENVIRONMENTAL_MIL_STD_810H.md")
+CONOPS_09_SCENARIOS_PATH = os.path.join(REPO_ROOT, "skills", "spec-conops-engineering", "resources", "units", "conops", "09_SCENARIOS_AND_TIMELINES.md")
+AGENTS_CONOPS_09_SCENARIOS_PATH = os.path.join(REPO_ROOT, ".agents", "skills", "spec-conops-engineering", "resources", "units", "conops", "09_SCENARIOS_AND_TIMELINES.md")
+CONOPS_11_TRADE_STUDIES_PATH = os.path.join(REPO_ROOT, "skills", "spec-conops-engineering", "resources", "units", "conops", "11_IMPACTS_AND_TRADE_STUDIES.md")
+AGENTS_CONOPS_11_TRADE_STUDIES_PATH = os.path.join(REPO_ROOT, ".agents", "skills", "spec-conops-engineering", "resources", "units", "conops", "11_IMPACTS_AND_TRADE_STUDIES.md")
+
 
 
 def _extract_yaml_frontmatter(content: str) -> dict:
@@ -211,6 +222,8 @@ class TestSpecConopsEngineering(unittest.TestCase):
             CONOPS_SKILL_PATH,
             CONOPS_RULE_PATH,
             ORCHESTRATOR_SKILL_PATH,
+            CONOPS_01_OVERVIEW_PATH,
+            CONOPS_04_USER_CLASSES_PATH,
         ]
 
         for path in files_to_check:
@@ -275,6 +288,530 @@ class TestSpecConopsEngineering(unittest.TestCase):
             self.assertIn("circular dependency", content.lower())
             self.assertIn("piece-part bom fmeca", content.lower())
 
+    def test_conops_01_metadata_and_overview_structure(self):
+        """Verify 01_METADATA_AND_OVERVIEW.md populates Sections 1.3.1, 1.3.2, 1.3.3, 1.4, and 1.5 (#117, #123, #128, #121)."""
+        self.assertTrue(os.path.isfile(CONOPS_01_OVERVIEW_PATH), f"Missing {CONOPS_01_OVERVIEW_PATH}")
+        with open(CONOPS_01_OVERVIEW_PATH, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        # Section 1.3.1: Parametric Coordinate Reference Frames Math
+        self.assertIn("### 1.3.1 Parametric Coordinate Reference Frames Math", content)
+        self.assertIn("Primary Global Geodetic Frame", content)
+        self.assertIn("Local Tangent Plane / Navigation Frame", content)
+        self.assertIn("Body-Fixed Geometric Frame", content)
+        self.assertIn(r"\phi", content)
+        self.assertIn(r"\lambda", content)
+        self.assertIn(r"h_{\mathrm{ellips}}", content)
+        self.assertIn("X_n, Y_n, Z_n", content)
+        self.assertIn("X_b, Y_b, Z_b", content)
+        self.assertIn(r"\boldsymbol{\omega}_{b/n}", content)
+        self.assertIn(r"\mathbf{v}_b", content)
+
+        # Section 1.3.2: Parametric Subsystem Mass/Resource Budget Breakdown Table
+        self.assertIn("### 1.3.2 Parametric Subsystem Mass/Resource Budget Breakdown Table", content)
+        ast_groups = [
+            "Airframe Structure",
+            "Avionics & Processing",
+            "Propulsion & Power Distribution",
+            "Energy Storage Subsystem",
+            "Primary Mission Payload",
+            "Autonomous Failsafe Containment",
+        ]
+        for group in ast_groups:
+            self.assertIn(group, content)
+        self.assertIn("100.0% MTOW", content)
+
+        # Section 1.3.3: Master Physical Limits Table
+        self.assertIn("### 1.3.3 Master Physical Limits Table", content)
+        physical_limits = [
+            "Maximum Takeoff Weight (MTOW)",
+            "Maximum Payload Mass Capacity",
+            "Physical Dimensions",
+            "Nominal Cruise Velocity",
+            "Maximum Permissible Operating Velocity",
+            "Minimum Controllable / Stall Velocity",
+            "Maximum Operating Ceiling",
+            "Command & Control (C2) Datalink Range",
+            "Mission Operational Endurance",
+            "Environmental Operating Temperature Envelope",
+        ]
+        for param in physical_limits:
+            self.assertIn(param, content)
+
+        # Section 1.4: Abstract UAF Context Diagram (Mermaid flowchart TB with 5 segments / 6 subgraphs across 15 interface links)
+        self.assertIn("### 1.4 Abstract UAF Context Diagram", content)
+        self.assertIn("flowchart TB", content)
+        segments = [
+            "SpaceSegment",
+            "VehicleSegment",
+            "ControlSegment",
+            "SupportSegment",
+            "OperationalRoles",
+            "ExternalAuthorities",
+        ]
+        for seg in segments:
+            self.assertIn(seg, content)
+
+        # Section 1.5: Normative Standards & Regulatory Baseline Table (13 standards)
+        self.assertIn("### 1.5 Normative Standards & Regulatory Baseline", content)
+        standards = [
+            "RTCA DO-178C (DAL-A)",
+            "RTCA DO-254",
+            "RTCA DO-365B",
+            "RTCA DO-362A",
+            "MIL-STD-882E",
+            "MIL-STD-810H",
+            "MIL-STD-461G",
+            "ISO/IEC/IEEE 29148:2018",
+            "ISO 26262:2018",
+            "ASTM F3411-22a",
+            "ASTM F3269-17",
+            "JARUS SORA v2.5",
+            "NIST SP 800-82r3",
+        ]
+        for std in standards:
+            self.assertIn(std, content)
+
+        # Issue Tracking references
+        self.assertIn("Fixes #117, #123, #128, #121", content)
+
+    def test_conops_11_impacts_and_trade_studies_structure(self):
+        """Verify 11_IMPACTS_AND_TRADE_STUDIES.md populates Trade Studies 1, 2, and 3 with full Pugh matrices, sensitivity equations, parameter tables, and domain agnosticism (#118, #129, #132)."""
+        self.assertTrue(os.path.isfile(CONOPS_11_TRADE_STUDIES_PATH), f"Missing {CONOPS_11_TRADE_STUDIES_PATH}")
+        self.assertTrue(os.path.isfile(AGENTS_CONOPS_11_TRADE_STUDIES_PATH), f"Missing {AGENTS_CONOPS_11_TRADE_STUDIES_PATH}")
+
+        with open(CONOPS_11_TRADE_STUDIES_PATH, "r", encoding="utf-8") as f:
+            content = f.read()
+        with open(AGENTS_CONOPS_11_TRADE_STUDIES_PATH, "r", encoding="utf-8") as f:
+            mirror_content = f.read()
+
+        self.assertEqual(content, mirror_content, "Mirror mismatch between skills/ and .agents/ for 11_IMPACTS_AND_TRADE_STUDIES.md")
+
+        # Heading presence
+        self.assertIn("## 11. Operational Impacts, System Limitations & Documented Trade Studies", content)
+        self.assertIn("### 11.1 Operational Workflow & Deployment Impacts", content)
+        self.assertIn("### 11.2 Organizational Roles & Training Impacts", content)
+        self.assertIn("### 11.3 System Limitations & Operational Boundaries", content)
+        self.assertIn("### 11.4 Documented Engineering Trade Studies", content)
+
+        # Traceability references
+        self.assertIn("Fixes #118, #129, #132", content)
+
+        # Trade Study 1: Energy & Power Storage Architecture (Fix #118)
+        self.assertIn("#### 11.4.1 Trade Study 1: Energy & Power Storage Architecture", content)
+        self.assertIn("Multi-Criteria Pugh Decision Matrix (Trade Study 1)", content)
+        self.assertIn("High-Capacity Cylindrical Chemistry with Integrated Thermal Heating", content)
+        self.assertIn("Mathematical Sensitivity Analysis Formulation (Trade Study 1)", content)
+        self.assertIn(r"S_j(w_{\mathrm{cold}}) &= \sum_{i \neq \mathrm{cold}} w_i s_{ij} + w_{\mathrm{cold}} s_{\mathrm{cold}, j}", content)
+
+        # Trade Study 2: Edge Neural Compute vs Datalink Compression (Fix #129)
+        self.assertIn("#### 11.4.2 Trade Study 2: Edge Neural Compute vs Datalink Compression", content)
+        self.assertIn("Multi-Criteria Pugh Decision Matrix (Trade Study 2)", content)
+        self.assertIn("Onboard Edge Neural Inference Accelerator with Dynamic Context Compression", content)
+        self.assertIn("Mathematical Sensitivity Analysis Formulation (Trade Study 2)", content)
+        self.assertIn(r"S_j(P_{\mathrm{jam}}) &= \sum_{i \neq \mathrm{jam}} w_i s_{ij} + w_{\mathrm{jam}} s_{\mathrm{jam}, j}(P_{\mathrm{jam}})", content)
+
+        # Trade Study 3: Autonomous Failsafe Containment vs Actuator Redundancy (Fix #132)
+        self.assertIn("#### 11.4.3 Trade Study 3: Autonomous Failsafe Containment vs Actuator Redundancy", content)
+        self.assertIn("Multi-Criteria Pugh Decision Matrix (Trade Study 3)", content)
+        self.assertIn("Integrated Autonomous Failsafe Containment Subsystem", content)
+        self.assertIn("Mathematical Sensitivity Analysis Formulation (Trade Study 3)", content)
+        self.assertIn(r"E_k(m) &= \frac{1}{2} m v_{\mathrm{term}}^2(m) = \frac{m^2 g}{\rho S C_d}", content)
+
+        # Parameter Tables ("Where and Operational Parameters:")
+        self.assertEqual(content.count("Where and Operational Parameters:"), 3)
+
+        # KaTeX Rendering Integrity check
+        cleaned = re.sub(r"```.*?```|~~~.*?~~~", "", content, flags=re.DOTALL)
+        cleaned = re.sub(r"`+.*?`+", "", cleaned)
+
+        # Balanced $$ delimiters
+        parts = cleaned.split("$$")
+        self.assertEqual(
+            (len(parts) - 1) % 2,
+            0,
+            f"Unbalanced $$ delimiters in 11_IMPACTS_AND_TRADE_STUDIES.md (found {len(parts) - 1} delimiters)",
+        )
+
+        # Balanced \begin{aligned} and \end{aligned}
+        num_begin_aligned = len(re.findall(r"\\begin\{aligned\}", cleaned))
+        num_end_aligned = len(re.findall(r"\\end\{aligned\}", cleaned))
+        self.assertEqual(num_begin_aligned, num_end_aligned)
+        self.assertGreaterEqual(num_begin_aligned, 3)
+
+        # No forbidden \begin{align}
+        self.assertFalse(re.search(r"\\begin\{align\*?\}", cleaned))
+
+        # Markdown Table Math Prohibition: No $ in table lines
+        table_lines = [line for line in content.splitlines() if line.startswith("|")]
+        for line in table_lines:
+            self.assertNotIn("$", line, f"Found LaTeX math delimiter '$' in table line: {line}")
+
+        # Domain Agnosticism & Parametric Placeholders check
+        from tests.test_canonical_templates import FORBIDDEN_DOMAIN_NOUNS
+        violations = []
+        for pat in FORBIDDEN_DOMAIN_NOUNS:
+            matches = re.findall(pat, content, re.IGNORECASE)
+            if matches:
+                violations.append(f"Found forbidden domain noun '{matches[0]}' matching pattern '{pat}'")
+        self.assertEqual(violations, [], f"Forbidden domain nouns found in 11_IMPACTS_AND_TRADE_STUDIES.md: {violations}")
+
+        # Ensure parametric placeholders are present
+        placeholders = re.findall(r"\{\{[A-Za-z0-9_]+\}\}", content)
+        self.assertGreaterEqual(len(placeholders), 10, f"Expected >= 10 parametric placeholders, found {len(placeholders)}")
+
+    def test_conops_02_deficiencies_and_motivation_structure(self):
+        """Verify 02_DEFICIENCIES_AND_MOTIVATION.md populates Section 2.2 GAP-01..GAP-04 table and Section 2.3 3-Domain Legacy Deficiencies Matrix (#139)."""
+        self.assertTrue(os.path.isfile(CONOPS_02_DEFICIENCIES_PATH), f"Missing {CONOPS_02_DEFICIENCIES_PATH}")
+        self.assertTrue(os.path.isfile(AGENTS_CONOPS_02_DEFICIENCIES_PATH), f"Missing {AGENTS_CONOPS_02_DEFICIENCIES_PATH}")
+
+        with open(CONOPS_02_DEFICIENCIES_PATH, "r", encoding="utf-8") as f:
+            content = f.read()
+        with open(AGENTS_CONOPS_02_DEFICIENCIES_PATH, "r", encoding="utf-8") as f:
+            mirror_content = f.read()
+
+        self.assertEqual(content, mirror_content, "Mirror mismatch between skills/ and .agents/ for 02_DEFICIENCIES_AND_MOTIVATION.md")
+
+        # Headings presence
+        self.assertIn("## 2. Current Situation, Deficiency Analysis & Operational Motivation", content)
+        self.assertIn("### 2.1 Current Operational Baseline (Predecessors)", content)
+        self.assertIn("### 2.2 Operational Capability Gaps", content)
+        self.assertIn("### 2.3 3-Domain Legacy Deficiencies Matrix", content)
+        self.assertIn("#### 2.3.1 Technical Deficiencies Detail", content)
+        self.assertIn("#### 2.3.2 Operational Deficiencies Detail", content)
+        self.assertIn("#### 2.3.3 Human Factors Deficiencies Detail", content)
+        self.assertIn("### 2.4 Mission Drivers & User Operational Problems", content)
+
+        # Section 2.2: Capability Gaps GAP-01 through GAP-04
+        gaps = ["GAP-01", "GAP-02", "GAP-03", "GAP-04"]
+        for gap in gaps:
+            self.assertIn(f"**{gap}**", content)
+            self.assertIn(f"/// OperationalAllocation: [{gap}]", content)
+
+        # Section 2.2 Table Columns: Operational Manifestation, Technical Root Cause, Mission Impact, Severity, Gate 24 Allocation Tag
+        gap_columns = [
+            "Gap ID",
+            "Capability Gap Name",
+            "Operational Manifestation",
+            "Technical Root Cause",
+            "Mission Impact & Risk",
+            "Severity",
+            "Gate 24 Allocation Tag",
+        ]
+        for col in gap_columns:
+            self.assertIn(col, content)
+
+        # Section 2.3: 3-Domain Legacy Deficiencies Matrix
+        domains = ["Technical Deficiencies", "Operational Deficiencies", "Human Factors Deficiencies"]
+        for domain in domains:
+            self.assertIn(f"**{domain}**", content)
+
+        matrix_columns = [
+            "Deficiency Domain",
+            "Deficiency ID",
+            "Legacy Baseline Deficiency Description",
+            "Quantified Baseline Limitation",
+            "Safety Risk Categorization",
+            "Proposed Architectural Mitigation",
+        ]
+        for col in matrix_columns:
+            self.assertIn(col, content)
+
+        # Specific deficiency IDs
+        def_ids = [
+            "DEF-TECH-01", "DEF-TECH-02", "DEF-TECH-03", "DEF-TECH-04",
+            "DEF-OPS-01", "DEF-OPS-02", "DEF-OPS-03", "DEF-OPS-04",
+            "DEF-HUM-01", "DEF-HUM-02", "DEF-HUM-03",
+        ]
+        for did in def_ids:
+            self.assertIn(f"`{did}`", content)
+
+        # Quantified baseline limitations
+        quant_metrics = [
+            "MTBF_baseline <= MTBF_threshold",
+            "tau_loop > tau_stability_limit",
+            "IP_xy",
+            "t_collapse < 10 ms",
+            "R_margin < R_buffer_req",
+            "t_coord > 300 s",
+            "E_reserve < 0.20 * E_capacity",
+            "t_turnaround_legacy >> t_turnaround_target",
+            "TLX_manual > TLX_threshold",
+            "tau_human > tau_containment_req",
+            "t_shift > t_shift_max",
+        ]
+        for qm in quant_metrics:
+            self.assertIn(qm, content)
+
+        # Markdown Table Math Prohibition: No $ in table lines
+        table_lines = [line for line in content.splitlines() if line.startswith("|")]
+        for line in table_lines:
+            self.assertNotIn("$", line, f"Found LaTeX math delimiter '$' in table line: {line}")
+
+        # Domain Agnosticism check
+        from tests.test_canonical_templates import FORBIDDEN_DOMAIN_NOUNS
+        violations = []
+        for pat in FORBIDDEN_DOMAIN_NOUNS:
+            matches = re.findall(pat, content, re.IGNORECASE)
+            if matches:
+                violations.append(f"Found forbidden domain noun '{matches[0]}' matching pattern '{pat}'")
+        self.assertEqual(violations, [], f"Forbidden domain nouns found in 02_DEFICIENCIES_AND_MOTIVATION.md: {violations}")
+
+    def test_conops_08_environmental_mil_std_810h_structure(self):
+        """Verify 08_ENVIRONMENTAL_MIL_STD_810H.md populates Section 8.1 12-method table and Section 8.2.1-8.2.12 (#127, #134, #137)."""
+        self.assertTrue(os.path.isfile(CONOPS_08_ENVIRONMENTAL_PATH), f"Missing {CONOPS_08_ENVIRONMENTAL_PATH}")
+        with open(CONOPS_08_ENVIRONMENTAL_PATH, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        # Headings presence
+        self.assertIn("## 8. Operational Environments & MIL-STD-810H Environmental Stress Qualification", content)
+        self.assertIn("### 8.1 Master 12-Method Environmental Stress Qualification Table", content)
+        self.assertIn("### 8.2 Granular Test Method Breakdowns", content)
+        self.assertIn("### 8.3 Ingress Protection (IEC 60529) & Environmental Sealing Architecture", content)
+        self.assertIn("### 8.4 Electromagnetic Compatibility (EMC/EMI) & RF Environments", content)
+        self.assertIn("### 8.5 Physical Spatial Constraints & Deployment Envelopes", content)
+
+        # 12 canonical methods in Section 8.1 table
+        methods = [
+            "M-500.6", "M-501.7", "M-502.7", "M-503.7",
+            "M-505.7", "M-506.6", "M-507.6", "M-509.7",
+            "M-510.7", "M-514.8", "M-516.8", "M-521.4",
+        ]
+        for m in methods:
+            self.assertIn(f"**{m}**", content)
+
+        # 12 subsections in 8.2
+        for idx in range(1, 13):
+            self.assertIn(f"#### 8.2.{idx}", content)
+
+        # Markdown Table Math Prohibition: No $ in table lines
+        table_lines = [line for line in content.splitlines() if line.startswith("|")]
+        for line in table_lines:
+            self.assertNotIn("$", line, f"Found LaTeX math delimiter '$' in table line: {line}")
+
+        # Domain Agnosticism check
+        from tests.test_canonical_templates import FORBIDDEN_DOMAIN_NOUNS
+        violations = []
+        for pat in FORBIDDEN_DOMAIN_NOUNS:
+            matches = re.findall(pat, content, re.IGNORECASE)
+            if matches:
+                violations.append(f"Found forbidden domain noun '{matches[0]}' matching pattern '{pat}'")
+        self.assertEqual(violations, [], f"Forbidden domain nouns found in 08_ENVIRONMENTAL_MIL_STD_810H.md: {violations}")
+
+        # Parametric placeholders check
+        placeholders = re.findall(r"\{\{[A-Za-z0-9_]+\}\}", content)
+        self.assertGreaterEqual(len(placeholders), 30, f"Expected >= 30 parametric placeholders, found {len(placeholders)}")
+
+    def test_conops_09_scenarios_and_timelines_structure(self):
+        """Verify 09_SCENARIOS_AND_TIMELINES.md populates SCN-01 (8-step), SCN-02 (6-step), SCN-03 (6-step), SCN-04 (6-step), and SCN-05 (stateDiagram-v2 + 4 phase tables) (Fixes #126, #131, #138)."""
+        self.assertTrue(os.path.isfile(CONOPS_09_SCENARIOS_PATH), f"Missing {CONOPS_09_SCENARIOS_PATH}")
+        self.assertTrue(os.path.isfile(AGENTS_CONOPS_09_SCENARIOS_PATH), f"Missing {AGENTS_CONOPS_09_SCENARIOS_PATH}")
+
+        with open(CONOPS_09_SCENARIOS_PATH, "r", encoding="utf-8") as f:
+            content = f.read()
+        with open(AGENTS_CONOPS_09_SCENARIOS_PATH, "r", encoding="utf-8") as f:
+            mirror_content = f.read()
+
+        self.assertEqual(content, mirror_content, "Mirror mismatch between skills/ and .agents/ for 09_SCENARIOS_AND_TIMELINES.md")
+
+        # Headings presence
+        self.assertIn("## 9. Multi-Threaded Operational Scenarios & System Timelines", content)
+        self.assertIn("### 9.1 Scenario SCN-01: Nominal Lifecycle Thread", content)
+        self.assertIn("### 9.2 Scenario SCN-02: High-Throughput State Tracking & Target Processing", content)
+        self.assertIn("### 9.3 Scenario SCN-03: Degraded C2 Lost-Link & Autonomous Fallback Return", content)
+        self.assertIn("### 9.4 Scenario SCN-04: Dynamic Geofence Boundary Divert", content)
+        self.assertIn("### 9.5 Scenario SCN-05: Controlled Safety Interlock Action", content)
+        self.assertIn("#### 9.5.1 Safety Interlock State Machine & Deterministic Transitions", content)
+        self.assertIn("#### 9.5.2 Phase 1: Ingress & Station Keeping Execution Verification", content)
+        self.assertIn("#### 9.5.3 Phase 2: Positive Identification & Interlock Check Execution Verification", content)
+        self.assertIn("#### 9.5.4 Phase 3: Dual-Consent Arming & Execution Verification", content)
+        self.assertIn("#### 9.5.5 Phase 4: Post-Action Assessment & Telemetry Dump Execution Verification", content)
+
+        # Mandatory columns in timeline tables
+        timeline_cols = [
+            "Step Number",
+            "Elapsed Time (T+)",
+            "Stimulus / Trigger",
+            "Actor / Performer",
+            "Action Executed",
+            "Telemetry Stream",
+            "Decision Gate",
+            "Exception Branch",
+            "Exit Criterion",
+        ]
+        for col in timeline_cols:
+            self.assertIn(col, content)
+
+        # Scenario 1 (SCN-01): Full 8 steps
+        sec1_match = re.search(r'### 9\.1 Scenario SCN-01[\s\S]*?(?=### 9\.2)', content)
+        self.assertIsNotNone(sec1_match)
+        sec1_text = sec1_match.group(0)
+        for step_idx in range(1, 9):
+            self.assertIn(f"**{step_idx}**", sec1_text)
+
+        # Scenario 2 (SCN-02): Full 6 steps
+        sec2_match = re.search(r'### 9\.2 Scenario SCN-02[\s\S]*?(?=### 9\.3)', content)
+        self.assertIsNotNone(sec2_match)
+        sec2_text = sec2_match.group(0)
+        for step_idx in range(1, 7):
+            self.assertIn(f"**{step_idx}**", sec2_text)
+
+        # Scenario 3 (SCN-03): Full 6 steps
+        sec3_match = re.search(r'### 9\.3 Scenario SCN-03[\s\S]*?(?=### 9\.4)', content)
+        self.assertIsNotNone(sec3_match)
+        sec3_text = sec3_match.group(0)
+        for step_idx in range(1, 7):
+            self.assertIn(f"**{step_idx}**", sec3_text)
+
+        # Scenario 4 (SCN-04): Full 6 steps
+        sec4_match = re.search(r'### 9\.4 Scenario SCN-04[\s\S]*?(?=### 9\.5)', content)
+        self.assertIsNotNone(sec4_match)
+        sec4_text = sec4_match.group(0)
+        for step_idx in range(1, 7):
+            self.assertIn(f"**{step_idx}**", sec4_text)
+
+        # Scenario 5 (SCN-05): Mermaid stateDiagram-v2 state machine
+        sec5_match = re.search(r'### 9\.5 Scenario SCN-05[\s\S]*$', content)
+        self.assertIsNotNone(sec5_match)
+        sec5_text = sec5_match.group(0)
+        self.assertIn("stateDiagram-v2", sec5_text)
+        self.assertIn("Phase_Ingress_StationKeeping", sec5_text)
+        self.assertIn("Phase_PID_InterlockCheck", sec5_text)
+        self.assertIn("Phase_DualConsent_ArmingExecution", sec5_text)
+        self.assertIn("Phase_PostAction_AssessmentDump", sec5_text)
+
+        # Scenario 5: 4 decomposed phase execution verification tables
+        phase_headings = [
+            "#### 9.5.2 Phase 1: Ingress & Station Keeping Execution Verification",
+            "#### 9.5.3 Phase 2: Positive Identification & Interlock Check Execution Verification",
+            "#### 9.5.4 Phase 3: Dual-Consent Arming & Execution Verification",
+            "#### 9.5.5 Phase 4: Post-Action Assessment & Telemetry Dump Execution Verification",
+        ]
+        for ph in phase_headings:
+            self.assertIn(ph, sec5_text)
+
+        # Traceability tokens
+        for oa in ["OA-01", "OA-02", "OA-03", "OA-04", "OA-05", "OA-06", "OA-07", "OA-08"]:
+            self.assertIn(oa, content)
+        for optx in ["OpTx-01", "OpTx-02", "OpTx-03", "OpTx-04", "OpTx-05", "OpTx-06", "OpTx-07", "OpTx-08"]:
+            self.assertIn(optx, content)
+        for emg in ["EMG-01", "EMG-02", "EMG-03", "EMG-05", "EMG-06", "EMG-07"]:
+            self.assertIn(emg, content)
+        for roe in ["ROE-01", "ROE-02", "ROE-03", "ROE-04", "ROE-05", "ROE-06"]:
+            self.assertIn(roe, content)
+
+        # Markdown Table Math Prohibition: No $ in table lines
+        table_lines = [line for line in content.splitlines() if line.startswith("|")]
+        for line in table_lines:
+            self.assertNotIn("$", line, f"Found LaTeX math delimiter '$' in table line: {line}")
+
+        # Domain Agnosticism check
+        from tests.test_canonical_templates import FORBIDDEN_DOMAIN_NOUNS
+        violations = []
+        for pat in FORBIDDEN_DOMAIN_NOUNS:
+            matches = re.findall(pat, content, re.IGNORECASE)
+            if matches:
+                violations.append(f"Found forbidden domain noun '{matches[0]}' matching pattern '{pat}'")
+        self.assertEqual(violations, [], f"Forbidden domain nouns found in 09_SCENARIOS_AND_TIMELINES.md: {violations}")
+
+    def test_conops_04_user_classes_and_stakeholders_structure(self):
+        """Verify 04_USER_CLASSES_AND_STAKEHOLDERS.md populates Section 4.4 NASA-TLX matrix, Section 4.4.1 shift rotation, Section 4.5.1 4-way handoff diagram, and Section 4.5.2 timeout & rejection protocol (Fixes #120, #119)."""
+        self.assertTrue(os.path.isfile(CONOPS_04_USER_CLASSES_PATH), f"Missing {CONOPS_04_USER_CLASSES_PATH}")
+        self.assertTrue(os.path.isfile(AGENTS_CONOPS_04_USER_CLASSES_PATH), f"Missing {AGENTS_CONOPS_04_USER_CLASSES_PATH}")
+
+        with open(CONOPS_04_USER_CLASSES_PATH, "r", encoding="utf-8") as f:
+            content = f.read()
+        with open(AGENTS_CONOPS_04_USER_CLASSES_PATH, "r", encoding="utf-8") as f:
+            mirror_content = f.read()
+
+        self.assertEqual(content, mirror_content, "Mirror mismatch between skills/ and .agents/ for 04_USER_CLASSES_AND_STAKEHOLDERS.md")
+
+        # Headings presence
+        self.assertIn("## 4. User Classes, Stakeholder Taxonomy & Operational Lifecycle Modes", content)
+        self.assertIn("### 4.1 Stakeholder Roster", content)
+        self.assertIn("### 4.2 User Class Taxonomy", content)
+        self.assertIn("### 4.3 Skill Prerequisites & Minimum Qualifications", content)
+        self.assertIn("### 4.4 Workload Constraints & Human Factors Considerations", content)
+        self.assertIn("### 4.4.1 Operational Shift Rotation Protocol", content)
+        self.assertIn("### 4.5 Authority Handoff Chains & Control Transfer Protocols", content)
+        self.assertIn("### 4.5.1 Abstract Cryptographic 4-Way Control Handoff Sequence Diagram", content)
+        self.assertIn("### 4.5.2 Timeout & Rejection Protocol", content)
+        self.assertIn("### 4.6 Operational Lifecycle Stages", content)
+
+        # Traceability references
+        self.assertIn("Fixes #120, #119", content)
+
+        # User classes UC-01 to UC-05
+        for uc in ["UC-01", "UC-02", "UC-03", "UC-04", "UC-05"]:
+            self.assertIn(f"**{uc}**", content)
+
+        # Section 4.4: 6-Dimensional NASA-TLX Table
+        tlx_dims = [
+            "Mental Demand",
+            "Physical Demand",
+            "Temporal Demand",
+            "Performance",
+            "Effort",
+            "Frustration",
+        ]
+        for dim in tlx_dims:
+            self.assertIn(dim, content)
+
+        self.assertIn("Score <= 35", content)
+        self.assertIn("Score <= 55", content)
+        self.assertIn("TLX_nominal_max <= 35", content)
+        self.assertIn("TLX_contingency_max <= 55", content)
+
+        # Section 4.4.1: Operational Shift Rotation Protocol
+        self.assertIn("t_shift <= 4.0 hr", content)
+        self.assertIn("t_rest >= 30.0 min", content)
+        self.assertIn("t_daily_max <= 8.0 hr", content)
+
+        # Section 4.5.1: Sequence diagram with 4 participants across 9 steps
+        self.assertIn("sequenceDiagram", content)
+        participants = ["PrimaryConsole", "VehicleController", "SecondaryConsole", "CryptographicAuthService"]
+        for p in participants:
+            self.assertIn(p, content)
+
+        for step in [
+            "1. Request Handoff Token",
+            "2. Issue Signed Token",
+            "3. Transmit Control Request",
+            "4. Validate Token",
+            "5. Token Verification Response",
+            "6. Command Control Relinquishment",
+            "7. Acknowledge Relinquish",
+            "8. Grant Active C2 Authority",
+            "9. Confirm Active C2",
+        ]:
+            self.assertIn(step, content)
+
+        # Section 4.5.2: Bounded Timeout Recovery (tau_timeout = 5.0 s) & 4 Rejection Criteria
+        self.assertIn("5.0", content)
+        for rej in ["REJ-01", "REJ-02", "REJ-03", "REJ-04"]:
+            self.assertIn(f"**{rej}**", content)
+
+        # Markdown Table Math Prohibition: No $ in table lines
+        table_lines = [line for line in content.splitlines() if line.startswith("|")]
+        for line in table_lines:
+            self.assertNotIn("$", line, f"Found LaTeX math delimiter '$' in table line: {line}")
+
+        # Domain Agnosticism check
+        from tests.test_canonical_templates import FORBIDDEN_DOMAIN_NOUNS
+        violations = []
+        for pat in FORBIDDEN_DOMAIN_NOUNS:
+            matches = re.findall(pat, content, re.IGNORECASE)
+            if matches:
+                violations.append(f"Found forbidden domain noun '{matches[0]}' matching pattern '{pat}'")
+        self.assertEqual(violations, [], f"Forbidden domain nouns found in 04_USER_CLASSES_AND_STAKEHOLDERS.md: {violations}")
+
+        # Parametric placeholders check
+        placeholders = re.findall(r"\{\{[A-Za-z0-9_]+(?::[^\}]*)?\}\}", content)
+        self.assertGreaterEqual(len(placeholders), 5, f"Expected >= 5 parametric placeholders, found {len(placeholders)}")
+
 
 if __name__ == "__main__":
     unittest.main()
+
+
+

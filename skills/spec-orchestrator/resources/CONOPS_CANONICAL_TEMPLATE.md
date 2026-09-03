@@ -29,6 +29,23 @@
 - **Mission Drivers & Value Proposition:** {{MISSION_DRIVERS_AND_VALUE_PROPOSITION}}
 - **Trade-Off Analysis:** {{TRADE_OFF_ANALYSIS}}
 
+### 4.1 Pugh Decision Matrix & Architectural Sensitivity Analysis
+$$
+\begin{aligned}
+S_j(w) &= \sum_{i=1}^{M} w_i \cdot c_{ij} \\
+\sum_{i=1}^{M} w_i &= 1.0 \\
+\frac{\partial S_j}{\partial w_i} &= c_{ij}
+\end{aligned}
+$$
+
+| Evaluation Criterion | Weight (w_i) | Baseline (Datum) | Candidate Architecture A | Candidate Architecture B | Candidate Architecture C |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| Operational Reliability | {{WEIGHT_CRIT_1}} | 0 (Datum) | {{SCORE_A_1}} | {{SCORE_B_1}} | {{SCORE_C_1}} |
+| Containment Response Latency | {{WEIGHT_CRIT_2}} | 0 (Datum) | {{SCORE_A_2}} | {{SCORE_B_2}} | {{SCORE_C_2}} |
+| Lifecycle Maintenance Cost | {{WEIGHT_CRIT_3}} | 0 (Datum) | {{SCORE_A_3}} | {{SCORE_B_3}} | {{SCORE_C_3}} |
+| **Weighted Total Score S_j(w)** | **1.00** | **0.00** | **{{WEIGHTED_SCORE_A}}** | **{{WEIGHTED_SCORE_B}}** | **{{WEIGHTED_SCORE_C}}** |
+
+
 ## 5. Operational Modes & Lifecycle Stages
 Formal operational lifecycle stages across $\Phi_{\mathrm{lifecycle}}$:
 - **Phase_Startup:** {{PHASE_STARTUP_DESCRIPTION}}
