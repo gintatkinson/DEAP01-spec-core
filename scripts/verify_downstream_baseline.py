@@ -1083,7 +1083,7 @@ def validate_safety_matrix_ast(content: str, model_text: Optional[str] = None) -
                 f"minimum required is {MIN_STRUCTURAL_UCA_ROWS} permutations (4 control actions x 4 guide words)."
             )
 
-    if model_text:
+    if model_text or oso_rows:
         sora_report = CartesianProductValidator.verify_sora_oso_coverage(oso_rows)
         report.missing_osos.extend(sora_report.missing_osos)
         if sora_report.missing_osos:

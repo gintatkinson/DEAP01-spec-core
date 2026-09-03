@@ -378,10 +378,11 @@ class ConceptProvenanceValidator(IValidator):
                 name = match.group(1).strip()
                 raw_val = match.group(2).strip()
 
-                num_match = re.search(r'([-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)', raw_val)
+                num_match = re.search(r'([-+−\u2212]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)', raw_val)
                 if num_match:
                     try:
-                        num_val = float(num_match.group(1))
+                        raw_clean = num_match.group(1).replace('\u2212', '-').replace('−', '-')
+                        num_val = float(raw_clean)
                         unit_m = re.search(r'\[([a-zA-Z0-9_/\^°%]+)\]', raw_val)
                         unit = unit_m.group(1) if unit_m else None
                         if not unit:
@@ -492,10 +493,11 @@ class ConceptProvenanceValidator(IValidator):
                         continue
 
                     # b) Numeric attribute table row
-                    num_match = re.search(r'([-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)', clean_v)
+                    num_match = re.search(r'([-+−\u2212]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)', clean_v)
                     if norm_k and num_match and not re.search(r'\b(?:none|no|false|n/a)\b', clean_v, re.IGNORECASE):
                         try:
-                            num_val = float(num_match.group(1))
+                            raw_clean = num_match.group(1).replace('\u2212', '-').replace('−', '-')
+                            num_val = float(raw_clean)
                             root_node.children.append(TypedASTNode(
                                 node_id=f"attr_{len(root_node.children)}",
                                 node_type="Attribute",
@@ -905,10 +907,11 @@ class ConceptProvenanceValidator(IValidator):
                         clean_col0 = re.sub(r'^_+|_+$', '', clean_col0)
                         norm_col0 = _normalize_identifier(clean_col0)
                         if (norm_col0 == norm_name or clean_col0.lower() == gt_attr.name.lower()) and not _is_pin_or_index(clean_col0, norm_col0):
-                            num_match = re.search(r'([-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)', parts[1])
+                            num_match = re.search(r'([-+−\u2212]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)', parts[1])
                             if num_match:
                                 try:
-                                    val = float(num_match.group(1))
+                                    raw_clean = num_match.group(1).replace('\u2212', '-').replace('−', '-')
+                                    val = float(raw_clean)
                                     root_node.children.append(TypedASTNode(
                                         node_id=f"cand_attr_{len(root_node.children)}",
                                         node_type="Attribute",
@@ -923,16 +926,18 @@ class ConceptProvenanceValidator(IValidator):
                                 except ValueError:
                                     pass
 
-                # Key-value format: **Name**: 1800.0 or Name = 1800.0 or Name of 1800.0
+                # Key-value format: **Name**: 1800.0 or Name = 1800.0 or Name of 1800.0 or Name -45.0
                 if len(norm_name) >= 3 and not _is_pin_or_index(gt_attr.name, norm_name):
+                    name_pattern = escaped_name.replace('_', r'[\s_]+')
                     kv_m = re.search(
-                        r'(?:\*\*|\b)(?:' + escaped_name + r'|' + escaped_norm + r')(?:\*\*|\b)\s*(?:[:=]|is|of|at|around|approx(?:imately)?|—|-)\s*([0-9]+(?:\.[0-9]+)?)\b',
+                        r'(?:\*\*|\b)(?:' + name_pattern + r'|' + escaped_name + r'|' + escaped_norm + r')(?:\*\*|\b)\s*(?:[:=]|is|of|at|around|approx(?:imately)?|—|-(?!\d))?\s*([-+−\u2212]?[0-9]+(?:\.[0-9]+)?(?:[eE][-+]?[0-9]+)?)\b',
                         line_str,
                         re.IGNORECASE
                     )
                     if kv_m:
                         try:
-                            val = float(kv_m.group(1))
+                            raw_clean = kv_m.group(1).replace('\u2212', '-').replace('−', '-')
+                            val = float(raw_clean)
                             root_node.children.append(TypedASTNode(
                                 node_id=f"cand_attr_{len(root_node.children)}",
                                 node_type="Attribute",

@@ -25,12 +25,9 @@ This Concept of Operations (ConOps) defines the operational architecture, coordi
 ### 1.2 System Classification & Operational Purpose
 - **System Identifier:** `{{SYSTEM_IDENTIFIER}}`
 - **Operational Domain:** `{{OPERATIONAL_DOMAIN}}`
-- **Primary Operational Mission:** The system is engineered to execute autonomous closed-loop state trajectory execution, multi-modal sensor data acquisition, real-time telemetry processing, edge state inference, and deterministic boundary containment within complex, high-reliability cyber-physical operational environments.
+- **Primary Operational Mission:** {{PRIMARY_OPERATIONAL_MISSION}}
 - **Core Mission Capabilities:**
-  1. Autonomous closed-loop state trajectory tracking, corridor execution, and stationary state holding within parameterized performance envelopes.
-  2. Multi-modal sensor data fusion combining redundant state estimation sensors, environmental perception units, and reference state observers.
-  3. Real-time high-throughput telemetry streaming and edge neural state inference processing.
-  4. Deterministic failsafe state machine ensuring autonomous containment within the maximum containment response time threshold $\tau_{\mathrm{containment}}$ upon critical contingency detection.
+{{CORE_MISSION_CAPABILITIES}}
 
 ### 1.3 System Boundary & Operational State Space
 The operational system boundary encompasses all physical, logical, communications, and organizational elements required to conduct end-to-end autonomous mission operations:
@@ -43,13 +40,13 @@ The operational system boundary encompasses all physical, logical, communication
 
 | Symbol / Parameter | Domain / Context | Description | Dimension / Limits | Engineering Unit | Normative / Safety Basis |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| $\Omega_{\mathrm{state}}$ | State Space Domain | Admissible operational state space envelope ($\Omega_{\mathrm{state}} \subset \mathbb{R}^n$) | Compact subset of $\mathbb{R}^n$ ($n \ge 6$) | Dimensionless | ISO/IEC/IEEE 29148:2018 §6.4.2 |
-| $\mathbf{X}_{\mathrm{boundary}}$ | State Vector Bounds | Bounding box of admissible vehicle operational states $[\mathbf{x}_{\mathrm{min}}, \mathbf{x}_{\mathrm{max}}]^\top$ | Bounded hyper-rectangle | Mixed SI Units | ASTM F3269-17 §6.2 |
-| $\mathbf{x}_{\mathrm{min}}$ | State Lower Limit | Minimum permissible state vector threshold | $[\phi_{\min}, \lambda_{\min}, h_{\min}, u_{\min}, v_{\min}, w_{\min}]^\top$ | rad, rad, m, m/s | SORA Annex B M1 Mitigations |
-| $\mathbf{x}_{\mathrm{max}}$ | State Upper Limit | Maximum permissible state vector threshold | $[\phi_{\max}, \lambda_{\max}, h_{\max}, u_{\max}, v_{\max}, w_{\max}]^\top$ | rad, rad, m, m/s | SORA Annex B M1 Mitigations |
-| $R_{\mathrm{buffer}}$ | Spatial Containment | Verified 1:1 parametric lateral containment safety buffer radius | $R_{\mathrm{buffer}} \ge 1.0 \times \text{Distance}_{\mathrm{containment}}$ | m | JARUS SORA v2.5 Step #2 |
-| $\text{Range}_{\mathrm{max}}(\text{Link}_{\mathrm{C2}})$ | C2 Comms Margin | Maximum certified C2 data link operational range | $\text{Range}_{\mathrm{max}} \ge \text{Range}_{\mathrm{nominal}}$ | km | RTCA DO-362A §2.2.1 |
-| $\tau_{\mathrm{containment}}$ | Emergency Response | Maximum allowable failsafe containment response time | $\tau_{\mathrm{containment}} \le 2.0$ | s | ASTM F3269-17 §7.1 |
+| Ω_state | State Space Domain | Admissible operational state space envelope (Ω_state ⊂ R^n) | Compact subset of R^n (n >= 6) | Dimensionless | ISO/IEC/IEEE 29148:2018 §6.4.2 |
+| X_boundary | State Vector Bounds | Bounding box of admissible vehicle operational states [x_min, x_max]^T | Bounded hyper-rectangle | Mixed SI Units | ASTM F3269-17 §6.2 |
+| x_min | State Lower Limit | Minimum permissible state vector threshold | [phi_min, lambda_min, h_min, u_min, v_min, w_min]^T | rad, rad, m, m/s | SORA Annex B M1 Mitigations |
+| x_max | State Upper Limit | Maximum permissible state vector threshold | [phi_max, lambda_max, h_max, u_max, v_max, w_max]^T | rad, rad, m/s | SORA Annex B M1 Mitigations |
+| R_buffer | Spatial Containment | Verified 1:1 parametric lateral containment safety buffer radius | R_buffer >= 1.0 * Distance_containment | m | JARUS SORA v2.5 Step #2 |
+| Range_max(Link_C2) | C2 Comms Margin | Maximum certified C2 data link operational range | Range_max >= Range_nominal | km | RTCA DO-362A §2.2.1 |
+| tau_containment | Emergency Response | Maximum allowable failsafe containment response time | tau_containment <= 2.0 | s | ASTM F3269-17 §7.1 |
 
 ### 1.3.1 Parametric Coordinate Reference Frames Math
 The cyber-physical state estimation, guidance, and navigation architecture is mathematically formulated across three standardized, right-handed orthogonal coordinate reference frames:

@@ -151,6 +151,6 @@ In accordance with JARUS SORA v2.5 Annex B (§2.1–§2.3), Ground Risk Class (G
 
 ### 5.5 Containment Margins & Dynamic Exclusion Buffers
 To guarantee zero-breach containment of the operational state space:
-- **Soft Warning Boundary:** Positioned $d_{\mathrm{warning\_buffer}}$ inboard of the primary operational boundary. Reaching this threshold triggers an automated trajectory correction and visual/acoustic alert on the operator console.
+- **Soft Warning Boundary:** Positioned $d_{\text{warning\_buffer}}$ inboard of the primary operational boundary. Reaching this threshold triggers an automated trajectory correction and visual/acoustic alert on the operator console.
 - **Hard Containment Boundary:** The outer edge of the contingency state space. Crossing this threshold activates trigger `EMG-05`, initiating an immediate autonomous maximum-rate boundary reversal maneuver.
 - **Buffer Retention Margin:** The containment buffer ($R_{\mathrm{buffer}}$) guarantees that in the event of unrecoverable actuation or control loss at maximum boundary speed under worst-case disturbances, all system states remain strictly confined within the declared buffer zone.

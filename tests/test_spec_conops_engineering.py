@@ -24,6 +24,9 @@ AGENTS_CONOPS_SKILL_PATH = os.path.join(REPO_ROOT, ".agents", "skills", "spec-co
 CONOPS_RULE_PATH = os.path.join(REPO_ROOT, "rules", "conops-mission-intent-integrity.md")
 ORCHESTRATOR_SKILL_PATH = os.path.join(REPO_ROOT, "skills", "spec-orchestrator", "SKILL.md")
 CONOPS_01_OVERVIEW_PATH = os.path.join(REPO_ROOT, "skills", "spec-conops-engineering", "resources", "units", "conops", "01_METADATA_AND_OVERVIEW.md")
+AGENTS_CONOPS_01_OVERVIEW_PATH = os.path.join(REPO_ROOT, ".agents", "skills", "spec-conops-engineering", "resources", "units", "conops", "01_METADATA_AND_OVERVIEW.md")
+MISSION_01_COMMANDERS_INTENT_PATH = os.path.join(REPO_ROOT, "skills", "spec-conops-engineering", "resources", "units", "mission_intent", "01_COMMANDERS_INTENT.md")
+AGENTS_MISSION_01_COMMANDERS_INTENT_PATH = os.path.join(REPO_ROOT, ".agents", "skills", "spec-conops-engineering", "resources", "units", "mission_intent", "01_COMMANDERS_INTENT.md")
 CONOPS_02_DEFICIENCIES_PATH = os.path.join(REPO_ROOT, "skills", "spec-conops-engineering", "resources", "units", "conops", "02_DEFICIENCIES_AND_MOTIVATION.md")
 AGENTS_CONOPS_02_DEFICIENCIES_PATH = os.path.join(REPO_ROOT, ".agents", "skills", "spec-conops-engineering", "resources", "units", "conops", "02_DEFICIENCIES_AND_MOTIVATION.md")
 CONOPS_04_USER_CLASSES_PATH = os.path.join(REPO_ROOT, "skills", "spec-conops-engineering", "resources", "units", "conops", "04_USER_CLASSES_AND_STAKEHOLDERS.md")
@@ -31,9 +34,16 @@ AGENTS_CONOPS_04_USER_CLASSES_PATH = os.path.join(REPO_ROOT, ".agents", "skills"
 CONOPS_08_ENVIRONMENTAL_PATH = os.path.join(REPO_ROOT, "skills", "spec-conops-engineering", "resources", "units", "conops", "08_ENVIRONMENTAL_MIL_STD_810H.md")
 CONOPS_09_SCENARIOS_PATH = os.path.join(REPO_ROOT, "skills", "spec-conops-engineering", "resources", "units", "conops", "09_SCENARIOS_AND_TIMELINES.md")
 AGENTS_CONOPS_09_SCENARIOS_PATH = os.path.join(REPO_ROOT, ".agents", "skills", "spec-conops-engineering", "resources", "units", "conops", "09_SCENARIOS_AND_TIMELINES.md")
+CONOPS_10_MAINTENANCE_PATH = os.path.join(REPO_ROOT, "skills", "spec-conops-engineering", "resources", "units", "conops", "10_MAINTENANCE_AND_GSE_SUPPORT.md")
+AGENTS_CONOPS_10_MAINTENANCE_PATH = os.path.join(REPO_ROOT, ".agents", "skills", "spec-conops-engineering", "resources", "units", "conops", "10_MAINTENANCE_AND_GSE_SUPPORT.md")
 CONOPS_11_TRADE_STUDIES_PATH = os.path.join(REPO_ROOT, "skills", "spec-conops-engineering", "resources", "units", "conops", "11_IMPACTS_AND_TRADE_STUDIES.md")
 AGENTS_CONOPS_11_TRADE_STUDIES_PATH = os.path.join(REPO_ROOT, ".agents", "skills", "spec-conops-engineering", "resources", "units", "conops", "11_IMPACTS_AND_TRADE_STUDIES.md")
+CONOPS_12_EMERGENCY_PATH = os.path.join(REPO_ROOT, "skills", "spec-conops-engineering", "resources", "units", "conops", "12_EMERGENCY_DECISION_MATRIX.md")
+AGENTS_CONOPS_12_EMERGENCY_PATH = os.path.join(REPO_ROOT, ".agents", "skills", "spec-conops-engineering", "resources", "units", "conops", "12_EMERGENCY_DECISION_MATRIX.md")
 CONOPS_07_OPTX_PATH = os.path.join(REPO_ROOT, "skills", "spec-conops-engineering", "resources", "units", "conops", "07_OPTX_EXCHANGES.md")
+MISSION_03_MATH_PATH = os.path.join(REPO_ROOT, "skills", "spec-conops-engineering", "resources", "units", "mission_intent", "03_INCOSE_MOE_MOP_MATH.md")
+AGENTS_MISSION_03_MATH_PATH = os.path.join(REPO_ROOT, ".agents", "skills", "spec-conops-engineering", "resources", "units", "mission_intent", "03_INCOSE_MOE_MOP_MATH.md")
+
 
 
 
@@ -819,7 +829,7 @@ class TestSpecConopsEngineering(unittest.TestCase):
         self.assertGreaterEqual(len(placeholders), 5, f"Expected >= 5 parametric placeholders, found {len(placeholders)}")
 
     def test_section_1_3_system_boundary_math_and_table(self):
-        """Verify Section 1.3 in 01_METADATA_AND_OVERVIEW.md has valid KaTeX math formatting and formal Parameter Definitions table (Fixes #151)."""
+        """Verify Section 1.3 in 01_METADATA_AND_OVERVIEW.md has valid KaTeX math formatting and formal Parameter Definitions table with plain text symbols (Fixes #151, #155)."""
         self.assertTrue(os.path.isfile(CONOPS_01_OVERVIEW_PATH), f"Missing {CONOPS_01_OVERVIEW_PATH}")
         with open(CONOPS_01_OVERVIEW_PATH, "r", encoding="utf-8") as f:
             content = f.read()
@@ -836,13 +846,31 @@ class TestSpecConopsEngineering(unittest.TestCase):
         # Operational State Space Parameter Definitions & Engineering Units table
         self.assertIn("- **Operational State Space Parameter Definitions & Engineering Units:**", content)
         self.assertIn("| Symbol / Parameter | Domain / Context | Description | Dimension / Limits | Engineering Unit | Normative / Safety Basis |", content)
-        self.assertIn(r"| $\Omega_{\mathrm{state}}$ | State Space Domain | Admissible operational state space envelope ($\Omega_{\mathrm{state}} \subset \mathbb{R}^n$) | Compact subset of $\mathbb{R}^n$ ($n \ge 6$) | Dimensionless | ISO/IEC/IEEE 29148:2018 §6.4.2 |", content)
-        self.assertIn(r"| $\mathbf{X}_{\mathrm{boundary}}$ | State Vector Bounds | Bounding box of admissible vehicle operational states $[\mathbf{x}_{\mathrm{min}}, \mathbf{x}_{\mathrm{max}}]^\top$ | Bounded hyper-rectangle | Mixed SI Units | ASTM F3269-17 §6.2 |", content)
-        self.assertIn(r"| $\mathbf{x}_{\mathrm{min}}$ | State Lower Limit | Minimum permissible state vector threshold | $[\phi_{\min}, \lambda_{\min}, h_{\min}, u_{\min}, v_{\min}, w_{\min}]^\top$ | rad, rad, m, m/s | SORA Annex B M1 Mitigations |", content)
-        self.assertIn(r"| $\mathbf{x}_{\mathrm{max}}$ | State Upper Limit | Maximum permissible state vector threshold | $[\phi_{\max}, \lambda_{\max}, h_{\max}, u_{\max}, v_{\max}, w_{\max}]^\top$ | rad, rad, m, m/s | SORA Annex B M1 Mitigations |", content)
-        self.assertIn(r"| $R_{\mathrm{buffer}}$ | Spatial Containment | Verified 1:1 parametric lateral containment safety buffer radius | $R_{\mathrm{buffer}} \ge 1.0 \times \text{Distance}_{\mathrm{containment}}$ | m | JARUS SORA v2.5 Step #2 |", content)
-        self.assertIn(r"| $\text{Range}_{\mathrm{max}}(\text{Link}_{\mathrm{C2}})$ | C2 Comms Margin | Maximum certified C2 data link operational range | $\text{Range}_{\mathrm{max}} \ge \text{Range}_{\mathrm{nominal}}$ | km | RTCA DO-362A §2.2.1 |", content)
-        self.assertIn(r"| $\tau_{\mathrm{containment}}$ | Emergency Response | Maximum allowable failsafe containment response time | $\tau_{\mathrm{containment}} \le 2.0$ | s | ASTM F3269-17 §7.1 |", content)
+        self.assertIn(r"| Ω_state | State Space Domain | Admissible operational state space envelope (Ω_state ⊂ R^n) | Compact subset of R^n (n >= 6) | Dimensionless | ISO/IEC/IEEE 29148:2018 §6.4.2 |", content)
+        self.assertIn(r"| X_boundary | State Vector Bounds | Bounding box of admissible vehicle operational states [x_min, x_max]^T | Bounded hyper-rectangle | Mixed SI Units | ASTM F3269-17 §6.2 |", content)
+        self.assertIn(r"| x_min | State Lower Limit | Minimum permissible state vector threshold | [phi_min, lambda_min, h_min, u_min, v_min, w_min]^T | rad, rad, m, m/s | SORA Annex B M1 Mitigations |", content)
+        self.assertIn(r"| x_max | State Upper Limit | Maximum permissible state vector threshold | [phi_max, lambda_max, h_max, u_max, v_max, w_max]^T | rad, rad, m/s | SORA Annex B M1 Mitigations |", content)
+        self.assertIn(r"| R_buffer | Spatial Containment | Verified 1:1 parametric lateral containment safety buffer radius | R_buffer >= 1.0 * Distance_containment | m | JARUS SORA v2.5 Step #2 |", content)
+        self.assertIn(r"| Range_max(Link_C2) | C2 Comms Margin | Maximum certified C2 data link operational range | Range_max >= Range_nominal | km | RTCA DO-362A §2.2.1 |", content)
+        self.assertIn(r"| tau_containment | Emergency Response | Maximum allowable failsafe containment response time | tau_containment <= 2.0 | s | ASTM F3269-17 §7.1 |", content)
+
+        # Markdown Table Math Prohibition: No $ in Section 1.3 table lines
+        table_lines = [line for line in content.splitlines() if line.startswith("|") and any(sym in line for sym in ["Ω_state", "X_boundary", "x_min", "x_max", "R_buffer", "Range_max(Link_C2)", "tau_containment"])]
+        self.assertGreaterEqual(len(table_lines), 7, f"Expected >= 7 table lines, found {len(table_lines)}")
+        for line in table_lines:
+            self.assertNotIn("$", line, f"Found LaTeX math delimiter '$' in table line: {line}")
+
+    def test_incose_moe_mop_math_operational_availability_tokens(self):
+        """Verify 03_INCOSE_MOE_MOP_MATH.md uses resolved symbolic identifiers A_o_threshold and A_o_objective instead of raw template tokens (Fixes #154)."""
+        self.assertTrue(os.path.isfile(MISSION_03_MATH_PATH), f"Missing {MISSION_03_MATH_PATH}")
+        with open(MISSION_03_MATH_PATH, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        # Check line 106 MoE-01 row
+        self.assertIn("| MoE-01 | MoE | Operational Availability | Ao = MTBM / (MTBM + MDT) | A_o_threshold | A_o_objective | Dimensionless | INCOSE SEH v5.0 §3.2 |", content)
+        self.assertNotIn("{{OPERATIONAL_AVAILABILITY_THRESHOLD}}", content)
+        self.assertNotIn("{{OPERATIONAL_AVAILABILITY_OBJECTIVE}}", content)
+
 
     def test_section_7_3_optx_katex_math_notation(self):
         """Verify Section 7.3 in 07_OPTX_EXCHANGES.md has valid KaTeX math formatting without unbracketed double subscripts (Fixes #152)."""
@@ -880,9 +908,133 @@ class TestSpecConopsEngineering(unittest.TestCase):
         self.assertNotIn(r"\mathrm{squib", content)
         self.assertNotIn(r"\mathrm{payload", content)
 
+    def test_conops_units_10_11_12_katex_math_subscript_notation(self):
+        """Verify Units 10, 11, and 12 contain zero \\mathrm{...\\_...} math subscripts and use \\text{...\\_...} (Fixes #156)."""
+        paths_to_verify = [
+            (CONOPS_10_MAINTENANCE_PATH, AGENTS_CONOPS_10_MAINTENANCE_PATH, "10_MAINTENANCE_AND_GSE_SUPPORT.md"),
+            (CONOPS_11_TRADE_STUDIES_PATH, AGENTS_CONOPS_11_TRADE_STUDIES_PATH, "11_IMPACTS_AND_TRADE_STUDIES.md"),
+            (CONOPS_12_EMERGENCY_PATH, AGENTS_CONOPS_12_EMERGENCY_PATH, "12_EMERGENCY_DECISION_MATRIX.md"),
+        ]
+
+        for primary_path, mirror_path, unit_name in paths_to_verify:
+            self.assertTrue(os.path.isfile(primary_path), f"Missing {primary_path}")
+            self.assertTrue(os.path.isfile(mirror_path), f"Missing {mirror_path}")
+            with open(primary_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            with open(mirror_path, "r", encoding="utf-8") as f:
+                mirror_content = f.read()
+            self.assertEqual(content, mirror_content, f"Mirror mismatch between skills/ and .agents/ for {unit_name}")
+
+            # Verify zero \mathrm{..._...} snake_case subscripts in math mode
+            self.assertFalse(
+                re.search(r"\\mathrm\{[^}]*_[^}]*\}", content),
+                f"Found invalid \\mathrm snake_case subscript with underscore in {unit_name}",
+            )
+
+        # Unit 10 specific \text{...} assertions
+        with open(CONOPS_10_MAINTENANCE_PATH, "r", encoding="utf-8") as f:
+            c10 = f.read()
+        self.assertIn(r"\tau_{\text{PBIT\_max}}", c10)
+        self.assertIn(r"$t_{\text{swap}} \le \tau_{\text{swap\_battery}}", c10)
+        self.assertIn(r"$t_{\text{LRU\_swap}} \le \tau_{\text{swap\_LRU}}", c10)
+        self.assertIn(r"\tau_{\text{turnaround\_max}}", c10)
+        self.assertIn(r"\tau_{\text{swap\_FC}}", c10)
+        self.assertIn(r"\tau_{\text{swap\_payload}}", c10)
+        self.assertIn(r"\tau_{\text{swap\_actuator}}", c10)
+        self.assertIn(r"T_{\text{op\_min}}", c10)
+        self.assertIn(r"T_{\text{op\_max}}", c10)
+        self.assertIn(r"\text{RH}_{\text{storage\_max}}", c10)
+        self.assertIn(r"t_{\text{spares\_endurance}}", c10)
+
+        # Unit 11 specific \text{...} assertions
+        with open(CONOPS_11_TRADE_STUDIES_PATH, "r", encoding="utf-8") as f:
+            c11 = f.read()
+        self.assertIn(r"\tau_{\text{prep\_target}}", c11)
+        self.assertIn(r"\tau_{\text{turnaround\_target}}", c11)
+        self.assertIn(r"x_{\text{operating\_max}}", c11)
+        self.assertIn(r"t_{\text{endurance\_nominal}}", c11)
+        self.assertIn(r"t_{\text{endurance\_cold}}", c11)
+        self.assertIn(r"m_{\text{payload\_max}}", c11)
+        self.assertIn(r"m_{\text{system\_max}}", c11)
+        self.assertIn(r"a_{\text{dist\_limit}}", c11)
+        self.assertIn(r"R_{\text{precip\_max}}", c11)
+        self.assertIn(r"\tau_{\text{deploy\_max}}", c11)
+
+        # Unit 12 specific \text{...} assertions
+        with open(CONOPS_12_EMERGENCY_PATH, "r", encoding="utf-8") as f:
+            c12 = f.read()
+        self.assertIn(r"\tau_{\text{deadline\_abort}}", c12)
+
+    def test_operational_purpose_and_mission_template_tokens(self):
+        """Verify 01_COMMANDERS_INTENT.md and 01_METADATA_AND_OVERVIEW.md use template tokens {{OPERATIONAL_PURPOSE}} and {{PRIMARY_OPERATIONAL_MISSION}} (Fixes #157)."""
+        self.assertTrue(os.path.isfile(MISSION_01_COMMANDERS_INTENT_PATH), f"Missing {MISSION_01_COMMANDERS_INTENT_PATH}")
+        self.assertTrue(os.path.isfile(AGENTS_MISSION_01_COMMANDERS_INTENT_PATH), f"Missing {AGENTS_MISSION_01_COMMANDERS_INTENT_PATH}")
+        self.assertTrue(os.path.isfile(CONOPS_01_OVERVIEW_PATH), f"Missing {CONOPS_01_OVERVIEW_PATH}")
+        self.assertTrue(os.path.isfile(AGENTS_CONOPS_01_OVERVIEW_PATH), f"Missing {AGENTS_CONOPS_01_OVERVIEW_PATH}")
+
+        # Check Mission Intent 01_COMMANDERS_INTENT.md
+        with open(MISSION_01_COMMANDERS_INTENT_PATH, "r", encoding="utf-8") as f:
+            mission_c = f.read()
+        with open(AGENTS_MISSION_01_COMMANDERS_INTENT_PATH, "r", encoding="utf-8") as f:
+            agents_mission_c = f.read()
+        self.assertEqual(mission_c, agents_mission_c, "Mirror mismatch between skills/ and .agents/ for 01_COMMANDERS_INTENT.md")
+        self.assertIn("- **Operational Purpose:** {{OPERATIONAL_PURPOSE}}", mission_c)
+        self.assertNotIn("The primary operational purpose of the tactical autonomous cyber-physical system is to execute persistent", mission_c)
+
+        # Check ConOps 01_METADATA_AND_OVERVIEW.md
+        with open(CONOPS_01_OVERVIEW_PATH, "r", encoding="utf-8") as f:
+            conops_c = f.read()
+        with open(AGENTS_CONOPS_01_OVERVIEW_PATH, "r", encoding="utf-8") as f:
+            agents_conops_c = f.read()
+        self.assertEqual(conops_c, agents_conops_c, "Mirror mismatch between skills/ and .agents/ for 01_METADATA_AND_OVERVIEW.md")
+        self.assertIn("- **Primary Operational Mission:** {{PRIMARY_OPERATIONAL_MISSION}}", conops_c)
+        self.assertNotIn("The system is engineered to execute autonomous closed-loop state trajectory execution", conops_c)
+
+    def test_core_mission_capabilities_template_token(self):
+        """Verify 01_METADATA_AND_OVERVIEW.md uses template token {{CORE_MISSION_CAPABILITIES}} under Core Mission Capabilities (Fixes #158)."""
+        self.assertTrue(os.path.isfile(CONOPS_01_OVERVIEW_PATH), f"Missing {CONOPS_01_OVERVIEW_PATH}")
+        self.assertTrue(os.path.isfile(AGENTS_CONOPS_01_OVERVIEW_PATH), f"Missing {AGENTS_CONOPS_01_OVERVIEW_PATH}")
+
+        # Check ConOps 01_METADATA_AND_OVERVIEW.md
+        with open(CONOPS_01_OVERVIEW_PATH, "r", encoding="utf-8") as f:
+            conops_c = f.read()
+        with open(AGENTS_CONOPS_01_OVERVIEW_PATH, "r", encoding="utf-8") as f:
+            agents_conops_c = f.read()
+        self.assertEqual(conops_c, agents_conops_c, "Mirror mismatch between skills/ and .agents/ for 01_METADATA_AND_OVERVIEW.md")
+        self.assertIn("- **Core Mission Capabilities:**\n{{CORE_MISSION_CAPABILITIES}}", conops_c)
+        self.assertNotIn("1. Autonomous closed-loop state trajectory tracking, corridor execution, and stationary state holding", conops_c)
+        self.assertNotIn("3. Real-time high-throughput telemetry streaming and edge neural state inference processing.", conops_c)
+
+    def test_no_mathrm_with_underscores_in_units(self):
+        """Verify zero occurrences of \\mathrm{..._...} math mode notation exist in modular unit markdown files (Fixes #160)."""
+        pattern = re.compile(r"\\mathrm\{[^}]*_[^}]*\}")
+        unit_dirs = [
+            os.path.join(REPO_ROOT, "skills", "spec-conops-engineering", "resources", "units"),
+            os.path.join(REPO_ROOT, ".agents", "skills", "spec-conops-engineering", "resources", "units"),
+        ]
+        found_violations = []
+        for udir in unit_dirs:
+            self.assertTrue(os.path.isdir(udir), f"Missing units directory {udir}")
+            for root, _, files in os.walk(udir):
+                for f in sorted(files):
+                    if f.endswith(".md"):
+                        path = os.path.join(root, f)
+                        with open(path, "r", encoding="utf-8") as fp:
+                            content = fp.read()
+                        matches = pattern.findall(content)
+                        if matches:
+                            found_violations.append((path, matches))
+
+        self.assertEqual(
+            len(found_violations),
+            0,
+            f"Found invalid \\mathrm{{..._...}} in modular units: {found_violations}",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
 
 

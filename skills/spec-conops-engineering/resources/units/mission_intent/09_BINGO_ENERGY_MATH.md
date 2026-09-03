@@ -6,7 +6,7 @@
 
 ## 9. Bingo Energy Mathematics & Secondary Divert Protocols
 
-In accordance with INCOSE Systems Engineering Handbook v5.0 (§3.2) and safety-critical resource management baselines, safe mission execution is guaranteed by continuous parametric computation of the dynamic resource threshold $R_{\mathrm{threshold}}(t)$ and enforcement of the mandatory statutory resource reserve ratio $\text{Ratio}_{\mathrm{reserve\_min}} \ge 0.20$.
+In accordance with INCOSE Systems Engineering Handbook v5.0 (§3.2) and safety-critical resource management baselines, safe mission execution is guaranteed by continuous parametric computation of the dynamic resource threshold $R_{\mathrm{threshold}}(t)$ and enforcement of the mandatory statutory resource reserve ratio $\text{Ratio}_{\text{reserve\_min}} \ge 0.20$.
 
 ### 9.1 Parametric Closed-Loop Resource Reserve Formulation
 
@@ -15,7 +15,7 @@ The dynamic resource threshold represents the minimum onboard stored energy/reso
 $$
 \begin{aligned}
 R_{\mathrm{threshold}}(t) &= R_{\mathrm{return}}(\mathbf{p}(t), \mathbf{p}_{\mathrm{dest}}) + R_{\mathrm{divert}}(\mathbf{p}_{\mathrm{dest}}, \mathbf{p}_{\mathrm{alt}}) + R_{\mathrm{reserve}} + R_{\mathrm{contingency}} \\
-R_{\mathrm{reserve}} &\ge \text{Ratio}_{\mathrm{reserve\_min}} \cdot R_{\mathrm{capacity}}
+R_{\mathrm{reserve}} &\ge \text{Ratio}_{\text{reserve\_min}} \cdot R_{\mathrm{capacity}}
 \end{aligned}
 $$
 
@@ -24,7 +24,7 @@ The dynamic transit and divert components are evaluated via continuous integral 
 $$
 \begin{aligned}
 R_{\mathrm{return}}(\mathbf{p}(t), \mathbf{p}_{\mathrm{dest}}) &= \int_{t}^{t_{\mathrm{recovery}}} \left( P_{\mathrm{motion}}(v(\tau), \mathbf{w}(\tau)) + P_{\mathrm{control}} + P_{\mathrm{payload}} \right) d\tau \\
-R_{\mathrm{divert}}(\mathbf{p}_{\mathrm{dest}}, \mathbf{p}_{\mathrm{alt}}) &= \frac{\|\mathbf{p}_{\mathrm{dest}} - \mathbf{p}_{\mathrm{alt}}\|_2}{v_{\mathrm{nominal}}} \cdot P_{\mathrm{nominal}} + R_{\mathrm{reserve\_divert}}
+R_{\mathrm{divert}}(\mathbf{p}_{\mathrm{dest}}, \mathbf{p}_{\mathrm{alt}}) &= \frac{\|\mathbf{p}_{\mathrm{dest}} - \mathbf{p}_{\mathrm{alt}}\|_2}{v_{\mathrm{nominal}}} \cdot P_{\mathrm{nominal}} + R_{\text{reserve\_divert}}
 \end{aligned}
 $$
 

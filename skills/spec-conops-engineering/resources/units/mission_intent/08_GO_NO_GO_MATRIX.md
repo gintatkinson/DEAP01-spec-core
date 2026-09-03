@@ -20,6 +20,6 @@ In accordance with INCOSE Systems Engineering Handbook v5.0 and MIL-STD-882E (§
 | `GNG-08` | In-Operation | Dynamic Boundary Containment Margin | Distance to Boundary d_boundary >= d_containment_margin | Spatial Containment Filter | Execute immediate 180 deg turnaround if d_boundary < d_containment_margin | MIL-STD-882E §4.3 |
 
 ### 8.1 Conjunction Logic and Override Policy
-- **Pre-Operation Conjunction:** $\mathrm{Operation\_Go} \iff \bigwedge_{i=1}^{5} \mathrm{GNG}_{i} = \mathrm{TRUE}$. A failure of any single pre-operation gate automatically places the system into a hardware-locked `Hold` state.
-- **In-Operation Safety Gate Response:** $\mathrm{Operation\_Continue} \iff \bigwedge_{i=6}^{8} \mathrm{GNG}_{i} = \mathrm{TRUE}$. Any in-operation gate breach triggers immediate autonomous containment in accordance with Section 9 and Section 10.
+- **Pre-Operation Conjunction:** $\text{Operation\_Go} \iff \bigwedge_{i=1}^{5} \mathrm{GNG}_{i} = \mathrm{TRUE}$. A failure of any single pre-operation gate automatically places the system into a hardware-locked `Hold` state.
+- **In-Operation Safety Gate Response:** $\text{Operation\_Continue} \iff \bigwedge_{i=6}^{8} \mathrm{GNG}_{i} = \mathrm{TRUE}$. Any in-operation gate breach triggers immediate autonomous containment in accordance with Section 9 and Section 10.
 - **Safety Supervisor Authority:** Gate overrides are strictly prohibited for safety-critical interlocks (`GNG-01`, `GNG-05`, `GNG-08`) under MIL-STD-882E.

@@ -561,6 +561,219 @@ def _find_matching_section(
 
 
 # =============================================================================
+# Mermaid Block and Table Schema Validation Helpers (Fixes #114, #130)
+# =============================================================================
+
+VALID_MERMAID_TYPES = (
+    "flowchart",
+    "graph",
+    "sequenceDiagram",
+    "stateDiagram",
+    "stateDiagram-v2",
+    "classDiagram",
+    "erDiagram",
+    "gantt",
+    "pie",
+    "journey",
+    "gitGraph",
+    "quadrantChart",
+    "mindmap",
+    "timeline",
+    "zenuml",
+    "sankey-beta",
+    "C4Context",
+    "C4Container",
+    "C4Component",
+    "C4Dynamic",
+    "C4Deployment",
+    "requirementDiagram",
+    "architecture-beta",
+    "packet-beta",
+    "kanban",
+    "block-beta",
+)
+
+
+def _validate_mermaid_integrity(content: str, rel_path: str, prefix: str = "conops") -> List[Finding]:
+    """
+    Validates Mermaid code block syntax, recognized diagram types, and fence closing integrity.
+    """
+    findings: List[Finding] = []
+    lines = content.splitlines()
+    in_code = False
+    code_lang = ""
+    code_start_line = 0
+    code_lines: List[str] = []
+
+    for idx, line in enumerate(lines, start=1):
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            if not in_code:
+                in_code = True
+                code_lang = stripped[3:].strip().lower()
+                code_start_line = idx
+                code_lines = []
+            else:
+                # Closing fence
+                if code_lang == "mermaid":
+                    block_body = "\n".join(code_lines).strip()
+                    if not block_body:
+                        findings.append(Finding(
+                            f"{prefix}-mermaid-malformed",
+                            f"Empty Mermaid diagram block detected at line {code_start_line} in '{rel_path}'.",
+                            location=f"{rel_path}:{code_start_line}",
+                            detail={"line": code_start_line, "file": rel_path},
+                        ))
+                    else:
+                        body_lines = [l.strip() for l in block_body.splitlines() if l.strip() and not l.strip().startswith("%%")]
+                        if not body_lines:
+                            findings.append(Finding(
+                                f"{prefix}-mermaid-malformed",
+                                f"Mermaid diagram block at line {code_start_line} in '{rel_path}' contains only comments or whitespace.",
+                                location=f"{rel_path}:{code_start_line}",
+                                detail={"line": code_start_line, "file": rel_path},
+                            ))
+                        else:
+                            first_stmt = body_lines[0]
+                            matched_type = any(
+                                re.match(rf'^{re.escape(dt)}\b', first_stmt, re.IGNORECASE)
+                                for dt in VALID_MERMAID_TYPES
+                            )
+                            if not matched_type:
+                                findings.append(Finding(
+                                    f"{prefix}-mermaid-malformed",
+                                    f"Mermaid diagram block at line {code_start_line} in '{rel_path}' has unrecognized or invalid diagram type '{first_stmt}'.",
+                                    location=f"{rel_path}:{code_start_line}",
+                                    detail={"line": code_start_line, "statement": first_stmt, "file": rel_path},
+                                ))
+                in_code = False
+                code_lang = ""
+                code_start_line = 0
+                code_lines = []
+        elif in_code:
+            code_lines.append(line)
+
+    if in_code and code_lang == "mermaid":
+        findings.append(Finding(
+            f"{prefix}-mermaid-unclosed",
+            f"Unclosed Mermaid code block detected starting at line {code_start_line} in '{rel_path}'.",
+            location=f"{rel_path}:{code_start_line}",
+            detail={"line": code_start_line, "file": rel_path},
+        ))
+
+    return findings
+
+
+MANDATORY_CONOPS_TABLE_SCHEMAS: Dict[int, Dict[str, Any]] = {
+    2: {
+        "name": "Normative Standards Baseline",
+        "required_columns": [
+            ("standard_id", ["standard_id", "standard", "id"]),
+            ("issuing_body", ["issuing_body", "issuing_org", "issuing_organization", "body", "org", "organization"]),
+            ("title", ["title", "title_baseline", "title_baseline_description", "standard_title"]),
+            ("applicable_clauses", ["applicable_clauses", "applicable_clauses_focus_area", "clauses", "clause"]),
+        ],
+    },
+    6: {
+        "name": "SORA 4D Volume & GRB Parameters",
+        "required_columns": [
+            ("parameter", ["parameter", "param", "parameter_name", "name"]),
+            ("symbol", ["symbol", "sym"]),
+            ("value", ["value", "val"]),
+            ("units", ["units", "unit"]),
+            ("description", ["description", "desc"]),
+        ],
+    },
+    7: {
+        "name": "OMG UAF Activity Taxonomy",
+        "required_columns": [
+            ("activity_id", ["activity_id", "activity", "oa_id", "id"]),
+            ("activity_name", ["activity_name", "name"]),
+            ("description", ["description", "desc"]),
+            ("gate_24_allocation_tag", ["gate_24_allocation_tag", "allocation_tag", "allocation", "gate24_allocation_tag"]),
+        ],
+    },
+    8: {
+        "name": "Op-Tx Information Exchange Matrix",
+        "required_columns": [
+            ("exchange_id", ["exchange_id", "exchange", "optx_id", "id"]),
+            ("source_node", ["source_node", "source", "src_node", "src"]),
+            ("destination_node", ["destination_node", "dest_node", "destination", "dest", "target_node"]),
+            ("information_item", ["information_item", "information_element", "item", "info_item", "message"]),
+            ("data_rate", ["data_rate", "throughput", "rate", "frequency"]),
+            ("max_latency", ["max_latency", "latency", "max_latency_ms", "latency_limit"]),
+            ("criticality", ["criticality", "criticality_level", "dal", "safety_criticality"]),
+        ],
+    },
+    11: {
+        "name": "O/I/D Maintenance Hierarchy",
+        "required_columns": [
+            ("maintenance_level", ["maintenance_level", "maintenance_tier", "tier", "level", "organizational_level"]),
+            ("scope", ["scope", "maintenance_tasks_work_scope", "tasks", "work_scope", "description"]),
+            ("tooling_equipment", ["tooling_equipment", "tooling", "interval_trigger", "turnaround_time", "interval", "qualification", "equipment"]),
+        ],
+    },
+    12: {
+        "name": "Emergency Decision Matrix",
+        "required_columns": [
+            ("trigger_id", ["trigger_id", "trigger", "emg_id", "id"]),
+            ("contingency_trigger", ["contingency_trigger", "contingency_trigger_name", "trigger_event", "contingency", "event"]),
+            ("detection_mechanism", ["detection_mechanism", "detection", "mechanism"]),
+            ("automated_containment_action", ["automated_containment_action", "containment_action", "containment", "action"]),
+            ("failsafe_state", ["failsafe_state", "primary_failsafe_state", "recovery_state", "failsafe_recovery_state"]),
+            ("max_response_time", ["max_response_time", "response_time", "latency_deadline", "max_latency"]),
+            ("hitl_role", ["hitl_role", "authority_role", "hitl_authority_role", "human_in_the_loop_role", "role"]),
+        ],
+    },
+}
+
+
+def _validate_table_schema(
+    tables: List[List[Dict[str, str]]],
+    schema_spec: Dict[str, Any],
+) -> Tuple[bool, List[str], List[str]]:
+    """
+    Validates if at least one table in tables matches the required columns schema.
+    Returns (is_valid, missing_columns, found_headers).
+    """
+    if not tables:
+        return False, [req[0] for req in schema_spec["required_columns"]], []
+
+    for tbl in tables:
+        if not tbl:
+            continue
+        row_keys = list(tbl[0].keys())
+        missing_for_this_table: List[str] = []
+        for col_name, aliases in schema_spec["required_columns"]:
+            matched = False
+            for k in row_keys:
+                k_norm = k.lower().replace(" ", "_").replace("-", "_")
+                if any(alias == k_norm or alias in k_norm or k_norm in alias for alias in aliases):
+                    matched = True
+                    break
+            if not matched:
+                missing_for_this_table.append(col_name)
+
+        if not missing_for_this_table:
+            return True, [], row_keys
+
+    # If none matched completely, report the missing columns from the first table
+    first_tbl_keys = list(tables[0][0].keys()) if tables and tables[0] else []
+    missing_from_first: List[str] = []
+    for col_name, aliases in schema_spec["required_columns"]:
+        matched = False
+        for k in first_tbl_keys:
+            k_norm = k.lower().replace(" ", "_").replace("-", "_")
+            if any(alias == k_norm or alias in k_norm or k_norm in alias for alias in aliases):
+                matched = True
+                break
+        if not matched:
+            missing_from_first.append(col_name)
+
+    return False, missing_from_first, first_tbl_keys
+
+
+# =============================================================================
 # Gate 26: ConopsCompletenessValidator
 # =============================================================================
 
@@ -905,6 +1118,22 @@ class ConopsCompletenessValidator(IValidator):
                     detail={"section_number": sec_num, "section_title": title},
                 ))
 
+        # Check for Hollow Sections failing line floor (Fixes #114, #130)
+        if "TEMPLATE" not in rel_path.upper():
+            for sec_num, (h_title, s_line, s_chunk) in matched_sections.items():
+                non_empty = [l for l in s_chunk.splitlines() if l.strip()]
+                if len(non_empty) < 8:
+                    findings.append(Finding(
+                        "conops-section-hollow",
+                        f"Section {sec_num} ('{h_title}') in '{rel_path}' is hollow / below minimum line floor ({len(non_empty)} lines; minimum required: 8 lines).",
+                        location=f"{rel_path}:{s_line}",
+                        detail={"section_number": sec_num, "line_count": len(non_empty), "minimum_floor": 8, "file": rel_path},
+                    ))
+
+        # Check Mandatory Table Schemas (Fixes #114, #130)
+        if "TEMPLATE" not in rel_path.upper():
+            findings.extend(self._validate_conops_table_schemas(content, rel_path, matched_sections))
+
         # Section 4: Operational Justification & Pugh Decision Matrix with S_j(w) Validation (Fixes #130)
         if 4 in matched_sections and "TEMPLATE" not in rel_path.upper():
             _, sec4_line, sec4_content = matched_sections[4]
@@ -924,6 +1153,11 @@ class ConopsCompletenessValidator(IValidator):
                         location=f"{rel_path}:{sec6_line}",
                         detail={"declared_r_grb": r_grb_val, "minimum_r_grb": r_calc},
                     ))
+
+        # Section 10: Multi-Threaded Operational Scenarios Timeline Steps (Fixes #114, #130)
+        if 10 in matched_sections and "TEMPLATE" not in rel_path.upper():
+            _, sec10_line, sec10_content = matched_sections[10]
+            findings.extend(self._validate_scenario_timeline_steps(content, rel_path, sec10_content, sec10_line))
 
         # Section 12: 7-Row Emergency Decision Matrix Validation
         if 12 in matched_sections:
@@ -962,6 +1196,102 @@ class ConopsCompletenessValidator(IValidator):
 
             # Validate Section 12 depth (subsections 12.1..12.6 + statechart)
             findings.extend(self._validate_emergency_matrix_depth(content, rel_path, sec12_content, sec12_line))
+
+        # Check Mermaid Diagram Integrity (Fixes #114, #130)
+        findings.extend(_validate_mermaid_integrity(content, rel_path, prefix="conops"))
+
+        return findings
+
+    def _validate_conops_table_schemas(
+        self,
+        content: str,
+        rel_path: str,
+        matched_sections: Dict[int, Tuple[str, int, str]],
+    ) -> List[Finding]:
+        """
+        Validates mandatory table column schemas across ConOps sections (Fixes #114, #130).
+        """
+        findings: List[Finding] = []
+        for sec_num, schema_spec in MANDATORY_CONOPS_TABLE_SCHEMAS.items():
+            if sec_num in matched_sections:
+                _, sec_line, sec_content = matched_sections[sec_num]
+                sec_tables, _ = _parse_commonmark_tables(sec_content)
+                is_valid, missing_cols, found_keys = _validate_table_schema(sec_tables, schema_spec)
+                if not is_valid:
+                    findings.append(Finding(
+                        "conops-table-schema-invalid",
+                        f"Table in Section {sec_num} ('{schema_spec['name']}') in '{rel_path}' is missing required column schema: {', '.join(missing_cols)}.",
+                        location=f"{rel_path}:{sec_line}",
+                        detail={
+                            "section": sec_num,
+                            "table_name": schema_spec["name"],
+                            "missing_columns": missing_cols,
+                            "found_columns": found_keys,
+                            "file": rel_path,
+                        },
+                    ))
+        return findings
+
+    def _validate_scenario_timeline_steps(
+        self,
+        content: str,
+        rel_path: str,
+        sec10_content: str,
+        sec10_line: int,
+    ) -> List[Finding]:
+        """
+        Validates timeline step count in Section 10 (Multi-Threaded Operational Scenarios) (Fixes #114, #130):
+        - SCN-01 / Scenario 1 >= 8 steps (nominal lifecycle thread)
+        - SCN-02 / Scenario 2 >= 6 steps
+        - SCN-03 / Scenario 3 >= 6 steps
+        """
+        findings: List[Finding] = []
+        
+        # Split Section 10 into scenario sub-blocks by headers
+        scenario_blocks = re.split(r'(?=^#{2,4}\s+)', sec10_content, flags=re.MULTILINE)
+
+        def _count_steps(block_text: str) -> int:
+            # 1. Check table rows
+            tbls, _ = _parse_commonmark_tables(block_text)
+            table_steps = 0
+            for tbl in tbls:
+                step_rows = 0
+                for row in tbl:
+                    first_val = list(row.values())[0] if row else ""
+                    step_val = row.get("step_number") or row.get("step") or row.get("step_num") or first_val
+                    clean_step = re.sub(r'[*`_]', '', str(step_val)).strip()
+                    if re.match(r'^[0-9]+$', clean_step) or re.match(r'^step\s*[0-9]+', clean_step, re.IGNORECASE):
+                        step_rows += 1
+                table_steps = max(table_steps, step_rows)
+
+            # 2. Check bullet points / lines with Step X
+            step_matches = re.findall(
+                r'[-*]\s+\*?\*?Step\s*([0-9]+)',
+                block_text,
+                re.IGNORECASE,
+            )
+            return max(table_steps, len(step_matches))
+
+        checked_scenarios = {
+            "SCN-01": (8, r'\b(?:SCN-01|Scenario\s+1\b|Nominal)', "Scenario 1 (SCN-01)"),
+            "SCN-02": (6, r'\b(?:SCN-02|Scenario\s+2\b)', "Scenario 2 (SCN-02)"),
+            "SCN-03": (6, r'\b(?:SCN-03|Scenario\s+3\b)', "Scenario 3 (SCN-03)"),
+        }
+
+        for scn_key, (min_steps, scn_pattern, scn_title) in checked_scenarios.items():
+            for block in scenario_blocks:
+                header_m = re.match(r'^#{2,4}\s+(.+)$', block.strip(), flags=re.MULTILINE)
+                block_header = header_m.group(1) if header_m else block[:100]
+                if re.search(scn_pattern, block_header, re.IGNORECASE):
+                    cnt = _count_steps(block)
+                    if cnt < min_steps:
+                        findings.append(Finding(
+                            "conops-scenario-steps-truncated",
+                            f"{scn_title} in '{rel_path}' has {cnt} lifecycle step(s); minimum required: {min_steps} steps.",
+                            location=f"{rel_path}:{sec10_line}",
+                            detail={"scenario": scn_key, "step_count": cnt, "min_required": min_steps, "file": rel_path},
+                        ))
+                    break
 
         return findings
 
@@ -1725,6 +2055,9 @@ class MissionIntentCompletenessValidator(IValidator):
                         location=f"{rel_path}:{sec9_line}",
                         detail={"capacity_joules": capacity_val, "reserve_joules": reserve_val, "reserve_ratio": ratio},
                     ))
+
+        # Check Mermaid Diagram Integrity (Fixes #114, #130)
+        findings.extend(_validate_mermaid_integrity(content, rel_path, prefix="mission"))
 
         return findings
 

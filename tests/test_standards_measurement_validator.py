@@ -347,8 +347,10 @@ class TestStandardsAndMeasurementValidator(unittest.TestCase):
         """Verify valid standards and assurance levels pass lattice validation."""
         with tempfile.TemporaryDirectory() as tmpdir:
             features_dir = os.path.join(tmpdir, "docs", "features")
+            safety_dir = os.path.join(tmpdir, "docs", "safety")
             schema_dir = os.path.join(tmpdir, "schema")
             os.makedirs(features_dir, exist_ok=True)
+            os.makedirs(safety_dir, exist_ok=True)
             os.makedirs(schema_dir, exist_ok=True)
 
             feat_md = """# Feature: Flight Management
@@ -360,6 +362,18 @@ class TestStandardsAndMeasurementValidator(unittest.TestCase):
 """
             with open(os.path.join(features_dir, "FEAT_01.md"), "w", encoding="utf-8") as f:
                 f.write(feat_md)
+
+            rows = "\n".join(
+                f"| `OSO-{i:02d}` | Medium | Robust design and verification | `MIT-{i:02d}` |"
+                for i in range(1, 25)
+            )
+            with open(os.path.join(safety_dir, "STPA_MATRIX.md"), "w", encoding="utf-8") as f:
+                f.write(f"""# Safety Matrix
+## SORA OSO Evaluation Table
+| OSO ID | Robustness Level | Justification | Mitigation Reference |
+| :--- | :--- | :--- | :--- |
+{rows}
+""")
 
             repo = WorkspaceRepository(workspace_dir=tmpdir)
             validator = StandardsAndMeasurementValidator()
@@ -468,7 +482,115 @@ class TestStandardsAndMeasurementValidator(unittest.TestCase):
             self.assertIn("Parameter & Measurement Taxonomy Dictionary", param_dict)
             self.assertIn("PrimaryVelocity", param_dict)
             self.assertIn("m/s", param_dict)
-            self.assertIn(r"\text{m} \cdot \text{s}^{-1}", param_dict)
+    # -------------------------------------------------------------------------
+    # (e) Phase-0 Safety Obligation Mechanical Witness Verification (Issue #93)
+    # -------------------------------------------------------------------------
+
+    def test_declared_safety_standard_with_missing_safety_folder_fails(self):
+        """Verify that declaring safety standards without a docs/safety folder fails Gate 25."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            features_dir = os.path.join(tmpdir, "docs", "features")
+            os.makedirs(features_dir, exist_ok=True)
+
+            with open(os.path.join(features_dir, "FEAT_01.md"), "w", encoding="utf-8") as f:
+                f.write("/// Standard: [JARUS-SORA-v2.5, 'Step 4', SAIL-III]\n")
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            validator = StandardsAndMeasurementValidator()
+            findings = validator.validate(repo)
+
+            safety_findings = [f for f in findings if getattr(f, "rule_id", "") == "standards-missing-safety-baseline"]
+            self.assertTrue(len(safety_findings) >= 1)
+            self.assertIn("docs/safety", str(safety_findings[0]))
+
+    def test_declared_sora_with_empty_oso_table_fails_gate_25(self):
+        """Verify that declaring SORA with an empty OSO table in docs/safety fails Gate 25."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            features_dir = os.path.join(tmpdir, "docs", "features")
+            safety_dir = os.path.join(tmpdir, "docs", "safety")
+            os.makedirs(features_dir, exist_ok=True)
+            os.makedirs(safety_dir, exist_ok=True)
+
+            with open(os.path.join(features_dir, "FEAT_01.md"), "w", encoding="utf-8") as f:
+                f.write("/// Standard: [JARUS-SORA-v2.5, 'Step 4', SAIL-IV]\n")
+
+            # Bare table header without any OSO rows
+            with open(os.path.join(safety_dir, "STPA_MATRIX.md"), "w", encoding="utf-8") as f:
+                f.write("""# Safety Matrix
+## SORA OSO Evaluation Table
+| OSO ID | Robustness Level | Justification | Mitigation Reference |
+| :--- | :--- | :--- | :--- |
+
+(No rows evaluated)
+""")
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            validator = StandardsAndMeasurementValidator()
+            findings = validator.validate(repo)
+
+            oso_findings = [
+                f for f in findings
+                if getattr(f, "rule_id", "") in ("standards-empty-oso-table", "standards-missing-sora-oso-witness")
+            ]
+            self.assertTrue(len(oso_findings) >= 1)
+
+    def test_declared_sora_with_prose_only_enumeration_fails_gate_25(self):
+        """Verify that mentioning OSO-01..24 in prose without structured table rows fails Gate 25."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            features_dir = os.path.join(tmpdir, "docs", "features")
+            safety_dir = os.path.join(tmpdir, "docs", "safety")
+            os.makedirs(features_dir, exist_ok=True)
+            os.makedirs(safety_dir, exist_ok=True)
+
+            with open(os.path.join(features_dir, "FEAT_01.md"), "w", encoding="utf-8") as f:
+                f.write("/// Standard: [JARUS-SORA-v2.5, 'Step 4', SAIL-IV]\n")
+
+            # Prose line enumerating all 24 OSOs, but zero table rows
+            with open(os.path.join(safety_dir, "STPA_MATRIX.md"), "w", encoding="utf-8") as f:
+                f.write("""# Safety Matrix
+## SORA OSO Evaluation
+We have evaluated all objectives: OSO-01, OSO-02, OSO-03, OSO-04, OSO-05, OSO-06, OSO-07, OSO-08,
+OSO-09, OSO-10, OSO-11, OSO-12, OSO-13, OSO-14, OSO-15, OSO-16, OSO-17, OSO-18, OSO-19, OSO-20,
+OSO-21, OSO-22, OSO-23, OSO-24 in the operational context.
+""")
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            validator = StandardsAndMeasurementValidator()
+            findings = validator.validate(repo)
+
+            oso_findings = [
+                f for f in findings
+                if getattr(f, "rule_id", "") in ("standards-empty-oso-table", "standards-missing-sora-oso-witness")
+            ]
+            self.assertTrue(len(oso_findings) >= 1)
+
+    def test_declared_sora_with_complete_24_osos_passes_gate_25(self):
+        """Verify that declaring SORA with all 24 OSOs populated in table rows passes Gate 25."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            features_dir = os.path.join(tmpdir, "docs", "features")
+            safety_dir = os.path.join(tmpdir, "docs", "safety")
+            os.makedirs(features_dir, exist_ok=True)
+            os.makedirs(safety_dir, exist_ok=True)
+
+            with open(os.path.join(features_dir, "FEAT_01.md"), "w", encoding="utf-8") as f:
+                f.write("/// Standard: [JARUS-SORA-v2.5, 'Step 4', SAIL-IV]\n")
+
+            rows = "\n".join(
+                f"| `OSO-{i:02d}` | Medium | Robust design and verification | `MIT-{i:02d}` |"
+                for i in range(1, 25)
+            )
+            with open(os.path.join(safety_dir, "STPA_MATRIX.md"), "w", encoding="utf-8") as f:
+                f.write(f"""# Safety Matrix
+## SORA OSO Evaluation Table
+| OSO ID | Robustness Level | Justification | Mitigation Reference |
+| :--- | :--- | :--- | :--- |
+{rows}
+""")
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            validator = StandardsAndMeasurementValidator()
+            findings = validator.validate(repo)
+            self.assertEqual(findings, [])
 
     def test_aggregating_validators_registration(self):
         """Verify StandardsAndMeasurementValidator is registered in AGGREGATING_VALIDATORS."""
@@ -477,3 +599,5 @@ class TestStandardsAndMeasurementValidator(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+

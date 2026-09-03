@@ -535,6 +535,62 @@ def _normalize_standard_id(raw_id: str) -> str:
     return s
 
 
+SAFETY_CRITICAL_STANDARDS: Set[str] = {
+    "JARUS-SORA-V2.5", "JARUS-SORA-V2.0", "JARUS-SORA",
+    "ISO-26262", "ISO-21448",
+    "DO-178C", "DO-254", "DO-331", "DO-385", "DO-365",
+    "IEC-62304", "IEC-61508", "IEC-62443",
+    "ARP4754A", "ARP4754B", "ARP4761", "ARP4761A",
+    "MIL-STD-882E", "MIL-STD-1629A",
+    "ASTM-F3269", "ASTM-F3298",
+}
+
+
+def is_safety_critical_standard(standard_id: str) -> bool:
+    """Checks whether a canonical standard identifier is a safety-critical standard."""
+    norm = _normalize_standard_id(standard_id)
+    if norm in SAFETY_CRITICAL_STANDARDS:
+        return True
+    for s in SAFETY_CRITICAL_STANDARDS:
+        if norm.startswith(s) or s.startswith(norm):
+            return True
+    if any(k in norm for k in ("SORA", "26262", "62304", "61508", "178C", "254", "882E", "4761", "4754", "3269")):
+        return True
+    return False
+
+
+def _parse_sora_table_rows(text: str) -> Set[str]:
+    """
+    Parses SORA OSO IDs from markdown table data rows in text.
+    Returns set of canonical OSO IDs (e.g. {'OSO-01', ..., 'OSO-24'}).
+    """
+    oso_ids: Set[str] = set()
+    lines = text.splitlines()
+    header_seen = False
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("|") and stripped.endswith("|"):
+            cells = [c.strip() for c in stripped.split("|")[1:-1]]
+            # Check for separator row: |:---|:---| or |---|---|
+            if all(re.fullmatch(r":?-{1,}:?", c) for c in cells if c):
+                header_seen = True
+                continue
+            if not header_seen:
+                # Header row
+                continue
+            # Data row
+            for cell in cells:
+                m = re.search(r'\bOSO-?0*(\d+)\b', cell, re.IGNORECASE)
+                if m:
+                    idx = int(m.group(1))
+                    if 1 <= idx <= 24:
+                        oso_ids.add(f"OSO-{idx:02d}")
+        else:
+            header_seen = False
+    return oso_ids
+
+
 def _resolve_sdo(standard_id: str) -> Optional[str]:
     """Resolves the SDO issuing body for a given canonical standard ID."""
     norm = _normalize_standard_id(standard_id)
@@ -789,6 +845,82 @@ class StandardsAndMeasurementValidator(IValidator):
                     location=loc,
                     detail={"standard_id": dec.standard_id, "assurance_level": dec.assurance_level, "sdo": sdo, "location": loc}
                 ))
+
+        # 2.5 Validate Phase-0 Safety Obligations & Mechanical Witnesses (Issue #93)
+        declared_safety_stds: Set[str] = set()
+        for dec in decorators:
+            if dec.standard_id and (is_safety_critical_standard(dec.standard_id) or dec.sdo in ("JARUS", "RTCA", "SAE")):
+                declared_safety_stds.add(dec.standard_id)
+
+        # Also inspect docs/research/RESEARCH_INVENTORY.md if present
+        inventory_file = os.path.join(workspace_dir, "docs", "research", "RESEARCH_INVENTORY.md")
+        if os.path.isfile(inventory_file):
+            try:
+                with open(inventory_file, "r", encoding="utf-8", errors="ignore") as inv_f:
+                    inv_text = inv_f.read()
+                for line in inv_text.splitlines():
+                    if "|" in line:
+                        for part in line.split("|"):
+                            clean_part = part.strip().strip("`* ")
+                            if clean_part and is_safety_critical_standard(clean_part):
+                                declared_safety_stds.add(_normalize_standard_id(clean_part))
+            except Exception:
+                pass
+
+        if declared_safety_stds:
+            is_upstream = repo.is_upstream_compiler_repo() if hasattr(repo, "is_upstream_compiler_repo") else False
+            safety_dir = os.path.join(workspace_dir, "docs", "safety")
+            safety_files: List[Tuple[str, str]] = []
+            if os.path.isdir(safety_dir):
+                for root, _, files in os.walk(safety_dir):
+                    for f in sorted(files):
+                        if f.endswith(".md") and f != "README.md":
+                            full_p = os.path.join(root, f)
+                            rel_p = os.path.relpath(full_p, workspace_dir)
+                            safety_files.append((full_p, rel_p))
+
+            if is_upstream and not safety_files and not decorators:
+                # Upstream distribution template clean landing zone passes cleanly
+                pass
+            elif not os.path.isdir(safety_dir) or not safety_files:
+                findings.append(Finding(
+                    "standards-missing-safety-baseline",
+                    f"Safety-critical standard(s) ({', '.join(sorted(declared_safety_stds))}) declared in normative baseline, but docs/safety/ directory is absent or contains zero safety specifications.",
+                    location="docs/safety",
+                    detail={"declared_safety_standards": sorted(declared_safety_stds)}
+                ))
+            else:
+                # Read all safety files
+                safety_content_parts = []
+                for full_p, _ in safety_files:
+                    try:
+                        with open(full_p, "r", encoding="utf-8", errors="ignore") as sf:
+                            safety_content_parts.append(sf.read())
+                    except Exception:
+                        pass
+                safety_content = "\n\n".join(safety_content_parts)
+
+                # SORA OSO mechanical witness validation
+                is_sora_declared = any("SORA" in s.upper() for s in declared_safety_stds)
+                if is_sora_declared:
+                    oso_rows = _parse_sora_table_rows(safety_content)
+                    if len(oso_rows) == 0:
+                        findings.append(Finding(
+                            "standards-empty-oso-table",
+                            "SORA safety standard declared in normative baseline, but docs/safety/ contains 0 OSO evaluation table rows (mechanical witness failure).",
+                            location="docs/safety",
+                            detail={"declared_standards": sorted(declared_safety_stds), "oso_rows_found": 0}
+                        ))
+                    else:
+                        expected_osos = {f"OSO-{i:02d}" for i in range(1, 25)}
+                        missing_osos = sorted(expected_osos - oso_rows)
+                        if missing_osos:
+                            findings.append(Finding(
+                                "standards-missing-sora-oso-witness",
+                                f"SORA OSO evaluation table in docs/safety/ is missing mechanical witnesses for {len(missing_osos)} OSO(s): {', '.join(missing_osos)}.",
+                                location="docs/safety",
+                                detail={"missing_osos": missing_osos, "found_count": len(oso_rows)}
+                            ))
 
         # 3. Read Level 1C ICD tables for Theorem 3 and Nyquist validation
         icd01_path = os.path.join(workspace_dir, "docs", "interfaces", "ICD_01_SYSTEM_INTERFACE_MATRIX.md")

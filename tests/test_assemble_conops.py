@@ -752,6 +752,128 @@ class TestSysMLParameterBindingEngine(unittest.TestCase):
         for key, expected_val in DEFAULT_CONOPS_PARAMS.items():
             self.assertEqual(engine.resolve_token(key), expected_val)
 
+    def test_operational_intent_explicit_ingestion(self):
+        """Verify SysMLParameterBindingEngine ingests explicit OPERATIONAL_PURPOSE and PRIMARY_OPERATIONAL_MISSION (Fixes #157)."""
+        explicit_params = {
+            "OPERATIONAL_PURPOSE": "Custom operational purpose for test vehicle.",
+            "PRIMARY_OPERATIONAL_MISSION": "Custom primary operational mission for test vehicle.",
+        }
+        engine = SysMLParameterBindingEngine(parameter_values=explicit_params, auto_detect=False)
+        self.assertEqual(engine.resolve_token("OPERATIONAL_PURPOSE"), "Custom operational purpose for test vehicle.")
+        self.assertEqual(engine.resolve_token("PRIMARY_OPERATIONAL_MISSION"), "Custom primary operational mission for test vehicle.")
+
+        template = "- Purpose: {{OPERATIONAL_PURPOSE}}\n- Mission: {{PRIMARY_OPERATIONAL_MISSION}}"
+        substituted = engine.substitute(template)
+        self.assertIn("- Purpose: Custom operational purpose for test vehicle.", substituted)
+        self.assertIn("- Mission: Custom primary operational mission for test vehicle.", substituted)
+
+    def test_operational_intent_derivation_from_ast_entities(self):
+        """Verify SysMLParameterBindingEngine derives domain-grounded purpose & mission from AST entities (Fixes #157)."""
+        domain_params = {
+            "SYSTEM_NAME": "AeroScan X1",
+            "PLATFORM_TYPE": "Autonomous Aerial Vehicle",
+            "OPERATIONAL_DOMAIN": "Maritime Surveillance",
+            "PRIMARY_COMMS": "COFDM Mesh Link",
+            "REGULATORY_CLASS": "EASA Specific SAIL III",
+        }
+        engine = SysMLParameterBindingEngine(parameter_values=domain_params, auto_detect=False)
+
+        expected_purpose = (
+            "The primary operational purpose of AeroScan X1 (Autonomous Aerial Vehicle) is to execute deterministic, "
+            "autonomous operational tasks, real-time multi-modal state monitoring, and safety-critical boundary containment "
+            "within designated Maritime Surveillance environments, operating under verified EASA Specific SAIL III governance "
+            "and resilient COFDM Mesh Link communications."
+        )
+        expected_mission = (
+            "The AeroScan X1 is engineered to execute high-assurance Maritime Surveillance missions, autonomous closed-loop control, "
+            "telemetry processing, and deterministic contingency containment in compliance with EASA Specific SAIL III requirements."
+        )
+
+        self.assertEqual(engine.resolve_token("OPERATIONAL_PURPOSE"), expected_purpose)
+        self.assertEqual(engine.resolve_token("PRIMARY_OPERATIONAL_MISSION"), expected_mission)
+
+    def test_operational_intent_default_synthesis(self):
+        """Verify SysMLParameterBindingEngine synthesizes deterministic fallback defaults when parameters are omitted (Fixes #157)."""
+        engine = SysMLParameterBindingEngine(auto_detect=False)
+
+        expected_purpose = (
+            "The primary operational purpose of Autonomous Cyber-Physical System (Cyber-Physical System) is to execute deterministic, "
+            "autonomous operational tasks, real-time multi-modal state monitoring, and safety-critical boundary containment "
+            "within designated Autonomous Operations environments, operating under verified High-Assurance Safety Baseline governance "
+            "and resilient Multi-Tier C2 Telemetry Link communications."
+        )
+        expected_mission = (
+            "The Autonomous Cyber-Physical System is engineered to execute high-assurance Autonomous Operations missions, autonomous closed-loop control, "
+            "telemetry processing, and deterministic contingency containment in compliance with High-Assurance Safety Baseline requirements."
+        )
+
+        self.assertEqual(engine.resolve_token("OPERATIONAL_PURPOSE"), expected_purpose)
+        self.assertEqual(engine.resolve_token("PRIMARY_OPERATIONAL_MISSION"), expected_mission)
+
+    def test_core_mission_capabilities_explicit_ingestion(self):
+        """Verify SysMLParameterBindingEngine ingests explicit CORE_MISSION_CAPABILITIES and individual CORE_CAPABILITY_1..4 (Fixes #158)."""
+        explicit_params = {
+            "CORE_MISSION_CAPABILITIES": "  1. Surgical arm trajectory tracking.\n  2. Endoscopic camera sensor fusion.\n  3. Low-latency haptic telemetry.\n  4. Patient boundary containment interlock.",
+        }
+        engine = SysMLParameterBindingEngine(parameter_values=explicit_params, auto_detect=False)
+        self.assertEqual(engine.resolve_token("CORE_MISSION_CAPABILITIES"), explicit_params["CORE_MISSION_CAPABILITIES"])
+
+        individual_caps = {
+            "CORE_CAPABILITY_1": "Custom Capability 1",
+            "CORE_CAPABILITY_2": "Custom Capability 2",
+            "CORE_CAPABILITY_3": "Custom Capability 3",
+            "CORE_CAPABILITY_4": "Custom Capability 4",
+        }
+        engine2 = SysMLParameterBindingEngine(parameter_values=individual_caps, auto_detect=False)
+        expected = "  1. Custom Capability 1\n  2. Custom Capability 2\n  3. Custom Capability 3\n  4. Custom Capability 4"
+        self.assertEqual(engine2.resolve_token("CORE_MISSION_CAPABILITIES"), expected)
+
+        list_caps = {
+            "CORE_MISSION_CAPABILITIES": [
+                "List Capability 1",
+                "List Capability 2",
+            ]
+        }
+        engine3 = SysMLParameterBindingEngine(parameter_values=list_caps, auto_detect=False)
+        expected_list = "  1. List Capability 1\n  2. List Capability 2"
+        self.assertEqual(engine3.resolve_token("CORE_MISSION_CAPABILITIES"), expected_list)
+
+    def test_core_mission_capabilities_derivation_from_ast_entities(self):
+        """Verify SysMLParameterBindingEngine derives domain-grounded capabilities from AST entities (Fixes #158)."""
+        domain_params = {
+            "PLATFORM_TYPE": "Subsea Autonomous Underwater Vehicle",
+            "OPERATIONAL_DOMAIN": "Deep Ocean Bathymetry",
+            "PRIMARY_COMMS": "Acoustic & Optical Modem",
+            "REGULATORY_CLASS": "DNV-GL Underwater Assurance",
+        }
+        engine = SysMLParameterBindingEngine(parameter_values=domain_params, auto_detect=False)
+        expected_c1 = "Autonomous closed-loop state trajectory tracking, corridor execution, and operational boundary holding for Subsea Autonomous Underwater Vehicle in Deep Ocean Bathymetry."
+        expected_c2 = "Multi-modal sensor data fusion combining redundant state estimation sensors, environmental perception units, and reference state observers."
+        expected_c3 = "Real-time high-throughput telemetry streaming and deterministic command processing over Acoustic & Optical Modem."
+        expected_c4 = "Deterministic failsafe state machine ensuring autonomous containment within response threshold limits in accordance with DNV-GL Underwater Assurance."
+        expected_full = f"  1. {expected_c1}\n  2. {expected_c2}\n  3. {expected_c3}\n  4. {expected_c4}"
+
+        self.assertEqual(engine.resolve_token("CORE_CAPABILITY_1"), expected_c1)
+        self.assertEqual(engine.resolve_token("CORE_CAPABILITY_2"), expected_c2)
+        self.assertEqual(engine.resolve_token("CORE_CAPABILITY_3"), expected_c3)
+        self.assertEqual(engine.resolve_token("CORE_CAPABILITY_4"), expected_c4)
+        self.assertEqual(engine.resolve_token("CORE_MISSION_CAPABILITIES"), expected_full)
+
+    def test_core_mission_capabilities_default_synthesis(self):
+        """Verify SysMLParameterBindingEngine synthesizes deterministic fallback default capabilities when parameters are omitted (Fixes #158)."""
+        engine = SysMLParameterBindingEngine(auto_detect=False)
+        expected_c1 = "Autonomous closed-loop state trajectory tracking, corridor execution, and operational boundary holding for Cyber-Physical System in Autonomous Operations."
+        expected_c2 = "Multi-modal sensor data fusion combining redundant state estimation sensors, environmental perception units, and reference state observers."
+        expected_c3 = "Real-time high-throughput telemetry streaming and deterministic command processing over Multi-Tier C2 Telemetry Link."
+        expected_c4 = "Deterministic failsafe state machine ensuring autonomous containment within response threshold limits in accordance with High-Assurance Safety Baseline."
+        expected_full = f"  1. {expected_c1}\n  2. {expected_c2}\n  3. {expected_c3}\n  4. {expected_c4}"
+
+        self.assertEqual(engine.resolve_token("CORE_CAPABILITY_1"), expected_c1)
+        self.assertEqual(engine.resolve_token("CORE_CAPABILITY_2"), expected_c2)
+        self.assertEqual(engine.resolve_token("CORE_CAPABILITY_3"), expected_c3)
+        self.assertEqual(engine.resolve_token("CORE_CAPABILITY_4"), expected_c4)
+        self.assertEqual(engine.resolve_token("CORE_MISSION_CAPABILITIES"), expected_full)
+
 
 if __name__ == "__main__":
     unittest.main()

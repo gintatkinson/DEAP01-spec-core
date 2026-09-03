@@ -132,11 +132,14 @@ def _parse_obligation_tags(text: str) -> List[str]:
         re.compile(r'///\s*ObligationAllocation\s*:\s*([A-Za-z0-9_-]+)', re.IGNORECASE),
         re.compile(r'///\s*Obligation\s*:\s*([A-Za-z0-9_-]+)', re.IGNORECASE),
         re.compile(r'///\s*RealisesObligation\s*:\s*([A-Za-z0-9_-]+)', re.IGNORECASE),
+        re.compile(r'///\s*Realises\s*:\s*([A-Za-z0-9_-]+)', re.IGNORECASE),
     ]
     for pat in single_patterns:
         for match in pat.finditer(text):
             token = match.group(1).strip()
             if token and not token.startswith("["):
+                if not _is_probable_obligation_token(token):
+                    continue
                 norm = _normalize_obligation_id(token)
                 if norm and norm not in tags:
                     tags.append(norm)
@@ -476,23 +479,24 @@ class CoverageDigestValidator(IValidator):
             target_abs = os.path.join(workspace_dir, target_spec) if target_spec else ""
             target_exists = bool(target_abs and os.path.exists(target_abs))
             is_conops_target = bool(
-                target_spec and (
-                    "CONOPS" in target_spec.upper()
-                    or "MISSION_INTENT" in target_spec.upper()
-                    or "Phase 1" in phase_spec
-                )
+                (target_spec and ("CONOPS" in target_spec.upper() or "MISSION_INTENT" in target_spec.upper()))
+                or ("PHASE 1" in phase_spec.upper() or "CONOPS" in phase_spec.upper() or "MISSION_INTENT" in phase_spec.upper())
+            )
+            is_feature_target = bool(
+                (target_spec and target_spec.startswith("docs/features"))
+                or ("PHASE 2" in phase_spec.upper() or "FEATURE" in phase_spec.upper() or "LOGICAL" in phase_spec.upper())
             )
 
             # Enforce realization:
             # - When allow_missing_specs is False (strict mode: all declared obligations must be realized)
-            # - When target spec file exists in workspace (completed specification target)
-            # - When target is ConOps / Mission Intent / Phase 1 (mandatory structural phase)
-            # - When feature specs exist and target is a feature spec
+            # - When target spec file exists in workspace (completed/existing specification target)
+            # - When target is ConOps / Mission Intent / Phase 1 (mandatory Level 1 structural phase)
+            # - When feature specs exist and target is a feature spec / Phase 2 logical spec
             should_enforce = (
                 not allow_missing_specs
                 or target_exists
                 or is_conops_target
-                or (has_features and target_spec.startswith("docs/features"))
+                or (has_features and is_feature_target)
             )
 
             if should_enforce:

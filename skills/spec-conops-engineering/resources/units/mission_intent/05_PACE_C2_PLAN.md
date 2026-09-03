@@ -21,7 +21,7 @@ Link state degradation triggers deterministic down-tier failover when the active
 
 $$
 \begin{aligned}
-\Delta t_{\mathrm{loss}}(t) &= t - t_{\mathrm{last\_valid\_rx}} \\
+\Delta t_{\mathrm{loss}}(t) &= t - t_{\text{last\_valid\_rx}} \\
 \mathrm{State}(t) &= \begin{cases}
 \mathrm{Tier}_i & \text{if } \Delta t_{\mathrm{loss}} < \tau_{\mathrm{timeout},i} \\
 \mathrm{Tier}_{i+1} & \text{if } \Delta t_{\mathrm{loss}} \ge \tau_{\mathrm{timeout},i} \quad \text{for } t \ge t_{\mathrm{fail}} + \tau_{\mathrm{hysteresis},i+1}

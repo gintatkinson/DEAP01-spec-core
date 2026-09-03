@@ -29,7 +29,7 @@ In accordance with ISO/IEC/IEEE 29148:2018 §5.2.4 and the specification data co
 | **UC-05** | Safety Monitor (SM) | Field Support | Local Environment Monitoring Staff | Maintains continuous monitoring of surrounding operational boundaries to detect environmental anomalies and non-cooperative entities within the operational state space. | Certified Safety Observer Training & Operational Communication Protocol Qualification | MIL-STD-882E §4.3 |
 
 ### 4.3 Skill Prerequisites & Minimum Qualifications
-1. **System Operator (SO):** Minimum accredited supervisory operational hours ($t_{\mathrm{operational\_hours}} \ge t_{\mathrm{req}}$); validated proficiency in emergency decision matrix (`EMG-01`..`EMG-07`) execution under simulated degraded state conditions.
+1. **System Operator (SO):** Minimum accredited supervisory operational hours ($t_{\text{operational\_hours}} \ge t_{\mathrm{req}}$); validated proficiency in emergency decision matrix (`EMG-01`..`EMG-07`) execution under simulated degraded state conditions.
 2. **Payload / Data Specialist (PS):** Validated proficiency in multi-modal sensor data interpretation, tracking locks, coordinate extraction, and secure data dissemination protocols.
 3. **Maintenance Technician (MT):** Formal electro-mechanical certification, electronic diagnostic inspection qualification, and authorized digital maintenance logbook endorsement.
 4. **Mission Supervisor (MS):** Advanced certification in autonomous systems operations, mission risk management, and formal command authorization protocols.
@@ -74,9 +74,9 @@ To mitigate operator fatigue, sustain continuous situational vigilance, and prev
 
 $$
 \begin{aligned}
-t_{\mathrm{shift}} &\le t_{\mathrm{shift\_max}} \\
-t_{\mathrm{rest}} &\ge t_{\mathrm{rest\_min}} \\
-t_{\mathrm{daily}} &\le t_{\mathrm{daily\_max}}
+t_{\mathrm{shift}} &\le t_{\text{shift\_max}} \\
+t_{\mathrm{rest}} &\ge t_{\text{rest\_min}} \\
+t_{\mathrm{daily}} &\le t_{\text{daily\_max}}
 \end{aligned}
 $$
 
@@ -98,12 +98,12 @@ $$
 The shift rotation protocol incorporates the following mandatory operational rules:
 1. **Continuous Console Duty Limit ($t_{\mathrm{shift}} \le 4.0\text{ hr}$):** No operator shall remain on active supervisory console duty for longer than 4.0 continuous hours without a mandatory rest break.
 2. **Minimum Rest Interval ($t_{\mathrm{rest}} \ge 30.0\text{ min}$):** Between consecutive supervisory console shifts, operators must take a minimum non-operational rest interval of at least 30.0 minutes.
-3. **Cumulative Daily Duty Cap ($t_{\mathrm{daily\_max}} \le 8.0\text{ hr}$):** Total active supervisory console time for an individual operator within any rolling 24-hour window shall not exceed 8.0 hours.
+3. **Cumulative Daily Duty Cap ($t_{\text{daily\_max}} \le 8.0\text{ hr}$):** Total active supervisory console time for an individual operator within any rolling 24-hour window shall not exceed 8.0 hours.
 4. **Mandatory Shift Handover Overlap ($t_{\mathrm{overlap}} \ge 15.0\text{ min}$):** Incoming and outgoing operators must participate in a structured handover briefing covering current system state, trajectory corridors, environmental conditions, and resource reserves before transferring control authority.
 5. **Fatigue-Triggered Reassignment:** If an operator exhibits elevated NASA-TLX scores exceeding nominal limits (Score > 35) or experiences continuous high-workload degraded mode management, the Mission Supervisor is empowered to mandate an immediate relief rotation.
 
 ### 4.5 Authority Handoff Chains & Control Transfer Protocols
-Handoff of command and control (C2) authority between Operator Stations (e.g., PrimaryConsole to SecondaryConsole) or between human supervisory stations and autonomous execution modes follows a strict cryptographic 4-way handshake with handoff completion time bounded by $t_{\mathrm{handoff}} \le \tau_{\mathrm{handoff\_max}}$ (Fixes #120, #119).
+Handoff of command and control (C2) authority between Operator Stations (e.g., PrimaryConsole to SecondaryConsole) or between human supervisory stations and autonomous execution modes follows a strict cryptographic 4-way handshake with handoff completion time bounded by $t_{\mathrm{handoff}} \le \tau_{\text{handoff\_max}}$ (Fixes #120, #119).
 
 The handoff workflow comprises four key operational phases:
 1. **Initiation:** The standby station (SecondaryConsole) initiates a transfer request by obtaining a cryptographically signed authorization token from the CryptographicAuthService.
@@ -150,8 +150,8 @@ To guarantee deterministic execution and prevent command deadlocks during contro
 $$
 \begin{aligned}
 \tau_{\mathrm{handoff}} &\le \tau_{\mathrm{timeout}} = 5.0 \\
-t_{\mathrm{RTT}} &\le \tau_{\mathrm{RTT\_max}} \\
-P_{\mathrm{loss}} &\le P_{\mathrm{loss\_max}}
+t_{\mathrm{RTT}} &\le \tau_{\text{RTT\_max}} \\
+P_{\mathrm{loss}} &\le P_{\text{loss\_max}}
 \end{aligned}
 $$
 

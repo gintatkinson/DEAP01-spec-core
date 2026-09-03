@@ -21,7 +21,7 @@ In accordance with MIL-STD-882E (§4.4) and autonomous system safety principles,
 - **ROE-01: Safe Operating Clearance Interlock**
   - **Rule Statement:** The system shall never execute autonomous state transitions outside declared safe margins without continuous proximity sensor confirmation and active clearance verification.
   - **Interlock Condition:**
-    $$\mathrm{AllowMotion} \iff (d_{\mathrm{clearance}} \ge d_{\mathrm{min\_clearance}}) \land (\mathrm{ObstacleClearance} = \mathrm{TRUE}) \land (\mathbf{v} \le v_{\mathrm{max}})$$
+    $$\mathrm{AllowMotion} \iff (d_{\mathrm{clearance}} \ge d_{\text{min\_clearance}}) \land (\mathrm{ObstacleClearance} = \mathrm{TRUE}) \land (\mathbf{v} \le v_{\mathrm{max}})$$
   - **Public Clause Citation:** MIL-STD-882E §4.4
 
 - **ROE-02: Multi-Modal Positive Condition Verification**
@@ -31,21 +31,21 @@ In accordance with MIL-STD-882E (§4.4) and autonomous system safety principles,
   - **Public Clause Citation:** INCOSE SEH v5.0 §3.3
 
 - **ROE-03: Dual-Consent Cryptographic Authorization Interlock**
-  - **Rule Statement:** High-consequence state arming sequence requires simultaneous cryptographic signature submission from Mission Supervisor (Key A) and Safety Supervisor (Key B) within a rolling validation window $\Delta t_{\mathrm{arm\_window}}$.
+  - **Rule Statement:** High-consequence state arming sequence requires simultaneous cryptographic signature submission from Mission Supervisor (Key A) and Safety Supervisor (Key B) within a rolling validation window $\Delta t_{\text{arm\_window}}$.
   - **Interlock Condition:**
-    $$\mathrm{SystemArmed} \iff \mathrm{VerifySig}(\mathrm{Key}_A) \land \mathrm{VerifySig}(\mathrm{Key}_B) \land (|t_A - t_B| \le \Delta t_{\mathrm{arm\_window}}) \land (\mathrm{BoundaryStatus} = \mathrm{INSIDE})$$
+    $$\mathrm{SystemArmed} \iff \mathrm{VerifySig}(\mathrm{Key}_A) \land \mathrm{VerifySig}(\mathrm{Key}_B) \land (|t_A - t_B| \le \Delta t_{\text{arm\_window}}) \land (\mathrm{BoundaryStatus} = \mathrm{INSIDE})$$
   - **Public Clause Citation:** NIST SP 800-82r3 §5.2
 
 - **ROE-04: Human-on-the-Loop (HOTL) Veto Authority Interlock**
-  - **Rule Statement:** The autonomous system shall immediately abort mission tasks and enter safe state upon receipt of an authenticated HOTL veto command or upon operator heartbeat timeout expiration ($\tau_{\mathrm{veto\_timeout}}$).
+  - **Rule Statement:** The autonomous system shall immediately abort mission tasks and enter safe state upon receipt of an authenticated HOTL veto command or upon operator heartbeat timeout expiration ($\tau_{\text{veto\_timeout}}$).
   - **Interlock Condition:**
-    $$\mathrm{ContinueOperation} \iff (\mathrm{VetoReceived} = \mathrm{FALSE}) \land (\mathrm{Heartbeat}_{\mathrm{Operator}} \le \tau_{\mathrm{veto\_timeout}})$$
+    $$\mathrm{ContinueOperation} \iff (\mathrm{VetoReceived} = \mathrm{FALSE}) \land (\mathrm{Heartbeat}_{\mathrm{Operator}} \le \tau_{\text{veto\_timeout}})$$
   - **Public Clause Citation:** MIL-STD-882E §4.4
 
 - **ROE-05: Protected Zone & Exclusion Boundary Interlock**
-  - **Rule Statement:** Automated trajectories and sensor pointing corridors must enforce a minimum standoff distance ($R_{\mathrm{CDA\_min}}$) from all designated protected structures, exclusion zones, and dynamic keep-out boundaries.
+  - **Rule Statement:** Automated trajectories and sensor pointing corridors must enforce a minimum standoff distance ($R_{\text{CDA\_min}}$) from all designated protected structures, exclusion zones, and dynamic keep-out boundaries.
   - **Interlock Condition:**
-    $$\mathrm{StateValid} \iff \forall \mathbf{p}_{\mathrm{protected}} \in \mathcal{Z}_{\mathrm{protected}}, \quad \|\mathbf{p}_{\mathrm{system}} - \mathbf{p}_{\mathrm{protected}}\|_2 \ge R_{\mathrm{CDA\_min}}$$
+    $$\mathrm{StateValid} \iff \forall \mathbf{p}_{\mathrm{protected}} \in \mathcal{Z}_{\mathrm{protected}}, \quad \|\mathbf{p}_{\mathrm{system}} - \mathbf{p}_{\mathrm{protected}}\|_2 \ge R_{\text{CDA\_min}}$$
   - **Public Clause Citation:** ISO/IEC/IEEE 29148:2018 §5.2.4
 
 - **ROE-06: Communication Loss Autonomous Safing Interlock**

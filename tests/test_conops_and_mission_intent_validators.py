@@ -427,6 +427,7 @@ def _get_valid_conops_content() -> str:
     lines.append("- **Step 3:** Autonomous lost-link loiter pattern executed for 30.0 s at current station altitude.")
     lines.append("- **Step 4:** Autonomous climb to safe clearance altitude ($h = 120.0\\text{ m}$) and direct return to base.")
     lines.append("- **Step 5:** Autonomous vertical descent and engine shutdown at primary recovery pad.")
+    lines.append("- **Step 6:** System rest confirmation verified and non-volatile diagnostic logs secured.")
     lines.append("")
     lines.append("### 10.4 Scenario 4: Dynamic Divert to Secondary Recovery Site")
     lines.append("- **Thread Context:** Primary recovery point obstructed by unpredicted severe localized weather.")
@@ -435,6 +436,7 @@ def _get_valid_conops_content() -> str:
     lines.append("- **Step 3:** Dynamic Bingo evaluation verifies $E_{\\mathrm{current}} \\ge E_{\\mathrm{divert}} + E_{\\mathrm{reserve}}$.")
     lines.append("- **Step 4:** Autonomous divert trajectory engaged with positive terrain separation $> 50.0\\text{ m}$.")
     lines.append("- **Step 5:** Safe precision touchdown executed at secondary surveyed recovery coordinate.")
+    lines.append("- **Step 6:** Vehicle secured at secondary recovery point and recovery telemetry broadcast.")
     lines.append("")
 
     # Section 11
@@ -2160,6 +2162,117 @@ Standards body
         self.assertEqual(len(toc_findings), 1, f"Expected mission-toc-incomplete finding: {findings}")
         self.assertEqual(toc_findings[0].detail.get("severity"), "CRITICAL")
         self.assertIn(10, toc_findings[0].detail.get("missing_sections", []))
+
+    def test_conops_section_line_floor_hollow_fails(self):
+        """Verify that a ConOps document containing a hollow section (< 8 lines) is rejected (Fixes #114, #130)."""
+        base_conops = _get_valid_conops_content()
+        # Replace Section 1 with a hollow 2-line stub while maintaining document >= 800 lines
+        hollow_sec1 = "## 1. Scope & System Identification\n- Scope: Minimal stub.\n"
+        hollow_conops = re.sub(
+            r'## 1\. Scope & System Identification[\s\S]*?(?=## 2\. Normative Standards)',
+            hollow_sec1 + "\n",
+            base_conops,
+        )
+        val = ConopsCompletenessValidator()
+        findings = val._validate_conops_text(hollow_conops, "docs/conops/CONOPS.md")
+        hollow_findings = [f for f in findings if f.rule_id == "conops-section-hollow"]
+        self.assertGreaterEqual(len(hollow_findings), 1, f"Expected conops-section-hollow finding: {findings}")
+        self.assertEqual(hollow_findings[0].detail.get("section_number"), 1)
+
+    def test_conops_missing_table_column_schemas_fails(self):
+        """Verify that ConOps tables with missing required column schemas are rejected (Fixes #114, #130)."""
+        base_conops = _get_valid_conops_content()
+        val = ConopsCompletenessValidator()
+
+        # 1. Broken Op-Tx table (missing Destination Node and Max Latency)
+        broken_optx = re.sub(
+            r'\| OpTx-(\d+) \| ([^|]+) \| ([^|]+) \| ([^|]+) \| ([^|]+) \| ([^|]+) \| ([^|]+) \|',
+            r'| OpTx-\1 | \2 | \4 | \5 | \7 |',
+            base_conops,
+        ).replace(
+            "| Exchange ID | Source Node | Destination Node | Information Item | Data Rate | Max Latency | Criticality |",
+            "| Exchange ID | Source Node | Information Item | Data Rate | Criticality |",
+        )
+        findings_optx = val._validate_conops_text(broken_optx, "docs/conops/CONOPS.md")
+        optx_schema_findings = [f for f in findings_optx if f.rule_id == "conops-table-schema-invalid" and f.detail.get("section") == 8]
+        self.assertGreaterEqual(len(optx_schema_findings), 1, f"Expected Op-Tx table schema finding: {findings_optx}")
+
+        # 2. Broken SORA table (missing Symbol and Units)
+        broken_sora = re.sub(
+            r'\| ([^|]+) \| ([^|]+) \| ([^|]+) \| ([^|]+) \| ([^|]+) \|',
+            r'| \1 | \3 | \5 |',
+            base_conops,
+        ).replace(
+            "| Parameter | Symbol | Value | Units | Description |",
+            "| Parameter | Value | Description |",
+        )
+        findings_sora = val._validate_conops_text(broken_sora, "docs/conops/CONOPS.md")
+        sora_schema_findings = [f for f in findings_sora if f.rule_id == "conops-table-schema-invalid" and f.detail.get("section") == 6]
+        self.assertGreaterEqual(len(sora_schema_findings), 1, f"Expected SORA table schema finding: {findings_sora}")
+
+        # 3. Broken Emergency Matrix (missing Failsafe State and Max Response Time)
+        broken_emg = re.sub(
+            r'\| `(EMG-\d+)` \| ([^|]+) \| ([^|]+) \| ([^|]+) \| `([^|]+)` \| ([^|]+) \| ([^|]+) \|',
+            r'| `\1` | \2 | \3 | \4 | \7 |',
+            base_conops,
+        ).replace(
+            "| Trigger ID | Contingency Trigger | Detection Mechanism | Automated Containment Action | Failsafe State | Max Response Time | HITL Role |",
+            "| Trigger ID | Contingency Trigger | Detection Mechanism | Automated Containment Action | HITL Role |",
+        )
+        findings_emg = val._validate_conops_text(broken_emg, "docs/conops/CONOPS.md")
+        emg_schema_findings = [f for f in findings_emg if f.rule_id == "conops-table-schema-invalid" and f.detail.get("section") == 12]
+        self.assertGreaterEqual(len(emg_schema_findings), 1, f"Expected Emergency table schema finding: {findings_emg}")
+
+    def test_conops_truncated_timeline_steps_fails(self):
+        """Verify that ConOps Section 10 with truncated timeline steps is rejected (Fixes #114, #130)."""
+        base_conops = _get_valid_conops_content()
+        val = ConopsCompletenessValidator()
+
+        # Truncate Scenario 1 (SCN-01) from 10 steps to 4 steps
+        truncated_scn1 = base_conops.replace(
+            "- **Step 5:** Automated perimeter surveillance sweeps executed with zero exclusion zone excursions.\n"
+            "- **Step 6:** Continuous battery health and thermal status monitoring at 10 Hz.\n"
+            "- **Step 7:** Guidance computer calculates Bingo return energy and initiates egress trajectory.\n"
+            "- **Step 8:** Egress transit completed along clear return corridor maintaining altitude $h = 100.0\\text{ m}$.\n"
+            "- **Step 9:** Autonomous vertical descent initiated over primary surveyed recovery zone.\n"
+            "- **Step 10:** Touchdown confirmed by weight-on-wheels sensor; motors shut down with remaining energy $> 25\\%$.\n",
+            "",
+        )
+        findings = val._validate_conops_text(truncated_scn1, "docs/conops/CONOPS.md")
+        step_findings = [f for f in findings if f.rule_id == "conops-scenario-steps-truncated"]
+        self.assertGreaterEqual(len(step_findings), 1, f"Expected conops-scenario-steps-truncated finding: {findings}")
+        self.assertIn("SCN-01", str(step_findings[0]))
+
+    def test_conops_and_mission_unclosed_or_malformed_mermaid_fails(self):
+        """Verify that unclosed or malformed Mermaid blocks are rejected in ConOps and Mission Intent (Fixes #114, #130)."""
+        base_conops = _get_valid_conops_content()
+        base_mission = _get_valid_mission_intent_content()
+        conops_val = ConopsCompletenessValidator()
+        mission_val = MissionIntentCompletenessValidator()
+
+        # 1. Unclosed Mermaid block in ConOps
+        unclosed_conops = base_conops + "\n\n```mermaid\nflowchart TB\n    A --> B\n"
+        c_findings_unclosed = conops_val._validate_conops_text(unclosed_conops, "docs/conops/CONOPS.md")
+        c_unclosed = [f for f in c_findings_unclosed if f.rule_id == "conops-mermaid-unclosed"]
+        self.assertEqual(len(c_unclosed), 1, f"Expected conops-mermaid-unclosed finding: {c_findings_unclosed}")
+
+        # 2. Malformed Mermaid diagram header in ConOps
+        malformed_conops = base_conops + "\n\n```mermaid\ninvalid_diagram_syntax_node\n    A --> B\n```\n"
+        c_findings_malformed = conops_val._validate_conops_text(malformed_conops, "docs/conops/CONOPS.md")
+        c_malformed = [f for f in c_findings_malformed if f.rule_id == "conops-mermaid-malformed"]
+        self.assertEqual(len(c_malformed), 1, f"Expected conops-mermaid-malformed finding: {c_findings_malformed}")
+
+        # 3. Unclosed Mermaid block in Mission Intent
+        unclosed_mission = base_mission + "\n\n```mermaid\nstateDiagram-v2\n    [*] --> S1\n"
+        m_findings_unclosed = mission_val._validate_mission_text(unclosed_mission, "docs/conops/MISSION_INTENT.md")
+        m_unclosed = [f for f in m_findings_unclosed if f.rule_id == "mission-mermaid-unclosed"]
+        self.assertEqual(len(m_unclosed), 1, f"Expected mission-mermaid-unclosed finding: {m_findings_unclosed}")
+
+        # 4. Malformed Mermaid diagram header in Mission Intent
+        malformed_mission = base_mission + "\n\n```mermaid\nunknown_protocol_diagram\n    X --> Y\n```\n"
+        m_findings_malformed = mission_val._validate_mission_text(malformed_mission, "docs/conops/MISSION_INTENT.md")
+        m_malformed = [f for f in m_findings_malformed if f.rule_id == "mission-mermaid-malformed"]
+        self.assertEqual(len(m_malformed), 1, f"Expected mission-mermaid-malformed finding: {m_findings_malformed}")
 
 
 if __name__ == "__main__":

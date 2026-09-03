@@ -494,6 +494,112 @@ The ESAD bus executes Opcode 0x11 for PBIT and Opcode 0x10 for Exchange.
             errors = validator.validate(repo)
             self.assertEqual(errors, [])
 
+    def test_negative_attribute_values_extracted_with_true_negative_sign(self):
+        """
+        Verify Issue #91: Negative attribute values with hyphens or separators are extracted
+        with true negative float values and not flipped to positive values.
+        """
+        from parity_auditor.validators.concept_provenance_validator import TypedASTNode
+
+        validator = ConceptProvenanceValidator()
+        gt_root = TypedASTNode(node_id="root_gt", node_type="Root", name="GroundTruth")
+        gt_root.children.append(TypedASTNode(
+            node_id="attr_1", node_type="Attribute", name="pitch", value=-45.0, properties={"normalized_name": "pitch"}
+        ))
+        gt_root.children.append(TypedASTNode(
+            node_id="attr_2", node_type="Attribute", name="yaw_roll", value=-165.0, properties={"normalized_name": "yawroll"}
+        ))
+        gt_root.children.append(TypedASTNode(
+            node_id="attr_3", node_type="Attribute", name="operating_temperature_range", value=-20.0, properties={"normalized_name": "operatingtemperaturerange"}
+        ))
+        gt_root.children.append(TypedASTNode(
+            node_id="attr_4", node_type="Attribute", name="minimum_altitude", value=-10.0, properties={"normalized_name": "minimumaltitude"}
+        ))
+        gt_root.children.append(TypedASTNode(
+            node_id="attr_5", node_type="Attribute", name="cruise_speed", value=30.0, properties={"normalized_name": "cruisespeed"}
+        ))
+
+        test_content = """# ConOps Specification
+<!-- Source: schema/extracted/specs.md -->
+
+## Flight Characteristics
+- The primary flight profile limits pitch -45 deg to +135 deg.
+- Gimbal orientation constraints: yaw_roll -165 deg.
+- Environmental operating temperature range -20 degC to +50 degC.
+- Minimum altitude -10 m above sea level.
+- Normal cruise speed - 30 m/s.
+- Alternate colon format pitch: -45 deg.
+- Alternate bold format **pitch**: -45 deg.
+- Alternate equals format pitch = -45 deg.
+- Alternate unicode minus format pitch \u221245 deg.
+"""
+        cand_graph = validator.extract_concept_graph(test_content, "docs/conops/conops.md", gt_root)
+        attrs = [c for c in cand_graph.children if c.node_type == "Attribute"]
+        attr_map = {}
+        for a in attrs:
+            attr_map.setdefault(a.properties.get("normalized_name", a.name.lower()), []).append(a.value)
+
+        # Verify pitch extracted negative values
+        self.assertIn("pitch", attr_map)
+        for p_val in attr_map["pitch"]:
+            self.assertEqual(p_val, -45.0, f"Expected -45.0 for pitch, got {p_val}")
+
+        # Verify yaw_roll extracted -165.0
+        self.assertIn("yawroll", attr_map)
+        self.assertEqual(attr_map["yawroll"][0], -165.0)
+
+        # Verify operating temperature range extracted -20.0
+        self.assertIn("operatingtemperaturerange", attr_map)
+        self.assertEqual(attr_map["operatingtemperaturerange"][0], -20.0)
+
+        # Verify minimum altitude extracted -10.0
+        self.assertIn("minimumaltitude", attr_map)
+        self.assertEqual(attr_map["minimumaltitude"][0], -10.0)
+
+        # Verify cruise speed prose with hyphen separator extracted +30.0
+        self.assertIn("cruisespeed", attr_map)
+        self.assertEqual(attr_map["cruisespeed"][0], 30.0)
+
+    def test_end_to_end_negative_attribute_provenance_no_false_mismatch(self):
+        """
+        Verify that negative attribute assertions in Level 1 ConOps match Level 0 Ground Truth
+        within tolerance and do not emit false parametric mismatch errors.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            extracted_dir = os.path.join(schema_dir, "extracted")
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            os.makedirs(extracted_dir, exist_ok=True)
+            os.makedirs(conops_dir, exist_ok=True)
+
+            with open(os.path.join(extracted_dir, "oem_specs.md"), "w", encoding="utf-8") as f:
+                f.write("""# OEM Specs
+| Property | Value |
+|---|---|
+| pitch | -45.0 deg |
+| yaw_roll | -165.0 deg |
+| minimum_altitude | -10.0 m |
+""")
+
+            conops_content = """# Concept of Operations
+<!-- Source: schema/extracted/oem_specs.md -->
+
+## Operational Limits
+The platform envelope supports pitch -45 deg to +135 deg during maneuvers.
+The sensor gimbal supports yaw_roll -165 deg maximum deflection.
+The vehicle allows minimum_altitude -10 m during subterranean approach.
+"""
+            with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
+                f.write(conops_content)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            validator = ConceptProvenanceValidator()
+            errors = validator.validate(repo)
+
+            mismatch_errors = [e for e in errors if e.rule_id == "concept-provenance-parametric-mismatch"]
+            self.assertEqual(mismatch_errors, [], f"Expected 0 parametric mismatch errors, got: {mismatch_errors}")
+            self.assertEqual(errors, [])
+
 
 if __name__ == "__main__":
     unittest.main()

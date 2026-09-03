@@ -287,6 +287,47 @@ Guidance is performed via Optical mode.
         mismatches = comparator.compare_graphs(gt_root, cand_root)
         self.assertEqual(len(mismatches), 0, f"Expected 0 mismatches but got: {mismatches}")
 
+    def test_ast_signed_numerical_attribute_extraction(self):
+        """Verify Issue #91: Typed AST Metamodel extracts negative signed numeric attributes correctly."""
+        validator = ConceptProvenanceValidator()
+        comparator = ASTMetamodelGraphComparator()
+
+        gt_root = TypedASTNode(node_id="gt_root", node_type="Root", name="GroundTruth")
+        gt_root.children.append(TypedASTNode(
+            node_id="gt_pitch",
+            node_type="Attribute",
+            name="pitch_limit",
+            value=-45.0,
+            properties={"normalized_name": "pitchlimit"},
+            source_file="schema/extracted/limits.md"
+        ))
+        gt_root.children.append(TypedASTNode(
+            node_id="gt_yaw",
+            node_type="Attribute",
+            name="yaw_roll",
+            value=-165.0,
+            properties={"normalized_name": "yawroll"},
+            source_file="schema/extracted/limits.md"
+        ))
+
+        cand_content = """# ConOps Document
+<!-- Source: schema/extracted/limits.md -->
+
+## 1. Flight Dynamics Envelope
+The aircraft operates under pitch_limit -45 deg to +135 deg safely.
+Sensor stabilization enforces yaw_roll -165 deg maximum limits.
+"""
+        cand_root = validator.extract_concept_graph(cand_content, "docs/conops/flight.md", gt_root)
+
+        cand_attrs = {c.name: c.value for c in cand_root.children if c.node_type == "Attribute"}
+        self.assertIn("pitch_limit", cand_attrs)
+        self.assertEqual(cand_attrs["pitch_limit"], -45.0)
+        self.assertIn("yaw_roll", cand_attrs)
+        self.assertEqual(cand_attrs["yaw_roll"], -165.0)
+
+        mismatches = comparator.compare_graphs(gt_root, cand_root)
+        self.assertEqual(mismatches, [], f"Expected 0 graph comparison mismatches, got: {mismatches}")
+
 
 if __name__ == "__main__":
     unittest.main()

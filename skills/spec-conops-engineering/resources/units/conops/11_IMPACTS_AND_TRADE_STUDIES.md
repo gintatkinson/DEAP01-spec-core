@@ -10,9 +10,9 @@
 ### 11.1 Operational Workflow & Deployment Impacts
 The transition from legacy manual systems to the Abstract Cyber-Physical System Archetype introduces substantial positive impacts across operational workflows:
 1. **Reduced Crew Staging Footprint:** The operational crew footprint required to maintain continuous operations is minimized through supervisory automation (1 System Operator and 1 Payload / Data Specialist).
-2. **Automated Pre-Operation Staging:** Preparation time is compressed to $t_{\mathrm{prep}} \le \tau_{\mathrm{prep\_target}}$ (nominal $\tau_{\mathrm{prep\_target}} = {{PREP_TIME_TARGET_S}}$ s) due to automated digital PBIT routines and tool-less modular interfaces.
+2. **Automated Pre-Operation Staging:** Preparation time is compressed to $t_{\text{prep}} \le \tau_{\text{prep\_target}}$ (nominal $\tau_{\text{prep\_target}} = {{PREP_TIME_TARGET_S}}$ s) due to automated digital PBIT routines and tool-less modular interfaces.
 3. **Automated External Coordination:** Integration with external data services automates operational plan registration, dynamic boundary deconfliction, and electronic conspicuity broadcast.
-4. **Rapid Turnaround Servicing:** Field turnaround time $t_{\mathrm{turnaround}} \le \tau_{\mathrm{turnaround\_target}}$ (nominal $\tau_{\mathrm{turnaround\_target}} = {{TURNAROUND_TIME_TARGET_S}}$ s) enabled by modular energy packs and automated self-calibration diagnostics.
+4. **Rapid Turnaround Servicing:** Field turnaround time $t_{\text{turnaround}} \le \tau_{\text{turnaround\_target}}$ (nominal $\tau_{\text{turnaround\_target}} = {{TURNAROUND_TIME_TARGET_S}}$ s) enabled by modular energy packs and automated self-calibration diagnostics.
 
 ### 11.2 Organizational Roles & Training Impacts
 - **Operator Reskilling:** The primary operator role transitions from continuous manual control to supervisory systems management, state deconfliction, and payload data analysis.
@@ -21,20 +21,20 @@ The transition from legacy manual systems to the Abstract Cyber-Physical System 
 
 ### 11.3 System Limitations & Operational Boundaries
 While the system provides robust multi-mission capability, formal operational boundaries and statutory constraints must be observed:
-- **Maximum Operational Boundary:** $x_{\mathrm{operating\_max}} = {{OPERATIONAL_BOUNDARY_MAX_M}}$ m in accordance with operational authorizations.
-- **Operational Endurance:** Operating endurance $t_{\mathrm{endurance\_nominal}} = {{NOMINAL_ENDURANCE_HOURS}}$ hr under standard environmental conditions; adjusts to $t_{\mathrm{endurance\_cold}} = {{COLD_ENDURANCE_HOURS}}$ hr at the minimum operating temperature limit $T_{\mathrm{op\_min}} = {{OPERATING_TEMP_MIN_C}}^\circ\text{C}$.
-- **Maximum Payload Capacity:** Maximum payload mass $m_{\mathrm{payload\_max}} = {{PAYLOAD_MASS_MAX_KG}}$ kg within the maximum total system mass envelope $m_{\mathrm{system\_max}} = {{SYSTEM_MASS_MAX_KG}}$ kg.
-- **Severe Environmental Constraints:** Operation is prohibited in environmental conditions exceeding maximum dynamic disturbance limits $a_{\mathrm{dist\_limit}} = {{DISTURBANCE_LIMIT_ACCEL}}\text{ m/s}^2$ or precipitation limits $R_{\mathrm{precip\_max}} = {{PRECIPITATION_LIMIT_MM_HR}}$ mm/hr.
+- **Maximum Operational Boundary:** $x_{\text{operating\_max}} = {{OPERATIONAL_BOUNDARY_MAX_M}}$ m in accordance with operational authorizations.
+- **Operational Endurance:** Operating endurance $t_{\text{endurance\_nominal}} = {{NOMINAL_ENDURANCE_HOURS}}$ hr under standard environmental conditions; adjusts to $t_{\text{endurance\_cold}} = {{COLD_ENDURANCE_HOURS}}$ hr at the minimum operating temperature limit $T_{\text{op\_min}} = {{OPERATING_TEMP_MIN_C}}^\circ\text{C}$.
+- **Maximum Payload Capacity:** Maximum payload mass $m_{\text{payload\_max}} = {{PAYLOAD_MASS_MAX_KG}}$ kg within the maximum total system mass envelope $m_{\text{system\_max}} = {{SYSTEM_MASS_MAX_KG}}$ kg.
+- **Severe Environmental Constraints:** Operation is prohibited in environmental conditions exceeding maximum dynamic disturbance limits $a_{\text{dist\_limit}} = {{DISTURBANCE_LIMIT_ACCEL}}\text{ m/s}^2$ or precipitation limits $R_{\text{precip\_max}} = {{PRECIPITATION_LIMIT_MM_HR}}$ mm/hr.
 
 ### 11.4 Documented Engineering Trade Studies
 In accordance with INCOSE Systems Engineering Handbook v5.0 §4.3 (Decision Analysis) and ISO/IEC/IEEE 29148:2018 §6.4.2, three formal quantitative multi-criteria engineering trade studies were conducted across the energy storage, edge compute / communications, and autonomous safety containment architecture design spaces (Fixes #118, #129, #132):
 
 #### 11.4.1 Trade Study 1: Energy & Power Storage Architecture (Fix #118)
-- **Objective & Problem Statement:** Select the optimal energy storage chemistry and thermal management architecture balancing low-temperature operational performance at $T_{\mathrm{op\_min}}$, gravimetric energy density $\rho_{\mathrm{energy}}$, cycle lifetime $N_{\mathrm{cycles}}$, safety containment, and pack unit acquisition cost.
+- **Objective & Problem Statement:** Select the optimal energy storage chemistry and thermal management architecture balancing low-temperature operational performance at $T_{\text{op\_min}}$, gravimetric energy density $\rho_{\mathrm{energy}}$, cycle lifetime $N_{\mathrm{cycles}}$, safety containment, and pack unit acquisition cost.
 - **Normative Standards Baseline:** INCOSE SEH v5.0 §4.3 (Decision Management), ISO/IEC/IEEE 29148:2018 §6.4.2, MIL-STD-810H Method 502.7 (Low Temperature).
 - **Options Evaluated:**
   - **Option A (Baseline):** High-Discharge Chemistry Cells (High peak discharge capability, lower gravimetric energy density, severe capacity degradation below $0^\circ\text{C}$).
-  - **Option B (Selected Architecture):** High-Capacity Cylindrical Chemistry Cells with Integrated Thermal Heating (Optimal gravimetric energy density, active internal thermal heating maintaining nominal discharge capacity down to $T_{\mathrm{op\_min}}$, and verified cycle durability).
+  - **Option B (Selected Architecture):** High-Capacity Cylindrical Chemistry Cells with Integrated Thermal Heating (Optimal gravimetric energy density, active internal thermal heating maintaining nominal discharge capacity down to $T_{\text{op\_min}}$, and verified cycle durability).
   - **Option C:** Solid-State Storage Cells (High theoretical gravimetric energy density and non-flammable solid core, but low ionic conductivity at low temperatures, developmental TRL, and high unit acquisition cost).
 - **Decision:** **Option B (High-Capacity Cylindrical Chemistry with Integrated Thermal Heating)** was selected as the optimal architecture.
 
@@ -42,7 +42,7 @@ In accordance with INCOSE Systems Engineering Handbook v5.0 §4.3 (Decision Anal
 The quantitative INCOSE Pugh Decision Matrix evaluates the candidate energy storage architectures against weighted operational criteria (scale 1 to 5, where 1 = Unacceptable, 3 = Compliant Baseline, 5 = Optimal):
 
 | Evaluation Criterion | Criterion ID | Weight (w_i) | Option A: High-Discharge Cells (s_i1) | Option A: Weighted (w_i * s_i1) | Option B: High-Capacity with Heating (s_i2) [Selected] | Option B: Weighted (w_i * s_i2) | Option C: Solid-State Cells (s_i3) | Option C: Weighted (w_i * s_i3) |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | Gravimetric Energy Density (rho_energy) | C_1 | 0.25 | 2 (180 Wh/kg) | 0.50 | 4 (260 Wh/kg) | 1.00 | 5 (350 Wh/kg) | 1.25 |
 | Low-Temp Discharge at T_op_min (s_cold) | C_2 | 0.25 | 1 (Capacity Drop < 40%) | 0.25 | 4 (Thermal Heated > 85%) | 1.00 | 2 (High Impedance < 50%) | 0.50 |
 | Cycle Lifetime & Durability (N_cycles) | C_3 | 0.15 | 2 (300 cycles) | 0.30 | 5 (1000+ cycles) | 0.75 | 2 (350 cycles) | 0.30 |
@@ -87,7 +87,7 @@ $$
 The quantitative Pugh Decision Matrix evaluates compute and communications architectures across operational criteria (scale 1 to 5):
 
 | Evaluation Criterion | Criterion ID | Weight (w_i) | Option A: Centralized Streaming (s_i1) | Option A: Weighted (w_i * s_i1) | Option B: Edge Compute + Compression (s_i2) [Selected] | Option B: Weighted (w_i * s_i2) | Option C: Hybrid Adaptive Splitting (s_i3) | Option C: Weighted (w_i * s_i3) |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | Contested / Jammed RF Resilience (s_jam) | C_1 | 0.30 | 1 (Mission Failure on Loss) | 0.30 | 5 (Autonomous Full Capability) | 1.50 | 3 (Degraded Dynamic Fallback) | 0.90 |
 | Telemetry Bandwidth Consumption | C_2 | 0.20 | 1 (High > 10 Mbps raw) | 0.20 | 5 (Low < 250 kbps semantic) | 1.00 | 3 (Moderate ~ 2 Mbps) | 0.60 |
 | Real-Time Inference Latency (tau_infer) | C_3 | 0.20 | 2 (Transport + Station: 80 ms) | 0.40 | 4 (Local Edge: < 15 ms) | 0.80 | 3 (Variable 20-100 ms) | 0.60 |
@@ -124,7 +124,7 @@ $$
 - **Normative Standards Baseline:** INCOSE SEH v5.0 §4.3, ISO/IEC/IEEE 29148:2018 §6.4.2, JARUS SORA v2.5 Annex B (Ground Risk Mitigation M2), MIL-STD-882E §4.3 & Task 202, SAE ARP4761 §3.
 - **Options Evaluated:**
   - **Option A (Baseline):** Multi-Channel Control Actuator Redundancy (Dual or triple-redundant control channels; provides single-point actuator fail-operational capability, but cannot arrest unpowered descent, provides zero protection against full high-voltage power rail collapse or major structural failure, and adds significant parasitic mass).
-  - **Option B (Selected Architecture):** Integrated Autonomous Failsafe Containment Subsystem with Independent Safety Watchdog and Power Cutoff Interlock (Dedicated independent microcontroller `SafetyWatchdog` with isolated power supply, autonomous deployment trigger $t_{\mathrm{deploy}} \le \tau_{\mathrm{deploy\_max}}$, high-speed actuator power cutoff interlock, and deployable aerodynamic drag / energy dissipation mechanism reducing terminal descent velocity to $v_{\mathrm{safe}}$ and kinetic impact energy to $E_k \le E_{\mathrm{threshold}}$).
+  - **Option B (Selected Architecture):** Integrated Autonomous Failsafe Containment Subsystem with Independent Safety Watchdog and Power Cutoff Interlock (Dedicated independent microcontroller `SafetyWatchdog` with isolated power supply, autonomous deployment trigger $t_{\text{deploy}} \le \tau_{\text{deploy\_max}}$, high-speed actuator power cutoff interlock, and deployable aerodynamic drag / energy dissipation mechanism reducing terminal descent velocity to $v_{\mathrm{safe}}$ and kinetic impact energy to $E_k \le E_{\mathrm{threshold}}$).
   - **Option C:** Passive Impact Structural Energy Absorption / Crushable Structure (Passive crumple structures and energy-absorbing chassis; zero active deployment complexity, but provides no terminal descent deceleration, adds heavy structural deadweight, and fails to prevent boundary containment excursions).
 - **Decision:** **Option B (Integrated Autonomous Failsafe Containment Subsystem)** was selected as the optimal architecture.
 
@@ -132,7 +132,7 @@ $$
 The quantitative Pugh Decision Matrix evaluates safety containment architectures across operational criteria (scale 1 to 5):
 
 | Evaluation Criterion | Criterion ID | Weight (w_i) | Option A: Actuator Redundancy (s_i1) | Option A: Weighted (w_i * s_i1) | Option B: Failsafe Containment (s_i2) [Selected] | Option B: Weighted (w_i * s_i2) | Option C: Passive Crushable Structure (s_i3) | Option C: Weighted (w_i * s_i3) |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | Terminal Kinetic Energy Reduction (E_k <= E_thresh) | C_1 | 0.30 | 1 (Unmitigated Terminal v_term) | 0.30 | 5 (Decelerated to v_safe <= 5 m/s) | 1.50 | 2 (Marginal Impact Absorption) | 0.60 |
 | Catastrophic Bus & Structural Failure Mitigation | C_2 | 0.20 | 1 (Zero Protection on Bus Loss) | 0.20 | 5 (Independent Battery & Watchdog) | 1.00 | 2 (Structural Dissipation Only) | 0.40 |
 | SORA M2 / ARP4761 Certification Credit | C_3 | 0.20 | 2 (Partial Actuator Integrity) | 0.40 | 5 (Full High-Integrity M2 Credit) | 1.00 | 1 (No Standard Regulatory Credit) | 0.20 |

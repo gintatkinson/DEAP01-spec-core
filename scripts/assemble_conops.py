@@ -101,6 +101,76 @@ class SysMLParameterBindingEngine:
         if parameter_values:
             self.ingest_dictionary(parameter_values)
 
+        self._derive_operational_intent()
+
+    def _derive_operational_intent(self) -> None:
+        """Deterministically derives OPERATIONAL_PURPOSE, PRIMARY_OPERATIONAL_MISSION, and CORE_MISSION_CAPABILITIES from schema AST entities."""
+        sys_name = (
+            self.parameter_bindings.get("SYSTEM_IDENTIFIER")
+            or self.parameter_bindings.get("SYSTEM_NAME")
+            or self.inferred_system_identifier
+            or "Autonomous Cyber-Physical System"
+        )
+        platform_type = (
+            self.parameter_bindings.get("PLATFORM_TYPE")
+            or "Cyber-Physical System"
+        )
+        domain = (
+            self.parameter_bindings.get("OPERATIONAL_DOMAIN")
+            or "Autonomous Operations"
+        )
+        comms = (
+            self.parameter_bindings.get("PRIMARY_COMMS")
+            or self.parameter_bindings.get("PACE_PRIMARY_MEDIUM")
+            or "Multi-Tier C2 Telemetry Link"
+        )
+        reg_class = (
+            self.parameter_bindings.get("REGULATORY_CLASS")
+            or self.parameter_bindings.get("SORA_SAIL")
+            or "High-Assurance Safety Baseline"
+        )
+
+        if "OPERATIONAL_PURPOSE" not in self.parameter_bindings:
+            purpose = (
+                f"The primary operational purpose of {sys_name} ({platform_type}) is to execute deterministic, "
+                f"autonomous operational tasks, real-time multi-modal state monitoring, and safety-critical boundary containment "
+                f"within designated {domain} environments, operating under verified {reg_class} governance and resilient {comms} communications."
+            )
+            self.parameter_bindings["OPERATIONAL_PURPOSE"] = purpose
+
+        if "PRIMARY_OPERATIONAL_MISSION" not in self.parameter_bindings:
+            mission = (
+                f"The {sys_name} is engineered to execute high-assurance {domain} missions, autonomous closed-loop control, "
+                f"telemetry processing, and deterministic contingency containment in compliance with {reg_class} requirements."
+            )
+            self.parameter_bindings["PRIMARY_OPERATIONAL_MISSION"] = mission
+
+        if "CORE_CAPABILITY_1" not in self.parameter_bindings:
+            self.parameter_bindings["CORE_CAPABILITY_1"] = (
+                f"Autonomous closed-loop state trajectory tracking, corridor execution, and operational boundary holding for {platform_type} in {domain}."
+            )
+        if "CORE_CAPABILITY_2" not in self.parameter_bindings:
+            self.parameter_bindings["CORE_CAPABILITY_2"] = (
+                f"Multi-modal sensor data fusion combining redundant state estimation sensors, environmental perception units, and reference state observers."
+            )
+        if "CORE_CAPABILITY_3" not in self.parameter_bindings:
+            self.parameter_bindings["CORE_CAPABILITY_3"] = (
+                f"Real-time high-throughput telemetry streaming and deterministic command processing over {comms}."
+            )
+        if "CORE_CAPABILITY_4" not in self.parameter_bindings:
+            self.parameter_bindings["CORE_CAPABILITY_4"] = (
+                f"Deterministic failsafe state machine ensuring autonomous containment within response threshold limits in accordance with {reg_class}."
+            )
+
+        if "CORE_MISSION_CAPABILITIES" not in self.parameter_bindings:
+            c1 = self.parameter_bindings["CORE_CAPABILITY_1"]
+            c2 = self.parameter_bindings["CORE_CAPABILITY_2"]
+            c3 = self.parameter_bindings["CORE_CAPABILITY_3"]
+            c4 = self.parameter_bindings["CORE_CAPABILITY_4"]
+            self.parameter_bindings["CORE_MISSION_CAPABILITIES"] = (
+                f"  1. {c1}\n  2. {c2}\n  3. {c3}\n  4. {c4}"
+            )
+
     def ingest_dictionary(self, data: Dict[str, Any]) -> None:
         """Flattens and registers key-value pairs into parameter bindings."""
         if not isinstance(data, dict):
@@ -116,11 +186,28 @@ class SysMLParameterBindingEngine:
             if name_key in data and isinstance(data[name_key], str) and data[name_key].strip():
                 self.inferred_system_identifier = data[name_key].strip()
 
-        # Ingest scalar parameters
+        # Ingest scalar parameters and list capabilities
         for key, value in data.items():
             if key in ("parameters", "domain_parameters", "domain_params", "specs", "attributes", "metadata", "schema_nodes"):
                 continue
-            if isinstance(value, (str, int, float, bool)):
+            if isinstance(value, list) and key.lower() in (
+                "core_mission_capabilities",
+                "core_capabilities",
+                "capabilities",
+                "mission_capabilities",
+            ):
+                lines = []
+                for idx, item in enumerate(value, 1):
+                    item_str = str(item).strip()
+                    if item_str.startswith(f"{idx}.") or item_str.startswith("-"):
+                        lines.append(f"  {item_str}")
+                    else:
+                        lines.append(f"  {idx}. {item_str}")
+                formatted = "\n".join(lines)
+                self.parameter_bindings[key] = formatted
+                self.parameter_bindings[key.upper()] = formatted
+                self.parameter_bindings["CORE_MISSION_CAPABILITIES"] = formatted
+            elif isinstance(value, (str, int, float, bool)):
                 str_val = str(value)
                 self.parameter_bindings[key] = str_val
                 self.parameter_bindings[key.upper()] = str_val
@@ -140,6 +227,7 @@ class SysMLParameterBindingEngine:
         if "system_identifier" in lower or (lower in ("system", "system_name") and not self.parameter_bindings.get("SYSTEM_IDENTIFIER")):
             self.parameter_bindings["SYSTEM_IDENTIFIER"] = val
             self.parameter_bindings["MISSION_SYSTEM_NAME"] = val
+            self.parameter_bindings["SYSTEM_NAME"] = val
         elif "v_cruise" in lower or lower in ("cruise_speed", "cruise_velocity"):
             self.parameter_bindings["V_CRUISE_NOMINAL_MPS"] = val
             self.parameter_bindings["V_CRUISE_MAX_MPS"] = val
@@ -319,6 +407,12 @@ class SysMLParameterBindingEngine:
             return "High-assurance autonomous operation with deterministic safety containment."
         elif token_upper == "TRADE_OFF_ANALYSIS":
             return "Dedicated backup communication link vs payload mass and thermal budget allocation."
+        elif token_upper == "CORE_MISSION_CAPABILITIES":
+            self._derive_operational_intent()
+            return self.parameter_bindings.get("CORE_MISSION_CAPABILITIES", "")
+        elif token_upper.startswith("CORE_CAPABILITY_"):
+            self._derive_operational_intent()
+            return self.parameter_bindings.get(token_upper, "Autonomous cyber-physical mission execution capability.")
 
         # 2. Pugh Decision Matrix
         elif token_upper == "WEIGHT_CRIT_1":
@@ -881,7 +975,11 @@ class SysMLParameterBindingEngine:
 
         # 10. Mission Intent METL & MoE/MoP
         elif token_upper == "OPERATIONAL_PURPOSE":
-            return "Execute autonomous mission tasks and payload operations."
+            self._derive_operational_intent()
+            return self.parameter_bindings.get("OPERATIONAL_PURPOSE", "")
+        elif token_upper == "PRIMARY_OPERATIONAL_MISSION":
+            self._derive_operational_intent()
+            return self.parameter_bindings.get("PRIMARY_OPERATIONAL_MISSION", "")
         elif token_upper == "KEY_MISSION_TASKS":
             return "System initialization, navigation along nominal corridor, mission payload processing, return to base."
         elif token_upper == "MISSION_END_STATE":
@@ -1174,6 +1272,8 @@ class SysMLParameterBindingEngine:
         """Substitutes all template placeholders {{...}} in content with resolved values."""
         if not content:
             return ""
+
+        self._derive_operational_intent()
 
         def _replacer(match: re.Match) -> str:
             token_name = match.group(1)

@@ -10,7 +10,7 @@
 To resolve the critical deficiencies of predecessor systems and meet statutory safety requirements, the Abstract Cyber-Physical System Archetype transitions the operational paradigm from manual direct control to certified supervisory autonomous execution. This architectural evolution is justified by:
 1. **Deterministic RTOS Safety-Critical Core:** Implementation of a deterministic safety-critical core architecture executing on a fault-tolerant multi-core processor with memory protection unit (MPU) isolation.
 2. **Multi-Tiered PACE Communications Architecture:** Deployment of a 4-tier communication plan (Primary Point-to-Point link, Alternate high-bandwidth network channel, Contingency robust narrowband link, and Emergency resilient channel) ensuring unbroken command and control integrity.
-3. **Sub-Second Failsafe Containment:** Integration of an independent hardware safety watchdog capable of detecting cross-channel sensor disparities, loss of communication, or state boundary breaches, and triggering deterministic containment actions within $t_{\mathrm{resp}} \le \tau_{\mathrm{containment\_req}}$.
+3. **Sub-Second Failsafe Containment:** Integration of an independent hardware safety watchdog capable of detecting cross-channel sensor disparities, loss of communication, or state boundary breaches, and triggering deterministic containment actions within $t_{\mathrm{resp}} \le \tau_{\text{containment\_req}}$.
 4. **Edge Neural Telemetry Processing:** High-efficiency edge computing accelerator executing real-time state classification, multi-sensor odometry, and automated feature tracking without saturating low-bandwidth telemetry downlinks.
 
 ### 3.2 Functional Superiority & Operational Value Proposition
@@ -29,9 +29,9 @@ $$
 - Parameter Definitions & Engineering Units:
 - $\Delta \text{Range}$: Operational range expansion margin over legacy baseline ($\text{Range}_{\mathrm{proposed}} \ge \text{Range}_{\mathrm{threshold}}$).
 - $\Delta t_{\mathrm{turnaround}}$: Operational turnaround and servicing time reduction ($t_{\mathrm{turnaround,proposed}} \le t_{\mathrm{turnaround,target}}$).
-- $\Delta \tau_{\mathrm{response}}$: Containment and emergency response latency reduction ($\tau_{\mathrm{response,proposed}} \le \tau_{\mathrm{containment\_req}}$).
+- $\Delta \tau_{\mathrm{response}}$: Containment and emergency response latency reduction ($\tau_{\mathrm{response,proposed}} \le \tau_{\text{containment\_req}}$).
 - $\Delta \text{Disturbance}$: Dynamic disturbance tolerance and environmental resistance expansion ($\text{IP}_{xy} \ge \text{IP}_{\mathrm{req}}$).
-- $\Delta \text{TLX}$: NASA Task Load Index cognitive workload reduction ($\text{TLX}_{\mathrm{proposed}} \le \text{TLX}_{\mathrm{nominal\_max}}$).
+- $\Delta \text{TLX}$: NASA Task Load Index cognitive workload reduction ($\text{TLX}_{\mathrm{proposed}} \le \text{TLX}_{\text{nominal\_max}}$).
 
 | Operational Pillar | Legacy Baseline (Predecessor) | Proposed Autonomous Archetype | Superiority Delta Formula | Threshold Improvement Bound | Operational Value Delivered |
 | :--- | :--- | :--- | :--- | :--- | :--- |

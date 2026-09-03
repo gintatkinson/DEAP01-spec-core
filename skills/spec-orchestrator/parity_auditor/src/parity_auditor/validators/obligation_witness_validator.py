@@ -110,11 +110,14 @@ def _parse_witness_tags(text: str) -> List[str]:
     # Unbracketed single tags: /// ObligationWitness: OBL-01
     single_patterns = [
         re.compile(r'///\s*(?:ObligationWitness|TestWitness|CodeWitness|SpecWitness|ModelWitness)\s*:\s*([A-Za-z0-9_-]+)', re.IGNORECASE),
+        re.compile(r'///\s*Realises\s*:\s*([A-Za-z0-9_-]+)', re.IGNORECASE),
     ]
     for pat in single_patterns:
         for match in pat.finditer(text):
             token = match.group(1).strip()
             if token and not token.startswith("["):
+                if not _is_probable_obligation_token(token):
+                    continue
                 norm = _normalize_obligation_id(token)
                 if norm and norm not in tags:
                     tags.append(norm)
@@ -454,11 +457,12 @@ class ObligationWitnessValidator(IValidator):
             target_abs = os.path.join(workspace_dir, target_spec) if target_spec else ""
             target_exists = bool(target_abs and os.path.exists(target_abs))
             is_conops_target = bool(
-                target_spec and (
-                    "CONOPS" in target_spec.upper()
-                    or "MISSION_INTENT" in target_spec.upper()
-                    or "Phase 1" in phase_spec
-                )
+                (target_spec and ("CONOPS" in target_spec.upper() or "MISSION_INTENT" in target_spec.upper()))
+                or ("PHASE 1" in phase_spec.upper() or "CONOPS" in phase_spec.upper() or "MISSION_INTENT" in phase_spec.upper())
+            )
+            is_feature_target = bool(
+                (target_spec and target_spec.startswith("docs/features"))
+                or ("PHASE 2" in phase_spec.upper() or "FEATURE" in phase_spec.upper() or "LOGICAL" in phase_spec.upper())
             )
 
             if target_spec:
@@ -474,7 +478,7 @@ class ObligationWitnessValidator(IValidator):
                 not allow_missing_specs
                 or target_exists
                 or is_conops_target
-                or (has_features and target_spec.startswith("docs/features"))
+                or (has_features and is_feature_target)
                 or len(rec.spec_witnesses) > 0
                 or is_witnessed_in_assigned
             )
@@ -497,25 +501,35 @@ class ObligationWitnessValidator(IValidator):
                 )
 
             # If in implementation / codebase mode and not spec-only: check test and code witnesses
-            if has_codebase and not spec_only and not repo.is_upstream_compiler_repo() and not allow_missing_specs:
-                if len(rec.test_witnesses) == 0:
-                    findings.append(
-                        Finding(
-                            rule_id="obligation-witness-missing-test-witness",
-                            message=f"Declared obligation '{ob_id}' ({rec.category}, Standard: {rec.standard_id}) has zero automated test witnesses in workspace test suite.",
-                            location="docs/research/RESEARCH_INVENTORY.md",
-                            detail={"obligation_id": ob_id, "standard_id": rec.standard_id},
+            # Do NOT allow allow_missing_specs to bypass test/code witness checks on specifications
+            # that exist in workspace, are ConOps/active targets, or have spec witnesses.
+            if has_codebase and not spec_only and not repo.is_upstream_compiler_repo():
+                should_enforce_test_code = (
+                    not allow_missing_specs
+                    or target_exists
+                    or is_conops_target
+                    or (has_features and is_feature_target)
+                    or len(rec.spec_witnesses) > 0
+                )
+                if should_enforce_test_code:
+                    if len(rec.test_witnesses) == 0:
+                        findings.append(
+                            Finding(
+                                rule_id="obligation-witness-missing-test-witness",
+                                message=f"Declared obligation '{ob_id}' ({rec.category}, Standard: {rec.standard_id}) has zero automated test witnesses in workspace test suite.",
+                                location="docs/research/RESEARCH_INVENTORY.md",
+                                detail={"obligation_id": ob_id, "standard_id": rec.standard_id},
+                            )
                         )
-                    )
-                if (len(rec.code_witnesses) + len(rec.model_witnesses)) == 0:
-                    findings.append(
-                        Finding(
-                            rule_id="obligation-witness-missing-code-witness",
-                            message=f"Declared obligation '{ob_id}' ({rec.category}, Standard: {rec.standard_id}) has zero implementation or discrete model witnesses in codebase.",
-                            location="docs/research/RESEARCH_INVENTORY.md",
-                            detail={"obligation_id": ob_id, "standard_id": rec.standard_id},
+                    if (len(rec.code_witnesses) + len(rec.model_witnesses)) == 0:
+                        findings.append(
+                            Finding(
+                                rule_id="obligation-witness-missing-code-witness",
+                                message=f"Declared obligation '{ob_id}' ({rec.category}, Standard: {rec.standard_id}) has zero implementation or discrete model witnesses in codebase.",
+                                location="docs/research/RESEARCH_INVENTORY.md",
+                                detail={"obligation_id": ob_id, "standard_id": rec.standard_id},
+                            )
                         )
-                    )
 
         return findings
 

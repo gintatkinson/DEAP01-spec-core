@@ -8,17 +8,17 @@
 
 ## 1. Commander's Intent & Operational Objectives
 
-- **Operational Purpose:** The primary operational purpose of the tactical autonomous cyber-physical system is to execute persistent, autonomous state trajectory traversal, multi-modal sensor data acquisition, edge state inference, dynamic boundary deconfliction, and precision task execution within bounded operational state spaces, operating under rigorous autonomous control with multi-tier command and control (C2) communications redundancy and deterministic failsafe containment.
+- **Operational Purpose:** {{OPERATIONAL_PURPOSE}}
 - **Key Tasks:**
-  - Execute pre-operation Built-In-Test (BIT) self-diagnostics, calibration, and cryptographic link binding within $t_{\mathrm{PBIT}} \le \tau_{\mathrm{PBIT\_max}}$ of power activation.
-  - Conduct autonomous transit along designated multi-dimensional state corridors while maintaining strict state boundary containment within $x_{\mathrm{operating\_max}}$.
+  - Execute pre-operation Built-In-Test (BIT) self-diagnostics, calibration, and cryptographic link binding within $t_{\mathrm{PBIT}} \le \tau_{\text{PBIT\_max}}$ of power activation.
+  - Conduct autonomous transit along designated multi-dimensional state corridors while maintaining strict state boundary containment within $x_{\text{operating\_max}}$.
   - Perform real-time multi-modal sensor processing and persistent state tracking over designated operational zones.
   - Maintain continuous boundary deconfliction and separation minima from non-cooperative external entities.
   - Stream encrypted system telemetry across the primary C2 link with automatic failover across alternate, contingency, and emergency PACE tiers.
   - Enforce dual-consent cryptographic authorization and positive condition verification ($C_{\mathrm{condition}} \ge C_{\mathrm{threshold}}$) prior to executing high-consequence operational tasks.
   - Continuously compute closed-loop dynamic resource state and execute autonomous return-to-base (RTB) or secondary divert routing upon reaching safety thresholds ($R(t) \le R_{\mathrm{threshold}}(t)$).
   - Perform precision autonomous arrival, actuator safe locking, cryptographic data zeroization, and diagnostic log offloading.
-- **End State:** All assigned operational corridor waypoints fully traversed and verified; zero unauthorized state boundary excursions; zero unmitigated collision or interference hazards; all state conditions positively identified and verified ($C_{\mathrm{condition}} \ge C_{\mathrm{threshold}}$); and successful recovery at the primary base or designated secondary divert recovery site with residual resources strictly satisfying $R_{\mathrm{reserve}} \ge \text{Ratio}_{\mathrm{reserve\_min}} \cdot R_{\mathrm{capacity}}$.
+- **End State:** All assigned operational corridor waypoints fully traversed and verified; zero unauthorized state boundary excursions; zero unmitigated collision or interference hazards; all state conditions positively identified and verified ($C_{\mathrm{condition}} \ge C_{\mathrm{threshold}}$); and successful recovery at the primary base or designated secondary divert recovery site with residual resources strictly satisfying $R_{\mathrm{reserve}} \ge \text{Ratio}_{\text{reserve\_min}} \cdot R_{\mathrm{capacity}}$.
 
 ### 1.1 Normative Baseline & Doctrinal Authority
 This Tactical Mission Intent specification tree is authored in strict compliance with:

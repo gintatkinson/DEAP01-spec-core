@@ -28,7 +28,7 @@ P_{\mathrm{EMG-07}} > P_{\mathrm{EMG-03}} > P_{\mathrm{EMG-05}} > P_{\mathrm{EMG
 \end{aligned}
 $$
 
-2. **Deterministic Response Timing ($t_{\mathrm{resp}} \le \tau_{\mathrm{deadline}}$):** From initial sensor anomaly threshold crossing to containment command issuance on the actuator bus, the maximum propagation latency is guaranteed to remain strictly bounded by $t_{\mathrm{resp}} \le \tau_{\mathrm{deadline}}$ across all seven canonical triggers (with emergency termination executing within $t_{\mathrm{resp}} \le \tau_{\mathrm{deadline\_abort}}$).
+2. **Deterministic Response Timing ($t_{\mathrm{resp}} \le \tau_{\mathrm{deadline}}$):** From initial sensor anomaly threshold crossing to containment command issuance on the actuator bus, the maximum propagation latency is guaranteed to remain strictly bounded by $t_{\mathrm{resp}} \le \tau_{\mathrm{deadline}}$ across all seven canonical triggers (with emergency termination executing within $t_{\text{resp}} \le \tau_{\text{deadline\_abort}}$).
 3. **Fail-Safe Retention:** Once a critical emergency state (`Emergency_SafeStateTermination` or `Contingency_ResourceDivert`) is triggered, the state machine is non-reentrant and locks until a physical post-operation ground reset and authorized Maintenance Technician clearance are performed.
 
 ### 12.2 Deterministic Emergency Statechart & State Machine

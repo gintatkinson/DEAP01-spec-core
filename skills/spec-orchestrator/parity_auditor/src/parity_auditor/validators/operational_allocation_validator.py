@@ -54,17 +54,19 @@ def _normalize_oa_id(raw_id: str) -> str:
     if m_phase_prefix:
         raw = m_phase_prefix.group(1).strip()
 
-    # Match OA identifier: OA-01, OA_1, OA-STARTUP
-    m_oa = re.match(r'^OA[_-]?0*(\d+[a-zA-Z0-9_-]*)$', raw, re.IGNORECASE)
+    # Match OA or MET/METL identifier: OA-01, OA_1, OA-STARTUP, MET-01, METL-01
+    m_oa = re.match(r'^(?:OA|MET|METL)[_-]?0*(\d+[a-zA-Z0-9_-]*)$', raw, re.IGNORECASE)
     if m_oa:
         suffix = m_oa.group(1)
+        prefix = "MET" if raw.upper().startswith("MET") else "OA"
         if suffix.isdigit():
-            return f"OA-{int(suffix):02d}"
-        return f"OA-{suffix.upper()}"
+            return f"{prefix}-{int(suffix):02d}"
+        return f"{prefix}-{suffix.upper()}"
 
-    m_oa_named = re.match(r'^OA[_-]?([a-zA-Z0-9_-]+)$', raw, re.IGNORECASE)
+    m_oa_named = re.match(r'^(?:OA|MET|METL)[_-]?([a-zA-Z0-9_-]+)$', raw, re.IGNORECASE)
     if m_oa_named:
-        return f"OA-{m_oa_named.group(1).upper()}"
+        prefix = "MET" if raw.upper().startswith("MET") else "OA"
+        return f"{prefix}-{m_oa_named.group(1).upper()}"
 
     # General phase/activity name normalization
     cleaned = re.sub(r'[^a-zA-Z0-9]', '', raw).upper()
@@ -180,8 +182,8 @@ class OperationalAllocationValidator(IValidator):
                     if len(parts) >= 2:
                         first_col = parts[0]
                         second_col = parts[1]
-                        # Check if first column is an OA identifier: `OA-01`, OA_1, etc.
-                        m_oa = re.search(r'\b(OA[_-]?\d+[a-zA-Z0-9_-]*)\b', first_col, re.IGNORECASE)
+                        # Check if first column is an OA or MET identifier: `OA-01`, OA_1, MET-01, etc.
+                        m_oa = re.search(r'\b((?:OA|MET|METL)[_-]?\d+[a-zA-Z0-9_-]*)\b', first_col, re.IGNORECASE)
                         if m_oa:
                             raw_id = m_oa.group(1)
                             canon = _normalize_oa_id(raw_id)
@@ -207,12 +209,12 @@ class OperationalAllocationValidator(IValidator):
                 # - **Phase 1: Startup**
                 # ### OA-01: Initialization
                 # ### Phase 1: Startup
-                oa_match = re.search(r'\b(OA[_-]?\d+[a-zA-Z0-9_-]*)\b', stripped, re.IGNORECASE)
+                oa_match = re.search(r'\b((?:OA|MET|METL)[_-]?\d+[a-zA-Z0-9_-]*)\b', stripped, re.IGNORECASE)
                 if oa_match:
                     raw_id = oa_match.group(1)
                     canon = _normalize_oa_id(raw_id)
                     # Extract name after colon or dash if present
-                    m_desc = re.search(r'(?:OA[_-]?\d+[a-zA-Z0-9_-]*)[*`_]*\s*[:\-—]\s*(.+)$', stripped, re.IGNORECASE)
+                    m_desc = re.search(r'(?:(?:OA|MET|METL)[_-]?\d+[a-zA-Z0-9_-]*)[*`_]*\s*[:\-—]\s*(.+)$', stripped, re.IGNORECASE)
                     display_name = m_desc.group(1).strip() if m_desc else raw_id
                     display_name = re.sub(r'[*`_]', '', display_name).strip()
                     ops_universe[canon] = display_name
@@ -359,10 +361,9 @@ class OperationalAllocationValidator(IValidator):
         has_features: bool = self._has_feature_specifications(repo)
 
         # Stage-awareness: if allow_missing_specs is True or no feature specifications
-        # have been authored yet in the workspace (and len(allocated_tags) == 0), treat
-        # the workspace as being in the pre-feature / ConOps lifecycle stage and do not
-        # emit false orphan-allocation findings (Theorem 1).
-        skip_orphan_check = allow_missing_specs or (not has_features and len(allocated_tags) == 0)
+        # have been authored yet in the workspace (Phase 1 pre-feature / ConOps lifecycle stage),
+        # suppress orphan-allocation findings for downstream features/tasks (Theorem 1).
+        skip_orphan_check = allow_missing_specs or not has_features
 
         findings: List[Finding] = []
 
