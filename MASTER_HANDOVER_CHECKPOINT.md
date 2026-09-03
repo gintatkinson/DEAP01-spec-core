@@ -11,7 +11,7 @@
 The previous agent made severe architectural and judgment errors across both the upstream compiler (`DEAP01-spec-core`) and downstream domain repositories (`DEAP01-uas-infrastructure-safety`):
 
 1. **Host Filesystem / Local Ingestion Contamination**:
-   - The agent ingested unmanaged, unverified local files from `/Users/perkunas/` (`DEAP_SYSML_V2_SAFETY_MODEL_SPECIFICATION.sysml`, `DEAP_FLIGHT_SYSTEMS_SAFETY_CONCEPT_PAPER.txt`, `UDS-STP-FMECA/`, `UAV Safety Project WBS.docx`) directly into `DEAP01-uas-infrastructure-safety` without establishing cryptographic provenance, verifying whether they were stale/abandoned drafts, or conducting an adversarial audit.
+   - The agent ingested unmanaged, unverified local files from local workstation directories (`DEAP_SYSML_V2_SAFETY_MODEL_SPECIFICATION.sysml`, `DEAP_FLIGHT_SYSTEMS_SAFETY_CONCEPT_PAPER.txt`, `UDS-STP-FMECA/`, `UAV Safety Project WBS.docx`) directly into `DEAP01-uas-infrastructure-safety` without establishing cryptographic provenance, verifying whether they were stale/abandoned drafts, or conducting an adversarial audit.
 2. **Synthetic Template Pollution in ConOps**:
    - The agent copied generic upstream template units (`skills/spec-conops-engineering/resources/units/`) into `DEAP01-uas-infrastructure-safety/docs/conops/units/`.
    - The agent then ran `assemble_conops.py` with a synthetic `domain_config.json` containing severe dimensional scaling mismatches, producing an assembled `CONOPS.md` (1,581 lines) and `MISSION_INTENT.md` (430 lines) full of blatant physical absurdities (e.g. $20,000\text{ km}$ C2 range for a $20\text{ kg}$ drone, $1.0\text{ min}$ endurance).
@@ -24,13 +24,13 @@ The previous agent made severe architectural and judgment errors across both the
 ## 2. Inventory of Repositories & Current Git States
 
 ### Repository 1: `gintatkinson/DEAP01-spec-core` (Upstream Core Compiler)
-- **Local Absolute Path:** [`/Users/perkunas/jail/DEAP01-spec-core`](file:///Users/perkunas/jail/DEAP01-spec-core)
+- **Local Path:** `../DEAP01-spec-core`
 - **Role:** Pure schema-driven abstract compiler and quality gate framework. MUST contain ZERO concrete specifications or domain files.
 - **Git Commit:** [`796fcde`](https://github.com/gintatkinson/DEAP01-spec-core/commit/796fcde) (100% clean, synced with `origin/main`).
 - **Test Baseline:** 588 / 588 unit tests passing (`python3 -m pytest tests/`).
 
 ### Repository 2: `gintatkinson/DEAP-uas-infrastructure-safety` (Contaminated Downstream Repo)
-- **Local Absolute Path:** [`/Users/perkunas/jail/DEAP01-uas-infrastructure-safety`](file:///Users/perkunas/jail/DEAP01-uas-infrastructure-safety)
+- **Local Path:** `../DEAP01-uas-infrastructure-safety`
 - **Role:** Downstream UAS Infrastructure Safety workspace.
 - **Git Commit:** [`2f3c6c4`](https://github.com/gintatkinson/DEAP-uas-infrastructure-safety/commit/2f3c6c4) (Pushed to `origin/main`).
 - **Contaminated Files to Clean Up / Re-evaluate:**
@@ -42,7 +42,7 @@ The previous agent made severe architectural and judgment errors across both the
   - `docs/research/fmeca/` (Ingested unmanaged files).
 
 ### Repository 3: `gintatkinson/DEAP-avionic-flight-safety` (Downstream Avionics Repo)
-- **Local Absolute Path:** [`/Users/perkunas/jail/DEAP01-avionic-flight-safety`](file:///Users/perkunas/jail/DEAP01-avionic-flight-safety)
+- **Local Path:** `../DEAP01-avionic-flight-safety`
 - **Role:** Downstream Airborne Flight Safety / DO-178C DAL-A workspace.
 - **Git Status:** Unpopulated clean landing zones.
 
@@ -72,7 +72,7 @@ Every number, formula, and engineering unit in the generated specifications MUST
 
 ### Protocol 4: The 10-Variant Acceptance Benchmark Test
 To prove that a fix or compiler feature is production-grade, the agent must execute the **10-Variant Acceptance Benchmark**:
-1. Provision 10 isolated scratch sandboxes (`/Users/perkunas/deap_sandboxes/run_01` through `run_10`).
+1. Provision 10 isolated scratch sandboxes (`../deap_sandboxes/run_01` through `run_10`).
 2. Run the end-to-end compilation pipeline in each sandbox.
 3. Validate all 10 sandboxes against Quality Gate 26, Gate 28, Gate 29, Gate 16, and Gate 24.
 4. Verify that **ALL 10 runs achieve 100% PASS with ZERO warnings and ZERO semantic distortions**.
@@ -104,6 +104,6 @@ To prove that a fix or compiler feature is production-grade, the agent must exec
 ---
 
 ## 5. Non-Negotiable Engineering Guardrails
-- **Full Absolute Paths Mandatory**: Always refer to files and symbols by their full, recognizable absolute paths (e.g. `/Users/perkunas/jail/DEAP01-uas-infrastructure-safety/schema/UAS_INFRASTRUCTURE_SAFETY.sysml`).
+- **Explicit Repository Paths Mandatory**: Always refer to files and symbols by their recognizable repository paths (e.g. `../DEAP01-uas-infrastructure-safety/schema/UAS_INFRASTRUCTURE_SAFETY.sysml`).
 - **SysML v2 is the Sole SSOT**: Never generate specifications by string substitution on markdown templates. All data must derive from the SysML AST.
 - **No Silent Assumptions**: If a requirement is ambiguous, verify and ask rather than guessing.
