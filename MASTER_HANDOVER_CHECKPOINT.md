@@ -1,8 +1,8 @@
-# Master Handover Checkpoint & Forensic Clean-Up Blueprint
+# Master Handover Checkpoint & Formal Acceptance Instructions
 
-**Generated at:** 2026-09-03T12:03:45+03:00  
+**Generated at:** 2026-09-03T12:38:55+03:00  
 **Target Audience:** Incoming Autonomous Engineering Agent / Master Coordinator  
-**Classification:** `SAFETY-CRITICAL FORENSIC AUDIT & RECOVERY PLAN`
+**Classification:** `SAFETY-CRITICAL FORENSIC AUDIT, RECOVERY PLAN & FORMAL ACCEPTANCE INSTRUCTIONS`
 
 ---
 
@@ -11,10 +11,10 @@
 The previous agent made severe architectural and judgment errors across both the upstream compiler (`DEAP01-spec-core`) and downstream domain repositories (`DEAP01-uas-infrastructure-safety`):
 
 1. **Host Filesystem / Local Ingestion Contamination**:
-   - The agent ingested unmanaged, unverified local files from host storage (`DEAP_SYSML_V2_SAFETY_MODEL_SPECIFICATION.sysml`, `DEAP_FLIGHT_SYSTEMS_SAFETY_CONCEPT_PAPER.txt`, `UDS-STP-FMECA/`, `UAV Safety Project WBS.docx`) directly into `DEAP01-uas-infrastructure-safety` without establishing cryptographic provenance, verifying whether they were stale/abandoned drafts, or conducting an adversarial audit.
+   - The agent ingested unmanaged, unverified local files from `/Users/perkunas/` (`DEAP_SYSML_V2_SAFETY_MODEL_SPECIFICATION.sysml`, `DEAP_FLIGHT_SYSTEMS_SAFETY_CONCEPT_PAPER.txt`, `UDS-STP-FMECA/`, `UAV Safety Project WBS.docx`) directly into `DEAP01-uas-infrastructure-safety` without establishing cryptographic provenance, verifying whether they were stale/abandoned drafts, or conducting an adversarial audit.
 2. **Synthetic Template Pollution in ConOps**:
    - The agent copied generic upstream template units (`skills/spec-conops-engineering/resources/units/`) into `DEAP01-uas-infrastructure-safety/docs/conops/units/`.
-   - The agent then ran `assemble_conops.py` with a synthetic `domain_config.json` containing severe dimensional scaling mismatches, producing an assembled `CONOPS.md` (1,581 lines) and `MISSION_INTENT.md` (430 lines) full of blatant physical absurdities (e.g. $20,000\text{ km}$ C2 range for a $20\text{ kg}$ drone, $1.0\text{ minute}$ endurance).
+   - The agent then ran `assemble_conops.py` with a synthetic `domain_config.json` containing severe dimensional scaling mismatches, producing an assembled `CONOPS.md` (1,581 lines) and `MISSION_INTENT.md` (430 lines) full of blatant physical absurdities (e.g. $20,000\text{ km}$ C2 range for a $20\text{ kg}$ drone, $1.0\text{ min}$ endurance).
    - The agent mistakenly defended checking in both the 12/10 raw template units AND the monolithic assembled Markdown files, creating a dual-source-of-truth nightmare.
 3. **Quality Gate False-Positive Blindness ("Failed-Pass")**:
    - Quality Gate 26 (`conops_completeness_validator.py`) passed with exit code 0 because it only checks for surface regex patterns and table structures, completely failing to detect obvious physical, mathematical, and dimensional contradictions.
@@ -24,15 +24,15 @@ The previous agent made severe architectural and judgment errors across both the
 ## 2. Inventory of Repositories & Current Git States
 
 ### Repository 1: `gintatkinson/DEAP01-spec-core` (Upstream Core Compiler)
-- **Local Relative Path:** `../DEAP01-spec-core`
+- **Local Absolute Path:** [`/Users/perkunas/jail/DEAP01-spec-core`](file:///Users/perkunas/jail/DEAP01-spec-core)
 - **Role:** Pure schema-driven abstract compiler and quality gate framework. MUST contain ZERO concrete specifications or domain files.
-- **Git Commit:** [`9ed9a85`](https://github.com/gintatkinson/DEAP01-spec-core/commit/9ed9a85) (100% clean, synced with `origin/main`).
-- **Test Baseline:** 588 / 588 unit tests passing.
+- **Git Commit:** [`796fcde`](https://github.com/gintatkinson/DEAP01-spec-core/commit/796fcde) (100% clean, synced with `origin/main`).
+- **Test Baseline:** 588 / 588 unit tests passing (`python3 -m pytest tests/`).
 
 ### Repository 2: `gintatkinson/DEAP-uas-infrastructure-safety` (Contaminated Downstream Repo)
-- **Local Relative Path:** `../DEAP01-uas-infrastructure-safety`
+- **Local Absolute Path:** [`/Users/perkunas/jail/DEAP01-uas-infrastructure-safety`](file:///Users/perkunas/jail/DEAP01-uas-infrastructure-safety)
 - **Role:** Downstream UAS Infrastructure Safety workspace.
-- **Git Commit:** [`5fd008d`](https://github.com/gintatkinson/DEAP-uas-infrastructure-safety/commit/5fd008d) (Pushed to `origin/main`).
+- **Git Commit:** [`2f3c6c4`](https://github.com/gintatkinson/DEAP-uas-infrastructure-safety/commit/2f3c6c4) (Pushed to `origin/main`).
 - **Contaminated Files to Clean Up / Re-evaluate:**
   - `docs/conops/units/` (Synthetic template copies).
   - `docs/conops/CONOPS.md` (Contaminated 1,581-line assembled file with unit/scale errors).
@@ -42,13 +42,44 @@ The previous agent made severe architectural and judgment errors across both the
   - `docs/research/fmeca/` (Ingested unmanaged files).
 
 ### Repository 3: `gintatkinson/DEAP-avionic-flight-safety` (Downstream Avionics Repo)
-- **Local Relative Path:** `../DEAP01-avionic-flight-safety`
+- **Local Absolute Path:** [`/Users/perkunas/jail/DEAP01-avionic-flight-safety`](file:///Users/perkunas/jail/DEAP01-avionic-flight-safety)
 - **Role:** Downstream Airborne Flight Safety / DO-178C DAL-A workspace.
 - **Git Status:** Unpopulated clean landing zones.
 
 ---
 
-## 3. Immediate Action Plan for Incoming Agent
+## 3. Mandatory Acceptance Instructions & Evaluation Protocols
+
+The incoming agent MUST strictly follow these **Four Acceptance Protocols** before declaring any task, fix, or compilation complete:
+
+### Protocol 1: The Anti-Complacency / False-Positive Detection Gate
+- **`exit code 0` is NEVER sufficient proof of success.**
+- The agent is strictly forbidden from declaring a test passing just because a script finished without an exception.
+- You MUST perform live artifact content inspection: read the generated output, check that actual compiled data exists, verify mathematical formulas, and check that no hallucinated or distorted numbers were injected.
+
+### Protocol 2: The 4-Pillar Semantic Physical & Dimensional Check
+Every number, formula, and engineering unit in the generated specifications MUST be physically and mathematically coherent:
+1. **Dimensional Homogeneity**: Check that units match column headers (e.g. if the table header is `km`, a range of $20,000\text{ m}$ must be recorded as $20.0\text{ km}$, NOT $20,000.0\text{ km}$).
+2. **Time Scaling**: Check that durations match column units (e.g. if the table header is `min`, an endurance of $1.0\text{ hr}$ must be recorded as $60.0\text{ min}$, NOT $1.0\text{ min}$).
+3. **Mass & Energy Balance**: Subsystem mass fractions must sum to exactly $100.0\%$ MTOW. Power budgets must have positive margins ($\Delta P_{\mathrm{margin}} \ge 15\%$).
+4. **Physical Reality Limits**: Never allow a 20 kg drone to claim global satellite range, supersonic velocity, or infinite battery life.
+
+### Protocol 3: The Zero-Placeholder & Duplicate Header Invariant
+- **Zero Placeholders**: Zero unrendered `{{...}}` or `[TBD]` placeholders in any document.
+- **Strict Section Cardinality**: Exactly 12 sections for ConOps (`## 1.` through `## 12.`) and exactly 10 sections for Mission Intent (`## 1.` through `## 10.`).
+- **Zero Duplicate Headers**: Every section header must be unique across the entire document.
+- **Table of Contents Parity**: Every Level-2 header must have an exact 1:1 matching link in the Table of Contents.
+
+### Protocol 4: The 10-Variant Acceptance Benchmark Test
+To prove that a fix or compiler feature is production-grade, the agent must execute the **10-Variant Acceptance Benchmark**:
+1. Provision 10 isolated scratch sandboxes (`/Users/perkunas/deap_sandboxes/run_01` through `run_10`).
+2. Run the end-to-end compilation pipeline in each sandbox.
+3. Validate all 10 sandboxes against Quality Gate 26, Gate 28, Gate 29, Gate 16, and Gate 24.
+4. Verify that **ALL 10 runs achieve 100% PASS with ZERO warnings and ZERO semantic distortions**.
+
+---
+
+## 4. Step-by-Step Clean-Up & Recovery Action Plan
 
 ### Step 1: Purge ConOps Contamination in `DEAP01-uas-infrastructure-safety`
 1. Remove the synthetic `docs/conops/units/` directory.
@@ -72,7 +103,7 @@ The previous agent made severe architectural and judgment errors across both the
 
 ---
 
-## 4. Key Rules to Remember
-- **SysML v2 is the SSOT**: Never generate specifications by string substitution on markdown templates. All data must derive from the SysML AST.
-- **Exact Relative Paths Required**: Always refer to files by their exact relative workspace paths (e.g. `../DEAP01-uas-infrastructure-safety/schema/UAS_INFRASTRUCTURE_SAFETY.sysml`).
-- **No Silent Assumptions**: Never pass a test based on `exit code 0`. Read and semantically verify the output.
+## 5. Non-Negotiable Engineering Guardrails
+- **Full Absolute Paths Mandatory**: Always refer to files and symbols by their full, recognizable absolute paths (e.g. `/Users/perkunas/jail/DEAP01-uas-infrastructure-safety/schema/UAS_INFRASTRUCTURE_SAFETY.sysml`).
+- **SysML v2 is the Sole SSOT**: Never generate specifications by string substitution on markdown templates. All data must derive from the SysML AST.
+- **No Silent Assumptions**: If a requirement is ambiguous, verify and ask rather than guessing.
