@@ -20,6 +20,7 @@ if REPO_ROOT not in sys.path:
 from scripts.assemble_conops import (
     CANONICAL_CONOPS_UNITS,
     CANONICAL_MISSION_INTENT_UNITS,
+    DEFAULT_CONOPS_PARAMS,
     RAW_TOKEN_FINDER,
     SysMLParameterBindingEngine,
     assemble_conops,
@@ -737,6 +738,19 @@ class TestSysMLParameterBindingEngine(unittest.TestCase):
             toc_mission = toc_match_mission.group(0)
             for i in range(1, 11):
                 self.assertRegex(toc_mission, rf'\[(?:Section\s+)?{i}\.')
+
+    def test_default_conops_params_bindings(self):
+        """Verify DEFAULT_CONOPS_PARAMS bindings and resolution in SysMLParameterBindingEngine."""
+        self.assertEqual(DEFAULT_CONOPS_PARAMS["MAX_JUNCTION_TEMPERATURE_DELTA_C"], "25.0")
+        self.assertEqual(DEFAULT_CONOPS_PARAMS["BATTERY_CHARGE_C_RATE"], "2.0C")
+        self.assertEqual(DEFAULT_CONOPS_PARAMS["BATTERY_CHARGE_TIME_HOURS"], "1.5")
+        self.assertEqual(DEFAULT_CONOPS_PARAMS["SUPPORT_EQUIPMENT_BATTERY_HOURS"], "8.0")
+        self.assertEqual(DEFAULT_CONOPS_PARAMS["OPERATIONAL_AVAILABILITY_THRESHOLD"], "0.95")
+        self.assertEqual(DEFAULT_CONOPS_PARAMS["OPERATIONAL_AVAILABILITY_OBJECTIVE"], "0.99")
+
+        engine = SysMLParameterBindingEngine(auto_detect=False)
+        for key, expected_val in DEFAULT_CONOPS_PARAMS.items():
+            self.assertEqual(engine.resolve_token(key), expected_val)
 
 
 if __name__ == "__main__":

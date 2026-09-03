@@ -536,7 +536,7 @@ class TestSpecConopsEngineering(unittest.TestCase):
         quant_metrics = [
             "MTBF_baseline <= MTBF_threshold",
             "tau_loop > tau_stability_limit",
-            "IP_xy",
+            "{{INGRESS_PROTECTION_RATING}}",
             "t_collapse < 10 ms",
             "R_margin < R_buffer_req",
             "t_coord > 300 s",

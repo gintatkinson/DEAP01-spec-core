@@ -9,7 +9,7 @@
 
 ## 1. System Truth Specification: SYS-UAS-INFRA-01
 
-The incoming agent must treat the following engineering parameter baseline as the **uncompromising Ground Truth** for the concrete UAS solution in [`/Users/perkunas/jail/DEAP01-uas-infrastructure-safety`](file:///Users/perkunas/jail/DEAP01-uas-infrastructure-safety):
+The incoming agent must treat the following engineering parameter baseline as the **uncompromising Ground Truth** for the concrete UAS solution in `DEAP01-uas-infrastructure-safety`:
 
 | Parameter Attribute | Authoritative Truth Value | Engineering Unit | Validation Rule & Boundary Limit |
 | :--- | :--- | :--- | :--- |
@@ -57,27 +57,27 @@ Every specification and schema must maintain exact mathematical equality ($\sum 
 The incoming agent must inspect the repository for these **exact historical defects and confirm their complete elimination**:
 
 ### Defect 1: Absurd C2 Datalink Range ($20,000\text{ km}$)
-- **Location:** [`docs/conops/CONOPS.md`](file:///Users/perkunas/jail/DEAP01-uas-infrastructure-safety/docs/conops/CONOPS.md) line 155 (Table 1.3.3 PL-08).
+- **Location:** `docs/conops/CONOPS.md` line 155 (Table 1.3.3 PL-08).
 - **The Defect:** Stated `Range_C2 >= 20000.0 km` (half the Earth's circumference) due to plugging a meter variable ($20,000\text{ m}$) into a kilometer column.
 - **Pass Criteria:** Must be strictly written as `20.0 km`.
 
 ### Defect 2: Absurd Mission Endurance ($1.0\text{ min}$)
-- **Location:** [`docs/conops/CONOPS.md`](file:///Users/perkunas/jail/DEAP01-uas-infrastructure-safety/docs/conops/CONOPS.md) line 156 (Table 1.3.3 PL-09).
+- **Location:** `docs/conops/CONOPS.md` line 156 (Table 1.3.3 PL-09).
 - **The Defect:** Stated `t_endurance >= 1.0 min` due to plugging an hour variable ($1.0\text{ hr}$) into a minute column.
 - **Pass Criteria:** Must be strictly written as `60.0 min`.
 
 ### Defect 3: Degenerate Cruise Velocity (`18.0 - 18.0 m/s`)
-- **Location:** [`docs/conops/CONOPS.md`](file:///Users/perkunas/jail/DEAP01-uas-infrastructure-safety/docs/conops/CONOPS.md) line 151 (Table 1.3.3 PL-04).
+- **Location:** `docs/conops/CONOPS.md` line 151 (Table 1.3.3 PL-04).
 - **The Defect:** Cruise velocity range stated `18.0 - 18.0 m/s`.
 - **Pass Criteria:** Must be strictly written as `14.0 - 22.0 m/s` (Nominal Target: `18.0 m/s`).
 
 ### Defect 4: Generic Synthetic Placeholder Pollution
-- **Location:** [`docs/conops/CONOPS.md`](file:///Users/perkunas/jail/DEAP01-uas-infrastructure-safety/docs/conops/CONOPS.md) Section 1.2.
+- **Location:** `docs/conops/CONOPS.md` Section 1.2.
 - **The Defect:** System Identifier stated `AutonomousCyberPhysicalSystem` instead of `SYS-UAS-INFRA-01`.
 - **Pass Criteria:** Zero generic template identifiers in the document.
 
 ### Defect 5: Unmanaged Template Unit Clutter
-- **Location:** [`docs/conops/units/`](file:///Users/perkunas/jail/DEAP01-uas-infrastructure-safety/docs/conops/units/).
+- **Location:** `docs/conops/units/`.
 - **The Defect:** Ingesting 22 raw upstream template files into downstream git, causing dual source-of-truth drift with assembled `CONOPS.md`.
 - **Pass Criteria:** Purge synthetic units; generate specifications cleanly from the SysML v2 AST.
 
@@ -117,8 +117,8 @@ sequenceDiagram
     A->>UAS: 6. Commit and Push clean verified baseline to origin/main
 ```
 
-1. **Step 1:** Delete [`docs/conops/units/`](file:///Users/perkunas/jail/DEAP01-uas-infrastructure-safety/docs/conops/units/), [`docs/conops/CONOPS.md`](file:///Users/perkunas/jail/DEAP01-uas-infrastructure-safety/docs/conops/CONOPS.md), and [`docs/conops/MISSION_INTENT.md`](file:///Users/perkunas/jail/DEAP01-uas-infrastructure-safety/docs/conops/MISSION_INTENT.md).
-2. **Step 2:** Audit [`schema/UAS_INFRASTRUCTURE_SAFETY.sysml`](file:///Users/perkunas/jail/DEAP01-uas-infrastructure-safety/schema/UAS_INFRASTRUCTURE_SAFETY.sysml) using `compile_sysml.py` to ensure complete syntactic, structural, and mathematical integrity.
+1. **Step 1:** Delete `docs/conops/units/`, `docs/conops/CONOPS.md`, and `docs/conops/MISSION_INTENT.md`.
+2. **Step 2:** Audit `schema/UAS_INFRASTRUCTURE_SAFETY.sysml` using `compile_sysml.py` to ensure complete syntactic, structural, and mathematical integrity.
 3. **Step 3:** Re-compile the ConOps and Mission Intent specifications directly from the SysML AST and Truth Baseline.
 4. **Step 4:** Perform a line-by-line semantic inspection against the Truth Tables in §1 and §2.
 5. **Step 5:** Commit and push the clean, fully verified baseline to GitHub.

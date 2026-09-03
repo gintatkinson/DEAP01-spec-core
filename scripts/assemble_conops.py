@@ -53,6 +53,18 @@ CANONICAL_MISSION_INTENT_UNITS: List[str] = [
     "10_OPERATIONAL_ALLOCATION_TAGS.md",
 ]
 
+# Canonical default ConOps parameters dictionary
+DEFAULT_CONOPS_PARAMS: Dict[str, str] = {
+    "MAX_JUNCTION_TEMPERATURE_DELTA_C": "25.0",
+    "BATTERY_CHARGE_C_RATE": "2.0C",
+    "BATTERY_CHARGE_TIME_HOURS": "1.5",
+    "SUPPORT_EQUIPMENT_BATTERY_HOURS": "8.0",
+    "OPERATIONAL_AVAILABILITY_THRESHOLD": "0.95",
+    "OPERATIONAL_AVAILABILITY_OBJECTIVE": "0.99",
+    "OPERATING_TEMPERATURE_MIN_C": "-20.0",
+    "OPERATING_TEMPERATURE_MAX_C": "+55.0",
+}
+
 
 class SysMLParameterBindingEngine:
     """
@@ -163,8 +175,11 @@ class SysMLParameterBindingEngine:
         elif "temp_min" in lower:
             self.parameter_bindings["TEMP_MIN_DEGC"] = val
             self.parameter_bindings["OPERATING_TEMP_MIN_C"] = val
+            self.parameter_bindings["OPERATING_TEMPERATURE_MIN_C"] = val
         elif "temp_max" in lower:
             self.parameter_bindings["TEMP_MAX_DEGC"] = val
+            self.parameter_bindings["OPERATING_TEMP_MAX_C"] = val
+            self.parameter_bindings["OPERATING_TEMPERATURE_MAX_C"] = val
         elif "ingress" in lower or "ip_rating" in lower:
             self.parameter_bindings["INGRESS_PROTECTION_RATING"] = val
             self.parameter_bindings["INGRESS_PROTECTION_TARGET"] = val
@@ -272,6 +287,9 @@ class SysMLParameterBindingEngine:
 
         if token_upper in self.parameter_bindings:
             return self.parameter_bindings[token_upper]
+
+        if token_upper in DEFAULT_CONOPS_PARAMS:
+            return DEFAULT_CONOPS_PARAMS[token_upper]
 
         # 1. System and Document Metadata
         sys_id = self.inferred_system_identifier or "AutonomousCyberPhysicalSystem"
