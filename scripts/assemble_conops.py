@@ -1044,68 +1044,95 @@ class SysMLParameterBindingEngine:
     def _map_semantic_aliases(self, key: str, val: str) -> None:
         """Maps domain attributes to canonical template tokens (Issues #162, #170)."""
         lower = key.lower()
+        alias_map = {}
         if "system_identifier" in lower or (lower in ("system", "system_name") and not self.parameter_bindings.get("SYSTEM_IDENTIFIER")):
-            self.parameter_bindings["SYSTEM_IDENTIFIER"] = val
-            self.parameter_bindings["MISSION_SYSTEM_NAME"] = val
-            self.parameter_bindings["SYSTEM_NAME"] = val
+            alias_map.update({
+                "SYSTEM_IDENTIFIER": val,
+                "MISSION_SYSTEM_NAME": val,
+                "SYSTEM_NAME": val,
+            })
         elif "max_cruise" in lower or "v_cruise" in lower or lower in ("cruise_speed", "cruise_velocity"):
-            self.parameter_bindings["V_CRUISE_NOMINAL_MPS"] = val
-            self.parameter_bindings["V_CRUISE_MAX_MPS"] = val
-            self.parameter_bindings["V_CRUISE_MIN_MPS"] = val
-            self.parameter_bindings["MAX_CRUISE_SPEED_MS"] = val
-            self.parameter_bindings["CRUISE_SPEED_MS"] = val
-            self.parameter_bindings["CRUISE_SPEED_MPS"] = val
+            alias_map.update({
+                "V_CRUISE_NOMINAL_MPS": val,
+                "V_CRUISE_MAX_MPS": val,
+                "V_CRUISE_MIN_MPS": val,
+                "MAX_CRUISE_SPEED_MS": val,
+                "CRUISE_SPEED_MS": val,
+                "CRUISE_SPEED_MPS": val,
+            })
         elif "v_max" in lower or lower in ("max_speed", "max_velocity"):
-            self.parameter_bindings["V_MAX_MPS"] = val
-            self.parameter_bindings["V_MAX_NOMINAL_MPS"] = val
-            self.parameter_bindings["MAX_SPEED_MS"] = val
+            alias_map.update({
+                "V_MAX_MPS": val,
+                "V_MAX_NOMINAL_MPS": val,
+                "MAX_SPEED_MS": val,
+            })
         elif "v_stall" in lower or "stall_speed" in lower or "stall_velocity" in lower:
-            self.parameter_bindings["V_STALL_MAX_MPS"] = val
-            self.parameter_bindings["V_STALL_NOMINAL_MPS"] = val
-            self.parameter_bindings["STALL_SPEED_MS"] = val
-            self.parameter_bindings["V_STALL_MPS"] = val
-            self.parameter_bindings["STALL_SPEED_MPS"] = val
+            alias_map.update({
+                "V_STALL_MAX_MPS": val,
+                "V_STALL_NOMINAL_MPS": val,
+                "STALL_SPEED_MS": val,
+                "V_STALL_MPS": val,
+                "STALL_SPEED_MPS": val,
+            })
         elif "wingspan" in lower or "wing_span" in lower:
-            self.parameter_bindings["WINGSPAN_M"] = val
-            self.parameter_bindings["WINGSPAN"] = val
-            self.parameter_bindings["DIM_MAX_W_M"] = val
-            self.parameter_bindings["DIM_NOM_W_M"] = val
+            alias_map.update({
+                "WINGSPAN_M": val,
+                "WINGSPAN": val,
+                "DIM_MAX_W_M": val,
+                "DIM_NOM_W_M": val,
+            })
         elif "parachute" in lower and ("area" in lower or "canopy" in lower or "m2" in lower or "size" in lower) or lower in ("s_canopy", "s_canopy_m2", "canopy_area", "canopy_area_m2"):
-            self.parameter_bindings["PARACHUTE_AREA_M2"] = val
-            self.parameter_bindings["PARACHUTE_CANOPY_AREA_M2"] = val
-            self.parameter_bindings["PARACHUTE_CANOPY_AREA"] = val
-            self.parameter_bindings["S_CANOPY"] = val
-            self.parameter_bindings["S_CANOPY_M2"] = val
+            alias_map.update({
+                "PARACHUTE_AREA_M2": val,
+                "PARACHUTE_CANOPY_AREA_M2": val,
+                "PARACHUTE_CANOPY_AREA": val,
+                "S_CANOPY": val,
+                "S_CANOPY_M2": val,
+            })
         elif "parachute" in lower and ("drag" in lower or "cd" in lower or "c_d" in lower):
-            self.parameter_bindings["PARACHUTE_DRAG_COEFFICIENT"] = val
-            self.parameter_bindings["C_D_PARACHUTE"] = val
+            alias_map.update({
+                "PARACHUTE_DRAG_COEFFICIENT": val,
+                "C_D_PARACHUTE": val,
+            })
         elif "mtow" in lower or "takeoff_weight" in lower or "takeoff_mass" in lower or "total_mtow" in lower:
-            self.parameter_bindings["TOTAL_MTOW_KG"] = val
-            self.parameter_bindings["MTOW_MAX_KG"] = val
-            self.parameter_bindings["MTOW_NOMINAL_KG"] = val
+            alias_map.update({
+                "TOTAL_MTOW_KG": val,
+                "MTOW_MAX_KG": val,
+                "MTOW_NOMINAL_KG": val,
+            })
         elif "payload" in lower and ("mass" in lower or "weight" in lower):
-            self.parameter_bindings["PAYLOAD_MAX_KG"] = val
-            self.parameter_bindings["PAYLOAD_NOMINAL_KG"] = val
+            alias_map.update({
+                "PAYLOAD_MAX_KG": val,
+                "PAYLOAD_NOMINAL_KG": val,
+            })
         elif "ceiling" in lower or "max_altitude" in lower:
-            self.parameter_bindings["CEILING_MAX_M"] = val
-            self.parameter_bindings["CEILING_NOMINAL_M"] = val
-            self.parameter_bindings["H_MAX_M"] = val
+            alias_map.update({
+                "CEILING_MAX_M": val,
+                "CEILING_NOMINAL_M": val,
+                "H_MAX_M": val,
+            })
         elif "c2_range" in lower or "range_c2" in lower:
-            self.parameter_bindings["C2_RANGE_NOMINAL_KM"] = val
-            self.parameter_bindings["C2_RANGE_MIN_KM"] = val
+            alias_map.update({
+                "C2_RANGE_NOMINAL_KM": val,
+                "C2_RANGE_MIN_KM": val,
+            })
         elif "endurance" in lower:
             is_hours = any(h in lower for h in ("_hour", "_hr", "_h", "hours", "hrs")) or any(h in val.lower() for h in ("hour", "hr", " h", "hrs", "hours"))
             m_num = re.search(r"[-+]?\d*\.?\d+", val)
             if is_hours and m_num:
                 hours = float(m_num.group(0))
                 min_val = str(round(hours * 60.0, 1))
-                self.parameter_bindings["ENDURANCE_NOMINAL_MIN"] = min_val
-                self.parameter_bindings["ENDURANCE_MIN_MIN"] = min_val
-                self.parameter_bindings["ENDURANCE_HOURS"] = str(hours)
-                self.parameter_bindings["NOMINAL_ENDURANCE_HOURS"] = str(hours)
+                alias_map.update({
+                    "ENDURANCE_NOMINAL_MIN": min_val,
+                    "ENDURANCE_MIN_MIN": min_val,
+                    "ENDURANCE_HOURS": str(hours),
+                    "NOMINAL_ENDURANCE_HOURS": str(hours),
+                })
             else:
-                self.parameter_bindings["ENDURANCE_NOMINAL_MIN"] = val
-                self.parameter_bindings["ENDURANCE_MIN_MIN"] = val
+                alias_map.update({
+                    "ENDURANCE_NOMINAL_MIN": val,
+                    "ENDURANCE_MIN_MIN": val,
+                })
         elif "battery_capacity" in lower or "energy_capacity" in lower or "battery_energy" in lower:
             m_num = re.search(r"[-+]?\d*\.?\d+", val)
             if m_num:
@@ -1123,25 +1150,39 @@ class SysMLParameterBindingEngine:
                     kwh = num
                     joules = round(kwh * 3.6e6, 1)
 
-                self.parameter_bindings["BATTERY_CAPACITY_JOULES"] = str(joules)
-                self.parameter_bindings["E_CAPACITY_JOULES"] = str(joules)
-                self.parameter_bindings["BATTERY_CAPACITY_KWH"] = str(kwh)
-                self.parameter_bindings["E_CAPACITY_KWH"] = str(kwh)
+                alias_map.update({
+                    "BATTERY_CAPACITY_JOULES": str(joules),
+                    "E_CAPACITY_JOULES": str(joules),
+                    "BATTERY_CAPACITY_KWH": str(kwh),
+                    "E_CAPACITY_KWH": str(kwh),
+                })
         elif "wind_limit" in lower or "v_wind" in lower:
-            self.parameter_bindings["WIND_LIMIT_MAX_MPS"] = val
-            self.parameter_bindings["WIND_LIMIT_NOMINAL_MPS"] = val
-            self.parameter_bindings["V_WIND_MAX_MPS"] = val
+            alias_map.update({
+                "WIND_LIMIT_MAX_MPS": val,
+                "WIND_LIMIT_NOMINAL_MPS": val,
+                "V_WIND_MAX_MPS": val,
+            })
         elif "temp_min" in lower:
-            self.parameter_bindings["TEMP_MIN_DEGC"] = val
-            self.parameter_bindings["OPERATING_TEMP_MIN_C"] = val
-            self.parameter_bindings["OPERATING_TEMPERATURE_MIN_C"] = val
+            alias_map.update({
+                "TEMP_MIN_DEGC": val,
+                "OPERATING_TEMP_MIN_C": val,
+                "OPERATING_TEMPERATURE_MIN_C": val,
+            })
         elif "temp_max" in lower:
-            self.parameter_bindings["TEMP_MAX_DEGC"] = val
-            self.parameter_bindings["OPERATING_TEMP_MAX_C"] = val
-            self.parameter_bindings["OPERATING_TEMPERATURE_MAX_C"] = val
+            alias_map.update({
+                "TEMP_MAX_DEGC": val,
+                "OPERATING_TEMP_MAX_C": val,
+                "OPERATING_TEMPERATURE_MAX_C": val,
+            })
         elif "ingress" in lower or "ip_rating" in lower:
-            self.parameter_bindings["INGRESS_PROTECTION_RATING"] = val
-            self.parameter_bindings["INGRESS_PROTECTION_TARGET"] = val
+            alias_map.update({
+                "INGRESS_PROTECTION_RATING": val,
+                "INGRESS_PROTECTION_TARGET": val,
+            })
+
+        for k, v in alias_map.items():
+            self.parameter_bindings[k] = v
+            self._explicit_keys.add(k)
 
     def ingest_file(self, file_path: str) -> bool:
         """Ingests a file based on its extension."""
@@ -1184,6 +1225,8 @@ class SysMLParameterBindingEngine:
                 self.inferred_system_identifier = pkg_name
                 self.parameter_bindings["SYSTEM_IDENTIFIER"] = pkg_name
                 self.parameter_bindings["MISSION_SYSTEM_NAME"] = pkg_name
+                self._explicit_keys.add("SYSTEM_IDENTIFIER")
+                self._explicit_keys.add("MISSION_SYSTEM_NAME")
 
         # 2. Attribute extraction: attribute name : Type = value;
         attr_pattern = re.compile(
@@ -1193,6 +1236,8 @@ class SysMLParameterBindingEngine:
         for match in attr_pattern.finditer(text):
             attr_name = match.group(1).strip()
             raw_val = match.group(2).strip().strip('"\'')
+            self._explicit_keys.add(attr_name)
+            self._explicit_keys.add(attr_name.upper())
             self.parameter_bindings[attr_name] = raw_val
             self.parameter_bindings[attr_name.upper()] = raw_val
             self._map_semantic_aliases(attr_name, raw_val)
@@ -1204,7 +1249,20 @@ class SysMLParameterBindingEngine:
         )
         for match in constraint_pattern.finditer(text):
             _c_name, var_name, _op, limit_val = match.groups()
+            self._explicit_keys.add(var_name)
+            self._explicit_keys.add(var_name.upper())
             self._map_semantic_aliases(var_name, limit_val)
+
+        self.detected_domain = self._detect_domain_type()
+        self.parameter_bindings["DETECTED_DOMAIN"] = self.detected_domain
+        self.parameter_bindings["DOMAIN_TYPE"] = self.detected_domain
+
+        self._derive_operational_intent()
+        self._derive_mass_budgets()
+        self._derive_quadratic_physics()
+        self._derive_energy_budgets()
+        self._derive_domain_regulatory_standards()
+        self._derive_domain_ontology()
 
         return True
 

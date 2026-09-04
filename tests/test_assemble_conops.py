@@ -458,6 +458,14 @@ class TestSysMLParameterBindingEngine(unittest.TestCase):
         self.assertEqual(engine.resolve_token("H_MAX_M"), "3500.0")
         self.assertEqual(engine.resolve_token("TEMP_MIN_DEGC"), "-25.0")
         self.assertEqual(engine.resolve_token("TEMP_MAX_DEGC"), "60.0")
+        self.assertEqual(engine.resolve_token("MASS_BUDGET_AIRFRAME_KG"), "13.5")
+        self.assertEqual(engine.resolve_token("MASS_BUDGET_AVIONICS_KG"), "6.75")
+        self.assertEqual(engine.resolve_token("MASS_BUDGET_PROPULSION_KG"), "11.25")
+        self.assertEqual(engine.resolve_token("MASS_BUDGET_ENERGY_KG"), "9.0")
+        self.assertEqual(engine.resolve_token("MASS_BUDGET_PAYLOAD_KG"), "3.15")
+        self.assertEqual(engine.resolve_token("MASS_BUDGET_CONTAINMENT_KG"), "1.35")
+        self.assertEqual(engine.resolve_token("V_TERMINAL_UNMITIGATED_MPS"), "94.31")
+        self.assertEqual(engine.resolve_token("E_K_UNMITIGATED_JOULES"), "200123.5")
 
     def test_parameter_engine_auto_detection_schema_digest(self):
         """Verify auto-detection of .pipeline/schema-digest.json in workspace."""
