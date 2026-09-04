@@ -214,10 +214,16 @@ Alternatively, copy the pipeline directories and templates from the canonical up
 
 ```bash
 git clone https://github.com/gintatkinson/DEAP01-spec-core.git ./.tmp-pipeline
-rm -rf ./skills ./rules ./.pipeline ./.agents ./scripts ./schema ./tests
+rm -rf ./skills ./rules ./.pipeline ./.agents ./scripts ./tests
 cp -RP ./.tmp-pipeline/skills ./
 cp -RP ./.tmp-pipeline/rules ./
-cp -RP ./.tmp-pipeline/schema ./
+if [ ! -d ./schema ]; then
+  if [ -d ./.tmp-pipeline/schema ]; then
+    cp -RP ./.tmp-pipeline/schema ./
+  else
+    mkdir -p ./schema
+  fi
+fi
 cp -RP ./.tmp-pipeline/.pipeline ./
 rm -rf ./.pipeline/upstream
 cp -RP ./.tmp-pipeline/.agents ./

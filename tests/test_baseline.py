@@ -157,6 +157,30 @@ def test_instructions_and_readme_accessible():
         f"(checked AGENTS.md, CLAUDE.md, .agents/AGENTS.md)"
     )
 
+def test_readme_section_5_3_does_not_wipe_schema():
+    """Verify README.md Section 5.3 manual setup instructions do not wipe schema directory."""
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if not os.path.isdir(repo_root):
+        repo_root = os.getcwd()
+
+    readme_path = os.path.join(repo_root, "README.md")
+    assert os.path.isfile(readme_path), f"README.md not found at {readme_path}"
+    with open(readme_path, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    # Locate Section 5.3
+    assert "5.3 Direct Copy" in content, "Section 5.3 Direct Copy missing from README.md"
+    sec_5_3 = content.split("5.3 Direct Copy", 1)[1].split("```bash", 1)[1].split("```", 1)[0]
+
+    # Assert rm -rf line does not delete ./schema
+    rm_lines = [line for line in sec_5_3.splitlines() if line.strip().startswith("rm -rf")]
+    assert len(rm_lines) > 0, "No rm -rf command found in Section 5.3 snippet"
+    for rm_line in rm_lines:
+        assert "./schema" not in rm_line.split(), f"Section 5.3 rm -rf line unexpectedly deletes ./schema: {rm_line}"
+
+    # Assert safe schema copy logic is present
+    assert "if [ ! -d ./schema ]; then" in sec_5_3, "Section 5.3 missing safe schema conditional copy logic"
+
 def test_reconcile_backlog_tooling_accessible():
     """Verify scripts/reconcile_backlog.py exists, is executable, and runs to completion."""
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

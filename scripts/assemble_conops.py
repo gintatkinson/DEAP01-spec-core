@@ -587,7 +587,17 @@ class SysMLParameterBindingEngine:
         """
         # 1. Determine endurance in hours
         t_hours = None
-        if "ENDURANCE_HOURS" in self.parameter_bindings:
+        if "ENDURANCE_HOURS" in self._explicit_keys:
+            try:
+                t_hours = float(self.parameter_bindings["ENDURANCE_HOURS"])
+            except ValueError:
+                pass
+        elif "ENDURANCE_NOMINAL_MIN" in self._explicit_keys:
+            try:
+                t_hours = float(self.parameter_bindings["ENDURANCE_NOMINAL_MIN"]) / 60.0
+            except ValueError:
+                pass
+        elif "ENDURANCE_HOURS" in self.parameter_bindings:
             try:
                 t_hours = float(self.parameter_bindings["ENDURANCE_HOURS"])
             except ValueError:
@@ -643,14 +653,20 @@ class SysMLParameterBindingEngine:
 
         e_kwh = round(e_joules / 3.6e6, 4)
 
-        self.parameter_bindings["BATTERY_CAPACITY_KWH"] = str(e_kwh)
-        self.parameter_bindings["E_CAPACITY_KWH"] = str(e_kwh)
-        self.parameter_bindings["BATTERY_CAPACITY_JOULES"] = str(e_joules)
-        self.parameter_bindings["E_CAPACITY_JOULES"] = str(e_joules)
-        self.parameter_bindings["ENDURANCE_HOURS"] = str(t_hours)
-        self.parameter_bindings["NOMINAL_ENDURANCE_HOURS"] = str(t_hours)
-        self.parameter_bindings["ENDURANCE_NOMINAL_MIN"] = str(t_min)
-        self.parameter_bindings["ENDURANCE_MIN_MIN"] = str(t_min)
+        if "BATTERY_CAPACITY_KWH" not in self._explicit_keys:
+            self.parameter_bindings["BATTERY_CAPACITY_KWH"] = str(e_kwh)
+        if "E_CAPACITY_KWH" not in self._explicit_keys:
+            self.parameter_bindings["E_CAPACITY_KWH"] = str(e_kwh)
+        if "BATTERY_CAPACITY_JOULES" not in self._explicit_keys:
+            self.parameter_bindings["BATTERY_CAPACITY_JOULES"] = str(e_joules)
+        if "E_CAPACITY_JOULES" not in self._explicit_keys:
+            self.parameter_bindings["E_CAPACITY_JOULES"] = str(e_joules)
+        if "ENDURANCE_HOURS" not in self._explicit_keys:
+            self.parameter_bindings["ENDURANCE_HOURS"] = str(t_hours)
+            self.parameter_bindings["NOMINAL_ENDURANCE_HOURS"] = str(t_hours)
+        if "ENDURANCE_NOMINAL_MIN" not in self._explicit_keys:
+            self.parameter_bindings["ENDURANCE_NOMINAL_MIN"] = str(t_min)
+            self.parameter_bindings["ENDURANCE_MIN_MIN"] = str(t_min)
 
         # 3. Derive sustainable nominal and peak power
         p_sustainable = e_joules / t_sec
@@ -1175,82 +1191,92 @@ class SysMLParameterBindingEngine:
 
     def _map_semantic_aliases(self, key: str, val: str) -> None:
         """Maps domain attributes to canonical template tokens (Issues #162, #170)."""
-        lower = key.lower()
+        lower = key.lower().replace("-", "_").replace(" ", "_")
         alias_map = {}
-        if "system_identifier" in lower or (lower in ("system", "system_name") and not self.parameter_bindings.get("SYSTEM_IDENTIFIER")):
+
+        m_num = re.search(r"[-+]?\d*\.?\d+", val)
+        num_val = m_num.group(0) if m_num else val
+
+        if "system_identifier" in lower or "mission_system_name" in lower or (lower in ("system", "system_name") and not self.parameter_bindings.get("SYSTEM_IDENTIFIER")):
             alias_map.update({
                 "SYSTEM_IDENTIFIER": val,
                 "MISSION_SYSTEM_NAME": val,
                 "SYSTEM_NAME": val,
             })
-        elif "max_cruise" in lower or "v_cruise" in lower or lower in ("cruise_speed", "cruise_velocity"):
+        elif "max_cruise" in lower or "v_cruise" in lower or "cruise_speed" in lower or "cruise_velocity" in lower or "cruise" in lower:
             alias_map.update({
-                "V_CRUISE_NOMINAL_MPS": val,
-                "V_CRUISE_MAX_MPS": val,
-                "V_CRUISE_MIN_MPS": val,
-                "MAX_CRUISE_SPEED_MS": val,
-                "CRUISE_SPEED_MS": val,
-                "CRUISE_SPEED_MPS": val,
+                "V_CRUISE_NOMINAL_MPS": num_val,
+                "V_CRUISE_MAX_MPS": num_val,
+                "V_CRUISE_MIN_MPS": num_val,
+                "MAX_CRUISE_SPEED_MS": num_val,
+                "CRUISE_SPEED_MS": num_val,
+                "CRUISE_SPEED_MPS": num_val,
             })
-        elif "v_max" in lower or lower in ("max_speed", "max_velocity"):
+        elif "max_horizontal" in lower or "horizontal_speed" in lower or "v_max" in lower or "max_speed" in lower or "max_velocity" in lower or lower in ("speed_max", "vmax"):
             alias_map.update({
-                "V_MAX_MPS": val,
-                "V_MAX_NOMINAL_MPS": val,
-                "MAX_SPEED_MS": val,
+                "V_MAX_MPS": num_val,
+                "V_MAX_NOMINAL_MPS": num_val,
+                "MAX_SPEED_MS": num_val,
+                "MAX_HORIZONTAL_SPEED_MPS": num_val,
             })
-        elif "v_stall" in lower or "stall_speed" in lower or "stall_velocity" in lower:
+        elif "dive" in lower:
             alias_map.update({
-                "V_STALL_MAX_MPS": val,
-                "V_STALL_NOMINAL_MPS": val,
-                "STALL_SPEED_MS": val,
-                "V_STALL_MPS": val,
-                "STALL_SPEED_MPS": val,
+                "V_DIVE_MAX_MPS": num_val,
+                "MAX_DIVE_SPEED_MPS": num_val,
+                "V_DIVE_MPS": num_val,
+            })
+        elif "v_stall" in lower or "stall_speed" in lower or "stall_velocity" in lower or "stall" in lower:
+            alias_map.update({
+                "V_STALL_MAX_MPS": num_val,
+                "V_STALL_NOMINAL_MPS": num_val,
+                "STALL_SPEED_MS": num_val,
+                "V_STALL_MPS": num_val,
+                "STALL_SPEED_MPS": num_val,
             })
         elif "wingspan" in lower or "wing_span" in lower:
             alias_map.update({
-                "WINGSPAN_M": val,
-                "WINGSPAN": val,
-                "DIM_MAX_W_M": val,
-                "DIM_NOM_W_M": val,
+                "WINGSPAN_M": num_val,
+                "WINGSPAN": num_val,
+                "DIM_MAX_W_M": num_val,
+                "DIM_NOM_W_M": num_val,
             })
         elif "parachute" in lower and ("area" in lower or "canopy" in lower or "m2" in lower or "size" in lower) or lower in ("s_canopy", "s_canopy_m2", "canopy_area", "canopy_area_m2"):
             alias_map.update({
-                "PARACHUTE_AREA_M2": val,
-                "PARACHUTE_CANOPY_AREA_M2": val,
-                "PARACHUTE_CANOPY_AREA": val,
-                "S_CANOPY": val,
-                "S_CANOPY_M2": val,
+                "PARACHUTE_AREA_M2": num_val,
+                "PARACHUTE_CANOPY_AREA_M2": num_val,
+                "PARACHUTE_CANOPY_AREA": num_val,
+                "S_CANOPY": num_val,
+                "S_CANOPY_M2": num_val,
             })
         elif "parachute" in lower and ("drag" in lower or "cd" in lower or "c_d" in lower):
             alias_map.update({
-                "PARACHUTE_DRAG_COEFFICIENT": val,
-                "C_D_PARACHUTE": val,
+                "PARACHUTE_DRAG_COEFFICIENT": num_val,
+                "C_D_PARACHUTE": num_val,
             })
-        elif "mtow" in lower or "takeoff_weight" in lower or "takeoff_mass" in lower or "total_mtow" in lower:
+        elif "mtow" in lower or "takeoff_weight" in lower or "takeoff_mass" in lower or "total_mtow" in lower or "gross_weight" in lower:
             alias_map.update({
-                "TOTAL_MTOW_KG": val,
-                "MTOW_MAX_KG": val,
-                "MTOW_NOMINAL_KG": val,
+                "TOTAL_MTOW_KG": num_val,
+                "MTOW_MAX_KG": num_val,
+                "MTOW_NOMINAL_KG": num_val,
             })
-        elif "payload" in lower and ("mass" in lower or "weight" in lower):
+        elif "payload" in lower or "warhead" in lower:
             alias_map.update({
-                "PAYLOAD_MAX_KG": val,
-                "PAYLOAD_NOMINAL_KG": val,
+                "PAYLOAD_MAX_KG": num_val,
+                "PAYLOAD_NOMINAL_KG": num_val,
             })
-        elif "ceiling" in lower or "max_altitude" in lower:
+        elif "ceiling" in lower or "max_altitude" in lower or "operating_ceiling" in lower:
             alias_map.update({
-                "CEILING_MAX_M": val,
-                "CEILING_NOMINAL_M": val,
-                "H_MAX_M": val,
+                "CEILING_MAX_M": num_val,
+                "CEILING_NOMINAL_M": num_val,
+                "H_MAX_M": num_val,
             })
-        elif "c2_range" in lower or "range_c2" in lower:
+        elif "c2_range" in lower or "range_c2" in lower or "control_range" in lower or "datalink_range" in lower:
             alias_map.update({
-                "C2_RANGE_NOMINAL_KM": val,
-                "C2_RANGE_MIN_KM": val,
+                "C2_RANGE_NOMINAL_KM": num_val,
+                "C2_RANGE_MIN_KM": num_val,
             })
         elif "endurance" in lower:
             is_hours = any(h in lower for h in ("_hour", "_hr", "_h", "hours", "hrs")) or any(h in val.lower() for h in ("hour", "hr", " h", "hrs", "hours"))
-            m_num = re.search(r"[-+]?\d*\.?\d+", val)
             if is_hours and m_num:
                 hours = float(m_num.group(0))
                 min_val = str(round(hours * 60.0, 1))
@@ -1260,13 +1286,18 @@ class SysMLParameterBindingEngine:
                     "ENDURANCE_HOURS": str(hours),
                     "NOMINAL_ENDURANCE_HOURS": str(hours),
                 })
+            elif m_num:
+                min_val = m_num.group(0)
+                alias_map.update({
+                    "ENDURANCE_NOMINAL_MIN": min_val,
+                    "ENDURANCE_MIN_MIN": min_val,
+                })
             else:
                 alias_map.update({
                     "ENDURANCE_NOMINAL_MIN": val,
                     "ENDURANCE_MIN_MIN": val,
                 })
         elif "battery_capacity" in lower or "energy_capacity" in lower or "battery_energy" in lower:
-            m_num = re.search(r"[-+]?\d*\.?\d+", val)
             if m_num:
                 num = float(m_num.group(0))
                 if "joule" in lower or "joule" in val.lower() or (val.strip().endswith("J") and not val.strip().endswith("kJ")):
@@ -1288,23 +1319,23 @@ class SysMLParameterBindingEngine:
                     "BATTERY_CAPACITY_KWH": str(kwh),
                     "E_CAPACITY_KWH": str(kwh),
                 })
-        elif "wind_limit" in lower or "v_wind" in lower:
+        elif "wind_limit" in lower or "v_wind" in lower or "wind_speed" in lower or "max_wind" in lower:
             alias_map.update({
-                "WIND_LIMIT_MAX_MPS": val,
-                "WIND_LIMIT_NOMINAL_MPS": val,
-                "V_WIND_MAX_MPS": val,
+                "WIND_LIMIT_MAX_MPS": num_val,
+                "WIND_LIMIT_NOMINAL_MPS": num_val,
+                "V_WIND_MAX_MPS": num_val,
             })
-        elif "temp_min" in lower:
+        elif "temp_min" in lower or "min_temp" in lower or "operating_temperature_min" in lower:
             alias_map.update({
-                "TEMP_MIN_DEGC": val,
-                "OPERATING_TEMP_MIN_C": val,
-                "OPERATING_TEMPERATURE_MIN_C": val,
+                "TEMP_MIN_DEGC": num_val,
+                "OPERATING_TEMP_MIN_C": num_val,
+                "OPERATING_TEMPERATURE_MIN_C": num_val,
             })
-        elif "temp_max" in lower:
+        elif "temp_max" in lower or "max_temp" in lower or "operating_temperature_max" in lower:
             alias_map.update({
-                "TEMP_MAX_DEGC": val,
-                "OPERATING_TEMP_MAX_C": val,
-                "OPERATING_TEMPERATURE_MAX_C": val,
+                "TEMP_MAX_DEGC": num_val,
+                "OPERATING_TEMP_MAX_C": num_val,
+                "OPERATING_TEMPERATURE_MAX_C": num_val,
             })
         elif "ingress" in lower or "ip_rating" in lower:
             alias_map.update({
@@ -1326,6 +1357,8 @@ class SysMLParameterBindingEngine:
             return self.ingest_json_file(abs_path)
         elif abs_path.endswith(".sysml"):
             return self.ingest_sysml_file(abs_path)
+        elif abs_path.endswith(".md") or abs_path.endswith(".markdown"):
+            return self.ingest_markdown_file(abs_path)
         return False
 
     def ingest_json_file(self, json_path: str) -> bool:
@@ -1398,16 +1431,164 @@ class SysMLParameterBindingEngine:
 
         return True
 
-    def auto_discover_sources(self, root_dir: str) -> None:
-        """Auto-detects parameter dictionaries and SysML AST symbols across repository root."""
-        search_dirs = []
-        curr = os.path.abspath(root_dir)
-        for _ in range(5):
-            search_dirs.append(curr)
-            parent = os.path.dirname(curr)
-            if parent == curr:
+    def ingest_markdown_file(self, md_path: str) -> bool:
+        """Parses a Markdown specification file and ingests its parameters."""
+        try:
+            with open(md_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            return self.ingest_markdown_text(content)
+        except Exception:
+            return False
+
+    def ingest_markdown_text(self, text: str) -> bool:
+        """
+        Parses Markdown specification text (tables, key-value lists, headings, and patterns)
+        and ingests extracted parameters into parameter bindings.
+        """
+        ingested = False
+        if not text or not text.strip():
+            return False
+
+        # 1. System Title Extraction: Look for `# <SYSTEM_NAME>`
+        for line in text.splitlines():
+            line_str = line.strip()
+            if line_str.startswith("# ") and not line_str.startswith("##"):
+                title = line_str[2:].strip()
+                title_clean = re.sub(r"[*_`]", "", title).strip()
+                generic_headings = {
+                    "technical specifications",
+                    "specifications",
+                    "table of contents",
+                    "overview",
+                    "system specifications",
+                    "concept of operations",
+                    "conops",
+                    "mission intent",
+                    "requirements",
+                    "architecture",
+                    "metadata",
+                    "document overview",
+                }
+                if title_clean.lower() not in generic_headings and len(title_clean) > 0:
+                    self.inferred_system_identifier = title_clean
+                    self.parameter_bindings["SYSTEM_IDENTIFIER"] = title_clean
+                    self.parameter_bindings["MISSION_SYSTEM_NAME"] = title_clean
+                    self.parameter_bindings["SYSTEM_NAME"] = title_clean
+                    self._explicit_keys.add("SYSTEM_IDENTIFIER")
+                    self._explicit_keys.add("MISSION_SYSTEM_NAME")
+                    self._explicit_keys.add("SYSTEM_NAME")
+                    ingested = True
                 break
-            curr = parent
+
+        # 2. Markdown Table Ingestion
+        # Extract 2-column or multi-column markdown table rows
+        for line in text.splitlines():
+            line_str = line.strip()
+            if not ("|" in line_str):
+                continue
+            if re.match(r"^\|?[\s:-|]+\|?$", line_str) and "-" in line_str:
+                continue
+
+            raw_cells = [c.strip() for c in line_str.split("|")]
+            if line_str.startswith("|") and len(raw_cells) > 0 and raw_cells[0] == "":
+                raw_cells = raw_cells[1:]
+            if line_str.endswith("|") and len(raw_cells) > 0 and raw_cells[-1] == "":
+                raw_cells = raw_cells[:-1]
+
+            if len(raw_cells) >= 2:
+                col1 = raw_cells[0]
+                col2 = raw_cells[1]
+                clean_key = re.sub(r"[*_`]", "", col1).strip().rstrip(":")
+                clean_val = re.sub(r"[*_`]", "", col2).strip()
+                clean_key_name = re.sub(r"[\*†‡#]+$", "", clean_key).strip()
+
+                header_names = {
+                    "parameter", "parameters", "property", "properties",
+                    "attribute", "attributes", "key", "keys", "metric",
+                    "metrics", "item", "items", "specification", "specifications",
+                    "field", "fields", "feature", "features", "name", "variable",
+                    "symbol", "check", "check id", "task id", "exchange id",
+                    "activity id", "standard id", "trigger id", "threat id", "pace tier",
+                }
+                if clean_key_name.lower() in header_names or clean_val.lower() in ("value", "nominal value", "description"):
+                    continue
+
+                if clean_key_name and clean_val:
+                    if len(raw_cells) >= 3:
+                        col3 = re.sub(r"[*_`]", "", raw_cells[2]).strip()
+                        if col3 and re.match(r"^[A-Za-z0-9/°^%_-]+$", col3) and re.match(r"^[-+]?\d*\.?\d+$", clean_val):
+                            clean_val = f"{clean_val} {col3}"
+
+                    norm_key = re.sub(r"[^A-Za-z0-9_]", "_", clean_key_name).upper()
+                    self._explicit_keys.add(norm_key)
+                    self.parameter_bindings[norm_key] = clean_val
+                    self.parameter_bindings[clean_key_name] = clean_val
+                    self._map_semantic_aliases(clean_key_name, clean_val)
+                    ingested = True
+
+        # 3. Key-Value Bullet Ingestion
+        # Extract lines matching - **Key**: Value or - Key: Value
+        bullet_pattern = re.compile(
+            r"^\s*(?:[-*+]|\d+\.)\s+(?:\*\*([^*]+)\*\*|\*([^*]+)\*|`([^`]+)`|([^:\n]+))\s*:\s*(.+)$"
+        )
+        for line in text.splitlines():
+            m_bullet = bullet_pattern.match(line)
+            if m_bullet:
+                raw_k = m_bullet.group(1) or m_bullet.group(2) or m_bullet.group(3) or m_bullet.group(4)
+                raw_v = m_bullet.group(5)
+                if raw_k and raw_v:
+                    clean_k = re.sub(r"[*_`]", "", raw_k).strip().rstrip(":")
+                    clean_v = re.sub(r"[*_`]", "", raw_v).strip()
+                    clean_k_name = re.sub(r"[\*†‡#]+$", "", clean_k).strip()
+                    if clean_k_name and clean_v:
+                        norm_key = re.sub(r"[^A-Za-z0-9_]", "_", clean_k_name).upper()
+                        self._explicit_keys.add(norm_key)
+                        self.parameter_bindings[norm_key] = clean_v
+                        self.parameter_bindings[clean_k_name] = clean_v
+                        self._map_semantic_aliases(clean_k_name, clean_v)
+                        ingested = True
+
+        # 4. Text Pattern Ingestion
+        text_patterns = [
+            re.compile(r"(?:carries\s+(?:up\s+to\s+)?a?|payload\s+of|warhead\s+of|with\s+a)\s+(\d+(?:\.\d+)?)\s*kg\s*(?:warhead|payload)?", re.IGNORECASE),
+            re.compile(r"(\d+(?:\.\d+)?)\s*kg\s+(?:warhead|payload)", re.IGNORECASE),
+        ]
+        for pat in text_patterns:
+            for match in pat.finditer(text):
+                val = match.group(1).strip()
+                self._explicit_keys.add("PAYLOAD_MAX_KG")
+                self._explicit_keys.add("PAYLOAD_NOMINAL_KG")
+                self.parameter_bindings["PAYLOAD_MAX_KG"] = val
+                self.parameter_bindings["PAYLOAD_NOMINAL_KG"] = val
+                self._map_semantic_aliases("PAYLOAD_MAX_KG", val)
+                ingested = True
+
+        # Detect domain
+        self.detected_domain = self._detect_domain_type()
+        self.parameter_bindings["DETECTED_DOMAIN"] = self.detected_domain
+        self.parameter_bindings["DOMAIN_TYPE"] = self.detected_domain
+
+        # Trigger all 6 derivation solvers
+        self._derive_mass_budgets()
+        self._derive_quadratic_physics()
+        self._derive_energy_budgets()
+        self._derive_domain_regulatory_standards()
+        self._derive_domain_ontology()
+        self._derive_operational_intent()
+
+        return ingested
+
+    def auto_detect_workspace_parameters(self, search_dirs: Optional[List[str]] = None) -> None:
+        """Auto-detects parameter dictionaries, markdown specs, and SysML AST symbols across workspace."""
+        if search_dirs is None:
+            search_dirs = []
+            curr = os.path.abspath(self.workspace_dir)
+            for _ in range(5):
+                search_dirs.append(curr)
+                parent = os.path.dirname(curr)
+                if parent == curr:
+                    break
+                curr = parent
 
         candidate_paths = []
         for sdir in search_dirs:
@@ -1422,11 +1603,25 @@ class SysMLParameterBindingEngine:
                 for fname in sorted(os.listdir(schema_dir)):
                     if fname.endswith(".sysml"):
                         candidate_paths.append(os.path.join(schema_dir, fname))
+                    elif (fname.endswith(".md") or fname.endswith(".markdown")) and fname.lower() not in ("readme.md",):
+                        candidate_paths.append(os.path.join(schema_dir, fname))
 
         # Ingest existing candidates
         for cpath in candidate_paths:
             if os.path.isfile(cpath):
                 self.ingest_file(cpath)
+
+    def auto_discover_sources(self, root_dir: str) -> None:
+        """Auto-detects parameter dictionaries and SysML AST symbols across repository root."""
+        search_dirs = []
+        curr = os.path.abspath(root_dir)
+        for _ in range(5):
+            search_dirs.append(curr)
+            parent = os.path.dirname(curr)
+            if parent == curr:
+                break
+            curr = parent
+        self.auto_detect_workspace_parameters(search_dirs=search_dirs)
 
     def get_fallback_default(self, token_name: str, inline_default: Optional[str] = None) -> str:
         """

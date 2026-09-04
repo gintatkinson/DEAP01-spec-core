@@ -467,6 +467,41 @@ class TestSysMLParameterBindingEngine(unittest.TestCase):
         self.assertEqual(engine.resolve_token("V_TERMINAL_UNMITIGATED_MPS"), "94.31")
         self.assertEqual(engine.resolve_token("E_K_UNMITIGATED_JOULES"), "200123.5")
 
+    def test_parameter_engine_markdown_specification_ingestion(self):
+        """Verify Markdown specification text ingestion (Avenger 5 exemplar)."""
+        md_text = """# AVENGER 5
+
+## Technical Specifications
+| Parameter | Value |
+| :--- | :--- |
+| Endurance | 90 min |
+| Cruise speed | 31 m/s |
+| Max horizontal speed | 42 m/s |
+| Stall speed | 24 m/s |
+| Service ceiling | 5000 m |
+
+Carries up to a 5 kg warhead.
+"""
+        engine = SysMLParameterBindingEngine(auto_detect=False)
+        success = engine.ingest_markdown_text(md_text)
+        self.assertTrue(success)
+
+        self.assertEqual(engine.resolve_token("SYSTEM_IDENTIFIER"), "AVENGER 5")
+        self.assertIn(engine.resolve_token("V_CRUISE_NOMINAL_MPS"), ("31", "31.0"))
+        self.assertIn(engine.resolve_token("V_MAX_MPS"), ("42", "42.0"))
+        self.assertIn(engine.resolve_token("V_STALL_MAX_MPS"), ("24", "24.0"))
+        self.assertIn(engine.resolve_token("CEILING_MAX_M"), ("5000", "5000.0"))
+        self.assertIn(engine.resolve_token("ENDURANCE_NOMINAL_MIN"), ("90", "90.0"))
+        self.assertIn(engine.resolve_token("PAYLOAD_MAX_KG"), ("5", "5.0"))
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            md_path = os.path.join(tmpdir, "avenger5.md")
+            with open(md_path, "w", encoding="utf-8") as f:
+                f.write(md_text)
+            file_engine = SysMLParameterBindingEngine(auto_detect=False)
+            self.assertTrue(file_engine.ingest_file(md_path))
+            self.assertEqual(file_engine.resolve_token("SYSTEM_IDENTIFIER"), "AVENGER 5")
+
     def test_parameter_engine_auto_detection_schema_digest(self):
         """Verify auto-detection of .pipeline/schema-digest.json in workspace."""
         with tempfile.TemporaryDirectory() as tmpdir:
