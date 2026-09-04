@@ -11,6 +11,9 @@ import unittest
 from scripts.assemble_conops import (
     SysMLParameterBindingEngine,
     assemble_conops,
+    LifecycleType,
+    ContainmentActionType,
+    LifecycleContract,
 )
 
 
@@ -406,7 +409,252 @@ class TestDomainCompilerRemediation(unittest.TestCase):
         self.assertEqual(len(state_space_standards_set), 6, f"Expected 6 distinct state space standards, got {len(state_space_standards_set)}")
         self.assertEqual(len(safety_bounds_standards_set), 6, f"Expected 6 distinct safety bounds standards, got {len(safety_bounds_standards_set)}")
 
+    def test_lifecycle_archetype_expendable_kinetic_effector(self):
+        """Verify EXPENDABLE_KINETIC_EFFECTOR archetype: 0 RTB, 0 runway landing; enforces terminal intercept / ditching zeroization."""
+        canonical_units_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "skills",
+            "spec-conops-engineering",
+            "resources",
+            "units",
+        )
+        params = {
+            "SYSTEM_IDENTIFIER": "SkyShield_Kinetic_Interceptor",
+            "PLATFORM_TYPE": "Delta-Wing High-G Solid-Rocket Interceptor UAS",
+            "OPERATIONAL_DOMAIN": "Defensive Counter-UAS Kinetic Intercept",
+            "IS_EXPENDABLE": "true",
+            "PAYLOAD_TYPE": "Kinetic Warhead Effector",
+            "TOTAL_MTOW_KG": "12.0",
+        }
+        engine = SysMLParameterBindingEngine(parameter_values=params, auto_detect=False)
+        contract = engine._derive_lifecycle_contract()
+
+        self.assertEqual(contract.lifecycle_type, LifecycleType.EXPENDABLE_KINETIC_EFFECTOR)
+        self.assertEqual(contract.containment_action, ContainmentActionType.SAFE_IMPACT_ZEROIZATION)
+        self.assertEqual(engine.resolve_token("LIFECYCLE_TYPE"), "EXPENDABLE_KINETIC_EFFECTOR")
+        self.assertEqual(engine.resolve_token("LIFECYCLE_TRANSIT_MODE"), "Terminal_Engagement_Transit")
+        self.assertIn("zeroization", engine.resolve_token("LIFECYCLE_BINGO_SAFETY_ACTION").lower())
+        self.assertIn("zeroization", engine.resolve_token("LIFECYCLE_END_STATE").lower())
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = os.path.join(tmpdir, "out_expendable")
+            success = assemble_conops(
+                input_dir=canonical_units_dir,
+                output_dir=out_dir,
+                verify_only=False,
+                params=params,
+            )
+            self.assertTrue(success)
+
+            with open(os.path.join(out_dir, "CONOPS.md"), "r", encoding="utf-8") as f:
+                conops_txt = f.read()
+            with open(os.path.join(out_dir, "MISSION_INTENT.md"), "r", encoding="utf-8") as f:
+                intent_txt = f.read()
+
+            combined = conops_txt + "\n" + intent_txt
+
+            # Verify 0 RTB / return-to-base in key lifecycle fields
+            self.assertNotIn("autonomous return-to-base (rtb)", combined.lower())
+            self.assertNotIn("autonomous return-to-base sequence", combined.lower())
+            self.assertNotIn("civilian runway landing", combined.lower())
+            self.assertIn("zeroization", combined.lower())
+            self.assertIn("terminal intercept", combined.lower())
+            self.assertIn("safe containment ditching", combined.lower())
+
+    def test_lifecycle_archetype_continuous_stationary_medical(self):
+        """Verify CONTINUOUS_STATIONARY (Medical) archetype: 0 RTB, 0 flight corridors; enforces electromechanical joint brake lock & sterile field preservation."""
+        canonical_units_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "skills",
+            "spec-conops-engineering",
+            "resources",
+            "units",
+        )
+        params = {
+            "SYSTEM_IDENTIFIER": "Surgical_Robotic_Console_X1",
+            "PLATFORM_TYPE": "Surgical Robotic Master-Slave Console",
+            "OPERATIONAL_DOMAIN": "Hospital Clinical Operating Room",
+            "DOMAIN_TYPE": "medical",
+        }
+        engine = SysMLParameterBindingEngine(domain="medical", parameter_values=params, auto_detect=False)
+        contract = engine._derive_lifecycle_contract()
+
+        self.assertEqual(contract.lifecycle_type, LifecycleType.CONTINUOUS_STATIONARY)
+        self.assertEqual(contract.containment_action, ContainmentActionType.ELECTROMECHANICAL_BRAKE_LOCK)
+        self.assertEqual(engine.resolve_token("LIFECYCLE_TYPE"), "CONTINUOUS_STATIONARY")
+        self.assertEqual(engine.resolve_token("PRIMARY_TERMINAL_TARGET"), "Primary Sterile Field Docking Station")
+        self.assertEqual(engine.resolve_token("LIFECYCLE_TRANSIT_MODE"), "Autonomous_Clinical_Safing")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = os.path.join(tmpdir, "out_medical")
+            success = assemble_conops(
+                input_dir=canonical_units_dir,
+                output_dir=out_dir,
+                verify_only=False,
+                domain="medical",
+                params=params,
+            )
+            self.assertTrue(success)
+
+            with open(os.path.join(out_dir, "CONOPS.md"), "r", encoding="utf-8") as f:
+                conops_txt = f.read()
+            with open(os.path.join(out_dir, "MISSION_INTENT.md"), "r", encoding="utf-8") as f:
+                intent_txt = f.read()
+
+            combined = conops_txt + "\n" + intent_txt
+
+            # 0 RTB and 0 flight corridors
+            self.assertNotIn("autonomous return-to-base (rtb)", combined.lower())
+            self.assertNotIn("autonomous return-to-base sequence", combined.lower())
+            self.assertNotIn("flight corridor", combined.lower())
+            self.assertIn("sterile field", combined.lower())
+            self.assertIn("joint brake", combined.lower())
+
+    def test_lifecycle_archetype_track_bound_guided_rail(self):
+        """Verify TRACK_BOUND_GUIDED (Rail) archetype: 0 RTB, 0 flight corridors; enforces track deceleration & maintenance siding brake."""
+        canonical_units_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "skills",
+            "spec-conops-engineering",
+            "resources",
+            "units",
+        )
+        params = {
+            "SYSTEM_IDENTIFIER": "Autonomous_Shunting_Locomotive_9000",
+            "PLATFORM_TYPE": "Heavy Freight Shunting Locomotive",
+            "OPERATIONAL_DOMAIN": "Railway Classification Yard Operations",
+            "DOMAIN_TYPE": "rail",
+        }
+        engine = SysMLParameterBindingEngine(domain="rail", parameter_values=params, auto_detect=False)
+        contract = engine._derive_lifecycle_contract()
+
+        self.assertEqual(contract.lifecycle_type, LifecycleType.TRACK_BOUND_GUIDED)
+        self.assertEqual(contract.containment_action, ContainmentActionType.TRACK_SIDING_BRAKE)
+        self.assertEqual(engine.resolve_token("LIFECYCLE_TYPE"), "TRACK_BOUND_GUIDED")
+        self.assertEqual(engine.resolve_token("PRIMARY_TERMINAL_TARGET"), "Primary Rail Maintenance Siding")
+        self.assertEqual(engine.resolve_token("LIFECYCLE_TRANSIT_MODE"), "Autonomous_Track_Deceleration")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = os.path.join(tmpdir, "out_rail")
+            success = assemble_conops(
+                input_dir=canonical_units_dir,
+                output_dir=out_dir,
+                verify_only=False,
+                domain="rail",
+                params=params,
+            )
+            self.assertTrue(success)
+
+            with open(os.path.join(out_dir, "CONOPS.md"), "r", encoding="utf-8") as f:
+                conops_txt = f.read()
+            with open(os.path.join(out_dir, "MISSION_INTENT.md"), "r", encoding="utf-8") as f:
+                intent_txt = f.read()
+
+            combined = conops_txt + "\n" + intent_txt
+
+            # 0 RTB and 0 flight corridors
+            self.assertNotIn("autonomous return-to-base (rtb)", combined.lower())
+            self.assertNotIn("autonomous return-to-base sequence", combined.lower())
+            self.assertNotIn("flight corridor", combined.lower())
+            self.assertIn("track deceleration", combined.lower())
+            self.assertIn("siding", combined.lower())
+
+    def test_lifecycle_archetype_persistent_orbital_space(self):
+        """Verify PERSISTENT_ORBITAL (Space) archetype: 0 atmospheric landing; enforces de-orbit / graveyard disposal."""
+        canonical_units_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "skills",
+            "spec-conops-engineering",
+            "resources",
+            "units",
+        )
+        params = {
+            "SYSTEM_IDENTIFIER": "LEO_CubeSat_Constellation_Node",
+            "PLATFORM_TYPE": "12U LEO Earth Observation CubeSat",
+            "OPERATIONAL_DOMAIN": "Low Earth Orbit Space Operations",
+            "DOMAIN_TYPE": "space",
+        }
+        engine = SysMLParameterBindingEngine(domain="space", parameter_values=params, auto_detect=False)
+        contract = engine._derive_lifecycle_contract()
+
+        self.assertEqual(contract.lifecycle_type, LifecycleType.PERSISTENT_ORBITAL)
+        self.assertEqual(contract.containment_action, ContainmentActionType.DEORBIT_DISPOSAL_BURN)
+        self.assertEqual(engine.resolve_token("LIFECYCLE_TYPE"), "PERSISTENT_ORBITAL")
+        self.assertEqual(engine.resolve_token("PRIMARY_TERMINAL_TARGET"), "Designated De-Orbit Reentry Corridor / Graveyard Orbit")
+        self.assertEqual(engine.resolve_token("LIFECYCLE_TRANSIT_MODE"), "Autonomous_Disposal_Burn_Transit")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = os.path.join(tmpdir, "out_space")
+            success = assemble_conops(
+                input_dir=canonical_units_dir,
+                output_dir=out_dir,
+                verify_only=False,
+                domain="space",
+                params=params,
+            )
+            self.assertTrue(success)
+
+            with open(os.path.join(out_dir, "CONOPS.md"), "r", encoding="utf-8") as f:
+                conops_txt = f.read()
+            with open(os.path.join(out_dir, "MISSION_INTENT.md"), "r", encoding="utf-8") as f:
+                intent_txt = f.read()
+
+            combined = conops_txt + "\n" + intent_txt
+
+            # 0 atmospheric runway landing
+            self.assertNotIn("autonomous return-to-base (rtb)", combined.lower())
+            self.assertNotIn("civilian runway landing", combined.lower())
+            self.assertIn("de-orbit", combined.lower())
+            self.assertIn("graveyard", combined.lower())
+
+    def test_lifecycle_archetype_reusable_recovery(self):
+        """Verify REUSABLE_RECOVERY (Aviation/Maritime/Ground) archetype: enforces nominal RTB / vertiport / dock arrival."""
+        canonical_units_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "skills",
+            "spec-conops-engineering",
+            "resources",
+            "units",
+        )
+        params = {
+            "SYSTEM_IDENTIFIER": "Tactical_ISR_FixedWing_UAV",
+            "PLATFORM_TYPE": "Tactical ISR Fixed-Wing UAV",
+            "OPERATIONAL_DOMAIN": "Airspace Operations",
+            "DOMAIN_TYPE": "aviation",
+            "TOTAL_MTOW_KG": "25.0",
+        }
+        engine = SysMLParameterBindingEngine(domain="aviation", parameter_values=params, auto_detect=False)
+        contract = engine._derive_lifecycle_contract()
+
+        self.assertEqual(contract.lifecycle_type, LifecycleType.REUSABLE_RECOVERY)
+        self.assertEqual(contract.containment_action, ContainmentActionType.CONTROLLED_RECOVERY_LANDING)
+        self.assertEqual(engine.resolve_token("LIFECYCLE_TYPE"), "REUSABLE_RECOVERY")
+        self.assertEqual(engine.resolve_token("PRIMARY_TERMINAL_TARGET"), "Primary Recovery Base")
+        self.assertEqual(engine.resolve_token("LIFECYCLE_TRANSIT_MODE"), "Autonomous_RTB_Transit")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = os.path.join(tmpdir, "out_aviation")
+            success = assemble_conops(
+                input_dir=canonical_units_dir,
+                output_dir=out_dir,
+                verify_only=False,
+                domain="aviation",
+                params=params,
+            )
+            self.assertTrue(success)
+
+            with open(os.path.join(out_dir, "CONOPS.md"), "r", encoding="utf-8") as f:
+                conops_txt = f.read()
+            with open(os.path.join(out_dir, "MISSION_INTENT.md"), "r", encoding="utf-8") as f:
+                intent_txt = f.read()
+
+            combined = conops_txt + "\n" + intent_txt
+
+            self.assertIn("primary recovery base", combined.lower())
+            self.assertIn("return-to-base", combined.lower())
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

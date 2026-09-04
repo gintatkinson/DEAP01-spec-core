@@ -17,7 +17,7 @@ The Mission Essential Task List (METL) establishes the quantitatively characteri
 | `MET-05` | CommunicationCountermeasures | Interference or intentional communication channel degradation detected | Seamless PACE tier switch t_switch <= tau_switch_max, state estimation drift <= Drift_state_max | Signal Log & Channel Test | `/// OperationalAllocation: [MET-05]` | MIL-STD-461G RS103 §4.3 |
 | `MET-06` | PrecisionStateEstimation | Feature or target state identified within sensor field of view | State Estimation Error Error_state <= epsilon_state_max at observation range Range_target | State Estimation Calibration Log | `/// OperationalAllocation: [MET-06]` | IEEE Std 1558-2020 §4.2 |
 | `MET-07` | AutonomousResourceDivert | Resource monitoring detects residual level R(t) <= R_threshold(t) | Autonomous RTB or divert trigger t_resp <= tau_containment_max, safe recovery with R_reserve >= Ratio_reserve_min * R_capacity | BMS Telemetry & State Recording | `/// OperationalAllocation: [MET-07]` | INCOSE SEH v5.0 §3.2 |
-| `MET-08` | PostOperationSecureShutdown | Post-operation stationary rest at recovery site | Cryptographic key zeroization and data offload in t_offload <= tau_offload_max, safe shutdown | Security Audit Log Verification | `/// OperationalAllocation: [MET-08]` | NIST SP 800-88r1 §2.4 |
+| `MET-08` | PostOperationSecureShutdown | {{LIFECYCLE_POST_OP_STATE}} | Cryptographic key zeroization and data offload in t_offload <= tau_offload_max, safe shutdown | Security Audit Log Verification | `/// OperationalAllocation: [MET-08]` | NIST SP 800-88r1 §2.4 |
 
 ### 2.1 METL Execution Invariants
 1. **Deterministic State Progression:** Progression from `MET-01` through `MET-08` is governed by discrete finite-state transitions in the executive controller.

@@ -16,9 +16,9 @@
   - Maintain continuous boundary deconfliction and separation minima from non-cooperative external entities.
   - Stream encrypted system telemetry across the primary C2 link with automatic failover across alternate, contingency, and emergency PACE tiers.
   - Enforce dual-consent cryptographic authorization and positive condition verification ($C_{\mathrm{condition}} \ge C_{\mathrm{threshold}}$) prior to executing high-consequence operational tasks.
-  - Continuously compute closed-loop dynamic resource state and execute autonomous return-to-base (RTB) or secondary divert routing upon reaching safety thresholds ($R(t) \le R_{\mathrm{threshold}}(t)$).
-  - Perform precision autonomous arrival, actuator safe locking, cryptographic data zeroization, and diagnostic log offloading.
-- **End State:** All assigned operational corridor waypoints fully traversed and verified; zero unauthorized state boundary excursions; zero unmitigated collision or interference hazards; all state conditions positively identified and verified ($C_{\mathrm{condition}} \ge C_{\mathrm{threshold}}$); and successful recovery at the primary base or designated secondary divert recovery site with residual resources strictly satisfying $R_{\mathrm{reserve}} \ge \text{Ratio}_{\text{reserve\_min}} \cdot R_{\mathrm{capacity}}$.
+  - {{LIFECYCLE_BINGO_SAFETY_ACTION}}
+  - {{LIFECYCLE_POST_OP_STATE}}
+- **End State:** {{LIFECYCLE_END_STATE}}
 
 ### 1.1 Normative Baseline & Doctrinal Authority
 This Tactical Mission Intent specification tree is authored in strict compliance with:

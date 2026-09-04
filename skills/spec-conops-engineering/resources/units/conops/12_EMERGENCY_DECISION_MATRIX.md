@@ -10,7 +10,7 @@ In accordance with MIL-STD-882E §4.3 and safety-critical deterministic control 
 
 | Trigger ID | Contingency Trigger Event | Anomaly Detection Mechanism | Automated Containment Action | Primary Failsafe State | Max Response Time | HITL Authority Role |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| EMG-01 | Communications Timeout | Heartbeat loss duration Delta_t_loss > tau_heartbeat_timeout across active communication tiers | Switches to autonomous lost-link hold pattern (tau_hold); if link unrecovered, initiates autonomous Return-to-Base (RTB) trajectory | `Contingency_LostLinkFallback` | t_resp <= tau_deadline_C2 | Supervisory / Manual Override via Emergency Link |
+| EMG-01 | Communications Timeout | Heartbeat loss duration Delta_t_loss > tau_heartbeat_timeout across active communication tiers | Switches to autonomous lost-link hold pattern (tau_hold); if link unrecovered, initiates {{LIFECYCLE_FAILSAFE_SEQUENCE}} | `Contingency_LostLinkFallback` | t_resp <= tau_deadline_C2 | Supervisory / Manual Override via Emergency Link |
 | EMG-02 | Sensor Integrity Fault | State estimation error / cross-channel disparity Delta_s > Delta_s_threshold lasting Delta_t > tau_fault_persist | Isolates faulty sensor channel via voting logic; switches to dead-reckoning state estimation; sets speed to v_degraded | `Contingency_SensorFallback` | t_resp <= tau_deadline_sensor | Supervisory / Command Hold or Divert |
 | EMG-03 | Critical Resource Depletion | Measured energy/resource level R(t) <= R_threshold(t) | Re-distributes power bus; throttles non-essential payloads; executes optimal resource-conserving transit to nearest divert site | `Contingency_ResourceDivert` | t_resp <= tau_deadline_resource | Informed / Automated Advisory |
 | EMG-04 | Controller Processing Fault | Hardware watchdog timeout or control loop task deadline breach exceeding tau_deadline_task | Triggers failover to redundant backup controller; isolates faulted software partition; logs diagnostic fault signature | `Degraded_ControllerFailsafe` | t_resp <= tau_deadline_controller | Supervisory / Precautionary Recovery Order |
@@ -56,7 +56,7 @@ stateDiagram-v2
 ### 12.3 Degraded Modes & Fallback Hierarchy
 - **Tier 1 (Nominal Execution):** Full multi-sensor fusion, dual-channel C2 links, and nominal envelope margins.
 - **Tier 2 (Degraded Sensor Mode):** Single-sensor failure activates secondary observer and dead reckoning.
-- **Tier 3 (Contingency Link Mode):** Loss of primary C2 link triggers autonomous hold and return-to-base sequence.
+- **Tier 3 (Contingency Link Mode):** Loss of primary C2 link triggers autonomous hold and {{LIFECYCLE_FAILSAFE_SEQUENCE}}.
 - **Tier 4 (Emergency Containment Mode):** Unrecoverable fault triggers {{TIER4_CONTAINMENT_DESC:ballistic parachute deploy or instant motor cutoff}}.
 
 ### 12.4 Human-in-the-Loop (HITL) Authority & Override Protocols

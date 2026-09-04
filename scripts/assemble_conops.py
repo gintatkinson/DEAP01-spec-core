@@ -16,8 +16,44 @@ import json
 import os
 import re
 import sys
+from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
+
+
+class LifecycleType(str, Enum):
+    """Formal lifecycle archetypes for cyber-physical mission systems."""
+    REUSABLE_RECOVERY = "REUSABLE_RECOVERY"
+    EXPENDABLE_KINETIC_EFFECTOR = "EXPENDABLE_KINETIC_EFFECTOR"
+    CONTINUOUS_STATIONARY = "CONTINUOUS_STATIONARY"
+    PERSISTENT_ORBITAL = "PERSISTENT_ORBITAL"
+    TRACK_BOUND_GUIDED = "TRACK_BOUND_GUIDED"
+
+
+class ContainmentActionType(str, Enum):
+    """Formal containment and terminal action mechanisms."""
+    CONTROLLED_RECOVERY_LANDING = "CONTROLLED_RECOVERY_LANDING"
+    SAFE_IMPACT_ZEROIZATION = "SAFE_IMPACT_ZEROIZATION"
+    ELECTROMECHANICAL_BRAKE_LOCK = "ELECTROMECHANICAL_BRAKE_LOCK"
+    DEORBIT_DISPOSAL_BURN = "DEORBIT_DISPOSAL_BURN"
+    TRACK_SIDING_BRAKE = "TRACK_SIDING_BRAKE"
+
+
+@dataclass
+class LifecycleContract:
+    """Formal MBSE lifecycle and terminal state contract."""
+    lifecycle_type: LifecycleType
+    containment_action: ContainmentActionType
+    bingo_safety_action: str
+    end_state: str
+    failsafe_sequence: str
+    post_op_state: str
+    primary_terminal_target: str
+    secondary_terminal_target: str
+    primary_recovery_facility: str
+    secondary_recovery_facility: str
+    lifecycle_transit_mode: str
 
 
 # Match template placeholders like {{SYSTEM_IDENTIFIER}}, {{TLX_WEIGHT_MD:0.25}}, etc.
@@ -96,6 +132,7 @@ class SysMLParameterBindingEngine:
         self.detected_domain: str = domain or "aviation"
         self.is_non_aircraft: bool = False
         self.is_civilian: bool = False
+        self.lifecycle_contract: Optional[LifecycleContract] = None
 
         if domain:
             self.parameter_bindings["DOMAIN_TYPE"] = domain
@@ -122,6 +159,7 @@ class SysMLParameterBindingEngine:
         self._derive_energy_budgets()
         self._derive_domain_regulatory_standards()
         self._derive_domain_ontology()
+        self._derive_lifecycle_contract()
 
     @property
     def domain(self) -> str:
@@ -1127,6 +1165,325 @@ class SysMLParameterBindingEngine:
                 f"  1. {c1}\n  2. {c2}\n  3. {c3}\n  4. {c4}"
             )
 
+        self._derive_lifecycle_contract()
+
+    def _derive_lifecycle_contract(self) -> LifecycleContract:
+        """
+        Deterministically derives formal MBSE Lifecycle Contract and terminal state tokens from schema AST nodes.
+        Inspects lifecycle_type, is_expendable, terminal_behavior, recovery_mode, payload_type, operational_domain, platform_type.
+        Binds:
+          - LIFECYCLE_TYPE
+          - LIFECYCLE_BINGO_SAFETY_ACTION
+          - LIFECYCLE_END_STATE
+          - LIFECYCLE_FAILSAFE_SEQUENCE
+          - LIFECYCLE_POST_OP_STATE
+          - PRIMARY_TERMINAL_TARGET
+          - SECONDARY_TERMINAL_TARGET
+          - PRIMARY_RECOVERY_FACILITY
+          - SECONDARY_RECOVERY_FACILITY
+          - LIFECYCLE_TRANSIT_MODE
+        """
+        dom = getattr(self, "detected_domain", "aviation").lower()
+        platform_type = str(self.parameter_bindings.get("PLATFORM_TYPE") or "").lower()
+        sys_id = str(self.parameter_bindings.get("SYSTEM_IDENTIFIER") or self.inferred_system_identifier or "").lower()
+        op_domain = str(self.parameter_bindings.get("OPERATIONAL_DOMAIN") or "").lower()
+        payload_type = str(self.parameter_bindings.get("PAYLOAD_TYPE") or "").lower()
+        terminal_behavior = str(self.parameter_bindings.get("TERMINAL_BEHAVIOR") or "").lower()
+        recovery_mode = str(self.parameter_bindings.get("RECOVERY_MODE") or "").lower()
+        raw_is_expendable = self.parameter_bindings.get("IS_EXPENDABLE") or self.parameter_bindings.get("is_expendable")
+        is_expendable = False
+        if raw_is_expendable is not None:
+            if isinstance(raw_is_expendable, bool):
+                is_expendable = raw_is_expendable
+            elif str(raw_is_expendable).strip().lower() in ("true", "1", "yes"):
+                is_expendable = True
+
+        is_explicit_lifecycle = (
+            "LIFECYCLE_TYPE" in self._explicit_keys
+            or "lifecycle_type" in self._explicit_keys
+        )
+        raw_lifecycle = str(
+            self.parameter_bindings.get("LIFECYCLE_TYPE")
+            or self.parameter_bindings.get("lifecycle_type")
+            or ""
+        ).strip().upper()
+
+        combined_context = f"{dom} {platform_type} {sys_id} {op_domain} {payload_type} {terminal_behavior} {recovery_mode}".lower()
+
+        # Archetype classification
+        if is_explicit_lifecycle and raw_lifecycle in LifecycleType.__members__:
+            selected_type = LifecycleType[raw_lifecycle]
+        elif (
+            is_expendable
+            or "expendable" in combined_context
+            or "interceptor" in platform_type
+            or "interceptor" in sys_id
+            or "kinetic" in payload_type
+            or "kinetic" in platform_type
+            or "c-uas" in combined_context
+            or "counter-uas" in combined_context
+            or "run_10" in combined_context
+        ):
+            selected_type = LifecycleType.EXPENDABLE_KINETIC_EFFECTOR
+        elif (
+            dom == "medical"
+            or "surgical" in combined_context
+            or "medical" in combined_context
+            or "laparoscopic" in combined_context
+            or "clinical" in combined_context
+            or "run_07" in combined_context
+        ):
+            selected_type = LifecycleType.CONTINUOUS_STATIONARY
+        elif (
+            dom == "rail"
+            or "locomotive" in combined_context
+            or "rail" in combined_context
+            or "train" in combined_context
+            or "shunting" in combined_context
+            or "run_08" in combined_context
+        ):
+            selected_type = LifecycleType.TRACK_BOUND_GUIDED
+        elif (
+            dom == "space"
+            or "cubesat" in combined_context
+            or "satellite" in combined_context
+            or "spacecraft" in combined_context
+            or "orbital" in combined_context
+            or "run_06" in combined_context
+        ):
+            selected_type = LifecycleType.PERSISTENT_ORBITAL
+        else:
+            selected_type = LifecycleType.REUSABLE_RECOVERY
+
+        def _get_explicit_or_default(key: str, default_val: str) -> str:
+            if key in self._explicit_keys or key.lower() in self._explicit_keys or key.upper() in self._explicit_keys:
+                return str(self.parameter_bindings.get(key) or default_val)
+            return default_val
+
+        # Generate contract definitions
+        if selected_type == LifecycleType.EXPENDABLE_KINETIC_EFFECTOR:
+            containment = ContainmentActionType.SAFE_IMPACT_ZEROIZATION
+            bingo_action = _get_explicit_or_default(
+                "LIFECYCLE_BINGO_SAFETY_ACTION",
+                "Continuously compute closed-loop dynamic resource state and execute terminal target engagement or safe containment ditching with cryptographic zeroization upon reaching safety thresholds ($R(t) \\le R_{\\mathrm{threshold}}(t)$)."
+            )
+            end_state = _get_explicit_or_default(
+                "LIFECYCLE_END_STATE",
+                "All assigned operational corridor waypoints fully traversed and verified; zero unauthorized state boundary excursions; zero unmitigated collision or interference hazards; all state conditions positively identified and verified ($C_{\\mathrm{condition}} \\ge C_{\\mathrm{threshold}}$); and successful terminal intercept or safe containment ditching in the designated containment zone with complete cryptographic zeroization."
+            )
+            failsafe = _get_explicit_or_default(
+                "LIFECYCLE_FAILSAFE_SEQUENCE",
+                "autonomous terminal containment ditching and zeroization sequence"
+            )
+            post_op = _get_explicit_or_default(
+                "LIFECYCLE_POST_OP_STATE",
+                "Terminal kinetic impact or safe containment ditching with complete cryptographic key zeroization, volatile memory purge, and structural containment verification"
+            )
+            primary_target = _get_explicit_or_default(
+                "PRIMARY_TERMINAL_TARGET",
+                "Designated Kinetic Intercept / Terminal Containment Zone"
+            )
+            secondary_target = _get_explicit_or_default(
+                "SECONDARY_TERMINAL_TARGET",
+                "Safe Containment Ditching Zone LZ-DIVERT-ALPHA"
+            )
+            primary_facility = _get_explicit_or_default(
+                "PRIMARY_RECOVERY_FACILITY",
+                "Safe Impact Containment Grid"
+            )
+            secondary_facility = _get_explicit_or_default(
+                "SECONDARY_RECOVERY_FACILITY",
+                "Secondary Safe Ditching Area"
+            )
+            transit_mode = _get_explicit_or_default(
+                "LIFECYCLE_TRANSIT_MODE",
+                "Terminal_Engagement_Transit"
+            )
+
+        elif selected_type == LifecycleType.CONTINUOUS_STATIONARY:
+            containment = ContainmentActionType.ELECTROMECHANICAL_BRAKE_LOCK
+            bingo_action = _get_explicit_or_default(
+                "LIFECYCLE_BINGO_SAFETY_ACTION",
+                "Continuously compute closed-loop dynamic resource state and execute automated electromechanical joint brake locking and sterile field preservation upon reaching safety thresholds ($R(t) \\le R_{\\mathrm{threshold}}(t)$)."
+            )
+            end_state = _get_explicit_or_default(
+                "LIFECYCLE_END_STATE",
+                "All assigned surgical trajectory segments fully traversed and verified; zero unauthorized workspace boundary excursions; zero unmitigated tissue contact hazards; all clinical conditions positively identified and verified ($C_{\\mathrm{condition}} \\ge C_{\\mathrm{threshold}}$); and successful safe parking at the primary sterile console with residual power reserves strictly satisfying $R_{\\mathrm{reserve}} \\ge \\text{Ratio}_{\\text{reserve\\_min}} \\cdot R_{\\mathrm{capacity}}$."
+            )
+            failsafe = _get_explicit_or_default(
+                "LIFECYCLE_FAILSAFE_SEQUENCE",
+                "electromechanical joint brake lock and sterile field safing sequence"
+            )
+            post_op = _get_explicit_or_default(
+                "LIFECYCLE_POST_OP_STATE",
+                "Post-operation stationary safe rest at sterile field console with engaged electromechanical joint brake locks, complete cryptographic key zeroization, and diagnostic log offloading"
+            )
+            primary_target = _get_explicit_or_default(
+                "PRIMARY_TERMINAL_TARGET",
+                "Primary Sterile Field Docking Station"
+            )
+            secondary_target = _get_explicit_or_default(
+                "SECONDARY_TERMINAL_TARGET",
+                "Secondary Clinical Safe Staging Console"
+            )
+            primary_facility = _get_explicit_or_default(
+                "PRIMARY_RECOVERY_FACILITY",
+                "Clinical Operating Suite"
+            )
+            secondary_facility = _get_explicit_or_default(
+                "SECONDARY_RECOVERY_FACILITY",
+                "Secondary Maintenance Staging Bay"
+            )
+            transit_mode = _get_explicit_or_default(
+                "LIFECYCLE_TRANSIT_MODE",
+                "Autonomous_Clinical_Safing"
+            )
+
+        elif selected_type == LifecycleType.TRACK_BOUND_GUIDED:
+            containment = ContainmentActionType.TRACK_SIDING_BRAKE
+            bingo_action = _get_explicit_or_default(
+                "LIFECYCLE_BINGO_SAFETY_ACTION",
+                "Continuously compute closed-loop dynamic resource state and execute controlled track deceleration or secondary maintenance siding divert upon reaching safety thresholds ($R(t) \\le R_{\\mathrm{threshold}}(t)$)."
+            )
+            end_state = _get_explicit_or_default(
+                "LIFECYCLE_END_STATE",
+                "All assigned track blocks and route sections fully traversed and verified; zero unauthorized siding excursions; zero unmitigated collision or derailment hazards; all signal aspects positively identified and verified ($C_{\\mathrm{condition}} \\ge C_{\\mathrm{threshold}}$); and successful controlled arrival at the primary maintenance siding or designated secondary spur with residual resources strictly satisfying $R_{\\mathrm{reserve}} \\ge \\text{Ratio}_{\\text{reserve\\_min}} \\cdot R_{\\mathrm{capacity}}$."
+            )
+            failsafe = _get_explicit_or_default(
+                "LIFECYCLE_FAILSAFE_SEQUENCE",
+                "controlled track deceleration and siding brake sequence"
+            )
+            post_op = _get_explicit_or_default(
+                "LIFECYCLE_POST_OP_STATE",
+                "Post-operation stationary rest at rail siding with mechanical parking brakes engaged, pneumatic systems vented, cryptographic key zeroization, and diagnostic log offloading"
+            )
+            primary_target = _get_explicit_or_default(
+                "PRIMARY_TERMINAL_TARGET",
+                "Primary Rail Maintenance Siding"
+            )
+            secondary_target = _get_explicit_or_default(
+                "SECONDARY_TERMINAL_TARGET",
+                "Secondary Controlled Deceleration Spur LZ-DIVERT-ALPHA"
+            )
+            primary_facility = _get_explicit_or_default(
+                "PRIMARY_RECOVERY_FACILITY",
+                "Classification Yard Maintenance Depot"
+            )
+            secondary_facility = _get_explicit_or_default(
+                "SECONDARY_RECOVERY_FACILITY",
+                "Secondary Service Siding"
+            )
+            transit_mode = _get_explicit_or_default(
+                "LIFECYCLE_TRANSIT_MODE",
+                "Autonomous_Track_Deceleration"
+            )
+
+        elif selected_type == LifecycleType.PERSISTENT_ORBITAL:
+            containment = ContainmentActionType.DEORBIT_DISPOSAL_BURN
+            bingo_action = _get_explicit_or_default(
+                "LIFECYCLE_BINGO_SAFETY_ACTION",
+                "Continuously compute closed-loop dynamic resource state and execute autonomous de-orbit disposal burn or graveyard orbit maneuver upon reaching safety thresholds ($R(t) \\le R_{\\mathrm{threshold}}(t)$)."
+            )
+            end_state = _get_explicit_or_default(
+                "LIFECYCLE_END_STATE",
+                "All assigned orbital mission phases fully executed and verified; zero unauthorized constellation slot excursions; zero unmitigated orbital debris collision hazards; all payload observations positively verified ($C_{\\mathrm{condition}} \\ge C_{\\mathrm{threshold}}$); and successful de-orbit disposal or transfer to graveyard orbit with residual propellant satisfying disposal containment standards."
+            )
+            failsafe = _get_explicit_or_default(
+                "LIFECYCLE_FAILSAFE_SEQUENCE",
+                "autonomous de-orbit disposal and passivation sequence"
+            )
+            post_op = _get_explicit_or_default(
+                "LIFECYCLE_POST_OP_STATE",
+                "Post-mission passivation and safe disposal state with reaction wheels desaturated, batteries passivated, cryptographic key zeroization, and final ephemeris offload"
+            )
+            primary_target = _get_explicit_or_default(
+                "PRIMARY_TERMINAL_TARGET",
+                "Designated De-Orbit Reentry Corridor / Graveyard Orbit"
+            )
+            secondary_target = _get_explicit_or_default(
+                "SECONDARY_TERMINAL_TARGET",
+                "Secondary Disposal Orbit Node LZ-DIVERT-ALPHA"
+            )
+            primary_facility = _get_explicit_or_default(
+                "PRIMARY_RECOVERY_FACILITY",
+                "Designated Atmospheric Demise Footprint"
+            )
+            secondary_facility = _get_explicit_or_default(
+                "SECONDARY_RECOVERY_FACILITY",
+                "Stable Graveyard Disposal Orbit"
+            )
+            transit_mode = _get_explicit_or_default(
+                "LIFECYCLE_TRANSIT_MODE",
+                "Autonomous_Disposal_Burn_Transit"
+            )
+
+        else:  # REUSABLE_RECOVERY
+            containment = ContainmentActionType.CONTROLLED_RECOVERY_LANDING
+            bingo_action = _get_explicit_or_default(
+                "LIFECYCLE_BINGO_SAFETY_ACTION",
+                "Continuously compute closed-loop dynamic resource state and execute autonomous return-to-base (RTB) or secondary divert routing upon reaching safety thresholds ($R(t) \\le R_{\\mathrm{threshold}}(t)$)."
+            )
+            end_state = _get_explicit_or_default(
+                "LIFECYCLE_END_STATE",
+                "All assigned operational corridor waypoints fully traversed and verified; zero unauthorized state boundary excursions; zero unmitigated collision or interference hazards; all state conditions positively identified and verified ($C_{\\mathrm{condition}} \\ge C_{\\mathrm{threshold}}$); and successful recovery at the primary base or designated secondary divert recovery site with residual resources strictly satisfying $R_{\\mathrm{reserve}} \\ge \\text{Ratio}_{\\text{reserve\\_min}} \\cdot R_{\\mathrm{capacity}}$."
+            )
+            failsafe = _get_explicit_or_default(
+                "LIFECYCLE_FAILSAFE_SEQUENCE",
+                "autonomous return-to-base sequence"
+            )
+            post_op = _get_explicit_or_default(
+                "LIFECYCLE_POST_OP_STATE",
+                "Post-operation stationary rest at recovery site with actuator safe locking, cryptographic data zeroization, and diagnostic log offloading"
+            )
+            primary_target = _get_explicit_or_default(
+                "PRIMARY_TERMINAL_TARGET",
+                "Primary Recovery Base"
+            )
+            secondary_target = _get_explicit_or_default(
+                "SECONDARY_TERMINAL_TARGET",
+                "Secondary Divert Site LZ-DIVERT-ALPHA"
+            )
+            primary_facility = _get_explicit_or_default(
+                "PRIMARY_RECOVERY_FACILITY",
+                "Primary Recovery Base"
+            )
+            secondary_facility = _get_explicit_or_default(
+                "SECONDARY_RECOVERY_FACILITY",
+                "Secondary Divert Base"
+            )
+            transit_mode = _get_explicit_or_default(
+                "LIFECYCLE_TRANSIT_MODE",
+                "Autonomous_RTB_Transit"
+            )
+
+        contract = LifecycleContract(
+            lifecycle_type=selected_type,
+            containment_action=containment,
+            bingo_safety_action=bingo_action,
+            end_state=end_state,
+            failsafe_sequence=failsafe,
+            post_op_state=post_op,
+            primary_terminal_target=primary_target,
+            secondary_terminal_target=secondary_target,
+            primary_recovery_facility=primary_facility,
+            secondary_recovery_facility=secondary_facility,
+            lifecycle_transit_mode=transit_mode,
+        )
+
+        self.lifecycle_contract = contract
+        self.parameter_bindings["LIFECYCLE_TYPE"] = contract.lifecycle_type.value
+        self.parameter_bindings["LIFECYCLE_BINGO_SAFETY_ACTION"] = contract.bingo_safety_action
+        self.parameter_bindings["LIFECYCLE_END_STATE"] = contract.end_state
+        self.parameter_bindings["LIFECYCLE_FAILSAFE_SEQUENCE"] = contract.failsafe_sequence
+        self.parameter_bindings["LIFECYCLE_POST_OP_STATE"] = contract.post_op_state
+        self.parameter_bindings["PRIMARY_TERMINAL_TARGET"] = contract.primary_terminal_target
+        self.parameter_bindings["SECONDARY_TERMINAL_TARGET"] = contract.secondary_terminal_target
+        self.parameter_bindings["PRIMARY_RECOVERY_FACILITY"] = contract.primary_recovery_facility
+        self.parameter_bindings["SECONDARY_RECOVERY_FACILITY"] = contract.secondary_recovery_facility
+        self.parameter_bindings["LIFECYCLE_TRANSIT_MODE"] = contract.lifecycle_transit_mode
+
+        return contract
+
     def ingest_dictionary(self, data: Dict[str, Any]) -> None:
         """Flattens and registers key-value pairs into parameter bindings."""
         if not isinstance(data, dict):
@@ -1188,6 +1545,7 @@ class SysMLParameterBindingEngine:
         self._derive_energy_budgets()
         self._derive_domain_regulatory_standards()
         self._derive_domain_ontology()
+        self._derive_lifecycle_contract()
 
     def _map_semantic_aliases(self, key: str, val: str) -> None:
         """Maps domain attributes to canonical template tokens (Issues #162, #170)."""
@@ -1428,6 +1786,7 @@ class SysMLParameterBindingEngine:
         self._derive_energy_budgets()
         self._derive_domain_regulatory_standards()
         self._derive_domain_ontology()
+        self._derive_lifecycle_contract()
 
         return True
 
@@ -1568,13 +1927,14 @@ class SysMLParameterBindingEngine:
         self.parameter_bindings["DETECTED_DOMAIN"] = self.detected_domain
         self.parameter_bindings["DOMAIN_TYPE"] = self.detected_domain
 
-        # Trigger all 6 derivation solvers
+        # Trigger all derivation solvers
         self._derive_mass_budgets()
         self._derive_quadratic_physics()
         self._derive_energy_budgets()
         self._derive_domain_regulatory_standards()
         self._derive_domain_ontology()
         self._derive_operational_intent()
+        self._derive_lifecycle_contract()
 
         return ingested
 
@@ -1610,6 +1970,8 @@ class SysMLParameterBindingEngine:
         for cpath in candidate_paths:
             if os.path.isfile(cpath):
                 self.ingest_file(cpath)
+
+        self._derive_lifecycle_contract()
 
     def auto_discover_sources(self, root_dir: str) -> None:
         """Auto-detects parameter dictionaries and SysML AST symbols across repository root."""
@@ -1673,6 +2035,20 @@ class SysMLParameterBindingEngine:
         elif token_upper.startswith("CORE_CAPABILITY_"):
             self._derive_operational_intent()
             return self.parameter_bindings.get(token_upper, "Autonomous cyber-physical mission execution capability.")
+        elif token_upper in (
+            "LIFECYCLE_TYPE",
+            "LIFECYCLE_BINGO_SAFETY_ACTION",
+            "LIFECYCLE_END_STATE",
+            "LIFECYCLE_FAILSAFE_SEQUENCE",
+            "LIFECYCLE_POST_OP_STATE",
+            "PRIMARY_TERMINAL_TARGET",
+            "SECONDARY_TERMINAL_TARGET",
+            "PRIMARY_RECOVERY_FACILITY",
+            "SECONDARY_RECOVERY_FACILITY",
+            "LIFECYCLE_TRANSIT_MODE",
+        ):
+            self._derive_lifecycle_contract()
+            return self.parameter_bindings.get(token_upper, "")
 
         # 2. Pugh Decision Matrix
         elif token_upper == "WEIGHT_CRIT_1":
@@ -3002,6 +3378,7 @@ def assemble_conops(
     verify_only: bool = False,
     params: Optional[Union[Dict[str, Any], str, SysMLParameterBindingEngine]] = None,
     domain: Optional[str] = None,
+    workspace_dir: Optional[str] = None,
 ) -> bool:
     """
     Orchestrates the assembly, parameter binding, and validation of both CONOPS.md and MISSION_INTENT.md
@@ -3009,6 +3386,27 @@ def assemble_conops(
     Fixes Issues #143, #148, #174, #175, #177, #178, #179, #180.
     """
     print(f"[*] ConOps Assembly Engine starting: input='{input_dir}', output='{output_dir}', verify_only={verify_only}, domain={domain}")
+
+    ws_dir = workspace_dir
+    if not ws_dir:
+        for cand in (
+            os.path.abspath(output_dir),
+            os.path.abspath(os.path.join(output_dir, "..")),
+            os.path.abspath(os.path.join(output_dir, "..", "..")),
+            os.path.abspath(input_dir),
+            os.path.abspath(os.path.join(input_dir, "..")),
+            os.path.abspath(os.path.join(input_dir, "..", "..")),
+        ):
+            if (
+                os.path.isdir(os.path.join(cand, "schema"))
+                or os.path.isdir(os.path.join(cand, ".pipeline"))
+                or os.path.isfile(os.path.join(cand, "domain_config.json"))
+                or os.path.isfile(os.path.join(cand, "schema", "domain_config.json"))
+            ):
+                ws_dir = cand
+                break
+    if not ws_dir:
+        ws_dir = input_dir
 
     # Resolve parameter binding engine
     if isinstance(params, SysMLParameterBindingEngine):
@@ -3018,11 +3416,11 @@ def assemble_conops(
             param_engine.parameter_bindings["DETECTED_DOMAIN"] = domain
             param_engine.parameter_bindings["DOMAIN_TYPE"] = domain
     elif isinstance(params, dict):
-        param_engine = SysMLParameterBindingEngine(parameter_values=params, workspace_dir=input_dir, auto_detect=True, domain=domain)
+        param_engine = SysMLParameterBindingEngine(parameter_values=params, workspace_dir=ws_dir, auto_detect=True, domain=domain)
     elif isinstance(params, str):
-        param_engine = SysMLParameterBindingEngine(config_path=params, workspace_dir=input_dir, auto_detect=True, domain=domain)
+        param_engine = SysMLParameterBindingEngine(config_path=params, workspace_dir=ws_dir, auto_detect=True, domain=domain)
     else:
-        param_engine = SysMLParameterBindingEngine(workspace_dir=input_dir, auto_detect=True, domain=domain)
+        param_engine = SysMLParameterBindingEngine(workspace_dir=ws_dir, auto_detect=True, domain=domain)
 
     detected_dom = domain or getattr(param_engine, "detected_domain", "aviation")
 
@@ -3171,6 +3569,7 @@ def main() -> int:
         verify_only=args.verify,
         params=args.params,
         domain=args.domain,
+        workspace_dir=workspace,
     )
     return 0 if success else 1
 
