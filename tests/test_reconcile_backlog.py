@@ -9,6 +9,7 @@ scripts_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "scr
 if scripts_dir not in sys.path:
     sys.path.insert(0, scripts_dir)
 
+import copy
 from reconcile_backlog import (
     expand_relative_links_for_tracker,
     sync_issue_body_to_tracker,
@@ -18,6 +19,11 @@ from reconcile_backlog import (
     is_already_resolved,
     get_resolved_label,
     sanitize_latex_delimiters_for_tracker,
+    get_structural_label,
+    apply_structural_label,
+    create_tracker_provider,
+    GitLabV4Provider,
+    DEFAULT_GITLAB_TRACKER_RULES,
 )
 
 class TestExpandRelativeLinksForTracker(unittest.TestCase):
@@ -487,10 +493,6 @@ class TestSanitizeLatexDelimitersForTracker(unittest.TestCase):
                 os.remove(temp_path)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TestCommitMessageNonClosureInvariant(unittest.TestCase):
     """Verifies that commit message guidelines and validators reject auto-closing trigger keywords."""
 
@@ -531,3 +533,250 @@ class TestCommitMessageNonClosureInvariant(unittest.TestCase):
 
         for msg in good_messages:
             self.assertFalse(bool(combined_regex.search(msg)), f"False positive flag in: {msg}")
+
+
+class TestGitLabProviderParity(unittest.TestCase):
+    """
+    Unit tests verifying 100% feature parity for the GitLab provider adapter in reconcile_backlog.py.
+    """
+
+    def setUp(self):
+        self.workspace_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        self.gitlab_rules = {
+            "meta": {"upstream_repository": "gintatkinson/DEAP01-spec-core"},
+            "tracker_rules": copy.deepcopy(DEFAULT_GITLAB_TRACKER_RULES)
+        }
+        self.temp_dir = tempfile.TemporaryDirectory()
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    def test_gitlab_issue_creation_with_full_markdown_body(self):
+        """
+        Verifies issue creation payload retains Mermaid diagrams, KaTeX formulas,
+        and metadata tables without truncation.
+        """
+        spec_content = (
+            "---\n"
+            "title: Tactical UAS DAA Collision Avoidance\n"
+            "type: feature\n"
+            "dal: DAL A\n"
+            "---\n\n"
+            "# Feature: Tactical UAS DAA Collision Avoidance\n\n"
+            "## Architecture Statechart\n\n"
+            "```mermaid\n"
+            "stateDiagram-v2\n"
+            "    [*] --> ClearAirspace\n"
+            "    ClearAirspace --> TrafficAlert: DAA_Traffic_Intruder_Detected\n"
+            "    TrafficAlert --> ResolutionAdvisory: Tau_Closure <= 25s\n"
+            "    ResolutionAdvisory --> ClearAirspace: Intruder_Clear\n"
+            "```\n\n"
+            "## Mathematical Invariants\n\n"
+            "Risk Priority Number formulation:\n"
+            "$$\n"
+            r"\text{RPN} = S \times O \times D" "\n"
+            "$$\n\n"
+            r"Enforces lateral separation $d_{\mathrm{sep}} \ge 500\,\mathrm{m}$." "\n\n"
+            "## Requirements\n"
+            "See [Architecture Blueprint](docs/architecture/blueprints/DEAP_MODEL.sysml) "
+            "and [Parent Epic](../epics/epic-01.md).\n"
+        )
+        spec_path = os.path.join(self.temp_dir.name, "feat-daa.md")
+        with open(spec_path, "w", encoding="utf-8") as f:
+            f.write(spec_content)
+
+        # 1. Test GitLabV4Provider.create_issue with full payload
+        provider = GitLabV4Provider(
+            server_url="https://gitlab.example.com",
+            project_id="uas/infrastructure-safety",
+            token="glpat-mock-token",
+            workspace_dir=self.workspace_dir
+        )
+
+        mock_response = {
+            "iid": 42,
+            "title": "Tactical UAS DAA Collision Avoidance",
+            "description": spec_content,
+            "state": "opened",
+            "labels": ["type::feature"]
+        }
+        with patch.object(provider, "_api_request", return_value=(201, mock_response, {})) as mock_api:
+            res = provider.create_issue(
+                title="Tactical UAS DAA Collision Avoidance",
+                description=spec_content,
+                labels=["type::feature"]
+            )
+            self.assertIsNotNone(res)
+            self.assertEqual(res["number"], 42)
+            mock_api.assert_called_once()
+            called_endpoint, called_kwargs = mock_api.call_args[0][0], mock_api.call_args[1]
+            self.assertEqual(called_endpoint, "projects/uas%2Finfrastructure-safety/issues")
+            self.assertEqual(called_kwargs.get("method"), "POST")
+            self.assertEqual(called_kwargs["data"]["title"], "Tactical UAS DAA Collision Avoidance")
+            self.assertEqual(called_kwargs["data"]["description"], spec_content)
+            self.assertEqual(called_kwargs["data"]["labels"], "type::feature")
+
+        # 2. Test sync_issue_body_to_tracker preserves Mermaid, KaTeX, and frontmatter table
+        mock_adapter = MagicMock()
+        mock_adapter.edit_issue.return_value = True
+        mock_adapter.edit_issue_title.return_value = True
+        mock_adapter.add_label.return_value = True
+
+        mock_remote_info = {
+            "raw": "https://gitlab.example.com/uas/infrastructure-safety.git",
+            "is_gitlab": True,
+            "project_path": "uas/infrastructure-safety",
+            "server_url": "https://gitlab.example.com",
+            "host": "gitlab.example.com"
+        }
+
+        with patch("reconcile_backlog.get_current_branch", return_value="main"), \
+             patch("reconcile_backlog.get_git_remote_info", return_value=mock_remote_info):
+            sync_issue_body_to_tracker(
+                issue_num=42,
+                filepath=spec_path,
+                issue_type="Feature",
+                rules=self.gitlab_rules,
+                provider_adapter=mock_adapter
+            )
+
+        mock_adapter.edit_issue.assert_called_once()
+        synced_body = mock_adapter.edit_issue.call_args[0][1]
+
+        # Verify frontmatter converted to table
+        self.assertIn("| Attribute | Specification Detail |", synced_body)
+        self.assertIn("| **Title** | Tactical UAS DAA Collision Avoidance |", synced_body)
+        self.assertIn("| **Dal** | DAL A |", synced_body)
+
+        # Verify Mermaid diagrams preserved
+        self.assertIn("```mermaid", synced_body)
+        self.assertIn("stateDiagram-v2", synced_body)
+        self.assertIn("ClearAirspace --> TrafficAlert", synced_body)
+
+        # Verify KaTeX formulas preserved without truncation
+        self.assertIn(r"\text{RPN} = S \times O \times D", synced_body)
+        self.assertIn(r"$d_{\mathrm{sep}} \ge 500\,\mathrm{m}$", synced_body)
+
+        # Verify relative links expanded to GitLab blob URLs
+        self.assertIn("https://gitlab.example.com/uas/infrastructure-safety/-/blob/main/docs/architecture/blueprints/DEAP_MODEL.sysml", synced_body)
+        self.assertIn("https://gitlab.example.com/uas/infrastructure-safety/-/blob/main/docs/epics/epic-01.md", synced_body)
+
+    def test_gitlab_scoped_label_mapping(self):
+        """
+        Verifies type::epic, type::feature, type::user-story, type::use-case, status::fixed-resolved mapping.
+        """
+        self.assertEqual(get_structural_label("epic", self.gitlab_rules), "type::epic")
+        self.assertEqual(get_structural_label("feature", self.gitlab_rules), "type::feature")
+        self.assertEqual(get_structural_label("user_story", self.gitlab_rules), "type::user-story")
+        self.assertEqual(get_structural_label("user-story", self.gitlab_rules), "type::user-story")
+        self.assertEqual(get_structural_label("User Story", self.gitlab_rules), "type::user-story")
+        self.assertEqual(get_structural_label("use_case", self.gitlab_rules), "type::use-case")
+        self.assertEqual(get_structural_label("use-case", self.gitlab_rules), "type::use-case")
+        self.assertEqual(get_structural_label("Use Case", self.gitlab_rules), "type::use-case")
+        self.assertEqual(get_resolved_label(self.gitlab_rules), "status::fixed-resolved")
+
+        # Test apply_structural_label on GitLab provider adapter
+        mock_adapter = MagicMock()
+        mock_adapter.create_label.return_value = True
+        mock_adapter.add_label.return_value = True
+
+        res = apply_structural_label(101, "User Story", rules=self.gitlab_rules, provider_adapter=mock_adapter)
+        self.assertTrue(res)
+        mock_adapter.create_label.assert_called_with(
+            "type::user-story",
+            description="User Story specification item, applied by the backlog reconciler.",
+            color="#0E8A16"
+        )
+        mock_adapter.add_label.assert_called_with(101, "type::user-story")
+
+    def test_gitlab_dependency_checklist_generation(self):
+        """
+        Verifies cross-reference resolution and checkbox generation (- [ ] #101) for GitLab issues.
+        """
+        spec_content = (
+            "# Epic: Tactical UAS Safe Landing\n\n"
+            "## Dependencies\n"
+            "- [ ] #101 - Terrain Elevation Mapping\n"
+            "- [ ] #102 - Optical Flow Landing Sensor\n"
+        )
+        spec_file = os.path.join(self.temp_dir.name, "epic-landing.md")
+        with open(spec_file, "w", encoding="utf-8") as f:
+            f.write(spec_content)
+
+        issue_dict = {
+            101: {"iid": 101, "number": 101, "title": "Terrain Elevation Mapping", "state": "CLOSED", "labels": [{"name": "type::feature"}]},
+            102: {"iid": 102, "number": 102, "title": "Optical Flow Landing Sensor", "state": "OPENED", "labels": [{"name": "type::feature"}]},
+        }
+
+        updated_content, completed = update_checklist_in_file(spec_file, issue_dict, self.gitlab_rules)
+        self.assertFalse(completed, "Checklist with open dependency #102 must not be completed")
+        self.assertIn("- [x] #101", updated_content)
+        self.assertIn("- [ ] #102", updated_content)
+
+        # Now close issue 102 and re-run
+        issue_dict[102]["state"] = "CLOSED"
+        updated_content2, completed2 = update_checklist_in_file(spec_file, issue_dict, self.gitlab_rules)
+        self.assertTrue(completed2, "Checklist with all closed dependencies must be completed")
+        self.assertIn("- [x] #101", updated_content2)
+        self.assertIn("- [x] #102", updated_content2)
+
+    def test_gitlab_unmapped_dependency_gating(self):
+        """
+        Verifies that open or unmapped dependencies prevent premature status::fixed-resolved labeling.
+        """
+        spec_content = (
+            "# Feature: ASTM F3269-17 RTA Switching Logic\n\n"
+            "## Dependencies\n"
+            "- [x] #101 - Primary Autopilot Channel (Closed)\n"
+            "- [ ] #999 - Unmapped Backup Channel\n"
+        )
+        spec_file = os.path.join(self.temp_dir.name, "feat-rta.md")
+        with open(spec_file, "w", encoding="utf-8") as f:
+            f.write(spec_content)
+
+        issue_dict = {
+            101: {"iid": 101, "number": 101, "title": "Primary Autopilot Channel", "state": "CLOSED", "labels": [{"name": "type::feature"}]},
+            201: {"iid": 201, "number": 201, "title": "ASTM F3269-17 RTA Switching Logic", "state": "OPENED", "labels": [{"name": "type::feature"}]},
+        }
+
+        mock_adapter = MagicMock()
+        updated_content, completed = update_checklist_in_file(spec_file, issue_dict, self.gitlab_rules)
+        self.assertFalse(completed, "Unmapped dependency #999 must block completion")
+
+        if completed and not is_already_resolved(issue_dict[201], self.gitlab_rules):
+            resolve_issue_on_tracker(201, "Resolved.", rules=self.gitlab_rules, provider_adapter=mock_adapter)
+
+        # Must not have resolved issue on tracker
+        mock_adapter.create_label.assert_not_called()
+        mock_adapter.add_label.assert_not_called()
+        mock_adapter.comment_issue.assert_not_called()
+
+    def test_gitlab_offline_mode(self):
+        """
+        Verifies offline reconciliation execution.
+        """
+        provider = GitLabV4Provider(
+            server_url="https://gitlab.example.com",
+            project_id="uas/infrastructure-safety",
+            token="glpat-mock-token",
+            offline=True,
+            workspace_dir=self.workspace_dir
+        )
+        self.assertTrue(provider.offline)
+        self.assertEqual(provider.list_issues(), [])
+        self.assertIsNone(provider.create_issue("Title", "Description"))
+        self.assertFalse(provider.edit_issue(42, "Description"))
+        self.assertFalse(provider.edit_issue_title(42, "Title"))
+        self.assertFalse(provider.add_label(42, "type::feature"))
+        self.assertFalse(provider.comment_issue(42, "Comment"))
+        self.assertFalse(provider.create_label("type::feature"))
+
+        # Test factory instantiation in offline mode
+        factory_provider = create_tracker_provider("gitlab", rules=self.gitlab_rules, offline=True, workspace_dir=self.workspace_dir)
+        self.assertIsInstance(factory_provider, GitLabV4Provider)
+        self.assertTrue(factory_provider.offline)
+        self.assertEqual(factory_provider.list_issues(), [])
+
+
+if __name__ == "__main__":
+    unittest.main()
