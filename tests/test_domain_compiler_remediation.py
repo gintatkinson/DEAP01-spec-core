@@ -3,19 +3,14 @@ Unit tests for Phase 2 Compiler & Domain Template Architecture Remediation.
 Addresses Issues #174, #175, #177, #178, #179, #180.
 """
 
-import json
 import math
 import os
 import tempfile
 import unittest
 
 from scripts.assemble_conops import (
-    CANONICAL_CONOPS_UNITS,
-    CANONICAL_MISSION_INTENT_UNITS,
     SysMLParameterBindingEngine,
     assemble_conops,
-    assemble_document,
-    bind_parameters,
 )
 
 
@@ -84,9 +79,9 @@ class TestDomainCompilerRemediation(unittest.TestCase):
         self.assertAlmostEqual(float(eng_air.resolve_token("AIR_DENSITY_KGM3")), 1.225, places=3)
         v_unmit_air = float(eng_air.resolve_token("V_TERMINAL_UNMITIGATED_MPS"))
         ek_unmit_air = float(eng_air.resolve_token("E_K_UNMITIGATED_JOULES"))
-        # Verify formula parity: v = sqrt(2mg / (rho * S * Cd))
+        # Verify formula parity: v = sqrt(2mg / (rho * S * Cd)) and Ek = 0.5 * m * v^2
         expected_v_air = round(math.sqrt((2.0 * 50.0 * 9.80665) / (1.225 * 0.18 * 0.45)), 2)
-        expected_ek_air = round(0.5 * 50.0 * (v_unmit_air ** 2), 1)
+        expected_ek_air = round(0.5 * 50.0 * (expected_v_air ** 2), 1)
         self.assertAlmostEqual(v_unmit_air, expected_v_air, places=1)
         self.assertAlmostEqual(ek_unmit_air, expected_ek_air, places=1)
 
@@ -257,8 +252,8 @@ class TestDomainCompilerRemediation(unittest.TestCase):
         )
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            out_dir = os.path.join(tmpdir, "docs_conops")
             for dom in ("aviation", "medical", "rail", "marine", "space", "industrial"):
+                out_dir = os.path.join(tmpdir, f"docs_conops_{dom}")
                 success = assemble_conops(
                     input_dir=canonical_units_dir,
                     output_dir=out_dir,
@@ -268,14 +263,19 @@ class TestDomainCompilerRemediation(unittest.TestCase):
                 )
                 self.assertTrue(success, f"assemble_conops failed for domain: {dom}")
 
+                for doc_name in ("CONOPS.md", "MISSION_INTENT.md"):
+                    doc_path = os.path.join(out_dir, doc_name)
+                    self.assertTrue(os.path.isfile(doc_path), f"Missing {doc_name} for domain {dom}")
+                    with open(doc_path, "r", encoding="utf-8") as f:
+                        doc_text = f.read()
+
+                    # Zero residual archetype
+                    self.assertNotIn("the Abstract Cyber-Physical System Archetype", doc_text)
+                    self.assertNotIn("The Abstract Cyber-Physical System Archetype", doc_text)
+
                 conops_file = os.path.join(out_dir, "CONOPS.md")
-                self.assertTrue(os.path.isfile(conops_file))
                 with open(conops_file, "r", encoding="utf-8") as f:
                     conops_text = f.read()
-
-                # Zero residual archetype
-                self.assertNotIn("the Abstract Cyber-Physical System Archetype", conops_text)
-                self.assertNotIn("The Abstract Cyber-Physical System Archetype", conops_text)
 
                 # Domain checks
                 if dom == "medical":
