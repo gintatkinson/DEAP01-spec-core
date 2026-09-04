@@ -588,6 +588,10 @@ class GitLabV4Provider:
                 raw_err = e.read().decode("utf-8", errors="ignore") if e.fp else ""
                 
                 if status_code in (429, 502, 503, 504) and attempt < self.max_retries:
+                    try:
+                        e.close()
+                    except Exception:
+                        pass
                     retry_after = error_headers.get("Retry-After")
                     if retry_after and retry_after.isdigit():
                         sleep_time = float(retry_after)
@@ -596,6 +600,10 @@ class GitLabV4Provider:
                     time.sleep(sleep_time)
                     continue
                 
+                try:
+                    e.close()
+                except Exception:
+                    pass
                 raise RuntimeError(
                     f"GitLab API HTTP {status_code} Error on {method} {url}: {raw_err}"
                 ) from e
@@ -999,6 +1007,10 @@ class JiraV2V3Provider:
                 raw_err = e.read().decode("utf-8", errors="ignore") if e.fp else ""
 
                 if status_code in (429, 502, 503, 504) and attempt < self.max_retries:
+                    try:
+                        e.close()
+                    except Exception:
+                        pass
                     retry_after = error_headers.get("Retry-After") or error_headers.get("retry-after")
                     if retry_after:
                         try:
@@ -1010,6 +1022,10 @@ class JiraV2V3Provider:
                     time.sleep(sleep_time)
                     continue
 
+                try:
+                    e.close()
+                except Exception:
+                    pass
                 raise RuntimeError(
                     f"Jira API HTTP {status_code} Error on {method} {url}: {raw_err}"
                 ) from e

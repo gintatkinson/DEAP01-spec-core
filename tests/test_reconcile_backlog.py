@@ -1,7 +1,9 @@
+import io
 import os
 import sys
 import tempfile
 import unittest
+import urllib.error
 from unittest.mock import patch, MagicMock
 
 # Add scripts directory to sys.path
@@ -23,6 +25,7 @@ from reconcile_backlog import (
     apply_structural_label,
     create_tracker_provider,
     GitLabV4Provider,
+    JiraV2V3Provider,
     GitHubCLIProvider,
     DEFAULT_GITLAB_TRACKER_RULES,
 )
@@ -856,7 +859,148 @@ class TestResourceLifecycleCleanup(unittest.TestCase):
                 os.remove(temp_file)
             self.assertFalse(file_exists, f"Temporary file {temp_file} leaked on disk after write exception!")
 
+    def test_gitlab_api_request_closes_http_error_on_retry(self):
+        """
+        Reproduction test for Issue #203:
+        Verifies that GitLabV4Provider._api_request invokes e.close() on HTTPError
+        before sleeping and retrying on retriable status codes (429, 502, 503, 504).
+        """
+        provider = GitLabV4Provider(
+            server_url="https://gitlab.example.com",
+            project_id="uas/test",
+            token="glpat-token",
+            workspace_dir=self.workspace_dir,
+            max_retries=2,
+            backoff_base_sec=0.001,
+        )
+
+        for status_code in (429, 502, 503, 504):
+            with self.subTest(status_code=status_code):
+                err_stream = io.BytesIO(b'{"message": "Rate limited or gateway error"}')
+                mock_err = urllib.error.HTTPError(
+                    url="https://gitlab.example.com/api/v4/projects/uas%2Ftest/issues",
+                    code=status_code,
+                    msg="HTTP Error",
+                    hdrs={"Retry-After": "0"},
+                    fp=err_stream,
+                )
+                mock_err.close = MagicMock(wraps=mock_err.close)
+
+                mock_resp = MagicMock()
+                mock_resp.status = 200
+                mock_resp.headers = {}
+                mock_resp.read.return_value = b'{"status": "ok"}'
+                mock_resp.__enter__.return_value = mock_resp
+                mock_resp.__exit__.return_value = None
+
+                with patch("urllib.request.urlopen", side_effect=[mock_err, mock_resp]):
+                    code, body, hdrs = provider._api_request("projects/uas%2Ftest/issues")
+                    self.assertEqual(code, 200)
+                    self.assertEqual(body, {"status": "ok"})
+                    mock_err.close.assert_called_once()
+
+    def test_gitlab_api_request_closes_http_error_on_terminal_failure(self):
+        """
+        Reproduction test for Issue #203:
+        Verifies that GitLabV4Provider._api_request invokes e.close() on HTTPError
+        when raising RuntimeError on non-retriable status codes.
+        """
+        provider = GitLabV4Provider(
+            server_url="https://gitlab.example.com",
+            project_id="uas/test",
+            token="glpat-token",
+            workspace_dir=self.workspace_dir,
+            max_retries=2,
+            backoff_base_sec=0.001,
+        )
+
+        err_stream = io.BytesIO(b'{"message": "Unauthorized"}')
+        mock_err = urllib.error.HTTPError(
+            url="https://gitlab.example.com/api/v4/projects/uas%2Ftest/issues",
+            code=401,
+            msg="Unauthorized",
+            hdrs={},
+            fp=err_stream,
+        )
+        mock_err.close = MagicMock(wraps=mock_err.close)
+
+        with patch("urllib.request.urlopen", side_effect=mock_err):
+            with self.assertRaises(RuntimeError):
+                provider._api_request("projects/uas%2Ftest/issues")
+            mock_err.close.assert_called_once()
+
+    def test_jira_api_request_closes_http_error_on_retry(self):
+        """
+        Reproduction test for Issue #203:
+        Verifies that JiraV2V3Provider._api_request invokes e.close() on HTTPError
+        before sleeping and retrying on retriable status codes (429, 502, 503, 504).
+        """
+        provider = JiraV2V3Provider(
+            server_url="https://jira.example.com",
+            project_key="DEAP",
+            token="mock-token",
+            workspace_dir=self.workspace_dir,
+            max_retries=2,
+            backoff_base_sec=0.001,
+        )
+
+        for status_code in (429, 502, 503, 504):
+            with self.subTest(status_code=status_code):
+                err_stream = io.BytesIO(b'{"errorMessages": ["Rate limit exceeded"]}')
+                mock_err = urllib.error.HTTPError(
+                    url="https://jira.example.com/rest/api/2/issue",
+                    code=status_code,
+                    msg="HTTP Error",
+                    hdrs={"Retry-After": "0"},
+                    fp=err_stream,
+                )
+                mock_err.close = MagicMock(wraps=mock_err.close)
+
+                mock_resp = MagicMock()
+                mock_resp.status = 200
+                mock_resp.headers = {}
+                mock_resp.read.return_value = b'{"status": "ok"}'
+                mock_resp.__enter__.return_value = mock_resp
+                mock_resp.__exit__.return_value = None
+
+                with patch("urllib.request.urlopen", side_effect=[mock_err, mock_resp]):
+                    code, body, hdrs = provider._api_request("rest/api/2/issue")
+                    self.assertEqual(code, 200)
+                    self.assertEqual(body, {"status": "ok"})
+                    mock_err.close.assert_called_once()
+
+    def test_jira_api_request_closes_http_error_on_terminal_failure(self):
+        """
+        Reproduction test for Issue #203:
+        Verifies that JiraV2V3Provider._api_request invokes e.close() on HTTPError
+        when raising RuntimeError on non-retriable status codes.
+        """
+        provider = JiraV2V3Provider(
+            server_url="https://jira.example.com",
+            project_key="DEAP",
+            token="mock-token",
+            workspace_dir=self.workspace_dir,
+            max_retries=2,
+            backoff_base_sec=0.001,
+        )
+
+        err_stream = io.BytesIO(b'{"errorMessages": ["Forbidden"]}')
+        mock_err = urllib.error.HTTPError(
+            url="https://jira.example.com/rest/api/2/issue",
+            code=403,
+            msg="Forbidden",
+            hdrs={},
+            fp=err_stream,
+        )
+        mock_err.close = MagicMock(wraps=mock_err.close)
+
+        with patch("urllib.request.urlopen", side_effect=mock_err):
+            with self.assertRaises(RuntimeError):
+                provider._api_request("rest/api/2/issue")
+            mock_err.close.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
