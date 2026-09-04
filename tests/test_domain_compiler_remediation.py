@@ -1,6 +1,6 @@
 """
 Unit tests for Phase 2 Compiler & Domain Template Architecture Remediation.
-Addresses Issues #174, #175, #177, #178, #179, #180.
+Addresses Issues #174, #175, #177, #178, #179, #180, #206.
 """
 
 import math
@@ -652,6 +652,31 @@ class TestDomainCompilerRemediation(unittest.TestCase):
 
             self.assertIn("primary recovery base", combined.lower())
             self.assertIn("return-to-base", combined.lower())
+
+    def test_explicit_bingo_energy_parameters_preservation(self):
+        """Verify explicit Bingo energy partitions are not overwritten by _derive_energy_budgets (Issue #206)."""
+        explicit_bingo_params = {
+            "TOTAL_POWER_NOMINAL_W": "500.0",
+            "ENDURANCE_HOURS": "2.0",
+            "BATTERY_CAPACITY_JOULES": "4000000.0",
+            "E_RETURN_JOULES": "1800000.0",
+            "E_DIVERT_JOULES": "700000.0",
+            "E_RESERVE_JOULES": "950000.0",
+            "E_CONTINGENCY_JOULES": "550000.0",
+            "E_BINGO_JOULES": "4000000.0",
+            "E_BINGO_THRESHOLD_JOULES": "4000000.0",
+        }
+        engine = SysMLParameterBindingEngine(
+            parameter_values=explicit_bingo_params,
+            auto_detect=False,
+        )
+
+        for key, val in explicit_bingo_params.items():
+            self.assertEqual(
+                engine.resolve_token(key),
+                val,
+                f"Explicit parameter {key} was clobbered: expected {val}, got {engine.resolve_token(key)}",
+            )
 
 
 if __name__ == "__main__":

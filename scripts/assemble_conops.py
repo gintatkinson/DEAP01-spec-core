@@ -760,12 +760,18 @@ class SysMLParameterBindingEngine:
         e_contingency = round(0.10 * e_joules, 1)
         e_bingo = round(e_return + e_divert + e_reserve + e_contingency, 1)
 
-        self.parameter_bindings["E_RESERVE_JOULES"] = str(e_reserve)
-        self.parameter_bindings["E_RETURN_JOULES"] = str(e_return)
-        self.parameter_bindings["E_DIVERT_JOULES"] = str(e_divert)
-        self.parameter_bindings["E_CONTINGENCY_JOULES"] = str(e_contingency)
-        self.parameter_bindings["E_BINGO_JOULES"] = str(e_bingo)
-        self.parameter_bindings["E_BINGO_THRESHOLD_JOULES"] = str(e_bingo)
+        if "E_RESERVE_JOULES" not in self._explicit_keys:
+            self.parameter_bindings["E_RESERVE_JOULES"] = str(e_reserve)
+        if "E_RETURN_JOULES" not in self._explicit_keys:
+            self.parameter_bindings["E_RETURN_JOULES"] = str(e_return)
+        if "E_DIVERT_JOULES" not in self._explicit_keys:
+            self.parameter_bindings["E_DIVERT_JOULES"] = str(e_divert)
+        if "E_CONTINGENCY_JOULES" not in self._explicit_keys:
+            self.parameter_bindings["E_CONTINGENCY_JOULES"] = str(e_contingency)
+        if "E_BINGO_JOULES" not in self._explicit_keys:
+            self.parameter_bindings["E_BINGO_JOULES"] = str(e_bingo)
+        if "E_BINGO_THRESHOLD_JOULES" not in self._explicit_keys:
+            self.parameter_bindings["E_BINGO_THRESHOLD_JOULES"] = str(e_bingo)
 
     def _derive_domain_ontology(self) -> None:
         """
