@@ -12,6 +12,7 @@ Action01..Action21); no domain-specific concepts are hardcoded anywhere.
 """
 import os
 import sys
+import unittest
 
 import pytest
 
@@ -21,6 +22,8 @@ if repo_root not in sys.path:
 
 from scripts.verify_downstream_baseline import (  # noqa: E402  (sys.path setup above)
     check_safety_integrity_and_sora_completeness,
+    MarkdownTableASTParser,
+    CartesianProductValidator,
 )
 
 # Canonical STPA guide words (methodology constants, domain-independent).
@@ -340,4 +343,99 @@ def test_check17_accepts_complete_cartesian_matrix_with_multifile_schema(tmp_pat
     doc = build_stpa_document(uca_combos=combos)
 
     _run_check17_multifile(tmp_path, schema_files, doc)
+
+
+def test_check17_accepts_uca_table_with_description_column(tmp_path):
+    """Check 17 must accept UCA tables having description columns alongside control action columns (#211)."""
+    model = build_sysml_model({"ControllerA": 4})
+    combos = [(f"Action{number:02d}", gw) for number in range(1, 5) for gw in GUIDE_WORD_CELL_TEXT]
+    header = (
+        "| UCA ID | Controller | Unsafe Control Action Description | Control Action | Guide Word | Hazard Reference | Loss Reference | Safety Constraint |\n"
+        "| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n"
+    )
+    rows = []
+    for number, (action, gw_id) in enumerate(combos, start=1):
+        rows.append(
+            f"| UCA-{number:02d} | ControllerA | Unsafe command issued under abnormal conditions | {action} | {GUIDE_WORD_CELL_TEXT[gw_id]} "
+            f"| H-1 | L-1 | SC-{number:02d}: Safe constraint for {action}. |"
+        )
+    uca_table = header + "\n".join(rows) + "\n"
+    doc = build_stpa_document(uca_combos=[])
+    doc = doc.replace(build_uca_table([]), uca_table)
+    _run_check17(tmp_path, model, doc)
+
+
+class TestMarkdownTableASTParserUCAColumns(unittest.TestCase):
+    """Unit and regression tests for MarkdownTableASTParser column resolution (#211)."""
+
+    def test_parse_stpa_table_description_before_control_action(self):
+        """Verify control_action is extracted from 'Control Action' when 'Unsafe Control Action Description' appears first."""
+        table = (
+            "| UCA ID | Controller | Unsafe Control Action Description | Control Action | Guide Word | Hazard Reference | Loss Reference | Safety Constraint |\n"
+            "| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n"
+            "| UCA-01 | ControllerA | Commands thrust when obstacle present | Action01 | Not providing causes hazard | H-1 | L-1 | SC-01 |\n"
+            "| UCA-02 | ControllerA | Inhibits braking on landing roll | Action02 | Providing causes hazard | H-1 | L-1 | SC-02 |\n"
+        )
+        rows = MarkdownTableASTParser.parse_stpa_table(table)
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0].uca_id, "UCA-01")
+        self.assertEqual(rows[0].controller, "ControllerA")
+        self.assertEqual(rows[0].control_action, "Action01")
+        self.assertEqual(rows[0].guide_word, "Not providing causes hazard")
+
+        self.assertEqual(rows[1].uca_id, "UCA-02")
+        self.assertEqual(rows[1].controller, "ControllerA")
+        self.assertEqual(rows[1].control_action, "Action02")
+        self.assertEqual(rows[1].guide_word, "Providing causes hazard")
+
+    def test_parse_stpa_table_description_after_control_action(self):
+        """Verify control_action is extracted when 'Control Action' appears before 'Unsafe Control Action Description'."""
+        table = (
+            "| UCA ID | Controller | Control Action | Unsafe Control Action Description | Guide Word | Hazard Reference | Loss Reference | Safety Constraint |\n"
+            "| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n"
+            "| UCA-01 | ControllerA | Action01 | Commands thrust when obstacle present | Not providing causes hazard | H-1 | L-1 | SC-01 |\n"
+        )
+        rows = MarkdownTableASTParser.parse_stpa_table(table)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].uca_id, "UCA-01")
+        self.assertEqual(rows[0].control_action, "Action01")
+
+    def test_parse_stpa_table_unsafe_control_action_header(self):
+        """Verify control_action is not confused by 'Unsafe Control Action' column header."""
+        table = (
+            "| UCA ID | Unsafe Control Action | Controller | Control Action | Guide Word | Hazard Reference | Loss Reference | Safety Constraint |\n"
+            "| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n"
+            "| UCA-01 | High throttle command | ControllerA | Action01 | Not providing causes hazard | H-1 | L-1 | SC-01 |\n"
+        )
+        rows = MarkdownTableASTParser.parse_stpa_table(table)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].uca_id, "UCA-01")
+        self.assertEqual(rows[0].control_action, "Action01")
+
+    def test_cartesian_product_validation_with_description_column(self):
+        """Verify CartesianProductValidator passes on table with description column."""
+        combos = [(f"Action{number:02d}", gw) for number in range(1, 3) for gw in GUIDE_WORD_CELL_TEXT]
+        header = (
+            "| UCA ID | Controller | Unsafe Control Action Description | Control Action | Guide Word | Hazard Reference | Loss Reference | Safety Constraint |\n"
+            "| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n"
+        )
+        rows = []
+        for number, (action, gw_id) in enumerate(combos, start=1):
+            rows.append(
+                f"| UCA-{number:02d} | ControllerA | Descriptive context for {action} | {action} | {GUIDE_WORD_CELL_TEXT[gw_id]} "
+                f"| H-1 | L-1 | SC-{number:02d} |"
+            )
+        table = header + "\n".join(rows) + "\n"
+        stpa_rows = MarkdownTableASTParser.parse_stpa_table(table)
+        expected_actions = ["Action01", "Action02"]
+        report = CartesianProductValidator.verify_cartesian_completeness(stpa_rows, expected_actions)
+        self.assertTrue(report.is_conforming)
+        self.assertEqual(len(report.missing_permutations), 0)
+        self.assertEqual(report.total_uca_rows, 8)
+        self.assertEqual(report.expected_uca_rows, 8)
+
+
+if __name__ == "__main__":
+    unittest.main()
+
 

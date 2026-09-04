@@ -790,10 +790,20 @@ class MarkdownTableASTParser:
             index = probe
 
     @staticmethod
-    def _column_index(header, keywords):
+    def _column_index(header, keywords, exclude=()):
+        # First attempt exact normalized match
         for index, cell in enumerate(header):
-            lowered = cell.lower()
-            if any(keyword in lowered for keyword in keywords):
+            lowered = cell.lower().strip()
+            if any(ex in lowered for ex in exclude):
+                continue
+            if lowered in keywords:
+                return index
+        # Second attempt word-boundary regex match
+        for index, cell in enumerate(header):
+            lowered = cell.lower().strip()
+            if any(ex in lowered for ex in exclude):
+                continue
+            if any(re.search(rf"\b{re.escape(kw)}\b", lowered) for kw in keywords):
                 return index
         return None
 
@@ -807,13 +817,13 @@ class MarkdownTableASTParser:
                 continue
             if "guide word" not in header_text and "control action" not in header_text:
                 continue
-            col_uca = cls._column_index(header, ("uca id", "uca"))
+            col_uca = cls._column_index(header, ("uca id", "uca"), exclude=("description", "scenario", "constraint"))
             col_controller = cls._column_index(header, ("controller",))
-            col_action = cls._column_index(header, ("control action", "action"))
-            col_guide = cls._column_index(header, ("guide word",))
-            col_hazard = cls._column_index(header, ("hazard",))
-            col_loss = cls._column_index(header, ("loss",))
-            col_constraint = cls._column_index(header, ("constraint",))
+            col_action = cls._column_index(header, ("control action", "action"), exclude=("description", "unsafe", "scenario"))
+            col_guide = cls._column_index(header, ("guide word", "stpa guide word", "uca category", "stpa uca category", "failure mode"))
+            col_hazard = cls._column_index(header, ("hazard", "hazard ref", "hazard reference", "hazard links", "triggered system hazard"))
+            col_loss = cls._column_index(header, ("loss", "loss ref", "system loss ref", "loss reference"), exclude=("scenario",))
+            col_constraint = cls._column_index(header, ("safety constraint", "constraint", "constraint statement"))
 
             def cell_for(cells, col):
                 return cells[col] if col is not None and col < len(cells) else ""
