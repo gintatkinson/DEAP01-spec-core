@@ -721,13 +721,16 @@ def _discover_sysml_model_text(repo_root: Optional[str]) -> Optional[str]:
         return None
     schema_dir = os.path.join(repo_root, "schema")
     if os.path.isdir(schema_dir):
+        sysml_contents = []
         for name in sorted(os.listdir(schema_dir)):
             if name.endswith(".sysml"):
                 try:
                     with open(os.path.join(schema_dir, name), "r", encoding="utf-8") as handle:
-                        return handle.read()
+                        sysml_contents.append(handle.read())
                 except OSError:
                     continue
+        if sysml_contents:
+            return "\n\n".join(sysml_contents)
     pipeline_model = os.path.join(repo_root, ".pipeline", "schema.sysml")
     if os.path.isfile(pipeline_model):
         try:

@@ -283,3 +283,61 @@ def test_check17_rejects_proof_block_missing_derivation(tmp_path, capsys):
     captured = capsys.readouterr().err
     assert "THM-01" in captured, f"Error did not name the malformed theorem: {captured}"
     assert "Missing Part 4 Derivation" in captured, f"Error did not name the missing derivation: {captured}"
+
+
+def write_multifile_downstream_project(tmp_path, schema_files: dict, document_text: str):
+    """Write a downstream project tree with multiple schema/*.sysml files + docs/safety/STPA_MATRIX.md."""
+    schema_dir = tmp_path / "schema"
+    schema_dir.mkdir(parents=True, exist_ok=True)
+    for filename, content in schema_files.items():
+        (schema_dir / filename).write_text(content, encoding="utf-8")
+
+    safety_dir = tmp_path / "docs" / "safety"
+    safety_dir.mkdir(parents=True, exist_ok=True)
+    (safety_dir / "STPA_MATRIX.md").write_text(document_text, encoding="utf-8")
+    return tmp_path
+
+
+def _run_check17_multifile(tmp_path, schema_files: dict, document_text: str):
+    write_multifile_downstream_project(tmp_path, schema_files, document_text)
+    check_safety_integrity_and_sora_completeness(str(tmp_path))
+
+
+def test_check17_rejects_truncated_uca_cartesian_with_multifile_schema(tmp_path, capsys):
+    """A modular SysML schema split across 01_types.sysml (no actions) and 02_actions.sysml (21 actions)
+    plus a 16-row UCA table must be rejected.
+
+    The mandatory Cartesian space is 21 actions x 4 guide words = 84 UCAs; a 16-row
+    table is missing 68 permutations and Check 17 must aggregate all schema files to detect and name them.
+    """
+    types_sysml = "package NeutralTypes {\n    part def SignalType;\n}\n"
+    actions_sysml = build_sysml_model({"ControllerA": 10, "ControllerB": 11})
+    schema_files = {
+        "01_types.sysml": types_sysml,
+        "02_actions.sysml": actions_sysml,
+    }
+    combos = [(f"Action{number:02d}", gw) for number in range(1, 5) for gw in GUIDE_WORD_CELL_TEXT]
+    doc = build_stpa_document(uca_combos=combos)
+
+    with pytest.raises(SystemExit) as exc_info:
+        _run_check17_multifile(tmp_path, schema_files, doc)
+    assert exc_info.value.code == 1
+
+    captured = capsys.readouterr().err
+    assert "expected 84" in captured, f"Cardinality error naming 84 expected permutations missing: {captured}"
+    assert "Action05" in captured, f"Error did not name missing permutations: {captured}"
+
+
+def test_check17_accepts_complete_cartesian_matrix_with_multifile_schema(tmp_path):
+    """A complete 4-action x 4-guide-word = 16-row Cartesian matrix with modular schema must be accepted."""
+    types_sysml = "package NeutralTypes {\n    part def SignalType;\n}\n"
+    actions_sysml = build_sysml_model({"ControllerA": 4})
+    schema_files = {
+        "01_types.sysml": types_sysml,
+        "02_actions.sysml": actions_sysml,
+    }
+    combos = [(f"Action{number:02d}", gw) for number in range(1, 5) for gw in GUIDE_WORD_CELL_TEXT]
+    doc = build_stpa_document(uca_combos=combos)
+
+    _run_check17_multifile(tmp_path, schema_files, doc)
+
