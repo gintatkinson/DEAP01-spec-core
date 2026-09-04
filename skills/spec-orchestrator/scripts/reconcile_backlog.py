@@ -1454,8 +1454,8 @@ class GitHubCLIProvider:
         temp_path = None
         try:
             with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".md", delete=False) as tf:
-                tf.write(description)
                 temp_path = tf.name
+                tf.write(description)
             cmd = [str(issue_num) if c == "{number}" else (temp_path if c == "{temp_path}" else c) for c in edit_cmd_template]
             res = subprocess.run(cmd, cwd=self.workspace_dir, check=True, capture_output=True, timeout=30)
             return res.returncode == 0
@@ -2663,8 +2663,8 @@ def sync_issue_body_to_tracker(issue_num, filepath, issue_type="Feature", rules=
         temp_path = None
         try:
             with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".md", delete=False) as tf:
-                tf.write(content)
                 temp_path = tf.name
+                tf.write(content)
             
             edit_cmd_template = tracker_rules.get("commands", {}).get("edit_issue")
             if not edit_cmd_template:

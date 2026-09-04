@@ -23,6 +23,7 @@ from reconcile_backlog import (
     apply_structural_label,
     create_tracker_provider,
     GitLabV4Provider,
+    GitHubCLIProvider,
     DEFAULT_GITLAB_TRACKER_RULES,
 )
 
@@ -778,5 +779,84 @@ class TestGitLabProviderParity(unittest.TestCase):
         self.assertEqual(factory_provider.list_issues(), [])
 
 
+class TestResourceLifecycleCleanup(unittest.TestCase):
+    """
+    Regression and reproduction tests for Issue #202:
+    Uncleaned temporary file leak on write exception paths during issue synchronization.
+    """
+    def setUp(self):
+        self.workspace_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        self.github_rules = {
+            "meta": {"upstream_repository": "gintatkinson/DEAP01-spec-core"},
+            "tracker_rules": {
+                "provider": "github",
+                "commands": {
+                    "edit_issue": ["gh", "issue", "edit", "{number}", "--body-file", "{temp_path}"]
+                }
+            }
+        }
+
+    def test_github_cli_provider_edit_issue_temp_file_cleanup_on_write_exception(self):
+        provider = GitHubCLIProvider(workspace_dir=self.workspace_dir, tracker_rules=self.github_rules["tracker_rules"])
+        
+        created_temp_files = []
+        original_named_temp_file = tempfile.NamedTemporaryFile
+
+        def faulty_named_temp_file(*args, **kwargs):
+            tf = original_named_temp_file(*args, **kwargs)
+            created_temp_files.append(tf.name)
+            def faulty_write(*wargs, **wkwargs):
+                raise OSError("Simulated disk full or I/O failure during tf.write")
+            tf.write = faulty_write
+            return tf
+
+        with patch("reconcile_backlog.tempfile.NamedTemporaryFile", side_effect=faulty_named_temp_file):
+            with self.assertRaises(OSError):
+                provider.edit_issue(42, "Description content to write")
+
+        self.assertTrue(len(created_temp_files) > 0, "A temporary file should have been allocated")
+        for temp_file in created_temp_files:
+            file_exists = os.path.exists(temp_file)
+            if file_exists:
+                os.remove(temp_file)
+            self.assertFalse(file_exists, f"Temporary file {temp_file} leaked on disk after write exception!")
+
+    def test_sync_issue_body_to_tracker_temp_file_cleanup_on_write_exception(self):
+        created_temp_files = []
+        original_named_temp_file = tempfile.NamedTemporaryFile
+
+        def faulty_named_temp_file(*args, **kwargs):
+            tf = original_named_temp_file(*args, **kwargs)
+            created_temp_files.append(tf.name)
+            def faulty_write(*wargs, **wkwargs):
+                raise OSError("Simulated disk full or I/O failure during tf.write")
+            tf.write = faulty_write
+            return tf
+
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        dummy_spec = os.path.join(temp_dir.name, "feat-test.md")
+        with open(dummy_spec, "w", encoding="utf-8") as f:
+            f.write("# Dummy Spec\nContent")
+
+        with patch("reconcile_backlog.tempfile.NamedTemporaryFile", side_effect=faulty_named_temp_file):
+            with self.assertRaises(OSError):
+                sync_issue_body_to_tracker(
+                    issue_num=101,
+                    filepath=dummy_spec,
+                    rules=self.github_rules,
+                    issue_record={"number": 101, "title": "Dummy Spec", "labels": []},
+                    provider_adapter=None
+                )
+
+        self.assertTrue(len(created_temp_files) > 0, "A temporary file should have been allocated")
+        for temp_file in created_temp_files:
+            file_exists = os.path.exists(temp_file)
+            if file_exists:
+                os.remove(temp_file)
+            self.assertFalse(file_exists, f"Temporary file {temp_file} leaked on disk after write exception!")
+
+
 if __name__ == "__main__":
     unittest.main()
+
