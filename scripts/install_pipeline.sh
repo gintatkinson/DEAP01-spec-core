@@ -342,24 +342,47 @@ JIRA_API_TOKEN=your_jira_api_token_or_pat_here
 # JIRA_CA_CERT_PATH=/etc/ssl/certs/internal-ca.pem
 EOF
 
-# Scaffold downstream .agents/AGENTS.md and root AGENTS.md
+# Transform and scaffold downstream .agents/AGENTS.md and root AGENTS.md with full governance armor
 mkdir -p "$TARGET_DIR/.agents"
-cat << 'EOF' > "$TARGET_DIR/.agents/AGENTS.md"
-# Agent Instructions
+python3 -c "
+import os, sys
 
-## Repository Role & Scope Classification
-- **Repository Classification:** `DOWNSTREAM_CUSTOMER_PROJECT` (Domain-Specific Safety-Critical Engineering Project)
-- **Sentinel Indicator:** The absence of `.pipeline/upstream/` denotes that this repository is an active **Downstream Customer Project Workspace**, authorized for concrete application code implementation and domain feature delivery.
-- **Customer Application Scope:** Customer-specific application code, domain nodes/modules, domain tests, mission envelopes, and proprietary safety models are developed, tested, and maintained directly within this project workspace across any target domain (Aerospace, Medical, Space, Industrial AGV, Subsea, Rail).
+installer_root = sys.argv[1]
+target_dir = sys.argv[2]
+src_agents_path = os.path.join(installer_root, 'AGENTS.md')
 
-## Pipeline Skills & Rules
-This project uses the Digital Engineering Agent Platform (DEAP).
-- Skills: read all SKILL.md files in `skills/` and `.agents/skills/`
-- Rules: read all files in `rules/` and `.agents/AGENTS.md`
-- Constitution: read `.pipeline/constitution.md` before any task
-- Profiles: read the target platform profile in `.pipeline/profiles/` (e.g. `ros2_cpp.md`, `px4_module.md`, etc.) before implementing features
-EOF
-cp "$TARGET_DIR/.agents/AGENTS.md" "$TARGET_DIR/AGENTS.md"
+with open(src_agents_path, 'r', encoding='utf-8') as f:
+    content = f.read()
+
+upstream_header = '''## Repository Role & Scope Classification
+- **Repository Classification:** \`UPSTREAM_SPEC_CORE_COMPILER\` (Digital Engineering Agent Platform Core Specification Compiler)
+- **Sentinel Indicator:** The presence of \`.pipeline/upstream/\` and \`skills/spec-orchestrator/\` denotes that this repository is the **Upstream Specification Core Compiler**, NOT a downstream customer application workspace or domain template.
+- **Domain Template & Customer Data Boundary:** Domain-specific platforms (e.g. UAS safety, automotive, medical) and customer applications belong in downstream distribution repositories, and must NOT be committed to this upstream specification core compiler repository.'''
+
+downstream_header = '''## Repository Role & Scope Classification
+- **Repository Classification:** \`DOWNSTREAM_CUSTOMER_PROJECT\` (Domain-Specific Safety-Critical Engineering Project)
+- **Sentinel Indicator:** The absence of \`.pipeline/upstream/\` denotes that this repository is an active **Downstream Customer Project Workspace**, authorized for concrete application code implementation and domain feature delivery.
+- **Customer Application Scope:** Customer-specific application code, domain nodes/modules, domain tests, mission envelopes, and proprietary safety models are developed, tested, and maintained directly within this project workspace across any target domain (Aerospace, Medical, Space, Industrial AGV, Subsea, Rail).'''
+
+if upstream_header in content:
+    transformed = content.replace(upstream_header, downstream_header)
+else:
+    import re
+    transformed = re.sub(
+        r'## Repository Role & Scope Classification\n- \*\*Repository Classification:\*\* `UPSTREAM_SPEC_CORE_COMPILER`[^\n]*\n- \*\*Sentinel Indicator:\*\* [^\n]*\n- \*\*Domain Template & Customer Data Boundary:\*\* [^\n]*',
+        downstream_header,
+        content
+    )
+
+dot_agents_path = os.path.join(target_dir, '.agents', 'AGENTS.md')
+root_agents_path = os.path.join(target_dir, 'AGENTS.md')
+
+with open(dot_agents_path, 'w', encoding='utf-8') as f:
+    f.write(transformed)
+
+with open(root_agents_path, 'w', encoding='utf-8') as f:
+    f.write(transformed)
+" "$INSTALLER_ROOT" "$TARGET_DIR"
 
 # Scaffold downstream root CLAUDE.md if missing
 if [ ! -f "$TARGET_DIR/CLAUDE.md" ]; then
@@ -842,6 +865,8 @@ if [ -f "$TARGET_DIR/skills/spec-orchestrator/scripts/bootstrap_tracker_labels.p
     echo "You can re-run label provisioning anytime: python3 skills/spec-orchestrator/scripts/bootstrap_tracker_labels.py"
   }
 fi
+
+find "$TARGET_DIR" -name ".DS_Store" -delete 2>/dev/null || true
 
 echo "==> Digital Pipeline Installation Complete. 0 manual steps remaining."
 

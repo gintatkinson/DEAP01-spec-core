@@ -435,7 +435,7 @@ def test_upstream_blueprint_domain_cleanliness_detects_domain_concept_papers_and
 
 
 def test_installer_scaffolds_downstream_agents_md():
-    """Verify that scripts/install_pipeline.sh scaffolds downstream AGENTS.md files with DOWNSTREAM_CUSTOMER_PROJECT."""
+    """Verify that scripts/install_pipeline.sh scaffolds downstream AGENTS.md files with DOWNSTREAM_CUSTOMER_PROJECT and full governance armor."""
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     if not os.path.isdir(repo_root):
         repo_root = os.getcwd()
@@ -444,6 +444,11 @@ def test_installer_scaffolds_downstream_agents_md():
     assert os.path.isfile(installer_path), f"scripts/install_pipeline.sh missing at {repo_root}"
 
     with tempfile.TemporaryDirectory() as tmpdir:
+        # Pre-seed a dummy .DS_Store file to verify installer purges it
+        dummy_ds = os.path.join(tmpdir, ".DS_Store")
+        with open(dummy_ds, "w", encoding="utf-8") as f:
+            f.write("test_ds_store")
+
         res = subprocess.run(
             ["bash", installer_path, tmpdir, "-p", "github"],
             cwd=repo_root,
@@ -464,11 +469,24 @@ def test_installer_scaffolds_downstream_agents_md():
         with open(agents_root_path, "r", encoding="utf-8") as f:
             root_content = f.read()
 
-        assert "DOWNSTREAM_CUSTOMER_PROJECT" in dot_content, ".agents/AGENTS.md does not contain DOWNSTREAM_CUSTOMER_PROJECT"
-        assert "UPSTREAM_SPEC_CORE_COMPILER" not in dot_content, ".agents/AGENTS.md unexpectedly contains UPSTREAM_SPEC_CORE_COMPILER"
+        assert "Mandatory Subagent Self-Rejection Pre-Flight Gate" in dot_content, ".agents/AGENTS.md missing Mandatory Subagent Self-Rejection Pre-Flight Gate"
+        assert "Mandatory Subagent Self-Rejection Pre-Flight Gate" in root_content, "AGENTS.md missing Mandatory Subagent Self-Rejection Pre-Flight Gate"
 
+        assert "DOWNSTREAM_CUSTOMER_PROJECT" in dot_content, ".agents/AGENTS.md does not contain DOWNSTREAM_CUSTOMER_PROJECT"
         assert "DOWNSTREAM_CUSTOMER_PROJECT" in root_content, "AGENTS.md does not contain DOWNSTREAM_CUSTOMER_PROJECT"
+
+        assert "UPSTREAM_SPEC_CORE_COMPILER" not in dot_content, ".agents/AGENTS.md unexpectedly contains UPSTREAM_SPEC_CORE_COMPILER"
         assert "UPSTREAM_SPEC_CORE_COMPILER" not in root_content, "AGENTS.md unexpectedly contains UPSTREAM_SPEC_CORE_COMPILER"
+
+        assert "Mandatory Subagent Dispatch for Research, Specification & Implementation Loops" in dot_content, ".agents/AGENTS.md missing Mandatory Subagent Dispatch"
+        assert "Mandatory Subagent Dispatch for Research, Specification & Implementation Loops" in root_content, "AGENTS.md missing Mandatory Subagent Dispatch"
+
+        ds_store_files = []
+        for root, dirs, files in os.walk(tmpdir):
+            for f in files:
+                if f == ".DS_Store":
+                    ds_store_files.append(os.path.join(root, f))
+        assert not ds_store_files, f"Found .DS_Store files in target directory: {ds_store_files}"
 
 
 class TestCheck18BlueprintDomainCleanliness(unittest.TestCase):

@@ -237,28 +237,41 @@ if [ -f ./.gitignore ]; then
 else
   cp ./.tmp-pipeline/.gitignore ./
 fi
+# Transform and scaffold downstream AGENTS.md with full governance armor
+mkdir -p ./.agents
+python3 -c "
+import os
+src = './.tmp-pipeline/AGENTS.md' if os.path.exists('./.tmp-pipeline/AGENTS.md') else 'AGENTS.md'
+with open(src, 'r', encoding='utf-8') as f:
+    content = f.read()
+
+upstream_h = '''## Repository Role & Scope Classification
+- **Repository Classification:** \`UPSTREAM_SPEC_CORE_COMPILER\` (Digital Engineering Agent Platform Core Specification Compiler)
+- **Sentinel Indicator:** The presence of \`.pipeline/upstream/\` and \`skills/spec-orchestrator/\` denotes that this repository is the **Upstream Specification Core Compiler**, NOT a downstream customer application workspace or domain template.
+- **Domain Template & Customer Data Boundary:** Domain-specific platforms (e.g. UAS safety, automotive, medical) and customer applications belong in downstream distribution repositories, and must NOT be committed to this upstream specification core compiler repository.'''
+
+downstream_h = '''## Repository Role & Scope Classification
+- **Repository Classification:** \`DOWNSTREAM_CUSTOMER_PROJECT\` (Domain-Specific Safety-Critical Engineering Project)
+- **Sentinel Indicator:** The absence of \`.pipeline/upstream/\` denotes that this repository is an active **Downstream Customer Project Workspace**, authorized for concrete application code implementation and domain feature delivery.
+- **Customer Application Scope:** Customer-specific application code, domain nodes/modules, domain tests, mission envelopes, and proprietary safety models are developed, tested, and maintained directly within this project workspace across any target domain (Aerospace, Medical, Space, Industrial AGV, Subsea, Rail).'''
+
+if upstream_h in content:
+    transformed = content.replace(upstream_h, downstream_h)
+else:
+    import re
+    transformed = re.sub(
+        r'## Repository Role & Scope Classification\n- \*\*Repository Classification:\*\* `UPSTREAM_SPEC_CORE_COMPILER`[^\n]*\n- \*\*Sentinel Indicator:\*\* [^\n]*\n- \*\*Domain Template & Customer Data Boundary:\*\* [^\n]*',
+        downstream_h,
+        content
+    )
+
+for dest in ['./.agents/AGENTS.md', './AGENTS.md']:
+    with open(dest, 'w', encoding='utf-8') as f:
+        f.write(transformed)
+"
 rm -rf ./.tmp-pipeline
 find . -name ".DS_Store" -delete 2>/dev/null || true
 mkdir -p ./docs/conops ./docs/safety ./docs/architecture/blueprints ./docs/epics ./docs/features ./docs/user-stories ./docs/use-cases ./.pipeline/contracts ./.pipeline/domain_specs ./.pipeline/profiles
-
-# Scaffold downstream AGENTS.md
-mkdir -p ./.agents
-cat << 'EOF' > ./.agents/AGENTS.md
-# Agent Instructions
-
-## Repository Role & Scope Classification
-- **Repository Classification:** `DOWNSTREAM_CUSTOMER_PROJECT` (Domain-Specific Safety-Critical Engineering Project)
-- **Sentinel Indicator:** The absence of `.pipeline/upstream/` denotes that this repository is an active **Downstream Customer Project Workspace**, authorized for concrete application code implementation and domain feature delivery.
-- **Customer Application Scope:** Customer-specific application code, domain nodes/modules, domain tests, mission envelopes, and proprietary safety models are developed, tested, and maintained directly within this project workspace across any target domain (Aerospace, Medical, Space, Industrial AGV, Subsea, Rail).
-
-## Pipeline Skills & Rules
-This project uses the Digital Engineering Agent Platform (DEAP).
-- Skills: read all SKILL.md files in `skills/` and `.agents/skills/`
-- Rules: read all files in `rules/` and `.agents/AGENTS.md`
-- Constitution: read `.pipeline/constitution.md` before any task
-- Profiles: read the target platform profile in `.pipeline/profiles/` (e.g. `ros2_cpp.md`, `px4_module.md`, etc.) before implementing features
-EOF
-cp ./.agents/AGENTS.md ./AGENTS.md
 
 # Verify pipeline directories, agent configuration, and skills
 test -d ./.pipeline && test -d ./skills && test -d ./.agents/skills && echo "Pipeline directories (.pipeline, skills, .agents/skills) verified successfully."
