@@ -18,6 +18,9 @@ if repo_root not in sys.path:
 from scripts.verify_downstream_baseline import (
     verify_upstream_blueprint_domain_cleanliness,
     run_all_checks,
+    MarkdownTableASTParser,
+    CartesianProductValidator,
+    ProofBlockAST,
 )
 
 def test_python_runtime_environment():
@@ -654,6 +657,83 @@ class TestInstallerScaffolding(unittest.TestCase):
         test_installer_refuses_self_target()
 
 
+class TestProofBlockASTParser(unittest.TestCase):
+    """Unit tests for MarkdownTableASTParser.parse_proof_blocks (Issue #189)."""
+
+    def test_parse_proof_blocks_markdown_subheadings(self):
+        """Verify proof blocks structured with markdown subheadings for parts 1 to 5 are correctly parsed."""
+        content = """
+# Safety Assurance Cases
+
+### Theorem SAF-01: Forward Invariance of Conflict-Free Minimum Separation
+
+#### Part 1 — Proposition Statement
+For any initial state $x_0 \in \mathcal{C}$, the safety envelope $h(x(t)) \ge 0$ holds for all $t \ge 0$.
+
+#### Part 2 — Assumptions
+1. Continuous differentiability of system dynamics $\dot{x} = f(x) + g(x)u$.
+2. Actuator saturation limits $|u| \le u_{\max}$.
+
+#### Part 3 — Barrier Function / Invariant
+We define candidate zeroing control barrier function $B(x) = d(x) - d_{\min}$.
+
+#### Part 4 — Derivation & Inductive Step
+Taking the Lie derivative:
+$$\dot{B}(x) = L_f B(x) + L_g B(x) u \ge -\alpha(B(x))$$
+
+#### Part 5 — Conclusion & Q.E.D.
+By Nagumo's theorem, the set $\mathcal{C}$ is forward invariant under feedback controller $k(x)$. Q.E.D.
+
+### Next Unrelated Section
+This section is outside the proof block.
+"""
+        blocks = MarkdownTableASTParser.parse_proof_blocks(content)
+        self.assertEqual(len(blocks), 1)
+        block = blocks[0]
+        self.assertEqual(block.theorem_id, "SAF-01")
+        self.assertIn("Part 1", block.proposition)
+        self.assertIn("Part 2", block.assumptions)
+        self.assertIn("Part 3", block.barrier_function)
+        self.assertIn("Part 4", block.derivation)
+        self.assertIn("Part 5", block.conclusion)
+
+        report = CartesianProductValidator.verify_proof_structure(blocks)
+        self.assertTrue(report.is_conforming)
+        self.assertEqual(len(report.malformed_proofs), 0)
+
+    def test_parse_proof_blocks_numbered_and_subheadings_multi_block(self):
+        """Verify multiple proof blocks with mixed formatting styles parse cleanly."""
+        content = """
+### Theorem SEC-01: Collision Avoidance
+#### Part 1 — Proposition
+Proposition statement here.
+#### Part 2 — Assumptions
+Assumptions text.
+#### Part 3 — Invariant Barrier
+Invariant definition.
+#### Part 4 — Derivation
+Inductive derivation.
+#### Part 5 — Conclusion QED
+Conclusion statement.
+
+### Theorem SEC-02: Geofence Containment
+1. Proposition: Aircraft stays inside geofence.
+2. Assumptions: GPS accuracy within 1m.
+3. Invariant: Distance to boundary is positive.
+4. Derivation: Velocity vector bounded.
+5. Conclusion: System containment verified (qed).
+"""
+        blocks = MarkdownTableASTParser.parse_proof_blocks(content)
+        self.assertEqual(len(blocks), 2)
+        self.assertEqual(blocks[0].theorem_id, "SEC-01")
+        self.assertEqual(blocks[1].theorem_id, "SEC-02")
+
+        report = CartesianProductValidator.verify_proof_structure(blocks)
+        self.assertTrue(report.is_conforming)
+        self.assertEqual(len(report.malformed_proofs), 0)
+
+
 if __name__ == "__main__":
     unittest.main()
+
 

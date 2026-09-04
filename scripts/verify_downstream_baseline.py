@@ -899,30 +899,34 @@ class MarkdownTableASTParser:
                 )
                 continue
             if current is not None:
-                if heading_line.match(line):
-                    finish()
-                    continue
                 part = part_match.search(line)
+                part_number = None
                 if part:
                     part_number = int(part.group(1))
                 else:
                     numbered = numbered_part.match(line)
-                    if not numbered:
-                        continue
-                    part_number = int(numbered.group(1))
-                    if part_number > 5:
-                        continue
-                lowered = line.lower()
-                if part_number == 1 and ("proposition" in lowered or "statement" in lowered):
-                    current.proposition = line
-                elif part_number == 2 and "assumption" in lowered:
-                    current.assumptions = line
-                elif part_number == 3 and ("invariant" in lowered or "barrier" in lowered):
-                    current.barrier_function = line
-                elif part_number == 4 and ("deriv" in lowered or "inductive" in lowered):
-                    current.derivation = line
-                elif part_number == 5 and ("conclusion" in lowered or "q.e.d" in lowered or "qed" in lowered):
-                    current.conclusion = line
+                    if numbered:
+                        p_num = int(numbered.group(1))
+                        if p_num <= 5:
+                            part_number = p_num
+
+                if part_number is not None:
+                    lowered = line.lower()
+                    if part_number == 1 and ("proposition" in lowered or "statement" in lowered):
+                        current.proposition = line
+                    elif part_number == 2 and "assumption" in lowered:
+                        current.assumptions = line
+                    elif part_number == 3 and ("invariant" in lowered or "barrier" in lowered):
+                        current.barrier_function = line
+                    elif part_number == 4 and ("deriv" in lowered or "inductive" in lowered):
+                        current.derivation = line
+                    elif part_number == 5 and ("conclusion" in lowered or "q.e.d" in lowered or "qed" in lowered):
+                        current.conclusion = line
+                    continue
+
+                if heading_line.match(line):
+                    finish()
+                    continue
         finish()
         return blocks
 
