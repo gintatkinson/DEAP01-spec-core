@@ -7,6 +7,7 @@ import os
 import re
 import subprocess
 import tempfile
+import shutil
 import unittest
 import pytest
 
@@ -535,11 +536,122 @@ class TestCheck18BlueprintDomainCleanliness(unittest.TestCase):
         run_all_checks(repo_root)
 
 
+def test_installer_refuses_self_target():
+    """Verify scripts/install_pipeline.sh refuses self-targeting in upstream and downstream environments without deleting files."""
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if not os.path.isdir(repo_root):
+        repo_root = os.getcwd()
+
+    installer_path = os.path.join(repo_root, "scripts", "install_pipeline.sh")
+    assert os.path.isfile(installer_path), f"scripts/install_pipeline.sh missing at {repo_root}"
+
+    # 1. Upstream environment (with .pipeline/upstream marker)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        scripts_dir = os.path.join(tmpdir, "scripts")
+        skills_dir = os.path.join(tmpdir, "skills")
+        rules_dir = os.path.join(tmpdir, "rules")
+        pipeline_dir = os.path.join(tmpdir, ".pipeline")
+        upstream_marker = os.path.join(pipeline_dir, "upstream")
+        agents_dir = os.path.join(tmpdir, ".agents")
+
+        os.makedirs(scripts_dir, exist_ok=True)
+        os.makedirs(skills_dir, exist_ok=True)
+        os.makedirs(rules_dir, exist_ok=True)
+        os.makedirs(pipeline_dir, exist_ok=True)
+        os.makedirs(upstream_marker, exist_ok=True)
+        os.makedirs(agents_dir, exist_ok=True)
+
+        shutil.copy(installer_path, os.path.join(scripts_dir, "install_pipeline.sh"))
+        with open(os.path.join(skills_dir, "upstream_skill.md"), "w", encoding="utf-8") as f:
+            f.write("# Upstream Skill\n")
+        with open(os.path.join(rules_dir, "upstream_rule.md"), "w", encoding="utf-8") as f:
+            f.write("# Upstream Rule\n")
+
+        # Test self-target with "."
+        res_dot = subprocess.run(
+            ["bash", os.path.join("scripts", "install_pipeline.sh"), "."],
+            cwd=tmpdir,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert res_dot.returncode == 1, f"Expected returncode 1 for upstream self-target with '.', got {res_dot.returncode}"
+        assert "REFUSING: target is the pipeline repository itself, not a downstream project." in res_dot.stderr
+        assert os.path.isfile(os.path.join(skills_dir, "upstream_skill.md")), "Upstream self-target deleted skills directory/files"
+        assert os.path.isfile(os.path.join(rules_dir, "upstream_rule.md")), "Upstream self-target deleted rules directory/files"
+
+        # Test self-target with absolute path
+        res_abs = subprocess.run(
+            ["bash", os.path.join("scripts", "install_pipeline.sh"), tmpdir],
+            cwd=tmpdir,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert res_abs.returncode == 1, f"Expected returncode 1 for upstream self-target with absolute path, got {res_abs.returncode}"
+        assert "REFUSING: target is the pipeline repository itself, not a downstream project." in res_abs.stderr
+        assert os.path.isfile(os.path.join(skills_dir, "upstream_skill.md")), "Upstream self-target deleted skills directory/files"
+        assert os.path.isfile(os.path.join(rules_dir, "upstream_rule.md")), "Upstream self-target deleted rules directory/files"
+
+    # 2. Downstream environment (NO .pipeline/upstream marker)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        scripts_dir = os.path.join(tmpdir, "scripts")
+        skills_dir = os.path.join(tmpdir, "skills")
+        rules_dir = os.path.join(tmpdir, "rules")
+        pipeline_dir = os.path.join(tmpdir, ".pipeline")
+        agents_dir = os.path.join(tmpdir, ".agents")
+
+        os.makedirs(scripts_dir, exist_ok=True)
+        os.makedirs(skills_dir, exist_ok=True)
+        os.makedirs(rules_dir, exist_ok=True)
+        os.makedirs(pipeline_dir, exist_ok=True)
+        os.makedirs(agents_dir, exist_ok=True)
+
+        shutil.copy(installer_path, os.path.join(scripts_dir, "install_pipeline.sh"))
+        with open(os.path.join(skills_dir, "downstream_skill.md"), "w", encoding="utf-8") as f:
+            f.write("# Downstream Skill\n")
+        with open(os.path.join(rules_dir, "downstream_rule.md"), "w", encoding="utf-8") as f:
+            f.write("# Downstream Rule\n")
+        with open(os.path.join(pipeline_dir, "config.json"), "w", encoding="utf-8") as f:
+            f.write("{}\n")
+
+        # Test self-target with "."
+        res_down_dot = subprocess.run(
+            ["bash", os.path.join("scripts", "install_pipeline.sh"), "."],
+            cwd=tmpdir,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert res_down_dot.returncode == 1, f"Expected returncode 1 for downstream self-target with '.', got {res_down_dot.returncode}"
+        assert "REFUSING: target directory is identical to installer root" in res_down_dot.stderr
+        assert os.path.isfile(os.path.join(skills_dir, "downstream_skill.md")), "Downstream self-target deleted skills directory/files"
+        assert os.path.isfile(os.path.join(rules_dir, "downstream_rule.md")), "Downstream self-target deleted rules directory/files"
+        assert os.path.isfile(os.path.join(pipeline_dir, "config.json")), "Downstream self-target deleted pipeline config"
+
+        # Test self-target with absolute path
+        res_down_abs = subprocess.run(
+            ["bash", os.path.join("scripts", "install_pipeline.sh"), tmpdir],
+            cwd=tmpdir,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert res_down_abs.returncode == 1, f"Expected returncode 1 for downstream self-target with absolute path, got {res_down_abs.returncode}"
+        assert "REFUSING: target directory is identical to installer root" in res_down_abs.stderr
+        assert os.path.isfile(os.path.join(skills_dir, "downstream_skill.md")), "Downstream self-target deleted skills directory/files"
+        assert os.path.isfile(os.path.join(rules_dir, "downstream_rule.md")), "Downstream self-target deleted rules directory/files"
+        assert os.path.isfile(os.path.join(pipeline_dir, "config.json")), "Downstream self-target deleted pipeline config"
+
+
 class TestInstallerScaffolding(unittest.TestCase):
     """Unit tests for installer scaffolding behavior."""
 
     def test_installer_scaffolds_downstream_agents_md(self):
         test_installer_scaffolds_downstream_agents_md()
+
+    def test_installer_refuses_self_target(self):
+        test_installer_refuses_self_target()
 
 
 if __name__ == "__main__":

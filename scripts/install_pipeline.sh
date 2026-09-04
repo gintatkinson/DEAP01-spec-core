@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-INSTALLER_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+INSTALLER_ROOT="$(cd -P "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 TARGET_DIR=""
 PROVIDER="auto"
 GITLAB_URL="https://gitlab.com"
@@ -145,10 +145,14 @@ if [[ "$PROVIDER" != "auto" && "$PROVIDER" != "github" && "$PROVIDER" != "gitlab
 fi
 
 mkdir -p "$TARGET_DIR"
-TARGET_DIR="$(cd "$TARGET_DIR" 2>/dev/null && pwd || echo "$TARGET_DIR")"
+TARGET_DIR="$(cd -P "$TARGET_DIR" 2>/dev/null && pwd -P || echo "$TARGET_DIR")"
 
-if [ "$TARGET_DIR" = "$INSTALLER_ROOT" ] && [ -e "$INSTALLER_ROOT/.pipeline/upstream" ]; then
-  echo "REFUSING: target is the pipeline repository itself, not a downstream project." >&2
+if [ "$TARGET_DIR" = "$INSTALLER_ROOT" ]; then
+  if [ -e "$INSTALLER_ROOT/.pipeline/upstream" ]; then
+    echo "REFUSING: target is the pipeline repository itself, not a downstream project." >&2
+  else
+    echo "REFUSING: target directory is identical to installer root ($INSTALLER_ROOT)." >&2
+  fi
   exit 1
 fi
 
