@@ -821,9 +821,9 @@ class SysMLParameterBindingEngine:
             if "STATE_VECTOR_MAX_EXPRESSION" not in self._explicit_keys:
                 self.parameter_bindings["STATE_VECTOR_MAX_EXPRESSION"] = "[x_max, y_max, z_max, vx_max, vy_max, vz_max]^T"
             if "STATE_VECTOR_MIN_UNITS" not in self._explicit_keys:
-                self.parameter_bindings["STATE_VECTOR_MIN_UNITS"] = "mm, mm, mm, mm/s"
+                self.parameter_bindings["STATE_VECTOR_MIN_UNITS"] = "mm, mm, mm, mm/s, mm/s, mm/s"
             if "STATE_VECTOR_MAX_UNITS" not in self._explicit_keys:
-                self.parameter_bindings["STATE_VECTOR_MAX_UNITS"] = "mm, mm, mm, mm/s"
+                self.parameter_bindings["STATE_VECTOR_MAX_UNITS"] = "mm, mm, mm, mm/s, mm/s, mm/s"
             if "STATE_SAFETY_MITIGATION" not in self._explicit_keys:
                 self.parameter_bindings["STATE_SAFETY_MITIGATION"] = "ISO 14971:2019 §7.1 Risk Controls"
             if "CONTAINMENT_BUFFER_UNIT" not in self._explicit_keys:
@@ -915,9 +915,9 @@ class SysMLParameterBindingEngine:
             if "STATE_VECTOR_MAX_EXPRESSION" not in self._explicit_keys:
                 self.parameter_bindings["STATE_VECTOR_MAX_EXPRESSION"] = "[x_north_max, y_east_max, z_depth_max, u_surge_max, v_sway_max, w_heave_max]^T"
             if "STATE_VECTOR_MIN_UNITS" not in self._explicit_keys:
-                self.parameter_bindings["STATE_VECTOR_MIN_UNITS"] = "m, m, m Depth, m/s"
+                self.parameter_bindings["STATE_VECTOR_MIN_UNITS"] = "m, m, m Depth, m/s, m/s, m/s"
             if "STATE_VECTOR_MAX_UNITS" not in self._explicit_keys:
-                self.parameter_bindings["STATE_VECTOR_MAX_UNITS"] = "m, m, m Depth, m/s"
+                self.parameter_bindings["STATE_VECTOR_MAX_UNITS"] = "m, m, m Depth, m/s, m/s, m/s"
             if "STATE_SAFETY_MITIGATION" not in self._explicit_keys:
                 self.parameter_bindings["STATE_SAFETY_MITIGATION"] = "IMO MASS Code §4.2 / COLREGs Rule 8"
             if "CONTAINMENT_BUFFER_UNIT" not in self._explicit_keys:
@@ -962,9 +962,9 @@ class SysMLParameterBindingEngine:
             if "STATE_VECTOR_MAX_EXPRESSION" not in self._explicit_keys:
                 self.parameter_bindings["STATE_VECTOR_MAX_EXPRESSION"] = "[r_x_max, r_y_max, r_z_max, v_x_max, v_y_max, v_z_max]^T"
             if "STATE_VECTOR_MIN_UNITS" not in self._explicit_keys:
-                self.parameter_bindings["STATE_VECTOR_MIN_UNITS"] = "km, km, km, km/s"
+                self.parameter_bindings["STATE_VECTOR_MIN_UNITS"] = "km, km, km, km/s, km/s, km/s"
             if "STATE_VECTOR_MAX_UNITS" not in self._explicit_keys:
-                self.parameter_bindings["STATE_VECTOR_MAX_UNITS"] = "km, km, km, km/s"
+                self.parameter_bindings["STATE_VECTOR_MAX_UNITS"] = "km, km, km, km/s, km/s, km/s"
             if "STATE_SAFETY_MITIGATION" not in self._explicit_keys:
                 self.parameter_bindings["STATE_SAFETY_MITIGATION"] = "NASA-STD-8739.8 §4.2 Orbital Demise"
             if "CONTAINMENT_BUFFER_UNIT" not in self._explicit_keys:
@@ -1058,9 +1058,9 @@ class SysMLParameterBindingEngine:
             if "STATE_VECTOR_MAX_EXPRESSION" not in self._explicit_keys:
                 self.parameter_bindings["STATE_VECTOR_MAX_EXPRESSION"] = "[phi_max, lambda_max, h_max, u_max, v_max, w_max]^T"
             if "STATE_VECTOR_MIN_UNITS" not in self._explicit_keys:
-                self.parameter_bindings["STATE_VECTOR_MIN_UNITS"] = "rad, rad, m, m/s"
+                self.parameter_bindings["STATE_VECTOR_MIN_UNITS"] = "rad, rad, m, m/s, m/s, m/s"
             if "STATE_VECTOR_MAX_UNITS" not in self._explicit_keys:
-                self.parameter_bindings["STATE_VECTOR_MAX_UNITS"] = "rad, rad, m/s"
+                self.parameter_bindings["STATE_VECTOR_MAX_UNITS"] = "rad, rad, m, m/s, m/s, m/s"
             if "STATE_SAFETY_MITIGATION" not in self._explicit_keys:
                 self.parameter_bindings["STATE_SAFETY_MITIGATION"] = "SORA Annex B M1 Mitigations"
             if "CONTAINMENT_BUFFER_UNIT" not in self._explicit_keys:

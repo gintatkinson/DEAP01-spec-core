@@ -318,6 +318,8 @@ class TestDomainCompilerRemediation(unittest.TestCase):
                 "SAFETY_BOUNDS_STANDARD": "ASTM F3269-17 §6.2",
                 "STATE_VECTOR_MIN_EXPRESSION": "[phi_min, lambda_min, h_min, u_min, v_min, w_min]^T",
                 "STATE_VECTOR_MAX_EXPRESSION": "[phi_max, lambda_max, h_max, u_max, v_max, w_max]^T",
+                "STATE_VECTOR_MIN_UNITS": "rad, rad, m, m/s, m/s, m/s",
+                "STATE_VECTOR_MAX_UNITS": "rad, rad, m, m/s, m/s, m/s",
                 "CONTAINMENT_BUFFER_UNIT": "m",
             },
             "medical": {
@@ -325,6 +327,8 @@ class TestDomainCompilerRemediation(unittest.TestCase):
                 "SAFETY_BOUNDS_STANDARD": "IEC 60601-1-8:2020 §6.9",
                 "STATE_VECTOR_MIN_EXPRESSION": "[x_min, y_min, z_min, vx_min, vy_min, vz_min]^T",
                 "STATE_VECTOR_MAX_EXPRESSION": "[x_max, y_max, z_max, vx_max, vy_max, vz_max]^T",
+                "STATE_VECTOR_MIN_UNITS": "mm, mm, mm, mm/s, mm/s, mm/s",
+                "STATE_VECTOR_MAX_UNITS": "mm, mm, mm, mm/s, mm/s, mm/s",
                 "CONTAINMENT_BUFFER_UNIT": "mm",
             },
             "rail": {
@@ -332,6 +336,8 @@ class TestDomainCompilerRemediation(unittest.TestCase):
                 "SAFETY_BOUNDS_STANDARD": "EN 50128:2011/A2:2020 SIL 4 §6.3",
                 "STATE_VECTOR_MIN_EXPRESSION": "[s_min, v_min, a_min, p_brake_min]^T",
                 "STATE_VECTOR_MAX_EXPRESSION": "[s_max, v_max, a_max, p_brake_max]^T",
+                "STATE_VECTOR_MIN_UNITS": "m, m/s, m/s^2, bar",
+                "STATE_VECTOR_MAX_UNITS": "m, m/s, m/s^2, bar",
                 "CONTAINMENT_BUFFER_UNIT": "m",
             },
             "marine": {
@@ -339,6 +345,8 @@ class TestDomainCompilerRemediation(unittest.TestCase):
                 "SAFETY_BOUNDS_STANDARD": "ISO 13628-6 §6.3",
                 "STATE_VECTOR_MIN_EXPRESSION": "[x_north_min, y_east_min, z_depth_min, u_surge_min, v_sway_min, w_heave_min]^T",
                 "STATE_VECTOR_MAX_EXPRESSION": "[x_north_max, y_east_max, z_depth_max, u_surge_max, v_sway_max, w_heave_max]^T",
+                "STATE_VECTOR_MIN_UNITS": "m, m, m Depth, m/s, m/s, m/s",
+                "STATE_VECTOR_MAX_UNITS": "m, m, m Depth, m/s, m/s, m/s",
                 "CONTAINMENT_BUFFER_UNIT": "m Depth",
             },
             "space": {
@@ -346,6 +354,8 @@ class TestDomainCompilerRemediation(unittest.TestCase):
                 "SAFETY_BOUNDS_STANDARD": "ECSS-E-ST-40C §6.3",
                 "STATE_VECTOR_MIN_EXPRESSION": "[r_x_min, r_y_min, r_z_min, v_x_min, v_y_min, v_z_min]^T",
                 "STATE_VECTOR_MAX_EXPRESSION": "[r_x_max, r_y_max, r_z_max, v_x_max, v_y_max, v_z_max]^T",
+                "STATE_VECTOR_MIN_UNITS": "km, km, km, km/s, km/s, km/s",
+                "STATE_VECTOR_MAX_UNITS": "km, km, km, km/s, km/s, km/s",
                 "CONTAINMENT_BUFFER_UNIT": "km Orbital Altitude",
             },
             "industrial": {
@@ -353,6 +363,8 @@ class TestDomainCompilerRemediation(unittest.TestCase):
                 "SAFETY_BOUNDS_STANDARD": "IEC 61508 SIL 3 Part 2 §7.4",
                 "STATE_VECTOR_MIN_EXPRESSION": "[x_grid_min, y_grid_min, theta_yaw_min, v_trans_min, omega_rot_min, h_fork_min]^T",
                 "STATE_VECTOR_MAX_EXPRESSION": "[x_grid_max, y_grid_max, theta_yaw_max, v_trans_max, omega_rot_max, h_fork_max]^T",
+                "STATE_VECTOR_MIN_UNITS": "m, m, rad, m/s, rad/s, m",
+                "STATE_VECTOR_MAX_UNITS": "m, m, rad, m/s, rad/s, m",
                 "CONTAINMENT_BUFFER_UNIT": "m",
             },
         }
@@ -392,6 +404,8 @@ class TestDomainCompilerRemediation(unittest.TestCase):
                 self.assertIn(expected["SAFETY_BOUNDS_STANDARD"], conops_content)
                 self.assertIn(expected["STATE_VECTOR_MIN_EXPRESSION"], conops_content)
                 self.assertIn(expected["STATE_VECTOR_MAX_EXPRESSION"], conops_content)
+                self.assertIn(expected["STATE_VECTOR_MIN_UNITS"], conops_content)
+                self.assertIn(expected["STATE_VECTOR_MAX_UNITS"], conops_content)
 
                 # Anti-plagiarism isolation: Verify other domains' unique standards are not present in this domain
                 for other_dom, other_expected in domain_expected_tokens.items():
@@ -677,6 +691,90 @@ class TestDomainCompilerRemediation(unittest.TestCase):
                 val,
                 f"Explicit parameter {key} was clobbered: expected {val}, got {engine.resolve_token(key)}",
             )
+
+    def test_state_vector_unit_cardinality_remediation_issue_205(self):
+        """
+        Reproduction and regression test for Issue #205:
+        Verify that STATE_VECTOR_MIN_UNITS and STATE_VECTOR_MAX_UNITS in _derive_domain_ontology
+        have exact dimensional cardinality matching state vector coordinate dimensions across
+        all supported domains (aviation, medical, marine, space, rail, industrial).
+        Specifically:
+        - aviation: 6 elements ("rad, rad, m, m/s, m/s, m/s")
+        - medical: 6 elements ("mm, mm, mm, mm/s, mm/s, mm/s")
+        - marine: 6 elements ("m, m, m Depth, m/s, m/s, m/s")
+        - space: 6 elements ("km, km, km, km/s, km/s, km/s")
+        - industrial: 6 elements ("m, m, rad, m/s, rad/s, m")
+        - rail: 4 elements ("m, m/s, m/s^2, bar")
+        """
+        expected_units = {
+            "aviation": {
+                "STATE_VECTOR_MIN_UNITS": "rad, rad, m, m/s, m/s, m/s",
+                "STATE_VECTOR_MAX_UNITS": "rad, rad, m, m/s, m/s, m/s",
+                "expected_dim": 6,
+            },
+            "medical": {
+                "STATE_VECTOR_MIN_UNITS": "mm, mm, mm, mm/s, mm/s, mm/s",
+                "STATE_VECTOR_MAX_UNITS": "mm, mm, mm, mm/s, mm/s, mm/s",
+                "expected_dim": 6,
+            },
+            "marine": {
+                "STATE_VECTOR_MIN_UNITS": "m, m, m Depth, m/s, m/s, m/s",
+                "STATE_VECTOR_MAX_UNITS": "m, m, m Depth, m/s, m/s, m/s",
+                "expected_dim": 6,
+            },
+            "space": {
+                "STATE_VECTOR_MIN_UNITS": "km, km, km, km/s, km/s, km/s",
+                "STATE_VECTOR_MAX_UNITS": "km, km, km, km/s, km/s, km/s",
+                "expected_dim": 6,
+            },
+            "industrial": {
+                "STATE_VECTOR_MIN_UNITS": "m, m, rad, m/s, rad/s, m",
+                "STATE_VECTOR_MAX_UNITS": "m, m, rad, m/s, rad/s, m",
+                "expected_dim": 6,
+            },
+            "rail": {
+                "STATE_VECTOR_MIN_UNITS": "m, m/s, m/s^2, bar",
+                "STATE_VECTOR_MAX_UNITS": "m, m/s, m/s^2, bar",
+                "expected_dim": 4,
+            },
+        }
+
+        for dom, spec in expected_units.items():
+            with self.subTest(domain=dom):
+                engine = SysMLParameterBindingEngine(domain=dom, auto_detect=False)
+                min_units = engine.resolve_token("STATE_VECTOR_MIN_UNITS")
+                max_units = engine.resolve_token("STATE_VECTOR_MAX_UNITS")
+                min_expr = engine.resolve_token("STATE_VECTOR_MIN_EXPRESSION")
+                max_expr = engine.resolve_token("STATE_VECTOR_MAX_EXPRESSION")
+
+                # Parse comma-separated elements
+                min_expr_elems = [e.strip() for e in min_expr.strip("[]^T").split(",")]
+                max_expr_elems = [e.strip() for e in max_expr.strip("[]^T").split(",")]
+                min_unit_elems = [u.strip() for u in min_units.split(",")]
+                max_unit_elems = [u.strip() for u in max_units.split(",")]
+
+                self.assertEqual(
+                    len(min_expr_elems),
+                    spec["expected_dim"],
+                    f"Domain {dom} min expression dimension mismatch",
+                )
+                self.assertEqual(
+                    len(max_expr_elems),
+                    spec["expected_dim"],
+                    f"Domain {dom} max expression dimension mismatch",
+                )
+                self.assertEqual(
+                    len(min_unit_elems),
+                    spec["expected_dim"],
+                    f"Domain {dom} min units cardinality mismatch: {min_units}",
+                )
+                self.assertEqual(
+                    len(max_unit_elems),
+                    spec["expected_dim"],
+                    f"Domain {dom} max units cardinality mismatch: {max_units}",
+                )
+                self.assertEqual(min_units, spec["STATE_VECTOR_MIN_UNITS"])
+                self.assertEqual(max_units, spec["STATE_VECTOR_MAX_UNITS"])
 
 
 if __name__ == "__main__":
