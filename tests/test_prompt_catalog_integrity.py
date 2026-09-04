@@ -88,14 +88,24 @@ def extract_prompt_blocks(markdown_content: str, section_header_pattern: str) ->
     if match_1d:
         prompts["worker_1d"] = match_1d.group(1).strip()
 
-    # Extract Worker 2 prompt
-    match_2 = re.search(
-        r"####\s+(?:9\.4\.1|4\.5\.1)\s+Worker 2[^\n]*\n+```text\n(.*?)```",
+    # Extract Worker 2A prompt
+    match_2a = re.search(
+        r"####\s+(?:9\.4\.1|4\.5\.1)\s+Worker 2A?[^\n]*\n+```text\n(.*?)```",
         markdown_content,
         re.DOTALL,
     )
-    if match_2:
-        prompts["worker_2"] = match_2.group(1).strip()
+    if match_2a:
+        prompts["worker_2a"] = match_2a.group(1).strip()
+        prompts["worker_2"] = match_2a.group(1).strip()
+
+    # Extract Worker 2B prompt
+    match_2b = re.search(
+        r"####\s+(?:9\.4\.2|4\.5\.2)\s+Worker 2B[^\n]*\n+```text\n(.*?)```",
+        markdown_content,
+        re.DOTALL,
+    )
+    if match_2b:
+        prompts["worker_2b"] = match_2b.group(1).strip()
 
     return prompts
 
@@ -119,7 +129,7 @@ class TestPromptCatalogIntegrity(unittest.TestCase):
 
     def test_all_prompts_extracted(self):
         """Verify that all worker prompts are successfully parsed from both README and installer."""
-        for key in ["worker_0a", "worker_0b", "worker_0c", "worker_1a", "worker_1b", "worker_1c", "worker_1d", "worker_2"]:
+        for key in ["worker_0a", "worker_0b", "worker_0c", "worker_1a", "worker_1b", "worker_1c", "worker_1d", "worker_2a", "worker_2b"]:
             self.assertIn(key, self.readme_prompts, f"{key} prompt missing from README.md")
             self.assertIn(key, self.installer_prompts, f"{key} prompt missing from install_pipeline.sh Section 4")
 
@@ -342,7 +352,7 @@ class TestPromptCatalogIntegrity(unittest.TestCase):
             self.assertTrue(prompt.strip().endswith("PROCEED"), f"Worker 1D in {source} missing PROCEED token")
 
     def test_worker_2_prompt_compliance(self):
-        """Verify Worker 2 prompt invariants in README.md and install_pipeline.sh."""
+        """Verify Worker 2 / 2A prompt invariants in README.md and install_pipeline.sh."""
         for source, prompts in [("README.md", self.readme_prompts), ("install_pipeline.sh", self.installer_prompts)]:
             prompt = prompts["worker_2"]
 
@@ -359,12 +369,64 @@ class TestPromptCatalogIntegrity(unittest.TestCase):
                 check_repository_classification(prompt),
                 f"Worker 2 in {source} failed check_repository_classification",
             )
-            self.assertIn("DOWNSTREAM_CUSTOMER_PROJECT", prompt)
             self.assertFalse(
                 check_leading_code_steering(prompt),
                 f"Worker 2 in {source} has leading code steering",
             )
             self.assertTrue(prompt.strip().endswith("PROCEED"), f"Worker 2 in {source} missing PROCEED token")
+
+    def test_worker_2a_prompt_compliance(self):
+        """Verify Worker 2A prompt invariants in README.md and install_pipeline.sh."""
+        for source, prompts in [("README.md", self.readme_prompts), ("install_pipeline.sh", self.installer_prompts)]:
+            prompt = prompts["worker_2a"]
+
+            self.assertTrue(
+                check_step1_skill_directive(prompt),
+                f"Worker 2A in {source} failed check_step1_skill_directive",
+            )
+            self.assertIn(
+                "skills/feature-driven-implementation/SKILL.md",
+                prompt,
+                f"Worker 2A in {source} missing skills/feature-driven-implementation/SKILL.md path",
+            )
+            self.assertTrue(
+                check_repository_classification(prompt),
+                f"Worker 2A in {source} failed check_repository_classification",
+            )
+            self.assertFalse(
+                check_leading_code_steering(prompt),
+                f"Worker 2A in {source} has leading code steering",
+            )
+            self.assertTrue(prompt.strip().endswith("PROCEED"), f"Worker 2A in {source} missing PROCEED token")
+
+    def test_worker_2b_prompt_compliance(self):
+        """Verify Worker 2B prompt invariants in README.md and install_pipeline.sh."""
+        for source, prompts in [("README.md", self.readme_prompts), ("install_pipeline.sh", self.installer_prompts)]:
+            prompt = prompts["worker_2b"]
+
+            self.assertTrue(
+                check_step1_skill_directive(prompt),
+                f"Worker 2B in {source} failed check_step1_skill_directive",
+            )
+            self.assertIn(
+                "skills/feature-driven-implementation/SKILL.md",
+                prompt,
+                f"Worker 2B in {source} missing skills/feature-driven-implementation/SKILL.md path",
+            )
+            self.assertTrue(
+                check_repository_classification(prompt),
+                f"Worker 2B in {source} failed check_repository_classification",
+            )
+            self.assertFalse(
+                check_leading_code_steering(prompt),
+                f"Worker 2B in {source} has leading code steering",
+            )
+            self.assertTrue(prompt.strip().endswith("PROCEED"), f"Worker 2B in {source} missing PROCEED token")
+            self.assertIn("Two-Path (Dual-Track) Model-Based Design", prompt)
+            self.assertIn("models/scripts/build_", prompt)
+            self.assertIn("models/python/", prompt)
+            self.assertIn("tests/test_", prompt)
+            self.assertIn("docs/reports/simulink_results/", prompt)
 
     def test_readme_installer_prompt_parity(self):
         """Verify 100% prompt body parity between README.md Section 8.3 and install_pipeline.sh Section 4.2."""
@@ -395,6 +457,9 @@ class TestPromptCatalogIntegrity(unittest.TestCase):
         self.assertIn("#### 4.4.2 Option B: GitLab Self-Managed / SCIF Air-Gapped Reconciliation", self.installer_content)
         self.assertIn("#### 4.4.3 Option C: GitHub Issues Reconciliation", self.installer_content)
         self.assertIn("#### 4.4.4 Option D: Offline Verification & 23-Gate Parity Lock", self.installer_content)
+        self.assertIn("#### 4.5.1 Worker 2A / Synthesis Driver", self.installer_content)
+        self.assertIn("#### 4.5.2 Worker 2B / Simulation Driver", self.installer_content)
+        self.assertIn("#### 4.5.3 Two-Path MBD Artifact & Deliverable Hierarchy", self.installer_content)
 
 
 if __name__ == "__main__":

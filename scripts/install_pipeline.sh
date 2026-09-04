@@ -749,16 +749,16 @@ python3 scripts/compile_sysml.py --reverse-sync
 
 ### 4.5 Pipeline 2 Autonomous Feature Implementation Prompts
 
-Execute the following prompt to drive feature implementation through context-isolated TDD micro-tasks:
+Execute the following prompts to drive feature implementation and two-path (dual-track) simulation verification through context-isolated TDD micro-tasks:
 
-#### 4.5.1 Worker 2 / Synthesis Driver: Feature-Driven Implementation Prompt
+#### 4.5.1 Worker 2A / Synthesis Driver: Feature-Driven Implementation Prompt
 
 ```text
 Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` as your very first step before taking any action.
 
 Repository Classification: DOWNSTREAM_CUSTOMER_PROJECT (or UPSTREAM_SPEC_CORE_COMPILER depending on execution context)
 
-Role: Worker 2 — Feature-Driven Implementation & Synthesis Driver
+Role: Worker 2A — Feature-Driven Implementation & Synthesis Driver
 
 Primary Commercial Toolchain Integration Context:
 This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
@@ -782,6 +782,81 @@ If any compiler fault, schema inconsistency, or invariant violation is discovere
 
 PROCEED
 ```
+
+#### 4.5.2 Worker 2B / Simulation Driver: Two-Path (Dual-Track) Simulation & Digital Twin Verification Prompt
+
+```text
+Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` as your very first step before taking any action.
+
+Repository Classification: DOWNSTREAM_CUSTOMER_PROJECT (or UPSTREAM_SPEC_CORE_COMPILER depending on execution context)
+
+Role: Worker 2B — Two-Path (Dual-Track) Simulation & Digital Twin Verification Driver
+
+Primary Commercial Toolchain Integration Context:
+This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
+
+Governance Preamble & Execution Directive:
+Adopt the feature-driven-implementation skill by reading `.pipeline/constitution.md`, `rules/dual-track-mbd-verification.md`, and `docs/architecture/blueprints/SYSML_SSOT_BIDIRECTIONAL_SYNCHRONIZATION_ARCHITECTURE.md`.
+
+Execute Two-Path (Dual-Track) Model-Based Design (MBD) simulation synthesis and digital twin verification for Feature [Issue Number, e.g. #1]:
+
+1. Track A (Native MATLAB / Simulink / Stateflow Synthesis):
+   - Programmatic Model Construction: Deliver `models/scripts/build_<feature_slug>_model.m` to programmatically synthesize native `.slx` block diagrams and Stateflow charts using official MATLAB APIs.
+   - Parameter & Signal Dictionaries: Deliver physical parameter dictionary `models/matlab/<feature_slug>_params.m` and Simulink Data Dictionary `models/matlab/<feature_slug>_data.sldd`.
+   - Solver & Synthesis Baseline: Configure models for deterministic fixed-step discrete solvers (`FixedStepDiscrete`, $dt = 0.004\,\text{s}$ / 250 Hz) and Embedded Coder DO-178C C / SPARK Ada code synthesis.
+
+2. Track B (Headless CI Digital Twin Engine):
+   - License-Free Discrete Execution Engine: Deliver standalone Python simulation engine (`models/python/<feature_slug>_domain.py` and `models/python/<feature_slug>_engine.py`) executing at identical discrete loop rate ($dt$) with exact transition guards, polynomial transfer curves, and 6-DOF kinematics.
+   - Zero License Blocker CI Harness: Deliver automated regression test suite `tests/test_<feature_slug>_simulation.py` running 100% offline in containerized CI environments without MathWorks licenses.
+
+3. Mathematical & Discrete Equivalence Mandate:
+   - Numerical Tolerance Verification: Guarantee state vector and output trajectory error between Track A reference and Track B digital twin satisfies $\|x_{\text{Simulink}} - x_{\text{DigitalTwin}}\|_\infty \le 10^{-6}$.
+   - Formal DO-331 Verification Report: Generate comprehensive verification report `docs/reports/simulink_results/<FEATURE-ID>_simulation_results.md` detailing MC/DC coverage mapping, transition truth tables, fault-injection scenarios, and numerical parity logs.
+
+Defect Filing Directive:
+If any compiler fault, schema inconsistency, or invariant violation is discovered, file a defect report using both `gh issue create` (GitHub) and `glab issue create` (GitLab) with the `bug` / `type::bug` label and full 7-section defect analysis. Issue auto-closing keywords or issue close commands are strictly forbidden.
+
+PROCEED
+```
+
+#### 4.5.3 Two-Path MBD Artifact & Deliverable Hierarchy
+
+Every feature containing control laws, flight dynamics, physical plant estimators, or safety state machines delivers the canonical two-path MBD artifact suite:
+
+```text
+models/
+├── scripts/
+│   └── build_<feature_slug>_model.m        # Track A: Programmatic Simulink/Stateflow builder script
+├── matlab/
+│   ├── <feature_slug>_params.m            # Track A: MATLAB physical plant & control parameters
+│   └── <feature_slug>_data.sldd           # Track A: Simulink Data Dictionary (data types & signals)
+└── python/
+    ├── <feature_slug>_domain.py           # Track B: Strongly-typed domain models & state vectors
+    └── <feature_slug>_engine.py           # Track B: Standalone discrete-time simulation engine
+
+tests/
+└── test_<feature_slug>_simulation.py      # Automated CI regression suite for Track B engine
+
+docs/reports/simulink_results/
+└── <FEATURE-ID>_simulation_results.md     # Formal DO-331 simulation & numerical parity report
+```
+
+##### Dual-Track Artifact Descriptions:
+
+1. **`models/scripts/build_<feature_slug>_model.m` (Track A Builder)**:
+   Programmatically constructs native MATLAB / Simulink (`.slx`) block diagrams and Stateflow charts via official MATLAB APIs (`new_system`, `add_block`, `Stateflow.Data`, `Stateflow.State`, `Stateflow.Transition`). Configures deterministic discrete fixed-step solvers (`FixedStepDiscrete`) and Embedded Coder DO-178C C / SPARK Ada code synthesis.
+
+2. **`models/matlab/<feature_slug>_params.m` & `.sldd` (Track A Dictionaries)**:
+   Declares physical plant constants, control gains, rate limits, sensor noise variances, and discrete sample time ($dt = 0.004\,\text{s}$ / 250 Hz) in typed MATLAB structures and Simulink Data Dictionaries.
+
+3. **`models/python/<feature_slug>_domain.py` & `_engine.py` (Track B Digital Twin)**:
+   Pure Python, license-free, headless discrete simulation engine executing identical algebraic formulations, cubic polynomial blending curves ($\lambda(\tau) = 3\tau^2 - 2\tau^3$), and safety transition guards. Exposes typed state vectors and `step(dt, inputs) -> outputs` execution interface.
+
+4. **`tests/test_<feature_slug>_simulation.py` (Automated CI Verification Suite)**:
+   Pytest / Unittest test suite executing offline in CI/CD runners without MathWorks license blockers. Validates nominal control tracks, fault-injection responses, emergency safety transitions, and state invariants.
+
+5. **`docs/reports/simulink_results/<FEATURE-ID>_simulation_results.md` (DO-331 Verification Report)**:
+   Formal DO-178C / DO-331 verification deliverable documenting mathematical equivalence, step-by-step state transition logs, fault injection test results, and numerical tolerance parity ($\le 10^{-6}$).
 
 ---
 
