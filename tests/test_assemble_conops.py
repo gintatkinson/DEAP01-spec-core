@@ -1082,6 +1082,61 @@ class TestSysMLParameterBindingEngine(unittest.TestCase):
             engine_space = SysMLParameterBindingEngine(workspace_dir=tmpdir, auto_detect=False)
             self.assertEqual(engine_space.detected_domain, "space")
 
+    def test_first_law_energy_conservation_and_bingo_thresholds(self):
+        """Verify First-Law Energy Conservation and Bingo threshold arithmetic across parameter configurations (Fixes #179, #182)."""
+        test_configs = [
+            {},  # default params
+            {"TOTAL_POWER_NOMINAL_W": "250.0", "ENDURANCE_HOURS": "2.0"},
+            {"TOTAL_POWER_NOMINAL_W": "500.0", "ENDURANCE_HOURS": "4.5"},
+            {"TOTAL_POWER_NOMINAL_W": "1200.0", "ENDURANCE_HOURS": "8.0"},
+            {"BATTERY_CAPACITY_JOULES": "8000000.0", "ENDURANCE_HOURS": "3.0"},
+            {"TOTAL_MTOW_KG": "45.0", "ENDURANCE_HOURS": "1.5"},
+        ]
+
+        for config in test_configs:
+            engine = SysMLParameterBindingEngine(parameter_values=config, auto_detect=False)
+
+            e_capacity = float(engine.resolve_token("BATTERY_CAPACITY_JOULES"))
+            p_nominal = float(engine.resolve_token("TOTAL_POWER_NOMINAL_W"))
+            t_hours = float(engine.resolve_token("ENDURANCE_HOURS"))
+            t_sec = t_hours * 3600.0
+
+            # 1. First-Law Energy Conservation: E_capacity >= P_nominal * t_endurance_sec
+            self.assertGreaterEqual(
+                e_capacity,
+                p_nominal * t_sec,
+                f"Energy capacity {e_capacity} J is less than nominal power demand {p_nominal * t_sec} J for config {config}",
+            )
+
+            # 2. Statutory reserve ratio: E_reserve >= 0.20 * E_capacity and reserve_ratio >= 0.20
+            e_reserve = float(engine.resolve_token("E_RESERVE_JOULES"))
+            reserve_ratio = e_reserve / e_capacity
+            self.assertGreaterEqual(
+                e_reserve,
+                round(0.20 * e_capacity, 1),
+                f"E_reserve {e_reserve} < 0.20 * E_capacity for config {config}",
+            )
+            self.assertGreaterEqual(
+                reserve_ratio,
+                0.20 - 1e-6,
+                f"reserve_ratio {reserve_ratio} < 0.20 for config {config}",
+            )
+
+            # 3. Bingo threshold arithmetic: E_bingo == round(E_return + E_divert + E_reserve + E_contingency, 1)
+            e_return = float(engine.resolve_token("E_RETURN_JOULES"))
+            e_divert = float(engine.resolve_token("E_DIVERT_JOULES"))
+            e_contingency = float(engine.resolve_token("E_CONTINGENCY_JOULES"))
+            e_bingo = float(engine.resolve_token("E_BINGO_JOULES"))
+            e_bingo_threshold = float(engine.resolve_token("E_BINGO_THRESHOLD_JOULES"))
+
+            expected_bingo = round(e_return + e_divert + e_reserve + e_contingency, 1)
+            self.assertEqual(
+                e_bingo,
+                expected_bingo,
+                f"E_bingo {e_bingo} != sum of partitions {expected_bingo} for config {config}",
+            )
+            self.assertEqual(e_bingo, e_bingo_threshold)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -40,13 +40,13 @@ The operational system boundary encompasses all physical, logical, communication
 
 | Symbol / Parameter | Domain / Context | Description | Dimension / Limits | Engineering Unit | Normative / Safety Basis |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| Ω_state | State Space Domain | Admissible operational state space envelope (Ω_state ⊂ R^n) | Compact subset of R^n (n >= 6) | Dimensionless | ISO/IEC/IEEE 29148:2018 §6.4.2 |
-| X_boundary | State Vector Bounds | Bounding box of admissible vehicle operational states [x_min, x_max]^T | Bounded hyper-rectangle | Mixed SI Units | ASTM F3269-17 §6.2 |
-| x_min | State Lower Limit | Minimum permissible state vector threshold | [phi_min, lambda_min, h_min, u_min, v_min, w_min]^T | rad, rad, m, m/s | SORA Annex B M1 Mitigations |
-| x_max | State Upper Limit | Maximum permissible state vector threshold | [phi_max, lambda_max, h_max, u_max, v_max, w_max]^T | rad, rad, m/s | SORA Annex B M1 Mitigations |
-| R_buffer | Spatial Containment | Verified 1:1 parametric lateral containment safety buffer radius | R_buffer >= 1.0 * Distance_containment | m | JARUS SORA v2.5 Step #2 |
-| Range_max(Link_C2) | C2 Comms Margin | Maximum certified C2 data link operational range | Range_max >= Range_nominal | km | RTCA DO-362A §2.2.1 |
-| tau_containment | Emergency Response | Maximum allowable failsafe containment response time | tau_containment <= 2.0 | s | ASTM F3269-17 §7.1 |
+| Ω_state | State Space Domain | Admissible operational state space envelope (Ω_state ⊂ R^n) | Compact subset of R^n (n >= 6) | Dimensionless | {{STATE_SPACE_STANDARD:ISO/IEC/IEEE 29148:2018 §6.4.2}} |
+| X_boundary | State Vector Bounds | Bounding box of admissible vehicle operational states [x_min, x_max]^T | Bounded hyper-rectangle | Mixed SI Units | {{SAFETY_BOUNDS_STANDARD:ASTM F3269-17 §6.2}} |
+| x_min | State Lower Limit | Minimum permissible state vector threshold | {{STATE_VECTOR_MIN_EXPRESSION:[phi_min, lambda_min, h_min, u_min, v_min, w_min]^T}} | {{STATE_VECTOR_MIN_UNITS:rad, rad, m, m/s}} | {{STATE_SAFETY_MITIGATION:SORA Annex B M1 Mitigations}} |
+| x_max | State Upper Limit | Maximum permissible state vector threshold | {{STATE_VECTOR_MAX_EXPRESSION:[phi_max, lambda_max, h_max, u_max, v_max, w_max]^T}} | {{STATE_VECTOR_MAX_UNITS:rad, rad, m/s}} | {{STATE_SAFETY_MITIGATION:SORA Annex B M1 Mitigations}} |
+| R_buffer | Spatial Containment | Verified 1:1 parametric lateral containment safety buffer radius | R_buffer >= 1.0 * Distance_containment | {{CONTAINMENT_BUFFER_UNIT:m}} | {{CONTAINMENT_STANDARD:JARUS SORA v2.5 Step #2}} |
+| Range_max(Link_C2) | C2 Comms Margin | Maximum certified C2 data link operational range | Range_max >= Range_nominal | km | {{C2_STANDARD:RTCA DO-362A §2.2.1}} |
+| tau_containment | Emergency Response | Maximum allowable failsafe containment response time | tau_containment <= 2.0 | s | {{CONTAINMENT_RESPONSE_STANDARD:ASTM F3269-17 §7.1}} |
 
 ### 1.3.1 Parametric Coordinate Reference Frames Math
 The cyber-physical state estimation, guidance, and navigation architecture is mathematically formulated across three standardized, right-handed orthogonal coordinate reference frames:

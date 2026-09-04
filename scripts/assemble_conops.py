@@ -752,6 +752,28 @@ class SysMLParameterBindingEngine:
             self.parameter_bindings["OPTX13_SOURCE"] = "MedicalDeviceIdentification"
             self.parameter_bindings["OPTX13_PROTOCOL_DESC"] = "Digitally Signed Medical Telemetry (DICOM/HL7 per IEC 62304)"
             self.parameter_bindings["ALTITUDE_TELEMETRY"] = "Manipulator Tip Position (X/Y/Z)"
+            if "STATE_SPACE_STANDARD" not in self._explicit_keys:
+                self.parameter_bindings["STATE_SPACE_STANDARD"] = "IEC 62304:2006+AMD1:2015 §5.2"
+            if "SAFETY_BOUNDS_STANDARD" not in self._explicit_keys:
+                self.parameter_bindings["SAFETY_BOUNDS_STANDARD"] = "IEC 60601-1-8:2020 §6.9"
+            if "STATE_VECTOR_MIN_EXPRESSION" not in self._explicit_keys:
+                self.parameter_bindings["STATE_VECTOR_MIN_EXPRESSION"] = "[x_min, y_min, z_min, vx_min, vy_min, vz_min]^T"
+            if "STATE_VECTOR_MAX_EXPRESSION" not in self._explicit_keys:
+                self.parameter_bindings["STATE_VECTOR_MAX_EXPRESSION"] = "[x_max, y_max, z_max, vx_max, vy_max, vz_max]^T"
+            if "STATE_VECTOR_MIN_UNITS" not in self._explicit_keys:
+                self.parameter_bindings["STATE_VECTOR_MIN_UNITS"] = "mm, mm, mm, mm/s"
+            if "STATE_VECTOR_MAX_UNITS" not in self._explicit_keys:
+                self.parameter_bindings["STATE_VECTOR_MAX_UNITS"] = "mm, mm, mm, mm/s"
+            if "STATE_SAFETY_MITIGATION" not in self._explicit_keys:
+                self.parameter_bindings["STATE_SAFETY_MITIGATION"] = "ISO 14971:2019 §7.1 Risk Controls"
+            if "CONTAINMENT_BUFFER_UNIT" not in self._explicit_keys:
+                self.parameter_bindings["CONTAINMENT_BUFFER_UNIT"] = "mm"
+            if "CONTAINMENT_STANDARD" not in self._explicit_keys:
+                self.parameter_bindings["CONTAINMENT_STANDARD"] = "IEC 60601-1-8:2020 §6.3"
+            if "C2_STANDARD" not in self._explicit_keys:
+                self.parameter_bindings["C2_STANDARD"] = "IEC 60601-1-8 §6.8 / DICOM"
+            if "CONTAINMENT_RESPONSE_STANDARD" not in self._explicit_keys:
+                self.parameter_bindings["CONTAINMENT_RESPONSE_STANDARD"] = "IEC 60601-1:2020 §8.1"
         elif dom == "rail":
             self.parameter_bindings["STRUCTURE_PARTITION_LABEL"] = "Locomotive Heavy Chassis & Underframe Structure"
             self.parameter_bindings["FAILSAFE_CONTAINMENT_NAME"] = "pneumatic train brake pipe venting / automatic coupler emergency release"
@@ -777,6 +799,28 @@ class SysMLParameterBindingEngine:
             self.parameter_bindings["OPTX13_SOURCE"] = "TrainIdentification"
             self.parameter_bindings["OPTX13_PROTOCOL_DESC"] = "Digitally Signed Train Telemetry (ETCS / AEI RFID per EN 50128)"
             self.parameter_bindings["ALTITUDE_TELEMETRY"] = "Track Elevation / Chainage"
+            if "STATE_SPACE_STANDARD" not in self._explicit_keys:
+                self.parameter_bindings["STATE_SPACE_STANDARD"] = "EN 50126:2017 §6.2"
+            if "SAFETY_BOUNDS_STANDARD" not in self._explicit_keys:
+                self.parameter_bindings["SAFETY_BOUNDS_STANDARD"] = "EN 50128:2011/A2:2020 SIL 4 §6.3"
+            if "STATE_VECTOR_MIN_EXPRESSION" not in self._explicit_keys:
+                self.parameter_bindings["STATE_VECTOR_MIN_EXPRESSION"] = "[s_min, v_min, a_min, p_brake_min]^T"
+            if "STATE_VECTOR_MAX_EXPRESSION" not in self._explicit_keys:
+                self.parameter_bindings["STATE_VECTOR_MAX_EXPRESSION"] = "[s_max, v_max, a_max, p_brake_max]^T"
+            if "STATE_VECTOR_MIN_UNITS" not in self._explicit_keys:
+                self.parameter_bindings["STATE_VECTOR_MIN_UNITS"] = "m, m/s, m/s^2, bar"
+            if "STATE_VECTOR_MAX_UNITS" not in self._explicit_keys:
+                self.parameter_bindings["STATE_VECTOR_MAX_UNITS"] = "m, m/s, m/s^2, bar"
+            if "STATE_SAFETY_MITIGATION" not in self._explicit_keys:
+                self.parameter_bindings["STATE_SAFETY_MITIGATION"] = "EN 50129:2018 §6.3 Safety Interlocks"
+            if "CONTAINMENT_BUFFER_UNIT" not in self._explicit_keys:
+                self.parameter_bindings["CONTAINMENT_BUFFER_UNIT"] = "m"
+            if "CONTAINMENT_STANDARD" not in self._explicit_keys:
+                self.parameter_bindings["CONTAINMENT_STANDARD"] = "EN 50128 SIL 4 / IEEE 1474.1"
+            if "C2_STANDARD" not in self._explicit_keys:
+                self.parameter_bindings["C2_STANDARD"] = "EN 50159 / GSM-R / Eurobalise"
+            if "CONTAINMENT_RESPONSE_STANDARD" not in self._explicit_keys:
+                self.parameter_bindings["CONTAINMENT_RESPONSE_STANDARD"] = "EN 50126:2017 §7.3"
         elif dom == "marine":
             self.parameter_bindings["STRUCTURE_PARTITION_LABEL"] = "Pressure-Tolerant Titanium & Syntactic Foam Hull"
             self.parameter_bindings["FAILSAFE_CONTAINMENT_NAME"] = "positive buoyancy ballast drop-weight / ascent actuator"
@@ -802,6 +846,28 @@ class SysMLParameterBindingEngine:
             self.parameter_bindings["OPTX13_SOURCE"] = "MaritimeIdentification"
             self.parameter_bindings["OPTX13_PROTOCOL_DESC"] = "Digitally Signed Subsea Telemetry (USBL Acoustic / AIS per DNV-GL)"
             self.parameter_bindings["ALTITUDE_TELEMETRY"] = "Bathymetric Depth"
+            if "STATE_SPACE_STANDARD" not in self._explicit_keys:
+                self.parameter_bindings["STATE_SPACE_STANDARD"] = "DNV-GL-ST-E403 §3.2"
+            if "SAFETY_BOUNDS_STANDARD" not in self._explicit_keys:
+                self.parameter_bindings["SAFETY_BOUNDS_STANDARD"] = "ISO 13628-6 §6.3"
+            if "STATE_VECTOR_MIN_EXPRESSION" not in self._explicit_keys:
+                self.parameter_bindings["STATE_VECTOR_MIN_EXPRESSION"] = "[x_north_min, y_east_min, z_depth_min, u_surge_min, v_sway_min, w_heave_min]^T"
+            if "STATE_VECTOR_MAX_EXPRESSION" not in self._explicit_keys:
+                self.parameter_bindings["STATE_VECTOR_MAX_EXPRESSION"] = "[x_north_max, y_east_max, z_depth_max, u_surge_max, v_sway_max, w_heave_max]^T"
+            if "STATE_VECTOR_MIN_UNITS" not in self._explicit_keys:
+                self.parameter_bindings["STATE_VECTOR_MIN_UNITS"] = "m, m, m Depth, m/s"
+            if "STATE_VECTOR_MAX_UNITS" not in self._explicit_keys:
+                self.parameter_bindings["STATE_VECTOR_MAX_UNITS"] = "m, m, m Depth, m/s"
+            if "STATE_SAFETY_MITIGATION" not in self._explicit_keys:
+                self.parameter_bindings["STATE_SAFETY_MITIGATION"] = "IMO MASS Code §4.2 / COLREGs Rule 8"
+            if "CONTAINMENT_BUFFER_UNIT" not in self._explicit_keys:
+                self.parameter_bindings["CONTAINMENT_BUFFER_UNIT"] = "m Depth"
+            if "CONTAINMENT_STANDARD" not in self._explicit_keys:
+                self.parameter_bindings["CONTAINMENT_STANDARD"] = "DNV-GL-ST-E403 §4.4"
+            if "C2_STANDARD" not in self._explicit_keys:
+                self.parameter_bindings["C2_STANDARD"] = "USBL Acoustic / AIS Datalink"
+            if "CONTAINMENT_RESPONSE_STANDARD" not in self._explicit_keys:
+                self.parameter_bindings["CONTAINMENT_RESPONSE_STANDARD"] = "ISO 13628-6 §6.3"
         elif dom == "space":
             self.parameter_bindings["STRUCTURE_PARTITION_LABEL"] = "Spacecraft Space-Grade Aluminum Chassis & Structural Panels"
             self.parameter_bindings["FAILSAFE_CONTAINMENT_NAME"] = "autonomous de-orbit propulsion / reaction wheel passivation"
@@ -827,6 +893,28 @@ class SysMLParameterBindingEngine:
             self.parameter_bindings["OPTX13_SOURCE"] = "SpaceTrackingIdentification"
             self.parameter_bindings["OPTX13_PROTOCOL_DESC"] = "Digitally Signed CCSDS Space Telemetry per ECSS-E-ST-40C"
             self.parameter_bindings["ALTITUDE_TELEMETRY"] = "Orbital Altitude / Ephemeris"
+            if "STATE_SPACE_STANDARD" not in self._explicit_keys:
+                self.parameter_bindings["STATE_SPACE_STANDARD"] = "ECSS-E-ST-10C §5.2"
+            if "SAFETY_BOUNDS_STANDARD" not in self._explicit_keys:
+                self.parameter_bindings["SAFETY_BOUNDS_STANDARD"] = "ECSS-E-ST-40C §6.3"
+            if "STATE_VECTOR_MIN_EXPRESSION" not in self._explicit_keys:
+                self.parameter_bindings["STATE_VECTOR_MIN_EXPRESSION"] = "[r_x_min, r_y_min, r_z_min, v_x_min, v_y_min, v_z_min]^T"
+            if "STATE_VECTOR_MAX_EXPRESSION" not in self._explicit_keys:
+                self.parameter_bindings["STATE_VECTOR_MAX_EXPRESSION"] = "[r_x_max, r_y_max, r_z_max, v_x_max, v_y_max, v_z_max]^T"
+            if "STATE_VECTOR_MIN_UNITS" not in self._explicit_keys:
+                self.parameter_bindings["STATE_VECTOR_MIN_UNITS"] = "km, km, km, km/s"
+            if "STATE_VECTOR_MAX_UNITS" not in self._explicit_keys:
+                self.parameter_bindings["STATE_VECTOR_MAX_UNITS"] = "km, km, km, km/s"
+            if "STATE_SAFETY_MITIGATION" not in self._explicit_keys:
+                self.parameter_bindings["STATE_SAFETY_MITIGATION"] = "NASA-STD-8739.8 §4.2 Orbital Demise"
+            if "CONTAINMENT_BUFFER_UNIT" not in self._explicit_keys:
+                self.parameter_bindings["CONTAINMENT_BUFFER_UNIT"] = "km Orbital Altitude"
+            if "CONTAINMENT_STANDARD" not in self._explicit_keys:
+                self.parameter_bindings["CONTAINMENT_STANDARD"] = "ECSS-E-ST-40C §5.8"
+            if "C2_STANDARD" not in self._explicit_keys:
+                self.parameter_bindings["C2_STANDARD"] = "CCSDS Space Packet Protocol / ECSS-E-ST-40C"
+            if "CONTAINMENT_RESPONSE_STANDARD" not in self._explicit_keys:
+                self.parameter_bindings["CONTAINMENT_RESPONSE_STANDARD"] = "NASA-STD-8739.8 §5.3"
         elif dom == "industrial":
             self.parameter_bindings["STRUCTURE_PARTITION_LABEL"] = "Heavy-Duty Welded Steel AGV Chassis & Mast Assembly"
             self.parameter_bindings["FAILSAFE_CONTAINMENT_NAME"] = "optical safety lidar field stop / electromagnetic friction brake"
@@ -852,6 +940,28 @@ class SysMLParameterBindingEngine:
             self.parameter_bindings["OPTX13_SOURCE"] = "IndustrialVehicleIdentification"
             self.parameter_bindings["OPTX13_PROTOCOL_DESC"] = "Digitally Signed Industrial Telemetry (VDA 5050 MQTT per ISO 3691-4)"
             self.parameter_bindings["ALTITUDE_TELEMETRY"] = "Fork Lift Height"
+            if "STATE_SPACE_STANDARD" not in self._explicit_keys:
+                self.parameter_bindings["STATE_SPACE_STANDARD"] = "ISO 3691-4:2023 §4.2"
+            if "SAFETY_BOUNDS_STANDARD" not in self._explicit_keys:
+                self.parameter_bindings["SAFETY_BOUNDS_STANDARD"] = "IEC 61508 SIL 3 Part 2 §7.4"
+            if "STATE_VECTOR_MIN_EXPRESSION" not in self._explicit_keys:
+                self.parameter_bindings["STATE_VECTOR_MIN_EXPRESSION"] = "[x_grid_min, y_grid_min, theta_yaw_min, v_trans_min, omega_rot_min, h_fork_min]^T"
+            if "STATE_VECTOR_MAX_EXPRESSION" not in self._explicit_keys:
+                self.parameter_bindings["STATE_VECTOR_MAX_EXPRESSION"] = "[x_grid_max, y_grid_max, theta_yaw_max, v_trans_max, omega_rot_max, h_fork_max]^T"
+            if "STATE_VECTOR_MIN_UNITS" not in self._explicit_keys:
+                self.parameter_bindings["STATE_VECTOR_MIN_UNITS"] = "m, m, rad, m/s, rad/s, m"
+            if "STATE_VECTOR_MAX_UNITS" not in self._explicit_keys:
+                self.parameter_bindings["STATE_VECTOR_MAX_UNITS"] = "m, m, rad, m/s, rad/s, m"
+            if "STATE_SAFETY_MITIGATION" not in self._explicit_keys:
+                self.parameter_bindings["STATE_SAFETY_MITIGATION"] = "ISO 3691-4:2023 §4.3 Active Personnel Detection"
+            if "CONTAINMENT_BUFFER_UNIT" not in self._explicit_keys:
+                self.parameter_bindings["CONTAINMENT_BUFFER_UNIT"] = "m"
+            if "CONTAINMENT_STANDARD" not in self._explicit_keys:
+                self.parameter_bindings["CONTAINMENT_STANDARD"] = "ISO 3691-4:2023 §4.2 Path Containment"
+            if "C2_STANDARD" not in self._explicit_keys:
+                self.parameter_bindings["C2_STANDARD"] = "VDA 5050 MQTT §4.0"
+            if "CONTAINMENT_RESPONSE_STANDARD" not in self._explicit_keys:
+                self.parameter_bindings["CONTAINMENT_RESPONSE_STANDARD"] = "IEC 61508 SIL 3 Part 3 §7.4"
         else:
             self.parameter_bindings["STRUCTURE_PARTITION_LABEL"] = "Airframe Structure"
             self.parameter_bindings["FAILSAFE_CONTAINMENT_NAME"] = "ballistic parachute recovery / containment actuator"
@@ -879,6 +989,28 @@ class SysMLParameterBindingEngine:
             self.parameter_bindings["OPTX13_SOURCE"] = "BroadcastRemoteID"
             self.parameter_bindings["OPTX13_PROTOCOL_DESC"] = "Digitally Signed Public Broadcast (Bluetooth 5.x / Wi-Fi Beacon per ASTM F3411-22a)"
             self.parameter_bindings["ALTITUDE_TELEMETRY"] = "Altitude"
+            if "STATE_SPACE_STANDARD" not in self._explicit_keys:
+                self.parameter_bindings["STATE_SPACE_STANDARD"] = "ISO/IEC/IEEE 29148:2018 §6.4.2"
+            if "SAFETY_BOUNDS_STANDARD" not in self._explicit_keys:
+                self.parameter_bindings["SAFETY_BOUNDS_STANDARD"] = "ASTM F3269-17 §6.2"
+            if "STATE_VECTOR_MIN_EXPRESSION" not in self._explicit_keys:
+                self.parameter_bindings["STATE_VECTOR_MIN_EXPRESSION"] = "[phi_min, lambda_min, h_min, u_min, v_min, w_min]^T"
+            if "STATE_VECTOR_MAX_EXPRESSION" not in self._explicit_keys:
+                self.parameter_bindings["STATE_VECTOR_MAX_EXPRESSION"] = "[phi_max, lambda_max, h_max, u_max, v_max, w_max]^T"
+            if "STATE_VECTOR_MIN_UNITS" not in self._explicit_keys:
+                self.parameter_bindings["STATE_VECTOR_MIN_UNITS"] = "rad, rad, m, m/s"
+            if "STATE_VECTOR_MAX_UNITS" not in self._explicit_keys:
+                self.parameter_bindings["STATE_VECTOR_MAX_UNITS"] = "rad, rad, m/s"
+            if "STATE_SAFETY_MITIGATION" not in self._explicit_keys:
+                self.parameter_bindings["STATE_SAFETY_MITIGATION"] = "SORA Annex B M1 Mitigations"
+            if "CONTAINMENT_BUFFER_UNIT" not in self._explicit_keys:
+                self.parameter_bindings["CONTAINMENT_BUFFER_UNIT"] = "m"
+            if "CONTAINMENT_STANDARD" not in self._explicit_keys:
+                self.parameter_bindings["CONTAINMENT_STANDARD"] = "JARUS SORA v2.5 Step #2"
+            if "C2_STANDARD" not in self._explicit_keys:
+                self.parameter_bindings["C2_STANDARD"] = "RTCA DO-362A §2.2.1"
+            if "CONTAINMENT_RESPONSE_STANDARD" not in self._explicit_keys:
+                self.parameter_bindings["CONTAINMENT_RESPONSE_STANDARD"] = "ASTM F3269-17 §7.1"
 
         if is_civilian:
             self.parameter_bindings["INTERLOCK_PREFIX"] = "SAF"

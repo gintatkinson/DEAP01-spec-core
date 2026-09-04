@@ -112,11 +112,11 @@ $$
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | System Operational Mass | m | {{SYSTEM_MASS_KG:25.0}} | kg | m <= m_max | Total cyber-physical system mass at launch |
 | Gravitational Acceleration | g | 9.80665 | m/s^2 | g = 9.80665 | Standard gravitational acceleration constant |
-| Atmospheric Air Density | rho | 1.225 | kg/m^3 | rho >= rho_min | Sea-level standard atmospheric air density (ISA) |
-| Unmitigated Reference Area | S_ref | 0.15 | m^2 | S_ref > 0 | Frontal aerodynamic reference cross-sectional area |
-| Unmitigated Drag Coefficient | C_D | 0.45 | Dimensionless | C_D >= 0.30 | Characteristic unmitigated vehicle aerodynamic drag coefficient |
-| Unmitigated Terminal Velocity | v_terminal_unmitigated | 27.6 | m/s | v_terminal_unmitigated = sqrt(2*m*g / (rho*S_ref*C_D)) | Free-fall unconstrained terminal descent velocity |
-| Unmitigated Kinetic Energy | E_k_unmitigated | 9522.5 | J | E_k_unmitigated = (m^2 * g) / (rho * S_ref * C_D) | Total unmitigated ground impact kinetic energy |
+| Atmospheric Air Density | rho | {{AIR_DENSITY_KGM3:1.225}} | kg/m^3 | rho >= rho_min | Sea-level standard atmospheric air density (ISA) |
+| Unmitigated Reference Area | S_ref | {{FRONTAL_AREA_M2:0.18}} | m^2 | S_ref > 0 | Frontal aerodynamic reference cross-sectional area |
+| Unmitigated Drag Coefficient | C_D | {{DRAG_COEFFICIENT:0.45}} | Dimensionless | C_D >= 0.30 | Characteristic unmitigated vehicle aerodynamic drag coefficient |
+| Unmitigated Terminal Velocity | v_terminal_unmitigated | {{V_TERMINAL_UNMITIGATED_MPS:77.01}} | m/s | v_terminal_unmitigated = sqrt(2*m*g / (rho*S_ref*C_D)) | Free-fall unconstrained terminal descent velocity |
+| Unmitigated Kinetic Energy | E_k_unmitigated | {{E_K_UNMITIGATED_JOULES:74125.1}} | J | E_k_unmitigated = (m^2 * g) / (rho * S_ref * C_D) | Total unmitigated ground impact kinetic energy |
 | Parachute Canopy Area | S_canopy | {{S_CANOPY:84.0}} | m^2 | S_canopy >= S_canopy_min | Deployed emergency recovery canopy surface area |
 | Parachute Drag Coefficient | C_d_parachute | {{PARACHUTE_DRAG_COEFFICIENT:1.75}} | Dimensionless | C_d_parachute >= 1.50 | Deployed canopy aerodynamic drag coefficient |
 | Parachute Terminal Velocity | v_terminal_parachute | {{V_TERMINAL_PARACHUTE_MPS:1.65}} | m/s | v_terminal_parachute = sqrt(2*m*g / (rho*S_canopy*C_d_parachute)) <= 1.65 | Equilibrium descent velocity (<= 1.65 m/s) |
@@ -124,8 +124,8 @@ $$
 | Regulatory Energy Threshold | E_threshold | 34.0 | J | E_threshold = 34.0 | Regulatory maximum kinetic energy threshold for low ground risk classification |
 
 3. **Kinetic Energy Threshold Compliance ($E_k \le E_{\mathrm{threshold}}$):**
-   - Unmitigated free-fall kinetic energy ($E_{k,\mathrm{unmitigated}} = 9522.5\text{ J}$) exceeds the low-risk kinetic energy threshold ($E_{\mathrm{threshold}} = 34.0\text{ J}$), mandating certified safety mitigations (M1–M3) and autonomous containment mechanisms per JARUS SORA v2.5.
-   - Autonomous emergency {{RECOVERY_DEVICE_TERM:parachute}} actuation reduces the terminal descent velocity to $v_{\mathrm{terminal,parachute}} \le 1.65\text{ m/s}$, capping the ground impact kinetic energy to $E_{k,\mathrm{mitigated}} \le 34.0\text{ J}$, fulfilling the high-assurance energy containment criteria.
+   - Unmitigated free-fall kinetic energy ($E_{k,\mathrm{unmitigated}} = {{E_K_UNMITIGATED_JOULES:74125.1}}\text{ J}$) exceeds the low-risk kinetic energy threshold ($E_{\mathrm{threshold}} = 34.0\text{ J}$), mandating certified safety mitigations (M1–M3) and autonomous containment mechanisms per JARUS SORA v2.5.
+   - Autonomous emergency {{RECOVERY_DEVICE_TERM:parachute}} actuation reduces the terminal descent velocity to $v_{\mathrm{terminal,parachute}} \le {{V_TERMINAL_PARACHUTE_MPS:1.65}}\text{ m/s}$, capping the ground impact kinetic energy to $E_{k,\mathrm{mitigated}} \le {{E_K_MITIGATED_JOULES:34.0}}\text{ J}$, fulfilling the high-assurance energy containment criteria.
 
 ### 5.2.1 Domain-Specific Multi-Physics Failsafe Containment Architectures
 For multi-domain operations across non-aerial and aerial platforms, containment mechanisms are tailored to the physical operating medium:

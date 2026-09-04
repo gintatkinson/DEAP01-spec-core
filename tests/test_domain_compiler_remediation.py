@@ -292,6 +292,120 @@ class TestDomainCompilerRemediation(unittest.TestCase):
                 elif dom == "industrial":
                     self.assertNotIn("flight plan", conops_text.lower())
 
+    def test_cross_domain_state_vectors_and_anti_plagiarism(self):
+        """Verify cross-domain state space parameterization and anti-plagiarism isolation (Fixes #165, #174, #175, #176)."""
+        domains = ("aviation", "medical", "rail", "marine", "space", "industrial")
+
+        state_vector_min_set = set()
+        state_vector_max_set = set()
+        state_space_standards_set = set()
+        safety_bounds_standards_set = set()
+
+        canonical_units_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "skills",
+            "spec-conops-engineering",
+            "resources",
+            "units",
+        )
+
+        domain_expected_tokens = {
+            "aviation": {
+                "STATE_SPACE_STANDARD": "ISO/IEC/IEEE 29148:2018 §6.4.2",
+                "SAFETY_BOUNDS_STANDARD": "ASTM F3269-17 §6.2",
+                "STATE_VECTOR_MIN_EXPRESSION": "[phi_min, lambda_min, h_min, u_min, v_min, w_min]^T",
+                "STATE_VECTOR_MAX_EXPRESSION": "[phi_max, lambda_max, h_max, u_max, v_max, w_max]^T",
+                "CONTAINMENT_BUFFER_UNIT": "m",
+            },
+            "medical": {
+                "STATE_SPACE_STANDARD": "IEC 62304:2006+AMD1:2015 §5.2",
+                "SAFETY_BOUNDS_STANDARD": "IEC 60601-1-8:2020 §6.9",
+                "STATE_VECTOR_MIN_EXPRESSION": "[x_min, y_min, z_min, vx_min, vy_min, vz_min]^T",
+                "STATE_VECTOR_MAX_EXPRESSION": "[x_max, y_max, z_max, vx_max, vy_max, vz_max]^T",
+                "CONTAINMENT_BUFFER_UNIT": "mm",
+            },
+            "rail": {
+                "STATE_SPACE_STANDARD": "EN 50126:2017 §6.2",
+                "SAFETY_BOUNDS_STANDARD": "EN 50128:2011/A2:2020 SIL 4 §6.3",
+                "STATE_VECTOR_MIN_EXPRESSION": "[s_min, v_min, a_min, p_brake_min]^T",
+                "STATE_VECTOR_MAX_EXPRESSION": "[s_max, v_max, a_max, p_brake_max]^T",
+                "CONTAINMENT_BUFFER_UNIT": "m",
+            },
+            "marine": {
+                "STATE_SPACE_STANDARD": "DNV-GL-ST-E403 §3.2",
+                "SAFETY_BOUNDS_STANDARD": "ISO 13628-6 §6.3",
+                "STATE_VECTOR_MIN_EXPRESSION": "[x_north_min, y_east_min, z_depth_min, u_surge_min, v_sway_min, w_heave_min]^T",
+                "STATE_VECTOR_MAX_EXPRESSION": "[x_north_max, y_east_max, z_depth_max, u_surge_max, v_sway_max, w_heave_max]^T",
+                "CONTAINMENT_BUFFER_UNIT": "m Depth",
+            },
+            "space": {
+                "STATE_SPACE_STANDARD": "ECSS-E-ST-10C §5.2",
+                "SAFETY_BOUNDS_STANDARD": "ECSS-E-ST-40C §6.3",
+                "STATE_VECTOR_MIN_EXPRESSION": "[r_x_min, r_y_min, r_z_min, v_x_min, v_y_min, v_z_min]^T",
+                "STATE_VECTOR_MAX_EXPRESSION": "[r_x_max, r_y_max, r_z_max, v_x_max, v_y_max, v_z_max]^T",
+                "CONTAINMENT_BUFFER_UNIT": "km Orbital Altitude",
+            },
+            "industrial": {
+                "STATE_SPACE_STANDARD": "ISO 3691-4:2023 §4.2",
+                "SAFETY_BOUNDS_STANDARD": "IEC 61508 SIL 3 Part 2 §7.4",
+                "STATE_VECTOR_MIN_EXPRESSION": "[x_grid_min, y_grid_min, theta_yaw_min, v_trans_min, omega_rot_min, h_fork_min]^T",
+                "STATE_VECTOR_MAX_EXPRESSION": "[x_grid_max, y_grid_max, theta_yaw_max, v_trans_max, omega_rot_max, h_fork_max]^T",
+                "CONTAINMENT_BUFFER_UNIT": "m",
+            },
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for dom in domains:
+                engine = SysMLParameterBindingEngine(domain=dom, auto_detect=False)
+
+                # Verify each expected token is present and matches
+                expected = domain_expected_tokens[dom]
+                for key, val in expected.items():
+                    resolved_val = engine.resolve_token(key)
+                    self.assertTrue(resolved_val, f"Empty token {key} for domain {dom}")
+                    self.assertEqual(resolved_val, val, f"Mismatch in {key} for domain {dom}")
+
+                state_vector_min_set.add(engine.resolve_token("STATE_VECTOR_MIN_EXPRESSION"))
+                state_vector_max_set.add(engine.resolve_token("STATE_VECTOR_MAX_EXPRESSION"))
+                state_space_standards_set.add(engine.resolve_token("STATE_SPACE_STANDARD"))
+                safety_bounds_standards_set.add(engine.resolve_token("SAFETY_BOUNDS_STANDARD"))
+
+                # Test assembly from canonical units
+                out_dir = os.path.join(tmpdir, f"out_{dom}")
+                success = assemble_conops(
+                    input_dir=canonical_units_dir,
+                    output_dir=out_dir,
+                    verify_only=False,
+                    domain=dom,
+                )
+                self.assertTrue(success, f"assemble_conops failed for {dom}")
+
+                conops_path = os.path.join(out_dir, "CONOPS.md")
+                with open(conops_path, "r", encoding="utf-8") as f:
+                    conops_content = f.read()
+
+                # Verify Table 1.3 in assembled document contains the domain-specific standards and state vectors
+                self.assertIn(expected["STATE_SPACE_STANDARD"], conops_content)
+                self.assertIn(expected["SAFETY_BOUNDS_STANDARD"], conops_content)
+                self.assertIn(expected["STATE_VECTOR_MIN_EXPRESSION"], conops_content)
+                self.assertIn(expected["STATE_VECTOR_MAX_EXPRESSION"], conops_content)
+
+                # Anti-plagiarism isolation: Verify other domains' unique standards are not present in this domain
+                for other_dom, other_expected in domain_expected_tokens.items():
+                    if other_dom != dom:
+                        self.assertNotIn(
+                            other_expected["STATE_VECTOR_MIN_EXPRESSION"],
+                            conops_content,
+                            f"Domain {dom} contains state vector min expression from {other_dom}",
+                        )
+
+        # Mutually distinct state vector expressions across all 6 domains
+        self.assertEqual(len(state_vector_min_set), 6, f"Expected 6 distinct state vector min expressions, got {len(state_vector_min_set)}")
+        self.assertEqual(len(state_vector_max_set), 6, f"Expected 6 distinct state vector max expressions, got {len(state_vector_max_set)}")
+        # Mutually distinct standards across all 6 domains
+        self.assertEqual(len(state_space_standards_set), 6, f"Expected 6 distinct state space standards, got {len(state_space_standards_set)}")
+        self.assertEqual(len(safety_bounds_standards_set), 6, f"Expected 6 distinct safety bounds standards, got {len(safety_bounds_standards_set)}")
+
 
 if __name__ == "__main__":
     unittest.main()
