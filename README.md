@@ -241,6 +241,25 @@ rm -rf ./.tmp-pipeline
 find . -name ".DS_Store" -delete 2>/dev/null || true
 mkdir -p ./docs/conops ./docs/safety ./docs/architecture/blueprints ./docs/epics ./docs/features ./docs/user-stories ./docs/use-cases ./.pipeline/contracts ./.pipeline/domain_specs ./.pipeline/profiles
 
+# Scaffold downstream AGENTS.md
+mkdir -p ./.agents
+cat << 'EOF' > ./.agents/AGENTS.md
+# Agent Instructions
+
+## Repository Role & Scope Classification
+- **Repository Classification:** `DOWNSTREAM_CUSTOMER_PROJECT` (Domain-Specific Safety-Critical Engineering Project)
+- **Sentinel Indicator:** The absence of `.pipeline/upstream/` denotes that this repository is an active **Downstream Customer Project Workspace**, authorized for concrete application code implementation and domain feature delivery.
+- **Customer Application Scope:** Customer-specific application code, domain nodes/modules, domain tests, mission envelopes, and proprietary safety models are developed, tested, and maintained directly within this project workspace across any target domain (Aerospace, Medical, Space, Industrial AGV, Subsea, Rail).
+
+## Pipeline Skills & Rules
+This project uses the Digital Engineering Agent Platform (DEAP).
+- Skills: read all SKILL.md files in `skills/` and `.agents/skills/`
+- Rules: read all files in `rules/` and `.agents/AGENTS.md`
+- Constitution: read `.pipeline/constitution.md` before any task
+- Profiles: read the target platform profile in `.pipeline/profiles/` (e.g. `ros2_cpp.md`, `px4_module.md`, etc.) before implementing features
+EOF
+cp ./.agents/AGENTS.md ./AGENTS.md
+
 # Verify pipeline directories, agent configuration, and skills
 test -d ./.pipeline && test -d ./skills && test -d ./.agents/skills && echo "Pipeline directories (.pipeline, skills, .agents/skills) verified successfully."
 
@@ -282,7 +301,7 @@ After copying the pipeline, configure Gemini / Antigravity to load the skills an
 
 ### 5.5 AGENTS.md Setup
 
-Ensure `.agents/AGENTS.md` exists in your project root to instruct initializing AI agents:
+When installing via `scripts/install_pipeline.sh`, the installer automatically configures both `.agents/AGENTS.md` and `AGENTS.md` for downstream customer projects (`DOWNSTREAM_CUSTOMER_PROJECT`). If performing manual setup, ensure `.agents/AGENTS.md` and `AGENTS.md` exist in your project root to instruct initializing AI agents:
 
 ```markdown
 # Agent Instructions

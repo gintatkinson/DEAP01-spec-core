@@ -342,14 +342,24 @@ JIRA_API_TOKEN=your_jira_api_token_or_pat_here
 # JIRA_CA_CERT_PATH=/etc/ssl/certs/internal-ca.pem
 EOF
 
-# Scaffold downstream root AGENTS.md if missing
-if [ ! -f "$TARGET_DIR/AGENTS.md" ]; then
-  if [ -f "$TARGET_DIR/.agents/AGENTS.md" ]; then
-    cp "$TARGET_DIR/.agents/AGENTS.md" "$TARGET_DIR/AGENTS.md"
-  elif [ -f "$INSTALLER_ROOT/AGENTS.md" ]; then
-    cp "$INSTALLER_ROOT/AGENTS.md" "$TARGET_DIR/AGENTS.md"
-  fi
-fi
+# Scaffold downstream .agents/AGENTS.md and root AGENTS.md
+mkdir -p "$TARGET_DIR/.agents"
+cat << 'EOF' > "$TARGET_DIR/.agents/AGENTS.md"
+# Agent Instructions
+
+## Repository Role & Scope Classification
+- **Repository Classification:** `DOWNSTREAM_CUSTOMER_PROJECT` (Domain-Specific Safety-Critical Engineering Project)
+- **Sentinel Indicator:** The absence of `.pipeline/upstream/` denotes that this repository is an active **Downstream Customer Project Workspace**, authorized for concrete application code implementation and domain feature delivery.
+- **Customer Application Scope:** Customer-specific application code, domain nodes/modules, domain tests, mission envelopes, and proprietary safety models are developed, tested, and maintained directly within this project workspace across any target domain (Aerospace, Medical, Space, Industrial AGV, Subsea, Rail).
+
+## Pipeline Skills & Rules
+This project uses the Digital Engineering Agent Platform (DEAP).
+- Skills: read all SKILL.md files in `skills/` and `.agents/skills/`
+- Rules: read all files in `rules/` and `.agents/AGENTS.md`
+- Constitution: read `.pipeline/constitution.md` before any task
+- Profiles: read the target platform profile in `.pipeline/profiles/` (e.g. `ros2_cpp.md`, `px4_module.md`, etc.) before implementing features
+EOF
+cp "$TARGET_DIR/.agents/AGENTS.md" "$TARGET_DIR/AGENTS.md"
 
 # Scaffold downstream root CLAUDE.md if missing
 if [ ! -f "$TARGET_DIR/CLAUDE.md" ]; then

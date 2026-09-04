@@ -434,6 +434,43 @@ def test_upstream_blueprint_domain_cleanliness_detects_domain_concept_papers_and
             assert exc_info.value.code == 1
 
 
+def test_installer_scaffolds_downstream_agents_md():
+    """Verify that scripts/install_pipeline.sh scaffolds downstream AGENTS.md files with DOWNSTREAM_CUSTOMER_PROJECT."""
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if not os.path.isdir(repo_root):
+        repo_root = os.getcwd()
+
+    installer_path = os.path.join(repo_root, "scripts", "install_pipeline.sh")
+    assert os.path.isfile(installer_path), f"scripts/install_pipeline.sh missing at {repo_root}"
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        res = subprocess.run(
+            ["bash", installer_path, tmpdir, "-p", "github"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        assert res.returncode == 0, f"install_pipeline.sh failed with exit code {res.returncode}:\nSTDOUT:\n{res.stdout}\nSTDERR:\n{res.stderr}"
+
+        agents_dot_path = os.path.join(tmpdir, ".agents", "AGENTS.md")
+        agents_root_path = os.path.join(tmpdir, "AGENTS.md")
+
+        assert os.path.isfile(agents_dot_path), f".agents/AGENTS.md missing in target directory {tmpdir}"
+        assert os.path.isfile(agents_root_path), f"AGENTS.md missing in target directory {tmpdir}"
+
+        with open(agents_dot_path, "r", encoding="utf-8") as f:
+            dot_content = f.read()
+        with open(agents_root_path, "r", encoding="utf-8") as f:
+            root_content = f.read()
+
+        assert "DOWNSTREAM_CUSTOMER_PROJECT" in dot_content, ".agents/AGENTS.md does not contain DOWNSTREAM_CUSTOMER_PROJECT"
+        assert "UPSTREAM_SPEC_CORE_COMPILER" not in dot_content, ".agents/AGENTS.md unexpectedly contains UPSTREAM_SPEC_CORE_COMPILER"
+
+        assert "DOWNSTREAM_CUSTOMER_PROJECT" in root_content, "AGENTS.md does not contain DOWNSTREAM_CUSTOMER_PROJECT"
+        assert "UPSTREAM_SPEC_CORE_COMPILER" not in root_content, "AGENTS.md unexpectedly contains UPSTREAM_SPEC_CORE_COMPILER"
+
+
 class TestCheck18BlueprintDomainCleanliness(unittest.TestCase):
     """Unit tests for Check 18 (Upstream Blueprint Domain Cleanliness Gate)."""
 
@@ -478,6 +515,13 @@ class TestCheck18BlueprintDomainCleanliness(unittest.TestCase):
         if not os.path.isdir(repo_root):
             repo_root = os.getcwd()
         run_all_checks(repo_root)
+
+
+class TestInstallerScaffolding(unittest.TestCase):
+    """Unit tests for installer scaffolding behavior."""
+
+    def test_installer_scaffolds_downstream_agents_md(self):
+        test_installer_scaffolds_downstream_agents_md()
 
 
 if __name__ == "__main__":
