@@ -509,6 +509,8 @@ class TestGitLabCITemplate(unittest.TestCase):
         self.assertTrue(os.path.isfile(template_in_templates), f"Expected {template_in_templates} to exist")
 
     def test_root_gitlab_ci_absent_in_upstream(self):
+        if not os.path.exists(os.path.join(self.repo_root, ".pipeline", "upstream")):
+            self.skipTest("Skipping test_root_gitlab_ci_absent_in_upstream in downstream repository")
         root_gitlab_ci = os.path.join(self.repo_root, ".gitlab-ci.yml")
         self.assertFalse(os.path.exists(root_gitlab_ci), "Upstream spec-core root must not have .gitlab-ci.yml")
 

@@ -5,6 +5,7 @@ Downstream Environment & Runtime Integrity Verification Suite.
 import sys
 import os
 import re
+import json
 import subprocess
 import tempfile
 import shutil
@@ -21,6 +22,7 @@ from scripts.verify_downstream_baseline import (
     MarkdownTableASTParser,
     CartesianProductValidator,
     ProofBlockAST,
+    _validate_domain_types,
 )
 
 def test_python_runtime_environment():
@@ -755,6 +757,110 @@ Conclusion statement.
         report = CartesianProductValidator.verify_proof_structure(blocks)
         self.assertTrue(report.is_conforming)
         self.assertEqual(len(report.malformed_proofs), 0)
+
+
+class TestValidateDomainTypes(unittest.TestCase):
+    """Unit and regression tests for _validate_domain_types (#210)."""
+
+    def test_validate_domain_types_typescript_enum_and_types_accepted(self):
+        """Verify TypeScript enum declarations are accepted alongside interface, class, and type."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            rules = {
+                "validation_rules": {
+                    "mandated_classes": [
+                        "FlightMode",
+                        "DroneState",
+                        "TelemetryData",
+                        "NavigationCommand",
+                    ]
+                }
+            }
+            with open(os.path.join(tmpdir, "codebase_rules.json"), "w", encoding="utf-8") as f:
+                json.dump(rules, f)
+
+            domain_dir = os.path.join(tmpdir, "src", "domain")
+            os.makedirs(domain_dir, exist_ok=True)
+            types_ts = os.path.join(domain_dir, "types.ts")
+            with open(types_ts, "w", encoding="utf-8") as f:
+                f.write(
+                    "export enum FlightMode {\n"
+                    "    AUTO = 'AUTO',\n"
+                    "    MANUAL = 'MANUAL',\n"
+                    "}\n\n"
+                    "export interface DroneState {\n"
+                    "    id: string;\n"
+                    "}\n\n"
+                    "export class TelemetryData {\n"
+                    "    timestamp: number;\n"
+                    "}\n\n"
+                    "export type NavigationCommand = {\n"
+                    "    action: string;\n"
+                    "};\n"
+                )
+
+            # Should complete without error / exit
+            _validate_domain_types(tmpdir, tmpdir, "ts", "src/domain")
+
+    def test_validate_domain_types_typescript_missing_type_fails(self):
+        """Verify TypeScript type validation fails when a mandated enum/type is missing."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            rules = {
+                "validation_rules": {
+                    "mandated_classes": [
+                        "FlightMode",
+                        "MissingDomainType",
+                    ]
+                }
+            }
+            with open(os.path.join(tmpdir, "codebase_rules.json"), "w", encoding="utf-8") as f:
+                json.dump(rules, f)
+
+            domain_dir = os.path.join(tmpdir, "src", "domain")
+            os.makedirs(domain_dir, exist_ok=True)
+            types_ts = os.path.join(domain_dir, "types.ts")
+            with open(types_ts, "w", encoding="utf-8") as f:
+                f.write(
+                    "export enum FlightMode {\n"
+                    "    AUTO = 'AUTO',\n"
+                    "    MANUAL = 'MANUAL',\n"
+                    "}\n"
+                )
+
+            with self.assertRaises(SystemExit) as cm:
+                _validate_domain_types(tmpdir, tmpdir, "ts", "src/domain")
+            self.assertEqual(cm.exception.code, 1)
+
+    def test_validate_domain_types_dart_enum_and_classes_accepted(self):
+        """Verify Dart enum declarations are accepted alongside class and mixin."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            rules = {
+                "validation_rules": {
+                    "mandated_classes": [
+                        "FlightMode",
+                        "DroneState",
+                    ]
+                }
+            }
+            with open(os.path.join(tmpdir, "codebase_rules.json"), "w", encoding="utf-8") as f:
+                json.dump(rules, f)
+
+            domain_dir = os.path.join(tmpdir, "lib", "src", "domain")
+            os.makedirs(domain_dir, exist_ok=True)
+            types_dart = os.path.join(domain_dir, "types.dart")
+            with open(types_dart, "w", encoding="utf-8") as f:
+                f.write(
+                    "enum FlightMode {\n"
+                    "    auto,\n"
+                    "    manual,\n"
+                    "}\n\n"
+                    "class DroneState {\n"
+                    "    final String id;\n"
+                    "    DroneState(this.id);\n"
+                    "}\n"
+                )
+
+            # Should complete without error / exit
+            _validate_domain_types(tmpdir, tmpdir, "dart", "lib/src/domain")
 
 
 if __name__ == "__main__":
