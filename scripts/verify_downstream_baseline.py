@@ -296,7 +296,8 @@ def _validate_domain_types(dest, repo_root, ext, domain_subpath):
         type_keywords = r"(?:class|mixin|enum|extension\s+type|sealed\s+class)"
         pattern = r"\b" + type_keywords + r"\s+({})\b".format("|".join(re.escape(c) for c in mandated))
     else:
-        pattern = r"\b(?:interface|class|type)\s+({})\b".format("|".join(re.escape(c) for c in mandated))
+        type_keywords = r"(?:interface|class|type|enum)"
+        pattern = r"\b" + type_keywords + r"\s+({})\b".format("|".join(re.escape(c) for c in mandated))
     found = set(re.findall(pattern, combined, re.MULTILINE))
     missing = set(mandated) - found
     if missing:
@@ -888,46 +889,62 @@ class MarkdownTableASTParser:
         Part labels are recognized in both "Part N — Keyword" and numbered
         "N. Keyword" styles; keyword families must match the part number.
         """
-        block_start = re.compile(r"^\s*#{2,4}\s+.*\bTheorem\b", re.IGNORECASE)
-        heading_line = re.compile(r"^\s*#{1,6}\s+\S")
-        part_match = re.compile(r"Part\s*(\d)", re.IGNORECASE)
-        numbered_part = re.compile(r"^\s*(\d+)[.)]\s+")
+        block_start = re.compile(r"^\s*(#{2,4})\s+.*\bTheorem\b", re.IGNORECASE)
+        heading_part = re.compile(
+            r"^\s*#{3,6}\s+(?:\*{0,2})?(?:Part\s*(\d+)|(\d+)[.)])",
+            re.IGNORECASE,
+        )
+        non_heading_part = re.compile(
+            r"^\s*(?:\*{0,2})?(?:Part\s*(\d+)|(\d+)[.)])",
+            re.IGNORECASE,
+        )
         blocks: List[ProofBlockAST] = []
         current: Optional[ProofBlockAST] = None
+        has_heading_parts: bool = False
+        theorem_heading_level: int = 3
 
         def finish():
-            nonlocal current
+            nonlocal current, has_heading_parts
             if current is not None:
                 blocks.append(current)
                 current = None
+                has_heading_parts = False
 
         for line_number, raw_line in enumerate(text.splitlines(), start=1):
             line = raw_line.strip()
-            if block_start.match(line):
+            start_m = block_start.match(line)
+            if start_m:
                 finish()
-                id_match = re.search(r"\b([A-Z]+-\d+)\b", line)
+                theorem_heading_level = len(start_m.group(1))
+                id_match = re.search(r"\b([A-Z0-9_-]+-\d+)\b", line)
                 current = ProofBlockAST(
                     theorem_id=id_match.group(1) if id_match else f"Theorem@{line_number}",
                     line_number=line_number,
                 )
                 continue
             if current is not None:
-                part = part_match.search(line)
+                h_part = heading_part.match(line)
                 part_number = None
-                if part:
-                    part_number = int(part.group(1))
-                else:
-                    numbered = numbered_part.match(line)
-                    if numbered:
-                        p_num = int(numbered.group(1))
-                        if p_num <= 5:
-                            part_number = p_num
+                if h_part:
+                    p_str = h_part.group(1) or h_part.group(2)
+                    p_num = int(p_str)
+                    if 1 <= p_num <= 5:
+                        part_number = p_num
+                        has_heading_parts = True
+                elif not has_heading_parts:
+                    if not raw_line.startswith((" ", "\t")):
+                        nh_part = non_heading_part.match(line)
+                        if nh_part:
+                            p_str = nh_part.group(1) or nh_part.group(2)
+                            p_num = int(p_str)
+                            if 1 <= p_num <= 5:
+                                part_number = p_num
 
                 if part_number is not None:
                     lowered = line.lower()
                     if part_number == 1 and ("proposition" in lowered or "statement" in lowered):
                         current.proposition = line
-                    elif part_number == 2 and "assumption" in lowered:
+                    elif part_number == 2 and ("assumption" in lowered or "state space" in lowered or "domain bound" in lowered):
                         current.assumptions = line
                     elif part_number == 3 and ("invariant" in lowered or "barrier" in lowered):
                         current.barrier_function = line
@@ -937,9 +954,15 @@ class MarkdownTableASTParser:
                         current.conclusion = line
                     continue
 
-                if heading_line.match(line):
-                    finish()
-                    continue
+                h_match = re.match(r"^\s*(#{1,6})\s+\S", line)
+                if h_match:
+                    level = len(h_match.group(1))
+                    if level <= max(theorem_heading_level, 3) and level <= 3:
+                        finish()
+                        continue
+                    elif level <= theorem_heading_level:
+                        finish()
+                        continue
         finish()
         return blocks
 

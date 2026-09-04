@@ -435,7 +435,105 @@ class TestMarkdownTableASTParserUCAColumns(unittest.TestCase):
         self.assertEqual(report.expected_uca_rows, 8)
 
 
+class TestProofBlockASTParserRobustness(unittest.TestCase):
+    """Unit and regression tests for proof block parser robustness (#208)."""
+
+    def test_parse_proof_blocks_with_markdown_subheadings_numbered(self):
+        """Verify proof blocks with numbered markdown subheadings (#### 1. ...) are not prematurely terminated."""
+        content = """
+# Safety Assurance
+### Theorem THM-01: Operating Envelope Invariance
+#### 1. Proposition Statement
+System trajectory remains bounded within safe envelope.
+
+#### 2. State Space & Operational Assumptions
+Sensor noise is bounded by delta.
+
+#### 3. Invariant / Barrier Certificate
+Barrier certificate B(x) >= 0 across state space.
+
+#### 4. Inductive Step & Derivation
+Taking Lie derivative: dB/dt >= -alpha * B(x).
+
+#### 5. Formal Conclusion & Q.E.D.
+By Nagumo theorem, envelope is forward invariant. Q.E.D.
+
+### Section 11: Next Section
+Unrelated content.
+"""
+        blocks = MarkdownTableASTParser.parse_proof_blocks(content)
+        self.assertEqual(len(blocks), 1)
+        block = blocks[0]
+        self.assertEqual(block.theorem_id, "THM-01")
+        self.assertIn("1. Proposition", block.proposition)
+        self.assertIn("2. State Space", block.assumptions)
+        self.assertIn("3. Invariant", block.barrier_function)
+        self.assertIn("4. Inductive Step", block.derivation)
+        self.assertIn("5. Formal Conclusion", block.conclusion)
+
+        report = CartesianProductValidator.verify_proof_structure(blocks)
+        self.assertTrue(report.is_conforming)
+        self.assertEqual(len(report.malformed_proofs), 0)
+
+    def test_parse_proof_blocks_rejects_inner_numbered_list_misclassification(self):
+        """Verify inner numbered list items inside derivations do not falsely satisfy missing Part 5."""
+        content = """
+### Theorem THM-02: Bounded Velocity Invariance
+#### Part 1 — Proposition Statement
+Velocity remains within limit.
+
+#### Part 2 — Operational Assumptions
+Actuator response is linear.
+
+#### Part 3 — Invariant Barrier Function
+Candidate barrier B(v) = v_max - v.
+
+#### Part 4 — Derivation & Inductive Step
+Proof steps:
+1. Base case holds at t0.
+2. Inductive hypothesis on step k.
+3. Invariant condition preserved.
+5. Conclusion of lemma derivation: x >= 0.
+
+### Section 11: Next Section
+"""
+        blocks = MarkdownTableASTParser.parse_proof_blocks(content)
+        self.assertEqual(len(blocks), 1)
+        block = blocks[0]
+        self.assertEqual(block.theorem_id, "THM-02")
+        self.assertEqual(block.conclusion, "")
+
+        report = CartesianProductValidator.verify_proof_structure(blocks)
+        self.assertFalse(report.is_conforming)
+        self.assertTrue(any("Missing Part 5 Conclusion" in err for err in report.malformed_proofs))
+
+    def test_parse_proof_blocks_canonical_5_part_names(self):
+        """Verify canonical 5-part names (1. Proposition, 2. State Space, 3. Invariant, 4. Inductive Step, 5. Conclusion)."""
+        content = """
+### Theorem THM-03: Complete Proof Canonical
+1. Proposition: System invariant holds.
+2. State Space: Compact domain with Lipschitz dynamics.
+3. Invariant: Candidate Lyapunov function V(x) <= c.
+4. Inductive Step: Induction on discrete time step k.
+5. Conclusion: Envelope invariance holds for all t >= 0.
+"""
+        blocks = MarkdownTableASTParser.parse_proof_blocks(content)
+        self.assertEqual(len(blocks), 1)
+        block = blocks[0]
+        self.assertEqual(block.theorem_id, "THM-03")
+        self.assertIn("1. Proposition", block.proposition)
+        self.assertIn("2. State Space", block.assumptions)
+        self.assertIn("3. Invariant", block.barrier_function)
+        self.assertIn("4. Inductive Step", block.derivation)
+        self.assertIn("5. Conclusion", block.conclusion)
+
+        report = CartesianProductValidator.verify_proof_structure(blocks)
+        self.assertTrue(report.is_conforming)
+        self.assertEqual(len(report.malformed_proofs), 0)
+
+
 if __name__ == "__main__":
     unittest.main()
+
 
 
