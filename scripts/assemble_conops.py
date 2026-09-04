@@ -1228,7 +1228,6 @@ class SysMLParameterBindingEngine:
             or "kinetic" in platform_type
             or "c-uas" in combined_context
             or "counter-uas" in combined_context
-            or "run_10" in combined_context
         ):
             selected_type = LifecycleType.EXPENDABLE_KINETIC_EFFECTOR
         elif (
@@ -1237,7 +1236,6 @@ class SysMLParameterBindingEngine:
             or "medical" in combined_context
             or "laparoscopic" in combined_context
             or "clinical" in combined_context
-            or "run_07" in combined_context
         ):
             selected_type = LifecycleType.CONTINUOUS_STATIONARY
         elif (
@@ -1246,7 +1244,6 @@ class SysMLParameterBindingEngine:
             or "rail" in combined_context
             or "train" in combined_context
             or "shunting" in combined_context
-            or "run_08" in combined_context
         ):
             selected_type = LifecycleType.TRACK_BOUND_GUIDED
         elif (
@@ -1255,7 +1252,6 @@ class SysMLParameterBindingEngine:
             or "satellite" in combined_context
             or "spacecraft" in combined_context
             or "orbital" in combined_context
-            or "run_06" in combined_context
         ):
             selected_type = LifecycleType.PERSISTENT_ORBITAL
         else:

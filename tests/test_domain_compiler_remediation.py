@@ -776,8 +776,90 @@ class TestDomainCompilerRemediation(unittest.TestCase):
                 self.assertEqual(min_units, spec["STATE_VECTOR_MIN_UNITS"])
                 self.assertEqual(max_units, spec["STATE_VECTOR_MAX_UNITS"])
 
+    def test_lifecycle_derivation_purely_schema_driven_issue_209(self):
+        """
+        Reproduction and regression test for Issue #209:
+        Verify that _derive_lifecycle_contract derives lifecycle archetypes
+        (EXPENDABLE_KINETIC_EFFECTOR, CONTINUOUS_STATIONARY, TRACK_BOUND_GUIDED,
+        PERSISTENT_ORBITAL, REUSABLE_RECOVERY) purely from domain schema parameters
+        and domain keywords, NOT from sniffing test harness folder strings
+        ('run_10', 'run_07', 'run_08', 'run_06').
+        """
+        # 1. Verify schema-driven derivation without any run_XX strings
+        schema_cases = [
+            (
+                {"DOMAIN_TYPE": "medical", "SYSTEM_IDENTIFIER": "SurgicalConsole"},
+                "medical",
+                LifecycleType.CONTINUOUS_STATIONARY,
+            ),
+            (
+                {"DOMAIN_TYPE": "rail", "SYSTEM_IDENTIFIER": "LocomotiveUnit"},
+                "rail",
+                LifecycleType.TRACK_BOUND_GUIDED,
+            ),
+            (
+                {"DOMAIN_TYPE": "space", "SYSTEM_IDENTIFIER": "OrbitalCubeSat"},
+                "space",
+                LifecycleType.PERSISTENT_ORBITAL,
+            ),
+            (
+                {"PLATFORM_TYPE": "Kinetic Interceptor UAV", "IS_EXPENDABLE": "true"},
+                "aviation",
+                LifecycleType.EXPENDABLE_KINETIC_EFFECTOR,
+            ),
+            (
+                {"PLATFORM_TYPE": "Tactical ISR Fixed-Wing UAV"},
+                "aviation",
+                LifecycleType.REUSABLE_RECOVERY,
+            ),
+        ]
+
+        for params, dom, expected_type in schema_cases:
+            engine = SysMLParameterBindingEngine(domain=dom, parameter_values=params, auto_detect=False)
+            contract = engine._derive_lifecycle_contract()
+            self.assertEqual(
+                contract.lifecycle_type,
+                expected_type,
+                f"Failed pure schema derivation for {dom} ({params}): got {contract.lifecycle_type}, expected {expected_type}",
+            )
+
+        # 2. Verify that test runner strings ('run_10', 'run_07', 'run_08', 'run_06') in identifiers
+        # do NOT erroneously force incorrect archetype classification for standard systems.
+        anti_sniffing_cases = [
+            (
+                {"SYSTEM_IDENTIFIER": "run_07_tactical_surveillance_drone", "PLATFORM_TYPE": "Fixed-Wing UAV"},
+                "aviation",
+                LifecycleType.REUSABLE_RECOVERY,
+            ),
+            (
+                {"SYSTEM_IDENTIFIER": "run_08_maritime_patrol_vessel", "PLATFORM_TYPE": "Surface Patrol Craft"},
+                "marine",
+                LifecycleType.REUSABLE_RECOVERY,
+            ),
+            (
+                {"SYSTEM_IDENTIFIER": "run_06_warehouse_forklift", "PLATFORM_TYPE": "Autonomous AGV"},
+                "industrial",
+                LifecycleType.REUSABLE_RECOVERY,
+            ),
+            (
+                {"SYSTEM_IDENTIFIER": "run_10_cargo_transport_uav", "PLATFORM_TYPE": "Cargo Transport UAV", "IS_EXPENDABLE": "false"},
+                "aviation",
+                LifecycleType.REUSABLE_RECOVERY,
+            ),
+        ]
+
+        for params, dom, expected_type in anti_sniffing_cases:
+            engine = SysMLParameterBindingEngine(domain=dom, parameter_values=params, auto_detect=False)
+            contract = engine._derive_lifecycle_contract()
+            self.assertEqual(
+                contract.lifecycle_type,
+                expected_type,
+                f"Test runner string sniffing poisoned classification for {params}: got {contract.lifecycle_type}, expected {expected_type}",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
 
