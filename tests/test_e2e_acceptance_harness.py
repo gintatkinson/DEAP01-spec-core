@@ -22,6 +22,7 @@ from scripts.e2e_acceptance_harness import (
     DomainScorecard,
     HarnessSummary,
     POSITIVE_DOMAIN_LEXICONS,
+    _infer_lexicon_domain_type,
     solve_relational_mass_cross_sum,
     solve_closed_form_quadratic_physics,
     solve_dimensional_energy_conservation,
@@ -833,6 +834,16 @@ class TestDeterministicSemanticSolvers(unittest.TestCase):
         passed, errors, details = solve_positive_domain_lexicon_floor("run_01", "aviation", text)
         self.assertFalse(passed)
         self.assertLess(details["matched_count"], 4)
+
+    def test_infer_lexicon_domain_type_airspace_collision_avoidance(self):
+        """Verify _infer_lexicon_domain_type does not misclassify airspace as space (Fixes Issue #186)."""
+        # Airspace operations should infer aviation, not space
+        inferred = _infer_lexicon_domain_type("uas-airspace-monitoring", "Airspace Operations", "CONOPS for Airspace Surveillance")
+        self.assertEqual(inferred, "aviation")
+
+        # Deep space orbital cubesat should infer space
+        inferred_space = _infer_lexicon_domain_type("leo-cubesat", "Deep Space Orbital CubeSat", "CONOPS for Satellite Constellation")
+        self.assertEqual(inferred_space, "space")
 
     # -----------------------------------------------------------------------
     # Solver 7: Pairwise Anti-Plagiarism Gate

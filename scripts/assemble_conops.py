@@ -134,8 +134,97 @@ class SysMLParameterBindingEngine:
     def _detect_domain_type(self) -> str:
         """
         Detects operational domain type: aviation, medical, rail, marine, space, industrial.
-        Fixes Issue #175.
+        Fixes Issues #175, #186.
         """
+        aviation_tokens = {
+            "aviation",
+            "aircraft",
+            "uav",
+            "uas",
+            "drone",
+            "evtol",
+            "aerial",
+            "flight",
+            "airspace",
+            "aerospace",
+            "sora",
+            "fixed-wing",
+            "rotorcraft",
+            "interceptor",
+        }
+        medical_tokens = {
+            "medical",
+            "surgical",
+            "healthcare",
+            "patient",
+            "clinical",
+            "hospital",
+            "laparoscopic",
+            "trocar",
+        }
+        rail_tokens = {
+            "rail",
+            "locomotive",
+            "train",
+            "shunting",
+            "metro",
+            "tramway",
+            "railway",
+        }
+        marine_tokens = {
+            "marine",
+            "subsea",
+            "maritime",
+            "underwater",
+            "auv",
+            "rov",
+            "usv",
+            "uuv",
+            "vessel",
+            "naval",
+            "ocean",
+            "bathymetric",
+        }
+        space_tokens = {
+            "space",
+            "satellite",
+            "cubesat",
+            "orbital",
+            "spacecraft",
+            "launch",
+            "leo",
+            "geo",
+            "adcs",
+            "orbit",
+            "constellation",
+        }
+        industrial_tokens = {
+            "industrial",
+            "agv",
+            "forklift",
+            "warehouse",
+            "logistics",
+            "amr",
+            "ugv",
+        }
+
+        def _match_tokens(text: str) -> Optional[str]:
+            clean = text.lower()
+            tokens = set(re.findall(r"[a-z0-9]+", clean))
+            if tokens & aviation_tokens or any(p in clean for p in ("fixed wing", "fixed-wing")):
+                return "aviation"
+            if tokens & medical_tokens:
+                return "medical"
+            if tokens & rail_tokens or any(p in clean for p in ("rolling stock", "track circuit")):
+                return "rail"
+            if tokens & marine_tokens or any(p in clean for p in ("surface vessel",)):
+                return "marine"
+            if tokens & space_tokens:
+                return "space"
+            if tokens & industrial_tokens or any(p in clean for p in ("industrial truck", "material handling", "vda 5050", "ground delivery", "ground robot")):
+                return "industrial"
+            return None
+
         # 1. Explicit domain in parameter bindings
         explicit = (
             self.parameter_bindings.get("DOMAIN_TYPE")
@@ -143,10 +232,9 @@ class SysMLParameterBindingEngine:
             or self.parameter_bindings.get("DOMAIN")
         )
         if explicit:
-            exp_clean = str(explicit).lower().strip()
-            for dom in ("medical", "rail", "marine", "space", "industrial", "aviation"):
-                if dom in exp_clean:
-                    return dom
+            dom = _match_tokens(str(explicit))
+            if dom:
+                return dom
 
         # 2. Parameter bindings and inferred identifiers
         domain_str = (
@@ -162,20 +250,9 @@ class SysMLParameterBindingEngine:
         ).lower()
         platform_type = (self.parameter_bindings.get("PLATFORM_TYPE") or "").lower()
         params_combined = f"{domain_str} {sys_str} {platform_type}"
-        words = set(re.findall(r"[a-z0-9]+", params_combined))
-
-        if words & {"medical", "surgical", "healthcare", "patient", "clinical", "hospital", "laparoscopic", "trocar"}:
-            return "medical"
-        if words & {"rail", "locomotive", "train", "shunting", "metro", "tramway", "railway"} or any(p in params_combined for p in ("rolling stock", "track circuit")):
-            return "rail"
-        if words & {"marine", "subsea", "maritime", "underwater", "auv", "rov", "usv", "uuv", "vessel", "naval", "ocean", "bathymetric"}:
-            return "marine"
-        if words & {"industrial", "agv", "forklift", "warehouse", "logistics", "amr", "ugv"} or any(p in params_combined for p in ("industrial truck", "material handling", "vda 5050")):
-            return "industrial"
-        if words & {"space", "satellite", "cubesat", "orbital", "spacecraft", "launch", "leo", "geo", "adcs", "orbit"}:
-            return "space"
-        if words & {"aviation", "uav", "uas", "drone", "evtol", "aircraft", "aerial", "flight", "airspace", "sora", "aerospace"}:
-            return "aviation"
+        dom = _match_tokens(params_combined)
+        if dom:
+            return dom
 
         # 3. Check domain_config.json in workspace
         for cfg_rel in (
@@ -197,10 +274,10 @@ class SysMLParameterBindingEngine:
                             or cfg.get("operational_domain")
                             or cfg.get("system_type")
                             or ""
-                        ).lower()
-                        for dom in ("medical", "space", "rail", "marine", "industrial", "aviation"):
-                            if dom in dom_val:
-                                return dom
+                        )
+                        dom = _match_tokens(str(dom_val))
+                        if dom:
+                            return dom
                     except Exception:
                         pass
                 parent = os.path.dirname(curr)
@@ -209,19 +286,9 @@ class SysMLParameterBindingEngine:
                 curr = parent
 
         # 4. Fallback: inspect workspace directory string
-        ws_str = self.workspace_dir.lower()
-        if any(w in ws_str for w in ("medical", "surgical", "healthcare", "patient", "clinical", "hospital")):
-            return "medical"
-        if any(w in ws_str for w in ("space", "satellite", "cubesat", "orbital", "spacecraft")):
-            return "space"
-        if any(w in ws_str for w in ("rail", "locomotive", "train", "shunting", "metro")):
-            return "rail"
-        if any(w in ws_str for w in ("marine", "subsea", "maritime", "underwater", "auv", "rov")):
-            return "marine"
-        if any(w in ws_str for w in ("industrial", "agv", "forklift", "warehouse", "logistics")):
-            return "industrial"
-        if any(w in ws_str for w in ("aviation", "uav", "uas", "drone", "evtol", "aircraft")):
-            return "aviation"
+        dom = _match_tokens(self.workspace_dir)
+        if dom:
+            return dom
 
         return "aviation"
 

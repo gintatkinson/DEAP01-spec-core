@@ -981,6 +981,88 @@ class TestSysMLParameterBindingEngine(unittest.TestCase):
         self.assertAlmostEqual(v_term, 1.65, places=1)
         self.assertAlmostEqual(e_k, 0.5 * 50.0 * (v_term ** 2), places=1)
 
+    def test_detect_domain_type_airspace_aerospace_collision_avoidance(self):
+        """Verifies domain type detection eliminates substring collisions on airspace/aerospace (Fixes Issue #186)."""
+        # Level 1: explicit DOMAIN_TYPE="Airspace Operations" -> "aviation"
+        engine_airspace = SysMLParameterBindingEngine(
+            parameter_values={"DOMAIN_TYPE": "Airspace Operations"}, auto_detect=False
+        )
+        self.assertEqual(engine_airspace.detected_domain, "aviation")
+        self.assertEqual(engine_airspace._detect_domain_type(), "aviation")
+
+        # Level 1: explicit DOMAIN_TYPE="Aerospace Flight Systems" -> "aviation"
+        engine_aerospace = SysMLParameterBindingEngine(
+            parameter_values={"DOMAIN_TYPE": "Aerospace Flight Systems"}, auto_detect=False
+        )
+        self.assertEqual(engine_aerospace.detected_domain, "aviation")
+        self.assertEqual(engine_aerospace._detect_domain_type(), "aviation")
+
+        # Level 2: OPERATIONAL_DOMAIN="Airspace Infrastructure Safety" -> "aviation"
+        engine_op_domain = SysMLParameterBindingEngine(
+            parameter_values={"OPERATIONAL_DOMAIN": "Airspace Infrastructure Safety"}, auto_detect=False
+        )
+        self.assertEqual(engine_op_domain.detected_domain, "aviation")
+        self.assertEqual(engine_op_domain._detect_domain_type(), "aviation")
+
+        # Level 4: workspace directory path "/opt/workspaces/uas-airspace-inspection" -> "aviation"
+        engine_ws = SysMLParameterBindingEngine(
+            workspace_dir="/opt/workspaces/uas-airspace-inspection", auto_detect=False
+        )
+        self.assertEqual(engine_ws.detected_domain, "aviation")
+        self.assertEqual(engine_ws._detect_domain_type(), "aviation")
+
+        # Space systems with "Deep Space Orbital CubeSat" -> "space"
+        engine_space = SysMLParameterBindingEngine(
+            parameter_values={"DOMAIN_TYPE": "Deep Space Orbital CubeSat"}, auto_detect=False
+        )
+        self.assertEqual(engine_space.detected_domain, "space")
+        self.assertEqual(engine_space._detect_domain_type(), "space")
+
+    def test_detect_domain_type_all_six_domains_no_cross_talk(self):
+        """Verifies all 6 domains classify accurately without cross-talk (Fixes Issue #186)."""
+        domain_cases = [
+            ("aviation", {"DOMAIN_TYPE": "Tactical ISR Aviation Airspace Fixed-Wing"}),
+            ("medical", {"DOMAIN_TYPE": "Medical Surgical Robotic Healthcare Hospital"}),
+            ("rail", {"DOMAIN_TYPE": "Rail Locomotive Shunting Yard Freight Train"}),
+            ("marine", {"DOMAIN_TYPE": "Marine Subsea Maritime Underwater AUV Vessel"}),
+            ("space", {"DOMAIN_TYPE": "Deep Space Orbital CubeSat Satellite Constellation"}),
+            ("industrial", {"DOMAIN_TYPE": "Industrial Warehouse Forklift AGV Logistics AMR"}),
+        ]
+
+        for expected_dom, params in domain_cases:
+            engine = SysMLParameterBindingEngine(parameter_values=params, auto_detect=False)
+            self.assertEqual(
+                engine.detected_domain,
+                expected_dom,
+                f"Domain '{expected_dom}' misclassified with params {params}",
+            )
+            self.assertEqual(
+                engine._detect_domain_type(),
+                expected_dom,
+                f"Domain '{expected_dom}' _detect_domain_type() misclassified with params {params}",
+            )
+
+    def test_detect_domain_type_level3_domain_config(self):
+        """Verifies Level 3 domain_config.json word token matching (Fixes Issue #186)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cfg_dir = os.path.join(tmpdir, "schema")
+            os.makedirs(cfg_dir, exist_ok=True)
+            cfg_path = os.path.join(cfg_dir, "domain_config.json")
+
+            # Airspace monitoring -> aviation (not space)
+            with open(cfg_path, "w", encoding="utf-8") as f:
+                json.dump({"domain": "Airspace Monitoring"}, f)
+
+            engine_airspace = SysMLParameterBindingEngine(workspace_dir=tmpdir, auto_detect=False)
+            self.assertEqual(engine_airspace.detected_domain, "aviation")
+
+            # Deep Space Orbit -> space
+            with open(cfg_path, "w", encoding="utf-8") as f:
+                json.dump({"domain": "Deep Space Orbit"}, f)
+
+            engine_space = SysMLParameterBindingEngine(workspace_dir=tmpdir, auto_detect=False)
+            self.assertEqual(engine_space.detected_domain, "space")
+
 
 if __name__ == "__main__":
     unittest.main()

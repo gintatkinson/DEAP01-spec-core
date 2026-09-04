@@ -926,17 +926,24 @@ def _infer_lexicon_domain_type(
         ("marine", ("marine", "maritime", "subsea", "underwater", "auv", "asv", "surface vessel", "vessel", "run_03", "run_04")),
         ("space", ("space", "cubesat", "satellite", "spacecraft", "orbit", "leo", "constellation", "run_06")),
         ("industrial", ("industrial", "agv", "forklift", "ugv", "ground delivery", "ground robot", "warehouse", "logistics", "run_05", "run_09")),
-        ("aviation", ("aviation", "aircraft", "uav", "uas", "aerial", "evtol", "fixed-wing", "interceptor", "air mobility", "run_01", "run_02", "run_10")),
+        ("aviation", ("aviation", "aircraft", "uav", "uas", "aerial", "airspace", "aerospace", "evtol", "fixed-wing", "interceptor", "air mobility", "flight", "drone", "rotorcraft", "sora", "run_01", "run_02", "run_10")),
     ]
 
+    def _matches_rule(target: str, kw_tuple: Tuple[str, ...]) -> bool:
+        for k in kw_tuple:
+            pat = r"\b" + re.escape(k).replace(r"\-", r"[\s\-]") + r"\b"
+            if re.search(pat, target, re.IGNORECASE):
+                return True
+        return False
+
     for dom_key, kw_tuple in rules:
-        if any(k in combined for k in kw_tuple):
+        if _matches_rule(combined, kw_tuple):
             return dom_key
 
     if text:
         text_head = text[:2000].lower()
         for dom_key, kw_tuple in rules:
-            if any(k in text_head for k in kw_tuple):
+            if _matches_rule(text_head, kw_tuple):
                 return dom_key
 
     return None
@@ -1221,7 +1228,13 @@ def verify_layer4_physical_math(workspace_path: str) -> LayerResult:
         details["mitigated_kinetic_energy_J"] = ek
         m_grc = re.search(r"GRC-(\d+)", conops_c)
         grc_level = int(m_grc.group(1)) if m_grc else None
-        is_aircraft = not any(k in conops_c.lower() for k in ("subsea", "maritime", "ugv", "ground delivery", "cubesat", "space", "surgical", "hospital", "locomotive", "rail", "forklift", "agv"))
+        is_aircraft = not bool(
+            re.search(
+                r"\b(subsea|maritime|ugv|cubesat|spacecraft|satellite|space|surgical|hospital|locomotive|rail|forklift|agv)\b",
+                conops_c,
+                re.IGNORECASE,
+            )
+        )
         if is_aircraft and (grc_level is None or grc_level == 1) and ek > 34.0:
             errors.append(f"Mitigated kinetic energy E_k ({ek} J) exceeds 34.0 J GRC-1 ceiling")
     else:
