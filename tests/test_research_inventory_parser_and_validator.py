@@ -362,7 +362,8 @@ class TestClauseCitationValidator(unittest.TestCase):
     def test_workspace_upstream_clean_mode(self):
         """In upstream repository, if docs/research/RESEARCH_INVENTORY.md is not present, validate passes."""
         repo = WorkspaceRepository(PROJECT_ROOT)
-        self.assertTrue(repo.is_upstream_compiler_repo())
+        if not repo.is_upstream_compiler_repo():
+            self.skipTest("Skipping upstream clean mode test in downstream repository.")
         validator = ResearchInventoryValidator()
         findings = validator.validate(repo)
         self.assertEqual(findings, [])

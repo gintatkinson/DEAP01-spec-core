@@ -148,7 +148,36 @@ class SysMLParameterBindingEngine:
                 if dom in exp_clean:
                     return dom
 
-        # 2. Check domain_config.json in workspace
+        # 2. Parameter bindings and inferred identifiers
+        domain_str = (
+            self.parameter_bindings.get("OPERATIONAL_DOMAIN")
+            or self.parameter_bindings.get("DOMAIN")
+            or ""
+        ).lower()
+        sys_str = (
+            self.parameter_bindings.get("SYSTEM_IDENTIFIER")
+            or self.parameter_bindings.get("SYSTEM_NAME")
+            or self.inferred_system_identifier
+            or ""
+        ).lower()
+        platform_type = (self.parameter_bindings.get("PLATFORM_TYPE") or "").lower()
+        params_combined = f"{domain_str} {sys_str} {platform_type}"
+        words = set(re.findall(r"[a-z0-9]+", params_combined))
+
+        if words & {"medical", "surgical", "healthcare", "patient", "clinical", "hospital", "laparoscopic", "trocar"}:
+            return "medical"
+        if words & {"rail", "locomotive", "train", "shunting", "metro", "tramway", "railway"} or any(p in params_combined for p in ("rolling stock", "track circuit")):
+            return "rail"
+        if words & {"marine", "subsea", "maritime", "underwater", "auv", "rov", "usv", "uuv", "vessel", "naval", "ocean", "bathymetric"}:
+            return "marine"
+        if words & {"industrial", "agv", "forklift", "warehouse", "logistics", "amr", "ugv"} or any(p in params_combined for p in ("industrial truck", "material handling", "vda 5050")):
+            return "industrial"
+        if words & {"space", "satellite", "cubesat", "orbital", "spacecraft", "launch", "leo", "geo", "adcs", "orbit"}:
+            return "space"
+        if words & {"aviation", "uav", "uas", "drone", "evtol", "aircraft", "aerial", "flight", "airspace", "sora", "aerospace"}:
+            return "aviation"
+
+        # 3. Check domain_config.json in workspace
         for cfg_rel in (
             "schema/domain_config.json",
             ".pipeline/domain_config.json",
@@ -169,7 +198,7 @@ class SysMLParameterBindingEngine:
                             or cfg.get("system_type")
                             or ""
                         ).lower()
-                        for dom in ("medical", "rail", "marine", "space", "industrial", "aviation"):
+                        for dom in ("medical", "space", "rail", "marine", "industrial", "aviation"):
                             if dom in dom_val:
                                 return dom
                     except Exception:
@@ -179,34 +208,20 @@ class SysMLParameterBindingEngine:
                     break
                 curr = parent
 
-        # 3. Parameter bindings and inferred identifiers
-        domain_str = (
-            self.parameter_bindings.get("OPERATIONAL_DOMAIN")
-            or self.parameter_bindings.get("DOMAIN")
-            or ""
-        ).lower()
-        sys_str = (
-            self.parameter_bindings.get("SYSTEM_IDENTIFIER")
-            or self.parameter_bindings.get("SYSTEM_NAME")
-            or self.inferred_system_identifier
-            or ""
-        ).lower()
-        platform_type = (self.parameter_bindings.get("PLATFORM_TYPE") or "").lower()
+        # 4. Fallback: inspect workspace directory string
         ws_str = self.workspace_dir.lower()
-        combined = f"{domain_str} {sys_str} {platform_type} {ws_str}"
-
-        if any(w in combined for w in ("medical", "surgical", "healthcare", "patient", "clinical", "hospital", "laparoscop", "trocar")):
+        if any(w in ws_str for w in ("medical", "surgical", "healthcare", "patient", "clinical", "hospital")):
             return "medical"
-        if any(w in combined for w in ("rail", "locomotive", "train", "shunting", "metro", "tramway", "rolling stock", "railway", "track circuit")):
-            return "rail"
-        if any(w in combined for w in ("marine", "subsea", "maritime", "underwater", "auv", "rov", "usv", "uuv", "vessel", "naval", "ocean", "bathymetr")):
-            return "marine"
-        if any(w in combined for w in ("aviation", "uav", "uas", "drone", "evtol", "aircraft", "aerial", "flight", "airspace", "sora", "aerospace")):
-            return "aviation"
-        if any(w in combined for w in ("satellite", "cubesat", "orbital", "spacecraft", "launch", "leo", "geo", "adcs", "orbit", "space ")):
+        if any(w in ws_str for w in ("space", "satellite", "cubesat", "orbital", "spacecraft")):
             return "space"
-        if any(w in combined for w in ("agv", "forklift", "warehouse", "logistics", "industrial truck", "amr", "material handling", "vda 5050", "ugv")):
+        if any(w in ws_str for w in ("rail", "locomotive", "train", "shunting", "metro")):
+            return "rail"
+        if any(w in ws_str for w in ("marine", "subsea", "maritime", "underwater", "auv", "rov")):
+            return "marine"
+        if any(w in ws_str for w in ("industrial", "agv", "forklift", "warehouse", "logistics")):
             return "industrial"
+        if any(w in ws_str for w in ("aviation", "uav", "uas", "drone", "evtol", "aircraft")):
+            return "aviation"
 
         return "aviation"
 
