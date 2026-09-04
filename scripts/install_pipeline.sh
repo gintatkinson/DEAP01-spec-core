@@ -450,9 +450,9 @@ Immediately following installation, any AI agent (Antigravity, Claude Code, Gemi
 
 ---
 
-## 4. Pipeline 0: Pre-Spec Safety Engineering Execution Workflow
+## 4. Multi-Pipeline Operator Prompt Catalog & Autonomous Execution Workflows
 
-Pipeline 0 (**Pre-Spec Safety Engineering Engine**) ingests mission flight envelopes and airspace constraints to produce normative safety specifications, STPA/FMECA analysis, SORA SAIL assurance models, and SysML v2 textual AST artifacts.
+This catalog contains the complete, unabridged, copy-pasteable operator prompt suite for executing all stages of the Digital Engineering Agent Platform (DEAP) lifecycle across context-isolated subagents in Antigravity, Claude Code, Gemini CLI, Cursor, and Cascade.
 
 ### 4.1 Master-Worker Subagent Topology
 
@@ -473,9 +473,9 @@ flowchart LR
     Worker_0C -->|"DEAP_MODEL.sysml & Handoff AST JSON"| Pipeline_1["Pipeline 1 Projection Engine"]
 ```
 
-### 4.2 Pipeline 0 Command-Line Execution Prompts
+### 4.2 Pipeline 0 Execution Prompts
 
-Execute the following prompts in sequence using context-isolated subagents:
+Execute the following prompts in sequence using context-isolated subagents to transform unstructured intent, operational scenarios, and interface schemas into formal CONOPS, STPA hazard matrices, and SysML v2 AST models:
 
 #### 4.2.1 Worker 0A: CONOPS & Operational Scenario Synthesis Prompt
 
@@ -575,6 +575,210 @@ Formalize the CONOPS (`CONOPS.md`), STPA hazard matrices, FMECA ratings, and dom
 2. Output Requirements:
    - Generate canonical `DEAP_MODEL.sysml` under `schema/DEAP_MODEL.sysml` (or `.pipeline/schema.sysml`).
    - Generate canonical `pipeline0_handoff_contract.json` under `.pipeline/contracts/pipeline0_handoff_contract.json` for downstream Pipeline 1 Agile projection and Pipeline 2 code generation.
+
+PROCEED
+```
+
+### 4.3 Pipeline 1 Agile Backlog Projection Prompts
+
+Execute the following prompts to extract full Agile backlogs (Epics, Level 1C ICD Interface Matrices, BDD User Stories, and UML Use Cases) with closed-loop tracker synchronization:
+
+#### 4.3.1 Worker 1A: Structural Spec Worker (Epics & Features) Prompt
+
+```text
+Execute `view_file` on `skills/schema-specification-engineering/SKILL.md` as your very first step before taking any action.
+
+Repository Classification: DOWNSTREAM_CUSTOMER_PROJECT (or UPSTREAM_SPEC_CORE_COMPILER depending on execution context)
+
+Role: Worker 1A — Structural Specification Worker (Epics & Features)
+
+Primary Commercial Toolchain Integration Context:
+This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
+
+Directive:
+Transform structural schemas and SysML v2 AST models into formal Agile Epics and Features adhering to OOA/OOD principles:
+
+1. AST Parsing & Subsystem Extraction:
+   - Ingest canonical SysML v2 model (`.pipeline/schema.sysml`) and schema digest (`.pipeline/schema-digest.json`).
+   - Parse all subsystem `package` declarations to identify Epic boundaries (`docs/epics/epic-*.md`).
+   - Parse all `part def` (structural components) and `item def` (data payloads) elements to identify Feature boundaries (`docs/features/feat-*.md`).
+   - Dispatch fresh context-isolated subagents for each individual Epic and Feature with YAML frontmatter declaring `generation_mode: "subagent"`.
+
+2. Local Validation & Issue Registration:
+   - Execute the local model coverage linter: `./skills/spec-orchestrator/scripts/verify_model_coverage.py --spec-only --allow-missing-specs`.
+   - Register Features first via `./skills/spec-orchestrator/scripts/create_issue.sh "<file>" "feature" "<title>"`.
+   - Verify live published payload on the issue tracker (`gh issue view <ID> --json body` or `glab issue view <ID>`).
+   - Inject verified Feature Issue IDs into Epic tasklists.
+   - Register Epics via `./skills/spec-orchestrator/scripts/create_issue.sh "<file>" "epic" "<title>"`.
+
+Defect Filing Directive:
+If any compiler fault, schema inconsistency, or invariant violation is discovered, file a defect report using both `gh issue create` (GitHub) and `glab issue create` (GitLab) with the `bug` / `type::bug` label and full 7-section defect analysis. Issue auto-closing keywords or issue close commands are strictly forbidden.
+
+PROCEED
+```
+
+#### 4.3.2 Worker 1B: Interface Spec Worker (Logical ICD & Signal Dictionary) Prompt
+
+```text
+Execute `view_file` on `skills/spec-icd-engineering/SKILL.md` as your very first step before taking any action.
+
+Repository Classification: DOWNSTREAM_CUSTOMER_PROJECT (or UPSTREAM_SPEC_CORE_COMPILER depending on execution context)
+
+Role: Worker 1B — Interface Specification Worker (Worker ICD)
+
+Primary Commercial Toolchain Integration Context:
+This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
+
+Directive:
+Synthesize Level 1C Logical Interface Specifications and Signal Dictionaries from formal SysML v2 AST interface blocks:
+
+1. AST Interface Parsing:
+   - Ingest `.pipeline/schema.sysml` and `.pipeline/schema-digest.json`.
+   - Extract directional ports (`port def`), connection bindings (`connection`), formal interface contracts (`interface def`), and information payloads (`item flow`).
+   - Ingest safety constraints (`SC-1..N`) and hazard allocations from `docs/safety/STPA_MATRIX.md` to map safety-critical signal bounds.
+
+2. Deliverable Generation & Quality Gate:
+   - Generate `docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md` containing subsystem boundary graphs, N² communication matrix, and topological port bindings.
+   - Generate `docs/interfaces/ICD_02_MASTER_SIGNAL_DICTIONARY.md` containing signal identifiers (`SIG-*`), data types, units, sampling frequencies, update rates, latency bounds, and fail-safe default values.
+   - Run Gate 23 ICD completeness validation: `python3 skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/icd_completeness_validator.py`.
+   - Register the ICD suite under the `icd` issue label using `./skills/spec-orchestrator/scripts/create_issue.sh "<file>" "icd" "<title>"`.
+   - Verify published issue body integrity via live tracker inspection.
+
+Defect Filing Directive:
+If any compiler fault, schema inconsistency, or invariant violation is discovered, file a defect report using both `gh issue create` (GitHub) and `glab issue create` (GitLab) with the `bug` / `type::bug` label and full 7-section defect analysis. Issue auto-closing keywords or issue close commands are strictly forbidden.
+
+PROCEED
+```
+
+#### 4.3.3 Worker 1C: Behavioral Spec Worker (User Stories & Statecharts) Prompt
+
+```text
+Execute `view_file` on `skills/spec-user-story-engineering/SKILL.md` as your very first step before taking any action.
+
+Repository Classification: DOWNSTREAM_CUSTOMER_PROJECT (or UPSTREAM_SPEC_CORE_COMPILER depending on execution context)
+
+Role: Worker 1C — Behavioral Specification Worker (User Stories & Statecharts)
+
+Primary Commercial Toolchain Integration Context:
+This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
+
+Directive:
+Extract Behavior-Driven Development (BDD) User Stories, UML Sequence Lifelines, and Stateflow transition triggers from SysML v2 behavioral AST nodes:
+
+1. Behavioral AST Ingestion:
+   - Ingest `.pipeline/schema.sysml` and operational text.
+   - Parse `action def` (computations & transformations), `state def` (lifecycle states & transition guards), `port def` (message triggers), and `interaction def` (lifeline sequences).
+   - Extract algorithmic calculation stories for dynamic computations and temporal expiration stories for state lifecycles.
+   - Map acceptance criteria BDD scenarios to formal SysML `test case def` elements with `verify requirement` tags.
+
+2. Deliverable Generation & Issue Registration:
+   - Dispatch fresh context-isolated subagents per User Story (`docs/user-stories/us-*.md`) with YAML frontmatter (`generation_mode: "subagent"`).
+   - Execute local model coverage linter: `./skills/spec-orchestrator/scripts/verify_model_coverage.py --spec-only --allow-missing-specs`.
+   - Register User Stories via `./skills/spec-orchestrator/scripts/create_issue.sh "<file>" "user-story" "<title>"`.
+   - Verify live published payload on the issue tracker (`gh issue view <ID> --json body` or `glab issue view <ID>`).
+
+Defect Filing Directive:
+If any compiler fault, schema inconsistency, or invariant violation is discovered, file a defect report using both `gh issue create` (GitHub) and `glab issue create` (GitLab) with the `bug` / `type::bug` label and full 7-section defect analysis. Issue auto-closing keywords or issue close commands are strictly forbidden.
+
+PROCEED
+```
+
+#### 4.3.4 Worker 1D: System Interaction Spec Worker (UML Use Cases & Realization Matrix) Prompt
+
+```text
+Execute `view_file` on `skills/spec-usecase-engineering/SKILL.md` as your very first step before taking any action.
+
+Repository Classification: DOWNSTREAM_CUSTOMER_PROJECT (or UPSTREAM_SPEC_CORE_COMPILER depending on execution context)
+
+Role: Worker 1D — System Interaction Specification Worker (UML Use Cases)
+
+Primary Commercial Toolchain Integration Context:
+This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
+
+Directive:
+Derive formal UML System Use Cases directly from SysML v2 `use case def` AST blocks and system interaction scenarios:
+
+1. Use Case AST Ingestion:
+   - Ingest `.pipeline/schema.sysml`, `docs/features/`, and `docs/user-stories/`.
+   - Extract `use case def` AST nodes, identifying `subject` (`part def`), typed `actor` ports, `objective`, and `include`/`extend` relations.
+   - Maintain 1:1 Use Case Def mapping with Primary/Secondary Actors, Preconditions, Trigger, Main Success Scenario, Alternate/Exception Flows (covering 100% of validation constraints across realized features), and Postconditions (Success & Failure Guarantees).
+   - Construct UML Use Case diagrams and UML State Machine diagrams.
+
+2. Realization Matrix & Registration:
+   - Construct `## Realization Matrix` resolving specific, unique tracker Issue IDs for each intersecting User Story and Feature.
+   - Execute local model coverage check: `./skills/spec-orchestrator/scripts/verify_model_coverage.py --spec-only --allow-missing-specs`.
+   - Register Use Cases via `./skills/spec-orchestrator/scripts/create_issue.sh "<file>" "use-case" "<title>"`.
+   - Verify live published payload on the issue tracker (`gh issue view <ID> --json body` or `glab issue view <ID>`).
+
+Defect Filing Directive:
+If any compiler fault, schema inconsistency, or invariant violation is discovered, file a defect report using both `gh issue create` (GitHub) and `glab issue create` (GitLab) with the `bug` / `type::bug` label and full 7-section defect analysis. Issue auto-closing keywords or issue close commands are strictly forbidden.
+
+PROCEED
+```
+
+### 4.4 Multi-Provider Backlog Reconciliation Commands
+
+Execute backlog reconciliation and model parity verification across your target VCS platform or offline air-gapped environment:
+
+#### 4.4.1 Option A: GitLab SaaS Reconciliation
+```bash
+./scripts/reconcile_backlog.py --provider gitlab
+```
+
+#### 4.4.2 Option B: GitLab Self-Managed / SCIF Air-Gapped Reconciliation
+```bash
+./scripts/reconcile_backlog.py --provider gitlab --gitlab-url https://gitlab.internal.defense.gov --project <group>/<project>
+```
+
+#### 4.4.3 Option C: GitHub Issues Reconciliation
+```bash
+./scripts/reconcile_backlog.py --provider github
+```
+
+#### 4.4.4 Option D: Offline Verification & 23-Gate Parity Lock
+```bash
+# Closed-loop reverse SysML v2 AST synchronization
+python3 scripts/compile_sysml.py --reverse-sync
+
+# Offline backlog checklist and status synchronization
+./scripts/reconcile_backlog.py --offline
+
+# 23-Gate Model Coverage & UML Compliance Lock
+./skills/spec-orchestrator/scripts/verify_model_coverage.py schema docs/features --spec-only
+```
+
+### 4.5 Pipeline 2 Autonomous Feature Implementation Prompts
+
+Execute the following prompt to drive feature implementation through context-isolated TDD micro-tasks:
+
+#### 4.5.1 Worker 2 / Synthesis Driver: Feature-Driven Implementation Prompt
+
+```text
+Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` as your very first step before taking any action.
+
+Repository Classification: DOWNSTREAM_CUSTOMER_PROJECT (or UPSTREAM_SPEC_CORE_COMPILER depending on execution context)
+
+Role: Worker 2 — Feature-Driven Implementation & Synthesis Driver
+
+Primary Commercial Toolchain Integration Context:
+This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
+
+Governance Preamble & Execution Directive:
+Adopt the feature-driven-implementation skill by reading `.pipeline/constitution.md` and the target platform profile (`.pipeline/profiles/<target-platform>.md`, e.g. `ros2_cpp.md`, `px4_module.md`, or `flutter.md`).
+
+Implement prioritized Feature [Issue Number, e.g. #1] adhering strictly to the 3-Layer Definition of Done (DoD):
+1. Layer 1: Domain Model / Safety Statechart — Platform-independent domain entities, transition guards, mathematical invariants, and safety statecharts.
+2. Layer 2: Safety Statechart / ViewModel — State management, event handling, lifecycle hooks, and reactive telemetry bindings.
+3. Layer 3: Interface Binding / Middleware & BDD Tests — Platform interface bindings (ROS2 lifecycle nodes, PX4 uORB modules, or Flutter widgets) verified via automated BDD integration tests against live emulators / simulation harnesses.
+
+Execution Standards:
+- Execute TDD RED-GREEN-REFACTOR cycles using context-isolated subagents for each 2-5 minute micro-task.
+- Dual-Track MBD Verification: Enforce Track A (Native MATLAB / Simulink / Stateflow synthesis) and Track B (Headless CI Digital Twin Engine) with numerical tolerance verification (error <= 10^-6) and zero license blockers.
+- Zero-Mocking Live Persistence Mandate: Validate all transactions against live databases / emulators.
+- Closed-Loop Payload Verification: Deliver cumulative solution walkthrough (`docs/designs/feat-<ID>-solution.md`), verify live published payload, comment on issue with walkthrough link, and apply `status:fixed-resolved` (GitHub) or `status::fixed-resolved` (GitLab). Leave issue open for Product Owner review.
+
+Defect Filing Directive:
+If any compiler fault, schema inconsistency, or invariant violation is discovered, file a defect report using both `gh issue create` (GitHub) and `glab issue create` (GitLab) with the `bug` / `type::bug` label and full 7-section defect analysis. Issue auto-closing keywords or issue close commands are strictly forbidden.
 
 PROCEED
 ```
