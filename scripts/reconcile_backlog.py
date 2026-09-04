@@ -1061,6 +1061,17 @@ class JiraV2V3Provider:
         start_at = 0
         max_results = 50
         jql = f"project = '{self.project_key}' ORDER BY key ASC" if self.project_key else "ORDER BY key ASC"
+        consumed_fields = [
+            "summary",
+            "description",
+            "status",
+            "issuetype",
+            "labels",
+            "updated",
+            "created",
+            "issuelinks",
+            "parent",
+        ]
         endpoint = "rest/api/2/search"
 
         try:
@@ -1070,7 +1081,7 @@ class JiraV2V3Provider:
                     "jql": jql,
                     "startAt": start_at,
                     "maxResults": max_results,
-                    "fields": "*all",
+                    "fields": ",".join(consumed_fields),
                 }
                 status_code, data, headers = self._api_request(endpoint, method="GET", params=params)
                 if not isinstance(data, dict):

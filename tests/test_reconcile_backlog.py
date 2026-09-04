@@ -999,6 +999,40 @@ class TestResourceLifecycleCleanup(unittest.TestCase):
                 provider._api_request("rest/api/2/issue")
             mock_err.close.assert_called_once()
 
+    def test_jira_list_issues_restricts_fields_projection(self):
+        """
+        Reproduction and regression test for Issue #204:
+        Verifies that JiraV2V3Provider.list_issues does not query with wildcard fields='*all',
+        and restricts field projection to the consumed set.
+        """
+        provider = JiraV2V3Provider(
+            server_url="https://jira.example.com",
+            project_key="DEAP",
+            token="mock-token",
+            workspace_dir=self.workspace_dir,
+        )
+
+        with patch.object(provider, "_api_request", return_value=(200, {"issues": [], "total": 0}, {})) as mock_req:
+            issues = provider.list_issues()
+            self.assertEqual(issues, [])
+            mock_req.assert_called_once()
+            _, kwargs = mock_req.call_args
+            params = kwargs.get("params", {})
+            self.assertIn("fields", params)
+            self.assertNotEqual(params["fields"], "*all")
+            consumed_fields = [
+                "summary",
+                "description",
+                "status",
+                "issuetype",
+                "labels",
+                "updated",
+                "created",
+                "issuelinks",
+                "parent",
+            ]
+            self.assertEqual(params["fields"], ",".join(consumed_fields))
+
 
 if __name__ == "__main__":
     unittest.main()

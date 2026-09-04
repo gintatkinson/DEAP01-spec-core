@@ -222,6 +222,36 @@ class TestJiraApiOperations(unittest.TestCase):
         self.assertEqual(issues[2]["state"], "DONE")
         self.assertEqual(issues[2]["issue_type"], "Story")
 
+    @patch.object(JiraV2V3Provider, "_api_request")
+    def test_list_issues_bounded_fields_projection(self, mock_api_request):
+        """Verify JiraV2V3Provider.list_issues projects only consumed fields rather than '*all' wildcard."""
+        mock_api_request.return_value = (200, {"issues": [], "total": 0}, {})
+        issues = self.provider.list_issues()
+        self.assertEqual(issues, [])
+        mock_api_request.assert_called_once()
+        _, kwargs = mock_api_request.call_args
+        params = kwargs.get("params", {})
+
+        self.assertIn("fields", params)
+        self.assertNotEqual(params["fields"], "*all", "Fields parameter must not use '*all' wildcard")
+
+        expected_fields = [
+            "summary",
+            "description",
+            "status",
+            "issuetype",
+            "labels",
+            "updated",
+            "created",
+            "issuelinks",
+            "parent",
+        ]
+        if isinstance(params["fields"], str):
+            actual_fields = [f.strip() for f in params["fields"].split(",") if f.strip()]
+        else:
+            actual_fields = list(params["fields"])
+        self.assertEqual(actual_fields, expected_fields)
+
     @patch("urllib.request.urlopen")
     def test_get_issue_success(self, mock_urlopen):
         """Verify get_issue fetches a single issue and converts to DEAP schema."""
