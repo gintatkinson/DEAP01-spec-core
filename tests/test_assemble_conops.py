@@ -631,8 +631,10 @@ class TestSysMLParameterBindingEngine(unittest.TestCase):
     def test_canonical_resource_units_assembly_passes_cleanly(self):
         """Verify end-to-end assembly on actual canonical resource units in skills/spec-conops-engineering/resources/units."""
         res_units_dir = os.path.join(REPO_ROOT, "skills", "spec-conops-engineering", "resources", "units")
-        if not os.path.isdir(res_units_dir):
-            self.skipTest(f"Resource units dir not found at {res_units_dir}")
+        self.assertTrue(
+            os.path.isdir(res_units_dir),
+            f"Canonical resource units directory missing at {res_units_dir}. Required for zero-skip end-to-end assembly testing.",
+        )
 
         with tempfile.TemporaryDirectory() as tmpdir:
             out_dir = os.path.join(tmpdir, "out")
@@ -701,10 +703,12 @@ class TestSysMLParameterBindingEngine(unittest.TestCase):
                 self.assertIn(f"## {sec_num}.", doc)
 
     def test_assemble_conops_toc_contains_all_12_and_10_sections_with_valid_anchors(self):
-        """Verify assembled CONOPS and MISSION_INTENT generate a complete TOC with all sections and valid anchor links (Fixes #148)."""
+        """Verify assembled CONOPS and MISSION_INTENT generate a complete TOC with all sections and valid anchor links (Fixes #148, #191, #193)."""
         res_units_dir = os.path.join(REPO_ROOT, "skills", "spec-conops-engineering", "resources", "units")
-        if not os.path.isdir(res_units_dir):
-            self.skipTest(f"Resource units dir not found at {res_units_dir}")
+        self.assertTrue(
+            os.path.isdir(res_units_dir),
+            f"Canonical resource units directory missing at {res_units_dir}. Required for zero-skip end-to-end assembly testing.",
+        )
 
         with tempfile.TemporaryDirectory() as tmpdir:
             out_dir = os.path.join(tmpdir, "out")
@@ -738,6 +742,13 @@ class TestSysMLParameterBindingEngine(unittest.TestCase):
             toc_mission = toc_match_mission.group(0)
             for i in range(1, 11):
                 self.assertRegex(toc_mission, rf'\[(?:Section\s+)?{i}\.')
+
+            # Check for 0 broken relative internal links in assembled documents (Fixes #191)
+            conops_link_errors = verify_markdown_links(conops_text)
+            self.assertEqual(conops_link_errors, [], f"Broken anchor links in CONOPS.md: {conops_link_errors}")
+
+            mission_link_errors = verify_markdown_links(mission_text)
+            self.assertEqual(mission_link_errors, [], f"Broken anchor links in MISSION_INTENT.md: {mission_link_errors}")
 
     def test_default_conops_params_bindings(self):
         """Verify DEFAULT_CONOPS_PARAMS bindings and resolution in SysMLParameterBindingEngine."""
