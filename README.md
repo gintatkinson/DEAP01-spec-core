@@ -238,6 +238,7 @@ else
   cp ./.tmp-pipeline/.gitignore ./
 fi
 rm -rf ./.tmp-pipeline
+find . -name ".DS_Store" -delete 2>/dev/null || true
 mkdir -p ./docs/conops ./docs/safety ./docs/architecture/blueprints ./docs/epics ./docs/features ./docs/user-stories ./docs/use-cases ./.pipeline/contracts ./.pipeline/domain_specs ./.pipeline/profiles
 
 # Verify pipeline directories, agent configuration, and skills
@@ -255,7 +256,7 @@ d['tracker_rules']['labels'] = {'epic':'type::epic','feature':'type::feature','u
 with open(p, 'w') as f: json.dump(d, f, indent=2)
 "
 
-python3 scripts/setup_git_hooks.py
+python3 scripts/setup_git_hooks.py --install
 python3 skills/spec-orchestrator/scripts/bootstrap_tracker_labels.py
 ```
 

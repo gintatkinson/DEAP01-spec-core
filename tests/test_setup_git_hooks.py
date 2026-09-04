@@ -118,7 +118,57 @@ class TestSetupGitHooksCLI(unittest.TestCase):
         self.assertEqual(res.returncode, 2, f"Expected returncode 2 for invalid flag, got {res.returncode}")
         self.assertTrue("unrecognized arguments" in res.stderr.lower() or "usage:" in res.stderr.lower())
 
+    def test_purges_ds_store_files_with_install(self):
+        """Calling setup_git_hooks.py with --install must recursively purge all .DS_Store files."""
+        script_file = self.repo / "scripts" / "setup_git_hooks.py"
+        ds1 = self.repo / ".DS_Store"
+        ds2 = self.repo / "skills" / ".DS_Store"
+        ds3 = self.repo / "nested" / "deep" / ".DS_Store"
+        ds3.parent.mkdir(parents=True, exist_ok=True)
+        ds1.write_bytes(b"\x00\x00")
+        ds2.write_bytes(b"\x00\x00")
+        ds3.write_bytes(b"\x00\x00")
+
+        self.assertTrue(ds1.exists())
+        self.assertTrue(ds2.exists())
+        self.assertTrue(ds3.exists())
+
+        res = subprocess.run(
+            [sys.executable, str(script_file), "--install"],
+            cwd=self.repo,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        self.assertEqual(res.returncode, 0, f"Expected returncode 0 with --install, got {res.returncode}\nSTDERR:\n{res.stderr}")
+        self.assertFalse(ds1.exists(), "Root .DS_Store was not removed")
+        self.assertFalse(ds2.exists(), "Nested skills/.DS_Store was not removed")
+        self.assertFalse(ds3.exists(), "Deep nested .DS_Store was not removed")
+        self.assertIn("Purged 3 .DS_Store files from repository", res.stdout)
+
+    def test_purges_ds_store_files_without_args(self):
+        """Calling setup_git_hooks.py without arguments must also purge all .DS_Store files."""
+        script_file = self.repo / "scripts" / "setup_git_hooks.py"
+        ds1 = self.repo / "rules" / ".DS_Store"
+        ds1.write_bytes(b"\x00\x00")
+
+        self.assertTrue(ds1.exists())
+
+        res = subprocess.run(
+            [sys.executable, str(script_file)],
+            cwd=self.repo,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        self.assertEqual(res.returncode, 0, f"Expected returncode 0 without arguments, got {res.returncode}\nSTDERR:\n{res.stderr}")
+        self.assertFalse(ds1.exists(), "rules/.DS_Store was not removed")
+        self.assertIn("Purged 1 .DS_Store file from repository", res.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

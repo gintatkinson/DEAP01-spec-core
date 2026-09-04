@@ -16,6 +16,22 @@ WHITELIST_HEADER = "\n# Pipeline infrastructure (whitelisted by setup_git_hooks.
 STAGE_DIRS = [".pipeline/", "skills/", "rules/", "scripts/", ".agents/"]
 
 
+def _purge_ds_store(repo_root):
+    """Recursively locate and delete all .DS_Store files in the repository."""
+    removed = 0
+    for root, _, files in os.walk(repo_root):
+        for f in files:
+            if f == ".DS_Store":
+                path = os.path.join(root, f)
+                try:
+                    os.remove(path)
+                    removed += 1
+                except OSError as e:
+                    print(f"Warning: Failed to remove .DS_Store at {path}: {e}", file=sys.stderr)
+    if removed:
+        print(f"Purged {removed} .DS_Store file{'s' if removed != 1 else ''} from repository")
+
+
 def _whitelist_infrastructure(repo_root):
     gitignore_path = os.path.join(repo_root, ".gitignore")
     if not os.path.isfile(gitignore_path):
@@ -65,6 +81,8 @@ def setup_git_hooks():
     if not os.path.isdir(git_dir):
         print(f"Error: .git directory not found at {git_dir}", file=sys.stderr)
         sys.exit(1)
+
+    _purge_ds_store(repo_root)
         
     hooks_dir = os.path.join(git_dir, "hooks")
     errored = False
