@@ -3,7 +3,7 @@ title: "Project Constitution — Functional Layer"
 project: "Digital Engineering Agent Platform (DEAP)"
 tier: functional
 created: "2026-06-29"
-last_updated: "2026-08-29"
+last_updated: "2026-09-05"
 ---
 
 # Project Constitution: Digital Engineering Agent Platform (DEAP)
@@ -198,6 +198,7 @@ The pipeline mechanically enforces 16 active quality gates that halt execution o
   6. Formal Safety Constraints (**SC-1..N**)
   7. FMECA Criticality Matrix with at least 15 component failure mode rows (15+ rows) and RPN calculations
   8. SORA SAIL Risk Mitigations & OSO Traceability Table determining Final GRC, ARC, SAIL classification, and complete coverage of all 24 Operational Safety Objectives (OSO-01 through OSO-24).
+- **Derivation-Annotation Contract**: All analytical content in the 8-pillar deliverable is an engineering derivative of the SSOT fact base, never a fact itself. Every derived cell MUST carry four annotations: (1) Input anchors (SSOT document, section, and clause, or explicit silent source set), (2) Methodology citation (Leveson STPA for L/H/UCA/LS/SC; MIL-STD-1629A/SAE ARP4761 for FMECA S/O/D/RPN; JARUS SORA v2.5 for GRC/ARC/SAIL; ASTM F3269-17 for RTA hooks), (3) Derivation grade (directly evidenced, analytically derived, or declared assumption), and (4) Caveat (mandatory where product documents are silent, recording the attempt made, silent source set, and downstream impact).
 - **ASTM F3269-17 RTA & Model-Based Design Hook Mandate**: Formal safety constraints and Run-Time Assurance (RTA) Safety Net monitors MUST specify direct integration hooks for MATLAB / Simulink / Stateflow / Embedded Coder control law synthesis and Simulink Design Verifier (SLDV) invariant proving.
 - **Forbidden Math Delimiters on Alphanumeric IDs**: Traceability keys and non-mathematical identifiers (such as requirement IDs `SC-XX`, hazard tags `H-X`, SORA codes `OSO-XX`, loss tags `L-X`, and UCA codes `UCA-X`) MUST NOT be wrapped in LaTeX math delimiters `$...$`. Bold formatting (`**SC-01**`, `**H-1**`) MUST be used instead.
 

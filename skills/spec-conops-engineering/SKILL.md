@@ -239,6 +239,23 @@ Safety, threat, and hazard derivation in DEAP follows a strict three-tier, multi
 - **Primary Methodologies**: Piece-Part Hardware Failure Mode, Effects, and Criticality Analysis (FMECA) under **MIL-STD-1629A Method 102**.
 - **Derivation Mechanism**: Calculates quantitative failure rates ($\lambda$) and criticality metrics ($C_r$) for specific physical hardware components, commercial-off-the-shelf (COTS) parts, electrical interconnects, and circuit components based on empirical reliability handbooks (e.g. MIL-HDBK-217F, NPRD-2016).
 
+### Derivation-Annotation Contract (Phase 0 Safety Engineering)
+All analytical content across safety engineering deliverables (`docs/safety/STPA_MATRIX.md`) and operational safety assessments is an engineering derivative of the SSOT fact base, never an un-anchored fact itself. Every derived analytical cell (System Losses, Hazards, UCAs, Loss Scenarios, Safety Constraints, FMECA, SORA) MUST carry four mandatory annotations:
+1. **Input Anchors**: Precise citations of upstream SSOT document, section, and clause (or explicit silent source set declaration where product documentation is silent).
+2. **Methodology Citation**: Authoritative governing methodology standard:
+   - **Leveson STPA** for Losses (**L**), Hazards (**H**), Unsafe Control Actions (**UCA**), Loss Scenarios (**LS**), and Safety Constraints (**SC**).
+   - **MIL-STD-1629A / SAE ARP4761** for FMECA Severity (**S**), Occurrence (**O**), Detection (**D**), and Criticality / Risk Priority Number (**RPN**).
+   - **JARUS SORA v2.5** for Ground Risk Class (**GRC**), Air Risk Class (**ARC**), Specific Assurance and Integrity Level (**SAIL**), and Operational Safety Objectives (**OSO-01..24**).
+   - **ASTM F3269-17** for Run-Time Assurance (RTA) Safety Net monitors and MATLAB / Simulink / Stateflow / Embedded Coder synthesis hooks.
+3. **Derivation Grade**: Explicit classification of analytical provenance:
+   - `Directly Evidenced`: Direct empirical evidence from ingested SSOT schemas or normative requirements.
+   - `Analytically Derived`: Formally computed or deduced via domain engineering logic.
+   - `Declared Assumption`: Explicit engineering assumption when upstream sources are silent.
+4. **Caveat**: Mandatory where upstream product documents are silent, recording:
+   - The specific derivation attempt made.
+   - The silent source set identified.
+   - The downstream architectural impact and verification requirement.
+
 ---
 
 ## Step 5: Deterministic Modular Assembly Engine
