@@ -834,8 +834,27 @@ class UmlValidator(IValidator):
                         if fm_key in ("subagent_drafted", "subagent-drafted") and fm_val == "true":
                             has_subagent_tag = True
                             break
+
         if not has_subagent_tag:
-            errors.append(Finding("specification-requires-the-subagent-generation-mode-marker", f"{doc_type} {filename} violates the Item-Level Subagent Context Isolation mandate. Specifications must be drafted strictly inside a context-isolated subagent with 'generation_mode: subagent' in the frontmatter.", location=filename))
+            for line in content.splitlines():
+                if "|" in line:
+                    parts = [p.strip() for p in line.split("|")]
+                    if parts and parts[0] == "":
+                        parts = parts[1:]
+                    if parts and parts[-1] == "":
+                        parts = parts[:-1]
+                    if len(parts) >= 2:
+                        raw_key = parts[0]
+                        raw_val = parts[1]
+                        clean_key = re.sub(r'[*`_]', '', raw_key).strip().lower()
+                        clean_val = re.sub(r'[*`_\'"]', '', raw_val).strip().lower()
+                        if clean_key in ("generation mode", "generation_mode", "generation-mode", "subagent drafted", "subagent_drafted", "subagent-drafted"):
+                            if clean_val in ("subagent", "true"):
+                                has_subagent_tag = True
+                                break
+
+        if not has_subagent_tag:
+            errors.append(Finding("specification-requires-the-subagent-generation-mode-marker", f"{doc_type} {filename} violates the Item-Level Subagent Context Isolation mandate. Specifications must be drafted strictly inside a context-isolated subagent with 'generation_mode: subagent' in the frontmatter or metadata table.", location=filename))
 
     def _validate_placeholders_and_links(
         self,
