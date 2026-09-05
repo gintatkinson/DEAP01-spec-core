@@ -24,6 +24,8 @@ Rules enforced
   opened by ``class X {`` and closed only by a line consisting of ``}``, so the
   same-line brace never closes it; a later ``}`` pops the leaked block and the
   classes after it are silently attached to the wrong namespace. Issue #279.
+* Commas and slashes inside quoted Mermaid labels in ``graph``, ``flowchart``,
+  ``stateDiagram``, and ``stateDiagram-v2``. Issue #200.
 
 Deliberately not enforced
 -------------------------
@@ -137,6 +139,20 @@ SHAPE_PAIRS = {
     '((': '))',
     '>': ']',
 }
+
+_QUOTED_LABEL_FORBIDDEN = (",", "/")
+
+
+def validate_mermaid_quoted_label_content(line: str) -> List[Tuple[str, List[str]]]:
+    """Scan quoted strings for forbidden comma and slash characters."""
+    offending: List[Tuple[str, List[str]]] = []
+    for quoted in re.finditer(r'"[^"]*"', line):
+        inner = quoted.group(0)
+        conflict = [ch for ch in _QUOTED_LABEL_FORBIDDEN if ch in inner]
+        if conflict:
+            offending.append((inner, conflict))
+    return offending
+
 
 def validate_mermaid_node_label_quoting(line: str) -> List[str]:
     unquoted = []
@@ -311,6 +327,19 @@ def check_mermaid_text(text: str, source: str = "<input>") -> List[str]:
                         f"line: '{line_strip}'. Transitions, labels, or guards containing comparison "
                         f"operators or brackets MUST be enclosed in double quotes."
                     , location=f"{source}"))
+
+            if kind in ("graph", "flowchart", "statediagram", "statediagram-v2"):
+                for label_str, conflict in validate_mermaid_quoted_label_content(line_strip):
+                    for ch in conflict:
+                        err_name = "comma" if ch == "," else "slash"
+                        errors.append(Finding(
+                            f"mermaid-quoted-label-{err_name}-forbidden",
+                            f"{source}:{lineno}: '{ch}' inside a quoted Mermaid label "
+                            f"({label_str!r}). GitLab's pinned Glfm renderer rejects this content "
+                            f"even though Mermaid headless parses it. Replace the character "
+                            f"with a dash or space, or split the label.",
+                            location=f"{source}",
+                        ))
 
             if kind in ("graph", "flowchart"):
                 unquoted_title = validate_mermaid_subgraph_title_quoting(line_strip)
