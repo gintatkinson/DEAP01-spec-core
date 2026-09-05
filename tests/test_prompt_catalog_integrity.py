@@ -18,6 +18,7 @@ from scripts.lint_subagent_prompt import (
     check_step1_skill_directive,
     check_repository_classification,
     check_leading_code_steering,
+    check_defect_filing_directive,
 )
 
 
@@ -274,6 +275,13 @@ class TestPromptCatalogIntegrity(unittest.TestCase):
                 check_leading_code_steering(prompt),
                 f"Worker 1A in {source} has leading code steering",
             )
+            self.assertTrue(
+                check_defect_filing_directive(prompt),
+                f"Worker 1A in {source} failed check_defect_filing_directive",
+            )
+            self.assertIn("skills/adversarial-code-auditor/SKILL.md", prompt)
+            self.assertIn("python3 scripts/file_defect.py", prompt)
+            self.assertIn("strictly forbidden from filing raw issues directly", prompt)
             self.assertTrue(prompt.strip().endswith("PROCEED"), f"Worker 1A in {source} missing PROCEED token")
 
     def test_worker_1b_prompt_compliance(self):
@@ -299,6 +307,13 @@ class TestPromptCatalogIntegrity(unittest.TestCase):
                 check_leading_code_steering(prompt),
                 f"Worker 1B in {source} has leading code steering",
             )
+            self.assertTrue(
+                check_defect_filing_directive(prompt),
+                f"Worker 1B in {source} failed check_defect_filing_directive",
+            )
+            self.assertIn("skills/adversarial-code-auditor/SKILL.md", prompt)
+            self.assertIn("python3 scripts/file_defect.py", prompt)
+            self.assertIn("strictly forbidden from filing raw issues directly", prompt)
             self.assertTrue(prompt.strip().endswith("PROCEED"), f"Worker 1B in {source} missing PROCEED token")
 
     def test_worker_1c_prompt_compliance(self):
@@ -324,6 +339,13 @@ class TestPromptCatalogIntegrity(unittest.TestCase):
                 check_leading_code_steering(prompt),
                 f"Worker 1C in {source} has leading code steering",
             )
+            self.assertTrue(
+                check_defect_filing_directive(prompt),
+                f"Worker 1C in {source} failed check_defect_filing_directive",
+            )
+            self.assertIn("skills/adversarial-code-auditor/SKILL.md", prompt)
+            self.assertIn("python3 scripts/file_defect.py", prompt)
+            self.assertIn("strictly forbidden from filing raw issues directly", prompt)
             self.assertTrue(prompt.strip().endswith("PROCEED"), f"Worker 1C in {source} missing PROCEED token")
 
     def test_worker_1d_prompt_compliance(self):
@@ -349,6 +371,13 @@ class TestPromptCatalogIntegrity(unittest.TestCase):
                 check_leading_code_steering(prompt),
                 f"Worker 1D in {source} has leading code steering",
             )
+            self.assertTrue(
+                check_defect_filing_directive(prompt),
+                f"Worker 1D in {source} failed check_defect_filing_directive",
+            )
+            self.assertIn("skills/adversarial-code-auditor/SKILL.md", prompt)
+            self.assertIn("python3 scripts/file_defect.py", prompt)
+            self.assertIn("strictly forbidden from filing raw issues directly", prompt)
             self.assertTrue(prompt.strip().endswith("PROCEED"), f"Worker 1D in {source} missing PROCEED token")
 
     def test_worker_2_prompt_compliance(self):
@@ -373,6 +402,13 @@ class TestPromptCatalogIntegrity(unittest.TestCase):
                 check_leading_code_steering(prompt),
                 f"Worker 2 in {source} has leading code steering",
             )
+            self.assertTrue(
+                check_defect_filing_directive(prompt),
+                f"Worker 2 in {source} failed check_defect_filing_directive",
+            )
+            self.assertIn("skills/adversarial-code-auditor/SKILL.md", prompt)
+            self.assertIn("python3 scripts/file_defect.py", prompt)
+            self.assertIn("strictly forbidden from filing raw issues directly", prompt)
             self.assertTrue(prompt.strip().endswith("PROCEED"), f"Worker 2 in {source} missing PROCEED token")
 
     def test_worker_2a_prompt_compliance(self):
@@ -397,6 +433,13 @@ class TestPromptCatalogIntegrity(unittest.TestCase):
                 check_leading_code_steering(prompt),
                 f"Worker 2A in {source} has leading code steering",
             )
+            self.assertTrue(
+                check_defect_filing_directive(prompt),
+                f"Worker 2A in {source} failed check_defect_filing_directive",
+            )
+            self.assertIn("skills/adversarial-code-auditor/SKILL.md", prompt)
+            self.assertIn("python3 scripts/file_defect.py", prompt)
+            self.assertIn("strictly forbidden from filing raw issues directly", prompt)
             self.assertTrue(prompt.strip().endswith("PROCEED"), f"Worker 2A in {source} missing PROCEED token")
 
     def test_worker_2b_prompt_compliance(self):
@@ -421,6 +464,13 @@ class TestPromptCatalogIntegrity(unittest.TestCase):
                 check_leading_code_steering(prompt),
                 f"Worker 2B in {source} has leading code steering",
             )
+            self.assertTrue(
+                check_defect_filing_directive(prompt),
+                f"Worker 2B in {source} failed check_defect_filing_directive",
+            )
+            self.assertIn("skills/adversarial-code-auditor/SKILL.md", prompt)
+            self.assertIn("python3 scripts/file_defect.py", prompt)
+            self.assertIn("strictly forbidden from filing raw issues directly", prompt)
             self.assertTrue(prompt.strip().endswith("PROCEED"), f"Worker 2B in {source} missing PROCEED token")
             self.assertIn("Two-Path (Dual-Track) Model-Based Design", prompt)
             self.assertIn("models/scripts/build_", prompt)
@@ -429,22 +479,20 @@ class TestPromptCatalogIntegrity(unittest.TestCase):
             self.assertIn("docs/reports/simulink_results/", prompt)
 
     def test_readme_installer_prompt_parity(self):
-        """Verify 100% prompt body parity between README.md Section 8.3 and install_pipeline.sh Section 4.2."""
-        self.assertEqual(
-            self.readme_prompts["worker_0a"],
-            self.installer_prompts["worker_0a"],
-            "Worker 0A prompt differs between README.md and install_pipeline.sh",
-        )
-        self.assertEqual(
-            self.readme_prompts["worker_0b"],
-            self.installer_prompts["worker_0b"],
-            "Worker 0B prompt differs between README.md and install_pipeline.sh",
-        )
-        self.assertEqual(
-            self.readme_prompts["worker_0c"],
-            self.installer_prompts["worker_0c"],
-            "Worker 0C prompt differs between README.md and install_pipeline.sh",
-        )
+        """Verify 100% prompt body parity between README.md and install_pipeline.sh."""
+        def _normalize(p: str) -> str:
+            return re.sub(
+                r"Repository Classification: (?:UPSTREAM_SPEC_CORE_COMPILER|DOWNSTREAM_CUSTOMER_PROJECT) \(or (?:DOWNSTREAM_CUSTOMER_PROJECT|UPSTREAM_SPEC_CORE_COMPILER) depending on execution context\)",
+                "Repository Classification: <CLASSIFICATION>",
+                p,
+            )
+
+        for key in ["worker_0a", "worker_0b", "worker_0c", "worker_1a", "worker_1b", "worker_1c", "worker_1d", "worker_2a", "worker_2b"]:
+            self.assertEqual(
+                _normalize(self.readme_prompts[key]),
+                _normalize(self.installer_prompts[key]),
+                f"{key} prompt differs between README.md and install_pipeline.sh",
+            )
 
     def test_downstream_readme_scaffolding_sections(self):
         """Verify all 5 catalog sections are present in install_pipeline.sh downstream README."""

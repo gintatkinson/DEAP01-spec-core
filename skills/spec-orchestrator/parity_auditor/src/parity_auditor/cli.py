@@ -1298,7 +1298,7 @@ def main():
         except Exception:
             pass
         print("\n[!] If you believe this failure is due to a bug or limitation in the pipeline tooling, please report it upstream:")
-        print(f"    gh issue create --repo {upstream_repo} --title \"Tooling Bug: [Brief description]\" --body \"Context: UML/Coverage validation failed in downstream execution.\"")
+        print(f"    python3 scripts/file_defect.py --repo {upstream_repo} --title \"Tooling Bug: [Brief description]\" --body-file [payload_path] --label \"bug\"")
         sys.exit(1)
 
 if __name__ == "__main__":

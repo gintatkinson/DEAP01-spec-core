@@ -22,6 +22,7 @@ from scripts.lint_subagent_prompt import (
     lint_subagent_prompt,
     check_repository_classification,
     validate_subagent_preflight,
+    check_defect_filing_directive,
 )
 
 
@@ -281,7 +282,33 @@ If defects found, use glab issue create.
 PROCEED
 """
         errors = lint_subagent_prompt(prompt)
-        self.assertTrue(any("gh issue create" in e for e in errors))
+        self.assertTrue(any("defect filing directive" in e.lower() for e in errors))
+
+    def test_valid_prompt_with_adversarial_auditor_defect_directive(self):
+        """Verify that prompts utilizing Adversarial Auditor pre-flight directive pass linting."""
+        auditor_directive = (
+            "If any compiler fault, schema inconsistency, or invariant violation is discovered, "
+            "you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent "
+            "with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, "
+            "and submit it via `python3 scripts/file_defect.py`. Issue auto-closing keywords or issue close commands are strictly forbidden."
+        )
+        prompt = self.valid_prompt.replace(
+            "3. If defects or anomalies are detected, record them using `gh issue create` (GitHub) or `glab issue create` (GitLab).",
+            f"3. Defect Filing Directive: {auditor_directive}",
+        )
+        errors = lint_subagent_prompt(prompt)
+        self.assertEqual(errors, [])
+        self.assertTrue(check_defect_filing_directive(prompt))
+
+    def test_missing_defect_directive_flagged(self):
+        """Verify that prompt with neither dual CLI nor auditor directive is flagged."""
+        prompt = """
+Step 1: Execute `view_file` on `skills/spec-orchestrator/SKILL.md` before running.
+Task: Implement FEAT-01.
+PROCEED
+"""
+        errors = lint_subagent_prompt(prompt)
+        self.assertTrue(any("defect filing directive" in e.lower() for e in errors))
 
     def test_missing_proceed_token(self):
         """Verify that missing PROCEED authorization token is flagged."""

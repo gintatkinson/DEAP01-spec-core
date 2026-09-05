@@ -200,6 +200,23 @@ def check_leading_code_steering(prompt_text: str) -> bool:
     return False
 
 
+def check_defect_filing_directive(prompt_text: str) -> bool:
+    """
+    Semantically verifies that the prompt contains a valid defect filing directive:
+    either mandating Adversarial Auditor dispatch with `skills/adversarial-code-auditor/SKILL.md`
+    and `scripts/file_defect.py`, or declaring dual `gh issue create` and `glab issue create`.
+    """
+    if not prompt_text or not isinstance(prompt_text, str):
+        return False
+    has_auditor = bool(
+        re.search(r'skills/adversarial-code-auditor/SKILL\.md', prompt_text)
+        and re.search(r'file_defect\.py', prompt_text)
+    )
+    has_gh_create = bool(re.search(r'\bgh\s+issue\s+create\b', prompt_text))
+    has_glab_create = bool(re.search(r'\bglab\s+issue\s+create\b', prompt_text))
+    return has_auditor or (has_gh_create and has_glab_create)
+
+
 def mask_mandate_text(prompt_text: str) -> str:
     """
     Masks out pre-flight checklist text and rule quotations so that verbatim
@@ -302,18 +319,12 @@ def lint_subagent_prompt(prompt_text: str) -> List[str]:
                 f"Prompt violates micro-task scope by specifying {desc}. Single-item micro-task scope is required."
             )
 
-    # Check (c): Mandatory defect filing directive supporting both `gh issue create` and `glab issue create`
-    has_gh_create = bool(re.search(r'\bgh\s+issue\s+create\b', prompt_text))
-    has_glab_create = bool(re.search(r'\bglab\s+issue\s+create\b', prompt_text))
-
-    if not (has_gh_create and has_glab_create):
-        missing_tools = []
-        if not has_gh_create:
-            missing_tools.append("'gh issue create'")
-        if not has_glab_create:
-            missing_tools.append("'glab issue create'")
+    # Check (c): Mandatory defect filing directive mandating Adversarial Auditor dispatch & file_defect.py
+    if not check_defect_filing_directive(prompt_text):
         errors.append(
-            f"Prompt missing mandatory defect filing directive supporting both 'gh issue create' and 'glab issue create' (missing: {', '.join(missing_tools)})."
+            "Prompt missing mandatory defect filing directive. Must mandate either Adversarial Auditor dispatch "
+            "('skills/adversarial-code-auditor/SKILL.md' and 'scripts/file_defect.py') or dual CLI issue creation "
+            "('gh issue create' and 'glab issue create')."
         )
 
     # Check (d): Mandatory `PROCEED` authorization token

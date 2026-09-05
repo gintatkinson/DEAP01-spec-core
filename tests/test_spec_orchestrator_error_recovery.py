@@ -101,17 +101,13 @@ class TestSpecOrchestratorErrorRecovery(unittest.TestCase):
             )
 
     def test_issue_tracker_filing_mandate(self):
-        """Verify issue creation commands for GitHub and GitLab."""
+        """Verify issue creation commands for defect submission via file_defect.py."""
         for path in TARGET_SKILL_PATHS:
             with open(path, "r", encoding="utf-8") as f:
                 content = f.read()
             self.assertTrue(
-                "gh issue create" in content and "--label" in content and "bug" in content,
-                f"Missing 'gh issue create --label bug' in {path}",
-            )
-            self.assertTrue(
-                "glab issue create" in content or "REST API v4" in content,
-                f"Missing GitLab issue creation reference in {path}",
+                "file_defect.py" in content and "--label" in content and "bug" in content,
+                f"Missing 'file_defect.py' defect filing mandate with '--label bug' in {path}",
             )
 
     def test_debug_protocol_and_tdd_remediation(self):

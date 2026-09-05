@@ -37,8 +37,7 @@ If any phase, worker, compiler, or validation gate fails during orchestration (w
      * **Offline Mermaid Syntax Verification**: Validates all generated architectural / sequence diagrams against the offline syntax gate (Check 7 offline syntax gate per `rules/platform-independence.md`) before filing.
      * **7-Section Defect Report**: Formats the finding strictly according to the canonical 7-section defect report skeleton (`## 1. Context and References`, `## 2. Root Cause Analysis (5 Whys)`, `## 3. Correctness Analysis`, `## 4. UML Diagrams`, `## 5. Affected Callers / Downstream Impact`, `## 6. Proposed Correction`, `## 7. Relationship to Existing Issues`, terminating with `## Audit Source`).
    - **Automated Defect Publication**: The subagent publishes the verified 7-section defect report to the issue tracker:
-     * **GitHub**: `gh issue create --repo [REPO] --title "[AUDIT] [file.ext]: [description]" --label "bug" --body-file [payload_path]`
-     * **GitLab**: `glab issue create --repo [REPO] --title "[AUDIT] [file.ext]: [description]" --label "type::bug" --description "$(< [payload_path])"` (or via direct GitLab REST API v4 in CI/offline environments).
+     * `python3 scripts/file_defect.py --repo [REPO] --title "[AUDIT] [file.ext]: [description]" --body-file [payload_path] --label "bug"`
 
 3. **Remediation Dispatch via Debug Protocol (TDD RED-GREEN Fix)**:
    - Once the defect issue is registered on the tracker, the coordinator MUST dispatch a context-isolated subagent with Role `Micro-Task Implementer` (TypeName: `code_modifier_worker`) adopting `skills/debug-protocol/SKILL.md` to execute the systematic 8-step bug loop.
@@ -50,7 +49,7 @@ If any phase, worker, compiler, or validation gate fails during orchestration (w
 
 4. **Invariants & Escalation**:
    - **Never skip a validation gate.** If a gate cannot be satisfied, the pipeline remains halted until systematically resolved and verified.
-   - **Automated Upstream Reporting**: If the failure is due to a pipeline tooling bug in `DEAP01-spec-core` (linter, reconciler, or parser), file an upstream defect report (`gh issue create --repo gintatkinson/DEAP01-spec-core --title "Tooling Bug: [Command] failed" --body-file [payload_path] --label "bug"`) and escalate to the human operator with the issue URL.
+   - **Automated Upstream Reporting**: If the failure is due to a pipeline tooling bug in `DEAP01-spec-core` (linter, reconciler, or parser), file an upstream defect report (`python3 scripts/file_defect.py --repo gintatkinson/DEAP01-spec-core --title "Tooling Bug: [Command] failed" --body-file [payload_path] --label "bug"`) and escalate to the human operator with the issue URL.
 
 ## Pre-Flight Git Repository Verification
 Before performing any orchestration steps, the agent MUST run `git ls-files` on:

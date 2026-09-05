@@ -109,7 +109,7 @@ is found, HALT and escalate as a blocker. Do not substitute direct coordinator w
 
 ## Mandatory Upstream Tooling Bug Reporting
 - If a bug, edge case, or limitation is identified in the shared pipeline scripts (e.g., `verify_model_coverage.py`, `reconcile_backlog.py`), the executing agent is strictly required to file a corresponding defect report upstream on the appropriate repository (`gintatkinson/DEAP01-spec-core` for specification tooling or `gintatkinson/DEAP-implementation-driver` for implementation tooling).
-- Tooling Error Recovery Procedure: Locate the diagnostic payload at `.pipeline/diagnostics/repro_payload_[timestamp].json` and execute: `gh issue create --repo gintatkinson/DEAP01-spec-core --title "Tooling Bug: [Command] failed" --body-file [payload_path] --label "bug"` (or `--repo gintatkinson/DEAP-implementation-driver` for implementation tooling bugs).
+- Tooling Defect Submission Mandate: Agents are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `python3 scripts/file_defect.py` (e.g. `python3 scripts/file_defect.py --repo gintatkinson/DEAP01-spec-core --title "Tooling Bug: [Command] failed" --body-file [payload_path] --label "bug"`).
 - Agents must not silently apply local-only patches to pipeline scripts without filing an upstream synchronization issue.
 
 ## Documentation Integrity — No Wholesale Replacement Without Approval

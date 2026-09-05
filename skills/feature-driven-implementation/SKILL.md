@@ -267,9 +267,6 @@ If a test fails with an unexpected error during Step 3, follow the 4-phase debug
 If a tool command (linter or reconciler) fails during implementation:
 1. **Do not proceed** to the next step.
 2. **Log the exact error** (stderr, exit code).
-3. **Automated Upstream Reporting**: If the step fails and you suspect it is due to a bug in the pipeline tooling, you MUST automatically file a bug report upstream:
-   - Locating the latest diagnostic payload JSON at `.pipeline/diagnostics/repro_payload_[timestamp].json`.
-   - Running the command:
-     `gh issue create --title "Tooling Bug: [Command] failed" --body-file [payload_path] --label "bug"`
+3. **Automated Upstream Reporting**: If the step fails and you suspect it is due to a bug in the pipeline tooling, you MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `python3 scripts/file_defect.py` (e.g. `python3 scripts/file_defect.py --repo gintatkinson/DEAP01-spec-core --title "Tooling Bug: [Command] failed" --body-file [payload_path] --label "bug"`).
 4. Escalate to the user with the issue URL and error context.
 

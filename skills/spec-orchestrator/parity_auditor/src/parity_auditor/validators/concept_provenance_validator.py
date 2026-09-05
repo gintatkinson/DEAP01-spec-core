@@ -135,6 +135,121 @@ def _is_table_header(norm_k: str, norm_v: str) -> bool:
     return False
 
 
+def _is_metadata_key(name: str, norm_name: str) -> bool:
+    """Returns True if name is a markdown document metadata, tracker, or governance key."""
+    if not norm_name:
+        return False
+    metadata_keys = {
+        "title", "issueid", "type", "parentepic", "status", "generationmode",
+        "realizedastnodes", "sourcereferences", "sourcereference", "version",
+        "author", "created", "createdat", "date", "assignee", "targetrelease",
+        "priority", "epicid", "featureid", "storyid", "usecaseid", "revision",
+        "traceability", "derivedfrom", "allocatedto", "classification", "category",
+        "subsystem", "module", "package", "component", "id", "identifier", "docid",
+        "documentid", "reqid", "requirementid", "epic", "feature", "userstory",
+        "usecase", "parent", "description", "summary", "notes", "changelog",
+        "history", "revisionhistory", "documenthistory", "references", "reference",
+        "schema", "model", "diagram", "diagrams", "scope", "rationale",
+        "acceptancecriteria", "verificationcriteria", "assumptions", "constraints",
+        "confidencelevel", "arbitrationstatus", "sourceref", "sourcefile",
+        "governance", "reviewstatus", "verificationmethod"
+    }
+    if norm_name in metadata_keys:
+        return True
+    raw = str(name).strip().lower()
+    if re.match(r'^(?:document|doc|spec|system|epic|feature|story|user\s*story|use\s*case|task|issue|req|requirement)\s*(?:id|#|number|title|type|status|version|name)$', raw):
+        return True
+    if re.match(r'^(?:parent|child)\s*(?:epic|feature|story|use\s*case|id|name)$', raw):
+        return True
+    return False
+
+
+def _is_non_normative_schema_section(section_name: str) -> bool:
+    """Returns True if section in schema/ is non-normative (glossary, pending arbitration, trade study, etc.)."""
+    if _is_glossary_section(section_name):
+        return True
+    return bool(re.search(
+        r'\b(pending[_\s]arbitration|unarbitrated|disputed|unresolved|trade\s*study|trade-?offs?|alternatives?|candidate\s*options?|rejected\s*options?|decision\s*matrix)\b',
+        section_name,
+        re.IGNORECASE
+    ))
+
+
+def _extract_numeric_value(raw_val: Optional[str]) -> Optional[Tuple[float, Optional[str], str]]:
+    """
+    Robustly extracts scalar numeric value, unit, and clean string representation from raw text.
+    Rejects compound alphanumeric identifiers (e.g. RS-485, PL40, RBF3, C2, EPIC-01),
+    hex opcodes (0x11), boolean/none values, and integer pins/indices.
+
+    Returns:
+        (float_value, optional_unit_string, clean_matched_string) or None
+    """
+    if not raw_val:
+        return None
+    raw = str(raw_val).strip()
+    if not raw or _is_structural_delimiter(raw):
+        return None
+
+    # Check for negative/prohibition keywords
+    if re.search(r'\b(?:none|no|false|n/a|na|not\s+installed|not\s+equipped|disabled)\b', raw, re.IGNORECASE):
+        return None
+
+    # Check for hex opcodes (e.g. 0x11, Opcode 0x22)
+    if re.search(r'\b(?:opcode\s+)?0x[0-9a-fA-F]+\b', raw, re.IGNORECASE):
+        return None
+
+    # Strip markdown bold/code/italic/underline markers
+    clean = re.sub(r'[*`_]', '', raw).strip()
+
+    # Pattern for scalar numbers:
+    # 1. Lookbehind: Cannot be preceded by word chars [a-zA-Z0-9_] or word-hyphen [a-zA-Z0-9_]-
+    # 2. Number: optional sign [-+−\u2212], digits, optional decimal, optional exponent
+    # 3. Lookahead: Cannot be followed by digits or underscore
+    num_pattern = re.compile(
+        r'(?<![a-zA-Z0-9_])(?<![a-zA-Z0-9_]-)([-+−\u2212]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)(?![0-9_])'
+    )
+
+    for m in num_pattern.finditer(clean):
+        num_str = m.group(1)
+        if not re.search(r'\d', num_str):
+            continue
+
+        # Check immediate trailing characters
+        immediate_after = clean[m.end():]
+        if immediate_after and re.match(r'^[a-zA-Z]', immediate_after):
+            unit_match = re.match(r'^([a-zA-Z°%µΩ][a-zA-Z0-9_/\^°%µΩ]*)', immediate_after)
+            if unit_match:
+                unit_candidate = unit_match.group(1)
+                # Valid unit pattern for attached unit
+                if not re.match(r'^(?:kg|g|mg|lbs?|kW|W|mW|MW|kWh|Wh|m|cm|mm|km|m3|m2|m/s|km/h|deg|rad|degC|V|VDC|VAC|mV|kV|A|mA|uA|µA|Hz|kHz|MHz|GHz|s|ms|us|µs|ns|min|hr|h|L|mL|L/min|bar|psi|Pa|kPa|MPa|J|kJ|dB|dBm|rpm|RPM|ft|in|kts|knots|NM|nm|°|°C|°F|%|µm|Ω|kΩ|MΩ|ppm|bps|kbps|Mbps|Gbps|B|KB|MB|GB|TB)$', unit_candidate, re.IGNORECASE):
+                    continue
+                unit = unit_candidate
+            else:
+                continue
+        else:
+            unit = None
+            bracket_m = re.search(r'\[([a-zA-Z0-9_/\^°%µΩ\-]+)\]', clean)
+            if bracket_m:
+                unit = bracket_m.group(1)
+            else:
+                after = clean[m.end():].strip()
+                if after:
+                    unit_word_m = re.match(r'^([a-zA-Z°%µΩ][a-zA-Z0-9_/\^°%µΩ]*)', after)
+                    if unit_word_m:
+                        unit_cand = unit_word_m.group(1)
+                        if unit_cand.lower() not in ("to", "for", "at", "during", "and", "or", "above", "below", "of", "in", "is", "with"):
+                            unit = unit_cand
+
+        try:
+            clean_num = num_str.replace('\u2212', '-').replace('−', '-')
+            val = float(clean_num)
+            return val, unit, num_str
+        except ValueError:
+            continue
+
+    return None
+
+
 def _is_glossary_section(section_name: str) -> bool:
     """Returns True if section is a Glossary, Acronyms, Definitions, or metadata section."""
     return bool(re.search(
@@ -180,11 +295,14 @@ class ASTMetamodelGraphComparator:
         # 1. Attribute numeric tolerance check
         gt_attrs = {
             c.name: c for c in ground_truth_graph.children
-            if c.node_type == "Attribute" and not _is_pin_or_index(c.name, _normalize_identifier(c.name)) and not _is_structural_delimiter(c.name)
+            if c.node_type == "Attribute" and not _is_pin_or_index(c.name, _normalize_identifier(c.name))
+            and not _is_structural_delimiter(c.name) and not _is_metadata_key(c.name, _normalize_identifier(c.name))
         }
         cand_attrs = {
             c.name: c for c in candidate_concept_graph.children
-            if c.node_type == "Attribute" and c.is_normative and not _is_pin_or_index(c.name, _normalize_identifier(c.name)) and not _is_structural_delimiter(c.name)
+            if c.node_type == "Attribute" and c.is_normative
+            and not _is_pin_or_index(c.name, _normalize_identifier(c.name))
+            and not _is_structural_delimiter(c.name) and not _is_metadata_key(c.name, _normalize_identifier(c.name))
         }
         for name, cand_node in cand_attrs.items():
             if name in gt_attrs:
@@ -204,12 +322,14 @@ class ASTMetamodelGraphComparator:
             if (p.properties.get("enabled") is False or str(p.value).lower() in ("none", "no", "false", "n/a", "not installed", "not equipped", "disabled", "0"))
             and not _is_pin_or_index(p.name, p.properties.get("normalized_name", _normalize_identifier(p.name)))
             and not _is_structural_delimiter(p.name)
+            and not _is_metadata_key(p.name, p.properties.get("normalized_name", _normalize_identifier(p.name)))
         ]
         cand_props = [
             c for c in candidate_concept_graph.children
             if c.node_type in ("Property", "PartUsage") and c.is_normative
             and not _is_pin_or_index(c.name, c.properties.get("normalized_name", _normalize_identifier(c.name)))
             and not _is_structural_delimiter(c.name)
+            and not _is_metadata_key(c.name, c.properties.get("normalized_name", _normalize_identifier(c.name)))
         ]
 
         for neg_prop in gt_neg_props:
@@ -234,6 +354,7 @@ class ASTMetamodelGraphComparator:
             if p.properties.get("enabled") is not False and str(p.value).lower() not in ("none", "no", "false", "n/a", "not installed", "not equipped", "disabled", "0")
             and not _is_pin_or_index(p.name, p.properties.get("normalized_name", _normalize_identifier(p.name)))
             and not _is_structural_delimiter(p.name)
+            and not _is_metadata_key(p.name, p.properties.get("normalized_name", _normalize_identifier(p.name)))
         ]
         for cat_prop in gt_cat_props:
             cat_norm = cat_prop.properties.get("normalized_name") or _normalize_identifier(cat_prop.name)
@@ -345,6 +466,8 @@ class ConceptProvenanceValidator(IValidator):
         for child in gt_graph.children:
             if child.node_type == "Attribute" and child.value is not None:
                 norm = child.properties.get("normalized_name") or _normalize_identifier(child.name)
+                if _is_metadata_key(child.name, norm) or _is_pin_or_index(child.name, norm) or _is_structural_delimiter(child.name):
+                    continue
                 gt = GroundTruthParameter(
                     name=child.name,
                     normalized_name=norm,
@@ -377,34 +500,24 @@ class ConceptProvenanceValidator(IValidator):
             for match in attr_pattern.finditer(line):
                 name = match.group(1).strip()
                 raw_val = match.group(2).strip()
+                norm = _normalize_identifier(name)
+                if _is_metadata_key(name, norm) or _is_pin_or_index(name, norm) or _is_structural_delimiter(name):
+                    continue
 
-                num_match = re.search(r'([-+−\u2212]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)', raw_val)
-                if num_match:
-                    try:
-                        raw_clean = num_match.group(1).replace('\u2212', '-').replace('−', '-')
-                        num_val = float(raw_clean)
-                        unit_m = re.search(r'\[([a-zA-Z0-9_/\^°%]+)\]', raw_val)
-                        unit = unit_m.group(1) if unit_m else None
-                        if not unit:
-                            after_num = raw_val[num_match.end():].strip()
-                            unit_str = re.match(r'([a-zA-Z°%µΩ][a-zA-Z0-9_/\^°%µΩ]*)', after_num)
-                            if unit_str:
-                                unit = unit_str.group(1)
-
-                        norm = _normalize_identifier(name)
-                        root_node.children.append(TypedASTNode(
-                            node_id=f"sysml_attr_{len(root_node.children)}",
-                            node_type="Attribute",
-                            name=name,
-                            value=num_val,
-                            raw_value=raw_val,
-                            unit=unit,
-                            properties={"normalized_name": norm},
-                            source_file=rel_path,
-                            line_number=lineno_1idx
-                        ))
-                    except ValueError:
-                        pass
+                parsed_num = _extract_numeric_value(raw_val)
+                if parsed_num is not None:
+                    num_val, unit, raw_clean = parsed_num
+                    root_node.children.append(TypedASTNode(
+                        node_id=f"sysml_attr_{len(root_node.children)}",
+                        node_type="Attribute",
+                        name=name,
+                        value=num_val,
+                        raw_value=raw_val,
+                        unit=unit,
+                        properties={"normalized_name": norm},
+                        source_file=rel_path,
+                        line_number=lineno_1idx
+                    ))
 
         # 2. Part definitions and usages: part [def] <name> [: <Type>]
         part_pattern = re.compile(
@@ -443,14 +556,18 @@ class ConceptProvenanceValidator(IValidator):
             if not line_str:
                 continue
 
-            # Heading detection & Glossary/Meta isolation in schema extraction
+            # Heading detection & Glossary/Meta/Arbitration isolation in schema extraction
             m_header = re.match(r'^(#{1,6})\s+(.+)$', line_str)
             if m_header:
                 current_section = m_header.group(2).strip()
-                current_section_normative = not _is_glossary_section(current_section)
+                current_section_normative = not _is_non_normative_schema_section(current_section)
                 continue
 
             if not current_section_normative:
+                continue
+
+            # Isolate pending arbitration, disputed, unarbitrated, or rejected entries
+            if re.search(r'\b(pending[_\s]arbitration|unarbitrated|disputed|rejected|discarded|eliminated|not\s+selected)\b', line_str, re.IGNORECASE):
                 continue
 
             # Skip markdown table delimiters and horizontal rules
@@ -470,12 +587,12 @@ class ConceptProvenanceValidator(IValidator):
                     norm_k = _normalize_identifier(clean_k)
                     norm_v = _normalize_identifier(clean_v)
 
-                    # Filter out empty, delimiters, headers, pin numbers, index keys
+                    # Filter out empty, delimiters, headers, pin numbers, index keys, metadata keys
                     if not norm_k or not clean_k or not clean_v:
                         continue
                     if _is_structural_delimiter(clean_k) or _is_structural_delimiter(clean_v):
                         continue
-                    if _is_table_header(norm_k, norm_v) or _is_pin_or_index(clean_k, norm_k):
+                    if _is_table_header(norm_k, norm_v) or _is_pin_or_index(clean_k, norm_k) or _is_metadata_key(clean_k, norm_k):
                         continue
 
                     # a) Opcode mapping table: | Opcode 0x11 | PBIT | or | 0x11 | PBIT |
@@ -493,40 +610,38 @@ class ConceptProvenanceValidator(IValidator):
                         continue
 
                     # b) Numeric attribute table row
-                    num_match = re.search(r'([-+−\u2212]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)', clean_v)
-                    if norm_k and num_match and not re.search(r'\b(?:none|no|false|n/a)\b', clean_v, re.IGNORECASE):
-                        try:
-                            raw_clean = num_match.group(1).replace('\u2212', '-').replace('−', '-')
-                            num_val = float(raw_clean)
-                            root_node.children.append(TypedASTNode(
-                                node_id=f"attr_{len(root_node.children)}",
-                                node_type="Attribute",
-                                name=clean_k,
-                                value=num_val,
-                                raw_value=clean_v,
-                                properties={"normalized_name": norm_k},
-                                source_file=rel_path,
-                                line_number=lineno_1idx
-                            ))
-                            continue
-                        except ValueError:
-                            pass
-
-                    # c) Negative / Prohibition property
-                    if norm_v in ("no", "none", "false", "na", "notinstalled", "notequipped", "disabled", "0"):
+                    parsed_num = _extract_numeric_value(clean_v)
+                    if norm_k and parsed_num is not None and not _is_metadata_key(clean_k, norm_k):
+                        num_val, unit, raw_clean = parsed_num
                         root_node.children.append(TypedASTNode(
-                            node_id=f"prop_{len(root_node.children)}",
-                            node_type="Property",
+                            node_id=f"attr_{len(root_node.children)}",
+                            node_type="Attribute",
                             name=clean_k,
-                            value=clean_v,
-                            properties={"enabled": False, "normalized_name": norm_k, "tokens": clean_k.lower().split()},
+                            value=num_val,
+                            raw_value=clean_v,
+                            unit=unit,
+                            properties={"normalized_name": norm_k},
                             source_file=rel_path,
                             line_number=lineno_1idx
                         ))
                         continue
 
+                    # c) Negative / Prohibition property
+                    if norm_v in ("no", "none", "false", "na", "notinstalled", "notequipped", "disabled", "0"):
+                        if not _is_metadata_key(clean_k, norm_k):
+                            root_node.children.append(TypedASTNode(
+                                node_id=f"prop_{len(root_node.children)}",
+                                node_type="Property",
+                                name=clean_k,
+                                value=clean_v,
+                                properties={"enabled": False, "normalized_name": norm_k, "tokens": clean_k.lower().split()},
+                                source_file=rel_path,
+                                line_number=lineno_1idx
+                            ))
+                        continue
+
                     # d) Categorical string property
-                    if clean_k and clean_v and not _is_structural_delimiter(clean_v):
+                    if clean_k and clean_v and not _is_structural_delimiter(clean_v) and not _is_metadata_key(clean_k, norm_k) and not _is_metadata_key(clean_v, norm_v):
                         root_node.children.append(TypedASTNode(
                             node_id=f"prop_{len(root_node.children)}",
                             node_type="Property",
@@ -570,7 +685,7 @@ class ConceptProvenanceValidator(IValidator):
                     norm_k = _normalize_identifier(clean_k)
                     norm_v = _normalize_identifier(clean_v)
 
-                    if not norm_k or not norm_v or _is_structural_delimiter(clean_k) or _is_structural_delimiter(clean_v) or _is_pin_or_index(clean_k, norm_k):
+                    if not norm_k or not norm_v or _is_structural_delimiter(clean_k) or _is_structural_delimiter(clean_v) or _is_pin_or_index(clean_k, norm_k) or _is_metadata_key(clean_k, norm_k):
                         continue
 
                     if norm_v in ("no", "none", "false", "na", "notinstalled", "notequipped", "disabled", "0"):
@@ -631,18 +746,21 @@ class ConceptProvenanceValidator(IValidator):
             if p.node_type == "Property" and (p.properties.get("enabled") is False or str(p.value).lower() in ("none", "no", "false", "n/a", "not installed", "not equipped", "disabled", "0"))
             and not _is_pin_or_index(p.name, p.properties.get("normalized_name", _normalize_identifier(p.name)))
             and not _is_structural_delimiter(p.name)
+            and not _is_metadata_key(p.name, p.properties.get("normalized_name", _normalize_identifier(p.name)))
         ]
         gt_cat_props = [
             p for p in gt_graph.children
             if p.node_type == "Property" and p.properties.get("enabled") is not False and str(p.value).lower() not in ("none", "no", "false", "n/a", "not installed", "not equipped", "disabled", "0")
             and not _is_pin_or_index(p.name, p.properties.get("normalized_name", _normalize_identifier(p.name)))
             and not _is_structural_delimiter(p.name)
+            and not _is_metadata_key(p.name, p.properties.get("normalized_name", _normalize_identifier(p.name)))
         ]
         gt_mappings = [c for c in gt_graph.children if c.node_type == "Mapping"]
         gt_attrs = {
             c.properties.get("normalized_name", _normalize_identifier(c.name)): c
             for c in gt_graph.children
             if c.node_type == "Attribute" and not _is_pin_or_index(c.name, c.properties.get("normalized_name", _normalize_identifier(c.name)))
+            and not _is_metadata_key(c.name, c.properties.get("normalized_name", _normalize_identifier(c.name)))
         }
 
         for lineno_1idx, line in enumerate(lines, start=1):
@@ -654,9 +772,9 @@ class ConceptProvenanceValidator(IValidator):
             m_header = re.match(r'^(#{1,6})\s+(.+)$', line_str)
             if m_header:
                 current_section = m_header.group(2).strip()
-                # AST Section Isolation: MCDA trade study / alternatives sections and glossary / definitions sections are non-normative
+                # AST Section Isolation: MCDA trade study / alternatives sections, glossary / definitions, and pending arbitration are non-normative
                 is_trade_study = bool(re.search(
-                    r'\b(trade\s*study|trade-?offs?|mcda|alternatives?|candidate\s*options?|rejected\s*options?|decision\s*matrix|evaluation\s*of)\b',
+                    r'\b(trade\s*study|trade-?offs?|mcda|alternatives?|candidate\s*options?|rejected\s*options?|decision\s*matrix|evaluation\s*of|pending[_\s]arbitration|unarbitrated|disputed)\b',
                     current_section,
                     re.IGNORECASE
                 ))
@@ -673,8 +791,8 @@ class ConceptProvenanceValidator(IValidator):
             line_normative = current_section_normative
 
             if is_table_row:
-                # If table row contains decision keywords like REJECTED / DISCARDED / NOT SELECTED, isolate as non-normative
-                if re.search(r'\b(rejected|discarded|eliminated|not\s+selected|cons|negative|fail|exceeds\s+limit)\b', line_str, re.IGNORECASE):
+                # If table row contains decision keywords like REJECTED / DISCARDED / NOT SELECTED / PENDING_ARBITRATION, isolate as non-normative
+                if re.search(r'\b(rejected|discarded|eliminated|not\s+selected|cons|negative|fail|exceeds\s+limit|pending[_\s]arbitration|unarbitrated|disputed)\b', line_str, re.IGNORECASE):
                     line_normative = False
 
                 parts = [p.strip() for p in line_str.split("|")[1:-1]]
@@ -688,8 +806,8 @@ class ConceptProvenanceValidator(IValidator):
                     norm_k = _normalize_identifier(clean_k)
                     norm_v = _normalize_identifier(clean_v)
 
-                    # Table delimiter or header row
-                    if not norm_k or not norm_v or _is_structural_delimiter(clean_k) or _is_structural_delimiter(clean_v) or _is_table_header(norm_k, norm_v):
+                    # Table delimiter, header row, pin/index, or metadata key
+                    if not norm_k or not norm_v or _is_structural_delimiter(clean_k) or _is_structural_delimiter(clean_v) or _is_table_header(norm_k, norm_v) or _is_pin_or_index(clean_k, norm_k) or _is_metadata_key(clean_k, norm_k):
                         continue
 
             # If line explicitly states alternative investigation / rejection
@@ -768,7 +886,7 @@ class ConceptProvenanceValidator(IValidator):
             ))
             for neg_prop in gt_neg_props:
                 prop_norm = neg_prop.properties.get("normalized_name") or _normalize_identifier(neg_prop.name)
-                if not prop_norm or _is_pin_or_index(neg_prop.name, prop_norm) or _is_structural_delimiter(neg_prop.name):
+                if not prop_norm or _is_pin_or_index(neg_prop.name, prop_norm) or _is_structural_delimiter(neg_prop.name) or _is_metadata_key(neg_prop.name, prop_norm):
                     continue
 
                 mentioned = False
@@ -796,7 +914,7 @@ class ConceptProvenanceValidator(IValidator):
                         clean_col0 = re.sub(r'^_+|_+$', '', clean_col0)
                         k_norm = _normalize_identifier(clean_col0)
                         v_norm = _normalize_identifier(parts[1])
-                        if k_norm and not _is_pin_or_index(clean_col0, k_norm) and not _is_structural_delimiter(clean_col0):
+                        if k_norm and not _is_pin_or_index(clean_col0, k_norm) and not _is_structural_delimiter(clean_col0) and not _is_metadata_key(clean_col0, k_norm):
                             if (k_norm == prop_norm or (len(k_norm) >= 4 and len(prop_norm) >= 4 and (k_norm == prop_norm))) and v_norm not in ("no", "none", "false", "na", "notinstalled", "notequipped", "disabled", "0"):
                                 mentioned = True
                                 matched_token = parts[0]
@@ -820,7 +938,7 @@ class ConceptProvenanceValidator(IValidator):
             # 5. Extract Categorical / Taxonomy assertions
             for cat_prop in gt_cat_props:
                 cat_norm = cat_prop.properties.get("normalized_name") or _normalize_identifier(cat_prop.name)
-                if not cat_norm or _is_pin_or_index(cat_prop.name, cat_norm) or _is_structural_delimiter(cat_prop.name):
+                if not cat_norm or _is_pin_or_index(cat_prop.name, cat_norm) or _is_structural_delimiter(cat_prop.name) or _is_metadata_key(cat_prop.name, cat_norm):
                     continue
                 gt_val = str(cat_prop.value).lower()
                 gt_val_norm = _normalize_identifier(gt_val)
@@ -853,7 +971,7 @@ class ConceptProvenanceValidator(IValidator):
                         v_str = re.sub(r'[*`]', '', parts[1]).strip()
                         v_str = re.sub(r'^_+|_+$', '', v_str)
                         v_norm = _normalize_identifier(v_str)
-                        if k_norm and v_norm and not _is_pin_or_index(clean_col0, k_norm) and not _is_structural_delimiter(clean_col0) and not _is_structural_delimiter(v_str):
+                        if k_norm and v_norm and not _is_pin_or_index(clean_col0, k_norm) and not _is_structural_delimiter(clean_col0) and not _is_structural_delimiter(v_str) and not _is_metadata_key(clean_col0, k_norm) and not _is_metadata_key(v_str, v_norm):
                             if k_norm == cat_norm and v_norm != gt_val_norm:
                                 root_node.children.append(TypedASTNode(
                                     node_id=f"cand_cat_{len(root_node.children)}",
@@ -876,7 +994,7 @@ class ConceptProvenanceValidator(IValidator):
                         if m_kv:
                             asserted_val = m_kv.group(1).strip()
                             asserted_val_norm = _normalize_identifier(asserted_val)
-                            if asserted_val_norm and asserted_val_norm != gt_val_norm and not _is_structural_delimiter(asserted_val) and not _is_pin_or_index(asserted_val, asserted_val_norm):
+                            if asserted_val_norm and asserted_val_norm != gt_val_norm and not _is_structural_delimiter(asserted_val) and not _is_pin_or_index(asserted_val, asserted_val_norm) and not _is_metadata_key(asserted_val, asserted_val_norm):
                                 root_node.children.append(TypedASTNode(
                                     node_id=f"cand_cat_{len(root_node.children)}",
                                     node_type="Property",
@@ -894,7 +1012,7 @@ class ConceptProvenanceValidator(IValidator):
 
             # 6. Extract Numeric Attributes from Normative lines
             for norm_name, gt_attr in gt_attrs.items():
-                if not norm_name or _is_pin_or_index(gt_attr.name, norm_name) or _is_structural_delimiter(gt_attr.name):
+                if not norm_name or _is_pin_or_index(gt_attr.name, norm_name) or _is_structural_delimiter(gt_attr.name) or _is_metadata_key(gt_attr.name, norm_name):
                     continue
                 escaped_name = re.escape(gt_attr.name)
                 escaped_norm = re.escape(norm_name)
@@ -906,25 +1024,25 @@ class ConceptProvenanceValidator(IValidator):
                         clean_col0 = re.sub(r'[*`]', '', parts[0]).strip()
                         clean_col0 = re.sub(r'^_+|_+$', '', clean_col0)
                         norm_col0 = _normalize_identifier(clean_col0)
+                        if _is_metadata_key(clean_col0, norm_col0) or _is_pin_or_index(clean_col0, norm_col0):
+                            continue
                         if (norm_col0 == norm_name or clean_col0.lower() == gt_attr.name.lower()) and not _is_pin_or_index(clean_col0, norm_col0):
-                            num_match = re.search(r'([-+−\u2212]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)', parts[1])
-                            if num_match:
-                                try:
-                                    raw_clean = num_match.group(1).replace('\u2212', '-').replace('−', '-')
-                                    val = float(raw_clean)
-                                    root_node.children.append(TypedASTNode(
-                                        node_id=f"cand_attr_{len(root_node.children)}",
-                                        node_type="Attribute",
-                                        name=gt_attr.name,
-                                        value=val,
-                                        properties={"normalized_name": norm_name},
-                                        source_file=rel_path,
-                                        line_number=lineno_1idx,
-                                        is_normative=True
-                                    ))
-                                    continue
-                                except ValueError:
-                                    pass
+                            parsed_num = _extract_numeric_value(parts[1])
+                            if parsed_num is not None:
+                                val, unit, raw_clean = parsed_num
+                                root_node.children.append(TypedASTNode(
+                                    node_id=f"cand_attr_{len(root_node.children)}",
+                                    node_type="Attribute",
+                                    name=gt_attr.name,
+                                    value=val,
+                                    raw_value=parts[1],
+                                    unit=unit,
+                                    properties={"normalized_name": norm_name},
+                                    source_file=rel_path,
+                                    line_number=lineno_1idx,
+                                    is_normative=True
+                                ))
+                                continue
 
                 # Key-value format: **Name**: 1800.0 or Name = 1800.0 or Name of 1800.0 or Name -45.0
                 if len(norm_name) >= 3 and not _is_pin_or_index(gt_attr.name, norm_name):
@@ -1110,12 +1228,14 @@ class ConceptProvenanceValidator(IValidator):
                 if (p.properties.get("enabled") is False or str(p.value).lower() in ("none", "no", "false", "n/a", "not installed", "not equipped", "disabled", "0"))
                 and not _is_pin_or_index(p.name, p.properties.get("normalized_name", _normalize_identifier(p.name)))
                 and not _is_structural_delimiter(p.name)
+                and not _is_metadata_key(p.name, p.properties.get("normalized_name", _normalize_identifier(p.name)))
             ]
             cand_props = [
                 c for c in cand_graph.children
                 if c.node_type in ("Property", "PartUsage") and c.is_normative
                 and not _is_pin_or_index(c.name, c.properties.get("normalized_name", _normalize_identifier(c.name)))
                 and not _is_structural_delimiter(c.name)
+                and not _is_metadata_key(c.name, c.properties.get("normalized_name", _normalize_identifier(c.name)))
             ]
 
             for neg_prop in gt_neg_props:
@@ -1143,6 +1263,7 @@ class ConceptProvenanceValidator(IValidator):
                 if p.properties.get("enabled") is not False and str(p.value).lower() not in ("none", "no", "false", "n/a", "not installed", "not equipped", "disabled", "0")
                 and not _is_pin_or_index(p.name, p.properties.get("normalized_name", _normalize_identifier(p.name)))
                 and not _is_structural_delimiter(p.name)
+                and not _is_metadata_key(p.name, p.properties.get("normalized_name", _normalize_identifier(p.name)))
             ]
             for cat_prop in gt_cat_props:
                 cat_norm = cat_prop.properties.get("normalized_name") or _normalize_identifier(cat_prop.name)

@@ -600,8 +600,240 @@ The vehicle allows minimum_altitude -10 m during subterranean approach.
             self.assertEqual(mismatch_errors, [], f"Expected 0 parametric mismatch errors, got: {mismatch_errors}")
             self.assertEqual(errors, [])
 
+    def test_metadata_tables_with_compound_titles_produce_zero_false_positives(self):
+        """
+        Verify Issue #216: Document metadata tables with compound titles (e.g. Format RS-485 Frame,
+        Gate RBF3 Removal, PL40, Swarm C2 Ground Station) and metadata keys (Title, Issue ID, Type,
+        Status, Parent Epic, Version) produce zero false-positive findings.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            extracted_dir = os.path.join(schema_dir, "extracted")
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            feat_dir = os.path.join(tmpdir, "docs", "features")
+            story_dir = os.path.join(tmpdir, "docs", "user-stories")
+            os.makedirs(extracted_dir, exist_ok=True)
+            os.makedirs(conops_dir, exist_ok=True)
+            os.makedirs(feat_dir, exist_ok=True)
+            os.makedirs(story_dir, exist_ok=True)
+
+            # Ground truth schema with legitimate physical parameters
+            with open(os.path.join(extracted_dir, "system_specs.md"), "w", encoding="utf-8") as f:
+                f.write("""# System Specifications
+| Property | Value |
+| :--- | :--- |
+| Title | System Ground Truth Baseline Specification |
+| Version | 2.0.0 |
+| system_mass | 1800.0 kg |
+| nominal_power | 75.5 kW |
+""")
+
+            # ConOps document with compound title in metadata table
+            conops_content = """# Concept of Operations
+<!-- Source: schema/extracted/system_specs.md -->
+
+| Property | Value |
+| :--- | :--- |
+| Title | Swarm C2 Ground Station Operational Architecture |
+| Issue ID | #216 |
+| Type | Concept Document |
+| Status | Approved |
+| Version | 1.0.0 |
+
+## Operational Characteristics
+The operational system operates with system_mass = 1800.0 kg and nominal_power = 75.5 kW.
+"""
+            with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
+                f.write(conops_content)
+
+            # Feature document with RS-485 compound title in metadata table
+            feat_content = """# Feature: Serial Communication
+<!-- Source: schema/extracted/system_specs.md -->
+
+| Property | Value |
+| :--- | :--- |
+| Title | Format RS-485 Frame Protocol |
+| Issue ID | #217 |
+| Type | Feature |
+| Parent Epic | EPIC-01 |
+| Status | Draft |
+| Generation Mode | Autonomous |
+| Realized AST Nodes | PortDef, PartDef |
+| Source References | schema/extracted/system_specs.md |
+
+The serial bus operates under system_mass = 1800.0 kg constraints.
+"""
+            with open(os.path.join(feat_dir, "feat-01.md"), "w", encoding="utf-8") as f:
+                f.write(feat_content)
+
+            # User story with RBF3 removal compound title in metadata table
+            story1_content = """# User Story: Arming Gate
+<!-- Source: schema/extracted/system_specs.md -->
+
+| Property | Value |
+| :--- | :--- |
+| Title | Gate RBF3 Removal Interlock |
+| Issue ID | #218 |
+| Type | User Story |
+| Parent Epic | EPIC-01 |
+| Status | Ready |
+
+The system asserts system_mass = 1800.0 kg.
+"""
+            with open(os.path.join(story_dir, "us-01.md"), "w", encoding="utf-8") as f:
+                f.write(story1_content)
+
+            # User story with PL40 compound title in metadata table
+            story2_content = """# User Story: Payload Interface
+<!-- Source: schema/extracted/system_specs.md -->
+
+| Property | Value |
+| :--- | :--- |
+| Title | PL40 Payload Protocol Integration |
+| Issue ID | #219 |
+| Type | User Story |
+| Parent Epic | EPIC-01 |
+| Status | In Progress |
+
+The payload interface consumes nominal_power = 75.5 kW.
+"""
+            with open(os.path.join(story_dir, "us-02.md"), "w", encoding="utf-8") as f:
+                f.write(story2_content)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            validator = ConceptProvenanceValidator()
+
+            # Verify ground truth does not contain Title, Version, etc. as physical parameters
+            gt = validator.extract_ground_truth(repo)
+            self.assertIn("system_mass", gt)
+            self.assertIn("nominal_power", gt)
+            self.assertNotIn("title", gt)
+            self.assertNotIn("version", gt)
+
+            # Validate the repository specifications
+            errors = validator.validate(repo)
+            self.assertEqual(errors, [], f"Expected 0 findings from metadata tables with compound titles, got: {errors}")
+
+    def test_pending_arbitration_registers_isolated_without_false_contradictions(self):
+        """
+        Verify Issue #216: Disputed intra-SSOT entries marked with PENDING_ARBITRATION in
+        schema/SSOT_INPUT_REGISTER.md are isolated and not treated as immutable ground truth.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(conops_dir, exist_ok=True)
+
+            # Write SSOT_INPUT_REGISTER.md with approved and pending arbitration sections
+            with open(os.path.join(schema_dir, "SSOT_INPUT_REGISTER.md"), "w", encoding="utf-8") as f:
+                f.write("""# Single Source of Truth Input Register
+
+## 1. Approved Baseline Parameters
+| Parameter | Value | Status |
+| :--- | :--- | :--- |
+| system_mass | 1800.0 kg | APPROVED |
+| cruise_speed | 30.0 m/s | APPROVED |
+
+## 2. Disputed Parameters (Pending Arbitration)
+| Parameter | Candidate A | Candidate B | Arbitration Status | Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| battery_capacity | 120.0 kWh | 90.0 kWh | PENDING_ARBITRATION | Thermal vs mass trade-off |
+| payload_capacity | 50.0 kg | 75.0 kg | PENDING_ARBITRATION | Structural review required |
+
+## 3. Disputed Recovery System Architecture
+| Architecture Option | Decision |
+| :--- | :--- |
+| Ballistic Parachute | PENDING_ARBITRATION |
+
+## 4. Single-Row Disputed Entry
+| sensor_range | 150.0 km | PENDING_ARBITRATION |
+""")
+
+            # ConOps document citing the SSOT input register for approved parameters
+            conops_content = """# Concept of Operations
+<!-- Source: schema/SSOT_INPUT_REGISTER.md -->
+
+## System Overview
+The operational platform operates with system_mass = 1800.0 kg and normal cruise speed - 30 m/s.
+"""
+            with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
+                f.write(conops_content)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            validator = ConceptProvenanceValidator()
+
+            # Verify ground truth extraction:
+            # - Approved parameters are extracted
+            # - Pending arbitration parameters are excluded
+            gt = validator.extract_ground_truth(repo)
+            self.assertIn("system_mass", gt)
+            self.assertEqual(gt["system_mass"].value, 1800.0)
+            self.assertIn("cruise_speed", gt)
+            self.assertEqual(gt["cruise_speed"].value, 30.0)
+
+            self.assertNotIn("battery_capacity", gt)
+            self.assertNotIn("payload_capacity", gt)
+            self.assertNotIn("sensor_range", gt)
+
+            # Verify validation passes cleanly
+            errors = validator.validate(repo)
+            self.assertEqual(errors, [], f"Expected 0 errors for valid ConOps against SSOT input register, got: {errors}")
+
+    def test_extract_numeric_value_robustness(self):
+        """
+        Verify Issue #216: _extract_numeric_value correctly parses scalar numbers with units
+        and rejects compound alphanumeric identifiers, hex opcodes, and metadata.
+        """
+        from parity_auditor.validators.concept_provenance_validator import (
+            _extract_numeric_value,
+            _is_metadata_key,
+        )
+
+        # Valid scalar quantities
+        self.assertEqual(_extract_numeric_value("1800.0 kg")[0], 1800.0)
+        self.assertEqual(_extract_numeric_value("1800.0 kg")[1], "kg")
+        self.assertEqual(_extract_numeric_value("45.0 deg")[0], 45.0)
+        self.assertEqual(_extract_numeric_value("45.0 deg")[1], "deg")
+        self.assertEqual(_extract_numeric_value("75.5 kW")[0], 75.5)
+        self.assertEqual(_extract_numeric_value("75.5 kW")[1], "kW")
+        self.assertEqual(_extract_numeric_value("-10.5 m/s")[0], -10.5)
+        self.assertEqual(_extract_numeric_value("-10.5 m/s")[1], "m/s")
+        self.assertEqual(_extract_numeric_value("-20 degC to +50 degC")[0], -20.0)
+        self.assertEqual(_extract_numeric_value("+12.5 %")[0], 12.5)
+        self.assertEqual(_extract_numeric_value("100.0 kWh")[0], 100.0)
+        self.assertEqual(_extract_numeric_value("42.0 [m3]")[0], 42.0)
+
+        # Compound alphanumeric identifiers that MUST NOT be parsed as numbers
+        self.assertIsNone(_extract_numeric_value("Format RS-485 Frame"))
+        self.assertIsNone(_extract_numeric_value("RS-485"))
+        self.assertIsNone(_extract_numeric_value("RS485"))
+        self.assertIsNone(_extract_numeric_value("Gate RBF3 Removal"))
+        self.assertIsNone(_extract_numeric_value("RBF3"))
+        self.assertIsNone(_extract_numeric_value("PL40"))
+        self.assertIsNone(_extract_numeric_value("PL-40"))
+        self.assertIsNone(_extract_numeric_value("Swarm C2 Ground Station"))
+        self.assertIsNone(_extract_numeric_value("Opcode 0x11"))
+        self.assertIsNone(_extract_numeric_value("None"))
+        self.assertIsNone(_extract_numeric_value("No"))
+        self.assertIsNone(_extract_numeric_value("N/A"))
+
+        # Metadata key recognition
+        self.assertTrue(_is_metadata_key("Title", "title"))
+        self.assertTrue(_is_metadata_key("Issue ID", "issueid"))
+        self.assertTrue(_is_metadata_key("Type", "type"))
+        self.assertTrue(_is_metadata_key("Parent Epic", "parentepic"))
+        self.assertTrue(_is_metadata_key("Status", "status"))
+        self.assertTrue(_is_metadata_key("Generation Mode", "generationmode"))
+        self.assertTrue(_is_metadata_key("Realized AST Nodes", "realizedastnodes"))
+        self.assertTrue(_is_metadata_key("Source References", "sourcereferences"))
+        self.assertTrue(_is_metadata_key("Version", "version"))
+        self.assertFalse(_is_metadata_key("system_mass", "systemmass"))
+        self.assertFalse(_is_metadata_key("cruise_speed", "cruisespeed"))
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
 
