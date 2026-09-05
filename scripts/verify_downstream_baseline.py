@@ -684,10 +684,10 @@ class ASTValidationReport:
 # Order matters: timing/duration rules precede the generic providing rule so
 # phrases such as "Providing too early" classify to GW-3 rather than GW-2.
 STPA_GUIDE_WORD_RULES = [
-    ("GW-1", "Not providing causes hazard", re.compile(r"not\s+provid|omission", re.IGNORECASE)),
-    ("GW-3", "Providing too early, too late, or out of order", re.compile(r"too\s+early|too\s+late|out\s+of\s+order|timing|early/late", re.IGNORECASE)),
-    ("GW-4", "Stopped too soon or applied too long", re.compile(r"stopped\s+too\s+soon|applied\s+too\s+long|stopped\s+early|duration", re.IGNORECASE)),
-    ("GW-2", "Providing causes hazard", re.compile(r"providing|commission", re.IGNORECASE)),
+    ("GW-1", "Not providing causes hazard", re.compile(r"not\s+provid|omission|withheld|\bclass\s+a\b|\bgw-?1\b", re.IGNORECASE)),
+    ("GW-3", "Providing too early, too late, or out of order", re.compile(r"too\s+early|too\s+late|out\s+of\s+order|early/late|\btiming\b|\bclass\s+c\b|\bgw-?3\b", re.IGNORECASE)),
+    ("GW-4", "Stopped too soon or applied too long", re.compile(r"stopped\s+too\s+soon|applied\s+too\s+long|stopped\s+early|\bduration\b|too\s+soon|\bclass\s+d\b|\bgw-?4\b", re.IGNORECASE)),
+    ("GW-2", "Providing causes hazard", re.compile(r"providing\s+causes|incorrectly\s+provided|unintended\s+provision|\bcommission\b|\bclass\s+b\b|\bgw-?2\b|\bproviding\b", re.IGNORECASE)),
 ]
 STPA_GUIDE_WORD_ORDER = {gw_id: index for index, (gw_id, _label, _pattern) in enumerate(STPA_GUIDE_WORD_RULES)}
 STPA_GUIDE_WORD_LABELS = {gw_id: label for gw_id, label, _pattern in STPA_GUIDE_WORD_RULES}
@@ -698,12 +698,50 @@ STPA_GUIDE_WORD_LABELS = {gw_id: label for gw_id, label, _pattern in STPA_GUIDE_
 MIN_STRUCTURAL_UCA_ROWS = 16
 
 
+def classify_uca_guide_words(cell_text: str) -> List[Tuple[str, str]]:
+    """Classify a UCA guide word cell into one or more canonical STPA failure modes.
+
+    Handles compound class attribution (e.g. 'Class a — not providing; Class c — too late')
+    by splitting compound segments and returning all unique matched guide words in canonical order.
+    """
+    if not cell_text or not cell_text.strip():
+        return []
+
+    chunks = [c.strip() for c in re.split(r"[;\n\r]+", cell_text) if c.strip()]
+    refined_chunks = []
+    for chunk in chunks:
+        sub_chunks = re.split(r"(?=(?:\b(?:class\s+[a-d]|gw-?[1-4])\b))", chunk, flags=re.IGNORECASE)
+        for sc in sub_chunks:
+            sc_clean = sc.strip().strip(",").strip()
+            if sc_clean:
+                refined_chunks.append(sc_clean)
+
+    matched_gw_ids = set()
+    results = []
+
+    for chunk in refined_chunks:
+        for gw_id, label, pattern in STPA_GUIDE_WORD_RULES:
+            if pattern.search(chunk):
+                if gw_id not in matched_gw_ids:
+                    matched_gw_ids.add(gw_id)
+                    results.append((gw_id, label))
+                break
+
+    if not results:
+        for gw_id, label, pattern in STPA_GUIDE_WORD_RULES:
+            if pattern.search(cell_text):
+                if gw_id not in matched_gw_ids:
+                    matched_gw_ids.add(gw_id)
+                    results.append((gw_id, label))
+
+    results.sort(key=lambda item: STPA_GUIDE_WORD_ORDER.get(item[0], 99))
+    return results
+
+
 def classify_uca_guide_word(cell_text: str) -> Optional[Tuple[str, str]]:
     """Classify a UCA guide word cell into one of the 4 canonical STPA failure modes."""
-    for gw_id, label, pattern in STPA_GUIDE_WORD_RULES:
-        if pattern.search(cell_text):
-            return gw_id, label
-    return None
+    matches = classify_uca_guide_words(cell_text)
+    return matches[0] if matches else None
 
 
 def _load_sysml_parser():
@@ -792,20 +830,26 @@ class MarkdownTableASTParser:
 
     @staticmethod
     def _column_index(header, keywords, exclude=()):
-        # First attempt exact normalized match
-        for index, cell in enumerate(header):
-            lowered = cell.lower().strip()
-            if any(ex in lowered for ex in exclude):
-                continue
-            if lowered in keywords:
-                return index
-        # Second attempt word-boundary regex match
-        for index, cell in enumerate(header):
-            lowered = cell.lower().strip()
-            if any(ex in lowered for ex in exclude):
-                continue
-            if any(re.search(rf"\b{re.escape(kw)}\b", lowered) for kw in keywords):
-                return index
+        # First attempt exact normalized match in keyword priority order
+        for kw in keywords:
+            kw_norm = kw.lower().strip()
+            for index, cell in enumerate(header):
+                lowered = cell.lower().strip()
+                if any(ex in lowered for ex in exclude):
+                    continue
+                if lowered == kw_norm:
+                    return index
+        # Second attempt word-boundary regex match in keyword priority order
+        for kw in keywords:
+            kw_norm = kw.lower().strip()
+            pattern_str = r"\b" + re.escape(kw_norm).replace(r"\ ", r"\s+") + r"\b"
+            pattern = re.compile(pattern_str, re.IGNORECASE)
+            for index, cell in enumerate(header):
+                lowered = cell.lower().strip()
+                if any(ex in lowered for ex in exclude):
+                    continue
+                if pattern.search(lowered):
+                    return index
         return None
 
     @classmethod
@@ -814,17 +858,51 @@ class MarkdownTableASTParser:
         rows: List[STPARowAST] = []
         for header, data_rows in cls._iter_tables(text):
             header_text = " ".join(cell.lower() for cell in header)
-            if "uca" not in header_text:
+            # Exclude obvious non-UCA tables (such as FMECA, Loss Scenarios, Hazards, SORA OSO)
+            if "rpn" in header_text or "oso" in header_text or "mitigating design control" in header_text:
                 continue
-            if "guide word" not in header_text and "control action" not in header_text:
+
+            col_uca = cls._column_index(
+                header,
+                ("uca id", "uca", "id", "identifier"),
+                exclude=("description", "scenario", "constraint", "loss", "hazard", "action", "guide", "mode", "type", "failure", "fmeca", "rpn", "component", "subsystem", "effect"),
+            )
+            col_controller = cls._column_index(header, ("controller", "subsystem", "component"))
+            col_action = cls._column_index(
+                header,
+                ("control action (ssot)", "control action", "action", "command"),
+                exclude=("description", "unsafe", "scenario"),
+            )
+            col_guide = cls._column_index(
+                header,
+                ("guide word", "guide-word", "stpa guide word", "failure mode", "class attribution", "uca category", "stpa uca category", "type", "mode"),
+                exclude=("description", "scenario"),
+            )
+            col_hazard = cls._column_index(
+                header,
+                ("hazard", "linked hazards", "hazards", "hazard ref", "hazard reference", "hazard links", "triggered system hazard"),
+            )
+            col_loss = cls._column_index(
+                header,
+                ("loss", "loss ref", "system loss ref", "loss reference"),
+                exclude=("scenario",),
+            )
+            col_constraint = cls._column_index(
+                header,
+                ("safety constraint", "constraint", "constraint statement"),
+            )
+
+            # Table must be an STPA UCA table:
+            # Must have 'uca' in header_text, or specifically a UCA column, or both action and guide columns.
+            is_uca_table = (
+                "uca" in header_text
+                or (col_uca is not None and "uca" in header[col_uca].lower())
+                or (col_action is not None and col_guide is not None)
+            )
+            if not is_uca_table:
                 continue
-            col_uca = cls._column_index(header, ("uca id", "uca"), exclude=("description", "scenario", "constraint"))
-            col_controller = cls._column_index(header, ("controller",))
-            col_action = cls._column_index(header, ("control action", "action"), exclude=("description", "unsafe", "scenario"))
-            col_guide = cls._column_index(header, ("guide word", "stpa guide word", "uca category", "stpa uca category", "failure mode"))
-            col_hazard = cls._column_index(header, ("hazard", "hazard ref", "hazard reference", "hazard links", "triggered system hazard"))
-            col_loss = cls._column_index(header, ("loss", "loss ref", "system loss ref", "loss reference"), exclude=("scenario",))
-            col_constraint = cls._column_index(header, ("safety constraint", "constraint", "constraint statement"))
+            if col_action is None and col_guide is None:
+                continue
 
             def cell_for(cells, col):
                 return cells[col] if col is not None and col < len(cells) else ""
@@ -992,10 +1070,9 @@ class CartesianProductValidator:
                     break
             if matched_action is None:
                 continue
-            classified = classify_uca_guide_word(row.guide_word)
-            if classified is None:
-                continue
-            found.add((matched_action, classified[0]))
+            classified_list = classify_uca_guide_words(row.guide_word)
+            for gw_id, _label in classified_list:
+                found.add((matched_action, gw_id))
 
         expected = set()
         for action in unique_actions:
@@ -1063,6 +1140,24 @@ def validate_safety_matrix_ast(content: str, model_text: Optional[str] = None) -
     oso_rows = MarkdownTableASTParser.parse_sora_table(content)
     proof_blocks = MarkdownTableASTParser.parse_proof_blocks(content)
 
+    # Diagnostic check: if STPA rows are parsed but guide words are missing or unclassifiable
+    if stpa_rows:
+        rows_with_empty_gw = sum(1 for r in stpa_rows if not r.guide_word.strip())
+        rows_unclassifiable_gw = sum(
+            1 for r in stpa_rows
+            if r.guide_word.strip() and not classify_uca_guide_words(r.guide_word)
+        )
+        if rows_with_empty_gw == len(stpa_rows):
+            errors.append(
+                "Pillar 4 violation: UCA table guide word / failure mode column could not be resolved from headers. "
+                "Expected column header matching: 'Guide Word', 'Failure Mode', 'Class attribution', 'Type', or 'Mode'."
+            )
+        elif rows_unclassifiable_gw > 0:
+            errors.append(
+                f"Pillar 4 diagnostic: {rows_unclassifiable_gw} UCA row(s) contain unclassifiable guide word text. "
+                "Ensure guide words conform to canonical STPA categories (Not providing, Providing, Too early/late, Stopped too soon/applied too long) or Class a/b/c/d."
+            )
+
     expected_actions: Optional[List[str]] = None
     if model_text:
         parse_sysml = _load_sysml_parser()
@@ -1117,7 +1212,8 @@ def validate_safety_matrix_ast(content: str, model_text: Optional[str] = None) -
                 f"permutations ({len(derived_actions)} control actions x 4 guide words), found {found_combos} "
                 f"unique combinations. Missing permutations:\n{listing}"
             )
-        if report.total_uca_rows < MIN_STRUCTURAL_UCA_ROWS:
+        found_combos = report.expected_uca_rows - len(cartesian_report.missing_permutations)
+        if report.total_uca_rows < MIN_STRUCTURAL_UCA_ROWS and found_combos < MIN_STRUCTURAL_UCA_ROWS:
             errors.append(
                 f"Pillar 4 violation: UCA Cartesian matrix truncation — found {report.total_uca_rows} UCA row(s); "
                 f"minimum required is {MIN_STRUCTURAL_UCA_ROWS} permutations (4 control actions x 4 guide words)."
