@@ -2008,7 +2008,11 @@ def update_checklist_in_file(filepath, issue_dict, rules=None):
         content = f.read()
 
     tracker_rules = rules.get("tracker_rules", {}) if rules else {}
-    pattern = tracker_rules.get("dependency_regex", r"(-\s*\[\s*([ xX])\s*\]\s*(#|#\[|\#\s*)?([A-Za-z0-9\-]+))")
+    custom_pattern = tracker_rules.get("dependency_regex")
+    if custom_pattern and custom_pattern != r"(-\s*\[\s*([ xX])\s*\]\s*(#|#\[|\#\s*)?([A-Za-z0-9\-]+))":
+        pattern = custom_pattern
+    else:
+        pattern = r"(-\s*\[\s*([ xX])\s*\]\s*(\[#|#|#\[|\#\s*)?([A-Za-z0-9\-]+))"
     PLACEHOLDER_PATTERN = re.compile(r'^(IssueID|EpicIssueID|StoryIssueID|FeatureIssueID|UseCaseIssueID|StoryID|N/A)\]?$')
     
     updated_content = content
@@ -2242,6 +2246,106 @@ def get_blob_url_base(rules=None, workspace_dir=None, branch=None):
 
         return f"{server_url}/{proj_path}/blob/{branch}"
 
+def get_issue_web_url(issue_id, rules=None, workspace_dir=None):
+    """
+    Generate provider-aware web URL for a given issue ID (#224).
+    GitLab: https://<host>/<group>/<project>/-/issues/<id>
+    GitHub: https://github.com/<org>/<repo>/issues/<id>
+    Jira: https://<host>/browse/<KEY>-<id>
+    """
+    if issue_id is None or str(issue_id).strip() == "" or str(issue_id) == "0":
+        return ""
+
+    issue_id_str = str(issue_id).strip()
+
+    if workspace_dir is None:
+        workspace_dir = find_workspace_dir(os.getcwd())
+
+    upstream_repo = get_upstream_repository(rules, workspace_dir) or "gintatkinson/DEAP01-spec-core"
+    provider_name = detect_tracker_provider(rules=rules, workspace_dir=workspace_dir)
+
+    remote_info = get_git_remote_info(workspace_dir) if workspace_dir else None
+    remote_info = remote_info or {}
+
+    tracker_rules = rules.get("tracker_rules", {}) if rules else {}
+    server_url_override = tracker_rules.get("server_url") or tracker_rules.get("url")
+
+    is_gitlab_remote = remote_info.get("is_gitlab", False)
+    if provider_name == "gitlab" or is_gitlab_remote:
+        server_url = (
+            server_url_override
+            or (remote_info.get("server_url") if is_gitlab_remote else None)
+            or os.environ.get("GITLAB_URL")
+            or os.environ.get("CI_SERVER_URL")
+            or "https://gitlab.com"
+        ).rstrip("/")
+
+        proj_path = (
+            tracker_rules.get("project_id")
+            or remote_info.get("project_path")
+            or os.environ.get("CI_PROJECT_PATH")
+            or upstream_repo
+            or ""
+        ).strip("/")
+
+        if proj_path.startswith("http://") or proj_path.startswith("https://"):
+            parsed_proj = urllib.parse.urlparse(proj_path)
+            server_url = f"{parsed_proj.scheme}://{parsed_proj.netloc}".rstrip("/")
+            proj_path = parsed_proj.path.lstrip("/")
+
+        if proj_path.endswith(".git"):
+            proj_path = proj_path[:-4]
+
+        if proj_path.startswith("github.com/"):
+            proj_path = proj_path[len("github.com/"):]
+        elif proj_path.startswith("gitlab.com/"):
+            proj_path = proj_path[len("gitlab.com/"):]
+
+        return f"{server_url}/{proj_path}/-/issues/{issue_id_str}"
+    elif provider_name == "jira":
+        server_url = (
+            server_url_override
+            or remote_info.get("server_url")
+            or os.environ.get("JIRA_URL")
+            or os.environ.get("JIRA_SERVER_URL")
+            or "https://jira.atlassian.net"
+        ).rstrip("/")
+        issue_key = issue_id_str
+        project_key = tracker_rules.get("project_key") or "PROJ"
+        if "-" not in issue_key and issue_key.isdigit():
+            issue_key = f"{project_key}-{issue_key}"
+        return f"{server_url}/browse/{issue_key}"
+    else:  # github
+        server_url = (
+            server_url_override
+            if (server_url_override and not is_gitlab_remote)
+            else (remote_info.get("server_url") if (remote_info.get("server_url") and not is_gitlab_remote) else "https://github.com")
+        ).rstrip("/")
+
+        proj_path = (
+            tracker_rules.get("project_id")
+            or tracker_rules.get("project_key")
+            or remote_info.get("project_path")
+            or upstream_repo
+            or ""
+        ).strip("/")
+
+        if proj_path.startswith("http://") or proj_path.startswith("https://"):
+            parsed_proj = urllib.parse.urlparse(proj_path)
+            server_url = f"{parsed_proj.scheme}://{parsed_proj.netloc}".rstrip("/")
+            proj_path = parsed_proj.path.lstrip("/")
+
+        if proj_path.endswith(".git"):
+            proj_path = proj_path[:-4]
+
+        if proj_path.startswith("github.com/"):
+            proj_path = proj_path[len("github.com/"):]
+        elif proj_path.startswith("gitlab.com/"):
+            proj_path = proj_path[len("gitlab.com/"):]
+
+        return f"{server_url}/{proj_path}/issues/{issue_id_str}"
+
+
 def rewrite_header_repository_urls(content, active_repo, rules=None, workspace_dir=None):
     if not content or not active_repo:
         return content
@@ -2328,13 +2432,14 @@ def sanitize_source_references(content, workspace_dir=None, rules=None):
     pattern = r'file://(/[^\s\)\>"\']+)'
     return re.sub(pattern, replacer, content)
 
-def expand_relative_links_for_tracker(content, filepath=None, rules=None, workspace_dir=None, branch=None):
-    """Expand relative markdown links to full blob URLs for web issue tracker payloads.
+def expand_relative_links_for_tracker(content, filepath=None, rules=None, workspace_dir=None, branch=None, known_issue_ids=None):
+    """Expand relative markdown links to full blob URLs and task list issue references to explicit hyperlinks.
     
     Local git files maintain clean, canonical relative links for branch isolation
     and offline navigation. During tracker dispatch, this transforms relative file links
     into provider-aware web blob URLs (e.g. GitHub /blob/<branch>/... or GitLab /-/blob/<branch>/...)
-    so links resolve correctly when viewed in issue tracker web interfaces (#45).
+    and task list issue references into explicit hyperlinks ([#123](<url>)) (#45, #224)
+    with dead link and unregistered reference guards (#222).
     """
     if not content:
         return content
@@ -2408,11 +2513,45 @@ def expand_relative_links_for_tracker(content, filepath=None, rules=None, worksp
             return match.group(0)
 
         norm_target = norm_target.lstrip("./").lstrip("/")
+
+        # Dead Link Guard (#222): verify file exists in workspace before expanding to remote blob URL
+        if abs_workspace:
+            target_full_path = os.path.join(abs_workspace, norm_target)
+            if not os.path.exists(target_full_path):
+                print(f"  [Warning] Target file '{norm_target}' not found in workspace for link '[{label}]({target})' — retaining relative link", file=sys.stderr)
+                return match.group(0)
+
         blob_url = f"{blob_base.rstrip('/')}/{norm_target}{fragment}"
         return f"[{label}]({blob_url})"
 
     pattern = r'\[([^\]]+)\]\(([^)]+)\)'
-    return re.sub(r'\[([^\]]+)\]\(([^)]+)\)', replace_link, content)
+    content = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', replace_link, content)
+
+    # Explicit Issue Hyperlinks in Task Lists (#224) & Unregistered Reference Guard (#222)
+    tracker_rules = rules.get("tracker_rules", {}) if rules else {}
+    placeholder = tracker_rules.get("issue_id_placeholder", "#[IssueID]")
+
+    def replace_task_list_issue_ref(match):
+        indent = match.group("indent")
+        issue_id_str = match.group("id")
+        rest = match.group("rest")
+        
+        issue_num = int(issue_id_str) if issue_id_str.isdigit() else issue_id_str
+        if known_issue_ids is not None:
+            if issue_num not in known_issue_ids and issue_id_str not in known_issue_ids:
+                print(f"  [Warning] Unregistered issue reference #{issue_id_str} not found in tracker registry — reverting to placeholder {placeholder}", file=sys.stderr)
+                return f"{indent}{placeholder}{rest}"
+
+        issue_url = get_issue_web_url(issue_num, rules=rules, workspace_dir=workspace_dir)
+        if issue_url:
+            return f"{indent}[#{issue_id_str}]({issue_url}){rest}"
+        return match.group(0)
+
+    task_list_pattern = r'^(?P<indent>\s*-\s*\[[ xX]\]\s*)#(?P<id>\d+)(?P<rest>(?:[^\d].*|\s*)$)'
+    content = re.sub(task_list_pattern, replace_task_list_issue_ref, content, flags=re.MULTILINE)
+
+    return content
+
 
 
 def sanitize_mermaid_diagrams(content):
@@ -2788,7 +2927,7 @@ def apply_structural_label(issue_num, issue_type, rules=None, issue_record=None,
 
 
 def sync_issue_body_to_tracker(issue_num, filepath, issue_type="Feature", rules=None,
-                               issue_record=None, provider_adapter=None):
+                               issue_record=None, provider_adapter=None, known_issue_ids=None):
     """Push the specification to its tracker issue: body, title (#315) and label (#313).
 
     `issue_record` is the tracker's own payload for this issue, when the caller has it.
@@ -2804,7 +2943,7 @@ def sync_issue_body_to_tracker(issue_num, filepath, issue_type="Feature", rules=
         
     workspace_dir = find_workspace_dir(filepath)
     content = sanitize_source_references(content, workspace_dir=workspace_dir, rules=rules)
-    content = expand_relative_links_for_tracker(content, filepath=filepath, rules=rules, workspace_dir=workspace_dir)
+    content = expand_relative_links_for_tracker(content, filepath=filepath, rules=rules, workspace_dir=workspace_dir, known_issue_ids=known_issue_ids)
     content = sanitize_latex_delimiters_for_tracker(content)
     content = sanitize_mermaid_diagrams(content)
     content = convert_frontmatter_to_table(content)
@@ -4071,7 +4210,13 @@ def reconcile_epic_checklists(filepath, child_features, child_stories, child_use
     
     def format_item(item_type, filename, title, issue_num):
         tracker_rules = rules.get("tracker_rules", {}) if rules else {}
-        ref_str = format_issue_reference(issue_num, tracker_rules) if (issue_num and issue_num != 0) else tracker_rules.get("issue_id_placeholder", "#[IssueID]")
+        if issue_num and issue_num != 0:
+            ref_str = format_issue_reference(issue_num, tracker_rules)
+            issue_url = get_issue_web_url(issue_num, rules=rules, workspace_dir=workspace_root)
+            if issue_url:
+                ref_str = f"[{ref_str}]({issue_url})"
+        else:
+            ref_str = tracker_rules.get("issue_id_placeholder", "#[IssueID]")
         
         if item_type == "feature":
             path_part = f"docs/features/{filename}.md"
@@ -4091,26 +4236,31 @@ def reconcile_epic_checklists(filepath, child_features, child_stories, child_use
     def sanitize_existing_item(item, title_map, child_list):
         tracker_rules = rules.get("tracker_rules", {}) if rules else {}
         placeholder = tracker_rules.get("issue_id_placeholder", "#[IssueID]")
-        if "#0" in item or "#[" in item:
-            title = None
-            m_title = re.search(r'\[([^\]]+)\]\(', item)
-            if m_title:
-                title = m_title.group(1)
-            else:
-                key = get_filename_key(item)
-                if key and child_list:
-                    for fn, t in child_list:
-                        if fn == key:
-                            title = t
-                            break
-            issue_num = None
-            if title:
-                issue_num = title_map.get(normalize_title(title, rules))
-            if issue_num and issue_num != 0:
-                ref_str = format_issue_reference(issue_num, tracker_rules)
-                item = re.sub(r'#0\b|#\[(?:IssueID|FeatureIssueID|UseCaseIssueID|StoryIssueID)\]', ref_str, item)
-            else:
-                item = re.sub(r'#0\b', placeholder, item)
+        title = None
+        m_title = re.search(r'\[([^\]]+)\]\(', item)
+        if m_title:
+            title = m_title.group(1)
+        else:
+            key = get_filename_key(item)
+            if key and child_list:
+                for fn, t in child_list:
+                    if fn == key:
+                        title = t
+                        break
+        issue_num = None
+        if title:
+            issue_num = title_map.get(normalize_title(title, rules))
+        if issue_num and issue_num != 0:
+            ref_str = format_issue_reference(issue_num, tracker_rules)
+            issue_url = get_issue_web_url(issue_num, rules=rules, workspace_dir=workspace_root)
+            if issue_url:
+                ref_str = f"[{ref_str}]({issue_url})"
+            item = re.sub(r'#0\b|#\[(?:IssueID|FeatureIssueID|UseCaseIssueID|StoryIssueID)\]|\[?#\d+\]?(?:\([^)]+\))?', ref_str, item, count=1)
+        else:
+            # Sibling is not registered on tracker yet (#223, #222)
+            # Revert any assumed #0 or #N or placeholder to canonical placeholder
+            if "#0" in item or "#[" in item or re.search(r'-\s*\[[ xX]\]\s*\[?#\d+\]?', item):
+                item = re.sub(r'#0\b|#\[(?:IssueID|FeatureIssueID|UseCaseIssueID|StoryIssueID)\]|\[?#\d+\]?(?:\([^)]+\))?', placeholder, item, count=1)
         return item
 
     final_features = []
@@ -4734,6 +4884,7 @@ def main():
                         sync_issue_body_to_tracker(
                             issue_num, filepath, issue_type="Epic", rules=rules,
                             issue_record=issue_dict[issue_num], provider_adapter=provider_adapter,
+                            known_issue_ids=set(issue_dict.keys()),
                         )
                         if completed and not is_already_resolved(issue_dict[issue_num], rules):
                             resolve_issue_on_tracker(
@@ -4776,6 +4927,7 @@ def main():
                         sync_issue_body_to_tracker(
                             issue_num, filepath, issue_type="Feature", rules=rules,
                             issue_record=issue_dict[issue_num], provider_adapter=provider_adapter,
+                            known_issue_ids=set(issue_dict.keys()),
                         )
                         if completed and not is_already_resolved(issue_dict[issue_num], rules):
                             resolve_issue_on_tracker(
@@ -4818,6 +4970,7 @@ def main():
                         sync_issue_body_to_tracker(
                             issue_num, filepath, issue_type="User Story", rules=rules,
                             issue_record=issue_dict[issue_num], provider_adapter=provider_adapter,
+                            known_issue_ids=set(issue_dict.keys()),
                         )
                         if completed and not is_already_resolved(issue_dict[issue_num], rules):
                             resolve_issue_on_tracker(
@@ -4860,6 +5013,7 @@ def main():
                         sync_issue_body_to_tracker(
                             issue_num, filepath, issue_type="Use Case", rules=rules,
                             issue_record=issue_dict[issue_num], provider_adapter=provider_adapter,
+                            known_issue_ids=set(issue_dict.keys()),
                         )
                         if completed and not is_already_resolved(issue_dict[issue_num], rules):
                             resolve_issue_on_tracker(

@@ -32,7 +32,24 @@ from reconcile_backlog import (
 
 class TestExpandRelativeLinksForTracker(unittest.TestCase):
     def setUp(self):
-        self.workspace_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.workspace_dir = self.temp_dir.name
+        os.makedirs(os.path.join(self.workspace_dir, ".pipeline"), exist_ok=True)
+        with open(os.path.join(self.workspace_dir, ".pipeline", "codebase_rules.json"), "w") as f:
+            f.write("{}")
+
+        for rel_file in [
+            "rules/sysml-ssot-completeness.md",
+            "docs/architecture/blueprints/DEAP_MODEL.sysml",
+            "docs/epics/epic-01.md",
+            "docs/features/feat-01.md",
+            "docs/features/feat-02.md",
+        ]:
+            full = os.path.join(self.workspace_dir, rel_file)
+            os.makedirs(os.path.dirname(full), exist_ok=True)
+            with open(full, "w", encoding="utf-8") as f:
+                f.write(f"# Mock {rel_file}\n")
+
         self.github_rules = {
             "meta": {"upstream_repository": "gintatkinson/DEAP01-spec-core"},
             "tracker_rules": {"provider": "github"}
@@ -41,6 +58,9 @@ class TestExpandRelativeLinksForTracker(unittest.TestCase):
             "meta": {"upstream_repository": "gintatkinson/DEAP01-spec-core"},
             "tracker_rules": {"provider": "gitlab"}
         }
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
 
     def test_expand_relative_links_github(self):
         content = (
@@ -143,38 +163,43 @@ class TestExpandRelativeLinksForTracker(unittest.TestCase):
             "## Requirements\n"
             "See [Rule](rules/sysml-ssot-completeness.md) and [Parent](../epics/epic-01.md).\n"
         )
-        with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".md", delete=False) as tf:
+        temp_path = os.path.join(self.workspace_dir, "docs", "features", "feat-01.md")
+        with open(temp_path, "w", encoding="utf-8") as tf:
             tf.write(spec_content)
-            temp_path = tf.name
 
-        try:
-            mock_provider = MagicMock()
-            mock_provider.edit_issue.return_value = True
-            mock_provider.edit_issue_title.return_value = True
-            mock_provider.add_label.return_value = True
+        mock_provider = MagicMock()
+        mock_provider.edit_issue.return_value = True
+        mock_provider.edit_issue_title.return_value = True
+        mock_provider.add_label.return_value = True
 
-            with patch("reconcile_backlog.get_current_branch", return_value="main"):
-                sync_issue_body_to_tracker(
-                    issue_num=101,
-                    filepath=temp_path,
-                    issue_type="Feature",
-                    rules=self.github_rules,
-                    provider_adapter=mock_provider
-                )
+        mock_remote_info = {
+            "raw": "https://github.com/gintatkinson/DEAP01-spec-core.git",
+            "is_gitlab": False,
+            "project_path": "gintatkinson/DEAP01-spec-core",
+            "server_url": "https://github.com",
+            "host": "github.com"
+        }
 
-            mock_provider.edit_issue.assert_called_once()
-            called_content = mock_provider.edit_issue.call_args[0][1]
-            self.assertIn(
-                "https://github.com/gintatkinson/DEAP01-spec-core/blob/main/rules/sysml-ssot-completeness.md",
-                called_content
+        with patch("reconcile_backlog.get_current_branch", return_value="main"), \
+             patch("reconcile_backlog.get_git_remote_info", return_value=mock_remote_info):
+            sync_issue_body_to_tracker(
+                issue_num=101,
+                filepath=temp_path,
+                issue_type="Feature",
+                rules=self.github_rules,
+                provider_adapter=mock_provider
             )
-            self.assertIn(
-                "https://github.com/gintatkinson/DEAP01-spec-core/blob/main/docs/epics/epic-01.md",
-                called_content
-            )
-        finally:
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
+
+        mock_provider.edit_issue.assert_called_once()
+        called_content = mock_provider.edit_issue.call_args[0][1]
+        self.assertIn(
+            "https://github.com/gintatkinson/DEAP01-spec-core/blob/main/rules/sysml-ssot-completeness.md",
+            called_content
+        )
+        self.assertIn(
+            "https://github.com/gintatkinson/DEAP01-spec-core/blob/main/docs/epics/epic-01.md",
+            called_content
+        )
 
 
 class TestReconcileBacklogDependencyGating(unittest.TestCase):
@@ -545,12 +570,25 @@ class TestGitLabProviderParity(unittest.TestCase):
     """
 
     def setUp(self):
-        self.workspace_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.workspace_dir = self.temp_dir.name
+        os.makedirs(os.path.join(self.workspace_dir, ".pipeline"), exist_ok=True)
+        with open(os.path.join(self.workspace_dir, ".pipeline", "codebase_rules.json"), "w") as f:
+            f.write("{}")
+
+        for rel_file in [
+            "docs/architecture/blueprints/DEAP_MODEL.sysml",
+            "docs/epics/epic-01.md",
+        ]:
+            full = os.path.join(self.workspace_dir, rel_file)
+            os.makedirs(os.path.dirname(full), exist_ok=True)
+            with open(full, "w", encoding="utf-8") as f:
+                f.write(f"# Mock {rel_file}\n")
+
         self.gitlab_rules = {
             "meta": {"upstream_repository": "gintatkinson/DEAP01-spec-core"},
             "tracker_rules": copy.deepcopy(DEFAULT_GITLAB_TRACKER_RULES)
         }
-        self.temp_dir = tempfile.TemporaryDirectory()
 
     def tearDown(self):
         self.temp_dir.cleanup()

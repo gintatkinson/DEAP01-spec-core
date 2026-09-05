@@ -177,8 +177,9 @@ For each Bounded Context, partition its subtree into cohesive functional feature
     - [ ] #[IssueID] - [User Story Title](../user-stories/us-XX-name.md) (semantic linkage justification)
 
     > [!IMPORTANT]
-    > **EXPLICIT LINKAGE JUSTIFICATION MANDATE**
-    > Subagents MUST provide concise, context-specific semantic justifications for all checklist items. Omitting justifications or leaving unreplaced placeholder text in generated Epic specifications is strictly prohibited and will trigger validator rejection.
+    > **MANDATORY CHECKLIST PLACEHOLDER DISCIPLINE & EXPLICIT LINKAGE JUSTIFICATION**
+    > - **Placeholder Discipline (#223)**: Until a sibling Feature, Use Case, or User Story is registered with the issue tracker and assigned a live issue number, checklist items in Epic documents MUST carry the literal placeholder `#[IssueID]`. Authors and subagents are strictly forbidden from guessing, predicting, assuming, or hardcoding future issue numbers. Only live issue numbers returned directly from tracker registration commands (`gh issue create` / `glab issue create`) or live tracker queries may replace `#[IssueID]`.
+    > - **Semantic Justification**: Subagents MUST provide concise, context-specific semantic justifications for all checklist items. Omitting justifications or leaving unreplaced placeholder text in generated Epic specifications is strictly prohibited and will trigger validator rejection.
 
 
     ## 3. Architecture
@@ -449,8 +450,9 @@ For each Bounded Context, partition its subtree into cohesive functional feature
         ```
 
 5. **Epic Backlog Assembly:**
-   - Now that you possess the actual live Issue IDs for all extracted features, inject them into the Epic's checklist.
-   - Ensure the body of the Epic lists its child features as a tasklist referencing the Issue ID and canonical relative markdown links to the feature document (e.g., `../features/feat-01.md`). Link expansion to web blob URLs for tracker UI navigation is handled automatically by the backlog reconciler during tracker payload synchronization.
+   - For extracted features that have been registered on the tracker and returned live Issue IDs, inject their live Issue IDs into the Epic's checklist.
+   - For any sibling specification (Feature, Use Case, or User Story) not yet registered on the tracker, the checklist item MUST strictly retain the `#[IssueID]` placeholder. Hardcoding, predicting, or assuming provisional future issue numbers is strictly forbidden (#223).
+   - Ensure the body of the Epic lists its child features as a tasklist referencing the Issue ID (or `#[IssueID]`) and canonical relative markdown links to the feature document (e.g., `../features/feat-01.md`). Link expansion to web blob URLs and explicit issue hyperlinks for tracker UI navigation is handled automatically by the backlog reconciler during tracker payload synchronization (#45, #224).
 
 6. **Epic Backlog Creation LAST:**
    - Register the Epic specification containing the fully resolved tasklist with the active tracker provider.
