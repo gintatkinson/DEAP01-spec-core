@@ -13,7 +13,14 @@ import re
 import argparse
 import json
 import shutil
-from typing import Set, List
+import ssl
+import urllib.request
+import urllib.parse
+import urllib.error
+import subprocess
+import netrc
+import time
+from typing import Set, List, Dict, Optional, Any, Tuple
 
 try:
     from .core.workspace import WorkspaceRepository, extract_metadata_from_content
@@ -122,7 +129,7 @@ def assert_no_mock_cli(workspace_dir: str = None):
     workspace_dir = os.path.abspath(workspace_dir)
     scratch_dir = os.path.abspath(os.path.join(workspace_dir, "scratch"))
     scratch_bin = os.path.join(scratch_dir, "bin")
-    forbidden_cmds = ["gh", "git", "flutter"]
+    forbidden_cmds = ["gh", "glab", "git", "flutter"]
 
     for cmd in forbidden_cmds:
         binary_path = os.path.join(scratch_bin, cmd)
@@ -138,34 +145,370 @@ def assert_no_mock_cli(workspace_dir: str = None):
                 sys.exit(1)
 
 
-def get_open_feature_issues(workspace_dir: str = None):
+def parse_git_remote_url(remote_url: str) -> Dict[str, Any]:
+    """
+    Parse a git remote origin URL into its components:
+    - raw: raw URL string
+    - is_gitlab: True if domain contains 'gitlab'
+    - project_path: repository path (e.g. 'gintatkinson/DEAP01-spec-core' or 'group/subgroup/project')
+    - server_url: base server URL (e.g. 'https://gitlab.com' or 'https://gitlab.internal.corp')
+    - host: domain host name (e.g. 'gitlab.com' or 'github.com')
+    """
+    if not remote_url:
+        return {"raw": "", "is_gitlab": False, "project_path": None, "server_url": None, "host": None}
+    
+    clean_url = remote_url.strip()
+    if clean_url.endswith(".git"):
+        clean_url = clean_url[:-4]
+        
+    # Check if HTTP(S) / SSH URL with scheme (e.g. https://gitlab.com/owner/repo or ssh://git@gitlab.com/owner/repo)
+    if "://" in clean_url:
+        parsed = urllib.parse.urlparse(clean_url)
+        path = parsed.path.lstrip("/")
+        netloc = parsed.netloc
+        host = netloc.split("@")[-1].split(":")[0]
+        scheme = parsed.scheme if parsed.scheme in ("http", "https") else "https"
+        server_url = f"{scheme}://{netloc.split('@')[-1]}"
+        is_gitlab = "gitlab" in host.lower()
+        return {
+            "raw": remote_url,
+            "is_gitlab": is_gitlab,
+            "project_path": path,
+            "server_url": server_url,
+            "host": host
+        }
+    
+    # Check if SCP-style SSH URL (e.g. git@gitlab.com:owner/repo or git@gitlab.internal.corp:group/sub/repo)
+    scp_match = re.match(r'^(?:[^@]+@)?([^:]+):(.+)$', clean_url)
+    if scp_match:
+        host = scp_match.group(1)
+        path = scp_match.group(2).lstrip("/")
+        is_gitlab = "gitlab" in host.lower()
+        server_url = f"https://{host}"
+        return {
+            "raw": remote_url,
+            "is_gitlab": is_gitlab,
+            "project_path": path,
+            "server_url": server_url,
+            "host": host
+        }
+        
+    # Fallback parsing
+    parts = clean_url.split("/")
+    project_path = f"{parts[-2]}/{parts[-1]}" if len(parts) >= 2 else clean_url
+    is_gitlab = "gitlab" in clean_url.lower()
+    return {
+        "raw": remote_url,
+        "is_gitlab": is_gitlab,
+        "project_path": project_path,
+        "server_url": "https://gitlab.com" if is_gitlab else "https://github.com",
+        "host": "gitlab.com" if is_gitlab else "github.com"
+    }
+
+
+def get_git_remote_info(workspace_dir: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    if not workspace_dir:
+        workspace_dir = os.getcwd()
+    try:
+        res = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            cwd=workspace_dir,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=10
+        )
+        url = res.stdout.strip()
+        return parse_git_remote_url(url)
+    except Exception:
+        return None
+
+
+def detect_tracker_provider(cli_provider: Optional[str] = None, rules: Optional[Any] = None, workspace_dir: Optional[str] = None) -> str:
+    if cli_provider and cli_provider.lower() != "auto":
+        return cli_provider.lower()
+        
+    env_provider = os.environ.get("TRACKER_PROVIDER") or os.environ.get("PROVIDER")
+    if env_provider and env_provider.lower() != "auto":
+        return env_provider.lower()
+
+    if rules is not None:
+        configured = None
+        if hasattr(rules, "tracker_rules") and isinstance(rules.tracker_rules, dict):
+            configured = rules.tracker_rules.get("provider")
+        elif isinstance(rules, dict):
+            configured = rules.get("tracker_rules", {}).get("provider")
+        if configured and str(configured).lower() not in ("auto", "github"):
+            return str(configured).lower()
+
+    # Detect from Jira environment variables
+    if (
+        os.environ.get("JIRA_SERVER_URL")
+        or os.environ.get("JIRA_URL")
+        or os.environ.get("JIRA_PROJECT_KEY")
+        or os.environ.get("JIRA_PROJECT")
+        or os.environ.get("JIRA_API_TOKEN")
+        or os.environ.get("JIRA_PAT")
+        or os.environ.get("JIRA_TOKEN")
+    ):
+        return "jira"
+
+    # Detect from CI environment variables
+    if os.environ.get("GITLAB_CI") or os.environ.get("CI_SERVER_URL") or os.environ.get("CI_PROJECT_PATH"):
+        return "gitlab"
+    if os.environ.get("GITHUB_ACTIONS") or os.environ.get("GITHUB_REPOSITORY"):
+        return "github"
+
+    # Detect from git remote
+    remote_info = get_git_remote_info(workspace_dir)
+    if remote_info and remote_info.get("is_gitlab"):
+        return "gitlab"
+
+    # Fallback to configured provider in rules or "github"
+    if rules is not None:
+        configured = None
+        if hasattr(rules, "tracker_rules") and isinstance(rules.tracker_rules, dict):
+            configured = rules.tracker_rules.get("provider")
+        elif isinstance(rules, dict):
+            configured = rules.get("tracker_rules", {}).get("provider")
+        if configured:
+            return str(configured).lower()
+            
+    return "github"
+
+
+def _fetch_gitlab_issues(workspace_dir: Optional[str] = None, rules: Optional[Any] = None) -> Optional[List[Dict[str, Any]]]:
+    """
+    Fetch open feature issues from GitLab via glab CLI or GitLab REST API v4.
+    """
+    if os.environ.get("OFFLINE"):
+        return None
+
+    try:
+        timeout = float(os.environ.get("PARITY_AUDITOR_GL_TIMEOUT", os.environ.get("PARITY_AUDITOR_GH_TIMEOUT", "10.0")))
+    except (ValueError, TypeError):
+        timeout = 10.0
+
+    tracker_rules = {}
+    if rules is not None:
+        if hasattr(rules, "tracker_rules") and isinstance(rules.tracker_rules, dict):
+            tracker_rules = rules.tracker_rules
+        elif isinstance(rules, dict):
+            tracker_rules = rules.get("tracker_rules", {})
+
+    target_feature_labels = {"feature", "type::feature"}
+    configured_feat_label = tracker_rules.get("labels", {}).get("feature")
+    if configured_feat_label:
+        target_feature_labels.add(str(configured_feat_label).lower())
+
+    keywords = ["defect", "bug", "repro", "tooling"]
+
+    def _is_feature_issue(issue: Dict[str, Any]) -> bool:
+        title = issue.get("title", "")
+        if any(kw in title.lower() for kw in keywords):
+            return False
+        raw_labels = issue.get("labels", [])
+        if raw_labels:
+            label_names = set()
+            for lbl in raw_labels:
+                if isinstance(lbl, str):
+                    label_names.add(lbl.lower())
+                elif isinstance(lbl, dict) and "name" in lbl:
+                    label_names.add(str(lbl["name"]).lower())
+            return any(l in target_feature_labels for l in label_names)
+        return True
+
+    # 1. Attempt glab CLI if installed
+    if shutil.which("glab"):
+        try:
+            cmd = ["glab", "issue", "list", "--all", "--per-page", "1000", "--output", "json"]
+            res = subprocess.run(
+                cmd,
+                cwd=workspace_dir,
+                capture_output=True,
+                text=True,
+                timeout=timeout
+            )
+            if res.returncode == 0 and res.stdout.strip():
+                issues = json.loads(res.stdout)
+                open_feature_issues = []
+                for issue in issues:
+                    if "iid" in issue and "number" not in issue:
+                        issue["number"] = issue["iid"]
+                    state = str(issue.get("state", "")).lower()
+                    if state in ("opened", "open") and _is_feature_issue(issue):
+                        open_feature_issues.append(issue)
+                return open_feature_issues
+            else:
+                if res.returncode != 0:
+                    print(f"ERROR: glab CLI exited with code {res.returncode}: {res.stderr.strip()}", file=sys.stderr)
+        except subprocess.TimeoutExpired:
+            print(f"ERROR: glab CLI timed out after {timeout} seconds.", file=sys.stderr)
+        except Exception as e:
+            print(f"ERROR: Failed to run glab CLI: {e}", file=sys.stderr)
+
+    # 2. Direct GitLab REST API v4 using urllib.request
+    server_url = None
+    for env_var in ("GITLAB_URL", "CI_SERVER_URL", "GL_SERVER_URL"):
+        val = os.environ.get(env_var)
+        if val and val.strip():
+            server_url = val.strip().rstrip("/")
+            break
+    if not server_url:
+        server_url = tracker_rules.get("server_url")
+    if not server_url:
+        remote_info = get_git_remote_info(workspace_dir)
+        if remote_info and remote_info.get("server_url") and remote_info.get("is_gitlab"):
+            server_url = remote_info["server_url"]
+    if not server_url:
+        server_url = "https://gitlab.com"
+    server_url = server_url.rstrip("/")
+
+    raw_project_id = None
+    for env_var in ("CI_PROJECT_PATH", "CI_PROJECT_ID", "GITLAB_PROJECT", "GL_PROJECT"):
+        val = os.environ.get(env_var)
+        if val and val.strip():
+            raw_project_id = val.strip()
+            break
+    if not raw_project_id:
+        raw_project_id = tracker_rules.get("project_id")
+    if not raw_project_id:
+        remote_info = get_git_remote_info(workspace_dir)
+        if remote_info and remote_info.get("project_path"):
+            raw_project_id = remote_info["project_path"]
+    if not raw_project_id:
+        env_repo = os.environ.get("UPSTREAM_REPOSITORY") or os.environ.get("GIT_REMOTE_ORIGIN")
+        if env_repo:
+            raw_project_id = env_repo.strip()
+
+    if not raw_project_id:
+        print("ERROR: GitLab project path/ID could not be resolved.", file=sys.stderr)
+        return None
+
+    raw_str = str(raw_project_id).strip()
+    if raw_str.isdigit():
+        project_id_encoded = raw_str
+    else:
+        project_id_encoded = urllib.parse.quote(raw_str, safe="")
+
+    # Resolve token
+    token = None
+    token_type = "PRIVATE-TOKEN"
+    for var in ("GITLAB_TOKEN", "GL_TOKEN"):
+        val = os.environ.get(var)
+        if val and val.strip():
+            token = val.strip()
+            token_type = "PRIVATE-TOKEN"
+            break
+    if not token:
+        job_token = os.environ.get("CI_JOB_TOKEN")
+        if job_token and job_token.strip():
+            token = job_token.strip()
+            token_type = "JOB-TOKEN"
+    if not token and shutil.which("glab"):
+        try:
+            res = subprocess.run(["glab", "auth", "token"], capture_output=True, text=True, timeout=5)
+            if res.returncode == 0 and res.stdout.strip():
+                token = res.stdout.strip()
+                token_type = "PRIVATE-TOKEN"
+        except Exception:
+            pass
+    if not token:
+        try:
+            hostname = urllib.parse.urlparse(server_url).hostname or "gitlab.com"
+            auth = netrc.netrc().authenticators(hostname)
+            if auth and auth[2] and auth[2].strip():
+                token = auth[2].strip()
+                token_type = "PRIVATE-TOKEN"
+        except Exception:
+            pass
+
+    if not token:
+        print("[Notice] No GitLab authentication token found (GITLAB_TOKEN, GL_TOKEN, CI_JOB_TOKEN). Operating in offline/local specification mode.", file=sys.stderr)
+        return None
+
+    ca_cert_path = os.environ.get("GITLAB_CA_CERT_PATH") or os.environ.get("SSL_CERT_FILE")
+    ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+    if ca_cert_path and os.path.isfile(ca_cert_path):
+        try:
+            ctx.load_verify_locations(cafile=ca_cert_path)
+        except Exception as e:
+            print(f"Warning: Failed to load CA certificate from {ca_cert_path}: {e}", file=sys.stderr)
+
+    all_issues = []
+    page = 1
+
+    try:
+        while True:
+            params = {
+                "scope": "all",
+                "state": "opened",
+                "per_page": 100,
+                "page": page,
+            }
+            url = f"{server_url}/api/v4/projects/{project_id_encoded}/issues?{urllib.parse.urlencode(params)}"
+            headers = {
+                "Accept": "application/json",
+                "User-Agent": "DEAP-Parity-Auditor/1.0",
+                token_type: token
+            }
+            req = urllib.request.Request(url=url, headers=headers, method="GET")
+            with urllib.request.urlopen(req, context=ctx, timeout=timeout) as resp:
+                raw_body = resp.read().decode("utf-8")
+                issues = json.loads(raw_body) if raw_body.strip() else []
+                resp_headers = {k: v for k, v in resp.headers.items()}
+
+            if not isinstance(issues, list):
+                break
+
+            for issue in issues:
+                if "iid" in issue and "number" not in issue:
+                    issue["number"] = issue["iid"]
+                if _is_feature_issue(issue):
+                    all_issues.append(issue)
+
+            next_page_hdr = resp_headers.get("X-Next-Page") or resp_headers.get("x-next-page")
+            if next_page_hdr and str(next_page_hdr).strip() and str(next_page_hdr).strip() != "0":
+                page = int(next_page_hdr)
+            elif len(issues) == 100:
+                page += 1
+            else:
+                break
+
+        return all_issues
+    except Exception as e:
+        print(f"ERROR: Failed to fetch GitLab issues via REST API v4: {e}", file=sys.stderr)
+        return None
+
+
+def _fetch_github_issues(workspace_dir: Optional[str] = None, rules: Optional[Any] = None) -> Optional[List[Dict[str, Any]]]:
     """
     Fetch open feature issues from GitHub via ``gh issue list``.
-
-    Filters out issues whose title contains known defect/bug/tooling keywords.
-
-    Returns:
-        List of issue dicts with 'number' and 'title' keys, or None when the
-        ``gh`` CLI is unavailable, offline, returns a non-zero exit code, or times out.
     """
-    assert_no_mock_cli(workspace_dir)
-
     if os.environ.get("OFFLINE") or not shutil.which("gh"):
         return None
 
-    import subprocess
-    import json
     try:
         timeout = float(os.environ.get("PARITY_AUDITOR_GH_TIMEOUT", "3.0"))
     except (ValueError, TypeError):
         timeout = 3.0
 
+    tracker_rules = {}
+    if rules is not None:
+        if hasattr(rules, "tracker_rules") and isinstance(rules.tracker_rules, dict):
+            tracker_rules = rules.tracker_rules
+        elif isinstance(rules, dict):
+            tracker_rules = rules.get("tracker_rules", {})
+
+    feature_label = tracker_rules.get("labels", {}).get("feature", "feature")
+
     try:
         result = subprocess.run(
-            ["gh", "issue", "list", "--state", "open", "--label", "feature", "--json", "number,title"],
+            ["gh", "issue", "list", "--state", "open", "--label", feature_label, "--json", "number,title"],
             capture_output=True,
             text=True,
-            timeout=timeout
+            timeout=timeout,
+            cwd=workspace_dir
         )
         if result.returncode == 0:
             issues = json.loads(result.stdout)
@@ -183,6 +526,29 @@ def get_open_feature_issues(workspace_dir: str = None):
     except Exception as e:
         print(f"ERROR: Failed to run gh CLI to fetch open feature issues: {e}", file=sys.stderr)
         return None
+
+
+def get_open_feature_issues(workspace_dir: str = None, provider: str = None, rules: Any = None):
+    """
+    Fetch open feature issues from the configured issue tracker (GitHub or GitLab).
+
+    Determines provider from ``provider`` argument, ``rules`` configuration,
+    environment variables, or git remote host.
+
+    Filters out issues whose title contains known defect/bug/tooling keywords.
+
+    Returns:
+        List of issue dicts with 'number' and 'title' keys, or None when the
+        provider is unavailable, offline, returns a non-zero exit code, or times out.
+    """
+    assert_no_mock_cli(workspace_dir)
+
+    effective_provider = detect_tracker_provider(cli_provider=provider, rules=rules, workspace_dir=workspace_dir)
+
+    if effective_provider == "gitlab":
+        return _fetch_gitlab_issues(workspace_dir=workspace_dir, rules=rules)
+    else:
+        return _fetch_github_issues(workspace_dir=workspace_dir, rules=rules)
 
 def parse_ignore_issues(ignore_str: str) -> set:
     ignored = set()
@@ -288,6 +654,7 @@ def _main_impl():
     parser.add_argument("--synthesize-coverage-digest", action="store_true", help="Synthesize COVERAGE_DIGEST.md report")
     parser.add_argument("--synthesize-witness-registry", action="store_true", help="Synthesize OBLIGATION_WITNESS_REGISTRY.md report")
     parser.add_argument("--output-dir", help="Output directory for synthesized documents (default: docs/conops/ or docs/research/)")
+    parser.add_argument("--provider", help="Issue tracker provider (e.g. github, gitlab, jira)")
     
     args = parser.parse_args()
     if args.schema_only:
@@ -475,14 +842,15 @@ def _main_impl():
         else:
             ignored_set.update(parse_ignore_issues(str(rule_ignore)))
 
-    open_issues = get_open_feature_issues(workspace_dir)
+    open_issues = get_open_feature_issues(workspace_dir, provider=args.provider, rules=rules)
+    provider_name = detect_tracker_provider(cli_provider=args.provider, rules=rules, workspace_dir=workspace_dir).capitalize()
     if open_issues is None:
         if not args.allow_missing_specs:
             has_failed = True
-            print("[!] ERROR: Could not fetch open feature issues from GitHub while --no-allow-missing-specs is enabled.", file=sys.stderr)
+            print(f"[!] ERROR: Could not fetch open feature issues from {provider_name} while --no-allow-missing-specs is enabled.", file=sys.stderr)
             open_issues = []
         else:
-            print("[!] WARNING: Could not fetch open feature issues from GitHub. Cross-reference verification skipped.", file=sys.stderr)
+            print(f"[!] WARNING: Could not fetch open feature issues from {provider_name}. Cross-reference verification skipped.", file=sys.stderr)
             open_issues = []
 
     if ignored_set:
