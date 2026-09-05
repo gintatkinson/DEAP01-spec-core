@@ -12,7 +12,7 @@ Enforces:
 3. Exactly 5 Whys in Section 2 (`1. **Why ...?** Because ...`).
 4. Section 1 three-bullet structure (`**File**:`, `**Pillar**:`, `**Symptom**:`)
 5. Section 4 Mermaid diagram validation for Critical/Important findings (offline syntax check)
-   or `N/A — ` declaration for Suggestion/Nitpick findings.
+   or `N/A -- ` declaration for Suggestion/Nitpick findings.
 6. Balanced code blocks.
 7. No ASCII art UML arrows outside code fences.
 
@@ -148,10 +148,10 @@ def validate_defect_body(
                     for f in mermaid_findings:
                         errors.append(f"Mermaid syntax error in Section 4: {f}")
         elif severity in ("Suggestion", "Nitpick"):
-            has_na = bool(re.search(r"N/A\s*[-—]", sec4, re.IGNORECASE))
+            has_na = bool(re.search(r"N/A\s*(?:--|-)", sec4, re.IGNORECASE))
             if not has_na:
                 errors.append(
-                    f"Section 4 must declare 'N/A — {severity} severity.' for {severity} findings."
+                    f"Section 4 must declare 'N/A -- {severity} severity.' for {severity} findings."
                 )
 
     # Check 9: Balanced code blocks

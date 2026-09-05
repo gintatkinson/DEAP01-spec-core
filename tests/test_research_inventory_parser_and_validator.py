@@ -75,7 +75,7 @@ SAMPLE_VALID_RESEARCH_INVENTORY = r"""
 ## 2. Normative Standards & Baseline Documents Inventory
 | Standard / Baseline ID | Issuing Body | Title | Applicable Clauses | Obligation Category | Declared Total | Clause Citation |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| ISO/IEC/IEEE 29148:2018 | ISO/IEC/IEEE | Systems and Software Engineering — Requirements Engineering | §6.4.2 ConOps, §6.4.3 OpsCon, §8.4 System Requirements | Requirements Engineering | 3 | ISO/IEC/IEEE 29148:2018 §6.4.2, §6.4.3, §8.4 |
+| ISO/IEC/IEEE 29148:2018 | ISO/IEC/IEEE | Systems and Software Engineering -- Requirements Engineering | §6.4.2 ConOps, §6.4.3 OpsCon, §8.4 System Requirements | Requirements Engineering | 3 | ISO/IEC/IEEE 29148:2018 §6.4.2, §6.4.3, §8.4 |
 | NATO STANAG 4586 | NATO | Standard Interfaces of Autonomous Control Systems | Interoperability Profiles & DLI/VCI Interfaces | Interoperability | 2 | STANAG 4586 Ed. 4 §3.2, §4.1 |
 | RTCA DO-178C / DO-254 | RTCA / EUROCAE | Software and Electronic Hardware Considerations in Airborne Systems | §6.3 Software Architecture, §11.0 Software Life Cycle Data | Safety Assurance | 2 | DO-178C §6.3, DO-254 §11.0 |
 | MIL-STD-882E | DoD | System Safety | Task 201 Preliminary Hazard Analysis, Task 205 System Hazard Analysis | Hazard Analysis | 2 | MIL-STD-882E Task 201, Task 205 |
@@ -189,7 +189,7 @@ class TestResearchInventoryParser(unittest.TestCase):
         std0 = doc.standards[0]
         self.assertEqual(std0.standard_id, "ISO/IEC/IEEE 29148:2018")
         self.assertEqual(std0.issuing_body, "ISO/IEC/IEEE")
-        self.assertEqual(std0.title, "Systems and Software Engineering — Requirements Engineering")
+        self.assertEqual(std0.title, "Systems and Software Engineering -- Requirements Engineering")
         self.assertEqual(std0.applicable_clauses, "§6.4.2 ConOps, §6.4.3 OpsCon, §8.4 System Requirements")
         self.assertEqual(std0.obligation_category, "Requirements Engineering")
         self.assertEqual(std0.declared_total, 3)

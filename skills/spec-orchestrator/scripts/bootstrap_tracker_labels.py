@@ -604,7 +604,7 @@ def bootstrap_labels(
     if failures:
         print(
             f"\n{len(failures)} label(s) could not be provisioned. The just-in-time "
-            "path in create_issue.sh remains as a fallback, so filing still works — "
+            "path in create_issue.sh remains as a fallback, so filing still works -- "
             "but the tracker's label filter will stay incomplete until this succeeds.",
             file=sys.stderr,
         )

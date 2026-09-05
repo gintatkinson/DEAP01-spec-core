@@ -9,7 +9,7 @@ description = "A modular package to verify model coverage and UML compliance"
 # Raised from >=3.9 to >=3.12 by issue #294. 3.9 reached end-of-life in October
 # 2025. Verified empirically before raising: both suites pass under 3.12.13 and
 # `pip install -e` succeeds against it. Note the machine's bare `python3` is
-# still 3.9.6 — homebrew python@3.12 sits alongside it — so use the explicit
+# still 3.9.6 -- homebrew python@3.12 sits alongside it -- so use the explicit
 # interpreter. requires-python is the only declaration that enforces this;
 # pytest, ruff and the scripts do not read it.
 requires-python = ">=3.12"

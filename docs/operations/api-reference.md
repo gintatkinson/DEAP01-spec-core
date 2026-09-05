@@ -14,9 +14,9 @@
 **File:** `lib/domain/data_source.dart`
 
 The swappable backend interface. Implementations:
-- `SqliteDataSource` — local SQLite database
-- `FirebaseDataSource` — Firebase Firestore
-- `GrpcDataSource` — gRPC-based backend
+- `SqliteDataSource` -- local SQLite database
+- `FirebaseDataSource` -- Firebase Firestore
+- `GrpcDataSource` -- gRPC-based backend
 
 **Methods:**
 
@@ -37,26 +37,26 @@ The swappable backend interface. Implementations:
 **File:** `lib/domain/type_descriptor.dart`
 
 Describes one object type. Contains:
-- `typeName`, `displayName`, `iconName` — identity
-- `fields` — list of `FieldDescriptor`
-- `childTypes` — hierarchy children (tree)
-- `relatedTypes` — associated data (tabs)
-- `parentTypes` — reverse hierarchy
+- `typeName`, `displayName`, `iconName` -- identity
+- `fields` -- list of `FieldDescriptor`
+- `childTypes` -- hierarchy children (tree)
+- `relatedTypes` -- associated data (tabs)
+- `parentTypes` -- reverse hierarchy
 
 ### FieldDescriptor
 
 Describes one field of a type. Contains:
-- `key`, `label`, `type` — identity
-- `sectionLabel`, `sectionOrder` — UI grouping
-- `minValue`, `maxValue`, `pattern`, `required` — validation
-- `enumOptions`, `defaultValue`, `inputFormatters` — input behavior
+- `key`, `label`, `type` -- identity
+- `sectionLabel`, `sectionOrder` -- UI grouping
+- `minValue`, `maxValue`, `pattern`, `required` -- validation
+- `enumOptions`, `defaultValue`, `inputFormatters` -- input behavior
 
 ### TypeRelationDescriptor
 
 Describes a relationship between two types. Contains:
-- `relationName` — semantic name (e.g. "contains", "belongs_to")
-- `childTypeName` — the related type's name
-- `childLabel` — human-readable plural label for UI tabs
+- `relationName` -- semantic name (e.g. "contains", "belongs_to")
+- `childTypeName` -- the related type's name
+- `childLabel` -- human-readable plural label for UI tabs
 
 ## Widgets
 

@@ -17,7 +17,7 @@ The report further diagnoses the 5 systemic root cause mechanisms explaining why
 
 ## 1. Exhaustive 64-Specification Coverage Inventory
 
-### Category 1: Feature Specifications (`docs/features/*.md`) — 19 Documents
+### Category 1: Feature Specifications (`docs/features/*.md`) -- 19 Documents
 
 | # | Specification Document | Feature / Topic Title | Implemented Scope | Missing / Un-implemented Scope | Coverage % |
 | :---: | :--- | :--- | :--- | :--- | :---: |
@@ -43,7 +43,7 @@ The report further diagnoses the 5 systemic root cause mechanisms explaining why
 
 ---
 
-### Category 2: System Use Cases (`docs/use-cases/*.md`) — 6 Documents
+### Category 2: System Use Cases (`docs/use-cases/*.md`) -- 6 Documents
 
 | # | Specification Document | Use Case Title | Implemented Scope | Missing / Un-implemented Scope | Coverage % |
 | :---: | :--- | :--- | :--- | :--- | :---: |
@@ -56,7 +56,7 @@ The report further diagnoses the 5 systemic root cause mechanisms explaining why
 
 ---
 
-### Category 3: System Requirements (`docs/requirements/*.md`) — 2 Documents
+### Category 3: System Requirements (`docs/requirements/*.md`) -- 2 Documents
 
 | # | Specification Document | Requirements Title | Implemented Scope | Missing / Un-implemented Scope | Coverage % |
 | :---: | :--- | :--- | :--- | :--- | :---: |
@@ -65,7 +65,7 @@ The report further diagnoses the 5 systemic root cause mechanisms explaining why
 
 ---
 
-### Category 4: Architectural & Design Specifications (`docs/designs/`, `docs/architecture/`, root `docs/feat-*.md`) — 27 Documents
+### Category 4: Architectural & Design Specifications (`docs/designs/`, `docs/architecture/`, root `docs/feat-*.md`) -- 27 Documents
 
 | # | Specification Document | Solution / Blueprint Title | Implemented Scope | Missing / Un-implemented Scope | Coverage % |
 | :---: | :--- | :--- | :--- | :--- | :---: |
@@ -101,7 +101,7 @@ The report further diagnoses the 5 systemic root cause mechanisms explaining why
 
 ---
 
-### Category 5: Operational Specifications (`docs/operations/*.md`) — 6 Documents
+### Category 5: Operational Specifications (`docs/operations/*.md`) -- 6 Documents
 
 | # | Specification Document | Operations Title | Implemented Scope | Missing / Un-implemented Scope | Coverage % |
 | :---: | :--- | :--- | :--- | :--- | :---: |
@@ -114,7 +114,7 @@ The report further diagnoses the 5 systemic root cause mechanisms explaining why
 
 ---
 
-### Category 6: Process Specifications (`docs/process/*.md`, root `docs/sprint-*.md`) — 2 Documents
+### Category 6: Process Specifications (`docs/process/*.md`, root `docs/sprint-*.md`) -- 2 Documents
 
 | # | Specification Document | Process Title | Implemented Scope | Missing / Un-implemented Scope | Coverage % |
 | :---: | :--- | :--- | :--- | :--- | :---: |
@@ -150,7 +150,7 @@ The root causes stem from five structural and operational friction points:
 * **Impact**: Subagents implementing a User Story read the Sequence Diagram and BDD Given-When-Then scenarios. They implement the exact messages present in the Sequence Diagram, leaving the remaining 80% of un-exercised methods declared in the Class Diagram unimplemented.
 
 ### 4. Absence of Pre-Completion Parity Auditor Gates for Subagents
-* **Mechanism**: Subagents validate their work using build commands (`flutter test`, `flutter analyze`, `pytest`). These compilers and test runners check for syntax correctness, lint rules, and passing unit tests—not for missing UML methods or un-implemented spec sections.
+* **Mechanism**: Subagents validate their work using build commands (`flutter test`, `flutter analyze`, `pytest`). These compilers and test runners check for syntax correctness, lint rules, and passing unit tests--not for missing UML methods or un-implemented spec sections.
 * **Impact**: `parity_auditor` was executed post-hoc at the project coordinator level rather than as a mandatory step in the subagent's local verification loop. The subagent believes it achieved 100% success because all build/test gates passed.
 
 ### 5. Role Boundary Locking & Task Scope Boundaries

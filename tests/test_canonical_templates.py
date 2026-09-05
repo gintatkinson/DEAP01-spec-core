@@ -30,7 +30,7 @@ def _is_downstream_workspace(root):
     Upstream distribution template / compiler repos carry the
     .pipeline/upstream sentinel directory; downstream customer workspaces
     (installed via scripts/install_pipeline.sh) do not. The Clean Landing
-    Zone Invariant applies strictly to upstream template repos only —
+    Zone Invariant applies strictly to upstream template repos only --
     concrete ConOps deliverables are constitutionally authorized in
     downstream workspaces (see .pipeline/constitution.md, Core System
     Boundaries & Invariants, and scripts/verify_downstream_baseline.py

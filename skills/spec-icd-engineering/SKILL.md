@@ -167,9 +167,9 @@ flowchart TD
 ## 3. Canonical N² Subsystem Interface Matrix
 | Subsystem | 1. Subsystem A | 2. Subsystem B | 3. Subsystem C |
 | :--- | :--- | :--- | :--- |
-| **1. Subsystem A** | **[ Subsystem A ]** | CONN-01 (12 Signals) | — |
-| **2. Subsystem B** | — | **[ Subsystem B ]** | CONN-02 (6 Signals) |
-| **3. Subsystem C** | CONN-03 (4 Signals) | — | **[ Subsystem C ]** |
+| **1. Subsystem A** | **[ Subsystem A ]** | CONN-01 (12 Signals) | -- |
+| **2. Subsystem B** | -- | **[ Subsystem B ]** | CONN-02 (6 Signals) |
+| **3. Subsystem C** | CONN-03 (4 Signals) | -- | **[ Subsystem C ]** |
 
 ## 4. Port Definition Roster Table
 | Port ID | Subsystem | Port Name | Direction | Port Type | Multiplicity | Protocol Profile |

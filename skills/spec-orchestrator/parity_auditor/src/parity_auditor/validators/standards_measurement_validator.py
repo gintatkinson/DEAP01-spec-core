@@ -1156,7 +1156,7 @@ class StandardsAndMeasurementValidator(IValidator):
             sig_name = sig.get("signal_name", "")
             dtype = sig.get("data_type", "")
             unit = sig.get("si_units", "") or sig.get("units", "") or sig.get("unit", "")
-            rate = sig.get("update_rate", "") or sig.get("rate", "") or "—"
+            rate = sig.get("update_rate", "") or sig.get("rate", "") or "--"
 
             dim_vec = parse_si_unit(unit)
             vec_str = str(dim_vec.to_list())

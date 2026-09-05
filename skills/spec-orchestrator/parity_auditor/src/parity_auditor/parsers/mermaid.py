@@ -186,9 +186,9 @@ class MermaidFlowchartParser(IParser):
                         if node_id not in subgraphs[current_sub].nodes:
                             subgraphs[current_sub].nodes.append(node_id)
                 elif node_id:
-                    parse_errors.append(f"Unparseable line: unrecognized shape for node '{node_id}' — '{line.strip()}'")
+                    parse_errors.append(f"Unparseable line: unrecognized shape for node '{node_id}' -- '{line.strip()}'")
                 else:
-                    parse_errors.append(f"Unparseable line: not a connection or node — '{line.strip()}'")
+                    parse_errors.append(f"Unparseable line: not a connection or node -- '{line.strip()}'")
 
         return ParsedFlowchart(nodes=nodes, connections=connections, subgraphs=subgraphs, parse_errors=parse_errors)
 
@@ -232,7 +232,7 @@ class MermaidClassDiagramParser(IParser):
         def parse_attribute_signature(sig):
             sig = sig.strip()
             if ':' in sig:
-                parse_errors.append(f"Syntax error: colons are strictly prohibited inside class attribute/method signatures — '{sig}'")
+                parse_errors.append(f"Syntax error: colons are strictly prohibited inside class attribute/method signatures -- '{sig}'")
             constraints = []
             constraint_match = re.search(r'\{([^}]+)\}', sig)
             if constraint_match:
@@ -282,7 +282,7 @@ class MermaidClassDiagramParser(IParser):
         def parse_method_signature(sig):
             sig = sig.strip()
             if ':' in sig:
-                parse_errors.append(f"Syntax error: colons are strictly prohibited inside class attribute/method signatures — '{sig}'")
+                parse_errors.append(f"Syntax error: colons are strictly prohibited inside class attribute/method signatures -- '{sig}'")
             constraints = []
             constraint_match = re.search(r'\{([^}]+)\}', sig)
             if constraint_match:
@@ -382,7 +382,7 @@ class MermaidClassDiagramParser(IParser):
                                 has_error = True
                         
                         if has_error:
-                            parse_errors.append(f"Syntax error: note directive has unbalanced quotes — '{line.strip()}'")
+                            parse_errors.append(f"Syntax error: note directive has unbalanced quotes -- '{line.strip()}'")
                         
                         note_text = content_part.strip('"\': ')
                         if note_text and not has_error:
@@ -443,7 +443,7 @@ class MermaidClassDiagramParser(IParser):
                     label_str = label.strip()
                     if ' ' in label_str or ':' in label_str:
                         if not (label_str.startswith('"') and label_str.endswith('"') and len(label_str) >= 2):
-                            parse_errors.append(f"Syntax error: relationship label containing spaces or colons must be double-quoted — '{line.strip()}'")
+                            parse_errors.append(f"Syntax error: relationship label containing spaces or colons must be double-quoted -- '{line.strip()}'")
                     if label_str.startswith('"') and label_str.endswith('"') and len(label_str) >= 2:
                         label = label_str[1:-1].strip()
                     else:
@@ -727,6 +727,6 @@ class MermaidSequenceDiagramParser(IParser):
                     fragment_stack[-1].branches[-1].messages.append(msg_record)
                 continue
             else:
-                parse_errors.append(f"Unparseable line: not a valid sequence diagram element — '{line.strip()}'")
+                parse_errors.append(f"Unparseable line: not a valid sequence diagram element -- '{line.strip()}'")
 
         return ParsedSequenceDiagram(lifelines=lifelines, messages=messages, fragments=fragments, parse_errors=parse_errors)

@@ -92,7 +92,7 @@ SAMPLE_RESEARCH_INVENTORY = r"""
 ## 2. Normative Standards & Baseline Documents Inventory
 | Standard / Baseline ID | Issuing Body | Title | Applicable Clauses | Obligation Category | Declared Total | Clause Citation |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| ISO/IEC/IEEE 29148:2018 | ISO/IEC/IEEE | Systems and Software Engineering — Requirements Engineering | §6.4.2 ConOps, §8.4 System Requirements | Requirements Engineering | 2 | ISO/IEC/IEEE 29148:2018 §6.4.2, §8.4 |
+| ISO/IEC/IEEE 29148:2018 | ISO/IEC/IEEE | Systems and Software Engineering -- Requirements Engineering | §6.4.2 ConOps, §8.4 System Requirements | Requirements Engineering | 2 | ISO/IEC/IEEE 29148:2018 §6.4.2, §8.4 |
 | RTCA DO-178C / DO-254 | RTCA / EUROCAE | Software and Electronic Hardware Considerations in Airborne Systems | §6.3 Software Architecture | Safety Assurance | 2 | DO-178C §6.3 |
 | NATO STANAG 4586 | NATO | Standard Interfaces of Autonomous Control Systems | §3.2 DLI Interface | Interoperability | 1 | STANAG 4586 Ed. 4 §3.2 |
 

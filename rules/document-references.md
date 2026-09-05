@@ -15,12 +15,12 @@ document must refer to something that exists.
   asymmetric and confusing: a `skills/` reference on one line still resolves while an
   `.agents/skills/` reference on the next fails, pointing debugging at the wrong subsystem.
 - **Cited Paths Must Resolve**: Every repository path named in a governance document MUST
-  exist on disk. A dangling path is worse than no reference, because it sends the reader —
-  or a dispatched subagent instructed to read it — somewhere empty, and the resulting
+  exist on disk. A dangling path is worse than no reference, because it sends the reader --
+  or a dispatched subagent instructed to read it -- somewhere empty, and the resulting
   silence looks like an absence of instructions rather than a broken link.
 - **Markdown Links Must Resolve**: Every relative markdown link in a backlog specification
   MUST point at a file that exists. This is the specification-corpus counterpart of the
-  rule above — that one governs paths named in governance prose, this one governs
+  rule above -- that one governs paths named in governance prose, this one governs
   `[text](target)` links in Epics, Features, User Stories and Use Cases, and it is
   enforced by a different checker (`link_validator.py`, offline, no network). A broken
   link inside a specification is worse than a broken prose reference, because the
@@ -37,16 +37,16 @@ document must refer to something that exists.
   only in the dispatch table in `.agents/AGENTS.md` § *Mandatory Subagent Dispatch for
   Research, Specification & Implementation Loops*, which is the single place a change of
   runtime has to be reflected. A directive naming a tool the active runtime does not expose
-  is unexecutable, and an agent facing it does the work itself rather than halting — the
+  is unexecutable, and an agent facing it does the work itself rather than halting -- the
   failure recorded in issue #312, where the coordinator wrote every file directly for an
   entire session. This is the same shape as the three constraints above: a reference to
   something that is not there, differing only in that the missing referent is a tool rather
-  than a path or a step. **Naming a tool in order to prohibit its use remains permitted** —
+  than a path or a step. **Naming a tool in order to prohibit its use remains permitted** --
   a prohibition that no longer matches the runtime becomes inert, not unexecutable.
 
 - **Authoritative Source Locators Must Be Preserved Verbatim**: A `Source References`
-  entry describing an external artefact — a structural schema or a normative
-  specification — MUST carry the authoritative upstream URL exactly as supplied, and MUST
+  entry describing an external artefact -- a structural schema or a normative
+  specification -- MUST carry the authoritative upstream URL exactly as supplied, and MUST
   NOT be rewritten to point at this repository. Those artefacts are external by
   definition, so a self-referential locator means the upstream URL was replaced during
   drafting, breaking the traceability the reference exists to provide. Generative models
@@ -59,7 +59,7 @@ document must refer to something that exists.
 ## Scope
 
 These constraints apply to every document under `rules/`, `skills/`, `.agents/` and
-`.pipeline/` — the corpus scanned by `tests/test_skill_path_references.py`. Hidden
+`.pipeline/` -- the corpus scanned by `tests/test_skill_path_references.py`. Hidden
 directories are explicitly in scope; omitting them is how the prefix rule went unenforced
 against the only document that violated it (issue #305).
 
@@ -73,7 +73,7 @@ between each constraint above and its enforcing assertion is registered in
 
 Until issue #310 these three rules were enforced by tests and stated in no document.
 `rules/constitution-first.md` requires agents to read `rules/` before any task, so a rule
-absent from `rules/` is invisible to the process meant to guarantee compliance — an agent
+absent from `rules/` is invisible to the process meant to guarantee compliance -- an agent
 could follow every documented rule and still fail the suite. It also left the rules
 unamendable, because there was no text to propose a change against.
 
@@ -82,7 +82,7 @@ and the same class as issue #299, where the Mermaid parser rejected unquoted rel
 labels that `rules/platform-independence.md` never mentioned.
 
 The fourth constraint was added afterwards, and has the reverse provenance. Issue #312
-already established it twice — `.agents/AGENTS.md` § *Mandatory Subagent Dispatch* states
+already established it twice -- `.agents/AGENTS.md` § *Mandatory Subagent Dispatch* states
 that concrete tool names belong in its dispatch table "and nowhere else in this document",
 and `rules/user-authorization-lock.md` restates it for the authorization lock. Both
 statements are scoped to their own file, so `skills/` was covered by neither, and the #312

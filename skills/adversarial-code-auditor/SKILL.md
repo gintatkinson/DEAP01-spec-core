@@ -84,7 +84,7 @@ Every finding MUST produce output matching this skeleton character-for-character
 
 ## 4. UML Diagrams
 
-[MANDATORY for Critical/Important. For Suggestion/Nitpick: "N/A — [severity] severity."]
+[MANDATORY for Critical/Important. For Suggestion/Nitpick: "N/A -- [severity] severity."]
 
 ```mermaid
 sequenceDiagram
@@ -98,7 +98,7 @@ sequenceDiagram
 
 ## 5. Affected Callers / Downstream Impact
 
-[caller] — [how affected]
+[caller] -- [how affected]
 
 ## 6. Proposed Correction
 
@@ -109,7 +109,7 @@ sequenceDiagram
 
 ## 7. Relationship to Existing Issues
 
-Discovered in audit — new finding.
+Discovered in audit -- new finding.
 
 ## Audit Source
 
@@ -121,14 +121,14 @@ FILE_LOCATION: [path]:[line-line]
 
 Subagents follow these steps in order. No deviation.
 
-### Step A — Read
+### Step A -- Read
 
 1. Read this skill file in full.
 2. Read `[FILE_PATH]`.
 3. Read `.pipeline/constitution.md`.
 4. For Dart files, read `.pipeline/profiles/flutter.md`.
 
-### Step B — Audit
+### Step B -- Audit
 
 1. Scan every line of `[FILE_PATH]` through the `[PILLAR]` focus.
 2. For each potential defect, answer:
@@ -141,18 +141,18 @@ Subagents follow these steps in order. No deviation.
 3. Classify severity using Section 1.4.
 4. If Critical or Important, select diagram type from Section 1.5.
 
-### Step C — Write
+### Step C -- Write
 
 1. For EVERY finding, produce one issue body.
 2. Copy the skeleton from Section 2 exactly. Fill in `[...]` placeholders with real values.
 3. Section headers and field labels must match the skeleton character-for-character.
 4. Section 1: Three bullet points with bold labels. Never collapse into one line.
 5. Section 2: Exactly five `[1-5]. **Why [text]?** Because [text].` lines.
-6. Section 4: Valid Mermaid block (```` ```mermaid ````) (Critical/Important) or "N/A — [severity] severity." (Suggestion/Nitpick). No ASCII art.
+6. Section 4: Valid Mermaid block (```` ```mermaid ````) (Critical/Important) or "N/A -- [severity] severity." (Suggestion/Nitpick). No ASCII art.
 7. Section 6: Triple-backtick code block with language tag.
 8. End with SEVERITY and FILE_LOCATION lines exactly as shown in the skeleton.
 
-### Step D — Verify
+### Step D -- Verify
 
 Before filing, run these checks on the body. All must pass.
 
@@ -165,14 +165,14 @@ Before filing, run these checks on the body. All must pass.
 | 5 | Section 1 bullets | Three lines matching `^[-*] \*\*(File|Pillar|Symptom)\*\*:` |
 | 6 | Section 2 Whys | Five lines matching `^[1-5]\. \*\*Why .*\?\*\* Because .*` |
 | 7 | Section 4 Critical/Important | Contains Mermaid block (```` ```mermaid ````), AND the offline syntax gate below exits 0 |
-| 8 | Section 4 Suggestion/Nitpick | Contains `N/A — ` |
+| 8 | Section 4 Suggestion/Nitpick | Contains `N/A -- ` |
 | 9 | Balanced code blocks | Even number of ````` occurrences |
 | 10 | No ASCII art UML | Does NOT contain unescaped `->>` or `→` outside mermaid blocks |
 | 11 | Title-format | Matches `\[AUDIT\] \[[file.ext]\]: [description]` |
 
 If any check fails, fix the body and re-verify. Do NOT file until all checks pass.
 
-**Check 7 is executable and MUST be run — it is not an eyeball check.** Presence of a
+**Check 7 is executable and MUST be run -- it is not an eyeball check.** Presence of a
 fenced block does not establish validity. An unparseable diagram previously cleared all
 eleven checks and was filed on issue #283, where GitHub reported a parse error instead of
 rendering Section 4. Run:
@@ -201,7 +201,7 @@ rate-limits, and it ships specification content to a third party. See
 Scope limit: this enforces the documented rules in `rules/platform-independence.md`. It is
 not a full Mermaid grammar parser, so a pass is not proof the diagram renders.
 
-### Step E — File
+### Step E -- File
 
 1. Write the verified body to a dynamically named temporary file (e.g., `/tmp/gh_body_$(uuidgen).md` or `/tmp/gl_body_$(uuidgen).md`) to prevent parallel execution collisions.
 2. Resolve `[LABEL]` from the severity assigned in Section 1.4. This mapping is mandatory:
@@ -213,7 +213,7 @@ not a full Mermaid grammar parser, so a pass is not proof the diagram renders.
    | Suggestion | `enhancement` | `type::feature` |
    | Nitpick | `enhancement` | `type::feature` |
 
-   Section 1.4 defines Suggestion as forward-looking risk that is explicitly **NOT a current bug**. Filing such a finding as `bug` places it in the selection set of `debug-protocol`, whose Step 0 then forbids processing it — deadlocking that loop. See issue #287.
+   Section 1.4 defines Suggestion as forward-looking risk that is explicitly **NOT a current bug**. Filing such a finding as `bug` places it in the selection set of `debug-protocol`, whose Step 0 then forbids processing it -- deadlocking that loop. See issue #287.
 3. File the issue based on the provider environment:
    - **GitHub (`gh` CLI)**:
      ```bash
@@ -255,7 +255,7 @@ not a full Mermaid grammar parser, so a pass is not proof the diagram renders.
 6. Sleep 1 second between issues.
 7. Return: issue URLs with severities.
 
-## 4. Example — Complete Compliant Output
+## 4. Example -- Complete Compliant Output
 
 ## 1. Context and References
 
@@ -290,7 +290,7 @@ sequenceDiagram
 
 ## 5. Affected Callers / Downstream Impact
 
-Dart FFI caller getLastError() — receives dangling pointer after concurrent shutdown. Any async error-handling path calling getLastError after tile load failure.
+Dart FFI caller getLastError() -- receives dangling pointer after concurrent shutdown. Any async error-handling path calling getLastError after tile load failure.
 
 ## 6. Proposed Correction
 
@@ -309,7 +309,7 @@ int32_t bridge_get_last_error(bridge_handle_t handle, char* out, int32_t size) {
 
 ## 7. Relationship to Existing Issues
 
-Discovered in audit — new finding.
+Discovered in audit -- new finding.
 
 ## Audit Source
 
@@ -322,6 +322,6 @@ FILE_LOCATION: cesium_native_bridge/src/bridge.cpp:56-61
 The ONLY text sent to each subagent. Only the three bracketed fields differ.
 
 Execute adversarial-code-auditor skill.
-Read skills/adversarial-code-auditor/SKILL.md in full. Follow the Protocol (Section 3) exactly — Read, Audit, Write, Verify, File.
+Read skills/adversarial-code-auditor/SKILL.md in full. Follow the Protocol (Section 3) exactly -- Read, Audit, Write, Verify, File.
 FILE_PATH: [FILE_PATH] PILLAR: [PILLAR] MODE: [MODE] REPO: [REPO]
 Return issue URLs with severities. PROCEED

@@ -62,8 +62,8 @@ For every BDD scenario and acceptance criteria set, you MUST generate and link t
        - *SysML Interaction Realization*: Parse SysML `interaction` AST blocks to construct lifelines, message sequences, and triggers.
        - *Lifeline Notation*: All sequence diagrams must use the standard UML lifeline notation `name : Classifier` or `: Classifier` (using Mermaid alias syntax: `actor userActor as "userActor : UserActor"` or `participant systemService as "systemService : SystemService"`).
        - *Lifeline Part Binding*: Every internal `participant` classifier MUST resolve to a valid SysML `part def` declared in the SysML AST.
-       - *Actor vs Participant (enforced — issue #277)*: The choice of keyword is semantic, not cosmetic, and determines whether the classifier must exist in a Feature class diagram / SysML part definition.
-         - Declare a lifeline `actor` **only** when it represents an entity **outside the system boundary** — a human role, or a third-party system you do not model. An `actor` classifier is **exempt** from the structural-definition requirement, because external entities are correctly absent from the structural models.
+       - *Actor vs Participant (enforced -- issue #277)*: The choice of keyword is semantic, not cosmetic, and determines whether the classifier must exist in a Feature class diagram / SysML part definition.
+         - Declare a lifeline `actor` **only** when it represents an entity **outside the system boundary** -- a human role, or a third-party system you do not model. An `actor` classifier is **exempt** from the structural-definition requirement, because external entities are correctly absent from the structural models.
          - Declare a lifeline `participant` for every **internal** object. A `participant` classifier **MUST** be defined as a class in some Feature's UML Class Diagram and as a SysML `part def`, and every message sent to it must map to a public operation on that class/part.
        - *Open Return Arrow*: Return/reply messages must use the open arrowhead (`-->` in Mermaid) instead of the filled/closed arrowhead (`-->>`).
        - *Return Value Signatures*: Return messages must represent assignments/return values (e.g. `isValid : Boolean`) rather than method/operation calls.
@@ -228,7 +228,7 @@ Normative Specification: [Normative Specification](link-to-specification)
 > **Mermaid Block Closing Constraints & Code Fence Integrity:**
 > - Every Mermaid diagram MUST be strictly closed with ```` ``` ```` on a new line. Leaking Mermaid blocks (e.g. having headings like `##` inside an unclosed diagram) or stray/unclosed code fences will fail downstream validation checks.
 > - Ensure there are no stray backticks or unmatched code fences in the document.
-> - **All Mermaid syntax constraints are defined in `rules/platform-independence.md` and MUST be observed in full** — including the prohibition on semicolons in `Note` and message text, colons in class members and note strings, stereotypes on relationship lines, and curly braces in class member lines. Do not maintain a local subset here; subsets drift (issue #289).
+> - **All Mermaid syntax constraints are defined in `rules/platform-independence.md` and MUST be observed in full** -- including the prohibition on semicolons in `Note` and message text, colons in class members and note strings, stereotypes on relationship lines, and curly braces in class member lines. Do not maintain a local subset here; subsets drift (issue #289).
 
 
 

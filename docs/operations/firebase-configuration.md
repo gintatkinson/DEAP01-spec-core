@@ -20,10 +20,10 @@
 
 ## 1. Prerequisites
 
-- **Node.js 18+** — required for `firebase-tools`.
-- **Java 11+** — required by the Firestore emulator.
-- **Firebase project** — required for cloud mode (can be a free Spark tier).
-- **Flutter SDK 3.12+** — with `cloud_firestore` and `firebase_core` added to `pubspec.yaml`:
+- **Node.js 18+** -- required for `firebase-tools`.
+- **Java 11+** -- required by the Firestore emulator.
+- **Firebase project** -- required for cloud mode (can be a free Spark tier).
+- **Flutter SDK 3.12+** -- with `cloud_firestore` and `firebase_core` added to `pubspec.yaml`:
 
   ```bash
   cd app_flutter
@@ -160,10 +160,10 @@ firebase deploy --only firestore:rules
 Seed the schema document and base data using the REST API or the Firebase Admin SDK. You can use the same `seed-firebase-data.py` script by pointing it at the Firestore REST endpoint for your cloud project:
 
 ```bash
-# Default (emulator) — no change needed
+# Default (emulator) -- no change needed
 python3 app_flutter/scripts/seed-firebase-data.py
 
-# Cloud — override the BASE and PROJECT variables in the script.
+# Cloud -- override the BASE and PROJECT variables in the script.
 ```
 
 ### 3.4 Run the app
@@ -243,8 +243,8 @@ The Firestore database uses the following collections and document structure:
 
 | Document ID | Purpose | Fields |
 |---|---|---|
-| `types` | Defines all object types in the domain ontology. | `fields` — a map keyed by type name (e.g. `"Item"`, `"SubElement"`). Each value is a JSON string containing `displayName`, `iconName`, `fields` (array of field definitions), `childTypes`, `relatedTypes`, and `parentTypes`. |
-| `hierarchy` | Defines parent-child relationships between types. | `pairs` — an array of `[parentTypeName, childTypeName]` tuples. |
+| `types` | Defines all object types in the domain ontology. | `fields` -- a map keyed by type name (e.g. `"Item"`, `"SubElement"`). Each value is a JSON string containing `displayName`, `iconName`, `fields` (array of field definitions), `childTypes`, `relatedTypes`, and `parentTypes`. |
+| `hierarchy` | Defines parent-child relationships between types. | `pairs` -- an array of `[parentTypeName, childTypeName]` tuples. |
 
 **Example `schema/types` document (from seed script):**
 
@@ -277,7 +277,7 @@ The Firestore database uses the following collections and document structure:
 |---|---|
 | `{nodeId}` | Flat key-value map of property values for that node. |
 
-**Document fields:** Arbitrary — defined by the type's field schema (e.g. `name`, `description`, etc.).
+**Document fields:** Arbitrary -- defined by the type's field schema (e.g. `name`, `description`, etc.).
 
 ```
 data/{nodeId}
@@ -414,7 +414,7 @@ cd app_flutter && ./scripts/setup-firebase-emulator.sh
 flutter run --dart-define=DATA_SOURCE=firebase -v 2>&1 | grep DATA_SOURCE
 ```
 
-Check `app_flutter/lib/main.dart:16` — the constant must read `String.fromEnvironment('DATA_SOURCE', defaultValue: 'sqlite')`.
+Check `app_flutter/lib/main.dart:16` -- the constant must read `String.fromEnvironment('DATA_SOURCE', defaultValue: 'sqlite')`.
 
 ### No types appear in the sidebar
 
@@ -450,4 +450,4 @@ The emulator accepts any project ID by default, but the URL path must match.
 
 **Symptom:** App crashes at startup with a Firebase initialization error.
 
-**Solution:** Ensure platform config files are present (see [Prerequisites](#1-prerequisites)). For the emulator, a dummy config is sufficient — any `google-services.json` or `GoogleService-Info.plist` with a valid project ID works, since the SDK connects to the local emulator and never reaches the cloud.
+**Solution:** Ensure platform config files are present (see [Prerequisites](#1-prerequisites)). For the emulator, a dummy config is sufficient -- any `google-services.json` or `GoogleService-Info.plist` with a valid project ID works, since the SDK connects to the local emulator and never reaches the cloud.

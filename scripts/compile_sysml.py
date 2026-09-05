@@ -2586,7 +2586,7 @@ def _render_rta_architecture(proofs: List[Dict[str, str]]) -> str:
         "",
     ]
     for proof in proofs:
-        lines.append(f"## Theorem {proof['id']} — {proof['name']}")
+        lines.append(f"## Theorem {proof['id']} -- {proof['name']}")
         lines.append("")
         lines.append("### Formal Theorem Statement")
         lines.append("")

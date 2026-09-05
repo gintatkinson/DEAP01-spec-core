@@ -11,7 +11,7 @@
 ConOps and Mission Intent specifications (Level 1B) operate as the authoritative digital bridge between high-level operational intent and downstream structural extraction (Level 2 Epics, Features, User Stories, and Use Cases) and Model-Based Design (MBD) synthesis.
 
 This governance standard is aligned with:
-- **ISO/IEC/IEEE 29148:2018**: Systems and software engineering — Requirements engineering (§6.4.2 ConOps and §6.4.3 OpsCon).
+- **ISO/IEC/IEEE 29148:2018**: Systems and software engineering -- Requirements engineering (§6.4.2 ConOps and §6.4.3 OpsCon).
 - **INCOSE Systems Engineering Handbook v5.0**: Measures of Effectiveness (MoE), Measures of Performance (MoP), and Operational Scenario Engineering.
 - **NATO STANAG 4586**: Standard Interfaces of UAV Control System (UCS) for NATO UAV Interoperability.
 - **MIL-STD-882E**: Department of Defense Standard Practice: System Safety and Hazard Analysis (Task 202: Operational Hazard Analysis).

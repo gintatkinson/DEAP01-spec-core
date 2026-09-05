@@ -1,5 +1,5 @@
 ---
-title: "Implementation Profile — React Platform"
+title: "Implementation Profile -- React Platform"
 project: "Digital Engineering Agent Platform (DEAP)"
 tier: implementation
 platform: "react"

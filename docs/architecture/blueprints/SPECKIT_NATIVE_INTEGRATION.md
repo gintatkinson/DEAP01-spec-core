@@ -26,15 +26,15 @@ This document analyzes four integration strategies, scores them against your pri
 
 These capabilities are not replicated by Spec Kit and must be preserved in any integration:
 
-1. **Schema-to-Agile automation** — YANG/OpenAPI/Protobuf → Epics, Features, User Stories, Use Cases with UML OOA/OOD
-2. **Subagent-driven TDD** — fresh context per micro-task, RED-GREEN-REFACTOR mandatory
-3. **Two-stage review gates** — spec compliance then code quality, blocking
-4. **Verification-before-completion** — raw proof required, no assertions
-5. **Agentic Epic closure** — full GitHub lifecycle management with `gh` CLI
-6. **Validation isolation** — separate subagent audit or strict self-audit fallback
-7. **The Grill** — interactive design review with human approval gate
-8. **Cumulative walkthroughs** — append/merge, never destructive overwrite
-9. **100% model coverage verification** — mathematical parity check
+1. **Schema-to-Agile automation** -- YANG/OpenAPI/Protobuf → Epics, Features, User Stories, Use Cases with UML OOA/OOD
+2. **Subagent-driven TDD** -- fresh context per micro-task, RED-GREEN-REFACTOR mandatory
+3. **Two-stage review gates** -- spec compliance then code quality, blocking
+4. **Verification-before-completion** -- raw proof required, no assertions
+5. **Agentic Epic closure** -- full GitHub lifecycle management with `gh` CLI
+6. **Validation isolation** -- separate subagent audit or strict self-audit fallback
+7. **The Grill** -- interactive design review with human approval gate
+8. **Cumulative walkthroughs** -- append/merge, never destructive overwrite
+9. **100% model coverage verification** -- mathematical parity check
 
 ---
 
@@ -42,13 +42,13 @@ These capabilities are not replicated by Spec Kit and must be preserved in any i
 
 | Gap | Spec Kit's Solution | Value to You |
 |---|---|---|
-| No project constitution/principles file | `/speckit.constitution` → `.specify/memory/constitution.md` | **High** — persistent memory of project rules across sessions |
-| No tech stack research phase | `research.md` with web research spawning | **Medium** — useful for new projects, less relevant for protocol standards |
-| No parallel task markers | `[P]` markers in `tasks.md` | **Medium** — your pipeline is serial by mandate; but parallel markers could help spec-generation (Workers A-C could run in parallel on independent modules) |
-| No CLI scaffolding tool | `specify init` bootstraps agent-specific config files | **High** — eliminates manual setup of `.windsurf/`, `.claude/`, etc. |
-| No extension/preset ecosystem | Community extensions + presets + stacking | **Medium** — only valuable if you plan to share your pipeline publicly |
-| Narrow runtime support (3 runtimes) | 30+ integrations | **High** — broader adoption potential |
-| No `/speckit.clarify` equivalent | Interactive Q&A before planning | **Low** — "The Grill" already covers this more rigorously |
+| No project constitution/principles file | `/speckit.constitution` → `.specify/memory/constitution.md` | **High** -- persistent memory of project rules across sessions |
+| No tech stack research phase | `research.md` with web research spawning | **Medium** -- useful for new projects, less relevant for protocol standards |
+| No parallel task markers | `[P]` markers in `tasks.md` | **Medium** -- your pipeline is serial by mandate; but parallel markers could help spec-generation (Workers A-C could run in parallel on independent modules) |
+| No CLI scaffolding tool | `specify init` bootstraps agent-specific config files | **High** -- eliminates manual setup of `.windsurf/`, `.claude/`, etc. |
+| No extension/preset ecosystem | Community extensions + presets + stacking | **Medium** -- only valuable if you plan to share your pipeline publicly |
+| Narrow runtime support (3 runtimes) | 30+ integrations | **High** -- broader adoption potential |
+| No `/speckit.clarify` equivalent | Interactive Q&A before planning | **Low** -- "The Grill" already covers this more rigorously |
 
 ---
 
@@ -68,7 +68,7 @@ These capabilities are not replicated by Spec Kit and must be preserved in any i
 - Must conform to Spec Kit's extension API and template resolution system
 - Your orchestrator's multi-phase validation gates may conflict with Spec Kit's simpler linear flow
 - Dependency on an external project (GitHub controls the extension API)
-- Your pipeline's power comes from its *rigidity* — Spec Kit's preset system could weaken mandates
+- Your pipeline's power comes from its *rigidity* -- Spec Kit's preset system could weaken mandates
 
 **Effort:** Medium (learn extension API, restructure skill files into Spec Kit template format)
 
@@ -185,7 +185,7 @@ Scoring: 1 (worst) to 5 (best) per criterion.
 
 **Rationale:**
 - Highest weighted score (114)
-- Zero external dependencies — your pipeline remains fully self-contained
+- Zero external dependencies -- your pipeline remains fully self-contained
 - Preserves your pipeline's rigor with no compromise
 - Fastest to implement (1-2 new skills, minor edits)
 - No collision risk, no maintenance burden from external APIs
@@ -234,7 +234,7 @@ Create `skills/project-constitution/SKILL.md`:
 
 Please review this blueprint and select:
 
-- [ ] **Approve Strategy B** — I will implement Phases 1-4 now
-- [ ] **Approve Strategy B + C** — Strategy B now, use `specify init` for new projects later
-- [ ] **Prefer a different strategy** — specify which and why
-- [ ] **Defer decision** — need more information (specify what)
+- [ ] **Approve Strategy B** -- I will implement Phases 1-4 now
+- [ ] **Approve Strategy B + C** -- Strategy B now, use `specify init` for new projects later
+- [ ] **Prefer a different strategy** -- specify which and why
+- [ ] **Defer decision** -- need more information (specify what)

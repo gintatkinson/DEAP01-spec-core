@@ -115,7 +115,7 @@ $$
         "11_IMPACTS_AND_TRADE_STUDIES.md": """## 11. Normative Standards & Regulatory Baseline
 | Standard ID | Issuing Body | Title / Baseline | Applicable Clauses |
 | :--- | :--- | :--- | :--- |
-| ISO/IEC/IEEE 29148:2018 | ISO/IEEE | Systems and Software Engineering — Requirements Engineering | §6.4.2 ConOps & §6.4.3 OpsCon |
+| ISO/IEC/IEEE 29148:2018 | ISO/IEEE | Systems and Software Engineering -- Requirements Engineering | §6.4.2 ConOps & §6.4.3 OpsCon |
 | OMG UAF v1.2 / v2.0 | OMG | Unified Architecture Framework | Operational Domain (Op-*) |
 | NATO STANAG 4586 | NATO | Standard Interfaces of Autonomous Control Systems | Interoperability Profiles |
 | JARUS SORA v2.5 | JARUS | Specific Operations Risk Assessment | Annex B (Ground Risk & GRB) |

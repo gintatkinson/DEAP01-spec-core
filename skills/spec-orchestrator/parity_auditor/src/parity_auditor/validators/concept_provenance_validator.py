@@ -659,7 +659,7 @@ class ConceptProvenanceValidator(IValidator):
                 item_text = m_list.group(1).strip()
 
                 # Opcode list pattern: - Opcode 0x11: PBIT or - 0x11: PBIT
-                m_op = re.match(r'^(?:Opcode\s+)?(0x[0-9a-fA-F]+)\s*[:\-—=]\s*([a-zA-Z0-9_]+)', item_text, re.IGNORECASE)
+                m_op = re.match(r'^(?:Opcode\s+)?(0x[0-9a-fA-F]+)\s*[:\-=]\s*([a-zA-Z0-9_]+)', item_text, re.IGNORECASE)
                 if m_op:
                     hex_norm = _normalize_hex(m_op.group(1))
                     target_name = m_op.group(2).strip()
@@ -674,7 +674,7 @@ class ConceptProvenanceValidator(IValidator):
                     continue
 
                 # Key-value list item: - Control surfaces: Ruddervator
-                m_kv = re.match(r'^([^:\-—=]+)\s*[:\-—=]\s*([^\n]+)$', item_text)
+                m_kv = re.match(r'^([^:\-=]+)\s*[:\-=]\s*([^\n]+)$', item_text)
                 if m_kv:
                     k_str = m_kv.group(1).strip()
                     v_str = m_kv.group(2).strip()
@@ -827,7 +827,7 @@ class ConceptProvenanceValidator(IValidator):
 
                 # Check for: Opcode 0xXX <Target> or 0xXX <Target> or Opcode 0xXX for <Target> or Opcode 0xXX: <Target>
                 m_after = re.search(
-                    r'\b((?:Opcode\s+)?(0x[0-9a-fA-F]+)\s*(?:[:\-—|]|\s+for\s+|\s+)\s*(' + escaped_target + r'))\b',
+                    r'\b((?:Opcode\s+)?(0x[0-9a-fA-F]+)\s*(?:[:\-|]|\s+for\s+|\s+)\s*(' + escaped_target + r'))\b',
                     line_str,
                     re.IGNORECASE
                 )
@@ -853,7 +853,7 @@ class ConceptProvenanceValidator(IValidator):
 
                 # Check for: <Target> (Opcode 0xXX) or <Target> (0xXX) or <Target> opcode 0xXX or <Target>: 0xXX
                 m_before = re.search(
-                    r'\b((' + escaped_target + r')\s*(?:\((?:Opcode\s+)?(0x[0-9a-fA-F]+)\)|(?:opcode\s+|[:\-—|]\s*)(0x[0-9a-fA-F]+)))\b',
+                    r'\b((' + escaped_target + r')\s*(?:\((?:Opcode\s+)?(0x[0-9a-fA-F]+)\)|(?:opcode\s+|[:\-|]\s*)(0x[0-9a-fA-F]+)))\b',
                     line_str,
                     re.IGNORECASE
                 )
@@ -1048,7 +1048,7 @@ class ConceptProvenanceValidator(IValidator):
                 if len(norm_name) >= 3 and not _is_pin_or_index(gt_attr.name, norm_name):
                     name_pattern = escaped_name.replace('_', r'[\s_]+')
                     kv_m = re.search(
-                        r'(?:\*\*|\b)(?:' + name_pattern + r'|' + escaped_name + r'|' + escaped_norm + r')(?:\*\*|\b)\s*(?:[:=]|is|of|at|around|approx(?:imately)?|—|-(?!\d))?\s*([-+−\u2212]?[0-9]+(?:\.[0-9]+)?(?:[eE][-+]?[0-9]+)?)\b',
+                        r'(?:\*\*|\b)(?:' + name_pattern + r'|' + escaped_name + r'|' + escaped_norm + r')(?:\*\*|\b)\s*(?:[:=]|is|of|at|around|approx(?:imately)?|--|-(?!\d))?\s*([-+−\u2212]?[0-9]+(?:\.[0-9]+)?(?:[eE][-+]?[0-9]+)?)\b',
                         line_str,
                         re.IGNORECASE
                     )

@@ -42,7 +42,7 @@ normalize_spec_slug() {
 }
 
 
-# Issue #330 — fail closed. This block previously warned and carried on, so the gate
+# Issue #330 -- fail closed. This block previously warned and carried on, so the gate
 # vanished in exactly the circumstance where it most needed to hold: a partial or broken
 # checkout with no checker present. A gate that yields when its checker is absent is not
 # a gate, it is a comment.
@@ -52,14 +52,14 @@ if [ ! -f "$LINTER" ]; then
     exit 1
 fi
 
-# Issue #331 — the explicit --allow-missing-specs flag was removed from this invocation.
+# Issue #331 -- the explicit --allow-missing-specs flag was removed from this invocation.
 # It was a no-op: cli.py declares it with default=True, so passing it changed nothing,
 # and its strict counterpart --no-allow-missing-specs is not used anywhere in the
 # repository. It also does not gate the 100% *model coverage* invariant as #331 states;
 # it gates whether an open tracker issue lacking a local spec file is fatal. Narrowing
 # the gate's scope to the item being filed remains an open design question recorded on
-# #331 and #321 — two views of one scoping defect that must be resolved together.
-# Issue #331 + #321 — the gate is scoped to the item being filed. Whole-corpus
+# #331 and #321 -- two views of one scoping defect that must be resolved together.
+# Issue #331 + #321 -- the gate is scoped to the item being filed. Whole-corpus
 # invariants still run (uniqueness and cross-references cannot be checked per file),
 # but only findings naming this specification are reported. That is what makes
 # strictness affordable: the permissive --allow-missing-specs flag is gone, and an
@@ -76,7 +76,7 @@ if [ -n "$REPO" ]; then
     REPO_FLAG="--repo $REPO"
 fi
 
-# Issue #332 — idempotency. Re-running filed a second issue with the same title. Since
+# Issue #332 -- idempotency. Re-running filed a second issue with the same title. Since
 # #314/#316 the reconciler resolves specs by canonical issue_id, but a duplicate still
 # pollutes the tracker and re-triggers downstream automation, so the cheapest place to
 # stop it is before creation. Exact match on the title column, not a substring:
@@ -88,7 +88,7 @@ if [ -n "$EXISTING" ]; then
     exit 0
 fi
 
-# Issue #332 — the label precondition used `grep -Fq "$LABEL"`, a substring match, so an
+# Issue #332 -- the label precondition used `grep -Fq "$LABEL"`, a substring match, so an
 # existing `feature-request` satisfied the check for `feature` and the real label was
 # never created. Exact match on the name column instead.
 if ! gh label list $REPO_FLAG 2>/dev/null \

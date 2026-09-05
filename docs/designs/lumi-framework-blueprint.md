@@ -545,12 +545,12 @@ class LogicalUiValidator:
 Below is the formal text diff specification to update `.pipeline/constitution-amendments.md` and `.pipeline/constitution.md`.
 
 ```markdown
-## AMEND-0014 — Universal LUMI (Logical User & Machine Interface) Framework Integration
+## AMEND-0014 -- Universal LUMI (Logical User & Machine Interface) Framework Integration
 
 - **Date:** 2026-08-09
 - **Logged:** 2026-08-09
 - **Motivating issue:** #375
-- **Approved by:** "PROCEED" — user explicit prompt directive for official LUMI framework integration
+- **Approved by:** "PROCEED" -- user explicit prompt directive for official LUMI framework integration
 - **Destructive:** no
 - **Line count:** 165
 - **Resulting SHA-256:** `[Calculated upon application]`

@@ -22,7 +22,7 @@ Resolution order:
    pre-seeded the scripts directory), return it unchanged.
 2. Otherwise walk upward from ``__file__`` until
    ``<repo>/skills/spec-orchestrator/scripts/sysmlv2_ast.py`` exists and load
-   it directly via ``importlib.util.spec_from_file_location`` — robust to
+   it directly via ``importlib.util.spec_from_file_location`` -- robust to
    install layouts and independent of any sys.path seeding.
 3. Otherwise raise ImportError (fail closed).
 """

@@ -1,5 +1,5 @@
 ---
-title: "Implementation Profile — ROS2 C++"
+title: "Implementation Profile -- ROS2 C++"
 project: "Digital Engineering Agent Platform (DEAP)"
 tier: implementation
 platform: ros2_cpp
@@ -23,7 +23,7 @@ last_updated: "2026-08-29"
 
 ## Coding Standards
 - Lifecycle Nodes: All domain controllers MUST inherit from `rclcpp_lifecycle::LifecycleNode`.
-- Naming Conventions: Files — `snake_case.cpp` / `snake_case.hpp`. Classes — `PascalCase`. Topics/Services — `/snake_case`.
+- Naming Conventions: Files -- `snake_case.cpp` / `snake_case.hpp`. Classes -- `PascalCase`. Topics/Services -- `/snake_case`.
 - Commercial Toolchain Context: MATLAB / Simulink / Embedded Coder synthesis integration hooks for control law algorithms.
 
 ## Testing Mandates

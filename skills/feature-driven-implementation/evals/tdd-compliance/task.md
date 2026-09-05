@@ -15,7 +15,7 @@ Using the `feature-driven-implementation` skill, implement the feature following
 
 ## Inputs
 
-- Feature issue: `#42 — Display Network Node Attributes`
+- Feature issue: `#42 -- Display Network Node Attributes`
 - Implementation plan: `inputs/implementation_plan.md`
 - Constitution: `inputs/constitution.md`
 - Implementation profile: `inputs/react-profile.md`

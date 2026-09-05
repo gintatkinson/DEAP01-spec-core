@@ -20,7 +20,7 @@ Use this skill to establish or update a project's foundational governance docume
 - **Implementation** (code, tests, deployment) is **platform-specific** and may have multiple variants.
 
 > [!IMPORTANT]
-> Epics, Features, User Stories, and Use Cases derived from structural schemas and specifications describe *what* the system must do — never *how* it is built. A single set of functional specs can drive implementations on any target platform, language, or framework simultaneously.
+> Epics, Features, User Stories, and Use Cases derived from structural schemas and specifications describe *what* the system must do -- never *how* it is built. A single set of functional specs can drive implementations on any target platform, language, or framework simultaneously.
 
 ## Architecture: Two Tiers
 
@@ -31,13 +31,13 @@ Use this skill to establish or update a project's foundational governance docume
     └── [platform].md                # Tier 2: Platform-specific implementation profiles
 ```
 
-**Tier 1 — Functional Constitution** (`.pipeline/constitution.md`)
+**Tier 1 -- Functional Constitution** (`.pipeline/constitution.md`)
 - Domain rules, specification sources, data model constraints
 - Agent behavior rules (commit format, branch naming, documentation)
 - Quality gates that apply universally (human approval, The Grill)
 - Read by ALL skills (spec-orchestrator, workers, implementation)
 
-**Tier 2 — Implementation Profiles** (`.pipeline/profiles/<platform>.md`)
+**Tier 2 -- Implementation Profiles** (`.pipeline/profiles/<platform>.md`)
 - Platform & stack constraints (framework, language version, forbidden deps)
 - Coding standards (typing rules, naming conventions, architecture pattern)
 - Testing mandates (test framework, coverage thresholds, TDD level)
@@ -58,7 +58,7 @@ Use this skill to establish or update a project's foundational governance docume
 
 1. **Functional/Implementation Separation:** Specification skills (`spec-orchestrator`, Workers A-C) MUST NOT read implementation profiles. They operate on the functional constitution only. Implementation profiles contain platform-specific details that would contaminate platform-independent specs.
 2. **One Functional Constitution, Many Profiles:** A project has exactly one `.pipeline/constitution.md` (functional) and zero or more `.pipeline/profiles/<platform>.md` (implementation). Multiple platforms can coexist.
-3. **Cumulative, Never Destructive:** When updating any constitution document, read the existing file first. Append or refine — never delete established principles without explicit human approval.
+3. **Cumulative, Never Destructive:** When updating any constitution document, read the existing file first. Append or refine -- never delete established principles without explicit human approval.
 4. **Human Authored, Agent Enforced:** The constitution is written by the human (with agent assistance for structure). Agents MUST NOT modify it autonomously.
 5. **Profile Selection at Implementation Time:** When invoking `feature-driven-implementation`, the target platform is specified. The agent reads the functional constitution AND the matching implementation profile. If no profile exists for the target platform, halt and prompt the human to create one.
 
@@ -74,7 +74,7 @@ mkdir -p .pipeline/profiles
 
 ### Step 2: Gather Functional Principles (Tier 1)
 
-Prompt the human with these categories — all must be **platform-independent** and **protocol-agnostic**. The constitution itself MUST NOT hardcode or assume any specific standard or schema format (such as YANG or RFC 8345) during initialization; all reference models are loaded dynamically at runtime.
+Prompt the human with these categories -- all must be **platform-independent** and **protocol-agnostic**. The constitution itself MUST NOT hardcode or assume any specific standard or schema format (such as YANG or RFC 8345) during initialization; all reference models are loaded dynamically at runtime.
 
 1. **Domain Rules**
    - General schema compliance requirements (how constraints, ranges, and patterns are captured)
@@ -106,7 +106,7 @@ Write to `.pipeline/constitution.md`:
 
 ```markdown
 ---
-title: "Project Constitution — Functional Layer"
+title: "Project Constitution -- Functional Layer"
 project: "[Project Name]"
 tier: functional
 created: "[ISO Date]"
@@ -176,7 +176,7 @@ Write to `.pipeline/profiles/<platform>.md`:
 
 ```markdown
 ---
-title: "Implementation Profile — [Platform]"
+title: "Implementation Profile -- [Platform]"
 project: "[Project Name]"
 tier: implementation
 platform: "[platform identifier, e.g., react, flutter, dotnet]"
@@ -251,7 +251,7 @@ last_updated: "[ISO Date]"
 6. Commit:
    ```bash
    git add .pipeline/profiles/<platform>.md
-   git commit -m "docs: update <platform> implementation profile — <change summary>"
+   git commit -m "docs: update <platform> implementation profile -- <change summary>"
    ```
 
 #### Removing a Profile
@@ -268,7 +268,7 @@ last_updated: "[ISO Date]"
    git add -A
    git commit -m "docs: remove <platform> implementation profile"
    ```
-6. Existing solution walkthroughs (e.g., `feat-82-<platform>-solution.md`) are NOT deleted — they remain as historical records.
+6. Existing solution walkthroughs (e.g., `feat-82-<platform>-solution.md`) are NOT deleted -- they remain as historical records.
 
 #### Listing Active Profiles
 
@@ -282,14 +282,14 @@ ls .pipeline/profiles/
 - **Before every spec-generation run:** Agent reads `.pipeline/constitution.md` only. Implementation profiles are ignored.
 - **Before every feature implementation:** Agent reads `.pipeline/constitution.md` AND `.pipeline/profiles/<target-platform>.md`.
 - **On conflict:** If a proposed change conflicts with any constitution document, the agent halts and escalates.
-- **On evolution:** Human requests an update. Agent reads existing, proposes amendments, waits for approval. The procedure is Step 9 — do not improvise it.
+- **On evolution:** Human requests an update. Agent reads existing, proposes amendments, waits for approval. The procedure is Step 9 -- do not improvise it.
 
 ### Step 9: Amending the Functional Constitution (Tier 1)
 
 > [!IMPORTANT]
 > Until this step existed, Tier 2 implementation profiles had a full lifecycle (Step 7:
-> add, update, remove, list) while the Tier 1 constitution — the **higher**-authority
-> document — had a single sentence. The stronger document had the weaker process, so the
+> add, update, remove, list) while the Tier 1 constitution -- the **higher**-authority
+> document -- had a single sentence. The stronger document had the weaker process, so the
 > safe default became refusal and known defects stayed unfixed because no one could
 > describe a safe way to amend it. This step closes that gap.
 
@@ -302,7 +302,7 @@ satisfies both. What was missing was procedure and audit trail, not permission.
 **Every amendment is logged.** `.pipeline/constitution-amendments.md` is append-only and
 records the resulting SHA-256 of the constitution.
 `tests/test_constitution_integrity.py` asserts the file matches the newest entry, so an
-unlogged edit — by a human, an agent, or a merge — fails the suite.
+unlogged edit -- by a human, an agent, or a merge -- fails the suite.
 
 #### Procedure
 
@@ -316,7 +316,7 @@ unlogged edit — by a human, an agent, or a merge — fails the suite.
 4. **Agent stops and waits.** No file is touched. Approval must be explicit and must
    reference the proposed text; a bare "proceed" to a message containing several
    proposals is ambiguous and MUST be clarified.
-5. **Agent applies the amendment**, editing in place. Additive or refining only —
+5. **Agent applies the amendment**, editing in place. Additive or refining only --
    Mandate 3 forbids destructive change without separate explicit approval.
 6. **Agent bumps `last_updated`** in the constitution frontmatter.
 7. **Agent appends an amendment entry** with all required fields: Date, Logged,
@@ -330,7 +330,7 @@ unlogged edit — by a human, an agent, or a merge — fails the suite.
    history:
    ```bash
    git add .pipeline/constitution.md .pipeline/constitution-amendments.md
-   git commit -m "docs: amend constitution — <change summary> (AMEND-nnnn)"
+   git commit -m "docs: amend constitution -- <change summary> (AMEND-nnnn)"
    ```
 
 #### Hard constraints
@@ -367,7 +367,7 @@ docs/designs/feat-82-[platform_a]-solution.md    # Platform A solution walkthrou
 docs/designs/feat-82-[platform_b]-solution.md    # Platform B solution walkthrough
 ```
 
-The agent implements Feature #82 twice — once per platform — each time loading the appropriate profile. The functional specs (Epics, Features, Stories, Use Cases) are written once and shared.
+The agent implements Feature #82 twice -- once per platform -- each time loading the appropriate profile. The functional specs (Epics, Features, Stories, Use Cases) are written once and shared.
 
 ### Scenario: Platform-specific acceptance criteria
 
@@ -392,8 +392,8 @@ The spec-generation workers write only the "Functional" criteria. Platform-speci
 
 | Skill | Reads Functional Constitution? | Reads Implementation Profile? |
 |---|---|---|
-| `spec-orchestrator` | YES — domain rules, spec standards | NO |
-| `schema-specification-engineering` | YES — domain rules, data model constraints | NO |
-| `spec-user-story-engineering` | YES — BDD format, domain rules | NO |
-| `spec-usecase-engineering` | YES — Use Case formality, domain rules | NO |
-| `feature-driven-implementation` | YES — agent behavior, quality gates | YES — platform, coding, testing, build |
+| `spec-orchestrator` | YES -- domain rules, spec standards | NO |
+| `schema-specification-engineering` | YES -- domain rules, data model constraints | NO |
+| `spec-user-story-engineering` | YES -- BDD format, domain rules | NO |
+| `spec-usecase-engineering` | YES -- Use Case formality, domain rules | NO |
+| `feature-driven-implementation` | YES -- agent behavior, quality gates | YES -- platform, coding, testing, build |

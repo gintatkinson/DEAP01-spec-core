@@ -1,4 +1,4 @@
-# Formal Safety Proof — T-01 Safe-State Invariant Preservation (Incomplete)
+# Formal Safety Proof -- T-01 Safe-State Invariant Preservation (Incomplete)
 
 This document omits the analytical derivation part of the canonical 5-part mathematical proof structure.
 

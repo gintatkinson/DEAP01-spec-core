@@ -55,7 +55,7 @@ CONDITIONAL_STUB_PATTERNS = [
     (re.compile(r"\*\(\s*none(?:\s+registered)?\s*\)\*", re.I), "placeholder stub"),
     # Parentheses optional: "*(TBD)*" reads exactly like "*(None)*", which the
     # pattern above already accepts in both forms. Without this, the near-variant
-    # slips through — the same gap the comment above records (#280).
+    # slips through -- the same gap the comment above records (#280).
     (re.compile(r"\*\s*\(?\s*(?:to be populated|tbd|n/a)\s*\)?\s*\*", re.I), "placeholder stub"),
 ]
 
@@ -74,7 +74,7 @@ import yaml
 from typing import Optional, Set, Tuple
 
 # Import SysML v2 AST classes via the fail-closed loader (refs #76): resolve
-# the real scripts dir or raise ImportError — never bind None silently.
+# the real scripts dir or raise ImportError -- never bind None silently.
 from ..utils.sysml_loader import load_sysml_ast_members
 
 _sysml_ast = load_sysml_ast_members([

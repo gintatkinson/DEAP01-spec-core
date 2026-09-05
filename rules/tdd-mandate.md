@@ -13,7 +13,7 @@
 ## Hard constraints
 
 - Code written before its corresponding failing test must be deleted and re-implemented after the test.
-- Never skip the "confirm it fails" step — a test that passes before implementation is not a valid driving test.
+- Never skip the "confirm it fails" step -- a test that passes before implementation is not a valid driving test.
 - **A compile error is not a RED phase.** A test that does not compile has not run, so it evidences nothing: a correctly-failing test and a broken one are indistinguishable. RED means an executed test failing on an assertion, with the failure message recorded.
 - **Do not let a compile failure mask a behavioural one.** Where a task adds new symbols *and* corrects existing behaviour, land the tests that compile against the existing symbols first and observe them fail on their assertions. Those failures are the evidence the task exists. Bundling them behind an undefined-symbol error throws that evidence away and reports only that the new names are absent, which was never in doubt.
 - Each micro-task (2-5 minutes of work) must have a driving test specified before execution begins.
@@ -50,4 +50,4 @@ about what is asserted, not about which framework asserts it.
 
 ## Why
 
-TDD prevents false confidence. A test written after the code is confirmation bias — it tests what was built, not what was specified. RED-GREEN-REFACTOR guarantees the test actually validates the requirement.
+TDD prevents false confidence. A test written after the code is confirmation bias -- it tests what was built, not what was specified. RED-GREEN-REFACTOR guarantees the test actually validates the requirement.

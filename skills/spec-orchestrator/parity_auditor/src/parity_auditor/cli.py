@@ -599,8 +599,8 @@ def _extract_issue_id_from_frontmatter(fm_text: str, issue_number: int) -> bool:
 def _scope_findings(errors, only):
     """Findings naming ``only``; everything else is another item's problem.
 
-    Whole-corpus invariants still ran — a duplicate title or a dangling cross-reference
-    is only visible across files — but a finding that does not name this item belongs to
+    Whole-corpus invariants still ran -- a duplicate title or a dangling cross-reference
+    is only visible across files -- but a finding that does not name this item belongs to
     a different one. Matching on the basename keeps a collision report, which names every
     colliding file, visible to each of them (issues #331, #321).
     """

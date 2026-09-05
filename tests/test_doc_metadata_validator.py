@@ -12,7 +12,7 @@ Tests:
 8. Detection and rejection of concatenated title strings in H1 heading, YAML frontmatter, or tables.
 9. Validation of matching YAML frontmatter, H1 heading, and visual Markdown tables.
 10. Negative validation of mismatch between YAML title and H1 heading.
-11. Positive validation of agile specs with prefixes (# Epic: EPIC-001 — ...).
+11. Positive validation of agile specs with prefixes (# Epic: EPIC-001 -- ...).
 """
 
 import os
@@ -79,10 +79,10 @@ class TestDocMetadataValidator(unittest.TestCase):
 
     def test_helper_strip_agile_prefix(self):
         """Verify stripping of agile prefixes from H1 heading text."""
-        self.assertEqual(_strip_agile_prefix("Epic: EPIC-001 — Core System Architecture"), "EPIC-001 — Core System Architecture")
-        self.assertEqual(_strip_agile_prefix("Feature: FEAT-101 — Subsystem Mounting"), "FEAT-101 — Subsystem Mounting")
-        self.assertEqual(_strip_agile_prefix("Use Case: UC-001 — Assemble Subsystem"), "UC-001 — Assemble Subsystem")
-        self.assertEqual(_strip_agile_prefix("User Story: US-001 — Coupling Verification"), "US-001 — Coupling Verification")
+        self.assertEqual(_strip_agile_prefix("Epic: EPIC-001 -- Core System Architecture"), "EPIC-001 -- Core System Architecture")
+        self.assertEqual(_strip_agile_prefix("Feature: FEAT-101 -- Subsystem Mounting"), "FEAT-101 -- Subsystem Mounting")
+        self.assertEqual(_strip_agile_prefix("Use Case: UC-001 -- Assemble Subsystem"), "UC-001 -- Assemble Subsystem")
+        self.assertEqual(_strip_agile_prefix("User Story: US-001 -- Coupling Verification"), "US-001 -- Coupling Verification")
         self.assertEqual(_strip_agile_prefix("Autonomous UAS Safety Concept"), "Autonomous UAS Safety Concept")
         self.assertEqual(_strip_agile_prefix("**Epic:** Flight Guidance"), "Flight Guidance")
 
@@ -98,13 +98,13 @@ date: 2026-08-31
 # Ignored Code Comment
 ```
 
-# Epic: EPIC-001 — Core Architecture
+# Epic: EPIC-001 -- Core Architecture
 
 ## Section 1
 """
         h1_info = _extract_h1_heading(doc_with_fm)
         self.assertIsNotNone(h1_info)
-        self.assertEqual(h1_info[0], "EPIC-001 — Core Architecture")
+        self.assertEqual(h1_info[0], "EPIC-001 -- Core Architecture")
         self.assertEqual(h1_info[1], 11)
 
     def test_pure_markdown_header_without_yaml_passes(self):
@@ -449,7 +449,7 @@ This document does not contain a frontmatter table.
 
     def test_helper_has_concatenated_title_metadata(self):
         """Verify concatenated title metadata helper detects versions, dates, and doc IDs."""
-        self.assertFalse(_has_concatenated_title_metadata("Mission Intent — AVENGER 5 Autonomous UAS"))
+        self.assertFalse(_has_concatenated_title_metadata("Mission Intent -- AVENGER 5 Autonomous UAS"))
         self.assertFalse(_has_concatenated_title_metadata("Autonomous UAS Infrastructure Safety Concept of Operations"))
         self.assertFalse(_has_concatenated_title_metadata("STPA Matrix Specification"))
 
@@ -471,7 +471,7 @@ This document does not contain a frontmatter table.
 
 | Metadata | Value |
 | :--- | :--- |
-| **Title** | Mission Intent — AVENGER 5 Autonomous UAS |
+| **Title** | Mission Intent -- AVENGER 5 Autonomous UAS |
 | **Version** | 1.0.0 |
 | **Date** | 2026-08-31 |
 | **Status** | APPROVED |
@@ -616,16 +616,16 @@ date: 2026-08-31
 
             # 1. Epic
             epic_content = """---
-title: EPIC-001 — Core System Architecture
+title: EPIC-001 -- Core System Architecture
 version: 1.0.0
 date: 2026-08-31
 ---
 
-# Epic: EPIC-001 — Core System Architecture
+# Epic: EPIC-001 -- Core System Architecture
 
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Title** | EPIC-001 — Core System Architecture |
+| **Title** | EPIC-001 -- Core System Architecture |
 | **Version** | 1.0.0 |
 | **Date** | 2026-08-31 |
 """
@@ -634,16 +634,16 @@ date: 2026-08-31
 
             # 2. Feature
             feat_content = """---
-title: FEAT-101 — Subsystem Structural Mounting
+title: FEAT-101 -- Subsystem Structural Mounting
 version: 1.0.0
 date: 2026-08-31
 ---
 
-# Feature: FEAT-101 — Subsystem Structural Mounting
+# Feature: FEAT-101 -- Subsystem Structural Mounting
 
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Title** | FEAT-101 — Subsystem Structural Mounting |
+| **Title** | FEAT-101 -- Subsystem Structural Mounting |
 | **Version** | 1.0.0 |
 | **Date** | 2026-08-31 |
 """
@@ -652,16 +652,16 @@ date: 2026-08-31
 
             # 3. Use Case
             uc_content = """---
-title: UC-001 — Assemble and Verify Subsystem
+title: UC-001 -- Assemble and Verify Subsystem
 version: 1.0.0
 date: 2026-08-31
 ---
 
-# Use Case: UC-001 — Assemble and Verify Subsystem
+# Use Case: UC-001 -- Assemble and Verify Subsystem
 
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Title** | UC-001 — Assemble and Verify Subsystem |
+| **Title** | UC-001 -- Assemble and Verify Subsystem |
 | **Version** | 1.0.0 |
 | **Date** | 2026-08-31 |
 """
@@ -670,16 +670,16 @@ date: 2026-08-31
 
             # 4. User Story
             us_content = """---
-title: US-001 — Subsystem Coupling Verification
+title: US-001 -- Subsystem Coupling Verification
 version: 1.0.0
 date: 2026-08-31
 ---
 
-# User Story: US-001 — Subsystem Coupling Verification
+# User Story: US-001 -- Subsystem Coupling Verification
 
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Title** | US-001 — Subsystem Coupling Verification |
+| **Title** | US-001 -- Subsystem Coupling Verification |
 | **Version** | 1.0.0 |
 | **Date** | 2026-08-31 |
 """

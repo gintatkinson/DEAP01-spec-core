@@ -9,7 +9,7 @@ presentation detail into Tier 1.
 ## Scope, and why these are here rather than in a platform profile
 
 Every rule below is **configuration-driven**. The validator reads the directories,
-file extensions, keywords and patterns it matches from `codebase_rules.json` — for
+file extensions, keywords and patterns it matches from `codebase_rules.json` -- for
 example `flutter_rules.ffi_keywords`, `flutter_rules.write_lock_keywords`,
 `spec_rules.dom_leak_patterns`. The *rule* is therefore platform-independent and only its
 vocabulary is platform-specific, so this file is its normative home and
@@ -17,8 +17,8 @@ vocabulary is platform-specific, so this file is its normative home and
 `rules/platform-independence.md` § *Where platform-specific details belong*.
 
 Enforced offline by `parity_auditor/validators/codebase.py`. Every rule below was
-enforced before issue #304 and stated in no document — the orphan-enforcement shape
-recorded as issue #299 — so nothing generating code into a downstream workspace could
+enforced before issue #304 and stated in no document -- the orphan-enforcement shape
+recorded as issue #299 -- so nothing generating code into a downstream workspace could
 have been told what it had to satisfy.
 
 ## Workspace configuration
@@ -26,7 +26,7 @@ have been told what it had to satisfy.
 - **Configured Platform Directory Must Exist**: if `target_directories` names a platform
   directory, that directory MUST exist whenever the workspace actually contains source
   files of that platform's extensions. A configured directory that is absent while
-  matching sources sit elsewhere means every platform check silently scans nothing — a
+  matching sources sit elsewhere means every platform check silently scans nothing -- a
   compliance bypass that reads as a clean run.
 - **Design Tokens Path Must Be Configured**: `spec_rules.design_tokens_path` MUST be set.
   It is the authority for which colours are forbidden in source, so without it the
@@ -35,7 +35,7 @@ have been told what it had to satisfy.
 - **Design Tokens File Must Be Loadable**: the file MUST parse as JSON.
 - **Design Tokens Must Declare Colours**: at least one hex colour MUST be extractable
   from it. A token file with no colours makes every hardcoded-colour check vacuous, and a
-  vacuous check is indistinguishable from a compliant codebase — which is why the four
+  vacuous check is indistinguishable from a compliant codebase -- which is why the four
   rules above are reported as failures rather than skipped preconditions.
 
 ## Source file integrity
@@ -44,7 +44,7 @@ have been told what it had to satisfy.
   decode as UTF-8. A binary blob wearing a source extension is skipped by every
   content-based check below, so it is reported rather than passed over.
 - **Source Files Must Be Readable**: a source file that cannot be opened is reported. The
-  alternative — continuing silently — shrinks the audited corpus without saying so.
+  alternative -- continuing silently -- shrinks the audited corpus without saying so.
 
 ## Presentation and design tokens
 
@@ -99,6 +99,6 @@ have been told what it had to satisfy.
 ## Why
 
 The two-tier architecture only holds if something checks it. These constraints are the
-ones whose violation is invisible in review — a duplicated colour literal, a missing loop
-guard, an unclamped rate, an `aria-label` in a logical specification — and each of them
+ones whose violation is invisible in review -- a duplicated colour literal, a missing loop
+guard, an unclamped rate, an `aria-label` in a logical specification -- and each of them
 degrades silently rather than failing loudly.

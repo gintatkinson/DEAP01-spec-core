@@ -2,7 +2,7 @@
 
 ---
 name: spec-implementation-auditor
-description: "Audits the codebase against generated specifications (Epics, Features, UML diagrams) to detect missing, partial, or incorrectly implemented features. Use when a feature was specified but never built, built partially, or built incorrectly — bridging the gap between spec-orchestrator output and feature-driven-implementation backlog."
+description: "Audits the codebase against generated specifications (Epics, Features, UML diagrams) to detect missing, partial, or incorrectly implemented features. Use when a feature was specified but never built, built partially, or built incorrectly -- bridging the gap between spec-orchestrator output and feature-driven-implementation backlog."
 compatibility: "Requires git, configured issue tracker, and an existing spec directory under docs/ (epics/, features/, user-stories/, use-cases/)."
 metadata:
   risk: low
@@ -16,17 +16,17 @@ Use this skill when a feature, user story, or use case exists in the specificati
 
 This skill reconciles what was specified against what exists in source code, files targeted gap issues, and optionally dispatches implementation for confirmed gaps.
 
-## Step 0 — Gate Check: Is this audit necessary?
+## Step 0 -- Gate Check: Is this audit necessary?
 
 Before starting, confirm:
 - Is there a specification document (Feature, User Story, Use Case) that describes behavior that should exist?
 - Does the behavior not exist, exist only partially, or work incorrectly compared to the spec?
-- Is this a runtime defect (bug) — if yes, stop and use `debug-protocol` instead.
-- Is this entirely new functionality with no spec — if yes, route to backlog + `feature-driven-implementation`.
+- Is this a runtime defect (bug) -- if yes, stop and use `debug-protocol` instead.
+- Is this entirely new functionality with no spec -- if yes, route to backlog + `feature-driven-implementation`.
 
 If this is a spec'd feature with missing/incorrect implementation, proceed to Step 1.
 
-## Step 1 — Specification Inventory Subagent
+## Step 1 -- Specification Inventory Subagent
 
 Dispatch a subagent to: Discover all specification documents in the `docs/` directory tree. Read each document and extract:
 - Issue ID and title (from YAML frontmatter or content)
@@ -37,13 +37,13 @@ Dispatch a subagent to: Discover all specification documents in the `docs/` dire
 
 Return a structured inventory: one entry per spec document with its requirements listed as verifiable claims.
 
-## Step 2 — Codebase Coverage Subagent
+## Step 2 -- Codebase Coverage Subagent
 
 Dispatch a subagent to: For each verifiable claim from Step 1, search the codebase for corresponding implementation:
 - Check Flutter (`lib/`), React (`web_react/src/`), and Python (`scripts/`) as applicable.
 - Search by semantic keywords, class names, widget names, route paths, API endpoints.
 - Check test files for corresponding test coverage.
-- Do NOT assume — verify each claim against actual file content.
+- Do NOT assume -- verify each claim against actual file content.
 
 Return a coverage matrix mapping each spec claim to:
 - ✅ Fully implemented (code + tests found)
@@ -51,7 +51,7 @@ Return a coverage matrix mapping each spec claim to:
 - ❌ Missing (no corresponding code found)
 - ❓ Ambiguous (code exists but doesn't clearly match the spec)
 
-## Step 3 — Gap Analysis Subagent
+## Step 3 -- Gap Analysis Subagent
 
 Dispatch a subagent to: Analyze the coverage matrix from Step 2 and classify each gap:
 - **Missing feature**: Entire spec document has no corresponding implementation.
@@ -63,7 +63,7 @@ For each gap, estimate: (1) which source files would need to change, (2) whether
 
 Return a prioritized gap report.
 
-## Step 4 — Issue Filing Subagent
+## Step 4 -- Issue Filing Subagent
 
 Dispatch a subagent to: For each gap identified in Step 3, file a GitHub issue:
 
@@ -78,13 +78,13 @@ Every issue must:
 
 Return the list of created issue URLs.
 
-## Step 5 — Implementation Dispatch (Optional)
+## Step 5 -- Implementation Dispatch (Optional)
 
 If configured to do so, the coordinator may dispatch the `feature-driven-implementation` skill for each new `feature` issue, or the `debug-protocol` skill for each new `bug` issue.
 
 This step is OPTIONAL and must be explicitly authorized by the human per-issue or globally.
 
-## Step 6 — Report Subagent
+## Step 6 -- Report Subagent
 
 Dispatch a subagent to: Generate a summary report containing:
 - Total spec documents audited

@@ -33,7 +33,7 @@ and SDN environments. Network equipment vendors ship YANG modules that define
 containers, lists, leaves, types, ranges, and enumerations for every managed
 resource (interfaces, slotContainer, sensors, routing protocols, etc.).
 
-The compiler runs inside CI/CD using **pyang** — an open-source Python YANG
+The compiler runs inside CI/CD using **pyang** -- an open-source Python YANG
 validator and parser. It walks pyang's internal AST and emits a
 `logical-layout.json` file that:
 
@@ -59,7 +59,7 @@ Key architectural principles:
 
 - **Python 3.8+**
 - **pip** (Python package installer)
-- **pyang** — the YANG parser library
+- **pyang** -- the YANG parser library
 
 ### Install pyang
 
@@ -117,7 +117,7 @@ python3 scripts/compile_yang.py \
 
 | Argument | Short | Required | Default | Description |
 |---|---|---|---|---|
-| `--input` | `-i` | Yes | — | Path to a `.yang` file |
+| `--input` | `-i` | Yes | -- | Path to a `.yang` file |
 | `--output` | `-o` | No | `logical-layout.json` | Path for the generated JSON |
 
 ### Typical workflow
@@ -332,7 +332,7 @@ widget-props level consumed by `ComponentFactory`.
 ### 5.4. Layout Section
 
 The layout section is a **fixed shell** produced by every compilation. Its
-structure never changes — only the `hierarchy` array inside the
+structure never changes -- only the `hierarchy` array inside the
 `HierarchyTreeSelector` props is populated dynamically.
 
 ```json
@@ -475,11 +475,11 @@ python3 scripts/compile_yang.py \
 
 The Flutter app consumes the generated file in two ways:
 
-1. **Layout shell** — The `layout` section is parsed by `ComponentFactory` to
+1. **Layout shell** -- The `layout` section is parsed by `ComponentFactory` to
    instantiate the sidebar, workspace split, topology pane, and tabbed
    containers. The hierarchy tree populates the `HierarchyTreeSelector` widget.
 
-2. **Attribute schemas** — The `attributes` array is consumed at runtime by
+2. **Attribute schemas** -- The `attributes` array is consumed at runtime by
    the generic `PropertyGrid` widget. The file `asset/logical-layout.json` is
    read on startup, deserialized into `AttributeDefinition` objects, and used
    to render form fields dynamically.
@@ -692,9 +692,9 @@ are empty (or absent in the JSON output).
 3. Build and launch: `flutter build macos && open build/macos/Build/Products/Debug/app_flutter.app`
 4. In the sidebar you should see a single **System** node.
 5. Expand System to see **Dns** and **Logging** sub-nodes.
-6. Click **System** — the property form should show `Hostname` (required) and
+6. Click **System** -- the property form should show `Hostname` (required) and
    `Uptime`.
-7. Click **Logging** — the form shows `Severity` (required, dropdown with 5
+7. Click **Logging** -- the form shows `Severity` (required, dropdown with 5
    options) and `Max Log Size` (integer, min 1, max 1048576).
 
 ---
@@ -806,7 +806,7 @@ without `leaf`/`leaf-list`.
 **Solution**: Check that the YANG type is `enumeration` and that `enum`
 substatements exist. The compiler maps `enumeration` to `"enum"` (line 42 of
 `compile_yang.py`). If you see `"type": "string"`, the type name is not
-`enumeration` — verify the YANG source.
+`enumeration` -- verify the YANG source.
 
 ### Ranges are not reflected in the output
 

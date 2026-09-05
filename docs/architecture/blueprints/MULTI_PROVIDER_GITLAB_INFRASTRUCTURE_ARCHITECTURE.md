@@ -16,7 +16,7 @@
 
 ### 1.1 Executive Summary
 
-In safety-critical cyber-physical systems—specifically autonomous Unmanned Aircraft Systems (UAS) operating Beyond Visual Line of Sight (BVLOS) near critical infrastructure—system safety, regulatory compliance (FAA / EASA / JARUS SORA), and airworthiness certification (RTCA DO-178C / DO-331) demand end-to-end bi-directional traceability across all engineering artifacts.
+In safety-critical cyber-physical systems--specifically autonomous Unmanned Aircraft Systems (UAS) operating Beyond Visual Line of Sight (BVLOS) near critical infrastructure--system safety, regulatory compliance (FAA / EASA / JARUS SORA), and airworthiness certification (RTCA DO-178C / DO-331) demand end-to-end bi-directional traceability across all engineering artifacts.
 
 A major architectural challenge in enterprise aerospace, defense, and sovereign infrastructure projects is **infrastructure and provider lock-in**. While initial open-source or commercial research and development frequently takes place on public software-as-a-service (SaaS) platforms (such as GitHub.com or GitLab.com SaaS), production deployment, defense programs, and classified operational variants are mandated to execute within **on-premises, air-gapped, or Sensitive Compartmented Information Facility (SCIF)** enclaves. These secure enclaves standardly deploy **GitLab Community Edition (CE)** or **GitLab Enterprise Edition (EE)** hosted on private hardware or isolated sovereign clouds (e.g., AWS Secret Region, Azure Government).
 
@@ -755,7 +755,7 @@ flowchart LR
 
 ### 5.1 Token Authentication Hierarchy & Resolution Engine
 
-To support execution across diverse environments—from developer laptops to automated air-gapped CI/CD runners—the DEAP GitLab Engine enforces a deterministic credential resolution hierarchy:
+To support execution across diverse environments--from developer laptops to automated air-gapped CI/CD runners--the DEAP GitLab Engine enforces a deterministic credential resolution hierarchy:
 
 ```mermaid
 flowchart TD

@@ -56,7 +56,7 @@ from .validators.coverage_digest_validator import CoverageDigestValidator
 from .validators.obligation_witness_validator import ObligationWitnessValidator
 
 # Validators migrated to structured findings. Un-migrated validators are deliberately
-# excluded rather than included and silently ungroupable — see `coverage_note`.
+# excluded rather than included and silently ungroupable -- see `coverage_note`.
 # Migration progress is gated by tests/test_validator_findings_migration_issue304.py,
 # which asserts that every module listed as migrated is also listed here: wrapping an
 # emission in Finding without wiring the validator in produces rule ids that reach no

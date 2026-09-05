@@ -1582,7 +1582,7 @@ def generate_markdown_report(summary: HarnessSummary) -> str:
         for layer_id in sorted(d.layers.keys()):
             l = d.layers[layer_id]
             status_tag = "✅ PASS" if l.passed else "❌ FAIL"
-            lines.append(f"#### Layer {l.layer_id}: {l.layer_name} — {status_tag}")
+            lines.append(f"#### Layer {l.layer_id}: {l.layer_name} -- {status_tag}")
             if l.errors:
                 lines.append("**Violations:**")
                 for err in l.errors:

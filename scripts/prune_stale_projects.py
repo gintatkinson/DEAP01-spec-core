@@ -20,7 +20,7 @@ def prune_projects_json(projects_file=None, dry_run=False):
         projects_file = os.path.expanduser("~/.gemini/projects.json")
 
     if not os.path.exists(projects_file):
-        print(f"Projects file '{projects_file}' does not exist — skipping pruning.")
+        print(f"Projects file '{projects_file}' does not exist -- skipping pruning.")
         return [], []
 
     try:
@@ -66,7 +66,7 @@ def prune_projects_json(projects_file=None, dry_run=False):
                     kept.append(path)
         data_to_write = new_dict
     else:
-        print(f"WARNING: Unexpected structure in '{projects_file}' — skipping pruning.", file=sys.stderr)
+        print(f"WARNING: Unexpected structure in '{projects_file}' -- skipping pruning.", file=sys.stderr)
         return [], []
 
     if pruned and not dry_run:
@@ -133,7 +133,7 @@ def clean_ds_store_files(workspace_dir=None, dry_run=False):
 
     workspace_dir = os.path.abspath(workspace_dir)
     if not os.path.exists(workspace_dir):
-        print(f"Workspace directory '{workspace_dir}' does not exist — skipping .DS_Store cleanup.")
+        print(f"Workspace directory '{workspace_dir}' does not exist -- skipping .DS_Store cleanup.")
         return []
 
     removed = []

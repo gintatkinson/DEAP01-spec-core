@@ -1,5 +1,5 @@
 ---
-title: "Implementation Profile — Flutter"
+title: "Implementation Profile -- Flutter"
 project: "Digital Engineering Agent Platform (DEAP)"
 tier: implementation
 platform: flutter
@@ -20,7 +20,7 @@ last_updated: "2026-06-29"
 
 ## Coding Standards
 - Type safety: Use strict null safety. All variables must have explicit types; avoid `var` in public API signatures. Use `final` for immutable declarations.
-- Naming conventions: Files — `snake_case.dart`. Directories — `snake_case`. Classes — `PascalCase`. Constants — `camelCase` with `const` keyword. Private members prefixed with `_`.
+- Naming conventions: Files -- `snake_case.dart`. Directories -- `snake_case`. Classes -- `PascalCase`. Constants -- `camelCase` with `const` keyword. Private members prefixed with `_`.
 - Architecture pattern: MVVM (Model-View-ViewModel). Views are stateless widgets that consume ViewModels via dependency injection. ViewModels hold business logic and state. Models are data classes with serialization support.
 - State management: Use `ChangeNotifier` + `ListenableBuilder` or `ValueListenableBuilder`. Avoid global state libraries unless justified by cross-cutting concerns.
 - Dependency injection: Use constructor injection. Repository and DataSource instances are resolved at bootstrap via `RepositoryResolver`.
@@ -41,28 +41,28 @@ last_updated: "2026-06-29"
 
 ## Domain Engineering Standards
 All Flutter feature implementations MUST adhere strictly to the 15 mandatory domain engineering standards:
-1. **Result<T> Over Exceptions** — All fallible domain operations and repository methods MUST return explicit `Result<T>` signatures (`Success<T>` or `Failure<T>`) rather than throwing untyped runtime exceptions.
-2. **Sealed Class Hierarchies** — Domain states, algebraic data types, events, and error hierarchies MUST use sealed class hierarchies (`sealed class`) to enforce exhaustive pattern matching and prevent invalid state variants.
-3. **Named Constructors with Validation** — Complex domain entities MUST declare private or named constructors that perform assertion and validation logic on inputs to guarantee invalid objects cannot be instantiated.
-4. **Typed Errors per Domain** — Every domain module MUST define explicit, strongly-typed error classes extending a sealed domain error base (`DomainError`) rather than returning raw error strings or untyped exceptions.
-5. **@immutable Annotation Mandatory** — Every domain class, entity, value object, event, and state container MUST be annotated with `@immutable` to enforce compile-time immutability.
-6. **Interface Segregation** — Domain interfaces and repository contracts MUST be narrow, lean, and highly cohesive so that clients are not forced to depend on methods they do not use.
-7. **Zero dynamic** — The use of `dynamic` or untyped `Object?` in domain signatures, interfaces, properties, or variables is strictly prohibited. All data flows must be strongly typed.
-8. **BDD Test Naming** — Unit and integration test names for domain logic MUST use explicit BDD behavior-driven naming patterns (`given_when_then` or `should [behavior] when [condition]`).
-9. **UML Traceability Tags Mandatory (`/// Realises: [...]`)** — Every public domain class, interface, mixin, extension, or typedef header MUST include a DartDoc traceability tag (`/// Realises: [SpecName/ClassName]`) referencing its underlying specification or UML classifier.
-10. **Public Member Docstrings Mandatory (`///`)** — Full DartDoc comments (`///`) are mandatory for every public class, interface, method, function, constructor, getter, and property in the domain layer.
-11. **const Constructors** — Immutable domain classes and value objects with `final` fields MUST declare `const` constructors to support compile-time constant canonicalization.
-12. **Value Equality (`==`/`hashCode`)** — All domain value objects and entities MUST override `operator ==` and `hashCode` (or extend `Equatable`) to guarantee value-based equality rather than reference identity.
-13. **Typedefs for Callbacks** — Callback functions, listener signatures, and event handlers MUST be declared as explicit `typedef` aliases rather than raw inline function types.
-14. **Private Constructors with Public Factories** — Domain entities requiring construction validation MUST restrict direct instantiation via private constructors (`._()`) and expose public factory constructors or builder methods.
-15. **Separation of Serialization** — Domain models MUST remain completely decoupled from JSON, database, or network serialization logic (such as `fromJson`/`toJson`). Serialization logic MUST reside strictly in separate DTOs or data layer adapters.
+1. **Result<T> Over Exceptions** -- All fallible domain operations and repository methods MUST return explicit `Result<T>` signatures (`Success<T>` or `Failure<T>`) rather than throwing untyped runtime exceptions.
+2. **Sealed Class Hierarchies** -- Domain states, algebraic data types, events, and error hierarchies MUST use sealed class hierarchies (`sealed class`) to enforce exhaustive pattern matching and prevent invalid state variants.
+3. **Named Constructors with Validation** -- Complex domain entities MUST declare private or named constructors that perform assertion and validation logic on inputs to guarantee invalid objects cannot be instantiated.
+4. **Typed Errors per Domain** -- Every domain module MUST define explicit, strongly-typed error classes extending a sealed domain error base (`DomainError`) rather than returning raw error strings or untyped exceptions.
+5. **@immutable Annotation Mandatory** -- Every domain class, entity, value object, event, and state container MUST be annotated with `@immutable` to enforce compile-time immutability.
+6. **Interface Segregation** -- Domain interfaces and repository contracts MUST be narrow, lean, and highly cohesive so that clients are not forced to depend on methods they do not use.
+7. **Zero dynamic** -- The use of `dynamic` or untyped `Object?` in domain signatures, interfaces, properties, or variables is strictly prohibited. All data flows must be strongly typed.
+8. **BDD Test Naming** -- Unit and integration test names for domain logic MUST use explicit BDD behavior-driven naming patterns (`given_when_then` or `should [behavior] when [condition]`).
+9. **UML Traceability Tags Mandatory (`/// Realises: [...]`)** -- Every public domain class, interface, mixin, extension, or typedef header MUST include a DartDoc traceability tag (`/// Realises: [SpecName/ClassName]`) referencing its underlying specification or UML classifier.
+10. **Public Member Docstrings Mandatory (`///`)** -- Full DartDoc comments (`///`) are mandatory for every public class, interface, method, function, constructor, getter, and property in the domain layer.
+11. **const Constructors** -- Immutable domain classes and value objects with `final` fields MUST declare `const` constructors to support compile-time constant canonicalization.
+12. **Value Equality (`==`/`hashCode`)** -- All domain value objects and entities MUST override `operator ==` and `hashCode` (or extend `Equatable`) to guarantee value-based equality rather than reference identity.
+13. **Typedefs for Callbacks** -- Callback functions, listener signatures, and event handlers MUST be declared as explicit `typedef` aliases rather than raw inline function types.
+14. **Private Constructors with Public Factories** -- Domain entities requiring construction validation MUST restrict direct instantiation via private constructors (`._()`) and expose public factory constructors or builder methods.
+15. **Separation of Serialization** -- Domain models MUST remain completely decoupled from JSON, database, or network serialization logic (such as `fromJson`/`toJson`). Serialization logic MUST reside strictly in separate DTOs or data layer adapters.
 
 ## Platform Audit Gates
 
 These are the platform-specific constraints the parity auditor enforces against a
 Flutter workspace. They live here rather than in `rules/` because each one names the
 Flutter source tree, a Flutter widget, or Flutter UI directories, and would be
-meaningless on another platform — see `rules/platform-independence.md`
+meaningless on another platform -- see `rules/platform-independence.md`
 § *Where platform-specific details belong*. Enforced offline by
 `parity_auditor/validators/profile_scoping_validator.py`,
 `parity_auditor/validators/schema_mapping_validator.py`, and
@@ -74,7 +74,7 @@ meaningless on another platform — see `rules/platform-independence.md`
   indistinguishable from full compliance, and across a corpus of downstream projects an
   empty codebase is itself the finding worth aggregating.
 - **Splitter Widgets Require Pointer Gesture Listeners**: any Dart source implementing a
-  splitter — by filename or by containing `Splitter` — MUST attach pointer gesture event
+  splitter -- by filename or by containing `Splitter` -- MUST attach pointer gesture event
   handling via `Listener` or `GestureDetector`. A splitter without one renders as a
   divider that cannot be dragged, so the layout requirement is met visually and not
   functionally.

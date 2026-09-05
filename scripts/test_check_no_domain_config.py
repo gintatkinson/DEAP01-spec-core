@@ -91,7 +91,7 @@ def test_cleanup_workspace_preserves_dart_tool_cache():
         cleanup_workspace(tmpdir)
 
         assert os.path.isdir(dart_tool), (
-            ".dart_tool/ cache directory was DELETED — it should be preserved"
+            ".dart_tool/ cache directory was DELETED -- it should be preserved"
         )
         assert not os.path.isfile(lock_file), (
             "package_config.json.lock should be cleaned (stale lock file)"

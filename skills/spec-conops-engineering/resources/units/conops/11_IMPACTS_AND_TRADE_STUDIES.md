@@ -50,7 +50,7 @@ The quantitative INCOSE Pugh Decision Matrix evaluates the candidate energy stor
 | Technology Readiness Level (TRL / Maturity) | C_5 | 0.10 | 5 (TRL 9 - Production) | 0.50 | 5 (TRL 9 - Commercial) | 0.50 | 2 (TRL 4 - Lab Prototype) | 0.20 |
 | Unit Acquisition & Pack Integration Cost | C_6 | 0.10 | 4 (Low Cost Baseline) | 0.40 | 3 (Moderate Heating Cost) | 0.30 | 1 (Very High Unit Cost) | 0.10 |
 | Total Composite Score (S_j = sum(w_i * s_ij)) | Total | 1.00 | Baseline Total: 2.25 | 2.25 | Selected Total: 4.15 | 4.15 | Developmental Total: 3.10 | 3.10 |
-| Pugh Ranking & Selection Decision | Rank | — | Rank 3 (Rejected) | — | Rank 1 (Selected Preferred) | — | Rank 2 (Deferred - Low TRL) | — |
+| Pugh Ranking & Selection Decision | Rank | -- | Rank 3 (Rejected) | -- | Rank 1 (Selected Preferred) | -- | Rank 2 (Deferred - Low TRL) | -- |
 
 ##### Mathematical Sensitivity Analysis Formulation (Trade Study 1)
 To verify decision robustness across varying environmental requirements, the sensitivity of the composite decision score $S_j$ to the cold-temperature performance weight $w_{\mathrm{cold}}$ is formulated as:
@@ -95,7 +95,7 @@ The quantitative Pugh Decision Matrix evaluates compute and communications archi
 | Autonomous Lost-Link Execution Authority | C_5 | 0.10 | 1 (Blind Reversion / Abort) | 0.10 | 5 (Continuous State Extraction) | 0.50 | 3 (Partial State Buffering) | 0.30 |
 | Software & Verification Complexity | C_6 | 0.05 | 4 (Standard Pipeline) | 0.20 | 3 (Embedded Neural Runtime) | 0.15 | 1 (Complex Distributed Sync) | 0.05 |
 | Total Composite Score (S_j = sum(w_i * s_ij)) | Total | 1.00 | Baseline Total: 1.95 | 1.95 | Selected Total: 4.40 | 4.40 | Hybrid Total: 2.90 | 2.90 |
-| Pugh Ranking & Selection Decision | Rank | — | Rank 3 (Rejected) | — | Rank 1 (Selected Preferred) | — | Rank 2 (Rejected - Complexity) | — |
+| Pugh Ranking & Selection Decision | Rank | -- | Rank 3 (Rejected) | -- | Rank 1 (Selected Preferred) | -- | Rank 2 (Rejected - Complexity) | -- |
 
 ##### Mathematical Sensitivity Analysis Formulation (Trade Study 2)
 The sensitivity of the composite decision score $S_j$ to the operational jamming and RF interference probability $P_{\mathrm{jam}} \in [0, 1]$ is formulated as:
@@ -140,7 +140,7 @@ The quantitative Pugh Decision Matrix evaluates safety containment architectures
 | Common-Cause Failure Mode Immunity | C_5 | 0.10 | 2 (Susceptible to Main Bus Failure) | 0.20 | 5 (Isolated Microcontroller & Power) | 0.50 | 4 (Passive Mechanical Simplicity) | 0.40 |
 | Pre-Operation Verification & Inspection Simplicity | C_6 | 0.05 | 3 (Complex Multi-Channel Rig) | 0.15 | 4 (Automated PBIT Continuity Check) | 0.20 | 5 (Visual Inspection Only) | 0.25 |
 | Total Composite Score (S_j = sum(w_i * s_ij)) | Total | 1.00 | Baseline Total: 1.55 | 1.55 | Selected Total: 4.80 | 4.80 | Passive Total: 2.00 | 2.00 |
-| Pugh Ranking & Selection Decision | Rank | — | Rank 3 (Rejected) | — | Rank 1 (Selected Preferred) | — | Rank 2 (Rejected - Insufficient) | — |
+| Pugh Ranking & Selection Decision | Rank | -- | Rank 3 (Rejected) | -- | Rank 1 (Selected Preferred) | -- | Rank 2 (Rejected - Insufficient) | -- |
 
 ##### Mathematical Sensitivity Analysis Formulation (Trade Study 3)
 In an unconstrained terminal descent scenario, steady-state terminal velocity is reached when gravitational force equals aerodynamic drag force ($m g = \frac{1}{2} \rho v_{\mathrm{term}}^2 S C_d$), yielding $v_{\mathrm{term}}^2(m) = \frac{2 m g}{\rho S C_d}$. The kinetic impact energy sensitivity equation expresses terminal kinetic energy $E_k(m)$ as a function of system mass $m$:

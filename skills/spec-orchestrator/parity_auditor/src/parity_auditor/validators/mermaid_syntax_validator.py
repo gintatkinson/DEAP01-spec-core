@@ -449,7 +449,7 @@ def check_mermaid_text(text: str, source: str = "<input>") -> List[str]:
                 label = rel_label.group("label").strip()
                 # Issue #333: a colon is not a "special character that quoting fixes".
                 # Mermaid treats ':' as a statement separator, so it ends the statement
-                # wherever it appears — inside quotes as much as outside. The quoting
+                # wherever it appears -- inside quotes as much as outside. The quoting
                 # rule was generalised from spaces, where quoting genuinely works, and
                 # the resulting label satisfied the gate while GitHub refused to render
                 # it. Checked before the quoting rule so a quoted colon is still caught.

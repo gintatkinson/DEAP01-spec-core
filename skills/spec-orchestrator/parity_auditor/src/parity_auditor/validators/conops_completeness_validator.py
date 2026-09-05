@@ -512,8 +512,8 @@ def _find_matching_sections_all(
     Preserves all matching occurrences to allow duplicate section detection.
     """
     matches: List[Tuple[str, int, str]] = []
-    num_pattern = rf'^(?:section\s+)?{sec_num}[.\s:\-—]'
-    any_num_pattern = r'^(?:section\s+)?[0-9]+[.\s:\-—]'
+    num_pattern = rf'^(?:section\s+)?{sec_num}[.\s:\-]'
+    any_num_pattern = r'^(?:section\s+)?[0-9]+[.\s:\-]'
 
     for heading, line_no, content in sections_list:
         h_clean = heading.lower().strip()
@@ -542,14 +542,14 @@ def _find_matching_section(
         return matches[0] if matches else None
 
     # Pass 1: Direct prefix match: e.g. "1. Scope", "## 1.", "1 - Scope", "Section 1:"
-    num_pattern = rf'^(?:section\s+)?{sec_num}[.\s:\-—]'
+    num_pattern = rf'^(?:section\s+)?{sec_num}[.\s:\-]'
     for heading, (line_no, content) in sections.items():
         h_clean = heading.lower().strip()
         if re.search(num_pattern, h_clean):
             return heading, line_no, content
 
     # Pass 2: Check alias matches for headings without section numbers
-    any_num_pattern = r'^(?:section\s+)?[0-9]+[.\s:\-—]'
+    any_num_pattern = r'^(?:section\s+)?[0-9]+[.\s:\-]'
     for heading, (line_no, content) in sections.items():
         h_clean = heading.lower().strip()
         if not re.search(any_num_pattern, h_clean):
@@ -1016,7 +1016,7 @@ class ConopsCompletenessValidator(IValidator):
                     sec_title = req["title"]
                     sec_aliases = req["aliases"]
 
-                    num_pattern_text = rf'\[(?:section\s+)?{sec_num}[.\s:\-—]'
+                    num_pattern_text = rf'\[(?:section\s+)?{sec_num}[.\s:\-]'
                     num_pattern_anchor = rf'\(#(?:section-)?{sec_num}[-_]'
                     found_in_toc = bool(
                         re.search(num_pattern_text, toc_chunk, re.IGNORECASE)
@@ -1526,7 +1526,7 @@ class ConopsCompletenessValidator(IValidator):
 ## 2. Normative Standards & Regulatory Baseline
 | Standard ID | Issuing Body | Title / Baseline | Applicable Clauses |
 | :--- | :--- | :--- | :--- |
-| ISO/IEC/IEEE 29148:2018 | ISO/IEEE | Systems and Software Engineering — Requirements Engineering | §6.4.2 ConOps & §6.4.3 OpsCon |
+| ISO/IEC/IEEE 29148:2018 | ISO/IEEE | Systems and Software Engineering -- Requirements Engineering | §6.4.2 ConOps & §6.4.3 OpsCon |
 | OMG UAF v1.2 / v2.0 | OMG | Unified Architecture Framework | Operational Domain (Op-*) |
 | NATO STANAG 4586 | NATO | Standard Interfaces of Autonomous Control Systems | Interoperability Profiles |
 | JARUS SORA v2.5 | JARUS | Specific Operations Risk Assessment | Annex B (Ground Risk & GRB) |
@@ -1884,7 +1884,7 @@ class MissionIntentCompletenessValidator(IValidator):
                     sec_title = req["title"]
                     sec_aliases = req["aliases"]
 
-                    num_pattern_text = rf'\[(?:section\s+)?{sec_num}[.\s:\-—]'
+                    num_pattern_text = rf'\[(?:section\s+)?{sec_num}[.\s:\-]'
                     num_pattern_anchor = rf'\(#(?:section-)?{sec_num}[-_]'
                     found_in_toc = bool(
                         re.search(num_pattern_text, toc_chunk, re.IGNORECASE)

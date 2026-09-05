@@ -1,4 +1,4 @@
-# DEAP Agent Orchestration Harness (DEAP-Harness) — DeepSeek Engine Integration Blueprint
+# DEAP Agent Orchestration Harness (DEAP-Harness) -- DeepSeek Engine Integration Blueprint
 
 | Attribute | Specification Detail |
 | :--- | :--- |

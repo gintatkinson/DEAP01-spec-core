@@ -1826,7 +1826,7 @@ SPEC_TYPE_ALIASES = {
 
 # A type word only marks a type when a separator, a digit or the end of the reference
 # follows it. Without that boundary `us` would claim "User Access Control" and `uc`
-# would claim "UCS Migration" — the same over-eager prefix stripping that produced #319
+# would claim "UCS Migration" -- the same over-eager prefix stripping that produced #319
 # in the first place, reintroduced in the code meant to contain it.
 _REFERENCE_TYPE_RE = re.compile(
     r'^\s*["\'#]*\s*'
@@ -2047,7 +2047,7 @@ def update_checklist_in_file(filepath, issue_dict, rules=None):
         # 2. Skip unresolved template placeholders
         if isinstance(dep_num_str, str) and PLACEHOLDER_PATTERN.match(dep_num_str):
             ref_str = format_issue_reference(dep_num_str, tracker_rules)
-            print(f"  [Deferred] Unresolved placeholder {ref_str} in {os.path.basename(filepath)} — skipping")
+            print(f"  [Deferred] Unresolved placeholder {ref_str} in {os.path.basename(filepath)} -- skipping")
             has_deps = True
             all_deps_closed = False
             continue
@@ -2057,7 +2057,7 @@ def update_checklist_in_file(filepath, issue_dict, rules=None):
         
         if dep_issue is None:
             ref_str = format_issue_reference(dep_num, tracker_rules)
-            print(f"  [Warning] Dependency {ref_str} not found in tracker for {os.path.basename(filepath)} — skipping item")
+            print(f"  [Warning] Dependency {ref_str} not found in tracker for {os.path.basename(filepath)} -- skipping item")
             all_deps_closed = False
             continue
             
@@ -2518,7 +2518,7 @@ def expand_relative_links_for_tracker(content, filepath=None, rules=None, worksp
         if abs_workspace:
             target_full_path = os.path.join(abs_workspace, norm_target)
             if not os.path.exists(target_full_path):
-                print(f"  [Warning] Target file '{norm_target}' not found in workspace for link '[{label}]({target})' — retaining relative link", file=sys.stderr)
+                print(f"  [Warning] Target file '{norm_target}' not found in workspace for link '[{label}]({target})' -- retaining relative link", file=sys.stderr)
                 return match.group(0)
 
         blob_url = f"{blob_base.rstrip('/')}/{norm_target}{fragment}"
@@ -2539,7 +2539,7 @@ def expand_relative_links_for_tracker(content, filepath=None, rules=None, worksp
         issue_num = int(issue_id_str) if issue_id_str.isdigit() else issue_id_str
         if known_issue_ids is not None:
             if issue_num not in known_issue_ids and issue_id_str not in known_issue_ids:
-                print(f"  [Warning] Unregistered issue reference #{issue_id_str} not found in tracker registry — reverting to placeholder {placeholder}", file=sys.stderr)
+                print(f"  [Warning] Unregistered issue reference #{issue_id_str} not found in tracker registry -- reverting to placeholder {placeholder}", file=sys.stderr)
                 return f"{indent}{placeholder}{rest}"
 
         issue_url = get_issue_web_url(issue_num, rules=rules, workspace_dir=workspace_dir)
@@ -2648,8 +2648,8 @@ def structural_label_key(issue_type):
     """Reduce an item type ("User Story") to its `tracker_rules.labels` key.
 
     The four spec loops name their type in prose; the configuration keys it in snake
-    case. Deriving one from the other keeps the taxonomy in a single place — the
-    configuration — instead of restating it at four call sites.
+    case. Deriving one from the other keeps the taxonomy in a single place -- the
+    configuration -- instead of restating it at four call sites.
     """
     return re.sub(r"[\s\-]+", "_", str(issue_type or "").strip().lower())
 
@@ -2771,7 +2771,7 @@ def issue_has_label(issue_record, label):
     """Does this tracker record already carry `label`?
 
     Tracker payloads express labels either as objects with a "name" or as bare strings,
-    so both are accepted — the same shapes `is_already_resolved` handles.
+    so both are accepted -- the same shapes `is_already_resolved` handles.
 
     Comparison folds case and word separators through `normalize_label` (#329). It was
     exact when #313 added this function, which meant an issue already carrying
@@ -2851,8 +2851,8 @@ def sync_issue_title_to_tracker(issue_num, filepath, rules=None, issue_record=No
 def apply_structural_label(issue_num, issue_type, rules=None, issue_record=None, provider_adapter=None):
     """Apply the configured structural label for this item type (#313).
 
-    Bootstrapping reuses the `create_label` command #309 added — `--force` makes it a
-    no-op where the label already exists — because a fresh downstream repository has no
+    Bootstrapping reuses the `create_label` command #309 added -- `--force` makes it a
+    no-op where the label already exists -- because a fresh downstream repository has no
     such label and applying one that does not exist fails the sync. This is the same
     just-in-time provisioning #309 established; making it install-time is issue #323 and
     is not attempted here.
@@ -2931,7 +2931,7 @@ def sync_issue_body_to_tracker(issue_num, filepath, issue_type="Feature", rules=
     """Push the specification to its tracker issue: body, title (#315) and label (#313).
 
     `issue_record` is the tracker's own payload for this issue, when the caller has it.
-    It is what makes the two additions conditional rather than unconditional — the title
+    It is what makes the two additions conditional rather than unconditional -- the title
     is only re-sent when it differs, and the label only applied when it is absent.
     """
     tracker_rules = rules.get("tracker_rules", {}) if rules else {}
@@ -3520,7 +3520,7 @@ def blocked_specs_from_linter_output(output_text, workspace_dir, rules=None):
     """Specification files the linter rejected, from its output.
 
     Intersected with the files that actually exist in the backlog directories. A bare
-    regex over the output also catches documents merely *cited* by a finding — a
+    regex over the output also catches documents merely *cited* by a finding -- a
     remediation note reading "see rules/document-references.md" made the reconciler
     skip the constitution, which it had never been asked to validate. Only items the
     linter genuinely rejected belong in the skip set (#321).
@@ -3693,7 +3693,7 @@ def extract_metadata(filepath):
 def lookup_canonical_issue_key(raw_id, issue_dict):
     """Return the key under which `raw_id` sits in `issue_dict`, or None if absent.
 
-    `issue_dict` is keyed twice per issue — once int, once str — because tracker
+    `issue_dict` is keyed twice per issue -- once int, once str -- because tracker
     payloads and frontmatter disagree about the type. Frontmatter may also quote the
     value or write it as a reference (`"901"`, `#901`), so all three spellings are
     reduced to the one key the caller can index with.
@@ -3735,12 +3735,12 @@ def resolve_spec_issue_number(filepath, title, title_map, issue_dict, rules=None
            the matched ID (#221).
          * If no title match exists in title_map, FAIL CLOSED with an explicit [FATAL]
            error explaining the collision (#221) and refuse to overwrite the remote tracker issue.
-    2. Frontmatter `issue_id` present but absent from the tracker — **hard error**. A
+    2. Frontmatter `issue_id` present but absent from the tracker -- **hard error**. A
        fall-through to title matching here is exactly #316: the title can match some
        unrelated issue, and `sync_issue_body_to_tracker` would then overwrite that
        issue's body. It is also the same class of defect as the referenced-but-missing
        issue the module already refuses to invent.
-    3. No `issue_id` yet (first registration) — title normalization, with a warning
+    3. No `issue_id` yet (first registration) -- title normalization, with a warning
        naming the file, because the constitution allows it only as a fallback.
 
     `claimed` is an optional dict shared across all four loops. Two spec files
@@ -3822,7 +3822,7 @@ def resolve_spec_issue_number(filepath, title, title_map, issue_dict, rules=None
                 f"frontmatter; fell back to matching by normalized title and resolved "
                 f"{format_issue_reference(issue_num, tracker_rules)}. "
                 ".pipeline/constitution.md:58-59 prohibits title normalization as a "
-                f"primary selector — add 'issue_id: {issue_num}' to {filepath}"
+                f"primary selector -- add 'issue_id: {issue_num}' to {filepath}"
             )
 
     if issue_num is None:
@@ -3848,15 +3848,15 @@ def resolve_spec_issue_number(filepath, title, title_map, issue_dict, rules=None
 def build_epic_alias_map(epics_dir, rules=None):
     """Every spelling an Epic can be referenced by -> that Epic's canonical normalized title.
 
-    The map resolves *cross-references between items* — the `epic:` frontmatter key and
-    the parent-epic link in a body — so that a child ends up in the right Epic's
+    The map resolves *cross-references between items* -- the `epic:` frontmatter key and
+    the parent-epic link in a body -- so that a child ends up in the right Epic's
     checklist. It has never resolved a file's own identity, and after #314/#316 it must
     not: `resolve_spec_issue_number` is the sole authority there, and an alias that
     claimed a Feature's slug would assert an identity the resolver never granted.
 
     Aliases are deliberately generous, including type-erased ones: an Epic titled
     "Epic 07: Geo Location" is reachable as `geo location`, because children routinely
-    name their parent by bare title. #319 is what that generosity cost — `feat-07-geo-
+    name their parent by bare title. #319 is what that generosity cost -- `feat-07-geo-
     location` normalizes to `geo location` too, so a Feature-typed reference resolved to
     the Epic. The gate for that is at *lookup* time in `resolve_epic_reference`, on the
     type the reference declares about itself, rather than by deleting the alias: deleting
@@ -3864,7 +3864,7 @@ def build_epic_alias_map(epics_dir, rules=None):
 
     What is enforced here is the other half of the collision. An alias claimed by two
     Epics with different canonical titles is dropped rather than kept, because keeping it
-    resolves by `os.listdir` order — a filesystem accident, not a resolution rule.
+    resolves by `os.listdir` order -- a filesystem accident, not a resolution rule.
     """
     alias_map = {}
     ambiguous = set()
@@ -3933,7 +3933,7 @@ def resolve_epic_reference(epic_ref, epic_alias_map, epic_id_to_norm, rules=None
     Order: issue number first, then the alias map, then bare normalization.
 
     The namespace gate for #319 sits between those last two. A reference that names its
-    own type — `feat-07-geo-location`, `us-03-operator`, `uc-04-device-state` — is not an
+    own type -- `feat-07-geo-location`, `us-03-operator`, `uc-04-device-state` -- is not an
     Epic reference, so the alias map is not consulted for it and no epic is returned.
     Falling through to `normalize_title` instead would not be enough: the whole point of
     the collision is that a Feature and an Epic sharing a suffix normalize to the same
@@ -4624,7 +4624,7 @@ def main():
 
         # Both sides of every comparison fold through normalize_label (#329): an issue
         # filed as "User Story" lowercases to "user story", never matched "user-story",
-        # and was bucketed nowhere — its specification then reported no issue on the
+        # and was bucketed nowhere -- its specification then reported no issue on the
         # tracker and the duplicate stayed open and orphaned.
         labels_config = tracker_rules.get("labels", {})
         epic_label = normalize_label(labels_config.get("epic", "epic"))
@@ -4898,7 +4898,7 @@ def main():
                             )
                 else:
                     print(
-                        f"Warning: No Epic issue on the tracker for {filename} — "
+                        f"Warning: No Epic issue on the tracker for {filename} -- "
                         f"no issue_id in its frontmatter and no title match for '{title}'"
                     )
 
@@ -4941,7 +4941,7 @@ def main():
                             )
                 else:
                     print(
-                        f"Warning: No Feature issue on the tracker for {filename} — "
+                        f"Warning: No Feature issue on the tracker for {filename} -- "
                         f"no issue_id in its frontmatter and no title match for '{title}'"
                     )
 
@@ -4984,7 +4984,7 @@ def main():
                             )
                 else:
                     print(
-                        f"Warning: No User Story issue on the tracker for {filename} — "
+                        f"Warning: No User Story issue on the tracker for {filename} -- "
                         f"no issue_id in its frontmatter and no title match for '{title}'"
                     )
 
@@ -5027,7 +5027,7 @@ def main():
                             )
                 else:
                     print(
-                        f"Warning: No Use Case issue on the tracker for {filename} — "
+                        f"Warning: No Use Case issue on the tracker for {filename} -- "
                         f"no issue_id in its frontmatter and no title match for '{title}'"
                     )
 

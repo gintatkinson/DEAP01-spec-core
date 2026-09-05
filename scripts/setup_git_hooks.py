@@ -41,7 +41,7 @@ def _whitelist_infrastructure(repo_root):
 
     git_dir = os.path.join(repo_root, ".git")
     if not os.path.isdir(git_dir) or not os.path.isfile(os.path.join(git_dir, "HEAD")):
-        print("Warning: not a git repository — skipping whitelist modifications", file=sys.stderr)
+        print("Warning: not a git repository -- skipping whitelist modifications", file=sys.stderr)
         return
 
     with open(gitignore_path, "r", encoding="utf-8") as f:

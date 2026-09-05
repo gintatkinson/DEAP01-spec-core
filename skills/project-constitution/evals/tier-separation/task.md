@@ -19,7 +19,7 @@ Using the `project-constitution` skill:
 
 ## Expected Behaviors
 
-- Agent creates `.pipeline/constitution.md` with domain rules, spec standards, agent behavior, quality gates — all platform-independent
+- Agent creates `.pipeline/constitution.md` with domain rules, spec standards, agent behavior, quality gates -- all platform-independent
 - Agent creates `.pipeline/profiles/{platform}.md` with platform-specific coding standards, testing mandates, build config
 - The functional constitution does NOT mention React, TypeScript, Jest, or any framework
 - The implementation profile references the functional constitution

@@ -54,14 +54,14 @@ class TestSTPAGuideWordClassification(unittest.TestCase):
             # GW-1: Not providing / Omission
             ("Class a", "GW-1"),
             ("Class A", "GW-1"),
-            ("Class a — not providing", "GW-1"),
+            ("Class a -- not providing", "GW-1"),
             ("Omission", "GW-1"),
             ("Withheld", "GW-1"),
             ("GW-1", "GW-1"),
             # GW-2: Providing / Commission
             ("Class b", "GW-2"),
             ("Class B", "GW-2"),
-            ("Class b — providing causes hazard", "GW-2"),
+            ("Class b -- providing causes hazard", "GW-2"),
             ("Commission", "GW-2"),
             ("Incorrectly provided", "GW-2"),
             ("Unintended provision", "GW-2"),
@@ -69,7 +69,7 @@ class TestSTPAGuideWordClassification(unittest.TestCase):
             # GW-3: Too early, too late, out of order
             ("Class c", "GW-3"),
             ("Class C", "GW-3"),
-            ("Class c — too late", "GW-3"),
+            ("Class c -- too late", "GW-3"),
             ("Too early", "GW-3"),
             ("Too late", "GW-3"),
             ("Out of order", "GW-3"),
@@ -79,7 +79,7 @@ class TestSTPAGuideWordClassification(unittest.TestCase):
             # GW-4: Stopped too soon, applied too long
             ("Class d", "GW-4"),
             ("Class D", "GW-4"),
-            ("Class d — stopped too soon", "GW-4"),
+            ("Class d -- stopped too soon", "GW-4"),
             ("Stopped too soon", "GW-4"),
             ("Applied too long", "GW-4"),
             ("Stopped early", "GW-4"),
@@ -94,7 +94,7 @@ class TestSTPAGuideWordClassification(unittest.TestCase):
 
     def test_compound_class_attribution_expansion(self):
         """Verify compound class attribution cells expand into multiple guide words."""
-        compound = "Class a — not providing; Class c — too late"
+        compound = "Class a -- not providing; Class c -- too late"
         matches = classify_uca_guide_words(compound)
         self.assertEqual(len(matches), 2)
         gw_ids = [m[0] for m in matches]
@@ -116,15 +116,15 @@ class TestSTPATableParserColumnVariations(unittest.TestCase):
         table = (
             "| UCA ID | Controller | Control action (SSOT) | Class attribution | Linked hazards | Loss Reference | Safety Constraint |\n"
             "| :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n"
-            "| UCA-001 | ControllerA | Action01 | Class a — not providing causes hazard | H-1 | L-1 | SC-001 |\n"
-            "| UCA-002 | ControllerA | Action01 | Class b — providing causes hazard | H-1 | L-1 | SC-002 |\n"
+            "| UCA-001 | ControllerA | Action01 | Class a -- not providing causes hazard | H-1 | L-1 | SC-001 |\n"
+            "| UCA-002 | ControllerA | Action01 | Class b -- providing causes hazard | H-1 | L-1 | SC-002 |\n"
         )
         rows = MarkdownTableASTParser.parse_stpa_table(table)
         self.assertEqual(len(rows), 2)
         self.assertEqual(rows[0].uca_id, "UCA-001")
         self.assertEqual(rows[0].controller, "ControllerA")
         self.assertEqual(rows[0].control_action, "Action01")
-        self.assertEqual(rows[0].guide_word, "Class a — not providing causes hazard")
+        self.assertEqual(rows[0].guide_word, "Class a -- not providing causes hazard")
         self.assertEqual(rows[0].hazard_ref, "H-1")
 
     def test_short_headers_action_failure_mode(self):
@@ -188,10 +188,10 @@ class TestCheck17CartesianCompleteness60Rows(unittest.TestCase):
                 "| :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n"
             )
             gw_phrasings = {
-                "GW-1": "Class a — not providing causes hazard",
-                "GW-2": "Class b — providing causes hazard",
-                "GW-3": "Class c — too late",
-                "GW-4": "Class d — stopped too soon",
+                "GW-1": "Class a -- not providing causes hazard",
+                "GW-2": "Class b -- providing causes hazard",
+                "GW-3": "Class c -- too late",
+                "GW-4": "Class d -- stopped too soon",
             }
         elif header_style == "short":
             header = (
@@ -302,11 +302,11 @@ Formal invariant proofs are synthesized into **MATLAB / Simulink / Stateflow / E
 ## 10. Formal Safety Theorems
 
 ### Theorem THM-01: Safe Operating Envelope Invariance
-**Part 1 — Proposition / Theorem Statement**: Safe envelope invariant.
-**Part 2 — Operational Assumptions & Domain Bounds**: Bounded inputs.
-**Part 3 — Invariant / Barrier Function Definition**: B(x) <= 0.
-**Part 4 — Analytical / Inductive Derivation**: Preserved across all transitions.
-**Part 5 — Formal Conclusion & Q.E.D.**: Envelope invariance holds.
+**Part 1 -- Proposition / Theorem Statement**: Safe envelope invariant.
+**Part 2 -- Operational Assumptions & Domain Bounds**: Bounded inputs.
+**Part 3 -- Invariant / Barrier Function Definition**: B(x) <= 0.
+**Part 4 -- Analytical / Inductive Derivation**: Preserved across all transitions.
+**Part 5 -- Formal Conclusion & Q.E.D.**: Envelope invariance holds.
 """
 
     def test_60_row_standard_table_cartesian_completeness_with_model(self):

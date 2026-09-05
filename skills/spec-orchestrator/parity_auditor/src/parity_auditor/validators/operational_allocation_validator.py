@@ -50,7 +50,7 @@ def _normalize_oa_id(raw_id: str) -> str:
     raw = re.sub(r'[*`_\[\]]', '', raw).strip()
     
     # Strip leading 'Phase N:' or 'Phase N -'
-    m_phase_prefix = re.match(r'^Phase\s*\d*[:\-—\s]+\s*(.+)$', raw, re.IGNORECASE)
+    m_phase_prefix = re.match(r'^Phase\s*\d*[:\-\s]+\s*(.+)$', raw, re.IGNORECASE)
     if m_phase_prefix:
         raw = m_phase_prefix.group(1).strip()
 
@@ -214,7 +214,7 @@ class OperationalAllocationValidator(IValidator):
                     raw_id = oa_match.group(1)
                     canon = _normalize_oa_id(raw_id)
                     # Extract name after colon or dash if present
-                    m_desc = re.search(r'(?:(?:OA|MET|METL)[_-]?\d+[a-zA-Z0-9_-]*)[*`_]*\s*[:\-—]\s*(.+)$', stripped, re.IGNORECASE)
+                    m_desc = re.search(r'(?:(?:OA|MET|METL)[_-]?\d+[a-zA-Z0-9_-]*)[*`_]*\s*[:\-]\s*(.+)$', stripped, re.IGNORECASE)
                     display_name = m_desc.group(1).strip() if m_desc else raw_id
                     display_name = re.sub(r'[*`_]', '', display_name).strip()
                     ops_universe[canon] = display_name
@@ -223,7 +223,7 @@ class OperationalAllocationValidator(IValidator):
                     continue
 
                 # Parse Phase declarations: - **Phase 1: Startup** or ### Phase 1: Startup
-                phase_match = re.search(r'\bPhase\s*\d*[:\-—\s]+\s*([a-zA-Z0-9_-]+)', stripped, re.IGNORECASE)
+                phase_match = re.search(r'\bPhase\s*\d*[:\-\s]+\s*([a-zA-Z0-9_-]+)', stripped, re.IGNORECASE)
                 if phase_match:
                     phase_name = phase_match.group(1).strip()
                     phase_name = re.sub(r'[*`_]', '', phase_name).strip()
@@ -237,7 +237,7 @@ class OperationalAllocationValidator(IValidator):
                 # If inside explicit phases section, check list items: - **Startup** or - Startup:
                 if in_phases_section and (stripped.startswith("-") or stripped.startswith("*")):
                     item_text = re.sub(r'^[-*]\s*', '', stripped).strip()
-                    m_token = re.match(r'^\*{0,2}([a-zA-Z0-9_-]+)\*{0,2}(?:\s*[:\-—]|$)', item_text)
+                    m_token = re.match(r'^\*{0,2}([a-zA-Z0-9_-]+)\*{0,2}(?:\s*[:\-]|$)', item_text)
                     if m_token:
                         pname = m_token.group(1).strip()
                         if pname and len(pname) > 2 and pname.lower() not in ("phase", "phases", "lifecycle", "table", "the", "all"):

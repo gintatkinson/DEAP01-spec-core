@@ -24,7 +24,7 @@
 
 ## 1. Architecture Overview
 
-The platform discovers your domain schema at runtime — no code changes needed. Here is the data flow:
+The platform discovers your domain schema at runtime -- no code changes needed. Here is the data flow:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -69,7 +69,7 @@ The platform discovers your domain schema at runtime — no code changes needed.
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-**Key insight:** The app has zero hardcoded domain knowledge. Everything — the sidebar tree, the property forms, the table columns — is driven by what your `DataSource` returns. Add rows to the database tables and the UI adapts immediately.
+**Key insight:** The app has zero hardcoded domain knowledge. Everything -- the sidebar tree, the property forms, the table columns -- is driven by what your `DataSource` returns. Add rows to the database tables and the UI adapts immediately.
 
 ---
 
@@ -108,7 +108,7 @@ Each real-world object type gets one row in `type_definitions`.
 | `icon_name`  | Material Design icon name (see [Material Icons](https://fonts.google.com/icons)) | `menu_book`         |
 
 **Rules:**
-- `type_name` must be unique — use `PascalCase`.
+- `type_name` must be unique -- use `PascalCase`.
 - `icon_name` is the snake_case name from the Material icon set (e.g., `person`, `category`, `dns`). Defaults to `insert_drive_file` if omitted.
 
 ### 3.2 Type Attributes (Fields)
@@ -196,14 +196,14 @@ INSERT INTO type_relations VALUES (2, 'Book', 'written_by', 'Author', 'Authors')
 INSERT INTO type_relations VALUES (3, 'Book', 'borrowed_by', 'Patron', 'Borrowers');
 INSERT INTO type_relations VALUES (4, 'Patron', 'has_loan', 'Loan', 'Loans');
 
--- 4.3 Type Attributes — Genre
+-- 4.3 Type Attributes -- Genre
 INSERT INTO type_attributes
   (type_name, attr_key, label, attr_type, section_label, section_order, is_required)
 VALUES
   ('Genre', 'name', 'Name', 'string', 'Details', 0, 1),
   ('Genre', 'description', 'Description', 'string', 'Details', 1, 0);
 
--- 4.4 Type Attributes — Book
+-- 4.4 Type Attributes -- Book
 INSERT INTO type_attributes
   (type_name, attr_key, label, attr_type, section_label, section_order, is_required, min_value, max_value)
 VALUES
@@ -224,7 +224,7 @@ VALUES
    '["Fiction","Non-Fiction","Reference","Periodical"]',
    'Fiction', NULL);
 
--- 4.5 Type Attributes — Author
+-- 4.5 Type Attributes -- Author
 INSERT INTO type_attributes
   (type_name, attr_key, label, attr_type, section_label, section_order, is_required)
 VALUES
@@ -232,7 +232,7 @@ VALUES
   ('Author', 'birth_year', 'Birth Year', 'int', 'Details', 1, 0),
   ('Author', 'nationality', 'Nationality', 'string', 'Details', 2, 0);
 
--- 4.6 Type Attributes — Patron
+-- 4.6 Type Attributes -- Patron
 INSERT INTO type_attributes
   (type_name, attr_key, label, attr_type, section_label, section_order, is_required)
 VALUES
@@ -241,7 +241,7 @@ VALUES
   ('Patron', 'phone', 'Phone', 'string', 'Details', 2, 0),
   ('Patron', 'member_since', 'Member Since', 'date', 'Details', 3, 0);
 
--- 4.7 Type Attributes — Loan
+-- 4.7 Type Attributes -- Loan
 INSERT INTO type_attributes
   (type_name, attr_key, label, attr_type, section_label, section_order, is_required)
 VALUES
@@ -330,7 +330,7 @@ This script:
 2. Creates a fresh SQLite database at `assets/properties_db.db`.
 3. Creates all required tables: `properties`, `elements`, `alarms`, `events`, `type_definitions`, `type_attributes`, `type_relations`.
 
-The script only creates the schema — it does NOT insert seed data. After running it, you must seed your ontology. The two steps can be combined in a single script if preferred.
+The script only creates the schema -- it does NOT insert seed data. After running it, you must seed your ontology. The two steps can be combined in a single script if preferred.
 
 **Important:** The `generate_db.dart` script creates an _empty_ database with just the schema. If you run it after seeding, you will lose your seed data. The correct order is:
 
@@ -345,7 +345,7 @@ Or roll both into a single script (option B above).
 
 ## 6. Step 4: (Optional) Customize the Layout
 
-The file `assets/logical-layout.json` controls the application layout — the sidebar, the pane split ratios, the tabs shown in the detail panel, and the topology map settings.
+The file `assets/logical-layout.json` controls the application layout -- the sidebar, the pane split ratios, the tabs shown in the detail panel, and the topology map settings.
 
 ### What you can change
 
@@ -401,9 +401,9 @@ flutter build windows  # Windows
 ### Verify your domain is working
 
 1. Launch the app.
-2. Check the sidebar — you should see your root types (e.g., Genre) at the top level.
-3. Expand a type — child types should appear (e.g., Books under Genre).
-4. Click a child type — the property form should show the fields you defined, grouped by section.
+2. Check the sidebar -- you should see your root types (e.g., Genre) at the top level.
+3. Expand a type -- child types should appear (e.g., Books under Genre).
+4. Click a child type -- the property form should show the fields you defined, grouped by section.
 5. Check that required fields show validation, numeric fields respect min/max, and enum fields show a dropdown.
 
 ---
@@ -539,7 +539,7 @@ Then set `repository_type` in `assets/persistence-config.json`:
 ### What else you may need
 
 - If your new data source provides _instance data_ (not just schema), implement a custom `AbstractRepository` as well.
-- The `RepositoryResolver.resolve()` returns both `(AbstractRepository, DataSource)` — both can be swapped independently.
+- The `RepositoryResolver.resolve()` returns both `(AbstractRepository, DataSource)` -- both can be swapped independently.
 
 ---
 
@@ -556,7 +556,7 @@ Genre ──contains──> Book ──written_by──> Author
 
 ### 9.2 Seed SQL
 
-Full seed script is shown in [Step 4](#4-step-2-seed-the-database) — here is the condensed version:
+Full seed script is shown in [Step 4](#4-step-2-seed-the-database) -- here is the condensed version:
 
 ```sql
 DELETE FROM type_relations;
@@ -636,7 +636,7 @@ flutter build macos
 
 ## 10. Troubleshooting
 
-### "No type definitions found" — app shows a blank "Item" type
+### "No type definitions found" -- app shows a blank "Item" type
 
 The `RepositoryResolver` counts rows in `type_definitions`. If the count is zero, it falls back to `FallbackDataSource`, which provides a hardcoded `Item` type. **Solution:** Make sure your seed data was written to the correct database file. Verify:
 
@@ -658,7 +658,7 @@ You tried to insert a duplicate `(type_name, attr_key)` pair or a duplicate `(pa
 
 ### Enum fields show as plain text instead of dropdowns
 
-Ensure `attr_type` is exactly `'enum'` and that `enum_options` is a valid JSON array string (e.g., `'["Fiction","Non-Fiction"]'`). The `SqliteDataSource._parseField` method calls `jsonDecode` on `enum_options` — invalid JSON will silently produce `null`.
+Ensure `attr_type` is exactly `'enum'` and that `enum_options` is a valid JSON array string (e.g., `'["Fiction","Non-Fiction"]'`). The `SqliteDataSource._parseField` method calls `jsonDecode` on `enum_options` -- invalid JSON will silently produce `null`.
 
 ### "Cannot locate database asset" error on build
 
@@ -688,11 +688,11 @@ The `TreeViewModel` builds the tree in `_buildTree()`: types that never appear a
 Check:
 1. The `type_name` in `type_attributes` matches exactly (case-sensitive) a `type_name` in `type_definitions`.
 2. The `attr_key` is unique within that type.
-3. The `SqliteDataSource` query orders by `section_order, id` — fields with `NULL` `section_order` default to `0`.
+3. The `SqliteDataSource` query orders by `section_order, id` -- fields with `NULL` `section_order` default to `0`.
 
 ---
 
-## Appendix A: Reference — Database Schema
+## Appendix A: Reference -- Database Schema
 
 The tables created by `scripts/generate_db.dart`:
 
@@ -729,6 +729,6 @@ type_relations
   UNIQUE(parent_type_name, child_type_name)
 ```
 
-## Appendix B: Reference — Material Icon Names
+## Appendix B: Reference -- Material Icon Names
 
 Find icon names at [flutter.github.io/material-icon-font](https://flutter.github.io/material-icon-font/). Use the "snake_case" name (e.g., `menu_book`, `person`, `category`, `dns`, `inventory_2`, `local_hospital`, `warehouse`).

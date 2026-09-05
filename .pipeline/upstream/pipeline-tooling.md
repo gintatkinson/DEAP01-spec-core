@@ -1,5 +1,5 @@
 ---
-title: "Implementation Profile — Pipeline Tooling (UPSTREAM ONLY)"
+title: "Implementation Profile -- Pipeline Tooling (UPSTREAM ONLY)"
 project: "Digital Engineering Agent Platform (DEAP)"
 tier: implementation
 platform: pipeline-tooling
@@ -10,7 +10,7 @@ last_updated: "2026-07-31"
 
 # Implementation Profile: Pipeline Tooling
 
-> **UPSTREAM ONLY.** This profile governs the pipeline repository's own tooling —
+> **UPSTREAM ONLY.** This profile governs the pipeline repository's own tooling --
 > the Python scripts and Markdown governance documents that generate and validate
 > specifications. It is **not** an application platform profile.
 >
@@ -22,17 +22,17 @@ last_updated: "2026-07-31"
 - **Target:** this repository's own tooling. `scripts/`, `skills/*/scripts/`,
   `skills/spec-orchestrator/parity_auditor/`, plus the Markdown under
   `rules/`, `skills/` and `.pipeline/`.
-- **Python floor:** `>=3.12`. Empirically verified — both suites pass under
+- **Python floor:** `>=3.12`. Empirically verified -- both suites pass under
   `python3.12` (3.12.13) and `pip install -e` succeeds against it. Raised from
   `>=3.9` by issue #294.
   > **The bare `python3` on the development machine is still 3.9.6.** Homebrew's
   > `python@3.12` is installed alongside it and does not replace it, so invoke the
-  > toolchain explicitly — `/opt/homebrew/opt/python@3.12/bin/python3.12`, or a
+  > toolchain explicitly -- `/opt/homebrew/opt/python@3.12/bin/python3.12`, or a
   > venv built from it. `requires-python` is the only thing that enforces the
   > floor: `pip install -e` refuses under 3.9, while `pytest`, `ruff` and the
   > scripts do not read it and would still run. That narrowness is why the
   > migration was safe, and why the explicit interpreter matters.
-- **CI matrix:** `['3.12', '3.13']` with `fail-fast: false` — the floor plus a
+- **CI matrix:** `['3.12', '3.13']` with `fail-fast: false` -- the floor plus a
   forward version, so post-3.12 syntax is caught before it reaches `main`.
 - **Runtime dependencies:** `PyYAML>=6.0` and `pyang` (`requirements.txt`).
   `parity_auditor` additionally declares `pytest>=8.3.5` and `pyyaml>=6.0.3`.
@@ -58,10 +58,10 @@ last_updated: "2026-07-31"
   unions or builtin generics. This existed to hold the 3.9 floor; with the floor at
   3.12 (#294) both spellings are valid, so the rule is now **consistency, not
   necessity**. New code SHOULD match the surrounding file. A mechanical sweep of the
-  22 modules using `typing` imports is explicitly NOT wanted — it would be pure churn
+  22 modules using `typing` imports is explicitly NOT wanted -- it would be pure churn
   across the package with no behavioural change and would swamp review.
 - **Linter:** `ruff`, configured in `parity_auditor/pyproject.toml` with
-  `select = ["F", "E9"]` — pyflakes plus syntax/IO errors. Style families (`E1`-`E7`,
+  `select = ["F", "E9"]` -- pyflakes plus syntax/IO errors. Style families (`E1`-`E7`,
   `W`, `I`, `N`) are **deliberately excluded**: enabling them across ~70 previously
   unlinted files would create a large cosmetic backlog that is a project in its own
   right. Blocking in CI. Run locally with:
@@ -96,11 +96,11 @@ last_updated: "2026-07-31"
   caches `.pyc` under `~/Library/Caches/com.apple.python/`, *outside* the repository, so
   clearing `./tests/__pycache__` has no effect. Because `.pyc` invalidation keys on mtime
   and size, an edit that does not change a file's byte length can leave stale bytecode in
-  place — a test then passes or fails against source no longer on disk. This invalidates
+  place -- a test then passes or fails against source no longer on disk. This invalidates
   negative-control probes, which are the only evidence that a gate can actually fail. Set
   in CI job `env`; set it locally too. See issue #302.
 - **No coverage percentage threshold.** Deliberate. The observed failure mode in
-  this repository is specific defects escaping, not low aggregate coverage — a
+  this repository is specific defects escaping, not low aggregate coverage -- a
   percentage gate would have prevented none of issues #276 through #294, and on a
   tooling repository it is trivially gamed by importing modules. Measure coverage
   for information if desired, but do not gate on it. The per-issue regression
@@ -110,7 +110,7 @@ last_updated: "2026-07-31"
 
 - Blocking gates MUST be **offline and dependency-free**. A gate that calls a
   third-party service fails when that service is down or rate-limits, blocking
-  work for reasons unrelated to correctness — the same pathology as issue #282,
+  work for reasons unrelated to correctness -- the same pathology as issue #282,
   where a mandatory gate hard-failed for an unrelated reason.
 - Sending specification content to a third-party renderer or API for validation
   is additionally a confidentiality concern and is not permitted in a gate.
@@ -149,7 +149,7 @@ last_updated: "2026-07-31"
 
 Per `.pipeline/constitution.md` § *CMMI Level 3 & Scrum Issue Lifecycle Rules*:
 
-- An agent may take an issue as far as **`Fixed / Resolved`** — development
+- An agent may take an issue as far as **`Fixed / Resolved`** -- development
   complete, both suites green, merged to `main`, evidence pasted on the issue.
 - **`Closed` is unreachable by an agent.** It requires explicit Product Owner
   validation. Agents MUST NOT close issues.
@@ -159,7 +159,7 @@ Per `.pipeline/constitution.md` § *CMMI Level 3 & Scrum Issue Lifecycle Rules*:
   `debug-protocol` Step 7 and `feature-driven-implementation` Step 5 item 5 and
   Step 6 item 2, all of which instructed the agent to close the issue. An override
   was the wrong instrument: `AGENTS.md:75` mandates literal skill execution, and
-  this profile is upstream-only, so a downstream project never receives it — the
+  this profile is upstream-only, so a downstream project never receives it -- the
   skills would have kept instructing closure with nothing to countermand them.
   Both skills now state the rule directly, and
   `tests/test_skills_never_close_issues_issue306.py` enforces it across every
@@ -167,7 +167,7 @@ Per `.pipeline/constitution.md` § *CMMI Level 3 & Scrum Issue Lifecycle Rules*:
   (`AGENTS.md:59-62`).
 - **Resolved by #309.** `reconcile_backlog.py` formerly closed Epics, User Stories
   and Use Cases automatically at three call sites, and `AGENTS.md` § *Backlog
-  Reconciliation Mandate* requires that script run before every merge — so the
+  Reconciliation Mandate* requires that script run before every merge -- so the
   violation was mandated to execute. It now applies `status:fixed-resolved` with an
   evidence comment and leaves the issue open. The guard moved from issue state to the
   label: closing was what stopped a second run from acting, so removing it without

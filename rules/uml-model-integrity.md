@@ -10,7 +10,7 @@ complete, and every UML diagram it carries must be a valid model rather than a p
 **This file is the single normative home for the model-integrity constraints enforced by
 `parity_auditor/validators/uml.py`.** They span all four backlog document types, so
 stating them in any one worker skill would fragment them across four files with disjoint
-subsets — the failure issue #289 fixed for the Mermaid rules by designating one home.
+subsets -- the failure issue #289 fixed for the Mermaid rules by designating one home.
 The worker skills own the *templates*; this file owns the *rules* the templates exist to
 satisfy.
 
@@ -18,9 +18,9 @@ Three rules enforced here are **not** restated below, because they already have 
 normative home and restating them is prohibited by
 `rules/platform-independence.md` § *Normative home & enforcement*:
 
-- braces inside class members — *Mermaid Class Member Brace Rules*
-- colons inside note strings — *Mermaid Note Rules*
-- stereotypes on relationship lines — *Mermaid Relationship Rules*
+- braces inside class members -- *Mermaid Class Member Brace Rules*
+- colons inside note strings -- *Mermaid Note Rules*
+- stereotypes on relationship lines -- *Mermaid Relationship Rules*
 
 The subagent generation-mode marker likewise keeps its existing home in
 `skills/spec-orchestrator/SKILL.md`.

@@ -2,7 +2,7 @@
 
 Titles normalise through ``reconcile_backlog.py``'s own function, bound by reference in
 ``utils/spec_titles.py``. This module used to carry a private copy that had drifted from
-it in two ways — it lacked the guard that keeps the original title when prefix-stripping
+it in two ways -- it lacked the guard that keeps the original title when prefix-stripping
 would empty it (so every prefix-only title, "Epic 2" and "Epic 3" alike, collapsed to one
 key), and it folded ``_`` to a space (so two titles the reconciler keys apart looked
 identical here). A gate that collides in a different space from the consumer it protects

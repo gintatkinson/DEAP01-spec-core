@@ -1,5 +1,5 @@
 ---
-title: "Implementation Profile — PX4 Autopilot Module"
+title: "Implementation Profile -- PX4 Autopilot Module"
 project: "Digital Engineering Agent Platform (DEAP)"
 tier: implementation
 platform: px4_module

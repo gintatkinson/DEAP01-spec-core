@@ -11,7 +11,7 @@ at all, so the rewrite published cleanly (#320).
 to be offline and dependency-free, and forbids sending specification content to a third
 party. #320's text asks for reachability checking; implementing it would put an HTTP
 call on the critical path of every registration, failing whenever the far end is down or
-rate-limits — for reasons unrelated to correctness — and would leak specification
+rate-limits -- for reasons unrelated to correctness -- and would leak specification
 content to whoever is asked. What is checked instead is the *structure* of the rewrite,
 which is what actually catches #322 and needs no network.
 

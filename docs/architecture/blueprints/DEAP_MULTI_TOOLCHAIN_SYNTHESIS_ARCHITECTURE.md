@@ -22,7 +22,7 @@ Historically, safety-critical organizations have been trapped in rigid, single-v
 1. **Commercial Model-Based Design (MBD) Silos:** Organizations relying exclusively on proprietary environments such as **ANSYS SCADE Suite** or **MathWorks MATLAB / Simulink / Stateflow** achieve high levels of code generation maturity, but face vendor lock-in, proprietary model representations that resist automated git-based CI/CD workflows, and steep licensing barriers that prevent elastic cloud verification.
 2. **Formal Verification Silos:** Specialized teams utilizing formal deductive provers such as **AdaCore SPARK Ada** or bounded model checkers (**nuXmv**, **UPPAAL**, **CBMC**, **Kani**) frequently operate independently of the primary systems engineering team, manually translating requirements into mathematical contracts and leading to specification drift.
 3. **Multi-Physics & Architectural Analysis Silos:** Multi-body dynamics, aerodynamic models, and thermal dissipation systems authored in **OpenModelica** / **FMI** or execution architecture models authored in **OSATE / AADL (SAE AS5506)** remain disconnected from real-time flight software synthesis.
-4. **Target Execution Framework Heterogeneity:** Embedded software teams must deploy synthesized control laws across vastly different real-time kernels and frameworks—from bare-metal microcontrollers running **Zephyr RTOS**, to space-grade **RTEMS**, certified commercial microkernels (**QNX Neutrino**, **Wind River VxWorks 653**), robotics middleware (**ROS 2**), autonomous flight stacks (**PX4 Autopilot**), and spaceflight software frameworks (**NASA cFS**).
+4. **Target Execution Framework Heterogeneity:** Embedded software teams must deploy synthesized control laws across vastly different real-time kernels and frameworks--from bare-metal microcontrollers running **Zephyr RTOS**, to space-grade **RTEMS**, certified commercial microkernels (**QNX Neutrino**, **Wind River VxWorks 653**), robotics middleware (**ROS 2**), autonomous flight stacks (**PX4 Autopilot**), and spaceflight software frameworks (**NASA cFS**).
 
 ```mermaid
 flowchart TD
@@ -171,7 +171,7 @@ flowchart TD
 
 ---
 
-## Section 3: Tier 1 — Certified Model-Based Design (MBD) Toolchains
+## Section 3: Tier 1 -- Certified Model-Based Design (MBD) Toolchains
 
 Tier 1 encompasses industry-standard, certifiable Model-Based Design environments with qualifiable automatic code generation and formal property checking.
 
@@ -334,7 +334,7 @@ tel
 
 ---
 
-## Section 4: Tier 2 — Formal Contract & Prover Ecosystems
+## Section 4: Tier 2 -- Formal Contract & Prover Ecosystems
 
 Tier 2 provides mathematically provable assurance through deductive formal contracts, memory-safe type systems, and automated symbolic model checking.
 
@@ -477,7 +477,7 @@ $$\bigwedge_{i=0}^k \text{Step}_i \land \neg \text{Assertion} \implies \text{UNS
 
 ---
 
-## Section 5: Tier 3 — Open Standards, Multi-Physics & Architectural Co-Simulation
+## Section 5: Tier 3 -- Open Standards, Multi-Physics & Architectural Co-Simulation
 
 Tier 3 bridges discrete cyber control software with continuous multi-physics plants and hard-partitioned system execution architectures using open standards.
 
@@ -587,7 +587,7 @@ ensuring that sensor-to-actuator control loops never violate safety timing envel
 
 ---
 
-## Section 6: Tier 4 — Target Real-Time Execution Frameworks & RTOS Platforms
+## Section 6: Tier 4 -- Target Real-Time Execution Frameworks & RTOS Platforms
 
 Tier 4 maps synthesized control algorithms, data contracts, and formal statecharts directly to concrete real-time execution platforms.
 

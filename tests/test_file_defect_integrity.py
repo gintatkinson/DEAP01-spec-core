@@ -65,7 +65,7 @@ int32_t bridge_get_last_error(bridge_handle_t handle, char* out, int32_t size) {
 
 ## 7. Relationship to Existing Issues
 
-Discovered in audit — new finding.
+Discovered in audit -- new finding.
 
 ## Audit Source
 
@@ -95,7 +95,7 @@ Analysis shows no immediate leak under normal test loads.
 
 ## 4. UML Diagrams
 
-N/A — Suggestion severity.
+N/A -- Suggestion severity.
 
 ## 5. Affected Callers / Downstream Impact
 
@@ -109,7 +109,7 @@ void set_cache_limit(size_t limit);
 
 ## 7. Relationship to Existing Issues
 
-Discovered in audit — new finding.
+Discovered in audit -- new finding.
 
 ## Audit Source
 
@@ -192,9 +192,9 @@ class TestFileDefectIntegrity(unittest.TestCase):
 
     def test_suggestion_missing_na_rejected(self):
         """Verify that Suggestion finding without N/A in Section 4 is rejected."""
-        broken = SAMPLE_COMPLIANT_SUGGESTION.replace("N/A — Suggestion severity.", "No diagram provided.")
+        broken = SAMPLE_COMPLIANT_SUGGESTION.replace("N/A -- Suggestion severity.", "No diagram provided.")
         errors = validate_defect_body(broken)
-        self.assertTrue(any("Section 4 must declare 'N/A — Suggestion severity.'" in e for e in errors))
+        self.assertTrue(any("Section 4 must declare 'N/A -- Suggestion severity.'" in e for e in errors))
 
     def test_unbalanced_code_blocks_rejected(self):
         """Verify that odd number of code block fences is rejected."""

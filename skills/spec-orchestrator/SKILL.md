@@ -100,13 +100,13 @@ When executing a phase, the worker agent must follow this lifecycle:
      breaks the traceability the reference exists to provide. Stated in
      `rules/document-references.md`; enforced offline by
      `source_reference_validator.py` (issues #322, #320).
-   - **All Mermaid syntax constraints are defined in `rules/platform-independence.md` and MUST be observed in full** — pass that file to the subagent rather than a paraphrase of it. A subagent that is never shown the constraints cannot comply with them, and a local subset drifts from the normative home (issue #289). This covers, among others, empty class bodies written on one line, curly braces and colons in class member lines, colons in note strings, stereotypes on relationship lines, unquoted relationship labels, and semicolons in `Note` and message text.
+   - **All Mermaid syntax constraints are defined in `rules/platform-independence.md` and MUST be observed in full** -- pass that file to the subagent rather than a paraphrase of it. A subagent that is never shown the constraints cannot comply with them, and a local subset drifts from the normative home (issue #289). This covers, among others, empty class bodies written on one line, curly braces and colons in class member lines, colons in note strings, stereotypes on relationship lines, unquoted relationship labels, and semicolons in `Note` and message text.
    - **Mandatory Mermaid Diagram Header Rule**: The very first non-comment line inside EVERY Mermaid code fence (```` ```mermaid ````) MUST declare a valid diagram type header (e.g. classDiagram, graph TD, flowchart TD, sequenceDiagram, stateDiagram-v2). Omitting the header and beginning directly with relationships or member lines is strictly forbidden.
    - **Mermaid State Diagram Escaping**: Unquoted `<` and `>` characters are strictly forbidden in Mermaid labels and transition descriptions. State transitions containing comparison operators, brackets, or guards MUST enclose the label in double quotes (e.g. `ActiveCounting --> ActiveCounting: "incrementCounter [value < maxBound] / updateValue"`).
-   - **The title namespacing constraint defined in `rules/tracker-source-of-truth.md` MUST be observed** — pass that file to the subagent rather than a paraphrase of it. Each subagent drafts in isolation and never sees the other items in the run, so a schema node name that recurs across modules yields the same title twice and neither subagent can detect it (issue #317). The rule lives in `rules/` and is referenced here rather than restated, per `rules/platform-independence.md` § *Normative home & enforcement*; a local subset drifts from the normative home (issue #289).
+   - **The title namespacing constraint defined in `rules/tracker-source-of-truth.md` MUST be observed** -- pass that file to the subagent rather than a paraphrase of it. Each subagent drafts in isolation and never sees the other items in the run, so a schema node name that recurs across modules yields the same title twice and neither subagent can detect it (issue #317). The rule lives in `rules/` and is referenced here rather than restated, per `rules/platform-independence.md` § *Normative home & enforcement*; a local subset drifts from the normative home (issue #289).
    - **SysML v2 Model-as-SSOT Completeness**: All derivations MUST be AST-driven from formal SysML v2 declarations (structural `part def`/`item def`, behavioral `action def`/`state def`/`port def`, and interaction `use case def` blocks) per `rules/sysml-ssot-completeness.md`. Heuristic prose interpretation without formal AST backing is strictly prohibited.
    - Do **NOT** pass the history of other items generated in the same run.
-3. **Drafting**: The subagent drafts only the target markdown file for that single item. It MUST open that file with the YAML frontmatter block defined by the item's own template in the worker skill — including `generation_mode: "subagent"`. That key is the only machine-readable evidence that this mandate was honoured: `_validate_subagent_isolation` in `skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/uml.py` rejects every Epic, Feature, User Story and Use Case that lacks it. Take the frontmatter from the template, never from a tracker issue body — `skills/spec-orchestrator/scripts/reconcile_backlog.py` renders frontmatter as a `| Metadata | Value |` table when it publishes to the tracker during Phase 4, and that table is a tracker-side rendering, never a substitute for the frontmatter block in the local file. Markdown tables are not otherwise restricted; the pipeline generates them itself, so a blanket prohibition would outlaw its own canonical output (issue #278).
+3. **Drafting**: The subagent drafts only the target markdown file for that single item. It MUST open that file with the YAML frontmatter block defined by the item's own template in the worker skill -- including `generation_mode: "subagent"`. That key is the only machine-readable evidence that this mandate was honoured: `_validate_subagent_isolation` in `skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/uml.py` rejects every Epic, Feature, User Story and Use Case that lacks it. Take the frontmatter from the template, never from a tracker issue body -- `skills/spec-orchestrator/scripts/reconcile_backlog.py` renders frontmatter as a `| Metadata | Value |` table when it publishes to the tracker during Phase 4, and that table is a tracker-side rendering, never a substitute for the frontmatter block in the local file. Markdown tables are not otherwise restricted; the pipeline generates them itself, so a blanket prohibition would outlaw its own canonical output (issue #278).
 4. **Registration**: The worker agent aggregates the outputs, links them, and registers them sequentially in the issue tracker. All spec issues (Epics, Features, User Stories, Use Cases) MUST be created with their full body contents (via `--body-file <local-md-file>` and immediate post-creation verification) during Phases 1, 2, and 3. An immediate post-creation verification check must be run (e.g., `gh issue view <ID> --json body`) to ensure the tracker body is not a stub and is fully populated at the time of creation.
 
 ## Closed-Loop Payload Verification Gate & Anti-Complacency Rule
@@ -116,8 +116,8 @@ When executing a phase, the worker agent must follow this lifecycle:
 
 > This section sits **after** § *Item-Level Subagent Context Isolation* deliberately. It
 > was originally inserted between that heading and its body, which split the isolation
-> section in two: everything from the dispatch lifecycle onward — the `generation_mode`
-> marker, the title-namespacing constraint, the Mermaid and source-locator payload rules —
+> section in two: everything from the dispatch lifecycle onward -- the `generation_mode`
+> marker, the title-namespacing constraint, the Mermaid and source-locator payload rules --
 > fell outside the section as the gates measure it. `test_governed_documents_are_discoverable_issue317`,
 > `test_drafting_dispatch_passes_the_namespacing_constraint_issue317` and
 > `test_drafting_step_names_the_frontmatter_marker_issue278` all read that section by
@@ -131,7 +131,7 @@ Phases marked with **`[P]`** may be dispatched in parallel when:
 - There are no data dependencies between the parallel phases
 - Each parallel worker operates on independent schema modules
 
-Phases NOT marked `[P]` are strictly sequential — the validation gate of phase N must pass before phase N+1 begins.
+Phases NOT marked `[P]` are strictly sequential -- the validation gate of phase N must pass before phase N+1 begins.
 
 > **Single-agent runtimes (Cascade/Windsurf/Devin):** Ignore `[P]` markers and execute all phases sequentially. Even in single-agent environments, item-level subagent isolation must be simulated by manually resetting/clearing prior context (e.g., providing explicit instructions to ignore previous items and focus only on the current target's schema/text) for each item drafted.
 
@@ -199,7 +199,7 @@ sequenceDiagram
 
 3. **Layout Manifest Constraints**: `logical-layout.json` is the authority every Feature's Logical UI bindings resolve against, so the manifest itself is validated before the bindings that cite it. Enforced offline by `parity_auditor/validators/logical_ui_validator.py`; stated here rather than in a worker skill because the manifest is produced in this phase and no worker owns it. All three were enforced and documented nowhere before issue #304.
    - **Layout Manifest Must Exist**: the manifest MUST be present at `.pipeline/logical-ui/logical-layout.json` or, failing that, at `<flutter_dir>/assets/logical-layout.json`. Absent, every binding in every Feature is unresolvable, so the run reports the missing manifest once instead of reporting each Feature as invalid.
-   - **Layout Manifest Must Parse**: the manifest MUST be well-formed JSON. A manifest that does not parse is reported as such, not treated as an empty layout — an empty layout would report every binding as naming a component that is not instantiated, which points at the Features instead of at the file that is actually broken.
+   - **Layout Manifest Must Parse**: the manifest MUST be well-formed JSON. A manifest that does not parse is reported as such, not treated as an empty layout -- an empty layout would report every binding as naming a component that is not instantiated, which points at the Features instead of at the file that is actually broken.
    - **Tabbed Containers Accept Only Tabular Children**: a `TabbedContainer` node MUST declare a `children` list, and every child MUST be a `TableView`, `PropertyGrid` or `DensityTable`. Tabs present a set of comparable records; a non-tabular child in a tab strip has no meaningful rendering.
    - **Features Directory Must Exist**: the configured `backlog_directories.features` path MUST exist. There is nothing to validate bindings for otherwise, and a silent pass would be indistinguishable from a fully-bound backlog.
 
@@ -285,7 +285,7 @@ sequenceDiagram
 > creates them."* That claim is false. `gh issue list` is a one-shot query: it neither
 > blocks nor polls, so dispatching both workers simultaneously lets Worker C read the
 > tracker before Worker B has finished writing to it. The result is a Use Case whose
-> Realization Matrix silently omits User Stories that did not exist at query time —
+> Realization Matrix silently omits User Stories that did not exist at query time --
 > a time-of-check-to-time-of-use race with no synchronisation barrier.
 >
 > Phase 3 consumes Phase 2's output, so it carries a hard data dependency and is
@@ -295,7 +295,7 @@ sequenceDiagram
 >
 > Phase 2 remains `[P]`-eligible with respect to Phase 1, whose Feature issues already
 > exist by the time it runs. Parallelism is available where the dependency is genuinely
-> absent — not asserted where it is inconvenient.
+> absent -- not asserted where it is inconvenient.
 
 ## Phase 4: Reconciliation & Automated Verification (Worker D & Coverage Check)
 1. **Trigger Automated Closed-Loop Reverse Synchronization**: Run the reverse compilation engine to extract newly elaborated markdown components, state transitions, port contracts, and STPA/FMECA safety constraints into the SysML v2 SSOT:

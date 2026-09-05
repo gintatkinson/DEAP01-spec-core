@@ -22,7 +22,7 @@
 
 ### 1.1 Normative Baseline & Doctrinal Authority
 This Tactical Mission Intent specification tree is authored in strict compliance with:
-- **ISO/IEC/IEEE 29148:2018**: Systems and Software Engineering — Life Cycle Processes — Requirements Engineering (§5.2.4, §6.4.2).
+- **ISO/IEC/IEEE 29148:2018**: Systems and Software Engineering -- Life Cycle Processes -- Requirements Engineering (§5.2.4, §6.4.2).
 - **INCOSE Systems Engineering Handbook v5.0**: Technical Planning, System Requirements Definition, and Mission Analysis Processes (§3.2, §3.3).
 - **OMG Unified Architecture Framework (UAF) v2.0**: Operational Domain Architecture and Process Taxonomy.
 - **MIL-STD-882E**: Department of Defense Standard Practice for System Safety (§4.3, Hazard Identification and Mitigation).

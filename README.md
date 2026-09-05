@@ -1,4 +1,4 @@
-# Digital Engineering Agent Platform (DEAP) — Core Specification Compiler
+# Digital Engineering Agent Platform (DEAP) -- Core Specification Compiler
 
 > **Repository Identifier:** `DEAP01-spec-core`  
 > **Repository Role:** `UPSTREAM_SPEC_CORE_COMPILER` (Digital Engineering Agent Platform Core Specification Compiler)  
@@ -362,7 +362,7 @@ python3 scripts/verify_downstream_baseline.py --no-domain
 
 | Runtime | Subagent Dispatch | Two-Stage Review |
 |---|---|---|
-| **Claude Code** | `Task("prompt")` — native isolated subagent | Separate reviewer subagents |
+| **Claude Code** | `Task("prompt")` -- native isolated subagent | Separate reviewer subagents |
 | **Gemini CLI / Antigravity** | Subagent tool call with curated context | Separate reviewer subagents |
 | **Cascade (Windsurf/Devin)** | Coordinator re-reads files per task to simulate isolation | Explicit self-audit documented in `task.md` |
 | **Cursor** | Context-isolated subagent prompt execution | Sequential self-audit checklist |
@@ -558,7 +558,7 @@ Execute `view_file` on `skills/spec-conops-engineering/SKILL.md` as your very fi
 
 Repository Classification: DOWNSTREAM_CUSTOMER_PROJECT (or UPSTREAM_SPEC_CORE_COMPILER depending on execution context)
 
-Role: Worker 0A — CONOPS & Operational Scenario Synthesizer
+Role: Worker 0A -- CONOPS & Operational Scenario Synthesizer
 
 Primary Commercial Toolchain Integration Context:
 This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
@@ -595,7 +595,7 @@ Execute `view_file` on `skills/spec-orchestrator/SKILL.md` as your very first st
 
 Repository Classification: DOWNSTREAM_CUSTOMER_PROJECT (or UPSTREAM_SPEC_CORE_COMPILER depending on execution context)
 
-Role: Worker 0B — STPA Hazard Analysis, FMECA & Domain Safety Assurer
+Role: Worker 0B -- STPA Hazard Analysis, FMECA & Domain Safety Assurer
 
 Primary Commercial Toolchain Integration Context:
 This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
@@ -632,7 +632,7 @@ Execute `view_file` on `skills/spec-orchestrator/SKILL.md` as your very first st
 
 Repository Classification: DOWNSTREAM_CUSTOMER_PROJECT (or UPSTREAM_SPEC_CORE_COMPILER depending on execution context)
 
-Role: Worker 0C — SysML v2 Architectural & Safety Model Author
+Role: Worker 0C -- SysML v2 Architectural & Safety Model Author
 
 Primary Commercial Toolchain Integration Context:
 This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
@@ -748,7 +748,7 @@ Execute `view_file` on `skills/spec-conops-engineering/SKILL.md` as your very fi
 
 Repository Classification: UPSTREAM_SPEC_CORE_COMPILER (or DOWNSTREAM_CUSTOMER_PROJECT depending on execution context)
 
-Role: Worker 0A — CONOPS & Operational Scenario Synthesizer
+Role: Worker 0A -- CONOPS & Operational Scenario Synthesizer
 
 Primary Commercial Toolchain Integration Context:
 This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
@@ -785,7 +785,7 @@ Execute `view_file` on `skills/spec-orchestrator/SKILL.md` as your very first st
 
 Repository Classification: UPSTREAM_SPEC_CORE_COMPILER (or DOWNSTREAM_CUSTOMER_PROJECT depending on execution context)
 
-Role: Worker 0B — STPA Hazard Analysis, FMECA & Domain Safety Assurer
+Role: Worker 0B -- STPA Hazard Analysis, FMECA & Domain Safety Assurer
 
 Primary Commercial Toolchain Integration Context:
 This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
@@ -822,7 +822,7 @@ Execute `view_file` on `skills/spec-orchestrator/SKILL.md` as your very first st
 
 Repository Classification: UPSTREAM_SPEC_CORE_COMPILER (or DOWNSTREAM_CUSTOMER_PROJECT depending on execution context)
 
-Role: Worker 0C — SysML v2 Architectural & Safety Model Author
+Role: Worker 0C -- SysML v2 Architectural & Safety Model Author
 
 Primary Commercial Toolchain Integration Context:
 This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
@@ -854,7 +854,7 @@ Execute `view_file` on `skills/schema-specification-engineering/SKILL.md` as you
 
 Repository Classification: UPSTREAM_SPEC_CORE_COMPILER (or DOWNSTREAM_CUSTOMER_PROJECT depending on execution context)
 
-Role: Worker 1A — Structural Specification Worker (Epics & Features)
+Role: Worker 1A -- Structural Specification Worker (Epics & Features)
 
 Primary Commercial Toolchain Integration Context:
 This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
@@ -888,7 +888,7 @@ Execute `view_file` on `skills/spec-icd-engineering/SKILL.md` as your very first
 
 Repository Classification: UPSTREAM_SPEC_CORE_COMPILER (or DOWNSTREAM_CUSTOMER_PROJECT depending on execution context)
 
-Role: Worker 1B — Interface Specification Worker (Worker ICD)
+Role: Worker 1B -- Interface Specification Worker (Worker ICD)
 
 Primary Commercial Toolchain Integration Context:
 This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
@@ -921,7 +921,7 @@ Execute `view_file` on `skills/spec-user-story-engineering/SKILL.md` as your ver
 
 Repository Classification: UPSTREAM_SPEC_CORE_COMPILER (or DOWNSTREAM_CUSTOMER_PROJECT depending on execution context)
 
-Role: Worker 1C — Behavioral Specification Worker (User Stories & Statecharts)
+Role: Worker 1C -- Behavioral Specification Worker (User Stories & Statecharts)
 
 Primary Commercial Toolchain Integration Context:
 This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
@@ -954,7 +954,7 @@ Execute `view_file` on `skills/spec-usecase-engineering/SKILL.md` as your very f
 
 Repository Classification: UPSTREAM_SPEC_CORE_COMPILER (or DOWNSTREAM_CUSTOMER_PROJECT depending on execution context)
 
-Role: Worker 1D — System Interaction Specification Worker (UML Use Cases)
+Role: Worker 1D -- System Interaction Specification Worker (UML Use Cases)
 
 Primary Commercial Toolchain Integration Context:
 This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
@@ -1022,7 +1022,7 @@ Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` as your v
 
 Repository Classification: UPSTREAM_SPEC_CORE_COMPILER (or DOWNSTREAM_CUSTOMER_PROJECT depending on execution context)
 
-Role: Worker 2A — Feature-Driven Implementation & Synthesis Driver
+Role: Worker 2A -- Feature-Driven Implementation & Synthesis Driver
 
 Primary Commercial Toolchain Integration Context:
 This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
@@ -1031,9 +1031,9 @@ Governance Preamble & Execution Directive:
 Adopt the feature-driven-implementation skill by reading `.pipeline/constitution.md` and the target platform profile (`.pipeline/profiles/<target-platform>.md`, e.g. `ros2_cpp.md`, `px4_module.md`, or `flutter.md`).
 
 Implement prioritized Feature [Issue Number, e.g. #1] adhering strictly to the 3-Layer Definition of Done (DoD):
-1. Layer 1: Domain Model / Safety Statechart — Platform-independent domain entities, transition guards, mathematical invariants, and safety statecharts.
-2. Layer 2: Safety Statechart / ViewModel — State management, event handling, lifecycle hooks, and reactive telemetry bindings.
-3. Layer 3: Interface Binding / Middleware & BDD Tests — Platform interface bindings (ROS2 lifecycle nodes, PX4 uORB modules, or Flutter widgets) verified via automated BDD integration tests against live emulators / simulation harnesses.
+1. Layer 1: Domain Model / Safety Statechart -- Platform-independent domain entities, transition guards, mathematical invariants, and safety statecharts.
+2. Layer 2: Safety Statechart / ViewModel -- State management, event handling, lifecycle hooks, and reactive telemetry bindings.
+3. Layer 3: Interface Binding / Middleware & BDD Tests -- Platform interface bindings (ROS2 lifecycle nodes, PX4 uORB modules, or Flutter widgets) verified via automated BDD integration tests against live emulators / simulation harnesses.
 
 Execution Standards:
 - Execute TDD RED-GREEN-REFACTOR cycles using context-isolated subagents for each 2-5 minute micro-task.
@@ -1054,7 +1054,7 @@ Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` as your v
 
 Repository Classification: UPSTREAM_SPEC_CORE_COMPILER (or DOWNSTREAM_CUSTOMER_PROJECT depending on execution context)
 
-Role: Worker 2B — Two-Path (Dual-Track) Simulation & Digital Twin Verification Driver
+Role: Worker 2B -- Two-Path (Dual-Track) Simulation & Digital Twin Verification Driver
 
 Primary Commercial Toolchain Integration Context:
 This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).

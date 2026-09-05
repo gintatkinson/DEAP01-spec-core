@@ -235,7 +235,7 @@ def main():
             flutter_domain = os.path.join(dest if is_flutter else repo_root, "lib", "domain")
             react_domain = os.path.join(dest if is_react else repo_root, "src", "domain")
             if os.path.isdir(flutter_domain) or os.path.isdir(react_domain):
-                print(f"NOTE: Domain directory found on disk for '{dest}' — overriding no_domain config and enabling domain verification.")
+                print(f"NOTE: Domain directory found on disk for '{dest}' -- overriding no_domain config and enabling domain verification.")
                 no_domain_for_target = False
 
         target_args = argparse.Namespace(**vars(args))
@@ -274,7 +274,7 @@ def _validate_domain_types(dest, repo_root, ext, domain_subpath):
         upstream_mandated = load_mandated_classes(repo_root)
         mandated = list(set(mandated + upstream_mandated))
     if not mandated:
-        print("No mandated classes configured — skipping type validation.")
+        print("No mandated classes configured -- skipping type validation.")
         return
     domain_dir = os.path.join(dest, domain_subpath)
     if not os.path.isdir(domain_dir):
@@ -366,7 +366,7 @@ def check_no_duplicate_master_blueprints(repo_root):
     """Check 12: Verify downstream repositories do NOT contain duplicate master core blueprints."""
     upstream_marker = os.path.join(repo_root, ".pipeline", "upstream")
     if os.path.isdir(upstream_marker):
-        print("Success: Check 12 verified (Master core / upstream repository detected — skipping duplicate blueprint check).")
+        print("Success: Check 12 verified (Master core / upstream repository detected -- skipping duplicate blueprint check).")
         return
     master_blueprints = {
         "DEAP_MASTER_ARCHITECTURE.md",
@@ -524,7 +524,7 @@ def check_upstream_template_clean_landing_zones(repo_root):
     """
     upstream_marker = os.path.join(repo_root, ".pipeline", "upstream")
     if not os.path.isdir(upstream_marker):
-        print("Success: Check 16 verified (Downstream repository detected — skipping upstream clean landing zone gate).")
+        print("Success: Check 16 verified (Downstream repository detected -- skipping upstream clean landing zone gate).")
         return
 
     landing_zones = [
@@ -737,7 +737,7 @@ MIN_STRUCTURAL_UCA_ROWS = 16
 def classify_uca_guide_words(cell_text: str) -> List[Tuple[str, str]]:
     """Classify a UCA guide word cell into one or more canonical STPA failure modes.
 
-    Handles compound class attribution (e.g. 'Class a — not providing; Class c — too late')
+    Handles compound class attribution (e.g. 'Class a -- not providing; Class c -- too late')
     by splitting compound segments and returning all unique matched guide words in canonical order.
     """
     if not cell_text or not cell_text.strip():
@@ -1000,7 +1000,7 @@ class MarkdownTableASTParser:
     def parse_proof_blocks(cls, text: str) -> List[ProofBlockAST]:
         """Parse formal theorem blocks and their canonical 5-part structure.
 
-        Part labels are recognized in both "Part N — Keyword" and numbered
+        Part labels are recognized in both "Part N -- Keyword" and numbered
         "N. Keyword" styles; keyword families must match the part number.
         """
         block_start = re.compile(r"^\s*(#{2,4})\s+.*\bTheorem\b", re.IGNORECASE)
@@ -1223,7 +1223,7 @@ def validate_safety_matrix_ast(content: str, model_text: Optional[str] = None) -
                 listing += f"\n    - ... and {remaining} more"
             found_combos = report.expected_uca_rows - len(cartesian_report.missing_permutations)
             errors.append(
-                f"Pillar 4 violation: UCA Cartesian completeness failure — expected {report.expected_uca_rows} "
+                f"Pillar 4 violation: UCA Cartesian completeness failure -- expected {report.expected_uca_rows} "
                 f"permutations ({len(expected_actions)} control actions x 4 guide words), found {found_combos} "
                 f"unique combinations. Missing permutations:\n{listing}"
             )
@@ -1244,14 +1244,14 @@ def validate_safety_matrix_ast(content: str, model_text: Optional[str] = None) -
                 listing += f"\n    - ... and {remaining} more"
             found_combos = report.expected_uca_rows - len(cartesian_report.missing_permutations)
             errors.append(
-                f"Pillar 4 violation: UCA guide-word completeness failure — expected {report.expected_uca_rows} "
+                f"Pillar 4 violation: UCA guide-word completeness failure -- expected {report.expected_uca_rows} "
                 f"permutations ({len(derived_actions)} control actions x 4 guide words), found {found_combos} "
                 f"unique combinations. Missing permutations:\n{listing}"
             )
         found_combos = report.expected_uca_rows - len(cartesian_report.missing_permutations)
         if report.total_uca_rows < MIN_STRUCTURAL_UCA_ROWS and found_combos < MIN_STRUCTURAL_UCA_ROWS:
             errors.append(
-                f"Pillar 4 violation: UCA Cartesian matrix truncation — found {report.total_uca_rows} UCA row(s); "
+                f"Pillar 4 violation: UCA Cartesian matrix truncation -- found {report.total_uca_rows} UCA row(s); "
                 f"minimum required is {MIN_STRUCTURAL_UCA_ROWS} permutations (4 control actions x 4 guide words)."
             )
 
@@ -1422,7 +1422,7 @@ def check_safety_integrity_and_sora_completeness(repo_root):
 
     # Downstream repository validation
     if not os.path.isdir(safety_dir):
-        print("Success: Check 17 verified (Downstream repository detected — docs/safety/ directory not present).")
+        print("Success: Check 17 verified (Downstream repository detected -- docs/safety/ directory not present).")
         return
 
     safety_files = []
@@ -1433,7 +1433,7 @@ def check_safety_integrity_and_sora_completeness(repo_root):
                 safety_files.append(os.path.join(root, f))
 
     if not safety_files:
-        print("Success: Check 17 verified (Downstream repository detected — safety specifications pending or clean).")
+        print("Success: Check 17 verified (Downstream repository detected -- safety specifications pending or clean).")
         return
 
     all_errors = []
@@ -1472,7 +1472,7 @@ def verify_upstream_blueprint_domain_cleanliness(target_dir):
     """
     upstream_marker = os.path.join(target_dir, ".pipeline", "upstream")
     if not (os.path.isdir(upstream_marker) or os.path.isfile(upstream_marker)):
-        print("Success: Check 18 verified (Downstream repository detected — skipping upstream blueprint domain cleanliness gate).")
+        print("Success: Check 18 verified (Downstream repository detected -- skipping upstream blueprint domain cleanliness gate).")
         return
 
     blueprints_dir = os.path.join(target_dir, "docs", "architecture", "blueprints")
@@ -1609,7 +1609,7 @@ def check_domain_agnostic_ast_cleanliness(repo_root):
     """
     upstream_marker = os.path.join(repo_root, ".pipeline", "upstream")
     if not os.path.isdir(upstream_marker):
-        print("Success: Check 19 verified (Downstream repository detected — skipping domain-agnostic AST cleanliness gate).")
+        print("Success: Check 19 verified (Downstream repository detected -- skipping domain-agnostic AST cleanliness gate).")
         return
 
     scan_dirs = [
@@ -1655,7 +1655,7 @@ def check_domain_agnostic_ast_cleanliness(repo_root):
             print(f"  - {v}", file=sys.stderr)
         sys.exit(1)
 
-    print("Success: Check 19 verified (Domain-Agnostic AST Cleanliness Gate passed — pure dynamic schema AST architecture verified).")
+    print("Success: Check 19 verified (Domain-Agnostic AST Cleanliness Gate passed -- pure dynamic schema AST architecture verified).")
 
 def run_all_checks(repo_root=None):
     """Run all baseline checks (Checks 10 through 19)."""

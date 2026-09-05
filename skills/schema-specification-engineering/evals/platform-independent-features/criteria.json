@@ -23,7 +23,7 @@
     },
     {
       "name": "exhaustive_constraints",
-      "description": "Every schema node's type, units, defaults, when/must clauses are documented — no constraint detail lost",
+      "description": "Every schema node's type, units, defaults, when/must clauses are documented -- no constraint detail lost",
       "weight": 2
     },
     {

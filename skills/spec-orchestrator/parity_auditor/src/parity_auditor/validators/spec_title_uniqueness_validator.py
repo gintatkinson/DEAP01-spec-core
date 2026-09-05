@@ -11,8 +11,8 @@ published, which is the cheapest place to stop that.
 **Uniqueness is scoped per spec type, not globally.** Issue #303 settled the same
 question for ``SyncValidator``, which keys on ``(spec_type, normalised_title)``: an
 epic issue is not satisfied by a same-titled feature file, and an Epic naming a theme
-alongside a Feature delivering part of it is ordinary, correct output. A global set —
-as the proposed correction on #318 sketches — would reject that pairing and the first
+alongside a Feature delivering part of it is ordinary, correct output. A global set --
+as the proposed correction on #318 sketches -- would reject that pairing and the first
 thing anyone would do is disable the gate. The collision that does damage is two
 specifications *of the same type*, because that is the key the reconciler collides in.
 The backlog directory is the spec type: one directory per type is the layout every

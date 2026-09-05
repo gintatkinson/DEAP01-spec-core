@@ -1,4 +1,4 @@
-# Formal Safety Proof — T-01 Safe-State Invariant Preservation
+# Formal Safety Proof -- T-01 Safe-State Invariant Preservation
 
 This document implements the canonical 5-part mathematical proof structure for the safe-state invariant theorem.
 

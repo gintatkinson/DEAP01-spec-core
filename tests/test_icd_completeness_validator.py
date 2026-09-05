@@ -102,7 +102,7 @@ flowchart TD
 | Subsystem | 1. NavigationSubsystem | 2. FlightControlSubsystem |
 | :--- | :--- | :--- |
 | **1. NavigationSubsystem** | **[ NavigationSubsystem ]** | CONN-01 (2 Signals) |
-| **2. FlightControlSubsystem** | — | **[ FlightControlSubsystem ]** |
+| **2. FlightControlSubsystem** | -- | **[ FlightControlSubsystem ]** |
 
 ## 4. Port Definition Roster Table
 | Port ID | Subsystem | Port Name | Direction | Port Type | Multiplicity | Protocol Profile |
@@ -251,14 +251,14 @@ class TestICDCompletenessValidator(unittest.TestCase):
 | Subsystem | 1. NavigationSubsystem |
 | :--- | :--- |
 | **1. NavigationSubsystem** | **[ NavigationSubsystem ]** |
-| **2. FlightControlSubsystem** | — |
+| **2. FlightControlSubsystem** | -- |
 """
             content = content.replace(
                 """## 3. Canonical N² Subsystem Interface Matrix
 | Subsystem | 1. NavigationSubsystem | 2. FlightControlSubsystem |
 | :--- | :--- | :--- |
 | **1. NavigationSubsystem** | **[ NavigationSubsystem ]** | CONN-01 (2 Signals) |
-| **2. FlightControlSubsystem** | — | **[ FlightControlSubsystem ]** |""",
+| **2. FlightControlSubsystem** | -- | **[ FlightControlSubsystem ]** |""",
                 malformed_n2
             )
             with open(icd01_file, "w", encoding="utf-8") as f:
@@ -291,7 +291,7 @@ class TestICDCompletenessValidator(unittest.TestCase):
 | Subsystem | 1. NavigationSubsystem | 2. FlightControlSubsystem |
 | :--- | :--- | :--- |
 | **1. NavigationSubsystem** | **[ NavigationSubsystem ]** | CONN-01 (2 Signals) |
-| **2. FlightControlSubsystem** | — | **[ FlightControlSubsystem ]** |""",
+| **2. FlightControlSubsystem** | -- | **[ FlightControlSubsystem ]** |""",
                 malformed_n2
             )
             with open(icd01_file, "w", encoding="utf-8") as f:
@@ -319,7 +319,7 @@ class TestICDCompletenessValidator(unittest.TestCase):
 | Subsystem | 1. NavigationSubsystem | 2. FlightControlSubsystem |
 | :--- | :--- | :--- |
 | **1. NavigationSubsystem** | **[ NavigationSubsystem ]** | CONN-01 (2 Signals) |
-| **2. FlightControlSubsystem** | — | **[ FlightControlSubsystem ]** |"""
+| **2. FlightControlSubsystem** | -- | **[ FlightControlSubsystem ]** |"""
             content = content.replace(target_section, "## 3. Canonical N² Subsystem Interface Matrix\n(Omitted)")
             with open(icd01_file, "w", encoding="utf-8") as f:
                 f.write(content)

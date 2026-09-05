@@ -28,7 +28,7 @@ except (ImportError, ValueError):
     from parity_auditor.core.workspace import WorkspaceRepository
 
 # Import SysML v2 AST classes via the fail-closed loader (refs #76): resolve
-# the real scripts dir or raise ImportError — never bind None silently.
+# the real scripts dir or raise ImportError -- never bind None silently.
 from ..utils.sysml_loader import load_sysml_ast_members
 
 _sysml_ast = load_sysml_ast_members([

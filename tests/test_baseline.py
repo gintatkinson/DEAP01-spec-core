@@ -250,7 +250,7 @@ def test_upstream_template_clean_landing_zones():
 
     upstream_marker = os.path.join(repo_root, ".pipeline", "upstream")
     if not os.path.isdir(upstream_marker):
-        pytest.skip("Downstream project detected — skipping upstream landing zone clean check.")
+        pytest.skip("Downstream project detected -- skipping upstream landing zone clean check.")
 
     landing_zones = [
         os.path.join("docs", "conops"),
@@ -693,21 +693,21 @@ class TestProofBlockASTParser(unittest.TestCase):
 
 ### Theorem SAF-01: Forward Invariance of Conflict-Free Minimum Separation
 
-#### Part 1 — Proposition Statement
+#### Part 1 -- Proposition Statement
 For any initial state $x_0 \in \mathcal{C}$, the safety envelope $h(x(t)) \ge 0$ holds for all $t \ge 0$.
 
-#### Part 2 — Assumptions
+#### Part 2 -- Assumptions
 1. Continuous differentiability of system dynamics $\dot{x} = f(x) + g(x)u$.
 2. Actuator saturation limits $|u| \le u_{\max}$.
 
-#### Part 3 — Barrier Function / Invariant
+#### Part 3 -- Barrier Function / Invariant
 We define candidate zeroing control barrier function $B(x) = d(x) - d_{\min}$.
 
-#### Part 4 — Derivation & Inductive Step
+#### Part 4 -- Derivation & Inductive Step
 Taking the Lie derivative:
 $$\dot{B}(x) = L_f B(x) + L_g B(x) u \ge -\alpha(B(x))$$
 
-#### Part 5 — Conclusion & Q.E.D.
+#### Part 5 -- Conclusion & Q.E.D.
 By Nagumo's theorem, the set $\mathcal{C}$ is forward invariant under feedback controller $k(x)$. Q.E.D.
 
 ### Next Unrelated Section
@@ -731,15 +731,15 @@ This section is outside the proof block.
         """Verify multiple proof blocks with mixed formatting styles parse cleanly."""
         content = """
 ### Theorem SEC-01: Collision Avoidance
-#### Part 1 — Proposition
+#### Part 1 -- Proposition
 Proposition statement here.
-#### Part 2 — Assumptions
+#### Part 2 -- Assumptions
 Assumptions text.
-#### Part 3 — Invariant Barrier
+#### Part 3 -- Invariant Barrier
 Invariant definition.
-#### Part 4 — Derivation
+#### Part 4 -- Derivation
 Inductive derivation.
-#### Part 5 — Conclusion QED
+#### Part 5 -- Conclusion QED
 Conclusion statement.
 
 ### Theorem SEC-02: Geofence Containment

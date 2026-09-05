@@ -31,7 +31,7 @@ Full-tree sweep, commissioned after an earlier count of 31 was judged too low. I
 | **Outstanding** | **32** |
 | Filed as issues | **0** |
 
-## NEW — Critical
+## NEW -- Critical
 
 **N1. The pipeline's own coverage linter fails.**
 `./skills/spec-orchestrator/scripts/verify_model_coverage.py --spec-only` exits **1**
@@ -49,8 +49,8 @@ ships it does not pass it.
 | `docs/features/` | 4 |
 
 A specification pipeline ships with no Epics, no User Stories and no Use Cases. Every
-traceability rule in `.pipeline/constitution.md` — Epic→Feature, Story→Feature,
-UseCase→Story — is vacuously satisfied because there is nothing to trace.
+traceability rule in `.pipeline/constitution.md` -- Epic→Feature, Story→Feature,
+UseCase→Story -- is vacuously satisfied because there is nothing to trace.
 
 **N3. There is no input schema.** `schema/` contains only `.gitkeep`. Phase 0 and Phase 1
 of the orchestrator take a structural schema as their input. There is none.
@@ -60,7 +60,7 @@ files.** `feat-28` and `feat-13` link to `.../blob/master/docs/epics/epic-28-...
 `epic-13-...`. The branch is `main`, not `master`, and `docs/epics/` is empty. These are
 published to the tracker where they render as live links.
 
-## NEW — Major
+## NEW -- Major
 
 **N5. `README.md` violates the standard-agnostic rule it enforces.** Line 267 names
 `IETF / 3GPP`. `verify_model_coverage.py` flags it: *"Documentation file 'README.md'
@@ -97,7 +97,7 @@ Not everything is broken; these were checked and pass.
 - No tautological assertions, empty test bodies or unconditional skips remain.
 - Every pipeline script compiles.
 
-## Carried forward — the 13 previously reported and still unfixed
+## Carried forward -- the 13 previously reported and still unfixed
 
 `tests/` absent from the installer copy list; `install-guide.md:73` prescribes a command
 that cannot work; the template route ships `.pipeline/upstream/`; no update procedure that

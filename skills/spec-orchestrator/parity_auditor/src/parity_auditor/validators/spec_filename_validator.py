@@ -1,12 +1,12 @@
 """Enforces the documented specification filename convention (issue #300).
 
-The convention was already documented and enforced by nothing — orphan documentation,
+The convention was already documented and enforced by nothing -- orphan documentation,
 which is #289's defect class:
 
-* ``spec-usecase-engineering/SKILL.md:62`` — ``uc-[XX]-[name].md``, "zero-padded,
+* ``spec-usecase-engineering/SKILL.md:62`` -- ``uc-[XX]-[name].md``, "zero-padded,
   dash-separated"
-* ``spec-user-story-engineering/SKILL.md:73`` — ``us-[XX]-[name].md``, likewise
-* ``schema-specification-engineering/SKILL.md:39,89`` — ``epic-01-name.md``,
+* ``spec-user-story-engineering/SKILL.md:73`` -- ``us-[XX]-[name].md``, likewise
+* ``schema-specification-engineering/SKILL.md:39,89`` -- ``epic-01-name.md``,
   ``feat-01-name.md``
 
 Three checks per backlog directory:

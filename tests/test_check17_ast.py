@@ -81,11 +81,11 @@ def build_oso_table(oso_ids):
 
 
 _PROOF_PARTS = {
-    1: "**Part 1 — Proposition / Theorem Statement**: Formal bound on the operating envelope invariant.",
-    2: "**Part 2 — Operational Assumptions & Domain Bounds**: Bounds on sensor noise and actuation latency.",
-    3: "**Part 3 — Invariant / Barrier Function Definition**: Barrier certificate must remain non-positive.",
-    4: "**Part 4 — Analytical / Inductive Derivation**: Stepwise derivation demonstrating invariant preservation.",
-    5: "**Part 5 — Formal Conclusion & Q.E.D.**: Stability conclusion under stated conservatism.",
+    1: "**Part 1 -- Proposition / Theorem Statement**: Formal bound on the operating envelope invariant.",
+    2: "**Part 2 -- Operational Assumptions & Domain Bounds**: Bounds on sensor noise and actuation latency.",
+    3: "**Part 3 -- Invariant / Barrier Function Definition**: Barrier certificate must remain non-positive.",
+    4: "**Part 4 -- Analytical / Inductive Derivation**: Stepwise derivation demonstrating invariant preservation.",
+    5: "**Part 5 -- Formal Conclusion & Q.E.D.**: Stability conclusion under stated conservatism.",
 }
 
 
@@ -479,16 +479,16 @@ Unrelated content.
         """Verify inner numbered list items inside derivations do not falsely satisfy missing Part 5."""
         content = """
 ### Theorem THM-02: Bounded Velocity Invariance
-#### Part 1 — Proposition Statement
+#### Part 1 -- Proposition Statement
 Velocity remains within limit.
 
-#### Part 2 — Operational Assumptions
+#### Part 2 -- Operational Assumptions
 Actuator response is linear.
 
-#### Part 3 — Invariant Barrier Function
+#### Part 3 -- Invariant Barrier Function
 Candidate barrier B(v) = v_max - v.
 
-#### Part 4 — Derivation & Inductive Step
+#### Part 4 -- Derivation & Inductive Step
 Proof steps:
 1. Base case holds at t0.
 2. Inductive hypothesis on step k.

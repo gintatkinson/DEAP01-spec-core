@@ -143,7 +143,7 @@ def _get_valid_conops_content() -> str:
     lines.append("")
     lines.append("| Standard ID | Issuing Body | Title / Baseline Description | Applicable Clauses & Focus Area |")
     lines.append("| :--- | :--- | :--- | :--- |")
-    lines.append("| ISO/IEC/IEEE 29148:2018 | ISO/IEC/IEEE | Systems and software engineering — Requirements engineering | §6.4.2 Concept of Operations & §6.4.3 Operational Concept |")
+    lines.append("| ISO/IEC/IEEE 29148:2018 | ISO/IEC/IEEE | Systems and software engineering -- Requirements engineering | §6.4.2 Concept of Operations & §6.4.3 Operational Concept |")
     lines.append("| INCOSE SEH v5.0 | INCOSE | Systems Engineering Handbook (5th Edition) | §3.3 Operational Concepts & §4.2 Requirements Engineering |")
     lines.append("| OMG UAF v1.2 / v2.0 | OMG | Unified Architecture Framework Specification | Operational Domain Views (Op-Pr, Op-Tx, Op-Is) |")
     lines.append("| NATO STANAG 4586 | NATO | Standard Interfaces of UAV Control System (UCS) for NATO Interoperability | Interoperability Data Link Interfaces (DLI §3.2) |")
@@ -1053,7 +1053,7 @@ class TestConOpsAndMissionIntentValidators(unittest.TestCase):
 
             content = _get_valid_mission_intent_content()
             # Strip allocation tag from MET-04 in Section 2 and Section 10
-            content = content.replace("`/// OperationalAllocation: [MET-04]`", "—")
+            content = content.replace("`/// OperationalAllocation: [MET-04]`", "--")
             content = content.replace("- `/// OperationalAllocation: [MET-04]`\n", "")
 
             with open(os.path.join(conops_dir, "MISSION_INTENT.md"), "w", encoding="utf-8") as f:
@@ -1118,7 +1118,7 @@ class TestConOpsAndMissionIntentValidators(unittest.TestCase):
             # Replace MET-01 with MET-01-OperationalPayload in table
             content = content.replace("`MET-01`", "`MET-01-OperationalPayload`")
             # Strip allocation tag for MET-01 from Section 2 and Section 10
-            content = content.replace("`/// OperationalAllocation: [MET-01]`", "—")
+            content = content.replace("`/// OperationalAllocation: [MET-01]`", "--")
             content = content.replace("- `/// OperationalAllocation: [MET-01]`\n", "")
 
             with open(os.path.join(conops_dir, "MISSION_INTENT.md"), "w", encoding="utf-8") as f:

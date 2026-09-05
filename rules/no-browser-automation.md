@@ -8,7 +8,7 @@
 
 - Do NOT use `browser_subagent`, headless browsers, Puppeteer, or Selenium for UI verification unless the project's test suite and implementation profile explicitly include E2E testing (e.g., Playwright).
 - All web UI verification must be performed manually by the human, with clear instructions provided by the agent.
-- If the project uses Playwright or another E2E framework (check the implementation profile), then automated E2E tests ARE permitted — but only through the project's own test framework, never ad-hoc browser scripts.
+- If the project uses Playwright or another E2E framework (check the implementation profile), then automated E2E tests ARE permitted -- but only through the project's own test framework, never ad-hoc browser scripts.
 
 ## What to do instead
 

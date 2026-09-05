@@ -21,7 +21,7 @@ import sys
 
 
 # ---------------------------------------------------------------------------
-# LUI JSON builder — walks pyang's internal AST directly
+# LUI JSON builder -- walks pyang's internal AST directly
 # ---------------------------------------------------------------------------
 
 # YANG built-in type → LUI type mapping
@@ -348,7 +348,7 @@ def build_lui_json(data_defs, schema_name='unknown', yang_source=''):
 
 
 # ---------------------------------------------------------------------------
-# Standalone entry point — parses with pyang Python API and writes output
+# Standalone entry point -- parses with pyang Python API and writes output
 # ---------------------------------------------------------------------------
 
 def parse_yang(input_path):

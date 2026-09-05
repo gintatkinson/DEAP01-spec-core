@@ -2,11 +2,11 @@
 
 `reconcile_backlog.py` addresses tracker issues by normalised title whenever a spec has
 no canonical `issue_id` yet (#314/#316 demoted that path to a warning-only fallback but
-did not remove it). Two validators exist to stop that key colliding — the #318 title
-uniqueness gate and `SyncValidator` — and each carried its own copy of the normaliser.
+did not remove it). Two validators exist to stop that key colliding -- the #318 title
+uniqueness gate and `SyncValidator` -- and each carried its own copy of the normaliser.
 They had drifted: `sync_validator`'s copy lacked the guard that keeps the original title
 when prefix-stripping would empty it, and additionally folded `_` to a space. A gate that
-collides in a different space from the consumer it protects is worse than no gate — the
+collides in a different space from the consumer it protects is worse than no gate -- the
 looser copy misses collisions the reconciler will make, the stricter one invents
 collisions it will not, and `sync_validator`'s copy managed both at once.
 
@@ -16,7 +16,7 @@ The dependency has to point somewhere, and the two ends are not symmetric:
 
 * `reconcile_backlog.py` is a standalone script. `.pipeline/upstream/pipeline-tooling.md`
   § *Platform & Stack* says `skills/*/scripts/` SHOULD be standard-library only, and
-  `AGENTS.md` § *Backlog Reconciliation Mandate* requires it to run before every merge —
+  `AGENTS.md` § *Backlog Reconciliation Mandate* requires it to run before every merge --
   including in a downstream repository that has never installed this package. Making it
   import `parity_auditor` would make a mandated pre-merge step fail on a missing
   third-party install.
@@ -57,7 +57,7 @@ def _load_reconciler():
     module = sys.modules.get("reconcile_backlog")
     if module is not None:
         return module
-    try:  # already on sys.path — how this package's own tests reach it
+    try:  # already on sys.path -- how this package's own tests reach it
         import reconcile_backlog  # noqa: F401
 
         return sys.modules["reconcile_backlog"]

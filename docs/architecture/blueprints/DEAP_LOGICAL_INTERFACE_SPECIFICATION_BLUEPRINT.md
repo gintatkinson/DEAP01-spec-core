@@ -256,9 +256,9 @@ The N² matrix provides a rigorous, compact representation of all inter-subsyste
 
 | Subsystem | 1. SEN | 2. CTL | 3. ACT |
 | :--- | :--- | :--- | :--- |
-| **1. SEN** | **[ Sensor Processing ]** | CONN-01 (3 Signals) | — |
-| **2. CTL** | — | **[ Controller Logic ]** | CONN-02 (3 Signals) |
-| **3. ACT** | — | — | **[ Actuation Driver ]** |
+| **1. SEN** | **[ Sensor Processing ]** | CONN-01 (3 Signals) | -- |
+| **2. CTL** | -- | **[ Controller Logic ]** | CONN-02 (3 Signals) |
+| **3. ACT** | -- | -- | **[ Actuation Driver ]** |
 
 #### 3.1.3 Port Definition Roster Table Structure
 The port roster defines every logical port across all system boundaries:

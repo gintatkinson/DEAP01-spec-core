@@ -6,7 +6,7 @@ several downstream projects: deciding that two messages describe *the same kind*
 problem requires parsing prose, which breaks the moment a message is reworded.
 
 ``Finding`` **subclasses ``str``**. That is deliberate and load-bearing. A ``Finding``
-*is* its message, so every existing consumer keeps working unchanged — ``" ".join(errors)``,
+*is* its message, so every existing consumer keeps working unchanged -- ``" ".join(errors)``,
 ``"text" in error``, equality, f-string interpolation, sorting. Roughly 172 tests assert on
 message content in those forms; without this the migration would require rewriting all of
 them, and a rewrite of that size is where regressions come from.

@@ -568,36 +568,36 @@ class SysMLParameterBindingEngine:
         # Medical domain
         if dom == "medical":
             rows = [
-                "| IEC 62304:2006+AMD1:2015 Class C | IEC | Medical device software — Software life cycle processes | §4.3 Software safety classification, §5.2 Software development planning, §7.1 Software risk management |",
-                "| ISO 14971:2019 | ISO | Medical devices — Application of risk management to medical devices | §4.4 Risk management plan, §5.4 Risk estimation, §7.1 Risk control option analysis |",
-                "| IEC 60601-1-8:2020 | IEC | Medical electrical equipment — Part 1-8: General requirements for basic safety and essential performance — Collateral Standard: Alarm systems | §6.3 Alarm condition categories, §6.8 Alarm signals, §6.9 Alarm limits |",
+                "| IEC 62304:2006+AMD1:2015 Class C | IEC | Medical device software -- Software life cycle processes | §4.3 Software safety classification, §5.2 Software development planning, §7.1 Software risk management |",
+                "| ISO 14971:2019 | ISO | Medical devices -- Application of risk management to medical devices | §4.4 Risk management plan, §5.4 Risk estimation, §7.1 Risk control option analysis |",
+                "| IEC 60601-1-8:2020 | IEC | Medical electrical equipment -- Part 1-8: General requirements for basic safety and essential performance -- Collateral Standard: Alarm systems | §6.3 Alarm condition categories, §6.8 Alarm signals, §6.9 Alarm limits |",
             ]
         # Rail domain
         elif dom == "rail":
             rows = [
-                "| EN 50126:2017 | CENELEC | Railway Applications — The Specification and Demonstration of Reliability, Availability, Maintainability and Safety (RAMS) | §6.2 RAMS lifecycle processes, §7.3 Risk assessment and safety requirements |",
-                "| EN 50128:2011/A2:2020 SIL 4 | CENELEC | Railway applications — Communication, signalling and processing systems — Software for railway control and protection systems | §6.3 Software safety integrity levels (SIL 4), §7.5 Software verification and testing |",
-                "| EN 50129:2018 | CENELEC | Railway applications — Communication, signalling and processing systems — Safety related electronic systems for signalling | §5.2 Safety management for electronic systems, §6.3 Hardware safety integrity, §7.1 Safety acceptance |",
+                "| EN 50126:2017 | CENELEC | Railway Applications -- The Specification and Demonstration of Reliability, Availability, Maintainability and Safety (RAMS) | §6.2 RAMS lifecycle processes, §7.3 Risk assessment and safety requirements |",
+                "| EN 50128:2011/A2:2020 SIL 4 | CENELEC | Railway applications -- Communication, signalling and processing systems -- Software for railway control and protection systems | §6.3 Software safety integrity levels (SIL 4), §7.5 Software verification and testing |",
+                "| EN 50129:2018 | CENELEC | Railway applications -- Communication, signalling and processing systems -- Safety related electronic systems for signalling | §5.2 Safety management for electronic systems, §6.3 Hardware safety integrity, §7.1 Safety acceptance |",
             ]
         # Space domain
         elif dom == "space":
             rows = [
-                "| ECSS-E-ST-40C | ECSS | Space engineering — Software | §5.2 Software life cycle, §5.8 Software verification and validation, §6.3 Space software safety requirements |",
+                "| ECSS-E-ST-40C | ECSS | Space engineering -- Software | §5.2 Software life cycle, §5.8 Software verification and validation, §6.3 Space software safety requirements |",
                 "| NASA-STD-8739.8 | NASA | Software Assurance Standard for NASA Programs and Projects | §4.2 Safety-critical software assurance, §5.3 Independent Verification and Validation (IV&V) |",
-                "| ECSS-E-ST-10C | ECSS | Space engineering — System engineering general requirements | §5.2 System engineering process, §6.2 Verification and product assurance processes |",
+                "| ECSS-E-ST-10C | ECSS | Space engineering -- System engineering general requirements | §5.2 System engineering process, §6.2 Verification and product assurance processes |",
             ]
         # AGV / Forklift / Warehouse logistics domain
         elif dom == "industrial":
             rows = [
-                "| ISO 3691-4:2023 | ISO | Industrial trucks — Safety requirements and verification — Part 4: Driverless industrial trucks and their systems | §4.2 Automated path containment, §4.3 Personnel detection and active obstacle avoidance, §5.2 Safety interlocks |",
+                "| ISO 3691-4:2023 | ISO | Industrial trucks -- Safety requirements and verification -- Part 4: Driverless industrial trucks and their systems | §4.2 Automated path containment, §4.3 Personnel detection and active obstacle avoidance, §5.2 Safety interlocks |",
                 "| IEC 61508 SIL 3 | IEC | Functional Safety of Electrical/Electronic/Programmable Electronic Safety-related Systems | Part 1 §6.2 Management of functional safety, Part 2 §7.4 Hardware safety integrity (SIL 3), Part 3 §7.4 Software design |",
-                "| VDA 5050 | VDA / VDMA | AGV Communication Interface — Interface for the communication between automated guided vehicles (AGV) and a master control | §4.0 MQTT message formats, §5.2 Dynamic order execution, §6.3 Instant action and e-stop commands |",
+                "| VDA 5050 | VDA / VDMA | AGV Communication Interface -- Interface for the communication between automated guided vehicles (AGV) and a master control | §4.0 MQTT message formats, §5.2 Dynamic order execution, §6.3 Instant action and e-stop commands |",
             ]
         # Subsea / Maritime domain
         elif dom == "marine":
             rows = [
                 "| DNV-GL-ST-E403 | DNV GL | Subsea power and automation systems | §3.2 Subsea electrical and control system safety, §4.4 Redundant power and containment architectures |",
-                "| ISO 13628-6 | ISO | Petroleum and natural gas industries — Design and operation of subsea production systems — Part 6: Subsea production control systems | §5.2 Environmental qualification, §6.3 Pressure containment and emergency release interlocks |",
+                "| ISO 13628-6 | ISO | Petroleum and natural gas industries -- Design and operation of subsea production systems -- Part 6: Subsea production control systems | §5.2 Environmental qualification, §6.3 Pressure containment and emergency release interlocks |",
                 "| IMO MASS Code | IMO | Maritime Autonomous Surface Ships (MASS) Code | §3.1 Autonomous navigation modes, §4.2 Remote control center safety functions, §5.3 Failsafe state reversion |",
                 "| COLREGs Convention | IMO | Convention on the International Regulations for Preventing Collisions at Sea | Rule 5 Look-out, Rule 8 Action to avoid collision, Rule 18 Responsibilities between vessels |",
             ]

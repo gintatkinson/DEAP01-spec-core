@@ -65,7 +65,7 @@ unrelated to this event, and out of scope.
 
 ## 3. The Repair
 
-Both changes were reverts to `HEAD`. No content was authored — the 197-line profile was
+Both changes were reverts to `HEAD`. No content was authored -- the 197-line profile was
 intact in git history and its frontmatter already declared `scope: upstream-only`, which
 is what the second failing test asserts.
 
@@ -89,8 +89,8 @@ if [ -e ./.pipeline/upstream ]; then
 fi
 ```
 
-`.pipeline/upstream/` exists only in the upstream repository — the installer deletes it
-from every downstream copy — so its presence is a reliable discriminator.
+`.pipeline/upstream/` exists only in the upstream repository -- the installer deletes it
+from every downstream copy -- so its presence is a reliable discriminator.
 
 `test -e` is used rather than `find -type f` because `rules/document-references.md`
 § *Existence Claims Must Use Commands That Observe Symlinks* requires existence checks to

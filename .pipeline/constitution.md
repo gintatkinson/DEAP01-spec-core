@@ -1,5 +1,5 @@
 ---
-title: "Project Constitution — Functional Layer"
+title: "Project Constitution -- Functional Layer"
 project: "Digital Engineering Agent Platform (DEAP)"
 tier: functional
 created: "2026-06-29"
@@ -65,7 +65,7 @@ graph TD
 ### Data Model Integrity
 - Every schema definition, model node, data object, property, variant, custom type, and extension defined in the input schemas MUST map to at least one Feature.
 - Cross-module or external schema references must be explicitly documented with source and target module names.
-- Circular dependencies must be flagged and escalated — do not silently drop them.
+- Circular dependencies must be flagged and escalated -- do not silently drop them.
 
 ### Model Metamodel & Profile Mapping Standard
 - Module Declarations & Container Nodes: YANG modules, OpenAPI schemas, or Protobuf packages map to a logical Component.
@@ -151,7 +151,7 @@ graph TD
 ### Documentation Standards
 - All generated markdown files include YAML frontmatter.
 - All generated markdown files include a "Source References" section at the bottom.
-- No orphan documents — every file must be linked from at least one tracker issue.
+- No orphan documents -- every file must be linked from at least one tracker issue.
 
 ### Idempotency
 - Re-running any pipeline skill MUST NOT create duplicate issues or documents.

@@ -5,18 +5,18 @@
 | **Version** | 1.0.0 |
 | **Date** | 2026-09-01 |
 
-> **Goal:** Make client applications fully metadata-driven — the client rendering system has zero hardcoded domain knowledge at compile time. Every entity type, field, icon, validation rule, section label, and relationship is discovered dynamically at runtime from the connected data source.
+> **Goal:** Make client applications fully metadata-driven -- the client rendering system has zero hardcoded domain knowledge at compile time. Every entity type, field, icon, validation rule, section label, and relationship is discovered dynamically at runtime from the connected data source.
 
 **Core Realization:** Static layout configurations with hardcoded fields are merely static schema definitions in a different file format. The application engine must discover all entity schemas dynamically at runtime because:
 - Multiple heterogeneous domains and platform profiles are supported.
 - Data sources are pluggable and swappable at runtime (SQLite ↔ Firebase ↔ gRPC/Protobuf ↔ REST).
-- For gRPC/Protobuf, the `.proto` descriptor set **is** the metadata — no separate hardcoded schema file is required.
+- For gRPC/Protobuf, the `.proto` descriptor set **is** the metadata -- no separate hardcoded schema file is required.
 
 ---
 
 ## 1. Core Abstraction: TypeDescriptor
 
-Each data source returns a `TypeDescriptor` object per entity type. The client renders whatever metadata this descriptor exposes — enforcing zero hardcoded domain logic.
+Each data source returns a `TypeDescriptor` object per entity type. The client renders whatever metadata this descriptor exposes -- enforcing zero hardcoded domain logic.
 
 ```dart
 /// Describes one object type known to the connected data source.

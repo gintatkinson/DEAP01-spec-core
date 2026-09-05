@@ -18,7 +18,7 @@
 
 In the **Digital Engineering Autonomous Pipeline (DEAP)**, system models and textual engineering specifications do not exist as decoupled or loosely correlated artifacts. Instead, **SysML v2** (`.pipeline/schema.sysml`) serves as the 100% authoritative, mathematically grounded **Single Source of Truth (SSOT)** for all system structure, behaviors, interfaces, data definitions, and safety invariants.
 
-All downstream engineering artifacts—including Agile Epics, Features, BDD User Stories, formal Use Cases, verification suites, and flight code generators—are direct formal projections and non-drifting elaborations of the SysML v2 Abstract Syntax Tree (AST).
+All downstream engineering artifacts--including Agile Epics, Features, BDD User Stories, formal Use Cases, verification suites, and flight code generators--are direct formal projections and non-drifting elaborations of the SysML v2 Abstract Syntax Tree (AST).
 
 ```mermaid
 flowchart TD
@@ -77,7 +77,7 @@ flowchart TD
 The architecture adheres to four fundamental principles:
 
 1. **Model-as-SSOT Priority**: Natural language prose is never the origin of system truth. Every structural component, interface boundary, state transition, and safety requirement must be formally declared in the SysML v2 AST before or in tandem with downstream specification generation.
-2. **Prohibition of Heuristic Prose Parsing**: Downstream code synthesis, validation linters, and verification test harnesses operate strictly on structured AST nodes and verified YAML/Mermaid metadata—never on free-form natural language heuristics.
+2. **Prohibition of Heuristic Prose Parsing**: Downstream code synthesis, validation linters, and verification test harnesses operate strictly on structured AST nodes and verified YAML/Mermaid metadata--never on free-form natural language heuristics.
 3. **Pure Schema-Driven Compilation**: SysML v2 parsing, AST extraction, and verification gates operate purely on generic AST tokens (`package`, `part def`, `item def`, `action def`, `state def`, `port def`, `requirement def`, `use case def`) without hardcoded domain bias.
 4. **Non-Drifting Bidirectional Synchronization**: Specifications and models are linked through a closed loop. Any refinement, edge case, or transition guard added in downstream specifications is automatically extracted and merged back into `.pipeline/schema.sysml`.
 
