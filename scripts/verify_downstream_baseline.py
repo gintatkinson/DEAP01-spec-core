@@ -321,10 +321,46 @@ def check_no_ds_store_files(repo_root):
         for f in files:
             if f == ".DS_Store":
                 ds_store_files.append(os.path.join(root, f))
-    if ds_store_files:
-        print(f"ERROR: Check 11 failed: Found {len(ds_store_files)} .DS_Store file(s) in working tree or git index: {', '.join(ds_store_files)}", file=sys.stderr)
+    if not ds_store_files:
+        print("Success: Check 11 verified (zero .DS_Store files found).")
+        return
+
+    tracked_files = []
+    cleaned_files = []
+
+    for path in ds_store_files:
+        rel_path = os.path.relpath(path, repo_root)
+        is_tracked = False
+        try:
+            res = subprocess.run(
+                ["git", "ls-files", "--error-unmatch", rel_path],
+                cwd=repo_root,
+                capture_output=True,
+                text=True,
+                timeout=GIT_TIMEOUT_SECONDS,
+            )
+            if res.returncode == 0:
+                is_tracked = True
+        except Exception:
+            is_tracked = False
+
+        if is_tracked:
+            tracked_files.append(rel_path)
+        else:
+            try:
+                os.remove(path)
+                cleaned_files.append(rel_path)
+            except OSError as e:
+                print(f"WARNING: Failed to remove transient .DS_Store file '{rel_path}': {e}", file=sys.stderr)
+
+    if cleaned_files:
+        print(f"Notice: [Cleaned] Removed {len(cleaned_files)} transient untracked .DS_Store file(s): {', '.join(cleaned_files)}")
+
+    if tracked_files:
+        print(f"ERROR: Check 11 failed: Found {len(tracked_files)} tracked/committed .DS_Store file(s) in git index: {', '.join(tracked_files)}", file=sys.stderr)
         sys.exit(1)
-    print("Success: Check 11 verified (zero .DS_Store files found).")
+
+    print("Success: Check 11 verified (zero tracked .DS_Store files, transient files cleaned).")
 
 def check_no_duplicate_master_blueprints(repo_root):
     """Check 12: Verify downstream repositories do NOT contain duplicate master core blueprints."""

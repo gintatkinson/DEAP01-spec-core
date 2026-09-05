@@ -127,7 +127,7 @@ class WorkspaceRepository:
             return self._feature_files
 
         for filename in os.listdir(features_dir):
-            if not filename.endswith(".md"):
+            if not filename.endswith(".md") or filename.startswith("."):
                 continue
             filepath = os.path.join(features_dir, filename)
             try:
@@ -172,6 +172,22 @@ class WorkspaceRepository:
             ))
         self._feature_files = features
         return self._feature_files
+
+    def get_markdown_files(self, directory: str) -> List[str]:
+        """Collect all non-hidden .md markdown files in a directory tree, ignoring .DS_Store and OS metadata."""
+        if not directory or not os.path.exists(directory):
+            return []
+        if os.path.isfile(directory):
+            if directory.endswith(".md") and not os.path.basename(directory).startswith("."):
+                return [directory]
+            return []
+        md_files = []
+        for root, dirs, files in os.walk(directory):
+            dirs[:] = [d for d in dirs if not d.startswith(".") and d not in (".git", "node_modules", ".dart_tool", "build")]
+            for f in sorted(files):
+                if f.endswith(".md") and not f.startswith("."):
+                    md_files.append(os.path.join(root, f))
+        return md_files
 
     def get_design_tokens(self) -> Dict[str, Any]:
         if self._design_tokens is not None:
