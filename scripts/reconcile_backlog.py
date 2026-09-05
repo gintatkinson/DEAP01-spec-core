@@ -503,6 +503,12 @@ class GitLabV4Provider:
             val = os.environ.get(env_var)
             if val and val.strip():
                 return val.strip()
+        group_val = os.environ.get("GITLAB_GROUP") or os.environ.get("GL_GROUP")
+        project_val = os.environ.get("GITLAB_PROJECT_NAME") or os.environ.get("GL_PROJECT_NAME")
+        if group_val and project_val:
+            return f"{group_val.strip().rstrip('/')}/{project_val.strip().lstrip('/')}"
+        if group_val and not project_val:
+            return group_val.strip()
         remote_info = get_git_remote_info(self.workspace_dir)
         if remote_info and remote_info.get("project_path"):
             return remote_info["project_path"]
@@ -530,8 +536,10 @@ class GitLabV4Provider:
         try:
             hostname = urllib.parse.urlparse(self.server_url).hostname or "gitlab.com"
             auth = netrc.netrc().authenticators(hostname)
-            if auth and auth[2] and auth[2].strip():
-                return auth[2].strip(), "PRIVATE-TOKEN"
+            if auth:
+                token_val = (auth[2] or auth[0] or "").strip()
+                if token_val:
+                    return token_val, "PRIVATE-TOKEN"
         except Exception:
             pass
         return None, "PRIVATE-TOKEN"
@@ -658,8 +666,14 @@ class GitLabV4Provider:
                 for issue in issues:
                     if "iid" in issue:
                         issue["number"] = issue["iid"]
+                        issue["issue_id"] = issue["iid"]
                     if "state" in issue:
-                        issue["state"] = str(issue["state"]).upper()
+                        state_str = str(issue["state"]).upper()
+                        if state_str == "OPEN":
+                            state_str = "OPENED"
+                        issue["state"] = state_str
+                    if "description" in issue:
+                        issue["body"] = issue["description"]
                     all_issues.append(issue)
 
                 next_page_hdr = headers.get("X-Next-Page") or headers.get("x-next-page")
@@ -685,8 +699,14 @@ class GitLabV4Provider:
                 for issue in issues:
                     if "iid" in issue:
                         issue["number"] = issue["iid"]
+                        issue["issue_id"] = issue["iid"]
                     if "state" in issue:
-                        issue["state"] = str(issue["state"]).upper()
+                        state_str = str(issue["state"]).upper()
+                        if state_str == "OPEN":
+                            state_str = "OPENED"
+                        issue["state"] = state_str
+                    if "description" in issue:
+                        issue["body"] = issue["description"]
                 return issues
         except Exception as e:
             print(f"[Notice] glab CLI fallback failed: {e}")
@@ -1536,16 +1556,31 @@ def create_tracker_provider(
     offline: bool = False,
     cli_gitlab_url: Optional[str] = None,
     cli_project: Optional[str] = None,
+    cli_gitlab_group: Optional[str] = None,
+    cli_token: Optional[str] = None,
     cli_jira_url: Optional[str] = None,
     cli_jira_project: Optional[str] = None,
     cli_jira_email: Optional[str] = None,
 ):
     if provider_name == "gitlab":
         server_url = cli_gitlab_url or (rules.get("tracker_rules", {}).get("server_url") if rules else None)
-        project_id = cli_project or (rules.get("tracker_rules", {}).get("project_id") if rules else None)
+        raw_project = cli_project or (rules.get("tracker_rules", {}).get("project_id") if rules else None) or (rules.get("tracker_rules", {}).get("project") if rules else None)
+        raw_group = cli_gitlab_group or (rules.get("tracker_rules", {}).get("gitlab_group") if rules else None) or (rules.get("tracker_rules", {}).get("group") if rules else None)
+
+        if raw_group and raw_project and "/" not in str(raw_project):
+            project_id = f"{str(raw_group).rstrip('/')}/{str(raw_project).lstrip('/')}"
+        elif raw_project:
+            project_id = str(raw_project)
+        elif raw_group:
+            project_id = str(raw_group)
+        else:
+            project_id = None
+
+        token = cli_token or (rules.get("tracker_rules", {}).get("token") if rules else None)
         return GitLabV4Provider(
             server_url=server_url,
             project_id=project_id,
+            token=token,
             offline=offline,
             workspace_dir=workspace_dir,
         )
@@ -1553,10 +1588,12 @@ def create_tracker_provider(
         server_url = cli_jira_url or (rules.get("tracker_rules", {}).get("server_url") if rules else None)
         project_key = cli_jira_project or (rules.get("tracker_rules", {}).get("project_key") if rules else None) or (rules.get("tracker_rules", {}).get("project") if rules else None)
         email = cli_jira_email or (rules.get("tracker_rules", {}).get("email") if rules else None)
+        token = cli_token or (rules.get("tracker_rules", {}).get("token") if rules else None)
         return JiraV2V3Provider(
             server_url=server_url,
             project_key=project_key,
             email=email,
+            token=token,
             offline=offline,
             workspace_dir=workspace_dir,
         )
@@ -2546,6 +2583,20 @@ def sync_issue_title_to_tracker(issue_num, filepath, rules=None, issue_record=No
     if current_title is not None and str(current_title) == title:
         return False
 
+    if not provider_adapter:
+        provider = tracker_rules.get("provider", "github")
+        if provider == "gitlab":
+            provider_adapter = GitLabV4Provider(
+                server_url=tracker_rules.get("server_url"),
+                project_id=tracker_rules.get("project_id"),
+            )
+        elif provider == "jira":
+            provider_adapter = JiraV2V3Provider(
+                server_url=tracker_rules.get("server_url"),
+                project_key=tracker_rules.get("project_key") or tracker_rules.get("project"),
+                email=tracker_rules.get("email"),
+            )
+
     if provider_adapter:
         return provider_adapter.edit_issue_title(issue_num, title)
 
@@ -2595,6 +2646,20 @@ def apply_structural_label(issue_num, issue_type, rules=None, issue_record=None,
         return False
 
     description = STRUCTURAL_LABEL_DESCRIPTION_TEMPLATE.format(item_type=issue_type)
+
+    if not provider_adapter:
+        provider = tracker_rules.get("provider", "github")
+        if provider == "gitlab":
+            provider_adapter = GitLabV4Provider(
+                server_url=tracker_rules.get("server_url"),
+                project_id=tracker_rules.get("project_id"),
+            )
+        elif provider == "jira":
+            provider_adapter = JiraV2V3Provider(
+                server_url=tracker_rules.get("server_url"),
+                project_key=tracker_rules.get("project_key") or tracker_rules.get("project"),
+                email=tracker_rules.get("email"),
+            )
 
     if provider_adapter:
         provider_adapter.create_label(label, description=description, color="#0E8A16")
@@ -2684,6 +2749,20 @@ def sync_issue_body_to_tracker(issue_num, filepath, issue_type="Feature", rules=
         else:
             content = content[:trunc_limit] + truncation_template
         
+    if not provider_adapter:
+        provider = tracker_rules.get("provider", "github")
+        if provider == "gitlab":
+            provider_adapter = GitLabV4Provider(
+                server_url=tracker_rules.get("server_url"),
+                project_id=tracker_rules.get("project_id"),
+            )
+        elif provider == "jira":
+            provider_adapter = JiraV2V3Provider(
+                server_url=tracker_rules.get("server_url"),
+                project_key=tracker_rules.get("project_key") or tracker_rules.get("project"),
+                email=tracker_rules.get("email"),
+            )
+
     if provider_adapter:
         provider_adapter.edit_issue(issue_num, content)
     else:
@@ -2754,6 +2833,20 @@ def resolve_issue_on_tracker(issue_num, comment, rules=None, provider_adapter=No
     label = get_resolved_label(rules)
     ref_str = format_issue_reference(issue_num, tracker_rules)
     print(f"  [Resolve Issue] Marking {ref_str} Fixed / Resolved via label '{label}'...")
+
+    if not provider_adapter:
+        provider = tracker_rules.get("provider", "github")
+        if provider == "gitlab":
+            provider_adapter = GitLabV4Provider(
+                server_url=tracker_rules.get("server_url"),
+                project_id=tracker_rules.get("project_id"),
+            )
+        elif provider == "jira":
+            provider_adapter = JiraV2V3Provider(
+                server_url=tracker_rules.get("server_url"),
+                project_key=tracker_rules.get("project_key") or tracker_rules.get("project"),
+                email=tracker_rules.get("email"),
+            )
 
     if provider_adapter:
         provider_adapter.create_label(label, description=RESOLVED_LABEL_DESCRIPTION, color="#0E8A16")
@@ -4067,6 +4160,16 @@ def main():
         help="GitLab project path or numeric ID (e.g. 'gintatkinson/DEAP01-spec-core' or CI_PROJECT_PATH).",
     )
     parser.add_argument(
+        "--gitlab-group",
+        default=None,
+        help="GitLab group or namespace path.",
+    )
+    parser.add_argument(
+        "--token",
+        default=None,
+        help="Authentication token for issue tracker (GitLab REST API, Jira, or GitHub).",
+    )
+    parser.add_argument(
         "--jira-url",
         default=None,
         help="Jira instance base URL (e.g. 'https://your-domain.atlassian.net' or JIRA_SERVER_URL environment variable).",
@@ -4167,6 +4270,8 @@ def main():
             offline=args.offline,
             cli_gitlab_url=args.gitlab_url,
             cli_project=args.project,
+            cli_gitlab_group=getattr(args, "gitlab_group", None),
+            cli_token=getattr(args, "token", None),
             cli_jira_url=args.jira_url,
             cli_jira_project=args.jira_project,
             cli_jira_email=args.jira_email,
