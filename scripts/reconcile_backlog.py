@@ -2537,6 +2537,97 @@ def get_structural_label(issue_type, rules=None):
     return DEFAULT_STRUCTURAL_LABELS.get(key)
 
 
+def get_type_for_structural_label(label, rules=None):
+    """Identify which structural spec type a label represents, or None if non-structural (#221).
+
+    Checks configured tracker_rules.labels, provider defaults, and canonical aliases.
+    """
+    if not label:
+        return None
+    norm = normalize_label(label)
+    if not norm:
+        return None
+
+    tracker_rules = rules.get("tracker_rules", {}) if rules else {}
+    configured_labels = tracker_rules.get("labels", {})
+
+    # Check configured labels first
+    for key in ("epic", "feature", "user_story", "use_case"):
+        cfg = configured_labels.get(key)
+        if cfg and normalize_label(cfg) == norm:
+            return key
+
+    # Check known provider defaults and aliases
+    type_label_map = {
+        "epic": {
+            "epic", "epics", "type::epic", "type:epic", "type::epics", "type:epics",
+            normalize_label(DEFAULT_STRUCTURAL_LABELS.get("epic")),
+            normalize_label(DEFAULT_GITLAB_STRUCTURAL_LABELS.get("epic")),
+            normalize_label(DEFAULT_JIRA_STRUCTURAL_LABELS.get("epic")),
+        },
+        "feature": {
+            "feature", "features", "feat", "type::feature", "type:feature", "type::features",
+            "type:features", "type::feat", "type:feat",
+            normalize_label(DEFAULT_STRUCTURAL_LABELS.get("feature")),
+            normalize_label(DEFAULT_GITLAB_STRUCTURAL_LABELS.get("feature")),
+            normalize_label(DEFAULT_JIRA_STRUCTURAL_LABELS.get("feature")),
+        },
+        "user_story": {
+            "user-story", "user-stories", "us", "type::user-story", "type:user-story",
+            "type::user-stories", "type:user-stories", "type::us", "type:us",
+            normalize_label(DEFAULT_STRUCTURAL_LABELS.get("user_story")),
+            normalize_label(DEFAULT_GITLAB_STRUCTURAL_LABELS.get("user_story")),
+            normalize_label(DEFAULT_JIRA_STRUCTURAL_LABELS.get("user_story")),
+        },
+        "use_case": {
+            "use-case", "use-cases", "uc", "type::use-case", "type:use-case",
+            "type::use-cases", "type:use-cases", "type::uc", "type:uc",
+            normalize_label(DEFAULT_STRUCTURAL_LABELS.get("use_case")),
+            normalize_label(DEFAULT_GITLAB_STRUCTURAL_LABELS.get("use_case")),
+            normalize_label(DEFAULT_JIRA_STRUCTURAL_LABELS.get("use_case")),
+        },
+    }
+
+    for key, label_set in type_label_map.items():
+        clean_set = {normalize_label(s) for s in label_set if s}
+        if norm in clean_set:
+            return key
+
+    return None
+
+
+def is_issue_type_compatible(issue_record, expected_type, rules=None):
+    """Detect when a remote issue carries conflicting structural labels (#221).
+
+    Returns False if the remote issue carries any structural label for a spec type
+    other than expected_type (e.g. carries 'type::feature' or 'feature' when expecting 'Epic').
+    Returns True if no conflicting structural labels are present.
+    """
+    if not issue_record or not isinstance(issue_record, dict):
+        return True
+    exp_key = structural_label_key(expected_type)
+    if exp_key in ("user-story", "user_stories"):
+        exp_key = "user_story"
+    elif exp_key in ("use-case", "use_cases"):
+        exp_key = "use_case"
+
+    tracker_rules = rules.get("tracker_rules", {}) if rules else {}
+    keys = tracker_rules.get("keys", {})
+    labels_key = keys.get("labels", "labels")
+
+    raw_labels = issue_record.get(labels_key)
+    if raw_labels is None:
+        raw_labels = issue_record.get("labels", [])
+
+    for item in raw_labels or []:
+        name = item.get("name", "") if isinstance(item, dict) else str(item)
+        found_type = get_type_for_structural_label(name, rules)
+        if found_type and found_type != exp_key:
+            return False
+
+    return True
+
+
 def issue_has_label(issue_record, label):
     """Does this tracker record already carry `label`?
 
@@ -3495,7 +3586,16 @@ def resolve_spec_issue_number(filepath, title, title_map, issue_dict, rules=None
 
     Order:
 
-    1. Frontmatter `issue_id` present and on the tracker — used, full stop.
+    1. Frontmatter `issue_id` present and on the tracker:
+       - Check if the remote issue's type is compatible AND its normalized title matches
+         the local document.
+       - If compatible and title matches: return candidate_num.
+       - If a collision is detected (type mismatch or title mismatch):
+         * Attempt to auto-reconcile to the true remote issue via normalized title
+           lookup (title_map.get(norm_local_title)). If found, emit a notice and return
+           the matched ID (#221).
+         * If no title match exists in title_map, FAIL CLOSED with an explicit [FATAL]
+           error explaining the collision (#221) and refuse to overwrite the remote tracker issue.
     2. Frontmatter `issue_id` present but absent from the tracker — **hard error**. A
        fall-through to title matching here is exactly #316: the title can match some
        unrelated issue, and `sync_issue_body_to_tracker` would then overwrite that
@@ -3512,13 +3612,15 @@ def resolve_spec_issue_number(filepath, title, title_map, issue_dict, rules=None
     meta = extract_metadata(filepath)
     fm_id = meta.get("issue_id")
     basename = os.path.basename(filepath)
+    keys = tracker_rules.get("keys", {})
+    title_key = keys.get("title", "title")
 
     declared = str(fm_id).strip().strip('"\'').lstrip("#").strip() if fm_id is not None else ""
 
     issue_num = None
     if declared:
-        issue_num = lookup_canonical_issue_key(fm_id, issue_dict)
-        if issue_num is None:
+        candidate_num = lookup_canonical_issue_key(fm_id, issue_dict)
+        if candidate_num is None:
             declared_ref = format_issue_reference(declared, tracker_rules)
             print(
                 f"[FATAL] {item_type} '{basename}' declares issue_id {declared_ref}, "
@@ -3528,6 +3630,51 @@ def resolve_spec_issue_number(filepath, title, title_map, issue_dict, rules=None
                 file=sys.stderr,
             )
             sys.exit(1)
+
+        candidate_record = issue_dict.get(candidate_num) or {}
+        candidate_title = candidate_record.get(title_key, "")
+        norm_remote_title = normalize_title(candidate_title, rules)
+        norm_local_title = normalize_title(title, rules)
+        type_compatible = is_issue_type_compatible(candidate_record, item_type, rules)
+        title_matches = (norm_remote_title == norm_local_title) and bool(norm_local_title)
+
+        if type_compatible and title_matches:
+            issue_num = candidate_num
+        else:
+            # Collision detected (#221): declared issue_id points to an issue with mismatched type or mismatched title.
+            # Attempt to auto-reconcile to the true remote issue via normalized title lookup.
+            matched_id = title_map.get(norm_local_title) if norm_local_title else None
+            if matched_id is not None:
+                candidate_ref = format_issue_reference(candidate_num, tracker_rules)
+                matched_ref = format_issue_reference(matched_id, tracker_rules)
+                reasons = []
+                if not type_compatible:
+                    reasons.append(f"incompatible spec type for {item_type}")
+                if not title_matches:
+                    reasons.append(f"title mismatch (tracker '{candidate_title}' vs local '{title}')")
+                reason_str = "; ".join(reasons) if reasons else "type or title mismatch"
+                print(
+                    f"  [Notice] {item_type} '{basename}' declared issue_id {candidate_ref}, "
+                    f"which collided with tracker issue {candidate_ref} ({reason_str}). "
+                    f"Auto-reconciled to true tracker issue {matched_ref} via normalized title match (#221)."
+                )
+                issue_num = matched_id
+            else:
+                candidate_ref = format_issue_reference(candidate_num, tracker_rules)
+                reasons = []
+                if not type_compatible:
+                    reasons.append(f"incompatible spec type for {item_type}")
+                if not title_matches:
+                    reasons.append(f"title mismatch (tracker '{candidate_title}' vs local '{title}')")
+                reason_str = "; ".join(reasons) if reasons else "type or title mismatch"
+                print(
+                    f"[FATAL] {item_type} '{basename}' declares issue_id {candidate_ref}, "
+                    f"which collides with tracker issue {candidate_ref} ({reason_str}), "
+                    f"and no matching {item_type} was found on the tracker (#221). "
+                    f"Refusing to overwrite tracker issue {candidate_ref}. Correct the issue_id in {filepath}",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
     else:
         issue_num = title_map.get(normalize_title(title, rules))
         if issue_num is not None:
