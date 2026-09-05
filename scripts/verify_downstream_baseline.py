@@ -7,6 +7,7 @@ and runs the build/test commands ('npm run build' for React, 'flutter analyze &&
 
 import argparse
 import ast
+import csv
 import json
 import os
 import re
@@ -534,6 +535,7 @@ def check_upstream_template_clean_landing_zones(repo_root):
         os.path.join("docs", "features"),
         os.path.join("docs", "user-stories"),
         os.path.join("docs", "use-cases"),
+        os.path.join("docs", "management"),
         "schema",
     ]
     allowed_files = {".gitkeep", "README.md"}
@@ -1657,8 +1659,167 @@ def check_domain_agnostic_ast_cleanliness(repo_root):
 
     print("Success: Check 19 verified (Domain-Agnostic AST Cleanliness Gate passed -- pure dynamic schema AST architecture verified).")
 
+def _check_wbs_suite_integrity(repo_root):
+    """Check 20: WBS & Enterprise Deliverables Suite Validation.
+
+    Verify that when docs/management/WBS_DELIVERABLES_SUITE.md exists:
+    - docs/management/wbs_export_jira_monday_ms_project.csv exists and conforms to RFC 4180 with 12 headers
+    - docs/management/wbs_export.json exists and conforms to the WBS JSON AST schema
+    - WBS_DELIVERABLES_SUITE.md contains required section headers and table structure (2-col metadata, 7-col traceability)
+    - Zero Unicode em dashes (\\u2014) exist in any management deliverable.
+    """
+    wbs_md = os.path.join(repo_root, "docs", "management", "WBS_DELIVERABLES_SUITE.md")
+    if not os.path.isfile(wbs_md):
+        print("Success: Check 20 verified (WBS & Enterprise Deliverables Suite pending or not present).")
+        return
+
+    errors = []
+    wbs_csv = os.path.join(repo_root, "docs", "management", "wbs_export_jira_monday_ms_project.csv")
+    wbs_json = os.path.join(repo_root, "docs", "management", "wbs_export.json")
+
+    # 1. Check presence of export deliverables
+    if not os.path.isfile(wbs_csv):
+        errors.append(f"Missing enterprise export deliverable: {os.path.relpath(wbs_csv, repo_root)}")
+    if not os.path.isfile(wbs_json):
+        errors.append(f"Missing enterprise export deliverable: {os.path.relpath(wbs_json, repo_root)}")
+
+    # 2. Check section headers and table structure in WBS_DELIVERABLES_SUITE.md
+    try:
+        with open(wbs_md, "r", encoding="utf-8") as f:
+            md_content = f.read()
+    except Exception as e:
+        errors.append(f"Failed to read {os.path.relpath(wbs_md, repo_root)}: {e}")
+        md_content = ""
+
+    if md_content:
+        # Required section headers (case-insensitive regex)
+        required_headers = [
+            ("Executive Summary", r"##\s+.*Executive\s+Summary"),
+            ("Baseline Deliverables", r"##\s+.*Baseline\s+Deliverables"),
+            ("Subsystem Epics / Features", r"##\s+.*(?:Subsystem\s+Epics|Feature\s+Realization|Features)"),
+            ("Verification Summary", r"##\s+.*(?:Verification.*Summary|Verification\s+&\s+Test)"),
+            ("Import Guide", r"##\s+.*(?:Import\s+Guide|Project\s+Management\s+Export)"),
+        ]
+        for name, pattern in required_headers:
+            if not re.search(pattern, md_content, re.IGNORECASE):
+                errors.append(f"WBS_DELIVERABLES_SUITE.md missing required section: {name}")
+
+        md_lines = md_content.splitlines()
+
+        # Native 2-column Metadata Table at lines 1-10
+        first_10_lines = "\n".join(md_lines[:10])
+        if not re.search(r"\|\s*Attribute\s*\|\s*Specification\s+Detail\s*\|", first_10_lines, re.IGNORECASE):
+            errors.append("WBS_DELIVERABLES_SUITE.md missing 2-column Metadata Table at lines 1-10 (| Attribute | Specification Detail |)")
+
+        # 7-Column Traceability Matrix header containing required columns
+        required_trace_cols = [
+            "SysML Component",
+            "Feature Spec",
+            "User Stories",
+            "MATLAB / Simulink Plant",
+            "Python 250 Hz Engine",
+            "Verification Suite",
+            "Simulation Evidence",
+        ]
+        has_trace_matrix = any(
+            line.strip().startswith("|") and line.strip().endswith("|") and all(col.lower() in line.lower() for col in required_trace_cols)
+            for line in md_lines
+        )
+        if not has_trace_matrix:
+            errors.append(
+                "WBS_DELIVERABLES_SUITE.md missing 7-Column Traceability Matrix header with columns: "
+                "SysML Component, Feature Spec, User Stories, MATLAB / Simulink Plant, Python 250 Hz Engine, Verification Suite, Simulation Evidence"
+            )
+
+    # 3. Check CSV export RFC 4180 parsing and 12 headers
+    if os.path.isfile(wbs_csv):
+        expected_csv_headers = [
+            "WBS Code",
+            "ID",
+            "Item Type",
+            "Name",
+            "Parent ID",
+            "Subsystem",
+            "DO-178C Level",
+            "Artifact Path",
+            "Est. Hours",
+            "Verification Gate",
+            "Status",
+            "Description",
+        ]
+        csv_rel = os.path.relpath(wbs_csv, repo_root)
+        try:
+            with open(wbs_csv, "r", encoding="utf-8") as f:
+                reader = csv.reader(f)
+                csv_rows = list(reader)
+            if not csv_rows:
+                errors.append(f"{csv_rel} is empty")
+            else:
+                actual_headers = [h.strip() for h in csv_rows[0]]
+                if actual_headers != expected_csv_headers:
+                    errors.append(
+                        f"{csv_rel} header mismatch. Expected {expected_csv_headers}, got {actual_headers}"
+                    )
+                data_rows = csv_rows[1:]
+                if not data_rows:
+                    errors.append(f"{csv_rel} contains zero data rows (expected at least one non-header row)")
+                else:
+                    for r_idx, row in enumerate(data_rows, start=2):
+                        if len(row) != len(expected_csv_headers):
+                            errors.append(
+                                f"{csv_rel} row {r_idx} column count mismatch: expected {len(expected_csv_headers)}, got {len(row)}"
+                            )
+        except Exception as e:
+            errors.append(f"Failed to parse {csv_rel} as RFC 4180 CSV: {e}")
+
+    # 4. Check JSON AST export parsing
+    if os.path.isfile(wbs_json):
+        json_rel = os.path.relpath(wbs_json, repo_root)
+        try:
+            with open(wbs_json, "r", encoding="utf-8") as f:
+                json_data = json.load(f)
+            if not isinstance(json_data, dict):
+                errors.append(f"{json_rel} must be a JSON object")
+            else:
+                for req_key in ("metadata", "wbs_tree", "traceability_matrix"):
+                    if req_key not in json_data:
+                        errors.append(f"{json_rel} missing required top-level key: '{req_key}'")
+                wbs_tree = json_data.get("wbs_tree")
+                if not isinstance(wbs_tree, dict):
+                    errors.append(f"{json_rel} 'wbs_tree' must be a JSON object")
+                else:
+                    for tree_key in ("wbs_code", "name", "level", "children"):
+                        if tree_key not in wbs_tree:
+                            errors.append(f"{json_rel} 'wbs_tree' missing required key: '{tree_key}'")
+        except Exception as e:
+            errors.append(f"Failed to parse {json_rel} as JSON: {e}")
+
+    # 5. Check Zero Unicode Em Dash Invariant (\u2014)
+    for target_path in (wbs_md, wbs_csv, wbs_json):
+        if os.path.isfile(target_path):
+            rel_path = os.path.relpath(target_path, repo_root)
+            try:
+                with open(target_path, "r", encoding="utf-8", errors="replace") as f:
+                    file_text = f.read()
+                if "\u2014" in file_text:
+                    errors.append(f"Unicode em dash (\\u2014) detected in {rel_path}")
+            except Exception as e:
+                errors.append(f"Failed to scan {rel_path} for em dashes: {e}")
+
+    # 6. Error handling
+    if errors:
+        print("ERROR: Check 20 failed (WBS & Enterprise Deliverables Suite violations found):", file=sys.stderr)
+        for err in errors:
+            print(f"  - {err}", file=sys.stderr)
+        sys.exit(1)
+
+    print("Success: Check 20 verified (WBS & Enterprise Deliverables Suite validated: Markdown structure, CSV RFC 4180 with 12 headers, JSON AST, and zero em dashes).")
+
+
+check_wbs_suite_integrity = _check_wbs_suite_integrity
+
 def run_all_checks(repo_root=None):
-    """Run all baseline checks (Checks 10 through 19)."""
+    """Run all baseline checks (Checks 10 through 20)."""
     if repo_root is None:
         repo_root = os.getcwd()
     check_gitignore_exists(repo_root)
@@ -1671,9 +1832,10 @@ def run_all_checks(repo_root=None):
     check_safety_integrity_and_sora_completeness(repo_root)
     verify_upstream_blueprint_domain_cleanliness(repo_root)
     check_domain_agnostic_ast_cleanliness(repo_root)
+    check_wbs_suite_integrity(repo_root)
 
 def _run_verification(args, dest, repo_root, is_flutter, is_react):
-    # Run Checks 10, 11, 12, 13, 14, 15, 16, 17, 18, and 19
+    # Run Checks 10 through 20
     run_all_checks(repo_root)
 
     if is_flutter:

@@ -191,7 +191,8 @@ cp -RP "$INSTALLER_ROOT/tests/test_gitlab_provider.py" "$TARGET_DIR/tests/" 2>/d
 cp -RP "$INSTALLER_ROOT/tests/test_jira_provider.py" "$TARGET_DIR/tests/" 2>/dev/null || true
 cp -RP "$INSTALLER_ROOT/tests/test_ground_truth_tooling.py" "$TARGET_DIR/tests/" 2>/dev/null || true
 cp -RP "$INSTALLER_ROOT/tests/fixtures" "$TARGET_DIR/tests/" 2>/dev/null || true
-mkdir -p "$TARGET_DIR/docs" "$TARGET_DIR/docs/conops" "$TARGET_DIR/docs/safety" "$TARGET_DIR/docs/architecture/blueprints" "$TARGET_DIR/docs/epics" "$TARGET_DIR/docs/features" "$TARGET_DIR/docs/user-stories" "$TARGET_DIR/docs/use-cases"
+mkdir -p "$TARGET_DIR/docs" "$TARGET_DIR/docs/conops" "$TARGET_DIR/docs/safety" "$TARGET_DIR/docs/architecture/blueprints" "$TARGET_DIR/docs/epics" "$TARGET_DIR/docs/features" "$TARGET_DIR/docs/user-stories" "$TARGET_DIR/docs/use-cases" "$TARGET_DIR/docs/management"
+touch "$TARGET_DIR/docs/management/.gitkeep"
 if [ -f "$INSTALLER_ROOT/docs/conops/README.md" ]; then
   cp -P "$INSTALLER_ROOT/docs/conops/README.md" "$TARGET_DIR/docs/conops/"
 fi
@@ -716,6 +717,40 @@ If any compiler fault, schema inconsistency, or invariant violation is discovere
 PROCEED
 ```
 
+#### 4.3.5 Worker 1E / Phase 4: Work Breakdown Structure & Enterprise Realization Worker (Worker WBS) Prompt
+
+```text
+Execute `view_file` on `skills/spec-wbs-engineering/SKILL.md` as your very first step before taking any action.
+
+Repository Classification: DOWNSTREAM_CUSTOMER_PROJECT (or UPSTREAM_SPEC_CORE_COMPILER depending on execution context)
+
+Role: Worker 1E -- Work Breakdown Structure & Enterprise Realization Worker (Worker WBS)
+
+Primary Commercial Toolchain Integration Context:
+This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
+
+Directive:
+Synthesize MIL-STD-881E Work Breakdown Structures (WBS), Technical Realization Registers, and Enterprise Project Management Exports (Jira, Monday.com, MS Project CSV and JSON AST) from SysML AST, ConOps, Safety Matrices, and Agile Backlog items:
+
+1. WBS & Enterprise Realization Synthesis:
+   - Ingest `.pipeline/schema.sysml`, `docs/conops/`, `docs/safety/`, `docs/epics/`, `docs/features/`, `docs/user-stories/`, and `docs/use-cases/`.
+   - Synthesize the complete 5-tier WBS hierarchy and 7 concrete Model-Based Design (MBD) work packages per feature (`WP-xxx-SPEC`, `WP-xxx-MAT-PARAM`, `WP-xxx-SL-BLD`, `WP-xxx-PY-DOM`, `WP-xxx-PY-ENG`, `WP-xxx-TST`, `WP-xxx-REP`).
+   - Construct the authoritative 7-Column End-to-End Traceability Matrix linking SysML components, Feature specs, User Stories, MATLAB/Simulink models, Python 250 Hz engines, Pytest verification suites, and DO-178C/DO-331 simulation evidence.
+   - Run the deterministic WBS suite generator: `python3 scripts/generate_wbs_suite.py`.
+
+2. Deliverable Generation & Issue Registration:
+   - Generate `docs/management/WBS_DELIVERABLES_SUITE.md` with CommonMark metadata table.
+   - Generate multi-platform export `docs/management/wbs_export_jira_monday_ms_project.csv` (RFC 4180 compliant with Jira, Monday.com, and MS Project field mappings).
+   - Generate validated machine-readable JSON AST `docs/management/wbs_export.json`.
+   - Register the WBS suite under the `wbs` issue label using `./skills/spec-orchestrator/scripts/create_issue.sh "docs/management/WBS_DELIVERABLES_SUITE.md" "wbs" "<title>"`.
+   - Verify published issue body integrity via live tracker inspection (`gh issue view <ID> --json body` or `glab issue view <ID>`).
+
+Defect Filing Directive:
+If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `python3 scripts/file_defect.py`. Issue auto-closing keywords or issue close commands are strictly forbidden.
+
+PROCEED
+```
+
 ### 4.4 Multi-Provider Backlog Reconciliation Commands
 
 Execute backlog reconciliation and model parity verification across your target VCS platform or offline air-gapped environment:
@@ -1066,7 +1101,7 @@ def test_upstream_template_clean_landing_zones():
 
     If repository is an upstream template (.pipeline/upstream/ exists), asserts that
     docs/conops/, docs/safety/, docs/epics/, docs/features/, docs/user-stories/,
-    docs/use-cases/, and schema/ contain only .gitkeep and README.md, and zero concrete
+    docs/use-cases/, docs/management/, and schema/ contain only .gitkeep and README.md, and zero concrete
     specification files or concrete .sysml domain models.
     """
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -1084,6 +1119,7 @@ def test_upstream_template_clean_landing_zones():
         os.path.join("docs", "features"),
         os.path.join("docs", "user-stories"),
         os.path.join("docs", "use-cases"),
+        os.path.join("docs", "management"),
         "schema",
     ]
     allowed_files = {".gitkeep", "README.md"}

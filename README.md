@@ -102,7 +102,8 @@ DEAP01-spec-core/
 │   ├── epics/                     # Abstract landing zone (.gitkeep)
 │   ├── features/                  # Abstract landing zone (.gitkeep)
 │   ├── user-stories/              # Abstract landing zone (.gitkeep)
-│   └── use-cases/                 # Abstract landing zone (.gitkeep)
+│   ├── use-cases/                 # Abstract landing zone (.gitkeep)
+│   └── management/                # Abstract landing zone (.gitkeep)
 ├── rules/                         # Abstract verification & governance rules
 ├── schema/                        # Abstract landing zone (.gitkeep)
 ├── scripts/                       # Turnkey installer, compiler, and parity verification scripts
@@ -126,6 +127,7 @@ downstream-workspace/ (e.g. DEAP-uas-infrastructure-safety, DEAP-surgical-roboti
 ├── docs/
 │   ├── conops/                    # Customer mission intent & Concept of Operations landing zone
 │   ├── safety/                    # STPA hazard analysis, FMECA & domain safety landing zone
+│   ├── management/                # Level 4 WBS & Enterprise Realization deliverables (.md, .csv, .json)
 │   └── architecture/
 │       └── blueprints/            # Canonical architecture specifications & multi-provider blueprints
 ├── schema/                        # Domain-specific structural schemas & SysML v2 models
@@ -277,7 +279,7 @@ for dest in ['./.agents/AGENTS.md', './AGENTS.md']:
 "
 rm -rf ./.tmp-pipeline
 find . -name ".DS_Store" -delete 2>/dev/null || true
-mkdir -p ./docs/conops ./docs/safety ./docs/architecture/blueprints ./docs/epics ./docs/features ./docs/user-stories ./docs/use-cases ./.pipeline/contracts ./.pipeline/domain_specs ./.pipeline/profiles
+mkdir -p ./docs/conops ./docs/safety ./docs/management ./docs/architecture/blueprints ./docs/epics ./docs/features ./docs/user-stories ./docs/use-cases ./.pipeline/contracts ./.pipeline/domain_specs ./.pipeline/profiles
 
 # Verify pipeline directories, agent configuration, and skills
 test -d ./.pipeline && test -d ./skills && test -d ./.agents/skills && echo "Pipeline directories (.pipeline, skills, .agents/skills) verified successfully."
@@ -313,7 +315,7 @@ After copying the pipeline, configure Gemini / Antigravity to load the skills an
       - If present -> **Template Distribution Mode**: The active repository is the upstream distribution template. Customer application artifacts are prohibited; work is restricted to pipeline governance, tooling, and generic safety models.
       - If absent -> **Downstream Customer Project Mode**: The active repository is an installed customer workspace. Authorized for customer feature implementation and domain codebase delivery.
    1. **Read Governance Constitution**: Execute `view_file` on `.pipeline/constitution.md` to ingest the platform-independent functional governance layer and zero-mocking persistence mandates.
-   2. **Load Project Skills**: Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` (and any active skills under `skills/` or `.agents/skills/`) to initialize feature-driven implementation protocols and review gates.
+   2. **Load Project Skills**: Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` (and any active skills under `skills/` or `.agents/skills/`, such as `skills/spec-wbs-engineering/SKILL.md`) to initialize feature-driven implementation protocols and review gates.
    3. **Load Governance Rules**: Ingest `AGENTS.md` (or `.agents/AGENTS.md`) and `rules/` to enforce project-scoped agentic rules, context-isolated subagent dispatch loops, and role boundary locks.
    4. **Load Platform Profile**: Read the target platform execution profile (`.pipeline/profiles/ros2_cpp.md` for ROS2 C++ Real-Time Nodes or `.pipeline/profiles/px4_module.md` for PX4 Autopilot Flight Modules) to establish platform-specific build, test, and lifecycle constraints.
    5. **Bootstrap Tracker Labels**: Verify that repository issue tracker labels are synchronized and operational by running `python3 skills/spec-orchestrator/scripts/bootstrap_tracker_labels.py --dry-run` or verifying label bootstrapping status.
@@ -432,7 +434,7 @@ $$\text{Pipeline} = \text{Stage}_{\text{lint}} \xrightarrow{\text{pass}} \text{S
 
 | Pipeline Stage | Target Job Name | Executed Verification Command | Pass / Fail Criteria |
 | :--- | :--- | :--- | :--- |
-| **Stage 1: `lint`** | `lint:downstream-baseline` | `python3 scripts/verify_downstream_baseline.py --no-domain` | Checks 10–17 (zero .DS_Store, KaTeX math integrity, valid entrypoints, clean landing zones, Safety Integrity & SORA completeness). |
+| **Stage 1: `lint`** | `lint:downstream-baseline` | `python3 scripts/verify_downstream_baseline.py --no-domain` | Checks 10-20 (zero .DS_Store, KaTeX math integrity, valid entrypoints, clean landing zones, Safety Integrity & SORA completeness, domain AST cleanliness, and Check 20: WBS & Enterprise Deliverables Suite Validation). |
 | **Stage 2: `test`** | `test:unit-and-parity` | `python3 -m pytest tests/` | Automated unit tests, ROS2 node lifecycle tests, and PX4 safety mode tests pass with 0 failures. |
 | **Stage 3: `verify`** | `verify:model-coverage` | `python3 skills/spec-orchestrator/scripts/verify_model_coverage.py --spec-only` | All 22 Parity Verification Gates pass with zero specification-model drift. |
 
@@ -475,6 +477,19 @@ This platform explicitly declares **MATLAB / Simulink / Stateflow / Embedded Cod
 - **Behavioral Statecharts:** SysML `state def` Run-Time Assurance (RTA) and fail-safe transitions map to Stateflow state machines with deterministic execution semantics.
 - **Formal Invariant Proving:** SysML `assert constraint` formulations translate to Simulink Design Verifier (SLDV) proof objectives for automated reachability and dead-lock free verification.
 - **Safety-Critical Code Synthesis:** Embedded Coder generates MISRA C / DO-178C qualified C code and SPARK Ada kernels for deployment to Pixhawk and ROS2 real-time hardware.
+
+### 7.4 Work Breakdown Structure & Enterprise Realization Tooling (`generate_wbs_suite.py`)
+
+The platform includes a deterministic Work Breakdown Structure (WBS) & Enterprise Realization generator synthesizing MIL-STD-881E decomposition hierarchies, traceability matrices, and multi-platform enterprise project management exports:
+- **Purpose**: Synthesizes MIL-STD-881E Work Breakdown Structures (WBS), 7-column end-to-end traceability matrix, multi-platform CSV export (Jira, Monday.com, MS Project), and hierarchical JSON AST from SysML AST, ConOps, Safety matrices, and Agile Backlog items.
+- **CLI Usage**:
+  ```bash
+  python3 scripts/generate_wbs_suite.py [--workspace <path>] [--output-dir <path>]
+  ```
+- **Synthesized Deliverables**:
+  1. `docs/management/WBS_DELIVERABLES_SUITE.md`: Authoritative markdown specification suite with CommonMark metadata table and 7-column end-to-end traceability matrix.
+  2. `docs/management/wbs_export_jira_monday_ms_project.csv`: Multi-platform RFC 4180 compliant CSV export formatted for Atlassian Jira, Monday.com, and Microsoft Project.
+  3. `docs/management/wbs_export.json`: Validated hierarchical JSON Abstract Syntax Tree conforming to formal WBS schema.
 
 ---
 
@@ -973,6 +988,40 @@ Derive formal UML System Use Cases directly from SysML v2 `use case def` AST blo
    - Execute local model coverage check: `./skills/spec-orchestrator/scripts/verify_model_coverage.py --spec-only --allow-missing-specs`.
    - Register Use Cases via `./skills/spec-orchestrator/scripts/create_issue.sh "<file>" "use-case" "<title>"`.
    - Verify live published payload on the issue tracker (`gh issue view <ID> --json body` or `glab issue view <ID>`).
+
+Defect Filing Directive:
+If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `python3 scripts/file_defect.py`. Issue auto-closing keywords or issue close commands are strictly forbidden.
+
+PROCEED
+```
+
+#### 9.2.5 Worker 1E / Phase 4: Work Breakdown Structure & Enterprise Realization Worker (Worker WBS) Prompt
+
+```text
+Execute `view_file` on `skills/spec-wbs-engineering/SKILL.md` as your very first step before taking any action.
+
+Repository Classification: UPSTREAM_SPEC_CORE_COMPILER (or DOWNSTREAM_CUSTOMER_PROJECT depending on execution context)
+
+Role: Worker 1E -- Work Breakdown Structure & Enterprise Realization Worker (Worker WBS)
+
+Primary Commercial Toolchain Integration Context:
+This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
+
+Directive:
+Synthesize MIL-STD-881E Work Breakdown Structures (WBS), Technical Realization Registers, and Enterprise Project Management Exports (Jira, Monday.com, MS Project CSV and JSON AST) from SysML AST, ConOps, Safety Matrices, and Agile Backlog items:
+
+1. WBS & Enterprise Realization Synthesis:
+   - Ingest `.pipeline/schema.sysml`, `docs/conops/`, `docs/safety/`, `docs/epics/`, `docs/features/`, `docs/user-stories/`, and `docs/use-cases/`.
+   - Synthesize the complete 5-tier WBS hierarchy and 7 concrete Model-Based Design (MBD) work packages per feature (`WP-xxx-SPEC`, `WP-xxx-MAT-PARAM`, `WP-xxx-SL-BLD`, `WP-xxx-PY-DOM`, `WP-xxx-PY-ENG`, `WP-xxx-TST`, `WP-xxx-REP`).
+   - Construct the authoritative 7-Column End-to-End Traceability Matrix linking SysML components, Feature specs, User Stories, MATLAB/Simulink models, Python 250 Hz engines, Pytest verification suites, and DO-178C/DO-331 simulation evidence.
+   - Run the deterministic WBS suite generator: `python3 scripts/generate_wbs_suite.py`.
+
+2. Deliverable Generation & Issue Registration:
+   - Generate `docs/management/WBS_DELIVERABLES_SUITE.md` with CommonMark metadata table.
+   - Generate multi-platform export `docs/management/wbs_export_jira_monday_ms_project.csv` (RFC 4180 compliant with Jira, Monday.com, and MS Project field mappings).
+   - Generate validated machine-readable JSON AST `docs/management/wbs_export.json`.
+   - Register the WBS suite under the `wbs` issue label using `./skills/spec-orchestrator/scripts/create_issue.sh "docs/management/WBS_DELIVERABLES_SUITE.md" "wbs" "<title>"`.
+   - Verify published issue body integrity via live tracker inspection (`gh issue view <ID> --json body` or `glab issue view <ID>`).
 
 Defect Filing Directive:
 If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `python3 scripts/file_defect.py`. Issue auto-closing keywords or issue close commands are strictly forbidden.

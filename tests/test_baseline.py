@@ -259,6 +259,7 @@ def test_upstream_template_clean_landing_zones():
         os.path.join("docs", "features"),
         os.path.join("docs", "user-stories"),
         os.path.join("docs", "use-cases"),
+        os.path.join("docs", "management"),
         "schema",
     ]
     allowed_files = {".gitkeep", "README.md"}
