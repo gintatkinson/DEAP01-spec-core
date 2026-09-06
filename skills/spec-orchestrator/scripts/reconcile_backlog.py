@@ -3739,6 +3739,10 @@ def is_placeholder_issue_id(val: Any) -> bool:
     if clean_digits.isdigit():
         return False
 
+    # Match spec slug placeholders such as #us-11, #US-03, #uc-06, #UC-09, #feat-12, #epic-01, #wp-01, etc.
+    if re.match(r'^#?(?:us|uc|feat|epic|wp)[-_]\d+', s, re.IGNORECASE):
+        return True
+
     # Match bracketed tokens like #[IssueID], [IssueID], #[EpicIssueID], [TBD], [Draft], etc.
     if re.match(r'^#?\[[a-zA-Z0-9_\s:\-]+\]$', s):
         inner = re.sub(r'^#?\[(.*)\]$', r'\1', s).strip()
