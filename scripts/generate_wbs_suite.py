@@ -60,9 +60,11 @@ class BaselineDeliverable:
     """Represents a Level 0/1 Architecture, ConOps, Safety, or ICD baseline deliverable."""
     id: str
     wbs_code: str
+    wp_code: str
     name: str
     standard: str
     target_path: str
+    toolchain: str
     verification_gate: str
     status: str
     description: str
@@ -239,9 +241,11 @@ class WBSAstIngestionEngine:
             (
                 "SPEC-CONOPS",
                 "1.0.1",
+                "WP-BASE-CONOPS-SPEC",
                 "Level 1B Concept of Operations (ConOps)",
                 "ISO/IEC/IEEE 29148:2018 / NATO STANAG 4586",
                 "docs/conops/CONOPS.md",
+                "ISO 29148 Markdown / SysML AST",
                 "Gate 1 - ConOps Structural Completeness",
                 "Operational lifecycle stages, 4D volume, and 7-row emergency contingency decision matrix.",
                 40,
@@ -249,9 +253,11 @@ class WBSAstIngestionEngine:
             (
                 "SPEC-MISSION",
                 "1.0.2",
+                "WP-BASE-MISSION-SPEC",
                 "Level 1B Tactical Mission Intent & Execution Plan",
                 "INCOSE SEH v5.0 / CJCSM 3500.04",
                 "docs/conops/MISSION_INTENT.md",
+                "CJCSM 3500.04 Markdown",
                 "Gate 1B - METL & MOE/MOP Validation",
                 "Commander intent, Mission Essential Task List (METL), PACE C2 plan, and Bingo energy thresholds.",
                 32,
@@ -259,9 +265,11 @@ class WBSAstIngestionEngine:
             (
                 "SPEC-ARCH-SYSML",
                 "1.0.3",
+                "WP-BASE-SYSML-ARCH",
                 "Level 1A SysML v2 Master Architecture Model",
                 "OMG SysML v2 / ISO/IEC 19514",
                 sysml_path,
+                "SysML v2 / Eclipse Lyo",
                 "Gate 0 - SysML SSOT Verification",
                 "Authoritative structural Single Source of Truth (SSOT), subsystem packages, and interface port topology.",
                 48,
@@ -269,9 +277,11 @@ class WBSAstIngestionEngine:
             (
                 "SAFE-STPA-HAZ",
                 "1.0.4",
+                "WP-BASE-STPA-HAZ",
                 "Level 1B STPA Hazard & Safety Constraints Analysis",
                 "MIT STPA / Leveson Safety-Guided Design",
                 "docs/safety/STPA_MATRIX.md",
+                "MIT STPA / MATLAB SLDV",
                 "Gate 0.5 - STPA Hazard Coverage",
                 "System losses (L-1..N), hazards (H-1..N), Unsafe Control Actions (UCAs), and formal safety constraints (SC-1..N).",
                 36,
@@ -279,9 +289,11 @@ class WBSAstIngestionEngine:
             (
                 "SAFE-FMECA",
                 "1.0.5",
+                "WP-BASE-FMECA-RPN",
                 "Level 1B FMECA Criticality Analysis",
                 "MIL-STD-1629A / SAE ARP4761",
                 "docs/safety/STPA_MATRIX.md",
+                "MIL-STD-1629A / Python FMECA",
                 "Gate 0.5 - FMECA RPN Analysis",
                 "Failure Mode, Effects, and Criticality Analysis with Risk Priority Number (RPN) quantification.",
                 24,
@@ -289,9 +301,11 @@ class WBSAstIngestionEngine:
             (
                 "SAFE-STPA-MAT",
                 "1.0.6",
+                "WP-BASE-SORA-SAIL",
                 "Level 1B SORA SAIL & OSO Risk Mitigation Matrix",
                 "JARUS SORA v2.5 / ASTM F3269-17",
                 "docs/safety/STPA_MATRIX.md",
+                "ASTM F3269-17 / Python SORA",
                 "Gate 0.5 - SORA OSO Traceability",
                 "Ground and Air Risk Class derivations, Specific Assurance and Integrity Level (SAIL), and OSO-01..24 mitigations.",
                 32,
@@ -299,9 +313,11 @@ class WBSAstIngestionEngine:
             (
                 "SPEC-ICD-MATRIX",
                 "1.0.7",
+                "WP-BASE-ICD-MAT",
                 "Level 1C System Interface Matrix & Connectivity",
                 "MIL-STD-881E / INCOSE SEH v5.0",
                 "docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md",
+                "SysML v2 Port Matrix",
                 "Gate 23 - Subsystem Port Completeness",
                 "Subsystem directional port definitions, connection bindings, and canonical N^2 interface matrix.",
                 28,
@@ -309,9 +325,11 @@ class WBSAstIngestionEngine:
             (
                 "SPEC-ICD-SIGNALS",
                 "1.0.8",
+                "WP-BASE-ICD-SIG",
                 "Level 1C Master Signal Flow Dictionary",
                 "MIL-STD-881E / RTCA DO-178C",
                 "docs/interfaces/ICD_02_MASTER_SIGNAL_DICTIONARY.md",
+                "SysML v2 Signal Flow Dictionary",
                 "Gate 23 - Master Signal Completeness",
                 "Signal item flows, data types, physical SI units, valid ranges, update rates, and safe default states.",
                 32,
@@ -319,16 +337,18 @@ class WBSAstIngestionEngine:
         ]
 
         self.baseline_deliverables = []
-        for c_id, wbs, name, std, path_str, gate, desc, hrs in candidates:
+        for c_id, wbs, wp, name, std, path_str, tc, gate, desc, hrs in candidates:
             full_path = self.workspace / path_str
             status = "Verified" if full_path.is_file() else "Baseline Available"
             self.baseline_deliverables.append(
                 BaselineDeliverable(
                     id=c_id,
                     wbs_code=wbs,
+                    wp_code=wp,
                     name=name,
                     standard=std,
                     target_path=path_str,
+                    toolchain=tc,
                     verification_gate=gate,
                     status=status,
                     description=desc,
@@ -899,13 +919,14 @@ class WBSSuiteSynthesizer:
             "Single Source of Truth (SSOT) from which all Level 2 Epics, Features, and downstream Work Packages derive:\n\n"
         )
 
-        out.write("| Deliverable ID | WBS Code | Specification Title | Standard / Framework | Target Artifact Path | Verification Gate | Status |\n")
-        out.write("| :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n")
+        out.write("##### Concrete Baseline Work Package Register\n\n")
+        out.write("| WP Code | WBS Code | Deliverable Category | Target Artifact Path | Primary Toolchain / Engine | Est. Hours | Verification Gate | Status |\n")
+        out.write("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n")
         for b in self.baseline_deliverables:
             exists = (self.engine.workspace / b.target_path).is_file()
             cell = self._format_artifact_cell(b.target_path, exists)
             out.write(
-                f"| `{b.id}` | `{b.wbs_code}` | {b.name} | {b.standard} | {cell} | {b.verification_gate} | {b.status} |\n"
+                f"| `{b.wp_code}` | `{b.wbs_code}` | {b.name} | {cell} | {b.toolchain} | {b.est_hours}h | {b.verification_gate} | {b.status} |\n"
             )
         out.write("\n")
 
@@ -1133,7 +1154,7 @@ class WBSSuiteSynthesizer:
         for b in self.baseline_deliverables:
             writer.writerow([
                 b.wbs_code,
-                b.id,
+                b.wp_code,
                 "Baseline Deliverable",
                 b.name,
                 self.metadata.system_id,
@@ -1217,8 +1238,10 @@ class WBSSuiteSynthesizer:
                 "name": b.name,
                 "level": 2,
                 "id": b.id,
+                "wp_code": b.wp_code,
                 "item_type": "Baseline Deliverable",
                 "artifact_path": b.target_path,
+                "toolchain_context": b.toolchain,
                 "verification_gate": b.verification_gate,
                 "status": b.status,
                 "est_hours": b.est_hours,
@@ -1311,10 +1334,12 @@ class WBSSuiteSynthesizer:
         for b in self.baseline_deliverables:
             base_list.append({
                 "id": b.id,
+                "wp_code": b.wp_code,
                 "wbs_code": b.wbs_code,
                 "name": b.name,
                 "standard": b.standard,
                 "artifact_path": b.target_path,
+                "toolchain_context": b.toolchain,
                 "verification_gate": b.verification_gate,
                 "status": b.status,
                 "est_hours": b.est_hours,

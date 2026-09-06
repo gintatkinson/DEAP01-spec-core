@@ -455,6 +455,65 @@ class TestCheck20WBSSuiteIntegrity(unittest.TestCase):
             self.assertIn("[`tests/test_feat_01_simulation.py`](../../tests/test_feat_01_simulation.py)", content)
             self.assertIn("[Results Report](../reports/simulink_results/FEAT-01_results.md)", content)
 
+    def test_wbs_generator_emits_8_column_baseline_work_package_register(self):
+        """Verify Section 2 baseline deliverables table adheres to 8-column Concrete Work Package Register schema (Issue #243)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ws = Path(tmpdir)
+            self._setup_mock_spec_workspace(ws)
+
+            engine = WBSAstIngestionEngine(workspace_path=ws)
+            engine.run_ingestion()
+            synthesizer = WBSSuiteSynthesizer(engine)
+            md_path, csv_path, json_path = synthesizer.synthesize_all()
+
+            content = md_path.read_text(encoding="utf-8")
+
+            # 1. Assert 8-column table header exists in Section 2
+            expected_header = "| WP Code | WBS Code | Deliverable Category | Target Artifact Path | Primary Toolchain / Engine | Est. Hours | Verification Gate | Status |"
+            self.assertIn(expected_header, content)
+
+            # 2. Assert standardized WP codes are present
+            expected_wp_codes = [
+                "WP-BASE-CONOPS-SPEC",
+                "WP-BASE-MISSION-SPEC",
+                "WP-BASE-SYSML-ARCH",
+                "WP-BASE-STPA-HAZ",
+                "WP-BASE-FMECA-RPN",
+                "WP-BASE-SORA-SAIL",
+                "WP-BASE-ICD-MAT",
+                "WP-BASE-ICD-SIG",
+            ]
+            for wp_code in expected_wp_codes:
+                self.assertIn(f"`{wp_code}`", content)
+
+            # 3. Assert primary toolchains are present
+            expected_toolchains = [
+                "ISO 29148 Markdown / SysML AST",
+                "CJCSM 3500.04 Markdown",
+                "SysML v2 / Eclipse Lyo",
+                "MIT STPA / MATLAB SLDV",
+                "MIL-STD-1629A / Python FMECA",
+                "ASTM F3269-17 / Python SORA",
+                "SysML v2 Port Matrix",
+                "SysML v2 Signal Flow Dictionary",
+            ]
+            for toolchain in expected_toolchains:
+                self.assertIn(toolchain, content)
+
+            # 4. Assert estimated hours are rendered
+            for hrs in ["40h", "32h", "48h", "36h", "24h", "28h"]:
+                self.assertIn(hrs, content)
+
+            # 5. Check JSON AST export contains wp_code and toolchain_context for baseline deliverables
+            json_data = json.loads(json_path.read_text(encoding="utf-8"))
+            base_items = json_data.get("baseline_deliverables", [])
+            self.assertEqual(len(base_items), 8)
+            for item in base_items:
+                self.assertIn("wp_code", item)
+                self.assertIn("toolchain_context", item)
+                self.assertTrue(item["wp_code"].startswith("WP-BASE-"))
+
 
 if __name__ == "__main__":
     unittest.main()
+
