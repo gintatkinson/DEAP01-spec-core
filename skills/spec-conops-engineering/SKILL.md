@@ -41,12 +41,13 @@ You should invoke this skill as **Phase 0.75 (Worker ConOps - Hierarchical ConOp
 The `Worker ConOps` ingests and synthesizes the following foundational inputs:
 
 1. **Normative Research Inventory & Standards Baseline**:
-   - Ingest `docs/research/RESEARCH_INVENTORY.md`.
+   - Ingest `docs/research/RESEARCH_INVENTORY.md` and `docs/research/FAILURE_MODE_REGISTRY.md`.
    - Extract all applicable standards: ISO/IEC/IEEE 29148:2018 (§6.4.2 ConOps & §6.4.3 OpsCon), INCOSE Systems Engineering Handbook v5.0, NATO STANAG 4586, MIL-STD-882E, JARUS SORA v2.5, RTCA DO-178C / DO-254, and SAE ARP4754A / ARP4761.
    - Map all allocated obligations (`OBL-*`) assigned to ConOps and Mission Intent.
 
 2. **System Architecture & Structural Schemas**:
    - Ingest `.pipeline/schema.sysml` and `.pipeline/schema-digest.json` to extract system boundaries, subsystems, and architectural partitions.
+   - **Mandatory AST Manifest Ingestion**: Ingest the explicit manifest of all AST `state def` prefix families with 2 or more states ($\ge 2$ states) and AST `part def` nodes with ports, actions, and constraints for Section 6.1 Stateflow synthesis hooks and Section 7 FMECA tables.
    - Ingest domain schemas under `schema/` (OMG IDL, Protobuf, ARXML, SysML v2).
 
 3. **Safety & Risk Baselines (3-Tier Lifecycle Integration)**:
