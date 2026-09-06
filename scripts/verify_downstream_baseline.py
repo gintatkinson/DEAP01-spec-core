@@ -16,6 +16,7 @@ import signal
 import subprocess
 import sys
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 TIMEOUT_SECONDS = 600
@@ -2205,6 +2206,7 @@ def _check_wbs_suite_integrity(repo_root):
     - docs/management/wbs_export_jira_monday_ms_project.csv exists and conforms to RFC 4180 with 12 headers
     - docs/management/wbs_export.json exists and conforms to the WBS JSON AST schema
     - WBS_DELIVERABLES_SUITE.md contains required section headers and table structure (2-col metadata, 7-col traceability)
+    - All intra-document markdown hyperlinks in WBS_DELIVERABLES_SUITE.md resolve to existing files on disk
     - Zero Unicode em dashes (\\u2014) exist in any management deliverable.
     """
     wbs_md = os.path.join(repo_root, "docs", "management", "WBS_DELIVERABLES_SUITE.md")
@@ -2269,6 +2271,21 @@ def _check_wbs_suite_integrity(repo_root):
                 "WBS_DELIVERABLES_SUITE.md missing 7-Column Traceability Matrix header with columns: "
                 "SysML Component, Feature Spec, User Stories, MATLAB / Simulink Plant, Python 250 Hz Engine, Verification Suite, Simulation Evidence"
             )
+
+        # Markdown hyperlink resolution verification
+        link_pattern = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
+        for link_text, link_target in link_pattern.findall(md_content):
+            target_clean = link_target.strip()
+            if target_clean.startswith("#") or target_clean.startswith("http://") or target_clean.startswith("https://") or target_clean.startswith("mailto:"):
+                continue
+            target_file = target_clean.split("#")[0].strip()
+            if not target_file:
+                continue
+            resolved_path = (Path(repo_root) / "docs" / "management" / target_file).resolve()
+            if not resolved_path.exists():
+                errors.append(
+                    f"Broken markdown link in WBS_DELIVERABLES_SUITE.md: '{link_target}' (resolved to non-existent path: {resolved_path})"
+                )
 
     # 3. Check CSV export RFC 4180 parsing and 12 headers
     if os.path.isfile(wbs_csv):

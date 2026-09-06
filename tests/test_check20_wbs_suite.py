@@ -32,6 +32,21 @@ def _create_valid_wbs_suite(tmpdir: str) -> None:
     mgmt_dir = os.path.join(tmpdir, "docs", "management")
     os.makedirs(mgmt_dir, exist_ok=True)
 
+    feat_file = os.path.join(tmpdir, "docs", "features", "feat-01.md")
+    os.makedirs(os.path.dirname(feat_file), exist_ok=True)
+    with open(feat_file, "w", encoding="utf-8") as f:
+        f.write("# Feature 01\n")
+
+    us_file = os.path.join(tmpdir, "docs", "user-stories", "us-01.md")
+    os.makedirs(os.path.dirname(us_file), exist_ok=True)
+    with open(us_file, "w", encoding="utf-8") as f:
+        f.write("# User Story 01\n")
+
+    report_file = os.path.join(tmpdir, "docs", "reports", "simulink_results", "FEAT-01_results.md")
+    os.makedirs(os.path.dirname(report_file), exist_ok=True)
+    with open(report_file, "w", encoding="utf-8") as f:
+        f.write("# Results\n")
+
     md_path = os.path.join(mgmt_dir, "WBS_DELIVERABLES_SUITE.md")
     csv_path = os.path.join(mgmt_dir, "wbs_export_jira_monday_ms_project.csv")
     json_path = os.path.join(mgmt_dir, "wbs_export.json")
@@ -62,7 +77,7 @@ Overview of the program.
 ### End-to-End 7-Column Traceability Matrix
 | SysML Component | Feature Spec | User Stories | MATLAB / Simulink Plant | Python 250 Hz Engine | Verification Suite | Simulation Evidence |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `SysSSOT::Nav` | [FEAT-01](docs/features/feat-01.md) | [US-01](docs/user-stories/us-01.md) | models/scripts/build_nav_model.m | models/python/nav_engine.py | tests/test_nav.py | [Report](docs/reports/simulink_results/FEAT-01_results.md) |
+| `SysSSOT::Nav` | [FEAT-01](../features/feat-01.md) | [US-01](../user-stories/us-01.md) | models/scripts/build_nav_model.m | models/python/nav_engine.py | tests/test_nav.py | [Report](../reports/simulink_results/FEAT-01_results.md) |
 
 ## 4. Master Verification & Test Execution Summary Table
 | Feature ID / WBS | Pytest Verification Suite Path | Test Coverage Types | Execution Rate | Equivalence Tol | Verification Gate Status |
@@ -245,6 +260,40 @@ class TestCheck20WBSSuiteIntegrity(unittest.TestCase):
             with self.assertRaises(SystemExit) as cm:
                 check_wbs_suite_integrity(tmpdir)
             self.assertEqual(cm.exception.code, 1)
+
+    def test_broken_markdown_link_fails(self):
+        """When WBS_DELIVERABLES_SUITE.md contains broken markdown links, Check 20 raises SystemExit."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            _create_valid_wbs_suite(tmpdir)
+            md_path = os.path.join(tmpdir, "docs", "management", "WBS_DELIVERABLES_SUITE.md")
+            with open(md_path, "a", encoding="utf-8") as f:
+                f.write("\n[Broken Link](../features/non_existent_feature.md)\n")
+
+            with self.assertRaises(SystemExit) as cm:
+                check_wbs_suite_integrity(tmpdir)
+            self.assertEqual(cm.exception.code, 1)
+
+    def test_repo_root_relative_link_fails(self):
+        """When WBS_DELIVERABLES_SUITE.md contains repo-root relative links (not document-relative), Check 20 fails."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            _create_valid_wbs_suite(tmpdir)
+            md_path = os.path.join(tmpdir, "docs", "management", "WBS_DELIVERABLES_SUITE.md")
+            with open(md_path, "a", encoding="utf-8") as f:
+                f.write("\n[Invalid Link](docs/features/feat-01.md)\n")
+
+            with self.assertRaises(SystemExit) as cm:
+                check_wbs_suite_integrity(tmpdir)
+            self.assertEqual(cm.exception.code, 1)
+
+    def test_anchor_and_external_links_ignored(self):
+        """When WBS_DELIVERABLES_SUITE.md contains anchor or external http links, Check 20 ignores them and passes."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            _create_valid_wbs_suite(tmpdir)
+            md_path = os.path.join(tmpdir, "docs", "management", "WBS_DELIVERABLES_SUITE.md")
+            with open(md_path, "a", encoding="utf-8") as f:
+                f.write("\n[Section](#1-executive-summary)\n[External](https://example.com/spec)\n[Anchor Target](../features/feat-01.md#sc-01)\n")
+
+            check_wbs_suite_integrity(tmpdir)
 
     def test_run_all_checks_passes_on_repo(self):
         """Verify run_all_checks passes on the active repository."""
