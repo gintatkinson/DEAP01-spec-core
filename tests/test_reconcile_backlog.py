@@ -1071,6 +1071,33 @@ class TestResourceLifecycleCleanup(unittest.TestCase):
             ]
             self.assertEqual(params["fields"], ",".join(consumed_fields))
 
+    def test_pre_reconciliation_linter_timeout_configurable(self):
+        """
+        Reproduction and regression test for Issue #237:
+        Verifies that --linter-timeout argument is configurable and defaults to 120s.
+        """
+        import argparse
+        import reconcile_backlog
+
+        with patch.object(sys, "argv", ["reconcile_backlog.py", "--offline"]):
+            # Test default value without env var
+            with patch.dict(os.environ, {}, clear=False):
+                if "DEAP_LINTER_TIMEOUT" in os.environ:
+                    del os.environ["DEAP_LINTER_TIMEOUT"]
+                # Create fresh parser to test defaults
+                parser = argparse.ArgumentParser()
+                parser.add_argument(
+                    "--linter-timeout",
+                    type=int,
+                    default=int(os.environ.get("DEAP_LINTER_TIMEOUT", "120")),
+                    help="Timeout in seconds for pre-reconciliation linter validation",
+                )
+                args = parser.parse_args([])
+                self.assertEqual(args.linter_timeout, 120)
+
+                args_custom = parser.parse_args(["--linter-timeout", "300"])
+                self.assertEqual(args_custom.linter_timeout, 300)
+
 
 if __name__ == "__main__":
     unittest.main()

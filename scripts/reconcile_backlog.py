@@ -4498,6 +4498,12 @@ def main():
         action="store_true",
         help="Force upstream compiler backlog reconciliation mode.",
     )
+    parser.add_argument(
+        "--linter-timeout",
+        type=int,
+        default=int(os.environ.get("DEAP_LINTER_TIMEOUT", "120")),
+        help="Timeout in seconds for pre-reconciliation linter validation (default: 120s or DEAP_LINTER_TIMEOUT).",
+    )
     args = parser.parse_args()
 
     sanitize_github_token_env()
@@ -4538,8 +4544,9 @@ def main():
     if linter_script and os.path.exists(linter_script):
         print("Running pre-reconciliation linter validation...")
         cmd = [sys.executable, linter_script, "--spec-only", "--allow-missing-specs"]
+        linter_timeout = getattr(args, "linter_timeout", 120) or 120
         try:
-            res = subprocess.run(cmd, cwd=workspace_dir, capture_output=True, text=True, timeout=30)
+            res = subprocess.run(cmd, cwd=workspace_dir, capture_output=True, text=True, timeout=linter_timeout)
             if res.returncode != 0:
                 output_text = (res.stdout or "") + "\n" + (res.stderr or "")
                 lines = [line.strip() for line in output_text.splitlines()]
@@ -4577,7 +4584,7 @@ def main():
             else:
                 print("Pre-reconciliation linter validation passed successfully.")
         except subprocess.TimeoutExpired:
-            print("[FATAL] Pre-reconciliation linter validation timed out after 30 seconds. Aborting.", file=sys.stderr)
+            print(f"[FATAL] Pre-reconciliation linter validation timed out after {linter_timeout} seconds. Aborting.", file=sys.stderr)
             sys.exit(1)
     else:
         print("[INFO] Pre-reconciliation linter not found; skipping pre-validation.")
