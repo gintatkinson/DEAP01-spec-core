@@ -745,6 +745,15 @@ class SysMLPackage:
             risks.extend(sub.get_all_risks())
         return risks
 
+    def get_all_states(self) -> List[StateDef]:
+        """Returns all StateDefs declared at package and part levels."""
+        states = list(self.state_defs or [])
+        for p in self.get_all_parts():
+            states.extend(p.states or [])
+        for sub in (self.sub_packages or []):
+            states.extend(sub.get_all_states())
+        return states
+
     def get_connection_graph(self) -> Dict[str, List[str]]:
         """
         Builds port-to-port and part-to-part adjacency graph from all connection definitions.
@@ -1229,6 +1238,14 @@ class SysMLParser:
                         container.requirement_defs.append(req_obj)
                     else:
                         container.requirements.append(req_obj)
+
+                elif re.search(r'\bstate\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt):
+                    m = re.search(r'\bstate\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt)
+                    state_obj = StateDef(name=m.group(1), doc=doc)
+                    if isinstance(container, SysMLPackage):
+                        container.state_defs.append(state_obj)
+                    else:
+                        container.states.append(state_obj)
 
                 elif re.search(r'\bhazard\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt):
                     h_obj = self._parse_hazard_stmt(stmt, doc)

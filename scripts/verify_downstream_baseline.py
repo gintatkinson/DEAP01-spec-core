@@ -839,6 +839,8 @@ class ASTValidationReport:
     missing_dimensions: List[str] = field(default_factory=list)
     missing_port_modes: List[str] = field(default_factory=list)
     part_criticalities: Dict[str, int] = field(default_factory=dict)
+    missing_state_diagrams: List[str] = field(default_factory=list)
+    missing_stateflow_hooks: List[str] = field(default_factory=list)
 
     def format_cli_summary(self) -> str:
         """Format a one-line CLI summary of the AST validation outcome."""
@@ -858,6 +860,10 @@ class ASTValidationReport:
             summary += f", {len(self.missing_port_modes)} missing high-criticality port mode(s)"
         if self.missing_dimensions:
             summary += f", {len(self.missing_dimensions)} missing failure dimension(s)"
+        if self.missing_state_diagrams:
+            summary += f", {len(self.missing_state_diagrams)} missing state diagram(s)"
+        if self.missing_stateflow_hooks:
+            summary += f", {len(self.missing_stateflow_hooks)} missing Stateflow hook(s)"
         return summary
 
 
@@ -1035,6 +1041,141 @@ def check_fmeca_ast_coverage(content: str, model_text: Optional[str] = None) -> 
 
     report.is_conforming = not errors
     return errors, report
+
+
+def group_state_defs_by_family(state_defs: List[str]) -> Dict[str, List[str]]:
+    """Group declared state def nodes by state machine prefix family (e.g. split by underscore, package, or delimiter)."""
+    families: Dict[str, List[str]] = {}
+    for s in state_defs:
+        s_clean = str(s).strip()
+        if not s_clean:
+            continue
+        if "::" in s_clean:
+            prefix = s_clean.split("::")[0].strip()
+        elif "." in s_clean:
+            prefix = s_clean.split(".")[0].strip()
+        elif "_" in s_clean:
+            prefix = s_clean.split("_")[0].strip()
+        else:
+            prefix = s_clean
+        families.setdefault(prefix, []).append(s_clean)
+    return families
+
+
+def extract_section_6_1(content: str) -> Optional[str]:
+    """Extract Section 6.1 (Stateflow Synthesis Hooks & Safety Statecharts) from markdown content."""
+    lines = content.splitlines()
+    in_section = False
+    section_lines = []
+    heading_level = 3
+
+    for line in lines:
+        stripped = line.strip()
+        m = re.match(r"^(#{2,4})\s+(?:Section\s+)?6\.1\b", stripped, re.IGNORECASE)
+        if m:
+            in_section = True
+            heading_level = len(m.group(1))
+            section_lines.append(line)
+            continue
+
+        if in_section:
+            next_heading = re.match(r"^(#{1,4})\s+\S", stripped)
+            if next_heading:
+                lvl = len(next_heading.group(1))
+                if lvl <= heading_level:
+                    break
+            section_lines.append(line)
+
+    if not section_lines:
+        return None
+    return "\n".join(section_lines)
+
+
+def extract_mermaid_state_diagrams(text: str) -> List[str]:
+    """Extract Mermaid state diagram blocks from markdown text."""
+    pattern = re.compile(r"```(?:mermaid)?\s*\n(.*?)```", re.DOTALL | re.IGNORECASE)
+    diagrams = []
+    for match in pattern.finditer(text):
+        block = match.group(1)
+        first_line = block.strip().splitlines()[0].strip() if block.strip() else ""
+        if re.match(r"^stateDiagram(?:-v2)?\b", first_line, re.IGNORECASE):
+            diagrams.append(block)
+    return diagrams
+
+
+def check_stateflow_ast_coverage(content: str, model_ast: dict) -> Tuple[List[str], List[str], List[str]]:
+    """Verify Section 6.1 Stateflow synthesis hooks and dedicated Mermaid stateDiagram-v2 figures for declared AST state machine families.
+
+    Returns (errors, missing_state_diagrams, missing_stateflow_hooks).
+    """
+    errors: List[str] = []
+    missing_diagrams: List[str] = []
+    missing_hooks: List[str] = []
+
+    state_defs = sorted({str(name) for name in model_ast.get("state_defs", [])})
+    families = group_state_defs_by_family(state_defs)
+    multi_state_families = {prefix: states for prefix, states in families.items() if len(states) >= 2}
+
+    if not multi_state_families:
+        return errors, missing_diagrams, missing_hooks
+
+    sec_6_1 = extract_section_6_1(content)
+    if sec_6_1 is None:
+        missing_fams = sorted(multi_state_families.keys())
+        missing_diagrams.extend(missing_fams)
+        missing_hooks.extend(missing_fams)
+        errors.append(
+            f"Pillar 6 violation: Missing Section 6.1 (Stateflow Synthesis Hooks & Safety Statecharts) "
+            f"in STPA Matrix for declared AST state machine families: {', '.join(missing_fams)}."
+        )
+        return errors, missing_diagrams, missing_hooks
+
+    diagrams = extract_mermaid_state_diagrams(sec_6_1)
+
+    # Extract hooks content by stripping markdown code fences and diagram subsection headers
+    non_diagram_lines = []
+    in_fence = False
+    for line in sec_6_1.splitlines():
+        if line.strip().startswith("```"):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        if re.match(r"^\s*#{3,6}\s+.*(?:Statechart|State\s+Diagram|Diagram|Figure)\b", line, re.IGNORECASE):
+            continue
+        non_diagram_lines.append(line)
+    hooks_body = "\n".join(non_diagram_lines)
+
+    for family, members in sorted(multi_state_families.items()):
+        # Check dedicated stateDiagram-v2 representation
+        family_matched = False
+        for diag in diagrams:
+            if re.search(rf"\b{re.escape(family)}\b", diag, re.IGNORECASE) or re.search(rf"\b{re.escape(family)}_", diag, re.IGNORECASE):
+                family_matched = True
+                break
+            if any(re.search(rf"\b{re.escape(st)}\b", diag, re.IGNORECASE) for st in members):
+                family_matched = True
+                break
+        if not family_matched:
+            missing_diagrams.append(family)
+            errors.append(
+                f"Pillar 6 violation: Missing dedicated Mermaid stateDiagram-v2 block in Section 6.1 "
+                f"for AST state machine family '{family}' ({len(members)} states: {', '.join(sorted(members))})."
+            )
+
+        # Check Stateflow synthesis hook reference
+        if not re.search(rf"\b{re.escape(family)}\b", hooks_body, re.IGNORECASE):
+            missing_hooks.append(family)
+            errors.append(
+                f"Pillar 6 violation: AST state machine family '{family}' is not referenced in Section 6.1 Stateflow synthesis hooks."
+            )
+
+    if not re.search(r'\b(?:Stateflow|Simulink|MATLAB|Embedded\s+Coder|SLDV)\b', hooks_body or sec_6_1, re.IGNORECASE):
+        errors.append(
+            "Pillar 6 violation: Section 6.1 missing Stateflow / MATLAB / Simulink synthesis hooks."
+        )
+
+    return errors, missing_diagrams, missing_hooks
 
 
 # Canonical STPA guide words are methodology constants, not domain concepts.
@@ -1537,6 +1678,14 @@ def validate_safety_matrix_ast(content: str, model_text: Optional[str] = None) -
                 f"but only {len(sysml_reqs)} requirement def nodes in SysML model. "
                 f"Model is out of sync; run scripts/compile_sysml.py --reverse-sync."
             )
+
+        # Pillar 6: Stateflow Synthesis Hooks & Statechart AST Coverage
+        sf_errors, missing_sf_diagrams, missing_sf_hooks = check_stateflow_ast_coverage(content, model_ast)
+        if missing_sf_diagrams:
+            report.missing_state_diagrams.extend(missing_sf_diagrams)
+        if missing_sf_hooks:
+            report.missing_stateflow_hooks.extend(missing_sf_hooks)
+        errors.extend(sf_errors)
 
     if expected_actions:
         cartesian_report = CartesianProductValidator.verify_cartesian_completeness(stpa_rows, expected_actions)

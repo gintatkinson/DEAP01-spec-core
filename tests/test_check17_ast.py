@@ -35,8 +35,8 @@ GUIDE_WORD_CELL_TEXT = {
 }
 
 
-def build_sysml_model(controller_action_counts):
-    """Build a neutral SysML v2 model text declaring controllers with action defs.
+def build_sysml_model(controller_action_counts, state_defs=None):
+    """Build a neutral SysML v2 model text declaring controllers with action defs and optional state defs.
 
     Actions are numbered globally Action01..ActionNN across the given controllers.
     """
@@ -48,11 +48,35 @@ def build_sysml_model(controller_action_counts):
             lines.append(f"        action def Action{idx:02d};")
             idx += 1
         lines.append("    }")
+    if state_defs:
+        for s in state_defs:
+            lines.append(f"    state def {s};")
     for i in range(1, 101):
         lines.append(f"    requirement def SafetyConstraint_SC_{i:02d};")
         lines.append(f"    requirement def SafetyConstraint_SC_{i:03d};")
     lines.append("}")
     return "\n".join(lines) + "\n"
+
+
+def build_section_6_1(families_with_states, hooks_text="The formal safety statecharts are synthesized directly into MATLAB / Simulink / Stateflow charts for Run-Time Assurance."):
+    """Build Section 6.1 with Stateflow synthesis hooks and dedicated Mermaid stateDiagram-v2 blocks."""
+    lines = [
+        "### 6.1 Stateflow Synthesis Hooks & Safety Statecharts",
+        "",
+        hooks_text,
+        "",
+    ]
+    for family, states in families_with_states.items():
+        lines.append(f"#### 6.1.{len(lines)} {family} Safety Statechart")
+        lines.append("```mermaid")
+        lines.append("stateDiagram-v2")
+        lines.append(f"    [*] --> {states[0]}")
+        for i in range(len(states) - 1):
+            lines.append(f"    {states[i]} --> {states[i+1]}: step_{i+1}")
+        lines.append(f"    {states[-1]} --> [*]")
+        lines.append("```")
+        lines.append("")
+    return "\n".join(lines)
 
 
 def build_uca_table(combos):
@@ -99,7 +123,7 @@ _SAMPLE_MODES = [
 ]
 
 
-def build_stpa_document(uca_combos=None, oso_ids=None, proof_part_numbers=(1, 2, 3, 4, 5), fmeca_row_count=16, components=("ControllerA", "ControllerB")):
+def build_stpa_document(uca_combos=None, oso_ids=None, proof_part_numbers=(1, 2, 3, 4, 5), fmeca_row_count=16, components=("ControllerA", "ControllerB"), section_6_1=""):
     """Build a full 8-pillar safety matrix document (neutral identifiers)."""
     if uca_combos is None:
         uca_combos = []
@@ -117,6 +141,7 @@ def build_stpa_document(uca_combos=None, oso_ids=None, proof_part_numbers=(1, 2,
         proof_lines.extend(_PROOF_PARTS[n] for n in sorted(proof_part_numbers))
 
     uca_block = build_uca_table(uca_combos)
+    sec_6_1_block = f"\n\n{section_6_1}" if section_6_1 else ""
 
     return rf"""# STPA Safety Analysis, FMECA Matrix & SORA SAIL Assessment
 
@@ -161,7 +186,7 @@ The system comprises ControllerA and ControllerB directing downstream actuators.
 ## 6. Formal Safety Constraints (**SC-1..N**)
 
 - **SC-1**: The system shall remain within the defined operating envelope under all conditions.
-- **SC-2**: The assurance monitor shall switch to a certified safe recovery state promptly upon barrier violation.
+- **SC-2**: The assurance monitor shall switch to a certified safe recovery state promptly upon barrier violation.{sec_6_1_block}
 
 ---
 
@@ -541,6 +566,158 @@ Proof steps:
         report = CartesianProductValidator.verify_proof_structure(blocks)
         self.assertTrue(report.is_conforming)
         self.assertEqual(len(report.malformed_proofs), 0)
+
+
+def test_check17_rejects_missing_section_6_1_when_ast_states_declared(tmp_path, capsys):
+    """When a SysML model declares multi-state families, STPA matrix missing Section 6.1 must be rejected."""
+    model = build_sysml_model({"ControllerA": 4}, state_defs=["ESAD_Safe", "ESAD_Armed", "ESAD_Fired"])
+    combos = [(f"Action{number:02d}", gw) for number in range(1, 5) for gw in GUIDE_WORD_CELL_TEXT]
+    doc = build_stpa_document(uca_combos=combos)
+
+    with pytest.raises(SystemExit) as exc_info:
+        _run_check17(tmp_path, model, doc)
+    assert exc_info.value.code == 1
+
+    captured = capsys.readouterr().err
+    assert "Pillar 6 violation: Missing Section 6.1" in captured, f"Missing Section 6.1 error not found in: {captured}"
+    assert "ESAD" in captured, f"Error did not name the state family: {captured}"
+
+
+def test_check17_rejects_missing_state_diagram_for_state_family(tmp_path, capsys):
+    """When a multi-state family lacks a dedicated stateDiagram-v2 in Section 6.1, Check 17 must reject."""
+    model = build_sysml_model(
+        {"ControllerA": 4},
+        state_defs=["ESAD_Safe", "ESAD_Armed", "ESAD_Fired", "Flight_Preflight", "Flight_Ascent", "Flight_Terminal"],
+    )
+    combos = [(f"Action{number:02d}", gw) for number in range(1, 5) for gw in GUIDE_WORD_CELL_TEXT]
+    sec_6_1 = build_section_6_1(
+        {"ESAD": ["ESAD_Safe", "ESAD_Armed", "ESAD_Fired"]},
+        hooks_text="The ESAD and Flight statecharts are synthesized into MATLAB / Simulink / Stateflow.",
+    )
+    doc = build_stpa_document(uca_combos=combos, section_6_1=sec_6_1)
+
+    with pytest.raises(SystemExit) as exc_info:
+        _run_check17(tmp_path, model, doc)
+    assert exc_info.value.code == 1
+
+    captured = capsys.readouterr().err
+    assert "Missing dedicated Mermaid stateDiagram-v2 block in Section 6.1 for AST state machine family 'Flight'" in captured, (
+        f"Missing diagram error not found in: {captured}"
+    )
+
+
+def test_check17_rejects_missing_stateflow_hook_reference(tmp_path, capsys):
+    """When a state family diagram is present but not referenced in Section 6.1 Stateflow hooks, Check 17 must reject."""
+    model = build_sysml_model(
+        {"ControllerA": 4},
+        state_defs=["ESAD_Safe", "ESAD_Armed", "ESAD_Fired"],
+    )
+    combos = [(f"Action{number:02d}", gw) for number in range(1, 5) for gw in GUIDE_WORD_CELL_TEXT]
+    sec_6_1 = build_section_6_1(
+        {"ESAD": ["ESAD_Safe", "ESAD_Armed", "ESAD_Fired"]},
+        hooks_text="General supervisory logic is synthesized into MATLAB / Simulink / Stateflow.",
+    )
+    doc = build_stpa_document(uca_combos=combos, section_6_1=sec_6_1)
+
+    with pytest.raises(SystemExit) as exc_info:
+        _run_check17(tmp_path, model, doc)
+    assert exc_info.value.code == 1
+
+    captured = capsys.readouterr().err
+    assert "AST state machine family 'ESAD' is not referenced in Section 6.1 Stateflow synthesis hooks" in captured, (
+        f"Missing Stateflow hook reference error not found in: {captured}"
+    )
+
+
+def test_check17_accepts_complete_stateflow_statecharts(tmp_path):
+    """When all declared multi-state families have dedicated stateDiagram-v2 blocks and Stateflow hooks, Check 17 must pass."""
+    model = build_sysml_model(
+        {"ControllerA": 4},
+        state_defs=["ESAD_Safe", "ESAD_Armed", "ESAD_Fired", "Flight_Preflight", "Flight_Ascent", "Flight_Terminal"],
+    )
+    combos = [(f"Action{number:02d}", gw) for number in range(1, 5) for gw in GUIDE_WORD_CELL_TEXT]
+    sec_6_1 = build_section_6_1(
+        {
+            "ESAD": ["ESAD_Safe", "ESAD_Armed", "ESAD_Fired"],
+            "Flight": ["Flight_Preflight", "Flight_Ascent", "Flight_Terminal"],
+        },
+        hooks_text="The ESAD and Flight safety statecharts are synthesized directly into MATLAB / Simulink / Stateflow charts.",
+    )
+    doc = build_stpa_document(uca_combos=combos, section_6_1=sec_6_1)
+
+    _run_check17(tmp_path, model, doc)
+
+
+def test_check17_ignores_single_state_family(tmp_path):
+    """When an AST state prefix family has only 1 state (< 2), no dedicated stateDiagram-v2 is required."""
+    model = build_sysml_model(
+        {"ControllerA": 4},
+        state_defs=["Standalone_Idle"],
+    )
+    combos = [(f"Action{number:02d}", gw) for number in range(1, 5) for gw in GUIDE_WORD_CELL_TEXT]
+    doc = build_stpa_document(uca_combos=combos)
+
+    _run_check17(tmp_path, model, doc)
+
+
+class TestStateflowASTValidator(unittest.TestCase):
+    """Unit tests for AST state machine grouping, Section 6.1 extraction, and Stateflow validation."""
+
+    def test_group_state_defs_by_family(self):
+        from scripts.verify_downstream_baseline import group_state_defs_by_family
+
+        state_defs = [
+            "ESAD_Safe",
+            "ESAD_Armed",
+            "ESAD_Fired",
+            "Flight_Preflight",
+            "Flight_Ascent",
+            "Flight_Terminal",
+            "RTA_Nominal",
+            "RTA_Intervention",
+            "Standalone_Idle",
+            "Package::StateA",
+            "Package::StateB",
+            "Module.State1",
+            "Module.State2",
+        ]
+        families = group_state_defs_by_family(state_defs)
+        self.assertEqual(len(families["ESAD"]), 3)
+        self.assertEqual(len(families["Flight"]), 3)
+        self.assertEqual(len(families["RTA"]), 2)
+        self.assertEqual(len(families["Standalone"]), 1)
+        self.assertEqual(len(families["Package"]), 2)
+        self.assertEqual(len(families["Module"]), 2)
+
+    def test_extract_section_6_1_and_diagrams(self):
+        from scripts.verify_downstream_baseline import extract_section_6_1, extract_mermaid_state_diagrams
+
+        doc = """
+## 6. Formal Safety Constraints (**SC-1..N**)
+
+- SC-01: Constraint 1.
+
+### 6.1 Stateflow Synthesis Hooks & Safety Statecharts
+
+The ESAD state machine is synthesized for MATLAB / Simulink / Stateflow.
+
+```mermaid
+stateDiagram-v2
+    [*] --> ESAD_Safe
+    ESAD_Safe --> ESAD_Armed: arm
+    ESAD_Armed --> [*]
+```
+
+## 7. FMECA Criticality Matrix
+"""
+        sec = extract_section_6_1(doc)
+        self.assertIsNotNone(sec)
+        self.assertIn("6.1 Stateflow Synthesis Hooks", sec)
+        self.assertNotIn("## 7. FMECA", sec)
+
+        diagrams = extract_mermaid_state_diagrams(sec)
+        self.assertEqual(len(diagrams), 1)
+        self.assertIn("ESAD_Safe", diagrams[0])
 
 
 if __name__ == "__main__":

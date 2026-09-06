@@ -4519,7 +4519,7 @@ def main():
             compile_script = os.path.join(script_dir, "compile_sysml.py")
         if os.path.isfile(compile_script):
             print("Running pre-reconciliation SysML v2 reverse-synchronization...")
-            cmd = [sys.executable, compile_script, "--reverse-sync", "--docs", "docs"]
+            cmd = [sys.executable, compile_script, "--reverse-sync", "--docs", "docs", "--allow-schema-overwrite"]
             for cand_schema in (
                 os.path.join(workspace_dir, "schema", "platform.sysml"),
                 os.path.join(workspace_dir, "schema", "DEAP_MODEL.sysml"),

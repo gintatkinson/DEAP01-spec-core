@@ -3544,6 +3544,7 @@ def assemble_conops(
                             "--schema", detected_schema,
                             "--out", out_sysml,
                             "--digest", out_digest,
+                            "--allow-schema-overwrite",
                         ]
                         print(f"[*] Running automated SysML v2 reverse-synchronization hook: {' '.join(cmd)}")
                         res = subprocess.run(cmd, cwd=effective_ws, capture_output=True, text=True)
