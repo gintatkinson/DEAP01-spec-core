@@ -4124,13 +4124,16 @@ def resolve_issue_ids_in_file(filepath, epic_titles, feature_titles, story_title
         link_label_match = re.search(r'\[([^\]]+)\]\(', line)
         if link_label_match:
             title = link_label_match.group(1).strip()
+            title = re.sub(r'\s*\([^\)]*\.md\)', '', title, flags=re.IGNORECASE).strip()
+            title = re.sub(r'\s*\((?:feat|epic|us|uc|wp)[-_][^\)]*\)', '', title, flags=re.IGNORECASE).strip()
+            title = title.strip('[]-* `"\':;,')
         else:
             pattern = escaped_active + r'(?:\s*[-:]\s*)?' + title_extraction_prefixes_regex + r'(.*)$'
             dash_match = re.search(pattern, line)
             if dash_match:
                 title = dash_match.group(1).strip()
                 title = re.sub(r'\(.*?\)', '', title).strip()
-                title = title.strip('[]-* ')
+                title = title.strip('[]-* `"\':;,')
                 
         if (not title or not title.strip()) and re.search(r'issue[\s\-_]*id\s*:', line, re.IGNORECASE):
             title = extract_title(filepath)
