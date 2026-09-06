@@ -83,24 +83,24 @@ Systematic identification across the 4 STPA guide word / failure mode categories
 
 ## 7. FMECA Criticality Matrix
 
-| Failure ID | Component / Subsystem | Failure Mode | Local Effect | System Effect | S | O | D | RPN | Mitigating Design Control |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| FM-01 | Unit-01 | Mode Drift | Local Degradation | System Loss L-1 | 4 | 2 | 2 | 16 | Redundant Path 01 |
-| FM-02 | Unit-02 | Mode Drift | Local Degradation | System Loss L-1 | 4 | 2 | 2 | 16 | Redundant Path 02 |
-| FM-03 | Unit-03 | Mode Drift | Local Degradation | System Loss L-1 | 4 | 2 | 2 | 16 | Redundant Path 03 |
-| FM-04 | Unit-04 | Mode Drift | Local Degradation | System Loss L-1 | 4 | 2 | 2 | 16 | Redundant Path 04 |
-| FM-05 | Unit-05 | Mode Drift | Local Degradation | System Loss L-1 | 4 | 2 | 2 | 16 | Redundant Path 05 |
-| FM-06 | Unit-06 | Mode Drift | Local Degradation | System Loss L-1 | 4 | 2 | 2 | 16 | Redundant Path 06 |
-| FM-07 | Unit-07 | Mode Drift | Local Degradation | System Loss L-1 | 4 | 2 | 2 | 16 | Redundant Path 07 |
-| FM-08 | Unit-08 | Mode Drift | Local Degradation | System Loss L-1 | 4 | 2 | 2 | 16 | Redundant Path 08 |
-| FM-09 | Unit-09 | Mode Drift | Local Degradation | System Loss L-1 | 4 | 2 | 2 | 16 | Redundant Path 09 |
-| FM-10 | Unit-10 | Mode Drift | Local Degradation | System Loss L-1 | 4 | 2 | 2 | 16 | Redundant Path 10 |
-| FM-11 | Unit-11 | Mode Drift | Local Degradation | System Loss L-1 | 4 | 2 | 2 | 16 | Redundant Path 11 |
-| FM-12 | Unit-12 | Mode Drift | Local Degradation | System Loss L-1 | 4 | 2 | 2 | 16 | Redundant Path 12 |
-| FM-13 | Unit-13 | Mode Drift | Local Degradation | System Loss L-1 | 4 | 2 | 2 | 16 | Redundant Path 13 |
-| FM-14 | Unit-14 | Mode Drift | Local Degradation | System Loss L-1 | 4 | 2 | 2 | 16 | Redundant Path 14 |
-| FM-15 | Unit-15 | Mode Drift | Local Degradation | System Loss L-1 | 4 | 2 | 2 | 16 | Redundant Path 15 |
-| FM-16 | Unit-16 | Mode Drift | Local Degradation | System Loss L-1 | 4 | 2 | 2 | 16 | Redundant Path 16 |
+| Failure ID | Component / Subsystem | Failure Mode | Local Effect | System Effect | S | O | D | RPN | Mitigating Design Control | Basis |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| FM-01 | Unit-01 | Sensor Bias Drift | Local Degradation | System Loss L-1 | 4 | 2 | 2 | 16 | Redundant Path 01 | SSOT |
+| FM-02 | Unit-01 | Stuck-at Signal Output | Local Interruption | System Loss L-1 | 5 | 2 | 2 | 20 | Dual Channel Cross-Check | SSOT |
+| FM-03 | Unit-01 | Noise / Spurious Transients | Signal Jitter | Hazard H-1 | 3 | 3 | 2 | 18 | Kalman Filtering | Derived |
+| FM-04 | Unit-02 | Memory Buffer Overflow | Frame Drop | System Loss L-1 | 4 | 2 | 2 | 16 | Circular Buffer Limiter | SSOT |
+| FM-05 | Unit-02 | Deadlock in Task Scheduler | Processing Freeze | System Loss L-1 | 5 | 1 | 2 | 10 | Hardware Watchdog Reset | Derived |
+| FM-06 | Unit-02 | Parameter Flash Corruption | Configuration Fault | Hazard H-1 | 4 | 2 | 2 | 16 | CRC32 Integrity Check | SSOT |
+| FM-07 | Unit-03 | Actuator Command Desync | Command Delay | System Loss L-1 | 4 | 2 | 2 | 16 | Heartbeat Monitor | SSOT |
+| FM-08 | Unit-03 | Torque Saturation | Authority Limit Exceeded | Hazard H-1 | 3 | 2 | 3 | 18 | Rate Limiter Clamping | Derived |
+| FM-09 | Unit-03 | Power Voltage Sag | Brownout Reset | System Loss L-1 | 5 | 1 | 2 | 10 | Backup Power Rail | SSOT |
+| FM-10 | Unit-04 | Telemetry Frame Loss | Uplink Timeout | System Loss L-1 | 3 | 3 | 2 | 18 | Auto-Reconnection Protocol | SSOT |
+| FM-11 | Unit-04 | Packet Checksum Failure | Rejected Packet | Hazard H-1 | 2 | 3 | 2 | 12 | Retransmission Queue | Derived |
+| FM-12 | Unit-05 | Thermal Overload | Thermal Throttling | Hazard H-1 | 3 | 2 | 2 | 12 | Active Cooling System | SSOT |
+| FM-13 | Unit-05 | Clock Drift / Jitter | Phase Offset | Hazard H-1 | 3 | 2 | 2 | 12 | PTP Sync Loop | Derived |
+| FM-14 | Unit-06 | Safe State Transition Failure | Uncommanded Motion | System Loss L-1 | 5 | 1 | 2 | 10 | Independent Interlock Circuit | SSOT |
+| FM-15 | Unit-06 | False Positive Envelope Trip | Spurious Abort | Hazard H-1 | 2 | 3 | 2 | 12 | Multi-Sensor Voting | Derived |
+| FM-16 | Unit-06 | Output Stage Short Circuit | Total Loss of Unit | System Loss L-1 | 5 | 1 | 2 | 10 | Overcurrent Crowbar | SSOT |
 
 ---
 

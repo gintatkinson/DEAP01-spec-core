@@ -96,14 +96,16 @@ def build_stpa_document(uca_combos=None, oso_ids=None, proof_part_numbers=(1, 2,
     if oso_ids is None:
         oso_ids = list(range(1, 25))
     fmeca_rows = "\n".join(
-        f"| FM-{i:02d} | Subsystem-{i:02d} | Failure Mode {i:02d} | Local Effect {i:02d} "
-        f"| System Effect {i:02d} | 4 | 2 | 2 | 16 | Redundant Channel {i:02d} |"
+        f"| FM-{i:02d} | Subsystem-{((i - 1) % 4) + 1:02d} | Failure Mode {i:02d} | Local Effect {i:02d} "
+        f"| System Effect {i:02d} | 4 | 2 | 2 | 16 | Redundant Channel {i:02d} | SSOT |"
         for i in range(1, fmeca_row_count + 1)
     )
     proof_lines = []
     if proof_part_numbers:
         proof_lines = ["### Theorem THM-01: Safe Operating Envelope Invariance"]
         proof_lines.extend(_PROOF_PARTS[n] for n in sorted(proof_part_numbers))
+
+    uca_block = build_uca_table(uca_combos)
 
     return rf"""# STPA Safety Analysis, FMECA Matrix & SORA SAIL Assessment
 
@@ -114,36 +116,34 @@ def build_stpa_document(uca_combos=None, oso_ids=None, proof_part_numbers=(1, 2,
 
 ## 1. System Losses (**L-1..N**)
 
-- **L-1**: Loss of primary function during operation.
-- **L-2**: Loss of containment of the operating envelope.
+- **L-1**: Loss of primary function resulting in envelope excursion.
+- **L-2**: Structural overload from uncommanded extreme control surface deflection.
 
 ---
 
 ## 2. System Hazards (**H-1..N**)
 
-- **H-1**: System enters hazardous state outside the defined envelope.
-- **H-2**: Untimely actuation of a control channel.
+- **H-1**: Flight trajectory excursion beyond geocage boundaries.
+- **H-2**: Inability to recover within dynamic response budget.
 
 ---
 
 ## 3. Hierarchical Control Structure Topology
 
-The control structure consists of ControllerA, ControllerB, the Actuator Channel, and the Sensor Channel.
+The system comprises ControllerA and ControllerB directing downstream actuators.
 
 ---
 
 ## 4. Unsafe Control Actions (**UCA-1..N**)
 
-Systematic identification across 4 STPA guide words / failure mode categories.
-
-{build_uca_table(uca_combos)}
+{uca_block}
 
 ---
 
 ## 5. Loss Scenarios (**LS-1..N**) & Causal Factors
 
-- **LS-1**: Sensor channel degradation leads to stale state estimation (**H-1**, **L-1**).
-- **LS-2**: Actuator channel packet loss delays control transitions.
+- **LS-1**: Feedback signal loss induces false state estimate leading to inappropriate command emission.
+- **LS-2**: Latency surge in communication link delays safe envelope transition.
 
 ---
 
@@ -156,8 +156,8 @@ Systematic identification across 4 STPA guide words / failure mode categories.
 
 ## 7. FMECA Criticality Matrix
 
-| Failure ID | Component / Subsystem | Failure Mode | Local Effect | System Effect | S | O | D | RPN | Mitigating Design Control |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| Failure ID | Component / Subsystem | Failure Mode | Local Effect | System Effect | S | O | D | RPN | Mitigating Design Control | Basis |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 {fmeca_rows}
 
 ---

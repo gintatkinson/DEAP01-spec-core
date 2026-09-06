@@ -234,8 +234,8 @@ class TestCheck17CartesianCompleteness60Rows(unittest.TestCase):
 
     def _build_full_doc(self, uca_table):
         fmeca_rows = "\n".join(
-            f"| FM-{i:02d} | Subsystem-{i:02d} | Failure Mode {i:02d} | Local Effect {i:02d} "
-            f"| System Effect {i:02d} | 4 | 2 | 2 | 16 | Redundant Channel {i:02d} |"
+            f"| FM-{i:02d} | Subsystem-{((i - 1) % 4) + 1:02d} | Failure Mode {i:02d} | Local Effect {i:02d} "
+            f"| System Effect {i:02d} | 4 | 2 | 2 | 16 | Redundant Channel {i:02d} | SSOT |"
             for i in range(1, 17)
         )
         oso_rows = "\n".join(
@@ -272,8 +272,8 @@ The control structure consists of ControllerA.
 
 ## 7. FMECA Criticality Matrix
 
-| Failure ID | Component / Subsystem | Failure Mode | Local Effect | System Effect | S | O | D | RPN | Mitigating Design Control |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| Failure ID | Component / Subsystem | Failure Mode | Local Effect | System Effect | S | O | D | RPN | Mitigating Design Control | Basis |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 {fmeca_rows}
 
 ---

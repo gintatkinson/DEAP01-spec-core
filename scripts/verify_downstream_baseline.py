@@ -558,63 +558,162 @@ def check_upstream_template_clean_landing_zones(repo_root):
 
     print("Success: Check 16 verified (Upstream distribution template landing zones are clean with zero concrete specs).")
 
-def count_fmeca_rows(content: str) -> int:
-    """Extract and count data rows from the FMECA table in content."""
+def parse_fmeca_table(content: str) -> dict:
+    """Extract structured FMECA table data including rows, components, failure modes, and basis classifications."""
     lines = content.splitlines()
     in_fmeca_section = False
-    row_count = 0
+    in_fmeca_table = False
+    header_cols = []
     header_skipped = False
+
+    components = {}
+    failure_modes = []
+    basis_counts = {"SSOT": 0, "Derived": 0}
+    basis_classifications = []
+    rows = []
+    has_rpn = False
+
+    comp_idx = None
+    mode_idx = None
+    rpn_idx = None
+    basis_idx = None
 
     for line in lines:
         stripped = line.strip()
         # Check for section header (level 2+ or specific FMECA header)
-        if stripped.startswith("##") or (stripped.startswith("#") and "criticality" in stripped.lower()):
+        if stripped.startswith("##") or (stripped.startswith("#") and ("criticality" in stripped.lower() or "fmeca" in stripped.lower())):
             if re.search(r'\b(?:FMECA|Failure\s+Mode)\b', stripped, re.IGNORECASE):
                 in_fmeca_section = True
+                header_cols = []
                 header_skipped = False
                 continue
             elif in_fmeca_section:
-                # Reached next section header
                 in_fmeca_section = False
 
-        if in_fmeca_section:
-            if stripped.startswith("|") and stripped.endswith("|"):
-                # Skip separator rows like |:---|:---| or |---|---|
-                if re.match(r"^\|(?:\s*:?-+:?\s*\|)+$", stripped):
-                    header_skipped = True
-                    continue
-                # If header row hasn't been skipped yet, check for common table header keywords
-                if not header_skipped:
-                    lower = stripped.lower()
-                    if any(kw in lower for kw in ["component", "failure", "subsystem", "severity", "rpn", "local effect"]):
-                        continue
-                cells = [c.strip() for c in stripped.split("|")[1:-1]]
-                if any(cells):
-                    row_count += 1
+        is_table_row = stripped.startswith("|") and stripped.endswith("|")
+        if not is_table_row:
+            if in_fmeca_table and not in_fmeca_section:
+                in_fmeca_table = False
+            continue
 
-    # Fallback: if no rows found via section header, scan for table with FMECA columns
-    if row_count == 0:
-        in_fmeca_table = False
-        for line in lines:
-            stripped = line.strip()
-            if stripped.startswith("|") and stripped.endswith("|"):
-                lower = stripped.lower()
-                if "failure" in lower and ("rpn" in lower or "severity" in lower or "component" in lower):
-                    in_fmeca_table = True
-                    header_skipped = False
-                    continue
-                if re.match(r"^\|(?:\s*:?-+:?\s*\|)+$", stripped):
-                    header_skipped = True
-                    continue
-                if in_fmeca_table and header_skipped:
-                    cells = [c.strip() for c in stripped.split("|")[1:-1]]
-                    if any(cells):
-                        row_count += 1
-            else:
-                if in_fmeca_table and stripped and not stripped.startswith("|"):
-                    in_fmeca_table = False
+        if not in_fmeca_section and not in_fmeca_table:
+            # Fallback scan for table containing FMECA keywords in header
+            lower = stripped.lower()
+            if "failure" in lower and ("rpn" in lower or "severity" in lower or "component" in lower or "mode" in lower):
+                in_fmeca_table = True
+                header_cols = []
+                header_skipped = False
 
-    return row_count
+        if in_fmeca_section or in_fmeca_table:
+            # Skip separator rows like |:---|:---| or |---|---|
+            if re.match(r"^\|(?:\s*:?-+:?\s*\|)+$", stripped):
+                header_skipped = True
+                continue
+
+            cells = [c.strip() for c in stripped.split("|")[1:-1]]
+            if not cells or not any(cells):
+                continue
+
+            # Identify header row
+            if not header_skipped and not header_cols:
+                lower = [c.lower() for c in cells]
+                if any(kw in lower_cell for lower_cell in lower for kw in ["component", "failure", "subsystem", "severity", "rpn", "effect"]):
+                    header_cols = lower
+                    for idx, h in enumerate(header_cols):
+                        if any(kw in h for kw in ["component", "subsystem", "unit", "item"]):
+                            if comp_idx is None:
+                                comp_idx = idx
+                        elif any(kw in h for kw in ["failure mode", "mode"]):
+                            if mode_idx is None:
+                                mode_idx = idx
+                        elif any(kw in h for kw in ["rpn", "risk priority"]):
+                            if rpn_idx is None:
+                                rpn_idx = idx
+                        elif any(kw in h for kw in ["basis", "derivation", "provenance", "classification"]):
+                            if basis_idx is None:
+                                basis_idx = idx
+                    continue
+
+            # Data row extraction
+            cur_comp_idx = comp_idx
+            cur_mode_idx = mode_idx
+            cur_basis_idx = basis_idx
+            cur_rpn_idx = rpn_idx
+
+            if cur_comp_idx is None:
+                if len(cells) > 1 and re.match(r'^(?:FM|FMECA)-', cells[0], re.IGNORECASE):
+                    cur_comp_idx = 1
+                else:
+                    cur_comp_idx = 0
+
+            if cur_mode_idx is None:
+                if cur_comp_idx == 1 and len(cells) > 2:
+                    cur_mode_idx = 2
+                elif cur_comp_idx == 0 and len(cells) > 1:
+                    cur_mode_idx = 1
+
+            comp_name = cells[cur_comp_idx] if cur_comp_idx is not None and cur_comp_idx < len(cells) else f"Component-{len(rows)+1}"
+            mode_name = cells[cur_mode_idx] if cur_mode_idx is not None and cur_mode_idx < len(cells) else ""
+
+            # Check RPN
+            if cur_rpn_idx is not None and cur_rpn_idx < len(cells):
+                if cells[cur_rpn_idx]:
+                    has_rpn = True
+            elif any("rpn" in c.lower() for c in header_cols):
+                has_rpn = True
+
+            # Check Basis
+            row_basis = None
+            if cur_basis_idx is not None and cur_basis_idx < len(cells):
+                cell_basis = cells[cur_basis_idx]
+                if re.search(r'\bSSOT\b', cell_basis, re.IGNORECASE):
+                    row_basis = "SSOT"
+                elif re.search(r'\bDerived\b', cell_basis, re.IGNORECASE):
+                    row_basis = "Derived"
+
+            # If not found in dedicated column, search across all cells for explicit annotations
+            if row_basis is None:
+                row_text = " ".join(cells)
+                if re.search(r'\bSSOT\b', row_text, re.IGNORECASE):
+                    row_basis = "SSOT"
+                elif re.search(r'\bDerived\b', row_text, re.IGNORECASE):
+                    row_basis = "Derived"
+
+            if row_basis == "SSOT":
+                basis_counts["SSOT"] += 1
+            elif row_basis == "Derived":
+                basis_counts["Derived"] += 1
+
+            basis_classifications.append(row_basis)
+            if mode_name:
+                failure_modes.append(mode_name)
+
+            row_dict = {
+                "cells": cells,
+                "component": comp_name,
+                "failure_mode": mode_name,
+                "basis": row_basis,
+            }
+            rows.append(row_dict)
+            components.setdefault(comp_name, []).append(row_dict)
+
+    if not has_rpn and (rpn_idx is not None or any("rpn" in c.lower() for c in header_cols) or re.search(r'\bRPN\b|Risk\s+Priority\s+Number', content, re.IGNORECASE)):
+        has_rpn = True
+
+    return {
+        "total_rows": len(rows),
+        "components": components,
+        "failure_modes": failure_modes,
+        "basis_counts": basis_counts,
+        "basis_classifications": basis_classifications,
+        "has_rpn": has_rpn,
+        "rows": rows,
+    }
+
+
+def count_fmeca_rows(content: str) -> int:
+    """Extract and count data rows from the FMECA table in content."""
+    return parse_fmeca_table(content)["total_rows"]
 
 def check_uca_categories(content: str) -> list:
     """Verify that all 4 STPA UCA failure modes are covered in content."""
@@ -1356,15 +1455,27 @@ def _validate_safety_matrix_pillars(content: str, ast_path_active: bool = False)
     if not (re.search(r'Safety\s+Constraints?', content, re.IGNORECASE) and re.search(r'\bSC-\d+\b|\$SC-\d+', content)):
         errors.append("Pillar 6 violation: Missing Formal Safety Constraints ($SC-1..N$).")
 
-    # Pillar 7: FMECA Criticality Matrix (15+ rows)
+    # Pillar 7: FMECA Criticality Matrix (15+ rows, RPN, Basis, Multiplicity)
     if not re.search(r'FMECA|Failure\s+Mode', content, re.IGNORECASE):
         errors.append("Pillar 7 violation: Missing FMECA Criticality Matrix.")
     else:
-        fmeca_rows = count_fmeca_rows(content)
-        if fmeca_rows < 15:
-            errors.append(f"Pillar 7 violation: FMECA Criticality Matrix contains {fmeca_rows} row(s); minimum required is 15 rows.")
-        if not re.search(r'\bRPN\b|Risk\s+Priority\s+Number', content, re.IGNORECASE):
+        fmeca_data = parse_fmeca_table(content)
+        total_rows = fmeca_data["total_rows"]
+        if total_rows < 15:
+            errors.append(f"Pillar 7 violation: FMECA Criticality Matrix contains {total_rows} row(s); minimum required is 15 rows.")
+        if not (fmeca_data.get("has_rpn") or re.search(r'\bRPN\b|Risk\s+Priority\s+Number', content, re.IGNORECASE)):
             errors.append("Pillar 7 violation: FMECA table missing RPN (Risk Priority Number) calculation.")
+
+        total_basis = fmeca_data["basis_counts"]["SSOT"] + fmeca_data["basis_counts"]["Derived"]
+        if total_rows > 0 and total_basis == 0:
+            errors.append("Pillar 7 violation: FMECA Criticality Matrix missing explicit Derivation Basis classification ('SSOT' / 'Derived').")
+        elif total_rows > 0 and total_basis < total_rows:
+            errors.append(f"Pillar 7 violation: FMECA Criticality Matrix contains {total_rows - total_basis} row(s) missing explicit Derivation Basis classification ('SSOT' / 'Derived').")
+
+        if total_rows > 1 and fmeca_data["components"]:
+            max_modes = max(len(modes) for modes in fmeca_data["components"].values())
+            if max_modes <= 1:
+                errors.append("Pillar 7 violation: FMECA Criticality Matrix lacks failure mode multiplicity (every component defines only a single failure mode). Multi-signature components must define multiple discrete failure modes.")
 
     # Pillar 8: SORA SAIL Risk Mitigations & OSO Traceability Table
     if not (re.search(r'\bSORA\b', content) and re.search(r'\bSAIL\b', content)):

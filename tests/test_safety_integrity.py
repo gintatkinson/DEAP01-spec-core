@@ -4,6 +4,7 @@ Safety Integrity Quality Gate & SORA OSO-01..24 Completeness Verification Suite.
 """
 import os
 import sys
+import re
 import tempfile
 import pathlib
 import pytest
@@ -15,6 +16,7 @@ if repo_root not in sys.path:
 
 from scripts.verify_downstream_baseline import (
     count_fmeca_rows,
+    parse_fmeca_table,
     check_uca_categories,
     check_sora_osos,
     validate_safety_matrix_content,
@@ -102,6 +104,81 @@ def test_sora_oso_01_to_24_validation():
 
     errors = validate_safety_matrix_content(incomplete_content)
     assert any("OSO-23" in err and "OSO-24" in err for err in errors), f"Expected missing OSOs error, got:\n{errors}"
+
+
+def test_fmeca_table_parser_and_multi_mode_distribution():
+    """Verify parse_fmeca_table accurately extracts components, modes, RPN, and Basis classifications."""
+    complete_content = read_fixture("complete_stpa_matrix.md")
+    parsed = parse_fmeca_table(complete_content)
+
+    assert parsed["total_rows"] == 16
+    assert parsed["has_rpn"] is True
+    assert len(parsed["components"]) == 6
+    for comp, modes in parsed["components"].items():
+        assert len(modes) >= 2, f"Expected component {comp} to have multiple failure modes, got {len(modes)}"
+    assert parsed["basis_counts"]["SSOT"] == 10
+    assert parsed["basis_counts"]["Derived"] == 6
+    assert len(parsed["failure_modes"]) == 16
+
+    errors = validate_safety_matrix_content(complete_content)
+    assert errors == []
+
+
+def test_fmeca_missing_basis_rejected():
+    """Verify FMECA matrix missing explicit Derivation Basis (SSOT / Derived) is rejected."""
+    complete_content = read_fixture("complete_stpa_matrix.md")
+    # Strip Basis column
+    lines = []
+    for line in complete_content.splitlines():
+        if line.strip().startswith("|") and line.strip().endswith("|"):
+            cells = [c.strip() for c in line.strip().split("|")[1:-1]]
+            if len(cells) > 1 and ("Basis" in cells[-1] or cells[-1] in ("SSOT", "Derived")):
+                cells = cells[:-1]
+                lines.append("| " + " | ".join(cells) + " |")
+            elif re.match(r"^\|(?:\s*:?-+:?\s*\|)+$", line.strip()):
+                parts = line.strip().split("|")[1:-1]
+                lines.append("| " + " | ".join(parts[:-1]) + " |")
+            else:
+                lines.append(line)
+        else:
+            lines.append(line)
+    invalid_no_basis = "\n".join(lines)
+
+    parsed = parse_fmeca_table(invalid_no_basis)
+    assert parsed["basis_counts"]["SSOT"] == 0
+    assert parsed["basis_counts"]["Derived"] == 0
+
+    errors = validate_safety_matrix_content(invalid_no_basis)
+    assert any("Pillar 7 violation: FMECA Criticality Matrix missing explicit Derivation Basis" in err for err in errors), (
+        f"Expected missing Basis classification error, got:\n{errors}"
+    )
+
+
+def test_fmeca_single_mode_per_component_rejected():
+    """Verify FMECA matrix where every component has exactly 1 single failure mode is rejected."""
+    complete_content = read_fixture("complete_stpa_matrix.md")
+    # Replace components so each row has a unique component (1 mode per component)
+    lines = []
+    fm_counter = 1
+    for line in complete_content.splitlines():
+        if line.strip().startswith("| FM-"):
+            cells = [c.strip() for c in line.strip().split("|")[1:-1]]
+            cells[1] = f"IsolatedUnit-{fm_counter:02d}"
+            fm_counter += 1
+            lines.append("| " + " | ".join(cells) + " |")
+        else:
+            lines.append(line)
+    single_mode_content = "\n".join(lines)
+
+    parsed = parse_fmeca_table(single_mode_content)
+    assert parsed["total_rows"] == 16
+    assert len(parsed["components"]) == 16
+    assert all(len(modes) == 1 for modes in parsed["components"].values())
+
+    errors = validate_safety_matrix_content(single_mode_content)
+    assert any("Pillar 7 violation: FMECA Criticality Matrix lacks failure mode multiplicity" in err for err in errors), (
+        f"Expected failure mode multiplicity error, got:\n{errors}"
+    )
 
 
 def test_fmeca_row_count_validation():
