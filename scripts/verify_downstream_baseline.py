@@ -16,7 +16,7 @@ import signal
 import subprocess
 import sys
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 TIMEOUT_SECONDS = 600
 GIT_TIMEOUT_SECONDS = 30
@@ -625,28 +625,28 @@ def parse_fmeca_table(content: str) -> dict:
                     header_cols = lower
                     for idx, h in enumerate(header_cols):
                         h_clean = h.strip().lower()
-                        if any(kw == h_clean for kw in ["id", "failure id", "fm id", "fmeca id", "fmid"]):
+                        if any(kw == h_clean for kw in ["id", "failure id", "fm id", "fmeca id", "fmid"]) or h_clean.startswith("failure id") or h_clean.startswith("fm id"):
                             if id_idx is None:
                                 id_idx = idx
-                        elif any(kw in h_clean for kw in ["component", "subsystem", "unit", "item", "part"]):
+                        elif any(kw in h_clean for kw in ["component", "subsystem", "unit", "item", "part", "partdef"]) and "effect" not in h_clean and "loss" not in h_clean and "control" not in h_clean:
                             if comp_idx is None:
                                 comp_idx = idx
-                        elif any(kw in h_clean for kw in ["failure mode", "mode"]):
+                        elif any(kw in h_clean for kw in ["failure mode", "mode", "failure description", "failure mechanism"]) and "dimension" not in h_clean and "control" not in h_clean and "effect" not in h_clean:
                             if mode_idx is None:
                                 mode_idx = idx
-                        elif h_clean in ("s", "sev", "severity") or re.search(r'\b(?:severity|s)\b', h_clean):
-                            if s_idx is None and "description" not in h_clean and "subsystem" not in h_clean and "status" not in h_clean and "system" not in h_clean:
+                        elif (h_clean in ("s", "sev", "severity") or re.search(r'\b(?:severity|s)\b', h_clean)) and "description" not in h_clean and "subsystem" not in h_clean and "status" not in h_clean and "system" not in h_clean and "class" not in h_clean and "dimension" not in h_clean:
+                            if s_idx is None:
                                 s_idx = idx
-                        elif h_clean in ("o", "occ", "occurrence") or re.search(r'\b(?:occurrence|occ|o)\b', h_clean):
-                            if o_idx is None and "description" not in h_clean and "mode" not in h_clean and "control" not in h_clean:
+                        elif (h_clean in ("o", "occ", "occurrence") or re.search(r'\b(?:occurrence|occ|o)\b', h_clean)) and "description" not in h_clean and "mode" not in h_clean and "control" not in h_clean and "action" not in h_clean:
+                            if o_idx is None:
                                 o_idx = idx
-                        elif h_clean in ("d", "det", "detection") or re.search(r'\b(?:detection|det|d)\b', h_clean):
-                            if d_idx is None and "description" not in h_clean and "mitigating" not in h_clean and "design" not in h_clean and "id" not in h_clean:
+                        elif (h_clean in ("d", "det", "detection") or re.search(r'\b(?:detection|det|d)\b', h_clean)) and "description" not in h_clean and "mitigating" not in h_clean and "design" not in h_clean and "id" not in h_clean and "method" not in h_clean and "dimension" not in h_clean:
+                            if d_idx is None:
                                 d_idx = idx
                         elif any(kw in h_clean for kw in ["rpn", "risk priority", "risk priority number"]):
                             if rpn_idx is None:
                                 rpn_idx = idx
-                        elif any(kw in h_clean for kw in ["basis", "derivation", "provenance", "classification"]):
+                        elif any(kw in h_clean for kw in ["basis", "derivation", "provenance", "classification", "anchor", "traceability", "derivation basis"]):
                             if basis_idx is None:
                                 basis_idx = idx
                     continue
@@ -836,6 +836,9 @@ class ASTValidationReport:
     malformed_proofs: List[str] = field(default_factory=list)
     syntax_errors: List[str] = field(default_factory=list)
     missing_fmeca_parts: List[str] = field(default_factory=list)
+    missing_dimensions: List[str] = field(default_factory=list)
+    missing_port_modes: List[str] = field(default_factory=list)
+    part_criticalities: Dict[str, int] = field(default_factory=dict)
 
     def format_cli_summary(self) -> str:
         """Format a one-line CLI summary of the AST validation outcome."""
@@ -851,7 +854,187 @@ class ASTValidationReport:
             summary += f", {len(self.malformed_proofs)} malformed proof block(s)"
         if self.missing_fmeca_parts:
             summary += f", {len(self.missing_fmeca_parts)} missing FMECA part(s)"
+        if self.missing_port_modes:
+            summary += f", {len(self.missing_port_modes)} missing high-criticality port mode(s)"
+        if self.missing_dimensions:
+            summary += f", {len(self.missing_dimensions)} missing failure dimension(s)"
         return summary
+
+
+# Universal 4 Failure Dimensions: Interface (Γ), State (Φ), Action (Ω), Resource (Ψ)
+UNIVERSAL_FAILURE_DIMENSIONS = {
+    "Interface": ("Γ", re.compile(r'\b(?:Interface|Port|Bus|Signal|Protocol|Packet|Message|Frame|Channel|Link|CRC|Timeout|IO|Input|Output|Data|Transceiver|Receiver|Uplink|Downlink|Telemetry|Transients?|Γ|\\Gamma)\b|\[(?:Interface|Γ)\]|\((?:Interface|Γ)\)', re.IGNORECASE)),
+    "State": ("Φ", re.compile(r'\b(?:State|Mode|Transition|Deadlock|Latch|Phase|Statechart|FSM|Sync|Synchronization|Desync|Drift|Stuck|Uninitialized|Freeze|Lockup|Trip|Abort|Corruption|Disagreement|Φ|\\Phi)\b|\[(?:State|Φ)\]|\((?:State|Φ)\)', re.IGNORECASE)),
+    "Action": ("Ω", re.compile(r'\b(?:Action|Command|Execution|Operation|Control|Timing|Deadline|Compute|Calculation|Process|Logic|Omission|Commission|Latency|Jitter|Delay|Rate|Clamping|Limiter|Saturation|Step|Overshoot|Schedule|Task|Authority|Miss|Ω|\\Omega)\b|\[(?:Action|Ω)\]|\((?:Action|Ω)\)', re.IGNORECASE)),
+    "Resource": ("Ψ", re.compile(r'\b(?:Resource|Memory|CPU|Buffer|Power|Energy|Battery|Thermal|Heat|Overheat|Overload|Bandwidth|Storage|Capacity|Stack|Heap|Overflow|Underflow|Brownout|Voltage|Current|Load|Fault|Short|Sag|Circuit|Crowbar|Degradation|Flash|RAM|Supply|Undervoltage|Overvoltage|Seizure|Windings?|Wiper|Hardware|Bearing|Dielectric|Squib|Fuse|Fusing|Ψ|\\Psi)\b|\[(?:Resource|Ψ)\]|\((?:Resource|Ψ)\)', re.IGNORECASE)),
+}
+
+
+def check_failure_dimension_coverage(fmeca_data: dict) -> List[str]:
+    """Verify that failure modes across the FMECA table span the 4 universal failure dimensions (Interface, State, Action, Resource)."""
+    found_dims = set()
+    for row in fmeca_data.get("rows", []):
+        mode_text = str(row.get("failure_mode", "")) + " " + str(row.get("basis", ""))
+        for dim_name, (_greek, pattern) in UNIVERSAL_FAILURE_DIMENSIONS.items():
+            if pattern.search(mode_text):
+                found_dims.add(dim_name)
+    missing = [dim for dim in ["Interface", "State", "Action", "Resource"] if dim not in found_dims]
+    return missing
+
+
+def _load_sysml_ast_classes():
+    """Import SysMLParser, SysMLPackage, PartDef, PortDef, HazardDef from sysmlv2_ast (fail-safe)."""
+    try:
+        from sysmlv2_ast import SysMLParser, SysMLPackage, PartDef, PortDef, HazardDef
+        return SysMLParser, SysMLPackage, PartDef, PortDef, HazardDef
+    except ImportError:
+        pass
+    try:
+        from skills.spec_orchestrator.scripts.sysmlv2_ast import SysMLParser, SysMLPackage, PartDef, PortDef, HazardDef
+        return SysMLParser, SysMLPackage, PartDef, PortDef, HazardDef
+    except ImportError:
+        pass
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(script_dir)
+    spec_dir = os.path.join(project_root, "skills", "spec-orchestrator", "scripts")
+    if spec_dir not in sys.path:
+        sys.path.insert(0, spec_dir)
+    try:
+        from sysmlv2_ast import SysMLParser, SysMLPackage, PartDef, PortDef, HazardDef
+        return SysMLParser, SysMLPackage, PartDef, PortDef, HazardDef
+    except ImportError:
+        return None, None, None, None, None
+
+
+def calculate_topological_criticality(pkg: Any, part: Any) -> int:
+    """Calculate dynamic topological criticality for an AST part def:
+    Crit(P_i) = max({Severity(H_j) for H_j in ReachableHazards(P_i)} U {Severity(H) for H in P_i.hazards} U {1})
+    """
+    severities = []
+    part_name = getattr(part, "name", str(part))
+    if hasattr(pkg, "get_reachable_hazards"):
+        try:
+            reachable = pkg.get_reachable_hazards(part_name)
+            for h in reachable:
+                sev = getattr(h, "severity", None)
+                if sev is not None:
+                    try:
+                        severities.append(int(sev))
+                    except (ValueError, TypeError):
+                        pass
+        except Exception:
+            pass
+    for h in (getattr(part, "hazards", []) or []):
+        sev = getattr(h, "severity", None)
+        if sev is not None:
+            try:
+                severities.append(int(sev))
+            except (ValueError, TypeError):
+                pass
+    return max(severities) if severities else 1
+
+
+def _component_matches(table_comp: str, ast_part_name: str) -> bool:
+    """Check if an FMECA table component cell matches an AST part def name."""
+    tc = table_comp.strip().lower()
+    pn = ast_part_name.strip().lower()
+    if tc == pn:
+        return True
+    tc_clean = re.sub(r'[^a-zA-Z0-9]', '', tc)
+    pn_clean = re.sub(r'[^a-zA-Z0-9]', '', pn)
+    if tc_clean and tc_clean == pn_clean:
+        return True
+    if re.search(rf"\b{re.escape(ast_part_name)}\b", table_comp, re.IGNORECASE):
+        return True
+    if re.search(rf"\b{re.escape(table_comp)}\b", ast_part_name, re.IGNORECASE):
+        return True
+    return False
+
+
+def check_high_criticality_port_coverage(fmeca_data: dict, pkg: Any) -> Tuple[List[str], Dict[str, int]]:
+    """For high-criticality parts (Crit >= 8), verify port-level interface failure modes for declared typed ports."""
+    errors = []
+    part_criticalities = {}
+    if not hasattr(pkg, "get_all_parts"):
+        return errors, part_criticalities
+
+    for part in pkg.get_all_parts():
+        crit = calculate_topological_criticality(pkg, part)
+        part_criticalities[part.name] = crit
+        if crit >= 8 and getattr(part, "ports", None):
+            comp_rows = []
+            for row in fmeca_data.get("rows", []):
+                if _component_matches(row.get("component", ""), part.name):
+                    comp_rows.append(row)
+
+            missing_ports = []
+            for port in part.ports:
+                port_name = port.name.strip()
+                port_matched = False
+                for r in comp_rows:
+                    row_text = " ".join(str(c) for c in r.get("cells", [])) + " " + str(r.get("failure_mode", ""))
+                    if re.search(rf"\b{re.escape(port_name)}\b", row_text, re.IGNORECASE) or re.search(rf"\b{re.escape(part.name)}\.{re.escape(port_name)}\b", row_text, re.IGNORECASE):
+                        port_matched = True
+                        break
+                if not port_matched:
+                    missing_ports.append(port_name)
+
+            if missing_ports:
+                errors.append(
+                    f"Pillar 7 violation: High-criticality component '{part.name}' (Crit={crit} >= 8) "
+                    f"missing port-level interface failure mode for declared port(s): {', '.join(sorted(missing_ports))}."
+                )
+
+    return errors, part_criticalities
+
+
+def check_fmeca_ast_coverage(content: str, model_text: Optional[str] = None) -> Tuple[List[str], ASTValidationReport]:
+    """Verify FMECA table against SysML AST closure: PartDef coverage, topological criticality, port coverage for Crit >= 8, and 4 universal failure dimensions."""
+    errors: List[str] = []
+    report = ASTValidationReport()
+    fmeca_data = parse_fmeca_table(content)
+
+    if fmeca_data["total_rows"] > 0:
+        missing_dims = check_failure_dimension_coverage(fmeca_data)
+        if missing_dims:
+            report.missing_dimensions.extend(missing_dims)
+            errors.append(
+                f"Pillar 7 violation: FMECA table missing coverage for universal failure dimension(s): "
+                f"{', '.join(missing_dims)} (expected Interface (Γ), State (Φ), Action (Ω), Resource (Ψ))."
+            )
+
+    if model_text:
+        SysMLParser, _SysMLPackage, _PartDef, _PortDef, _HazardDef = _load_sysml_ast_classes()
+        if SysMLParser is not None:
+            try:
+                pkg_obj = SysMLParser.parse_text(model_text)
+                expected_parts = [p.name for p in pkg_obj.get_all_parts()]
+                table_components = set(fmeca_data["components"].keys())
+                missing_parts = []
+                for p in expected_parts:
+                    matched = False
+                    for c in table_components:
+                        if _component_matches(c, p):
+                            matched = True
+                            break
+                    if not matched:
+                        missing_parts.append(p)
+                if missing_parts:
+                    report.missing_fmeca_parts.extend(missing_parts)
+                    errors.append(
+                        f"Pillar 7 violation: FMECA table missing declared AST part def component(s): {', '.join(sorted(missing_parts))}."
+                    )
+
+                port_errors, crit_map = check_high_criticality_port_coverage(fmeca_data, pkg_obj)
+                report.part_criticalities = crit_map
+                if port_errors:
+                    report.missing_port_modes.extend(port_errors)
+                    errors.extend(port_errors)
+            except Exception as exc:
+                errors.append(f"Safety AST violation: Failed to parse SysML v2 model for FMECA ({exc}).")
+
+    report.is_conforming = not errors
+    return errors, report
 
 
 # Canonical STPA guide words are methodology constants, not domain concepts.
@@ -1405,28 +1588,16 @@ def validate_safety_matrix_ast(content: str, model_text: Optional[str] = None) -
                 f"minimum required is {MIN_STRUCTURAL_UCA_ROWS} permutations (4 control actions x 4 guide words)."
             )
 
-    if expected_parts:
-        fmeca_data = parse_fmeca_table(content)
-        table_components = set(fmeca_data["components"].keys())
-        missing_parts = []
-        for p in expected_parts:
-            matched = False
-            for c in table_components:
-                if (
-                    c.strip().lower() == p.strip().lower()
-                    or re.sub(r'[^a-zA-Z0-9]', '', c).lower() == re.sub(r'[^a-zA-Z0-9]', '', p).lower()
-                    or re.search(rf"\b{re.escape(p)}\b", c, re.IGNORECASE)
-                    or re.search(rf"\b{re.escape(c)}\b", p, re.IGNORECASE)
-                ):
-                    matched = True
-                    break
-            if not matched:
-                missing_parts.append(p)
-        if missing_parts:
-            report.missing_fmeca_parts.extend(missing_parts)
-            errors.append(
-                f"Pillar 7 violation: FMECA table missing declared AST part def component(s): {', '.join(sorted(missing_parts))}."
-            )
+    if expected_parts or model_text:
+        fmeca_ast_errors, fmeca_report = check_fmeca_ast_coverage(content, model_text)
+        if fmeca_report.missing_fmeca_parts:
+            report.missing_fmeca_parts.extend(fmeca_report.missing_fmeca_parts)
+        if fmeca_report.missing_port_modes:
+            report.missing_port_modes.extend(fmeca_report.missing_port_modes)
+        if fmeca_report.missing_dimensions:
+            report.missing_dimensions.extend(fmeca_report.missing_dimensions)
+        report.part_criticalities.update(fmeca_report.part_criticalities)
+        errors.extend(fmeca_ast_errors)
 
     if model_text or oso_rows:
         sora_report = CartesianProductValidator.verify_sora_oso_coverage(oso_rows)
@@ -1482,7 +1653,7 @@ def validate_safety_matrix_content(
     repo_root: Optional[str] = None,
     model_text: Optional[str] = None,
 ) -> list:
-    """Validate 8-pillar schema, 24 SORA OSOs, 15+ FMECA rows, 4 UCA categories, ASTM F3269-17 RTA, and MATLAB/Simulink hooks.
+    """Validate 8-pillar schema, 24 SORA OSOs, FMECA matrix with AST closure, 4 UCA categories, ASTM F3269-17 RTA, and MATLAB/Simulink hooks.
 
     Structural table-aware AST validation is model-optional. When a SysML v2
     model is discoverable under repo_root (schema/*.sysml or .pipeline/schema.sysml),
@@ -1536,14 +1707,14 @@ def _validate_safety_matrix_pillars(content: str, ast_path_active: bool = False)
     if not (re.search(r'Safety\s+Constraints?', content, re.IGNORECASE) and re.search(r'\bSC-\d+\b|\$SC-\d+', content)):
         errors.append("Pillar 6 violation: Missing Formal Safety Constraints ($SC-1..N$).")
 
-    # Pillar 7: FMECA Criticality Matrix (15+ rows, RPN, Basis, Multiplicity)
+    # Pillar 7: FMECA Criticality Matrix (AST Closure, RPN, Basis, Universal 4 Dimensions)
     if not re.search(r'FMECA|Failure\s+Mode', content, re.IGNORECASE):
         errors.append("Pillar 7 violation: Missing FMECA Criticality Matrix.")
     else:
         fmeca_data = parse_fmeca_table(content)
         total_rows = fmeca_data["total_rows"]
-        if total_rows < 15:
-            errors.append(f"Pillar 7 violation: FMECA Criticality Matrix contains {total_rows} row(s); minimum required is 15 rows.")
+        if total_rows == 0:
+            errors.append("Pillar 7 violation: FMECA Criticality Matrix contains 0 rows.")
         if not (fmeca_data.get("has_rpn") or re.search(r'\bRPN\b|Risk\s+Priority\s+Number', content, re.IGNORECASE)):
             errors.append("Pillar 7 violation: FMECA table missing RPN (Risk Priority Number) calculation.")
 
@@ -1553,13 +1724,13 @@ def _validate_safety_matrix_pillars(content: str, ast_path_active: bool = False)
         elif total_rows > 0 and total_basis < total_rows:
             errors.append(f"Pillar 7 violation: FMECA Criticality Matrix contains {total_rows - total_basis} row(s) missing explicit Derivation Basis classification ('SSOT' / 'Derived').")
 
-        if total_rows > 0 and fmeca_data["components"]:
-            for comp, comp_rows in fmeca_data["components"].items():
-                if len(comp_rows) < 3:
-                    errors.append(
-                        f"Pillar 7 violation: FMECA component '{comp}' defines {len(comp_rows)} failure mode(s); "
-                        f"minimum required is 3 distinct failure modes across universal failure dimensions (Interface, State, Action, Resource)."
-                    )
+        if total_rows > 0:
+            missing_dims = check_failure_dimension_coverage(fmeca_data)
+            if missing_dims:
+                errors.append(
+                    f"Pillar 7 violation: FMECA table missing coverage for universal failure dimension(s): "
+                    f"{', '.join(missing_dims)} (expected Interface (Γ), State (Φ), Action (Ω), Resource (Ψ))."
+                )
 
         for row in fmeca_data["rows"]:
             row_id = row.get("failure_id") or row.get("failure_mode") or "Row"
@@ -1617,7 +1788,7 @@ def check_safety_integrity_and_sora_completeness(repo_root):
        - Pillar 4: Unsafe Control Actions (UCA-1..N) covering all 4 failure modes
        - Pillar 5: Loss Scenarios (LS-1..N) & Causal Factors
        - Pillar 6: Formal Safety Constraints (SC-1..N)
-       - Pillar 7: FMECA Criticality Matrix with 15+ component failure mode rows and RPN
+       - Pillar 7: FMECA Criticality Matrix with AST closure, universal 4 dimensions, and RPN
        - Pillar 8: SORA SAIL Risk Mitigations with all 24 OSOs (OSO-01 through OSO-24), GRC, and ARC
        - ASTM F3269-17 Run-Time Assurance (RTA) architecture
        - MATLAB / Simulink / Stateflow model integration baseline hooks.
@@ -1682,7 +1853,7 @@ def check_safety_integrity_and_sora_completeness(repo_root):
 
     if ast_report is not None:
         print(ast_report.format_cli_summary())
-    print("Success: Check 17 verified (Safety Integrity Quality Gate: 8 pillars, 24 SORA OSOs, 15+ FMECA rows, 4 UCA categories, ASTM F3269-17 RTA, and MATLAB/Simulink hooks).")
+    print("Success: Check 17 verified (Safety Integrity Quality Gate: 8 pillars, 24 SORA OSOs, FMECA matrix with AST closure, 4 UCA categories, ASTM F3269-17 RTA, and MATLAB/Simulink hooks).")
 
 def verify_upstream_blueprint_domain_cleanliness(target_dir):
     """Check 18: Upstream Blueprint Domain Cleanliness Gate.

@@ -236,8 +236,14 @@ class TestCheck17CartesianCompleteness60Rows(unittest.TestCase):
         return "\n".join(lines) + "\n"
 
     def _build_full_doc(self, uca_table):
+        sample_modes = [
+            "Interface Port Timeout",
+            "Statechart Transition Deadlock",
+            "Command Execution Jitter",
+            "Memory Buffer Overflow",
+        ]
         fmeca_rows = "\n".join(
-            f"| FM-{i:02d} | ControllerA | Failure Mode {i:02d} | Local Effect {i:02d} "
+            f"| FM-{i:02d} | ControllerA | {sample_modes[(i - 1) % len(sample_modes)]} {i:02d} | Local Effect {i:02d} "
             f"| System Effect {i:02d} | 4 | 2 | 2 | 16 | Redundant Channel {i:02d} | SSOT |"
             for i in range(1, 17)
         )

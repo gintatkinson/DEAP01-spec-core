@@ -154,44 +154,42 @@ def test_fmeca_missing_basis_rejected():
     )
 
 
-def test_fmeca_single_mode_per_component_rejected():
-    """Verify FMECA matrix where every component has exactly 1 single failure mode is rejected."""
+def test_fmeca_missing_universal_failure_dimension_rejected():
+    """Verify FMECA matrix missing a universal failure dimension is rejected."""
     complete_content = read_fixture("complete_stpa_matrix.md")
-    # Replace components so each row has a unique component (1 mode per component)
+    # Replace all failure modes with Interface-only modes
     lines = []
-    fm_counter = 1
     for line in complete_content.splitlines():
         if line.strip().startswith("| FM-"):
             cells = [c.strip() for c in line.strip().split("|")[1:-1]]
-            cells[1] = f"IsolatedUnit-{fm_counter:02d}"
-            fm_counter += 1
+            cells[2] = f"Bus Protocol Timeout {cells[0]}"
             lines.append("| " + " | ".join(cells) + " |")
         else:
             lines.append(line)
-    single_mode_content = "\n".join(lines)
+    single_dim_content = "\n".join(lines)
 
-    parsed = parse_fmeca_table(single_mode_content)
-    assert parsed["total_rows"] == 18
-    assert len(parsed["components"]) == 18
-    assert all(len(modes) == 1 for modes in parsed["components"].values())
-
-    errors = validate_safety_matrix_content(single_mode_content)
-    assert any("Pillar 7 violation: FMECA component" in err and "defines 1 failure mode" in err for err in errors), (
-        f"Expected failure mode multiplicity error, got:\n{errors}"
+    errors = validate_safety_matrix_content(single_dim_content)
+    assert any("Pillar 7 violation: FMECA table missing coverage for universal failure dimension(s)" in err for err in errors), (
+        f"Expected universal failure dimension error, got:\n{errors}"
     )
 
 
 def test_fmeca_row_count_validation():
-    """Verify FMECA matrix row count requires at least 15 component rows."""
+    """Verify FMECA matrix requires non-empty rows."""
     complete_content = read_fixture("complete_stpa_matrix.md")
     assert count_fmeca_rows(complete_content) == 18
     assert validate_safety_matrix_content(complete_content) == []
 
-    # Structurally reduced to 5 rows must be rejected
-    invalid_content_5 = _reduce_fmeca_rows(complete_content, keep=5)
-    assert count_fmeca_rows(invalid_content_5) == 5
-    errors = validate_safety_matrix_content(invalid_content_5)
-    assert any("FMECA Criticality Matrix contains 5 row(s); minimum required is 15 rows" in err for err in errors)
+    # Structurally reduced to 0 rows must be rejected
+    lines = []
+    for line in complete_content.splitlines():
+        if line.strip().startswith("| FM-"):
+            continue
+        lines.append(line)
+    empty_content = "\n".join(lines)
+    assert count_fmeca_rows(empty_content) == 0
+    errors = validate_safety_matrix_content(empty_content)
+    assert any("FMECA Criticality Matrix contains 0 rows" in err for err in errors)
 
 
 def test_uca_failure_mode_categories():

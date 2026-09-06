@@ -205,25 +205,81 @@ class TestFMECAASTCoverageGate(unittest.TestCase):
             f"Expected missing ActuatorUnit error, got: {errors}"
         )
 
-    def test_rejection_of_fmeca_where_component_has_under_3_failure_modes(self):
-        """Verify FMECA table where a component has < 3 failure modes is rejected."""
+    def test_rejection_of_fmeca_missing_universal_failure_dimension(self):
+        """Verify FMECA table missing any universal failure dimension (e.g. Resource) is rejected."""
         model = build_test_sysml_model(["FlightController", "NavigationSensor"], actions_per_part=3)
+        # comp_map has Interface, State, Action, but missing Resource
         comp_map = {
             "FlightController": [
-                (f"Mode {i}", 4, 2, 2, 16, "SSOT") for i in range(1, 14)
+                ("Interface Bus Timeout", 4, 2, 2, 16, "SSOT"),
+                ("RTOS Deadline Miss", 5, 2, 2, 20, "SSOT"),
+                ("Watchdog Reset Fail", 4, 2, 2, 16, "SSOT"),
             ],
-            # NavigationSensor has only 2 modes (< 3)
             "NavigationSensor": [
                 ("IMU Bias Drift", 4, 2, 2, 16, "SSOT"),
                 ("GPS Satellite Loss", 3, 3, 2, 18, "Derived"),
+                ("SPI Bus Timeout", 4, 2, 2, 16, "SSOT"),
             ],
         }
         doc = build_test_safety_document(comp_map, total_actions=6)
         errors = validate_safety_matrix_content(doc, model_text=model)
 
         self.assertTrue(
-            any("FMECA component 'NavigationSensor' defines 2 failure mode(s)" in err for err in errors),
-            f"Expected multiplicity error for NavigationSensor, got: {errors}"
+            any("missing coverage for universal failure dimension(s): Resource" in err for err in errors),
+            f"Expected missing Resource dimension error, got: {errors}"
+        )
+
+    def test_rejection_of_high_criticality_part_missing_port_mode(self):
+        """Verify high-criticality part (Crit >= 8) missing port-level failure mode for declared port is rejected."""
+        sysml_text = """package TestSystem {
+    part def Controller {
+        port control_bus_in : PortTypeA;
+        port telem_bus_out : PortTypeB;
+        hazard FatalHazard {
+            attribute severity : Integer = 9;
+        }
+        action def Action01;
+        action def Action02;
+        action def Action03;
+        action def Action04;
+    }
+    requirement def Req_SC_01;
+    requirement def Req_SC_02;
+    requirement def Req_SC_03;
+    requirement def Req_SC_04;
+    requirement def Req_SC_05;
+    requirement def Req_SC_06;
+    requirement def Req_SC_07;
+    requirement def Req_SC_08;
+    requirement def Req_SC_09;
+    requirement def Req_SC_10;
+    requirement def Req_SC_11;
+    requirement def Req_SC_12;
+    requirement def Req_SC_13;
+    requirement def Req_SC_14;
+    requirement def Req_SC_15;
+    requirement def Req_SC_16;
+    requirement def Req_SC_17;
+    requirement def Req_SC_18;
+    requirement def Req_SC_19;
+    requirement def Req_SC_20;
+}
+"""
+        # Only covers control_bus_in, missing telem_bus_out
+        comp_map = {
+            "Controller": [
+                ("control_bus_in Interface Packet Loss", 4, 2, 2, 16, "SSOT"),
+                ("State Transition Freeze", 5, 1, 2, 10, "SSOT"),
+                ("Command Rate Saturation", 3, 2, 2, 12, "Derived"),
+                ("CPU Memory Overflow", 4, 2, 2, 16, "Derived"),
+            ],
+        }
+        doc = build_test_safety_document(comp_map, total_actions=4)
+        errors = validate_safety_matrix_content(doc, model_text=sysml_text)
+
+        self.assertTrue(
+            any("High-criticality component 'Controller' (Crit=9 >= 8) missing port-level interface failure mode for declared port(s): telem_bus_out" in err for err in errors),
+            f"Expected missing telem_bus_out port error, got: {errors}"
         )
 
     def test_acceptance_of_complete_ast_anchored_multi_mode_fmeca(self):

@@ -15,6 +15,9 @@ Provides Canonical SysML v2 AST elements:
 - StateDef / SysMLStateDef: Defines statechart / state machine definitions
 - UseCaseDef / SysMLUseCaseDef: Defines formal use case definitions
 - ItemDef / SysMLItemDef: Defines data item / payload definitions
+- HazardDef / SysMLHazardDef: Defines hazard specifications with severity and port bindings
+- RiskDef / SysMLRiskDef: Defines risk specifications with severity and hazard references
+- ConnectionDef / SysMLConnectionDef: Defines connection specifications and topological links
 - PartDef / SysMLPart: Defines structural components (parts / blocks)
 - SysMLPackage: Top-level or nested SysML v2 package container
 - SysMLParser: Textual SysML v2 parser into canonical AST
@@ -316,11 +319,110 @@ class ItemDef:
         return "\n".join(lines)
 
 
+@dataclass
+class HazardDef:
+    name: str
+    doc: str = ""
+    severity: int = 1
+    source_port: str = ""
+    target_port: str = ""
+    attributes: Dict[str, Any] = field(default_factory=dict)
+    attribute_defs: List[AttributeDef] = field(default_factory=list)
+    part_ref: str = ""
+
+    def to_sysml(self, indent: int = 4) -> str:
+        pad = " " * indent
+        lines = []
+        if self.doc:
+            lines.append(f"{pad}doc /* {self.doc} */")
+        lines.append(f"{pad}hazard def {self.name} {{")
+        lines.append(f"{pad}    attribute severity : Integer = {self.severity};")
+        if self.part_ref:
+            lines.append(f"{pad}    attribute part_ref : String = \"{self.part_ref}\";")
+        if self.source_port:
+            lines.append(f"{pad}    attribute source_port : String = \"{self.source_port}\";")
+        if self.target_port:
+            lines.append(f"{pad}    attribute target_port : String = \"{self.target_port}\";")
+        for attr in (self.attribute_defs or []):
+            if attr.name not in ("severity", "part_ref", "source_port", "target_port"):
+                lines.append(attr.to_sysml(indent + 4))
+        lines.append(f"{pad}}}")
+        return "\n".join(lines)
+
+
+@dataclass
+class RiskDef:
+    name: str
+    doc: str = ""
+    severity: int = 1
+    source_port: str = ""
+    target_port: str = ""
+    attributes: Dict[str, Any] = field(default_factory=dict)
+    attribute_defs: List[AttributeDef] = field(default_factory=list)
+    hazard_ref: str = ""
+
+    def to_sysml(self, indent: int = 4) -> str:
+        pad = " " * indent
+        lines = []
+        if self.doc:
+            lines.append(f"{pad}doc /* {self.doc} */")
+        lines.append(f"{pad}risk def {self.name} {{")
+        lines.append(f"{pad}    attribute severity : Integer = {self.severity};")
+        if self.hazard_ref:
+            lines.append(f"{pad}    attribute hazard_ref : String = \"{self.hazard_ref}\";")
+        if self.source_port:
+            lines.append(f"{pad}    attribute source_port : String = \"{self.source_port}\";")
+        if self.target_port:
+            lines.append(f"{pad}    attribute target_port : String = \"{self.target_port}\";")
+        for attr in (self.attribute_defs or []):
+            if attr.name not in ("severity", "hazard_ref", "source_port", "target_port"):
+                lines.append(attr.to_sysml(indent + 4))
+        lines.append(f"{pad}}}")
+        return "\n".join(lines)
+
+
+@dataclass
+class ConnectionDef:
+    name: str
+    source_port: str = ""
+    target_port: str = ""
+    doc: str = ""
+    severity: int = 1
+    attributes: Dict[str, Any] = field(default_factory=dict)
+    attribute_defs: List[AttributeDef] = field(default_factory=list)
+
+    def to_sysml(self, indent: int = 4) -> str:
+        pad = " " * indent
+        lines = []
+        if self.doc:
+            lines.append(f"{pad}doc /* {self.doc} */")
+        if self.source_port and self.target_port:
+            lines.append(f"{pad}connection def {self.name} {{")
+            lines.append(f"{pad}    connect {self.source_port} to {self.target_port};")
+            if self.severity != 1:
+                lines.append(f"{pad}    attribute severity : Integer = {self.severity};")
+            for attr in (self.attribute_defs or []):
+                if attr.name not in ("source_port", "target_port", "severity"):
+                    lines.append(attr.to_sysml(indent + 4))
+            lines.append(f"{pad}}}")
+        else:
+            lines.append(f"{pad}connection def {self.name} {{")
+            if self.severity != 1:
+                lines.append(f"{pad}    attribute severity : Integer = {self.severity};")
+            for attr in (self.attribute_defs or []):
+                lines.append(attr.to_sysml(indent + 4))
+            lines.append(f"{pad}}}")
+        return "\n".join(lines)
+
+
 # Type aliases for consistency
 SysMLRequirementDef = RequirementDef
 SysMLStateDef = StateDef
 SysMLUseCaseDef = UseCaseDef
 SysMLItemDef = ItemDef
+SysMLHazardDef = HazardDef
+SysMLRiskDef = RiskDef
+SysMLConnectionDef = ConnectionDef
 
 
 @dataclass
@@ -340,6 +442,9 @@ class PartDef:
     requirements: List[RequirementDef] = field(default_factory=list)
     use_cases: List[UseCaseDef] = field(default_factory=list)
     item_defs: List[ItemDef] = field(default_factory=list)
+    hazards: List[HazardDef] = field(default_factory=list)
+    risks: List[RiskDef] = field(default_factory=list)
+    connections: List[ConnectionDef] = field(default_factory=list)
 
     def to_sysml(self, indent: int = 4) -> str:
         pad = " " * indent
@@ -372,6 +477,12 @@ class PartDef:
             lines.append(uc.to_sysml(indent + 4))
         for item in (self.item_defs or []):
             lines.append(item.to_sysml(indent + 4))
+        for hz in (self.hazards or []):
+            lines.append(hz.to_sysml(indent + 4))
+        for rk in (self.risks or []):
+            lines.append(rk.to_sysml(indent + 4))
+        for conn in (self.connections or []):
+            lines.append(conn.to_sysml(indent + 4))
         for subpart in (self.parts or []):
             lines.append(subpart.to_sysml(indent + 4))
 
@@ -400,6 +511,9 @@ class SysMLPackage:
     state_defs: List[StateDef] = field(default_factory=list)
     use_case_defs: List[UseCaseDef] = field(default_factory=list)
     item_defs: List[ItemDef] = field(default_factory=list)
+    hazard_defs: List[HazardDef] = field(default_factory=list)
+    risk_defs: List[RiskDef] = field(default_factory=list)
+    connection_defs: List[ConnectionDef] = field(default_factory=list)
 
     def to_sysml(self, indent: int = 0) -> str:
         pad = " " * indent
@@ -432,6 +546,12 @@ class SysMLPackage:
             lines.append(uc.to_sysml(indent + 4))
         for item in (self.item_defs or []):
             lines.append(item.to_sysml(indent + 4))
+        for hz in (self.hazard_defs or []):
+            lines.append(hz.to_sysml(indent + 4))
+        for rk in (self.risk_defs or []):
+            lines.append(rk.to_sysml(indent + 4))
+        for conn in (self.connection_defs or []):
+            lines.append(conn.to_sysml(indent + 4))
         for part in (self.part_defs or []):
             lines.append(part.to_sysml(indent + 4))
         for subpkg in (self.sub_packages or []):
@@ -456,6 +576,9 @@ class SysMLPackage:
             "state_defs": len(self.state_defs or []),
             "use_case_defs": len(self.use_case_defs or []),
             "item_defs": len(self.item_defs or []),
+            "hazard_defs": len(self.hazard_defs or []),
+            "risk_defs": len(self.risk_defs or []),
+            "connection_defs": len(self.connection_defs or []),
             "containers": len(self.part_defs or []),
             "lists": len(self.action_defs or []),
             "leaves": len(self.attribute_defs or []),
@@ -477,6 +600,9 @@ class SysMLPackage:
             counts["state_defs"] += len(p.states or [])
             counts["use_case_defs"] += len(p.use_cases or [])
             counts["item_defs"] += len(p.item_defs or [])
+            counts["hazard_defs"] += len(p.hazards or [])
+            counts["risk_defs"] += len(p.risks or [])
+            counts["connection_defs"] += len(p.connections or [])
             counts["leaves"] += len(p.attributes or [])
             counts["lists"] += len(p.actions or [])
             counts["part_defs"] += len(p.parts or [])
@@ -519,6 +645,12 @@ class SysMLPackage:
             names.append(uc.name)
         for item in (self.item_defs or []):
             names.append(item.name)
+        for hz in (self.hazard_defs or []):
+            names.append(hz.name)
+        for rk in (self.risk_defs or []):
+            names.append(rk.name)
+        for conn in (self.connection_defs or []):
+            names.append(conn.name)
 
         def _collect_part_names(p: PartDef):
             names.append(p.name)
@@ -546,6 +678,12 @@ class SysMLPackage:
                 names.append(uc.name)
             for item in (p.item_defs or []):
                 names.append(item.name)
+            for hz in (p.hazards or []):
+                names.append(hz.name)
+            for rk in (p.risks or []):
+                names.append(rk.name)
+            for conn in (p.connections or []):
+                names.append(conn.name)
             for sub_p in (p.parts or []):
                 _collect_part_names(sub_p)
 
@@ -556,6 +694,177 @@ class SysMLPackage:
             names.extend(sub.get_all_node_names())
 
         return sorted(list(set(names)))
+
+    def get_all_parts(self) -> List[PartDef]:
+        """Returns flat list of all PartDefs (including nested parts) across all packages."""
+        parts: List[PartDef] = []
+        def _collect(p: PartDef):
+            parts.append(p)
+            for sub_p in (p.parts or []):
+                _collect(sub_p)
+        for p in (self.part_defs or []):
+            _collect(p)
+        for sub in (self.sub_packages or []):
+            parts.extend(sub.get_all_parts())
+        return parts
+
+    def find_part(self, name: str) -> Optional[PartDef]:
+        """Finds a PartDef by name across the package hierarchy."""
+        for p in self.get_all_parts():
+            if p.name == name:
+                return p
+        return None
+
+    def get_all_connections(self) -> List[ConnectionDef]:
+        """Returns all ConnectionDefs declared at package and part levels."""
+        conns = list(self.connection_defs or [])
+        for p in self.get_all_parts():
+            conns.extend(p.connections or [])
+        for sub in (self.sub_packages or []):
+            conns.extend(sub.get_all_connections())
+        return conns
+
+    def get_all_hazards(self) -> List[HazardDef]:
+        """Returns all HazardDefs declared at package and part levels."""
+        hazards = list(self.hazard_defs or [])
+        for p in self.get_all_parts():
+            for h in (p.hazards or []):
+                if not h.part_ref:
+                    h.part_ref = p.name
+                hazards.append(h)
+        for sub in (self.sub_packages or []):
+            hazards.extend(sub.get_all_hazards())
+        return hazards
+
+    def get_all_risks(self) -> List[RiskDef]:
+        """Returns all RiskDefs declared at package and part levels."""
+        risks = list(self.risk_defs or [])
+        for p in self.get_all_parts():
+            risks.extend(p.risks or [])
+        for sub in (self.sub_packages or []):
+            risks.extend(sub.get_all_risks())
+        return risks
+
+    def get_connection_graph(self) -> Dict[str, List[str]]:
+        """
+        Builds port-to-port and part-to-part adjacency graph from all connection definitions.
+        Returns a dictionary mapping node identifier (port or part) to connected node identifiers.
+        """
+        adj: Dict[str, List[str]] = {}
+
+        def _add_edge(u: str, v: str):
+            if not u or not v:
+                return
+            if u not in adj:
+                adj[u] = []
+            if v not in adj[u]:
+                adj[u].append(v)
+            if v not in adj:
+                adj[v] = []
+            if u not in adj[v]:
+                adj[v].append(u)
+
+        for conn in self.get_all_connections():
+            src = conn.source_port
+            tgt = conn.target_port
+            if src and tgt:
+                _add_edge(src, tgt)
+                src_part = src.split('.', 1)[0] if '.' in src else src
+                tgt_part = tgt.split('.', 1)[0] if '.' in tgt else tgt
+                if src_part != tgt_part:
+                    _add_edge(src_part, tgt_part)
+
+        return adj
+
+    def get_connected_parts(self, part_name: str) -> List[str]:
+        """
+        Returns all part names directly or transitively connected to the given part.
+        """
+        graph = self.get_connection_graph()
+        visited = set()
+        queue = [part_name]
+        while queue:
+            curr = queue.pop(0)
+            if curr not in visited:
+                visited.add(curr)
+                for neighbor in graph.get(curr, []):
+                    neighbor_part = neighbor.split('.', 1)[0] if '.' in neighbor else neighbor
+                    if neighbor_part not in visited:
+                        queue.append(neighbor_part)
+        visited.discard(part_name)
+        return sorted(list(visited))
+
+    def get_reachable_hazards(self, part_or_port: str, max_depth: Optional[int] = None) -> List[HazardDef]:
+        """
+        Queries reachable hazards from a given part def or port via connected topology.
+        Traverses connected ports/parts up to max_depth (or unbounded if None).
+        """
+        all_hazards = self.get_all_hazards()
+        graph = self.get_connection_graph()
+
+        start_part = part_or_port.split('.', 1)[0] if '.' in part_or_port else part_or_port
+
+        visited_nodes = set()
+        queue = [(start_part, 0)]
+        if '.' in part_or_port:
+            queue.append((part_or_port, 0))
+
+        reachable_parts = {start_part}
+        reachable_ports = {part_or_port} if '.' in part_or_port else set()
+
+        part_obj = self.find_part(start_part)
+        if part_obj:
+            for p in (part_obj.ports or []):
+                p_fqn = f"{start_part}.{p.name}"
+                reachable_ports.add(p_fqn)
+                reachable_ports.add(p.name)
+                queue.append((p_fqn, 0))
+
+        while queue:
+            curr_node, depth = queue.pop(0)
+            if curr_node in visited_nodes:
+                continue
+            visited_nodes.add(curr_node)
+
+            curr_part = curr_node.split('.', 1)[0] if '.' in curr_node else curr_node
+            reachable_parts.add(curr_part)
+            if '.' in curr_node:
+                reachable_ports.add(curr_node)
+
+            if max_depth is not None and depth >= max_depth:
+                continue
+
+            for neighbor in graph.get(curr_node, []):
+                if neighbor not in visited_nodes:
+                    queue.append((neighbor, depth + 1))
+                    n_part = neighbor.split('.', 1)[0] if '.' in neighbor else neighbor
+                    reachable_parts.add(n_part)
+                    if '.' in neighbor:
+                        reachable_ports.add(neighbor)
+
+        result_hazards: List[HazardDef] = []
+        seen_names = set()
+
+        for h in all_hazards:
+            is_match = False
+            if h.part_ref and h.part_ref in reachable_parts:
+                is_match = True
+            elif h.source_port and (h.source_port in reachable_ports or h.source_port in reachable_parts or (h.source_port.split('.', 1)[0] in reachable_parts)):
+                is_match = True
+            elif h.target_port and (h.target_port in reachable_ports or h.target_port in reachable_parts or (h.target_port.split('.', 1)[0] in reachable_parts)):
+                is_match = True
+            elif not h.part_ref and not h.source_port and not h.target_port:
+                for r_part in reachable_parts:
+                    p_def = self.find_part(r_part)
+                    if p_def and any(ph.name == h.name for ph in (p_def.hazards or [])):
+                        is_match = True
+                        break
+
+            if is_match and h.name not in seen_names:
+                seen_names.add(h.name)
+                result_hazards.append(h)
+
+        return result_hazards
 
 
 class SysMLParser:
@@ -843,6 +1152,29 @@ class SysMLParser:
                     else:
                         container.item_defs.append(item_obj)
 
+                elif re.search(r'\bhazard\s+(?:def\s+)?([a-zA-Z0-9_]+)', header):
+                    h_obj = self._parse_hazard_block(d)
+                    if not h_obj.part_ref and isinstance(container, PartDef):
+                        h_obj.part_ref = container.name
+                    if isinstance(container, SysMLPackage):
+                        container.hazard_defs.append(h_obj)
+                    else:
+                        container.hazards.append(h_obj)
+
+                elif re.search(r'\brisk\s+(?:def\s+)?([a-zA-Z0-9_]+)', header):
+                    r_obj = self._parse_risk_block(d)
+                    if isinstance(container, SysMLPackage):
+                        container.risk_defs.append(r_obj)
+                    else:
+                        container.risks.append(r_obj)
+
+                elif re.search(r'\bconnection\s+(?:def\s+)?([a-zA-Z0-9_]+)', header):
+                    conn_obj = self._parse_connection_block(d)
+                    if isinstance(container, SysMLPackage):
+                        container.connection_defs.append(conn_obj)
+                    else:
+                        container.connections.append(conn_obj)
+
             elif d["type"] == "statement":
                 stmt = d["statement"]
                 doc = d.get("doc", "")
@@ -897,6 +1229,37 @@ class SysMLParser:
                         container.requirement_defs.append(req_obj)
                     else:
                         container.requirements.append(req_obj)
+
+                elif re.search(r'\bhazard\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt):
+                    h_obj = self._parse_hazard_stmt(stmt, doc)
+                    if not h_obj.part_ref and isinstance(container, PartDef):
+                        h_obj.part_ref = container.name
+                    if isinstance(container, SysMLPackage):
+                        container.hazard_defs.append(h_obj)
+                    else:
+                        container.hazards.append(h_obj)
+
+                elif re.search(r'\brisk\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt):
+                    r_obj = self._parse_risk_stmt(stmt, doc)
+                    if isinstance(container, SysMLPackage):
+                        container.risk_defs.append(r_obj)
+                    else:
+                        container.risks.append(r_obj)
+
+                elif re.search(r'\bconnection\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt):
+                    conn_obj = self._parse_connection_stmt(stmt, doc)
+                    if isinstance(container, SysMLPackage):
+                        container.connection_defs.append(conn_obj)
+                    else:
+                        container.connections.append(conn_obj)
+
+                elif re.search(r'\bconnect\b', stmt):
+                    conn_obj = self._parse_connect_stmt(stmt, doc)
+                    if conn_obj:
+                        if isinstance(container, SysMLPackage):
+                            container.connection_defs.append(conn_obj)
+                        else:
+                            container.connections.append(conn_obj)
 
     def _parse_part_block(self, decl: Dict[str, Any]) -> PartDef:
         header = decl["header"]
@@ -1328,3 +1691,388 @@ class SysMLParser:
                     attributes.append(self._parse_attribute_stmt(stmt, d.get("doc", "")))
 
         return ItemDef(name=name, doc=doc, attributes=attributes)
+
+    @classmethod
+    def query_reachable_hazards(cls, package: SysMLPackage, part_or_port: str, max_depth: Optional[int] = None) -> List[HazardDef]:
+        """Class method helper to query reachable hazards from a package AST."""
+        return package.get_reachable_hazards(part_or_port, max_depth=max_depth)
+
+    def _extract_severity(self, text: str, doc: str = "", default: int = 1) -> int:
+        """Extracts integer severity rating from attribute definitions, annotations, or doc comments."""
+        m = re.search(r'\bseverity\b\s*(?::\s*[a-zA-Z0-9_]+\s*)?=\s*([0-9]+)', text, re.IGNORECASE)
+        if m:
+            try:
+                return int(m.group(1))
+            except ValueError:
+                pass
+
+        full_text = f"{text} {doc}"
+        m_doc = re.search(r'\bseverity\s*[:=]\s*([0-9]+)', full_text, re.IGNORECASE)
+        if m_doc:
+            try:
+                return int(m_doc.group(1))
+            except ValueError:
+                pass
+
+        m_bracket = re.search(r'\[(?:severity|s)\s*[:=]\s*([0-9]+)\]', full_text, re.IGNORECASE)
+        if m_bracket:
+            try:
+                return int(m_bracket.group(1))
+            except ValueError:
+                pass
+
+        return default
+
+    def _parse_hazard_block(self, decl: Dict[str, Any]) -> HazardDef:
+        header = decl["header"]
+        m = re.search(r'\bhazard\s+(?:def\s+)?([a-zA-Z0-9_]+)', header)
+        name = m.group(1) if m else "Hazard"
+        doc = decl.get("doc", "")
+        attributes: Dict[str, Any] = {}
+        attribute_defs: List[AttributeDef] = []
+        source_port = ""
+        target_port = ""
+        part_ref = ""
+
+        body_decls = self._scan_declarations(decl["body"])
+        for d in body_decls:
+            if d["type"] == "statement":
+                stmt = d["statement"]
+                stmt_doc = d.get("doc", "")
+                if re.search(r'\battribute\s+', stmt):
+                    attr = self._parse_attribute_stmt(stmt, stmt_doc)
+                    attribute_defs.append(attr)
+                    val = attr.default_value if attr.default_value is not None else attr.type_name
+                    attributes[attr.name] = val
+                    if attr.name == "severity" and attr.default_value:
+                        try:
+                            attributes["severity"] = int(attr.default_value)
+                        except ValueError:
+                            pass
+                    elif attr.name in ("source_port", "source", "port") and attr.default_value:
+                        source_port = attr.default_value.strip('"\'; ')
+                    elif attr.name in ("target_port", "target") and attr.default_value:
+                        target_port = attr.default_value.strip('"\'; ')
+                    elif attr.name in ("part_ref", "part", "subsystem") and attr.default_value:
+                        part_ref = attr.default_value.strip('"\'; ')
+                elif re.search(r'\b(?:part_ref|part|subject)\s*[:=]\s*["\']?([^"\';\s]+)', stmt):
+                    m_part = re.search(r'\b(?:part_ref|part|subject)\s*[:=]\s*["\']?([^"\';\s]+)', stmt)
+                    if m_part:
+                        part_ref = m_part.group(1)
+                elif re.search(r'\b(?:source_port|source|port)\s*[:=]\s*["\']?([^"\';\s]+)', stmt):
+                    m_p = re.search(r'\b(?:source_port|source|port)\s*[:=]\s*["\']?([^"\';\s]+)', stmt)
+                    if m_p:
+                        source_port = m_p.group(1)
+                elif re.search(r'\b(?:target_port|target)\s*[:=]\s*["\']?([^"\';\s]+)', stmt):
+                    m_p = re.search(r'\b(?:target_port|target)\s*[:=]\s*["\']?([^"\';\s]+)', stmt)
+                    if m_p:
+                        target_port = m_p.group(1)
+
+        severity = 1
+        if "severity" in attributes:
+            try:
+                severity = int(attributes["severity"])
+            except (ValueError, TypeError):
+                severity = self._extract_severity(decl["body"], doc, default=1)
+        else:
+            severity = self._extract_severity(decl["body"], doc, default=1)
+
+        if source_port:
+            attributes["source_port"] = source_port
+        if target_port:
+            attributes["target_port"] = target_port
+        if part_ref:
+            attributes["part_ref"] = part_ref
+
+        return HazardDef(
+            name=name,
+            doc=doc,
+            severity=severity,
+            source_port=source_port,
+            target_port=target_port,
+            attributes=attributes,
+            attribute_defs=attribute_defs,
+            part_ref=part_ref,
+        )
+
+    def _parse_hazard_stmt(self, stmt: str, doc: str = "") -> HazardDef:
+        m = re.search(r'\bhazard\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt)
+        name = m.group(1) if m else "Hazard"
+        severity = self._extract_severity(stmt, doc, default=1)
+        attributes: Dict[str, Any] = {"severity": severity}
+        source_port = ""
+        target_port = ""
+        part_ref = ""
+
+        m_src = re.search(r'\b(?:source_port|source|port)\s*[:=]\s*["\']?([^"\';\s]+)', stmt)
+        if m_src:
+            source_port = m_src.group(1)
+            attributes["source_port"] = source_port
+        m_tgt = re.search(r'\b(?:target_port|target)\s*[:=]\s*["\']?([^"\';\s]+)', stmt)
+        if m_tgt:
+            target_port = m_tgt.group(1)
+            attributes["target_port"] = target_port
+        m_part = re.search(r'\b(?:part_ref|part|subject)\s*[:=]\s*["\']?([^"\';\s]+)', stmt)
+        if m_part:
+            part_ref = m_part.group(1)
+            attributes["part_ref"] = part_ref
+
+        return HazardDef(
+            name=name,
+            doc=doc,
+            severity=severity,
+            source_port=source_port,
+            target_port=target_port,
+            attributes=attributes,
+            part_ref=part_ref,
+        )
+
+    def _parse_risk_block(self, decl: Dict[str, Any]) -> RiskDef:
+        header = decl["header"]
+        m = re.search(r'\brisk\s+(?:def\s+)?([a-zA-Z0-9_]+)', header)
+        name = m.group(1) if m else "Risk"
+        doc = decl.get("doc", "")
+        attributes: Dict[str, Any] = {}
+        attribute_defs: List[AttributeDef] = []
+        source_port = ""
+        target_port = ""
+        hazard_ref = ""
+
+        body_decls = self._scan_declarations(decl["body"])
+        for d in body_decls:
+            if d["type"] == "statement":
+                stmt = d["statement"]
+                stmt_doc = d.get("doc", "")
+                if re.search(r'\battribute\s+', stmt):
+                    attr = self._parse_attribute_stmt(stmt, stmt_doc)
+                    attribute_defs.append(attr)
+                    val = attr.default_value if attr.default_value is not None else attr.type_name
+                    attributes[attr.name] = val
+                    if attr.name == "severity" and attr.default_value:
+                        try:
+                            attributes["severity"] = int(attr.default_value)
+                        except ValueError:
+                            pass
+                    elif attr.name in ("hazard_ref", "hazard") and attr.default_value:
+                        hazard_ref = attr.default_value.strip('"\'; ')
+                    elif attr.name in ("source_port", "source") and attr.default_value:
+                        source_port = attr.default_value.strip('"\'; ')
+                    elif attr.name in ("target_port", "target") and attr.default_value:
+                        target_port = attr.default_value.strip('"\'; ')
+                elif re.search(r'\b(?:hazard_ref|hazard)\s*[:=]\s*["\']?([^"\';\s]+)', stmt):
+                    m_haz = re.search(r'\b(?:hazard_ref|hazard)\s*[:=]\s*["\']?([^"\';\s]+)', stmt)
+                    if m_haz:
+                        hazard_ref = m_haz.group(1)
+
+        severity = 1
+        if "severity" in attributes:
+            try:
+                severity = int(attributes["severity"])
+            except (ValueError, TypeError):
+                severity = self._extract_severity(decl["body"], doc, default=1)
+        else:
+            severity = self._extract_severity(decl["body"], doc, default=1)
+
+        if source_port:
+            attributes["source_port"] = source_port
+        if target_port:
+            attributes["target_port"] = target_port
+        if hazard_ref:
+            attributes["hazard_ref"] = hazard_ref
+
+        return RiskDef(
+            name=name,
+            doc=doc,
+            severity=severity,
+            source_port=source_port,
+            target_port=target_port,
+            attributes=attributes,
+            attribute_defs=attribute_defs,
+            hazard_ref=hazard_ref,
+        )
+
+    def _parse_risk_stmt(self, stmt: str, doc: str = "") -> RiskDef:
+        m = re.search(r'\brisk\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt)
+        name = m.group(1) if m else "Risk"
+        severity = self._extract_severity(stmt, doc, default=1)
+        attributes: Dict[str, Any] = {"severity": severity}
+        hazard_ref = ""
+        source_port = ""
+        target_port = ""
+
+        m_haz = re.search(r'\b(?:hazard_ref|hazard)\s*[:=]\s*["\']?([^"\';\s]+)', stmt)
+        if m_haz:
+            hazard_ref = m_haz.group(1)
+            attributes["hazard_ref"] = hazard_ref
+
+        return RiskDef(
+            name=name,
+            doc=doc,
+            severity=severity,
+            source_port=source_port,
+            target_port=target_port,
+            attributes=attributes,
+            hazard_ref=hazard_ref,
+        )
+
+    def _parse_connection_block(self, decl: Dict[str, Any]) -> ConnectionDef:
+        header = decl["header"]
+        m = re.search(r'\bconnection\s+(?:def\s+)?([a-zA-Z0-9_]+)', header)
+        name = m.group(1) if m else "Connection"
+        doc = decl.get("doc", "")
+
+        source_port = ""
+        target_port = ""
+        attributes: Dict[str, Any] = {}
+        attribute_defs: List[AttributeDef] = []
+
+        m_to = re.search(r'\bconnect\s+([a-zA-Z0-9_\.]+)\s+to\s+([a-zA-Z0-9_\.]+)', header)
+        if m_to:
+            source_port = m_to.group(1)
+            target_port = m_to.group(2)
+
+        body_decls = self._scan_declarations(decl["body"])
+        for d in body_decls:
+            if d["type"] == "statement":
+                stmt = d["statement"]
+                stmt_doc = d.get("doc", "")
+                if re.search(r'\bconnect\b', stmt):
+                    sub_conn = self._parse_connect_stmt(stmt, stmt_doc)
+                    if sub_conn:
+                        if not source_port:
+                            source_port = sub_conn.source_port
+                        if not target_port:
+                            target_port = sub_conn.target_port
+                elif re.search(r'\battribute\s+', stmt):
+                    attr = self._parse_attribute_stmt(stmt, stmt_doc)
+                    attribute_defs.append(attr)
+                    val = attr.default_value if attr.default_value is not None else attr.type_name
+                    attributes[attr.name] = val
+                    if attr.name in ("source_port", "source", "from", "src", "end1") and attr.default_value:
+                        source_port = attr.default_value.strip('"\'; ')
+                    elif attr.name in ("target_port", "target", "to", "dst", "end2") and attr.default_value:
+                        target_port = attr.default_value.strip('"\'; ')
+                elif re.search(r'\b(?:source|from|end1|source_port)\s*[:=]\s*["\']?([^"\';\s]+)', stmt):
+                    m_src = re.search(r'\b(?:source|from|end1|source_port)\s*[:=]\s*["\']?([^"\';\s]+)', stmt)
+                    if m_src:
+                        source_port = m_src.group(1)
+                elif re.search(r'\b(?:target|to|end2|target_port)\s*[:=]\s*["\']?([^"\';\s]+)', stmt):
+                    m_dst = re.search(r'\b(?:target|to|end2|target_port)\s*[:=]\s*["\']?([^"\';\s]+)', stmt)
+                    if m_dst:
+                        target_port = m_dst.group(1)
+                elif re.search(r'\bend\s+(?:port\s+)?([a-zA-Z0-9_\.]+)', stmt):
+                    m_end = re.search(r'\bend\s+(?:port\s+)?([a-zA-Z0-9_\.]+)', stmt)
+                    if m_end:
+                        if not source_port:
+                            source_port = m_end.group(1)
+                        elif not target_port:
+                            target_port = m_end.group(1)
+
+        severity = self._extract_severity(decl["body"], doc, default=1)
+        if "severity" in attributes:
+            try:
+                severity = int(attributes["severity"])
+            except (ValueError, TypeError):
+                pass
+
+        if source_port:
+            attributes["source_port"] = source_port
+        if target_port:
+            attributes["target_port"] = target_port
+
+        return ConnectionDef(
+            name=name,
+            source_port=source_port,
+            target_port=target_port,
+            doc=doc,
+            severity=severity,
+            attributes=attributes,
+            attribute_defs=attribute_defs,
+        )
+
+    def _parse_connection_stmt(self, stmt: str, doc: str = "") -> ConnectionDef:
+        m = re.search(r'\bconnection\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt)
+        name = m.group(1) if m else "Connection"
+        severity = self._extract_severity(stmt, doc, default=1)
+        source_port = ""
+        target_port = ""
+        attributes: Dict[str, Any] = {"severity": severity}
+
+        m_to = re.search(r'\bconnect\s+([a-zA-Z0-9_\.]+)\s+to\s+([a-zA-Z0-9_\.]+)', stmt)
+        if m_to:
+            source_port = m_to.group(1)
+            target_port = m_to.group(2)
+        else:
+            m_src = re.search(r'\b(?:source|source_port|from)\s*[:=]\s*["\']?([^"\';\s]+)', stmt)
+            if m_src:
+                source_port = m_src.group(1)
+            m_dst = re.search(r'\b(?:target|target_port|to)\s*[:=]\s*["\']?([^"\';\s]+)', stmt)
+            if m_dst:
+                target_port = m_dst.group(1)
+
+        if source_port:
+            attributes["source_port"] = source_port
+        if target_port:
+            attributes["target_port"] = target_port
+
+        return ConnectionDef(
+            name=name,
+            source_port=source_port,
+            target_port=target_port,
+            doc=doc,
+            severity=severity,
+            attributes=attributes,
+        )
+
+    def _parse_connect_stmt(self, stmt: str, doc: str = "") -> Optional[ConnectionDef]:
+        name = ""
+        name_m = re.search(r'\bconnection\s+([a-zA-Z0-9_]+)', stmt)
+        if name_m:
+            name = name_m.group(1)
+
+        source_port = ""
+        target_port = ""
+
+        m_to = re.search(r'\bconnect\s+([a-zA-Z0-9_\.]+)\s+to\s+([a-zA-Z0-9_\.]+)', stmt)
+        if m_to:
+            source_port = m_to.group(1)
+            target_port = m_to.group(2)
+        else:
+            m_arrow = re.search(r'\bconnect\s+([a-zA-Z0-9_\.]+)\s*->\s*([a-zA-Z0-9_\.]+)', stmt)
+            if m_arrow:
+                source_port = m_arrow.group(1)
+                target_port = m_arrow.group(2)
+            else:
+                m_paren = re.search(r'\bconnect\s*\(\s*([a-zA-Z0-9_\.]+)\s*,\s*([a-zA-Z0-9_\.]+)\s*\)', stmt)
+                if m_paren:
+                    source_port = m_paren.group(1)
+                    target_port = m_paren.group(2)
+                else:
+                    m_comma = re.search(r'\bconnect\s+([a-zA-Z0-9_\.]+)\s*,\s*([a-zA-Z0-9_\.]+)', stmt)
+                    if m_comma:
+                        source_port = m_comma.group(1)
+                        target_port = m_comma.group(2)
+
+        if not name:
+            if source_port and target_port:
+                src_clean = source_port.replace('.', '_')
+                dst_clean = target_port.replace('.', '_')
+                name = f"conn_{src_clean}_to_{dst_clean}"
+            else:
+                name = "Connection"
+
+        severity = self._extract_severity(stmt, doc, default=1)
+        attributes: Dict[str, Any] = {"severity": severity}
+        if source_port:
+            attributes["source_port"] = source_port
+        if target_port:
+            attributes["target_port"] = target_port
+
+        return ConnectionDef(
+            name=name,
+            source_port=source_port,
+            target_port=target_port,
+            doc=doc,
+            severity=severity,
+            attributes=attributes,
+        )
