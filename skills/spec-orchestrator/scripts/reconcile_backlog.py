@@ -535,8 +535,11 @@ class GitLabV4Provider:
                 pass
             try:
                 status_res = subprocess.run([glab_path, "auth", "status", "--show-token"], capture_output=True, text=True, timeout=5)
-                if status_res.returncode == 0 and status_res.stdout:
-                    m = re.search(r'Token(?:\s+found\s+in\s+operating\s+system\s+keyring)?:\s*(\S+)', status_res.stdout)
+                if status_res.returncode == 0:
+                    stdout_str = status_res.stdout if isinstance(status_res.stdout, str) else ""
+                    stderr_str = status_res.stderr if isinstance(status_res.stderr, str) else ""
+                    output = (stdout_str or "") + "\n" + (stderr_str or "")
+                    m = re.search(r'Token(?:\s+found\s+in\s+operating\s+system\s+keyring)?:\s*(\S+)', output)
                     if m:
                         return m.group(1).strip(), "PRIVATE-TOKEN"
             except Exception:

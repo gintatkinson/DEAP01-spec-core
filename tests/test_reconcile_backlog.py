@@ -1165,6 +1165,7 @@ class TestGitLabKeyringTokenExtraction(unittest.TestCase):
         mock_status = MagicMock()
         mock_status.returncode = 0
         mock_status.stdout = "  ✓ Token: glpat-standard-token-xyz789\n"
+        mock_status.stderr = ""
 
         mock_run.side_effect = [mock_auth_token, mock_status]
 
@@ -1176,6 +1177,35 @@ class TestGitLabKeyringTokenExtraction(unittest.TestCase):
             )
             self.assertEqual(provider.token, "glpat-standard-token-xyz789")
             self.assertEqual(provider.token_type, "PRIVATE-TOKEN")
+
+    @patch("shutil.which", return_value="/usr/local/bin/glab")
+    @patch("subprocess.run")
+    def test_resolve_token_glab_auth_status_stderr_output(self, mock_run, mock_which):
+        mock_auth_token = MagicMock()
+        mock_auth_token.returncode = 1
+        mock_auth_token.stdout = ""
+        mock_auth_token.stderr = "unknown command 'token'"
+
+        mock_status = MagicMock()
+        mock_status.returncode = 0
+        mock_status.stdout = ""
+        mock_status.stderr = (
+            "gitlab.com\n"
+            "  ✓ Logged in to gitlab.com as testuser (~/.config/glab-cli/config.yml)\n"
+            "  ✓ Token found in operating system keyring: glpat-keyring-token-stderr123\n"
+        )
+
+        mock_run.side_effect = [mock_auth_token, mock_status]
+
+        with patch.dict(os.environ, {}, clear=True):
+            provider = GitLabV4Provider(
+                server_url="https://gitlab.example.com",
+                project_id="org/repo",
+                workspace_dir=self.workspace_dir,
+            )
+            self.assertEqual(provider.token, "glpat-keyring-token-stderr123")
+            self.assertEqual(provider.token_type, "PRIVATE-TOKEN")
+
 
 
 class TestPlaceholderIssueIDRecognition(unittest.TestCase):
