@@ -4013,6 +4013,62 @@ def resolve_epic_reference(epic_ref, epic_alias_map, epic_id_to_norm, rules=None
     else:
         ref_str = str(epic_ref).strip().strip('"\'')
 
+    # Parse Markdown link syntax: [Link Text](path)
+    link_match = re.search(r'\[([^\]]+)\]\(([^)]+)\)', ref_str)
+    if link_match:
+        link_text = link_match.group(1).strip()
+        link_url = link_match.group(2).strip()
+
+        # 1. Check issue ID from link_text if present against epic_id_to_norm
+        issue_id_match = re.search(r'#?(\d+)\b', link_text)
+        if issue_id_match:
+            cand_id = issue_id_match.group(1)
+            if cand_id in epic_id_to_norm:
+                return epic_id_to_norm[cand_id]
+            if int(cand_id) in epic_id_to_norm:
+                return epic_id_to_norm[int(cand_id)]
+
+        # 2. Extract filename slug from link_url (stripping .md) and check against epic_alias_map
+        url_clean = link_url.split('#')[0].split('?')[0].strip()
+        url_fn = os.path.basename(url_clean)
+        if url_fn.endswith('.md'):
+            url_fn = url_fn[:-3]
+        url_slug = url_fn.strip()
+        if url_slug:
+            if url_slug.lower() in epic_alias_map:
+                return epic_alias_map[url_slug.lower()]
+            norm_slug = normalize_title(url_slug, rules)
+            if norm_slug in epic_alias_map:
+                return epic_alias_map[norm_slug]
+            slug_space = url_slug.lower().replace("-", " ")
+            if slug_space in epic_alias_map:
+                return epic_alias_map[slug_space]
+
+        # 3. Use link_text (and cleaned title without leading issue numbers) for alias matching
+        if link_text:
+            if link_text.lower() in epic_alias_map:
+                return epic_alias_map[link_text.lower()]
+            norm_text = normalize_title(link_text, rules)
+            if norm_text in epic_alias_map:
+                return epic_alias_map[norm_text]
+            text_space = link_text.lower().replace("-", " ")
+            if text_space in epic_alias_map:
+                return epic_alias_map[text_space]
+
+            cleaned_title = re.sub(r'^(?:epic\s*)?#?\d+\s*[-:]?\s*', '', link_text, flags=re.IGNORECASE).strip()
+            if cleaned_title:
+                if cleaned_title.lower() in epic_alias_map:
+                    return epic_alias_map[cleaned_title.lower()]
+                norm_clean = normalize_title(cleaned_title, rules)
+                if norm_clean in epic_alias_map:
+                    return epic_alias_map[norm_clean]
+                clean_space = cleaned_title.lower().replace("-", " ")
+                if clean_space in epic_alias_map:
+                    return epic_alias_map[clean_space]
+                ref_str = cleaned_title
+            else:
+                ref_str = link_text
+
     clean_ref = ref_str
     if clean_ref.startswith('#'):
         clean_ref = clean_ref[1:].strip()

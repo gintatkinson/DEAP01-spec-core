@@ -30,6 +30,7 @@ from reconcile_backlog import (
     DEFAULT_GITLAB_TRACKER_RULES,
     is_placeholder_issue_id,
     resolve_spec_issue_number,
+    resolve_epic_reference,
 )
 
 class TestExpandRelativeLinksForTracker(unittest.TestCase):
@@ -1444,6 +1445,58 @@ class TestPlaceholderIssueIDRecognition(unittest.TestCase):
         finally:
             if os.path.exists(temp_path):
                 os.remove(temp_path)
+
+
+class TestResolveEpicReferenceMarkdownLinks(unittest.TestCase):
+    def setUp(self):
+        self.rules = {
+            "tracker_rules": {
+                "prefix_normalization_regex": r"^(epic|feature|feat|user[- ]story|use[- ]case|us|uc)[s]?(?:[- ]*\d+\s*[:\-]?|:)\s*",
+                "title_extraction_prefixes_regex": r"(?:Feature\s+\d+\s*:\s*|Use\s+Case\s+\d+\s*:\s*|User\s+Story\s+\d+\s*:\s*)?",
+            }
+        }
+        self.canonical_norm = "avenger5 control actions command authorization semantics"
+        self.epic_id_to_norm = {
+            "26": self.canonical_norm,
+            26: self.canonical_norm,
+        }
+        self.epic_alias_map = {
+            "epic-01-avenger5-control-actions": self.canonical_norm,
+            "epic-01": self.canonical_norm,
+            self.canonical_norm: self.canonical_norm,
+            "avenger5 control actions": self.canonical_norm,
+        }
+
+    def test_markdown_link_with_issue_id_and_relative_path(self):
+        ref = "[26 - AVENGER5 Control Actions & Command Authorization Semantics](../epics/epic-01-avenger5-control-actions.md)"
+        resolved = resolve_epic_reference(ref, self.epic_alias_map, self.epic_id_to_norm, self.rules)
+        self.assertEqual(resolved, self.canonical_norm)
+
+    def test_markdown_link_with_title_and_filename_slug(self):
+        ref = "[AVENGER5 Control Actions](epic-01-avenger5-control-actions.md)"
+        # Test without issue ID in map
+        resolved = resolve_epic_reference(ref, self.epic_alias_map, {}, self.rules)
+        self.assertEqual(resolved, self.canonical_norm)
+
+    def test_markdown_link_with_hash_issue_id(self):
+        ref = "[#26](epic-01.md)"
+        resolved = resolve_epic_reference(ref, self.epic_alias_map, self.epic_id_to_norm, self.rules)
+        self.assertEqual(resolved, self.canonical_norm)
+
+    def test_markdown_link_with_hash_issue_id_slug_fallback_when_id_missing(self):
+        ref = "[#26](epic-01.md)"
+        resolved = resolve_epic_reference(ref, self.epic_alias_map, {}, self.rules)
+        self.assertEqual(resolved, self.canonical_norm)
+
+    def test_markdown_link_with_unmatched_slug_cleaned_title_fallback(self):
+        ref = "[26 - AVENGER5 Control Actions & Command Authorization Semantics](unmatched-slug.md)"
+        resolved = resolve_epic_reference(ref, self.epic_alias_map, {}, self.rules)
+        self.assertEqual(resolved, self.canonical_norm)
+
+    def test_table_row_markdown_link(self):
+        ref = "| **Parent Epic** | [26 - AVENGER5 Control Actions & Command Authorization Semantics](../epics/epic-01-avenger5-control-actions.md) |"
+        resolved = resolve_epic_reference(ref, self.epic_alias_map, self.epic_id_to_norm, self.rules)
+        self.assertEqual(resolved, self.canonical_norm)
 
 
 if __name__ == "__main__":
