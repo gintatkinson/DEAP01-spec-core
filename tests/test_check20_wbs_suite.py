@@ -7,14 +7,20 @@ in scripts/verify_downstream_baseline.py.
 
 import json
 import os
+import re
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 
 repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if repo_root not in sys.path:
     sys.path.insert(0, repo_root)
 
+from scripts.generate_wbs_suite import (
+    WBSAstIngestionEngine,
+    WBSSuiteSynthesizer,
+)
 from scripts.verify_downstream_baseline import (
     check_wbs_suite_integrity,
     _check_wbs_suite_integrity,
@@ -243,6 +249,162 @@ class TestCheck20WBSSuiteIntegrity(unittest.TestCase):
     def test_run_all_checks_passes_on_repo(self):
         """Verify run_all_checks passes on the active repository."""
         run_all_checks(repo_root)
+
+    def _setup_mock_spec_workspace(self, workspace_path: Path) -> None:
+        """Helper to scaffold a complete mock specification workspace."""
+        (workspace_path / "schema").mkdir(parents=True, exist_ok=True)
+        (workspace_path / "schema" / "model.sysml").write_text("// SysML SSOT", encoding="utf-8")
+
+        conops_dir = workspace_path / "docs" / "conops"
+        conops_dir.mkdir(parents=True, exist_ok=True)
+        (conops_dir / "CONOPS.md").write_text("# Concept of Operations (ConOps)\n", encoding="utf-8")
+        (conops_dir / "MISSION_INTENT.md").write_text("# Tactical Mission Intent\n", encoding="utf-8")
+
+        safety_dir = workspace_path / "docs" / "safety"
+        safety_dir.mkdir(parents=True, exist_ok=True)
+        (safety_dir / "STPA_MATRIX.md").write_text("# Level 1B Safety Matrix\n", encoding="utf-8")
+
+        icd_dir = workspace_path / "docs" / "interfaces"
+        icd_dir.mkdir(parents=True, exist_ok=True)
+        (icd_dir / "ICD_01_SYSTEM_INTERFACE_MATRIX.md").write_text("# System Interface Matrix\n", encoding="utf-8")
+        (icd_dir / "ICD_02_MASTER_SIGNAL_DICTIONARY.md").write_text("# Signal Flow Dictionary\n", encoding="utf-8")
+
+        epics_dir = workspace_path / "docs" / "epics"
+        epics_dir.mkdir(parents=True, exist_ok=True)
+        (epics_dir / "epic-01-navigation.md").write_text(
+            "| Attribute | Detail |\n| :--- | :--- |\n| **Epic ID** | EPIC-01 |\n\n# Epic: Navigation\n\n**Subsystem:** Navigation\n",
+            encoding="utf-8",
+        )
+
+        feat_dir = workspace_path / "docs" / "features"
+        feat_dir.mkdir(parents=True, exist_ok=True)
+        (feat_dir / "feat-01-state-estimation.md").write_text(
+            "| Attribute | Detail |\n| :--- | :--- |\n| **Feature ID** | FEAT-01 |\n\n"
+            "# Feature: State Estimation\n\n**Subsystem:** Navigation\n**Epic:** EPIC-01\n"
+            "SysML Anchor: `SysSSOT::Nav::StateEstimator`\nSafety constraints: **SC-01**\n\n"
+            "- Given valid sensor data, When sample arrives, Then update state.\n",
+            encoding="utf-8",
+        )
+
+        us_dir = workspace_path / "docs" / "user-stories"
+        us_dir.mkdir(parents=True, exist_ok=True)
+        (us_dir / "us-01.md").write_text("# User Story: Ingestion\nRealizes: FEAT-01\n", encoding="utf-8")
+
+        uc_dir = workspace_path / "docs" / "use-cases"
+        uc_dir.mkdir(parents=True, exist_ok=True)
+        (uc_dir / "uc-01.md").write_text("# Use Case: Flight\nRealizes: FEAT-01\n", encoding="utf-8")
+
+    def test_wbs_generator_emits_document_relative_markdown_links(self):
+        """Verify all markdown links in WBS_DELIVERABLES_SUITE.md are document-relative (Issue #240)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ws = Path(tmpdir)
+            self._setup_mock_spec_workspace(ws)
+
+            engine = WBSAstIngestionEngine(workspace_path=ws)
+            engine.run_ingestion()
+            synthesizer = WBSSuiteSynthesizer(engine)
+            md_path, _, _ = synthesizer.synthesize_all()
+
+            content = md_path.read_text(encoding="utf-8")
+
+            # Find all markdown links [text](href)
+            md_links = re.findall(r"\[([^\]]+)\]\(([^)]+)\)", content)
+            self.assertTrue(len(md_links) > 0, "No markdown links found in generated WBS suite")
+
+            for text, href in md_links:
+                # No link should start with repo-root prefixes docs/, schema/, .pipeline/
+                self.assertFalse(
+                    href.startswith("docs/") or href.startswith("schema/") or href.startswith(".pipeline/"),
+                    f"Found repo-root relative link target '{href}' (text: '{text}'). Must be document-relative.",
+                )
+                self.assertTrue(
+                    href.startswith("../") or href.startswith("./") or href.startswith("#"),
+                    f"Link target '{href}' is not document-relative (should start with '../' or './').",
+                )
+
+            # Check specific baseline & spec links
+            hrefs = [h for _, h in md_links]
+            self.assertIn("../conops/CONOPS.md", hrefs)
+            self.assertIn("../../schema/model.sysml", hrefs)
+            self.assertIn("../safety/STPA_MATRIX.md", hrefs)
+            self.assertIn("../interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md", hrefs)
+            self.assertIn("../interfaces/ICD_02_MASTER_SIGNAL_DICTIONARY.md", hrefs)
+            self.assertIn("../epics/epic-01-navigation.md", hrefs)
+            self.assertIn("../features/feat-01-state-estimation.md", hrefs)
+            self.assertIn("../user-stories/us-01.md", hrefs)
+
+    def test_wbs_generator_formats_uncreated_phase3_artifacts_as_code_spans(self):
+        """Verify uncreated Phase 3 code/report artifacts are rendered as code spans, not dead links (Issue #241)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ws = Path(tmpdir)
+            self._setup_mock_spec_workspace(ws)
+
+            # Ensure Phase 3 files DO NOT exist on disk
+            self.assertFalse((ws / "models" / "matlab" / "feat_01_params.m").exists())
+            self.assertFalse((ws / "models" / "scripts" / "build_feat_01_model.m").exists())
+            self.assertFalse((ws / "models" / "python" / "feat_01_domain.py").exists())
+            self.assertFalse((ws / "models" / "python" / "feat_01_engine.py").exists())
+            self.assertFalse((ws / "tests" / "test_feat_01_simulation.py").exists())
+            self.assertFalse((ws / "docs" / "reports" / "simulink_results" / "FEAT-01_results.md").exists())
+
+            engine = WBSAstIngestionEngine(workspace_path=ws)
+            engine.run_ingestion()
+            synthesizer = WBSSuiteSynthesizer(engine)
+            md_path, _, _ = synthesizer.synthesize_all()
+
+            content = md_path.read_text(encoding="utf-8")
+
+            # Verify uncreated artifacts are formatted as plain backticked code spans
+            self.assertIn("`models/matlab/feat_01_params.m`", content)
+            self.assertIn("`models/scripts/build_feat_01_model.m`", content)
+            self.assertIn("`models/python/feat_01_domain.py`", content)
+            self.assertIn("`models/python/feat_01_engine.py`", content)
+            self.assertIn("`tests/test_feat_01_simulation.py`", content)
+            self.assertIn("`docs/reports/simulink_results/FEAT-01_results.md`", content)
+
+            # Ensure they are NOT rendered as markdown links
+            md_links = re.findall(r"\[([^\]]+)\]\(([^)]+)\)", content)
+            link_hrefs = [h for _, h in md_links]
+            for href in link_hrefs:
+                self.assertNotIn("build_feat_01_model.m", href)
+                self.assertNotIn("feat_01_engine.py", href)
+                self.assertNotIn("test_feat_01_simulation.py", href)
+                self.assertNotIn("FEAT-01_results.md", href)
+
+    def test_wbs_generator_links_existing_phase3_artifacts_when_present(self):
+        """Verify Phase 3 artifacts are rendered as document-relative links when they exist on disk (Issue #241)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ws = Path(tmpdir)
+            self._setup_mock_spec_workspace(ws)
+
+            # Create Phase 3 deliverable files
+            (ws / "models" / "matlab").mkdir(parents=True, exist_ok=True)
+            (ws / "models" / "scripts").mkdir(parents=True, exist_ok=True)
+            (ws / "models" / "python").mkdir(parents=True, exist_ok=True)
+            (ws / "tests").mkdir(parents=True, exist_ok=True)
+            (ws / "docs" / "reports" / "simulink_results").mkdir(parents=True, exist_ok=True)
+
+            (ws / "models" / "matlab" / "feat_01_params.m").write_text("% params", encoding="utf-8")
+            (ws / "models" / "scripts" / "build_feat_01_model.m").write_text("% builder", encoding="utf-8")
+            (ws / "models" / "python" / "feat_01_domain.py").write_text("# domain", encoding="utf-8")
+            (ws / "models" / "python" / "feat_01_engine.py").write_text("# engine", encoding="utf-8")
+            (ws / "tests" / "test_feat_01_simulation.py").write_text("# test", encoding="utf-8")
+            (ws / "docs" / "reports" / "simulink_results" / "FEAT-01_results.md").write_text("# results", encoding="utf-8")
+
+            engine = WBSAstIngestionEngine(workspace_path=ws)
+            engine.run_ingestion()
+            synthesizer = WBSSuiteSynthesizer(engine)
+            md_path, _, _ = synthesizer.synthesize_all()
+
+            content = md_path.read_text(encoding="utf-8")
+
+            # Verify that existing artifacts are rendered as document-relative links
+            self.assertIn("[`models/matlab/feat_01_params.m`](../../models/matlab/feat_01_params.m)", content)
+            self.assertIn("[`models/scripts/build_feat_01_model.m`](../../models/scripts/build_feat_01_model.m)", content)
+            self.assertIn("[`models/python/feat_01_domain.py`](../../models/python/feat_01_domain.py)", content)
+            self.assertIn("[`models/python/feat_01_engine.py`](../../models/python/feat_01_engine.py)", content)
+            self.assertIn("[`tests/test_feat_01_simulation.py`](../../tests/test_feat_01_simulation.py)", content)
+            self.assertIn("[Results Report](../reports/simulink_results/FEAT-01_results.md)", content)
 
 
 if __name__ == "__main__":

@@ -825,6 +825,19 @@ class WBSSuiteSynthesizer:
 
         return md_path, csv_path, json_path
 
+    def _rel_link(self, target_path: str) -> str:
+        """Converts a repository-root-relative path to a path relative to docs/management/."""
+        full_target = self.engine.workspace / target_path
+        rel_path = os.path.relpath(full_target, self.engine.output_dir)
+        return rel_path.replace(os.sep, "/")
+
+    def _format_artifact_cell(self, target_path: str, exists: bool) -> str:
+        """Renders as clickable markdown link if file exists, else as code span."""
+        if exists:
+            target_rel = self._rel_link(target_path)
+            return f"[`{target_path}`]({target_rel})"
+        return f"`{target_path}`"
+
     # -----------------------------------------------------------------------
     # Markdown Synthesis
     # -----------------------------------------------------------------------
@@ -889,18 +902,22 @@ class WBSSuiteSynthesizer:
         out.write("| Deliverable ID | WBS Code | Specification Title | Standard / Framework | Target Artifact Path | Verification Gate | Status |\n")
         out.write("| :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n")
         for b in self.baseline_deliverables:
+            exists = (self.engine.workspace / b.target_path).is_file()
+            cell = self._format_artifact_cell(b.target_path, exists)
             out.write(
-                f"| `{b.id}` | `{b.wbs_code}` | {b.name} | {b.standard} | [`{b.target_path}`]({b.target_path}) | {b.verification_gate} | {b.status} |\n"
+                f"| `{b.id}` | `{b.wbs_code}` | {b.name} | {b.standard} | {cell} | {b.verification_gate} | {b.status} |\n"
             )
         out.write("\n")
 
         # Section 3: Subsystem Epics & Feature Realization Matrices
         out.write("## 3. Subsystem Epics & Feature Realization Matrices\n\n")
         for epic in self.epics:
+            epic_exists = (self.engine.workspace / epic.artifact_path).is_file()
+            epic_cell = self._format_artifact_cell(epic.artifact_path, epic_exists)
             out.write(f"### WBS {epic.wbs_code}: [{epic.id}] {epic.title}\n\n")
             out.write(f"- **Subsystem Partition:** `{epic.subsystem}`\n")
             out.write(f"- **Software Assurance Level:** RTCA DO-178C {epic.do178c_level}\n")
-            out.write(f"- **Specification Source:** [`{epic.artifact_path}`]({epic.artifact_path})\n")
+            out.write(f"- **Specification Source:** {epic_cell}\n")
             out.write(f"- **Description:** {epic.description}\n")
             out.write(f"- **Associated Use Cases:** {', '.join(epic.associated_use_cases) if epic.associated_use_cases else 'UC-01'}\n")
             out.write(f"- **Associated User Stories:** {', '.join(epic.associated_user_stories) if epic.associated_user_stories else 'US-01'}\n\n")
@@ -921,8 +938,10 @@ class WBSSuiteSynthesizer:
                 out.write("| WP Code | WBS Code | Deliverable Category | Target Artifact Path | Primary Toolchain / Engine | Est. Hours | Verification Gate | Status |\n")
                 out.write("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n")
                 for wp in feat.work_packages:
+                    wp_exists = (self.engine.workspace / wp.target_path).is_file()
+                    wp_cell = self._format_artifact_cell(wp.target_path, wp_exists)
                     out.write(
-                        f"| `{wp.code}` | `{wp.wbs_code}` | {wp.name.split('] ')[-1]} | [`{wp.target_path}`]({wp.target_path}) | {wp.toolchain} | {wp.est_hours}h | {wp.verification_gate} | {wp.status} |\n"
+                        f"| `{wp.code}` | `{wp.wbs_code}` | {wp.name.split('] ')[-1]} | {wp_cell} | {wp.toolchain} | {wp.est_hours}h | {wp.verification_gate} | {wp.status} |\n"
                     )
                 out.write("\n")
 
@@ -937,10 +956,27 @@ class WBSSuiteSynthesizer:
         out.write("| :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n")
         all_features = [f for e in self.epics for f in e.features]
         if not all_features:
-            out.write("| `SysSSOT::CoreSubsys` | [Feat-01](docs/features/feat-01.md) | [US-01](docs/user-stories/us-01.md) | `models/scripts/build_feat_01_model.m` | `models/python/feat_01_engine.py` | `tests/test_feat_01.py` | [Report](docs/reports/simulink_results/FEAT-01_results.md) |\n")
+            out.write("| `SysSSOT::CoreSubsys` | `docs/features/feat-01.md` | `US-01` | `models/scripts/build_feat_01_model.m` | `models/python/feat_01_engine.py` | `tests/test_feat_01.py` | `docs/reports/simulink_results/FEAT-01_results.md` |\n")
         else:
             for feat in all_features:
-                us_links_str = ", ".join([f"[`{u}`](docs/user-stories/{u.lower()}.md)" for u in feat.associated_user_stories]) if feat.associated_user_stories else f"[`US-01`](docs/user-stories/us-01.md)"
+                feat_exists = (self.engine.workspace / feat.artifact_path).is_file()
+                feat_cell = f"[{feat.id}]({self._rel_link(feat.artifact_path)})" if feat_exists else f"`{feat.id}`"
+
+                if feat.associated_user_stories:
+                    us_cells = []
+                    for u in feat.associated_user_stories:
+                        us_data = self.engine.user_stories_by_id.get(u)
+                        us_path = us_data["path"] if us_data else f"docs/user-stories/{u.lower()}.md"
+                        u_exists = (self.engine.workspace / us_path).is_file()
+                        if u_exists:
+                            us_cells.append(f"[`{u}`]({self._rel_link(us_path)})")
+                        else:
+                            us_cells.append(f"`{u}`")
+                    us_links_str = ", ".join(us_cells)
+                else:
+                    us_path = "docs/user-stories/us-01.md"
+                    u_exists = (self.engine.workspace / us_path).is_file()
+                    us_links_str = f"[`US-01`]({self._rel_link(us_path)})" if u_exists else "`US-01`"
 
                 # Extract work package paths directly from synthesized work packages
                 wp_map = {wp.wp_type: wp.target_path for wp in feat.work_packages}
@@ -949,8 +985,18 @@ class WBSSuiteSynthesizer:
                 tst_path = wp_map.get("TST", f"tests/test_{feat.id.lower().replace('-', '_')}_simulation.py")
                 rep_path = wp_map.get("REP", f"docs/reports/simulink_results/FEAT-{feat.id.upper().replace('FEAT-', '')}_results.md")
 
+                mat_exists = (self.engine.workspace / matlab_path).is_file()
+                py_exists = (self.engine.workspace / py_path).is_file()
+                tst_exists = (self.engine.workspace / tst_path).is_file()
+                rep_exists = (self.engine.workspace / rep_path).is_file()
+
+                mat_cell = self._format_artifact_cell(matlab_path, mat_exists)
+                py_cell = self._format_artifact_cell(py_path, py_exists)
+                tst_cell = self._format_artifact_cell(tst_path, tst_exists)
+                rep_cell = f"[Results Report]({self._rel_link(rep_path)})" if rep_exists else f"`{rep_path}`"
+
                 out.write(
-                    f"| `{feat.sysml_anchor}` | [{feat.id}]({feat.artifact_path}) | {us_links_str} | [`{matlab_path}`]({matlab_path}) | [`{py_path}`]({py_path}) | [`{tst_path}`]({tst_path}) | [Results Report]({rep_path}) |\n"
+                    f"| `{feat.sysml_anchor}` | {feat_cell} | {us_links_str} | {mat_cell} | {py_cell} | {tst_cell} | {rep_cell} |\n"
                 )
         out.write("\n")
 
@@ -983,9 +1029,11 @@ class WBSSuiteSynthesizer:
             for feat in all_features:
                 wp_map = {wp.wp_type: wp.target_path for wp in feat.work_packages}
                 tst_path = wp_map.get("TST", f"tests/test_{feat.id.lower().replace('-', '_')}_simulation.py")
+                tst_exists = (self.engine.workspace / tst_path).is_file()
+                tst_cell = self._format_artifact_cell(tst_path, tst_exists)
                 sc_str = ", ".join(feat.safety_constraints[:2])
                 out.write(
-                    f"| `{feat.id} ({feat.wbs_code})` | [`{tst_path}`]({tst_path}) | Nominal, Safety Invariant ({sc_str}), Fault Injection | 250 Hz (dt = 0.004 s) | tol <= 1e-6 | Passing CI Gate |\n"
+                    f"| `{feat.id} ({feat.wbs_code})` | {tst_cell} | Nominal, Safety Invariant ({sc_str}), Fault Injection | 250 Hz (dt = 0.004 s) | tol <= 1e-6 | Passing CI Gate |\n"
                 )
         out.write("\n")
 
