@@ -528,20 +528,16 @@ class GitLabV4Provider:
         glab_path = shutil.which("glab")
         if glab_path:
             try:
-                res = subprocess.run([glab_path, "auth", "token"], capture_output=True, text=True, timeout=5)
-                if res.returncode == 0 and res.stdout.strip():
-                    return res.stdout.strip(), "PRIVATE-TOKEN"
+                status_res = subprocess.run([glab_path, "auth", "status", "--show-token"], capture_output=True, text=True, timeout=5)
+                m = re.search(r'Token(?:\s+found\s+in\s+operating\s+system\s+keyring)?:\s*([A-Za-z0-9_\.\-]+)', (status_res.stdout or '') + '\n' + (status_res.stderr or ''))
+                if m:
+                    return m.group(1).strip(), "PRIVATE-TOKEN"
             except Exception:
                 pass
             try:
-                status_res = subprocess.run([glab_path, "auth", "status", "--show-token"], capture_output=True, text=True, timeout=5)
-                if status_res.returncode == 0:
-                    stdout_str = status_res.stdout if isinstance(status_res.stdout, str) else ""
-                    stderr_str = status_res.stderr if isinstance(status_res.stderr, str) else ""
-                    output = (stdout_str or "") + "\n" + (stderr_str or "")
-                    m = re.search(r'Token(?:\s+found\s+in\s+operating\s+system\s+keyring)?:\s*(\S+)', output)
-                    if m:
-                        return m.group(1).strip(), "PRIVATE-TOKEN"
+                res = subprocess.run([glab_path, "auth", "token"], capture_output=True, text=True, timeout=5)
+                if res.returncode == 0 and res.stdout.strip() and '\n' not in res.stdout.strip() and ' ' not in res.stdout.strip() and 'USAGE' not in res.stdout:
+                    return res.stdout.strip(), "PRIVATE-TOKEN"
             except Exception:
                 pass
         try:
