@@ -346,10 +346,34 @@ class SchemaCardinalityValidator(IValidator):
                         if p_name.lower() == leaf.lower():
                             matched_parts.append(p_obj)
 
-            # Also match by class diagram classes or part names in text
+            # If not matched via schema_containers, match parts ONLY if explicitly declared in
+            # class diagram blocks or formal SysML part definition blocks
             if not matched_parts:
+                explicit_declared_parts = set()
+
+                # 1. Mermaid classDiagram blocks
+                for cd_match in re.finditer(r"```mermaid\s*\n\s*classDiagram(.*?)(?=```|\Z)", content, re.DOTALL):
+                    cd_body = cd_match.group(1)
+                    for line in cd_body.splitlines():
+                        line = re.sub(r'%%.*$', '', line).strip()
+                        if not line:
+                            continue
+                        cm = re.match(r"^class\s+([A-Za-z0-9_]+)", line)
+                        if cm:
+                            explicit_declared_parts.add(cm.group(1).lower())
+                        elif ":" in line and not line.lower().startswith("note") and re.match(r"^([A-Za-z0-9_]+)\s*:", line):
+                            explicit_declared_parts.add(re.match(r"^([A-Za-z0-9_]+)\s*:", line).group(1).lower())
+                        elif "{" in line and re.match(r"^([A-Za-z0-9_]+)\s*\{", line):
+                            explicit_declared_parts.add(re.match(r"^([A-Za-z0-9_]+)\s*\{", line).group(1).lower())
+
+                # 2. SysML code blocks
+                for sysml_match in re.finditer(r"```(?:sysml|sysmlv2)?\s*\n(.*?)(?=```|\Z)", content, re.DOTALL):
+                    sysml_body = sysml_match.group(1)
+                    for sm in re.finditer(r"\b(?:part\s+def|part)\s+([A-Za-z0-9_]+)\b", sysml_body):
+                        explicit_declared_parts.add(sm.group(1).lower())
+
                 for p_name, p_obj in parts_map.items():
-                    if re.search(rf"\b(?:class|part\s+def|part)\s+{re.escape(p_name)}\b", content) or re.search(rf"\b{re.escape(p_name)}\b", filename, re.IGNORECASE):
+                    if p_name.lower() in explicit_declared_parts:
                         matched_parts.append(p_obj)
 
             for part in matched_parts:

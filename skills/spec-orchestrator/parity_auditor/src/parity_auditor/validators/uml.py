@@ -1663,7 +1663,7 @@ class UmlValidator(IValidator):
         user_stories_dir_rel = getattr(backlog_dirs, "user_stories", None)
         user_stories_dir = os.path.join(repo.workspace_dir, user_stories_dir_rel) if user_stories_dir_rel else os.path.join(repo.workspace_dir, "docs", "user-stories")
 
-        sysml_files, all_pkgs, all_parts, _, _, _, _, _, all_test_cases, all_requirements, errors = _load_all_sysml_elements_full(repo, schemas_dir)
+        sysml_files, all_pkgs, all_parts, _, _, _, _, all_constraints, all_test_cases, all_requirements, errors = _load_all_sysml_elements_full(repo, schemas_dir)
         if errors:
             return errors
         if not sysml_files:
@@ -1692,6 +1692,10 @@ class UmlValidator(IValidator):
                 reqs_by_id_or_name[r_name] = r
             if r_id:
                 reqs_by_id_or_name[r_id] = r
+        for c in all_constraints:
+            c_name = getattr(c, "name", "")
+            if c_name:
+                reqs_by_id_or_name[c_name] = c
 
         bound_test_cases: Set[str] = set()
 
