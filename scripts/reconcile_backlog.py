@@ -533,6 +533,14 @@ class GitLabV4Provider:
                     return res.stdout.strip(), "PRIVATE-TOKEN"
             except Exception:
                 pass
+            try:
+                status_res = subprocess.run([glab_path, "auth", "status", "--show-token"], capture_output=True, text=True, timeout=5)
+                if status_res.returncode == 0 and status_res.stdout:
+                    m = re.search(r'Token(?:\s+found\s+in\s+operating\s+system\s+keyring)?:\s*(\S+)', status_res.stdout)
+                    if m:
+                        return m.group(1).strip(), "PRIVATE-TOKEN"
+            except Exception:
+                pass
         try:
             hostname = urllib.parse.urlparse(self.server_url).hostname or "gitlab.com"
             auth = netrc.netrc().authenticators(hostname)
@@ -3713,6 +3721,49 @@ def lookup_canonical_issue_key(raw_id, issue_dict):
     return None
 
 
+def is_placeholder_issue_id(val: Any) -> bool:
+    """Check whether a declared issue_id value is a pre-registration placeholder token.
+    
+    Recognizes placeholders such as `#[IssueID]`, `[IssueID]`, `IssueID`, `#TBD`,
+    `TBD`, `Pending Registration...`, `Pending (pre-registration draft)`, `[Draft]`,
+    `#[EpicIssueID]`, `[StoryIssueID]`, `[FeatureIssueID]`, `[UseCaseIssueID]`,
+    `[POPULATE: Issue ID]`, `TODO`, `N/A`, etc.
+    """
+    if val is None or isinstance(val, (int, float, bool)):
+        return False
+    s = str(val).strip().strip('"\'')
+    if not s:
+        return False
+
+    # Pure digits or #digits (e.g. 42 or #42) are real issue numbers, not placeholders
+    clean_digits = s.lstrip("#").strip()
+    if clean_digits.isdigit():
+        return False
+
+    # Match bracketed tokens like #[IssueID], [IssueID], #[EpicIssueID], [TBD], [Draft], etc.
+    if re.match(r'^#?\[[a-zA-Z0-9_\s:\-]+\]$', s):
+        inner = re.sub(r'^#?\[(.*)\]$', r'\1', s).strip()
+        if not inner.lstrip("#").isdigit():
+            return True
+
+    # Match specific placeholder keywords
+    placeholder_token_pattern = re.compile(
+        r'^#?\[?(?:issueid|epicid|featureid|storyid|usecaseid|'
+        r'epicissueid|featureissueid|storyissueid|usecaseissueid|'
+        r'tbd|todo|n/?a|draft|placeholder|populate)\]?$',
+        re.IGNORECASE,
+    )
+    if placeholder_token_pattern.match(s):
+        return True
+
+    # Descriptive placeholder phrases (e.g. 'Pending Registration...', 'Pending (pre-registration draft)')
+    lower_s = s.lower()
+    if any(kw in lower_s for kw in ("pending", "pre-registration", "preregistration", "populate:", "placeholder", "to be determined")):
+        return True
+
+    return False
+
+
 def resolve_spec_issue_number(filepath, title, title_map, issue_dict, rules=None,
                               item_type="Feature", claimed=None):
     """Resolve a local spec file to its tracker issue. Canonical `issue_id` first.
@@ -3740,7 +3791,7 @@ def resolve_spec_issue_number(filepath, title, title_map, issue_dict, rules=None
        unrelated issue, and `sync_issue_body_to_tracker` would then overwrite that
        issue's body. It is also the same class of defect as the referenced-but-missing
        issue the module already refuses to invent.
-    3. No `issue_id` yet (first registration) -- title normalization, with a warning
+    3. No `issue_id` yet (first registration or placeholder) -- title normalization, with a warning
        naming the file, because the constitution allows it only as a fallback.
 
     `claimed` is an optional dict shared across all four loops. Two spec files
@@ -3754,7 +3805,12 @@ def resolve_spec_issue_number(filepath, title, title_map, issue_dict, rules=None
     keys = tracker_rules.get("keys", {})
     title_key = keys.get("title", "title")
 
-    declared = str(fm_id).strip().strip('"\'').lstrip("#").strip() if fm_id is not None else ""
+    if is_placeholder_issue_id(fm_id):
+        declared = ""
+    else:
+        declared = str(fm_id).strip().strip('"\'').lstrip("#").strip() if fm_id is not None else ""
+        if is_placeholder_issue_id(declared):
+            declared = ""
 
     issue_num = None
     if declared:

@@ -533,6 +533,14 @@ class GitLabV4Provider:
                     return res.stdout.strip(), "PRIVATE-TOKEN"
             except Exception:
                 pass
+            try:
+                status_res = subprocess.run([glab_path, "auth", "status", "--show-token"], capture_output=True, text=True, timeout=5)
+                if status_res.returncode == 0 and status_res.stdout:
+                    m = re.search(r'Token(?:\s+found\s+in\s+operating\s+system\s+keyring)?:\s*(\S+)', status_res.stdout)
+                    if m:
+                        return m.group(1).strip(), "PRIVATE-TOKEN"
+            except Exception:
+                pass
         try:
             hostname = urllib.parse.urlparse(self.server_url).hostname or "gitlab.com"
             auth = netrc.netrc().authenticators(hostname)
@@ -3713,6 +3721,49 @@ def lookup_canonical_issue_key(raw_id, issue_dict):
     return None
 
 
+def is_placeholder_issue_id(val: Any) -> bool:
+    """Check whether a declared issue_id value is a pre-registration placeholder token.
+    
+    Recognizes placeholders such as `#[IssueID]`, `[IssueID]`, `IssueID`, `#TBD`,
+    `TBD`, `Pending Registration...`, `Pending (pre-registration draft)`, `[Draft]`,
+    `#[EpicIssueID]`, `[StoryIssueID]`, `[FeatureIssueID]`, `[UseCaseIssueID]`,
+    `[POPULATE: Issue ID]`, `TODO`, `N/A`, etc.
+    """
+    if val is None or isinstance(val, (int, float, bool)):
+        return False
+    s = str(val).strip().strip('"\'')
+    if not s:
+        return False
+
+    # Pure digits or #digits (e.g. 42 or #42) are real issue numbers, not placeholders
+    clean_digits = s.lstrip("#").strip()
+    if clean_digits.isdigit():
+        return False
+
+    # Match bracketed tokens like #[IssueID], [IssueID], #[EpicIssueID], [TBD], [Draft], etc.
+    if re.match(r'^#?\[[a-zA-Z0-9_\s:\-]+\]$', s):
+        inner = re.sub(r'^#?\[(.*)\]$', r'\1', s).strip()
+        if not inner.lstrip("#").isdigit():
+            return True
+
+    # Match specific placeholder keywords
+    placeholder_token_pattern = re.compile(
+        r'^#?\[?(?:issueid|epicid|featureid|storyid|usecaseid|'
+        r'epicissueid|featureissueid|storyissueid|usecaseissueid|'
+        r'tbd|todo|n/?a|draft|placeholder|populate)\]?$',
+        re.IGNORECASE,
+    )
+    if placeholder_token_pattern.match(s):
+        return True
+
+    # Descriptive placeholder phrases (e.g. 'Pending Registration...', 'Pending (pre-registration draft)')
+    lower_s = s.lower()
+    if any(kw in lower_s for kw in ("pending", "pre-registration", "preregistration", "populate:", "placeholder", "to be determined")):
+        return True
+
+    return False
+
+
 def resolve_spec_issue_number(filepath, title, title_map, issue_dict, rules=None,
                               item_type="Feature", claimed=None):
     """Resolve a local spec file to its tracker issue. Canonical `issue_id` first.
@@ -3740,7 +3791,7 @@ def resolve_spec_issue_number(filepath, title, title_map, issue_dict, rules=None
        unrelated issue, and `sync_issue_body_to_tracker` would then overwrite that
        issue's body. It is also the same class of defect as the referenced-but-missing
        issue the module already refuses to invent.
-    3. No `issue_id` yet (first registration) -- title normalization, with a warning
+    3. No `issue_id` yet (first registration or placeholder) -- title normalization, with a warning
        naming the file, because the constitution allows it only as a fallback.
 
     `claimed` is an optional dict shared across all four loops. Two spec files
@@ -3754,7 +3805,12 @@ def resolve_spec_issue_number(filepath, title, title_map, issue_dict, rules=None
     keys = tracker_rules.get("keys", {})
     title_key = keys.get("title", "title")
 
-    declared = str(fm_id).strip().strip('"\'').lstrip("#").strip() if fm_id is not None else ""
+    if is_placeholder_issue_id(fm_id):
+        declared = ""
+    else:
+        declared = str(fm_id).strip().strip('"\'').lstrip("#").strip() if fm_id is not None else ""
+        if is_placeholder_issue_id(declared):
+            declared = ""
 
     issue_num = None
     if declared:
@@ -4498,12 +4554,44 @@ def main():
         action="store_true",
         help="Force upstream compiler backlog reconciliation mode.",
     )
+    parser.add_argument(
+        "--linter-timeout",
+        type=int,
+        default=int(os.environ.get("DEAP_LINTER_TIMEOUT", "120")),
+        help="Timeout in seconds for pre-reconciliation linter validation (default: 120s or DEAP_LINTER_TIMEOUT).",
+    )
     args = parser.parse_args()
 
     sanitize_github_token_env()
     script_dir = os.path.dirname(os.path.abspath(__file__))
     workspace_dir = find_workspace_dir(script_dir)
     assert_no_mock_cli(workspace_dir)
+
+    # Automated hook: Closed-loop SysML v2 reverse-synchronization before tracker sync
+    docs_dir = os.path.join(workspace_dir, "docs")
+    if os.path.isdir(docs_dir):
+        compile_script = os.path.join(workspace_dir, "scripts", "compile_sysml.py")
+        if not os.path.isfile(compile_script):
+            compile_script = os.path.join(script_dir, "compile_sysml.py")
+        if os.path.isfile(compile_script):
+            print("Running pre-reconciliation SysML v2 reverse-synchronization...")
+            cmd = [sys.executable, compile_script, "--reverse-sync", "--docs", "docs", "--allow-schema-overwrite"]
+            for cand_schema in (
+                os.path.join(workspace_dir, "schema", "platform.sysml"),
+                os.path.join(workspace_dir, "schema", "DEAP_MODEL.sysml"),
+                os.path.join(workspace_dir, ".pipeline", "schema.sysml"),
+            ):
+                if os.path.isfile(cand_schema):
+                    cmd.extend(["--schema", cand_schema])
+                    break
+            try:
+                res = subprocess.run(cmd, cwd=workspace_dir, capture_output=True, text=True, timeout=60)
+                if res.returncode != 0:
+                    print(f"[Warning] Pre-reconciliation SysML v2 reverse-sync failed:\n{res.stderr or res.stdout}", file=sys.stderr)
+                else:
+                    print("Pre-reconciliation SysML v2 reverse-synchronization completed successfully.")
+            except Exception as e:
+                print(f"[Warning] Pre-reconciliation SysML v2 reverse-sync encountered error: {e}", file=sys.stderr)
 
     # Programmatic gate: Run linter before proceeding with reconciliation
     blocked_specs = set()
@@ -4512,8 +4600,9 @@ def main():
     if linter_script and os.path.exists(linter_script):
         print("Running pre-reconciliation linter validation...")
         cmd = [sys.executable, linter_script, "--spec-only", "--allow-missing-specs"]
+        linter_timeout = getattr(args, "linter_timeout", 120) or 120
         try:
-            res = subprocess.run(cmd, cwd=workspace_dir, capture_output=True, text=True, timeout=30)
+            res = subprocess.run(cmd, cwd=workspace_dir, capture_output=True, text=True, timeout=linter_timeout)
             if res.returncode != 0:
                 output_text = (res.stdout or "") + "\n" + (res.stderr or "")
                 lines = [line.strip() for line in output_text.splitlines()]
@@ -4551,7 +4640,7 @@ def main():
             else:
                 print("Pre-reconciliation linter validation passed successfully.")
         except subprocess.TimeoutExpired:
-            print("[FATAL] Pre-reconciliation linter validation timed out after 30 seconds. Aborting.", file=sys.stderr)
+            print(f"[FATAL] Pre-reconciliation linter validation timed out after {linter_timeout} seconds. Aborting.", file=sys.stderr)
             sys.exit(1)
     else:
         print("[INFO] Pre-reconciliation linter not found; skipping pre-validation.")

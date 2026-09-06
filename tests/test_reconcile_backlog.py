@@ -28,6 +28,8 @@ from reconcile_backlog import (
     JiraV2V3Provider,
     GitHubCLIProvider,
     DEFAULT_GITLAB_TRACKER_RULES,
+    is_placeholder_issue_id,
+    resolve_spec_issue_number,
 )
 
 class TestExpandRelativeLinksForTracker(unittest.TestCase):
@@ -1097,6 +1099,288 @@ class TestResourceLifecycleCleanup(unittest.TestCase):
 
                 args_custom = parser.parse_args(["--linter-timeout", "300"])
                 self.assertEqual(args_custom.linter_timeout, 300)
+
+
+class TestGitLabKeyringTokenExtraction(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.workspace_dir = self.temp_dir.name
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    @patch("shutil.which", return_value="/usr/local/bin/glab")
+    @patch("subprocess.run")
+    def test_resolve_token_glab_auth_token_success(self, mock_run, mock_which):
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.stdout = "glpat-token-from-auth-token\n"
+        mock_run.return_value = mock_proc
+
+        with patch.dict(os.environ, {}, clear=True):
+            provider = GitLabV4Provider(
+                server_url="https://gitlab.example.com",
+                project_id="org/repo",
+                workspace_dir=self.workspace_dir,
+            )
+            self.assertEqual(provider.token, "glpat-token-from-auth-token")
+            self.assertEqual(provider.token_type, "PRIVATE-TOKEN")
+
+    @patch("shutil.which", return_value="/usr/local/bin/glab")
+    @patch("subprocess.run")
+    def test_resolve_token_glab_auth_status_keyring_fallback(self, mock_run, mock_which):
+        # 1st call (glab auth token) fails
+        mock_auth_token = MagicMock()
+        mock_auth_token.returncode = 1
+        mock_auth_token.stdout = "unknown command 'token'"
+        mock_auth_token.stderr = ""
+
+        # 2nd call (glab auth status --show-token) succeeds with keyring message
+        mock_status = MagicMock()
+        mock_status.returncode = 0
+        mock_status.stdout = (
+            "gitlab.com\n"
+            "  ✓ Logged in to gitlab.com as testuser (~/.config/glab-cli/config.yml)\n"
+            "  ✓ Token found in operating system keyring: glpat-keyring-token-abc123\n"
+        )
+        mock_status.stderr = ""
+
+        mock_run.side_effect = [mock_auth_token, mock_status]
+
+        with patch.dict(os.environ, {}, clear=True):
+            provider = GitLabV4Provider(
+                server_url="https://gitlab.example.com",
+                project_id="org/repo",
+                workspace_dir=self.workspace_dir,
+            )
+            self.assertEqual(provider.token, "glpat-keyring-token-abc123")
+            self.assertEqual(provider.token_type, "PRIVATE-TOKEN")
+
+    @patch("shutil.which", return_value="/usr/local/bin/glab")
+    @patch("subprocess.run")
+    def test_resolve_token_glab_auth_status_standard_token_format(self, mock_run, mock_which):
+        mock_auth_token = MagicMock()
+        mock_auth_token.returncode = 1
+
+        mock_status = MagicMock()
+        mock_status.returncode = 0
+        mock_status.stdout = "  ✓ Token: glpat-standard-token-xyz789\n"
+
+        mock_run.side_effect = [mock_auth_token, mock_status]
+
+        with patch.dict(os.environ, {}, clear=True):
+            provider = GitLabV4Provider(
+                server_url="https://gitlab.example.com",
+                project_id="org/repo",
+                workspace_dir=self.workspace_dir,
+            )
+            self.assertEqual(provider.token, "glpat-standard-token-xyz789")
+            self.assertEqual(provider.token_type, "PRIVATE-TOKEN")
+
+
+class TestPlaceholderIssueIDRecognition(unittest.TestCase):
+    def setUp(self):
+        self.github_rules = {
+            "meta": {"upstream_repository": "gintatkinson/DEAP01-spec-core"},
+            "tracker_rules": {
+                "provider": "github",
+                "keys": {"title": "title", "state": "state", "labels": "labels"},
+            },
+        }
+
+    def test_is_placeholder_issue_id_truthy(self):
+        placeholders = [
+            "#[IssueID]",
+            "[IssueID]",
+            "IssueID",
+            "#TBD",
+            "TBD",
+            "[TBD]",
+            "#[TBD]",
+            "Pending Registration...",
+            "Pending (pre-registration draft)",
+            "Pending",
+            "[Pending]",
+            "[Draft]",
+            "Draft",
+            "#[EpicIssueID]",
+            "#[FeatureIssueID]",
+            "#[StoryIssueID]",
+            "#[UseCaseIssueID]",
+            "[StoryID]",
+            "[POPULATE: Issue ID]",
+            "TODO",
+            "#[TODO]",
+            "[TODO]",
+            "N/A",
+            "#[N/A]",
+        ]
+        for val in placeholders:
+            with self.subTest(val=val):
+                self.assertTrue(
+                    is_placeholder_issue_id(val),
+                    f"Expected is_placeholder_issue_id('{val}') to be True",
+                )
+
+    def test_is_placeholder_issue_id_falsy(self):
+        real_ids = [
+            1,
+            42,
+            "42",
+            "#42",
+            "DEAP-101",
+            "PROJ-123",
+            "AUT-5",
+            None,
+            "",
+            "   ",
+            True,
+            False,
+        ]
+        for val in real_ids:
+            with self.subTest(val=val):
+                self.assertFalse(
+                    is_placeholder_issue_id(val),
+                    f"Expected is_placeholder_issue_id({repr(val)}) to be False",
+                )
+
+    def test_resolve_spec_issue_number_with_placeholder_fallback_to_title(self):
+        spec_content = (
+            "---\n"
+            "title: Automated Navigation System\n"
+            "issue_id: #[IssueID]\n"
+            "---\n"
+            "# Feature: Automated Navigation System\n"
+        )
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".md", delete=False) as tf:
+            tf.write(spec_content)
+            temp_path = tf.name
+
+        try:
+            issue_dict = {
+                105: {
+                    "number": 105,
+                    "title": "Feature: Automated Navigation System",
+                    "labels": [{"name": "type::feature"}],
+                }
+            }
+            title_map = {"automated navigation system": 105}
+            claimed = {}
+
+            resolved = resolve_spec_issue_number(
+                filepath=temp_path,
+                title="Automated Navigation System",
+                title_map=title_map,
+                issue_dict=issue_dict,
+                rules=self.github_rules,
+                item_type="Feature",
+                claimed=claimed,
+            )
+            self.assertEqual(resolved, 105)
+            self.assertEqual(claimed.get("105"), temp_path)
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+
+    def test_resolve_spec_issue_number_with_pending_draft_placeholder(self):
+        spec_content = (
+            "# Use Case: Pre-Flight Check\n\n"
+            "| Field | Value |\n"
+            "| --- | --- |\n"
+            "| **Issue ID** | Pending (pre-registration draft) |\n"
+            "| **Parent Epic** | #[EpicIssueID] |\n"
+        )
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".md", delete=False) as tf:
+            tf.write(spec_content)
+            temp_path = tf.name
+
+        try:
+            issue_dict = {
+                202: {
+                    "number": 202,
+                    "title": "Use Case: Pre-Flight Check",
+                    "labels": [{"name": "type::use-case"}],
+                }
+            }
+            title_map = {"pre flight check": 202}
+            claimed = {}
+
+            resolved = resolve_spec_issue_number(
+                filepath=temp_path,
+                title="Pre-Flight Check",
+                title_map=title_map,
+                issue_dict=issue_dict,
+                rules=self.github_rules,
+                item_type="Use Case",
+                claimed=claimed,
+            )
+            self.assertEqual(resolved, 202)
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+
+    def test_resolve_spec_issue_number_with_placeholder_unregistered_returns_none(self):
+        spec_content = (
+            "---\n"
+            "title: Unregistered Draft Spec\n"
+            "issue_id: #TBD\n"
+            "---\n"
+            "# Feature: Unregistered Draft Spec\n"
+        )
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".md", delete=False) as tf:
+            tf.write(spec_content)
+            temp_path = tf.name
+
+        try:
+            issue_dict = {}
+            title_map = {}
+            claimed = {}
+
+            resolved = resolve_spec_issue_number(
+                filepath=temp_path,
+                title="Unregistered Draft Spec",
+                title_map=title_map,
+                issue_dict=issue_dict,
+                rules=self.github_rules,
+                item_type="Feature",
+                claimed=claimed,
+            )
+            self.assertIsNone(resolved)
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+
+    def test_resolve_spec_issue_number_real_missing_id_still_fatal(self):
+        spec_content = (
+            "---\n"
+            "title: Feature With Missing Issue\n"
+            "issue_id: 8888\n"
+            "---\n"
+            "# Feature: Feature With Missing Issue\n"
+        )
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".md", delete=False) as tf:
+            tf.write(spec_content)
+            temp_path = tf.name
+
+        try:
+            issue_dict = {}
+            title_map = {}
+            claimed = {}
+
+            with self.assertRaises(SystemExit) as cm:
+                resolve_spec_issue_number(
+                    filepath=temp_path,
+                    title="Feature With Missing Issue",
+                    title_map=title_map,
+                    issue_dict=issue_dict,
+                    rules=self.github_rules,
+                    item_type="Feature",
+                    claimed=claimed,
+                )
+            self.assertEqual(cm.exception.code, 1)
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
 
 
 if __name__ == "__main__":
