@@ -1344,6 +1344,16 @@ def validate_safety_matrix_ast(content: str, model_text: Optional[str] = None) -
             return errors, broken, None
         expected_actions = sorted({str(name) for name in model_ast.get("action_defs", [])})
         expected_parts = sorted({str(name) for name in model_ast.get("part_defs", [])})
+        sysml_reqs = model_ast.get("requirement_defs", [])
+
+        # Pillar 6: Safety Constraint Parity Verification
+        sc_ids = set(re.findall(r'\b(SC(?:-[A-Za-z0-9_]+)?-\d+)\b', content))
+        if len(sc_ids) > len(sysml_reqs):
+            errors.append(
+                f"Pillar 6 Parity Violation: Found {len(sc_ids)} markdown safety constraints, "
+                f"but only {len(sysml_reqs)} requirement def nodes in SysML model. "
+                f"Model is out of sync; run scripts/compile_sysml.py --reverse-sync."
+            )
 
     if expected_actions:
         cartesian_report = CartesianProductValidator.verify_cartesian_completeness(stpa_rows, expected_actions)

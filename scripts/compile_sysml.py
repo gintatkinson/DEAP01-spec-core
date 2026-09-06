@@ -508,6 +508,129 @@ def compile_fmeca_to_constraint(fmeca: Dict[str, Any]) -> Any:
         "is_assertion": False,
         "doc": doc
     }
+
+
+def extract_safety_constraints_to_requirements(content: str) -> List[Any]:
+    """
+    Parses formal safety constraints (SC-01..SC-N) from markdown tables, structured lists,
+    or headings into SysML v2 RequirementDef AST nodes with 'satisfy by' subsystem bindings.
+    """
+    if RequirementDef is None:
+        return []
+
+    reqs: List[Any] = []
+    seen_ids = set()
+
+    def _is_table_separator(line: str) -> bool:
+        s = line.strip()
+        if not s.startswith("|"):
+            return False
+        inner = s.replace("|", "").strip()
+        return bool(inner and set(inner) <= {"-", ":", " "} and "-" in inner)
+
+    # Pattern 1: Dedicated Safety Constraint Table Rows
+    # | SC ID | Constraint Statement / Description | Controller / Subsystem | Traceability / UCA |
+    # | SC-01 | The FlightController shall ... | FlightController | UCA-01 |
+    sc_table_row = re.compile(
+        r'\|\s*(?:\*\*)?(SC(?:-[A-Za-z0-9_]+)?-\d+)(?:\*\*)?\s*\|'
+        r'\s*([^|]+)\s*\|'
+        r'(?:\s*([^|\n]+)\s*\|)?'
+    )
+    for match in sc_table_row.finditer(content):
+        sc_id = match.group(1).strip()
+        statement = match.group(2).strip().strip('*')
+        controller = match.group(3).strip().strip('*') if match.group(3) else "SafetyController"
+        if not controller or controller.lower().startswith("uca-") or controller.lower().startswith("h-"):
+            controller = "SafetyController"
+        clean_controller = _sanitize_id(controller)
+        clean_id = _sanitize_id(sc_id)
+        if sc_id not in seen_ids:
+            seen_ids.add(sc_id)
+            reqs.append(
+                RequirementDef(
+                    name=f"SafetyConstraint_{clean_id}",
+                    req_id=sc_id,
+                    doc=statement,
+                    text=statement,
+                    satisfied_by=[clean_controller] if clean_controller else ["SafetyController"],
+                )
+            )
+
+    # Pattern 2: STPA 4-Guide-Word Table with Safety Constraint Column
+    lines = content.splitlines()
+    in_sc_table = False
+    active_controller = "SafetyController"
+    for line in lines:
+        stripped = line.strip()
+        if not stripped.startswith("|"):
+            in_sc_table = False
+            continue
+        if _is_table_separator(stripped):
+            continue
+        lower = stripped.lower()
+        if "safety constraint" in lower or "constraint" in lower:
+            in_sc_table = True
+            continue
+        if in_sc_table:
+            cols = [c.strip() for c in stripped.strip("|").split("|")]
+            for col in cols:
+                sc_match = re.search(r'\b(SC(?:-[A-Za-z0-9_]+)?-\d+)\b(?::?\s*(.+))?', col)
+                if sc_match:
+                    sc_id = sc_match.group(1).strip()
+                    stmt = sc_match.group(2).strip() if sc_match.group(2) else f"Formal safety constraint {sc_id}"
+                    clean_id = _sanitize_id(sc_id)
+                    if sc_id not in seen_ids:
+                        seen_ids.add(sc_id)
+                        reqs.append(
+                            RequirementDef(
+                                name=f"SafetyConstraint_{clean_id}",
+                                req_id=sc_id,
+                                doc=stmt,
+                                text=stmt,
+                                satisfied_by=[active_controller],
+                            )
+                        )
+
+    # Pattern 3: Bullet points, bold markers, or section headers
+    bullet_pattern = re.compile(
+        r'(?:^|\n)(?:[-*]|\d+\.|\#{1,6})\s*(?:\*\*)?(SC(?:-[A-Za-z0-9_]+)?-\d+)(?:\*\*)?[:\s\-]+([^\n]+)'
+    )
+    for match in bullet_pattern.finditer(content):
+        sc_id = match.group(1).strip()
+        stmt = match.group(2).strip().strip('*')
+        clean_id = _sanitize_id(sc_id)
+        if sc_id not in seen_ids:
+            seen_ids.add(sc_id)
+            reqs.append(
+                RequirementDef(
+                    name=f"SafetyConstraint_{clean_id}",
+                    req_id=sc_id,
+                    doc=stmt,
+                    text=stmt,
+                    satisfied_by=["SafetyController"],
+                )
+            )
+
+    # Pattern 4: Fallback generic SC extraction across the entire document
+    generic_sc = re.compile(r'\b(SC(?:-[A-Za-z0-9_]+)?-\d+)\b')
+    for match in generic_sc.finditer(content):
+        sc_id = match.group(1).strip()
+        if sc_id not in seen_ids:
+            seen_ids.add(sc_id)
+            clean_id = _sanitize_id(sc_id)
+            reqs.append(
+                RequirementDef(
+                    name=f"SafetyConstraint_{clean_id}",
+                    req_id=sc_id,
+                    doc=f"Formal safety constraint {sc_id}",
+                    text=f"Formal safety constraint {sc_id}",
+                    satisfied_by=["SafetyController"],
+                )
+            )
+
+    return reqs
+
+
 def compile_stpa_to_ast(content: str, package_name: str = "System_SafetyConstraints") -> Any:
     """
     Compiles STPA and FMECA hazard analyses into a canonical SysMLPackage AST containing
@@ -1516,6 +1639,44 @@ def _merge_capability_into_package(pkg: Any, new_cap: Any) -> None:
             existing.doc = new_cap.doc
 
 
+def _merge_requirement_into_package(pkg: Any, new_req: Any) -> None:
+    req_name = getattr(new_req, "name", "")
+    req_id = getattr(new_req, "req_id", "")
+    if not req_name and not req_id:
+        return
+
+    def _find_req(p: Any) -> Optional[Any]:
+        for r in getattr(p, "requirement_defs", []) or []:
+            if (req_name and getattr(r, "name", "") == req_name) or (req_id and getattr(r, "req_id", "") == req_id):
+                return r
+        for sub in getattr(p, "sub_packages", []) or []:
+            found = _find_req(sub)
+            if found:
+                return found
+        return None
+
+    existing = _find_req(pkg)
+    if not existing:
+        if hasattr(pkg, "requirement_defs"):
+            pkg.requirement_defs.append(new_req)
+    else:
+        if hasattr(existing, "req_id") and not existing.req_id and getattr(new_req, "req_id", ""):
+            existing.req_id = new_req.req_id
+        if hasattr(existing, "text") and not existing.text and getattr(new_req, "text", ""):
+            existing.text = new_req.text
+        if hasattr(existing, "doc") and not existing.doc and getattr(new_req, "doc", ""):
+            existing.doc = new_req.doc
+        if hasattr(existing, "satisfied_by") and getattr(new_req, "satisfied_by", None):
+            for s in new_req.satisfied_by:
+                if s not in existing.satisfied_by:
+                    existing.satisfied_by.append(s)
+        if hasattr(existing, "verified_by") and getattr(new_req, "verified_by", None):
+            for v in new_req.verified_by:
+                if v not in existing.verified_by:
+                    existing.verified_by.append(v)
+
+
+
 def _atomic_write_file(filepath: str, content: str) -> None:
     """Atomically writes string content to target file using NamedTemporaryFile and os.replace."""
     abs_path = os.path.abspath(filepath)
@@ -1670,13 +1831,16 @@ def reverse_sync_specs_to_sysml(
                         _merge_capability_into_package(pkg, cap)
 
                 # Safety & STPA
-                if "safety" in rel_dir or "UCA-" in content or "FMECA-" in content:
+                if "safety" in rel_dir or "UCA-" in content or "FMECA-" in content or "SC-" in content:
                     ucas = parse_stpa_ucas(content)
                     for u in ucas:
                         _merge_constraint_into_package(pkg, compile_uca_to_constraint(u))
                     fmecas = parse_fmeca_modes(content)
                     for fm_item in fmecas:
                         _merge_constraint_into_package(pkg, compile_fmeca_to_constraint(fm_item))
+                    safety_reqs = extract_safety_constraints_to_requirements(content)
+                    for s_req in safety_reqs:
+                        _merge_requirement_into_package(pkg, s_req)
 
     # Serialize SysML textual model with atomic write semantics
     sysml_text = pkg.to_sysml() if hasattr(pkg, "to_sysml") else ""

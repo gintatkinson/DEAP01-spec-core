@@ -229,6 +229,9 @@ class TestCheck17CartesianCompleteness60Rows(unittest.TestCase):
         for i in range(1, 16):
             lines.append(f"        action def Action{i:02d};")
         lines.append("    }")
+        lines.append("    requirement def SafetyConstraint_SC_1;")
+        for i in range(1, 65):
+            lines.append(f"    requirement def SafetyConstraint_SC_{i:03d};")
         lines.append("}")
         return "\n".join(lines) + "\n"
 

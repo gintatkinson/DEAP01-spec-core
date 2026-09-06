@@ -19,8 +19,8 @@ from scripts.verify_downstream_baseline import (
 )
 
 
-def build_test_sysml_model(part_names, actions_per_part=4):
-    """Build a SysML v2 model declaring specified part defs and action defs."""
+def build_test_sysml_model(part_names, actions_per_part=4, total_scs=100):
+    """Build a SysML v2 model declaring specified part defs, action defs, and requirement defs."""
     lines = ["package TestSystem {"]
     action_idx = 1
     for part in part_names:
@@ -29,6 +29,8 @@ def build_test_sysml_model(part_names, actions_per_part=4):
             lines.append(f"        action def Action{action_idx:02d};")
             action_idx += 1
         lines.append("    }")
+    for i in range(1, total_scs + 1):
+        lines.append(f"    requirement def SafetyConstraint_SC_{i:02d};")
     lines.append("}")
     return "\n".join(lines) + "\n"
 

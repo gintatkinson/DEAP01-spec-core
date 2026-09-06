@@ -4505,6 +4505,32 @@ def main():
     workspace_dir = find_workspace_dir(script_dir)
     assert_no_mock_cli(workspace_dir)
 
+    # Automated hook: Closed-loop SysML v2 reverse-synchronization before tracker sync
+    docs_dir = os.path.join(workspace_dir, "docs")
+    if os.path.isdir(docs_dir):
+        compile_script = os.path.join(workspace_dir, "scripts", "compile_sysml.py")
+        if not os.path.isfile(compile_script):
+            compile_script = os.path.join(script_dir, "compile_sysml.py")
+        if os.path.isfile(compile_script):
+            print("Running pre-reconciliation SysML v2 reverse-synchronization...")
+            cmd = [sys.executable, compile_script, "--reverse-sync", "--docs", "docs"]
+            for cand_schema in (
+                os.path.join(workspace_dir, "schema", "platform.sysml"),
+                os.path.join(workspace_dir, "schema", "DEAP_MODEL.sysml"),
+                os.path.join(workspace_dir, ".pipeline", "schema.sysml"),
+            ):
+                if os.path.isfile(cand_schema):
+                    cmd.extend(["--schema", cand_schema])
+                    break
+            try:
+                res = subprocess.run(cmd, cwd=workspace_dir, capture_output=True, text=True, timeout=60)
+                if res.returncode != 0:
+                    print(f"[Warning] Pre-reconciliation SysML v2 reverse-sync failed:\n{res.stderr or res.stdout}", file=sys.stderr)
+                else:
+                    print("Pre-reconciliation SysML v2 reverse-synchronization completed successfully.")
+            except Exception as e:
+                print(f"[Warning] Pre-reconciliation SysML v2 reverse-sync encountered error: {e}", file=sys.stderr)
+
     # Programmatic gate: Run linter before proceeding with reconciliation
     blocked_specs = set()
     rules_preview = load_codebase_rules(workspace_dir)

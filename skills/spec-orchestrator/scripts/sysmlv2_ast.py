@@ -890,6 +890,14 @@ class SysMLParser:
                     else:
                         container.attributes.append(attr_obj)
 
+                elif re.search(r'\brequirement\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt):
+                    m = re.search(r'\brequirement\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt)
+                    req_obj = RequirementDef(name=m.group(1), doc=doc)
+                    if isinstance(container, SysMLPackage):
+                        container.requirement_defs.append(req_obj)
+                    else:
+                        container.requirements.append(req_obj)
+
     def _parse_part_block(self, decl: Dict[str, Any]) -> PartDef:
         header = decl["header"]
         m = re.search(r'\bpart\s+(?:def\s+)?([a-zA-Z0-9_]+)', header)
