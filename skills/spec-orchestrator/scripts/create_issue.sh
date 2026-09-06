@@ -97,8 +97,54 @@ if ! gh label list $REPO_FLAG 2>/dev/null \
     gh label create "$LABEL" $REPO_FLAG --color "0366d6" --description "${LABEL} specification"
 fi
 
+# Issue #244 -- expand relative markdown links to full blob URLs before creating the issue.
+TMP_EXPANDED_BODY=$(mktemp /tmp/expanded_body_XXXXXX.md)
+cleanup() {
+    rm -f "$TMP_EXPANDED_BODY"
+}
+trap cleanup EXIT
+
+python3 - "$LOCAL_FILE" "$TMP_EXPANDED_BODY" "$REPO" "$SCRIPT_DIR" <<'PYEOF'
+import sys, os
+
+local_file = sys.argv[1]
+tmp_out = sys.argv[2]
+repo = sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] else None
+script_dir = sys.argv[4] if len(sys.argv) > 4 and sys.argv[4] else ""
+
+# Ensure scripts directories are on sys.path
+for path in [
+    script_dir,
+    os.path.join(script_dir, "..", "..", "..", "scripts"),
+    os.path.join(os.path.dirname(os.path.abspath(local_file)), "..", "..", "scripts"),
+]:
+    abs_p = os.path.abspath(path)
+    if os.path.isdir(abs_p) and abs_p not in sys.path:
+        sys.path.insert(0, abs_p)
+
+try:
+    from reconcile_backlog import expand_relative_links_for_tracker, load_codebase_rules, find_workspace_dir
+    workspace_dir = find_workspace_dir(os.path.dirname(os.path.abspath(local_file))) or find_workspace_dir(os.getcwd())
+    rules = load_codebase_rules(workspace_dir) if workspace_dir else {}
+    if repo:
+        if not rules:
+            rules = {}
+        rules.setdefault("meta", {})["upstream_repository"] = repo
+
+    with open(local_file, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    expanded = expand_relative_links_for_tracker(content, filepath=local_file, rules=rules, workspace_dir=workspace_dir)
+    with open(tmp_out, "w", encoding="utf-8") as f:
+        f.write(expanded)
+except Exception:
+    import shutil
+    shutil.copyfile(local_file, tmp_out)
+PYEOF
+
 if [ -n "$REPO" ]; then
-    gh issue create --repo "$REPO" --title "$TITLE" --label "$LABEL" --body-file "$LOCAL_FILE"
+    gh issue create --repo "$REPO" --title "$TITLE" --label "$LABEL" --body-file "$TMP_EXPANDED_BODY"
 else
-    gh issue create --title "$TITLE" --label "$LABEL" --body-file "$LOCAL_FILE"
+    gh issue create --title "$TITLE" --label "$LABEL" --body-file "$TMP_EXPANDED_BODY"
 fi
+
