@@ -111,14 +111,14 @@ def test_fmeca_table_parser_and_multi_mode_distribution():
     complete_content = read_fixture("complete_stpa_matrix.md")
     parsed = parse_fmeca_table(complete_content)
 
-    assert parsed["total_rows"] == 16
+    assert parsed["total_rows"] == 18
     assert parsed["has_rpn"] is True
     assert len(parsed["components"]) == 6
     for comp, modes in parsed["components"].items():
-        assert len(modes) >= 2, f"Expected component {comp} to have multiple failure modes, got {len(modes)}"
-    assert parsed["basis_counts"]["SSOT"] == 10
+        assert len(modes) >= 3, f"Expected component {comp} to have at least 3 failure modes, got {len(modes)}"
+    assert parsed["basis_counts"]["SSOT"] == 12
     assert parsed["basis_counts"]["Derived"] == 6
-    assert len(parsed["failure_modes"]) == 16
+    assert len(parsed["failure_modes"]) == 18
 
     errors = validate_safety_matrix_content(complete_content)
     assert errors == []
@@ -171,12 +171,12 @@ def test_fmeca_single_mode_per_component_rejected():
     single_mode_content = "\n".join(lines)
 
     parsed = parse_fmeca_table(single_mode_content)
-    assert parsed["total_rows"] == 16
-    assert len(parsed["components"]) == 16
+    assert parsed["total_rows"] == 18
+    assert len(parsed["components"]) == 18
     assert all(len(modes) == 1 for modes in parsed["components"].values())
 
     errors = validate_safety_matrix_content(single_mode_content)
-    assert any("Pillar 7 violation: FMECA Criticality Matrix lacks failure mode multiplicity" in err for err in errors), (
+    assert any("Pillar 7 violation: FMECA component" in err and "defines 1 failure mode" in err for err in errors), (
         f"Expected failure mode multiplicity error, got:\n{errors}"
     )
 
@@ -184,7 +184,7 @@ def test_fmeca_single_mode_per_component_rejected():
 def test_fmeca_row_count_validation():
     """Verify FMECA matrix row count requires at least 15 component rows."""
     complete_content = read_fixture("complete_stpa_matrix.md")
-    assert count_fmeca_rows(complete_content) == 16
+    assert count_fmeca_rows(complete_content) == 18
     assert validate_safety_matrix_content(complete_content) == []
 
     # Structurally reduced to 5 rows must be rejected

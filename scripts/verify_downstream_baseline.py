@@ -559,7 +559,7 @@ def check_upstream_template_clean_landing_zones(repo_root):
     print("Success: Check 16 verified (Upstream distribution template landing zones are clean with zero concrete specs).")
 
 def parse_fmeca_table(content: str) -> dict:
-    """Extract structured FMECA table data including rows, components, failure modes, and basis classifications."""
+    """Extract structured FMECA table data including rows, components, failure modes, S/O/D/RPN, and basis classifications."""
     lines = content.splitlines()
     in_fmeca_section = False
     in_fmeca_table = False
@@ -573,8 +573,12 @@ def parse_fmeca_table(content: str) -> dict:
     rows = []
     has_rpn = False
 
+    id_idx = None
     comp_idx = None
     mode_idx = None
+    s_idx = None
+    o_idx = None
+    d_idx = None
     rpn_idx = None
     basis_idx = None
 
@@ -617,28 +621,45 @@ def parse_fmeca_table(content: str) -> dict:
             # Identify header row
             if not header_skipped and not header_cols:
                 lower = [c.lower() for c in cells]
-                if any(kw in lower_cell for lower_cell in lower for kw in ["component", "failure", "subsystem", "severity", "rpn", "effect"]):
+                if any(kw in lower_cell for lower_cell in lower for kw in ["component", "failure", "subsystem", "severity", "rpn", "effect", "s", "o", "d"]):
                     header_cols = lower
                     for idx, h in enumerate(header_cols):
-                        if any(kw in h for kw in ["component", "subsystem", "unit", "item"]):
+                        h_clean = h.strip().lower()
+                        if any(kw == h_clean for kw in ["id", "failure id", "fm id", "fmeca id", "fmid"]):
+                            if id_idx is None:
+                                id_idx = idx
+                        elif any(kw in h_clean for kw in ["component", "subsystem", "unit", "item", "part"]):
                             if comp_idx is None:
                                 comp_idx = idx
-                        elif any(kw in h for kw in ["failure mode", "mode"]):
+                        elif any(kw in h_clean for kw in ["failure mode", "mode"]):
                             if mode_idx is None:
                                 mode_idx = idx
-                        elif any(kw in h for kw in ["rpn", "risk priority"]):
+                        elif h_clean in ("s", "sev", "severity") or re.search(r'\b(?:severity|s)\b', h_clean):
+                            if s_idx is None and "description" not in h_clean and "subsystem" not in h_clean and "status" not in h_clean and "system" not in h_clean:
+                                s_idx = idx
+                        elif h_clean in ("o", "occ", "occurrence") or re.search(r'\b(?:occurrence|occ|o)\b', h_clean):
+                            if o_idx is None and "description" not in h_clean and "mode" not in h_clean and "control" not in h_clean:
+                                o_idx = idx
+                        elif h_clean in ("d", "det", "detection") or re.search(r'\b(?:detection|det|d)\b', h_clean):
+                            if d_idx is None and "description" not in h_clean and "mitigating" not in h_clean and "design" not in h_clean and "id" not in h_clean:
+                                d_idx = idx
+                        elif any(kw in h_clean for kw in ["rpn", "risk priority", "risk priority number"]):
                             if rpn_idx is None:
                                 rpn_idx = idx
-                        elif any(kw in h for kw in ["basis", "derivation", "provenance", "classification"]):
+                        elif any(kw in h_clean for kw in ["basis", "derivation", "provenance", "classification"]):
                             if basis_idx is None:
                                 basis_idx = idx
                     continue
 
             # Data row extraction
+            cur_id_idx = id_idx
             cur_comp_idx = comp_idx
             cur_mode_idx = mode_idx
-            cur_basis_idx = basis_idx
+            cur_s_idx = s_idx
+            cur_o_idx = o_idx
+            cur_d_idx = d_idx
             cur_rpn_idx = rpn_idx
+            cur_basis_idx = basis_idx
 
             if cur_comp_idx is None:
                 if len(cells) > 1 and re.match(r'^(?:FM|FMECA)-', cells[0], re.IGNORECASE):
@@ -652,8 +673,16 @@ def parse_fmeca_table(content: str) -> dict:
                 elif cur_comp_idx == 0 and len(cells) > 1:
                     cur_mode_idx = 1
 
+            failure_id = cells[cur_id_idx] if cur_id_idx is not None and cur_id_idx < len(cells) else ""
+            if not failure_id and len(cells) > 0 and re.match(r'^(?:FM|FMECA)-', cells[0], re.IGNORECASE):
+                failure_id = cells[0]
+
             comp_name = cells[cur_comp_idx] if cur_comp_idx is not None and cur_comp_idx < len(cells) else f"Component-{len(rows)+1}"
             mode_name = cells[cur_mode_idx] if cur_mode_idx is not None and cur_mode_idx < len(cells) else ""
+            s_val = cells[cur_s_idx] if cur_s_idx is not None and cur_s_idx < len(cells) else None
+            o_val = cells[cur_o_idx] if cur_o_idx is not None and cur_o_idx < len(cells) else None
+            d_val = cells[cur_d_idx] if cur_d_idx is not None and cur_d_idx < len(cells) else None
+            rpn_val = cells[cur_rpn_idx] if cur_rpn_idx is not None and cur_rpn_idx < len(cells) else None
 
             # Check RPN
             if cur_rpn_idx is not None and cur_rpn_idx < len(cells):
@@ -690,8 +719,13 @@ def parse_fmeca_table(content: str) -> dict:
 
             row_dict = {
                 "cells": cells,
+                "failure_id": failure_id,
                 "component": comp_name,
                 "failure_mode": mode_name,
+                "s": s_val,
+                "o": o_val,
+                "d": d_val,
+                "rpn": rpn_val,
                 "basis": row_basis,
             }
             rows.append(row_dict)
@@ -801,6 +835,7 @@ class ASTValidationReport:
     missing_osos: List[str] = field(default_factory=list)
     malformed_proofs: List[str] = field(default_factory=list)
     syntax_errors: List[str] = field(default_factory=list)
+    missing_fmeca_parts: List[str] = field(default_factory=list)
 
     def format_cli_summary(self) -> str:
         """Format a one-line CLI summary of the AST validation outcome."""
@@ -814,6 +849,8 @@ class ASTValidationReport:
             summary += f", {len(self.missing_osos)} missing SORA OSO(s)"
         if self.malformed_proofs:
             summary += f", {len(self.malformed_proofs)} malformed proof block(s)"
+        if self.missing_fmeca_parts:
+            summary += f", {len(self.missing_fmeca_parts)} missing FMECA part(s)"
         return summary
 
 
@@ -1266,7 +1303,7 @@ def validate_safety_matrix_ast(content: str, model_text: Optional[str] = None) -
     completeness is enforced over the (controller, control action) pairs derived
     from the UCA table itself and the canonical 5-part proof structure is
     enforced on every parsed theorem block; the full Cartesian cardinality
-    comparison against the schema remains model-gated.
+    comparison and FMECA part def completeness against the schema remain model-gated.
 
     Returns (violation_strings, report, expected_control_actions_or_none).
     """
@@ -1296,6 +1333,7 @@ def validate_safety_matrix_ast(content: str, model_text: Optional[str] = None) -
             )
 
     expected_actions: Optional[List[str]] = None
+    expected_parts: Optional[List[str]] = None
     if model_text:
         parse_sysml = _load_sysml_parser()
         try:
@@ -1305,6 +1343,7 @@ def validate_safety_matrix_ast(content: str, model_text: Optional[str] = None) -
             broken = ASTValidationReport(is_conforming=False, syntax_errors=[str(exc)])
             return errors, broken, None
         expected_actions = sorted({str(name) for name in model_ast.get("action_defs", [])})
+        expected_parts = sorted({str(name) for name in model_ast.get("part_defs", [])})
 
     if expected_actions:
         cartesian_report = CartesianProductValidator.verify_cartesian_completeness(stpa_rows, expected_actions)
@@ -1356,6 +1395,29 @@ def validate_safety_matrix_ast(content: str, model_text: Optional[str] = None) -
                 f"minimum required is {MIN_STRUCTURAL_UCA_ROWS} permutations (4 control actions x 4 guide words)."
             )
 
+    if expected_parts:
+        fmeca_data = parse_fmeca_table(content)
+        table_components = set(fmeca_data["components"].keys())
+        missing_parts = []
+        for p in expected_parts:
+            matched = False
+            for c in table_components:
+                if (
+                    c.strip().lower() == p.strip().lower()
+                    or re.sub(r'[^a-zA-Z0-9]', '', c).lower() == re.sub(r'[^a-zA-Z0-9]', '', p).lower()
+                    or re.search(rf"\b{re.escape(p)}\b", c, re.IGNORECASE)
+                    or re.search(rf"\b{re.escape(c)}\b", p, re.IGNORECASE)
+                ):
+                    matched = True
+                    break
+            if not matched:
+                missing_parts.append(p)
+        if missing_parts:
+            report.missing_fmeca_parts.extend(missing_parts)
+            errors.append(
+                f"Pillar 7 violation: FMECA table missing declared AST part def component(s): {', '.join(sorted(missing_parts))}."
+            )
+
     if model_text or oso_rows:
         sora_report = CartesianProductValidator.verify_sora_oso_coverage(oso_rows)
         report.missing_osos.extend(sora_report.missing_osos)
@@ -1375,12 +1437,17 @@ def validate_safety_matrix_ast(content: str, model_text: Optional[str] = None) -
     return errors, report, expected_actions
 
 
-def _validate_aggregate_safety_content(aggregate_safety_content: str, repo_root: Optional[str] = None) -> Tuple[list, Optional[ASTValidationReport]]:
+def _validate_aggregate_safety_content(
+    aggregate_safety_content: str,
+    repo_root: Optional[str] = None,
+    model_text: Optional[str] = None,
+) -> Tuple[list, Optional[ASTValidationReport]]:
     """Run pillar validation plus structural AST validation.
 
     The structural AST validation is model-optional: when a SysML model is
     discoverable under repo_root, the full Cartesian cardinality is compared
-    against the model's action definitions; without a model, guide-word
+    against the model's action definitions and FMECA component completeness is
+    compared against the model's part definitions; without a model, guide-word
     completeness is enforced against the (controller, control action) pairs
     derived from the UCA table itself and the 5-part proof structure is
     enforced on parsed theorem blocks.
@@ -1390,8 +1457,7 @@ def _validate_aggregate_safety_content(aggregate_safety_content: str, repo_root:
     errors: List[str] = []
     ast_report: Optional[ASTValidationReport] = None
 
-    model_text = None
-    if repo_root:
+    if model_text is None and repo_root:
         model_text = _discover_sysml_model_text(repo_root)
 
     ast_errors, ast_report, _expected_actions = validate_safety_matrix_ast(aggregate_safety_content, model_text)
@@ -1401,20 +1467,25 @@ def _validate_aggregate_safety_content(aggregate_safety_content: str, repo_root:
     return errors, ast_report
 
 
-def validate_safety_matrix_content(content: str, repo_root: Optional[str] = None) -> list:
+def validate_safety_matrix_content(
+    content: str,
+    repo_root: Optional[str] = None,
+    model_text: Optional[str] = None,
+) -> list:
     """Validate 8-pillar schema, 24 SORA OSOs, 15+ FMECA rows, 4 UCA categories, ASTM F3269-17 RTA, and MATLAB/Simulink hooks.
 
     Structural table-aware AST validation is model-optional. When a SysML v2
     model is discoverable under repo_root (schema/*.sysml or .pipeline/schema.sysml),
     dynamic Cartesian product set equality against the model's action definitions
-    supersedes the legacy regex keyword checks; without a model, guide-word
+    and FMECA component completeness against the model's part definitions
+    supersede the legacy regex keyword checks; without a model, guide-word
     completeness over table-derived (controller, control action) pairs and the
     5-part proof structure are still enforced structurally, while the legacy
     regex scans remain the fallback for pillar presence and SORA OSO coverage.
 
     Returns a list of violation error strings (empty if valid).
     """
-    errors, _ast_report = _validate_aggregate_safety_content(content, repo_root)
+    errors, _ast_report = _validate_aggregate_safety_content(content, repo_root, model_text)
     return errors
 
 
@@ -1472,10 +1543,37 @@ def _validate_safety_matrix_pillars(content: str, ast_path_active: bool = False)
         elif total_rows > 0 and total_basis < total_rows:
             errors.append(f"Pillar 7 violation: FMECA Criticality Matrix contains {total_rows - total_basis} row(s) missing explicit Derivation Basis classification ('SSOT' / 'Derived').")
 
-        if total_rows > 1 and fmeca_data["components"]:
-            max_modes = max(len(modes) for modes in fmeca_data["components"].values())
-            if max_modes <= 1:
-                errors.append("Pillar 7 violation: FMECA Criticality Matrix lacks failure mode multiplicity (every component defines only a single failure mode). Multi-signature components must define multiple discrete failure modes.")
+        if total_rows > 0 and fmeca_data["components"]:
+            for comp, comp_rows in fmeca_data["components"].items():
+                if len(comp_rows) < 3:
+                    errors.append(
+                        f"Pillar 7 violation: FMECA component '{comp}' defines {len(comp_rows)} failure mode(s); "
+                        f"minimum required is 3 distinct failure modes across universal failure dimensions (Interface, State, Action, Resource)."
+                    )
+
+        for row in fmeca_data["rows"]:
+            row_id = row.get("failure_id") or row.get("failure_mode") or "Row"
+            s = row.get("s")
+            o = row.get("o")
+            d = row.get("d")
+            rpn = row.get("rpn")
+            if s is not None and o is not None and d is not None:
+                try:
+                    s_int = int(s)
+                    o_int = int(o)
+                    d_int = int(d)
+                    if not (1 <= s_int <= 10 and 1 <= o_int <= 10 and 1 <= d_int <= 10):
+                        errors.append(f"Pillar 7 violation: FMECA row '{row_id}' ratings out of range [1, 10] (S={s_int}, O={o_int}, D={d_int}).")
+                    expected_rpn = s_int * o_int * d_int
+                    if rpn is not None:
+                        try:
+                            rpn_int = int(rpn)
+                            if rpn_int != expected_rpn:
+                                errors.append(f"Pillar 7 violation: FMECA row '{row_id}' has invalid RPN calculation -- expected S({s_int}) * O({o_int}) * D({d_int}) = {expected_rpn}, but found RPN = {rpn_int}.")
+                        except ValueError:
+                            errors.append(f"Pillar 7 violation: FMECA row '{row_id}' has non-integer RPN '{rpn}'.")
+                except ValueError:
+                    errors.append(f"Pillar 7 violation: FMECA row '{row_id}' has non-integer S/O/D ratings (S='{s}', O='{o}', D='{d}').")
 
     # Pillar 8: SORA SAIL Risk Mitigations & OSO Traceability Table
     if not (re.search(r'\bSORA\b', content) and re.search(r'\bSAIL\b', content)):

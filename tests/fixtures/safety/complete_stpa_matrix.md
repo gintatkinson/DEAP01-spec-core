@@ -96,11 +96,13 @@ Systematic identification across the 4 STPA guide word / failure mode categories
 | FM-09 | Unit-03 | Power Voltage Sag | Brownout Reset | System Loss L-1 | 5 | 1 | 2 | 10 | Backup Power Rail | SSOT |
 | FM-10 | Unit-04 | Telemetry Frame Loss | Uplink Timeout | System Loss L-1 | 3 | 3 | 2 | 18 | Auto-Reconnection Protocol | SSOT |
 | FM-11 | Unit-04 | Packet Checksum Failure | Rejected Packet | Hazard H-1 | 2 | 3 | 2 | 12 | Retransmission Queue | Derived |
-| FM-12 | Unit-05 | Thermal Overload | Thermal Throttling | Hazard H-1 | 3 | 2 | 2 | 12 | Active Cooling System | SSOT |
-| FM-13 | Unit-05 | Clock Drift / Jitter | Phase Offset | Hazard H-1 | 3 | 2 | 2 | 12 | PTP Sync Loop | Derived |
-| FM-14 | Unit-06 | Safe State Transition Failure | Uncommanded Motion | System Loss L-1 | 5 | 1 | 2 | 10 | Independent Interlock Circuit | SSOT |
-| FM-15 | Unit-06 | False Positive Envelope Trip | Spurious Abort | Hazard H-1 | 2 | 3 | 2 | 12 | Multi-Sensor Voting | Derived |
-| FM-16 | Unit-06 | Output Stage Short Circuit | Total Loss of Unit | System Loss L-1 | 5 | 1 | 2 | 10 | Overcurrent Crowbar | SSOT |
+| FM-12 | Unit-04 | Transceiver Bus Lockup | Bus Inoperable | System Loss L-1 | 4 | 2 | 2 | 16 | Bus Reset Supervisor | SSOT |
+| FM-13 | Unit-05 | Thermal Overload | Thermal Throttling | Hazard H-1 | 3 | 2 | 2 | 12 | Active Cooling System | SSOT |
+| FM-14 | Unit-05 | Clock Drift / Jitter | Phase Offset | Hazard H-1 | 3 | 2 | 2 | 12 | PTP Sync Loop | Derived |
+| FM-15 | Unit-05 | Supply Voltage Undervoltage | Logic Reset | System Loss L-1 | 4 | 2 | 2 | 16 | Power Rail Supervisor | SSOT |
+| FM-16 | Unit-06 | Safe State Transition Failure | Uncommanded Motion | System Loss L-1 | 5 | 1 | 2 | 10 | Independent Interlock Circuit | SSOT |
+| FM-17 | Unit-06 | False Positive Envelope Trip | Spurious Abort | Hazard H-1 | 2 | 3 | 2 | 12 | Multi-Sensor Voting | Derived |
+| FM-18 | Unit-06 | Output Stage Short Circuit | Total Loss of Unit | System Loss L-1 | 5 | 1 | 2 | 10 | Overcurrent Crowbar | SSOT |
 
 ---
 

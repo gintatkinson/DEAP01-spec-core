@@ -89,14 +89,15 @@ _PROOF_PARTS = {
 }
 
 
-def build_stpa_document(uca_combos=None, oso_ids=None, proof_part_numbers=(1, 2, 3, 4, 5), fmeca_row_count=16):
+def build_stpa_document(uca_combos=None, oso_ids=None, proof_part_numbers=(1, 2, 3, 4, 5), fmeca_row_count=16, components=("ControllerA", "ControllerB")):
     """Build a full 8-pillar safety matrix document (neutral identifiers)."""
     if uca_combos is None:
         uca_combos = []
     if oso_ids is None:
         oso_ids = list(range(1, 25))
+    num_comps = len(components)
     fmeca_rows = "\n".join(
-        f"| FM-{i:02d} | Subsystem-{((i - 1) % 4) + 1:02d} | Failure Mode {i:02d} | Local Effect {i:02d} "
+        f"| FM-{i:02d} | {components[(i - 1) % num_comps]} | Failure Mode {i:02d} | Local Effect {i:02d} "
         f"| System Effect {i:02d} | 4 | 2 | 2 | 16 | Redundant Channel {i:02d} | SSOT |"
         for i in range(1, fmeca_row_count + 1)
     )
