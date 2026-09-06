@@ -119,7 +119,7 @@ class ValidationRules:
     realization_matrix_header: str = "## 8. Realization Matrix"
     realization_stories_header: str = "### Required User Stories"
     realization_features_header: str = "### Required Features"
-    alternative_schema_extensions: List[str] = field(default_factory=lambda: [".yaml", ".yml", ".json", ".proto", ".asn", ".asn1", ".msg", ".srv", ".xsd"])
+    alternative_schema_extensions: List[str] = field(default_factory=lambda: [".yaml", ".yml", ".json", ".proto", ".asn", ".asn1", ".msg", ".srv", ".xsd", ".sysml", ".kerml", ".md"])
     schema_patterns: Dict[str, Any] = field(default_factory=dict)
     required_sections: Dict[str, List[List[str]]] = field(default_factory=lambda: {})
 

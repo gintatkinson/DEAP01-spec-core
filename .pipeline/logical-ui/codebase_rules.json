@@ -328,6 +328,53 @@
           "\\baction\\s+([a-zA-Z0-9_\\-]+)",
           "\\bfeature\\s+([a-zA-Z0-9_\\-]+)"
         ]
+      },
+      ".sysml": {
+        "name_regex": "\\bpackage\\s+([a-zA-Z0-9_\\-]+)",
+        "patterns": [
+          "\\bpart\\s+(?:def\\s+)?([a-zA-Z0-9_\\-]+)",
+          "\\bport\\s+(?:def\\s+)?([a-zA-Z0-9_\\-]+)",
+          "\\baction\\s+(?:def\\s+)?([a-zA-Z0-9_\\-]+)",
+          "\\bstate\\s+(?:def\\s+)?([a-zA-Z0-9_\\-]+)",
+          "\\bconstraint\\s+(?:def\\s+)?([a-zA-Z0-9_\\-]+)",
+          "\\brequirement\\s+(?:def\\s+)?([a-zA-Z0-9_\\-]+)",
+          "\\binterface\\s+(?:def\\s+)?([a-zA-Z0-9_\\-]+)",
+          "\\bitem\\s+(?:def\\s+)?([a-zA-Z0-9_\\-]+)",
+          "\\battribute\\s+(?:def\\s+)?([a-zA-Z0-9_\\-]+)",
+          "\\bconnection\\s+(?:def\\s+)?([a-zA-Z0-9_\\-]+)",
+          "\\ballocation\\s+(?:def\\s+)?([a-zA-Z0-9_\\-]+)",
+          "\\benum\\s+(?:def\\s+)?([a-zA-Z0-9_\\-]+)",
+          "\\bview\\s+(?:def\\s+)?([a-zA-Z0-9_\\-]+)",
+          "\\bviewpoint\\s+(?:def\\s+)?([a-zA-Z0-9_\\-]+)"
+        ]
+      },
+      ".kerml": {
+        "name_regex": "\\bpackage\\s+([a-zA-Z0-9_\\-]+)",
+        "patterns": [
+          "\\bfeature\\s+(?:def\\s+)?([a-zA-Z0-9_\\-]+)",
+          "\\bfunction\\s+(?:def\\s+)?([a-zA-Z0-9_\\-]+)",
+          "\\btype\\s+(?:def\\s+)?([a-zA-Z0-9_\\-]+)",
+          "\\bclassifier\\s+(?:def\\s+)?([a-zA-Z0-9_\\-]+)",
+          "\\bdatatype\\s+(?:def\\s+)?([a-zA-Z0-9_\\-]+)",
+          "\\bstruct\\s+(?:def\\s+)?([a-zA-Z0-9_\\-]+)",
+          "\\bbehavior\\s+(?:def\\s+)?([a-zA-Z0-9_\\-]+)",
+          "\\bstep\\s+(?:def\\s+)?([a-zA-Z0-9_\\-]+)",
+          "\\bdimension\\s+([a-zA-Z0-9_\\-]+)",
+          "\\bunit\\s+([a-zA-Z0-9_\\-]+)"
+        ]
+      },
+      ".md": {
+        "name_regex": "#\\s+([a-zA-Z0-9_\\-]+)",
+        "patterns": [
+          "\\bconcept\\s+([a-zA-Z0-9_\\-]+)",
+          "\\bentity\\s+([a-zA-Z0-9_\\-]+)",
+          "\\btype\\s+([a-zA-Z0-9_\\-]+)",
+          "\\bfield\\s+([a-zA-Z0-9_\\-]+)",
+          "\\bproperty\\s+([a-zA-Z0-9_\\-]+)",
+          "\\bsection\\s+([a-zA-Z0-9_\\-]+)",
+          "\\bstructure\\s+([a-zA-Z0-9_\\-]+)",
+          "\\bmodel\\s+([a-zA-Z0-9_\\-]+)"
+        ]
       }
     },
     "alternative_schema_extensions": [
@@ -339,7 +386,10 @@
       ".asn1",
       ".msg",
       ".srv",
-      ".xsd"
+      ".xsd",
+      ".sysml",
+      ".kerml",
+      ".md"
     ],
     "required_sections": {
       "epic": [

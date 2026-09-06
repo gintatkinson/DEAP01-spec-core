@@ -28,6 +28,7 @@ from ..core.workspace import WorkspaceRepository
 ALWAYS_INVALID_PLACEHOLDER_PATTERNS = [
     # Real references look like '#43'. Any bracketed token is unresolved.
     (re.compile(r"#\[[^\]]+\]"), "unresolved issue reference token"),
+    (re.compile(r"#TBD\b", re.I), "unresolved reference token"),
     (re.compile(r"\[(?:Feat(?:ure)?|Epic|US|UC|User\s*Story|Use\s*Case|Story|Issue)[-_\s]*(?:ID|IssueID)\]", re.I),
      "unresolved issue reference token"),
     (re.compile(r"\[(?:Epic|Feature|User\s*Story|Use\s*Case)\s+Title\]", re.I),
@@ -59,14 +60,50 @@ CONDITIONAL_STUB_PATTERNS = [
     (re.compile(r"\*\s*\(?\s*(?:to be populated|tbd|n/a)\s*\)?\s*\*", re.I), "placeholder stub"),
 ]
 
+ALLOWED_METADATA_PLACEHOLDERS = re.compile(
+    r"^#?\[(?:IssueID|EpicID|FeatureID|EpicIssueID)\]$|^#TBD$",
+    re.IGNORECASE,
+)
+
+
+def _is_metadata_header_table_row(line: str) -> bool:
+    """Check if a line is a metadata header table row."""
+    stripped = line.strip()
+    if not (stripped.startswith("|") and stripped.endswith("|")):
+        return False
+    cells = [c.strip() for c in stripped.strip("|").split("|")]
+    if len(cells) < 2:
+        return False
+    key = re.sub(r'[*`_:#]', '', cells[0]).strip().lower()
+    key = re.sub(r'[\s\-/]+', '_', key)
+    metadata_keys = {
+        "issue_id", "issue", "parent_epic", "feature_id", "epic_id",
+        "epic_issue_id", "status", "doc_status", "document_status", "state",
+        "user_story_id", "use_case_id", "story_id", "id", "doc_id",
+        "document_id", "attribute", "key", "field", "property",
+        "parent", "epic", "feature", "type", "title", "package",
+        "subsystem", "generation_mode", "specification_source",
+        "interface_type", "schema_containers", "version", "date",
+        "release_date", "target_baseline",
+    }
+    return key in metadata_keys
+
 
 def find_unresolved_placeholders(content: str, patterns=None):
     """Yield ``(line_number, label, line_text)`` for each unresolved placeholder."""
     if patterns is None:
         patterns = ALWAYS_INVALID_PLACEHOLDER_PATTERNS
     for lineno, line in enumerate(content.splitlines(), 1):
+        is_meta_row = _is_metadata_header_table_row(line)
         for pattern, label in patterns:
-            if pattern.search(line):
+            has_unresolved = False
+            for m in pattern.finditer(line):
+                matched_str = m.group(0)
+                if is_meta_row and ALLOWED_METADATA_PLACEHOLDERS.fullmatch(matched_str.strip()):
+                    continue
+                has_unresolved = True
+                break
+            if has_unresolved:
                 yield lineno, label, line.strip()
                 break
 
@@ -1488,8 +1525,6 @@ class UmlValidator(IValidator):
                     covered_interactions.add(inter_name)
                 elif re.search(rf"\b(?:interaction|Interaction|SysML\s+Interaction\s+Def)\s*:?\s*`?{re.escape(inter_name)}`?\b", content):
                     covered_interactions.add(inter_name)
-                elif re.search(rf"\b{re.escape(inter_name)}\b", content):
-                    covered_interactions.add(inter_name)
 
         # 4. Bidirectional Check: SysML interaction realization
         for inter in all_interactions:
@@ -1728,14 +1763,13 @@ class UmlValidator(IValidator):
                             location="user-stories"
                         ))
                     else:
-                        if reqs_by_id_or_name:
-                            for v_req in verified_reqs:
-                                if v_req not in reqs_by_id_or_name:
-                                    errors.append(Finding(
-                                        "test-case-verify-requirement-invalid",
-                                        f"User Story '{filename}': Test case def '{tc_name}' specifies verify requirement '{v_req}' which is not defined in SysML AST.",
-                                        location="user-stories"
-                                    ))
+                        for v_req in verified_reqs:
+                            if v_req not in reqs_by_id_or_name:
+                                errors.append(Finding(
+                                    "test-case-verify-requirement-invalid",
+                                    f"User Story '{filename}': Test case def '{tc_name}' specifies verify requirement '{v_req}' which is not defined in SysML AST.",
+                                    location="user-stories"
+                                ))
 
         # Bidirectional Check: SysML test cases bound across User Stories
         for tc in all_test_cases:
