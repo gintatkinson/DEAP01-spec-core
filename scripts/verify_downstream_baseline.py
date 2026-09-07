@@ -79,7 +79,17 @@ def check_no_domain_config(destination):
 
 def tag_restoration_point(repo_root=None):
     print("Tagging restoration point...")
+    if shutil.which("git") is None:
+        print("WARNING: Skipping restoration point tag - git binary not found.", file=sys.stderr)
+        return True
     try:
+        res_inside = subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], capture_output=True, text=True, cwd=repo_root, timeout=GIT_TIMEOUT_SECONDS)
+        if res_inside.returncode != 0:
+            if os.environ.get("CI") == "true" or os.environ.get("GITLAB_CI") == "true" or os.environ.get("GITHUB_ACTIONS") == "true":
+                print("WARNING: Skipping restoration point tag - running in CI environment outside git repository.", file=sys.stderr)
+                return True
+            print("WARNING: Failed to tag restoration point: not inside a git repository.", file=sys.stderr)
+            return False
         res = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, cwd=repo_root, timeout=GIT_TIMEOUT_SECONDS)
         if res.returncode != 0:
             print("WARNING: Skipping restoration point tag - git HEAD is unborn (fresh repository).", file=sys.stderr)
