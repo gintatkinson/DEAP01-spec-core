@@ -1285,7 +1285,7 @@ class SysMLParser:
                 header = d["header"]
                 doc = d.get("doc", "")
 
-                if re.search(r'\b(?:perform\s+)?capability\s+(?:def\s+)?([a-zA-Z0-9_]+)|\bperform\s+([a-zA-Z0-9_]+)', header):
+                if re.search(r'\b(?:perform\s+)?capability\s+(?:def\s+)?([a-zA-Z0-9_]+)|\bperform\s+(?:[a-zA-Z0-9_]+::)?([a-zA-Z0-9_]+)', header):
                     c_obj = self._parse_capability_block(d, parent_name=container.name)
                     if isinstance(container, SysMLPackage):
                         if not c_obj.parent_package:
@@ -1427,8 +1427,8 @@ class SysMLParser:
                     else:
                         container.capabilities.append(cap_obj)
 
-                elif re.search(r'\bperform\s+(?:capability\s+|action\s+)?([a-zA-Z0-9_]+)', stmt):
-                    m = re.search(r'\bperform\s+(?:capability\s+|action\s+)?([a-zA-Z0-9_]+)', stmt)
+                elif re.search(r'\bperform\s+(?:capability\s+|action\s+)?(?:[a-zA-Z0-9_]+::)?([a-zA-Z0-9_]+)', stmt):
+                    m = re.search(r'\bperform\s+(?:capability\s+|action\s+)?(?:[a-zA-Z0-9_]+::)?([a-zA-Z0-9_]+)', stmt)
                     cap_name = m.group(1)
                     cap_obj = SysMLCapabilityDef(
                         name=cap_name,
@@ -1537,7 +1537,7 @@ class SysMLParser:
 
     def _parse_capability_block(self, decl: Dict[str, Any], parent_name: str = "") -> SysMLCapabilityDef:
         header = decl["header"]
-        m = re.search(r'\b(?:perform\s+)?capability\s+(?:def\s+)?([a-zA-Z0-9_]+)|\bperform\s+([a-zA-Z0-9_]+)', header)
+        m = re.search(r'\b(?:perform\s+)?capability\s+(?:def\s+)?(?:[a-zA-Z0-9_]+::)?([a-zA-Z0-9_]+)|\bperform\s+(?:[a-zA-Z0-9_]+::)?([a-zA-Z0-9_]+)', header)
         name = (m.group(1) or m.group(2)) if m else "Capability"
         doc = decl.get("doc", "")
         description = doc
