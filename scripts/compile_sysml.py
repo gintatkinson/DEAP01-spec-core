@@ -2012,6 +2012,9 @@ def parse_sysml(content: str) -> Dict[str, List[str]]:
     for match in re.finditer(r'\bcapability\s+(?:def\s+)?([a-zA-Z0-9_]+)', content):
         if match.group(1) not in ast["capability_defs"]:
             ast["capability_defs"].append(match.group(1))
+    for match in re.finditer(r'\bperform\s+(?:capability\s+|action\s+)?([a-zA-Z0-9_]+)', content):
+        if match.group(1) not in ast["capability_defs"]:
+            ast["capability_defs"].append(match.group(1))
     for match in re.finditer(r'\b(?:operation|feature)\s+(?:def\s+)?([a-zA-Z0-9_]+)', content):
         if match.group(1) not in ast["operation_defs"]:
             ast["operation_defs"].append(match.group(1))
@@ -2038,6 +2041,10 @@ def parse_sysml(content: str) -> Dict[str, List[str]]:
             ast["item_defs"].append(match.group(1))
 
     return ast
+
+
+# Alias for backwards compatibility
+extract_sysml_ast = parse_sysml
 
 
 def main():

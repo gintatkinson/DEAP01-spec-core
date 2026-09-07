@@ -335,6 +335,8 @@
           "\\bpart\\s+(?:def\\s+)?([a-zA-Z0-9_\\-]+)",
           "\\bport\\s+(?:def\\s+)?([a-zA-Z0-9_\\-]+)",
           "\\baction\\s+(?:def\\s+)?([a-zA-Z0-9_\\-]+)",
+          "\\bcapability\\s+(?:def\\s+)?([a-zA-Z0-9_\\-]+)",
+          "\\bperform\\s+(?:capability\\s+)?([a-zA-Z0-9_\\-]+)",
           "\\bstate\\s+(?:def\\s+)?([a-zA-Z0-9_\\-]+)",
           "\\bconstraint\\s+(?:def\\s+)?([a-zA-Z0-9_\\-]+)",
           "\\brequirement\\s+(?:def\\s+)?([a-zA-Z0-9_\\-]+)",

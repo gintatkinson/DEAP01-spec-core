@@ -36,6 +36,14 @@ class AttributeDef:
     doc: str = ""
     default_value: Optional[str] = None
 
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "type_name": self.type_name,
+            "doc": self.doc,
+            "default_value": self.default_value,
+        }
+
     def to_sysml(self, indent: int = 4) -> str:
         pad = " " * indent
         doc_str = f"{pad}doc /* {self.doc} */\n" if self.doc else ""
@@ -50,6 +58,14 @@ class PortDef:
     direction: str = "inout"
     doc: str = ""
 
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "type_name": self.type_name,
+            "direction": self.direction,
+            "doc": self.doc,
+        }
+
     def to_sysml(self, indent: int = 4) -> str:
         pad = " " * indent
         doc_str = f"{pad}doc /* {self.doc} */\n" if self.doc else ""
@@ -63,6 +79,14 @@ class ActionDef:
     doc: str = ""
     in_params: List[AttributeDef] = field(default_factory=list)
     out_params: List[AttributeDef] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "doc": self.doc,
+            "in_params": [p.to_dict() for p in (self.in_params or [])],
+            "out_params": [p.to_dict() for p in (self.out_params or [])],
+        }
 
     def to_sysml(self, indent: int = 4) -> str:
         pad = " " * indent
@@ -84,6 +108,16 @@ class SysMLOperationDef:
     return_type: Optional[str] = None
     doc: str = ""
     parameters: List[AttributeDef] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "direction": self.direction,
+            "param_type": self.param_type,
+            "return_type": self.return_type,
+            "doc": self.doc,
+            "parameters": [p.to_dict() for p in (self.parameters or [])],
+        }
 
     def to_sysml(self, indent: int = 4) -> str:
         pad = " " * indent
@@ -111,16 +145,29 @@ class SysMLCapabilityDef:
     subsystem: str = ""
     package_ref: str = ""
     doc: str = ""
+    parent_package: str = ""
 
     def __post_init__(self):
         if not self.description and self.doc:
             self.description = self.doc
         elif not self.doc and self.description:
             self.doc = self.description
-        if not self.package_ref and self.subsystem:
-            self.package_ref = self.subsystem
-        elif not self.subsystem and self.package_ref:
-            self.subsystem = self.package_ref
+        if not self.parent_package and self.package_ref:
+            self.parent_package = self.package_ref
+        elif not self.package_ref and self.parent_package:
+            self.package_ref = self.parent_package
+        if not self.subsystem and self.parent_package:
+            self.subsystem = self.parent_package
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "doc": self.doc or self.description,
+            "description": self.description or self.doc,
+            "subsystem": self.subsystem,
+            "package_ref": self.package_ref,
+            "parent_package": self.parent_package or self.package_ref or self.subsystem,
+        }
 
     def to_sysml(self, indent: int = 4) -> str:
         pad = " " * indent
@@ -129,7 +176,7 @@ class SysMLCapabilityDef:
         if doc_val:
             lines.append(f"{pad}doc /* {doc_val} */")
         lines.append(f"{pad}capability def {self.name} {{")
-        subsys = self.subsystem or self.package_ref
+        subsys = self.subsystem or self.package_ref or self.parent_package
         if subsys:
             lines.append(f"{pad}    subsystem {subsys};")
         lines.append(f"{pad}}}")
@@ -143,6 +190,15 @@ class SysMLInteractionDef:
     messages: List[str] = field(default_factory=list)
     triggers: List[str] = field(default_factory=list)
     doc: str = ""
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "lifelines": list(self.lifelines or []),
+            "messages": list(self.messages or []),
+            "triggers": list(self.triggers or []),
+            "doc": self.doc,
+        }
 
     def to_sysml(self, indent: int = 4) -> str:
         pad = " " * indent
@@ -168,6 +224,15 @@ class SysMLConstraintDef:
     is_assertion: bool = False
     doc: str = ""
 
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "expression": self.expression,
+            "parameters": list(self.parameters or []),
+            "is_assertion": self.is_assertion,
+            "doc": self.doc,
+        }
+
     def to_sysml(self, indent: int = 4) -> str:
         pad = " " * indent
         lines = []
@@ -192,6 +257,16 @@ class SysMLTestCaseDef:
     objective: str = ""
     test_steps: List[str] = field(default_factory=list)
     doc: str = ""
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "subject_part": self.subject_part,
+            "verified_requirements": list(self.verified_requirements or []),
+            "objective": self.objective,
+            "test_steps": list(self.test_steps or []),
+            "doc": self.doc,
+        }
 
     def to_sysml(self, indent: int = 4) -> str:
         pad = " " * indent
@@ -221,6 +296,18 @@ class RequirementDef:
     requires: List[str] = field(default_factory=list)
     verified_by: List[str] = field(default_factory=list)
     satisfied_by: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "req_id": self.req_id,
+            "doc": self.doc,
+            "text": self.text,
+            "assumes": list(self.assumes or []),
+            "requires": list(self.requires or []),
+            "verified_by": list(self.verified_by or []),
+            "satisfied_by": list(self.satisfied_by or []),
+        }
 
     def to_sysml(self, indent: int = 4) -> str:
         pad = " " * indent
@@ -253,6 +340,16 @@ class StateDef:
     exit_action: Optional[str] = None
     transitions: List[str] = field(default_factory=list)
 
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "doc": self.doc,
+            "entry_action": self.entry_action,
+            "do_action": self.do_action,
+            "exit_action": self.exit_action,
+            "transitions": list(self.transitions or []),
+        }
+
     def to_sysml(self, indent: int = 4) -> str:
         pad = " " * indent
         lines = []
@@ -281,6 +378,17 @@ class UseCaseDef:
     includes: List[str] = field(default_factory=list)
     extends: List[str] = field(default_factory=list)
 
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "doc": self.doc,
+            "subject": self.subject,
+            "actor": self.actor,
+            "objective": self.objective,
+            "includes": list(self.includes or []),
+            "extends": list(self.extends or []),
+        }
+
     def to_sysml(self, indent: int = 4) -> str:
         pad = " " * indent
         lines = []
@@ -307,6 +415,13 @@ class ItemDef:
     doc: str = ""
     attributes: List[AttributeDef] = field(default_factory=list)
 
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "doc": self.doc,
+            "attributes": [a.to_dict() for a in (self.attributes or [])],
+        }
+
     def to_sysml(self, indent: int = 4) -> str:
         pad = " " * indent
         lines = []
@@ -329,6 +444,17 @@ class HazardDef:
     attributes: Dict[str, Any] = field(default_factory=dict)
     attribute_defs: List[AttributeDef] = field(default_factory=list)
     part_ref: str = ""
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "doc": self.doc,
+            "severity": self.severity,
+            "source_port": self.source_port,
+            "target_port": self.target_port,
+            "part_ref": self.part_ref,
+            "attributes": dict(self.attributes or {}),
+        }
 
     def to_sysml(self, indent: int = 4) -> str:
         pad = " " * indent
@@ -361,6 +487,17 @@ class RiskDef:
     attribute_defs: List[AttributeDef] = field(default_factory=list)
     hazard_ref: str = ""
 
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "doc": self.doc,
+            "severity": self.severity,
+            "source_port": self.source_port,
+            "target_port": self.target_port,
+            "hazard_ref": self.hazard_ref,
+            "attributes": dict(self.attributes or {}),
+        }
+
     def to_sysml(self, indent: int = 4) -> str:
         pad = " " * indent
         lines = []
@@ -390,6 +527,16 @@ class ConnectionDef:
     severity: int = 1
     attributes: Dict[str, Any] = field(default_factory=dict)
     attribute_defs: List[AttributeDef] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "source_port": self.source_port,
+            "target_port": self.target_port,
+            "doc": self.doc,
+            "severity": self.severity,
+            "attributes": dict(self.attributes or {}),
+        }
 
     def to_sysml(self, indent: int = 4) -> str:
         pad = " " * indent
@@ -445,6 +592,28 @@ class PartDef:
     hazards: List[HazardDef] = field(default_factory=list)
     risks: List[RiskDef] = field(default_factory=list)
     connections: List[ConnectionDef] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "doc": self.doc,
+            "attributes": [a.to_dict() for a in (self.attributes or [])],
+            "ports": [p.to_dict() for p in (self.ports or [])],
+            "actions": [a.to_dict() for a in (self.actions or [])],
+            "operations": [o.to_dict() for o in (self.operations or [])],
+            "capabilities": [c.to_dict() for c in (self.capabilities or [])],
+            "interactions": [i.to_dict() for i in (self.interactions or [])],
+            "constraints": [c.to_dict() for c in (self.constraints or [])],
+            "test_cases": [t.to_dict() for t in (self.test_cases or [])],
+            "states": [s.to_dict() for s in (self.states or [])],
+            "requirements": [r.to_dict() for r in (self.requirements or [])],
+            "use_cases": [u.to_dict() for u in (self.use_cases or [])],
+            "item_defs": [i.to_dict() for i in (self.item_defs or [])],
+            "hazards": [h.to_dict() for h in (self.hazards or [])],
+            "risks": [r.to_dict() for r in (self.risks or [])],
+            "connections": [c.to_dict() for c in (self.connections or [])],
+            "parts": [p.to_dict() for p in (self.parts or [])],
+        }
 
     def to_sysml(self, indent: int = 4) -> str:
         pad = " " * indent
@@ -514,6 +683,30 @@ class SysMLPackage:
     hazard_defs: List[HazardDef] = field(default_factory=list)
     risk_defs: List[RiskDef] = field(default_factory=list)
     connection_defs: List[ConnectionDef] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "doc": self.doc,
+            "parent_package": "",
+            "packages": [p.to_dict() for p in (self.sub_packages or [])],
+            "part_defs": [p.to_dict() for p in (self.part_defs or [])],
+            "capability_defs": [c.to_dict() for c in (self.capability_defs or [])],
+            "action_defs": [a.to_dict() for a in (self.action_defs or [])],
+            "operation_defs": [o.to_dict() for o in (self.operation_defs or [])],
+            "port_defs": [p.to_dict() for p in (self.port_defs or [])],
+            "attribute_defs": [a.to_dict() for a in (self.attribute_defs or [])],
+            "interaction_defs": [i.to_dict() for i in (self.interaction_defs or [])],
+            "constraint_defs": [c.to_dict() for c in (self.constraint_defs or [])],
+            "test_case_defs": [t.to_dict() for t in (self.test_case_defs or [])],
+            "requirement_defs": [r.to_dict() for r in (self.requirement_defs or [])],
+            "state_defs": [s.to_dict() for s in (self.state_defs or [])],
+            "use_case_defs": [u.to_dict() for u in (self.use_case_defs or [])],
+            "item_defs": [i.to_dict() for i in (self.item_defs or [])],
+            "hazard_defs": [h.to_dict() for h in (self.hazard_defs or [])],
+            "risk_defs": [r.to_dict() for r in (self.risk_defs or [])],
+            "connection_defs": [c.to_dict() for c in (self.connection_defs or [])],
+        }
 
     def to_sysml(self, indent: int = 0) -> str:
         pad = " " * indent
@@ -898,6 +1091,11 @@ class SysMLParser:
         parser = cls()
         return parser._parse(content, default_name=default_name)
 
+    @classmethod
+    def parse_to_dict(cls, content: str, default_name: str = "SysML_Model") -> Dict[str, Any]:
+        pkg = cls.parse_text(content, default_name=default_name)
+        return pkg.to_dict()
+
     def _parse(self, content: str, default_name: str = "SysML_Model") -> SysMLPackage:
         decls = self._scan_declarations(content)
         pkg_decls = [d for d in decls if d["type"] == "block" and self._is_keyword(d["header"], "package")]
@@ -1067,7 +1265,15 @@ class SysMLParser:
         header = decl["header"]
         match = re.search(r'\bpackage\s+([a-zA-Z0-9_\-\.]+)', header)
         pkg_name = match.group(1).replace('.', '_') if match else "Package"
-        pkg = SysMLPackage(name=pkg_name, doc=decl.get("doc", ""))
+        doc = decl.get("doc", "")
+        if not doc:
+            doc_m = re.search(r'(?:^\s*doc\s*/\*|\s*/\*)(.*?)\*/', decl.get("body", ""), re.DOTALL)
+            if doc_m:
+                extracted = doc_m.group(1).strip()
+                if extracted.startswith("doc"):
+                    extracted = extracted[3:].strip()
+                doc = extracted
+        pkg = SysMLPackage(name=pkg_name, doc=doc)
 
         body_decls = self._scan_declarations(decl["body"])
         self._populate_container(pkg, body_decls)
@@ -1079,11 +1285,21 @@ class SysMLParser:
                 header = d["header"]
                 doc = d.get("doc", "")
 
-                if re.search(r'\bcapability\s+(?:def\s+)?([a-zA-Z0-9_]+)', header):
-                    c_obj = self._parse_capability_block(d)
+                if re.search(r'\b(?:perform\s+)?capability\s+(?:def\s+)?([a-zA-Z0-9_]+)|\bperform\s+([a-zA-Z0-9_]+)', header):
+                    c_obj = self._parse_capability_block(d, parent_name=container.name)
                     if isinstance(container, SysMLPackage):
+                        if not c_obj.parent_package:
+                            c_obj.parent_package = container.name
+                        if not c_obj.package_ref:
+                            c_obj.package_ref = container.name
+                        if not c_obj.subsystem:
+                            c_obj.subsystem = container.name
                         container.capability_defs.append(c_obj)
                     else:
+                        if not c_obj.subsystem:
+                            c_obj.subsystem = container.name
+                        if not c_obj.parent_package:
+                            c_obj.parent_package = getattr(container, "parent_package", "") or container.name
                         container.capabilities.append(c_obj)
 
                 elif re.search(r'\binteraction\s+(?:def\s+)?([a-zA-Z0-9_]+)', header):
@@ -1197,7 +1413,31 @@ class SysMLParser:
 
                 elif re.search(r'\bcapability\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt):
                     m = re.search(r'\bcapability\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt)
-                    cap_obj = SysMLCapabilityDef(name=m.group(1), doc=doc)
+                    cap_name = m.group(1)
+                    cap_obj = SysMLCapabilityDef(
+                        name=cap_name,
+                        doc=doc,
+                        description=doc,
+                        subsystem=container.name,
+                        package_ref=container.name if isinstance(container, SysMLPackage) else "",
+                        parent_package=container.name
+                    )
+                    if isinstance(container, SysMLPackage):
+                        container.capability_defs.append(cap_obj)
+                    else:
+                        container.capabilities.append(cap_obj)
+
+                elif re.search(r'\bperform\s+(?:capability\s+|action\s+)?([a-zA-Z0-9_]+)', stmt):
+                    m = re.search(r'\bperform\s+(?:capability\s+|action\s+)?([a-zA-Z0-9_]+)', stmt)
+                    cap_name = m.group(1)
+                    cap_obj = SysMLCapabilityDef(
+                        name=cap_name,
+                        doc=doc,
+                        description=doc,
+                        subsystem=container.name,
+                        package_ref=container.name if isinstance(container, SysMLPackage) else "",
+                        parent_package=container.name
+                    )
                     if isinstance(container, SysMLPackage):
                         container.capability_defs.append(cap_obj)
                     else:
@@ -1282,40 +1522,69 @@ class SysMLParser:
         header = decl["header"]
         m = re.search(r'\bpart\s+(?:def\s+)?([a-zA-Z0-9_]+)', header)
         name = m.group(1) if m else "Part"
-        part = PartDef(name=name, doc=decl.get("doc", ""))
+        doc = decl.get("doc", "")
+        if not doc:
+            doc_m = re.search(r'(?:^\s*doc\s*/\*|\s*/\*)(.*?)\*/', decl.get("body", ""), re.DOTALL)
+            if doc_m:
+                extracted = doc_m.group(1).strip()
+                if extracted.startswith("doc"):
+                    extracted = extracted[3:].strip()
+                doc = extracted
+        part = PartDef(name=name, doc=doc)
         body_decls = self._scan_declarations(decl["body"])
         self._populate_container(part, body_decls)
         return part
 
-    def _parse_capability_block(self, decl: Dict[str, Any]) -> SysMLCapabilityDef:
+    def _parse_capability_block(self, decl: Dict[str, Any], parent_name: str = "") -> SysMLCapabilityDef:
         header = decl["header"]
-        m = re.search(r'\bcapability\s+(?:def\s+)?([a-zA-Z0-9_]+)', header)
-        name = m.group(1) if m else "Capability"
+        m = re.search(r'\b(?:perform\s+)?capability\s+(?:def\s+)?([a-zA-Z0-9_]+)|\bperform\s+([a-zA-Z0-9_]+)', header)
+        name = (m.group(1) or m.group(2)) if m else "Capability"
         doc = decl.get("doc", "")
         description = doc
         subsystem = ""
         package_ref = ""
+        parent_pkg = parent_name
+
+        if not doc:
+            doc_m = re.search(r'(?:^\s*doc\s*/\*|\s*/\*)(.*?)\*/', decl.get("body", ""), re.DOTALL)
+            if doc_m:
+                extracted = doc_m.group(1).strip()
+                if extracted.startswith("doc"):
+                    extracted = extracted[3:].strip()
+                doc = extracted
+                description = doc
 
         body_decls = self._scan_declarations(decl["body"])
         for d in body_decls:
             if d["type"] == "statement":
                 stmt = d["statement"]
-                subsys_m = re.search(r'\b(?:subsystem|package|subject)\s+([a-zA-Z0-9_\-\.]+)', stmt)
+                subsys_m = re.search(r'\bsubsystem\s+([a-zA-Z0-9_\-\.]+)', stmt)
                 if subsys_m:
                     subsystem = subsys_m.group(1)
-                    package_ref = subsys_m.group(1)
+                pkg_m = re.search(r'\b(?:package|parent_package)\s+([a-zA-Z0-9_\-\.]+)', stmt)
+                if pkg_m:
+                    parent_pkg = pkg_m.group(1)
+                    package_ref = pkg_m.group(1)
                 desc_m = re.search(r'\bdescription\s*[:=]\s*["\']?([^"\']+)["\']?', stmt)
                 if desc_m:
                     description = desc_m.group(1).strip()
             if d.get("doc") and not description:
                 description = d["doc"]
 
+        if not subsystem and parent_name:
+            subsystem = parent_name
+        if not package_ref and parent_name:
+            package_ref = parent_name
+        if not parent_pkg and parent_name:
+            parent_pkg = parent_name
+
         return SysMLCapabilityDef(
             name=name,
-            description=description,
+            description=description or doc,
             subsystem=subsystem,
             package_ref=package_ref,
-            doc=doc or description
+            doc=doc or description,
+            parent_package=parent_pkg
         )
 
     def _parse_interaction_block(self, decl: Dict[str, Any]) -> SysMLInteractionDef:
