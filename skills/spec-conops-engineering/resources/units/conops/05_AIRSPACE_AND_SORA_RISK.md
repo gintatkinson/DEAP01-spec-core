@@ -87,22 +87,22 @@ v_{\mathrm{terminal,unmitigated}} &= \sqrt{\frac{2mg}{\rho S_{\mathrm{ref}} C_D}
 E_{k,\mathrm{unmitigated}} &= \frac{1}{2} m v_{\mathrm{terminal,unmitigated}}^2 = \frac{1}{2} m \left( \frac{2mg}{\rho S_{\mathrm{ref}} C_D} \right) = \frac{m^2 g}{\rho S_{\mathrm{ref}} C_D}
 \end{aligned}
 $$
-   - **Aerodynamic Descent Equilibrium Derivation:**
-     Under failsafe {{RECOVERY_DEVICE_TERM:parachute}} deployment and canopy inflation, steady-state aerodynamic drag counterbalances gravitational force ($F_g = F_{D,{{RECOVERY_SUB:parachute}}}$), establishing terminal descent equilibrium:
+   - **Mitigated Dynamic Equilibrium Derivation:**
+     Under failsafe {{RECOVERY_DEVICE_TERM:containment}} actuation, steady-state deceleration and dissipation forces establish dynamic containment equilibrium:
 
 $$
 \begin{aligned}
-m g &= \frac{1}{2} \rho S_{\mathrm{canopy}} C_{d,\mathrm{parachute}} v_{\mathrm{terminal,parachute}}^2 \\
-v_{\mathrm{terminal,parachute}} &= \sqrt{\frac{2mg}{\rho S_{\mathrm{canopy}} C_{d,\mathrm{parachute}}}}
+m g &= \frac{1}{2} \rho S_{\mathrm{mit}} C_{d,\mathrm{mit}} v_{\mathrm{terminal,mitigated}}^2 \\
+v_{\mathrm{terminal,mitigated}} &= \sqrt{\frac{2mg}{\rho S_{\mathrm{mit}} C_{d,\mathrm{mit}}}}
 \end{aligned}
 $$
 
    - **Failsafe-Mitigated Kinetic Impact Energy:**
-     Substituting the equilibrium descent velocity into the kinetic energy formulation gives the failsafe-mitigated impact energy:
+     Substituting the equilibrium containment velocity into the kinetic energy formulation gives the failsafe-mitigated impact energy:
 
 $$
 \begin{aligned}
-E_{k,\mathrm{mitigated}} &= \frac{1}{2} m v_{\mathrm{terminal,parachute}}^2
+E_{k,\mathrm{mitigated}} &= \frac{1}{2} m v_{\mathrm{terminal,mitigated}}^2
 \end{aligned}
 $$
 
@@ -117,15 +117,15 @@ $$
 | Unmitigated Drag Coefficient | C_D | {{DRAG_COEFFICIENT:0.45}} | Dimensionless | C_D >= 0.30 | Characteristic unmitigated vehicle aerodynamic drag coefficient |
 | Unmitigated Terminal Velocity | v_terminal_unmitigated | {{V_TERMINAL_UNMITIGATED_MPS:77.01}} | m/s | v_terminal_unmitigated = sqrt(2*m*g / (rho*S_ref*C_D)) | Free-fall unconstrained terminal descent velocity |
 | Unmitigated Kinetic Energy | E_k_unmitigated | {{E_K_UNMITIGATED_JOULES:74125.1}} | J | E_k_unmitigated = (m^2 * g) / (rho * S_ref * C_D) | Total unmitigated ground impact kinetic energy |
-| Parachute Canopy Area | S_canopy | {{S_CANOPY:84.0}} | m^2 | S_canopy >= S_canopy_min | Deployed emergency recovery canopy surface area |
-| Parachute Drag Coefficient | C_d_parachute | {{PARACHUTE_DRAG_COEFFICIENT:1.75}} | Dimensionless | C_d_parachute >= 1.50 | Deployed canopy aerodynamic drag coefficient |
-| Parachute Terminal Velocity | v_terminal_parachute | {{V_TERMINAL_PARACHUTE_MPS:1.65}} | m/s | v_terminal_parachute = sqrt(2*m*g / (rho*S_canopy*C_d_parachute)) <= 1.65 | Equilibrium descent velocity (<= 1.65 m/s) |
-| Mitigated Kinetic Energy | E_k_mitigated | {{E_K_MITIGATED_JOULES:34.0}} | J | E_k_mitigated = 0.5 * m * v_terminal_parachute^2 <= 34.0 | Failsafe-mitigated impact kinetic energy (<= 34.0 J) |
-| Regulatory Energy Threshold | E_threshold | 34.0 | J | E_threshold = 34.0 | Regulatory maximum kinetic energy threshold for low ground risk classification |
+| Mitigated Containment Area | S_mit | {{S_MIT:84.0}} | m^2 | S_mit >= S_mit_min | Deployed emergency containment reference area |
+| Mitigated Drag Coefficient | C_d_mit | {{C_D_MIT:1.75}} | Dimensionless | C_d_mit >= 1.50 | Deployed containment aerodynamic / resistance coefficient |
+| Mitigated Terminal Velocity | v_terminal_mitigated | {{V_TERMINAL_MITIGATED_MPS:1.65}} | m/s | v_terminal_mitigated = sqrt(2*m*g / (rho*S_mit*C_d_mit)) <= 1.65 | Equilibrium descent velocity (<= 1.65 m/s) |
+| Mitigated Kinetic Energy | E_k_mitigated | {{E_K_MITIGATED_JOULES:34.0}} | J | E_k_mitigated = 0.5 * m * v_terminal_mitigated^2 <= 34.0 | Failsafe-mitigated impact kinetic energy (<= 34.0 J) |
+| Regulatory Energy Threshold | E_threshold | {{E_THRESHOLD_JOULES:34.0}} | J | E_threshold = 34.0 | Regulatory maximum kinetic energy threshold for low ground risk classification |
 
 3. **Kinetic Energy Threshold Compliance ($E_k \le E_{\mathrm{threshold}}$):**
-   - Unmitigated free-fall kinetic energy ($E_{k,\mathrm{unmitigated}} = {{E_K_UNMITIGATED_JOULES:74125.1}}\text{ J}$) exceeds the low-risk kinetic energy threshold ($E_{\mathrm{threshold}} = 34.0\text{ J}$), mandating certified safety mitigations (M1–M3) and autonomous containment mechanisms per JARUS SORA v2.5.
-   - Autonomous emergency {{RECOVERY_DEVICE_TERM:parachute}} actuation reduces the terminal descent velocity to $v_{\mathrm{terminal,parachute}} \le {{V_TERMINAL_PARACHUTE_MPS:1.65}}\text{ m/s}$, capping the ground impact kinetic energy to $E_{k,\mathrm{mitigated}} \le {{E_K_MITIGATED_JOULES:34.0}}\text{ J}$, fulfilling the high-assurance energy containment criteria.
+   - Unmitigated free-fall kinetic energy ($E_{k,\mathrm{unmitigated}} = {{E_K_UNMITIGATED_JOULES:74125.1}}\text{ J}$) exceeds the low-risk kinetic energy threshold ($E_{\mathrm{threshold}} = {{E_THRESHOLD_JOULES:34.0}}\text{ J}$), mandating certified safety mitigations (M1–M3) and autonomous containment mechanisms per JARUS SORA v2.5.
+   - Autonomous emergency {{RECOVERY_DEVICE_TERM:containment}} actuation reduces the terminal descent velocity to $v_{\mathrm{terminal,mitigated}} \le {{V_TERMINAL_MITIGATED_MPS:1.65}}\text{ m/s}$, capping the ground impact kinetic energy to $E_{k,\mathrm{mitigated}} \le {{E_K_MITIGATED_JOULES:34.0}}\text{ J}$, fulfilling the high-assurance energy containment criteria.
 
 ### 5.2.1 Domain-Specific Multi-Physics Failsafe Containment Architectures
 For multi-domain operations across non-aerial and aerial platforms, containment mechanisms are tailored to the physical operating medium:
@@ -138,7 +138,7 @@ For multi-domain operations across non-aerial and aerial platforms, containment 
 3. **Space LEO Constellation Containment:**
    - Cold-gas thruster retro-burn perigee lowering for controlled atmospheric demise and passivation (zero residual stored energy / battery disconnect).
 4. **Aerial UAS & eVTOL Failsafe Containment:**
-   - Autonomous flight termination unit (FTU) with ballistic {{RECOVERY_DEVICE_TERM:parachute}} ejection ($t_{\mathrm{deploy}} \le 0.5\text{ s}$) and motor drive power isolation.
+   - Autonomous flight termination unit (FTU) with {{RECOVERY_DEVICE_TERM:emergency recovery system}} ejection ($t_{\mathrm{deploy}} \le 0.5\text{ s}$) and motor drive power isolation.
 
 ---
 
@@ -146,7 +146,7 @@ For multi-domain operations across non-aerial and aerial platforms, containment 
 To guarantee robust ground and operational safety across all operating states, the system incorporates certified emergency containment mechanisms:
 1. **Primary Containment Triggering:**
    - Continuous geofence boundary monitoring at frequency $f \ge 50\text{ Hz}$.
-   - Independent safety watchdog triggering ballistic {{RECOVERY_DEVICE_TERM:parachute}} deployment (${{PARACHUTE_SYMBOL_V:v_{\mathrm{terminal,parachute}}}} \le 1.65\text{ m/s}$, $E_{k,\mathrm{mitigated}} \le 34.0\text{ J}$).
+   - Independent safety watchdog triggering {{RECOVERY_DEVICE_TERM:emergency containment}} deployment ($v_{\mathrm{terminal,mitigated}} \le {{V_TERMINAL_MITIGATED_MPS:1.65}}\text{ m/s}$, $E_{k,\mathrm{mitigated}} \le {{E_K_MITIGATED_JOULES:34.0}}\text{ J}$).
 2. **Subsea & Maritime Containment:**
    - Inherent positive buoyancy reserve ($B_{\mathrm{net}} \ge 0.05 \cdot W_{\mathrm{dry}}$) ensuring unpowered passive ascent to surface.
    - Galvanic / electromagnetic drop-weight ballast release mechanism providing fail-safe positive buoyant ascent upon electrical power loss or depth threshold exceedance.
@@ -154,7 +154,7 @@ To guarantee robust ground and operational safety across all operating states, t
    - Autonomous orbital de-orbit burn execution using dedicated delta-V propellant reserve ($\Delta v_{\mathrm{deorbit}}$).
    - Passivated reaction wheels (spin-down to zero angular momentum), high-voltage battery discharge passivation, and solar array feathered orientation to eliminate orbital fragmentation risks.
 4. **Aerial & UAS Atmospheric Containment (for platforms with $h_{\mathrm{max}} > 0$):**
-   - Independent safety watchdog triggering ballistic {{RECOVERY_DEVICE_TERM:parachute}} deployment (${{PARACHUTE_SYMBOL_V:v_{\mathrm{terminal,parachute}}}} \le 1.65\text{ m/s}$, $E_{k,\mathrm{mitigated}} \le 34.0\text{ J}$).
+   - Independent safety watchdog triggering {{RECOVERY_DEVICE_TERM:emergency containment}} deployment ($v_{\mathrm{terminal,mitigated}} \le {{V_TERMINAL_MITIGATED_MPS:1.65}}\text{ m/s}$, $E_{k,\mathrm{mitigated}} \le {{E_K_MITIGATED_JOULES:34.0}}\text{ J}$).
    - Autonomous motor power bus disconnect preventing uncommanded powered trajectory excursions.
 
 ### 5.3 Strategic Deconfliction & State Separation
@@ -172,8 +172,8 @@ In accordance with JARUS SORA v2.5 Annex B (§2.1–§2.3), Ground Risk Class (G
 | **M1.B** | Strategic Ground Risk Mitigation | Physical perimeter isolation, access control checkpoints, and active buffer surveillance. | Medium | Audited perimeter control with active personnel exclusion. | -2 GRC | JARUS SORA v2.5 Annex B §2.1 |
 | **M1.C** | Strategic Ground Risk Mitigation | Enclosed access-controlled operational test range with hard fencing, security interlocks, and 0 non-participants. | High | Third-party audited physical containment with zero non-participant access. | -2 GRC | JARUS SORA v2.5 Annex B §2.1 |
 | **M2.A** | Impact Dynamics Mitigation | Impact-resistant frangible structures and energy-attenuating landing gear geometries. | Low | Empirical impact testing demonstrating controlled energy absorption. | -1 GRC | JARUS SORA v2.5 Annex B §2.2 |
-| **M2.B** | Impact Dynamics Mitigation | Autonomous {{FAILSAFE_DESCENT_SYSTEM:emergency parachute recovery system}} actuating in t_deploy <= tau_deploy_max, reducing v_terminal <= 3.0 m/s. | Medium | Dual-channel sensor trigger with independent backup battery pack. | -1 GRC | JARUS SORA v2.5 Annex B §2.2 |
-| **M2.C** | Impact Dynamics Mitigation | Certified {{FAILSAFE_DESCENT_SYSTEM:emergency parachute recovery system}} (ASTM F3322-18 / RTCA DO-178C DAL-C) ensuring v_terminal <= 1.65 m/s and E_k_mitigated <= 34.0 J. | High | Fully independent flight termination watchdog, ballistic ejection, and certified compliance. | -2 GRC | JARUS SORA v2.5 Annex B §2.2 |Annex B §2.2 |
+| **M2.B** | Impact Dynamics Mitigation | Autonomous {{FAILSAFE_DESCENT_SYSTEM:emergency containment system}} actuating in t_deploy <= tau_deploy_max, reducing v_terminal <= {{V_TERMINAL_MITIGATED_MPS:3.0}} m/s. | Medium | Dual-channel sensor trigger with independent backup battery pack. | -1 GRC | JARUS SORA v2.5 Annex B §2.2 |
+| **M2.C** | Impact Dynamics Mitigation | Certified {{FAILSAFE_DESCENT_SYSTEM:emergency containment system}} ({{CONTAINMENT_STANDARD:ISO/IEC 29148 / DO-178C DAL-C}}) ensuring v_terminal <= {{V_TERMINAL_MITIGATED_MPS:1.65}} m/s and E_k_mitigated <= {{E_K_MITIGATED_JOULES:34.0}} J. | High | Fully independent flight termination watchdog, ballistic ejection, and certified compliance. | -2 GRC | JARUS SORA v2.5 Annex B §2.2 |
 | **M3.A** | Emergency Response Plan (ERP) | Basic operator emergency checklist detailing notification phone numbers and rally points. | Low | Self-declared operational procedure without rehearsal. | 0 GRC (Prerequisite) | JARUS SORA v2.5 Annex B §2.3 |
 | **M3.B** | Emergency Response Plan (ERP) | Formal ERP coordinated with local emergency response services, defined divert landing sites, and trained personnel. | Medium | Validated ERP with annual multi-agency tabletop drills and direct coordinator link. | -1 GRC | JARUS SORA v2.5 Annex B §2.3 |
 | **M3.C** | Emergency Response Plan (ERP) | Integrated ERP with automated first-responder alerting API, multi-channel satellite emergency beacon (EMG-07), and certified emergency response team. | High | Live drill validated with competent emergency authorities, full mock incident execution, and automated rescue telemetry. | -1 GRC | JARUS SORA v2.5 Annex B §2.3 |

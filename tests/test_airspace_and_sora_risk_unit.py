@@ -68,7 +68,7 @@ class TestAirspaceAndSoraRiskUnit(unittest.TestCase):
             )
 
     def test_section_5_2_kinetic_impact_energy_derivations(self):
-        """Verify Section 5.2 contains physics derivations for unmitigated free-fall, parachute equilibrium, and mitigated energy."""
+        """Verify Section 5.2 contains physics derivations for unmitigated free-fall, mitigated containment equilibrium, and mitigated energy."""
         self.assertIn("## 5. Operational State Space, Boundary Containment & Risk Assessment", self.content)
         self.assertIn("### 5.2", self.content)
 
@@ -83,31 +83,35 @@ class TestAirspaceAndSoraRiskUnit(unittest.TestCase):
             "Missing unmitigated kinetic energy physics derivation formula m^2*g / (rho*S_ref*C_D)",
         )
 
-        # Parachute aerodynamic descent equilibrium derivation:
-        # v_{\mathrm{terminal,parachute}} = \sqrt{\frac{2mg}{\rho S_{\mathrm{canopy}} C_{d,\mathrm{parachute}}}} \le 1.65 m/s
-        self.assertIn("v_{\\mathrm{terminal,parachute}}", self.content)
+        # Mitigated dynamic equilibrium derivation:
+        # v_{\mathrm{terminal,mitigated}} = \sqrt{\frac{2mg}{\rho S_{\mathrm{mit}} C_{d,\mathrm{mit}}}} \le 1.65 m/s
+        self.assertIn("v_{\\mathrm{terminal,mitigated}}", self.content)
         self.assertTrue(
-            "\\sqrt{\\frac{2mg}{\\rho S_{\\mathrm{canopy}} C_{d,\\mathrm{parachute}}}}" in self.content or
-            "\\sqrt{\\frac{2 m g}{\\rho S_{\\mathrm{canopy}} C_{d,\\mathrm{parachute}}}}" in self.content,
-            "Missing parachute equilibrium terminal velocity derivation formula",
+            "\\sqrt{\\frac{2mg}{\\rho S_{\\mathrm{mit}} C_{d,\\mathrm{mit}}}}" in self.content or
+            "\\sqrt{\\frac{2 m g}{\\rho S_{\\mathrm{mit}} C_{d,\\mathrm{mit}}}}" in self.content,
+            "Missing mitigated equilibrium terminal velocity derivation formula",
         )
         self.assertIn("1.65", self.content)
 
         # Failsafe-mitigated kinetic impact energy:
-        # E_{k,\mathrm{mitigated}} = \frac{1}{2} m v_{\mathrm{terminal,parachute}}^2 \le 34.0 J
+        # E_{k,\mathrm{mitigated}} = \frac{1}{2} m v_{\mathrm{terminal,mitigated}}^2 \le 34.0 J
         self.assertIn("E_{k,\\mathrm{mitigated}}", self.content)
         self.assertIn("34.0", self.content)
 
         # Parameter definition table in 5.2
         param_symbols = [
-            "m", "g", "rho", "S_ref", "C_D", "S_canopy", "C_d_parachute",
-            "v_terminal_unmitigated", "E_k_unmitigated", "v_terminal_parachute", "E_k_mitigated"
+            "m", "g", "rho", "S_ref", "C_D", "S_mit", "C_d_mit",
+            "v_terminal_unmitigated", "E_k_unmitigated", "v_terminal_mitigated", "E_k_mitigated"
         ]
         for sym in param_symbols:
             self.assertTrue(
                 any(re.search(rf"\|\s*{re.escape(sym)}\s*\|", line) for line in self.content.splitlines()),
                 f"Missing parameter '{sym}' in Section 5.2 parameter definition table",
             )
+
+        # Verify zero hardcoded parachute or canopy keywords in unit 05
+        self.assertNotIn("parachute", self.content.lower())
+        self.assertNotIn("canopy", self.content.lower())
 
     def test_section_5_4_sora_m1_m3_mitigations_table(self):
         """Verify Section 5.4 SORA M1–M3 table with JARUS SORA v2.5 mitigations, Low/Medium/High assurance, and -1/-2 GRC credits."""

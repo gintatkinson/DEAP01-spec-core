@@ -990,7 +990,7 @@ Carries up to a 5 kg warhead.
             "max_cruise_speed_ms": 28.0,
             "stall_speed_ms": 13.5,
             "wingspan_m": 3.2,
-            "parachute_area_m2": 45.0,
+            "containment_area_m2": 45.0,
         }
         engine = SysMLParameterBindingEngine(parameter_values=params, auto_detect=False)
 
@@ -1010,29 +1010,29 @@ Carries up to a 5 kg warhead.
         self.assertEqual(engine.resolve_token("V_STALL_MAX_MPS"), "13.5")
         self.assertEqual(engine.resolve_token("WINGSPAN_M"), "3.2")
         self.assertEqual(engine.resolve_token("DIM_MAX_W_M"), "3.2")
-        self.assertEqual(engine.resolve_token("PARACHUTE_AREA_M2"), "45.0")
-        self.assertEqual(engine.resolve_token("S_CANOPY"), "45.0")
+        self.assertEqual(engine.resolve_token("CONTAINMENT_AREA_M2"), "45.0")
+        self.assertEqual(engine.resolve_token("S_MIT"), "45.0")
 
     def test_closed_form_quadratic_physics_solver(self):
-        """Verify closed-form quadratic physics solver for Section 5.2 SORA parachute derivations (Fixes #168)."""
-        # Case 1: m = 25.0 kg, S_canopy = 84.18 m^2, C_d = 1.75
+        """Verify closed-form quadratic physics solver for Section 5.2 abstract containment derivations (Fixes #168, #248)."""
+        # Case 1: m = 25.0 kg, S_mit = 84.18 m^2, C_d_mit = 1.75
         params = {
             "TOTAL_MTOW_KG": 25.0,
-            "PARACHUTE_AREA_M2": 84.18,
-            "PARACHUTE_DRAG_COEFFICIENT": 1.75,
+            "S_MIT": 84.18,
+            "C_D_MIT": 1.75,
         }
         engine = SysMLParameterBindingEngine(parameter_values=params, auto_detect=False)
 
         # v_calc = sqrt(2 * 25 * 9.80665 / (1.225 * 84.18 * 1.75)) = 1.6483 -> 1.65 m/s
         # E_k_calc = 0.5 * 25 * 1.65^2 = 34.03 -> 34.0 J
-        self.assertEqual(engine.resolve_token("V_TERMINAL_PARACHUTE_MPS"), "1.65")
+        self.assertEqual(engine.resolve_token("V_TERMINAL_MITIGATED_MPS"), "1.65")
         self.assertEqual(engine.resolve_token("E_K_MITIGATED_JOULES"), "34.0")
 
-        # Case 2: default synthesis with auto-calculated parachute area
+        # Case 2: default synthesis with abstract containment parameters
         engine_auto = SysMLParameterBindingEngine(parameter_values={"TOTAL_MTOW_KG": 50.0}, auto_detect=False)
-        v_term = float(engine_auto.resolve_token("V_TERMINAL_PARACHUTE_MPS"))
+        v_term = float(engine_auto.resolve_token("V_TERMINAL_MITIGATED_MPS"))
         e_k = float(engine_auto.resolve_token("E_K_MITIGATED_JOULES"))
-        self.assertAlmostEqual(v_term, 1.65, places=1)
+        self.assertAlmostEqual(v_term, 2.33, places=1)
         self.assertAlmostEqual(e_k, 0.5 * 50.0 * (v_term ** 2), places=1)
 
     def test_detect_domain_type_airspace_aerospace_collision_avoidance(self):
@@ -1171,6 +1171,41 @@ Carries up to a 5 kg warhead.
                 f"E_bingo {e_bingo} != sum of partitions {expected_bingo} for config {config}",
             )
             self.assertEqual(e_bingo, e_bingo_threshold)
+
+    def test_pure_schema_driven_containment_derivation_zero_parachute_leakage(self):
+        """Verify pure schema-driven containment derivation and zero parachute token leakage (Issue #248)."""
+        for domain in ["aviation", "medical", "rail", "marine", "space", "industrial"]:
+            engine = SysMLParameterBindingEngine(
+                parameter_values={
+                    "TOTAL_MTOW_KG": 30.0,
+                    "S_MIT": 60.0,
+                    "C_D_MIT": 1.5,
+                },
+                domain=domain,
+                auto_detect=False,
+            )
+
+            # Abstract containment derivations
+            v_term = float(engine.resolve_token("V_TERMINAL_MITIGATED_MPS"))
+            e_k = float(engine.resolve_token("E_K_MITIGATED_JOULES"))
+            rho = float(engine.resolve_token("AIR_DENSITY_KGM3"))
+
+            expected_v = round(((2.0 * 30.0 * 9.80665) / (rho * 60.0 * 1.5)) ** 0.5, 2)
+            expected_e = round(0.5 * 30.0 * (expected_v ** 2), 1)
+
+            self.assertAlmostEqual(v_term, expected_v, places=1)
+            self.assertAlmostEqual(e_k, expected_e, places=1)
+
+            # Verify no parachute tokens in bindings
+            for key in engine.parameter_bindings.keys():
+                self.assertNotIn("PARACHUTE", key)
+                self.assertNotIn("CANOPY", key)
+
+            # Verify substitution does not introduce parachute keywords
+            sample_text = "Failsafe containment: {{FAILSAFE_CONTAINMENT_NAME}}, velocity: {{V_TERMINAL_MITIGATED_MPS}} m/s, energy: {{E_K_MITIGATED_JOULES}} J."
+            rendered = engine.substitute(sample_text)
+            self.assertNotIn("parachute", rendered.lower())
+            self.assertNotIn("canopy", rendered.lower())
 
 
 if __name__ == "__main__":

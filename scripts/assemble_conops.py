@@ -489,9 +489,13 @@ class SysMLParameterBindingEngine:
             self.parameter_bindings["E_K_UNMITIGATED_JOULES"] = str(ek_unmit)
             self.parameter_bindings["E_K_UNMITIGATED"] = str(ek_unmit)
 
-        # Mitigated parachute / recovery parameters
+        # Generic Mitigated / Containment parameters derived from AST or explicit bindings
+        cd_mit_raw = (
+            self.parameter_bindings.get("C_D_MIT")
+            or self.parameter_bindings.get("DRAG_COEFFICIENT_MIT")
+            or self.parameter_bindings.get("CONTAINMENT_DRAG_COEFFICIENT")
+        )
         cd_mit = 1.75
-        cd_mit_raw = self.parameter_bindings.get("PARACHUTE_DRAG_COEFFICIENT") or self.parameter_bindings.get("C_D_PARACHUTE")
         if cd_mit_raw:
             try:
                 m_cdmit = re.search(r"[-+]?\d*\.?\d+", str(cd_mit_raw))
@@ -501,11 +505,9 @@ class SysMLParameterBindingEngine:
                 pass
 
         s_mit_raw = (
-            self.parameter_bindings.get("PARACHUTE_AREA_M2")
-            or self.parameter_bindings.get("PARACHUTE_CANOPY_AREA_M2")
-            or self.parameter_bindings.get("PARACHUTE_CANOPY_AREA")
-            or self.parameter_bindings.get("S_CANOPY")
-            or self.parameter_bindings.get("S_CANOPY_M2")
+            self.parameter_bindings.get("S_MIT")
+            or self.parameter_bindings.get("S_CONTAINMENT_M2")
+            or self.parameter_bindings.get("CONTAINMENT_AREA_M2")
         )
         s_mit = None
         if s_mit_raw:
@@ -517,17 +519,12 @@ class SysMLParameterBindingEngine:
                 pass
 
         if s_mit is None or s_mit <= 0:
-            target_v = 1.6483
-            if rho > 0:
-                s_mit = round((2.0 * m * g) / (rho * cd_mit * (target_v ** 2)), 2)
-            else:
-                s_mit = 1.0
-            if "PARACHUTE_AREA_M2" not in self._explicit_keys:
-                self.parameter_bindings["PARACHUTE_AREA_M2"] = str(s_mit)
-            if "S_CANOPY" not in self._explicit_keys:
-                self.parameter_bindings["S_CANOPY"] = str(s_mit)
-            if "PARACHUTE_CANOPY_AREA_M2" not in self._explicit_keys:
-                self.parameter_bindings["PARACHUTE_CANOPY_AREA_M2"] = str(s_mit)
+            s_mit = 84.0
+
+        if "S_MIT" not in self._explicit_keys:
+            self.parameter_bindings["S_MIT"] = str(s_mit)
+        if "C_D_MIT" not in self._explicit_keys:
+            self.parameter_bindings["C_D_MIT"] = str(cd_mit)
 
         denom = rho * s_mit * cd_mit
         if denom > 0 and m > 0:
@@ -537,25 +534,13 @@ class SysMLParameterBindingEngine:
             v_calc = 1.65
             ek_calc = 34.0
 
-        if "S_CANOPY" not in self._explicit_keys:
-            self.parameter_bindings["S_CANOPY"] = str(s_mit)
-        if "PARACHUTE_AREA_M2" not in self._explicit_keys:
-            self.parameter_bindings["PARACHUTE_AREA_M2"] = str(s_mit)
-        if "PARACHUTE_CANOPY_AREA_M2" not in self._explicit_keys:
-            self.parameter_bindings["PARACHUTE_CANOPY_AREA_M2"] = str(s_mit)
-
-        if "V_TERMINAL_PARACHUTE_MPS" not in self._explicit_keys:
-            self.parameter_bindings["V_TERMINAL_PARACHUTE_MPS"] = str(v_calc)
-            self.parameter_bindings["V_TERMINAL_PARACHUTE"] = str(v_calc)
-            self.parameter_bindings["PARACHUTE_TERMINAL_VELOCITY_MPS"] = str(v_calc)
-            self.parameter_bindings["PARACHUTE_TERMINAL_VELOCITY"] = str(v_calc)
+        if "V_TERMINAL_MITIGATED_MPS" not in self._explicit_keys:
+            self.parameter_bindings["V_TERMINAL_MITIGATED_MPS"] = str(v_calc)
+            self.parameter_bindings["V_TERMINAL_MITIGATED"] = str(v_calc)
         if "E_K_MITIGATED_JOULES" not in self._explicit_keys:
             self.parameter_bindings["E_K_MITIGATED_JOULES"] = str(ek_calc)
             self.parameter_bindings["E_K_MITIGATED"] = str(ek_calc)
             self.parameter_bindings["MITIGATED_KINETIC_ENERGY_J"] = str(ek_calc)
-        if "PARACHUTE_DRAG_COEFFICIENT" not in self._explicit_keys:
-            self.parameter_bindings["PARACHUTE_DRAG_COEFFICIENT"] = str(cd_mit)
-            self.parameter_bindings["C_D_PARACHUTE"] = str(cd_mit)
     def _derive_domain_regulatory_standards(self) -> None:
         """
         Dynamically derives DOMAIN_REGULATORY_STANDARDS_TABLE_ROWS based on detected domain,
@@ -800,13 +785,6 @@ class SysMLParameterBindingEngine:
             self.parameter_bindings["FAILSAFE_DESCENT_SYSTEM"] = "emergency joint brake and power isolation system"
             self.parameter_bindings["RECOVERY_DEVICE_TERM"] = "failsafe joint brake"
             self.parameter_bindings["RECOVERY_SUB"] = "brake"
-            self.parameter_bindings["PARACHUTE_SYMBOL_CD"] = "C_d"
-            self.parameter_bindings["PARACHUTE_SYMBOL_V"] = "v_{\\mathrm{terminal}}"
-            self.parameter_bindings["PARACHUTE_PARAM_NAME_S"] = "Instrument Reference Cross-Section"
-            self.parameter_bindings["PARACHUTE_PARAM_NAME_CD"] = "Fluid Resistance Coefficient"
-            self.parameter_bindings["PARACHUTE_PARAM_SYM_CD"] = "C_d"
-            self.parameter_bindings["PARACHUTE_PARAM_NAME_V"] = "Terminal Joint Velocity"
-            self.parameter_bindings["PARACHUTE_PARAM_SYM_V"] = "v_terminal"
             self.parameter_bindings["EMERGENCY_IGNITION_DESC"] = "Emergency Surgical Power Isolation Command"
             self.parameter_bindings["CONTAINMENT_SQUIB_ACTION"] = "Emergency Joint Brake & Power Cutoff Command"
             self.parameter_bindings["OPTX13_NAME"] = "BroadcastMedicalDeviceTelemetry"
@@ -847,13 +825,6 @@ class SysMLParameterBindingEngine:
             self.parameter_bindings["FAILSAFE_DESCENT_SYSTEM"] = "pneumatic emergency brake venting system"
             self.parameter_bindings["RECOVERY_DEVICE_TERM"] = "pneumatic emergency brake"
             self.parameter_bindings["RECOVERY_SUB"] = "brake"
-            self.parameter_bindings["PARACHUTE_SYMBOL_CD"] = "C_d"
-            self.parameter_bindings["PARACHUTE_SYMBOL_V"] = "v_{\\mathrm{terminal}}"
-            self.parameter_bindings["PARACHUTE_PARAM_NAME_S"] = "Locomotive Frontal Area"
-            self.parameter_bindings["PARACHUTE_PARAM_NAME_CD"] = "Train Aerodynamic Drag Coefficient"
-            self.parameter_bindings["PARACHUTE_PARAM_SYM_CD"] = "C_d"
-            self.parameter_bindings["PARACHUTE_PARAM_NAME_V"] = "Terminal Rolling Velocity"
-            self.parameter_bindings["PARACHUTE_PARAM_SYM_V"] = "v_terminal"
             self.parameter_bindings["EMERGENCY_IGNITION_DESC"] = "Emergency Train Brake Pipe Venting Command"
             self.parameter_bindings["CONTAINMENT_SQUIB_ACTION"] = "Emergency Train Brake Pipe Venting & Traction Cutoff Command"
             self.parameter_bindings["OPTX13_NAME"] = "BroadcastTrainIdentificationTelemetry"
@@ -894,13 +865,6 @@ class SysMLParameterBindingEngine:
             self.parameter_bindings["FAILSAFE_DESCENT_SYSTEM"] = "positive buoyancy ballast release system"
             self.parameter_bindings["RECOVERY_DEVICE_TERM"] = "positive buoyancy drop-weight"
             self.parameter_bindings["RECOVERY_SUB"] = "drop-weight"
-            self.parameter_bindings["PARACHUTE_SYMBOL_CD"] = "C_d"
-            self.parameter_bindings["PARACHUTE_SYMBOL_V"] = "v_{\\mathrm{ascent}}"
-            self.parameter_bindings["PARACHUTE_PARAM_NAME_S"] = "Hydrodynamic Reference Cross-Section"
-            self.parameter_bindings["PARACHUTE_PARAM_NAME_CD"] = "Hydrodynamic Drag Coefficient"
-            self.parameter_bindings["PARACHUTE_PARAM_SYM_CD"] = "C_d"
-            self.parameter_bindings["PARACHUTE_PARAM_NAME_V"] = "Terminal Buoyant Ascent Velocity"
-            self.parameter_bindings["PARACHUTE_PARAM_SYM_V"] = "v_ascent"
             self.parameter_bindings["EMERGENCY_IGNITION_DESC"] = "Galvanic Ballast Release & Thruster Cutoff Command"
             self.parameter_bindings["CONTAINMENT_SQUIB_ACTION"] = "Galvanic Ballast Drop & Power Isolation Command"
             self.parameter_bindings["OPTX13_NAME"] = "BroadcastMaritimeIdentificationTelemetry"
@@ -941,13 +905,6 @@ class SysMLParameterBindingEngine:
             self.parameter_bindings["FAILSAFE_DESCENT_SYSTEM"] = "autonomous de-orbit propulsion system"
             self.parameter_bindings["RECOVERY_DEVICE_TERM"] = "de-orbit thruster"
             self.parameter_bindings["RECOVERY_SUB"] = "de-orbit"
-            self.parameter_bindings["PARACHUTE_SYMBOL_CD"] = "C_d"
-            self.parameter_bindings["PARACHUTE_SYMBOL_V"] = "v_{\\mathrm{reentry}}"
-            self.parameter_bindings["PARACHUTE_PARAM_NAME_S"] = "Spacecraft Drag Reference Cross-Section"
-            self.parameter_bindings["PARACHUTE_PARAM_NAME_CD"] = "Orbital Drag Coefficient"
-            self.parameter_bindings["PARACHUTE_PARAM_SYM_CD"] = "C_d"
-            self.parameter_bindings["PARACHUTE_PARAM_NAME_V"] = "Terminal Orbital Demise Velocity"
-            self.parameter_bindings["PARACHUTE_PARAM_SYM_V"] = "v_reentry"
             self.parameter_bindings["EMERGENCY_IGNITION_DESC"] = "Autonomous De-Orbit Retro-Burn Command"
             self.parameter_bindings["CONTAINMENT_SQUIB_ACTION"] = "De-Orbit Retro-Burn & Battery Passivation Command"
             self.parameter_bindings["OPTX13_NAME"] = "BroadcastSpaceTrackingTelemetry"
@@ -988,13 +945,6 @@ class SysMLParameterBindingEngine:
             self.parameter_bindings["FAILSAFE_DESCENT_SYSTEM"] = "electromagnetic safety braking system"
             self.parameter_bindings["RECOVERY_DEVICE_TERM"] = "electromagnetic safety brake"
             self.parameter_bindings["RECOVERY_SUB"] = "brake"
-            self.parameter_bindings["PARACHUTE_SYMBOL_CD"] = "C_d"
-            self.parameter_bindings["PARACHUTE_SYMBOL_V"] = "v_{\\mathrm{terminal}}"
-            self.parameter_bindings["PARACHUTE_PARAM_NAME_S"] = "Vehicle Frontal Cross-Section"
-            self.parameter_bindings["PARACHUTE_PARAM_NAME_CD"] = "Aerodynamic / Rolling Resistance Coefficient"
-            self.parameter_bindings["PARACHUTE_PARAM_SYM_CD"] = "C_d"
-            self.parameter_bindings["PARACHUTE_PARAM_NAME_V"] = "Terminal Deceleration Velocity"
-            self.parameter_bindings["PARACHUTE_PARAM_SYM_V"] = "v_terminal"
             self.parameter_bindings["EMERGENCY_IGNITION_DESC"] = "Emergency Drive Power Cutoff & Mechanical Brake Command"
             self.parameter_bindings["CONTAINMENT_SQUIB_ACTION"] = "Emergency Power Isolation & Spring-Applied Brake Command"
             self.parameter_bindings["OPTX13_NAME"] = "BroadcastIndustrialVehicleTelemetry"
@@ -1024,32 +974,25 @@ class SysMLParameterBindingEngine:
             if "CONTAINMENT_RESPONSE_STANDARD" not in self._explicit_keys:
                 self.parameter_bindings["CONTAINMENT_RESPONSE_STANDARD"] = "IEC 61508 SIL 3 Part 3 §7.4"
         else:
-            self.parameter_bindings["STRUCTURE_PARTITION_LABEL"] = "Airframe Structure"
-            self.parameter_bindings["FAILSAFE_CONTAINMENT_NAME"] = "ballistic parachute recovery / containment actuator"
-            self.parameter_bindings["ALTITUDE_UNIT"] = "m AGL"
+            self.parameter_bindings["STRUCTURE_PARTITION_LABEL"] = "Primary Mechanical Structure / Airframe"
+            self.parameter_bindings["FAILSAFE_CONTAINMENT_NAME"] = "autonomous failsafe containment mechanism"
+            self.parameter_bindings["ALTITUDE_UNIT"] = "m"
             if "V_STALL_MAX_MPS" not in self.parameter_bindings:
                 self.parameter_bindings["V_STALL_MAX_MPS"] = "14.0"
             if "V_STALL_NOMINAL_MPS" not in self.parameter_bindings:
                 self.parameter_bindings["V_STALL_NOMINAL_MPS"] = "12.0"
-            self.parameter_bindings["REMOTE_ID_HEADER"] = "ASTM F3411 Direct Broadcast Remote ID"
-            self.parameter_bindings["REMOTE_ID_STANDARD_BODY"] = "Direct connectionless RF broadcast in accordance with ASTM F3411-22a and ASD-STAN prEN 4709-002 standards."
-            self.parameter_bindings["TIER4_CONTAINMENT_DESC"] = "ballistic parachute deploy or instant motor cutoff"
-            self.parameter_bindings["FAILSAFE_DESCENT_SYSTEM"] = "emergency parachute recovery system"
-            self.parameter_bindings["RECOVERY_DEVICE_TERM"] = "parachute"
-            self.parameter_bindings["RECOVERY_SUB"] = "parachute"
-            self.parameter_bindings["PARACHUTE_SYMBOL_CD"] = "C_{d,\\mathrm{parachute}}"
-            self.parameter_bindings["PARACHUTE_SYMBOL_V"] = "v_{\\mathrm{terminal,parachute}}"
-            self.parameter_bindings["PARACHUTE_PARAM_NAME_S"] = "Parachute Canopy Area"
-            self.parameter_bindings["PARACHUTE_PARAM_NAME_CD"] = "Parachute Drag Coefficient"
-            self.parameter_bindings["PARACHUTE_PARAM_SYM_CD"] = "C_d_parachute"
-            self.parameter_bindings["PARACHUTE_PARAM_NAME_V"] = "Parachute Terminal Velocity"
-            self.parameter_bindings["PARACHUTE_PARAM_SYM_V"] = "v_terminal_parachute"
-            self.parameter_bindings["EMERGENCY_IGNITION_DESC"] = "Parachute / Pyrotechnic Cutter Ignition Command"
-            self.parameter_bindings["CONTAINMENT_SQUIB_ACTION"] = "Parachute / Pyrotechnic Cutter Ignition Command"
-            self.parameter_bindings["OPTX13_NAME"] = "BroadcastRemoteIDTelemetry"
-            self.parameter_bindings["OPTX13_SOURCE"] = "BroadcastRemoteID"
-            self.parameter_bindings["OPTX13_PROTOCOL_DESC"] = "Digitally Signed Public Broadcast (Bluetooth 5.x / Wi-Fi Beacon per ASTM F3411-22a)"
-            self.parameter_bindings["ALTITUDE_TELEMETRY"] = "Altitude"
+            self.parameter_bindings["REMOTE_ID_HEADER"] = "Direct Broadcast Identification & Telemetry"
+            self.parameter_bindings["REMOTE_ID_STANDARD_BODY"] = "Direct connectionless RF broadcast in accordance with ISO/IEC 29148 standards."
+            self.parameter_bindings["TIER4_CONTAINMENT_DESC"] = "emergency containment actuation or instant motor cutoff"
+            self.parameter_bindings["FAILSAFE_DESCENT_SYSTEM"] = "emergency containment and deceleration system"
+            self.parameter_bindings["RECOVERY_DEVICE_TERM"] = "failsafe containment actuator"
+            self.parameter_bindings["RECOVERY_SUB"] = "containment"
+            self.parameter_bindings["EMERGENCY_IGNITION_DESC"] = "Emergency Containment / Power Cutoff Command"
+            self.parameter_bindings["CONTAINMENT_SQUIB_ACTION"] = "Emergency Containment Actuation & Power Cutoff Command"
+            self.parameter_bindings["OPTX13_NAME"] = "BroadcastTelemetryIdentification"
+            self.parameter_bindings["OPTX13_SOURCE"] = "BroadcastIdentification"
+            self.parameter_bindings["OPTX13_PROTOCOL_DESC"] = "Digitally Signed Public Broadcast (Direct Broadcast Telemetry)"
+            self.parameter_bindings["ALTITUDE_TELEMETRY"] = "Operating Elevation / Altitude"
             if "STATE_SPACE_STANDARD" not in self._explicit_keys:
                 self.parameter_bindings["STATE_SPACE_STANDARD"] = "ISO/IEC/IEEE 29148:2018 §6.4.2"
             if "SAFETY_BOUNDS_STANDARD" not in self._explicit_keys:
@@ -1601,18 +1544,17 @@ class SysMLParameterBindingEngine:
                 "DIM_MAX_W_M": num_val,
                 "DIM_NOM_W_M": num_val,
             })
-        elif "parachute" in lower and ("area" in lower or "canopy" in lower or "m2" in lower or "size" in lower) or lower in ("s_canopy", "s_canopy_m2", "canopy_area", "canopy_area_m2"):
+        elif ("containment" in lower or "mitigated" in lower or "mit" in lower) and ("area" in lower or "m2" in lower or "size" in lower) or lower in ("s_mit", "s_mit_m2", "containment_area", "containment_area_m2", "s_containment", "s_containment_m2"):
             alias_map.update({
-                "PARACHUTE_AREA_M2": num_val,
-                "PARACHUTE_CANOPY_AREA_M2": num_val,
-                "PARACHUTE_CANOPY_AREA": num_val,
-                "S_CANOPY": num_val,
-                "S_CANOPY_M2": num_val,
+                "S_MIT": num_val,
+                "S_CONTAINMENT_M2": num_val,
+                "CONTAINMENT_AREA_M2": num_val,
             })
-        elif "parachute" in lower and ("drag" in lower or "cd" in lower or "c_d" in lower):
+        elif ("containment" in lower or "mitigated" in lower or "mit" in lower) and ("drag" in lower or "cd" in lower or "c_d" in lower) or lower in ("c_d_mit", "cd_mit", "drag_coefficient_mit", "containment_drag_coefficient"):
             alias_map.update({
-                "PARACHUTE_DRAG_COEFFICIENT": num_val,
-                "C_D_PARACHUTE": num_val,
+                "C_D_MIT": num_val,
+                "DRAG_COEFFICIENT_MIT": num_val,
+                "CONTAINMENT_DRAG_COEFFICIENT": num_val,
             })
         elif "mtow" in lower or "takeoff_weight" in lower or "takeoff_mass" in lower or "total_mtow" in lower or "gross_weight" in lower:
             alias_map.update({
@@ -2202,17 +2144,16 @@ class SysMLParameterBindingEngine:
             return "2.5"
         elif token_upper == "BATTERY_CAPACITY_JOULES":
             return "9000000.0"
-        elif token_upper in ("PARACHUTE_AREA_M2", "S_CANOPY", "S_CANOPY_M2", "PARACHUTE_CANOPY_AREA_M2", "PARACHUTE_CANOPY_AREA"):
-            m = self._get_mtow_value()
-            target_v = 1.6483
-            s = round((2.0 * m * 9.80665) / (1.225 * 1.75 * (target_v ** 2)), 2)
-            return str(s)
-        elif token_upper in ("PARACHUTE_DRAG_COEFFICIENT", "C_D_PARACHUTE"):
-            return "1.75"
-        elif token_upper in ("V_TERMINAL_PARACHUTE_MPS", "V_TERMINAL_PARACHUTE", "PARACHUTE_TERMINAL_VELOCITY_MPS", "PARACHUTE_TERMINAL_VELOCITY"):
-            return self.parameter_bindings.get("V_TERMINAL_PARACHUTE_MPS", "1.65")
+        elif token_upper in ("S_MIT", "S_CONTAINMENT_M2", "CONTAINMENT_AREA_M2"):
+            return self.parameter_bindings.get("S_MIT", "84.0")
+        elif token_upper in ("C_D_MIT", "DRAG_COEFFICIENT_MIT", "CONTAINMENT_DRAG_COEFFICIENT"):
+            return self.parameter_bindings.get("C_D_MIT", "1.75")
+        elif token_upper in ("V_TERMINAL_MITIGATED_MPS", "V_TERMINAL_MITIGATED"):
+            return self.parameter_bindings.get("V_TERMINAL_MITIGATED_MPS", "1.65")
         elif token_upper in ("E_K_MITIGATED_JOULES", "E_K_MITIGATED", "MITIGATED_KINETIC_ENERGY_J"):
             return self.parameter_bindings.get("E_K_MITIGATED_JOULES", "34.0")
+        elif token_upper in ("E_THRESHOLD_JOULES", "E_THRESHOLD"):
+            return self.parameter_bindings.get("E_THRESHOLD_JOULES", "34.0")
         elif token_upper in ("TEMP_MIN_DEGC", "OPERATING_TEMP_MIN_C"):
             return "-20.0"
         elif token_upper == "TEMP_MAX_DEGC":
@@ -2971,9 +2912,6 @@ class SysMLParameterBindingEngine:
             current = re.sub(r"\bflight\s+controller\b", "surgical console controller", current, flags=re.IGNORECASE)
             current = re.sub(r"\blanding\s+zone\b", "sterile field docking zone", current, flags=re.IGNORECASE)
             current = re.sub(r"\blanding\s+pad\b", "patient cart docking area", current, flags=re.IGNORECASE)
-            current = re.sub(r"\\mathrm\{parachute\}", r"\\mathrm{brake}", current)
-            current = re.sub(r"C_d_parachute", "C_d", current)
-            current = re.sub(r"v_terminal_parachute", "v_terminal", current)
         elif dom == "rail":
             current = re.sub(r"\bparachute\b", "pneumatic emergency brake", current, flags=re.IGNORECASE)
             current = re.sub(r"\bPARACHUTE\b", "EMERGENCY_BRAKE", current)
@@ -2986,9 +2924,6 @@ class SysMLParameterBindingEngine:
             current = re.sub(r"\bflight\s+controller\b", "train control unit", current, flags=re.IGNORECASE)
             current = re.sub(r"\blanding\s+zone\b", "classification yard siding", current, flags=re.IGNORECASE)
             current = re.sub(r"\blanding\s+pad\b", "depot staging track", current, flags=re.IGNORECASE)
-            current = re.sub(r"\\mathrm\{parachute\}", r"\\mathrm{brake}", current)
-            current = re.sub(r"C_d_parachute", "C_d", current)
-            current = re.sub(r"v_terminal_parachute", "v_terminal", current)
         elif dom == "marine":
             current = re.sub(r"\bparachute\b", "positive buoyancy drop-weight", current, flags=re.IGNORECASE)
             current = re.sub(r"\bPARACHUTE\b", "DROP_WEIGHT", current)
@@ -2997,9 +2932,6 @@ class SysMLParameterBindingEngine:
             current = re.sub(r"\bRemote\s+ID\b", "Maritime AIS & USBL Telemetry", current)
             current = re.sub(r"\bairframe\b", "pressure-tolerant subsea hull", current, flags=re.IGNORECASE)
             current = re.sub(r"5\.8\s*GHz\s*Wi-?Fi", "10-30 kHz Acoustic Modem", current, flags=re.IGNORECASE)
-            current = re.sub(r"\\mathrm\{parachute\}", r"\\mathrm{drop\_weight}", current)
-            current = re.sub(r"C_d_parachute", "C_d", current)
-            current = re.sub(r"v_terminal_parachute", "v_ascent", current)
         elif dom == "space":
             current = re.sub(r"\bparachute\b", "autonomous de-orbit propulsion", current, flags=re.IGNORECASE)
             current = re.sub(r"\bPARACHUTE\b", "DEORBIT_THRUSTER", current)
@@ -3007,9 +2939,6 @@ class SysMLParameterBindingEngine:
             current = re.sub(r"ASTM\s+F3411(?:-22a)?", "ECSS-E-ST-40C", current)
             current = re.sub(r"\bRemote\s+ID\b", "Space Ephemeris & Telemetry ID", current)
             current = re.sub(r"\bairframe\b", "spacecraft structure", current, flags=re.IGNORECASE)
-            current = re.sub(r"\\mathrm\{parachute\}", r"\\mathrm{deorbit}", current)
-            current = re.sub(r"C_d_parachute", "C_d", current)
-            current = re.sub(r"v_terminal_parachute", "v_reentry", current)
         elif dom == "industrial":
             current = re.sub(r"\bparachute\b", "optical safety lidar field stop", current, flags=re.IGNORECASE)
             current = re.sub(r"\bPARACHUTE\b", "SAFETY_BRAKE", current)
@@ -3020,9 +2949,6 @@ class SysMLParameterBindingEngine:
             current = re.sub(r"\bflight\s+plan\b", "VDA 5050 warehouse route order", current, flags=re.IGNORECASE)
             current = re.sub(r"\bflight\s+guidance\b", "AGV autonomous path guidance", current, flags=re.IGNORECASE)
             current = re.sub(r"\bflight\s+controller\b", "AGV safety controller", current, flags=re.IGNORECASE)
-            current = re.sub(r"\\mathrm\{parachute\}", r"\\mathrm{brake}", current)
-            current = re.sub(r"C_d_parachute", "C_d", current)
-            current = re.sub(r"v_terminal_parachute", "v_terminal", current)
         elif getattr(self, "is_non_aircraft", False):
             current = re.sub(r"\bparachute\b", "recovery system", current, flags=re.IGNORECASE)
             current = re.sub(r"\bPARACHUTE\b", "RECOVERY", current)
@@ -3030,9 +2956,6 @@ class SysMLParameterBindingEngine:
             current = re.sub(r"ASTM\s+F3411(?:-22a)?", "ISO/IEC 29148", current)
             current = re.sub(r"\bRemote\s+ID\b", "Direct Broadcast Identification", current)
             current = re.sub(r"\bairframe\b", "chassis", current, flags=re.IGNORECASE)
-            current = re.sub(r"\\mathrm\{parachute\}", r"\\mathrm{recovery}", current)
-            current = re.sub(r"C_d_parachute", "C_d", current)
-            current = re.sub(r"v_terminal_parachute", "v_terminal", current)
 
         if getattr(self, "is_civilian", False):
             for idx in range(1, 7):
