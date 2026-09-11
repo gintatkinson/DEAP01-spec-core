@@ -14,8 +14,9 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import sys
-from typing import Tuple, Dict, Any
+from typing import Tuple, Dict, Any, List, Optional, Set, Union
 
 # Ensure local script directory is on sys.path for relative imports
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -23,13 +24,15 @@ if SCRIPT_DIR not in sys.path:
     sys.path.insert(0, SCRIPT_DIR)
 
 try:
-    from sysmlv2_ast import SysMLPackage, SysMLParser
+    from sysmlv2_ast import SysMLPackage, SysMLParser, SysMLConstraintDef, PartDef
     from translators.idl_translator import IDLTranslator
     from translators.autosar_translator import AUTOSARTranslator
     from translators.protobuf_translator import ProtobufTranslator
     from translators.openapi_translator import OpenAPITranslator
 except ImportError:
-    from skills.spec_orchestrator.scripts.sysmlv2_ast import SysMLPackage, SysMLParser
+    from skills.spec_orchestrator.scripts.sysmlv2_ast import (
+        SysMLPackage, SysMLParser, SysMLConstraintDef, PartDef
+    )
     from skills.spec_orchestrator.scripts.translators.idl_translator import IDLTranslator
     from skills.spec_orchestrator.scripts.translators.autosar_translator import AUTOSARTranslator
     from skills.spec_orchestrator.scripts.translators.protobuf_translator import ProtobufTranslator
@@ -66,11 +69,110 @@ def detect_format(schema_path: str, content: str) -> str:
     )
 
 
+def filter_ast_to_target_scope(
+    pkg: SysMLPackage,
+    allowed_parts: Optional[Union[List[str], Set[str], str]] = None,
+    negative_invariants: Optional[Union[List[str], Set[str], str]] = None,
+) -> SysMLPackage:
+    """
+    Filters AST nodes to target metamodel scope and projects negative invariants.
+    Prunes extraneous external reference entities to prevent phantom node injection.
+
+    Args:
+        pkg: The parsed or translated SysMLPackage instance.
+        allowed_parts: Optional list/set/comma-string of allowed part def names.
+        negative_invariants: Optional list/set/comma-string of entity names to project
+                             as negative exclusion assertions (assert constraint !exists(Entity)).
+
+    Returns:
+        The filtered SysMLPackage instance.
+    """
+    if allowed_parts is not None:
+        if isinstance(allowed_parts, str):
+            allowed_set: Set[str] = {p.strip() for p in allowed_parts.split(",") if p.strip()}
+        else:
+            allowed_set = {str(p).strip() for p in allowed_parts if str(p).strip()}
+
+        def _filter_part(part: PartDef) -> Optional[PartDef]:
+            if part.name not in allowed_set:
+                return None
+            if part.parts:
+                part.parts = [sub for sub in part.parts if _filter_part(sub) is not None]
+            return part
+
+        pkg.part_defs = [p for p in (pkg.part_defs or []) if _filter_part(p) is not None]
+
+        if pkg.item_defs and allowed_set:
+            pkg.item_defs = [
+                i for i in pkg.item_defs
+                if i.name in allowed_set or any(p.name in i.name or i.name in p.name for p in pkg.part_defs)
+            ]
+
+        if pkg.capability_defs and allowed_set:
+            pkg.capability_defs = [
+                c for c in pkg.capability_defs
+                if not c.subsystem or c.subsystem in allowed_set or c.name in allowed_set
+            ]
+
+        if pkg.hazard_defs and allowed_set:
+            pkg.hazard_defs = [
+                h for h in pkg.hazard_defs
+                if not h.part_ref or h.part_ref in allowed_set or h.name in allowed_set
+            ]
+
+        if pkg.risk_defs and pkg.hazard_defs:
+            surviving_hazards = {h.name for h in (pkg.hazard_defs or [])}
+            pkg.risk_defs = [
+                r for r in pkg.risk_defs
+                if not r.hazard_ref or r.hazard_ref in surviving_hazards or r.name in allowed_set
+            ]
+
+        if pkg.connection_defs and allowed_set:
+            filtered_conns = []
+            for conn in pkg.connection_defs:
+                src_part = conn.source_port.split(".")[0] if "." in conn.source_port else None
+                tgt_part = conn.target_port.split(".")[0] if "." in conn.target_port else None
+                if src_part and src_part not in allowed_set:
+                    continue
+                if tgt_part and tgt_part not in allowed_set:
+                    continue
+                filtered_conns.append(conn)
+            pkg.connection_defs = filtered_conns
+
+        for sub_pkg in (pkg.sub_packages or []):
+            filter_ast_to_target_scope(sub_pkg, allowed_parts=allowed_set, negative_invariants=None)
+
+    if negative_invariants is not None:
+        if isinstance(negative_invariants, str):
+            neg_list: List[str] = [n.strip() for n in negative_invariants.split(",") if n.strip()]
+        else:
+            neg_list = [str(n).strip() for n in negative_invariants if str(n).strip()]
+
+        for inv in neg_list:
+            clean_name = re.sub(r'[^a-zA-Z0-9_]', '_', inv).lower().strip('_')
+            constraint_name = f"assert_exclusion_{clean_name}"
+            if pkg.constraint_defs is None:
+                pkg.constraint_defs = []
+            if not any(c.name == constraint_name for c in pkg.constraint_defs):
+                pkg.constraint_defs.append(
+                    SysMLConstraintDef(
+                        name=constraint_name,
+                        expression=f"!exists({inv})",
+                        is_assertion=True,
+                        doc=f"Negative invariant asserting exclusion of phantom entity: {inv}",
+                    )
+                )
+
+    return pkg
+
+
 def ingest_schema(
     schema_path: str,
     format_type: str = "auto",
     output_path: str = ".pipeline/schema.sysml",
-    digest_path: str = ".pipeline/schema-digest.json"
+    digest_path: str = ".pipeline/schema-digest.json",
+    allowed_parts: Optional[Union[List[str], Set[str], str]] = None,
+    negative_invariants: Optional[Union[List[str], Set[str], str]] = None,
 ) -> Tuple[SysMLPackage, Dict[str, Any]]:
     if not os.path.exists(schema_path):
         raise FileNotFoundError(f"Schema file not found: {schema_path}")
@@ -106,6 +208,13 @@ def ingest_schema(
         raise ValueError(
             f"Unsupported schema format '{format_type}' for '{schema_path}'. Supported formats: .sysml, .idl, .arxml/.xml, .proto, .json/.yaml/.yml."
         )
+
+    # Apply AST-scoped structural filtering and negative invariant projection
+    pkg = filter_ast_to_target_scope(
+        pkg,
+        allowed_parts=allowed_parts,
+        negative_invariants=negative_invariants,
+    )
 
     sysml_text = pkg.to_sysml()
 
@@ -143,6 +252,8 @@ def main():
     parser.add_argument("--format", default="auto", help="Schema format (sysml, idl, autosar, protobuf, openapi, auto)")
     parser.add_argument("--out", default=".pipeline/schema.sysml", help="Path to output .sysml file")
     parser.add_argument("--digest", default=".pipeline/schema-digest.json", help="Path to output digest JSON")
+    parser.add_argument("--allowed-parts", nargs="*", default=None, help="List of allowed part def names to filter AST")
+    parser.add_argument("--negative-invariants", nargs="*", default=None, help="List of entity names to project as negative exclusion invariants")
     args = parser.parse_args()
 
     schema_path = args.schema or args.schema_pos
@@ -153,7 +264,9 @@ def main():
         schema_path=schema_path,
         format_type=args.format,
         output_path=args.out,
-        digest_path=args.digest
+        digest_path=args.digest,
+        allowed_parts=args.allowed_parts,
+        negative_invariants=args.negative_invariants,
     )
 
 
