@@ -2448,8 +2448,60 @@ def check_semantic_diagram_ast_parity(repo_root=None):
     print("Success: Check 21 verified (Semantic Diagram-to-AST Topology Parity Gate passed -- zero undeclared nodes, inverted flows, or ungrounded actuators).")
 
 
+def _load_semantic_prose_validator():
+    """Import SemanticProseInvariantValidator and WorkspaceRepository fail-safe."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(script_dir)
+    spec_dir = os.path.join(project_root, "skills", "spec-orchestrator", "scripts")
+    parity_src = os.path.join(project_root, "skills", "spec-orchestrator", "parity_auditor", "src")
+    scripts_dir = os.path.join(project_root, "scripts")
+    for p in (scripts_dir, spec_dir, parity_src):
+        if p not in sys.path:
+            sys.path.insert(0, p)
+    try:
+        from parity_auditor.validators.semantic_prose_invariant_validator import SemanticProseInvariantValidator
+        from parity_auditor.core.workspace import WorkspaceRepository
+        return SemanticProseInvariantValidator, WorkspaceRepository
+    except Exception:
+        return None, None
+
+
+def check_semantic_prose_invariants(repo_root=None):
+    """Check 22: Physical Invariant Semantic Prose Gate.
+
+    Verify that natural language narrative prose across all specification documents
+    in docs/ conforms to physical negative invariants declared in the SysML AST.
+    """
+    if repo_root is None:
+        repo_root = os.getcwd()
+
+    model_text = _discover_sysml_model_text(repo_root)
+    schema_dir = os.path.join(repo_root, "schema")
+    has_extracted = os.path.isdir(os.path.join(schema_dir, "extracted")) if os.path.isdir(schema_dir) else False
+    if (not model_text or not model_text.strip()) and not has_extracted:
+        print("Success: Check 22 verified (SysML model pending or landing zone clean).")
+        return
+
+    val_cls, repo_cls = _load_semantic_prose_validator()
+    if val_cls is None or repo_cls is None:
+        print("WARNING: Check 22 skipped (SemanticProseInvariantValidator or WorkspaceRepository unavailable).", file=sys.stderr)
+        return
+
+    repo = repo_cls(workspace_dir=repo_root)
+    validator = val_cls(workspace_repo=repo)
+    findings = validator.validate(repo, scan_dirs=["docs", "rules", "skills"])
+
+    if findings:
+        print("ERROR: Check 22 failed (Physical Invariant Semantic Prose Gate violations found):", file=sys.stderr)
+        for f in findings:
+            print(f"  - {f}", file=sys.stderr)
+        sys.exit(1)
+
+    print("Success: Check 22 verified (Physical Invariant Semantic Prose Gate passed -- zero ungrounded operational assertions).")
+
+
 def run_all_checks(repo_root=None):
-    """Run all baseline checks (Checks 10 through 21)."""
+    """Run all baseline checks (Checks 10 through 22)."""
     if repo_root is None:
         repo_root = os.getcwd()
     check_gitignore_exists(repo_root)
@@ -2464,9 +2516,10 @@ def run_all_checks(repo_root=None):
     check_domain_agnostic_ast_cleanliness(repo_root)
     check_wbs_suite_integrity(repo_root)
     check_semantic_diagram_ast_parity(repo_root)
+    check_semantic_prose_invariants(repo_root)
 
 def _run_verification(args, dest, repo_root, is_flutter, is_react):
-    # Run Checks 10 through 21
+    # Run Checks 10 through 22
     run_all_checks(repo_root)
 
     if is_flutter:

@@ -55,6 +55,7 @@ from .validators.research_inventory_validator import ResearchInventoryValidator
 from .validators.coverage_digest_validator import CoverageDigestValidator
 from .validators.obligation_witness_validator import ObligationWitnessValidator
 from .validators.semantic_diagram_ast_validator import SemanticDiagramASTValidator
+from .validators.semantic_prose_invariant_validator import SemanticProseInvariantValidator
 
 # Validators migrated to structured findings. Un-migrated validators are deliberately
 # excluded rather than included and silently ungroupable -- see `coverage_note`.
@@ -95,6 +96,7 @@ AGGREGATING_VALIDATORS = (
     CoverageDigestValidator,
     ObligationWitnessValidator,
     SemanticDiagramASTValidator,
+    SemanticProseInvariantValidator,
 )
 
 # SyncValidator is migrated to structured findings but deliberately absent: it shells
