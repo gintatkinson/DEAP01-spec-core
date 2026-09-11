@@ -57,6 +57,15 @@ def _setup_base_valid_workspace(tmpdir: str) -> None:
         in port fcc_in : FlightControlPort;
     }
 
+    part def FCS;
+    part def Sensors;
+    part def Watchdog;
+    part def BMS;
+    part def Actuators;
+    part def Containment;
+    part def Compute_Subsystem;
+    part def Power_Subsystem;
+
     connection Conn_Nav_FCC
         connect NavigationSubsystem.nav_out to FlightControlSubsystem.fcc_in;
 

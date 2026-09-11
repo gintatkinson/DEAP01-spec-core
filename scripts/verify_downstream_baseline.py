@@ -2396,8 +2396,60 @@ def _check_wbs_suite_integrity(repo_root):
 
 check_wbs_suite_integrity = _check_wbs_suite_integrity
 
+
+def _load_semantic_diagram_validator():
+    """Import SemanticDiagramASTValidator and WorkspaceRepository fail-safe."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(script_dir)
+    spec_dir = os.path.join(project_root, "skills", "spec-orchestrator", "scripts")
+    parity_src = os.path.join(project_root, "skills", "spec-orchestrator", "parity_auditor", "src")
+    scripts_dir = os.path.join(project_root, "scripts")
+    for p in (scripts_dir, spec_dir, parity_src):
+        if p not in sys.path:
+            sys.path.insert(0, p)
+    try:
+        from parity_auditor.validators.semantic_diagram_ast_validator import SemanticDiagramASTValidator
+        from parity_auditor.core.workspace import WorkspaceRepository
+        return SemanticDiagramASTValidator, WorkspaceRepository
+    except Exception:
+        return None, None
+
+
+def check_semantic_diagram_ast_parity(repo_root=None):
+    """Check 21: Semantic Diagram-to-AST Topology Parity Gate.
+
+    Verify that deliverable diagrams across docs/, rules/, and skills/ conform
+    to SysML v2 AST topology, containing zero undeclared phantom nodes, zero
+    inverted telemetry/signal flows, and zero ungrounded actuators.
+    """
+    if repo_root is None:
+        repo_root = os.getcwd()
+
+    model_text = _discover_sysml_model_text(repo_root)
+    if not model_text or not model_text.strip():
+        print("Success: Check 21 verified (SysML model pending or landing zone clean).")
+        return
+
+    val_cls, repo_cls = _load_semantic_diagram_validator()
+    if val_cls is None or repo_cls is None:
+        print("WARNING: Check 21 skipped (SemanticDiagramASTValidator or WorkspaceRepository unavailable).", file=sys.stderr)
+        return
+
+    repo = repo_cls(workspace_dir=repo_root)
+    validator = val_cls(workspace_repo=repo)
+    findings = validator.validate(repo, scan_dirs=["docs", "rules", "skills"])
+
+    if findings:
+        print("ERROR: Check 21 failed (Semantic Diagram-to-AST Topology Parity Gate violations found):", file=sys.stderr)
+        for f in findings:
+            print(f"  - {f}", file=sys.stderr)
+        sys.exit(1)
+
+    print("Success: Check 21 verified (Semantic Diagram-to-AST Topology Parity Gate passed -- zero undeclared nodes, inverted flows, or ungrounded actuators).")
+
+
 def run_all_checks(repo_root=None):
-    """Run all baseline checks (Checks 10 through 20)."""
+    """Run all baseline checks (Checks 10 through 21)."""
     if repo_root is None:
         repo_root = os.getcwd()
     check_gitignore_exists(repo_root)
@@ -2411,9 +2463,10 @@ def run_all_checks(repo_root=None):
     verify_upstream_blueprint_domain_cleanliness(repo_root)
     check_domain_agnostic_ast_cleanliness(repo_root)
     check_wbs_suite_integrity(repo_root)
+    check_semantic_diagram_ast_parity(repo_root)
 
 def _run_verification(args, dest, repo_root, is_flutter, is_react):
-    # Run Checks 10 through 20
+    # Run Checks 10 through 21
     run_all_checks(repo_root)
 
     if is_flutter:

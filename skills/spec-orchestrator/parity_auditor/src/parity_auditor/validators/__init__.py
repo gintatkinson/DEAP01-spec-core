@@ -23,4 +23,5 @@ from .conops_completeness_validator import ConopsCompletenessValidator, MissionI
 from .research_inventory_validator import ResearchInventoryValidator
 from .coverage_digest_validator import CoverageDigestValidator
 from .obligation_witness_validator import ObligationWitnessValidator, ObligationWitnessRegistry
+from .semantic_diagram_ast_validator import SemanticDiagramASTValidator
 

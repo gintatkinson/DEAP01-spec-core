@@ -54,6 +54,7 @@ try:
     from .validators.research_inventory_validator import ResearchInventoryValidator
     from .validators.coverage_digest_validator import CoverageDigestValidator
     from .validators.obligation_witness_validator import ObligationWitnessValidator
+    from .validators.semantic_diagram_ast_validator import SemanticDiagramASTValidator
     from .utils.diagnostics import serialize_diagnostics
     from .utils.comment_utils import strip_comments_and_strings
 except (ImportError, ValueError):
@@ -91,6 +92,7 @@ except (ImportError, ValueError):
     from parity_auditor.validators.research_inventory_validator import ResearchInventoryValidator
     from parity_auditor.validators.coverage_digest_validator import CoverageDigestValidator
     from parity_auditor.validators.obligation_witness_validator import ObligationWitnessValidator
+    from parity_auditor.validators.semantic_diagram_ast_validator import SemanticDiagramASTValidator
     from parity_auditor.utils.diagnostics import serialize_diagnostics
     from parity_auditor.utils.comment_utils import strip_comments_and_strings
 
@@ -1589,8 +1591,22 @@ def _main_impl():
     else:
         print("Success: Multi-dimensional obligation witness registry verified.")
 
+    print("\n=== Semantic Diagram-to-AST Topology Parity Audit (Gate 21) ===")
+    semantic_diagram_validator = SemanticDiagramASTValidator()
+    semantic_diagram_errors = _scope_findings(
+        semantic_diagram_validator.validate(repo, schemas_dir=schema_dir),
+        getattr(args, 'only', None)
+    )
+    if semantic_diagram_errors:
+        print("[!] Semantic Diagram-to-AST Topology Parity Violations Identified:")
+        for err in semantic_diagram_errors:
+            print(f"  - {err}")
+        has_failed = True
+    else:
+        print("Success: Semantic diagram nodes, signal flows, and actuator grounding verified against SysML AST.")
+
     if has_failed:
-        all_errors = (uml_errors or []) + (behavioral_errors or []) + (codebase_errors or []) + (doc_errors or []) + (dependency_errors or []) + (sync_errors or []) + (schema_mapping_errors or []) + (profile_scoping_errors or []) + (test_completeness_errors or []) + (cardinality_errors or []) + (spec_filename_errors or []) + (spec_title_errors or []) + (mermaid_syntax_errors or []) + (katex_errors or []) + (logical_ui_errors or []) + (docstring_errors or []) + (profile_compliance_errors or []) + (package_allocation_errors or []) + (feature_op_errors or []) + (interaction_errors or []) + (safety_constraint_errors or []) + (acceptance_test_errors or []) + (missing_spec_errors or []) + (source_ref_errors or []) + (link_errors or []) + (concept_provenance_errors or []) + (safety_trace_errors or []) + (doc_metadata_errors or []) + (icd_completeness_errors or []) + (operational_allocation_errors or []) + (standards_measurement_errors or []) + (conops_errors or []) + (mission_intent_errors or []) + (research_inventory_errors or []) + (coverage_digest_errors or []) + (obligation_witness_errors or [])
+        all_errors = (uml_errors or []) + (behavioral_errors or []) + (codebase_errors or []) + (doc_errors or []) + (dependency_errors or []) + (sync_errors or []) + (schema_mapping_errors or []) + (profile_scoping_errors or []) + (test_completeness_errors or []) + (cardinality_errors or []) + (spec_filename_errors or []) + (spec_title_errors or []) + (mermaid_syntax_errors or []) + (katex_errors or []) + (logical_ui_errors or []) + (docstring_errors or []) + (profile_compliance_errors or []) + (package_allocation_errors or []) + (feature_op_errors or []) + (interaction_errors or []) + (safety_constraint_errors or []) + (acceptance_test_errors or []) + (missing_spec_errors or []) + (source_ref_errors or []) + (link_errors or []) + (concept_provenance_errors or []) + (safety_trace_errors or []) + (doc_metadata_errors or []) + (icd_completeness_errors or []) + (operational_allocation_errors or []) + (standards_measurement_errors or []) + (conops_errors or []) + (mission_intent_errors or []) + (research_inventory_errors or []) + (coverage_digest_errors or []) + (obligation_witness_errors or []) + (semantic_diagram_errors or [])
 
 
         compiled_errors = all_errors

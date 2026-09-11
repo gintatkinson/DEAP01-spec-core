@@ -51,16 +51,18 @@ class MermaidFlowchartParser(IParser):
             match = re.match(r'^(.*?)\s*-\.\s*(.+?)\s*\.-\s*>\s*(.*)$', line)
             if match:
                 return match.group(1), match.group(3), "dotted_arrow", match.group(2).strip()
-            match = re.match(r'^(.*?)\s*(-->|-\.-*->|==>)\s*\|([^|]+)\|\s*(.*)$', line)
+            match = re.match(r'^(.*?)\s*(-->|-\.-*->|==>|---|--|===|==|-\.-*)\s*\|([^|]+)\|\s*(.*)$', line)
             if match:
                 arrow = match.group(2)
                 label = match.group(3).strip()
                 target = match.group(4)
                 style = "solid_arrow"
-                if "-.-" in arrow:
-                    style = "dotted_arrow"
+                if "-.-" in arrow or "-." in arrow:
+                    style = "dotted_arrow" if ">" in arrow else "dotted_line"
                 elif "==" in arrow:
-                    style = "thick_arrow"
+                    style = "thick_arrow" if ">" in arrow else "thick_line"
+                elif arrow in ("---", "--"):
+                    style = "solid_line"
                 return match.group(1), target, style, label
             match = re.match(r'^(.*?)\s*(--|==)\s*([^-\s=].*?)\s*(-->|==>)\s*(.*)$', line)
             if match:
