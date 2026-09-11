@@ -47,7 +47,8 @@ The `Worker ConOps` ingests and synthesizes the following foundational inputs:
 
 2. **System Architecture & Structural Schemas**:
    - Ingest `.pipeline/schema.sysml` and `.pipeline/schema-digest.json` to extract system boundaries, subsystems, and architectural partitions.
-   - **Mandatory AST Manifest Ingestion**: Ingest the explicit manifest of all AST `state def` prefix families with 2 or more states ($\ge 2$ states) and AST `part def` nodes with ports, actions, and constraints for Section 6.1 Stateflow synthesis hooks and Section 7 FMECA tables.
+   - **Mandatory AST Manifest Ingestion**: Ingest the explicit manifest of all AST `state def` prefix families with 2 or more states ($\ge 2$ states) and AST `part def` nodes with ports, actions, and constraints for Section 6.1 Stateflow synthesis hooks, Section 7 FMECA tables, and **Section 4 Super-System and Subsystem Architecture synthesis**.
+   - **Mandatory AST Part Taxonomy Invariant**: Enforce automated extraction of all `part def` blocks from `schema/` and `.pipeline/schema.sysml`. Require ConOps Section 4 to synthesize formal Super-System Architecture (Air Vehicle / Primary Segment, Ground Segment, Launch / Support Segment) and Subsystem Architecture subsections for 100% of declared AST `part def` nodes (100% AST part coverage invariant).
    - Ingest domain schemas under `schema/` (OMG IDL, Protobuf, ARXML, SysML v2).
 
 3. **Safety & Risk Baselines (3-Tier Lifecycle Integration)**:
@@ -74,7 +75,7 @@ The ConOps specification tree consists of 12 canonical modular units:
 | `01_METADATA_AND_OVERVIEW.md` | `## 1. Scope, System Identification & Normative Baseline` | `operational_context`, `user_classes` | System ID, domain classification, physical/legal boundaries, stakeholder roster, user classes. |
 | `02_DEFICIENCIES_AND_MOTIVATION.md` | `## 2. Current Situation, Deficiency Analysis & Operational Motivation` | `deficiencies` | Predecessor baseline, technical, operational, and human deficiencies. |
 | `03_PROPOSED_CAPABILITIES.md` | `## 3. Proposed Capabilities & Operational Justification (Trade-Offs)` | `proposed_capabilities` | Mission drivers, value propositions, engineering trade-off evaluations. |
-| `04_USER_CLASSES_AND_STAKEHOLDERS.md` | `## 4. User Classes, Stakeholder Taxonomy & Operational Lifecycle Modes` | `operational_context` | Formal operational lifecycle stages: Phase_Startup, Phase_NominalExecution, Phase_DegradedMode, Phase_ContingencyFailsafe, Phase_SecureShutdown, Phase_MaintenanceMode. |
+| `04_USER_CLASSES_AND_STAKEHOLDERS.md` | `## 4. User Classes, Stakeholder Taxonomy & Operational Lifecycle Modes` | `operational_context` | Formal operational lifecycle stages: Phase_Startup, Phase_NominalExecution, Phase_DegradedMode, Phase_ContingencyFailsafe, Phase_SecureShutdown, Phase_MaintenanceMode; Super-System Architecture (Air Vehicle, Ground Segment, Launch System); and Subsystem Architecture subsections covering 100% of declared AST `part def` nodes. |
 | `05_AIRSPACE_AND_SORA_RISK.md` | `## 5. Operational State Space, Boundary Containment & Risk Assessment` | `airspace_sora` | 4D volume mathematical formulation, Ground Risk Buffer ($R_{\mathrm{GRB}}$) equation, and SORA impact parameters table. |
 | `06_UAF_OPERATIONAL_ACTIVITIES.md` | `## 6. OMG UAF Operational Activity Taxonomy` | `uaf_activities` | Open-ended UAF activity roster (`OA-01`..`OA-N`) with mandatory Gate 24 allocation tags (`/// OperationalAllocation: [OA-XX]`). |
 | `07_OPTX_EXCHANGES.md` | `## 7. Operational Information Exchange (Op-Tx) Matrix` | `optx_exchanges` | Information exchange roster (`OpTx-01`..`OpTx-N`) specifying source, destination, data rates, latency limits, criticality. |
@@ -212,7 +213,22 @@ $$
 | Contingency Buffer | E_contingency | 40000.0 | J | Dynamic operational contingency energy reserve |
 | Total Bingo Threshold | E_bingo | 350000.0 | J | Critical return threshold condition |
 
-### 4.4 100% Public Clause Citations
+### 4.4 Mandatory AST Subsystem Architecture Invariant in Section 4
+Per ISO/IEC/IEEE 29148:2018 §6.4.2, INCOSE Systems Engineering Handbook v5.0, and the Pure Schema-Driven Compiler Invariant:
+- **100% AST Part Coverage Invariant**: ConOps Section 4 must synthesize formal Super-System Architecture and dedicated Subsystem Architecture subsections for 100% of declared `part def` nodes present in the SysML AST.
+- **Super-System Architecture (Section 4.7)**:
+  1. Formal Operational Segments: Primary Vehicle / Cyber-Physical Platform Segment, Ground Command & Control Segment, Launch & Auxiliary Support Segment.
+  2. Super-System Architectural Connectivity Diagram: A valid Mermaid diagram (`flowchart TD` or `graph TD`) depicting segment boundaries, C2 data links, payload feeds, and ground interfaces with universal quoting and header compliance.
+- **Subsystem Architecture & AST Part Allocation (Section 4.8)**:
+  For EVERY declared AST `part def` node $p \in \text{AST}$, Section 4 must contain a dedicated subsection (`#### 4.8.x {part.name} Subsystem Architecture`) specifying:
+  1. **Functional Purpose & Scope**: Primary operational mission role derived from AST doc comments and actions.
+  2. **Physical & Logical Interface / Port Allocations**: Declared input, output, and bidirectional ports (`PortDef`) and bus interconnects.
+  3. **Power, Mass & Resource Envelopes**: Operating electrical power draw, mass partition budget ($m_{\mathrm{alloc}}$), and thermal operating envelopes.
+  4. **Operational Role & Statechart Integration**: Lifecycle mode allocation ($\Phi_{\mathrm{lifecycle}}$) and active operational states.
+  5. **Safety Invariants, Containment Interlocks & FMECA Linkage**: Watchdog interlocks, emergency trigger containment bindings (`EMG-01`..`EMG-07`), and safety criticalities.
+- **Zero-Omission Rule**: Omitting any declared AST `part def` is strictly forbidden and triggers compiler validation failure during `assemble_conops.py` assembly.
+
+### 4.5 100% Public Clause Citations
 - Every threat mitigation, normative requirement, and operational task must cite authoritative public standards clauses (e.g. `ISO/IEC/IEEE 29148:2018 §6.4.2`, `NATO STANAG 4586 Annex B §3.2.1`, `JARUS SORA v2.5 Annex B §2.1`, `RTCA DO-178C §6.3.1`).
 - Speculative or un-cited additions are strictly forbidden.
 

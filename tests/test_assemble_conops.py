@@ -1207,6 +1207,144 @@ Carries up to a 5 kg warhead.
             self.assertNotIn("parachute", rendered.lower())
             self.assertNotIn("canopy", rendered.lower())
 
+    def test_sysml_ast_part_extraction_and_100_percent_subsystem_synthesis(self):
+        """Verify AST part def extraction and 100% subsystem architecture synthesis in Section 4 (Issue #246)."""
+        sysml_model = """
+        package AutonomousSurveillancePlatform {
+            part def PrimaryFlightComputer {
+                doc /* Dual-redundant flight control computer with MPU */
+                port p_in : SensorData;
+                port p_out : ActuatorDemand;
+            }
+            part def SensorPayloadSuite {
+                doc /* Optical and multi-spectral sensor camera package */
+                port p_video : VideoStream;
+            }
+            part def PowerManagementUnit {
+                doc /* Battery management and power distribution board */
+                port p_pwr_bus : DC_Bus;
+            }
+            part def PACECommsDatalink {
+                doc /* Multi-band C2 datalink transceiver */
+                port p_rf : RFPort;
+            }
+            part def AutonomousRecoverySystem {
+                doc /* Failsafe emergency containment and recovery deployment */
+                port p_squib : SquibDiscrete;
+            }
+        }
+        """
+        engine = SysMLParameterBindingEngine(auto_detect=False)
+        engine.ingest_sysml_text(sysml_model)
+
+        expected_parts = {
+            "PrimaryFlightComputer",
+            "SensorPayloadSuite",
+            "PowerManagementUnit",
+            "PACECommsDatalink",
+            "AutonomousRecoverySystem",
+        }
+        self.assertEqual(engine.ast_part_names, expected_parts)
+        self.assertEqual(len(engine.ast_parts), 5)
+
+        # Super-System Architecture synthesis
+        super_sys = engine.resolve_token("SUPER_SYSTEM_ARCHITECTURE")
+        self.assertIn("```mermaid", super_sys)
+        self.assertIn("flowchart TD", super_sys)
+        self.assertIn("Operational Super-System Architecture", super_sys)
+        self.assertIn("AutonomousSurveillancePlatform", super_sys)
+
+        # Subsystem Architecture synthesis covering 100% of declared parts
+        subsys_arch = engine.resolve_token("SUBSYSTEM_ARCHITECTURE_SECTION")
+        for p_name in expected_parts:
+            self.assertIn(f"#### 4.8.", subsys_arch)
+            self.assertIn(f"{p_name} Subsystem Architecture", subsys_arch)
+            self.assertIn("Physical & Logical Interface Allocations", subsys_arch)
+            self.assertIn("Resource & Operating Envelope Allocations", subsys_arch)
+            self.assertIn("Operational Lifecycle & Statechart Integration", subsys_arch)
+            self.assertIn("Safety Invariants & Containment Interlocks", subsys_arch)
+
+    def test_conops_section_4_ast_part_coverage_gate_success_and_failure(self):
+        """Verify 100% AST part coverage validation gate on ConOps Section 4 (Issue #246)."""
+        sysml_model = """
+        package TestPlatform {
+            part def SubsystemA { doc /* Subsystem A */ }
+            part def SubsystemB { doc /* Subsystem B */ }
+            part def SubsystemC { doc /* Subsystem C */ }
+        }
+        """
+        engine = SysMLParameterBindingEngine(auto_detect=False)
+        engine.ingest_sysml_text(sysml_model)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            _create_sample_conops_units(tmpdir, with_placeholders=True)
+            # Update Unit 4 to include placeholders
+            u4_path = os.path.join(tmpdir, "04_USER_CLASSES_AND_STAKEHOLDERS.md")
+            with open(u4_path, "w", encoding="utf-8") as f:
+                f.write("""# 4. Operational Modes & Subsystems
+
+### 4.7 Super-System Architecture & Segment Boundaries
+{{SUPER_SYSTEM_ARCHITECTURE}}
+
+### 4.8 Subsystem Architecture & AST Part Allocation
+{{SUBSYSTEM_ARCHITECTURE_SECTION}}
+""")
+
+            # Full coverage assembly should succeed with 0 errors
+            assembled, errors = assemble_document(tmpdir, params=engine, canonical_whitelist=CANONICAL_CONOPS_UNITS)
+            self.assertEqual(errors, [])
+            self.assertIn("SubsystemA Subsystem Architecture", assembled)
+            self.assertIn("SubsystemB Subsystem Architecture", assembled)
+            self.assertIn("SubsystemC Subsystem Architecture", assembled)
+
+            # Manual unit without SubsystemC should fail coverage gate
+            with open(u4_path, "w", encoding="utf-8") as f:
+                f.write("""# 4. Operational Modes & Subsystems
+### 4.8 Subsystem Architecture
+#### 4.8.1 SubsystemA Subsystem Architecture
+Functional purpose for SubsystemA.
+#### 4.8.2 SubsystemB Subsystem Architecture
+Functional purpose for SubsystemB.
+""")
+            assembled_bad, errors_bad = assemble_document(tmpdir, params=engine, canonical_whitelist=CANONICAL_CONOPS_UNITS)
+            self.assertTrue(any("Coverage Gate failed: Missing declared AST part def(s): SubsystemC" in e for e in errors_bad))
+
+    def test_multi_domain_super_system_and_subsystem_architecture(self):
+        """Verify multi-domain Super-System and Subsystem Architecture synthesis across all 6 domains (Issue #246)."""
+        domains = ["aviation", "medical", "rail", "marine", "space", "industrial"]
+        for dom in domains:
+            engine = SysMLParameterBindingEngine(domain=dom, auto_detect=False)
+            super_sys = engine.resolve_token("SUPER_SYSTEM_ARCHITECTURE")
+            subsys_arch = engine.resolve_token("SUBSYSTEM_ARCHITECTURE_SECTION")
+
+            self.assertIn("```mermaid", super_sys)
+            self.assertIn("flowchart TD", super_sys)
+            self.assertIn("#### 4.8.1", subsys_arch)
+            self.assertIn("Physical & Logical Interface Allocations", subsys_arch)
+            self.assertIn("Resource & Operating Envelope Allocations", subsys_arch)
+            self.assertIn("Operational Lifecycle & Statechart Integration", subsys_arch)
+            self.assertIn("Safety Invariants & Containment Interlocks", subsys_arch)
+
+            # Check domain-specific aspects
+            if dom == "medical":
+                self.assertIn("SurgeonMasterConsole", subsys_arch)
+                self.assertIn("ManipulatorArmSubsystem", subsys_arch)
+            elif dom == "rail":
+                self.assertIn("TractionController", subsys_arch)
+                self.assertIn("BrakingActuationSubsystem", subsys_arch)
+            elif dom == "marine":
+                self.assertIn("PressureHullStructure", subsys_arch)
+                self.assertIn("ThrusterPropulsionSubsystem", subsys_arch)
+            elif dom == "space":
+                self.assertIn("ADCSAttitudeController", subsys_arch)
+                self.assertIn("SolarPowerDistribution", subsys_arch)
+            elif dom == "industrial":
+                self.assertIn("NavigationLidarModule", subsys_arch)
+                self.assertIn("DriveWheelActuation", subsys_arch)
+            elif dom == "aviation":
+                self.assertIn("AirframeStructure", subsys_arch)
+                self.assertIn("OnboardComputer", subsys_arch)
+
 
 if __name__ == "__main__":
     unittest.main()
