@@ -366,6 +366,177 @@ The ESAD bus executes Opcode 0x11 for PBIT and Opcode 0x10 for Exchange.
             self.assertEqual(contra_errors, [])
             self.assertEqual(errors, [])
 
+    def test_semantic_oem_provenance_cruciform_empennage_passes_when_adhering(self):
+        """Verify that concept document adhering to OEM baseline cruciform empennage passes with zero errors."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            extracted_dir = os.path.join(schema_dir, "extracted")
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            os.makedirs(extracted_dir, exist_ok=True)
+            os.makedirs(conops_dir, exist_ok=True)
+
+            with open(os.path.join(extracted_dir, "oem_cruciform_baseline.md"), "w", encoding="utf-8") as f:
+                f.write("""# OEM Cruciform Baseline
+| Property | Value |
+|---|---|
+| system_mass | 2400.0 kg |
+| Recovery system | None |
+| empennage_configuration | Cruciform |
+
+- Control surfaces: Independent vertical rudder and horizontal elevator
+- Opcode 0x11: PBIT
+- Opcode 0x10: Exchange
+""")
+
+            conops_content = """# Concept of Operations
+<!-- Source: schema/extracted/oem_cruciform_baseline.md -->
+
+The vehicle has a system_mass = 2400.0 kg for target mission operations.
+Flight control is maintained via independent vertical rudder and horizontal elevator surfaces on the cruciform empennage.
+No parachute is installed; safe recovery relies on conventional landing.
+The ESAD bus executes Opcode 0x11 for PBIT and Opcode 0x10 for Exchange.
+"""
+            with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
+                f.write(conops_content)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            validator = ConceptProvenanceValidator()
+            errors = validator.validate(repo)
+
+            contra_errors = [e for e in errors if e.rule_id == "semantic-oem-provenance-contradiction"]
+            self.assertEqual(contra_errors, [])
+            self.assertEqual(errors, [])
+
+    def test_semantic_oem_provenance_fails_on_cruciform_vs_vtail_contradiction(self):
+        """Verify that asserting V-tail ruddervators when OEM defines cruciform empennage fails."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            extracted_dir = os.path.join(schema_dir, "extracted")
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            os.makedirs(extracted_dir, exist_ok=True)
+            os.makedirs(conops_dir, exist_ok=True)
+
+            with open(os.path.join(extracted_dir, "cruciform_spec.md"), "w", encoding="utf-8") as f:
+                f.write("""# Structural Specification
+| Property | Value |
+|---|---|
+| empennage_type | Cruciform |
+| system_mass | 2200.0 kg |
+""")
+
+            conops_content = """# Concept of Operations
+<!-- Source: schema/extracted/cruciform_spec.md -->
+
+| Property | Value |
+|---|---|
+| empennage_type | V-Tail |
+
+The vehicle has a system_mass = 2200.0 kg.
+"""
+            with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
+                f.write(conops_content)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            validator = ConceptProvenanceValidator()
+            errors = validator.validate(repo)
+
+            contra_errors = [e for e in errors if e.rule_id == "semantic-oem-provenance-contradiction"]
+            self.assertEqual(len(contra_errors), 1)
+            self.assertIn("Physical assertion ('V-Tail')", str(contra_errors[0]))
+            self.assertIn("contradicts Level 0 OEM Ground-Truth extraction baseline in schema/extracted/.", str(contra_errors[0]))
+
+    def test_semantic_oem_provenance_abstract_structural_property_graph(self):
+        """Verify that abstract structural property graphs validate cleanly without domain bias."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            extracted_dir = os.path.join(schema_dir, "extracted")
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            os.makedirs(extracted_dir, exist_ok=True)
+            os.makedirs(conops_dir, exist_ok=True)
+
+            with open(os.path.join(extracted_dir, "abstract_topology.md"), "w", encoding="utf-8") as f:
+                f.write("""# Abstract System Architecture
+| Property | Value |
+|---|---|
+| structure_topology | DistributedMesh |
+| actuation_mode | DualRedundantHydraulic |
+| cooling_architecture | VaporCycleLoop |
+| cryogenic_subcooling | None |
+""")
+
+            # 1. Matching ConOps passes
+            conops_content = """# Concept of Operations
+<!-- Source: schema/extracted/abstract_topology.md -->
+
+| Property | Value |
+|---|---|
+| structure_topology | DistributedMesh |
+| actuation_mode | DualRedundantHydraulic |
+| cooling_architecture | VaporCycleLoop |
+
+The system architecture implements structure_topology: DistributedMesh and actuation_mode: DualRedundantHydraulic.
+No cryogenic_subcooling is installed on the platform.
+"""
+            with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
+                f.write(conops_content)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            validator = ConceptProvenanceValidator()
+            errors = validator.validate(repo)
+            self.assertEqual(errors, [])
+
+            # 2. Contradictory ConOps fails
+            bad_conops_content = """# Concept of Operations
+<!-- Source: schema/extracted/abstract_topology.md -->
+
+| Property | Value |
+|---|---|
+| structure_topology | CentralizedStar |
+
+The system incorporates cryogenic_subcooling for thermal management.
+"""
+            with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
+                f.write(bad_conops_content)
+
+            errors_bad = validator.validate(repo)
+            contra_errors = [e for e in errors_bad if e.rule_id == "semantic-oem-provenance-contradiction"]
+            self.assertGreaterEqual(len(contra_errors), 1)
+
+    def test_semantic_oem_provenance_multi_stabiliser_independent_surfaces(self):
+        """Verify multi-stabiliser empennage with twin vertical fins and split horizontal elevators."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            extracted_dir = os.path.join(schema_dir, "extracted")
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            os.makedirs(extracted_dir, exist_ok=True)
+            os.makedirs(conops_dir, exist_ok=True)
+
+            with open(os.path.join(extracted_dir, "multi_stabiliser_spec.md"), "w", encoding="utf-8") as f:
+                f.write("""# Multi-Stabiliser OEM Specification
+| Property | Value |
+|---|---|
+| empennage_layout | TwinVerticalFin |
+| primary_pitch_control | SplitElevator |
+| primary_yaw_control | DualRudder |
+""")
+
+            conops_content = """# Concept of Operations
+<!-- Source: schema/extracted/multi_stabiliser_spec.md -->
+
+| Property | Value |
+|---|---|
+| empennage_layout | TwinVerticalFin |
+| primary_pitch_control | SplitElevator |
+| primary_yaw_control | DualRudder |
+"""
+            with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
+                f.write(conops_content)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            validator = ConceptProvenanceValidator()
+            errors = validator.validate(repo)
+            self.assertEqual(errors, [])
+
     def test_markdown_table_delimiters_ignored_without_phantom_contradictions(self):
         """Verify that markdown table delimiters (e.g. :---, ---:, :---:, |---|---|) do not trigger phantom contradictions."""
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -465,7 +636,7 @@ Interface wiring follows:
 - Opcode 0x10: Exchange
 """)
 
-            # ConOps has a Glossary explaining what a ballistic parachute and elevons are,
+            # ConOps has a Glossary explaining what a ballistic parachute, elevons, and cruciform empennages are,
             # but the normative architecture adheres strictly to OEM baseline.
             conops_content = """# Concept of Operations
 <!-- Source: schema/extracted/oem_baseline.md -->
@@ -475,10 +646,12 @@ Interface wiring follows:
 | :--- | :--- |
 | Ballistic Parachute | Pyrotechnic emergency recovery system deployed in contingency |
 | Elevon | Aerodynamic flight surface combining pitch and roll controls |
+| Cruciform Empennage | Tailplane arrangement where horizontal stabilizer intersects vertical fin in a cross shape |
 | PBIT | Periodic Built-In Test routine |
 
 - **Ballistic Parachute**: Emergency deceleration mechanism.
 - **Elevon**: Movable wing control surface.
+- **Cruciform Empennage**: Cross-shaped stabilizer geometry.
 
 ## 2. Normative Architecture
 The vehicle has a system_mass = 1800.0 kg.
