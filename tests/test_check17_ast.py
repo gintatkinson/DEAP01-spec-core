@@ -123,7 +123,7 @@ _SAMPLE_MODES = [
 ]
 
 
-def build_stpa_document(uca_combos=None, oso_ids=None, proof_part_numbers=(1, 2, 3, 4, 5), fmeca_row_count=16, components=("ControllerA", "ControllerB"), section_6_1=""):
+def build_stpa_document(uca_combos=None, oso_ids=None, proof_part_numbers=(1, 2, 3, 4, 5), fmeca_row_count=16, components=("ControllerA",), section_6_1=""):
     """Build a full 8-pillar safety matrix document (neutral identifiers)."""
     if uca_combos is None:
         uca_combos = []
@@ -249,7 +249,7 @@ def test_check17_rejects_truncated_uca_cartesian_with_model(tmp_path, capsys):
     """
     model = build_sysml_model({"ControllerA": 10, "ControllerB": 11})
     combos = [(f"Action{number:02d}", gw) for number in range(1, 5) for gw in GUIDE_WORD_CELL_TEXT]
-    doc = build_stpa_document(uca_combos=combos)
+    doc = build_stpa_document(uca_combos=combos, components=("ControllerA", "ControllerB"))
 
     with pytest.raises(SystemExit) as exc_info:
         _run_check17(tmp_path, model, doc)
@@ -356,7 +356,7 @@ def test_check17_rejects_truncated_uca_cartesian_with_multifile_schema(tmp_path,
         "02_actions.sysml": actions_sysml,
     }
     combos = [(f"Action{number:02d}", gw) for number in range(1, 5) for gw in GUIDE_WORD_CELL_TEXT]
-    doc = build_stpa_document(uca_combos=combos)
+    doc = build_stpa_document(uca_combos=combos, components=("ControllerA", "ControllerB", "SignalType"))
 
     with pytest.raises(SystemExit) as exc_info:
         _run_check17_multifile(tmp_path, schema_files, doc)
@@ -376,7 +376,7 @@ def test_check17_accepts_complete_cartesian_matrix_with_multifile_schema(tmp_pat
         "02_actions.sysml": actions_sysml,
     }
     combos = [(f"Action{number:02d}", gw) for number in range(1, 5) for gw in GUIDE_WORD_CELL_TEXT]
-    doc = build_stpa_document(uca_combos=combos)
+    doc = build_stpa_document(uca_combos=combos, components=("ControllerA", "SignalType"))
 
     _run_check17_multifile(tmp_path, schema_files, doc)
 

@@ -30,7 +30,7 @@ import re
 import hashlib
 import argparse
 import tempfile
-from typing import Dict, List, Any, Optional, Tuple, Union
+from typing import Dict, List, Any, Optional, Set, Tuple, Union
 
 # Ensure spec-orchestrator scripts are on sys.path
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -475,14 +475,37 @@ def compile_uca_to_constraint(uca: Dict[str, Any]) -> Any:
     }
 
 
-def compile_fmeca_to_constraint(fmeca: Dict[str, Any]) -> Any:
+def _component_matches(table_comp: str, ast_part_name: str) -> bool:
+    """Check if an FMECA table component cell matches an AST part def name."""
+    tc = table_comp.strip().lower()
+    pn = ast_part_name.strip().lower()
+    if tc == pn:
+        return True
+    tc_clean = re.sub(r'[^a-zA-Z0-9]', '', tc)
+    pn_clean = re.sub(r'[^a-zA-Z0-9]', '', pn)
+    if tc_clean and tc_clean == pn_clean:
+        return True
+    if re.search(rf"\b{re.escape(ast_part_name)}\b", table_comp, re.IGNORECASE):
+        return True
+    if re.search(rf"\b{re.escape(table_comp)}\b", ast_part_name, re.IGNORECASE):
+        return True
+    return False
+
+
+def compile_fmeca_to_constraint(fmeca: Dict[str, Any], valid_parts: Optional[Set[str]] = None) -> Optional[Any]:
     """
     Compiles a parsed FMECA failure mode into a formal SysMLConstraintDef AST node.
+    If valid_parts is provided, returns None if the component does not match any part in valid_parts.
     """
+    comp_raw = fmeca.get("component", "Component")
+    if valid_parts is not None:
+        if not any(_component_matches(comp_raw, p) for p in valid_parts):
+            return None
+
     fmeca_id = fmeca["id"]
     clean_id = _sanitize_id(fmeca_id)
     name = f"Constraint_{clean_id}"
-    comp = _sanitize_id(fmeca.get("component", "Component"))
+    comp = _sanitize_id(comp_raw)
     expression = f"{comp}_healthStatus == Normal"
 
     if fmeca.get("is_quantitative"):
@@ -631,7 +654,11 @@ def extract_safety_constraints_to_requirements(content: str) -> List[Any]:
     return reqs
 
 
-def compile_stpa_to_ast(content: str, package_name: str = "System_SafetyConstraints") -> Any:
+def compile_stpa_to_ast(
+    content: str,
+    package_name: str = "System_SafetyConstraints",
+    valid_parts: Optional[Set[str]] = None,
+) -> Any:
     """
     Compiles STPA and FMECA hazard analyses into a canonical SysMLPackage AST containing
     formal `assert constraint` and `constraint def` nodes.
@@ -641,9 +668,13 @@ def compile_stpa_to_ast(content: str, package_name: str = "System_SafetyConstrai
 
     constraints = []
     for u in ucas:
-        constraints.append(compile_uca_to_constraint(u))
+        con = compile_uca_to_constraint(u)
+        if con is not None:
+            constraints.append(con)
     for f in fmecas:
-        constraints.append(compile_fmeca_to_constraint(f))
+        con = compile_fmeca_to_constraint(f, valid_parts=valid_parts)
+        if con is not None:
+            constraints.append(con)
 
     if SysMLPackage:
         pkg = SysMLPackage(
@@ -658,11 +689,15 @@ def compile_stpa_to_ast(content: str, package_name: str = "System_SafetyConstrai
     }
 
 
-def compile_stpa_to_sysml(content: str, package_name: str = "System_SafetyConstraints") -> str:
+def compile_stpa_to_sysml(
+    content: str,
+    package_name: str = "System_SafetyConstraints",
+    valid_parts: Optional[Set[str]] = None,
+) -> str:
     """
     Compiles STPA hazard matrices and FMECA modes into textual SysML v2 model notation.
     """
-    ast_pkg = compile_stpa_to_ast(content, package_name)
+    ast_pkg = compile_stpa_to_ast(content, package_name, valid_parts=valid_parts)
     if hasattr(ast_pkg, "to_sysml"):
         return ast_pkg.to_sysml()
 
@@ -1588,13 +1623,16 @@ def _merge_test_case_into_package(pkg: Any, new_tc: Any) -> None:
 
 
 def _merge_constraint_into_package(pkg: Any, new_con: Any) -> None:
-    con_name = getattr(new_con, "name", "")
+    if new_con is None:
+        return
+    con_name = getattr(new_con, "name", "") if not isinstance(new_con, dict) else new_con.get("name", "")
     if not con_name:
         return
 
     def _find_con(p: Any) -> Optional[Any]:
         for c in getattr(p, "constraint_defs", []) or []:
-            if getattr(c, "name", "") == con_name:
+            c_name = getattr(c, "name", "") if not isinstance(c, dict) else c.get("name", "")
+            if c_name == con_name:
                 return c
         for sub in getattr(p, "sub_packages", []) or []:
             found = _find_con(sub)
@@ -1604,12 +1642,21 @@ def _merge_constraint_into_package(pkg: Any, new_con: Any) -> None:
 
     existing = _find_con(pkg)
     if not existing:
-        pkg.constraint_defs.append(new_con)
+        if hasattr(pkg, "constraint_defs"):
+            pkg.constraint_defs.append(new_con)
+        elif isinstance(pkg, dict) and "constraints" in pkg:
+            pkg["constraints"].append(new_con)
     else:
-        if hasattr(existing, "expression") and not existing.expression and getattr(new_con, "expression", ""):
-            existing.expression = new_con.expression
-        if hasattr(existing, "doc") and not existing.doc and getattr(new_con, "doc", ""):
-            existing.doc = new_con.doc
+        new_expr = getattr(new_con, "expression", "") if not isinstance(new_con, dict) else new_con.get("expression", "")
+        new_doc = getattr(new_con, "doc", "") if not isinstance(new_con, dict) else new_con.get("doc", "")
+        if hasattr(existing, "expression") and not existing.expression and new_expr:
+            existing.expression = new_expr
+        elif isinstance(existing, dict) and not existing.get("expression") and new_expr:
+            existing["expression"] = new_expr
+        if hasattr(existing, "doc") and not existing.doc and new_doc:
+            existing.doc = new_doc
+        elif isinstance(existing, dict) and not existing.get("doc") and new_doc:
+            existing["doc"] = new_doc
 
 
 def _merge_capability_into_package(pkg: Any, new_cap: Any) -> None:
@@ -1832,12 +1879,24 @@ def reverse_sync_specs_to_sysml(
 
                 # Safety & STPA
                 if "safety" in rel_dir or "UCA-" in content or "FMECA-" in content or "SC-" in content:
+                    valid_parts = None
+                    if hasattr(pkg, "get_all_parts"):
+                        all_p = pkg.get_all_parts()
+                        if all_p:
+                            valid_parts = {p.name for p in all_p}
+                    elif hasattr(pkg, "part_defs") and pkg.part_defs:
+                        valid_parts = {getattr(p, "name", str(p)) for p in pkg.part_defs}
+                    elif isinstance(pkg, dict) and pkg.get("part_defs"):
+                        valid_parts = {p.get("name", "") if isinstance(p, dict) else getattr(p, "name", str(p)) for p in pkg["part_defs"]}
+
                     ucas = parse_stpa_ucas(content)
                     for u in ucas:
                         _merge_constraint_into_package(pkg, compile_uca_to_constraint(u))
                     fmecas = parse_fmeca_modes(content)
                     for fm_item in fmecas:
-                        _merge_constraint_into_package(pkg, compile_fmeca_to_constraint(fm_item))
+                        con = compile_fmeca_to_constraint(fm_item, valid_parts=valid_parts)
+                        if con is not None:
+                            _merge_constraint_into_package(pkg, con)
                     safety_reqs = extract_safety_constraints_to_requirements(content)
                     for s_req in safety_reqs:
                         _merge_requirement_into_package(pkg, s_req)

@@ -179,7 +179,7 @@ SAMPLE_STPA_MATRIX_MD = """# STPA Unsafe Control Action (UCA) Matrix
 ## FMECA Failure Modes
 | FMECA ID | Component | Failure Mode | Effect | Safety Invariant |
 | :--- | :--- | :--- | :--- | :--- |
-| **FMECA-UAS-01** | Magnetometer | Magnetic flux saturation | Compass heading divergence | flux <= 250.0 uT |
+| **FMECA-UAS-01** | FlightController | Magnetic flux saturation | Compass heading divergence | flux <= 250.0 uT |
 """
 
 

@@ -26,6 +26,8 @@ from scripts.compile_sysml import (
     compile_stpa_to_sysml,
     extract_use_cases_from_markdown,
     reverse_sync_specs_to_sysml,
+    _merge_constraint_into_package,
+    _component_matches,
 )
 from parity_auditor.validators.link_validator import LinkValidator
 from parity_auditor.core.workspace import WorkspaceRepository
@@ -223,6 +225,117 @@ class TestCompileSysmlUpgrades(unittest.TestCase):
         c_gen = compile_uca_to_constraint(uca_generic_prov)
         expr_gen = c_gen.expression if hasattr(c_gen, 'expression') else c_gen['expression']
         self.assertEqual(expr_gen, "systemStateValid == true")
+
+    def test_component_matches_helper(self):
+        """Verify _component_matches matches exact, case-insensitive, and cleaned names."""
+        self.assertTrue(_component_matches("Electric Motor", "Electric_Motor"))
+        self.assertTrue(_component_matches("FlightController", "FlightController"))
+        self.assertTrue(_component_matches("flight_controller", "FlightController"))
+        self.assertTrue(_component_matches("NavigationSensor", "navigation_sensor"))
+        self.assertFalse(_component_matches("PhantomSubsystem", "ElectricMotor"))
+        self.assertFalse(_component_matches("GhostUnit", "FlightController"))
+
+    def test_compile_fmeca_to_constraint_valid_parts_filter(self):
+        """Verify compile_fmeca_to_constraint filters out phantom components when valid_parts is supplied."""
+        valid_parts = {"Electric_Motor", "Speed_Controller"}
+
+        # Valid part
+        fm_valid = {
+            "id": "FM-01",
+            "component": "Electric Motor",
+            "failure_mode": "Winding short",
+        }
+        c_valid = compile_fmeca_to_constraint(fm_valid, valid_parts=valid_parts)
+        self.assertIsNotNone(c_valid)
+        c_name = c_valid.name if hasattr(c_valid, 'name') else c_valid['name']
+        self.assertEqual(c_name, "Constraint_FM_01")
+
+        # Phantom / undeclared part
+        fm_phantom = {
+            "id": "FM-99",
+            "component": "PhantomSubsystem",
+            "failure_mode": "Ghost failure",
+        }
+        c_phantom = compile_fmeca_to_constraint(fm_phantom, valid_parts=valid_parts)
+        self.assertIsNone(c_phantom)
+
+        # valid_parts=None allows all
+        c_no_filter = compile_fmeca_to_constraint(fm_phantom, valid_parts=None)
+        self.assertIsNotNone(c_no_filter)
+
+    def test_compile_stpa_to_ast_filters_phantom_fmeca_constraints(self):
+        """Verify compile_stpa_to_ast ignores phantom FMECA modes when valid_parts is provided."""
+        sample_doc = """
+| UCA ID | Controller | Control Action | STPA UCA Category | Context | Hazard | Severity | SAIL |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **UCA-01** | FlightController | Land | 1. Not Provided | Critical battery | H-1 | Catastrophic | SAIL IV |
+
+| FMECA-ID | Component | Failure Mode | Effect | Mitigation |
+| :--- | :--- | :--- | :--- | :--- |
+| **FMECA-01** | Electric Motor | Lock Loss | Drift | Dual Motor |
+| **FMECA-02** | PhantomUnit | Ghost Error | None | None |
+"""
+        ast_pkg = compile_stpa_to_ast(sample_doc, valid_parts={"Electric_Motor"})
+        constraints = ast_pkg.constraint_defs if hasattr(ast_pkg, 'constraint_defs') else ast_pkg['constraints']
+        con_names = [c.name if hasattr(c, 'name') else c['name'] for c in constraints]
+
+        self.assertIn("Assert_UCA_01", con_names)
+        self.assertIn("Constraint_FMECA_01", con_names)
+        self.assertNotIn("Constraint_FMECA_02", con_names)
+
+    def test_merge_constraint_into_package_safe_with_none_and_dict(self):
+        """Verify _merge_constraint_into_package safely ignores None and empty objects."""
+        ast_pkg = compile_stpa_to_ast(self.sample_stpa_4guidewords)
+        initial_count = len(ast_pkg.constraint_defs if hasattr(ast_pkg, 'constraint_defs') else ast_pkg['constraints'])
+
+        # None new_con
+        _merge_constraint_into_package(ast_pkg, None)
+        # Empty dict
+        _merge_constraint_into_package(ast_pkg, {})
+        # Empty name
+        _merge_constraint_into_package(ast_pkg, {"name": ""})
+
+        new_count = len(ast_pkg.constraint_defs if hasattr(ast_pkg, 'constraint_defs') else ast_pkg['constraints'])
+        self.assertEqual(initial_count, new_count)
+
+    def test_reverse_sync_filters_phantom_fmeca_components(self):
+        """Verify reverse_sync_specs_to_sysml filters out FMECA failure modes for undeclared parts."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            docs_dir = os.path.join(tmpdir, "docs")
+            safety_dir = os.path.join(docs_dir, "safety")
+            schema_dir = os.path.join(tmpdir, "schema")
+            os.makedirs(safety_dir, exist_ok=True)
+            os.makedirs(schema_dir, exist_ok=True)
+
+            base_schema = os.path.join(schema_dir, "model.sysml")
+            with open(base_schema, "w", encoding="utf-8") as f:
+                f.write("""package SystemSSOT {
+    part def ElectricMotor;
+}
+""")
+
+            safety_file = os.path.join(safety_dir, "STPA_MATRIX.md")
+            with open(safety_file, "w", encoding="utf-8") as f:
+                f.write("""
+| FMECA-ID | Component | Failure Mode | Effect | Mitigation |
+| :--- | :--- | :--- | :--- | :--- |
+| **FMECA-01** | ElectricMotor | Overheat | Shutdown | Thermal throttle |
+| **FMECA-02** | PhantomUnit | Hallucination | None | None |
+""")
+
+            out_sysml = os.path.join(tmpdir, "out_schema.sysml")
+            out_digest = os.path.join(tmpdir, "out_digest.json")
+
+            pkg, _ = reverse_sync_specs_to_sysml(
+                docs_dir=docs_dir,
+                schema_path=base_schema,
+                output_path=out_sysml,
+                digest_path=out_digest,
+            )
+
+            con_names = [c.name if hasattr(c, 'name') else c['name'] for c in getattr(pkg, 'constraint_defs', [])]
+            self.assertIn("Constraint_FMECA_01", con_names)
+            self.assertNotIn("Constraint_FMECA_02", con_names)
 
 
 if __name__ == "__main__":

@@ -847,6 +847,7 @@ class ASTValidationReport:
     malformed_proofs: List[str] = field(default_factory=list)
     syntax_errors: List[str] = field(default_factory=list)
     missing_fmeca_parts: List[str] = field(default_factory=list)
+    undeclared_fmeca_parts: List[str] = field(default_factory=list)
     missing_dimensions: List[str] = field(default_factory=list)
     missing_port_modes: List[str] = field(default_factory=list)
     part_criticalities: Dict[str, int] = field(default_factory=dict)
@@ -867,6 +868,8 @@ class ASTValidationReport:
             summary += f", {len(self.malformed_proofs)} malformed proof block(s)"
         if self.missing_fmeca_parts:
             summary += f", {len(self.missing_fmeca_parts)} missing FMECA part(s)"
+        if self.undeclared_fmeca_parts:
+            summary += f", {len(self.undeclared_fmeca_parts)} undeclared FMECA part(s)"
         if self.missing_port_modes:
             summary += f", {len(self.missing_port_modes)} missing high-criticality port mode(s)"
         if self.missing_dimensions:
@@ -1040,6 +1043,13 @@ def check_fmeca_ast_coverage(content: str, model_text: Optional[str] = None) -> 
                     report.missing_fmeca_parts.extend(missing_parts)
                     errors.append(
                         f"Pillar 7 violation: FMECA table missing declared AST part def component(s): {', '.join(sorted(missing_parts))}."
+                    )
+
+                undeclared_parts = [c for c in table_components if not any(_component_matches(c, p) for p in expected_parts)]
+                if undeclared_parts:
+                    report.undeclared_fmeca_parts.extend(undeclared_parts)
+                    errors.append(
+                        f"Pillar 7 violation: FMECA table references undeclared phantom component(s) not in AST: {', '.join(sorted(undeclared_parts))}."
                     )
 
                 port_errors, crit_map = check_high_criticality_port_coverage(fmeca_data, pkg_obj)
@@ -1752,6 +1762,8 @@ def validate_safety_matrix_ast(content: str, model_text: Optional[str] = None) -
         fmeca_ast_errors, fmeca_report = check_fmeca_ast_coverage(content, model_text)
         if fmeca_report.missing_fmeca_parts:
             report.missing_fmeca_parts.extend(fmeca_report.missing_fmeca_parts)
+        if fmeca_report.undeclared_fmeca_parts:
+            report.undeclared_fmeca_parts.extend(fmeca_report.undeclared_fmeca_parts)
         if fmeca_report.missing_port_modes:
             report.missing_port_modes.extend(fmeca_report.missing_port_modes)
         if fmeca_report.missing_dimensions:

@@ -346,6 +346,80 @@ class TestFMECAASTCoverageGate(unittest.TestCase):
             f"Expected invalid RPN error, got: {errors}"
         )
 
+    def test_rejection_of_fmeca_with_undeclared_phantom_component(self):
+        """Verify FMECA table referencing undeclared phantom component not in AST is rejected (Issue #251, #249)."""
+        model = build_test_sysml_model(["FlightController", "NavigationSensor"], actions_per_part=3)
+        comp_map = {
+            "FlightController": [
+                ("CPU Lockup", 4, 2, 2, 16, "SSOT"),
+                ("RTOS Deadline Miss", 5, 2, 2, 20, "SSOT"),
+                ("Flash CRC Corruption", 3, 3, 2, 18, "Derived"),
+                ("Watchdog Reset Fail", 4, 2, 2, 16, "SSOT"),
+            ],
+            "NavigationSensor": [
+                ("IMU Bias Drift", 4, 2, 2, 16, "SSOT"),
+                ("GPS Satellite Loss", 3, 3, 2, 18, "Derived"),
+                ("SPI Bus Timeout", 4, 2, 2, 16, "SSOT"),
+            ],
+            "PhantomSubsystem": [
+                ("Ghost Logic Fail", 4, 2, 2, 16, "SSOT"),
+            ],
+        }
+        doc = build_test_safety_document(comp_map, total_actions=6)
+        errors, report, _ = validate_safety_matrix_ast(doc, model_text=model)
+
+        self.assertIn("PhantomSubsystem", report.undeclared_fmeca_parts)
+        self.assertTrue(
+            any("FMECA table references undeclared phantom component(s) not in AST: PhantomSubsystem" in err for err in errors),
+            f"Expected undeclared phantom component error, got: {errors}"
+        )
+
+    def test_bidirectional_ast_closure_reports_both_missing_and_undeclared(self):
+        """Verify AST verification reports both missing declared parts and extra phantom parts simultaneously."""
+        model = build_test_sysml_model(["FlightController", "NavigationSensor", "ActuatorUnit"], actions_per_part=2)
+        # Misses ActuatorUnit, includes PhantomUnit
+        comp_map = {
+            "FlightController": [
+                ("CPU Lockup", 4, 2, 2, 16, "SSOT"),
+                ("RTOS Deadline Miss", 5, 2, 2, 20, "SSOT"),
+                ("Flash CRC Corruption", 3, 3, 2, 18, "Derived"),
+                ("Watchdog Reset Fail", 4, 2, 2, 16, "SSOT"),
+            ],
+            "NavigationSensor": [
+                ("IMU Bias Drift", 4, 2, 2, 16, "SSOT"),
+                ("GPS Satellite Loss", 3, 3, 2, 18, "Derived"),
+                ("SPI Bus Timeout", 4, 2, 2, 16, "SSOT"),
+            ],
+            "PhantomUnit": [
+                ("Phantom Fault", 4, 2, 2, 16, "SSOT"),
+            ],
+        }
+        doc = build_test_safety_document(comp_map, total_actions=6)
+        errors, report, _ = validate_safety_matrix_ast(doc, model_text=model)
+
+        self.assertIn("ActuatorUnit", report.missing_fmeca_parts)
+        self.assertIn("PhantomUnit", report.undeclared_fmeca_parts)
+        self.assertTrue(any("missing declared AST part def component(s): ActuatorUnit" in err for err in errors))
+        self.assertTrue(any("references undeclared phantom component(s) not in AST: PhantomUnit" in err for err in errors))
+
+    def test_format_cli_summary_includes_undeclared_parts(self):
+        """Verify format_cli_summary includes undeclared FMECA parts count."""
+        model = build_test_sysml_model(["FlightController"], actions_per_part=2)
+        comp_map = {
+            "FlightController": [
+                ("CPU Lockup", 4, 2, 2, 16, "SSOT"),
+                ("RTOS Deadline Miss", 5, 2, 2, 20, "SSOT"),
+                ("Flash CRC Corruption", 3, 3, 2, 18, "Derived"),
+                ("Watchdog Reset Fail", 4, 2, 2, 16, "SSOT"),
+            ],
+            "PhantomA": [("Fault A", 4, 2, 2, 16, "SSOT")],
+            "PhantomB": [("Fault B", 4, 2, 2, 16, "SSOT")],
+        }
+        doc = build_test_safety_document(comp_map, total_actions=2)
+        _, report, _ = validate_safety_matrix_ast(doc, model_text=model)
+        cli_summary = report.format_cli_summary()
+        self.assertIn("2 undeclared FMECA part(s)", cli_summary)
+
 
 def test_end_to_end_check17_ast_fmeca_missing_part_fails(tmp_path):
     """Verify end-to-end check_safety_integrity_and_sora_completeness fails when AST part is missing from FMECA."""
@@ -363,6 +437,34 @@ def test_end_to_end_check17_ast_fmeca_missing_part_fails(tmp_path):
         ],
     }
     doc = build_test_safety_document(comp_map, total_actions=6)
+    safety_dir = tmp_path / "docs" / "safety"
+    safety_dir.mkdir(parents=True, exist_ok=True)
+    (safety_dir / "STPA_MATRIX.md").write_text(doc, encoding="utf-8")
+
+    with pytest.raises(SystemExit) as exc_info:
+        check_safety_integrity_and_sora_completeness(str(tmp_path))
+    assert exc_info.value.code == 1
+
+
+def test_end_to_end_check17_ast_fmeca_undeclared_phantom_part_fails(tmp_path):
+    """Verify end-to-end check_safety_integrity_and_sora_completeness fails when FMECA references an undeclared phantom part."""
+    model = build_test_sysml_model(["FlightController", "NavigationSensor"], actions_per_part=2)
+    schema_dir = tmp_path / "schema"
+    schema_dir.mkdir(parents=True, exist_ok=True)
+    (schema_dir / "model.sysml").write_text(model, encoding="utf-8")
+
+    comp_map = {
+        "FlightController": [
+            (f"Mode {i}", 4, 2, 2, 16, "SSOT") for i in range(1, 5)
+        ],
+        "NavigationSensor": [
+            (f"Mode {i}", 4, 2, 2, 16, "SSOT") for i in range(1, 5)
+        ],
+        "PhantomSubsystem": [
+            ("Ghost Failure", 4, 2, 2, 16, "SSOT"),
+        ],
+    }
+    doc = build_test_safety_document(comp_map, total_actions=4)
     safety_dir = tmp_path / "docs" / "safety"
     safety_dir.mkdir(parents=True, exist_ok=True)
     (safety_dir / "STPA_MATRIX.md").write_text(doc, encoding="utf-8")

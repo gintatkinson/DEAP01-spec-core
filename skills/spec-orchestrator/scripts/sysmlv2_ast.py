@@ -1404,7 +1404,16 @@ class SysMLParser:
                 stmt = d["statement"]
                 doc = d.get("doc", "")
 
-                if re.search(r'\b(?:assert\s+constraint|constraint\s+def|constraint)\s+([a-zA-Z0-9_]+)', stmt):
+                if re.search(r'\bpart\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt):
+                    m = re.search(r'\bpart\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt)
+                    part_name = m.group(1)
+                    p_obj = PartDef(name=part_name, doc=doc)
+                    if isinstance(container, SysMLPackage):
+                        container.part_defs.append(p_obj)
+                    else:
+                        container.parts.append(p_obj)
+
+                elif re.search(r'\b(?:assert\s+constraint|constraint\s+def|constraint)\s+([a-zA-Z0-9_]+)', stmt):
                     con_obj = self._parse_constraint_stmt(stmt, doc)
                     if isinstance(container, SysMLPackage):
                         container.constraint_defs.append(con_obj)
