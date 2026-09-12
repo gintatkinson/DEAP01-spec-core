@@ -42,6 +42,8 @@ from sysmlv2_ast import (
 )
 from scripts.compile_sysml import (
     reverse_sync_specs_to_sysml,
+    extract_conops_from_markdown,
+    _merge_subpackage_into_package,
     extract_use_cases_from_markdown,
     extract_user_story_ast,
     extract_features_from_markdown,
@@ -523,6 +525,245 @@ class TestReverseSysMLSync(unittest.TestCase):
             new_errors, new_report, _ = validate_safety_matrix_ast(safety_doc, model_text=synced_model_text)
             new_parity_errors = [e for e in new_errors if "Pillar 6 Parity Violation" in e]
             self.assertEqual(len(new_parity_errors), 0)
+
+    def test_extract_conops_from_markdown_unit(self):
+        """Verify extraction of subsystems, ports, actions, super-system segments, and user classes from ConOps markdown."""
+        conops_md = """---
+title: "Autonomous Surveillance Concept of Operations"
+type: "conops"
+system: "AutonomousSurveillancePlatform"
+---
+
+# Concept of Operations (ConOps): AutonomousSurveillancePlatform
+
+## 4. Operational Modes & Subsystems
+
+### 4.2 User Class Taxonomy
+| User Class ID | Title | Player or Operator | Interfacing Stakeholder | Characteristics & Responsibilities | Training & Qualification | Constraint Source |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **UC-01** | System Operator (SO) | Direct Operator | Operational Safety Authority | Primary responsibility for mission supervision and failsafe override | Certified Operator | ISO 29148 |
+| **UC-02** | Payload Specialist (PS) | Direct Operator | Analytics Team | Multi-modal sensor tasking and telemetry inspection | Certified Specialist | ISO 29148 |
+
+### 4.7 Super-System Architecture & Segment Boundaries
+```mermaid
+flowchart TD
+    subgraph "Operational Super-System Architecture (AutonomousSurveillancePlatform)"
+        subgraph "Primary Operational Segment"
+            Platform["AutonomousSurveillance Core Platform"]
+            Subsystems["Constituent Subsystems"]
+            Platform --> Subsystems
+        end
+
+        subgraph "Ground Command & Control Segment"
+            GCS["Ground Control Station / C2"]
+            Operator["Supervisory Operator (SO)"]
+            Operator --> GCS
+        end
+
+        subgraph "Launch & Auxiliary Support Segment"
+            Launch["Launch & Recovery System"]
+            GSE["Support Equipment & Maintenance"]
+        end
+    end
+```
+
+### 4.8 Subsystem Architecture & AST Part Allocation
+#### 4.8.1 FlightGuidance Subsystem Architecture
+- **Functional Purpose & Scope:** Dedicated autonomous flight guidance and navigation computation.
+
+##### 4.8.1.1 Physical & Logical Interface Allocations
+| Port Name | Direction | Interface Type | Functional Binding / Interconnect |
+| :--- | :--- | :--- | :--- |
+| **p_c2_link** | in | C2Interface | Bidirectional uplink command receiver |
+| **p_actuator_cmd** | out | ActuatorBus | High-speed command bus |
+
+- **Declared AST Actions:** `ComputeGuidance, ExecuteEmergencyManeuver`
+
+#### 4.8.2 SensorPayload Subsystem Architecture
+- **Functional Purpose & Scope:** Electro-optical and infrared payload monitoring unit.
+
+##### 4.8.2.1 Physical & Logical Interface Allocations
+| Port Name | Direction | Interface Type | Functional Binding / Interconnect |
+| :--- | :--- | :--- | :--- |
+| **p_telemetry** | out | TelemetryData | Real-time video and state stream |
+
+```mermaid
+classDiagram
+    class MissionPlanner {
+        +String planId
+        +Boolean ValidatePlan()
+    }
+```
+"""
+        parts, pkgs = extract_conops_from_markdown(conops_md, "CONOPS.md")
+
+        # 1. Verify subsystem parts
+        part_dict = {p.name: p for p in parts}
+        self.assertIn("FlightGuidance", part_dict)
+        self.assertIn("SensorPayload", part_dict)
+
+        fg_part = part_dict["FlightGuidance"]
+        self.assertIn("Dedicated autonomous flight guidance", fg_part.doc)
+        fg_ports = {p.name: p for p in fg_part.ports}
+        self.assertIn("p_c2_link", fg_ports)
+        self.assertEqual(fg_ports["p_c2_link"].direction, "in")
+        self.assertEqual(fg_ports["p_c2_link"].type_name, "C2Interface")
+        self.assertIn("p_actuator_cmd", fg_ports)
+        self.assertEqual(fg_ports["p_actuator_cmd"].direction, "out")
+        self.assertEqual(fg_ports["p_actuator_cmd"].type_name, "ActuatorBus")
+
+        fg_actions = {a.name for a in fg_part.actions}
+        self.assertIn("ComputeGuidance", fg_actions)
+        self.assertIn("ExecuteEmergencyManeuver", fg_actions)
+
+        sp_part = part_dict["SensorPayload"]
+        sp_ports = {p.name: p for p in sp_part.ports}
+        self.assertIn("p_telemetry", sp_ports)
+        self.assertEqual(sp_ports["p_telemetry"].direction, "out")
+        self.assertEqual(sp_ports["p_telemetry"].type_name, "TelemetryData")
+
+        # 2. Verify User Class parts
+        self.assertIn("SystemOperator", part_dict)
+        self.assertIn("PayloadSpecialist", part_dict)
+        self.assertIn("Primary responsibility for mission supervision", part_dict["SystemOperator"].doc)
+
+        # 3. Verify ClassDiagram extraction
+        self.assertIn("MissionPlanner", part_dict)
+        mp_part = part_dict["MissionPlanner"]
+        mp_attrs = {a.name for a in mp_part.attributes}
+        self.assertIn("planId", mp_attrs)
+
+        # 4. Verify Super-System segments & packages
+        pkg_dict = {p.name: p for p in pkgs}
+        self.assertIn("AutonomousSurveillancePlatform", pkg_dict)
+        self.assertIn("PrimaryOperationalSegment", pkg_dict)
+        self.assertIn("GroundCommandAndControlSegment", pkg_dict)
+        self.assertIn("LaunchAndAuxiliarySupportSegment", pkg_dict)
+
+    def test_merge_subpackage_into_package_unit(self):
+        """Verify recursive non-destructive merging of subpackages and child definitions."""
+        root_pkg = SysMLPackage(name="RootSystem")
+        sub1 = SysMLPackage(
+            name="GroundSegment",
+            doc="Ground segment doc",
+            part_defs=[PartDef(name="GCS", doc="Ground station")],
+            capability_defs=[SysMLCapabilityDef(name="RemoteMonitoring", description="Monitor UAS")],
+            constraint_defs=[SysMLConstraintDef(name="LinkIntegrity", expression="linkQuality >= 0.95")],
+        )
+
+        # Merge sub1 into root
+        _merge_subpackage_into_package(root_pkg, sub1)
+        self.assertEqual(len(root_pkg.sub_packages), 1)
+        self.assertEqual(root_pkg.sub_packages[0].name, "GroundSegment")
+        self.assertEqual(len(root_pkg.sub_packages[0].part_defs), 1)
+
+        # Merge additional parts and capabilities into existing subpackage
+        sub1_update = SysMLPackage(
+            name="GroundSegment",
+            part_defs=[PartDef(name="AntennaTracker", doc="Tracking antenna")],
+            capability_defs=[SysMLCapabilityDef(name="TelemetryLogging", description="Log telemetry")],
+        )
+        _merge_subpackage_into_package(root_pkg, sub1_update)
+        self.assertEqual(len(root_pkg.sub_packages), 1)
+        merged_sub = root_pkg.sub_packages[0]
+        self.assertEqual(len(merged_sub.part_defs), 2)
+        part_names = {p.name for p in merged_sub.part_defs}
+        self.assertIn("GCS", part_names)
+        self.assertIn("AntennaTracker", part_names)
+        self.assertEqual(len(merged_sub.capability_defs), 2)
+        self.assertEqual(len(merged_sub.constraint_defs), 1)
+
+    def test_reverse_sync_conops_integration_merges_into_sysml(self):
+        """Verify integration of docs/conops/ reverse synchronization into SysML model and digest."""
+        conops_content = """# Concept of Operations (ConOps): TestUAS
+## 4. Operational Modes & Subsystems
+
+### 4.2 User Class Taxonomy
+| User Class ID | Title | Player or Operator | Interfacing Stakeholder | Characteristics & Responsibilities | Training & Qualification | Constraint Source |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **UC-01** | Safety Pilot | Direct Operator | ATC | Handles emergency manual intervention | Certified Pilot | FAA Part 107 |
+
+### 4.7 Super-System Architecture
+```mermaid
+flowchart TD
+    subgraph "Operational Super-System Architecture (TestUAS)"
+        subgraph "Primary Operational Segment"
+            Platform["TestUAS Airframe"]
+        end
+        subgraph "Ground Command & Control Segment"
+            GCS["C2 Terminal"]
+        end
+    end
+```
+
+### 4.8 Subsystem Architecture & AST Part Allocation
+#### 4.8.1 FlightController Subsystem Architecture
+- **Functional Purpose & Scope:** Master flight control computer and state estimator.
+
+##### 4.8.1.1 Physical & Logical Interface Allocations
+| Port Name | Direction | Interface Type | Functional Binding / Interconnect |
+| :--- | :--- | :--- | :--- |
+| **p_imu_stream** | in | IMUDataBus | High-rate inertial telemetry |
+| **p_pwm_out** | out | ESCControlBus | Motor PWM actuation bus |
+
+- **Declared AST Actions:** `ArmedStateCheck, ExecuteFailsafe`
+"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            docs_dir = os.path.join(tmpdir, "docs")
+            conops_dir = os.path.join(docs_dir, "conops")
+            os.makedirs(conops_dir, exist_ok=True)
+            with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
+                f.write(conops_content)
+
+            base_schema_file = os.path.join(tmpdir, "base.sysml")
+            with open(base_schema_file, "w", encoding="utf-8") as f:
+                f.write(SAMPLE_BASE_SCHEMA)
+
+            out_sysml = os.path.join(tmpdir, ".pipeline", "schema.sysml")
+            out_digest = os.path.join(tmpdir, ".pipeline", "schema-digest.json")
+
+            pkg, digest = reverse_sync_specs_to_sysml(
+                docs_dir=docs_dir,
+                schema_path=base_schema_file,
+                output_path=out_sysml,
+                digest_path=out_digest,
+                allow_schema_overwrite=False,
+            )
+
+            self.assertTrue(os.path.exists(out_sysml))
+            self.assertTrue(os.path.exists(out_digest))
+
+            # Verify parsed AST
+            reparsed_pkg = SysMLParser.parse_file(out_sysml)
+            fc_part = next((p for p in reparsed_pkg.part_defs if p.name == "FlightController"), None)
+            self.assertIsNotNone(fc_part, "FlightController part must exist in merged AST")
+
+            # Verify base schema elements preserved 100%
+            port_names = {p.name: p for p in fc_part.ports}
+            self.assertIn("c2Port", port_names, "Original c2Port port must be preserved")
+            self.assertIn("p_imu_stream", port_names, "ConOps p_imu_stream port must be merged")
+            self.assertIn("p_pwm_out", port_names, "ConOps p_pwm_out port must be merged")
+
+            action_names = {a.name for a in fc_part.actions}
+            self.assertIn("CalibrateSensors", action_names, "Original CalibrateSensors action must be preserved")
+            self.assertIn("ArmedStateCheck", action_names, "ConOps ArmedStateCheck action must be merged")
+            self.assertIn("ExecuteFailsafe", action_names, "ConOps ExecuteFailsafe action must be merged")
+
+            # Verify user class actor added to parts
+            safety_pilot = next((p for p in reparsed_pkg.part_defs if p.name == "SafetyPilot"), None)
+            self.assertIsNotNone(safety_pilot, "SafetyPilot user class must be merged as a PartDef")
+
+            # Verify super-system subpackages
+            subpkg_names = {s.name for s in reparsed_pkg.sub_packages}
+            self.assertIn("PrimaryOperationalSegment", subpkg_names)
+            self.assertIn("GroundCommandAndControlSegment", subpkg_names)
+
+            # Verify digest JSON contains updated counts
+            with open(out_digest, "r", encoding="utf-8") as f:
+                digest_data = json.load(f)
+            self.assertIn("sha256", digest_data)
+            self.assertGreaterEqual(digest_data["node_counts"]["part_defs"], 2)
+            self.assertGreaterEqual(digest_data["node_counts"]["packages"], 1)
 
 
 if __name__ == "__main__":

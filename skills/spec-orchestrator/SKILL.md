@@ -154,21 +154,21 @@ sequenceDiagram
     participant W_D as "Phase 4: Reconciliation & Verification"
 
     Note over Coord,W_R: Phase 0.5 - Normative-Completeness Research
-    Coord->>W_R: Dispatch Normative Research Task (Regulatory & Domain Standards)
+    Coord->>W_R: Dispatch Normative Research Task (AST PartDef Manifest & Standards)
     W_R->>W_R: Ingest Standards & Map Clause-Level Requirements
-    W_R->>W_R: Synthesize RESEARCH_INVENTORY.md & Declared-Total Population Register
-    W_R-->>Coord: Return Cited Research Inventory & Clause Population Register (docs/research/)
+    W_R->>W_R: Synthesize RESEARCH_INVENTORY.md & FAILURE_MODE_REGISTRY.md
+    W_R-->>Coord: Return Cited Research Inventory & Failure Mode Registry (docs/research/)
 
     Note over Coord,W_CO: Phase 0.75 - ConOps & Mission Intent Tree Engineering
-    Coord->>W_CO: Dispatch ConOps & Mission Intent Task (docs/research/, schemas)
-    W_CO->>W_CO: Ingest Operational Intent, FMECA & SORA Baselines
+    Coord->>W_CO: Dispatch ConOps Task (AST PartDef Slice, docs/research/, schemas)
+    W_CO->>W_CO: Ingest Operational Intent, AST Architecture, FMECA & SORA Baselines
     W_CO->>W_CO: Synthesize Modular Units (docs/conops/units/conops/, docs/conops/units/mission_intent/)
     W_CO->>W_CO: Execute assemble_conops.py & Gate 26 Completeness Validation
     W_CO-->>Coord: Return Verified CONOPS.md & MISSION_INTENT.md (docs/conops/)
 
     Note over Coord,W_A: Phase 1 - Structural Extraction
     Coord->>W_A: Dispatch Schema Parsing Task (.pipeline/schema.sysml)
-    W_A->>W_A: Extract Packages & PartDefs (Epics & Features)
+    W_A->>W_A: Map Packages & PartDefs to Level 1B Epics & Features
     W_A-->>Coord: Return Generated Epics & Features (docs/epics/, docs/features/)
 
     Note over Coord,W_ICD: Phase 1.5 - Logical ICD Synthesis

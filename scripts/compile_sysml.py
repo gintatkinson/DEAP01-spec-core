@@ -13,7 +13,7 @@ and FMECA failure modes, compiling them into formal SysML v2 `constraint def` an
 with Simulink Design Verifier (SLDV) and Embedded Coder synthesis.
 
 Implements Closed-Loop Bidirectional Synchronization (--reverse-sync):
-Extracts Use Cases, User Stories, Features, Epics, and Safety Matrices from markdown
+Extracts Concept of Operations (ConOps), Use Cases, User Stories, Features, Epics, and Safety Matrices from markdown
 specifications into canonical SysML v2 AST nodes, merging them deterministically into
 the SysML Single Source of Truth (.pipeline/schema.sysml) and regenerating .pipeline/schema-digest.json.
 
@@ -1424,6 +1424,359 @@ def extract_epics_from_markdown(content: str, filename: str = "") -> List[Any]:
     return capabilities
 
 
+def extract_conops_from_markdown(content: str, filename: str = "") -> Tuple[List[Any], List[Any]]:
+    """
+    Parses Concept of Operations (ConOps) and Mission Intent markdown specifications:
+    - Extracts Subsystems from Section 4.8 headings (`#### 4.8.X <SubsystemName> Subsystem Architecture`),
+      extracting subsystem name, doc/functional purpose, port definitions from interface allocation tables,
+      actions/operations, and constraints.
+    - Extracts Super-System segments and architecture from Section 4.7 and Mermaid flowcharts
+      (subgraph "Operational Super-System Architecture (...)", "Primary Operational Segment",
+      "Ground Command & Control Segment", "Launch & Auxiliary Support Segment"),
+      creating segment PartDefs and SysMLPackage subpackages.
+    - Extracts User Classes / Actors from Section 4.2 tables into PartDef / Actor definitions.
+    - Extracts classes from Mermaid classDiagram blocks if present.
+    - Extracts system and subsystem definitions from YAML frontmatter if present.
+
+    Returns:
+        (parts, packages) where parts is a list of PartDef (or dict) objects,
+        and packages is a list of SysMLPackage (or dict) objects.
+    """
+    fm, body = _parse_frontmatter(content)
+    parts: List[Any] = []
+    packages: List[Any] = []
+    seen_part_names: Set[str] = set()
+    seen_pkg_names: Set[str] = set()
+
+    # 1. Frontmatter extraction
+    system_name = ""
+    if fm:
+        for k in ("system", "system_name", "system_identifier", "package", "package_name"):
+            if fm.get(k):
+                system_name = _sanitize_id(str(fm[k]))
+                break
+        if system_name and system_name not in seen_pkg_names:
+            if SysMLPackage:
+                packages.append(SysMLPackage(name=system_name, doc=f"System package for {system_name}"))
+            else:
+                packages.append({"name": system_name, "doc": f"System package for {system_name}", "part_defs": [], "packages": []})
+            seen_pkg_names.add(system_name)
+
+        # Subsystems in frontmatter
+        for k in ("subsystems", "parts", "part_defs", "components"):
+            subsys_list = fm.get(k)
+            if isinstance(subsys_list, list):
+                for item in subsys_list:
+                    if isinstance(item, str):
+                        p_name = _sanitize_id(item)
+                        if p_name and p_name not in seen_part_names:
+                            if PartDef:
+                                parts.append(PartDef(name=p_name, doc=f"Subsystem {item}"))
+                            else:
+                                parts.append({"name": p_name, "doc": f"Subsystem {item}"})
+                            seen_part_names.add(p_name)
+                    elif isinstance(item, dict):
+                        p_name = _sanitize_id(str(item.get("name", "")))
+                        p_doc = str(item.get("doc", "") or item.get("description", ""))
+                        if p_name and p_name not in seen_part_names:
+                            if PartDef:
+                                parts.append(PartDef(name=p_name, doc=p_doc))
+                            else:
+                                parts.append({"name": p_name, "doc": p_doc})
+                            seen_part_names.add(p_name)
+
+    # 2. Section 4.8 Subsystems: #### 4.8.X <SubsystemName> Subsystem Architecture (or #### 4.8.X <SubsystemName>)
+    subsys_sections = re.split(r'\n(?=####\s+4\.8(?:\.\d+)?)', body)
+    for section in subsys_sections:
+        head_m = re.search(r'####\s+4\.8(?:\.\d+)?\s+(.*?)(?:\n|\Z)', section)
+        if not head_m:
+            continue
+        raw_title = head_m.group(1).strip()
+        clean_name = re.sub(r'\s+Subsystem\s+Architecture\b', '', raw_title, flags=re.IGNORECASE)
+        clean_name = re.sub(r'\s+Architecture\b', '', clean_name, flags=re.IGNORECASE)
+        clean_name = re.sub(r'\s+Subsystem\b', '', clean_name, flags=re.IGNORECASE).strip()
+        if not clean_name:
+            clean_name = raw_title.split()[0]
+        if re.match(r'^[A-Za-z_][A-Za-z0-9_]*$', clean_name):
+            subsys_name = _sanitize_id(clean_name)
+        else:
+            words = re.findall(r'[A-Za-z0-9]+', clean_name)
+            subsys_name = _sanitize_id("".join(w.capitalize() for w in words))
+        if not subsys_name:
+            continue
+
+        doc_m = re.search(r'[-*]\s+\*\*Functional Purpose(?:\s*&(?:amp;)?\s*Scope)?:\*\*\s*([^\n]+)', section, re.IGNORECASE)
+        if not doc_m:
+            doc_m = re.search(r'[-*]\s+\*\*Description:\*\*\s*([^\n]+)', section, re.IGNORECASE)
+        p_doc = doc_m.group(1).strip() if doc_m else f"Subsystem architecture specification for {subsys_name}"
+
+        ports = []
+        table_matches = re.finditer(
+            r'\|\s*(?:\*\*)?Port(?:\s+Name)?(?:\*\*)?\s*\|\s*(?:\*\*)?Direction(?:\*\*)?\s*\|\s*(?:\*\*)?Interface(?:\s+Type)?(?:\*\*)?\s*\|\s*(?:\*\*)?Functional\s+Binding[^\n|]*\|\s*\n'
+            r'\|(?:\s*:?---+:?\s*\|)+\s*\n'
+            r'((?:\|[^\n]+\|\s*\n?)+)',
+            section,
+            re.IGNORECASE
+        )
+        for tm in table_matches:
+            table_body = tm.group(1)
+            for row_line in table_body.strip().splitlines():
+                cols = [c.strip() for c in row_line.strip().strip('|').split('|')]
+                if len(cols) >= 4:
+                    raw_pname = re.sub(r'[\*`]', '', cols[0]).strip()
+                    raw_dir = re.sub(r'[\*`]', '', cols[1]).strip().lower()
+                    raw_type = re.sub(r'[\*`]', '', cols[2]).strip()
+                    raw_doc = re.sub(r'[\*`]', '', cols[3]).strip()
+                    if raw_pname.lower() in ("port name", "port", "name", ""):
+                        continue
+                    p_direction = raw_dir if raw_dir in ("in", "out", "inout") else "inout"
+                    p_type = raw_type if raw_type else "Port"
+                    if PortDef:
+                        ports.append(PortDef(name=raw_pname, direction=p_direction, type_name=p_type, doc=raw_doc))
+                    else:
+                        ports.append({"name": raw_pname, "direction": p_direction, "type_name": p_type, "doc": raw_doc})
+
+        actions = []
+        operations = []
+        act_m = re.search(r'[-*]\s+\*\*Declared AST Actions:\*\*\s*`?([^\n`]+)`?', section)
+        if act_m:
+            for a_str in act_m.group(1).split(','):
+                a_name = _sanitize_id(a_str.strip())
+                if a_name:
+                    if ActionDef:
+                        actions.append(ActionDef(name=a_name))
+                    else:
+                        actions.append({"name": a_name})
+
+        for op_m in re.finditer(r'[-*]\s+`?([A-Za-z0-9_]+)\s*\(([^)]*)\)(?:\s*:\s*([A-Za-z0-9_<>:]+))?`?', section):
+            op_name = op_m.group(1)
+            op_params_raw = op_m.group(2)
+            op_ret = op_m.group(3)
+            in_p, out_p, all_p = _parse_parameter_string(op_params_raw)
+            if op_ret or all_p:
+                if SysMLOperationDef:
+                    operations.append(SysMLOperationDef(name=op_name, return_type=op_ret, parameters=all_p))
+                else:
+                    operations.append({"name": op_name, "return_type": op_ret, "parameters": all_p})
+
+        existing_part = next((p for p in parts if getattr(p, "name", "") == subsys_name or (isinstance(p, dict) and p.get("name") == subsys_name)), None)
+        if existing_part:
+            if hasattr(existing_part, "doc") and not existing_part.doc:
+                existing_part.doc = p_doc
+            elif isinstance(existing_part, dict) and not existing_part.get("doc"):
+                existing_part["doc"] = p_doc
+            if ports:
+                if hasattr(existing_part, "ports"):
+                    existing_part.ports.extend(ports)
+                elif isinstance(existing_part, dict):
+                    existing_part.setdefault("ports", []).extend(ports)
+            if actions:
+                if hasattr(existing_part, "actions"):
+                    existing_part.actions.extend(actions)
+                elif isinstance(existing_part, dict):
+                    existing_part.setdefault("actions", []).extend(actions)
+            if operations:
+                if hasattr(existing_part, "operations"):
+                    existing_part.operations.extend(operations)
+                elif isinstance(existing_part, dict):
+                    existing_part.setdefault("operations", []).extend(operations)
+        else:
+            if PartDef:
+                part_obj = PartDef(name=subsys_name, doc=p_doc, ports=ports, actions=actions, operations=operations)
+            else:
+                part_obj = {"name": subsys_name, "doc": p_doc, "ports": ports, "actions": actions, "operations": operations}
+            parts.append(part_obj)
+            seen_part_names.add(subsys_name)
+
+    # 3. Section 4.7 Super-System Architecture and Mermaid flowcharts
+    flowchart_matches = re.finditer(r'```mermaid\s*\n\s*(?:flowchart|graph)\s+[A-Z]+(.*?)(?=```|\Z)', body, re.DOTALL)
+    for fm_match in flowchart_matches:
+        diag_content = fm_match.group(1)
+        sys_m = re.search(r'subgraph\s+"?Operational\s+Super[- ]System\s+Architecture\s*\(([^)]+)\)"?', diag_content, re.IGNORECASE)
+        if sys_m:
+            sys_raw = sys_m.group(1).strip()
+            if re.match(r'^[A-Za-z_][A-Za-z0-9_]*$', sys_raw):
+                sys_name = _sanitize_id(sys_raw)
+            else:
+                sys_words = re.findall(r'[A-Za-z0-9]+', sys_raw)
+                sys_name = _sanitize_id("".join(w.capitalize() for w in sys_words))
+            if sys_name and sys_name not in seen_pkg_names:
+                if SysMLPackage:
+                    packages.append(SysMLPackage(name=sys_name, doc=f"Operational Super-System Architecture for {sys_name}"))
+                else:
+                    packages.append({"name": sys_name, "doc": f"Operational Super-System Architecture for {sys_name}", "sub_packages": [], "part_defs": []})
+                seen_pkg_names.add(sys_name)
+
+        current_segment_title = ""
+        current_segment_lines: List[str] = []
+        for line in diag_content.splitlines():
+            line_str = line.strip()
+            if not line_str or line_str.startswith("%%"):
+                continue
+            sg_match = re.match(r'subgraph\s+"?([^"\n]+?)"?\s*$', line_str)
+            if sg_match:
+                title_candidate = sg_match.group(1).strip()
+                if "segment" in title_candidate.lower():
+                    current_segment_title = title_candidate
+                    current_segment_lines = []
+                continue
+            if line_str == "end":
+                if current_segment_title:
+                    clean_sg = current_segment_title.replace('&', 'And')
+                    words = re.findall(r'[A-Za-z0-9]+', clean_sg)
+                    seg_name = _sanitize_id("".join(w.capitalize() for w in words))
+                    if seg_name:
+                        seg_parts = []
+                        seg_body = "\n".join(current_segment_lines)
+                        node_matches = re.finditer(r'([A-Za-z0-9_]+)\["([^"]+)"\]', seg_body)
+                        for nm in node_matches:
+                            node_id = nm.group(1)
+                            node_raw_label = nm.group(2)
+                            clean_label = node_raw_label.replace('\\n', ' ').split('(')[0].strip()
+                            if re.match(r'^[A-Za-z_][A-Za-z0-9_]*$', clean_label):
+                                node_name = _sanitize_id(clean_label)
+                            else:
+                                node_words = re.findall(r'[A-Za-z0-9]+', clean_label.replace('&', 'And'))
+                                node_name = _sanitize_id("".join(w.capitalize() for w in node_words)) or node_id
+                            if node_name and node_name not in seen_part_names:
+                                if PartDef:
+                                    node_part = PartDef(name=node_name, doc=clean_label)
+                                else:
+                                    node_part = {"name": node_name, "doc": clean_label}
+                                seg_parts.append(node_part)
+                                parts.append(node_part)
+                                seen_part_names.add(node_name)
+
+                        if seg_name not in seen_pkg_names:
+                            if SysMLPackage:
+                                seg_pkg = SysMLPackage(name=seg_name, doc=f"{current_segment_title} specification", part_defs=list(seg_parts))
+                            else:
+                                seg_pkg = {"name": seg_name, "doc": f"{current_segment_title} specification", "part_defs": list(seg_parts)}
+                            packages.append(seg_pkg)
+                            seen_pkg_names.add(seg_name)
+
+                        if seg_name not in seen_part_names:
+                            if PartDef:
+                                seg_part_def = PartDef(name=seg_name, doc=f"{current_segment_title} segment block", parts=list(seg_parts))
+                            else:
+                                seg_part_def = {"name": seg_name, "doc": f"{current_segment_title} segment block", "parts": list(seg_parts)}
+                            parts.append(seg_part_def)
+                            seen_part_names.add(seg_name)
+                    current_segment_title = ""
+                    current_segment_lines = []
+                continue
+
+            if current_segment_title:
+                current_segment_lines.append(line_str)
+
+    # 4. Section 4.2 User Classes / Stakeholder Taxonomy table
+    uc_row_pattern = re.compile(
+        r'\|\s*(?:\*\*)?(?:UC[-_]?\d+|[A-Za-z0-9_\-]+)\s*(?:\*\*)?\s*\|\s*([^|]+)\s*\|\s*([^|]+)\s*\|\s*([^|]+)\s*\|\s*([^|\n]+)\s*\|'
+    )
+    for row_m in uc_row_pattern.finditer(body):
+        cols = [c.strip().replace('*', '').replace('`', '') for c in row_m.group(0).strip().strip('|').split('|')]
+        if len(cols) >= 5:
+            raw_id = cols[0]
+            raw_title = cols[1]
+            raw_player = cols[2]
+            raw_stakeholder = cols[3]
+            raw_char = cols[4]
+
+            if not raw_id.upper().startswith("UC-") and not raw_id.upper().startswith("UC_") and not raw_id.upper().startswith("UC"):
+                continue
+            if raw_title.lower() in ("title", "user class title", "name", ""):
+                continue
+            clean_title = raw_title.split('(')[0].strip()
+            if re.match(r'^[A-Za-z_][A-Za-z0-9_]*$', clean_title):
+                actor_name = _sanitize_id(clean_title)
+            else:
+                actor_words = re.findall(r'[A-Za-z0-9]+', clean_title.replace('&', 'And'))
+                actor_name = _sanitize_id("".join(w.capitalize() for w in actor_words))
+            if actor_name and actor_name not in seen_part_names:
+                actor_doc = f"{raw_title}: {raw_char}" if raw_char else raw_title
+                if PartDef:
+                    actor_part = PartDef(name=actor_name, doc=actor_doc)
+                else:
+                    actor_part = {"name": actor_name, "doc": actor_doc}
+                parts.append(actor_part)
+                seen_part_names.add(actor_name)
+
+    # 5. Mermaid Class Diagram blocks in ConOps
+    cd_match = re.search(r'```mermaid\s*\n\s*classDiagram(.*?)(?=```|\Z)', body, re.DOTALL)
+    if cd_match:
+        cd_text = cd_match.group(1)
+        current_class = ""
+        class_attrs: Dict[str, List[Any]] = {}
+        class_ops: Dict[str, List[Any]] = {}
+        for line in cd_text.splitlines():
+            line = line.strip()
+            if not line or line.startswith('%%') or '<<' in line:
+                continue
+            cls_decl = re.match(r'class\s+([A-Za-z0-9_]+)\s*\{?', line)
+            if cls_decl:
+                current_class = _sanitize_id(cls_decl.group(1))
+                class_attrs.setdefault(current_class, [])
+                class_ops.setdefault(current_class, [])
+                continue
+            if line == '}':
+                current_class = ""
+                continue
+            clean_line = re.sub(r'^[+\-#~]\s*', '', line)
+            target_class = current_class
+            if not target_class:
+                inline_m = re.match(r'([A-Za-z0-9_]+)\s*:\s*(.*)', clean_line)
+                if inline_m:
+                    target_class = _sanitize_id(inline_m.group(1))
+                    clean_line = inline_m.group(2).strip()
+            if not target_class:
+                continue
+
+            class_attrs.setdefault(target_class, [])
+            class_ops.setdefault(target_class, [])
+
+            if '(' in clean_line and ')' in clean_line:
+                m_match = re.match(r'(?:([a-zA-Z0-9_<>:]+)\s+)?([a-zA-Z0-9_]+)\s*\(([^)]*)\)', clean_line)
+                if m_match:
+                    ret_type = m_match.group(1)
+                    m_name = m_match.group(2)
+                    params_raw = m_match.group(3)
+                    in_p, out_p, all_p = _parse_parameter_string(params_raw)
+                    if SysMLOperationDef:
+                        class_ops[target_class].append(SysMLOperationDef(name=m_name, return_type=ret_type, parameters=all_p))
+                    else:
+                        class_ops[target_class].append({"name": m_name, "return_type": ret_type, "parameters": all_p})
+            else:
+                attr_m = re.match(r'(?:([a-zA-Z0-9_<>:]+)\s+)?([a-zA-Z0-9_]+)(?:\s*[:=]\s*([a-zA-Z0-9_<>:]+))?', clean_line)
+                if attr_m:
+                    t1 = attr_m.group(1)
+                    n1 = attr_m.group(2)
+                    t2 = attr_m.group(3)
+                    a_type = t2 or t1 or "String"
+                    a_name = n1
+                    if AttributeDef:
+                        class_attrs[target_class].append(AttributeDef(name=a_name, type_name=a_type))
+                    else:
+                        class_attrs[target_class].append({"name": a_name, "type_name": a_type})
+
+        for c_name, c_attr_list in class_attrs.items():
+            c_op_list = class_ops.get(c_name, [])
+            existing_p = next((p for p in parts if getattr(p, "name", "") == c_name or (isinstance(p, dict) and p.get("name") == c_name)), None)
+            if existing_p:
+                if hasattr(existing_p, "attributes"):
+                    existing_p.attributes.extend(c_attr_list)
+                if hasattr(existing_p, "operations"):
+                    existing_p.operations.extend(c_op_list)
+            else:
+                if PartDef:
+                    part_obj = PartDef(name=c_name, doc=f"Class {c_name}", attributes=c_attr_list, operations=c_op_list)
+                else:
+                    part_obj = {"name": c_name, "doc": f"Class {c_name}", "attributes": c_attr_list, "operations": c_op_list}
+                parts.append(part_obj)
+                seen_part_names.add(c_name)
+
+    return parts, packages
+
+
 # ==============================================================================
 # AST MERGING & REVERSE SYNCHRONIZATION ENGINE
 # ==============================================================================
@@ -1723,6 +2076,94 @@ def _merge_requirement_into_package(pkg: Any, new_req: Any) -> None:
                     existing.verified_by.append(v)
 
 
+def _merge_subpackage_into_package(pkg: Any, new_subpkg: Any) -> None:
+    """
+    Recursively and non-destructively merges subpackages, child parts, capabilities,
+    requirements, and constraints into pkg.sub_packages.
+    """
+    if new_subpkg is None or pkg is None:
+        return
+
+    subpkg_name = getattr(new_subpkg, "name", "") if not isinstance(new_subpkg, dict) else new_subpkg.get("name", "")
+    if not subpkg_name:
+        return
+
+    pkg_name = getattr(pkg, "name", "") if not isinstance(pkg, dict) else pkg.get("name", "")
+    if pkg_name == subpkg_name:
+        target_pkg = pkg
+    else:
+        def _find_subpkg(p: Any, name: str) -> Optional[Any]:
+            sub_pkgs = getattr(p, "sub_packages", []) if not isinstance(p, dict) else p.get("packages", [])
+            for s in (sub_pkgs or []):
+                s_name = getattr(s, "name", "") if not isinstance(s, dict) else s.get("name", "")
+                if s_name == name:
+                    return s
+            for s in (sub_pkgs or []):
+                found = _find_subpkg(s, name)
+                if found:
+                    return found
+            return None
+
+        target_pkg = _find_subpkg(pkg, subpkg_name)
+        if target_pkg is None:
+            if hasattr(pkg, "sub_packages"):
+                if pkg.sub_packages is None:
+                    pkg.sub_packages = []
+                pkg.sub_packages.append(new_subpkg)
+            elif isinstance(pkg, dict):
+                if "packages" not in pkg:
+                    pkg["packages"] = []
+                pkg["packages"].append(new_subpkg)
+            return
+
+    # Merge properties non-destructively
+    new_doc = getattr(new_subpkg, "doc", "") if not isinstance(new_subpkg, dict) else new_subpkg.get("doc", "")
+    if hasattr(target_pkg, "doc") and not target_pkg.doc and new_doc:
+        target_pkg.doc = new_doc
+    elif isinstance(target_pkg, dict) and not target_pkg.get("doc") and new_doc:
+        target_pkg["doc"] = new_doc
+
+    # Merge parts
+    new_parts = getattr(new_subpkg, "part_defs", []) if not isinstance(new_subpkg, dict) else new_subpkg.get("part_defs", [])
+    for part in (new_parts or []):
+        _merge_part_into_package(target_pkg, part)
+
+    # Merge capabilities
+    new_caps = getattr(new_subpkg, "capability_defs", []) if not isinstance(new_subpkg, dict) else new_subpkg.get("capability_defs", [])
+    for cap in (new_caps or []):
+        _merge_capability_into_package(target_pkg, cap)
+
+    # Merge requirements
+    new_reqs = getattr(new_subpkg, "requirement_defs", []) if not isinstance(new_subpkg, dict) else new_subpkg.get("requirement_defs", [])
+    for req in (new_reqs or []):
+        _merge_requirement_into_package(target_pkg, req)
+
+    # Merge constraints
+    new_cons = getattr(new_subpkg, "constraint_defs", []) if not isinstance(new_subpkg, dict) else new_subpkg.get("constraint_defs", [])
+    for con in (new_cons or []):
+        _merge_constraint_into_package(target_pkg, con)
+
+    # Merge use cases
+    new_ucs = getattr(new_subpkg, "use_case_defs", []) if not isinstance(new_subpkg, dict) else new_subpkg.get("use_case_defs", [])
+    for uc in (new_ucs or []):
+        _merge_use_case_into_package(target_pkg, uc)
+
+    # Merge interactions
+    new_inters = getattr(new_subpkg, "interaction_defs", []) if not isinstance(new_subpkg, dict) else new_subpkg.get("interaction_defs", [])
+    for inter in (new_inters or []):
+        _merge_interaction_into_package(target_pkg, inter)
+
+    # Merge test cases
+    new_tcs = getattr(new_subpkg, "test_case_defs", []) if not isinstance(new_subpkg, dict) else new_subpkg.get("test_case_defs", [])
+    for tc in (new_tcs or []):
+        _merge_test_case_into_package(target_pkg, tc)
+
+    # Recursively merge nested subpackages
+    nested_subpkgs = getattr(new_subpkg, "sub_packages", []) if not isinstance(new_subpkg, dict) else new_subpkg.get("packages", [])
+    for nested in (nested_subpkgs or []):
+        _merge_subpackage_into_package(target_pkg, nested)
+
+
 
 def _atomic_write_file(filepath: str, content: str) -> None:
     """Atomically writes string content to target file using NamedTemporaryFile and os.replace."""
@@ -1763,6 +2204,7 @@ def reverse_sync_specs_to_sysml(
     into the canonical SysML v2 AST Single Source of Truth (.pipeline/schema.sysml).
 
     Parses:
+    - docs/conops/CONOPS.md & docs/conops/units/ -> PartDef, SysMLPackage, PortDef, ActionDef
     - docs/use-cases/UC-*.md -> UseCaseDef
     - docs/user-stories/US-*.md -> SysMLInteractionDef & SysMLTestCaseDef
     - docs/features/FEAT-*.md -> PartDef, SysMLOperationDef, ActionDef, SysMLConstraintDef
@@ -1851,8 +2293,16 @@ def reverse_sync_specs_to_sysml(
 
                 rel_dir = os.path.relpath(root, resolved_docs_dir).lower()
 
+                # ConOps & Mission Intent
+                if "conops" in rel_dir or file.lower().startswith("conops") or "mission_intent" in file.lower() or "mission-intent" in file.lower():
+                    conops_parts, conops_pkgs = extract_conops_from_markdown(content, file)
+                    for pkg_node in conops_pkgs:
+                        _merge_subpackage_into_package(pkg, pkg_node)
+                    for part in conops_parts:
+                        _merge_part_into_package(pkg, part)
+
                 # Use Cases
-                if "use-cases" in rel_dir or "use_cases" in rel_dir or file.lower().startswith("uc-") or file.lower().startswith("uc_"):
+                elif "use-cases" in rel_dir or "use_cases" in rel_dir or file.lower().startswith("uc-") or file.lower().startswith("uc_"):
                     uc_list = extract_use_cases_from_markdown(content, file)
                     for uc in uc_list:
                         _merge_use_case_into_package(pkg, uc)
