@@ -2236,6 +2236,15 @@ class SysMLParameterBindingEngine:
         # Ingest existing candidates
         for cpath in candidate_paths:
             if os.path.isfile(cpath):
+                if cpath.endswith(".sysml") and "DOMAIN_TYPE" in self._explicit_keys and self.detected_domain != "aviation":
+                    try:
+                        with open(cpath, "r", encoding="utf-8", errors="ignore") as f:
+                            content = f.read()
+                        content_lower = content.lower()
+                        if any(marker in content_lower for marker in ("avenger", "aviation", "aircraft", "uav")):
+                            continue
+                    except Exception:
+                        pass
                 self.ingest_file(cpath)
 
         self._derive_lifecycle_contract()
@@ -3776,58 +3785,58 @@ def assemble_conops(
     if not verify_only:
         # Automated hook: Closed-loop SysML v2 reverse-synchronization
         effective_ws = ws_dir or (os.path.abspath(workspace_dir) if workspace_dir else None)
-        if not effective_ws:
-            for cand in (
-                os.path.abspath(os.path.join(output_dir, "..")),
-                os.path.abspath(os.path.join(output_dir, "..", "..")),
-                os.getcwd(),
-            ):
-                if os.path.isdir(cand) and (
-                    os.path.isdir(os.path.join(cand, "docs"))
-                    or os.path.isdir(os.path.join(cand, "schema"))
-                    or os.path.isdir(os.path.join(cand, ".pipeline"))
+        if not effective_ws and output_dir:
+            curr = os.path.abspath(output_dir)
+            while curr and curr != os.path.dirname(curr):
+                if (
+                    os.path.isdir(os.path.join(curr, "docs"))
+                    or os.path.isdir(os.path.join(curr, "schema"))
+                    or os.path.isdir(os.path.join(curr, ".pipeline"))
                 ):
-                    effective_ws = cand
+                    effective_ws = curr
                     break
+                curr = os.path.dirname(curr)
 
         if effective_ws and os.path.isdir(effective_ws):
-            docs_dir = os.path.join(effective_ws, "docs")
-            if os.path.isdir(docs_dir):
-                detected_schema = None
-                for cand_schema in (
-                    os.path.join(effective_ws, "schema", "platform.sysml"),
-                    os.path.join(effective_ws, "schema", "DEAP_MODEL.sysml"),
-                    os.path.join(effective_ws, ".pipeline", "schema.sysml"),
-                ):
-                    if os.path.isfile(cand_schema):
-                        detected_schema = cand_schema
-                        break
+            if os.path.exists(os.path.join(effective_ws, ".pipeline", "upstream")):
+                print("[*] Upstream distribution template detected (.pipeline/upstream). Skipping reverse-sync.")
+            else:
+                docs_dir = os.path.join(effective_ws, "docs")
+                if os.path.isdir(docs_dir):
+                    detected_schema = None
+                    for cand_schema in (
+                        os.path.join(effective_ws, "schema", "platform.sysml"),
+                        os.path.join(effective_ws, "schema", "DEAP_MODEL.sysml"),
+                        os.path.join(effective_ws, ".pipeline", "schema.sysml"),
+                    ):
+                        if os.path.isfile(cand_schema):
+                            detected_schema = cand_schema
+                            break
 
-                if detected_schema:
-                    compile_script = os.path.join(effective_ws, "scripts", "compile_sysml.py")
-                    if not os.path.isfile(compile_script):
-                        compile_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "compile_sysml.py")
+                    if detected_schema:
+                        compile_script = os.path.join(effective_ws, "scripts", "compile_sysml.py")
+                        if not os.path.isfile(compile_script):
+                            compile_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "compile_sysml.py")
 
-                    if os.path.isfile(compile_script):
-                        out_sysml = os.path.join(effective_ws, ".pipeline", "schema.sysml")
-                        out_digest = os.path.join(effective_ws, ".pipeline", "schema-digest.json")
-                        cmd = [
-                            sys.executable,
-                            compile_script,
-                            "--reverse-sync",
-                            "--docs", docs_dir,
-                            "--schema", detected_schema,
-                            "--out", out_sysml,
-                            "--digest", out_digest,
-                            "--allow-schema-overwrite",
-                        ]
-                        print(f"[*] Running automated SysML v2 reverse-synchronization hook: {' '.join(cmd)}")
-                        res = subprocess.run(cmd, cwd=effective_ws, capture_output=True, text=True)
-                        if res.returncode != 0:
-                            err_msg = res.stderr or res.stdout
-                            print(f"[!] Error during automated SysML v2 reverse-sync:\n{err_msg}", file=sys.stderr)
-                            return False
-                        print(f"[+] Automated SysML v2 reverse-synchronization completed successfully.")
+                        if os.path.isfile(compile_script):
+                            out_sysml = os.path.join(effective_ws, ".pipeline", "schema.sysml")
+                            out_digest = os.path.join(effective_ws, ".pipeline", "schema-digest.json")
+                            cmd = [
+                                sys.executable,
+                                compile_script,
+                                "--reverse-sync",
+                                "--docs", docs_dir,
+                                "--schema", detected_schema,
+                                "--out", out_sysml,
+                                "--digest", out_digest,
+                            ]
+                            print(f"[*] Running automated SysML v2 reverse-synchronization hook: {' '.join(cmd)}")
+                            res = subprocess.run(cmd, cwd=effective_ws, capture_output=True, text=True)
+                            if res.returncode != 0:
+                                err_msg = res.stderr or res.stdout
+                                print(f"[!] Error during automated SysML v2 reverse-sync:\n{err_msg}", file=sys.stderr)
+                                return False
+                            print(f"[+] Automated SysML v2 reverse-synchronization completed successfully.")
 
     print("[+] All ConOps assembly and verification checks passed cleanly.")
     return True

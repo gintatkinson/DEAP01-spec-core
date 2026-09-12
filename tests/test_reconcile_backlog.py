@@ -1427,7 +1427,7 @@ class TestPlaceholderIssueIDRecognition(unittest.TestCase):
             temp_path = tf.name
 
         try:
-            issue_dict = {}
+            issue_dict = {100: {"title": "Other Existing Issue", "state": "OPEN", "labels": []}}
             title_map = {}
             claimed = {}
 
@@ -1435,6 +1435,69 @@ class TestPlaceholderIssueIDRecognition(unittest.TestCase):
                 resolve_spec_issue_number(
                     filepath=temp_path,
                     title="Feature With Missing Issue",
+                    title_map=title_map,
+                    issue_dict=issue_dict,
+                    rules=self.github_rules,
+                    item_type="Feature",
+                    claimed=claimed,
+                )
+            self.assertEqual(cm.exception.code, 1)
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+
+    def test_resolve_spec_issue_number_empty_tracker_returns_none_for_placeholder(self):
+        spec_content = (
+            "---\n"
+            "title: Feature In Offline Mode\n"
+            "issue_id: \"[Pending Registration]\"\n"
+            "---\n"
+            "# Feature: Feature In Offline Mode\n"
+        )
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".md", delete=False) as tf:
+            tf.write(spec_content)
+            temp_path = tf.name
+
+        try:
+            issue_dict = {}
+            title_map = {}
+            claimed = {}
+
+            resolved = resolve_spec_issue_number(
+                filepath=temp_path,
+                title="Feature In Offline Mode",
+                title_map=title_map,
+                issue_dict=issue_dict,
+                rules=self.github_rules,
+                item_type="Feature",
+                claimed=claimed,
+            )
+            self.assertIsNone(resolved)
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+
+    def test_resolve_spec_issue_number_empty_tracker_with_declared_id_is_fatal(self):
+        spec_content = (
+            "---\n"
+            "title: Feature In Offline Mode\n"
+            "issue_id: 8888\n"
+            "---\n"
+            "# Feature: Feature In Offline Mode\n"
+        )
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".md", delete=False) as tf:
+            tf.write(spec_content)
+            temp_path = tf.name
+
+        try:
+            issue_dict = {}
+            title_map = {}
+            claimed = {}
+
+            with self.assertRaises(SystemExit) as cm:
+                resolve_spec_issue_number(
+                    filepath=temp_path,
+                    title="Feature In Offline Mode",
                     title_map=title_map,
                     issue_dict=issue_dict,
                     rules=self.github_rules,

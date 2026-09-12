@@ -51,7 +51,7 @@ class MermaidFlowchartParser(IParser):
             match = re.match(r'^(.*?)\s*-\.\s*(.+?)\s*\.-\s*>\s*(.*)$', line)
             if match:
                 return match.group(1), match.group(3), "dotted_arrow", match.group(2).strip()
-            match = re.match(r'^(.*?)\s*(-->|-\.-*->|==>|---|--|===|==|-\.-*)\s*\|([^|]+)\|\s*(.*)$', line)
+            match = re.match(r'^(.*?)\s*(<-->|<--|-->|-\.-*->|==>|<==>|<==|---|--|===|==|-\.-*)\s*\|([^|]+)\|\s*(.*)$', line)
             if match:
                 arrow = match.group(2)
                 label = match.group(3).strip()
@@ -60,11 +60,11 @@ class MermaidFlowchartParser(IParser):
                 if "-.-" in arrow or "-." in arrow:
                     style = "dotted_arrow" if ">" in arrow else "dotted_line"
                 elif "==" in arrow:
-                    style = "thick_arrow" if ">" in arrow else "thick_line"
+                    style = "thick_arrow" if (">" in arrow or "<" in arrow) else "thick_line"
                 elif arrow in ("---", "--"):
                     style = "solid_line"
                 return match.group(1), target, style, label
-            match = re.match(r'^(.*?)\s*(--|==)\s*([^-\s=].*?)\s*(-->|==>)\s*(.*)$', line)
+            match = re.match(r'^(.*?)\s*(--|==)\s*([^-\s=].*?)\s*(-->|==>|<--|<==|<-->|<==>)\s*(.*)$', line)
             if match:
                 connector = match.group(2)
                 label = match.group(3).strip()
@@ -76,13 +76,13 @@ class MermaidFlowchartParser(IParser):
                 arrow = match.group(2)
                 style = "dotted_arrow" if "-->" in arrow or "->" in arrow else "dotted_line"
                 return match.group(1), match.group(3), style, None
-            match = re.match(r'^(.*?)\s*(-->|---|==>|==)\s*(.*)$', line)
+            match = re.match(r'^(.*?)\s*(<-->|<--|-->|---|==>|<==>|<==|==)\s*(.*)$', line)
             if match:
                 arrow = match.group(2)
                 style = "solid_arrow"
                 if arrow == "---":
                     style = "solid_line"
-                elif arrow == "==>":
+                elif arrow in ("==>", "<==", "<==>"):
                     style = "thick_arrow"
                 elif arrow == "==":
                     style = "thick_line"

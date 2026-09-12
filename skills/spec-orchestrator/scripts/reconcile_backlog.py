@@ -3817,7 +3817,7 @@ def resolve_spec_issue_number(filepath, title, title_map, issue_dict, rules=None
 
     issue_num = None
     if declared:
-        candidate_num = lookup_canonical_issue_key(fm_id, issue_dict)
+        candidate_num = lookup_canonical_issue_key(fm_id, issue_dict) if issue_dict else None
         if candidate_num is None:
             declared_ref = format_issue_reference(declared, tracker_rules)
             print(
@@ -3874,6 +3874,8 @@ def resolve_spec_issue_number(filepath, title, title_map, issue_dict, rules=None
                 )
                 sys.exit(1)
     else:
+        if not issue_dict:
+            return None
         issue_num = title_map.get(normalize_title(title, rules))
         if issue_num is not None:
             print(
@@ -4631,13 +4633,14 @@ def main():
 
     # Automated hook: Closed-loop SysML v2 reverse-synchronization before tracker sync
     docs_dir = os.path.join(workspace_dir, "docs")
-    if os.path.isdir(docs_dir):
+    upstream_marker = os.path.join(workspace_dir, ".pipeline", "upstream")
+    if os.path.isdir(docs_dir) and not os.path.isdir(upstream_marker):
         compile_script = os.path.join(workspace_dir, "scripts", "compile_sysml.py")
         if not os.path.isfile(compile_script):
             compile_script = os.path.join(script_dir, "compile_sysml.py")
         if os.path.isfile(compile_script):
             print("Running pre-reconciliation SysML v2 reverse-synchronization...")
-            cmd = [sys.executable, compile_script, "--reverse-sync", "--docs", "docs", "--allow-schema-overwrite"]
+            cmd = [sys.executable, compile_script, "--reverse-sync", "--docs", "docs"]
             for cand_schema in (
                 os.path.join(workspace_dir, "schema", "platform.sysml"),
                 os.path.join(workspace_dir, "schema", "DEAP_MODEL.sysml"),
@@ -5204,6 +5207,7 @@ def main():
                 exit_code = e.code
             elif e.code is None:
                 exit_code = 0
+            sys.exit(exit_code)
         
         if exit_code != 0:
             tb_str = traceback.format_exc()

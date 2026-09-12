@@ -234,8 +234,9 @@ class TestGitLabApiOperations(unittest.TestCase):
         offline_provider = GitLabV4Provider(offline=True)
         self.assertEqual(offline_provider.list_issues(), [])
 
+    @patch("shutil.which", return_value=None)
     @patch("urllib.request.urlopen")
-    def test_api_error_handling(self, mock_urlopen):
+    def test_api_error_handling(self, mock_urlopen, mock_which):
         mock_urlopen.side_effect = Exception("API connection error")
         created = self.provider.create_issue("Title", "Body")
         self.assertIsNone(created)

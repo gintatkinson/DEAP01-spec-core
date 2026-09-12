@@ -175,6 +175,90 @@ def _find_extracted_markdown_files(repo: WorkspaceRepository, schemas_dir: Optio
     return md_files
 
 
+NON_PHYSICAL_PARAM_NAMES = {
+    "parity", "baud", "baudrate", "bit", "bits", "stopbit", "stopbits", "databits",
+    "byte", "bytes", "crc", "ack", "nack", "seq", "sequence", "command", "cmd",
+    "opcode", "header", "footer", "checksum", "pbit", "cbit", "ibit", "pbitresult",
+    "cbitresult", "ibitresult", "offset", "index", "address", "addr", "register",
+    "reg", "port", "pin", "pinnumber", "pinname", "voltage", "current", "power",
+    "frequency", "freq", "period", "interval", "rate", "gain", "baud_rate",
+    "timeout", "retry", "retries", "delay", "latency", "message", "messagelength",
+    "packet", "buffer", "payloadlen", "payloadlength", "version", "revision",
+    "format", "encoding", "status", "flag", "flags", "error",
+    "errorcode", "returncode", "result", "code", "counter", "count", "id",
+    "channel", "uart", "rs485", "can", "spi", "i2c", "ethernet", "gpio",
+    "baud_rate", "stop_bits", "data_bits", "bus_interval", "reply_timeout"
+}
+
+NON_PHYSICAL_WORD_TOKENS = {
+    "pin", "parity", "baud", "crc", "pbit", "cbit", "ibit", "baudrate", "stopbit",
+    "stopbits", "databits"
+}
+
+DOC_METADATA_PARAM_NAMES = {
+    "note", "notes", "precondition", "preconditions", "postcondition", "postconditions",
+    "condition", "conditions", "trigger", "triggers", "actor", "actors", "dependency",
+    "dependencies", "assumption", "assumptions", "comment", "comments", "remark",
+    "remarks", "requirement", "requirements", "rationale", "traceability", "reference",
+    "references", "exception", "exceptions", "summary", "author", "reviewer", "version",
+    "revision", "title", "name", "id", "description", "scope", "purpose", "target",
+    "objective", "tag", "tags", "label", "labels", "source", "dest", "destination",
+    "type", "unit", "units", "range", "domain", "format", "criterion", "criteria",
+    "step", "steps", "flow", "alternative", "constraint", "constraints", "verification",
+    "validation", "compliance", "mitigation", "severity", "probability", "rpn"
+}
+
+SIGNAL_STATUS_SUFFIXES = (
+    "valid", "status", "state", "ready", "flag", "ack", "fault", "error",
+    "mode", "signal", "feed", "value", "level", "threshold", "rate", "gain",
+    "timeout", "count", "counter", "index", "offset"
+)
+
+PHYSICAL_EQUIPMENT_KEYWORDS = {
+    "system", "device", "mechanism", "equipment", "hardware", "subsystem", "payload",
+    "sensor", "actuator", "armor", "wing", "rotor", "engine", "motor", "propeller",
+    "thruster", "turret", "hook", "float", "skid", "launcher", "catapult", "airframe",
+    "uplink", "downlink", "transponder", "radar", "lidar", "altimeter", "beacon",
+    "camera", "gimbal", "warhead", "chute", "parachute", "recovery", "landing",
+    "gear", "undercarriage", "flotation", "arresting", "waterproofing", "shielding"
+}
+
+
+def _is_valid_identifier_key(k: str) -> bool:
+    """Validate that key is a genuine named identifier, not a table cell, number, or metadata."""
+    if not k:
+        return False
+    k_clean = k.strip()
+    if not re.match(r'^[a-zA-Z][a-zA-Z0-9_\s\-]*$', k_clean):
+        return False
+    norm = _normalize_name(k_clean)
+    if len(norm) < 3 or norm.isdigit():
+        return False
+    if norm in NON_PHYSICAL_PARAM_NAMES or norm in DOC_METADATA_PARAM_NAMES:
+        return False
+    words = _split_words(k_clean)
+    if any(w in NON_PHYSICAL_WORD_TOKENS for w in words):
+        return False
+    return True
+
+
+def _is_physical_feature_attribute(norm_name: str, val_clean: str) -> bool:
+    """Determine if a custom attribute represents a physical hardware/capability invariant."""
+    if any(norm_name.endswith(sfx) for sfx in SIGNAL_STATUS_SUFFIXES):
+        return False
+    # Must have physical equipment keyword or explicit installation/presence prefix/suffix
+    has_physical_kw = any(kw in norm_name for kw in PHYSICAL_EQUIPMENT_KEYWORDS)
+    has_presence_affix = (
+        norm_name.startswith(("has", "with", "enable", "support")) or
+        norm_name.endswith(("installed", "equipped", "fitted", "present", "available", "capable", "capability", "enabled"))
+    )
+    if not (has_physical_kw or has_presence_affix):
+        return False
+    if val_clean in ("0", "0.0") and not has_presence_affix:
+        return False
+    return True
+
+
 def _extract_negative_invariants_from_sysml(
     sysml_files: List[str], repo_root: str
 ) -> List[NegativeInvariant]:
@@ -216,8 +300,11 @@ def _extract_negative_invariants_from_sysml(
                 val_clean = val_raw.strip('"\'`')
                 norm_name = _normalize_name(name)
 
+                if not _is_valid_identifier_key(name):
+                    continue
+
                 # Check if this attribute is an expendable lifecycle or negative attribute
-                if norm_name in ("lifecycle", "lifecycletype", "operationalmode", "systemtype", "vehicleclass"):
+                if norm_name in ("lifecycle", "lifecycletype", "operationalmode", "systemtype", "vehicleclass", "platformtype"):
                     if _is_expendable_lifecycle_value(val_clean):
                         invariants.append(NegativeInvariant(
                             attribute_name=name,
@@ -232,10 +319,12 @@ def _extract_negative_invariants_from_sysml(
                         domain = "recovery"
                     elif "chute" in norm_name or "parachute" in norm_name:
                         domain = "parachute"
-                    elif "landinggear" in norm_name or "undercarriage" in norm_name or "gear" in norm_name:
+                    elif "landinggear" in norm_name or "undercarriage" in norm_name or ("gear" in norm_name and not any(p in norm_name for p in ["switchgear", "gearbox", "gearratio"])):
                         domain = "landing_gear"
                     elif "landing" in norm_name or "runway" in norm_name or "autoland" in norm_name or "touchdown" in norm_name:
                         domain = "landing"
+                    elif not _is_physical_feature_attribute(norm_name, val_clean):
+                        continue
 
                     invariants.append(NegativeInvariant(
                         attribute_name=name,
@@ -290,10 +379,13 @@ def _extract_negative_invariants_from_markdown(
             if re.match(r'^:?-+:?$', k) or re.match(r'^:?-+:?$', v):
                 continue
 
+            if not _is_valid_identifier_key(k):
+                continue
+
             v_clean = v.strip('"\'`')
             norm_k = _normalize_name(k)
 
-            if norm_k in ("lifecycle", "lifecycletype", "operationalmode", "systemtype", "vehicleclass"):
+            if norm_k in ("lifecycle", "lifecycletype", "operationalmode", "systemtype", "vehicleclass", "platformtype"):
                 if _is_expendable_lifecycle_value(v_clean):
                     invariants.append(NegativeInvariant(
                         attribute_name=k,
@@ -308,10 +400,12 @@ def _extract_negative_invariants_from_markdown(
                     domain = "recovery"
                 elif "chute" in norm_k or "parachute" in norm_k:
                     domain = "parachute"
-                elif "landinggear" in norm_k or "undercarriage" in norm_k or "gear" in norm_k:
+                elif "landinggear" in norm_k or "undercarriage" in norm_k or ("gear" in norm_k and not any(p in norm_k for p in ["switchgear", "gearbox", "gearratio"])):
                     domain = "landing_gear"
                 elif "landing" in norm_k or "runway" in norm_k or "autoland" in norm_k or "touchdown" in norm_k:
                     domain = "landing"
+                elif not _is_physical_feature_attribute(norm_k, v_clean):
+                    continue
 
                 invariants.append(NegativeInvariant(
                     attribute_name=k,
@@ -658,6 +752,16 @@ class SemanticProseInvariantValidator(IValidator):
         invariants: List[NegativeInvariant] = []
         invariants.extend(_extract_negative_invariants_from_sysml(sysml_files, repo.workspace_dir))
         invariants.extend(_extract_negative_invariants_from_markdown(md_schema_files, repo.workspace_dir))
+
+        # Deduplicate invariants by concept domain and normalized attribute name
+        unique_invariants: List[NegativeInvariant] = []
+        seen_keys = set()
+        for inv in invariants:
+            key = (inv.concept_domain, _normalize_name(inv.attribute_name))
+            if key not in seen_keys:
+                seen_keys.add(key)
+                unique_invariants.append(inv)
+        invariants = unique_invariants
 
         # If no negative invariants are declared in the schema, return clean pass
         if not invariants:

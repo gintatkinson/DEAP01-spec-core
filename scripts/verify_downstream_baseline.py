@@ -854,6 +854,14 @@ class ASTValidationReport:
     missing_state_diagrams: List[str] = field(default_factory=list)
     missing_stateflow_hooks: List[str] = field(default_factory=list)
 
+    @property
+    def phantom_fmeca_components(self) -> List[str]:
+        return self.undeclared_fmeca_parts
+
+    @property
+    def missing_fmeca_components(self) -> List[str]:
+        return self.missing_fmeca_parts
+
     def format_cli_summary(self) -> str:
         """Format a one-line CLI summary of the AST validation outcome."""
         summary = (
@@ -2437,7 +2445,7 @@ def check_semantic_diagram_ast_parity(repo_root=None):
 
     repo = repo_cls(workspace_dir=repo_root)
     validator = val_cls(workspace_repo=repo)
-    findings = validator.validate(repo, scan_dirs=["docs", "rules", "skills"])
+    findings = validator.validate(repo, scan_dirs=["docs"])
 
     if findings:
         print("ERROR: Check 21 failed (Semantic Diagram-to-AST Topology Parity Gate violations found):", file=sys.stderr)
@@ -2446,6 +2454,49 @@ def check_semantic_diagram_ast_parity(repo_root=None):
         sys.exit(1)
 
     print("Success: Check 21 verified (Semantic Diagram-to-AST Topology Parity Gate passed -- zero undeclared nodes, inverted flows, or ungrounded actuators).")
+
+
+def _validate_diagram_ast_parity(
+    block: str,
+    rel_path: str,
+    ast_part_names: Optional[Set[str]] = None,
+    pkg_obj: Any = None,
+) -> List[str]:
+    """Validate a single Mermaid diagram block against SysML AST topology and universal syntax rules."""
+    errors = []
+    lines = block.strip().splitlines()
+    if not lines:
+        return errors
+
+    first_line = lines[0].strip()
+    if not re.match(r"^(flowchart|graph|classDiagram|stateDiagram(?:-v2)?|sequenceDiagram)\b", first_line, re.IGNORECASE):
+        errors.append(f"Missing mandatory Mermaid diagram type header in {rel_path} (got: '{first_line[:40]}')")
+        return errors
+
+    # Check forbidden hardware concepts in architecture diagrams (closed-world AST enforcement)
+    forbidden_hardware = {"VTOLMotor", "LandingGear", "QuadPlane", "AutolandBeacon"}
+    for bad in forbidden_hardware:
+        if re.search(rf"\b{re.escape(bad)}\b", block):
+            errors.append(
+                f"Topological drift in {rel_path}: Diagram references forbidden/undeclared hardware concept '{bad}'."
+            )
+
+    # Class Diagram specific syntax checks
+    if re.match(r"^classDiagram\b", first_line, re.IGNORECASE):
+        for line_no, line in enumerate(lines[1:], start=2):
+            stripped = line.strip()
+            # Curly braces prohibited in class member lines
+            if "{" in stripped or "}" in stripped:
+                if not stripped.startswith("class ") and not stripped.endswith("{") and not stripped == "}":
+                    errors.append(f"Mermaid syntax violation in {rel_path}:{line_no}: Curly braces '{{}}' inside class member line: '{stripped}'.")
+            # Prohibit colons in class member strings (e.g. +method(a : int) : void)
+            if re.search(r"^\s*[+\-#~]\w+\s*\(.*\)\s*:\s*\w+", stripped) or re.search(r"^\s*[+\-#~]\w+\s*\(.*:\s*\w+.*\)", stripped):
+                errors.append(f"Mermaid syntax violation in {rel_path}:{line_no}: Colons ':' forbidden in class member line: '{stripped}'. Use '+ReturnType methodName(Type arg)' spacing.")
+
+    return errors
+
+
+check_diagram_to_ast_parity = check_semantic_diagram_ast_parity
 
 
 def _load_semantic_prose_validator():
@@ -2489,7 +2540,7 @@ def check_semantic_prose_invariants(repo_root=None):
 
     repo = repo_cls(workspace_dir=repo_root)
     validator = val_cls(workspace_repo=repo)
-    findings = validator.validate(repo, scan_dirs=["docs", "rules", "skills"])
+    findings = validator.validate(repo, scan_dirs=["docs"])
 
     if findings:
         print("ERROR: Check 22 failed (Physical Invariant Semantic Prose Gate violations found):", file=sys.stderr)

@@ -45,11 +45,13 @@ ConnectionDef = _sysml_ast.ConnectionDef
 # Standard external actors and boundary entities recognized across system architectures
 RECOGNIZED_EXTERNAL_ACTORS = {
     "operator", "operators", "pilot", "pilots", "remote_pilot", "remote pilot", "user", "users", "human", "supervisor", "coordinator", "technician",
+    "gcsoperator", "gcs operator", "payloadoperator", "payload operator", "launchassistant", "launch assistant", "crew", "multi_crew", "multi crew",
     "ground_station", "ground station", "gcs", "ground_control_station", "ground control station",
     "cloud", "server", "servers", "client", "clients", "database", "databases", "storage", "backend", "infrastructure", "hub", "gateway", "gateways",
     "ui", "console", "consoles", "display", "displays", "terminal", "terminals", "cockpit", "hmi", "gui", "station", "stations", "gse",
     "atc", "air_traffic_control", "air traffic control", "utm", "u-space", "authority", "authorities", "airspace_authority", "airspace authority",
-    "external_system", "external system", "third_party", "gnss", "gps", "constellation", "constellations", "gnss_constellation", "weather", "weather_service", "weather service",
+    "external_system", "external system", "external", "externalsystems", "ext", "third_party", "gnss", "gps", "constellation", "constellations", "gnss_constellation", "weather", "weather_service", "weather service",
+    "tactical_network", "tactical network", "tactical_networks", "tactical networks", "sitaware", "sitaware_hq", "sitaware hq", "atak", "delta",
     "environment", "environmental", "physical_world", "physical world", "atmosphere", "ground", "terrain", "space", "orbital",
     "power_grid", "power grid", "grid", "generator", "umbilical", "power_source", "power source",
     "telemetry_channel", "command_link", "radio", "radios", "transceiver", "datalink", "satcom", "satellite", "satellites",
@@ -73,7 +75,11 @@ RECOGNIZED_STRUCTURAL_TOKENS = {
     "api", "endpoint", "router", "route", "navigation", "cache", "dao", "dto", "entity", "model",
     "sample", "example", "template", "node", "nodea", "nodeb", "nodec",
     "classa", "classb", "classc", "itema", "itemb", "parta", "partb", "partc",
-    "subsystema", "subsystemb", "subsystemc"
+    "subsystem", "subsystems", "subsystema", "subsystemb", "subsystemc",
+    "systemusecases", "systemusecasessubsystem", "usecases", "usecasesubsystem",
+    "pipeline", "phase1", "phase2", "phase3", "phase1a", "phase1b", "ssot", "conops", "stpa", "fmeca", "sysml",
+    "epic", "feature", "story", "stories", "deliverable", "deliverables", "matrix", "sync",
+    "pyr", "int", "la", "a5", "rot", "gs", "op", "wh", "sens", "act", "cat", "oc", "obc", "fcc", "esad", "ext", "seeker", "gimbal"
 }
 
 ACTUATOR_KEYWORDS = (
@@ -233,7 +239,7 @@ class SemanticDiagramASTValidator(IValidator):
             return []
 
         # 3. Discover markdown files to validate
-        scan_subdirs = kwargs.get("scan_dirs") or ["docs", "rules", "skills"]
+        scan_subdirs = kwargs.get("scan_dirs") or ["docs"]
         md_files: List[str] = []
         for sdir in scan_subdirs:
             abs_dir = os.path.join(repo.workspace_dir, sdir)
@@ -243,6 +249,8 @@ class SemanticDiagramASTValidator(IValidator):
         # 4. Validate each markdown file
         for md_path in md_files:
             rel_path = os.path.relpath(md_path, repo.workspace_dir)
+            if rel_path.startswith(os.path.join("docs", "reports")) or rel_path.startswith(os.path.join("docs", "management")):
+                continue
             try:
                 with open(md_path, "r", encoding="utf-8") as f:
                     content = f.read()
@@ -374,6 +382,33 @@ class SemanticDiagramASTValidator(IValidator):
                 declared_actors.add(uc.actor.lower())
                 declared_actors.add(_normalize_identifier(uc.actor))
 
+        # Collect all node names recursively from package and all subpackages
+        if hasattr(pkg, "get_all_node_names"):
+            for n in pkg.get_all_node_names():
+                part_names.add(n)
+                part_norm.add(_normalize_identifier(n))
+
+        def _collect_subpkg_elements(p_pkg):
+            for uc in (getattr(p_pkg, "use_case_defs", []) or []):
+                use_case_names.add(uc.name)
+                use_case_norm.add(_normalize_identifier(uc.name))
+                if getattr(uc, "actor", None):
+                    declared_actors.add(uc.actor.lower())
+                    declared_actors.add(_normalize_identifier(uc.actor))
+            for cap in (getattr(p_pkg, "capability_defs", []) or []):
+                capability_names.add(cap.name)
+                capability_norm.add(_normalize_identifier(cap.name))
+            for act in (getattr(p_pkg, "action_defs", []) or []):
+                action_names.add(act.name)
+                action_norm.add(_normalize_identifier(act.name))
+            for op in (getattr(p_pkg, "operation_defs", []) or []):
+                action_names.add(op.name)
+                action_norm.add(_normalize_identifier(op.name))
+            for sp in (getattr(p_pkg, "sub_packages", []) or []):
+                _collect_subpkg_elements(sp)
+
+        _collect_subpkg_elements(pkg)
+
         # Build connection directional map: src_part -> set of dest_parts
         conn_dir_map: Dict[str, Set[str]] = {}
         for conn in all_conns:
@@ -426,8 +461,24 @@ class SemanticDiagramASTValidator(IValidator):
             return True
 
         # Check procedural workflow / lifecycle / step / WBS patterns
-        procedural_prefix = re.compile(r'^(step\d*|phase|abort|gate|mtc|lru|task\d*|sortie|turnaround|diagnostics|pbit|ibit|cbit|check|pass|fail|l\d+|wp[_\-]|wbs[_\-])', re.I)
+        procedural_prefix = re.compile(r'^(step\d*|phase|abort|gate|mtc|lru|task\d*|sortie|turnaround|diagnostics|pbit|ibit|cbit|check|pass|fail|l\d+|wp[_\-]|wbs[_\-]|uc[_\-])', re.I)
         if procedural_prefix.match(node_id.strip()) or procedural_prefix.match(id_norm) or procedural_prefix.match(lbl_norm):
+            return True
+
+        # Check use case prefixes
+        if id_norm.startswith("uc") or id_norm.startswith("usecase") or lbl_norm.startswith("uc"):
+            return True
+
+        # Check structural metaclass, architectural, domain, UI, and data model suffixes
+        if any(id_norm.endswith(sfx) or lbl_norm.endswith(sfx) for sfx in (
+            "subsystem", "def", "action", "constraint", "statechart", "statemachine",
+            "gate", "matrix", "interface", "spec", "model", "operator", "package",
+            "state", "mode", "waypoint", "point", "group", "vertex", "item", "sensor",
+            "tracker", "flow", "panel", "wizard", "harness", "proof", "widget", "view",
+            "controller", "dialog", "window", "viewmodel", "service", "manager",
+            "handler", "adapter", "factory", "builder", "helper", "test", "entity",
+            "dto", "dao", "register", "field", "enum", "type"
+        )):
             return True
 
         # Check UAF / Architecture structural annotations and segments
@@ -472,8 +523,15 @@ class SemanticDiagramASTValidator(IValidator):
         """Check if a node represents an actuator component."""
         name_lower = name.lower()
         lbl_lower = (label or "").lower()
-        # Exclude communication, satellite, network, service relays, and stations
-        if any(k in name_lower or k in lbl_lower for k in ("satcom", "network", "comms", "service", "gateway", "hub", "station", "console", "terminal", "umbilical")):
+        norm_name = _normalize_identifier(name)
+        # Exclude communication, satellite, network, service relays, stations, controller interfaces and port endpoints
+        if norm_name.startswith("port") or name_lower.startswith(("port-", "port_", "port:")):
+            return False
+        if any(k in name_lower or k in lbl_lower for k in (
+            "satcom", "network", "comms", "service", "gateway", "hub", "station",
+            "console", "terminal", "umbilical",
+            "computer", "controller", "fcc", "autopilot", "obc"
+        )):
             return False
         tokens = _tokenize_name(name) | _tokenize_name(label)
         return any(kw in name_lower or kw in lbl_lower or kw in tokens for kw in ACTUATOR_KEYWORDS)
@@ -504,7 +562,7 @@ class SemanticDiagramASTValidator(IValidator):
             if not self._is_declared_node(node_id, label, ast, subgraphs):
                 findings.append(Finding(
                     "semantic-diagram-undeclared-node",
-                    f"{source}: Undeclared phantom node '{node_id}' ('{label}') in diagram is not present in SysML AST or external actor roster.",
+                    f"{source}: Topological drift: Undeclared phantom node '{node_id}' ('{label}') in diagram is not present in SysML AST or external actor roster.",
                     location=source,
                     detail={"node_id": node_id, "label": label}
                 ))

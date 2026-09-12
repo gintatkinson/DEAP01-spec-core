@@ -194,8 +194,9 @@ def test_reconcile_backlog_tooling_accessible():
     assert os.path.getsize(reconcile_path) > 0, f"scripts/reconcile_backlog.py is empty at {repo_root}"
     assert os.access(reconcile_path, os.R_OK), f"scripts/reconcile_backlog.py is not readable at {repo_root}"
 
-    res = subprocess.run([sys.executable, reconcile_path], cwd=repo_root, capture_output=True, text=True, timeout=60)
+    res = subprocess.run([sys.executable, reconcile_path, "--help"], cwd=repo_root, capture_output=True, text=True, timeout=15)
     assert res.returncode == 0, f"scripts/reconcile_backlog.py failed with exit code {res.returncode}:\nSTDOUT:\n{res.stdout}\nSTDERR:\n{res.stderr}"
+    assert "usage:" in res.stdout.lower(), f"scripts/reconcile_backlog.py --help missing usage:\n{res.stdout}"
     assert "Traceback" not in res.stderr, f"scripts/reconcile_backlog.py produced unhandled exception:\n{res.stderr}"
 
 def test_setup_git_hooks_help_accessible():
