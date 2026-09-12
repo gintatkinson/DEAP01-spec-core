@@ -799,6 +799,21 @@ class ConopsCompletenessValidator(IValidator):
         {"num": 12, "title": "7-Row Emergency Decision & Contingency Matrix", "aliases": ["emergency decision", "contingency matrix", "7-row emergency", "emergency matrix", "emergency decision & contingency matrix", "emg-"]},
     ]
 
+    MANDATORY_SUPER_SYSTEM_SEGMENTS: List[Dict[str, Any]] = [
+        {
+            "name": "Primary Operational Segment",
+            "pattern": r'\b(?:Primary\s+Operational\s+Segment|Air\s+Segment|Operational\s+Segment|Primary\s+Segment|Space\s+Segment|Vehicle\s+Segment)\b',
+        },
+        {
+            "name": "Command & Control Segment",
+            "pattern": r'\b(?:Command\s+(?:&|and)\s+Control\s+Segment|C2\s+Segment|Ground\s+Segment|Ground\s+Control\s+Segment|Control\s+Segment)\b',
+        },
+        {
+            "name": "Auxiliary Support Segment / Launch",
+            "pattern": r'\b(?:Auxiliary\s+Support\s+Segment|Launch(?:\s+(?:&|and)\s+Recovery)?\s+Segment|Support\s+Segment|Launch\s+Segment|Ground\s+Support\s+Segment|Auxiliary\s+Segment|Launch)\b',
+        },
+    ]
+
     CANONICAL_EMERGENCY_TRIGGERS: List[str] = [
         "EMG-01",  # Lost C2 Link
         "EMG-02",  # GNSS Navigation Loss
@@ -1134,10 +1149,11 @@ class ConopsCompletenessValidator(IValidator):
         if "TEMPLATE" not in rel_path.upper():
             findings.extend(self._validate_conops_table_schemas(content, rel_path, matched_sections))
 
-        # Section 4: Operational Justification & Pugh Decision Matrix with S_j(w) Validation (Fixes #130)
+        # Section 4: Operational Justification & Priority Matrix (Fixes #130, #260)
         if 4 in matched_sections and "TEMPLATE" not in rel_path.upper():
             _, sec4_line, sec4_content = matched_sections[4]
             findings.extend(self._validate_pugh_decision_matrix(content, rel_path, sec4_content, sec4_line))
+            findings.extend(self._validate_operational_architecture_coverage(content, rel_path, sec4_content, sec4_line, repo=repo))
 
         # Section 6: SORA 4D Volume & GRB Math Validation
         if 6 in matched_sections:
@@ -1431,6 +1447,91 @@ class ConopsCompletenessValidator(IValidator):
                 location=f"{rel_path}:{sec4_line}",
                 detail={"file": rel_path, "section": 4},
             ))
+
+        return findings
+
+    def _validate_operational_architecture_coverage(
+        self,
+        content: str,
+        rel_path: str,
+        sec4_content: str,
+        sec4_line: int,
+        repo: Optional[WorkspaceRepository] = None,
+    ) -> List[Finding]:
+        """
+        Validates Section 4 Operational Architecture & Metamodel Coverage (Fixes #260):
+        1. Mandatory Super-System segment boundaries (Primary Operational Segment, Command & Control Segment, Auxiliary Support Segment / Launch).
+        2. 100% AST PartDef coverage from schema/DEAP_MODEL.sysml, schema/*.sysml, or .pipeline/schema.sysml.
+        """
+        findings: List[Finding] = []
+
+        # 1. Check Super-System segment boundaries
+        missing_segments: List[str] = []
+        for seg in self.MANDATORY_SUPER_SYSTEM_SEGMENTS:
+            if not re.search(seg["pattern"], sec4_content, re.IGNORECASE):
+                missing_segments.append(seg["name"])
+
+        if missing_segments:
+            findings.append(Finding(
+                "conops-segment-boundaries-missing",
+                f"ConOps Section 4 in '{rel_path}' is missing mandatory Super-System segment boundaries: {', '.join(missing_segments)}.",
+                location=f"{rel_path}:{sec4_line}",
+                detail={"missing_segments": missing_segments, "file": rel_path},
+            ))
+
+        # 2. Check 100% AST PartDef Coverage
+        sysml_files: List[str] = []
+        if repo is not None:
+            pipeline_sysml = os.path.join(repo.workspace_dir, ".pipeline", "schema.sysml")
+            if os.path.isfile(pipeline_sysml):
+                sysml_files.append(pipeline_sysml)
+            for s_name in ("schema", "schemas"):
+                cand_dir = os.path.join(repo.workspace_dir, s_name)
+                if os.path.isdir(cand_dir):
+                    for root, _, files in os.walk(cand_dir):
+                        for f in sorted(files):
+                            if f.endswith(".sysml") and not f.startswith("."):
+                                p = os.path.join(root, f)
+                                if p not in sysml_files:
+                                    sysml_files.append(p)
+        else:
+            if os.path.isfile(".pipeline/schema.sysml"):
+                sysml_files.append(".pipeline/schema.sysml")
+            if os.path.isdir("schema"):
+                for root, _, files in os.walk("schema"):
+                    for f in sorted(files):
+                        if f.endswith(".sysml") and not f.startswith("."):
+                            p = os.path.join(root, f)
+                            if p not in sysml_files:
+                                sysml_files.append(p)
+
+        part_defs: Set[str] = set()
+        for sf in sysml_files:
+            try:
+                with open(sf, "r", encoding="utf-8", errors="ignore") as f:
+                    sf_content = f.read()
+                clean_sf = re.sub(r'/\*.*?\*/', '', sf_content, flags=re.DOTALL)
+                clean_sf = re.sub(r'//.*$', '', clean_sf, flags=re.MULTILINE)
+                matches = re.findall(r'\bpart\s+(?:def\s+)?([A-Za-z0-9_]+)\b', clean_sf)
+                for m in matches:
+                    if m:
+                        part_defs.add(m)
+            except Exception:
+                pass
+
+        if part_defs:
+            sorted_parts = sorted(list(part_defs))
+            missing_parts = [
+                p for p in sorted_parts
+                if not re.search(rf'\b{re.escape(p)}\b', sec4_content, re.IGNORECASE)
+            ]
+            if missing_parts:
+                findings.append(Finding(
+                    "conops-partdef-coverage-incomplete",
+                    f"ConOps Section 4 in '{rel_path}' does not provide 100% AST PartDef coverage; missing {len(missing_parts)} PartDef(s): {', '.join(missing_parts)}.",
+                    location=f"{rel_path}:{sec4_line}",
+                    detail={"missing_partdefs": missing_parts, "file": rel_path},
+                ))
 
         return findings
 

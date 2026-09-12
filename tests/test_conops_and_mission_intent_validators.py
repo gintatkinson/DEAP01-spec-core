@@ -240,6 +240,12 @@ def _get_valid_conops_content() -> str:
     lines.append("Even when cost weighting increases to $w_6 = 0.30$, Candidate B maintains a score advantage of $> 0.85$ over Candidate A and Candidate C.")
     lines.append("The partial derivative vector $\\nabla S_B = [2, 2, 2, 2, 1, 0]^T$ proves strict dominance across all primary safety criteria.")
     lines.append("")
+    lines.append("### 4.4 Super-System Operational Architecture & Segment Boundaries")
+    lines.append("The operational architecture partitions the system across three mandatory Super-System segment boundaries:")
+    lines.append("1. **Primary Operational Segment (Air Segment):** Hosts onboard flight autonomy, flight and guidance controllers (`FlightGuidanceController`, `FlightControlSubsystem`, `FCS`, `NavigationSubsystem`), perception sensors (`PerceptionFusionSubsystem`, `Sensors`), actuators (`ActuatorSubsystem`, `Actuators`, `Containment`), and safety watchdogs (`SafetyWatchdog`, `Watchdog`, `Compute_Subsystem`, `Power_Subsystem`).")
+    lines.append("2. **Command & Control Segment (Ground Segment):** Hosts the telemetry ground control station (`GroundControlStation`), PACE communications terminals, and human operator supervisory consoles (`SupervisoryConsole`).")
+    lines.append("3. **Auxiliary Support Segment (Launch and Recovery Segment / GSE):** Hosts mobile ground support equipment (`GroundSupportEquipment`), launch staging interfaces (`LaunchAndRecoveryUnit`), and battery charging stations (`BatteryManagementSystem`, `BMS`).")
+    lines.append("")
 
     # Section 5
     lines.append("## 5. Operational Modes & Lifecycle Stages")
@@ -1658,6 +1664,89 @@ class TestConOpsAndMissionIntentValidators(unittest.TestCase):
         sens_findings = [f for f in findings if f.rule_id == "conops-pugh-sensitivity-missing"]
         self.assertEqual(len(sens_findings), 1)
         self.assertIn("missing mandatory LaTeX sensitivity equation S_j(w)", str(sens_findings[0]))
+
+    def test_conops_missing_segment_boundaries_fails(self):
+        """ConOps specification missing Section 4 Super-System segment boundaries emits conops-segment-boundaries-missing (Fixes #260)."""
+        full_content = _get_valid_conops_content()
+        # Remove Subsection 4.4 segment boundaries
+        broken_content = full_content.replace(
+            "### 4.4 Super-System Operational Architecture & Segment Boundaries",
+            "### 4.4 Architecture Overview"
+        ).replace(
+            "Primary Operational Segment", "Primary Operations"
+        ).replace(
+            "Air Segment", "Air Component"
+        ).replace(
+            "Command & Control Segment", "Command Line Interface"
+        ).replace(
+            "Ground Segment", "Ground Base"
+        ).replace(
+            "Auxiliary Support Segment", "Auxiliary Tools"
+        ).replace(
+            "Launch", "Deploy"
+        )
+        val = ConopsCompletenessValidator()
+        findings = val._validate_conops_text(broken_content, "docs/conops/CONOPS.md")
+        seg_findings = [f for f in findings if f.rule_id == "conops-segment-boundaries-missing"]
+        self.assertGreaterEqual(len(seg_findings), 1)
+        self.assertIn("missing mandatory Super-System segment boundaries", str(seg_findings[0]))
+
+    def test_conops_incomplete_partdef_coverage_fails(self):
+        """ConOps Section 4 missing AST PartDefs declared in SysML model emits conops-partdef-coverage-incomplete (Fixes #260)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(conops_dir, exist_ok=True)
+
+            sysml_content = """
+            package TestAutonomousSystem {
+                part def FlightGuidanceController;
+                part def BatteryManagementSystem;
+                part def MissingAutonomousActuatorCore;
+            }
+            """
+            with open(os.path.join(schema_dir, "DEAP_MODEL.sysml"), "w", encoding="utf-8") as f:
+                f.write(sysml_content)
+
+            with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
+                f.write(_get_valid_conops_content())
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            val = ConopsCompletenessValidator()
+            findings = val.validate(repo)
+
+            part_findings = [f for f in findings if f.rule_id == "conops-partdef-coverage-incomplete"]
+            self.assertEqual(len(part_findings), 1)
+            self.assertIn("MissingAutonomousActuatorCore", str(part_findings[0]))
+
+    def test_conops_full_operational_architecture_coverage_passes(self):
+        """ConOps Section 4 with 100% AST PartDef coverage and all Super-System segment boundaries passes with 0 findings (Fixes #260)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(conops_dir, exist_ok=True)
+
+            sysml_content = """
+            package TestAutonomousSystem {
+                part def FlightGuidanceController;
+                part def BatteryManagementSystem;
+                part def ActuatorSubsystem;
+            }
+            """
+            with open(os.path.join(schema_dir, "DEAP_MODEL.sysml"), "w", encoding="utf-8") as f:
+                f.write(sysml_content)
+
+            with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
+                f.write(_get_valid_conops_content())
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            val = ConopsCompletenessValidator()
+            findings = val.validate(repo)
+
+            arch_findings = [f for f in findings if f.rule_id in ("conops-segment-boundaries-missing", "conops-partdef-coverage-incomplete")]
+            self.assertEqual(arch_findings, [])
 
     def test_mission_intent_table_aware_energy_reserve_extraction_prevents_false_inequality_trigger(self):
         """

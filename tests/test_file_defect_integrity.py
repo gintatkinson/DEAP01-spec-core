@@ -18,6 +18,11 @@ if REPO_ROOT not in sys.path:
 from scripts.file_defect import (
     validate_defect_body,
     resolve_label,
+    extract_file_location,
+    normalize_file_target,
+    extract_core_title_tokens,
+    find_duplicate_issue,
+    file_defect_issue,
 )
 
 
@@ -271,6 +276,140 @@ class TestFileDefectIntegrity(unittest.TestCase):
                 os.remove(good_path)
             if os.path.exists(bad_path):
                 os.remove(bad_path)
+
+    def test_extract_file_location_and_normalize_target(self):
+        """Verify extraction and path normalization from FILE_LOCATION."""
+        body_with_loc = "## Audit Source\nSEVERITY: Critical\nFILE_LOCATION: skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/conops_completeness_validator.py:1137-1141\n"
+        loc = extract_file_location(body_with_loc)
+        self.assertEqual(loc, "skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/conops_completeness_validator.py:1137-1141")
+
+        norm_path, base_name = normalize_file_target(loc)
+        self.assertEqual(base_name, "conops_completeness_validator.py")
+        self.assertTrue(norm_path.endswith("conops_completeness_validator.py"))
+
+    def test_extract_core_title_tokens(self):
+        """Verify core token extraction strips tags, file extensions, and stopwords."""
+        title = "[AUDIT] conops_completeness_validator.py: missing Super-System segment boundaries and AST part defs"
+        tokens = extract_core_title_tokens(title)
+        self.assertIn("super", tokens)
+        self.assertIn("system", tokens)
+        self.assertIn("segment", tokens)
+        self.assertIn("boundaries", tokens)
+        self.assertIn("part", tokens)
+        self.assertIn("defs", tokens)
+        self.assertNotIn("audit", tokens)
+        self.assertNotIn("missing", tokens)
+
+    def test_find_duplicate_issue_exact_title(self):
+        """Verify duplicate detection on exact or near-exact title match."""
+        existing = [
+            {
+                "number": 260,
+                "title": "[AUDIT] conops_completeness_validator.py: ConopsCompletenessValidator evaluates Section 4 solely for pugh matrix",
+                "body": "FILE_LOCATION: skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/conops_completeness_validator.py:1137-1141",
+                "state": "open",
+                "labels": ["bug"],
+            }
+        ]
+        dup = find_duplicate_issue(
+            candidate_title="conops_completeness_validator.py: ConopsCompletenessValidator evaluates Section 4 solely for pugh matrix",
+            candidate_body=SAMPLE_COMPLIANT_CRITICAL,
+            existing_issues=existing,
+        )
+        self.assertIsNotNone(dup)
+        self.assertEqual(dup["number"], 260)
+
+    def test_find_duplicate_issue_file_location_and_core_tokens(self):
+        """Verify duplicate detection on same FILE_LOCATION and core title tokens."""
+        existing = [
+            {
+                "number": 260,
+                "title": "[AUDIT] conops_completeness_validator.py: missing Super-System segment boundaries and AST part defs",
+                "body": "FILE_LOCATION: skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/conops_completeness_validator.py:1137-1141",
+                "state": "open",
+                "labels": ["bug"],
+            }
+        ]
+        candidate_body = (
+            "## 1. Context\n- **File**: `conops_completeness_validator.py`\n- **Pillar**: Correctness\n- **Symptom**: missing segments\n"
+            "## 2. Root Cause Analysis (5 Whys)\n1. **Why?** Because 1\n2. **Why?** Because 2\n3. **Why?** Because 3\n4. **Why?** Because 4\n5. **Why?** Because 5\n"
+            "## 3. Correctness\nAnalysis\n## 4. UML\n```mermaid\nflowchart TD\nA-->B\n```\n## 5. Affected\nImpact\n## 6. Proposed\nFix\n## 7. Relation\nNone\n"
+            "## Audit Source\nSEVERITY: Important\nFILE_LOCATION: skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/conops_completeness_validator.py\n"
+        )
+        dup = find_duplicate_issue(
+            candidate_title="[AUDIT] conops_completeness_validator.py: missing segment boundaries in Section 4",
+            candidate_body=candidate_body,
+            existing_issues=existing,
+        )
+        self.assertIsNotNone(dup)
+        self.assertEqual(dup["number"], 260)
+
+    def test_find_duplicate_issue_across_all_states_and_fixed_resolved(self):
+        """Verify duplicate detection for previously resolved issues with status:fixed-resolved."""
+        existing = [
+            {
+                "number": 199,
+                "title": "[AUDIT] bridge.cpp: use after free on shutdown",
+                "body": "FILE_LOCATION: cesium_native_bridge/src/bridge.cpp:56-61",
+                "state": "open",
+                "labels": ["bug", "status:fixed-resolved"],
+            }
+        ]
+        dup = find_duplicate_issue(
+            candidate_title="[AUDIT] bridge.cpp: UAF memory safety defect during shutdown",
+            candidate_body=SAMPLE_COMPLIANT_CRITICAL,
+            existing_issues=existing,
+        )
+        self.assertIsNotNone(dup)
+        self.assertEqual(dup["number"], 199)
+
+    def test_find_duplicate_issue_distinct_defects_allowed(self):
+        """Verify that distinct defects in different files or addressing different topics are not flagged as duplicates."""
+        existing = [
+            {
+                "number": 260,
+                "title": "[AUDIT] conops_completeness_validator.py: segment boundaries",
+                "body": "FILE_LOCATION: skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/conops_completeness_validator.py:1137-1141",
+                "state": "open",
+                "labels": ["bug"],
+            }
+        ]
+        dup = find_duplicate_issue(
+            candidate_title="[AUDIT] allocator.cpp: memory cache growth",
+            candidate_body=SAMPLE_COMPLIANT_SUGGESTION,
+            existing_issues=existing,
+        )
+        self.assertIsNone(dup)
+
+    def test_file_defect_issue_deduplication_skips_creation(self):
+        """Verify that file_defect_issue skips filing when duplicate exists and returns 0."""
+        existing = [
+            {
+                "number": 260,
+                "title": "[AUDIT] bridge.cpp: UAF on shutdown",
+                "body": "FILE_LOCATION: cesium_native_bridge/src/bridge.cpp:56-61",
+                "state": "open",
+                "labels": ["bug", "status:fixed-resolved"],
+            }
+        ]
+        with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False) as tf:
+            tf.write(SAMPLE_COMPLIANT_CRITICAL)
+            tf_path = tf.name
+
+        try:
+            exit_code = file_defect_issue(
+                title="[AUDIT] bridge.cpp: UAF memory safety bug on shutdown",
+                body_file=tf_path,
+                repo="gintatkinson/DEAP01-spec-core",
+                label="bug",
+                provider="github",
+                dry_run=False,
+                existing_issues=existing,
+            )
+            self.assertEqual(exit_code, 0)
+        finally:
+            if os.path.exists(tf_path):
+                os.remove(tf_path)
 
 
 if __name__ == "__main__":

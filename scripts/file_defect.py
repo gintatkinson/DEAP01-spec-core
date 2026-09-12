@@ -22,11 +22,12 @@ Usage:
 """
 
 import argparse
+import json
 import os
 import re
 import subprocess
 import sys
-from typing import List, Optional
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PARITY_AUDITOR_SRC = os.path.join(REPO_ROOT, "skills", "spec-orchestrator", "parity_auditor", "src")
@@ -177,6 +178,148 @@ def validate_defect_body(
     return errors
 
 
+STOPWORDS = {
+    "the", "a", "an", "and", "or", "for", "with", "from", "that", "this", "in", "on", "at",
+    "by", "to", "of", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had",
+    "do", "does", "did", "audit", "bug", "defect", "issue", "file", "error", "fails", "failed",
+    "failing", "missing", "pillar", "critical", "important", "suggestion", "nitpick", "src",
+    "scripts", "tests", "validators", "core", "parity_auditor"
+}
+
+
+def extract_file_location(body_text: str) -> Optional[str]:
+    """Extracts raw FILE_LOCATION line value from defect body."""
+    if not body_text:
+        return None
+    m = re.search(r"^FILE_LOCATION:\s*(\S+.*)$", body_text, re.MULTILINE)
+    return m.group(1).strip() if m else None
+
+
+def normalize_file_target(file_loc: Optional[str]) -> Tuple[str, str]:
+    """
+    Returns (normalized_full_path, base_filename) from FILE_LOCATION.
+    Strips line number annotations (e.g. ':1137-1141' or ':56-61').
+    """
+    if not file_loc:
+        return "", ""
+    clean = file_loc.split(":")[0].strip().strip("`* ")
+    norm_path = os.path.normpath(clean).lower()
+    base_name = os.path.basename(clean).lower()
+    return norm_path, base_name
+
+
+def extract_core_title_tokens(title: str) -> Set[str]:
+    """
+    Extracts meaningful core keyword tokens from an issue title,
+    stripping bracket tags like [AUDIT], file extensions, numbers, and stopwords.
+    """
+    if not title:
+        return set()
+    clean_title = re.sub(r'\[[^\]]*\]', ' ', title)
+    raw_tokens = re.findall(r'[a-zA-Z0-9_]{3,}', clean_title.lower())
+    return {tok for tok in raw_tokens if tok not in STOPWORDS and not tok.isdigit()}
+
+
+def find_duplicate_issue(
+    candidate_title: str,
+    candidate_body: str,
+    existing_issues: List[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    """
+    Searches across existing issues (regardless of state: open, closed, status:fixed-resolved)
+    to find duplicates based on exact title match, or matching FILE_LOCATION and core title tokens.
+    """
+    cand_file_raw = extract_file_location(candidate_body)
+    cand_norm_path, cand_base_name = normalize_file_target(cand_file_raw)
+    cand_tokens = extract_core_title_tokens(candidate_title)
+    cand_title_clean = re.sub(r'\[[^\]]*\]', '', candidate_title).strip().lower()
+
+    for issue in existing_issues:
+        issue_title = str(issue.get("title", "")).strip()
+        issue_body = str(issue.get("body", "") or issue.get("description", ""))
+        issue_title_clean = re.sub(r'\[[^\]]*\]', '', issue_title).strip().lower()
+
+        # 1. Exact or normalized title match
+        if cand_title_clean and (cand_title_clean == issue_title_clean or candidate_title.strip().lower() == issue_title.lower()):
+            return issue
+
+        # 2. FILE_LOCATION matching + core title token overlap
+        ex_file_raw = extract_file_location(issue_body)
+        ex_norm_path, ex_base_name = normalize_file_target(ex_file_raw)
+
+        same_file = False
+        if cand_norm_path and ex_norm_path:
+            if cand_norm_path == ex_norm_path or cand_base_name == ex_base_name:
+                same_file = True
+        elif cand_base_name and (cand_base_name in issue_title.lower() or cand_base_name in issue_body.lower()):
+            same_file = True
+        elif ex_base_name and (ex_base_name in candidate_title.lower() or ex_base_name in candidate_body.lower()):
+            same_file = True
+
+        if same_file:
+            ex_tokens = extract_core_title_tokens(issue_title)
+            common_tokens = cand_tokens & ex_tokens
+            if len(common_tokens) >= 2:
+                return issue
+            if cand_tokens and ex_tokens:
+                jaccard = len(common_tokens) / len(cand_tokens | ex_tokens)
+                if jaccard >= 0.25:
+                    return issue
+                if len(cand_tokens) <= 2 and len(common_tokens) >= 1:
+                    return issue
+
+    return None
+
+
+def fetch_existing_issues(
+    repo: str,
+    provider: str = "github",
+) -> List[Dict[str, Any]]:
+    """Fetches all existing issues across all states (open, closed) from tracker CLI."""
+    prov = provider.lower()
+    if prov == "github":
+        cmd = [
+            "gh",
+            "issue",
+            "list",
+            "--repo",
+            repo,
+            "--state",
+            "all",
+            "--limit",
+            "200",
+            "--json",
+            "number,title,labels,body,state",
+        ]
+        try:
+            res = subprocess.run(cmd, capture_output=True, text=True)
+            if res.returncode == 0 and res.stdout.strip():
+                return json.loads(res.stdout)
+        except Exception:
+            pass
+    elif prov == "gitlab":
+        cmd = [
+            "glab",
+            "issue",
+            "list",
+            "--repo",
+            repo,
+            "--all",
+            "--per-page",
+            "100",
+            "--output",
+            "json",
+        ]
+        try:
+            res = subprocess.run(cmd, capture_output=True, text=True)
+            if res.returncode == 0 and res.stdout.strip():
+                return json.loads(res.stdout)
+        except Exception:
+            pass
+
+    return []
+
+
 def resolve_label(severity: Optional[str], provider: str = "github", explicit_label: Optional[str] = None) -> str:
     """Resolve issue label from finding severity and provider target."""
     if explicit_label:
@@ -198,12 +341,40 @@ def file_defect_issue(
     label: str,
     provider: str = "github",
     dry_run: bool = False,
+    existing_issues: Optional[List[Dict[str, Any]]] = None,
 ) -> int:
-    """Files a validated defect issue to GitHub or GitLab."""
+    """Files a validated defect issue to GitHub or GitLab, preventing duplicates across all states."""
     prov = provider.lower()
     if prov not in ("github", "gitlab"):
         print(f"Error: Unsupported provider '{provider}'. Must be 'github' or 'gitlab'.", file=sys.stderr)
         return 1
+
+    try:
+        with open(body_file, "r", encoding="utf-8") as f:
+            body_content = f.read()
+    except OSError as exc:
+        print(f"Error reading body file {body_file}: {exc}", file=sys.stderr)
+        return 1
+
+    # Deduplication check across all issue states
+    if existing_issues is None and not dry_run:
+        existing_issues = fetch_existing_issues(repo, provider=prov)
+
+    if existing_issues:
+        duplicate = find_duplicate_issue(title, body_content, existing_issues)
+        if duplicate:
+            issue_id = duplicate.get("number") or duplicate.get("iid") or duplicate.get("id") or "UNKNOWN"
+            issue_title = duplicate.get("title", "")
+            issue_state = duplicate.get("state", "")
+            labels_raw = duplicate.get("labels", [])
+            labels_str = ", ".join(
+                [lbl.get("name", "") if isinstance(lbl, dict) else str(lbl) for lbl in labels_raw]
+            )
+            print(
+                f"[DEDUPLICATION] Duplicate defect detected matching existing issue #{issue_id} "
+                f"('{issue_title}') [state: {issue_state}, labels: [{labels_str}]]. Skipping duplicate filing."
+            )
+            return 0
 
     if dry_run:
         print("[DRY RUN] Defect validation PASSED. Target payload:")
@@ -229,8 +400,6 @@ def file_defect_issue(
             body_file,
         ]
     else:  # gitlab
-        with open(body_file, "r", encoding="utf-8") as f:
-            body_content = f.read()
         cmd = [
             "glab",
             "issue",
