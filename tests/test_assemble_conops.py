@@ -1310,10 +1310,48 @@ Functional purpose for SubsystemB.
             self.assertTrue(any("Coverage Gate failed: Missing declared AST part def(s): SubsystemC" in e for e in errors_bad))
 
     def test_multi_domain_super_system_and_subsystem_architecture(self):
-        """Verify multi-domain Super-System and Subsystem Architecture synthesis across all 6 domains (Issue #246)."""
-        domains = ["aviation", "medical", "rail", "marine", "space", "industrial"]
-        for dom in domains:
+        """Verify multi-domain Super-System and Subsystem Architecture synthesis from SysML AST (Issue #246, #257)."""
+        domain_models = {
+            "aviation": """
+                package AviationPlatform {
+                    part def AirframeStructure { doc /* Airframe structure */ }
+                    part def OnboardComputer { doc /* Dual redundant flight controller */ }
+                }
+            """,
+            "medical": """
+                package MedicalPlatform {
+                    part def SurgeonMasterConsole { doc /* Master tele-op console */ }
+                    part def ManipulatorArmSubsystem { doc /* Patient-side manipulator */ }
+                }
+            """,
+            "rail": """
+                package RailPlatform {
+                    part def TractionController { doc /* Traction inverter control */ }
+                    part def BrakingActuationSubsystem { doc /* Failsafe braking unit */ }
+                }
+            """,
+            "marine": """
+                package MarinePlatform {
+                    part def PressureHullStructure { doc /* Titanium hull */ }
+                    part def ThrusterPropulsionSubsystem { doc /* Multi-axis thruster */ }
+                }
+            """,
+            "space": """
+                package SpacePlatform {
+                    part def ADCSAttitudeController { doc /* ADCS computer */ }
+                    part def SolarPowerDistribution { doc /* GaAs solar array */ }
+                }
+            """,
+            "industrial": """
+                package IndustrialPlatform {
+                    part def NavigationLidarModule { doc /* Safety LiDAR */ }
+                    part def DriveWheelActuation { doc /* Servo drive wheels */ }
+                }
+            """,
+        }
+        for dom, sysml_code in domain_models.items():
             engine = SysMLParameterBindingEngine(domain=dom, auto_detect=False)
+            engine.ingest_sysml_text(sysml_code)
             super_sys = engine.resolve_token("SUPER_SYSTEM_ARCHITECTURE")
             subsys_arch = engine.resolve_token("SUBSYSTEM_ARCHITECTURE_SECTION")
 
@@ -1325,7 +1363,7 @@ Functional purpose for SubsystemB.
             self.assertIn("Operational Lifecycle & Statechart Integration", subsys_arch)
             self.assertIn("Safety Invariants & Containment Interlocks", subsys_arch)
 
-            # Check domain-specific aspects
+            # Check domain-specific aspects derived deterministically from AST
             if dom == "medical":
                 self.assertIn("SurgeonMasterConsole", subsys_arch)
                 self.assertIn("ManipulatorArmSubsystem", subsys_arch)
@@ -1344,6 +1382,15 @@ Functional purpose for SubsystemB.
             elif dom == "aviation":
                 self.assertIn("AirframeStructure", subsys_arch)
                 self.assertIn("OnboardComputer", subsys_arch)
+
+    def test_conops_architecture_zero_hardcoded_domain_heuristics(self):
+        """Verify ConOps assembly engine has zero hardcoded domain fallback parts (Issue #257)."""
+        engine = SysMLParameterBindingEngine(domain="medical", auto_detect=False)
+        self.assertEqual(engine.ast_parts, [])
+        self.assertEqual(engine.ast_part_names, set())
+        subsys_arch = engine.resolve_token("SUBSYSTEM_ARCHITECTURE_SECTION")
+        self.assertNotIn("SurgeonMasterConsole", subsys_arch)
+        self.assertNotIn("ManipulatorArmSubsystem", subsys_arch)
 
 
 if __name__ == "__main__":

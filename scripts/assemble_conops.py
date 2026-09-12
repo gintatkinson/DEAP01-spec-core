@@ -1459,53 +1459,32 @@ class SysMLParameterBindingEngine:
         self._explicit_keys.add("SUBSYSTEM_ARCHITECTURE_SECTION")
         self._explicit_keys.add("CONOPS_SECTION_4_SUBSYSTEMS")
 
-    def _synthesize_super_system_architecture_text(self, sys_id: str, dom: str) -> str:
-        """Generates Section 4.7 Super-System Architecture Markdown with Mermaid diagram."""
-        if dom == "medical":
-            seg_primary = "Surgical / Patient Interface Manipulator Segment"
-            seg_c2 = "Surgeon Master Console & Tele-Operation Segment"
-            seg_aux = "Sterilization, Power & OR Integration Segment"
-            c2_desc = "Low-Latency Dual-Channel Master-Slave Control Link"
-        elif dom == "rail":
-            seg_primary = "Locomotive / Train Traction & Guidance Segment"
-            seg_c2 = "Wayside Signal & Dispatch Control Center (C2)"
-            seg_aux = "Depot Stabling, Maintenance & Electrification Segment"
-            c2_desc = "ETCS Level 2/3 Radio Block Center (RBC) Link"
-        elif dom == "marine":
-            seg_primary = "Subsea / Surface Autonomous Vessel Platform Segment"
-            seg_c2 = "Mothership / Shore-Based Operations Control Center"
-            seg_aux = "Deployment, Launch & Recovery System (LARS) Segment"
-            c2_desc = "Acoustic / Satellite Bidirectional Telemetry Link"
-        elif dom == "space":
-            seg_primary = "Orbital Spacecraft / Bus & Payload Segment"
-            seg_c2 = "Mission Operations Center & Ground Tracking Network"
-            seg_aux = "Launch Vehicle Adapter & Separation System Segment"
-            c2_desc = "Space-to-Ground CCSDS Telemetry & Telecommand Link"
-        elif dom == "industrial":
-            seg_primary = "Autonomous Mobile Robot (AMR / AGV) Fleet Segment"
-            seg_c2 = "Warehouse Fleet Management & Traffic Controller (C2)"
-            seg_aux = "Automated Battery Swap & Induction Charging Station"
-            c2_desc = "Industrial Wi-Fi / Private 5G Real-Time Guidance Link"
-        else:  # aviation
-            seg_primary = "Autonomous Air Vehicle Platform Segment"
-            seg_c2 = "Ground Command & Control Station (C2 Segment)"
-            seg_aux = "Catapult Launch & Ground Support Equipment (GSE Segment)"
-            c2_desc = "Bidirectional PACE C2 Telemetry & Command Link"
+    def _synthesize_super_system_architecture_text(self, sys_id: str, dom: str = "") -> str:
+        """Generates Section 4.7 Super-System Architecture Markdown derived deterministically from SysML AST."""
+        parts = self.ast_parts if self.ast_parts else []
+        subsys_names = [getattr(p, "name", str(p)) for p in parts]
+        subsys_summary = ", ".join(subsys_names) if subsys_names else "Declared System Subsystems"
 
         lines = [
             f"The **{sys_id}** super-system architecture formalizes the complete cyber-physical system boundary and segment allocations in accordance with ISO/IEC/IEEE 29148:2018 §6.4.2 and INCOSE Systems Engineering Handbook v5.0.",
             "",
-            f"The super-system decomposes across three formal operational segments:",
-            f"1. **Primary Operational Segment ({seg_primary}):** Houses all safety-critical onboard flight and autonomy subsystems, executing closed-loop mission activities, real-time sensing, guidance, power distribution, and actuation within the declared operational volume.",
-            f"2. **Ground Control Segment ({seg_c2}):** Provides supervisory human-on-the-loop (HOTL) and human-in-the-loop (HITL) command oversight, trajectory approval, situational awareness monitoring, and failsafe abort authority.",
-            f"3. **Launch & Support Segment ({seg_aux}):** Provides pre-operational deployment acceleration, precision mechanical launching, field support fixtures, automated battery recharge, and diagnostic servicing.",
+            f"The super-system decomposes across declared SysML AST architectural blocks:",
+            f"1. **Primary Operational Segment:** Houses constituent subsystems ({subsys_summary}) executing closed-loop mission activities.",
+            f"2. **Ground Command & Control Segment:** Provides supervisory oversight and failsafe abort authority.",
+            f"3. **Auxiliary Support Segment:** Provides pre-operational deployment, servicing, and diagnostic support.",
             "",
             "```mermaid",
             "flowchart TD",
             f'    subgraph "Operational Super-System Architecture ({sys_id})"',
             '        subgraph "Primary Operational Segment"',
             f'            Platform["{sys_id} Core Platform"]',
-            '            Subsystems["Constituent Subsystems\\n(Avionics, Sensors, Actuation, Comms, Power, Safety)"]',
+        ]
+        if subsys_names:
+            subsys_labels = "\\n".join(subsys_names[:6])
+            lines.append(f'            Subsystems["Constituent Subsystems\\n({subsys_labels})"]')
+        else:
+            lines.append('            Subsystems["Constituent Subsystems\\n(Declared System Subsystems)"]')
+        lines.extend([
             '            Platform --> Subsystems',
             '        end',
             '',
@@ -1520,95 +1499,17 @@ class SysMLParameterBindingEngine:
             '            GSE["Support Equipment & Maintenance"]',
             '        end',
             '',
-            f'        GCS <-->|"{c2_desc}"| Platform',
+            '        GCS <-->|"Bidirectional C2 Telemetry & Command Link"| Platform',
             '        Launch -.->|"Pre-Mission Deployment / Release"| Platform',
             '        GSE -.->|"Servicing & Diagnostics"| Platform',
             '    end',
             "```",
-        ]
+        ])
         return "\n".join(lines)
 
-    def _get_default_domain_parts(self, dom: str) -> List[Any]:
-        """Returns canonical domain parts when no explicit SysML AST model is present."""
-        if dom == "medical":
-            part_specs = [
-                ("SurgeonMasterConsole", "Ergonomic master tele-operation console and high-resolution stereoscopic display", [("p_master_c2", "out", "MasterCommandPort"), ("p_video_in", "in", "StereoVideoPort")]),
-                ("ManipulatorArmSubsystem", "Multi-DOF robotic patient-side manipulator arm with high-precision joint encoders", [("p_joint_cmd", "in", "JointCmdPort"), ("p_joint_feedback", "out", "EncoderFeedbackPort")]),
-                ("EndoscopicVisionSubsystem", "Dual-camera 3D endoscopic vision processor with sub-millimeter tracking", [("p_video_stream", "out", "VideoStreamPort"), ("p_light_ctrl", "in", "IlluminationPort")]),
-                ("ActuationDriverUnit", "Deterministic motor servo drive electronics with redundant current limiting", [("p_motor_pwm", "out", "MotorDrivePort"), ("p_dc_pwr", "in", "PowerRailPort")]),
-                ("PowerSupplyModule", "Medical-grade isolated uninterruptible power supply (UPS) and battery backup", [("p_grid_ac", "in", "ACInputPort"), ("p_dc_out", "out", "IsolatedDCPort")]),
-                ("SafetyWatchdogModule", "Independent hardware safety supervisor with e-stop joint braking interlock", [("p_estop_in", "in", "SafetyDiscretePort"), ("p_brake_trip", "out", "BrakeActuatePort")]),
-            ]
-        elif dom == "rail":
-            part_specs = [
-                ("LocomotiveHeavyChassis", "Heavy-duty steel chassis and structural bogie frame assembly", [("p_coupler_load", "inout", "LoadSensorPort")]),
-                ("TractionController", "High-power IGBT traction inverter control and anti-slip dynamic braking unit", [("p_throttle_cmd", "in", "ThrottleCmdPort"), ("p_inverter_gate", "out", "IGBTGatePort")]),
-                ("BrakingActuationSubsystem", "Pneumatic and electro-dynamic failsafe braking actuator unit", [("p_brake_pipe", "inout", "PneumaticLinePort"), ("p_brake_cmd", "in", "BrakeCmdPort")]),
-                ("SensorTelemetryModule", "Axle speed encoders, hotbox infrared sensors, and trackside transponder reader", [("p_balise_rf", "in", "BaliseRFPort"), ("p_telemetry_out", "out", "SensorDataPort")]),
-                ("RadioCommunicationsLink", "ETCS / GSM-R / FRMCS redundant train-to-wayside communication transponder", [("p_radio_rf", "inout", "RFDatalinkPort"), ("p_train_bus", "inout", "WTB_Port")]),
-                ("PowerConverterModule", "High-voltage catenary transformer and auxiliary hotel load power distribution", [("p_pantograph", "in", "CatenaryACPort"), ("p_aux_pwr", "out", "AuxPowerPort")]),
-            ]
-        elif dom == "marine":
-            part_specs = [
-                ("PressureHullStructure", "Titanium and syntactic foam hull rated for deep ocean hydrostatic pressure", [("p_hull_stress", "out", "StrainSensorPort")]),
-                ("NavigationSonarSuite", "Forward-looking obstacle avoidance and multibeam bathymetric sonar processor", [("p_sonar_transducer", "inout", "AcousticArrayPort"), ("p_nav_data", "out", "NavDataPort")]),
-                ("ThrusterPropulsionSubsystem", "Multi-axis brushless DC thruster propulsion and hydrodynamic vectoring unit", [("p_thruster_cmd", "in", "ThrusterCmdPort"), ("p_rpm_feedback", "out", "RPMFeedbackPort")]),
-                ("BatteryPowerSystem", "Pressure-tolerant lithium-ion energy storage and subsea BMS enclosure", [("p_batt_bus", "out", "DCPowerPort"), ("p_bms_telemetry", "out", "BMSTelemetryPort")]),
-                ("AcousticModemComms", "Long-range through-water acoustic communications modem and emergency pinger", [("p_hydrophone", "inout", "HydrophonePort")]),
-                ("EmergencyBallastControl", "Independent failsafe drop-weight and buoyancy recovery release squib mechanism", [("p_drop_squib", "in", "SquibDiscretePort"), ("p_depth_trigger", "in", "DepthSensorPort")]),
-            ]
-        elif dom == "space":
-            part_specs = [
-                ("SpacecraftBusChassis", "Space-grade aluminum-honeycomb primary structure and thermal radiator panels", [("p_thermal_coupler", "inout", "HeatPipePort")]),
-                ("ADCSAttitudeController", "Autonomous Attitude Determination & Control System computer and star tracker", [("p_star_tracker", "in", "OpticalSensorPort"), ("p_adcs_cmd", "out", "TorqueCmdPort")]),
-                ("ReactionWheelActuation", "Precision momentum exchange reaction wheel cluster and magnetic torque rods", [("p_rw_torque", "in", "TorqueDemandPort"), ("p_tach_out", "out", "TachometerPort")]),
-                ("SolarPowerDistribution", "Triple-junction GaAs solar array, MPPT charge controllers, and battery distribution", [("p_solar_input", "in", "PhotovoltaicPort"), ("p_regulated_bus", "out", "SpacePowerBusPort")]),
-                ("RFTransponderComms", "Dual-band S/X-band transponder, patch antennas, and high-gain dish tracking link", [("p_rf_antenna", "inout", "SpacecraftRFPort"), ("p_ccsds_bus", "inout", "CCSDS_PacketPort")]),
-                ("PayloadSensorInstrument", "Scientific/operational multi-spectral imaging or radar sensor instrument payload", [("p_payload_data", "out", "HighSpeedDataPort"), ("p_sync_clock", "in", "ClockSyncPort")]),
-            ]
-        elif dom == "industrial":
-            part_specs = [
-                ("AGVHeavyChassis", "Heavy-duty welded steel mobile chassis, mast assembly, and caster suspension", [("p_bumper_sw", "in", "BumperSwitchPort")]),
-                ("NavigationLidarModule", "360-degree safety and navigation LiDAR with real-time SLAM pose estimation", [("p_lidar_points", "out", "PointcloudPort"), ("p_safety_field", "out", "SafetyZonePort")]),
-                ("DriveWheelActuation", "Dual differential servo drive wheels and electro-mechanical holding brakes", [("p_drive_velocity", "in", "VelocityCmdPort"), ("p_wheel_enc", "out", "EncoderPort")]),
-                ("BatteryManagementSystem", "Fast-charge LiFePO4 battery pack with automated induction charging interface", [("p_charge_plate", "in", "InductivePowerPort"), ("p_system_dc", "out", "SystemPowerPort")]),
-                ("SafetyLaserScanner", "PLd / Cat 3 certified dual optical zone scanner with dynamic muting logic", [("p_scanner_beam", "inout", "OpticalFieldPort"), ("p_safety_stop", "out", "OSSD_StopPort")]),
-                ("FleetManagementClient", "Industrial Wi-Fi / 5G MQTT client interfacing with warehouse traffic controller", [("p_wlan_rf", "inout", "IndustrialWLANPort"), ("p_mission_queue", "inout", "MissionQueuePort")]),
-            ]
-        else:  # aviation
-            part_specs = [
-                ("AirframeStructure", "Carbon-fiber composite aerodynamic airframe and load-bearing fuselage structure", [("p_pitot_static", "in", "PitotStaticPort")]),
-                ("OnboardComputer", "Dual-redundant flight control and mission autonomy processing core with MPU isolation", [("p_c2_bus", "inout", "C2DatalinkBus"), ("p_sensor_bus", "in", "SensorInBus"), ("p_actuator_bus", "out", "ActuatorDemandBus")]),
-                ("SensorSuite", "Integrated IMU, GNSS receiver, radar altimeter, and optical air-data sensing suite", [("p_imu_raw", "out", "IMUDataPort"), ("p_gnss_fix", "out", "GNSSFixPort")]),
-                ("ActuationSubsystem", "Direct-drive brushless aerodynamic control surface servos with current feedback", [("p_servo_demand", "in", "PWMDemandPort"), ("p_pos_feedback", "out", "PositionFeedbackPort")]),
-                ("PropulsionSubsystem", "High-efficiency brushless electric propulsion motor, ESC, and propeller assembly", [("p_esc_throttle", "in", "ThrottleDemandPort"), ("p_rpm_telemetry", "out", "TelemetryPort")]),
-                ("CommunicationsSubsystem", "Multi-tier PACE datalink transceivers (C-band P2P, LTE, UHF, and Satellite link)", [("p_rf_antenna", "inout", "RFTransceiverPort"), ("p_c2_stream", "inout", "C2PacketStreamPort")]),
-                ("PowerDistributionSubsystem", "High-density lithium battery pack, BMS controller, and dual-redundant 28V/5V DC rails", [("p_batt_cell", "in", "BatteryCellPort"), ("p_regulated_28v", "out", "PowerRail28V")]),
-                ("RTASafetyNet", "Independent hardware Run-Time Assurance monitor and emergency failsafe watchdog", [("p_sensor_crosscheck", "in", "SensorCrossCheckPort"), ("p_failsafe_squib", "out", "FailsafeSquibPort")]),
-                ("GroundStationRadio", "Ground control station directional tracking antenna and C2 transponder node", [("p_ground_rf", "inout", "GroundRFPort"), ("p_ethernet_c2", "inout", "GCSNetworkPort")]),
-                ("PL40CatapultLauncher", "Pneumatic / mechanical catapult launcher providing pre-flight launch acceleration", [("p_shuttle_hook", "inout", "MechanicalReleasePort"), ("p_launch_fire", "in", "LaunchFireCommandPort")]),
-            ]
-
-        res = []
-        for name, doc, ports in part_specs:
-            part_obj = type("FallbackPart", (), {
-                "name": name,
-                "doc": doc,
-                "ports": [type("FallbackPort", (), {"name": p_n, "direction": p_d, "type_name": p_t, "doc": f"Interface {p_n} for {name}"})() for p_n, p_d, p_t in ports],
-                "actions": [],
-                "attributes": [],
-                "constraints": [],
-            })()
-            res.append(part_obj)
-        return res
-
-    def _synthesize_subsystem_architecture_text(self, sys_id: str, dom: str) -> str:
+    def _synthesize_subsystem_architecture_text(self, sys_id: str, dom: str = "") -> str:
         """Generates Section 4.8 Subsystem Architecture Markdown for 100% of declared AST parts."""
-        parts_to_render = []
-        if self.ast_parts:
-            parts_to_render = self.ast_parts
-        else:
-            parts_to_render = self._get_default_domain_parts(dom)
+        parts_to_render = self.ast_parts if self.ast_parts else []
 
         lines = [
             f"In accordance with ISO/IEC/IEEE 29148:2018 §6.4.2 and the pure schema-driven compiler invariant, all {len(parts_to_render)} declared SysML AST structural part blocks are allocated dedicated operational architecture specifications with formal interface, resource, lifecycle, and safety invariant bindings:",
@@ -3646,11 +3547,12 @@ def assemble_document(
     if link_errors:
         errors.extend(link_errors)
 
-    # 100% AST Part Coverage Validation Gate for ConOps Section 4 (Issue #246)
+    # 100% AST Part Coverage Validation Gate for ConOps Section 4 / Section 4.8 (Issue #246, #256, #257)
     if param_engine.ast_part_names:
+        sec4_8_match = re.search(r"(?:^|\n)###?\s*4\.8[.\s].*?(?=(?:\n###?\s*4\.[0-79]|\n##?\s*5[.\s]|\Z))", assembled, re.DOTALL)
         sec4_match = re.search(r"(?:^|\n)##?\s*4[.\s].*?(?=(?:\n##?\s*5[.\s]|\Z))", assembled, re.DOTALL)
-        sec4_text = sec4_match.group(0) if sec4_match else assembled
-        missing_parts = [p for p in sorted(param_engine.ast_part_names) if p not in sec4_text]
+        target_text = sec4_8_match.group(0) if sec4_8_match else (sec4_match.group(0) if sec4_match else assembled)
+        missing_parts = [p for p in sorted(param_engine.ast_part_names) if p not in target_text]
         if missing_parts:
             errors.append(
                 f"ConOps Section 4 AST Part Coverage Gate failed: Missing declared AST part def(s): {', '.join(missing_parts)} in Section 4."

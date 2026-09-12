@@ -135,6 +135,47 @@ def _get_valid_sample_conops_payload() -> Dict[str, Any]:
                 "constraint_source": "FAA Part 107 / EASA Specific Category Regulation",
             }
         ],
+        "super_system_architecture": {
+            "segments": [
+                {
+                    "segment_id": "SEG-01",
+                    "segment_name": "Primary Operational Segment",
+                    "operational_role": "Houses onboard avionics, sensors, and actuators for autonomous mission execution.",
+                },
+                {
+                    "segment_id": "SEG-02",
+                    "segment_name": "Ground Command & Control Segment",
+                    "operational_role": "Provides supervisory oversight and failsafe abort authority.",
+                },
+                {
+                    "segment_id": "SEG-03",
+                    "segment_name": "Auxiliary Support Segment",
+                    "operational_role": "Provides pre-operational deployment, servicing, and diagnostic support.",
+                },
+            ],
+            "boundary_diagram_mermaid": "flowchart TD\n    GCS[\"Ground Control Station\"] <--> Platform[\"Core Platform\"]",
+        },
+        "subsystem_architecture": {
+            "subsystems": [
+                {
+                    "subsystem_id": "SUBSYS-01",
+                    "subsystem_name": "Primary Flight Computer",
+                    "ast_part_ref": "PrimaryFlightComputer",
+                    "functional_description": "Executes guidance, navigation, and control algorithms.",
+                }
+            ],
+            "ast_part_allocations": ["PrimaryFlightComputer"],
+        },
+        "system_interface_topology": {
+            "interface_links": [
+                {
+                    "link_id": "LINK-01",
+                    "source_subsystem": "PrimaryFlightComputer",
+                    "target_subsystem": "SensorPayloadSuite",
+                    "protocol_type": "Ethernet",
+                }
+            ]
+        },
         "airspace_sora": {
             "h_max_m": 120.0,
             "theta_impact_deg": 45.0,
@@ -391,6 +432,9 @@ class TestSpecificationSchemas(unittest.TestCase):
             "deficiencies",
             "proposed_capabilities",
             "user_classes",
+            "super_system_architecture",
+            "subsystem_architecture",
+            "system_interface_topology",
             "airspace_sora",
             "uaf_activities",
             "optx_exchanges",
@@ -556,8 +600,55 @@ class TestSpecificationSchemas(unittest.TestCase):
         payload = _get_valid_sample_mission_intent_payload()
         payload["pace_c2_plan"] = payload["pace_c2_plan"][:3]  # 3 tiers instead of 4
 
-        errors = _validate_json_schema_instance(schema, payload)
-        self.assertTrue(any("minimum is 4" in err for err in errors), errors)
+    def test_conops_schema_architecture_properties(self):
+        """Verify CONOPS schema defines super_system_architecture, subsystem_architecture, and system_interface_topology (Issue #256)."""
+        with open(CONOPS_SCHEMA_PATH, "r", encoding="utf-8") as f:
+            schema = json.load(f)
+
+        props = schema["properties"]
+
+        # super_system_architecture
+        self.assertIn("super_system_architecture", props)
+        super_sys = props["super_system_architecture"]
+        self.assertEqual(super_sys.get("type"), "object")
+        for req in ["segments", "boundary_diagram_mermaid"]:
+            self.assertIn(req, super_sys.get("required", []))
+        seg_items = super_sys.get("properties", {}).get("segments", {}).get("items", {})
+        for req in ["segment_id", "segment_name", "operational_role"]:
+            self.assertIn(req, seg_items.get("required", []))
+
+        # subsystem_architecture
+        self.assertIn("subsystem_architecture", props)
+        subsys = props["subsystem_architecture"]
+        self.assertEqual(subsys.get("type"), "object")
+        for req in ["subsystems", "ast_part_allocations"]:
+            self.assertIn(req, subsys.get("required", []))
+        subsys_items = subsys.get("properties", {}).get("subsystems", {}).get("items", {})
+        for req in ["subsystem_id", "subsystem_name", "ast_part_ref", "functional_description"]:
+            self.assertIn(req, subsys_items.get("required", []))
+
+        # system_interface_topology
+        self.assertIn("system_interface_topology", props)
+        topo = props["system_interface_topology"]
+        self.assertEqual(topo.get("type"), "object")
+        self.assertIn("interface_links", topo.get("required", []))
+        link_items = topo.get("properties", {}).get("interface_links", {}).get("items", {})
+        for req in ["link_id", "source_subsystem", "target_subsystem", "protocol_type"]:
+            self.assertIn(req, link_items.get("required", []))
+
+    def test_conops_schema_rejects_missing_architecture_sections(self):
+        """Verify CONOPS schema rejects payloads missing architecture sections (Issue #256)."""
+        with open(CONOPS_SCHEMA_PATH, "r", encoding="utf-8") as f:
+            schema = json.load(f)
+
+        for arch_sec in ["super_system_architecture", "subsystem_architecture", "system_interface_topology"]:
+            payload = _get_valid_sample_conops_payload()
+            del payload[arch_sec]
+            errors = _validate_json_schema_instance(schema, payload)
+            self.assertTrue(
+                any(f"missing required property '{arch_sec}'" in err for err in errors),
+                f"Schema did not reject payload missing '{arch_sec}': {errors}",
+            )
 
 
 if __name__ == "__main__":

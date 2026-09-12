@@ -10,6 +10,9 @@
     "deficiencies",
     "proposed_capabilities",
     "user_classes",
+    "super_system_architecture",
+    "subsystem_architecture",
+    "system_interface_topology",
     "airspace_sora",
     "uaf_activities",
     "optx_exchanges",
@@ -176,6 +179,144 @@
         },
         "additionalProperties": true
       }
+    },
+    "super_system_architecture": {
+      "type": "object",
+      "description": "Section 4.7: Operational Super-System Architecture and Segment Allocation in accordance with ISO/IEC/IEEE 29148:2018 §6.4.2.",
+      "required": [
+        "segments",
+        "boundary_diagram_mermaid"
+      ],
+      "properties": {
+        "segments": {
+          "type": "array",
+          "description": "Operational system segments (Primary Operational, Ground C2, Auxiliary Support).",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "segment_id",
+              "segment_name",
+              "operational_role"
+            ],
+            "properties": {
+              "segment_id": {
+                "type": "string",
+                "description": "Unique segment identifier (e.g., SEG-01)."
+              },
+              "segment_name": {
+                "type": "string",
+                "description": "Formal segment title."
+              },
+              "operational_role": {
+                "type": "string",
+                "description": "Operational responsibilities and role allocated to this segment."
+              }
+            },
+            "additionalProperties": true
+          }
+        },
+        "boundary_diagram_mermaid": {
+          "type": "string",
+          "description": "Mermaid flowchart diagram defining segment boundary interfaces."
+        }
+      },
+      "additionalProperties": true
+    },
+    "subsystem_architecture": {
+      "type": "object",
+      "description": "Section 4.8: Subsystem Architecture with 100% AST part definition coverage in accordance with ISO/IEC/IEEE 29148:2018 §6.4.3.",
+      "required": [
+        "subsystems",
+        "ast_part_allocations"
+      ],
+      "properties": {
+        "subsystems": {
+          "type": "array",
+          "description": "Subsystem architecture entries for all declared AST part def nodes.",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "subsystem_id",
+              "subsystem_name",
+              "ast_part_ref",
+              "functional_description"
+            ],
+            "properties": {
+              "subsystem_id": {
+                "type": "string",
+                "description": "Unique subsystem identifier (e.g., SUBSYS-01)."
+              },
+              "subsystem_name": {
+                "type": "string",
+                "description": "Formal subsystem title."
+              },
+              "ast_part_ref": {
+                "type": "string",
+                "description": "Matching SysML v2 AST part def name."
+              },
+              "functional_description": {
+                "type": "string",
+                "description": "Functional purpose and scope of the subsystem."
+              }
+            },
+            "additionalProperties": true
+          }
+        },
+        "ast_part_allocations": {
+          "type": "array",
+          "description": "List of all AST part def names covered by the subsystem architecture.",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "system_interface_topology": {
+      "type": "object",
+      "description": "System interface topology linking internal subsystems and external operational actors.",
+      "required": [
+        "interface_links"
+      ],
+      "properties": {
+        "interface_links": {
+          "type": "array",
+          "description": "Interface interconnect links between subsystems and actors.",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "link_id",
+              "source_subsystem",
+              "target_subsystem",
+              "protocol_type"
+            ],
+            "properties": {
+              "link_id": {
+                "type": "string",
+                "description": "Unique interface link identifier (e.g., LINK-01)."
+              },
+              "source_subsystem": {
+                "type": "string",
+                "description": "Originating subsystem or external entity."
+              },
+              "target_subsystem": {
+                "type": "string",
+                "description": "Destination subsystem or external entity."
+              },
+              "protocol_type": {
+                "type": "string",
+                "description": "Physical or logical protocol type (e.g., CAN, Ethernet, RS422, Discrete)."
+              }
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": true
     },
     "airspace_sora": {
       "type": "object",
