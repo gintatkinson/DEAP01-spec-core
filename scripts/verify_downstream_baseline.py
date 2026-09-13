@@ -1824,7 +1824,7 @@ def _validate_aggregate_safety_content(
     ast_errors, ast_report, _expected_actions = validate_safety_matrix_ast(aggregate_safety_content, model_text)
     errors.extend(ast_errors)
 
-    errors.extend(_validate_safety_matrix_pillars(aggregate_safety_content, ast_path_active=model_text is not None))
+    errors.extend(_validate_safety_matrix_pillars(aggregate_safety_content, ast_path_active=model_text is not None, model_text=model_text))
     return errors, ast_report
 
 
@@ -1850,7 +1850,11 @@ def validate_safety_matrix_content(
     return errors
 
 
-def _validate_safety_matrix_pillars(content: str, ast_path_active: bool = False) -> list:
+def _validate_safety_matrix_pillars(
+    content: str,
+    ast_path_active: bool = False,
+    model_text: Optional[str] = None,
+) -> list:
     """Validate the 8-pillar schema presence checks (regex-based) plus structural counts.
 
     When ast_path_active is True, the shallow regex UCA-category and SORA-OSO
@@ -1946,9 +1950,13 @@ def _validate_safety_matrix_pillars(content: str, ast_path_active: bool = False)
         if missing_osos:
             errors.append(f"Pillar 8 violation: Missing mandatory SORA Operational Safety Objectives: {', '.join(missing_osos)}.")
 
-    # ASTM F3269-17 RTA Architecture
-    if not (re.search(r'ASTM\s+F3269', content, re.IGNORECASE) and re.search(r'Run-Time\s+Assurance|\bRTA\b|Safety\s+Net', content, re.IGNORECASE)):
-        errors.append("Safety Architecture violation: Missing ASTM F3269-17 Run-Time Assurance (RTA) / Safety Net specification.")
+    # ASTM F3269-17 RTA Architecture (AST-conditional)
+    has_model_rta = bool(model_text and re.search(r'ASTM\s+F3269|Run[- ]Time\s+Assurance|\bRTA\b|Safety[-_ ]?Net', model_text, re.IGNORECASE))
+    has_content_rta = bool(re.search(r'ASTM\s+F3269|Run-Time\s+Assurance|\bRTA\b|Safety\s+Net', content, re.IGNORECASE))
+
+    if has_model_rta or has_content_rta:
+        if not (re.search(r'ASTM\s+F3269', content, re.IGNORECASE) and re.search(r'Run-Time\s+Assurance|\bRTA\b|Safety\s+Net', content, re.IGNORECASE)):
+            errors.append("Safety Architecture violation: Missing ASTM F3269-17 Run-Time Assurance (RTA) / Safety Net specification.")
 
     # MATLAB / Simulink / Stateflow hooks
     if not re.search(r'MATLAB|Simulink|Stateflow|Embedded\s+Coder|SLDV', content, re.IGNORECASE):

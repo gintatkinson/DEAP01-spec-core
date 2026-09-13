@@ -3589,8 +3589,14 @@ def assemble_document(
     if link_errors:
         errors.extend(link_errors)
 
-    # 100% AST Part Coverage Validation Gate for ConOps Section 4 / Section 4.8 (Issue #246, #256, #257)
-    if param_engine.ast_part_names:
+    # 100% AST Part Coverage Validation Gate for ConOps Section 4 / Section 4.8 (Issue #246, #256, #257, #269)
+    is_conops = (
+        canonical_whitelist == CANONICAL_CONOPS_UNITS
+        or "concept of operations" in meta.get("title", "").lower()
+        or "conops" in meta.get("title", "").lower()
+        or (canonical_whitelist is None and "mission" not in meta.get("title", "").lower())
+    )
+    if is_conops and param_engine.ast_part_names:
         sec4_8_match = re.search(r"(?:^|\n)###?\s*4\.8[.\s].*?(?=(?:\n###?\s*4\.[0-79]|\n##?\s*5[.\s]|\Z))", assembled, re.DOTALL)
         sec4_match = re.search(r"(?:^|\n)##?\s*4[.\s].*?(?=(?:\n##?\s*5[.\s]|\Z))", assembled, re.DOTALL)
         target_text = sec4_8_match.group(0) if sec4_8_match else (sec4_match.group(0) if sec4_match else assembled)

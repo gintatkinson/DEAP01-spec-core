@@ -1539,6 +1539,54 @@ Formal operational lifecycle stages across $\\Phi_{\\mathrm{lifecycle}}$:
         self.assertNotIn("SurgeonMasterConsole", subsys_arch)
         self.assertNotIn("ManipulatorArmSubsystem", subsys_arch)
 
+    def test_assemble_conops_with_ast_parts_compiles_both_conops_and_mission_intent(self):
+        """Verify assemble_conops() compiles both CONOPS.md and MISSION_INTENT.md without false-positive coverage errors on Mission Intent when ast_parts is non-empty (Issues #269, #270)."""
+        sysml_model = """
+        package TestPlatform {
+            part def PrimaryController { doc /* Primary control module */ }
+            part def ActuationSubsystem { doc /* Actuation drive unit */ }
+            part def TelemetryRadio { doc /* C2 communications */ }
+        }
+        """
+        engine = SysMLParameterBindingEngine(auto_detect=False)
+        engine.ingest_sysml_text(sysml_model)
+        self.assertTrue(len(engine.ast_parts) > 0)
+        self.assertTrue(len(engine.ast_part_names) > 0)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            input_dir = os.path.join(tmpdir, "units")
+            output_dir = os.path.join(tmpdir, "docs", "conops")
+            conops_units_dir = os.path.join(input_dir, "conops")
+            mission_units_dir = os.path.join(input_dir, "mission_intent")
+
+            _create_sample_conops_units(conops_units_dir, with_placeholders=True)
+            _create_sample_mission_intent_units(mission_units_dir, with_placeholders=True)
+
+            success = assemble_conops(
+                input_dir=input_dir,
+                output_dir=output_dir,
+                verify_only=False,
+                params=engine,
+            )
+            self.assertTrue(success, "assemble_conops() failed with non-empty ast_parts")
+
+            conops_file = os.path.join(output_dir, "CONOPS.md")
+            mission_file = os.path.join(output_dir, "MISSION_INTENT.md")
+
+            self.assertTrue(os.path.isfile(conops_file))
+            self.assertTrue(os.path.isfile(mission_file))
+
+            with open(conops_file, "r", encoding="utf-8") as f:
+                conops_text = f.read()
+            with open(mission_file, "r", encoding="utf-8") as f:
+                mission_text = f.read()
+
+            self.assertIn("PrimaryController Subsystem Architecture", conops_text)
+            self.assertIn("ActuationSubsystem Subsystem Architecture", conops_text)
+            self.assertIn("TelemetryRadio Subsystem Architecture", conops_text)
+            self.assertIn("## 1. Commander's Intent & Operational Objectives", mission_text)
+            self.assertIn("## 10. Gate 24 MissionTask Traceability Tags", mission_text)
+
 
 if __name__ == "__main__":
     unittest.main()

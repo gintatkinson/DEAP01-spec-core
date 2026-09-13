@@ -234,6 +234,27 @@ def test_astm_f3269_rta_and_commercial_toolchain_hooks():
     assert any("MATLAB / Simulink" in err for err in errors)
 
 
+def test_non_rta_system_not_rejected_when_ast_and_content_omit_rta():
+    """Verify valid non-RTA systems (where neither SysML AST nor safety content declares RTA) are not rejected."""
+    base_content = read_fixture("complete_stpa_matrix.md")
+
+    # Strip all RTA mentions to simulate a valid non-RTA cyber-physical or medical system
+    non_rta_content = (
+        base_content
+        .replace("ASTM F3269-17 RTA | ", "")
+        .replace("ASTM F3269-17", "")
+        .replace("ASTM F3269", "")
+        .replace("Run-Time Assurance", "Deterministic Statechart")
+        .replace("(`RTA`)", "")
+        .replace("(RTA)", "")
+        .replace("RTA_", "Failsafe_")
+        .replace("Safety Net", "Failsafe Architecture")
+        .replace("safety net", "failsafe")
+    )
+    errors = validate_safety_matrix_content(non_rta_content)
+    assert not any("ASTM F3269-17" in err for err in errors)
+
+
 def test_truncated_cartesian_matrix_rejected(tmpdir):
     """Verify a truncated UCA cartesian matrix (12 of 16 permutations) is rejected."""
     truncated_content = read_fixture("truncated_uca_matrix.md")

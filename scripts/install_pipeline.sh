@@ -349,7 +349,7 @@ EOF
 
 # Transform and scaffold downstream .agents/AGENTS.md and root AGENTS.md with full governance armor
 mkdir -p "$TARGET_DIR/.agents"
-python3 -c "
+python3 - "$INSTALLER_ROOT" "$TARGET_DIR" << 'EOF'
 import os, sys
 
 installer_root = sys.argv[1]
@@ -360,13 +360,13 @@ with open(src_agents_path, 'r', encoding='utf-8') as f:
     content = f.read()
 
 upstream_header = '''## Repository Role & Scope Classification
-- **Repository Classification:** \`UPSTREAM_SPEC_CORE_COMPILER\` (Digital Engineering Agent Platform Core Specification Compiler)
-- **Sentinel Indicator:** The presence of \`.pipeline/upstream/\` and \`skills/spec-orchestrator/\` denotes that this repository is the **Upstream Specification Core Compiler**, NOT a downstream customer application workspace or domain template.
+- **Repository Classification:** `UPSTREAM_SPEC_CORE_COMPILER` (Digital Engineering Agent Platform Core Specification Compiler)
+- **Sentinel Indicator:** The presence of `.pipeline/upstream/` and `skills/spec-orchestrator/` denotes that this repository is the **Upstream Specification Core Compiler**, NOT a downstream customer application workspace or domain template.
 - **Domain Template & Customer Data Boundary:** Domain-specific platforms (e.g. UAS safety, automotive, medical) and customer applications belong in downstream distribution repositories, and must NOT be committed to this upstream specification core compiler repository.'''
 
 downstream_header = '''## Repository Role & Scope Classification
-- **Repository Classification:** \`DOWNSTREAM_CUSTOMER_PROJECT\` (Domain-Specific Safety-Critical Engineering Project)
-- **Sentinel Indicator:** The absence of \`.pipeline/upstream/\` denotes that this repository is an active **Downstream Customer Project Workspace**, authorized for concrete application code implementation and domain feature delivery.
+- **Repository Classification:** `DOWNSTREAM_CUSTOMER_PROJECT` (Domain-Specific Safety-Critical Engineering Project)
+- **Sentinel Indicator:** The absence of `.pipeline/upstream/` denotes that this repository is an active **Downstream Customer Project Workspace**, authorized for concrete application code implementation and domain feature delivery.
 - **Customer Application Scope:** Customer-specific application code, domain nodes/modules, domain tests, mission envelopes, and proprietary safety models are developed, tested, and maintained directly within this project workspace across any target domain (Aerospace, Medical, Space, Industrial AGV, Subsea, Rail).'''
 
 if upstream_header in content:
@@ -387,7 +387,7 @@ with open(dot_agents_path, 'w', encoding='utf-8') as f:
 
 with open(root_agents_path, 'w', encoding='utf-8') as f:
     f.write(transformed)
-" "$INSTALLER_ROOT" "$TARGET_DIR"
+EOF
 
 # Scaffold downstream root CLAUDE.md if missing
 if [ ! -f "$TARGET_DIR/CLAUDE.md" ]; then
