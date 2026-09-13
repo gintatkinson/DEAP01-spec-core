@@ -545,7 +545,7 @@ def _extract_numeric_range(val_str: str) -> Optional[Tuple[float, float]]:
         return None
 
     # 1. Bracketed mathematical intervals e.g. [0, 1800], [0,1800], [0 ; 2^8-1], [0; 255]
-    m_bracket = re.search(r'\[\s*([-+]?\d+(?:\.\d+)?)\s*[,;–—\-]\s*([^\]]+)\]', s)
+    m_bracket = re.search(r'\[\s*([-+]?\d+(?:\.\d+)?)\s*[,;\u2013\u2014\-]\s*([^\]]+)\]', s)
     if m_bracket:
         try:
             v1 = float(m_bracket.group(1))
@@ -566,7 +566,7 @@ def _extract_numeric_range(val_str: str) -> Optional[Tuple[float, float]]:
 
     # 2. General range patterns e.g. '4.4 - 5.0 GHz', '13-14 bar', '49–50 V', '60 km / 90 km', '60km/180km'
     m = re.search(
-        r'([-+]?\d+(?:\.\d+)?)\s*(?:[a-zA-Z/%^]+)?\s*(?:[-–—/,;]|to|or|\.{2,3})\s*([-+]?\d+(?:\.\d+)?)',
+        r'([-+]?\d+(?:\.\d+)?)\s*(?:[a-zA-Z/%^]+)?\s*(?:[\-\u2013\u2014/,;]|to|or|\.{2,3})\s*([-+]?\d+(?:\.\d+)?)',
         s
     )
     if m:
