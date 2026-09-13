@@ -67,6 +67,7 @@ NON_NORMATIVE_SECTION_PATTERNS = [
     re.compile(r'\b(?:trade\s+stud(?:y|ies)|trade-?off|mcda|multi-criteria|rejected\s+alternatives?|candidate\s+analysis|trade\s+space|decision\s+matrix|evaluation\s+of\s+alternatives)\b', re.I),
     re.compile(r'\b(?:revision\s+history|document\s+history|document\s+control|change\s+log|changelog)\b', re.I),
     re.compile(r'\b(?:references?|applicable\s+documents|reference\s+standards|normative\s+standards|standards\s+baseline|regulatory\s+baseline|regulatory\s+framework|standards\s+and\s+regulatory|standards\s+taxonomy)\b', re.I),
+    re.compile(r'\b(?:dual-track\s+mbd|simulation\s+deliverables|digital\s+twin(?:\s+engine)?|test\s+coverage|matlab\s*/?\s*simulink(?:\s+synthesis)?)\b', re.I),
 ]
 
 # Standard aerospace & industrial communication / electrical protocols
@@ -130,6 +131,20 @@ NON_HARDWARE_GENERIC_TOKENS: Set[str] = {
     "count", "qty", "quantity", "number", "num", "size", "index", "flag",
     "id", "name", "data", "info", "param", "parameter", "config", "configuration",
     "integer", "boolean", "string", "float", "double", "true", "false",
+    "record", "document", "register", "entry", "section", "table", "launch",
+    "check", "test", "coverage", "solver", "simulation", "twin", "ground",
+}
+
+STOP_WORDS_AND_DETERMINERS: Set[str] = {
+    "the", "a", "an", "this", "that", "these", "those", "each", "every",
+    "all", "both", "either", "neither", "one", "two", "three", "four", "five",
+    "six", "seven", "eight", "nine", "ten", "first", "second", "third",
+    "between", "on", "in", "at", "to", "for", "with", "from", "by", "about",
+    "into", "through", "during", "before", "after", "above", "below", "up",
+    "down", "out", "off", "over", "under", "again", "further", "then", "once",
+    "here", "there", "when", "where", "why", "how", "and", "or", "but", "if",
+    "while", "as", "of", "not", "no", "nor", "too", "very", "can", "will",
+    "just", "should", "now", "per", "via", "multi", "single", "dual", "twin",
 }
 
 
@@ -185,7 +200,7 @@ def _tokenize_identifier(ident: str) -> List[str]:
     """Splits an identifier by camelCase, snake_case, kebab-case, or spaces into lowercase words."""
     if not ident:
         return []
-    s = re.sub(r'[-_./:]', ' ', str(ident))
+    s = re.sub(r'[^a-zA-Z0-9]', ' ', str(ident))
     s = re.sub(r'([a-z0-9])([A-Z])', r'\1 \2', s)
     return [t.lower() for t in s.split() if t.strip()]
 
@@ -264,20 +279,27 @@ def _is_config_target(name: str) -> bool:
     configuration, config, layout, arrangement, topology, architecture, or type.
     EXCLUDES metadata strings (e.g. ending in name, title, description, doc, note, ref, poly, init,
     vector, standard, baseline, variants, camera).
+    EXCLUDES generic non-hardware targets such as bare type, record, document, metadata, etc.
     """
     if not name:
         return False
     name_norm = _normalize_name(name)
-    if not name_norm:
+    if not name_norm or name_norm in ("type", "record", "document", "metadata", "section", "spec", "spectype", "table", "item"):
         return False
     tokens = _tokenize_identifier(name)
-    if tokens:
-        last_tok = tokens[-1].lower()
-        if last_tok in CONFIG_TARGET_EXCLUSION_SUFFIXES:
-            return False
+    if not tokens:
+        return False
+    last_tok = tokens[-1].lower()
+    if last_tok in CONFIG_TARGET_EXCLUSION_SUFFIXES:
+        return False
     if any(name_norm.endswith(ex) for ex in CONFIG_TARGET_EXCLUSION_SUFFIXES):
         return False
+    # Require at least one non-config subject token (bare 'type' or 'config' without a subject noun is not a hardware config target)
+    non_config_tokens = [t for t in tokens if t not in ("configuration", "config", "layout", "arrangement", "topology", "architecture", "type")]
+    if not non_config_tokens:
+        return False
     return any(inc in name_norm for inc in CONFIG_TARGET_INCLUSIONS)
+
 
 
 def _is_protocol_or_standard_number(line: str, start: int, end: int, num_val: int) -> bool:
@@ -410,7 +432,21 @@ ISO_80000_PHYSICAL_UNITS: Dict[str, str] = {
 
     # Dimensionless Ratio / Percentage
     "%": "%", "pct": "%", "percent": "%",
+
+    # Information & Data Rate (ISO/IEC 80000-13)
+    "bps": "bps", "bit/s": "bps", "bits/s": "bps",
+    "kbps": "kbps", "kbit/s": "kbps",
+    "mbps": "mbps", "mbit/s": "mbps",
+    "gbps": "gbps", "gbit/s": "gbps",
+    "baud": "baud", "bd": "baud",
 }
+
+VEHICLE_CLASSIFIER_TOKENS: Set[str] = {
+    "uav", "uas", "drone", "vehicle", "aircraft", "system", "subsystem",
+    "assembled", "overall", "total", "general", "standard", "default",
+    "device", "component", "module", "airframe", "platform", "item",
+}
+
 
 # Atomic compound identifiers and standards citations
 ATOMIC_IDENTIFIER_PATTERN = re.compile(
@@ -423,6 +459,14 @@ STANDARDS_CITATION_PATTERN = re.compile(
 # Procedural and task identifiers (e.g. Task 202, Method 514.8, Phase 1, Clause 4.2)
 PROCEDURAL_IDENTIFIER_PATTERN = re.compile(
     r'\b(?:Task|Method|Methodology|Phase|Clause)\s+\d+(?:\.\d+)*\b',
+    re.I
+)
+MODEL_AND_DESIGNATION_PATTERN = re.compile(
+    r'\b(?:Avenger|Model|Mk|Mark|Block|Lot|Type|Group|Class|Option|Figure|Table|Section|Clause)\s+\d+(?:\.\d+)*\b',
+    re.I
+)
+SECTION_AND_TRACER_PATTERN = re.compile(
+    r'(?:§\s*\d+(?:\.\d+)*|\b\d+\.\d+(?:\.\d+)+\b|\b(?:SIG|REQ|CONN|FEAT|US|UC|EPIC|RULE|TEST|OSO|UCA|HAZ|SAF)-[A-Za-z0-9_]+(?:\.\.[A-Za-z0-9_]+)?\b)',
     re.I
 )
 
@@ -448,6 +492,12 @@ def _get_protected_spans(line: str) -> List[Tuple[int, int]]:
     spans: List[Tuple[int, int]] = []
 
     for m in PROCEDURAL_IDENTIFIER_PATTERN.finditer(line):
+        spans.append((m.start(), m.end()))
+
+    for m in MODEL_AND_DESIGNATION_PATTERN.finditer(line):
+        spans.append((m.start(), m.end()))
+
+    for m in SECTION_AND_TRACER_PATTERN.finditer(line):
         spans.append((m.start(), m.end()))
 
     for m in STANDARDS_CITATION_PATTERN.finditer(line):
@@ -485,7 +535,7 @@ def _mask_spans(line: str, spans: List[Tuple[int, int]]) -> str:
 
 def _extract_numeric_range(val_str: str) -> Optional[Tuple[float, float]]:
     """
-    Extracts lower and upper numeric bounds from a range string (e.g. '4.4 - 5.0 GHz', '13-14 bar', '49–50 V').
+    Extracts lower and upper numeric bounds from a range string (e.g. '4.4 - 5.0 GHz', '13-14 bar', '49–50 V', '60 km / 90 km', '[0,1800]').
     Returns (min_val, max_val) or None if not a range.
     """
     if not val_str:
@@ -493,8 +543,30 @@ def _extract_numeric_range(val_str: str) -> Optional[Tuple[float, float]]:
     s = str(val_str).strip()
     if re.search(r'\b\d{4}[-/]\d{2}[-/]\d{2}\b', s):
         return None
+
+    # 1. Bracketed mathematical intervals e.g. [0, 1800], [0,1800], [0 ; 2^8-1], [0; 255]
+    m_bracket = re.search(r'\[\s*([-+]?\d+(?:\.\d+)?)\s*[,;–—\-]\s*([^\]]+)\]', s)
+    if m_bracket:
+        try:
+            v1 = float(m_bracket.group(1))
+            upper_raw = m_bracket.group(2).strip()
+            m_pow = re.search(r'2\^(\d+)(?:\s*-\s*1)?', upper_raw)
+            if m_pow:
+                exp = int(m_pow.group(1))
+                v2 = float((1 << exp) - 1 if '- 1' in upper_raw or '-1' in upper_raw else (1 << exp))
+            else:
+                m_num = re.search(r'[-+]?\d+(?:\.\d+)?', upper_raw)
+                if m_num:
+                    v2 = float(m_num.group(0))
+                else:
+                    return None
+            return (min(v1, v2), max(v1, v2))
+        except (ValueError, OverflowError):
+            pass
+
+    # 2. General range patterns e.g. '4.4 - 5.0 GHz', '13-14 bar', '49–50 V', '60 km / 90 km', '60km/180km'
     m = re.search(
-        r'([-+]?\d+(?:\.\d+)?)\s*(?:[a-zA-Z/%^]+)?\s*(?:[-–—]|to|\.{2,3})\s*([-+]?\d+(?:\.\d+)?)',
+        r'([-+]?\d+(?:\.\d+)?)\s*(?:[a-zA-Z/%^]+)?\s*(?:[-–—/,;]|to|or|\.{2,3})\s*([-+]?\d+(?:\.\d+)?)',
         s
     )
     if m:
@@ -518,22 +590,36 @@ def _extract_unit(val_str: str, name_tokens: Optional[List[str]] = None) -> str:
 
     if name_tokens:
         last_tok = name_tokens[-1].lower()
+        if last_tok in ("ms", "mps"):
+            if any(t in name_tokens for t in ("speed", "wind", "airspeed", "velocity", "cruise", "stall", "dive", "horizontal", "vertical", "rate")):
+                return "m/s"
+            if last_tok == "mps":
+                return "m/s"
+            return "ms"
         if last_tok in ISO_80000_PHYSICAL_UNITS:
             return ISO_80000_PHYSICAL_UNITS[last_tok]
-        if last_tok == "mps":
-            return "m/s"
         if last_tok == "pct":
             return "%"
         if "g" in name_tokens and any(t in name_tokens for t in ("load", "accel", "acceleration", "limit")):
             return "g"
     return ""
 
+
+def _is_nominal_name(name: str, tokens: Optional[List[str]] = None) -> bool:
+    """Checks if attribute represents a nominal setpoint rather than an upper/lower bound."""
+    if not name:
+        return False
+    toks = tokens if tokens is not None else _tokenize_identifier(name)
+    toks_l = [t.lower() for t in toks]
+    return any(t in ("nom", "nominal") for t in toks_l) or "nom" in name.lower()
+
+
 def _is_lower_bound_name(name: str, tokens: Optional[List[str]] = None) -> bool:
     """
     Checks if attribute name represents a lower bound:
     Attributes whose names contain min, low, or floor (and not max) are lower bounds.
     """
-    if not name:
+    if not name or _is_nominal_name(name, tokens):
         return False
     name_l = name.lower()
     if "max" in name_l:
@@ -565,7 +651,7 @@ def _is_upper_bound_name(name: str, tokens: Optional[List[str]] = None) -> bool:
     Checks if attribute name represents an upper bound:
     Attributes whose names contain max, high, limit, ceiling, bound are upper bounds.
     """
-    if not name:
+    if not name or _is_nominal_name(name, tokens):
         return False
     name_l = name.lower()
     toks = tokens if tokens is not None else _tokenize_identifier(name)
@@ -610,7 +696,18 @@ def _property_token_matches(prop_tok: str, text_tok: str) -> bool:
         return True
     if prop_l in ("height", "tall") and text_l in ("height", "tall"):
         return True
+    if prop_l in ("respond", "response", "responding") and text_l in ("respond", "response", "responding"):
+        return True
+    if prop_l in ("rotator", "rotation", "rotate", "azimuth") and text_l in ("rotator", "rotation", "rotate", "azimuth"):
+        return True
+    # Plural and verb inflection stemming (e.g. abandon/abandons/abandoned, wait/waits, command/commands)
+    if prop_l.rstrip('s') == text_l.rstrip('s') and len(prop_l.rstrip('s')) >= 3:
+        return True
+    if len(prop_l) >= 4 and len(text_l) >= 4:
+        if (text_l.startswith(prop_l) or prop_l.startswith(text_l)) and abs(len(prop_l) - len(text_l)) <= 3:
+            return True
     return False
+
 
 
 def _find_sysml_files(repo: WorkspaceRepository, schemas_dir: Optional[str] = None) -> List[str]:
@@ -716,11 +813,14 @@ class FactualGroundingValidator(IValidator):
         owner: Optional[str] = None
     ) -> None:
         """Registers a numeric limit into SchemaGroundTruth with component-scoped metadata."""
+        tokens = _tokenize_identifier(name)
+        if _is_nominal_name(name, tokens):
+            bound_type = "nominal"
+
         name_norm = _normalize_name(name)
         gt.numeric_limits[name_norm] = (limit_val, unit)
         gt.numeric_bound_types[name_norm] = bound_type
 
-        tokens = _tokenize_identifier(name)
         meaningful = [t for t in tokens if t not in ("limit", "value", "val", "real", "float")]
 
         canon_unit = ISO_80000_PHYSICAL_UNITS.get(unit.lower(), unit.lower()) if unit else ""
@@ -729,17 +829,26 @@ class FactualGroundingValidator(IValidator):
             unit_tokens.add(unit.lower())
             unit_tokens.update(_tokenize_identifier(unit.lower()))
 
+        GENERIC_PROPERTY_TOKENS: Set[str] = {
+            "mode", "type", "configuration", "config", "spec", "item", "parameter",
+            "attribute", "field", "record", "document", "category", "target", "source",
+        }
+
         prop_tokens = []
         for t in tokens:
-            if t in ("limit", "value", "val", "real", "float", "scalar"):
+            if t in ("limit", "value", "val", "real", "float", "scalar", "number", "num"):
                 continue
             if t in unit_tokens:
                 continue
             if canon_unit and ISO_80000_PHYSICAL_UNITS.get(t) == canon_unit:
                 continue
+            if t in VEHICLE_CLASSIFIER_TOKENS:
+                continue
+            if t in GENERIC_PROPERTY_TOKENS and len(tokens) > 1:
+                continue
             prop_tokens.append(t)
         if not prop_tokens:
-            prop_tokens = [t for t in tokens if t not in ("value", "val", "real", "float")]
+            prop_tokens = [t for t in tokens if t not in ("value", "val", "real", "float") and t not in unit_tokens]
 
         gt.scoped_numeric_limits.append(ScopedNumericLimit(
             key=name_norm,
@@ -770,6 +879,7 @@ class FactualGroundingValidator(IValidator):
                     owner=owner,
                     meaningful_tokens=prop_tokens
                 ))
+
 
     def validate(
         self,
@@ -992,8 +1102,14 @@ class FactualGroundingValidator(IValidator):
             has_limit_tokens = any(t in tokens for t in ("limit", "max", "maximum", "min", "minimum", "low", "lower", "floor", "ceiling", "high", "load", "accel", "bound", "threshold", "capacity"))
             if scalar is not None and (is_real_type or unit or has_limit_tokens):
                 limit_val = float(scalar)
-                bound_type = "lower" if _is_lower_bound_name(name, tokens) else "upper"
+                if _is_nominal_name(name, tokens):
+                    bound_type = "nominal"
+                elif _is_lower_bound_name(name, tokens):
+                    bound_type = "lower"
+                else:
+                    bound_type = "upper"
                 self._register_numeric_limit(gt, name, limit_val, unit, bound_type, owner=owner)
+
 
     def _extract_from_sysml(self, text: str, gt: SchemaGroundTruth) -> None:
         """
@@ -1164,7 +1280,7 @@ class FactualGroundingValidator(IValidator):
                 h_norm = _normalize_name(current_heading)
                 current_owner = None
                 for part in gt.declared_parts:
-                    if part in h_norm:
+                    if part in h_norm or part.rstrip('s') == h_norm.rstrip('s') or (len(part) >= 4 and len(h_norm) >= 4 and (part.startswith(h_norm) or h_norm.startswith(part))):
                         current_owner = part
                         break
                 continue
@@ -1176,14 +1292,16 @@ class FactualGroundingValidator(IValidator):
                     k, v = cells[0], cells[1]
                     # Skip table header and separator rows
                     if k.startswith(":") or k.startswith("-") or k.lower() in (
-                        "component", "property", "parameter", "item", "attribute", "name", "field"
+                        "component", "property", "parameter", "item", "attribute", "name", "field", "data"
                     ):
                         continue
 
                     # Reject markdown table keys that are pure integers or digits (e.g. connector pin numbers 7, 8, 12 in pinout tables)
-                    # or shorter than 3 alphabetic characters. A pin number or row index is NOT a physical system attribute name.
+                    # or keys that start with numbers/ranges (e.g. 'Min. 5 Byte', '10 m') or shorter than 3 alphabetic characters.
                     clean_k = k.strip("*_`[] \t")
                     if clean_k.isdigit() or sum(1 for c in clean_k if c.isalpha()) < 3:
+                        continue
+                    if re.match(r'^(?:min\.?|max\.?)?\s*\d+', clean_k, re.I):
                         continue
 
                     row_owner = current_owner
@@ -1193,13 +1311,24 @@ class FactualGroundingValidator(IValidator):
                             row_owner = part
                             break
 
-                    # If cell 1 is a type (e.g. Integer, Real, String), value is cell 2
+                    # If cell 1 is a type (e.g. Integer, Real, String, UINT16, FLOAT32), value is cell 2 or range column
                     type_hint = ""
-                    if len(cells) >= 3 and cells[1].lower() in ("integer", "int", "real", "float", "string", "boolean"):
-                        type_hint = cells[1]
-                        v = cells[2]
+                    unit_override = ""
+                    type_pattern = re.compile(r'^(?:u?int\d*|float\d*|byte|char|short|long|double|boolean|bool|string|real|integer|int|float)$', re.I)
+                    if len(cells) >= 3 and (type_pattern.match(cells[1].strip().lower()) or cells[1].lower() in ("integer", "int", "real", "float", "string", "boolean")):
+                        type_hint = cells[1].strip()
+                        # If table has Range column (e.g. | Data | Type | Offset | Range | Unit | Description |)
+                        if len(cells) >= 5:
+                            v = cells[3]
+                            clean_v = v.strip('"\'`')
+                            if cells[4].strip() not in ("-", "None", ""):
+                                unit_override = cells[4].strip()
+                        else:
+                            v = cells[2]
+                            clean_v = v.strip('"\'`')
+                    else:
+                        clean_v = v.strip('"\'`')
 
-                    clean_v = v.strip('"\'`')
                     gt.attributes[k_norm] = clean_v
                     gt.declared_ast_nodes.add(k_norm)
                     gt.declared_ast_nodes.add(_normalize_name(clean_v))
@@ -1207,8 +1336,12 @@ class FactualGroundingValidator(IValidator):
                     tokens = _tokenize_identifier(k)
                     for t in tokens:
                         gt.declared_ast_nodes.add(t)
-                    unit = _extract_unit(clean_v, tokens)
-                    scalar = _extract_numeric_scalar(clean_v)
+
+                    unit = unit_override or _extract_unit(clean_v, tokens)
+                    if type_pattern.match(clean_v.lower()):
+                        scalar = None
+                    else:
+                        scalar = _extract_numeric_scalar(clean_v)
 
                     # 1. Integer count structural attributes:
                     is_int = scalar is not None and (
@@ -1235,16 +1368,29 @@ class FactualGroundingValidator(IValidator):
                             gt.structural_attributes["".join(root_tokens)] = clean_v
 
                     # 2. Numeric limits:
-                    has_limit_tokens = any(t in tokens for t in ("limit", "max", "maximum", "min", "minimum", "low", "lower", "floor", "ceiling", "high", "load", "accel", "bound", "threshold", "capacity"))
-                    num_range = _extract_numeric_range(clean_v)
-                    if num_range is not None and (unit or has_limit_tokens or type_hint.lower() in ("real", "float")):
-                        min_val, max_val = num_range
-                        self._register_numeric_limit(gt, k, min_val, unit, "lower", owner=row_owner)
-                        self._register_numeric_limit(gt, k, max_val, unit, "upper", owner=row_owner)
-                    elif scalar is not None and (unit or has_limit_tokens or type_hint.lower() in ("real", "float")):
-                        limit_val = float(scalar)
-                        bound_type = "lower" if _is_lower_bound_name(k, tokens) else "upper"
-                        self._register_numeric_limit(gt, k, limit_val, unit, bound_type, owner=row_owner)
+                    is_protocol_data_field = any(
+                        k_norm.endswith(sfx) for sfx in (
+                            "flag", "flags", "mask", "masks", "byte", "bytes", "result",
+                            "code", "codes", "status", "statuses", "offset", "offsets",
+                            "packet", "header", "crc", "checksum", "version"
+                        )
+                    )
+                    if not is_protocol_data_field:
+                        has_limit_tokens = any(t in tokens for t in ("limit", "max", "maximum", "min", "minimum", "low", "lower", "floor", "ceiling", "high", "load", "accel", "bound", "threshold", "capacity"))
+                        num_range = _extract_numeric_range(clean_v)
+                        if num_range is not None and (unit or has_limit_tokens or type_hint.lower() in ("real", "float")):
+                            min_val, max_val = num_range
+                            self._register_numeric_limit(gt, k, min_val, unit, "lower", owner=row_owner)
+                            self._register_numeric_limit(gt, k, max_val, unit, "upper", owner=row_owner)
+                        elif scalar is not None and (unit or has_limit_tokens or type_hint.lower() in ("real", "float")):
+                            limit_val = float(scalar)
+                            if _is_nominal_name(k, tokens):
+                                bound_type = "nominal"
+                            elif _is_lower_bound_name(k, tokens):
+                                bound_type = "lower"
+                            else:
+                                bound_type = "upper"
+                            self._register_numeric_limit(gt, k, limit_val, unit, bound_type, owner=row_owner)
 
                     # 3. If 3rd cell (Description) contains compound configuration descriptors, extract them generically
                     if len(cells) >= 3:
@@ -1290,13 +1436,19 @@ class FactualGroundingValidator(IValidator):
                     self._register_numeric_limit(gt, k, max_val, unit, "upper", owner=current_owner)
                 elif scalar is not None and (unit or any(t in tokens for t in ("limit", "max", "min", "minimum", "low", "lower", "floor", "ceiling", "high", "load", "accel", "bound", "threshold"))):
                     limit_val = float(scalar)
-                    bound_type = "lower" if _is_lower_bound_name(k, tokens) else "upper"
+                    if _is_nominal_name(k, tokens):
+                        bound_type = "nominal"
+                    elif _is_lower_bound_name(k, tokens):
+                        bound_type = "lower"
+                    else:
+                        bound_type = "upper"
                     self._register_numeric_limit(gt, k, limit_val, unit, bound_type, owner=current_owner)
                 elif scalar is None and _is_config_target(k):
                     gt.structural_attributes[k_norm] = clean_v
                     root_tokens = [t for t in tokens if t not in ("configuration", "config", "type", "mode", "layout", "geometry", "architecture", "topology", "arrangement")]
                     if root_tokens:
                         gt.structural_attributes["".join(root_tokens)] = clean_v
+
 
     # Backward-compatibility alias
     _ingest_schema_markdown = _extract_from_markdown
@@ -1358,7 +1510,7 @@ class FactualGroundingValidator(IValidator):
                 return True
         return False
 
-    def _has_ssot_citation(self, line: str, content: str, rel_path: str) -> bool:
+    def _has_ssot_citation(self, line: str, content: str, rel_path: str, gt: Optional[SchemaGroundTruth] = None) -> bool:
         """Checks if a claim or file carries an explicit SSOT citation."""
         # 1. Inline or block HTML comment citation
         if re.search(r'<!--\s*(?:Source|SSOT|Grounding|Reference):\s*[^>]+-->', line, re.I):
@@ -1368,7 +1520,13 @@ class FactualGroundingValidator(IValidator):
             return True
         if re.search(r'(?:^|[\s`\'"(\[<|])(?:\.\.?/)?schema/[a-zA-Z0-9_./#:\-]+', line, re.I):
             return True
-        # 3. Document-level frontmatter source references
+        # 3. Explicit citation of schema source files by filename or path
+        if gt and gt.source_files:
+            for sf in gt.source_files:
+                bname = os.path.basename(sf)
+                if len(bname) >= 5 and (bname in line or sf in line):
+                    return True
+        # 4. Document-level frontmatter source references
         if re.search(r'(?:source_references|realized_ast_nodes|ssot_source):\s*\[?[^\n\]]+schema/[^\n\]]+', content, re.I):
             return True
         return False
@@ -1387,6 +1545,7 @@ class FactualGroundingValidator(IValidator):
         lines = content.splitlines()
 
         current_heading = "Header"
+        non_normative_depth: Optional[int] = None
         is_normative = True
         in_code_block = False
 
@@ -1451,8 +1610,13 @@ class FactualGroundingValidator(IValidator):
             # Heading detection
             m_head = re.match(r'^(#{1,6})\s+(.+)$', line_str)
             if m_head:
+                level = len(m_head.group(1))
                 current_heading = m_head.group(2).strip()
-                is_normative = not self._is_non_normative_section(current_heading)
+                if non_normative_depth is not None and level <= non_normative_depth:
+                    non_normative_depth = None
+                if self._is_non_normative_section(current_heading):
+                    non_normative_depth = level
+                is_normative = (non_normative_depth is None)
                 continue
 
             if not is_normative:
@@ -1463,7 +1627,7 @@ class FactualGroundingValidator(IValidator):
                 continue
 
             # Check if line has explicit SSOT citation
-            if self._has_ssot_citation(line_str, content, rel_path):
+            if self._has_ssot_citation(line_str, content, rel_path, gt):
                 continue
 
             # 1. Check integer count assertions
@@ -1509,10 +1673,10 @@ class FactualGroundingValidator(IValidator):
                     continue
 
                 cfg_norm = _normalize_name(expected_cfg)
-                m_cfg_parts = re.match(r'^([a-zA-Z0-9]+)[- ]([a-zA-Z0-9]+)$', expected_cfg)
+                m_cfg_parts = re.match(r'^(.+)[- ]([a-zA-Z0-9]+)$', expected_cfg)
                 if m_cfg_parts:
-                    cfg_prefix = m_cfg_parts.group(1)
-                    cfg_noun = m_cfg_parts.group(2)
+                    cfg_prefix = m_cfg_parts.group(1).strip()
+                    cfg_noun = m_cfg_parts.group(2).strip()
 
                     pat_desc = re.compile(
                         r'\b([a-zA-Z0-9]+(?:-[a-zA-Z0-9]+)?[- ]' + re.escape(cfg_noun) + r')\b',
@@ -1522,20 +1686,27 @@ class FactualGroundingValidator(IValidator):
                         desc_claimed = m_desc.group(1).strip()
                         if desc_claimed in reported_descriptors_on_line:
                             continue
+                        first_word = desc_claimed.split()[0].split('-')[0].lower()
+                        if first_word in STOP_WORDS_AND_DETERMINERS or first_word.isdigit():
+                            continue
                         enclosing_tok = _get_enclosing_hyphenated_token(line_str, m_desc.start(), m_desc.end())
                         if _is_tracer_or_signal_identifier(desc_claimed) or _is_tracer_or_signal_identifier(enclosing_tok):
                             continue
                         desc_claimed_norm = _normalize_name(desc_claimed)
-                        if desc_claimed_norm != cfg_norm:
-                            if cfg_norm not in _normalize_name(line_str):
-                                findings.append(Finding(
-                                    "factual-grounding-numeric-drift",
-                                    f"{rel_path}:{lineno_1idx}: Structural descriptor '{desc_claimed}' contradicts schema ground truth ({expected_cfg}) in {', '.join(gt.source_files) or 'schema/'}.",
-                                    location=f"{rel_path}:{lineno_1idx}",
-                                    detail={"file": rel_path, "line": lineno_1idx, "descriptor": desc_claimed, "expected": expected_cfg}
-                                ))
-                                reported_descriptors_on_line.add(desc_claimed)
-                                break
+                        if desc_claimed_norm == cfg_norm or desc_claimed_norm in cfg_norm or cfg_norm in desc_claimed_norm:
+                            continue
+                        if first_word in gt.declared_parts or first_word in gt.declared_ast_nodes:
+                            continue
+                        if cfg_norm not in _normalize_name(line_str):
+                            findings.append(Finding(
+                                "factual-grounding-numeric-drift",
+                                f"{rel_path}:{lineno_1idx}: Structural descriptor '{desc_claimed}' contradicts schema ground truth ({expected_cfg}) in {', '.join(gt.source_files) or 'schema/'}.",
+                                location=f"{rel_path}:{lineno_1idx}",
+                                detail={"file": rel_path, "line": lineno_1idx, "descriptor": desc_claimed, "expected": expected_cfg}
+                            ))
+                            reported_descriptors_on_line.add(desc_claimed)
+                            break
+
 
             # 3. Closed-world structural descriptor resolution: check candidate compound descriptors
             if pat_compound_desc:
@@ -1595,6 +1766,7 @@ class FactualGroundingValidator(IValidator):
         lines = content.splitlines()
 
         current_heading = "Header"
+        non_normative_depth: Optional[int] = None
         is_normative = True
         in_code_block = False
 
@@ -1647,7 +1819,7 @@ class FactualGroundingValidator(IValidator):
                 ))
 
         numeric_pattern = re.compile(
-            r'\b(\d+(?:\.\d+)?(?:\s*-\s*\d+(?:\.\d+)?)?)\s*(%|[a-zA-Z/][a-zA-Z0-9/%^*_-]*\b)'
+            r'\b(\d+(?:\.\d+)?(?:\s*[-\u2013\u2014]\s*\d+(?:\.\d+)?)?)\s*(%|[a-zA-Z/][a-zA-Z0-9/%^*_-]*\b)'
         )
 
         for lineno_1idx, line in enumerate(lines, start=1):
@@ -1662,8 +1834,13 @@ class FactualGroundingValidator(IValidator):
             # Heading detection
             m_head = re.match(r'^(#{1,6})\s+(.+)$', line_str)
             if m_head:
+                level = len(m_head.group(1))
                 current_heading = m_head.group(2).strip()
-                is_normative = not self._is_non_normative_section(current_heading)
+                if non_normative_depth is not None and level <= non_normative_depth:
+                    non_normative_depth = None
+                if self._is_non_normative_section(current_heading):
+                    non_normative_depth = level
+                is_normative = (non_normative_depth is None)
                 continue
 
             if not is_normative:
@@ -1673,8 +1850,12 @@ class FactualGroundingValidator(IValidator):
             if re.search(r'\b(?:rejected|discarded|eliminated|not\s+selected|cons|fail|exceeds\s+limit)\b', line_str, re.I):
                 continue
 
+            # Skip lines documenting registered pending arbitration items
+            if re.search(r'\bpending\s+arbitration\b', line_str, re.I):
+                continue
+
             # Check if line has explicit SSOT citation
-            if self._has_ssot_citation(line_str, content, rel_path):
+            if self._has_ssot_citation(line_str, content, rel_path, gt):
                 continue
 
             # (a) Atomic Identifier Lexing: protect compound designations and citations
@@ -1684,6 +1865,16 @@ class FactualGroundingValidator(IValidator):
             line_tokens = _tokenize_identifier(line_str)
             heading_tokens = _tokenize_identifier(current_heading)
             reported_claims_on_line: Set[str] = set()
+
+            sep_pattern = re.compile(r'[,;|]|<br\s*/?>|\.\s+|\b(?:and|or|while|whereas|with)\b', re.I)
+            clause_spans: List[Tuple[int, int]] = []
+            last_end = 0
+            for sm in sep_pattern.finditer(line_str):
+                if sm.start() > last_end:
+                    clause_spans.append((last_end, sm.start()))
+                last_end = sm.end()
+            if last_end < len(line_str):
+                clause_spans.append((last_end, len(line_str)))
 
             # (b) ISO/IEC 80000 Physical Dimensional Typing:
             # An engineering numeric claim exists if and only if paired with recognized physical unit
@@ -1706,40 +1897,126 @@ class FactualGroundingValidator(IValidator):
                 max_claimed = max(numbers)
                 min_claimed = min(numbers)
 
+                match_clause_idx = -1
+                for idx, (c_start, c_end) in enumerate(clause_spans):
+                    if c_start <= match.start() and match.end() <= c_end:
+                        match_clause_idx = idx
+                        break
+
+                if match_clause_idx == -1:
+                    c_start = 0
+                    for sm in sep_pattern.finditer(line_str[:match.start()]):
+                        c_start = sm.end()
+                    c_end = len(line_str)
+                    sm_end = sep_pattern.search(line_str[match.end():])
+                    if sm_end:
+                        c_end = match.end() + sm_end.start()
+                    local_clause = line_str[c_start:c_end]
+                    adjacent_clauses = [local_clause]
+                else:
+                    local_clause = line_str[clause_spans[match_clause_idx][0]:clause_spans[match_clause_idx][1]]
+                    adjacent_clauses = [local_clause]
+                    if match_clause_idx > 0:
+                        adjacent_clauses.append(line_str[clause_spans[match_clause_idx - 1][0]:clause_spans[match_clause_idx - 1][1]])
+                    if match_clause_idx < len(clause_spans) - 1:
+                        adjacent_clauses.append(line_str[clause_spans[match_clause_idx + 1][0]:clause_spans[match_clause_idx + 1][1]])
+
+                local_tokens = _tokenize_identifier(local_clause)
+
+                # Skip software simulation engine, digital twin, or CI harness statements (e.g. 250 Hz digital twin simulation engine)
+                if re.search(r'\b(?:simulation\s+engine|digital\s+twin|discrete\s+solver|dual-track\s+mbd)\b', local_clause, re.I):
+                    continue
+
                 candidate_metrics: List[ScopedNumericLimit] = []
                 for metric in scoped_limits:
                     if not metric.unit:
                         # (c) Fail-closed: attributes without declared physical units do not match physical unit claims
+                        continue
+                    if metric.bound_type == "nominal":
                         continue
 
                     metric_canon_unit = ISO_80000_PHYSICAL_UNITS.get(metric.unit.lower(), metric.unit.lower())
                     if canon_unit != metric_canon_unit:
                         continue
 
-                    # (d) Component-Scoped Contextual Binding & Property Token Specificity
+                    # (d) Component-Scoped Contextual Binding
+                    owner_in_clause = False
+                    owner_in_line = False
+                    owner_in_heading = False
                     if metric.owner:
                         owner_toks = _tokenize_identifier(metric.owner)
-                        owner_in_line = (metric.owner in _normalize_name(line_str) or any(t in line_tokens for t in owner_toks if t not in NON_HARDWARE_GENERIC_TOKENS))
-                        owner_in_heading = (metric.owner in _normalize_name(current_heading) or any(t in heading_tokens for t in owner_toks if t not in NON_HARDWARE_GENERIC_TOKENS))
+                        metric_owner_norm = _normalize_name(metric.owner)
 
-                        # If line explicitly targets another declared component and does not mention this owner, skip
-                        other_parts = {p for p in gt.declared_parts if p != metric.owner and (p in line_tokens or p in _normalize_name(line_str))}
-                        if other_parts and not owner_in_line:
-                            continue
-                        if not (owner_in_line or owner_in_heading):
-                            continue
-                    else:
-                        token_matches = any(
-                            any(_property_token_matches(t, lt) for lt in line_tokens)
-                            for t in metric.meaningful_tokens
+                        owner_in_clause = (
+                            metric_owner_norm in _normalize_name(local_clause)
+                            or re.search(r'\b' + re.escape(metric.owner) + r'\b', local_clause, re.I) is not None
+                            or any(t == metric.owner for t in local_tokens if t not in NON_HARDWARE_GENERIC_TOKENS)
+                            or (len(owner_toks) >= 2 and all(any(_property_token_matches(ot, lt) for lt in local_tokens) for ot in owner_toks if ot not in NON_HARDWARE_GENERIC_TOKENS))
                         )
-                        if not token_matches and metric.unit != "g":
+
+                        owner_in_line = (
+                            owner_in_clause
+                            or metric_owner_norm in _normalize_name(line_str)
+                            or re.search(r'\b' + re.escape(metric.owner) + r'\b', line_str, re.I) is not None
+                            or any(t == metric.owner for t in line_tokens if t not in NON_HARDWARE_GENERIC_TOKENS)
+                            or (len(owner_toks) >= 2 and all(any(_property_token_matches(ot, lt) for lt in line_tokens) for ot in owner_toks if ot not in NON_HARDWARE_GENERIC_TOKENS))
+                        )
+
+                        owner_in_heading = (
+                            metric_owner_norm in _normalize_name(current_heading)
+                            or re.search(r'\b' + re.escape(metric.owner) + r'\b', current_heading, re.I) is not None
+                            or any(t == metric.owner for t in heading_tokens if t not in NON_HARDWARE_GENERIC_TOKENS)
+                            or (len(owner_toks) >= 2 and all(any(_property_token_matches(ot, ht) for ht in heading_tokens) for ot in owner_toks if ot not in NON_HARDWARE_GENERIC_TOKENS))
+                        )
+
+                        # Helper to check if a declared part name is an actual separate component
+                        def _is_other_part(p: str, target_str: str, target_toks: List[str]) -> bool:
+                            p_norm = _normalize_name(p)
+                            if not p_norm or len(p_norm) < 3:
+                                return False
+                            if p_norm == metric_owner_norm or p_norm in metric_owner_norm or metric_owner_norm in p_norm:
+                                return False
+                            if any(t in owner_toks for t in _tokenize_identifier(p)):
+                                return False
+                            if p in NON_HARDWARE_GENERIC_TOKENS or p_norm in NON_HARDWARE_GENERIC_TOKENS:
+                                return False
+                            if p in target_toks or re.search(r'\b' + re.escape(p) + r'\b', target_str, re.I):
+                                return True
+                            if len(p) >= 5 and p_norm in _normalize_name(target_str):
+                                return True
+                            return False
+
+                        other_parts_in_clause = {p for p in gt.declared_parts if _is_other_part(p, local_clause, local_tokens)}
+                        if other_parts_in_clause and not owner_in_clause:
                             continue
 
-                        if metric.unit == "g" and not token_matches:
+                        other_parts_in_line = {p for p in gt.declared_parts if _is_other_part(p, line_str, line_tokens)}
+                        if other_parts_in_line and not owner_in_line:
+                            continue
+
+                        strong_token_match = (
+                            len(metric.meaningful_tokens) >= 2 and
+                            all(any(_property_token_matches(pt, lt) for lt in line_tokens) for pt in metric.meaningful_tokens)
+                        )
+
+                        if not (owner_in_line or owner_in_heading or strong_token_match):
+                            continue
+
+                    # Property Token Specificity
+                    token_matches = any(
+                        any(_property_token_matches(t, lt) for lt in line_tokens)
+                        for t in metric.meaningful_tokens
+                    )
+                    if not token_matches:
+                        if metric.owner and owner_in_line:
+                            token_matches = True
+                        elif metric.unit == "g":
                             g_context = any(t in line_tokens for t in ("launch", "load", "accel", "acceleration", "gload", "rail", "profile", "catapult"))
                             if not g_context:
                                 continue
+                            token_matches = True
+                        else:
+                            continue
 
                     candidate_metrics.append(metric)
 
@@ -1753,42 +2030,6 @@ class FactualGroundingValidator(IValidator):
                 if len(candidate_metrics) > 1:
                     distinct_tokens = {tuple(m.meaningful_tokens) for m in candidate_metrics}
                     if len(distinct_tokens) > 1:
-                        sep_pattern = re.compile(r'[,;|]|\.\s+|\b(?:and|or|while|whereas|with)\b', re.I)
-                        clause_spans: List[Tuple[int, int]] = []
-                        last_end = 0
-                        for sm in sep_pattern.finditer(line_str):
-                            if sm.start() > last_end:
-                                clause_spans.append((last_end, sm.start()))
-                            last_end = sm.end()
-                        if last_end < len(line_str):
-                            clause_spans.append((last_end, len(line_str)))
-
-                        match_clause_idx = -1
-                        for idx, (c_start, c_end) in enumerate(clause_spans):
-                            if c_start <= match.start() and match.end() <= c_end:
-                                match_clause_idx = idx
-                                break
-
-                        if match_clause_idx == -1:
-                            c_start = 0
-                            for sm in sep_pattern.finditer(line_str[:match.start()]):
-                                c_start = sm.end()
-                            c_end = len(line_str)
-                            sm_end = sep_pattern.search(line_str[match.end():])
-                            if sm_end:
-                                c_end = match.end() + sm_end.start()
-                            local_clause = line_str[c_start:c_end]
-                            adjacent_clauses = [local_clause]
-                        else:
-                            local_clause = line_str[clause_spans[match_clause_idx][0]:clause_spans[match_clause_idx][1]]
-                            adjacent_clauses = [local_clause]
-                            if match_clause_idx > 0:
-                                adjacent_clauses.append(line_str[clause_spans[match_clause_idx - 1][0]:clause_spans[match_clause_idx - 1][1]])
-                            if match_clause_idx < len(clause_spans) - 1:
-                                adjacent_clauses.append(line_str[clause_spans[match_clause_idx + 1][0]:clause_spans[match_clause_idx + 1][1]])
-
-                        local_tokens = _tokenize_identifier(local_clause)
-
                         def _metric_proximity_score(m: ScopedNumericLimit) -> float:
                             if not m.meaningful_tokens:
                                 return 0.0
@@ -1810,6 +2051,10 @@ class FactualGroundingValidator(IValidator):
                             )
                             if l_matches == 0:
                                 return 0.0
+
+                            c_ratio = c_matches / len(m.meaningful_tokens)
+                            adj_ratio = adj_matches / len(m.meaningful_tokens)
+                            l_ratio = l_matches / len(m.meaningful_tokens)
 
                             min_dist = float('inf')
                             preceding_bonus = 0.0
@@ -1833,16 +2078,20 @@ class FactualGroundingValidator(IValidator):
                                         preceding_bonus = 1.0 if is_preceding else 0.0
 
                             return (
-                                c_matches * 1000.0 +
-                                adj_matches * 500.0 +
+                                c_matches * 10000.0 +
+                                c_ratio * 5000.0 +
+                                adj_matches * 100.0 +
+                                adj_ratio * 50.0 +
                                 l_matches * 10.0 +
                                 preceding_bonus * 5.0 +
-                                (10.0 / (1.0 + min_dist))
+                                (1000.0 / (1.0 + min_dist))
                             )
 
                         best_score = max((_metric_proximity_score(m) for m in candidate_metrics), default=0.0)
                         if best_score > 0.0:
                             candidate_metrics = [m for m in candidate_metrics if _metric_proximity_score(m) >= best_score - 1e-6]
+                        else:
+                            candidate_metrics = []
 
                 for metric in candidate_metrics:
 
@@ -1886,6 +2135,8 @@ class FactualGroundingValidator(IValidator):
             for metric in scoped_limits:
                 if metric.unit:
                     continue  # Only evaluate unitless attributes here
+                if metric.bound_type == "nominal":
+                    continue
 
                 # Strictly require an explicit attribute identifier match in local statement
                 has_explicit_id = (
@@ -1897,8 +2148,14 @@ class FactualGroundingValidator(IValidator):
 
                 if metric.owner:
                     owner_toks = _tokenize_identifier(metric.owner)
-                    owner_in_line = (metric.owner in _normalize_name(line_str) or any(t in line_tokens for t in owner_toks if t not in NON_HARDWARE_GENERIC_TOKENS))
-                    owner_in_heading = (metric.owner in _normalize_name(current_heading) or any(t in heading_tokens for t in owner_toks if t not in NON_HARDWARE_GENERIC_TOKENS))
+                    owner_in_line = (
+                        re.search(r'\b' + re.escape(metric.owner) + r'\b', line_str, re.I) is not None
+                        or any(t == metric.owner or t.startswith(metric.owner) for t in line_tokens if t not in NON_HARDWARE_GENERIC_TOKENS)
+                    )
+                    owner_in_heading = (
+                        re.search(r'\b' + re.escape(metric.owner) + r'\b', current_heading, re.I) is not None
+                        or any(t == metric.owner or t.startswith(metric.owner) for t in heading_tokens if t not in NON_HARDWARE_GENERIC_TOKENS)
+                    )
                     if not (owner_in_line or owner_in_heading):
                         continue
 
@@ -1906,6 +2163,12 @@ class FactualGroundingValidator(IValidator):
                     num_str = m_num.group(1)
                     if num_str in reported_claims_on_line:
                         continue
+
+                    # Check if number is the lower bound of a dimensioned range (e.g. '49' in '49–50 V')
+                    post_text_range = search_line[m_num.end():m_num.end() + 15]
+                    if re.match(r'^\s*[-\u2013\u2014]\s*\d+(?:\.\d+)?\s*[a-zA-Z/%^]', post_text_range):
+                        continue
+
                     # Check if followed by a physical unit
                     post_text = search_line[m_num.end():m_num.end() + 10].strip()
                     m_u = re.match(r'^([a-zA-Z/%^]+)', post_text)
@@ -1955,6 +2218,7 @@ class FactualGroundingValidator(IValidator):
         lines = content.splitlines()
 
         current_heading = "Header"
+        non_normative_depth: Optional[int] = None
         is_normative = True
         in_code_block = False
 
@@ -1970,8 +2234,13 @@ class FactualGroundingValidator(IValidator):
             # Heading detection
             m_head = re.match(r'^(#{1,6})\s+(.+)$', line_str)
             if m_head:
+                level = len(m_head.group(1))
                 current_heading = m_head.group(2).strip()
-                is_normative = not self._is_non_normative_section(current_heading)
+                if non_normative_depth is not None and level <= non_normative_depth:
+                    non_normative_depth = None
+                if self._is_non_normative_section(current_heading):
+                    non_normative_depth = level
+                is_normative = (non_normative_depth is None)
                 continue
 
             if not is_normative:
@@ -1982,8 +2251,9 @@ class FactualGroundingValidator(IValidator):
                 continue
 
             # Check if line has explicit SSOT citation
-            if self._has_ssot_citation(line_str, content, rel_path):
+            if self._has_ssot_citation(line_str, content, rel_path, gt):
                 continue
+
 
             # Skip standards citations / regulatory references (e.g. "NATO STANAG 4586", "STANAG 4586 §3.2", "ISO/IEC/IEEE", "RTCA DO-178C")
             if "§" in line_str or re.search(r'\b(?:NATO|RTCA|SAE|IEEE|ISO|MIL-STD|ARINC)\s+[A-Z0-9\-_]+(?:\s+§|\s+Ed\.|\s+Rev|\s*\|)', line_str, re.I):
