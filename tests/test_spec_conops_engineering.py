@@ -1096,7 +1096,7 @@ class TestSpecConopsEngineering(unittest.TestCase):
             with open(skill_path, "r", encoding="utf-8") as f:
                 content = f.read()
 
-            self.assertIn("### 4.4 Mandatory AST Subsystem Architecture Invariant & Primary System Architecture Diagram (IEEE 1362 §5.3 / DoDAF SV-1 / ISO 29148 §6.4.2–§6.4.3)", content)
+            self.assertIn("### 4.4 Mandatory AST Subsystem Architecture Invariant & Primary System Architecture Diagram (IEEE 1362 §5.3 / DoDAF SV-1 / ISO 29148 §6.4.2–§6.4.3 / ISO 15288:2023 / INCOSE SEH v5.0 §3.4.4)", content)
             self.assertIn("Subsystem & Segment Decomposition (IEEE 1362 §5.3 / DoDAF SV-1)", content)
             self.assertIn("Primary Vehicle / Cyber-Physical Platform Segment", content)
             self.assertIn("Command & Control (C2) Segment", content)
@@ -1152,9 +1152,57 @@ class TestSpecConopsEngineering(unittest.TestCase):
             self.assertIn("register bitmasks", content)
             self.assertIn("CRC-16 equations", content)
 
+    def test_incose_and_iso_architecture_hierarchy_documentation(self):
+        """Verify SKILL.md and rules/conops-mission-intent-integrity.md document the 5-tier architecture hierarchy (INCOSE SEH v5.0 §3.4.4 / ISO 15288:2023 / ISO 29148 §6.4.2)."""
+        paths_to_verify = [CONOPS_SKILL_PATH, AGENTS_CONOPS_SKILL_PATH, CONOPS_RULE_PATH]
+        for p in paths_to_verify:
+            self.assertTrue(os.path.isfile(p), f"Missing {p}")
+            with open(p, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            self.assertIn("Architecture Hierarchy & Standards Governance", content)
+            self.assertIn("INCOSE Systems Engineering Handbook v5.0 (§3.4.4 Concept Definition)", content)
+            self.assertIn("ISO/IEC/IEEE 15288:2023", content)
+            self.assertIn("ISO/IEC/IEEE 29148:2018", content)
+            self.assertIn("Level 1A: Stakeholder Intent, Normative Baseline & Threat Context", content)
+            self.assertIn("Level 1B: Concept of Operations (ConOps) & Tactical Mission Intent", content)
+            self.assertIn("Level 1C: Logical & Physical Interface Control Documents (ICD)", content)
+            self.assertIn("Level 2: System Requirements Specification (SyRS) & Functional Architecture", content)
+            self.assertIn("Level 3: Detailed Design & Model-Based Design (MBD)", content)
+
+    def test_strict_level_1b_vs_level_2_boundary_and_system_use_case_exclusion(self):
+        """Verify SKILL.md and rules enforce strict Level 1B vs Level 2 metamodel abstraction and exclude Level 2 System Use Cases (uc-xx)."""
+        paths_to_verify = [CONOPS_SKILL_PATH, AGENTS_CONOPS_SKILL_PATH, CONOPS_RULE_PATH]
+        for p in paths_to_verify:
+            self.assertTrue(os.path.isfile(p), f"Missing {p}")
+            with open(p, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            self.assertIn("Strict Level 1B vs. Level 2 Metamodel Abstraction Boundary", content)
+            self.assertIn("Strict Exclusion of Level 2 System Use Cases", content)
+            self.assertIn("Formal System Use Cases (`uc-xx`) specify technical system functions realizing Level 2 Features and belong strictly in downstream System Requirements Specifications (SyRS Level 2 under `docs/use-cases/`)", content)
+
+        # Ensure SV-1 template actors do not contain (UC-01 and UC-03) or (UC-02)
+        with open(CONOPS_SKILL_PATH, "r", encoding="utf-8") as f:
+            skill_c = f.read()
+        self.assertNotIn("Operator and Mission Supervisor (UC-01 and UC-03)", skill_c)
+        self.assertNotIn("Ground Control Station (GCS) (UC-02)", skill_c)
+
+    def test_option_3_mathematical_parity_with_section_4_8_table(self):
+        """Verify Option 3 standard requires 100% mathematical parity between Section 4.8 table and SV-1 diagram ports."""
+        paths_to_verify = [CONOPS_SKILL_PATH, AGENTS_CONOPS_SKILL_PATH, CONOPS_RULE_PATH]
+        for p in paths_to_verify:
+            self.assertTrue(os.path.isfile(p), f"Missing {p}")
+            with open(p, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            self.assertIn("100% Mathematical Parity with Section 4.8 Allocation Table", content)
+            self.assertIn("Every subsystem block in the SV-1 diagram embeds the exact set of typed logical and physical ports (`• PORT-... (DIRECTION)`) matching the Section 4.8 Physical & Logical Interface Allocations table rows 1:1, derived deterministically from 100% of declared AST `part def` nodes in exact lockstep.", content)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
 
 

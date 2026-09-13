@@ -18,6 +18,19 @@ In accordance with [`rules/conops-mission-intent-integrity.md`](../../rules/cono
 
 All specification units are authored as discrete, modular markdown files under `docs/conops/units/conops/` and `docs/conops/units/mission_intent/` adhering strictly to JSON Schema data contracts (`.pipeline/schemas/conops_specification_schema.json` and `.pipeline/schemas/mission_intent_specification_schema.json`) and compiled into canonical documents via `scripts/assemble_conops.py`.
 
+### Architecture Hierarchy & Standards Governance (INCOSE SEH v5.0 §3.4.4 / ISO/IEC/IEEE 15288:2023 / ISO/IEC/IEEE 29148:2018 §6.4.2)
+
+In accordance with **INCOSE Systems Engineering Handbook v5.0 (§3.4.4 Concept Definition)**, **ISO/IEC/IEEE 15288:2023 (§6.4.2 Stakeholder Needs and Requirements Definition & §6.4.3 Architecture Definition Process)**, and **ISO/IEC/IEEE 29148:2018 (§6.4.2 ConOps & §6.4.3 OpsCon)**, the DEAP specification compilation framework enforces a strict 5-tier architecture hierarchy:
+1. **Level 1A: Stakeholder Intent, Normative Baseline & Threat Context**: Normative Research Inventory (`docs/research/RESEARCH_INVENTORY.md`), Failure Mode Registry (`docs/research/FAILURE_MODE_REGISTRY.md`), and regulatory obligations baseline.
+2. **Level 1B: Concept of Operations (ConOps) & Tactical Mission Intent**: Operational Activities (`OA-01`..`OA-N`), multi-threaded operational scenarios (`SCN-01`..`SCN-N`), operational information exchanges (`OpTx-01`..`OpTx-N`), METL tasks (`MET-01`..`MET-N`), operational lifecycle modes ($\Phi_{\mathrm{lifecycle}}$), SORA 4D containment math, and High-Level Operational Architecture (OV-1 / OV-2 / SV-1).
+3. **Level 1C: Logical & Physical Interface Control Documents (ICD)**: Interface Control Documents (`docs/icd/ICD_01_SYSTEM_INTERFACE_MATRIX.md` and `docs/icd/ICD_02_MASTER_SIGNAL_DICTIONARY.md`), discrete port dictionaries, pinouts, bus topologies, and wire framing.
+4. **Level 2: System Requirements Specification (SyRS) & Functional Architecture**: Downstream structural requirements consisting of Epics (`epic-xx`), Features (`feat-xx`), User Stories (`us-xx`), and formal System Use Cases (`uc-xx`).
+5. **Level 3: Detailed Design & Model-Based Design (MBD)**: Low-level software and hardware requirements, MATLAB / Simulink / Stateflow / Embedded Coder synthesis models, target source code, and Piece-Part BOM FMECA (MIL-STD-1629A Method 102).
+
+### Strict Level 1B vs. Level 2 Metamodel Abstraction Boundary
+- **ConOps Operational Scope (Level 1B)**: ConOps models user operational viewpoints, user classes, operational activities (`OA-xx`), and operational scenarios (`SCN-xx`).
+- **Strict Exclusion of Level 2 System Use Cases**: ConOps documents and SV-1 diagrams are strictly forbidden from defining, citing, or injecting formal Level 2 System Use Cases (`uc-xx`). Formal System Use Cases (`uc-xx`) specify technical system functions realizing Level 2 Features and belong strictly in downstream System Requirements Specifications (SyRS Level 2 under `docs/use-cases/`).
+
 > [!TIP]
 > This skill enforces mathematical determinism, pure open schema contracts ($N \ge N_{\mathrm{min}}$), open multi-domain threat taxonomies, and 100% public clause citations across all operational and mission intent deliverables.
 
@@ -103,12 +116,14 @@ The Tactical Mission Intent specification tree consists of 10 canonical modular 
 | `10_OPERATIONAL_ALLOCATION_TAGS.md` | `## 10. Gate 24 MissionTask Traceability Tags` | `allocation_tags` | Comprehensive listing of Gate 24 allocation tags (`/// OperationalAllocation: [MET-XX]`) for cross-model traceability. |
 
 ### 2.3 System Architecture Diagram Representation Standard (Option 3) & Level 1B Operational Boundary
-In accordance with DoDAF v2.02 SV-1, IEEE 1362 §5.3, and ISO/IEC/IEEE 29148:2018 §6.4.2–§6.4.3, all system interface and super-system architectural diagrams MUST implement **Option 3 (Compact Subsystem Block Representation with Embedded Port Attributes and Vertical Hierarchical Tiers)**:
+In accordance with DoDAF v2.02 SV-1, IEEE 1362 §5.3, ISO/IEC/IEEE 15288:2023, INCOSE SE Handbook v5.0 (§3.4.4), and ISO/IEC/IEEE 29148:2018 §6.4.2–§6.4.3, all system interface and super-system architectural diagrams MUST implement **Option 3 (Compact Subsystem Block Representation with Embedded Port Attributes and Vertical Hierarchical Tiers)**:
 1. **High-Level Operational Architecture Scope (Level 1B)**: The ConOps (Level 1B) represents High-Level Operational Architecture (OV-1 / OV-2 / High-Level SV-1) partitioned across operational segments (Ground Segment, Air Vehicle Segment, Launch Segment, External Actors) with operational information exchanges (Op-Tx: C2 Commands, Telemetry, Video, Target Tracks, Arming Authorization).
-2. **Strict Level 1B vs. Level 1C ICD Boundary**: Detailed internal wire-level interconnects, pinouts, RS-485 serial framing, opcodes (0x10, 0x11, etc.), register bitmasks, and CRC-16 equations belong strictly in Level 1C Interface Control Documents (`ICD_01_SYSTEM_INTERFACE_MATRIX.md` and `ICD_02_MASTER_SIGNAL_DICTIONARY.md`), NOT in the ConOps document. ConOps SV-1 diagrams and Section 8 (Op-Tx) capture high-level operational information exchanges and strictly exclude component-internal serial opcode reference tables.
-3. **Compact Subsystem Blocks with Embedded Port Attributes**: Subsystems must be represented as unified compact nodes embedding their typed logical/physical ports as bulleted attributes (`[<b>Name</b><br/>• PORT-... (DIRECTION)]`), preventing diagram bloat from isolated port nodes.
-4. **Vertical Hierarchical Tier Partitioning (`direction TB`)**: Diagram flow must follow a top-to-bottom layout (`flowchart TD` / `direction TB`) partitioned into vertical subsystem tiers with a maximum of 3 columns horizontally (max 3-column vertical tier partitioning), eliminating unconstrained horizontal sprawl.
-5. **Traceable Direct Interconnects**: Connection links (`CONN-01`..`CONN-N`) must route directly between subsystem blocks, citing the relevant port interfaces in the link label.
+2. **Strict Level 1B vs. Level 2 Boundary**: ConOps contains Operational Activities (`OA-xx`) and Operational Scenarios (`SCN-xx`), and strictly excludes formal System Use Cases (`uc-xx`), which belong in SyRS Level 2.
+3. **Strict Level 1B vs. Level 1C ICD Boundary**: Detailed internal wire-level interconnects, pinouts, RS-485 serial framing, opcodes (0x10, 0x11, etc.), register bitmasks, and CRC-16 equations belong strictly in Level 1C Interface Control Documents (`ICD_01_SYSTEM_INTERFACE_MATRIX.md` and `ICD_02_MASTER_SIGNAL_DICTIONARY.md`), NOT in the ConOps document. ConOps SV-1 diagrams and Section 8 (Op-Tx) capture high-level operational information exchanges and strictly exclude component-internal serial opcode reference tables.
+4. **Compact Subsystem Blocks with Embedded Port Attributes**: Subsystems must be represented as unified compact nodes embedding their typed logical/physical ports as bulleted attributes (`[<b>Name</b><br/>• PORT-... (DIRECTION)]`), preventing diagram bloat from isolated port nodes.
+5. **Vertical Hierarchical Tier Partitioning (`direction TB`)**: Diagram flow must follow a top-to-bottom layout (`flowchart TD` / `direction TB`) partitioned into vertical subsystem tiers with a maximum of 3 columns horizontally (max 3-column vertical tier partitioning), eliminating unconstrained horizontal sprawl.
+6. **100% Mathematical Parity with Section 4.8 Allocation Table**: Every subsystem block in the SV-1 diagram embeds the exact set of typed logical and physical ports (`• PORT-... (DIRECTION)`) matching the Section 4.8 Physical & Logical Interface Allocations table rows 1:1, derived deterministically from 100% of declared AST `part def` nodes in exact lockstep.
+7. **Traceable Direct Interconnects**: Connection links (`CONN-01`..`CONN-N`) must route directly between subsystem blocks, citing the relevant port interfaces in the link label.
 
 ---
 
@@ -221,10 +236,11 @@ $$
 | Contingency Buffer | E_contingency | 40000.0 | J | Dynamic operational contingency energy reserve |
 | Total Bingo Threshold | E_bingo | 350000.0 | J | Critical return threshold condition |
 
-### 4.4 Mandatory AST Subsystem Architecture Invariant & Primary System Architecture Diagram (IEEE 1362 §5.3 / DoDAF SV-1 / ISO 29148 §6.4.2–§6.4.3)
-Per IEEE 1362-1998 §5.3 (Operational Environment & System Architecture), DoDAF v2.02 SV-1 (Systems Interface Description), ISO/IEC/IEEE 29148:2018 §6.4.2–§6.4.3 (ConOps & OpsCon Architecture), INCOSE Systems Engineering Handbook v5.0 §3.3, and the Pure Schema-Driven Compiler Invariant:
+### 4.4 Mandatory AST Subsystem Architecture Invariant & Primary System Architecture Diagram (IEEE 1362 §5.3 / DoDAF SV-1 / ISO 29148 §6.4.2–§6.4.3 / ISO 15288:2023 / INCOSE SEH v5.0 §3.4.4)
+Per IEEE 1362-1998 §5.3 (Operational Environment & System Architecture), DoDAF v2.02 SV-1 (Systems Interface Description), ISO/IEC/IEEE 29148:2018 §6.4.2–§6.4.3 (ConOps & OpsCon Architecture), ISO/IEC/IEEE 15288:2023 (§6.4.2 & §6.4.3), INCOSE Systems Engineering Handbook v5.0 §3.4.4 & §3.3, and the Pure Schema-Driven Compiler Invariant:
 
-- **100% AST Part Coverage Invariant**: ConOps Section 4 must synthesize formal Super-System Architecture and dedicated Subsystem Architecture subsections for 100% of declared `part def` nodes present in the SysML AST.
+- **100% AST Part Coverage & Mathematical Parity Invariant**: ConOps Section 4 must synthesize formal Super-System Architecture and dedicated Subsystem Architecture subsections for 100% of declared `part def` nodes present in the SysML AST in exact lockstep mathematical parity with the primary SV-1 architecture diagram.
+- **Strict Level 1B vs. Level 2 Metamodel Abstraction Boundary**: ConOps models Operational Activities (`OA-xx`) and Operational Scenarios (`SCN-xx`), and strictly excludes formal Level 2 System Use Cases (`uc-xx`), which belong in SyRS Level 2.
 - **Level 1B Operational Architecture Scope & Level 1C ICD Distinction**: ConOps (Level 1B) represents High-Level Operational Architecture (OV-1 / OV-2 / High-Level SV-1) partitioned across operational segments (Ground Segment, Air Vehicle Segment, Launch Segment, External Actors) with operational information exchanges (Op-Tx: C2 Commands, Telemetry, Video, Target Tracks, Arming Authorization). Detailed internal wire-level interconnects, pinouts, RS-485 serial framing, opcodes (0x10, 0x11, etc.), register bitmasks, and CRC-16 equations belong strictly in Level 1C Interface Control Documents (`ICD_01_SYSTEM_INTERFACE_MATRIX.md` and `ICD_02_MASTER_SIGNAL_DICTIONARY.md`), NOT in the ConOps document. Section 8 (Op-Tx) captures high-level operational information exchanges and strictly excludes component-internal serial opcode reference tables.
 - **Primary System Architecture Diagram & Super-System Architecture (Section 4.7)**:
   1. **Subsystem & Segment Decomposition (IEEE 1362 §5.3 / DoDAF SV-1)**: 100% Line Replaceable Unit (LRU) and subsystem identification partitioned across three canonical operational segments with black-box abstraction:
@@ -241,6 +257,7 @@ Per IEEE 1362-1998 §5.3 (Operational Environment & System Architecture), DoDAF 
   6. **Option 3 Standard: Compact Subsystem Blocks with Embedded Port Attributes & Vertical Hierarchical Tiers**:
      - **Embedded Port Attributes**: All subsystem blocks MUST embed their discrete ports as bulleted attributes inside the subsystem node definition (`[<b>Name</b><br/>• PORT-... (DIRECTION)]`), rather than rendering individual ports as separate downstream child nodes or nested single-component subgraphs.
      - **Vertical Hierarchical Tier Partitioning (`direction TB`)**: Subgraphs and segment partitions MUST enforce top-to-bottom vertical layout (`direction TB`) with a maximum of 3 columns horizontally (max 3-column vertical tier partitioning). Flat horizontal layout (`direction LR` or unrestricted horizontal chaining) is strictly prohibited to prevent unreadable horizontal diagram sprawl.
+     - **100% Mathematical Parity with Section 4.8 Allocation Table**: Every subsystem block in the SV-1 diagram embeds the exact set of typed logical and physical ports (`• PORT-... (DIRECTION)`) matching the Section 4.8 Physical & Logical Interface Allocations table rows 1:1, derived deterministically from 100% of declared AST `part def` nodes in exact lockstep.
      - **Direct Traceable Interconnects**: Directed and bidirectional connection links (`CONN-01`..`CONN-N`) route directly between compact subsystem nodes and external actors, specifying the logical/physical flow and port bindings in the connection label.
   7. **Canonical Compliant Mermaid SV-1 Diagram Template**: The architecture diagram MUST be authored using a compliant Mermaid flowchart (`flowchart TD` or `flowchart TB`) declaring segment subgraphs, discrete port nodes, and bidirectional/directed connection links (`CONN-XX`).
   8. **Operational Architecture Scope (Section 4.7)**: Section 4.7 represents High-Level Operational Architecture (OV-1 / OV-2 / High-Level SV-1) partitioned across operational segments (Ground Segment, Air Vehicle Segment, Launch Segment, External Actors) with operational information exchanges (Op-Tx: C2 Commands, Telemetry, Video, Target Tracks, Arming Authorization). Detailed internal wire-level interconnects, pinouts, RS-485 serial framing, opcodes (0x10, 0x11, etc.), register bitmasks, and CRC-16 equations belong strictly in Level 1C Interface Control Documents (`ICD_01_SYSTEM_INTERFACE_MATRIX.md` and `ICD_02_MASTER_SIGNAL_DICTIONARY.md`), NOT in the ConOps document.
@@ -250,10 +267,10 @@ Per IEEE 1362-1998 §5.3 (Operational Environment & System Architecture), DoDAF 
 flowchart TD
     subgraph External_Actors["External Operating Environment and Actors (IEEE 1362 §5.1)"]
         direction TB
-        Operator["Human Operator and Mission Supervisor (UC-01 and UC-03)"]
+        Operator["Human Operator and Mission Supervisor"]
         GNSS_Space["GNSS Constellation (Space Segment)"]
         Environment["Atmospheric and Environmental Dynamics"]
-        RangeSafety["Range Safety Authority (UC-02)"]
+        RangeSafety["Range Safety Authority"]
     end
 
     subgraph Ground_Segment["Ground Command and Control Segment (IEEE 1362 §5.3)"]
@@ -298,7 +315,7 @@ flowchart TD
 - **Subsystem Architecture & AST Part Allocation (Section 4.8)**:
   For EVERY declared AST `part def` node $p \in \text{AST}$, Section 4 must contain a dedicated subsection (`#### 4.8.x {part.name} Subsystem Architecture`) specifying:
   1. **Functional Purpose & Scope**: Primary operational mission role derived from AST doc comments and actions.
-  2. **Physical & Logical Interface / Port Allocations**: Declared input, output, and bidirectional ports (`PORT-... (IN/OUT/INOUT)`) and high-level bus interconnects. Detailed wire pinouts, register layouts, and serial framing are deferred to Level 1C ICD.
+  2. **Physical & Logical Interface / Port Allocations**: Declared input, output, and bidirectional ports (`PORT-... (IN/OUT/INOUT)`) and high-level bus interconnects in 100% lockstep parity with the SV-1 diagram. Detailed wire pinouts, register layouts, and serial framing are deferred to Level 1C ICD.
   3. **Power, Mass & Resource Envelopes**: Operating electrical power draw, mass partition budget ($m_{\mathrm{alloc}}$), and thermal operating envelopes.
   4. **Operational Role & Statechart Integration**: Lifecycle mode allocation ($\Phi_{\mathrm{lifecycle}}$) and active operational states.
   5. **Safety Invariants, Containment Interlocks & FMECA Linkage**: Watchdog interlocks, emergency trigger containment bindings (`EMG-01`..`EMG-07`), and safety criticalities.

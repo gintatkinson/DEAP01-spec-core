@@ -108,7 +108,7 @@ def _sanitize_level_1b_operational_text(text: str) -> str:
     Sanitizes text to enforce Level 1B operational abstraction (Fixes Issue #273).
     Strips component-internal serial opcodes (0x10, 0x11, 0x12, 0x13, 0xB0, etc.),
     baud rates (e.g., 115200 baud), CRC-16 polynomial equations (x^16 + x^12 + x^5 + 1),
-    and low-level wire protocol artifacts from ConOps architecture and Section 8 synthesis.
+    and Level 2 System Use Cases (uc-xx / (UC-xx)) from ConOps architecture and Section 8 synthesis.
     """
     if not text:
         return ""
@@ -133,7 +133,11 @@ def _sanitize_level_1b_operational_text(text: str) -> str:
     s = re.sub(r"_?0x[0-9a-fA-F]+", "", s)
     s = re.sub(r"\b(?:Opcode|opcode|OPCODE)\b", "", s)
 
-    # 4. Clean up punctuation artifacts, empty parens/brackets, duplicate commas, double spaces (horizontal whitespace only)
+    # 4. Remove Level 2 System Use Cases (e.g. (UC-01 and UC-03), (UC-02), uc-01, UC-01)
+    s = re.sub(r"\(\s*(?:UC|uc)-\d+(?:\s*(?:and|&|,)\s*(?:UC|uc)-\d+)*\s*\)", "", s)
+    s = re.sub(r"\b(?:UC|uc)-\d+\b", "", s)
+
+    # 5. Clean up punctuation artifacts, empty parens/brackets, duplicate commas, double spaces (horizontal whitespace only)
     s = re.sub(r"\(\s*\)", "", s)
     s = re.sub(r"\[\s*\]", "", s)
     s = re.sub(r"\(\s*,+\s*", "(", s)
@@ -142,7 +146,7 @@ def _sanitize_level_1b_operational_text(text: str) -> str:
     s = re.sub(r"[ \t]+,\s*", ", ", s)
     s = re.sub(r",\s*\.", ".", s)
     s = re.sub(r"[ \t]{2,}", " ", s)
-    return s
+    return s.strip()
 
 
 class SysMLParameterBindingEngine:
@@ -1513,7 +1517,7 @@ class SysMLParameterBindingEngine:
         subsys_summary = ", ".join(subsys_names) if subsys_names else "Declared System Subsystems"
 
         lines = [
-            f"The **{sys_id}** super-system architecture formalizes the complete cyber-physical system boundary and segment allocations in accordance with IEEE 1362 §5.3, DoDAF SV-1, ISO/IEC/IEEE 29148:2018 §6.4.2–§6.4.3, and INCOSE Systems Engineering Handbook v5.0.",
+            f"The **{sys_id}** super-system architecture formalizes the complete cyber-physical system boundary and segment allocations in accordance with IEEE 1362 §5.3, DoDAF SV-1, ISO/IEC/IEEE 15288:2023 (§6.4.2 & §6.4.3), ISO/IEC/IEEE 29148:2018 §6.4.2–§6.4.3, and INCOSE Systems Engineering Handbook v5.0 (§3.4.4).",
             "",
             f"The super-system decomposes across declared SysML AST architectural blocks conforming to Option 3 (Compact Subsystem Blocks with Embedded Port Attributes and max 3-column vertical tier partitioning):",
             f"1. **Primary Operational Segment (Air Vehicle / Primary Platform Segment):** Houses constituent subsystems ({subsys_summary}) executing closed-loop mission activities.",
@@ -1606,7 +1610,7 @@ class SysMLParameterBindingEngine:
         parts_to_render = self.ast_parts if self.ast_parts else []
 
         lines = [
-            f"In accordance with ISO/IEC/IEEE 29148:2018 §6.4.2 and the pure schema-driven compiler invariant, all {len(parts_to_render)} declared SysML AST structural part blocks are allocated dedicated operational architecture specifications with formal interface, resource, lifecycle, and safety invariant bindings:",
+            f"In accordance with ISO/IEC/IEEE 15288:2023 (§6.4.2 & §6.4.3), INCOSE Systems Engineering Handbook v5.0 (§3.4.4), ISO/IEC/IEEE 29148:2018 §6.4.2, and the pure schema-driven compiler invariant, all {len(parts_to_render)} declared SysML AST structural part blocks are allocated dedicated operational architecture specifications with formal interface, resource, lifecycle, and safety invariant bindings in 100% lockstep parity with the SV-1 architecture diagram:",
             "",
         ]
 
@@ -1652,7 +1656,7 @@ class SysMLParameterBindingEngine:
                     raw_port_name = getattr(port, "name", "p_port")
                     port_name = _sanitize_level_1b_operational_text(raw_port_name) or raw_port_name
                     port_name = re.sub(r'_?0x[0-9a-fA-F]+', '', port_name, flags=re.IGNORECASE) or "p_port"
-                    port_dir = getattr(port, "direction", "inout") or "inout"
+                    port_dir = (getattr(port, "direction", "inout") or "inout").upper()
                     raw_port_type = getattr(port, "type_name", "Port") or "Port"
                     clean_port_type = _sanitize_level_1b_operational_text(raw_port_type)
                     clean_port_type = re.sub(r'_?0x[0-9a-fA-F]+_?', '', clean_port_type, flags=re.IGNORECASE)
@@ -1671,11 +1675,12 @@ class SysMLParameterBindingEngine:
 
                     lines.append(f"| **{port_name}** | {port_dir} | {port_type} | {port_doc} |")
             else:
+                p_prefix = re.sub(r'[^A-Za-z0-9]', '', p_name)[:4].upper() or "SUB"
                 lines.append("| Port Name | Direction | Interface Type | Functional Binding / Interconnect |")
                 lines.append("| :--- | :--- | :--- | :--- |")
-                lines.append(f"| **p_data_bus** | inout | DeterministicSystemBus | Bidirectional inter-subsystem data communication |")
-                lines.append(f"| **p_pwr_in** | in | DC_PowerRail_28V | Regulated DC electrical power input rail |")
-                lines.append(f"| **p_safety_disc** | inout | DiscreteSafetyInterlock | Hardwired safety discrete and watchdog line |")
+                lines.append(f"| **PORT-{p_prefix}-C2** | INOUT | DiscreteSafetyInterlock | Dedicated command, control, and watchdog interlock |")
+                lines.append(f"| **PORT-{p_prefix}-DATA** | INOUT | DeterministicSystemBus | Bidirectional inter-subsystem data and telemetry bus |")
+                lines.append(f"| **PORT-{p_prefix}-PWR** | IN | DC_PowerRail_28V | Regulated DC electrical power input rail |")
 
             lines.append("")
             lines.append(f"##### 4.8.{idx}.2 Resource & Operating Envelope Allocations")

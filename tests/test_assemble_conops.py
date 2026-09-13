@@ -1688,7 +1688,84 @@ Formal operational lifecycle stages across $\\Phi_{\\mathrm{lifecycle}}$:
             self.assertIn("PrimaryController Subsystem Architecture", conops_text)
             self.assertIn("PowerDistribution Subsystem Architecture", conops_text)
 
+    def test_conops_architecture_standards_citations_and_sv1_section_4_8_parity(self):
+        """Verify Section 4.7 and 4.8 cite ISO 15288:2023 / INCOSE SEH v5.0 §3.4.4 and maintain 100% port parity between SV-1 and Section 4.8 tables."""
+        # Test Case 1: AST with explicit ports
+        sysml_code_ports = """
+        package TestPlatform {
+            part def FlightComputer {
+                doc /* Core autonomous flight controller */
+                inout port p_c2_link : C2Port;
+                out port p_act_cmd : CmdPort;
+                in port p_sensor_tlm : TlmPort;
+            }
+            part def SensorPayload {
+                doc /* Optical and thermal sensor unit */
+                out port p_video_data : VideoPort;
+                in port p_pwr_in : PwrPort;
+            }
+        }
+        """
+        engine_ports = SysMLParameterBindingEngine(auto_detect=False)
+        engine_ports.ingest_sysml_text(sysml_code_ports)
+
+        super_sys = engine_ports.resolve_token("SUPER_SYSTEM_ARCHITECTURE")
+        subsys_sec = engine_ports.resolve_token("SUBSYSTEM_ARCHITECTURE_SECTION")
+
+        # Citations
+        self.assertIn("ISO/IEC/IEEE 15288:2023 (§6.4.2 & §6.4.3)", super_sys)
+        self.assertIn("INCOSE Systems Engineering Handbook v5.0 (§3.4.4)", super_sys)
+        self.assertIn("ISO/IEC/IEEE 15288:2023 (§6.4.2 & §6.4.3)", subsys_sec)
+        self.assertIn("INCOSE Systems Engineering Handbook v5.0 (§3.4.4)", subsys_sec)
+
+        # Port Parity in Test Case 1
+        self.assertIn("FlightComputer<br/>• p_c2_link (INOUT)<br/>• p_act_cmd (OUT)<br/>• p_sensor_tlm (IN)", super_sys)
+        self.assertIn("| **p_c2_link** | INOUT | C2Port |", subsys_sec)
+        self.assertIn("| **p_act_cmd** | OUT | CmdPort |", subsys_sec)
+        self.assertIn("| **p_sensor_tlm** | IN | TlmPort |", subsys_sec)
+
+        self.assertIn("SensorPayload<br/>• p_video_data (OUT)<br/>• p_pwr_in (IN)", super_sys)
+        self.assertIn("| **p_video_data** | OUT | VideoPort |", subsys_sec)
+        self.assertIn("| **p_pwr_in** | IN | PwrPort |", subsys_sec)
+
+        # Test Case 2: AST without explicit ports (fallback ports parity)
+        sysml_code_fallback = """
+        package TestPlatform {
+            part def NavModule {
+                doc /* Navigation estimation unit */
+            }
+        }
+        """
+        engine_fallback = SysMLParameterBindingEngine(auto_detect=False)
+        engine_fallback.ingest_sysml_text(sysml_code_fallback)
+
+        super_sys_fb = engine_fallback.resolve_token("SUPER_SYSTEM_ARCHITECTURE")
+        subsys_sec_fb = engine_fallback.resolve_token("SUBSYSTEM_ARCHITECTURE_SECTION")
+
+        self.assertIn("NavModule<br/>• PORT-NAVM-C2 (INOUT)<br/>• PORT-NAVM-DATA (INOUT)<br/>• PORT-NAVM-PWR (IN)", super_sys_fb)
+        self.assertIn("| **PORT-NAVM-C2** | INOUT | DiscreteSafetyInterlock |", subsys_sec_fb)
+        self.assertIn("| **PORT-NAVM-DATA** | INOUT | DeterministicSystemBus |", subsys_sec_fb)
+        self.assertIn("| **PORT-NAVM-PWR** | IN | DC_PowerRail_28V |", subsys_sec_fb)
+
+    def test_sanitize_level_1b_operational_text_filters_level_2_use_cases(self):
+        """Verify _sanitize_level_1b_operational_text strips Level 2 system use cases (uc-xx / (UC-xx))."""
+        from scripts.assemble_conops import _sanitize_level_1b_operational_text
+
+        raw_text_1 = "Human Operator and Mission Supervisor (UC-01 and UC-03)"
+        clean_1 = _sanitize_level_1b_operational_text(raw_text_1)
+        self.assertEqual(clean_1, "Human Operator and Mission Supervisor")
+
+        raw_text_2 = "Ground Control Station (GCS) (UC-02)"
+        clean_2 = _sanitize_level_1b_operational_text(raw_text_2)
+        self.assertEqual(clean_2, "Ground Control Station (GCS)")
+
+        raw_text_3 = "Handles target tracking realizing uc-05 and UC-06 functions"
+        clean_3 = _sanitize_level_1b_operational_text(raw_text_3)
+        self.assertNotIn("uc-05", clean_3)
+        self.assertNotIn("UC-06", clean_3)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
