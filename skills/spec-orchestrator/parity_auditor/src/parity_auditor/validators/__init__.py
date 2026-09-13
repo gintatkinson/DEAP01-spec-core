@@ -37,4 +37,10 @@ from .metamodel_transformation_engine import (
     map_ast_classifier_to_m2,
     validate_metamodel_purity,
 )
+from .executive_deliverable_traceability_validator import (
+    ExecutiveDeliverableTraceabilityValidator,
+    validate_executive_deliverable_traceability,
+    RULE_TABLE_UNANCHORED,
+    RULE_DIAGRAM_INCOMPLETE,
+)
 

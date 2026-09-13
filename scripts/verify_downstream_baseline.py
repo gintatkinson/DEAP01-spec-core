@@ -2836,8 +2836,59 @@ def check_cross_document_diagram_parity(repo_root=None):
 check_cross_document_diagram_parity_gate = check_cross_document_diagram_parity
 
 
+def _load_executive_deliverable_traceability_validator():
+    """Import validate_executive_deliverable_traceability fail-safe."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(script_dir)
+    spec_dir = os.path.join(project_root, "skills", "spec-orchestrator", "scripts")
+    parity_src = os.path.join(project_root, "skills", "spec-orchestrator", "parity_auditor", "src")
+    scripts_dir = os.path.join(project_root, "scripts")
+    for p in (scripts_dir, spec_dir, parity_src):
+        if p not in sys.path:
+            sys.path.insert(0, p)
+    try:
+        from parity_auditor.validators.executive_deliverable_traceability_validator import (
+            validate_executive_deliverable_traceability,
+            ExecutiveDeliverableTraceabilityValidator,
+        )
+        from parity_auditor.core.workspace import WorkspaceRepository
+        return validate_executive_deliverable_traceability, ExecutiveDeliverableTraceabilityValidator, WorkspaceRepository
+    except Exception:
+        return None, None, None
+
+
+def check_executive_deliverable_traceability(repo_root=None):
+    """Check 27: Executive Deliverable Traceability & Completeness Gate.
+
+    Verify that executive engineering deliverables in docs/reports/ and docs/management/
+    maintain strict traceability back to the SysML SSOT model, schema documents, or
+    regulatory standards, and that architecture diagrams encompass declared AST subsystems
+    or provide explicit scoping rationale.
+    """
+    if repo_root is None:
+        repo_root = os.getcwd()
+
+    fn, val_cls, repo_cls = _load_executive_deliverable_traceability_validator()
+    if fn is None:
+        print("WARNING: Check 27 skipped (validate_executive_deliverable_traceability unavailable).", file=sys.stderr)
+        return
+
+    findings = fn(repo_root)
+
+    if findings:
+        print("ERROR: Check 27 failed (Executive Deliverable Traceability Gate violations found):", file=sys.stderr)
+        for f in findings:
+            print(f"  - {f}", file=sys.stderr)
+        sys.exit(1)
+
+    print("Success: Check 27 verified (Executive Deliverable Traceability Gate passed -- all tables and diagrams anchored to SSOT).")
+
+
+check_executive_deliverable_traceability_gate = check_executive_deliverable_traceability
+
+
 def run_all_checks(repo_root=None):
-    """Run all baseline checks (Checks 10 through 25)."""
+    """Run all baseline checks (Checks 10 through 27)."""
     if repo_root is None:
         repo_root = os.getcwd()
     check_gitignore_exists(repo_root)
@@ -2855,6 +2906,7 @@ def run_all_checks(repo_root=None):
     check_semantic_prose_invariants(repo_root)
     check_factual_grounding(repo_root)
     check_cross_document_diagram_parity(repo_root)
+    check_executive_deliverable_traceability(repo_root)
 
 def _run_verification(args, dest, repo_root, is_flutter, is_react):
     # Run Checks 10 through 25
