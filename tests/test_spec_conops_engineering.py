@@ -1117,6 +1117,21 @@ class TestSpecConopsEngineering(unittest.TestCase):
             self.assertIn("PORT_FCS_C2", content)
             self.assertIn("CONN-05: PACE Bidirectional C2 Datalink", content)
 
+    def test_option_3_compact_subsystem_blocks_and_vertical_tiers_standard(self):
+        """Verify §2.3 and §4.4 codify Option 3 Compact Subsystem Blocks with Embedded Port Attributes and Vertical Hierarchical Tiers."""
+        for skill_path in [CONOPS_SKILL_PATH, AGENTS_CONOPS_SKILL_PATH]:
+            self.assertTrue(os.path.isfile(skill_path), f"Missing {skill_path}")
+            with open(skill_path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            self.assertIn("### 2.3 System Architecture Diagram Representation Standard (Option 3)", content)
+            self.assertIn("Option 3 (Compact Subsystem Block Representation with Embedded Port Attributes and Vertical Hierarchical Tiers)", content)
+            self.assertIn("max 3-column vertical tier partitioning", content)
+            self.assertIn("direction TB", content)
+            self.assertIn("Option 3 Standard: Compact Subsystem Blocks with Embedded Port Attributes & Vertical Hierarchical Tiers", content)
+            self.assertIn("<br/>• PORT_GCS_C2", content)
+            self.assertIn("<br/>• PORT_FCS_C2", content)
+
 
 if __name__ == "__main__":
     unittest.main()

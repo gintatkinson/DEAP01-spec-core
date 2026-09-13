@@ -1460,7 +1460,10 @@ class SysMLParameterBindingEngine:
         self._explicit_keys.add("CONOPS_SECTION_4_SUBSYSTEMS")
 
     def _synthesize_super_system_architecture_text(self, sys_id: str, dom: str = "") -> str:
-        """Generates Section 4.7 Super-System Architecture Markdown derived deterministically from SysML AST."""
+        """
+        Generates Section 4.7 Super-System Architecture Markdown derived deterministically from SysML AST.
+        Conforms to Option 3: Compact Subsystem Blocks with Embedded Port Attributes and Vertical Hierarchical Tiers (direction TB).
+        """
         parts = self.ast_parts if self.ast_parts else []
         subsys_names = [getattr(p, "name", str(p)) for p in parts]
         subsys_summary = ", ".join(subsys_names) if subsys_names else "Declared System Subsystems"
@@ -1468,48 +1471,82 @@ class SysMLParameterBindingEngine:
         lines = [
             f"The **{sys_id}** super-system architecture formalizes the complete cyber-physical system boundary and segment allocations in accordance with IEEE 1362 §5.3, DoDAF SV-1, ISO/IEC/IEEE 29148:2018 §6.4.2–§6.4.3, and INCOSE Systems Engineering Handbook v5.0.",
             "",
-            f"The super-system decomposes across declared SysML AST architectural blocks:",
+            f"The super-system decomposes across declared SysML AST architectural blocks conforming to Option 3 (Compact Subsystem Blocks with Embedded Port Attributes and max 3-column vertical tier partitioning):",
             f"1. **Primary Operational Segment (Air Vehicle / Primary Platform Segment):** Houses constituent subsystems ({subsys_summary}) executing closed-loop mission activities.",
             f"2. **Ground Command & Control Segment (Ground Segment):** Provides supervisory oversight and failsafe abort authority.",
             f"3. **Launch & Auxiliary Support Segment (Launch & Support Segment):** Provides pre-operational deployment, servicing, and diagnostic support.",
             "",
             "```mermaid",
             "flowchart TD",
-            f'    subgraph "Operational Super-System Architecture ({sys_id})"',
-            '        subgraph "External Operating Environment & Actors (IEEE 1362 §5.1)"',
+            f'    subgraph Super_System["Operational Super-System Architecture ({sys_id})"]',
+            '        direction TB',
+            '',
+            '        subgraph External_Actors["External Operating Environment & Actors (IEEE 1362 §5.1)"]',
+            '            direction TB',
             '            Operator["Supervisory Operator (SO / MS)"]',
             '            Environment["External Environment & Infrastructure"]',
             '        end',
             '',
-            '        subgraph "Primary Operational Segment (DoDAF SV-1)"',
-            f'            Platform["{sys_id} Core Platform"]',
-            '            PORT_PLAT_C2["PORT-PLAT-C2 (INOUT)"]',
-            '            PORT_PLAT_PWR["PORT-PLAT-PWR (IN)"]',
-            '            Platform --- PORT_PLAT_C2',
-            '            Platform --- PORT_PLAT_PWR',
+            '        subgraph Ground_Segment["Ground Command & Control Segment (IEEE 1362 §5.3)"]',
+            '            direction TB',
+            '            GCS["Ground Control Station / C2<br/>• PORT_GCS_C2 (INOUT)<br/>• PORT_GCS_DISP (OUT)"]',
             '        end',
             '',
-            '        subgraph "Ground Command & Control Segment (IEEE 1362 §5.3)"',
-            '            GCS["Ground Control Station / C2"]',
-            '            PORT_GCS_C2["PORT-GCS-C2 (INOUT)"]',
-            '            GCS --- PORT_GCS_C2',
-            '        end',
-            '',
-            '        subgraph "Launch & Auxiliary Support Segment (IEEE 1362 §5.3)"',
-            '            Launch["Launch & Recovery System"]',
-            '            GSE["Support Equipment & Maintenance"]',
-            '            PORT_GSE_PWR["PORT-GSE-PWR (OUT)"]',
-            '            GSE --- PORT_GSE_PWR',
-            '        end',
-            '',
-            '        Operator -->|"CONN-01: Operator Command & Authorization"| GCS',
-            '        PORT_GCS_C2 <-->|"CONN-02: Bidirectional PACE C2 Datalink"| PORT_PLAT_C2',
-            '        PORT_GSE_PWR -.->|"CONN-03: Pre-Mission Power & Servicing"| PORT_PLAT_PWR',
-            '        Launch -.->|"CONN-04: Deployment & Recovery Interface"| Platform',
-            '        Environment -.->|"CONN-05: Environmental Dynamics & Disturbance"| Platform',
-            '    end',
-            "```",
+            '        subgraph Platform_Segment["Primary Operational Segment (DoDAF SV-1)"]',
+            '            direction TB',
         ]
+
+        part_node_ids: List[Tuple[str, str]] = []
+        if parts:
+            chunk_size = 3
+            for chunk_idx in range(0, len(parts), chunk_size):
+                chunk = parts[chunk_idx:chunk_idx + chunk_size]
+                tier_num = (chunk_idx // chunk_size) + 1
+                tier_subgraph_name = f"Tier_{tier_num}"
+                tier_label = f"Subsystem Architecture Tier {tier_num}" if len(parts) > 3 else "Core Platform Subsystems"
+                lines.append(f'            subgraph {tier_subgraph_name}["{tier_label}"]')
+                lines.append('                direction TB')
+                for p in chunk:
+                    p_name = getattr(p, "name", str(p))
+                    p_node_id = re.sub(r'[^A-Za-z0-9_]', '_', p_name)
+                    part_node_ids.append((p_node_id, p_name))
+                    ports = getattr(p, "ports", []) or []
+                    if ports:
+                        port_items = []
+                        for pt in ports:
+                            pt_name = getattr(pt, "name", "port")
+                            pt_dir = (getattr(pt, "direction", "inout") or "inout").upper()
+                            port_items.append(f"<br/>• {pt_name} ({pt_dir})")
+                        port_text = "".join(port_items)
+                    else:
+                        p_prefix = re.sub(r'[^A-Za-z0-9]', '', p_name)[:4].upper() or "SUB"
+                        port_text = f"<br/>• PORT-{p_prefix}-C2 (INOUT)<br/>• PORT-{p_prefix}-DATA (INOUT)<br/>• PORT-{p_prefix}-PWR (IN)"
+                    lines.append(f'                {p_node_id}["{p_name}{port_text}"]')
+                lines.append('            end')
+        else:
+            lines.append(f'            Platform["{sys_id} Core Platform<br/>• PORT_PLAT_C2 (INOUT)<br/>• PORT_PLAT_PWR (IN)"]')
+            part_node_ids.append(("Platform", f"{sys_id} Core Platform"))
+
+        lines.append('        end')
+        lines.append('')
+        lines.append('        subgraph Support_Segment["Launch & Auxiliary Support Segment (IEEE 1362 §5.3)"]')
+        lines.append('            direction TB')
+        lines.append('            Launch["Launch & Recovery System"]')
+        lines.append('            GSE["Support Equipment & Maintenance<br/>• PORT_GSE_PWR (OUT)"]')
+        lines.append('        end')
+        lines.append('')
+        lines.append('        Operator -->|"CONN-01: Operator Command & Authorization"| GCS')
+        if part_node_ids:
+            primary_node = part_node_ids[0][0]
+            lines.append(f'        GCS <-->|"CONN-02: Bidirectional PACE C2 Datalink [PORT_GCS_C2 <-> PORT_PLAT_C2]"| {primary_node}')
+            lines.append(f'        GSE -.->|"CONN-03: Pre-Mission Power & Servicing [PORT_GSE_PWR]"| {primary_node}')
+            lines.append(f'        Launch -.->|"CONN-04: Deployment & Recovery Interface"| {primary_node}')
+            lines.append(f'        Environment -.->|"CONN-05: Environmental Dynamics & Disturbance"| {primary_node}')
+            if len(part_node_ids) > 1:
+                for idx_p, (other_node, _other_name) in enumerate(part_node_ids[1:], start=6):
+                    lines.append(f'        {primary_node} <-->|"CONN-{idx_p:02d}: Internal Bus & Inter-Subsystem Control"| {other_node}')
+        lines.append('    end')
+        lines.append('```')
         return "\n".join(lines)
 
     def _synthesize_subsystem_architecture_text(self, sys_id: str, dom: str = "") -> str:

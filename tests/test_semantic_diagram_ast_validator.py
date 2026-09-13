@@ -270,8 +270,27 @@ flowchart TD
 ```
 """)
 
-            check_semantic_diagram_ast_parity(tmpdir)
+    def test_compact_subsystem_blocks_with_embedded_ports(self):
+        """Verify compact subsystem blocks with multi-line embedded port attributes pass without false positives."""
+        diagram = """
+flowchart TD
+    subgraph NavSegment ["Navigation Segment"]
+        NavSubsystem["NavigationSubsystem<br/>• nav_out (OUT: NavTelemetryPort)"]
+    end
+    subgraph ControlSegment ["Control Segment"]
+        FCCSubsystem["FlightControlSubsystem<br/>• nav_in (IN: FlightControlInPort)<br/>• act_cmd_out (OUT: ActuatorCommandPort)"]
+    end
+    subgraph ActuatorSegment ["Actuation Segment"]
+        MotorNode["MotorActuator<br/>• act_in (IN: ActuatorInputPort)"]
+    end
+
+    NavSubsystem --> FCCSubsystem
+    FCCSubsystem --> MotorNode
+"""
+        findings = self.validator.validate_diagram_ast(diagram, "docs/conops/CONOPS.md", self.pkg)
+        self.assertEqual(len(findings), 0, f"Expected 0 findings for compact diagram, got: {findings}")
 
 
 if __name__ == "__main__":
     unittest.main()
+

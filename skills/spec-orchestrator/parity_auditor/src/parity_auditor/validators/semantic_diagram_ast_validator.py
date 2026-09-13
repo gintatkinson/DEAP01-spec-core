@@ -523,26 +523,39 @@ class SemanticDiagramASTValidator(IValidator):
     def _is_actuator(self, name: str, label: str) -> bool:
         """Check if a node represents an actuator component."""
         name_lower = name.lower()
-        lbl_lower = (label or "").lower()
+        title_line = (label or "").split('<br')[0].split('\n')[0].strip()
+        title_lower = title_line.lower()
         norm_name = _normalize_identifier(name)
         # Exclude communication, satellite, network, service relays, stations, controller interfaces and port endpoints
         if norm_name.startswith("port") or name_lower.startswith(("port-", "port_", "port:")):
             return False
-        if any(k in name_lower or k in lbl_lower for k in (
+        if any(k in name_lower or k in title_lower for k in (
             "satcom", "network", "comms", "service", "gateway", "hub", "station",
             "console", "terminal", "umbilical",
-            "computer", "controller", "fcc", "autopilot", "obc"
+            "computer", "controller", "fcc", "autopilot", "obc",
+            "safety", "safetynet", "rta", "monitor", "supervisor", "executive"
         )):
             return False
-        tokens = _tokenize_name(name) | _tokenize_name(label)
-        return any(kw in name_lower or kw in lbl_lower or kw in tokens for kw in ACTUATOR_KEYWORDS)
+        tokens = _tokenize_name(name) | _tokenize_name(title_line)
+        return any(kw in name_lower or kw in title_lower or kw in tokens for kw in ACTUATOR_KEYWORDS)
 
     def _is_sensor_or_data_source(self, name: str, label: str) -> bool:
         """Check if a node represents a sensor, IMU, or primary data source."""
         name_lower = name.lower()
-        lbl_lower = (label or "").lower()
-        tokens = _tokenize_name(name) | _tokenize_name(label)
-        return any(kw in name_lower or kw in lbl_lower or kw in tokens for kw in SENSOR_OR_SOURCE_KEYWORDS)
+        title_line = (label or "").split('<br')[0].split('\n')[0].strip()
+        title_lower = title_line.lower()
+        norm_name = _normalize_identifier(name)
+        if norm_name.startswith("port") or name_lower.startswith(("port-", "port_", "port:")):
+            return False
+        if any(k in name_lower or k in title_lower for k in (
+            "satcom", "network", "comms", "service", "gateway", "hub", "station",
+            "console", "terminal", "umbilical",
+            "computer", "controller", "fcc", "autopilot", "obc",
+            "safety", "safetynet", "rta", "monitor", "supervisor", "executive"
+        )):
+            return False
+        tokens = _tokenize_name(name) | _tokenize_name(title_line)
+        return any(kw in name_lower or kw in title_lower or kw in tokens for kw in SENSOR_OR_SOURCE_KEYWORDS)
 
     def _validate_flowchart_semantics(
         self,

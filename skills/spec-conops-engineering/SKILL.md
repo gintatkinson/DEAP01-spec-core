@@ -75,7 +75,7 @@ The ConOps specification tree consists of 12 canonical modular units:
 | `01_METADATA_AND_OVERVIEW.md` | `## 1. Scope, System Identification & Normative Baseline` | `operational_context`, `user_classes` | System ID, domain classification, physical/legal boundaries, stakeholder roster, user classes. |
 | `02_DEFICIENCIES_AND_MOTIVATION.md` | `## 2. Current Situation, Deficiency Analysis & Operational Motivation` | `deficiencies` | Predecessor baseline, technical, operational, and human deficiencies. |
 | `03_PROPOSED_CAPABILITIES.md` | `## 3. Proposed Capabilities & Operational Justification (Trade-Offs)` | `proposed_capabilities` | Mission drivers, value propositions, engineering trade-off evaluations. |
-| `04_USER_CLASSES_AND_STAKEHOLDERS.md` | `## 4. User Classes, Stakeholder Taxonomy & Operational Lifecycle Modes` | `operational_context` | Formal operational lifecycle stages: Phase_Startup, Phase_NominalExecution, Phase_DegradedMode, Phase_ContingencyFailsafe, Phase_SecureShutdown, Phase_MaintenanceMode; Super-System Architecture (Air Vehicle, Ground Segment, Launch System); and Subsystem Architecture subsections covering 100% of declared AST `part def` nodes. |
+| `04_USER_CLASSES_AND_STAKEHOLDERS.md` | `## 4. User Classes, Stakeholder Taxonomy & Operational Lifecycle Modes` | `operational_context` | Formal operational lifecycle stages: Phase_Startup, Phase_NominalExecution, Phase_DegradedMode, Phase_ContingencyFailsafe, Phase_SecureShutdown, Phase_MaintenanceMode; Super-System Architecture (Air Vehicle, Ground Segment, Launch System) conforming to Option 3 (Compact Subsystem Blocks with Embedded Port Attributes and max 3-column vertical tier partitioning); and Subsystem Architecture subsections covering 100% of declared AST `part def` nodes. |
 | `05_AIRSPACE_AND_SORA_RISK.md` | `## 5. Operational State Space, Boundary Containment & Risk Assessment` | `airspace_sora` | 4D volume mathematical formulation, Ground Risk Buffer ($R_{\mathrm{GRB}}$) equation, and SORA impact parameters table. |
 | `06_UAF_OPERATIONAL_ACTIVITIES.md` | `## 6. OMG UAF Operational Activity Taxonomy` | `uaf_activities` | Open-ended UAF activity roster (`OA-01`..`OA-N`) with mandatory Gate 24 allocation tags (`/// OperationalAllocation: [OA-XX]`). |
 | `07_OPTX_EXCHANGES.md` | `## 7. Operational Information Exchange (Op-Tx) Matrix` | `optx_exchanges` | Information exchange roster (`OpTx-01`..`OpTx-N`) specifying source, destination, data rates, latency limits, criticality. |
@@ -101,6 +101,12 @@ The Tactical Mission Intent specification tree consists of 10 canonical modular 
 | `08_GO_NO_GO_MATRIX.md` | `## 8. Go/No-Go Decision Matrix` | `go_no_go_matrix` | Operational phase checks (`GNG-01`..`GNG-N`), threshold conditions, sensors/mechanisms, and deterministic Go/No-Go actions. |
 | `09_BINGO_ENERGY_MATH.md` | `## 9. Bingo Energy Mathematics & Secondary Divert Protocols` | `bingo_energy_math` | Bingo energy dynamics formulation ($E_{\mathrm{bingo}}(t)$), statutory reserve ratio constraint ($\ge 20\%$), and energy parameter table. |
 | `10_OPERATIONAL_ALLOCATION_TAGS.md` | `## 10. Gate 24 MissionTask Traceability Tags` | `allocation_tags` | Comprehensive listing of Gate 24 allocation tags (`/// OperationalAllocation: [MET-XX]`) for cross-model traceability. |
+
+### 2.3 System Architecture Diagram Representation Standard (Option 3)
+In accordance with DoDAF v2.02 SV-1, IEEE 1362 §5.3, and ISO/IEC/IEEE 29148:2018 §6.4.2–§6.4.3, all system interface and super-system architectural diagrams MUST implement **Option 3 (Compact Subsystem Block Representation with Embedded Port Attributes and Vertical Hierarchical Tiers)**:
+1. **Compact Subsystem Blocks with Embedded Port Attributes**: Subsystems must be represented as unified compact nodes embedding their typed logical/physical ports as bulleted attributes (`[<b>Name</b><br/>• PORT-... (DIRECTION)]`), preventing diagram bloat from isolated port nodes.
+2. **Vertical Hierarchical Tier Partitioning (`direction TB`)**: Diagram flow must follow a top-to-bottom layout (`flowchart TD` / `direction TB`) partitioned into vertical subsystem tiers with a maximum of 3 columns horizontally (max 3-column vertical tier partitioning), eliminating unconstrained horizontal sprawl.
+3. **Traceable Direct Interconnects**: Connection links (`CONN-01`..`CONN-N`) must route directly between subsystem blocks, citing the relevant port interfaces in the link label.
 
 ---
 
@@ -229,12 +235,17 @@ Per IEEE 1362-1998 §5.3 (Operational Environment & System Architecture), DoDAF 
      - **Mechanical / Aerodynamic Interfaces**: Physical mounting interfaces, environmental separation envelopes, aerodynamic forces.
   4. **System Boundary & External Actor Interfaces (IEEE 1362 §5.1 / ISO 29148 §6.4.2)**: Explicit boundary encapsulation enclosing the system segments and formal external actor interfaces (Supervisory Operators, Range Safety Officers, GNSS constellations, Environmental dynamics).
   5. **Strict Exclusion of Internal Software Modules (DoDAF SV-4)**: ConOps SV-1 operates strictly at the physical and logical subsystem / LRU boundary. Internal software execution classes, internal algorithms, class methods, and function signatures belong in Level 2 detailed design / DoDAF SV-4 and are strictly prohibited in the Level 1B ConOps SV-1 diagram.
-  6. **Canonical Compliant Mermaid SV-1 Diagram Template**: The architecture diagram MUST be authored using a compliant Mermaid flowchart (`flowchart TD` or `flowchart TB`) declaring segment subgraphs, discrete port nodes, and bidirectional/directed connection links (`CONN-XX`).
+  6. **Option 3 Standard: Compact Subsystem Blocks with Embedded Port Attributes & Vertical Hierarchical Tiers**:
+     - **Embedded Port Attributes**: All subsystem blocks MUST embed their discrete ports as bulleted attributes inside the subsystem node definition (`[<b>Name</b><br/>• PORT-... (DIRECTION)]`), rather than rendering individual ports as separate downstream child nodes or nested single-component subgraphs.
+     - **Vertical Hierarchical Tier Partitioning (`direction TB`)**: Subgraphs and segment partitions MUST enforce top-to-bottom vertical layout (`direction TB`) with a maximum of 3 columns horizontally (max 3-column vertical tier partitioning). Flat horizontal layout (`direction LR` or unrestricted horizontal chaining) is strictly prohibited to prevent unreadable horizontal diagram sprawl.
+     - **Direct Traceable Interconnects**: Directed and bidirectional connection links (`CONN-01`..`CONN-N`) route directly between compact subsystem nodes and external actors, specifying the logical/physical flow and port bindings in the connection label.
+  7. **Canonical Compliant Mermaid SV-1 Diagram Template**: The architecture diagram MUST be authored using a compliant Mermaid flowchart (`flowchart TD` or `flowchart TB`) declaring segment subgraphs, discrete port nodes, and bidirectional/directed connection links (`CONN-XX`).
 
-#### Figure 4.1: Canonical ConOps SV-1 Primary System Architecture Diagram Template
+#### Figure 4.1: Canonical ConOps SV-1 Primary System Architecture Diagram Template (Option 3: Compact Blocks & Vertical Tiers)
 ```mermaid
 flowchart TD
     subgraph External_Actors["External Operating Environment and Actors (IEEE 1362 §5.1)"]
+        direction TB
         Operator["Human Operator and Mission Supervisor (UC-01 and UC-03)"]
         GNSS_Space["GNSS Constellation (Space Segment)"]
         Environment["Atmospheric and Environmental Dynamics"]
@@ -242,65 +253,42 @@ flowchart TD
     end
 
     subgraph Ground_Segment["Ground Command and Control Segment (IEEE 1362 §5.3)"]
-        GCS["Ground Control Station (GCS)"]
-        PORT_GCS_C2["PORT-GCS-C2 (INOUT)"]
-        PORT_GCS_DISP["PORT-GCS-DISP (OUT)"]
-        GCS --- PORT_GCS_C2
-        GCS --- PORT_GCS_DISP
+        direction TB
+        GCS["Ground Control Station (GCS)<br/>• PORT_GCS_C2 (INOUT)<br/>• PORT_GCS_DISP (OUT)"]
     end
 
     subgraph Platform_Segment["Air Vehicle and Primary Platform Segment (DoDAF SV-1)"]
-        subgraph Avionics_Bay["Avionics and Processing Core"]
-            FCS["Flight and Guidance Controller"]
-            PORT_FCS_C2["PORT-FCS-C2 (INOUT)"]
-            PORT_FCS_CMD["PORT-FCS-CMD (OUT)"]
-            PORT_FCS_TLM["PORT-FCS-TLM (IN)"]
-            FCS --- PORT_FCS_C2
-            FCS --- PORT_FCS_CMD
-            FCS --- PORT_FCS_TLM
+        direction TB
+        subgraph Tier1_Processing["Guidance & Perception Tier"]
+            direction TB
+            FCS["Flight and Guidance Controller<br/>• PORT_FCS_C2 (INOUT)<br/>• PORT_FCS_CMD (OUT)<br/>• PORT_FCS_TLM (IN)"]
+            NavSensors["Sensor Fusion Unit<br/>• PORT_NAV_RF (IN)<br/>• PORT_NAV_DATA (OUT)"]
         end
 
-        subgraph Navigation_Sensors["Perception and Navigation Subsystem"]
-            NavSensors["Sensor Fusion Unit"]
-            PORT_NAV_RF["PORT-NAV-RF (IN)"]
-            PORT_NAV_DATA["PORT-NAV-DATA (OUT)"]
-            NavSensors --- PORT_NAV_RF
-            NavSensors --- PORT_NAV_DATA
-        end
-
-        subgraph Power_Actuation["Energy and Actuation Subsystem"]
-            Actuators["Distributed Actuator Core"]
-            PORT_ACT_IN["PORT-ACT-IN (IN)"]
-            Actuators --- PORT_ACT_IN
-        end
-
-        subgraph Safety_Core["Autonomous Containment Subsystem"]
-            Watchdog["Hardware Safety Watchdog"]
-            PORT_WD_IN["PORT-WD-IN (IN)"]
-            PORT_WD_TRIG["PORT-WD-TRIG (OUT)"]
-            Watchdog --- PORT_WD_IN
-            Watchdog --- PORT_WD_TRIG
+        subgraph Tier2_Actuation["Energy, Actuation & Safety Tier"]
+            direction TB
+            Actuators["Distributed Actuator Core<br/>• PORT_ACT_IN (IN)"]
+            Watchdog["Hardware Safety Watchdog<br/>• PORT_WD_IN (IN)<br/>• PORT_WD_TRIG (OUT)"]
         end
     end
 
     subgraph Support_Segment["Launch and Auxiliary Support Segment (IEEE 1362 §5.3)"]
-        GSE["Ground Support Equipment and Staging"]
-        PORT_GSE_PWR["PORT-GSE-PWR (OUT)"]
-        GSE --- PORT_GSE_PWR
+        direction TB
+        GSE["Ground Support Equipment and Staging<br/>• PORT_GSE_PWR (OUT)"]
     end
 
     %% External Interface Connections
-    Operator -->|"CONN-01: Operator Command Input"| PORT_GCS_DISP
-    GNSS_Space -->|"CONN-02: L-Band RF Navigation Signals"| PORT_NAV_RF
+    Operator -->|"CONN-01: Operator Command Input"| GCS
+    GNSS_Space -->|"CONN-02: L-Band RF Navigation Signals"| NavSensors
     Environment -.->|"CONN-03: Aerodynamic Disturbance and Wind Gusts"| Actuators
     RangeSafety -->|"CONN-04: Flight Termination Consent"| GCS
 
     %% Segment Inter-Connects (Item Flows)
-    PORT_GCS_C2 ---|"CONN-05: PACE Bidirectional C2 Datalink"| PORT_FCS_C2
-    PORT_NAV_DATA -->|"CONN-06: Navigation State Estimates"| PORT_FCS_TLM
-    PORT_FCS_CMD -->|"CONN-07: Real-Time Actuator Demand Vector"| PORT_ACT_IN
-    PORT_FCS_CMD -->|"CONN-08: Heartbeat Pulse and Safety Telemetry"| PORT_WD_IN
-    PORT_GSE_PWR -.->|"CONN-09: Regulated Pre-Flight Power and Diagnostics"| Platform_Segment
+    GCS <-->|"CONN-05: PACE Bidirectional C2 Datalink [PORT_GCS_C2 <-> PORT_FCS_C2]"| FCS
+    NavSensors -->|"CONN-06: Navigation State Estimates [PORT_NAV_DATA -> PORT_FCS_TLM]"| FCS
+    FCS -->|"CONN-07: Real-Time Actuator Demand Vector [PORT_FCS_CMD -> PORT_ACT_IN]"| Actuators
+    FCS -->|"CONN-08: Heartbeat Pulse and Safety Telemetry [PORT_FCS_CMD -> PORT_WD_IN]"| Watchdog
+    GSE -.->|"CONN-09: Regulated Pre-Flight Power and Diagnostics [PORT_GSE_PWR]"| Platform_Segment
 ```
 
 - **Subsystem Architecture & AST Part Allocation (Section 4.8)**:

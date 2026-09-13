@@ -1587,6 +1587,43 @@ Formal operational lifecycle stages across $\\Phi_{\\mathrm{lifecycle}}$:
             self.assertIn("## 1. Commander's Intent & Operational Objectives", mission_text)
             self.assertIn("## 10. Gate 24 MissionTask Traceability Tags", mission_text)
 
+    def test_option_3_super_system_architecture_synthesis(self):
+        """Verify Option 3 compact subsystem blocks and vertical hierarchical tiers in super-system architecture synthesis."""
+        sysml_code = """
+        package TestPlatform {
+            part def GuidanceComputer {
+                inout port p_c2 : InOutPort;
+                out port p_cmd : OutPort;
+            }
+            part def NavigationFusionUnit {
+                in port p_rf : InPort;
+                out port p_data : OutPort;
+            }
+            part def ActuatorUnit {
+                in port p_act : InPort;
+            }
+            part def SafetyWatchdog {
+                in port p_wd : InPort;
+            }
+        }
+        """
+        engine = SysMLParameterBindingEngine(auto_detect=False)
+        engine.ingest_sysml_text(sysml_code)
+
+        super_sys = engine.resolve_token("SUPER_SYSTEM_ARCHITECTURE")
+        self.assertIn("Option 3 (Compact Subsystem Blocks with Embedded Port Attributes and max 3-column vertical tier partitioning)", super_sys)
+        self.assertIn("```mermaid", super_sys)
+        self.assertIn("flowchart TD", super_sys)
+        self.assertIn("direction TB", super_sys)
+        self.assertIn('subgraph Tier_1["Subsystem Architecture Tier 1"]', super_sys)
+        self.assertIn('subgraph Tier_2["Subsystem Architecture Tier 2"]', super_sys)
+        self.assertIn('GuidanceComputer["GuidanceComputer<br/>• p_c2 (INOUT)<br/>• p_cmd (OUT)"]', super_sys)
+        self.assertIn('NavigationFusionUnit["NavigationFusionUnit<br/>• p_rf (IN)<br/>• p_data (OUT)"]', super_sys)
+        self.assertIn('ActuatorUnit["ActuatorUnit<br/>• p_act (IN)"]', super_sys)
+        self.assertIn('SafetyWatchdog["SafetyWatchdog<br/>• p_wd (IN)"]', super_sys)
+        self.assertIn("CONN-01: Operator Command & Authorization", super_sys)
+        self.assertIn("CONN-02: Bidirectional PACE C2 Datalink", super_sys)
+
 
 if __name__ == "__main__":
     unittest.main()
