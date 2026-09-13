@@ -1577,13 +1577,47 @@ class SysMLParameterBindingEngine:
 
             lines.append("")
             lines.append(f"##### 4.8.{idx}.3 Operational Lifecycle & Statechart Integration")
-            lines.append(f"The `{p_name}` subsystem actively participates across all six operational lifecycle stages ($\\Phi_{{\\mathrm{{lifecycle}}}}$):")
-            lines.append(f"- **Phase_Startup:** Executes automated power-on Built-In-Test (PBIT), sensor bias baseline verification, and communication handshake.")
-            lines.append(f"- **Phase_NominalExecution:** Performs continuous closed-loop operational processing, deterministic telemetry streaming, and nominal mission tasks.")
-            lines.append(f"- **Phase_DegradedMode:** Enforces degraded operating limits, switches to redundant channels upon signal loss, and suppresses non-critical loads.")
-            lines.append(f"- **Phase_ContingencyFailsafe:** Executes deterministic failsafe containment action within bounded response latency upon critical anomaly detection.")
-            lines.append(f"- **Phase_SecureShutdown:** Safely de-energizes power stages, latches mechanical actuators into safe positions, and archives diagnostic logs.")
-            lines.append(f"- **Phase_MaintenanceMode:** Supports interactive diagnostics, calibration verification, and tool-less modular LRU servicing.")
+            lines.append(f"The `{p_name}` subsystem actively participates across operational lifecycle stages ($\\Phi_{{\\mathrm{{lifecycle}}}}$):")
+
+            lifecycle_type = (
+                self.lifecycle_contract.lifecycle_type
+                if (self.lifecycle_contract and self.lifecycle_contract.lifecycle_type)
+                else LifecycleType.REUSABLE_RECOVERY
+            )
+
+            if lifecycle_type == LifecycleType.EXPENDABLE_KINETIC_EFFECTOR:
+                lines.append(f"- **Phase_Startup:** Executes automated power-on Built-In-Test (PBIT), sensor bias baseline verification, and arming handshake.")
+                lines.append(f"- **Phase_NominalExecution:** Performs continuous closed-loop guidance/flight processing, deterministic telemetry streaming, and nominal mission tasks.")
+                lines.append(f"- **Phase_DegradedMode:** Enforces degraded operating limits, switches to redundant channels upon signal loss, and suppresses non-critical loads.")
+                lines.append(f"- **Phase_ContingencyFailsafe:** Executes deterministic failsafe containment action within bounded response latency (safe containment ditching / zeroization).")
+                lines.append(f"- **Phase_TerminalEngagement:** Executes high-rate terminal state estimation, target intercept guidance, and kinetic impact zeroization.")
+            elif lifecycle_type == LifecycleType.CONTINUOUS_STATIONARY:
+                lines.append(f"- **Phase_Startup:** Executes automated power-on Built-In-Test (PBIT), sensor bias baseline verification, and communication handshake.")
+                lines.append(f"- **Phase_NominalExecution:** Performs continuous closed-loop operational processing, deterministic telemetry streaming, and nominal mission tasks.")
+                lines.append(f"- **Phase_DegradedMode:** Enforces degraded operating limits, switches to redundant channels upon signal loss, and suppresses non-critical loads.")
+                lines.append(f"- **Phase_ContingencyFailsafe:** Executes deterministic failsafe containment action within bounded response latency (electromechanical joint brake locking & sterile preservation).")
+                lines.append(f"- **Phase_SecureShutdown:** Safely de-energizes power stages, stationary joint lock & log archival.")
+                lines.append(f"- **Phase_MaintenanceMode:** Supports interactive diagnostics, calibration verification, and tool-less modular LRU servicing.")
+            elif lifecycle_type == LifecycleType.PERSISTENT_ORBITAL:
+                lines.append(f"- **Phase_Startup:** Executes automated power-on Built-In-Test (PBIT), sensor bias baseline verification, and communication handshake.")
+                lines.append(f"- **Phase_NominalExecution:** Performs continuous closed-loop operational processing, deterministic telemetry streaming, and nominal mission tasks.")
+                lines.append(f"- **Phase_DegradedMode:** Enforces degraded operating limits, switches to redundant channels upon signal loss, and suppresses non-critical loads.")
+                lines.append(f"- **Phase_ContingencyFailsafe:** Executes deterministic failsafe containment action within bounded response latency (safe hold sun-pointing & reaction wheel desaturation).")
+                lines.append(f"- **Phase_DisposalPassivation:** Executes autonomous de-orbit disposal / graveyard passivation.")
+            elif lifecycle_type == LifecycleType.TRACK_BOUND_GUIDED:
+                lines.append(f"- **Phase_Startup:** Executes automated power-on Built-In-Test (PBIT), sensor bias baseline verification, and communication handshake.")
+                lines.append(f"- **Phase_NominalExecution:** Performs continuous closed-loop operational processing, deterministic telemetry streaming, and nominal mission tasks.")
+                lines.append(f"- **Phase_DegradedMode:** Enforces degraded operating limits, switches to redundant channels upon signal loss, and suppresses non-critical loads.")
+                lines.append(f"- **Phase_ContingencyFailsafe:** Executes deterministic failsafe containment action within bounded response latency (controlled track deceleration / siding divert).")
+                lines.append(f"- **Phase_SecureShutdown:** Safely de-energizes power stages, engages mechanical parking brakes, and archives diagnostic logs.")
+                lines.append(f"- **Phase_MaintenanceMode:** Supports interactive diagnostics, calibration verification, and tool-less modular LRU servicing.")
+            else:
+                lines.append(f"- **Phase_Startup:** Executes automated power-on Built-In-Test (PBIT), sensor bias baseline verification, and communication handshake.")
+                lines.append(f"- **Phase_NominalExecution:** Performs continuous closed-loop operational processing, deterministic telemetry streaming, and nominal mission tasks.")
+                lines.append(f"- **Phase_DegradedMode:** Enforces degraded operating limits, switches to redundant channels upon signal loss, and suppresses non-critical loads.")
+                lines.append(f"- **Phase_ContingencyFailsafe:** Executes deterministic failsafe containment action within bounded response latency upon critical anomaly detection.")
+                lines.append(f"- **Phase_SecureShutdown:** Safely de-energizes power stages, latches mechanical actuators into safe positions, and archives diagnostic logs.")
+                lines.append(f"- **Phase_MaintenanceMode:** Supports interactive diagnostics, calibration verification, and tool-less modular LRU servicing.")
 
             if actions:
                 action_names = [getattr(a, "name", str(a)) for a in actions]
@@ -3485,11 +3519,6 @@ def assemble_document(
         with open(path, "r", encoding="utf-8") as f:
             raw_text = f.read()
         fname = os.path.basename(path)
-        if fname.startswith("04_"):
-            if "### 4.7" not in raw_text and "{{SUPER_SYSTEM_ARCHITECTURE}}" not in raw_text:
-                raw_text += "\n\n### 4.7 Super-System Architecture & Segment Boundaries\n{{SUPER_SYSTEM_ARCHITECTURE}}\n"
-            if "### 4.8" not in raw_text and "{{SUBSYSTEM_ARCHITECTURE_SECTION}}" not in raw_text:
-                raw_text += "\n\n### 4.8 Subsystem Architecture & AST Part Allocation\n{{SUBSYSTEM_ARCHITECTURE_SECTION}}\n"
         bound_text = param_engine.substitute(raw_text)
         units.append((fname, bound_text))
 

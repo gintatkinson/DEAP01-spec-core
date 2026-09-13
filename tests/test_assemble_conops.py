@@ -22,6 +22,7 @@ from scripts.assemble_conops import (
     CANONICAL_MISSION_INTENT_UNITS,
     DEFAULT_CONOPS_PARAMS,
     RAW_TOKEN_FINDER,
+    LifecycleType,
     SysMLParameterBindingEngine,
     assemble_conops,
     assemble_document,
@@ -38,6 +39,24 @@ def _create_sample_conops_units(units_dir: str, with_placeholders: bool = False,
     os.makedirs(units_dir, exist_ok=True)
 
     token_val = "{{SYSTEM_IDENTIFIER}}" if with_placeholders else "AutonomousCyberPhysicalSystem"
+
+    u4_content = """## 4. Operational Modes & Lifecycle Stages
+Formal operational lifecycle stages across $\\Phi_{\\mathrm{lifecycle}}$:
+- **Phase_Startup:** Built-In-Test self-check and navigation calibration.
+- **Phase_NominalExecution:** Automated waypoint tracking and payload monitoring.
+- **Phase_DegradedMode:** Sensor redundancy failsafe mode.
+- **Phase_ContingencyFailsafe:** Autonomous return-to-base and controlled containment.
+- **Phase_SecureShutdown:** Post-mission payload encryption and shutdown.
+- **Phase_MaintenanceMode:** Diagnostic telemetry analysis and component swap.
+"""
+    if with_placeholders:
+        u4_content += """
+### 4.7 Super-System Architecture & Segment Boundaries
+{{SUPER_SYSTEM_ARCHITECTURE}}
+
+### 4.8 Subsystem Architecture & AST Part Allocation
+{{SUBSYSTEM_ARCHITECTURE_SECTION}}
+"""
 
     units = {
         "01_METADATA_AND_OVERVIEW.md": f"""# Concept of Operations (ConOps): {token_val}
@@ -56,15 +75,7 @@ def _create_sample_conops_units(units_dir: str, with_placeholders: bool = False,
 - **Mission Drivers & Value Proposition:** High-tempo continuous perimeter monitoring with automated geo-fencing.
 - **Trade-Off Analysis:** Dedicated satellite backup link vs battery payload mass budget.
 """,
-        "04_USER_CLASSES_AND_STAKEHOLDERS.md": """## 4. Operational Modes & Lifecycle Stages
-Formal operational lifecycle stages across $\\Phi_{\\mathrm{lifecycle}}$:
-- **Phase_Startup:** Built-In-Test self-check and navigation calibration.
-- **Phase_NominalExecution:** Automated waypoint tracking and payload monitoring.
-- **Phase_DegradedMode:** Sensor redundancy failsafe mode.
-- **Phase_ContingencyFailsafe:** Autonomous return-to-base and controlled containment.
-- **Phase_SecureShutdown:** Post-mission payload encryption and shutdown.
-- **Phase_MaintenanceMode:** Diagnostic telemetry analysis and component swap.
-""",
+        "04_USER_CLASSES_AND_STAKEHOLDERS.md": u4_content,
         "05_AIRSPACE_AND_SORA_RISK.md": """## 5. 4D Operational Volume & SORA Ground Risk Buffer Mathematics
 $$
 \\begin{aligned}
@@ -1294,7 +1305,7 @@ Carries up to a 5 kg warhead.
             self.assertIn("Safety Invariants & Containment Interlocks", subsys_arch)
 
     def test_conops_section_4_ast_part_coverage_gate_success_and_failure(self):
-        """Verify 100% AST part coverage validation gate on ConOps Section 4 (Issue #246)."""
+        """Verify 100% AST part coverage validation gate on ConOps Section 4 (Issue #246, #268)."""
         sysml_model = """
         package TestPlatform {
             part def SubsystemA { doc /* Subsystem A */ }
@@ -1307,26 +1318,16 @@ Carries up to a 5 kg warhead.
 
         with tempfile.TemporaryDirectory() as tmpdir:
             _create_sample_conops_units(tmpdir, with_placeholders=True)
-            # Update Unit 4 to include placeholders
             u4_path = os.path.join(tmpdir, "04_USER_CLASSES_AND_STAKEHOLDERS.md")
-            with open(u4_path, "w", encoding="utf-8") as f:
-                f.write("""# 4. Operational Modes & Subsystems
 
-### 4.7 Super-System Architecture & Segment Boundaries
-{{SUPER_SYSTEM_ARCHITECTURE}}
-
-### 4.8 Subsystem Architecture & AST Part Allocation
-{{SUBSYSTEM_ARCHITECTURE_SECTION}}
-""")
-
-            # Full coverage assembly should succeed with 0 errors
+            # 1. Full coverage assembly with {{SUBSYSTEM_ARCHITECTURE_SECTION}} should succeed with 0 errors
             assembled, errors = assemble_document(tmpdir, params=engine, canonical_whitelist=CANONICAL_CONOPS_UNITS)
             self.assertEqual(errors, [])
             self.assertIn("SubsystemA Subsystem Architecture", assembled)
             self.assertIn("SubsystemB Subsystem Architecture", assembled)
             self.assertIn("SubsystemC Subsystem Architecture", assembled)
 
-            # Manual unit without SubsystemC should fail coverage gate
+            # 2. Manual unit without SubsystemC should fail coverage gate for SubsystemC
             with open(u4_path, "w", encoding="utf-8") as f:
                 f.write("""# 4. Operational Modes & Subsystems
 ### 4.8 Subsystem Architecture
@@ -1337,6 +1338,123 @@ Functional purpose for SubsystemB.
 """)
             assembled_bad, errors_bad = assemble_document(tmpdir, params=engine, canonical_whitelist=CANONICAL_CONOPS_UNITS)
             self.assertTrue(any("Coverage Gate failed: Missing declared AST part def(s): SubsystemC" in e for e in errors_bad))
+
+            # 3. Complete omission of Section 4.8 / placeholders fails with coverage error for all declared parts
+            with open(u4_path, "w", encoding="utf-8") as f:
+                f.write("""# 4. Operational Modes & Lifecycle Stages
+Formal operational lifecycle stages across $\\Phi_{\\mathrm{lifecycle}}$:
+- **Phase_Startup:** Built-In-Test self-check and navigation calibration.
+- **Phase_NominalExecution:** Automated waypoint tracking and payload monitoring.
+""")
+            assembled_omitted, errors_omitted = assemble_document(tmpdir, params=engine, canonical_whitelist=CANONICAL_CONOPS_UNITS)
+            self.assertTrue(any("Coverage Gate failed: Missing declared AST part def(s): SubsystemA, SubsystemB, SubsystemC" in e for e in errors_omitted))
+
+    def test_subsystem_architecture_lifecycle_archetypes(self):
+        """Verify synthesized lifecycle phases across all LifecycleType archetypes (Issue #268)."""
+        sysml_code = """
+        package TestPlatform {
+            part def PrimaryController { doc /* Primary control module */ }
+        }
+        """
+
+        archetypes = [
+            (
+                LifecycleType.EXPENDABLE_KINETIC_EFFECTOR,
+                [
+                    "Phase_Startup",
+                    "Phase_NominalExecution",
+                    "Phase_DegradedMode",
+                    "Phase_ContingencyFailsafe",
+                    "Phase_TerminalEngagement",
+                    "arming handshake",
+                    "safe containment ditching / zeroization",
+                    "kinetic impact zeroization",
+                ],
+                [
+                    "Phase_MaintenanceMode",
+                    "Phase_SecureShutdown",
+                    "Phase_DisposalPassivation",
+                ],
+            ),
+            (
+                LifecycleType.CONTINUOUS_STATIONARY,
+                [
+                    "Phase_Startup",
+                    "Phase_NominalExecution",
+                    "Phase_DegradedMode",
+                    "Phase_ContingencyFailsafe",
+                    "Phase_SecureShutdown",
+                    "Phase_MaintenanceMode",
+                    "electromechanical joint brake locking & sterile preservation",
+                    "stationary joint lock & log archival",
+                ],
+                [
+                    "Phase_TerminalEngagement",
+                    "Phase_DisposalPassivation",
+                ],
+            ),
+            (
+                LifecycleType.PERSISTENT_ORBITAL,
+                [
+                    "Phase_Startup",
+                    "Phase_NominalExecution",
+                    "Phase_DegradedMode",
+                    "Phase_ContingencyFailsafe",
+                    "Phase_DisposalPassivation",
+                    "safe hold sun-pointing & reaction wheel desaturation",
+                    "de-orbit disposal / graveyard passivation",
+                ],
+                [
+                    "Phase_MaintenanceMode",
+                    "Phase_TerminalEngagement",
+                ],
+            ),
+            (
+                LifecycleType.TRACK_BOUND_GUIDED,
+                [
+                    "Phase_Startup",
+                    "Phase_NominalExecution",
+                    "Phase_DegradedMode",
+                    "Phase_ContingencyFailsafe",
+                    "Phase_SecureShutdown",
+                    "Phase_MaintenanceMode",
+                    "controlled track deceleration / siding divert",
+                ],
+                [
+                    "Phase_TerminalEngagement",
+                    "Phase_DisposalPassivation",
+                ],
+            ),
+            (
+                LifecycleType.REUSABLE_RECOVERY,
+                [
+                    "Phase_Startup",
+                    "Phase_NominalExecution",
+                    "Phase_DegradedMode",
+                    "Phase_ContingencyFailsafe",
+                    "Phase_SecureShutdown",
+                    "Phase_MaintenanceMode",
+                ],
+                [
+                    "Phase_TerminalEngagement",
+                    "Phase_DisposalPassivation",
+                ],
+            ),
+        ]
+
+        for l_type, expected_present, expected_absent in archetypes:
+            engine = SysMLParameterBindingEngine(
+                parameter_values={"LIFECYCLE_TYPE": l_type.value},
+                auto_detect=False,
+            )
+            engine.ingest_sysml_text(sysml_code)
+            subsys_arch = engine.resolve_token("SUBSYSTEM_ARCHITECTURE_SECTION")
+
+            self.assertIn("PrimaryController Subsystem Architecture", subsys_arch)
+            for item in expected_present:
+                self.assertIn(item, subsys_arch, f"Expected '{item}' in subsys_arch for {l_type}")
+            for item in expected_absent:
+                self.assertNotIn(item, subsys_arch, f"Expected '{item}' to NOT be in subsys_arch for {l_type}")
 
     def test_multi_domain_super_system_and_subsystem_architecture(self):
         """Verify multi-domain Super-System and Subsystem Architecture synthesis from SysML AST (Issue #246, #257)."""
