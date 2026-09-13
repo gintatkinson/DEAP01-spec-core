@@ -30,6 +30,7 @@ Enforces factual grounding and physical fidelity against SysML v2 AST and Level 
      markdown links to schema, or frontmatter source_references/realized_ast_nodes).
 """
 
+import fnmatch
 import os
 import re
 import sys
@@ -469,12 +470,26 @@ class FactualGroundingValidator(IValidator):
                 except ValueError:
                     pass
 
+    def _is_excluded_spec_file(self, rel_path: str, filename: str) -> bool:
+        """
+        Excludes retrospective defect reports and audit summary files from normative specification evaluation:
+        1. Any file located under docs/reports/defects/
+        2. Any file matching *AUDIT.md or *audit*.md
+        """
+        norm_rel = rel_path.replace("\\", "/")
+        if norm_rel.startswith("docs/reports/defects/") or "/reports/defects/" in f"/{norm_rel}":
+            return True
+        f_lower = filename.lower()
+        if fnmatch.fnmatch(filename, "*AUDIT.md") or fnmatch.fnmatch(f_lower, "*audit*.md"):
+            return True
+        return False
+
     def _discover_spec_files(
         self,
         repo: WorkspaceRepository,
         scan_dirs: Optional[List[str]] = None
     ) -> List[Tuple[str, str]]:
-        """Finds all specification markdown documents to evaluate."""
+        """Finds all specification markdown documents to evaluate, excluding retrospective defect reports and audit files."""
         workspace_dir = repo.workspace_dir
         target_dirs: List[str] = []
 
@@ -489,14 +504,17 @@ class FactualGroundingValidator(IValidator):
             full_tdir = os.path.join(workspace_dir, tdir) if not os.path.isabs(tdir) else tdir
             if os.path.isfile(full_tdir) and full_tdir.endswith(".md"):
                 rel = os.path.relpath(full_tdir, workspace_dir)
-                spec_files.append((full_tdir, rel))
+                filename = os.path.basename(full_tdir)
+                if not self._is_excluded_spec_file(rel, filename):
+                    spec_files.append((full_tdir, rel))
             elif os.path.isdir(full_tdir):
                 for root, _, files in os.walk(full_tdir):
                     for f in sorted(files):
                         if f.endswith(".md") and not f.startswith("."):
                             full_p = os.path.join(root, f)
                             rel_p = os.path.relpath(full_p, workspace_dir)
-                            spec_files.append((full_p, rel_p))
+                            if not self._is_excluded_spec_file(rel_p, f):
+                                spec_files.append((full_p, rel_p))
 
         return spec_files
 

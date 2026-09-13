@@ -329,6 +329,32 @@ Evaluating candidate protocols: STANAG 4586 and MIL-STD-1553 were analyzed but r
             with open(os.path.join(docs_dir, "CONOPS_TRADE_STUDIES.md"), "w", encoding="utf-8") as f:
                 f.write(doc_md)
 
+    def test_excludes_retrospective_defect_reports_and_audit_summaries(self):
+        """Verify that retrospective defect reports under docs/reports/defects/ and *AUDIT.md / *audit*.md files are excluded."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            defects_dir = os.path.join(tmpdir, "docs", "reports", "defects")
+            reports_dir = os.path.join(tmpdir, "docs", "reports")
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(defects_dir, exist_ok=True)
+            os.makedirs(conops_dir, exist_ok=True)
+
+            with open(os.path.join(schema_dir, "model.sysml"), "w", encoding="utf-8") as f:
+                f.write(SAMPLE_GROUND_TRUTH_SYSML)
+
+            # Retrospective defect report quoting historical defects
+            with open(os.path.join(defects_dir, "DEFECT_001_VTAIL.md"), "w", encoding="utf-8") as f:
+                f.write("# Defect Report 001\nQuoting ungrounded claim: 2 ruddervators V-tail and STANAG 4586\n")
+
+            # Audit summary file ending in AUDIT.md
+            with open(os.path.join(reports_dir, "PARITY_AUDIT.md"), "w", encoding="utf-8") as f:
+                f.write("# Parity Audit Summary\nHistorical violation noted: 15-20g launch load and MIL-STD-1553\n")
+
+            # Audit summary file matching *audit*.md
+            with open(os.path.join(conops_dir, "conops_audit_summary.md"), "w", encoding="utf-8") as f:
+                f.write("# ConOps Audit Summary\nAudit finding: autonomous arming without HITL consent\n```mermaid\nsequenceDiagram\nAutopilot ->> FiringCircuit: Arm_Circuit\n```\n")
+
             repo = WorkspaceRepository(workspace_dir=tmpdir)
             findings = self.validator.validate(repo, scan_dirs=["docs"])
             self.assertEqual(findings, [])
@@ -336,3 +362,4 @@ Evaluating candidate protocols: STANAG 4586 and MIL-STD-1553 were analyzed but r
 
 if __name__ == "__main__":
     unittest.main()
+
