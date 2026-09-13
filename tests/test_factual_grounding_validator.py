@@ -1145,9 +1145,143 @@ The HydraulicSystem minimum pressure is 12.5 bar during idle.
             self.assertIn("12.5 bar", str(numeric_findings_invalid[0]))
             self.assertIn("lower bound", str(numeric_findings_invalid[0]))
 
+    def test_item_def_signal_payload_fields_excluded_from_operational_numeric_limits(self):
+        """Verify that default initial values of signal message payload fields in item def blocks
+        (e.g. voltsV = 0.0, pressureBar = 0.0, headingDeg = 0.0, altitudeMslM = 0.0) are NOT ingested
+        as operational numeric limits, while genuine part def limits and package constraints
+        (catapultLaunchLimitG = 12.0, pressureMaxBar = 14.0, batteryVoltageMaxV = 50.0) continue to be enforced.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            docs_dir = os.path.join(tmpdir, "docs", "features")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(docs_dir, exist_ok=True)
+
+            schema_sysml = """package Vehicle_SSOT {
+    attribute catapultLaunchLimitG : Real = 12.0;
+
+    part def HydraulicSubsystem {
+        attribute pressureMaxBar : Real = 14.0;
+    }
+
+    part def Battery {
+        attribute batteryVoltageMaxV : Real = 50.0;
+    }
+
+    item def TelemetryMessage {
+        attribute voltsV : Real = 0.0;
+        attribute altitudeMslM : Real = 0.0;
+    }
+
+    item def LaunchAcceleration {
+        attribute pressureBar : Real = 0.0;
+    }
+
+    item def RotatorCommand {
+        attribute headingDeg : Real = 0.0;
+    }
+}
+"""
+            with open(os.path.join(schema_dir, "model.sysml"), "w", encoding="utf-8") as f:
+                f.write(schema_sysml)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            gt = self.validator._extract_ground_truth(repo)
+
+            # 1. Ground truth assertions:
+            # Signal payload fields must NOT be in numeric_limits:
+            self.assertNotIn("voltsv", gt.numeric_limits)
+            self.assertNotIn("altitudemslm", gt.numeric_limits)
+            self.assertNotIn("pressurebar", gt.numeric_limits)
+            self.assertNotIn("headingdeg", gt.numeric_limits)
+
+            # Genuine limits MUST be in numeric_limits:
+            self.assertIn("catapultlaunchlimitg", gt.numeric_limits)
+            self.assertEqual(gt.numeric_limits["catapultlaunchlimitg"], (12.0, "g"))
+            self.assertIn("pressuremaxbar", gt.numeric_limits)
+            self.assertEqual(gt.numeric_limits["pressuremaxbar"], (14.0, "bar"))
+            self.assertIn("batteryvoltagemaxv", gt.numeric_limits)
+            self.assertEqual(gt.numeric_limits["batteryvoltagemaxv"], (50.0, "v"))
+
+            # Item def and payload fields MUST be recognized in declared_ast_nodes:
+            self.assertIn("telemetrymessage", gt.declared_ast_nodes)
+            self.assertIn("voltsv", gt.declared_ast_nodes)
+            self.assertIn("launchacceleration", gt.declared_ast_nodes)
+            self.assertIn("pressurebar", gt.declared_ast_nodes)
+            self.assertIn("rotatorcommand", gt.declared_ast_nodes)
+            self.assertIn("headingdeg", gt.declared_ast_nodes)
+            self.assertIn("altitudemslm", gt.declared_ast_nodes)
+
+            # 2. Document with valid operating values (28 V, 10 bar, 10g, 180 deg, 500 m) must pass cleanly:
+            doc_valid_md = """# Subsystems Operation Specification
+## Operating Parameters
+The battery operates at 28 V.
+The HydraulicSubsystem maintains pressure at 10 bar.
+The catapult launch acceleration is 10g.
+The rotator accepts a heading command of 180 deg.
+The vehicle cruises at altitude 500 m.
+"""
+            with open(os.path.join(docs_dir, "FEAT_VALID.md"), "w", encoding="utf-8") as f:
+                f.write(doc_valid_md)
+
+            findings_valid = self.validator.validate(repo, scan_dirs=["docs"])
+            numeric_drift_valid = [f for f in findings_valid if f.rule_id == "factual-grounding-numeric-drift"]
+            self.assertEqual(numeric_drift_valid, [])
+
+            # 3. Document with genuine violations exceeding part def / package limits must be caught:
+            doc_invalid_md = """# Subsystems Excursion Specification
+## Limit Excursions
+The battery operates at 60 V.
+The HydraulicSubsystem operates at 20 bar.
+The catapult launch acceleration is 15g.
+"""
+            with open(os.path.join(docs_dir, "FEAT_INVALID.md"), "w", encoding="utf-8") as f:
+                f.write(doc_invalid_md)
+
+            findings_invalid = self.validator.validate(repo, scan_dirs=["docs"])
+            numeric_drift_invalid = [f for f in findings_invalid if f.rule_id == "factual-grounding-numeric-drift"]
+            self.assertEqual(len(numeric_drift_invalid), 3)
+            findings_text = " ".join(str(f) for f in numeric_drift_invalid)
+            self.assertIn("60 V", findings_text)
+            self.assertIn("20 bar", findings_text)
+            self.assertIn("15g", findings_text)
+
+    def test_ast_package_ingest_excludes_item_def_numeric_limits(self):
+        """Verify that _ingest_sysml_package processes AST ItemDef nodes into declared_ast_nodes
+        without polluting gt.numeric_limits with default initial values.
+        """
+        from parity_auditor.validators.factual_grounding_validator import (
+            SysMLPackage, PartDef, AttributeDef, ItemDef, SchemaGroundTruth
+        )
+
+        pkg = SysMLPackage(name="Vehicle_SSOT")
+        pkg.attribute_defs.append(AttributeDef(name="catapultLaunchLimitG", type_name="Real", default_value="12.0"))
+
+        part = PartDef(name="Battery")
+        part.attributes.append(AttributeDef(name="batteryVoltageMaxV", type_name="Real", default_value="50.0"))
+        pkg.part_defs.append(part)
+
+        item = ItemDef(name="TelemetryMessage")
+        item.attributes.append(AttributeDef(name="voltsV", type_name="Real", default_value="0.0"))
+        item.attributes.append(AttributeDef(name="altitudeMslM", type_name="Real", default_value="0.0"))
+        pkg.item_defs.append(item)
+
+        gt = SchemaGroundTruth()
+        self.validator._ingest_sysml_package(pkg, gt)
+
+        # Operational limits from package and part must be present:
+        self.assertIn("catapultlaunchlimitg", gt.numeric_limits)
+        self.assertIn("batteryvoltagemaxv", gt.numeric_limits)
+
+        # Payload fields from item_defs must NOT be present in numeric_limits:
+        self.assertNotIn("voltsv", gt.numeric_limits)
+        self.assertNotIn("altitudemslm", gt.numeric_limits)
+
+        # AST nodes must be recognized:
+        self.assertIn("telemetrymessage", gt.declared_ast_nodes)
+        self.assertIn("voltsv", gt.declared_ast_nodes)
+        self.assertIn("altitudemslm", gt.declared_ast_nodes)
+
 
 if __name__ == "__main__":
     unittest.main()
-
-
-

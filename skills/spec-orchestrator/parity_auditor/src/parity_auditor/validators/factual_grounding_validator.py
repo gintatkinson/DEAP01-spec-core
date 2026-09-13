@@ -52,12 +52,13 @@ except (ImportError, ValueError):
 from ..utils.sysml_loader import load_sysml_ast_members
 
 _sysml_ast = load_sysml_ast_members([
-    "SysMLPackage", "SysMLParser", "PartDef", "AttributeDef"
+    "SysMLPackage", "SysMLParser", "PartDef", "AttributeDef", "ItemDef"
 ])
 SysMLPackage = _sysml_ast.SysMLPackage
 SysMLParser = _sysml_ast.SysMLParser
 PartDef = _sysml_ast.PartDef
 AttributeDef = _sysml_ast.AttributeDef
+ItemDef = _sysml_ast.ItemDef
 
 
 # Non-normative section heading patterns (e.g. Glossary, MCDA trade study, Acronyms, Standards/Regulatory baseline)
@@ -879,8 +880,35 @@ class FactualGroundingValidator(IValidator):
         self,
         text: str,
         gt: SchemaGroundTruth,
-        owner: Optional[str] = None
+        owner: Optional[str] = None,
+        is_item_def: bool = False
     ) -> None:
+        if not is_item_def:
+            item_pattern = re.compile(r'\bitem\s+(?:def\s+)?([a-zA-Z0-9_]+)\s*\{([^}]*)\}', re.DOTALL)
+            item_spans: List[Tuple[int, int]] = []
+            for match in item_pattern.finditer(text):
+                item_spans.append((match.start(), match.end()))
+                iname = match.group(1).strip()
+                iname_norm = _normalize_name(iname)
+                ibody = match.group(2)
+                if iname_norm:
+                    gt.declared_ast_nodes.add(iname_norm)
+                    for tok in _tokenize_identifier(iname):
+                        gt.declared_ast_nodes.add(tok)
+                self._extract_sysml_attributes_from_block(ibody, gt, owner=iname_norm, is_item_def=True)
+
+            bare_item_pattern = re.compile(r'\bitem\s+(?:def\s+)?([a-zA-Z0-9_]+)\b')
+            for match in bare_item_pattern.finditer(text):
+                iname = match.group(1).strip()
+                iname_norm = _normalize_name(iname)
+                if iname_norm:
+                    gt.declared_ast_nodes.add(iname_norm)
+                    for tok in _tokenize_identifier(iname):
+                        gt.declared_ast_nodes.add(tok)
+
+            if item_spans:
+                text = _mask_spans(text, item_spans)
+
         attr_pattern = re.compile(
             r'\battribute\s+(?:def\s+)?([a-zA-Z0-9_]+)(?:\s*:\s*([a-zA-Z0-9_<>:]+))?\s*=\s*([^;]+);'
         )
@@ -898,6 +926,11 @@ class FactualGroundingValidator(IValidator):
             tokens = _tokenize_identifier(name)
             for t in tokens:
                 gt.declared_ast_nodes.add(t)
+
+            # Signal message payload fields in item defs are data structure fields, NOT physical system operational limits or counts.
+            if is_item_def:
+                continue
+
             unit = _extract_unit(raw_val, tokens)
             scalar = _extract_numeric_scalar(raw_val)
 
@@ -936,8 +969,33 @@ class FactualGroundingValidator(IValidator):
         Generic AST extraction for SysML attribute definitions with component scoping:
         Ingests ANY typed attribute into gt.structural_attributes and/or gt.numeric_limits
         with owning component tracking.
+        Differentiates physical/logical component definitions (part def) and package constraints
+        from signal message payload item definitions (item def).
         """
-        # Ingest part definitions directly from SysML text with their bodies
+        # 1. Ingest item definitions (signal message payload fields - excluded from numeric limits)
+        item_pattern = re.compile(r'\bitem\s+(?:def\s+)?([a-zA-Z0-9_]+)\s*\{([^}]*)\}', re.DOTALL)
+        item_spans: List[Tuple[int, int]] = []
+        for match in item_pattern.finditer(text):
+            item_spans.append((match.start(), match.end()))
+            iname = match.group(1).strip()
+            iname_norm = _normalize_name(iname)
+            ibody = match.group(2)
+            if iname_norm:
+                gt.declared_ast_nodes.add(iname_norm)
+                for tok in _tokenize_identifier(iname):
+                    gt.declared_ast_nodes.add(tok)
+            self._extract_sysml_attributes_from_block(ibody, gt, owner=iname_norm, is_item_def=True)
+
+        bare_item_pattern = re.compile(r'\bitem\s+(?:def\s+)?([a-zA-Z0-9_]+)\b')
+        for match in bare_item_pattern.finditer(text):
+            iname = match.group(1).strip()
+            iname_norm = _normalize_name(iname)
+            if iname_norm:
+                gt.declared_ast_nodes.add(iname_norm)
+                for tok in _tokenize_identifier(iname):
+                    gt.declared_ast_nodes.add(tok)
+
+        # 2. Ingest part definitions directly from SysML text with their bodies
         part_pattern = re.compile(r'\bpart\s+(?:def\s+)?([a-zA-Z0-9_]+)\s*\{([^}]*)\}', re.DOTALL)
         part_spans: List[Tuple[int, int]] = []
         for match in part_pattern.finditer(text):
@@ -952,13 +1010,13 @@ class FactualGroundingValidator(IValidator):
                     gt.declared_ast_nodes.add(tok)
                     if tok not in NON_HARDWARE_GENERIC_TOKENS and len(tok) >= 3:
                         gt.declared_parts.add(tok)
-            self._extract_sysml_attributes_from_block(pbody, gt, owner=pname_norm)
+            self._extract_sysml_attributes_from_block(pbody, gt, owner=pname_norm, is_item_def=False)
 
-        # Ingest package-level attributes (outside part defs)
-        top_level_text = _mask_spans(text, part_spans)
-        self._extract_sysml_attributes_from_block(top_level_text, gt, owner=None)
+        # 3. Ingest package-level attributes (outside part defs AND outside item defs)
+        top_level_text = _mask_spans(text, part_spans + item_spans)
+        self._extract_sysml_attributes_from_block(top_level_text, gt, owner=None, is_item_def=False)
 
-        # Ingest any remaining part declarations without block braces
+        # 4. Ingest any remaining part declarations without block braces
         bare_part_pattern = re.compile(r'\bpart\s+(?:def\s+)?([a-zA-Z0-9_]+)\b')
         for match in bare_part_pattern.finditer(text):
             pname = match.group(1).strip()
@@ -976,14 +1034,35 @@ class FactualGroundingValidator(IValidator):
         if not pkg:
             return
 
-        # Ingest attribute_defs
+        # Ingest attribute_defs (package constraints)
         for attr in getattr(pkg, "attribute_defs", []) or getattr(pkg, "attributes", []) or []:
             name = getattr(attr, "name", "")
             type_str = getattr(attr, "type_name", None) or getattr(attr, "type", "") or ""
             val_str = getattr(attr, "default_value", None) or getattr(attr, "doc", "") or ""
             if name and val_str:
                 stmt = f"attribute {name} : {type_str} = {val_str};"
-                self._extract_sysml_attributes_from_block(stmt, gt, owner=None)
+                self._extract_sysml_attributes_from_block(stmt, gt, owner=None, is_item_def=False)
+
+        # Ingest item_defs (signal / message payload definitions - excluded from numeric limits)
+        for item in getattr(pkg, "item_defs", []) or getattr(pkg, "items", []) or []:
+            iname = getattr(item, "name", "")
+            iname_norm = _normalize_name(iname)
+            if iname:
+                gt.declared_ast_nodes.add(iname_norm)
+                for tok in _tokenize_identifier(iname):
+                    gt.declared_ast_nodes.add(tok)
+            for attr in getattr(item, "attributes", []) or getattr(item, "attribute_defs", []) or []:
+                aname = getattr(attr, "name", "")
+                type_str = getattr(attr, "type_name", None) or getattr(attr, "type", "") or ""
+                val_str = getattr(attr, "default_value", None) or getattr(attr, "doc", "") or ""
+                if aname:
+                    aname_norm = _normalize_name(aname)
+                    gt.declared_ast_nodes.add(aname_norm)
+                    for tok in _tokenize_identifier(aname):
+                        gt.declared_ast_nodes.add(tok)
+                    if val_str:
+                        stmt = f"attribute {aname} : {type_str} = {val_str};"
+                        self._extract_sysml_attributes_from_block(stmt, gt, owner=iname_norm, is_item_def=True)
 
         # Ingest part_defs
         for part in getattr(pkg, "part_defs", []) or getattr(pkg, "parts", []) or []:
@@ -1000,6 +1079,25 @@ class FactualGroundingValidator(IValidator):
                 port_name = getattr(port, "name", "")
                 if port_name:
                     gt.declared_ast_nodes.add(_normalize_name(port_name))
+            for item in getattr(part, "item_defs", []) or getattr(part, "items", []) or []:
+                iname = getattr(item, "name", "")
+                iname_norm = _normalize_name(iname)
+                if iname:
+                    gt.declared_ast_nodes.add(iname_norm)
+                    for tok in _tokenize_identifier(iname):
+                        gt.declared_ast_nodes.add(tok)
+                for attr in getattr(item, "attributes", []) or getattr(item, "attribute_defs", []) or []:
+                    aname = getattr(attr, "name", "")
+                    type_str = getattr(attr, "type_name", None) or getattr(attr, "type", "") or ""
+                    val_str = getattr(attr, "default_value", None) or getattr(attr, "doc", "") or ""
+                    if aname:
+                        aname_norm = _normalize_name(aname)
+                        gt.declared_ast_nodes.add(aname_norm)
+                        for tok in _tokenize_identifier(aname):
+                            gt.declared_ast_nodes.add(tok)
+                        if val_str:
+                            stmt = f"attribute {aname} : {type_str} = {val_str};"
+                            self._extract_sysml_attributes_from_block(stmt, gt, owner=iname_norm, is_item_def=True)
             for attr in getattr(part, "attributes", []) or getattr(part, "attribute_defs", []) or []:
                 aname = getattr(attr, "name", "")
                 aname_norm = _normalize_name(aname)
@@ -1009,7 +1107,7 @@ class FactualGroundingValidator(IValidator):
                     gt.structural_attributes[pname_norm] = int(ascalar)
                 elif aname and aval:
                     stmt = f"attribute {aname} = {aval};"
-                    self._extract_sysml_attributes_from_block(stmt, gt, owner=pname_norm)
+                    self._extract_sysml_attributes_from_block(stmt, gt, owner=pname_norm, is_item_def=False)
 
         # Ingest sub_packages
         for nested in getattr(pkg, "sub_packages", []) or getattr(pkg, "packages", []) or []:
