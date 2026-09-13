@@ -119,6 +119,18 @@ HITL_CONSENT_ACTION_PATTERNS = [
     re.compile(r'\b(?:confirm_engagement|engage_command|manual_arm|manual_consent|c2_arm|c2_fire)\b', re.I),
 ]
 
+# Generic AST tokens that represent structural/modeling boilerplate, units, or non-hardware prose
+NON_HARDWARE_GENERIC_TOKENS: Set[str] = {
+    "time", "step", "state", "range", "message", "sign", "mode", "level",
+    "feed", "status", "report", "frame", "int", "real", "scalar", "code",
+    "gate", "link", "bus", "item", "port", "doc", "package", "model",
+    "attribute", "connection", "part", "def",
+    "stage", "off", "phase", "order", "rate", "value", "val", "type",
+    "count", "qty", "quantity", "number", "num", "size", "index", "flag",
+    "id", "name", "data", "info", "param", "parameter", "config", "configuration",
+    "integer", "boolean", "string", "float", "double", "true", "false",
+}
+
 
 def _normalize_name(name: str) -> str:
     """Normalize identifier by removing non-alphanumeric characters and lowercasing."""
@@ -241,6 +253,7 @@ class SchemaGroundTruth:
     source_files: List[str] = field(default_factory=list)
     has_concrete_schema: bool = False
     declared_ast_nodes: Set[str] = field(default_factory=set)
+    declared_parts: Set[str] = field(default_factory=set)
 
 
 GroundTruth = SchemaGroundTruth
@@ -449,6 +462,19 @@ class FactualGroundingValidator(IValidator):
                     if meaningful_tokens:
                         gt.numeric_limits["".join(meaningful_tokens)] = (limit_val, unit)
 
+        # Ingest part definitions directly from SysML text
+        part_pattern = re.compile(r'\bpart\s+(?:def\s+)?([a-zA-Z0-9_]+)\b')
+        for match in part_pattern.finditer(text):
+            pname = match.group(1).strip()
+            pname_norm = _normalize_name(pname)
+            if pname_norm:
+                gt.declared_parts.add(pname_norm)
+                gt.declared_ast_nodes.add(pname_norm)
+                for tok in _tokenize_identifier(pname):
+                    gt.declared_ast_nodes.add(tok)
+                    if tok not in NON_HARDWARE_GENERIC_TOKENS and len(tok) >= 3:
+                        gt.declared_parts.add(tok)
+
     def _ingest_sysml_package(self, pkg: Any, gt: SchemaGroundTruth) -> None:
         """Recursively ingests elements from a parsed SysMLPackage using generic AST extraction."""
         if not pkg:
@@ -468,9 +494,12 @@ class FactualGroundingValidator(IValidator):
             pname = getattr(part, "name", "")
             pname_norm = _normalize_name(pname)
             if pname:
+                gt.declared_parts.add(pname_norm)
                 gt.declared_ast_nodes.add(pname_norm)
                 for tok in _tokenize_identifier(pname):
                     gt.declared_ast_nodes.add(tok)
+                    if tok not in NON_HARDWARE_GENERIC_TOKENS and len(tok) >= 3:
+                        gt.declared_parts.add(tok)
             for port in getattr(part, "ports", []) or []:
                 port_name = getattr(port, "name", "")
                 if port_name:
@@ -545,6 +574,9 @@ class FactualGroundingValidator(IValidator):
                             gt.structural_attributes["".join(root_tokens)] = int_val
                             singular = root_tokens[-1].rstrip("s")
                             gt.structural_attributes["".join(root_tokens[:-1] + [singular])] = int_val
+                        for t in tokens:
+                            if t not in NON_HARDWARE_GENERIC_TOKENS and len(t) >= 3:
+                                gt.declared_parts.add(t)
                     elif scalar is None or type_hint.lower() in ("string", "str"):
                         gt.structural_attributes[k_norm] = clean_v
                         root_tokens = [t for t in tokens if t not in ("configuration", "config", "type", "mode", "layout", "geometry", "bus")]
@@ -592,6 +624,9 @@ class FactualGroundingValidator(IValidator):
                     root_tokens = [t for t in tokens if t not in ("count", "qty", "quantity")]
                     if root_tokens:
                         gt.structural_attributes["".join(root_tokens)] = int(scalar)
+                    for t in tokens:
+                        if t not in NON_HARDWARE_GENERIC_TOKENS and len(t) >= 3:
+                            gt.declared_parts.add(t)
                 elif scalar is not None and (unit or any(t in tokens for t in ("limit", "max", "load", "accel"))):
                     gt.numeric_limits[k_norm] = (float(scalar), unit)
                 elif scalar is None:
@@ -696,29 +731,46 @@ class FactualGroundingValidator(IValidator):
             elif isinstance(v, str) and len(v) >= 2:
                 config_targets[k] = v
 
-        # Collect all structural nouns: standard physical nouns + schema-derived nouns
-        structural_nouns: Set[str] = {
-            "tail", "rudder", "ruddervator", "wing", "fin", "surface", "canard",
-            "stabilizer", "aileron", "elevon", "fuselage", "airframe", "rotor",
-            "propeller", "boom", "pylon", "hull"
-        }
-        for k, v in config_targets.items():
-            m_parts = re.match(r'^([a-zA-Z0-9]+)[- ]([a-zA-Z0-9]+)$', str(v))
-            if m_parts:
-                structural_nouns.add(m_parts.group(2).lower())
-            if isinstance(k, str) and len(k) >= 3:
-                structural_nouns.add(k.lower())
-        for node in gt.declared_ast_nodes:
-            if len(node) >= 3 and node not in ("integer", "real", "boolean", "string", "float", "true", "false"):
-                structural_nouns.add(node.lower())
+        # Collect structural nouns exclusively from:
+        # (a) The second token / noun of declared configuration attributes in config_targets (e.g. tail, wing, chassis, airframe, hull from tailConfiguration, empennageConfiguration, etc.)
+        # (b) Declared physical part def names from gt.declared_parts / gt.declared_ast_nodes (filtering out generic tokens)
+        # (c) Purge any residual hardcoded domain lists from structural_nouns
+        structural_nouns: Set[str] = set()
 
-        pat_compound_desc = re.compile(
-            r'\b([a-zA-Z0-9]+-(?:' + '|'.join(re.escape(n) for n in sorted(structural_nouns, key=len, reverse=True)) + r'))\b',
-            re.I
-        )
-        pat_standalone_desc = re.compile(
-            r'\b(cruciform)\b',
-            re.I
+        # (a) Configuration attributes in config_targets
+        for k, v in config_targets.items():
+            # Second token / noun of compound value (e.g. "X-tail" -> "tail", "swept-wing" -> "wing", "delta wing" -> "wing")
+            v_toks = _tokenize_identifier(str(v))
+            if len(v_toks) >= 2:
+                noun_val = v_toks[-1].lower()
+                if noun_val not in NON_HARDWARE_GENERIC_TOKENS and len(noun_val) >= 3:
+                    structural_nouns.add(noun_val)
+            # Attribute noun from key (e.g. "tailConfiguration" -> "tail", "empennageConfiguration" -> "empennage", "chassisConfig" -> "chassis")
+            k_toks = [t for t in _tokenize_identifier(k) if t not in ("configuration", "config", "type", "mode", "layout", "geometry", "architecture", "topology", "arrangement")]
+            for tok in k_toks:
+                if tok not in NON_HARDWARE_GENERIC_TOKENS and len(tok) >= 3:
+                    structural_nouns.add(tok.lower())
+
+        # (b) Declared physical part def names
+        part_candidates = gt.declared_parts if gt.declared_parts else gt.declared_ast_nodes
+        for node in part_candidates:
+            node_toks = _tokenize_identifier(node)
+            for tok in (node_toks if len(node_toks) > 1 else [node.lower()]):
+                tok_lower = tok.lower()
+                if (
+                    len(tok_lower) >= 3
+                    and tok_lower not in NON_HARDWARE_GENERIC_TOKENS
+                    and not tok_lower.isdigit()
+                ):
+                    structural_nouns.add(tok_lower)
+
+        pat_compound_desc = (
+            re.compile(
+                r'\b([a-zA-Z0-9]+-(?:' + '|'.join(re.escape(n) for n in sorted(structural_nouns, key=len, reverse=True)) + r'))\b',
+                re.I
+            )
+            if structural_nouns
+            else None
         )
 
         WORD_NUMBERS = {
@@ -813,9 +865,9 @@ class FactualGroundingValidator(IValidator):
                                 reported_descriptors_on_line.add(desc_claimed)
                                 break
 
-            # 3. Closed-world structural descriptor resolution: check candidate compound & standalone descriptors
-            for pat in (pat_compound_desc, pat_standalone_desc):
-                for m_desc in pat.finditer(line_str):
+            # 3. Closed-world structural descriptor resolution: check candidate compound descriptors
+            if pat_compound_desc:
+                for m_desc in pat_compound_desc.finditer(line_str):
                     desc_claimed = m_desc.group(1).strip()
                     if desc_claimed in reported_descriptors_on_line:
                         continue
@@ -824,6 +876,14 @@ class FactualGroundingValidator(IValidator):
                     desc_claimed_norm = _normalize_name(desc_claimed)
                     if not desc_claimed_norm or desc_claimed_norm.isdigit():
                         continue
+
+                    # Ensure generic hyphenated English phrases (e.g. real-time, valid-range, sign-off, multi-mode, two-step, single-stage, three-state)
+                    # do not get flagged unless their noun specifically matches a declared physical subsystem or configuration attribute
+                    parts = desc_claimed.split('-')
+                    noun = parts[-1].lower() if parts else ""
+                    if noun in NON_HARDWARE_GENERIC_TOKENS or noun not in structural_nouns:
+                        continue
+
                     is_declared = (
                         desc_claimed_norm in gt.declared_ast_nodes
                         or any(desc_claimed_norm == _normalize_name(v) for v in gt.structural_attributes.values() if isinstance(v, str))

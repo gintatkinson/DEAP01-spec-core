@@ -360,16 +360,20 @@ Evaluating candidate protocols: STANAG 4586 and MIL-STD-1553 were analyzed but r
             self.assertEqual(findings, [])
 
     def test_closed_world_rejects_arbitrary_ungrounded_descriptor(self):
-        """Verify that an arbitrary ungrounded compound structural descriptor (e.g. abc-tail) fails Check 23."""
+        """Verify that an arbitrary ungrounded compound structural descriptor (e.g. abc-tail and theta-wing) fails Check 23."""
         with tempfile.TemporaryDirectory() as tmpdir:
             schema_dir = os.path.join(tmpdir, "schema")
             docs_dir = os.path.join(tmpdir, "docs", "conops")
             os.makedirs(schema_dir, exist_ok=True)
             os.makedirs(docs_dir, exist_ok=True)
 
-            # Schema has NO tail or rudder configuration declared
+            # Schema declares tailConfiguration attribute and physical Wing part def
             schema_sysml = """package MinimalVehicle_SSOT {
     attribute maxGLoad : Real = 12.0;
+    attribute tailConfiguration : String = "X-tail";
+    part def Wing {
+        attribute spanM : Real = 3.5;
+    }
     part def Airframe {
         attribute massKg : Real = 25.0;
     }
@@ -381,7 +385,8 @@ Evaluating candidate protocols: STANAG 4586 and MIL-STD-1553 were analyzed but r
             doc_md = """# Concept of Operations
 
 ## Airframe Empennage Geometry
-The airframe is configured with an ungrounded abc-tail empennage and quantum-rudder for aerodynamic control.
+The airframe is configured with an ungrounded abc-tail empennage and theta-wing geometry for aerodynamic control.
+The system operates in real-time mode with a two-step valid-range check, single-stage ignition, three-state logic, and multi-mode sign-off.
 """
             with open(os.path.join(docs_dir, "CONOPS_EMPENNAGE.md"), "w", encoding="utf-8") as f:
                 f.write(doc_md)
@@ -389,10 +394,19 @@ The airframe is configured with an ungrounded abc-tail empennage and quantum-rud
             repo = WorkspaceRepository(workspace_dir=tmpdir)
             findings = self.validator.validate(repo, scan_dirs=["docs"])
 
-            self.assertTrue(len(findings) >= 1)
+            self.assertTrue(len(findings) >= 2)
             rule_ids = {f.rule_id for f in findings}
             self.assertIn("factual-grounding-numeric-drift", rule_ids)
             self.assertTrue(any("abc-tail" in str(f) for f in findings))
+            self.assertTrue(any("theta-wing" in str(f) for f in findings))
+            findings_text = " ".join(str(f) for f in findings)
+            self.assertNotIn("real-time", findings_text)
+            self.assertNotIn("two-step", findings_text)
+            self.assertNotIn("valid-range", findings_text)
+            self.assertNotIn("multi-mode", findings_text)
+            self.assertNotIn("sign-off", findings_text)
+            self.assertNotIn("single-stage", findings_text)
+            self.assertNotIn("three-state", findings_text)
 
 
 
