@@ -1009,6 +1009,142 @@ The ESAD fire inhibit signal operates at 10 V during test mode.
             self.assertIn("10 V", str(numeric_findings[0]))
             self.assertIn("5.0", str(numeric_findings[0]))
 
+    def test_same_unit_attribute_property_token_specificity(self):
+        """Verify that when a component defines multiple attributes sharing the same physical unit
+        (e.g. wingspanM: 3.5m, lengthM: 2.1m, heightM: 0.8m), a numeric quantity is matched against
+        the attribute whose property tokens match the line, rather than colliding with other attributes.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            docs_dir = os.path.join(tmpdir, "docs", "features")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(docs_dir, exist_ok=True)
+
+            schema_sysml = """package Vehicle_SSOT {
+    part def Airframe {
+        attribute wingspanM : Real = 3.5;
+        attribute lengthM : Real = 2.1;
+        attribute heightM : Real = 0.8;
+    }
+}
+"""
+            with open(os.path.join(schema_dir, "model.sysml"), "w", encoding="utf-8") as f:
+                f.write(schema_sysml)
+
+            # Wingspan 3.0 m is > 2.1m (length) and > 0.8m (height), but <= 3.5m (wingspan)
+            # It must not collide with lengthM or heightM.
+            doc_md = """# Airframe Geometry Specification
+## Geometric Parameters
+The Airframe wingspan is 3.0 m.
+The Airframe length is 2.0 m.
+The Airframe height is 0.7 m.
+"""
+            with open(os.path.join(docs_dir, "FEAT_AIRFRAME.md"), "w", encoding="utf-8") as f:
+                f.write(doc_md)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            findings = self.validator.validate(repo, scan_dirs=["docs"])
+            numeric_findings = [f for f in findings if f.rule_id == "factual-grounding-numeric-drift"]
+            self.assertEqual(numeric_findings, [])
+
+            # Also verify multi-quantity line
+            doc_multi_md = """# Airframe Summary
+## Dimensions
+The Airframe dimensions are wingspan 3.2 m, length 2.0 m, and height 0.7 m.
+"""
+            with open(os.path.join(docs_dir, "FEAT_AIRFRAME_MULTI.md"), "w", encoding="utf-8") as f:
+                f.write(doc_multi_md)
+
+            findings_multi = self.validator.validate(repo, scan_dirs=["docs"])
+            numeric_findings_multi = [f for f in findings_multi if f.rule_id == "factual-grounding-numeric-drift"]
+            self.assertEqual(numeric_findings_multi, [])
+
+    def test_same_unit_attribute_rejection_of_ungrounded_values(self):
+        """Verify that property token specificity still correctly flags ungrounded limit excursions."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            docs_dir = os.path.join(tmpdir, "docs", "features")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(docs_dir, exist_ok=True)
+
+            schema_sysml = """package Vehicle_SSOT {
+    part def Airframe {
+        attribute wingspanM : Real = 3.5;
+        attribute lengthM : Real = 2.1;
+        attribute heightM : Real = 0.8;
+    }
+}
+"""
+            with open(os.path.join(schema_dir, "model.sysml"), "w", encoding="utf-8") as f:
+                f.write(schema_sysml)
+
+            # Length 2.5 m exceeds lengthM (2.1 m) while wingspan 3.0 m is valid (< 3.5 m)
+            doc_md = """# Airframe Specification
+## Structure
+The Airframe wingspan is 3.0 m, but length is 2.5 m.
+"""
+            with open(os.path.join(docs_dir, "FEAT_AIRFRAME.md"), "w", encoding="utf-8") as f:
+                f.write(doc_md)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            findings = self.validator.validate(repo, scan_dirs=["docs"])
+            numeric_findings = [f for f in findings if f.rule_id == "factual-grounding-numeric-drift"]
+            self.assertEqual(len(numeric_findings), 1)
+            self.assertIn("2.5 m", str(numeric_findings[0]))
+            self.assertIn("2.1", str(numeric_findings[0]))
+
+    def test_exact_boundary_floating_point_tolerance_and_same_unit_bounds(self):
+        """Verify that exact boundary values (e.g. 13-14 bar against min 13.0 and max 14.0 bar)
+        are accepted via 1e-6 float tolerance, and values outside are rejected.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            docs_dir = os.path.join(tmpdir, "docs", "features")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(docs_dir, exist_ok=True)
+
+            schema_sysml = """package Subsystem_SSOT {
+    part def HydraulicSystem {
+        attribute pressureMinBar : Real = 13.0;
+        attribute pressureMaxBar : Real = 14.0;
+    }
+    part def Datalink {
+        attribute bandLowGHz : Real = 2.4;
+        attribute bandHighGHz : Real = 2.5;
+    }
+}
+"""
+            with open(os.path.join(schema_dir, "model.sysml"), "w", encoding="utf-8") as f:
+                f.write(schema_sysml)
+
+            # 1. Exact boundaries: 13-14 bar and 2.4 - 2.5 GHz must pass cleanly
+            doc_valid_md = """# Hydraulic and Datalink Specification
+## Operating Envelopes
+The HydraulicSystem operates within pressure range 13-14 bar.
+The Datalink frequency envelope spans 2.4 - 2.5 GHz band.
+"""
+            with open(os.path.join(docs_dir, "FEAT_OPS.md"), "w", encoding="utf-8") as f:
+                f.write(doc_valid_md)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            findings = self.validator.validate(repo, scan_dirs=["docs"])
+            numeric_findings = [f for f in findings if f.rule_id == "factual-grounding-numeric-drift"]
+            self.assertEqual(numeric_findings, [])
+
+            # 2. Excursion below minimum pressure (12.5 bar < 13.0 bar):
+            doc_invalid_md = """# Hydraulic Operations
+## Pressure Envelope
+The HydraulicSystem minimum pressure is 12.5 bar during idle.
+"""
+            with open(os.path.join(docs_dir, "FEAT_HYD_EXCURSION.md"), "w", encoding="utf-8") as f:
+                f.write(doc_invalid_md)
+
+            findings_invalid = self.validator.validate(repo, scan_dirs=["docs"])
+            numeric_findings_invalid = [f for f in findings_invalid if f.rule_id == "factual-grounding-numeric-drift"]
+            self.assertEqual(len(numeric_findings_invalid), 1)
+            self.assertIn("12.5 bar", str(numeric_findings_invalid[0]))
+            self.assertIn("lower bound", str(numeric_findings_invalid[0]))
+
 
 if __name__ == "__main__":
     unittest.main()

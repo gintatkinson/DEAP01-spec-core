@@ -551,6 +551,36 @@ def _is_upper_bound_name(name: str, tokens: Optional[List[str]] = None) -> bool:
     return False
 
 
+def _property_token_matches(prop_tok: str, text_tok: str) -> bool:
+    """Checks if a property token matches a token found in specification text."""
+    if not prop_tok or not text_tok:
+        return False
+    prop_l = prop_tok.lower()
+    text_l = text_tok.lower()
+    if prop_l == text_l:
+        return True
+    # Stemming / engineering synonyms for bounds and dimensions:
+    lower_bound_words = ("min", "minimum", "minimal", "floor", "low", "lower")
+    upper_bound_words = ("max", "maximum", "maximal", "ceiling", "high", "higher", "peak")
+    if (prop_l in lower_bound_words or prop_l.startswith("min") or (prop_l.startswith("low") and prop_l not in ("load", "loads"))) and \
+       (text_l in lower_bound_words or text_l.startswith("min") or (text_l.startswith("low") and text_l not in ("load", "loads"))):
+        return True
+    if (prop_l in upper_bound_words or prop_l.startswith("max")) and \
+       (text_l in upper_bound_words or text_l.startswith("max")):
+        return True
+    if prop_l in ("temp", "temperature") and text_l in ("temp", "temperature"):
+        return True
+    if prop_l in ("freq", "frequency") and text_l in ("freq", "frequency"):
+        return True
+    if prop_l in ("width", "wide") and text_l in ("width", "wide"):
+        return True
+    if prop_l in ("length", "long") and text_l in ("length", "long"):
+        return True
+    if prop_l in ("height", "tall") and text_l in ("height", "tall"):
+        return True
+    return False
+
+
 def _find_sysml_files(repo: WorkspaceRepository, schemas_dir: Optional[str] = None) -> List[str]:
     """Locate all SysML files in workspace."""
     sysml_files: List[str] = []
@@ -661,13 +691,31 @@ class FactualGroundingValidator(IValidator):
         tokens = _tokenize_identifier(name)
         meaningful = [t for t in tokens if t not in ("limit", "value", "val", "real", "float")]
 
+        canon_unit = ISO_80000_PHYSICAL_UNITS.get(unit.lower(), unit.lower()) if unit else ""
+        unit_tokens = set()
+        if unit:
+            unit_tokens.add(unit.lower())
+            unit_tokens.update(_tokenize_identifier(unit.lower()))
+
+        prop_tokens = []
+        for t in tokens:
+            if t in ("limit", "value", "val", "real", "float", "scalar"):
+                continue
+            if t in unit_tokens:
+                continue
+            if canon_unit and ISO_80000_PHYSICAL_UNITS.get(t) == canon_unit:
+                continue
+            prop_tokens.append(t)
+        if not prop_tokens:
+            prop_tokens = [t for t in tokens if t not in ("value", "val", "real", "float")]
+
         gt.scoped_numeric_limits.append(ScopedNumericLimit(
             key=name_norm,
             limit_val=limit_val,
             unit=unit,
             bound_type=bound_type,
             owner=owner,
-            meaningful_tokens=meaningful
+            meaningful_tokens=prop_tokens
         ))
 
         if len(tokens) > 1:
@@ -688,7 +736,7 @@ class FactualGroundingValidator(IValidator):
                     unit=unit,
                     bound_type=bound_type,
                     owner=owner,
-                    meaningful_tokens=meaningful
+                    meaningful_tokens=prop_tokens
                 ))
 
     def validate(
@@ -1391,28 +1439,9 @@ class FactualGroundingValidator(IValidator):
     ) -> List[Finding]:
         """
         Validates numeric quantities and loads against declared limits in schema ground truth.
-        Emits Finding('factual-grounding-numeric-drift', ...).
-        """
-        findings: List[Finding] = []
-        lines = content.splitlines()
-
-        current_heading = "Header"
-        is_normative = True
-        in_code_block = False
-
-        if not gt.numeric_limits:
-            return []
-
-    def _validate_numeric_assertions(
-        self,
-        content: str,
-        rel_path: str,
-        gt: SchemaGroundTruth
-    ) -> List[Finding]:
-        """
-        Validates numeric quantities and loads against declared limits in schema ground truth.
         Enforces ISO/IEC 80000 & SysML v2 ISQ dimensional quantity typing, atomic identifier lexing,
-        fail-closed unitless attribute handling, and component-scoped contextual binding.
+        fail-closed unitless attribute handling, component-scoped contextual binding, and
+        property token specificity for same-unit attributes with IEEE 754 float tolerance.
         Emits Finding('factual-grounding-numeric-drift', ...).
         """
         findings: List[Finding] = []
@@ -1428,9 +1457,9 @@ class FactualGroundingValidator(IValidator):
         # Collect scoped numeric limits
         scoped_limits: List[ScopedNumericLimit] = []
         if gt.scoped_numeric_limits:
-            seen_sigs: Set[Tuple[str, float, str, str, Optional[str]]] = set()
+            seen_sigs: Set[Tuple[float, str, str, Optional[str], Tuple[str, ...]]] = set()
             for sl in gt.scoped_numeric_limits:
-                sig = (sl.key, sl.limit_val, sl.unit, sl.bound_type, sl.owner)
+                sig = (sl.limit_val, sl.unit, sl.bound_type, sl.owner, tuple(sl.meaningful_tokens))
                 if sig not in seen_sigs:
                     seen_sigs.add(sig)
                     scoped_limits.append(sl)
@@ -1438,11 +1467,26 @@ class FactualGroundingValidator(IValidator):
             seen_sigs = set()
             for k, (limit, unit) in gt.numeric_limits.items():
                 tokens = _tokenize_identifier(k)
-                meaningful = [t for t in tokens if t not in ("value", "val", "real", "float")]
+                canon_unit = ISO_80000_PHYSICAL_UNITS.get(unit.lower(), unit.lower()) if unit else ""
+                unit_tokens = set()
+                if unit:
+                    unit_tokens.add(unit.lower())
+                    unit_tokens.update(_tokenize_identifier(unit.lower()))
+                prop_tokens = []
+                for t in tokens:
+                    if t in ("limit", "value", "val", "real", "float", "scalar"):
+                        continue
+                    if t in unit_tokens:
+                        continue
+                    if canon_unit and ISO_80000_PHYSICAL_UNITS.get(t) == canon_unit:
+                        continue
+                    prop_tokens.append(t)
+                if not prop_tokens:
+                    prop_tokens = [t for t in tokens if t not in ("value", "val", "real", "float")]
                 bound_type = gt.numeric_bound_types.get(k)
                 if not bound_type:
-                    bound_type = "lower" if _is_lower_bound_name(k, meaningful) else "upper"
-                sig = (k, limit, unit, bound_type, None)
+                    bound_type = "lower" if _is_lower_bound_name(k, prop_tokens) else "upper"
+                sig = (limit, unit, bound_type, None, tuple(prop_tokens))
                 if sig in seen_sigs:
                     continue
                 seen_sigs.add(sig)
@@ -1452,7 +1496,7 @@ class FactualGroundingValidator(IValidator):
                     unit=unit,
                     bound_type=bound_type,
                     owner=None,
-                    meaningful_tokens=meaningful
+                    meaningful_tokens=prop_tokens
                 ))
 
         numeric_pattern = re.compile(
@@ -1509,7 +1553,7 @@ class FactualGroundingValidator(IValidator):
                     # Non-dimensional prose: words that are not physical units are ignored
                     continue
 
-                numbers = [float(n) for n in re.findall(r'[-+]?\d+(?:\.\d+)?', val_range_str)]
+                numbers = [float(n) for n in re.findall(r'\d+(?:\.\d+)?', val_range_str)]
                 if not numbers:
                     continue
                 max_claimed = max(numbers)
@@ -1524,7 +1568,7 @@ class FactualGroundingValidator(IValidator):
                     if canon_unit != metric_canon_unit:
                         continue
 
-                    # (d) Component-Scoped Contextual Binding
+                    # (d) Component-Scoped Contextual Binding & Property Token Specificity
                     if metric.owner:
                         owner_toks = _tokenize_identifier(metric.owner)
                         owner_in_line = (metric.owner in _normalize_name(line_str) or any(t in line_tokens for t in owner_toks if t not in NON_HARDWARE_GENERIC_TOKENS))
@@ -1536,8 +1580,49 @@ class FactualGroundingValidator(IValidator):
                             continue
                         if not (owner_in_line or owner_in_heading):
                             continue
+
+                        # Property Token Specificity:
+                        # If a component defines multiple attributes sharing the same physical unit,
+                        # match the numeric quantity against the attribute whose property tokens match the line / local context.
+                        same_owner_unit_metrics = [
+                            m for m in scoped_limits
+                            if m.owner == metric.owner and ISO_80000_PHYSICAL_UNITS.get(m.unit.lower(), m.unit.lower()) == canon_unit
+                        ]
+                        distinct_tokens = {tuple(m.meaningful_tokens) for m in same_owner_unit_metrics}
+                        if len(distinct_tokens) > 1:
+                            clause_start = 0
+                            for sep_match in re.finditer(r'[,;|]|\b(?:and|or)\b', line_str[:match.start()]):
+                                clause_start = sep_match.end()
+                            clause_end = len(line_str)
+                            m_end = re.search(r'[,;|]|\b(?:and|or)\b', line_str[match.end():])
+                            if m_end:
+                                clause_end = match.end() + m_end.start()
+                            local_clause = line_str[clause_start:clause_end]
+                            local_tokens = _tokenize_identifier(local_clause)
+
+                            def _metric_score(m: ScopedNumericLimit) -> int:
+                                if not m.meaningful_tokens:
+                                    return 0
+                                c_matches = sum(
+                                    1 for pt in m.meaningful_tokens
+                                    if pt in _normalize_name(local_clause) or any(_property_token_matches(pt, lt) for lt in local_tokens)
+                                )
+                                l_matches = sum(
+                                    1 for pt in m.meaningful_tokens
+                                    if pt in _normalize_name(line_str) or any(_property_token_matches(pt, lt) for lt in line_tokens)
+                                )
+                                return c_matches * 10 + l_matches
+
+                            best_score = max((_metric_score(m) for m in same_owner_unit_metrics), default=0)
+                            if best_score == 0:
+                                continue
+                            if _metric_score(metric) < best_score:
+                                continue
                     else:
-                        token_matches = any(t in line_tokens for t in metric.meaningful_tokens)
+                        token_matches = any(
+                            any(_property_token_matches(t, lt) for lt in line_tokens)
+                            for t in metric.meaningful_tokens
+                        )
                         if not token_matches and metric.unit != "g":
                             continue
 
@@ -1547,7 +1632,7 @@ class FactualGroundingValidator(IValidator):
                                 continue
 
                     if metric.bound_type == "lower":
-                        if min_claimed < metric.limit_val:
+                        if min_claimed < metric.limit_val - 1e-6:
                             findings.append(Finding(
                                 "factual-grounding-numeric-drift",
                                 f"{rel_path}:{lineno_1idx}: Fabricated numeric quantity '{claimed_str}' falls below schema ground truth lower bound ({metric.limit_val:.1f}{metric.unit}) in {', '.join(gt.source_files) or 'schema/'}.",
@@ -1565,7 +1650,7 @@ class FactualGroundingValidator(IValidator):
                             reported_claims_on_line.add(claimed_str)
                             break
                     else:
-                        if max_claimed > (metric.limit_val * 1.05):
+                        if max_claimed > metric.limit_val + 1e-6:
                             findings.append(Finding(
                                 "factual-grounding-numeric-drift",
                                 f"{rel_path}:{lineno_1idx}: Fabricated numeric quantity '{claimed_str}' exceeds schema ground truth limit ({metric.limit_val:.1f}{metric.unit}) in {', '.join(gt.source_files) or 'schema/'}.",
@@ -1617,7 +1702,7 @@ class FactualGroundingValidator(IValidator):
                         continue
 
                     if metric.bound_type == "lower":
-                        if num_val < metric.limit_val:
+                        if num_val < metric.limit_val - 1e-6:
                             findings.append(Finding(
                                 "factual-grounding-numeric-drift",
                                 f"{rel_path}:{lineno_1idx}: Fabricated numeric quantity '{num_str}' falls below schema ground truth lower bound ({metric.limit_val:.1f}) in {', '.join(gt.source_files) or 'schema/'}.",
@@ -1627,7 +1712,7 @@ class FactualGroundingValidator(IValidator):
                             reported_claims_on_line.add(num_str)
                             break
                     else:
-                        if num_val > (metric.limit_val * 1.05):
+                        if num_val > metric.limit_val + 1e-6:
                             findings.append(Finding(
                                 "factual-grounding-numeric-drift",
                                 f"{rel_path}:{lineno_1idx}: Fabricated numeric quantity '{num_str}' exceeds schema ground truth limit ({metric.limit_val:.1f}) in {', '.join(gt.source_files) or 'schema/'}.",
