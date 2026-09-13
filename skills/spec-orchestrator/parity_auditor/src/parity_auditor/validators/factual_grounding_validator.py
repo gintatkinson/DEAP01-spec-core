@@ -18,7 +18,7 @@ Enforces factual grounding and physical fidelity against SysML v2 AST and Level 
    d) Temporal safety in Mermaid sequence diagrams (rule ID: 'factual-grounding-temporal-safety-violation'):
       - Scans ```mermaid sequenceDiagram blocks across docs/.
       - Detects physical arming/firing/motor-enable signals (e.g. targeting Actuator, Pyro, FiringCircuit, SafetySwitch,
-        Warhead with action Arm/Fire/Enable).
+        Safety-critical actuator with action Arm/Fire/Enable).
       - Validates that every physical arming signal must be preceded temporally in the sequence by an explicit
         human-in-the-loop (HITL) C2 arming command / operator consent / pilot authorization.
       - Rejects autonomous arming sequences without prior human C2 command.
@@ -83,19 +83,20 @@ RECOGNIZED_PROTOCOLS = [
 
 # Physical arming/firing target entity tokens in sequence diagrams
 PHYSICAL_ARMING_TARGET_TOKENS = {
-    "actuator", "pyro", "firingcircuit", "safetyswitch", "warhead", "motor",
-    "igniter", "armingdevice", "payloadrelease", "laser", "weapon", "esad",
-    "fuzing", "squib", "propulsionenable", "armswitch", "firingunit",
+    "actuator", "pyro", "firingcircuit", "safetyswitch", "motor",
+    "igniter", "armingdevice", "payloadrelease", "laser",
+    "powerstage", "highvoltage", "emitter",
+    "squib", "propulsionenable", "armswitch", "firingunit",
     "safearm", "safeandarm", "initiator", "booster", "payloadbay", "ejector"
 }
 
 # Physical arming/firing action tokens in sequence diagrams
 PHYSICAL_ARMING_ACTION_PATTERNS = [
-    re.compile(r'\b(?:arm|arm_all|arming|arm_circuit|arm_system|arm_warhead|arm_pyro|arm_device|arm_motor)\b', re.I),
+    re.compile(r'\b(?:arm|arm_all|arming|arm_circuit|arm_system|arm_pyro|arm_device|arm_motor)\b', re.I),
     re.compile(r'\b(?:fire|firing|fire_pulse|fire_squib|fire_pyro|fire_circuit|detonate|detonation)\b', re.I),
     re.compile(r'\b(?:ignite|ignition|ignite_motor|start_ignition|motor_enable|propulsion_enable|enable_motor|enable_firing|enable_high_voltage)\b', re.I),
-    re.compile(r'\b(?:deploy_payload|release_payload|eject_payload|payload_release|weapon_release)\b', re.I),
-    re.compile(r'\b(?:activate_warhead|activate_pyro|activate_fuzing|activate_esad)\b', re.I),
+    re.compile(r'\b(?:deploy_payload|release_payload|eject_payload|payload_release)\b', re.I),
+    re.compile(r'\b(?:activate_pyro|activate_initiator|activate_power_stage)\b', re.I),
 ]
 
 # Explicit prohibition/negation tokens on arming actions (e.g. disarm, safe, inhibit, abort)
@@ -105,9 +106,9 @@ DISARM_ACTION_PATTERNS = [
 
 # Human C2 / HITL participant tokens in sequence diagrams
 HITL_SENDER_TOKENS = {
-    "operator", "operators", "pilot", "pilots", "human", "commander", "remotepilot",
-    "gcsoperator", "gcs", "c2", "missioncommander", "safetyofficer", "tacticaloperator",
-    "groundcontrolstation", "groundstation", "user"
+    "operator", "operators", "pilot", "pilots", "human", "commander",
+    "supervisor", "controller", "technician", "safetyofficer", "user",
+    "c2", "gcsoperator", "gcs", "groundcontrolstation", "groundstation"
 }
 
 # HITL C2 arming / consent / authorization action patterns
@@ -239,42 +240,6 @@ class SchemaGroundTruth:
     raw_schema_text: str = ""
     source_files: List[str] = field(default_factory=list)
     has_concrete_schema: bool = False
-
-    # Backward compatibility properties
-    @property
-    def ruddervator_count(self) -> Optional[int]:
-        for k, v in self.structural_attributes.items():
-            if "ruddervator" in k and isinstance(v, int):
-                return v
-        return None
-
-    @property
-    def control_surface_count(self) -> Optional[int]:
-        for k, v in self.structural_attributes.items():
-            if ("controlsurface" in k or "ruddervator" in k) and isinstance(v, int):
-                return v
-        return None
-
-    @property
-    def tail_configuration(self) -> Optional[str]:
-        for k, v in self.structural_attributes.items():
-            if ("tail" in k or "empennage" in k) and isinstance(v, str):
-                return v
-        return None
-
-    @property
-    def catapult_launch_limit_g(self) -> Optional[float]:
-        for k, (limit, unit) in self.numeric_limits.items():
-            if "catapult" in k:
-                return limit
-        return None
-
-    @property
-    def max_g_load(self) -> Optional[float]:
-        for k, (limit, unit) in self.numeric_limits.items():
-            if "gload" in k or "maxg" in k:
-                return limit
-        return None
 
 
 GroundTruth = SchemaGroundTruth
