@@ -26,4 +26,11 @@ from .obligation_witness_validator import ObligationWitnessValidator, Obligation
 from .semantic_diagram_ast_validator import SemanticDiagramASTValidator
 from .semantic_prose_invariant_validator import SemanticProseInvariantValidator
 from .factual_grounding_validator import FactualGroundingValidator
+from .metamodel_transformation_engine import (
+    MetamodelTransformationEngine,
+    ALLOWED_M2_METAMODEL_TYPES,
+    is_allowed_m2_type,
+    map_ast_classifier_to_m2,
+    validate_metamodel_purity,
+)
 

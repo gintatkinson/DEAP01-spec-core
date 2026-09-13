@@ -10,11 +10,22 @@
     "incose_moe_mop",
     "threat_matrix",
     "pace_c2_plan",
-    "roe_interlocks",
     "airspace_geozones",
     "go_no_go_matrix",
     "bingo_energy_math",
     "allocation_tags"
+  ],
+  "anyOf": [
+    {
+      "required": [
+        "safety_interlocks"
+      ]
+    },
+    {
+      "required": [
+        "roe_interlocks"
+      ]
+    }
   ],
   "properties": {
     "commanders_intent": {
@@ -271,6 +282,34 @@
           "interlock_condition": {
             "type": "string",
             "description": "Formal logical condition or interlock predicate."
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "safety_interlocks": {
+      "type": "array",
+      "description": "Section 6: Safety Constraints & Subsystem Interlocks.",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "rule_statement",
+          "interlock_condition"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique safety constraint or interlock identifier (e.g., INT-01, ROE-01)."
+          },
+          "rule_statement": {
+            "type": "string",
+            "description": "Plain-text normative statement of the safety constraint or interlock rule."
+          },
+          "interlock_condition": {
+            "type": "string",
+            "description": "Formal logical condition or interlock predicate derived from AST constraint or state definitions."
           }
         },
         "additionalProperties": true

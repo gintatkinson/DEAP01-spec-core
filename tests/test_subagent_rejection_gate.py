@@ -161,6 +161,7 @@ Mandatory Instructions:
 3. Micro-Task Scope: Focus exclusively on target `scripts/dispatch_subagent.py`.
 4. Engineering Standards: Follow RED-GREEN-REFACTOR cycle discipline.
 5. Defect Reporting: Record defects with `gh issue create` and `glab issue create`.
+6. Tier-1 Metamodel Transformation Mandate: Upstream compiler operates exclusively on abstract M2 metamodels (ALLOWED_M2_METAMODEL_TYPES).
 
 PROCEED
 """
@@ -350,6 +351,7 @@ Target: scripts/lint_subagent_prompt.py
 Mandatory Instructions:
 {directive}
 2. Implement the required changes.
+3. Tier-1 Metamodel Transformation Mandate: Upstream compiler operates exclusively on abstract M2 metamodels (ALLOWED_M2_METAMODEL_TYPES).
 PROCEED
 """
             passed, reason = validate_subagent_preflight(prompt)

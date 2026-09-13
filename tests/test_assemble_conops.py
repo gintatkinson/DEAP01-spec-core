@@ -383,6 +383,35 @@ Standards list.
             )
             self.assertEqual(res_verify.returncode, 0, f"Verify CLI failed: {res_verify.stderr}\nstdout: {res_verify.stdout}")
 
+    def test_assemble_mission_intent_supports_safety_and_roe_interlocks_units(self):
+        """Verify assemble_document supports both 06_SAFETY_INTERLOCKS.md and 06_ROE_SAFETY_INTERLOCKS.md seamlessly (#266)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mission_units_dir = os.path.join(tmpdir, "mission_intent")
+            _create_sample_mission_intent_units(mission_units_dir, with_placeholders=False)
+
+            # Test 1: with 06_ROE_SAFETY_INTERLOCKS.md
+            doc_roe, errors_roe = assemble_document(
+                units_dir=mission_units_dir,
+                doc_title="Tactical Mission Intent & Execution Plan",
+            )
+            self.assertEqual(errors_roe, [])
+            self.assertIn("## 6. Rules of Engagement (ROE) & Weapon/Sensor Interlocks", doc_roe)
+
+            # Test 2: rename 06_ROE_SAFETY_INTERLOCKS.md -> 06_SAFETY_INTERLOCKS.md with updated content
+            roe_path = os.path.join(mission_units_dir, "06_ROE_SAFETY_INTERLOCKS.md")
+            safety_path = os.path.join(mission_units_dir, "06_SAFETY_INTERLOCKS.md")
+            os.remove(roe_path)
+            with open(safety_path, "w", encoding="utf-8") as f:
+                f.write("## 6. Safety Constraints & Subsystem Interlocks\n\n- **INT-01:** System shall enforce containment.\n")
+
+            doc_safety, errors_safety = assemble_document(
+                units_dir=mission_units_dir,
+                doc_title="Tactical Mission Intent & Execution Plan",
+            )
+            self.assertEqual(errors_safety, [])
+            self.assertIn("## 6. Safety Constraints & Subsystem Interlocks", doc_safety)
+            self.assertIn("INT-01", doc_safety)
+
 
 class TestSysMLParameterBindingEngine(unittest.TestCase):
     """

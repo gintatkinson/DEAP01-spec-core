@@ -272,6 +272,7 @@ Mandatory Instructions:
 2. Implement FEAT-01 according to specification.
 3. Report any defects using `gh issue create` or `glab issue create`.
 4. Run validation checks.
+5. Tier-1 Metamodel Transformation Mandate: Upstream compiler operates exclusively on abstract M2 metamodels (ALLOWED_M2_METAMODEL_TYPES). All domain entities must be projected to Tier-1 abstract archetypes (Operator, Console, SystemController, SafetyInterlock, PhysicalActuator, Component, Class, Port, Statechart, Constraint).
 
 Normative Pre-Flight Checklist (verbatim from rules/subagent-dispatch-standards.md):
 {checklist}
@@ -286,6 +287,7 @@ Instructions:
 1. Step 1: Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` as your very first step.
 2. Verify that all structural identifiers in FEAT-02 match codebase definitions.
 3. File issues using `gh issue create` and `glab issue create` if discrepancies found.
+4. Tier-1 Metamodel Transformation Mandate: Upstream compiler operates exclusively on abstract M2 metamodels (ALLOWED_M2_METAMODEL_TYPES). All domain entities must be projected to Tier-1 abstract archetypes (Operator, Console, SystemController, SafetyInterlock, PhysicalActuator, Component, Class, Port, Statechart, Constraint).
 
 Normative Pre-Flight Checklist (verbatim from rules/subagent-dispatch-standards.md):
 {checklist}

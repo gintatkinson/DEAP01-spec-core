@@ -68,6 +68,16 @@ def _validate_json_schema_instance(schema: Dict[str, Any], instance: Any, path: 
             if req not in instance:
                 errors.append(f"{path}: missing required property '{req}'")
 
+        if "anyOf" in schema:
+            any_valid = False
+            for subschema in schema["anyOf"]:
+                sub_errs = _validate_json_schema_instance(subschema, instance, path)
+                if not sub_errs:
+                    any_valid = True
+                    break
+            if not any_valid:
+                errors.append(f"{path}: instance did not satisfy anyOf constraint")
+
         props = schema.get("properties", {})
         additional_allowed = schema.get("additionalProperties", True)
 
@@ -507,7 +517,6 @@ class TestSpecificationSchemas(unittest.TestCase):
             "incose_moe_mop",
             "threat_matrix",
             "pace_c2_plan",
-            "roe_interlocks",
             "airspace_geozones",
             "go_no_go_matrix",
             "bingo_energy_math",
@@ -516,6 +525,15 @@ class TestSpecificationSchemas(unittest.TestCase):
         for sec in required_sections:
             self.assertIn(sec, schema.get("required", []), f"Missing required section '{sec}' in Mission Intent schema")
             self.assertIn(sec, schema.get("properties", {}), f"Missing property definition '{sec}' in Mission Intent schema")
+
+        # Verify both roe_interlocks and safety_interlocks are defined in properties
+        self.assertIn("roe_interlocks", schema.get("properties", {}))
+        self.assertIn("safety_interlocks", schema.get("properties", {}))
+
+        # Verify anyOf requires either safety_interlocks or roe_interlocks
+        any_of_reqs = [tuple(branch.get("required", [])) for branch in schema.get("anyOf", [])]
+        self.assertIn(("safety_interlocks",), any_of_reqs)
+        self.assertIn(("roe_interlocks",), any_of_reqs)
 
     def test_mission_intent_schema_array_cardinalities(self):
         """Verify Mission Intent schema enforces open array definitions and minimum cardinalities."""
@@ -552,6 +570,18 @@ class TestSpecificationSchemas(unittest.TestCase):
         for fld in ["tier", "frequency_band", "data_rate", "timeout", "failover_hysteresis"]:
             self.assertIn(fld, pace_req, f"pace_c2_plan item missing required field '{fld}'")
 
+        # roe_interlocks: minItems >= 1
+        self.assertEqual(props["roe_interlocks"].get("type"), "array")
+        self.assertGreaterEqual(props["roe_interlocks"].get("minItems", 0), 1)
+        for fld in ["id", "rule_statement", "interlock_condition"]:
+            self.assertIn(fld, props["roe_interlocks"].get("items", {}).get("required", []))
+
+        # safety_interlocks: minItems >= 1
+        self.assertEqual(props["safety_interlocks"].get("type"), "array")
+        self.assertGreaterEqual(props["safety_interlocks"].get("minItems", 0), 1)
+        for fld in ["id", "rule_statement", "interlock_condition"]:
+            self.assertIn(fld, props["safety_interlocks"].get("items", {}).get("required", []))
+
     def test_sample_conops_payload_validates_against_schema(self):
         """Verify that a valid CONOPS JSON payload passes schema validation with zero errors."""
         with open(CONOPS_SCHEMA_PATH, "r", encoding="utf-8") as f:
@@ -569,6 +599,49 @@ class TestSpecificationSchemas(unittest.TestCase):
         payload = _get_valid_sample_mission_intent_payload()
         errors = _validate_json_schema_instance(schema, payload)
         self.assertEqual(errors, [], f"Valid Mission Intent payload failed schema validation: {errors}")
+
+    def test_mission_intent_schema_supports_both_safety_and_roe_interlocks(self):
+        """Verify that Mission Intent schema validates payloads with safety_interlocks, roe_interlocks, or both (#266)."""
+        with open(MISSION_INTENT_SCHEMA_PATH, "r", encoding="utf-8") as f:
+            schema = json.load(f)
+
+        # 1. Payload with roe_interlocks only
+        payload_roe = _get_valid_sample_mission_intent_payload()
+        self.assertIn("roe_interlocks", payload_roe)
+        self.assertNotIn("safety_interlocks", payload_roe)
+        errors = _validate_json_schema_instance(schema, payload_roe)
+        self.assertEqual(errors, [], f"Payload with roe_interlocks failed: {errors}")
+
+        # 2. Payload with safety_interlocks only
+        payload_safety = _get_valid_sample_mission_intent_payload()
+        del payload_safety["roe_interlocks"]
+        payload_safety["safety_interlocks"] = [
+            {
+                "id": "INT-01",
+                "rule_statement": "System shall enforce containment boundary",
+                "interlock_condition": "boundary_status == OUTSIDE -> engage_failsafe",
+            }
+        ]
+        errors = _validate_json_schema_instance(schema, payload_safety)
+        self.assertEqual(errors, [], f"Payload with safety_interlocks failed: {errors}")
+
+        # 3. Payload with both
+        payload_both = _get_valid_sample_mission_intent_payload()
+        payload_both["safety_interlocks"] = [
+            {
+                "id": "INT-01",
+                "rule_statement": "System shall enforce containment boundary",
+                "interlock_condition": "boundary_status == OUTSIDE -> engage_failsafe",
+            }
+        ]
+        errors = _validate_json_schema_instance(schema, payload_both)
+        self.assertEqual(errors, [], f"Payload with both failed: {errors}")
+
+        # 4. Payload missing both fails
+        payload_neither = _get_valid_sample_mission_intent_payload()
+        del payload_neither["roe_interlocks"]
+        errors = _validate_json_schema_instance(schema, payload_neither)
+        self.assertTrue(any("anyOf" in err or "safety_interlocks" in err or "roe_interlocks" in err for err in errors), errors)
 
     def test_conops_schema_rejects_missing_required_section(self):
         """Verify that CONOPS schema rejects payloads missing mandatory sections."""

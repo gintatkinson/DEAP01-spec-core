@@ -96,7 +96,7 @@ The Tactical Mission Intent specification tree consists of 10 canonical modular 
 | `03_INCOSE_MOE_MOP_MATH.md` | `## 3. Measures of Effectiveness (MoE) & Measures of Performance (MoP) Metrics` | `incose_moe_mop` | INCOSE SEH v5.0 metrics table with KaTeX mathematical formulas, Threshold and Objective performance values, and engineering units. |
 | `04_MULTI_DOMAIN_THREAT_MATRIX.md` | `## 4. Multi-Domain Operational Threat & Contested Environment Matrix` | `threat_matrix` | Open multi-domain threat matrix across Kinetic, Mechanical, Environmental, EW/Cyber, Power/Thermal, Optical, and Human domains with public clause citations. |
 | `05_PACE_C2_PLAN.md` | `## 5. PACE C2 Link Communications Plan` | `pace_c2_plan` | 4-tier PACE communications plan (Primary, Alternate, Contingency, Emergency) with frequency bands, bandwidth, heartbeat timeouts, and failover hysteresis. |
-| `06_ROE_SAFETY_INTERLOCKS.md` | `## 6. Rules of Engagement (ROE) & Weapon/Sensor Interlocks` | `roe_interlocks` | Normative rules of engagement and logical interlock predicates (`ROE-01`..`ROE-N`). |
+| `06_SAFETY_INTERLOCKS.md` | `## 6. Safety Constraints & Subsystem Interlocks` | `safety_interlocks` | Safety constraints, interlock predicates, and subsystem state interlocks (`INT-01`..`INT-N`) derived from AST constraint and state definitions. |
 | `07_AIRSPACE_GEOZONES.md` | `## 7. Airspace Deconfliction & U-space Dynamic Geo-Zones` | `airspace_geozones` | Primary boundary perimeter, dynamic exclusion/keep-out zones, and horizontal/vertical separation minima. |
 | `08_GO_NO_GO_MATRIX.md` | `## 8. Go/No-Go Decision Matrix` | `go_no_go_matrix` | Operational phase checks (`GNG-01`..`GNG-N`), threshold conditions, sensors/mechanisms, and deterministic Go/No-Go actions. |
 | `09_BINGO_ENERGY_MATH.md` | `## 9. Bingo Energy Mathematics & Secondary Divert Protocols` | `bingo_energy_math` | Bingo energy dynamics formulation ($E_{\mathrm{bingo}}(t)$), statutory reserve ratio constraint ($\ge 20\%$), and energy parameter table. |
@@ -130,7 +130,7 @@ docs/conops/
         ├── 03_INCOSE_MOE_MOP_MATH.md
         ├── 04_MULTI_DOMAIN_THREAT_MATRIX.md
         ├── 05_PACE_C2_PLAN.md
-        ├── 06_ROE_SAFETY_INTERLOCKS.md
+        ├── 06_SAFETY_INTERLOCKS.md
         ├── 07_AIRSPACE_GEOZONES.md
         ├── 08_GO_NO_GO_MATRIX.md
         ├── 09_BINGO_ENERGY_MATH.md
@@ -264,7 +264,7 @@ $$
 Per [`rules/sysml-ssot-completeness.md`](../../rules/sysml-ssot-completeness.md) §3 and MIL-STD-882E §4.4:
 - **Strict Prohibition of Autonomous High-Consequence Actuation**: Autonomous generation of irreversible physical actuation, high-energy discharge, or safety-critical effector commands without prior human operator authorization/consent is strictly prohibited across all specification tiers. Any sequence diagram attempting uncommanded or unauthorized physical actuation is immediately rejected under rule `factual-grounding-temporal-safety-violation`.
 - **Mandatory Temporal Precedence of Human Consent**:
-  In every Mermaid sequence diagram (`sequenceDiagram`) representing high-consequence operations or safety-critical actuation, an explicit Human-in-the-Loop (HITL) operator authorization command / consent token (e.g. `Operator ->> Console: Authorize_Action_Command`, `Console ->> Controller: Action_Authorized_Consent_Token`) MUST temporally precede any physical interlock disengagement or actuation signal (`Controller ->> SafetyInterlock: Disengage_Safety_Interlock`, `Controller ->> Actuator: Command_Physical_Actuation`).
+  In every Mermaid sequence diagram (`sequenceDiagram`) representing high-consequence operations or safety-critical actuation, an explicit Human-in-the-Loop (HITL) operator authorization command / consent token (e.g. `Operator ->> Console: Authorize_Action_Command`, `Console ->> SystemController: Action_Authorized_Consent_Token`) MUST temporally precede any physical interlock disengagement or actuation signal (`SystemController ->> SafetyInterlock: Disengage_Safety_Interlock`, `SystemController ->> PhysicalActuator: Command_Physical_Actuation`).
 - **Abstract Temporal Safety Invariant Rule**: High-consequence or irreversible physical actuation commands require temporal predecessor human operator consent tokens if mandated by system safety requirements.
 
 #### Figure 10.1: Operational Sequence Diagram with Human Authorization & Safety Interlock Disengagement
@@ -273,22 +273,22 @@ sequenceDiagram
     autonumber
     actor Operator as "Human Operator"
     participant Console as "Operator Console / HMI"
-    participant Controller as "System Controller"
+    participant SystemController as "System Controller"
     participant SafetyInterlock as "Safety Interlock / Protection Subsystem"
-    participant Actuator as "Physical Actuator / High-Consequence Effector"
+    participant PhysicalActuator as "Physical Actuator / High-Consequence Effector"
 
-    Note over Operator,Actuator: Phase 1: Operational Monitoring & Verification
-    Controller ->> Console: Stream_System_Telemetry
+    Note over Operator,PhysicalActuator: Phase 1: Operational Monitoring & Verification
+    SystemController ->> Console: Stream_System_Telemetry
     Console ->> Operator: Display_Action_Authorization_Prompt
 
-    Note over Operator,Actuator: Phase 2: Human Operator Authorization
+    Note over Operator,PhysicalActuator: Phase 2: Human Operator Authorization
     Operator ->> Console: Authorize_Action_Command
-    Console ->> Controller: Action_Authorized_Consent_Token
+    Console ->> SystemController: Action_Authorized_Consent_Token
 
-    Note over Operator,Actuator: Phase 3: Hardware Interlock Disengagement & Actuation
-    Controller ->> SafetyInterlock: Disengage_Safety_Interlock
-    SafetyInterlock -->> Controller: Interlock_Disengaged_State
-    Controller ->> Actuator: Command_Physical_Actuation
+    Note over Operator,PhysicalActuator: Phase 3: Hardware Interlock Disengagement & Actuation
+    SystemController ->> SafetyInterlock: Disengage_Safety_Interlock
+    SafetyInterlock -->> SystemController: Interlock_Disengaged_State
+    SystemController ->> PhysicalActuator: Command_Physical_Actuation
 ```
 
 - **Mermaid & KaTeX Formatting Invariants**:

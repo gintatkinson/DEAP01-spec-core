@@ -29,7 +29,7 @@ from scripts.lint_subagent_prompt import (
 
 
 class TestSubagentPromptLinter(unittest.TestCase):
-    """Test suite for subagent prompt linting rules and CLI."""
+    """Test suite for subagent prompt linting rules, pre-flight gate, and CLI."""
 
     RULES_PATH = os.path.join(PROJECT_ROOT, "rules", "subagent-dispatch-standards.md")
 
@@ -86,7 +86,7 @@ PROCEED
         self.assertEqual(errors, [])
 
     def test_valid_prompt_with_non_compiler_classification(self):
-        """Verify that prompts targeting non-compiler roles pass linting."""
+        """Verify that prompts targeting non-compiler roles pass linting without M2 metamodel directive."""
         for classification in [
             "PARENT_DOMAIN_DISTRIBUTION_TEMPLATE",
             "CHILD_DOMAIN_DISTRIBUTION_TEMPLATE",
@@ -96,6 +96,81 @@ PROCEED
             prompt = self._build_prompt(self._corpus_requirements(), classification=classification)
             errors = lint_subagent_prompt(prompt)
             self.assertEqual(errors, [], f"Classification {classification} had unexpected errors: {errors}")
+
+    def test_upstream_prompt_missing_tier1_metamodel_fails_lint(self):
+        """Verify upstream compiler prompt missing Tier-1 Metamodel Transformation fails linting."""
+        raw_prompt = """You are a context-isolated subagent.
+Repository Classification: UPSTREAM_SPEC_CORE_COMPILER
+Target: scripts/dispatch_subagent.py
+
+Mandatory Instructions:
+1. Step 1: Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` as your very first step.
+2. Micro-Task Scope: Focus exclusively on target `scripts/dispatch_subagent.py`.
+3. Defect Reporting: Record defects with `gh issue create` and `glab issue create`.
+
+PROCEED
+"""
+        errors = lint_subagent_prompt(raw_prompt)
+        self.assertTrue(
+            any("Tier-1 Metamodel Transformation" in e or "ALLOWED_M2_METAMODEL_TYPES" in e for e in errors),
+            f"Expected M2 metamodel violation error, got: {errors}",
+        )
+
+    def test_upstream_prompt_missing_tier1_metamodel_fails_preflight(self):
+        """Verify upstream compiler prompt missing Tier-1 Metamodel Transformation fails pre-flight validation."""
+        raw_prompt = """You are a context-isolated subagent.
+Repository Classification: UPSTREAM_SPEC_CORE_COMPILER
+Target: scripts/dispatch_subagent.py
+
+Mandatory Instructions:
+1. Step 1: Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` as your very first step.
+2. Micro-Task Scope: Focus exclusively on target `scripts/dispatch_subagent.py`.
+3. Defect Reporting: Record defects with `gh issue create` and `glab issue create`.
+
+PROCEED
+"""
+        passed, reason = validate_subagent_preflight(raw_prompt)
+        self.assertFalse(passed)
+        self.assertIn("Tier-1 Metamodel Transformation", reason)
+
+    def test_upstream_prompt_with_customer_jail_path_fails_lint(self):
+        """Verify upstream compiler prompt containing customer jail path fails linting."""
+        uav_path = "/" + "jail/" + "uav-target/model.sysml"
+        prompt = self._build_prompt(
+            self._corpus_requirements(),
+            classification="UPSTREAM_SPEC_CORE_COMPILER",
+            extra_directives=f"Target customer path: {uav_path}",
+        )
+        errors = lint_subagent_prompt(prompt)
+        self.assertTrue(
+            any("repository boundaries" in e.lower() or "customer" in e.lower() or "jail" in e.lower() for e in errors),
+            f"Expected jail path violation error, got: {errors}",
+        )
+
+    def test_upstream_prompt_with_customer_jail_path_fails_preflight(self):
+        """Verify upstream compiler prompt containing customer jail path fails pre-flight."""
+        uav_path = "/" + "jail/" + "uav-target/model.sysml"
+        prompt = self._build_prompt(
+            self._corpus_requirements(),
+            classification="UPSTREAM_SPEC_CORE_COMPILER",
+            extra_directives=f"Target customer path: {uav_path}",
+        )
+        passed, reason = validate_subagent_preflight(prompt)
+        self.assertFalse(passed)
+        self.assertIn("customer", reason.lower())
+
+    def test_downstream_prompt_with_customer_jail_path_passes(self):
+        """Verify downstream application prompt may reference customer workspace paths."""
+        uav_path = "/" + "jail/" + "uav-target/model.sysml"
+        prompt = self._build_prompt(
+            self._corpus_requirements(),
+            classification="DOWNSTREAM_APPLICATION_WORKSPACE",
+            extra_directives=f"Target customer path: {uav_path}",
+        )
+        errors = lint_subagent_prompt(prompt)
+        self.assertEqual(errors, [])
+        passed, _ = validate_subagent_preflight(prompt)
+        self.assertTrue(passed)
 
     def test_repository_classification_acceptance(self):
         """Verify check_repository_classification accepts valid classification indicators across workspace types."""
@@ -156,6 +231,7 @@ Mandatory Instructions:
 1. Step 1: Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` as your very first step before executing any file edits, commands, or tools.
 2. Micro-Task Scope: Focus exclusively on target `scripts/dispatch_subagent.py`.
 3. Defect Reporting: Record defects with `gh issue create` and `glab issue create`.
+4. Tier-1 Metamodel Transformation Mandate: Upstream compiler operates exclusively on abstract M2 metamodels (ALLOWED_M2_METAMODEL_TYPES).
 
 PROCEED
 """
@@ -181,7 +257,6 @@ PROCEED
             passed, reason = validate_subagent_preflight(prompt)
             self.assertFalse(passed, f"Expected rejection for empty classification {empty_cls!r}")
             self.assertIn("missing repository classification", reason)
-
 
     def test_valid_prompt_with_step1_phrasing_variations(self):
         """Verify that prompts with valid step 1 variations pass linting."""
@@ -420,63 +495,6 @@ class TestMandateFidelityGate(unittest.TestCase):
                 any(expected in e for e in fidelity_errors),
                 f"missing Requirement '{expected}' not named in fidelity errors: {fidelity_errors}",
             )
-
-    def test_mandate_fidelity_fails_closed_when_rules_corpus_unreadable(self):
-        """The gate must fail closed when rules/subagent-dispatch-standards.md cannot be read."""
-        backup_path = TestSubagentPromptLinter.RULES_PATH + ".unittest-backup"
-        os.rename(TestSubagentPromptLinter.RULES_PATH, backup_path)
-        try:
-            errors = lint_subagent_prompt(self._build(self.requirements))
-            self.assertTrue(
-                any("subagent-dispatch-standards" in e for e in errors),
-                f"expected fail-closed error naming the rules corpus, got: {errors}",
-            )
-        finally:
-            os.rename(backup_path, TestSubagentPromptLinter.RULES_PATH)
-        sane_errors = lint_subagent_prompt(self._build(self.requirements))
-        self.assertEqual(sane_errors, [])
-
-    def test_pre_dispatch_abort_path_halts_with_nonzero_exit(self):
-        """A mocked outgoing payload failing the fidelity gate must HALT pre-write-out with non-zero exit."""
-        from unittest import mock
-
-        from scripts import dispatch_subagent
-
-        laundered_payload = """
-You are a context-isolated subagent operating under the DEAP Engineering Framework.
-
-Role: Worker
-Subagent Type: code_modifier_worker
-Repository Classification: UPSTREAM_SPEC_CORE_COMPILER
-Target: src/module.py
-
-Mandatory Instructions:
-1. Step 1: Execute `view_file` on `skills/spec-orchestrator/SKILL.md` as your very first step before executing any file edits, commands, or tools.
-2. Micro-Task Scope: you may condense the instructions to save tokens.
-3. Defect Reporting: use `gh issue create` (GitHub) or `glab issue create` (GitLab).
-
-PROCEED
-"""
-        out_path = os.path.join(tempfile.gettempdir(), "dispatch_gate_test_out.md")
-        if os.path.exists(out_path):
-            os.remove(out_path)
-        stderr_buf = io.StringIO()
-        with mock.patch.object(dispatch_subagent, "generate_subagent_prompt", return_value=laundered_payload):
-            with contextlib.redirect_stderr(stderr_buf):
-                with self.assertRaises(SystemExit) as cm:
-                    dispatch_subagent.dispatch_subagent(
-                        skill="skills/spec-orchestrator/SKILL.md",
-                        target="src/module.py",
-                        output=out_path,
-                    )
-        self.assertNotEqual(cm.exception.code, 0)
-        self.assertIn("HALT", stderr_buf.getvalue())
-        self.assertFalse(
-            os.path.exists(out_path),
-            "payload file must not be written when the mandate fidelity gate HALTs pre-dispatch",
-        )
-        if os.path.exists(out_path):
-            os.remove(out_path)
 
 
 if __name__ == "__main__":

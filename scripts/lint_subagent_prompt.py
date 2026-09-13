@@ -200,6 +200,37 @@ def check_leading_code_steering(prompt_text: str) -> bool:
     return False
 
 
+CUSTOMER_JAIL_PATH_PATTERN = re.compile(
+    r"(?:/(?:Users|home)/[^/\s\)\"\'\`]+/)?(?:/)?jail/(?:uav|customer|drone|automotive|medical|defense)[-_a-zA-Z0-9]*(?:/)?",
+    re.IGNORECASE,
+)
+
+
+def is_upstream_compiler_prompt(prompt_text: str) -> bool:
+    """
+    Returns True if the prompt declares or targets UPSTREAM_SPEC_CORE_COMPILER classification.
+    """
+    if not prompt_text or not isinstance(prompt_text, str):
+        return False
+    return bool(
+        re.search(r'\bUPSTREAM_SPEC_CORE_COMPILER\b', prompt_text, re.IGNORECASE)
+    )
+
+
+def check_m2_metamodel_directive(prompt_text: str) -> bool:
+    """
+    Verifies that the prompt contains the Tier-1 Metamodel Transformation directive
+    or M2 metamodel typing constraints when operating in upstream compiler mode.
+    """
+    if not prompt_text or not isinstance(prompt_text, str):
+        return False
+    has_tier1 = bool(re.search(r'Tier-1\s+Metamodel\s+Transformation', prompt_text, re.IGNORECASE))
+    has_allowed = "ALLOWED_M2_METAMODEL_TYPES" in prompt_text
+    has_m2_contract = bool(re.search(r'M2\s+Metamodel\s+Contract', prompt_text, re.IGNORECASE))
+    has_abstract_m2 = bool(re.search(r'abstract\s+M2\s+metamodels?', prompt_text, re.IGNORECASE))
+    return (has_tier1 and has_allowed) or (has_allowed and (has_m2_contract or has_abstract_m2)) or (has_tier1 and has_abstract_m2)
+
+
 def check_defect_filing_directive(prompt_text: str) -> bool:
     """
     Semantically verifies that the prompt contains a valid defect filing directive:
@@ -262,6 +293,7 @@ def lint_subagent_prompt(prompt_text: str) -> List[str]:
     f) Zero forbidden issue closures (`gh issue close`, `glab issue close`).
     g) Corpus-sourced mandate fidelity (all six pre-flight Requirements verbatim
        from rules/subagent-dispatch-standards.md, coverage 100 percent).
+    h) Repository boundary & Tier-1 Metamodel Transformation verification for UPSTREAM_SPEC_CORE_COMPILER.
     """
     errors: List[str] = []
 
@@ -362,6 +394,19 @@ def lint_subagent_prompt(prompt_text: str) -> List[str]:
                 f"rules/subagent-dispatch-standards.md: '{req}' (coverage {fidelity_coverage:.0%})"
             )
 
+    # Check (h): Upstream repository boundaries and M2 metamodel transformation requirements
+    if is_upstream_compiler_prompt(prompt_text):
+        if CUSTOMER_JAIL_PATH_PATTERN.search(prompt_text):
+            errors.append(
+                "Prompt targeting UPSTREAM_SPEC_CORE_COMPILER violates repository boundaries: "
+                "contains downstream customer or external jail path reference."
+            )
+        if not check_m2_metamodel_directive(prompt_text):
+            errors.append(
+                "Prompt targeting UPSTREAM_SPEC_CORE_COMPILER missing mandatory Tier-1 Metamodel Transformation directive "
+                "(ALLOWED_M2_METAMODEL_TYPES)."
+            )
+
     return errors
 
 
@@ -377,6 +422,7 @@ def validate_subagent_preflight(prompt_text: str) -> tuple[bool, str]:
     5. Prompt begins with the instruction to execute `view_file` on `SKILL.md` by exact path as step 1 / first action, before any line-level code steering.
     6. Prompt contains zero leading line-level steering or premature edits ahead of the step 1 skill read directive.
     7. Prompt respects single-item micro-task scope.
+    8. Prompt respects repository boundaries and includes Tier-1 Metamodel Transformation directive when targeting upstream compiler.
 
     Returns:
         (True, "") if prompt passes pre-flight gate.
@@ -442,6 +488,13 @@ def validate_subagent_preflight(prompt_text: str) -> tuple[bool, str]:
     for pat in batch_patterns:
         if re.search(pat, prompt_text, re.IGNORECASE):
             return False, "ERROR: Prompt rejected: micro-task scope violation"
+
+    # Check upstream repository boundaries and M2 metamodel transformation directive
+    if is_upstream_compiler_prompt(prompt_text):
+        if CUSTOMER_JAIL_PATH_PATTERN.search(prompt_text):
+            return False, "ERROR: Prompt rejected: downstream customer jail path detected in upstream compiler prompt"
+        if not check_m2_metamodel_directive(prompt_text):
+            return False, "ERROR: Prompt rejected: missing Tier-1 Metamodel Transformation directive for upstream compiler"
 
     return True, ""
 

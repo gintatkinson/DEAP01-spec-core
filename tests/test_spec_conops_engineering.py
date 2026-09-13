@@ -130,7 +130,7 @@ class TestSpecConopsEngineering(unittest.TestCase):
             "03_INCOSE_MOE_MOP_MATH.md",
             "04_MULTI_DOMAIN_THREAT_MATRIX.md",
             "05_PACE_C2_PLAN.md",
-            "06_ROE_SAFETY_INTERLOCKS.md",
+            "06_SAFETY_INTERLOCKS.md",
             "07_AIRSPACE_GEOZONES.md",
             "08_GO_NO_GO_MATRIX.md",
             "09_BINGO_ENERGY_MATH.md",
@@ -1064,10 +1064,10 @@ class TestSpecConopsEngineering(unittest.TestCase):
             # Sequence diagram syntax and temporal precedence check
             self.assertIn("sequenceDiagram", content)
             self.assertIn('Operator ->> Console: Authorize_Action_Command', content)
-            self.assertIn('Console ->> Controller: Action_Authorized_Consent_Token', content)
-            self.assertIn('Controller ->> SafetyInterlock: Disengage_Safety_Interlock', content)
-            self.assertIn('SafetyInterlock -->> Controller: Interlock_Disengaged_State', content)
-            self.assertIn('Controller ->> Actuator: Command_Physical_Actuation', content)
+            self.assertIn('Console ->> SystemController: Action_Authorized_Consent_Token', content)
+            self.assertIn('SystemController ->> SafetyInterlock: Disengage_Safety_Interlock', content)
+            self.assertIn('SafetyInterlock -->> SystemController: Interlock_Disengaged_State', content)
+            self.assertIn('SystemController ->> PhysicalActuator: Command_Physical_Actuation', content)
 
             # Purged domain concepts assertion
             self.assertNotIn("Warhead", content)
@@ -1078,9 +1078,9 @@ class TestSpecConopsEngineering(unittest.TestCase):
 
             # Verify temporal order in text
             pos_hitl_cmd = content.find("Operator ->> Console: Authorize_Action_Command")
-            pos_hitl_auth = content.find("Console ->> Controller: Action_Authorized_Consent_Token")
-            pos_phys_disengage = content.find("Controller ->> SafetyInterlock: Disengage_Safety_Interlock")
-            pos_phys_actuate = content.find("Controller ->> Actuator: Command_Physical_Actuation")
+            pos_hitl_auth = content.find("Console ->> SystemController: Action_Authorized_Consent_Token")
+            pos_phys_disengage = content.find("SystemController ->> SafetyInterlock: Disengage_Safety_Interlock")
+            pos_phys_actuate = content.find("SystemController ->> PhysicalActuator: Command_Physical_Actuation")
 
             self.assertTrue(pos_hitl_cmd != -1)
             self.assertTrue(pos_hitl_auth != -1)

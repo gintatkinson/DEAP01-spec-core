@@ -434,6 +434,35 @@ class TestDispatchSubagent(unittest.TestCase):
             os.chdir(old_cwd)
             shutil.rmtree(temp_ws, ignore_errors=True)
 
+    def test_generate_subagent_prompt_injects_tier1_metamodel_directive_in_upstream_mode(self):
+        """Verify prompt generated in upstream compiler mode includes the Tier-1 Metamodel Transformation directive."""
+        prompt = generate_subagent_prompt(
+            skill=self.skill_feature,
+            target=self.target_file,
+            classification="UPSTREAM_SPEC_CORE_COMPILER",
+            base_dir=PROJECT_ROOT,
+        )
+        self.assertIn("Tier-1 Metamodel Transformation Mandate", prompt)
+        self.assertIn("ALLOWED_M2_METAMODEL_TYPES", prompt)
+        self.assertIn("abstract M2 metamodels", prompt)
+        self.assertIn("Tier-1 abstract archetypes", prompt)
+        self.assertEqual(lint_prompt_text(prompt), [])
+        passed, reason = validate_subagent_preflight(prompt)
+        self.assertTrue(passed, f"Preflight rejected upstream prompt: {reason}")
+
+    def test_generate_subagent_prompt_does_not_inject_tier1_in_downstream_mode(self):
+        """Verify prompt generated in downstream mode does not inject Tier-1 Metamodel directive."""
+        prompt = generate_subagent_prompt(
+            skill=self.skill_feature,
+            target="src/component.py",
+            classification="DOWNSTREAM_APPLICATION_WORKSPACE",
+            base_dir=PROJECT_ROOT,
+        )
+        self.assertNotIn("Tier-1 Metamodel Transformation Mandate", prompt)
+        self.assertEqual(lint_prompt_text(prompt), [])
+        passed, reason = validate_subagent_preflight(prompt)
+        self.assertTrue(passed, f"Preflight rejected downstream prompt: {reason}")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -168,8 +168,8 @@ PROCEED
         self.assertNotIn("/" + "jail/uav-", sandboxed)
         self.assertNotIn("/" + "jail/customer-", sandboxed)
 
-        # Assert M2 metamodel contract is present
-        self.assertIn("M2 Metamodel Contract", sandboxed)
+        # Assert M2 metamodel contract / Tier-1 directive is present
+        self.assertIn("Tier-1 Metamodel Transformation Mandate", sandboxed)
         self.assertIn("ALLOWED_M2_METAMODEL_TYPES", sandboxed)
 
         # Assert PROCEED is maintained
