@@ -367,10 +367,11 @@ Evaluating candidate protocols: STANAG 4586 and MIL-STD-1553 were analyzed but r
             os.makedirs(schema_dir, exist_ok=True)
             os.makedirs(docs_dir, exist_ok=True)
 
-            # Schema declares tailConfiguration attribute and physical Wing part def
+            # Schema declares tailConfiguration and wingConfiguration config targets
             schema_sysml = """package MinimalVehicle_SSOT {
     attribute maxGLoad : Real = 12.0;
     attribute tailConfiguration : String = "X-tail";
+    attribute wingConfiguration : String = "delta-wing";
     part def Wing {
         attribute spanM : Real = 3.5;
     }
@@ -734,6 +735,120 @@ The airframe is configured with 2 ruddervators in a V-tail layout.
             self.assertTrue(any("2 ruddervators" in str(f) for f in findings))
             # MUST flag V-tail drift vs X-tail
             self.assertTrue(any("V-tail" in str(f) for f in findings))
+
+    def test_lower_bound_distinguished_from_upper_bound_allows_valid_range(self):
+        """Verify that lower bounds (e.g. hvRangeMinV: 0.0V) are distinguished from upper bounds:
+        a claim of 50 V exceeds 0.0V, but is completely valid for a minimum bound and must NOT trigger
+        'Fabricated numeric quantity 50 V exceeds schema ground truth limit (0.0v)'.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            docs_dir = os.path.join(tmpdir, "docs", "features")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(docs_dir, exist_ok=True)
+
+            schema_sysml = """package Vehicle_SSOT {
+    attribute hvRangeMinV : Real = 0.0;
+    attribute hvRangeMaxV : Real = 100.0;
+}
+"""
+            with open(os.path.join(schema_dir, "model.sysml"), "w", encoding="utf-8") as f:
+                f.write(schema_sysml)
+
+            # 50 V is between min 0.0V and max 100.0V -> completely valid!
+            doc_md = """# Electrical Power Architecture
+The high-voltage subsystem operates in the hv range at 50 V.
+"""
+            with open(os.path.join(docs_dir, "FEAT_POWER.md"), "w", encoding="utf-8") as f:
+                f.write(doc_md)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            findings = self.validator.validate(repo, scan_dirs=["docs"])
+
+            # 50 V must NOT be flagged as exceeding 0.0V
+            numeric_drift_findings = [f for f in findings if f.rule_id == "factual-grounding-numeric-drift"]
+            self.assertEqual(numeric_drift_findings, [])
+
+    def test_lower_bound_strictly_rejects_values_below_minimum(self):
+        """Verify that values strictly less than a declared lower bound (val < min) are rejected."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            docs_dir = os.path.join(tmpdir, "docs", "features")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(docs_dir, exist_ok=True)
+
+            schema_sysml = """package Vehicle_SSOT {
+    attribute minOperationalVoltageV : Real = 18.0;
+    attribute maxOperationalVoltageV : Real = 36.0;
+}
+"""
+            with open(os.path.join(schema_dir, "model.sysml"), "w", encoding="utf-8") as f:
+                f.write(schema_sysml)
+
+            # Claim of 12 V is strictly below the lower bound of 18.0 V -> violation!
+            doc_md = """# Power Regulation
+The avionics bus operates at 12 V during emergency low-power state.
+"""
+            with open(os.path.join(docs_dir, "FEAT_REG.md"), "w", encoding="utf-8") as f:
+                f.write(doc_md)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            findings = self.validator.validate(repo, scan_dirs=["docs"])
+
+            numeric_drift_findings = [f for f in findings if f.rule_id == "factual-grounding-numeric-drift"]
+            self.assertEqual(len(numeric_drift_findings), 1)
+            finding_str = str(numeric_drift_findings[0])
+            self.assertIn("12 V", finding_str)
+            self.assertIn("lower bound", finding_str)
+
+    def test_part_def_tokens_not_scoped_to_structural_nouns_preventing_prose_false_positives(self):
+        """Verify that arbitrary part def tokens (power, segment, fiber, sensor, launch) are NOT added
+        to structural_nouns, preventing normal technical prose (carbon-fiber, post-launch, full-power,
+        multi-segment, optical-sensor) from being falsely flagged, while ungrounded descriptors on
+        declared config_targets (e.g. abc-tail from tailConfiguration) continue to be rejected.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            docs_dir = os.path.join(tmpdir, "docs", "features")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(docs_dir, exist_ok=True)
+
+            schema_sysml = """package Vehicle_SSOT {
+    attribute tailConfiguration : String = "X-tail";
+
+    part def PowerSupply {}
+    part def FiberOptics {}
+    part def LaunchRail {}
+    part def MultiSegmentWing {}
+    part def OpticalSensor {}
+}
+"""
+            with open(os.path.join(schema_dir, "model.sysml"), "w", encoding="utf-8") as f:
+                f.write(schema_sysml)
+
+            # Normal prose containing carbon-fiber, post-launch, full-power, multi-segment, optical-sensor
+            # along with an ungrounded abc-tail descriptor
+            doc_md = """# Vehicle Specification
+The structure uses carbon-fiber composites and operates at full-power during post-launch flight.
+The flight path uses a multi-segment profile with optical-sensor guidance.
+The vehicle features an ungrounded abc-tail configuration.
+"""
+            with open(os.path.join(docs_dir, "FEAT_MATERIALS.md"), "w", encoding="utf-8") as f:
+                f.write(doc_md)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            findings = self.validator.validate(repo, scan_dirs=["docs"])
+
+            findings_text = " ".join(str(f) for f in findings)
+            # Must NOT flag prose tokens
+            self.assertNotIn("carbon-fiber", findings_text)
+            self.assertNotIn("full-power", findings_text)
+            self.assertNotIn("post-launch", findings_text)
+            self.assertNotIn("multi-segment", findings_text)
+            self.assertNotIn("optical-sensor", findings_text)
+
+            # MUST flag ungrounded structural descriptor on config target
+            self.assertTrue(any("abc-tail" in str(f) for f in findings))
 
 
 if __name__ == "__main__":
