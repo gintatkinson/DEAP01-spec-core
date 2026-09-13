@@ -1416,6 +1416,97 @@ Airframe dimensions: Wingspan: 1.8 m, Length: 2.2 m.
             findings_table = self.validator.validate(repo, scan_dirs=["docs"])
             self.assertEqual(findings_table, [], f"Expected 0 findings for table proximity clause matching, got {findings_table}")
 
+    def test_markdown_range_ingestion_registers_lower_and_upper_bounds(self):
+        """Verify that numeric ranges in markdown tables and bullets (4.4 - 5.0 GHz, 13-14 bar, 49–50 V)
+        extract both bounds, registering minimum as 'lower' and maximum as 'upper', rather than
+        ingesting the lower bound as an upper limit.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            docs_dir = os.path.join(tmpdir, "docs", "specs")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(docs_dir, exist_ok=True)
+
+            bom_md = """# Subsystem Specifications
+## Radio & Avionics
+| Property | Value |
+| :--- | :--- |
+| Main frequency | 4.4 - 5.0 GHz |
+| Reservoir pressure | 13-14 bar |
+
+- Battery voltage: 49–50 V
+"""
+            with open(os.path.join(schema_dir, "SPEC.md"), "w", encoding="utf-8") as f:
+                f.write(bom_md)
+
+            # Valid values: 4.8 GHz, 13.5 bar, 49.5 V (within declared ranges)
+            doc_valid = """# Avionics System
+The radio main frequency operates at 4.8 GHz with reservoir pressure 13.5 bar.
+The battery voltage holds at 49.5 V.
+"""
+            with open(os.path.join(docs_dir, "SPEC_VALID.md"), "w", encoding="utf-8") as f:
+                f.write(doc_valid)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            findings = self.validator.validate(repo, scan_dirs=["docs"])
+            self.assertEqual(findings, [], f"Expected 0 findings for in-range values, got {findings}")
+
+            # Test upper limit exceedance: 5.5 GHz > 5.0 GHz
+            doc_exceed = """# Avionics System
+The radio main frequency operates at 5.5 GHz.
+"""
+            with open(os.path.join(docs_dir, "SPEC_VALID.md"), "w", encoding="utf-8") as f:
+                f.write(doc_exceed)
+
+            findings_exceed = self.validator.validate(repo, scan_dirs=["docs"])
+            self.assertEqual(len(findings_exceed), 1)
+            self.assertEqual(findings_exceed[0].rule_id, "factual-grounding-numeric-drift")
+            self.assertIn("5.5 GHz", str(findings_exceed[0]))
+            self.assertIn("exceeds schema ground truth limit (5.0ghz)", str(findings_exceed[0]))
+
+            # Test lower limit violation: 4.0 GHz < 4.4 GHz
+            doc_below = """# Avionics System
+The radio main frequency operates at 4.0 GHz.
+"""
+            with open(os.path.join(docs_dir, "SPEC_VALID.md"), "w", encoding="utf-8") as f:
+                f.write(doc_below)
+
+            findings_below = self.validator.validate(repo, scan_dirs=["docs"])
+            self.assertEqual(len(findings_below), 1)
+            self.assertEqual(findings_below[0].rule_id, "factual-grounding-numeric-drift")
+            self.assertIn("4.0 GHz", str(findings_below[0]))
+            self.assertIn("falls below schema ground truth lower bound (4.4ghz)", str(findings_below[0]))
+
+    def test_procedural_task_identifiers_premasked_from_numeric_quantities(self):
+        """Verify that procedural identifiers (e.g. Task 202, Method 514.8, Phase 1, Clause 4.2)
+        are pre-masked and never extracted as physical scalar quantities.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            docs_dir = os.path.join(tmpdir, "docs", "safety")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(docs_dir, exist_ok=True)
+
+            schema_sysml = """package Safety_SSOT {
+    attribute maxAllowedLimit : Real = 10.0;
+}
+"""
+            with open(os.path.join(schema_dir, "model.sysml"), "w", encoding="utf-8") as f:
+                f.write(schema_sysml)
+
+            # Cites MIL-STD-882E Task 202, MIL-STD-810H Method 514.8, Phase 1, Clause 4.2
+            # None of 202, 514.8, 1, 4.2 should trigger numeric limit drift against maxAllowedLimit (10.0)
+            doc_md = """# System Safety Assessment
+This assessment conforms to MIL-STD-882E Task 202 and MIL-STD-810H Method 514.8.
+Compliance verified under Phase 1 lifecycle activities and Clause 4.2 safety mandates.
+"""
+            with open(os.path.join(docs_dir, "SAFETY_PLAN.md"), "w", encoding="utf-8") as f:
+                f.write(doc_md)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            findings = self.validator.validate(repo, scan_dirs=["docs"])
+            self.assertEqual(findings, [], f"Expected 0 findings for pre-masked procedural identifiers, got {findings}")
+
 
 if __name__ == "__main__":
     unittest.main()

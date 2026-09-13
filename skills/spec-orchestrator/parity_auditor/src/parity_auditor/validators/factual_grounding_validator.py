@@ -420,6 +420,11 @@ STANDARDS_CITATION_PATTERN = re.compile(
     r'\b(?:DO|ARP|MIL|STD|ASTM|ISO|IEC|IEEE|STANAG|ARINC|RTCA|SAE|DEF-STAN)[-_ ]*[0-9]+[A-Za-z0-9]*\b',
     re.I
 )
+# Procedural and task identifiers (e.g. Task 202, Method 514.8, Phase 1, Clause 4.2)
+PROCEDURAL_IDENTIFIER_PATTERN = re.compile(
+    r'\b(?:Task|Method|Methodology|Phase|Clause)\s+\d+(?:\.\d+)*\b',
+    re.I
+)
 
 
 def _is_numeric_range_or_quantity(tok: str) -> bool:
@@ -437,10 +442,13 @@ def _is_numeric_range_or_quantity(tok: str) -> bool:
 
 def _get_protected_spans(line: str) -> List[Tuple[int, int]]:
     """
-    Identifies spans of atomic compound identifiers and standards citations
+    Identifies spans of atomic compound identifiers, procedural identifiers, and standards citations
     that must be protected from being fragmented into numeric scalars or unit abbreviations.
     """
     spans: List[Tuple[int, int]] = []
+
+    for m in PROCEDURAL_IDENTIFIER_PATTERN.finditer(line):
+        spans.append((m.start(), m.end()))
 
     for m in STANDARDS_CITATION_PATTERN.finditer(line):
         spans.append((m.start(), m.end()))
@@ -475,11 +483,34 @@ def _mask_spans(line: str, spans: List[Tuple[int, int]]) -> str:
     return "".join(chars)
 
 
+def _extract_numeric_range(val_str: str) -> Optional[Tuple[float, float]]:
+    """
+    Extracts lower and upper numeric bounds from a range string (e.g. '4.4 - 5.0 GHz', '13-14 bar', '49–50 V').
+    Returns (min_val, max_val) or None if not a range.
+    """
+    if not val_str:
+        return None
+    s = str(val_str).strip()
+    if re.search(r'\b\d{4}[-/]\d{2}[-/]\d{2}\b', s):
+        return None
+    m = re.search(
+        r'([-+]?\d+(?:\.\d+)?)\s*(?:[a-zA-Z/%^]+)?\s*(?:[-–—]|to|\.{2,3})\s*([-+]?\d+(?:\.\d+)?)',
+        s
+    )
+    if m:
+        try:
+            v1 = float(m.group(1))
+            v2 = float(m.group(2))
+            return (min(v1, v2), max(v1, v2))
+        except ValueError:
+            return None
+    return None
+
+
 def _extract_unit(val_str: str, name_tokens: Optional[List[str]] = None) -> str:
     """Extracts ISO/IEC 80000 recognized physical measurement unit from value string or name tokens."""
     if val_str:
-        m = re.search(r'[-+]?\d+(?:\.\d+)?\s*\[?([a-zA-Z/%^]+)\]?', str(val_str))
-        if m:
+        for m in re.finditer(r'[-+]?\d+(?:\.\d+)?\s*\[?([a-zA-Z/%^]+)\]?', str(val_str)):
             cand = m.group(1).lower()
             canon = ISO_80000_PHYSICAL_UNITS.get(cand)
             if canon:
@@ -1205,7 +1236,12 @@ class FactualGroundingValidator(IValidator):
 
                     # 2. Numeric limits:
                     has_limit_tokens = any(t in tokens for t in ("limit", "max", "maximum", "min", "minimum", "low", "lower", "floor", "ceiling", "high", "load", "accel", "bound", "threshold", "capacity"))
-                    if scalar is not None and (unit or has_limit_tokens or type_hint.lower() in ("real", "float")):
+                    num_range = _extract_numeric_range(clean_v)
+                    if num_range is not None and (unit or has_limit_tokens or type_hint.lower() in ("real", "float")):
+                        min_val, max_val = num_range
+                        self._register_numeric_limit(gt, k, min_val, unit, "lower", owner=row_owner)
+                        self._register_numeric_limit(gt, k, max_val, unit, "upper", owner=row_owner)
+                    elif scalar is not None and (unit or has_limit_tokens or type_hint.lower() in ("real", "float")):
                         limit_val = float(scalar)
                         bound_type = "lower" if _is_lower_bound_name(k, tokens) else "upper"
                         self._register_numeric_limit(gt, k, limit_val, unit, bound_type, owner=row_owner)
@@ -1247,6 +1283,11 @@ class FactualGroundingValidator(IValidator):
                         for t in tokens:
                             if t not in NON_HARDWARE_GENERIC_TOKENS and len(t) >= 3:
                                 gt.declared_parts.add(t)
+                num_range = _extract_numeric_range(clean_v)
+                if num_range is not None and (unit or any(t in tokens for t in ("limit", "max", "min", "minimum", "low", "lower", "floor", "ceiling", "high", "load", "accel", "bound", "threshold"))):
+                    min_val, max_val = num_range
+                    self._register_numeric_limit(gt, k, min_val, unit, "lower", owner=current_owner)
+                    self._register_numeric_limit(gt, k, max_val, unit, "upper", owner=current_owner)
                 elif scalar is not None and (unit or any(t in tokens for t in ("limit", "max", "min", "minimum", "low", "lower", "floor", "ceiling", "high", "load", "accel", "bound", "threshold"))):
                     limit_val = float(scalar)
                     bound_type = "lower" if _is_lower_bound_name(k, tokens) else "upper"
