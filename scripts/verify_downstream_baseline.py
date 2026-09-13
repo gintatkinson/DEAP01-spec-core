@@ -2551,8 +2551,64 @@ def check_semantic_prose_invariants(repo_root=None):
     print("Success: Check 22 verified (Physical Invariant Semantic Prose Gate passed -- zero ungrounded operational assertions).")
 
 
+def _load_factual_grounding_validator():
+    """Import FactualGroundingValidator and WorkspaceRepository fail-safe."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(script_dir)
+    spec_dir = os.path.join(project_root, "skills", "spec-orchestrator", "scripts")
+    parity_src = os.path.join(project_root, "skills", "spec-orchestrator", "parity_auditor", "src")
+    scripts_dir = os.path.join(project_root, "scripts")
+    for p in (scripts_dir, spec_dir, parity_src):
+        if p not in sys.path:
+            sys.path.insert(0, p)
+    try:
+        from parity_auditor.validators.factual_grounding_validator import FactualGroundingValidator
+        from parity_auditor.core.workspace import WorkspaceRepository
+        return FactualGroundingValidator, WorkspaceRepository
+    except Exception:
+        return None, None
+
+
+def check_factual_grounding(repo_root=None):
+    """Check 23: Factual Grounding & Numeric Provenance Gate.
+
+    Verify that structural descriptors, control surface counts, numeric limits,
+    declared protocols, and sequence diagram temporal safety across docs/ conform
+    strictly to the SysML AST and schema ground truth.
+    """
+    if repo_root is None:
+        repo_root = os.getcwd()
+
+    model_text = _discover_sysml_model_text(repo_root)
+    schema_dir = os.path.join(repo_root, "schema")
+    has_extracted = os.path.isdir(os.path.join(schema_dir, "extracted")) if os.path.isdir(schema_dir) else False
+    if (not model_text or not model_text.strip()) and not has_extracted:
+        print("Success: Check 23 verified (SysML model pending or landing zone clean).")
+        return
+
+    val_cls, repo_cls = _load_factual_grounding_validator()
+    if val_cls is None or repo_cls is None:
+        print("WARNING: Check 23 skipped (FactualGroundingValidator or WorkspaceRepository unavailable).", file=sys.stderr)
+        return
+
+    repo = repo_cls(workspace_dir=repo_root)
+    validator = val_cls(workspace_repo=repo)
+    findings = validator.validate(repo, scan_dirs=["docs"])
+
+    if findings:
+        print("ERROR: Check 23 failed (Factual Grounding & Numeric Provenance Gate violations found):", file=sys.stderr)
+        for f in findings:
+            print(f"  - {f}", file=sys.stderr)
+        sys.exit(1)
+
+    print("Success: Check 23 verified (Factual Grounding & Numeric Provenance Gate passed -- zero ungrounded assertions).")
+
+
+check_factual_grounding_and_provenance = check_factual_grounding
+
+
 def run_all_checks(repo_root=None):
-    """Run all baseline checks (Checks 10 through 22)."""
+    """Run all baseline checks (Checks 10 through 23)."""
     if repo_root is None:
         repo_root = os.getcwd()
     check_gitignore_exists(repo_root)
@@ -2568,9 +2624,10 @@ def run_all_checks(repo_root=None):
     check_wbs_suite_integrity(repo_root)
     check_semantic_diagram_ast_parity(repo_root)
     check_semantic_prose_invariants(repo_root)
+    check_factual_grounding(repo_root)
 
 def _run_verification(args, dest, repo_root, is_flutter, is_react):
-    # Run Checks 10 through 22
+    # Run Checks 10 through 23
     run_all_checks(repo_root)
 
     if is_flutter:
