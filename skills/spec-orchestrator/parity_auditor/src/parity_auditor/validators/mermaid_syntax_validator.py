@@ -461,6 +461,139 @@ def validate_mermaid_option3_compact_blocks(body: Sequence[str], source: str = "
     return violations
 
 
+def validate_mermaid_layout_ergonomics(
+    start: int,
+    body: Sequence[str],
+    kind: str,
+    source: str = "<input>",
+) -> List[Finding]:
+    """Validate visual ergonomics and horizontal layout gates (Rules E1-E4).
+
+    (a) Rule E1 (Orientation & Horizontal Sprawl): For graph and flowchart, flag unconstrained
+        LR or RL orientation when total link count (--> or ---) exceeds 4 without nested
+        subgraph partitioning (mermaid-ergonomics-horizontal-sprawl).
+    (b) Rule E2 (Node Label Width & Wrapping): Flag node labels containing unbroken text lines
+        exceeding 35 characters without <br/> or newline line breaks (mermaid-ergonomics-unbroken-label).
+    (c) Rule E3 (Subgraph Layout Direction): When subgraphs are declared within graph or
+        flowchart, flag subgraphs missing explicit internal direction TB declarations
+        (mermaid-subgraph-direction-tb-mandated).
+    (d) Rule E4 (Universal Option 3 Compact Block Standard): Architecture/interface diagrams
+        must use Option 3 compact blocks (mermaid-option3-compact-block-mandated).
+    """
+    errors: List[Finding] = []
+    if kind not in ("graph", "flowchart"):
+        return errors
+
+    first_line_content = ""
+    header_lineno = start
+    for offset, line in enumerate(body):
+        line_strip = line.strip()
+        if not line_strip or line_strip.startswith("%%"):
+            continue
+        first_line_content = line_strip.lower()
+        header_lineno = start + offset + 1
+        break
+
+    # Rule E1 (Orientation & Horizontal Sprawl)
+    is_lr_or_rl = False
+    orientation = ""
+    for offset, line in enumerate(body):
+        line_strip = line.strip()
+        if not line_strip or line_strip.startswith("%%"):
+            continue
+        m = re.match(r"^\s*(?:flowchart|graph)\s+(LR|RL)\b", line_strip, re.I)
+        if m:
+            is_lr_or_rl = True
+            orientation = m.group(1).upper()
+            header_lineno = start + offset + 1
+            break
+        if re.match(r"^\s*(?:flowchart|graph)\b", line_strip, re.I):
+            header_lineno = start + offset + 1
+            for sub_offset in range(offset + 1, len(body)):
+                sub_line = body[sub_offset].strip()
+                if not sub_line or sub_line.startswith("%%"):
+                    continue
+                if re.match(r"^\s*subgraph\b", sub_line, re.I):
+                    break
+                dir_m = re.match(r"^\s*direction\s+(LR|RL)\b", sub_line, re.I)
+                if dir_m:
+                    is_lr_or_rl = True
+                    orientation = dir_m.group(1).upper()
+                    header_lineno = start + sub_offset + 1
+                    break
+            break
+
+    total_links = sum(
+        len(re.findall(r"-->|---", l))
+        for l in body
+        if not l.strip().startswith("%%")
+    )
+    has_subgraphs = any(
+        re.match(r"^\s*subgraph\b", l.strip(), re.I)
+        for l in body
+        if not l.strip().startswith("%%")
+    )
+
+    if is_lr_or_rl and total_links > 4 and not has_subgraphs:
+        errors.append(Finding(
+            "mermaid-ergonomics-horizontal-sprawl",
+            f"{source}:{header_lineno}: flowchart/graph uses '{orientation}' orientation with {total_links} links "
+            f"without nested subgraph partitioning. Use 'TD' or 'TB' orientation or insert explicit subgraphs to prevent horizontal sprawl.",
+            location=f"{source}",
+        ))
+
+    # Also check horizontal layout constraint (node count > 2 or label > 25)
+    h_flow = validate_mermaid_horizontal_flow(first_line_content, body)
+    if h_flow:
+        node_cnt, max_lbl = h_flow
+        errors.append(Finding(
+            "mermaid-horizontal-flow-prohibited",
+            f"{source}:{header_lineno}: horizontal layout ({first_line_content!r}) is prohibited for diagrams with more than 2 nodes or labels exceeding 25 characters (found {node_cnt} nodes, max label length {max_lbl}). Mandate 'flowchart TD' or 'flowchart TB'.",
+            location=f"{source}",
+        ))
+
+    # Rule E2 (Node Label Width & Wrapping)
+    _, labels = extract_mermaid_nodes_and_labels(body)
+    for offset, _, raw_label in labels:
+        clean = raw_label.strip()
+        if clean.startswith('"') and clean.endswith('"'):
+            clean = clean[1:-1]
+        for seg in re.split(r"<br\s*/?>|\r?\n", clean, flags=re.I):
+            seg_clean = re.sub(r"</?[a-zA-Z0-9_-]+\s*/?>", "", seg).strip()
+            if len(seg_clean) > 35:
+                lineno = start + offset + 1
+                errors.append(Finding(
+                    "mermaid-ergonomics-unbroken-label",
+                    f"{source}:{lineno}: node label line exceeds 35 characters without '<br/>' or newline line breaks ({len(seg_clean)} chars: {seg_clean!r}). Break line using '<br/>' or newline.",
+                    location=f"{source}",
+                ))
+                errors.append(Finding(
+                    "mermaid-node-label-line-wrapping-mandated",
+                    f"{source}:{lineno}: node label line exceeds 35 characters without '<br/>' wrapping ({len(seg_clean)} chars: {seg_clean!r}). Node labels must be wrapped with '<br/>' to maintain visual ergonomics.",
+                    location=f"{source}",
+                ))
+
+    # Rule E3: Mandatory direction TB on Subgraphs
+    for offset, sg_name in validate_mermaid_subgraph_direction(body):
+        lineno = start + offset + 1
+        errors.append(Finding(
+            "mermaid-subgraph-direction-tb-mandated",
+            f"{source}:{lineno}: subgraph {sg_name!r} is missing explicit 'direction TB' or 'direction TD' declaration. Subgraphs in multi-subgraph diagrams (>= 2) or with >= 4 nodes must declare 'direction TB' or 'direction TD'.",
+            location=f"{source}",
+        ))
+
+    # Rule E4: Universal Option 3 Compact Block Standard
+    for offset, line_content in validate_mermaid_option3_compact_blocks(body, source=source):
+        lineno = start + offset + 1
+        errors.append(Finding(
+            "mermaid-option3-compact-block-mandated",
+            f"{source}:{lineno}: exploded port node or subgraph detected ({line_content!r}). Architecture and interface diagrams (SV-1, ICD, STPA) must use Option 3 compact blocks with embedded bulleted port attributes ('• port (DIR)') instead of exploded child port nodes or subgraphs.",
+            location=f"{source}",
+        ))
+
+    return errors
+
+
 def _blocks(text: str) -> Tuple[List[Tuple[int, List[str], str]], List[int]]:
     """Return ``(blocks, unclosed_starts)``.
 
@@ -547,42 +680,7 @@ def check_mermaid_text(text: str, source: str = "<input>") -> List[str]:
             ))
 
         if kind in ("graph", "flowchart"):
-            # Rule E1: Horizontal Flow Prohibition
-            h_flow = validate_mermaid_horizontal_flow(first_line_content, body)
-            if h_flow:
-                node_cnt, max_lbl = h_flow
-                errors.append(Finding(
-                    "mermaid-horizontal-flow-prohibited",
-                    f"{source}:{header_lineno}: horizontal layout ({first_line_content!r}) is prohibited for diagrams with more than 2 nodes or labels exceeding 25 characters (found {node_cnt} nodes, max label length {max_lbl}). Mandate 'flowchart TD' or 'flowchart TB'.",
-                    location=f"{source}"
-                ))
-
-            # Rule E2: Mandatory Node Label Line-Wrapping
-            for offset, clean_len, clean_line in validate_mermaid_node_label_line_wrapping(body):
-                lineno = start + offset + 1
-                errors.append(Finding(
-                    "mermaid-node-label-line-wrapping-mandated",
-                    f"{source}:{lineno}: node label line exceeds 35 characters without '<br/>' wrapping ({clean_len} chars: {clean_line!r}). Node labels must be wrapped with '<br/>' to maintain visual ergonomics.",
-                    location=f"{source}"
-                ))
-
-            # Rule E3: Mandatory direction TB on Subgraphs
-            for offset, sg_name in validate_mermaid_subgraph_direction(body):
-                lineno = start + offset + 1
-                errors.append(Finding(
-                    "mermaid-subgraph-direction-tb-mandated",
-                    f"{source}:{lineno}: subgraph {sg_name!r} is missing explicit 'direction TB' or 'direction TD' declaration. Subgraphs in multi-subgraph diagrams (>= 2) or with >= 4 nodes must declare 'direction TB' or 'direction TD'.",
-                    location=f"{source}"
-                ))
-
-            # Rule E4: Universal Option 3 Compact Block Standard
-            for offset, line_content in validate_mermaid_option3_compact_blocks(body, source=source):
-                lineno = start + offset + 1
-                errors.append(Finding(
-                    "mermaid-option3-compact-block-mandated",
-                    f"{source}:{lineno}: exploded port node or subgraph detected ({line_content!r}). Architecture and interface diagrams (SV-1, ICD, STPA) must use Option 3 compact blocks with embedded bulleted port attributes ('• port (DIR)') instead of exploded child port nodes or subgraphs.",
-                    location=f"{source}"
-                ))
+            errors.extend(validate_mermaid_layout_ergonomics(start, body, kind, source=source))
 
         for offset, line in enumerate(body):
             lineno = start + offset + 1
@@ -758,6 +856,12 @@ def check_mermaid_text(text: str, source: str = "<input>") -> List[str]:
 
 class MermaidSyntaxValidator(IValidator):
     """``IValidator`` wrapper scanning markdown trees for rule violations."""
+
+    def validate_layout_ergonomics(
+        self, start: int, body: Sequence[str], kind: str, source: str = "<input>"
+    ) -> List[Finding]:
+        """Validate layout ergonomics (Rules E1-E4)."""
+        return validate_mermaid_layout_ergonomics(start, body, kind, source)
 
     def validate(self, repo: WorkspaceRepository, **kwargs) -> List[str]:
         search_dirs = kwargs.get("search_dirs")

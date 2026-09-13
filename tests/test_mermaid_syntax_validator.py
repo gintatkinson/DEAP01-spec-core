@@ -32,6 +32,7 @@ from parity_auditor.validators.mermaid_syntax_validator import (
     validate_mermaid_node_label_line_wrapping,
     validate_mermaid_subgraph_direction,
     validate_mermaid_option3_compact_blocks,
+    validate_mermaid_layout_ergonomics,
 )
 from parity_auditor.core.findings import Finding
 
@@ -450,6 +451,84 @@ flowchart TD
 """
         findings = check_mermaid_text(clean_md, source="docs/conops/units/conops/04_USER_CLASSES_AND_STAKEHOLDERS.md")
         self.assertEqual(len(findings), 0, f"Expected 0 findings but got: {findings}")
+
+    def test_rule_e1_horizontal_sprawl_rejected_when_links_gt_4(self):
+        """Rule E1: flowchart/graph LR with > 4 links and no subgraphs triggers mermaid-ergonomics-horizontal-sprawl."""
+        bad_md = """
+```mermaid
+flowchart LR
+    A --> B
+    B --> C
+    C --> D
+    D --> E
+    E --> F
+```
+"""
+        findings = check_mermaid_text(bad_md, source="bad_sprawl_lr.md")
+        rule_ids = [f.rule_id for f in findings]
+        self.assertIn("mermaid-ergonomics-horizontal-sprawl", rule_ids)
+        sprawl_findings = [f for f in findings if f.rule_id == "mermaid-ergonomics-horizontal-sprawl"]
+        self.assertEqual(len(sprawl_findings), 1)
+        self.assertIn("5 links", str(sprawl_findings[0]))
+
+    def test_rule_e1_horizontal_sprawl_with_three_dashes_rejected_when_links_gt_4(self):
+        """Rule E1: graph RL with > 4 '---' links and no subgraphs triggers mermaid-ergonomics-horizontal-sprawl."""
+        bad_md = """
+```mermaid
+graph RL
+    A --- B
+    B --- C
+    C --- D
+    D --- E
+    E --- F
+```
+"""
+        findings = check_mermaid_text(bad_md, source="bad_sprawl_rl.md")
+        rule_ids = [f.rule_id for f in findings]
+        self.assertIn("mermaid-ergonomics-horizontal-sprawl", rule_ids)
+
+    def test_rule_e2_unbroken_label_gt_35_chars_triggers_ergonomics_finding(self):
+        """Rule E2: Single unbroken node label > 35 characters triggers mermaid-ergonomics-unbroken-label."""
+        bad_md = """
+```mermaid
+flowchart TD
+    A["Guidance and Perception Unit and Autonomous Navigation Controller"] --> B["Actuator Core"]
+```
+"""
+        findings = check_mermaid_text(bad_md, source="bad_unbroken_label.md")
+        rule_ids = [f.rule_id for f in findings]
+        self.assertIn("mermaid-ergonomics-unbroken-label", rule_ids)
+        unbroken = [f for f in findings if f.rule_id == "mermaid-ergonomics-unbroken-label"]
+        self.assertEqual(len(unbroken), 1)
+        self.assertIn("Guidance and Perception Unit and Autonomous Navigation Controller", str(unbroken[0]))
+
+    def test_rule_e1_e2_well_structured_td_with_wrapped_labels_passes_cleanly(self):
+        """Rule E1-E3: Well-structured TD/TB diagrams with wrapped labels pass cleanly."""
+        clean_md = """
+```mermaid
+flowchart TD
+    A["Guidance and Perception Unit<br/>and Navigation Controller"] --> B["Actuator Core"]
+    B --> C["Power Unit"]
+    C --> D["Telemetry Logger"]
+    D --> E["Safety Watchdog"]
+```
+"""
+        findings = check_mermaid_text(clean_md, source="clean_td_wrapped.md")
+        self.assertEqual(len(findings), 0, f"Expected 0 findings but got: {findings}")
+
+    def test_validate_mermaid_layout_ergonomics_direct_call(self):
+        """Direct verification of validate_mermaid_layout_ergonomics helper function."""
+        body = [
+            "flowchart LR",
+            "A --> B",
+            "B --> C",
+            "C --> D",
+            "D --> E",
+            "E --> F",
+        ]
+        findings = validate_mermaid_layout_ergonomics(start=1, body=body, kind="flowchart", source="direct_test.md")
+        rule_ids = [f.rule_id for f in findings]
+        self.assertIn("mermaid-ergonomics-horizontal-sprawl", rule_ids)
 
 
 if __name__ == "__main__":
