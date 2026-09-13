@@ -189,6 +189,121 @@ def _tokenize_identifier(ident: str) -> List[str]:
     return [t.lower() for t in s.split() if t.strip()]
 
 
+# Suffixes and tokens for physical count targets and exclusions
+COUNT_TARGET_INCLUSIONS: Tuple[str, ...] = (
+    "count", "qty", "quantity", "surfaces", "channels", "actuators"
+)
+COUNT_TARGET_EXCLUSION_SUFFIXES: Tuple[str, ...] = (
+    "register", "registers", "code", "codes", "index", "indices",
+    "offset", "offsets", "id", "ids", "status", "statuses",
+    "state", "states", "mask", "masks", "threshold", "thresholds",
+    "baud", "chars", "bits"
+)
+
+# Suffixes and tokens for configuration targets and exclusions
+CONFIG_TARGET_INCLUSIONS: Tuple[str, ...] = (
+    "configuration", "config", "layout", "arrangement", "topology", "architecture", "type"
+)
+CONFIG_TARGET_EXCLUSION_SUFFIXES: Tuple[str, ...] = (
+    "name", "names", "title", "titles", "description", "descriptions",
+    "doc", "docs", "note", "notes", "ref", "refs", "poly", "polys",
+    "init", "vector", "vectors", "standard", "standards",
+    "baseline", "baselines", "variants", "variant", "camera", "cameras"
+)
+
+# Standard and protocol numbers that must never be treated as physical component counts
+STANDARD_PROTOCOL_NUMBERS: Set[int] = {
+    485, 422, 232, 429, 661, 653, 818, 825, 664,
+    1553, 1760, 4586, 4609, 7085, 4187, 461, 6016, 188, 220
+}
+
+STANDARD_NAME_PREFIX_PATTERN = re.compile(
+    r'\b(?:RS|EIA|TIA|MIL-STD|MIL-HDBK|MIL-SPEC|MIL|STANAG|ARINC|DO|IEEE|ISO|DEF-STAN)[-_ ]*$',
+    re.I
+)
+
+STANDARD_NAME_SUFFIX_PATTERN = re.compile(
+    r'^\s*(?:bus|commands?|protocol|protocols|standard|standards|spec|specs|specification|specifications|transceiver|transceivers|interface|interfaces|link|links|port|ports|serial)\b',
+    re.I
+)
+
+STANDARD_TOKEN_PATTERN = re.compile(
+    r'\b(?:RS|EIA|TIA|MIL(?:-STD|-HDBK|-SPEC)?|STANAG|ARINC|DO|IEEE|ISO)[-_ ]*\d+',
+    re.I
+)
+
+
+def _is_count_target(name: str) -> bool:
+    """
+    Checks if an attribute name represents a genuine physical count target.
+    An integer attribute is ONLY a physical count target if its normalized name contains or
+    ends with count, qty, quantity, surfaces, channels, or actuators.
+    EXCLUDES attributes that represent registers, bitmasks, status codes, state indices, or thresholds
+    (e.g. ending in register, code, index, offset, id, status, state, mask, threshold, baud, chars, bits).
+    """
+    if not name:
+        return False
+    name_norm = _normalize_name(name)
+    if not name_norm:
+        return False
+    tokens = _tokenize_identifier(name)
+    if tokens:
+        last_tok = tokens[-1].lower()
+        if last_tok in COUNT_TARGET_EXCLUSION_SUFFIXES:
+            return False
+    if any(name_norm.endswith(ex) for ex in COUNT_TARGET_EXCLUSION_SUFFIXES):
+        return False
+    return any(inc in name_norm for inc in COUNT_TARGET_INCLUSIONS)
+
+
+def _is_config_target(name: str) -> bool:
+    """
+    Checks if an attribute name represents a genuine configuration target.
+    A string attribute is ONLY a configuration target if its normalized name contains or ends with
+    configuration, config, layout, arrangement, topology, architecture, or type.
+    EXCLUDES metadata strings (e.g. ending in name, title, description, doc, note, ref, poly, init,
+    vector, standard, baseline, variants, camera).
+    """
+    if not name:
+        return False
+    name_norm = _normalize_name(name)
+    if not name_norm:
+        return False
+    tokens = _tokenize_identifier(name)
+    if tokens:
+        last_tok = tokens[-1].lower()
+        if last_tok in CONFIG_TARGET_EXCLUSION_SUFFIXES:
+            return False
+    if any(name_norm.endswith(ex) for ex in CONFIG_TARGET_EXCLUSION_SUFFIXES):
+        return False
+    return any(inc in name_norm for inc in CONFIG_TARGET_INCLUSIONS)
+
+
+def _is_protocol_or_standard_number(line: str, start: int, end: int, num_val: int) -> bool:
+    """
+    Determines if a matched number represents a communication protocol, military/civil standard,
+    or interface number rather than a physical component count.
+    Excludes numbers preceded or followed by standard names (e.g. RS-485, RS485, EIA-485,
+    485 bus, 485 Commands, MIL-STD-461, STANAG 4187, 4187).
+    """
+    if num_val in STANDARD_PROTOCOL_NUMBERS:
+        return True
+
+    preceding = line[:start]
+    if STANDARD_NAME_PREFIX_PATTERN.search(preceding):
+        return True
+
+    following = line[end:]
+    if STANDARD_NAME_SUFFIX_PATTERN.search(following):
+        return True
+
+    enclosing = _get_enclosing_hyphenated_token(line, start, end)
+    if STANDARD_TOKEN_PATTERN.search(enclosing):
+        return True
+
+    return False
+
+
 def _extract_numeric_scalar(val_str: str) -> Optional[float]:
     """Extract first numeric scalar value from a string."""
     if not val_str:
@@ -479,15 +594,16 @@ class FactualGroundingValidator(IValidator):
 
             if is_integer_val:
                 int_val = int(scalar)
-                gt.structural_attributes[name_norm] = int_val
-                # Register base entity root (stripping count suffixes)
-                root_tokens = [t for t in tokens if t not in ("count", "qty", "quantity", "number", "num", "actuators")]
-                if root_tokens:
-                    root_key = "".join(root_tokens)
-                    gt.structural_attributes[root_key] = int_val
-            elif scalar is None or type_str.lower() in ("string", "str"):
+                if _is_count_target(name) and int_val not in STANDARD_PROTOCOL_NUMBERS:
+                    gt.structural_attributes[name_norm] = int_val
+                    # Register base entity root (stripping count suffixes)
+                    root_tokens = [t for t in tokens if t not in ("count", "qty", "quantity", "number", "num", "actuators", "surfaces", "channels")]
+                    if root_tokens:
+                        root_key = "".join(root_tokens)
+                        gt.structural_attributes[root_key] = int_val
+            elif (scalar is None or type_str.lower() in ("string", "str")) and _is_config_target(name):
                 gt.structural_attributes[name_norm] = val_clean
-                root_tokens = [t for t in tokens if t not in ("configuration", "config", "type", "mode", "layout", "geometry", "architecture", "topology")]
+                root_tokens = [t for t in tokens if t not in ("configuration", "config", "type", "mode", "layout", "geometry", "architecture", "topology", "arrangement")]
                 if root_tokens:
                     root_key = "".join(root_tokens)
                     gt.structural_attributes[root_key] = val_clean
@@ -550,7 +666,7 @@ class FactualGroundingValidator(IValidator):
                 aname_norm = _normalize_name(aname)
                 aval = getattr(attr, "default_value", None) or ""
                 ascalar = _extract_numeric_scalar(aval)
-                if ("count" in aname_norm or "quantity" in aname_norm or "qty" in aname_norm) and ascalar is not None:
+                if _is_count_target(aname) and ascalar is not None and int(ascalar) not in STANDARD_PROTOCOL_NUMBERS:
                     gt.structural_attributes[pname_norm] = int(ascalar)
                 elif aname and aval:
                     stmt = f"attribute {pname}_{aname} = {aval};"
@@ -609,18 +725,19 @@ class FactualGroundingValidator(IValidator):
 
                     if is_int:
                         int_val = int(scalar)
-                        gt.structural_attributes[k_norm] = int_val
-                        root_tokens = [t for t in tokens if t not in ("actuators", "count", "quantity", "qty", "surfaces")]
-                        if root_tokens:
-                            gt.structural_attributes["".join(root_tokens)] = int_val
-                            singular = root_tokens[-1].rstrip("s")
-                            gt.structural_attributes["".join(root_tokens[:-1] + [singular])] = int_val
-                        for t in tokens:
-                            if t not in NON_HARDWARE_GENERIC_TOKENS and len(t) >= 3:
-                                gt.declared_parts.add(t)
-                    elif scalar is None or type_hint.lower() in ("string", "str"):
+                        if _is_count_target(k) and int_val not in STANDARD_PROTOCOL_NUMBERS:
+                            gt.structural_attributes[k_norm] = int_val
+                            root_tokens = [t for t in tokens if t not in ("actuators", "count", "quantity", "qty", "surfaces", "channels")]
+                            if root_tokens:
+                                gt.structural_attributes["".join(root_tokens)] = int_val
+                                singular = root_tokens[-1].rstrip("s")
+                                gt.structural_attributes["".join(root_tokens[:-1] + [singular])] = int_val
+                            for t in tokens:
+                                if t not in NON_HARDWARE_GENERIC_TOKENS and len(t) >= 3:
+                                    gt.declared_parts.add(t)
+                    elif (scalar is None or type_hint.lower() in ("string", "str")) and _is_config_target(k):
                         gt.structural_attributes[k_norm] = clean_v
-                        root_tokens = [t for t in tokens if t not in ("configuration", "config", "type", "mode", "layout", "geometry", "bus")]
+                        root_tokens = [t for t in tokens if t not in ("configuration", "config", "type", "mode", "layout", "geometry", "bus", "architecture", "topology", "arrangement")]
                         if root_tokens:
                             gt.structural_attributes["".join(root_tokens)] = clean_v
 
@@ -642,7 +759,8 @@ class FactualGroundingValidator(IValidator):
                             cfg_tokens = _tokenize_identifier(cfg_val)
                             if len(cfg_tokens) >= 2:
                                 noun = cfg_tokens[-1]
-                                gt.structural_attributes[noun] = cfg_val
+                                if not any(noun.endswith(ex) for ex in CONFIG_TARGET_EXCLUSION_SUFFIXES):
+                                    gt.structural_attributes[noun] = cfg_val
 
             # Check for bullet points: - Key: Value
             m_bullet = re.match(r'^[-*]\s*([a-zA-Z0-9_\s]+)\s*[:=]\s*([^;\n]+)$', line_str)
@@ -661,17 +779,22 @@ class FactualGroundingValidator(IValidator):
                 unit = _extract_unit(clean_v, tokens)
                 scalar = _extract_numeric_scalar(clean_v)
                 if scalar is not None and clean_v.isdigit() and not unit:
-                    gt.structural_attributes[k_norm] = int(scalar)
-                    root_tokens = [t for t in tokens if t not in ("count", "qty", "quantity")]
-                    if root_tokens:
-                        gt.structural_attributes["".join(root_tokens)] = int(scalar)
-                    for t in tokens:
-                        if t not in NON_HARDWARE_GENERIC_TOKENS and len(t) >= 3:
-                            gt.declared_parts.add(t)
+                    int_val = int(scalar)
+                    if _is_count_target(k) and int_val not in STANDARD_PROTOCOL_NUMBERS:
+                        gt.structural_attributes[k_norm] = int_val
+                        root_tokens = [t for t in tokens if t not in ("count", "qty", "quantity", "actuators", "surfaces", "channels")]
+                        if root_tokens:
+                            gt.structural_attributes["".join(root_tokens)] = int_val
+                        for t in tokens:
+                            if t not in NON_HARDWARE_GENERIC_TOKENS and len(t) >= 3:
+                                gt.declared_parts.add(t)
                 elif scalar is not None and (unit or any(t in tokens for t in ("limit", "max", "load", "accel"))):
                     gt.numeric_limits[k_norm] = (float(scalar), unit)
-                elif scalar is None:
+                elif scalar is None and _is_config_target(k):
                     gt.structural_attributes[k_norm] = clean_v
+                    root_tokens = [t for t in tokens if t not in ("configuration", "config", "type", "mode", "layout", "geometry", "architecture", "topology", "arrangement")]
+                    if root_tokens:
+                        gt.structural_attributes["".join(root_tokens)] = clean_v
 
     # Backward-compatibility alias
     _ingest_schema_markdown = _extract_from_markdown
@@ -768,9 +891,11 @@ class FactualGroundingValidator(IValidator):
 
         for k, v in gt.structural_attributes.items():
             if isinstance(v, int):
-                count_targets[k] = v
+                if v not in STANDARD_PROTOCOL_NUMBERS and not any(k.endswith(ex) for ex in COUNT_TARGET_EXCLUSION_SUFFIXES):
+                    count_targets[k] = v
             elif isinstance(v, str) and len(v) >= 2:
-                config_targets[k] = v
+                if not any(k.endswith(ex) for ex in CONFIG_TARGET_EXCLUSION_SUFFIXES):
+                    config_targets[k] = v
 
         # Collect structural nouns exclusively from:
         # (a) The second token / noun of declared configuration attributes in config_targets (e.g. tail, wing, chassis, airframe, hull from tailConfiguration, empennageConfiguration, etc.)
@@ -854,17 +979,26 @@ class FactualGroundingValidator(IValidator):
                     continue
 
                 pattern = re.compile(
-                    r'\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten|single|dual|twin|triple|quad)\s*(?:x\s*)?'
-                    r'((?:[a-zA-Z-]+\s+){0,2})' + re.escape(entity_key) + r'(?:s|\b)',
+                    r'\b(?:(?:RS|EIA|TIA|MIL-STD|MIL-HDBK|MIL-SPEC|STANAG|ARINC|DO|IEEE|ISO)[- ]?)?'
+                    r'(\d+|one|two|three|four|five|six|seven|eight|nine|ten|single|dual|twin|triple|quad)\s*(?:x\s*)?'
+                    r'((?:[a-zA-Z-]+\s+){0,2})' + re.escape(entity_key) + r'(?:e?s|\b)',
                     re.I
                 )
-                m_count = pattern.search(line_str)
-                if m_count:
+                for m_count in pattern.finditer(line_str):
                     num_word = m_count.group(1).lower()
                     claimed_count = int(num_word) if num_word.isdigit() else WORD_NUMBERS.get(num_word)
-                    if claimed_count is not None and claimed_count != expected_count:
+                    if claimed_count is None:
+                        continue
+
+                    # Protocol / Standard Number Exclusions:
+                    num_start = m_count.start(1)
+                    num_end = m_count.end(1)
+                    if _is_protocol_or_standard_number(line_str, num_start, num_end, claimed_count):
+                        continue
+
+                    if claimed_count != expected_count:
                         claimed_text = m_count.group(0).strip()
-                        plural_suffix = "s" if not entity_key.endswith("s") else ""
+                        plural_suffix = "es" if entity_key.endswith("s") else "s"
                         findings.append(Finding(
                             "factual-grounding-numeric-drift",
                             f"{rel_path}:{lineno_1idx}: Ungrounded structural assertion '{claimed_text}' contradicts schema ground truth ({expected_count} {entity_key}{plural_suffix}) in {', '.join(gt.source_files) or 'schema/'}.",

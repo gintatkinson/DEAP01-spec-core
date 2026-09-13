@@ -503,8 +503,241 @@ The vehicle is equipped with an ungrounded abc-tail empennage.
             # Verify actual ungrounded structural descriptor IS caught
             self.assertTrue(any("abc-tail" in str(f) for f in findings))
 
+    def test_count_targets_excludes_registers_indices_and_thresholds(self):
+        """Verify that integer attributes representing registers, indices, status codes, masks,
+        baud rates, or thresholds are excluded from count_targets, while genuine component counts
+        (e.g. ending in count, qty, surfaces, channels, actuators) are preserved.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            docs_dir = os.path.join(tmpdir, "docs", "features")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(docs_dir, exist_ok=True)
+
+            schema_sysml = """package Vehicle_SSOT {
+    attribute ruddervatorCount : Integer = 4;
+    attribute controlSurfaces : Integer = 4;
+    attribute rfChannels : Integer = 2;
+    attribute faultRegister : Integer = 16;
+    attribute statusRegister : Integer = 1;
+    attribute statusCode : Integer = 200;
+    attribute channelIndex : Integer = 1;
+    attribute channelOffset : Integer = 8;
+    attribute actuatorMask : Integer = 15;
+    attribute surfaceThreshold : Integer = 10;
+    attribute telemetryBaud : Integer = 115200;
+    attribute bufferChars : Integer = 256;
+    attribute payloadBits : Integer = 32;
+    attribute actuatorId : Integer = 3;
+    attribute systemState : Integer = 2;
+}
+"""
+            with open(os.path.join(schema_dir, "model.sysml"), "w", encoding="utf-8") as f:
+                f.write(schema_sysml)
+
+            # Document mentions various non-count items with differing counts, but only ruddervators drifts
+            doc_md = """# Flight Control Configuration
+The subsystem uses 2 fault registers, 4 channel indices, 1 actuator mask, 8 buffer chars, and 2 ruddervators.
+"""
+            with open(os.path.join(docs_dir, "FEAT_CONFIG.md"), "w", encoding="utf-8") as f:
+                f.write(doc_md)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            findings = self.validator.validate(repo, scan_dirs=["docs"])
+
+            findings_text = " ".join(str(f) for f in findings)
+            # Must NOT flag registers, indices, masks, or chars as component count contradictions
+            self.assertNotIn("fault register", findings_text.lower())
+            self.assertNotIn("channel indic", findings_text.lower())
+            self.assertNotIn("actuator mask", findings_text.lower())
+            self.assertNotIn("buffer char", findings_text.lower())
+
+            # MUST flag the actual count drift for 2 ruddervators vs 4
+            self.assertTrue(any("2 ruddervators" in str(f) for f in findings))
+
+    def test_config_targets_excludes_metadata_strings(self):
+        """Verify that string attributes representing metadata (name, title, description, doc,
+        note, ref, poly, init, vector, standard, baseline, variants, camera) are excluded from
+        config_targets, while genuine configuration attributes (configuration, config, layout,
+        arrangement, topology, architecture, type) are retained.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            docs_dir = os.path.join(tmpdir, "docs", "conops")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(docs_dir, exist_ok=True)
+
+            schema_sysml = """package Vehicle_SSOT {
+    attribute tailConfiguration : String = "X-tail";
+    attribute avionicsArchitecture : String = "distributed";
+    attribute vehicleName : String = "Eagle-One";
+    attribute systemTitle : String = "Autonomous System";
+    attribute configDescription : String = "Primary vehicle spec";
+    attribute systemDoc : String = "Reference doc";
+    attribute safetyNote : String = "Critical safety note";
+    attribute specRef : String = "DO-178C";
+    attribute crcPoly : String = "0x1021";
+    attribute stateInit : String = "STANDBY";
+    attribute testVector : String = "VEC-001";
+    attribute standardRef : String = "MIL-STD";
+    attribute architectureBaseline : String = "REV-B";
+    attribute payloadVariants : String = "EO-IR";
+    attribute payloadCamera : String = "Sony";
+}
+"""
+            with open(os.path.join(schema_dir, "model.sysml"), "w", encoding="utf-8") as f:
+                f.write(schema_sysml)
+
+            # Document mentions different metadata strings and a contradictory tail descriptor
+            doc_md = """# Concept of Operations
+The vehicle named Falcon-Two conforms to title UAV-Platform with doc UserGuide.
+It features an ungrounded V-tail configuration.
+"""
+            with open(os.path.join(docs_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
+                f.write(doc_md)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            findings = self.validator.validate(repo, scan_dirs=["docs"])
+
+            findings_text = " ".join(str(f) for f in findings)
+            # Metadata strings must not be flagged as contradictory configuration descriptors
+            self.assertNotIn("Falcon-Two", findings_text)
+            self.assertNotIn("UAV-Platform", findings_text)
+            self.assertNotIn("UserGuide", findings_text)
+
+            # Genuine configuration target (tailConfiguration: X-tail) must flag V-tail
+            self.assertTrue(any("V-tail" in str(f) for f in findings))
+
+    def test_protocol_and_standard_number_exclusions(self):
+        """Verify that numbers preceded or followed by standard names (e.g. RS-485, RS485,
+        EIA-485, 485 bus, 485 Commands, MIL-STD-461, STANAG 4187, 4187) are not matched as
+        physical component counts.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            docs_dir = os.path.join(tmpdir, "docs", "icds")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(docs_dir, exist_ok=True)
+
+            schema_sysml = """package Vehicle_SSOT {
+    attribute busCount : Integer = 2;
+    attribute commandCount : Integer = 10;
+    attribute channelCount : Integer = 2;
+}
+"""
+            with open(os.path.join(schema_dir, "model.sysml"), "w", encoding="utf-8") as f:
+                f.write(schema_sysml)
+
+            doc_md = """# Interface Control Document
+## Protocol and Bus Interfaces
+- Differential serial communication utilizes RS-485 bus interfaces.
+- The telemetry line connects via RS485 bus transceivers.
+- Legacy hardware supports EIA-485 bus lines.
+- Payload commands are transferred using 485 bus links.
+- The flight control computer processes 485 Commands over the avionics bus.
+- Electromagnetic susceptibility meets MIL-STD-461 requirements.
+- Interoperability conforms to STANAG 4187 specifications.
+- Firing logic meets 4187 safety requirements.
+"""
+            with open(os.path.join(docs_dir, "ICD_PROTOCOLS.md"), "w", encoding="utf-8") as f:
+                f.write(doc_md)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            findings = self.validator.validate(repo, scan_dirs=["docs"])
+
+            # None of RS-485, RS485, EIA-485, 485 bus, 485 Commands, MIL-STD-461, STANAG 4187, 4187
+            # should be flagged as numeric drift contradicting 2 buses, 10 commands, or 2 channels.
+            numeric_drift_findings = [f for f in findings if f.rule_id == "factual-grounding-numeric-drift"]
+            self.assertEqual(numeric_drift_findings, [])
+
+    def test_protocol_exclusion_does_not_mask_genuine_count_drift(self):
+        """Verify that genuine count drift on a line containing protocol numbers is still detected."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            docs_dir = os.path.join(tmpdir, "docs", "icds")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(docs_dir, exist_ok=True)
+
+            schema_sysml = """package Vehicle_SSOT {
+    attribute busCount : Integer = 2;
+    port c2 : RS-485;
+}
+"""
+            with open(os.path.join(schema_dir, "model.sysml"), "w", encoding="utf-8") as f:
+                f.write(schema_sysml)
+
+            # Line contains both an RS-485 mention AND an incorrect count of 4 buses
+            doc_md = """# Interface Control Document
+The architecture implements 4 redundant buses over an RS-485 bus network.
+"""
+            with open(os.path.join(docs_dir, "ICD_BUS.md"), "w", encoding="utf-8") as f:
+                f.write(doc_md)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            findings = self.validator.validate(repo, scan_dirs=["docs"])
+
+            # Must detect 4 redundant buses contradicting 2 buses
+            numeric_drift_findings = [f for f in findings if f.rule_id == "factual-grounding-numeric-drift"]
+            self.assertEqual(len(numeric_drift_findings), 1)
+            self.assertTrue(any("4 redundant buses" in str(f) for f in numeric_drift_findings))
+            # Must not falsely claim 485 buses contradicts 2
+            self.assertFalse(any("485" in str(f) for f in numeric_drift_findings))
+
+    def test_markdown_bom_count_and_config_target_exclusions(self):
+        """Verify that Markdown BOM table rows and bullets exclude registers/metadata and retain
+        genuine count_targets (count, qty, surfaces, channels, actuators) and config_targets.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema", "extracted")
+            docs_dir = os.path.join(tmpdir, "docs", "features")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(docs_dir, exist_ok=True)
+
+            bom_md = """# Bill of Materials
+| Property | Value | Description |
+| :--- | :--- | :--- |
+| Ruddervator Actuators | 4 | Four independent actuators |
+| Control Surfaces | 4 | Empennage surfaces |
+| Empennage Layout | X-tail | Empennage geometry |
+| Fault Register | 16 | Bitmask status register |
+| Status Code | 200 | HTTP OK status |
+| Baud Rate | 115200 | Serial bitrate |
+| Channel Index | 1 | Zero-based channel index |
+| System Title | SkyWatcher | Marketing name |
+| Config Description | Baseline spec | Specification summary |
+
+## System Parameters
+- Actuators Quantity: 4
+- Surface Threshold: 10
+- Component Name: Airframe-Alpha
+"""
+            with open(os.path.join(schema_dir, "bom.md"), "w", encoding="utf-8") as f:
+                f.write(bom_md)
+
+            doc_md = """# Feature Specification
+The system contains 2 fault registers, 4 channel indices, and title Drone-Beta.
+The airframe is configured with 2 ruddervators in a V-tail layout.
+"""
+            with open(os.path.join(docs_dir, "FEAT_SPEC.md"), "w", encoding="utf-8") as f:
+                f.write(doc_md)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            findings = self.validator.validate(repo, scan_dirs=["docs"])
+
+            findings_text = " ".join(str(f) for f in findings)
+            # Must NOT flag registers, indices, or titles
+            self.assertNotIn("fault register", findings_text.lower())
+            self.assertNotIn("channel indic", findings_text.lower())
+            self.assertNotIn("Drone-Beta", findings_text)
+
+            # MUST flag 2 ruddervators drift vs 4
+            self.assertTrue(any("2 ruddervators" in str(f) for f in findings))
+            # MUST flag V-tail drift vs X-tail
+            self.assertTrue(any("V-tail" in str(f) for f in findings))
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
 
