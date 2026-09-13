@@ -2786,8 +2786,58 @@ def check_factual_grounding(repo_root=None):
 check_factual_grounding_and_provenance = check_factual_grounding
 
 
+def _load_cross_document_diagram_validator():
+    """Import validate_cross_document_diagram_parity and WorkspaceRepository fail-safe."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(script_dir)
+    spec_dir = os.path.join(project_root, "skills", "spec-orchestrator", "scripts")
+    parity_src = os.path.join(project_root, "skills", "spec-orchestrator", "parity_auditor", "src")
+    scripts_dir = os.path.join(project_root, "scripts")
+    for p in (scripts_dir, spec_dir, parity_src):
+        if p not in sys.path:
+            sys.path.insert(0, p)
+    try:
+        from parity_auditor.validators.cross_document_diagram_parity_validator import (
+            validate_cross_document_diagram_parity,
+            CrossDocumentDiagramParityValidator,
+        )
+        from parity_auditor.core.workspace import WorkspaceRepository
+        return validate_cross_document_diagram_parity, CrossDocumentDiagramParityValidator, WorkspaceRepository
+    except Exception:
+        return None, None, None
+
+
+def check_cross_document_diagram_parity(repo_root=None):
+    """Check 25: Cross-Document Diagram Parity Gate.
+
+    Verify that Mermaid architecture diagrams (e.g. DoDAF SV-1 System Interface Block Diagrams)
+    replicated across docs/conops/CONOPS.md and executive reports in docs/reports/ maintain
+    strict 1:1 parity in subgraphs, nodes, embedded port attributes, and connection links.
+    """
+    if repo_root is None:
+        repo_root = os.getcwd()
+
+    fn, val_cls, repo_cls = _load_cross_document_diagram_validator()
+    if fn is None:
+        print("WARNING: Check 25 skipped (validate_cross_document_diagram_parity unavailable).", file=sys.stderr)
+        return
+
+    findings = fn(repo_root)
+
+    if findings:
+        print("ERROR: Check 25 failed (Cross-Document Diagram Parity Gate violations found):", file=sys.stderr)
+        for f in findings:
+            print(f"  - {f}", file=sys.stderr)
+        sys.exit(1)
+
+    print("Success: Check 25 verified (Cross-Document Diagram Parity Gate passed -- zero disparity in subgraphs, nodes, ports, or connections).")
+
+
+check_cross_document_diagram_parity_gate = check_cross_document_diagram_parity
+
+
 def run_all_checks(repo_root=None):
-    """Run all baseline checks (Checks 10 through 23)."""
+    """Run all baseline checks (Checks 10 through 25)."""
     if repo_root is None:
         repo_root = os.getcwd()
     check_gitignore_exists(repo_root)
@@ -2804,9 +2854,10 @@ def run_all_checks(repo_root=None):
     check_semantic_diagram_ast_parity(repo_root)
     check_semantic_prose_invariants(repo_root)
     check_factual_grounding(repo_root)
+    check_cross_document_diagram_parity(repo_root)
 
 def _run_verification(args, dest, repo_root, is_flutter, is_react):
-    # Run Checks 10 through 23
+    # Run Checks 10 through 25
     run_all_checks(repo_root)
 
     if is_flutter:

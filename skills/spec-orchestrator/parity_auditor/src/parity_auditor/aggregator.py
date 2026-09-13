@@ -57,6 +57,7 @@ from .validators.obligation_witness_validator import ObligationWitnessValidator
 from .validators.semantic_diagram_ast_validator import SemanticDiagramASTValidator
 from .validators.semantic_prose_invariant_validator import SemanticProseInvariantValidator
 from .validators.factual_grounding_validator import FactualGroundingValidator
+from .validators.cross_document_diagram_parity_validator import CrossDocumentDiagramParityValidator
 
 # Validators migrated to structured findings. Un-migrated validators are deliberately
 # excluded rather than included and silently ungroupable -- see `coverage_note`.
@@ -99,6 +100,7 @@ AGGREGATING_VALIDATORS = (
     SemanticDiagramASTValidator,
     SemanticProseInvariantValidator,
     FactualGroundingValidator,
+    CrossDocumentDiagramParityValidator,
 )
 
 # SyncValidator is migrated to structured findings but deliberately absent: it shells

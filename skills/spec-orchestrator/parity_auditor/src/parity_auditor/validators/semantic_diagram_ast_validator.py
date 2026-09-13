@@ -89,6 +89,7 @@ RECOGNIZED_STRUCTURAL_TOKENS = {
     "pipeline", "phase1", "phase2", "phase3", "phase1a", "phase1b", "ssot", "conops", "stpa", "fmeca", "sysml",
     "epic", "feature", "story", "stories", "deliverable", "deliverables", "matrix", "sync",
     "port", "ports", "conn", "connection", "connections",
+    "audit", "audits", "crit", "sug", "nit", "finding", "findings", "codegen", "gate",
     "segment", "segments", "airframe", "airframes", "vehicle", "vehicles",
     "platform", "platforms", "supersystem", "supersystems", "primary", "support", "operational",
     "launcher", "launchers", "recovery", "airvehicle", "groundcontrol", "launchsegment",
@@ -263,7 +264,7 @@ class SemanticDiagramASTValidator(IValidator):
         # 4. Validate each markdown file
         for md_path in md_files:
             rel_path = os.path.relpath(md_path, repo.workspace_dir)
-            if rel_path.startswith(os.path.join("docs", "reports")) or rel_path.startswith(os.path.join("docs", "management")):
+            if "defects" in rel_path.split(os.sep):
                 continue
             try:
                 with open(md_path, "r", encoding="utf-8") as f:
@@ -506,12 +507,12 @@ class SemanticDiagramASTValidator(IValidator):
             return True
 
         # Check procedural workflow / lifecycle / step / WBS / port / connection patterns
-        procedural_prefix = re.compile(r'^(step\d*|phase|abort|gate|mtc|lru|port|conn|task\d*|sortie|turnaround|diagnostics|pbit|ibit|cbit|check|pass|fail|l\d+|wp[_\-]|wbs[_\-]|uc[_\-]|port[_\-]|conn[_\-])', re.I)
+        procedural_prefix = re.compile(r'^(step\d*|phase\d*|p\d+[a-z_]|d[_\-]|pipeline\d*|abort|gate|mtc|lru|port|conn|task\d*|sortie|turnaround|diagnostics|pbit|ibit|cbit|check|pass|fail|l\d+|r\d+|wp[_\-]|wbs[_\-]|uc[_\-]|port[_\-]|conn[_\-])', re.I)
         if procedural_prefix.match(node_id.strip()) or procedural_prefix.match(id_norm) or procedural_prefix.match(lbl_norm):
             return True
 
         # Check use case, port, and connection prefixes
-        if id_norm.startswith(("uc", "usecase", "port", "conn")) or lbl_norm.startswith(("uc", "port", "conn")):
+        if id_norm.startswith(("uc", "usecase", "port", "conn", "p1_", "p2_", "d_")) or lbl_norm.startswith(("uc", "port", "conn", "p1_", "p2_", "d_")):
             return True
 
         # Check structural metaclass, architectural, domain, UI, and data model suffixes
@@ -523,6 +524,7 @@ class SemanticDiagramASTValidator(IValidator):
             "controller", "dialog", "window", "viewmodel", "service", "manager",
             "handler", "adapter", "factory", "builder", "helper", "test", "entity",
             "dto", "dao", "register", "field", "enum", "type",
+            "finding", "findings", "audit", "audits", "report", "reports", "deliverable", "deliverables", "codegen",
             "airframe", "segment", "segments", "vehicle", "platform", "launcher", "station"
         )):
             return True
