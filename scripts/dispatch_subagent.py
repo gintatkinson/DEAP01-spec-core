@@ -240,6 +240,53 @@ def resolve_repository_classification(
     return DEFAULT_CLASSIFICATION
 
 
+CUSTOMER_JAIL_PATH_PATTERN = re.compile(
+    r"(?:/(?:Users|home)/[^/\s\)\"\'\`]+/)?(?:/)?jail/(?:uav|customer|drone|automotive|medical|defense)[-_a-zA-Z0-9]*(?:/)?",
+    re.IGNORECASE,
+)
+
+
+def sandbox_upstream_dispatch_payload(
+    prompt_text: str,
+    repo_classification: Optional[str] = None,
+) -> str:
+    """
+    Sanitizes and sandboxes subagent prompt payloads in upstream compiler mode.
+
+    When `repo_classification == 'UPSTREAM_SPEC_CORE_COMPILER'`:
+    - Strips downstream customer directory paths and external jail references.
+    - Enforces M2 metamodel closed-vocabulary typing contracts.
+
+    When in downstream application or template modes:
+    - Passes payload through unmodified.
+    """
+    if not prompt_text or not isinstance(prompt_text, str):
+        return prompt_text
+
+    norm_cls = (repo_classification or "").strip().upper().replace("-", "_")
+    if norm_cls != "UPSTREAM_SPEC_CORE_COMPILER":
+        return prompt_text
+
+    # 1. Strip downstream customer directory paths
+    sanitized = CUSTOMER_JAIL_PATH_PATTERN.sub("", prompt_text)
+
+    # 2. Enforce M2 metamodel contracts
+    m2_marker = "M2 Metamodel Contract"
+    if m2_marker not in sanitized:
+        m2_clause = (
+            "6. M2 Metamodel Contract: Abstract M2 metamodel typing strictly enforced. "
+            "All AST elements, schemas, and parameter extractions must conform to closed allowlist "
+            "ALLOWED_M2_METAMODEL_TYPES; zero hardcoded M1 customer domain entities permitted.\n"
+        )
+        if "PROCEED" in sanitized:
+            parts = sanitized.rsplit("PROCEED", 1)
+            sanitized = parts[0] + m2_clause + "PROCEED" + parts[1]
+        else:
+            sanitized = sanitized + "\n" + m2_clause
+
+    return sanitized
+
+
 def construct_prompt_template(
     skill_path: str,
     target: str,
@@ -307,7 +354,7 @@ Mandatory Instructions:
 {checklist_block}{extra_block}
 PROCEED
 """
-    return prompt
+    return sandbox_upstream_dispatch_payload(prompt, resolved_classification)
 
 
 def generate_subagent_prompt(

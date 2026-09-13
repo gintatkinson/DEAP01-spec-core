@@ -229,8 +229,73 @@ Per ISO/IEC/IEEE 29148:2018 §6.4.2, INCOSE Systems Engineering Handbook v5.0, a
 - **Zero-Omission Rule**: Omitting any declared AST `part def` is strictly forbidden and triggers compiler validation failure during `assemble_conops.py` assembly.
 
 ### 4.5 100% Public Clause Citations
-- Every threat mitigation, normative requirement, and operational task must cite authoritative public standards clauses (e.g. `ISO/IEC/IEEE 29148:2018 §6.4.2`, `NATO STANAG 4586 Annex B §3.2.1`, `JARUS SORA v2.5 Annex B §2.1`, `RTCA DO-178C §6.3.1`).
+- Every threat mitigation, normative requirement, and operational task must cite authoritative public standards clauses (e.g. `ISO/IEC/IEEE 29148:2018 §6.4.2`, `IEEE Std 1558-2020 §4.5`, `JARUS SORA v2.5 Annex B §2.1`, `RTCA DO-178C §6.3.1`, `MIL-STD-882E §4.4`).
 - Speculative or un-cited additions are strictly forbidden.
+
+### 4.6 Section 5 PACE C2 Link Communications Plan Template & Schema-Driven Extraction Guidelines
+Per [`rules/sysml-ssot-completeness.md`](../../rules/sysml-ssot-completeness.md) and [`rules/conops-mission-intent-integrity.md`](../../rules/conops-mission-intent-integrity.md):
+- **Zero Hardcoded Synthetic Timeouts Invariant**: Agents and Worker ConOps are strictly forbidden from hardcoding synthetic timeout constants (such as `tau_loss = 5.0 s`, `tau_reacquire = 15.0 s`, `tau_escalate = 30.0 s`) or ungrounded generic protocol standards (e.g. NATO STANAG 4586) into Section 5 PACE templates and generated artifacts.
+- **Parametric Schema-Driven Extraction**:
+  1. All PACE communications tiers (`Primary`, `Alternate`, `Contingency`, `Emergency`) must extract link medium characteristics, frequency bands ($f_{\mathrm{band}}$), data rates ($\text{Rate}_{\mathrm{nom}}$), and heartbeat timeout thresholds ($\tau_{\mathrm{timeout},i}$) dynamically from schema definitions in `schema/` (e.g., OMG IDL, Protobuf, ARXML, SysML v2 port contracts) and SysML `state def` timing constraints.
+  2. Public clause citations must reference authoritative, grounded standards declared in `docs/research/RESEARCH_INVENTORY.md` (e.g., `IEEE Std 1558-2020 §4.5`, `MIL-STD-188-220E §5.3`, `MIL-STD-882E §4.3`, `NIST SP 800-82r3 §5.2`).
+- **Parametric Failover Transition Dynamics Equation**:
+$$
+\begin{aligned}
+\Delta t_{\mathrm{loss}}(t) &= t - t_{\text{last\_valid\_rx}} \\
+\mathrm{State}(t) &= \begin{cases}
+\mathrm{Tier}_i & \text{if } \Delta t_{\mathrm{loss}} < \tau_{\mathrm{timeout},i} \\
+\mathrm{Tier}_{i+1} & \text{if } \Delta t_{\mathrm{loss}} \ge \tau_{\mathrm{timeout},i} \quad \text{for } t \ge t_{\mathrm{fail}} + \tau_{\mathrm{hysteresis},i+1}
+\end{cases}
+\end{aligned}
+$$
+
+- Parameter Definitions & Engineering Units:
+
+| Parameter | Symbol | Units | Constraint / Rule | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| Active Link Loss Duration | Delta t_loss | s | Measured Online | Measured elapsed duration since last authenticated frame |
+| Primary Heartbeat Timeout | tau_timeout_Primary | s | tau_timeout_Primary > 0 | Timeout triggering fallback to Alternate tier extracted from schema |
+| Alternate Heartbeat Timeout | tau_timeout_Alternate | s | tau_timeout_Alternate > tau_timeout_Primary | Timeout triggering fallback to Contingency tier extracted from schema |
+| Contingency Heartbeat Timeout | tau_timeout_Contingency | s | tau_timeout_Contingency > tau_timeout_Alternate | Timeout triggering fallback to Emergency tier extracted from schema |
+| Emergency Heartbeat Timeout | tau_timeout_Emergency | s | tau_timeout_Emergency > tau_timeout_Contingency | Timeout initiating definitive failsafe sequence extracted from SysML state def |
+| Re-acquisition Hysteresis Window | tau_hysteresis | s | tau_hysteresis > 0 | Continuous stable link duration required before up-tier promotion |
+
+### 4.7 Section 10 Operational Sequence Diagram Template & Safety-Critical Actuation Invariants
+Per [`rules/sysml-ssot-completeness.md`](../../rules/sysml-ssot-completeness.md) §3 and MIL-STD-882E §4.4:
+- **Strict Prohibition of Autonomous High-Consequence Actuation**: Autonomous generation of irreversible physical actuation, high-energy discharge, or safety-critical effector commands without prior human operator authorization/consent is strictly prohibited across all specification tiers. Any sequence diagram attempting uncommanded or unauthorized physical actuation is immediately rejected under rule `factual-grounding-temporal-safety-violation`.
+- **Mandatory Temporal Precedence of Human Consent**:
+  In every Mermaid sequence diagram (`sequenceDiagram`) representing high-consequence operations or safety-critical actuation, an explicit Human-in-the-Loop (HITL) operator authorization command / consent token (e.g. `Operator ->> Console: Authorize_Action_Command`, `Console ->> Controller: Action_Authorized_Consent_Token`) MUST temporally precede any physical interlock disengagement or actuation signal (`Controller ->> SafetyInterlock: Disengage_Safety_Interlock`, `Controller ->> Actuator: Command_Physical_Actuation`).
+- **Abstract Temporal Safety Invariant Rule**: High-consequence or irreversible physical actuation commands require temporal predecessor human operator consent tokens if mandated by system safety requirements.
+
+#### Figure 10.1: Operational Sequence Diagram with Human Authorization & Safety Interlock Disengagement
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Operator as "Human Operator"
+    participant Console as "Operator Console / HMI"
+    participant Controller as "System Controller"
+    participant SafetyInterlock as "Safety Interlock / Protection Subsystem"
+    participant Actuator as "Physical Actuator / High-Consequence Effector"
+
+    Note over Operator,Actuator: Phase 1: Operational Monitoring & Verification
+    Controller ->> Console: Stream_System_Telemetry
+    Console ->> Operator: Display_Action_Authorization_Prompt
+
+    Note over Operator,Actuator: Phase 2: Human Operator Authorization
+    Operator ->> Console: Authorize_Action_Command
+    Console ->> Controller: Action_Authorized_Consent_Token
+
+    Note over Operator,Actuator: Phase 3: Hardware Interlock Disengagement & Actuation
+    Controller ->> SafetyInterlock: Disengage_Safety_Interlock
+    SafetyInterlock -->> Controller: Interlock_Disengaged_State
+    Controller ->> Actuator: Command_Physical_Actuation
+```
+
+- **Mermaid & KaTeX Formatting Invariants**:
+  1. Sequence diagram blocks MUST declare `sequenceDiagram` as the very first line inside ```` ```mermaid ````.
+  2. All participant names and notes containing special characters, hyphens, slashes, or colons must be properly enclosed in double quotes.
+  3. Every Mermaid block MUST be strictly closed with matching ```` ``` ```` on a newline.
+  4. Display math formulations must use `$$ \begin{aligned} ... \end{aligned} $$` on separate newlines with no bare alignment `&` outside aligned blocks.
 
 ---
 

@@ -1242,6 +1242,99 @@ class TestConOpsAndMissionIntentValidators(unittest.TestCase):
 
             self.assertEqual(findings, [])
 
+    def test_conops_emergency_statechart_deadlock_sink_detected(self):
+        """ConOps with dead-end sink state in Section 12 statechart fails with conops-emergency-statechart-deadlock-sink."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            os.makedirs(conops_dir, exist_ok=True)
+
+            content = _get_valid_conops_content()
+            # Introduce a dead-end sink state Contingency_Unresolved with no outbound transitions
+            modified_content = content.replace(
+                "    Phase_NominalExecution --> Degraded_SensorFailsafe : EMG_04_SensorFault\n",
+                "    Phase_NominalExecution --> Degraded_SensorFailsafe : EMG_04_SensorFault\n    Phase_NominalExecution --> Contingency_Unresolved : UnresolvedFault\n"
+            )
+
+            with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
+                f.write(modified_content)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            conops_val = ConopsCompletenessValidator()
+            findings = conops_val.validate(repo)
+
+            sink_errors = [f for f in findings if f.rule_id == "conops-emergency-statechart-deadlock-sink"]
+            self.assertEqual(len(sink_errors), 1)
+            self.assertEqual(sink_errors[0].detail.get("sink_state"), "Contingency_Unresolved")
+
+    def test_conops_emergency_statechart_init_fault_missing_detected(self):
+        """ConOps with ESAD_INACTIVE lacking transition to ESAD_FAULT fails with conops-emergency-statechart-init-fault-missing."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            os.makedirs(conops_dir, exist_ok=True)
+
+            content = _get_valid_conops_content()
+            # Replace Section 12.2 statechart with ESAD statechart missing ESAD_FAULT transition
+            esad_chart = """### 12.2 Deterministic Emergency Statechart & State Machine
+```mermaid
+stateDiagram-v2
+    [*] --> ESAD_INACTIVE
+    ESAD_INACTIVE --> ESAD_ARMED : ARM_CMD
+    ESAD_ARMED --> ESAD_FIRED : FIRE_CMD
+    ESAD_FIRED --> Phase_SecureShutdown : SafeTouchdown
+    Phase_SecureShutdown --> [*]
+```"""
+            modified_content = re.sub(
+                r'### 12\.2 Deterministic Emergency Statechart & State Machine[\s\S]*?```',
+                esad_chart,
+                content
+            )
+
+            with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
+                f.write(modified_content)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            conops_val = ConopsCompletenessValidator()
+            findings = conops_val.validate(repo)
+
+            init_fault_errors = [f for f in findings if f.rule_id == "conops-emergency-statechart-init-fault-missing"]
+            self.assertEqual(len(init_fault_errors), 1)
+            self.assertEqual(init_fault_errors[0].detail.get("state"), "ESAD_INACTIVE")
+
+    def test_conops_emergency_statechart_esad_closure_passes(self):
+        """ConOps with complete ESAD FSM including ESAD_FAULT and terminal states passes with zero errors."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            os.makedirs(conops_dir, exist_ok=True)
+
+            content = _get_valid_conops_content()
+            # Replace Section 12.2 statechart with complete ESAD statechart including ESAD_FAULT transition
+            esad_chart = """### 12.2 Deterministic Emergency Statechart & State Machine
+```mermaid
+stateDiagram-v2
+    [*] --> ESAD_INACTIVE
+    ESAD_INACTIVE --> ESAD_ARMED : ARM_CMD
+    ESAD_INACTIVE --> ESAD_FAULT : PBIT_FAIL
+    ESAD_ARMED --> ESAD_FIRED : FIRE_CMD
+    ESAD_ARMED --> ESAD_FAULT : ARM_TIMEOUT
+    ESAD_FIRED --> Phase_SecureShutdown : Detonation_Complete
+    ESAD_FAULT --> Phase_SecureShutdown : Lockout_Engaged
+    Phase_SecureShutdown --> [*]
+```"""
+            modified_content = re.sub(
+                r'### 12\.2 Deterministic Emergency Statechart & State Machine[\s\S]*?```',
+                esad_chart,
+                content
+            )
+
+            with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
+                f.write(modified_content)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            conops_val = ConopsCompletenessValidator()
+            findings = conops_val.validate(repo)
+
+            self.assertEqual(findings, [])
+
     def test_mission_intent_missing_threat_domains_fails(self):
         """Mission Intent missing required threat domains fails with mission-threat-domain-missing."""
         with tempfile.TemporaryDirectory() as tmpdir:

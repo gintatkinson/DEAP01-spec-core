@@ -1601,6 +1601,122 @@ class ConopsCompletenessValidator(IValidator):
                 f"Section 12 Emergency Decision Matrix (Subsection 12.2) is missing mandatory Mermaid statechart diagram (stateDiagram-v2) in '{rel_path}'.",
                 location=f"{rel_path}:{sec12_line}",
             ))
+        else:
+            findings.extend(self._validate_emergency_statechart_connectivity(sec12_content, rel_path, sec12_line))
+
+        return findings
+
+    def _validate_emergency_statechart_connectivity(
+        self,
+        sec12_content: str,
+        rel_path: str,
+        sec12_line: int,
+    ) -> List[Finding]:
+        """
+        Validates formal FSM graph connectivity and transition closure in Section 12 statecharts:
+        1. Extracts transitions `src --> dst` from Mermaid stateDiagram / stateDiagram-v2.
+        2. Detects dead-end sink states (inbound transitions but zero outbound transitions,
+           excluding recognized terminal states: [*], SHUTDOWN, TERMINATED, FAILSAFE,
+           EMERGENCY_STOP, FAULT, ABORTED, etc.). Emits 'conops-emergency-statechart-deadlock-sink'.
+        3. Enforces pre-power initialization fault closure: If an uninitialized or inactive state
+           (e.g. INACTIVE, UNINITIALIZED, or subsystem-specific *_INACTIVE) is present,
+           asserts that a transition exists to an error or fault state.
+           Emits 'conops-emergency-statechart-init-fault-missing'.
+        """
+        findings: List[Finding] = []
+
+        statechart_blocks = re.findall(
+            r'```(?:mermaid)?\s*\n\s*(?:stateDiagram|stateDiagram-v2)\b([\s\S]*?)```',
+            sec12_content,
+            re.IGNORECASE
+        )
+        if not statechart_blocks:
+            for m in re.finditer(r'```mermaid\s*\n([\s\S]*?)```', sec12_content, re.IGNORECASE):
+                block_text = m.group(1)
+                if "-->" in block_text:
+                    statechart_blocks.append(block_text)
+
+        if not statechart_blocks:
+            return findings
+
+        def _is_terminal_state(state_name: str) -> bool:
+            if state_name == "[*]":
+                return True
+            clean = re.sub(r'[^a-zA-Z0-9]', '', state_name).upper()
+            terminal_norms = {
+                "PHASESECURESHUTDOWN",
+                "SECURESHUTDOWN",
+                "ESADFIRED",
+                "ESADFAULT",
+                "SHUTDOWN",
+                "TERMINATED",
+                "EMERGENCYSTOP",
+                "FAILSAFE",
+                "COMPLETED",
+                "ABORTED",
+                "TERMINAL",
+            }
+            if clean in terminal_norms:
+                return True
+            return any(k in clean for k in ("SHUTDOWN", "TERMINAT", "HALT", "ABORT", "FIRED", "FAULT", "FAILSAFE"))
+
+        def _is_inactive_or_init_state(state_name: str) -> bool:
+            clean = re.sub(r'[^a-zA-Z0-9]', '', state_name).upper()
+            return clean.endswith("INACTIVE") or clean.endswith("UNINITIALIZED") or clean in {"ESADINACTIVE", "INACTIVE", "UNINITIALIZED"}
+
+        def _is_fault_or_error_state(state_name: str) -> bool:
+            clean = re.sub(r'[^a-zA-Z0-9]', '', state_name).upper()
+            return "FAULT" in clean or "ERROR" in clean or "FAIL" in clean or clean in {"ESADFAULT", "FAILSAFE", "FAIL"}
+
+        for block in statechart_blocks:
+            all_states: Set[str] = set()
+            inbound: Dict[str, List[str]] = {}
+            outbound: Dict[str, List[str]] = {}
+
+            for raw_line in block.splitlines():
+                line = raw_line.split("%%")[0].strip()
+                if not line or "-->" not in line:
+                    continue
+                # Handle transitions: src --> dst or src --> dst : label
+                m_trans = re.match(r'^\s*("[^"]+"|[^\s\-:>]+)\s*-->\s*("[^"]+"|[^\s\-:>]+)', line)
+                if m_trans:
+                    src = m_trans.group(1).strip().strip('"\'')
+                    dst = m_trans.group(2).strip().strip('"\'')
+                    if src != "[*]":
+                        all_states.add(src)
+                        outbound.setdefault(src, []).append(dst)
+                    if dst != "[*]":
+                        all_states.add(dst)
+                        inbound.setdefault(dst, []).append(src)
+                    if src != "[*]" and dst == "[*]":
+                        outbound.setdefault(src, []).append("[*]")
+
+            # 1. Dead-end sink detection
+            for state in sorted(all_states):
+                if _is_terminal_state(state):
+                    continue
+                in_count = len(inbound.get(state, []))
+                out_count = len(outbound.get(state, []))
+                if in_count > 0 and out_count == 0:
+                    findings.append(Finding(
+                        "conops-emergency-statechart-deadlock-sink",
+                        f"Section 12 Emergency Decision Matrix statechart has dead-end sink state '{state}' with zero outbound transitions in '{rel_path}'.",
+                        location=f"{rel_path}:{sec12_line}",
+                        detail={"sink_state": state, "inbound_from": inbound.get(state, [])},
+                    ))
+
+            # 2. Pre-power initialization fault closure
+            for state in sorted(all_states):
+                if _is_inactive_or_init_state(state):
+                    out_targets = outbound.get(state, [])
+                    has_fault_transition = any(_is_fault_or_error_state(t) for t in out_targets)
+                    if not has_fault_transition:
+                        findings.append(Finding(
+                            "conops-emergency-statechart-init-fault-missing",
+                            f"Section 12 Emergency Decision Matrix statechart contains '{state}' but lacks pre-power initialization fault transition to a fault or error state in '{rel_path}'.",
+                            location=f"{rel_path}:{sec12_line}",
+                            detail={"state": state, "outbound_transitions": out_targets},
+                        ))
 
         return findings
 

@@ -2077,16 +2077,154 @@ def verify_upstream_blueprint_domain_cleanliness(target_dir):
 
 check_upstream_blueprint_domain_cleanliness = verify_upstream_blueprint_domain_cleanliness
 
-class _DomainAgnosticASTVisitor(ast.NodeVisitor):
-    """AST visitor enforcing pure schema-driven parameter extraction and zero static domain specs."""
+ALLOWED_M2_METAMODEL_TYPES: Set[str] = {
+    # Core structural elements
+    "Component",
+    "Class",
+    "Port",
+    "Interface",
+    "Statechart",
+    "Constraint",
+    "Signal",
+    "Event",
+    "AcceptanceCriterion",
+    "Scenario",
+    "TraceLink",
+    # SysML v2 & KerML Definition types
+    "Package",
+    "PackageDefinition",
+    "PartDefinition",
+    "PortDefinition",
+    "StateDefinition",
+    "ItemDefinition",
+    "ActionDefinition",
+    "RequirementDefinition",
+    "UseCaseDefinition",
+    "ConstraintDefinition",
+    "AttributeDefinition",
+    "ConnectionDefinition",
+    "AllocationDefinition",
+    "ViewDefinition",
+    "ViewpointDefinition",
+    "ActorDefinition",
+    "NamespaceDefinition",
+    "ElementDefinition",
+    "FeatureDefinition",
+    "Classifier",
+    # Actor and Role types
+    "HumanOperator",
+    "SystemController",
+    "SafetyInterlock",
+    "PhysicalActuator",
+    "Sensor",
+    "SystemUnderStudy",
+    "ExternalSystem",
+    "OperatorConsole",
+    # Canonical M2 elements
+    "Actor",
+    "Part",
+    "Item",
+    "Action",
+    "State",
+    "Requirement",
+    "UseCase",
+    "Attribute",
+    "Connection",
+    "Allocation",
+    "Transition",
+    "Guard",
+    "Trigger",
+    "Effect",
+    # AST, Schema, Parser & Model primitives
+    "Namespace",
+    "Object",
+    "Array",
+    "String",
+    "Number",
+    "Boolean",
+    "Integer",
+    "Dict",
+    "List",
+    "Null",
+    "Primitive",
+    "Type",
+    "Definition",
+    "Block",
+    "Node",
+    "Root",
+    "Value",
+    "Field",
+    "Member",
+    "Document",
+    # Logical UI (LUI / LUMI) Canonical Display, Container & Widget primitives
+    "Widget",
+    "Container",
+    "Layout",
+    "View",
+    "SidebarLayout",
+    "HierarchyTree",
+    "ResizableSplitter",
+    "TopologyMap",
+    "DensityTable",
+    "TabbedContainer",
+    "SplitterContainer",
+    "Panel",
+    "Section",
+    "Tab",
+    "Tree",
+    "Table",
+    "Map",
+    "Chart",
+    "Form",
+    "Button",
+    "Input",
+    "Dialog",
+    "Modal",
+}
+
+
+def is_allowed_m2_type(type_name: str) -> bool:
+    """Check if a type name conforms to the closed M2 metamodel allowlist or carries a meta_ prefix."""
+    if not isinstance(type_name, str) or not type_name.strip():
+        return False
+    cleaned = type_name.strip()
+    if cleaned.lower().startswith("meta_") or cleaned.lower().startswith("meta"):
+        return True
+    norm = cleaned.lower().replace("_", "").replace("-", "")
+    norm_allowed = {t.lower().replace("_", "").replace("-", "") for t in ALLOWED_M2_METAMODEL_TYPES}
+    return norm in norm_allowed
+
+
+class ClosedGrammarMetamodelValidator(ast.NodeVisitor):
+    """AST visitor enforcing pure schema-driven parameter extraction, closed M2 metamodel typing, and zero static domain specs."""
 
     STATIC_PARAM_DICT_NAMES = re.compile(
         r"^(_)?("
         r"ground_?truth(_?(specs?|params?|parameters?|dict|map|set|table))?|"
         r"(expected|domain|static|hardcoded|benchmark|mandated|system)_?(specs?|params?|parameters?|constants?|dict|map|set|table|specifications?)"
         r")$",
-        re.IGNORECASE
+        re.IGNORECASE,
     )
+
+    M1_DOMAIN_DICT_NAMES = re.compile(
+        r"^(_)?("
+        r"(m1|domain|concrete)_(entities|instances|models|specs|objects|dicts|types)|"
+        r"(sample|mock|concrete)_(uav|aircraft|vehicle|device|patient|car|robot)(_?(specs|params|data|dict))?"
+        r")$",
+        re.IGNORECASE,
+    )
+
+    METAMODEL_TYPE_KEYS = {
+        "type",
+        "metamodel_type",
+        "entity_type",
+        "kind",
+        "node_type",
+        "ast_type",
+        "element_type",
+        "m2_type",
+        "definition_type",
+    }
 
     def __init__(self, filename: str, repo_root: str):
         self.filename = filename
@@ -2126,9 +2264,38 @@ class _DomainAgnosticASTVisitor(ast.NodeVisitor):
         self.generic_visit(node)
         self.scope_stack.pop()
 
+    def _check_dict_metamodel_types(self, dict_node: ast.Dict, lineno: int):
+        """Check dictionary literals for unvalidated M1 domain instance typing."""
+        if not isinstance(dict_node, ast.Dict):
+            return
+        for key_node, val_node in zip(dict_node.keys, dict_node.values):
+            if key_node is None or not isinstance(key_node, ast.Constant) or not isinstance(key_node.value, str):
+                continue
+            key_str = key_node.value.lower()
+            if key_str in self.METAMODEL_TYPE_KEYS:
+                if isinstance(val_node, ast.Constant) and isinstance(val_node.value, str):
+                    val_str = val_node.value.strip()
+                    if val_str and not is_allowed_m2_type(val_str):
+                        self.violations.append(
+                            f"Check 19 violation (domain-metamodel-typing-violation): Unvalidated M1 domain instance entity/type '{val_str}' declared in {self.rel_path}:{lineno}. "
+                            "Upstream compiler ASTs and dictionaries must adhere strictly to the closed M2 metamodel allowlist."
+                        )
+
+    def visit_Dict(self, node: ast.Dict):
+        self._check_dict_metamodel_types(node, getattr(node, "lineno", 1))
+        self.generic_visit(node)
+
     def _check_target_name(self, target_name: str, value_node: ast.AST, lineno: int):
         if not target_name or value_node is None:
             return
+
+        if self.M1_DOMAIN_DICT_NAMES.match(target_name):
+            self.violations.append(
+                f"Check 19 violation (domain-metamodel-typing-violation): Unvalidated M1 domain instance dictionary/constant \"{target_name}\" declared in {self.rel_path}:{lineno}. "
+                "Upstream compiler ASTs must adhere strictly to the closed M2 metamodel allowlist."
+            )
+            return
+
         if self.STATIC_PARAM_DICT_NAMES.match(target_name):
             is_literal_dict = isinstance(value_node, ast.Dict) and len(value_node.keys) > 0
             is_literal_collection = isinstance(value_node, (ast.List, ast.Set, ast.Tuple)) and len(value_node.elts) > 0
@@ -2171,13 +2338,17 @@ class _DomainAgnosticASTVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
 
+_DomainAgnosticASTVisitor = ClosedGrammarMetamodelValidator
+
+
 def check_domain_agnostic_ast_cleanliness(repo_root):
-    """Check 19: Domain-Agnostic AST Cleanliness Gate.
+    """Check 19: Domain-Agnostic AST Cleanliness & Closed-Grammar Metamodel Gate.
 
     Verify that upstream DEAP01-spec-core tools, scripts, and validator modules contain
     zero static/hardcoded parameter dictionaries (e.g. GROUND_TRUTH = {...}, EXPECTED_SPECS = {...},
-    DOMAIN_PARAMS = {...}), and that all parameter extraction dynamically queries workspace.schemas
-    or schema/*.sysml AST nodes without hardcoded domain concept constants.
+    DOMAIN_PARAMS = {...}), enforce closed M2 metamodel entity allowlist typing, and ensure that all
+    parameter extraction dynamically queries workspace.schemas or schema/*.sysml AST nodes without
+    hardcoded domain concept constants.
     """
     upstream_marker = os.path.join(repo_root, ".pipeline", "upstream")
     if not os.path.isdir(upstream_marker):
@@ -2217,17 +2388,17 @@ def check_domain_agnostic_ast_cleanliness(repo_root):
                     violations.append(f"Failed to parse Python AST for {rel_path}: {e}")
                     continue
 
-                visitor = _DomainAgnosticASTVisitor(file_path, repo_root)
+                visitor = ClosedGrammarMetamodelValidator(file_path, repo_root)
                 visitor.visit(tree)
                 violations.extend(visitor.violations)
 
     if violations:
-        print("ERROR: Check 19 failed (Domain-Agnostic AST Cleanliness Gate violations found):", file=sys.stderr)
+        print("ERROR: Check 19 failed (Domain-Agnostic AST Cleanliness & Closed-Grammar Metamodel Gate violations found):", file=sys.stderr)
         for v in violations:
             print(f"  - {v}", file=sys.stderr)
         sys.exit(1)
 
-    print("Success: Check 19 verified (Domain-Agnostic AST Cleanliness Gate passed -- pure dynamic schema AST architecture verified).")
+    print("Success: Check 19 verified (Domain-Agnostic AST Cleanliness & Closed-Grammar Metamodel Gate passed -- pure dynamic schema AST architecture verified).")
 
 def _check_wbs_suite_integrity(repo_root):
     """Check 20: WBS & Enterprise Deliverables Suite Validation.

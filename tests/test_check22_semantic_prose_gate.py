@@ -244,6 +244,85 @@ The system deploys parachute for recovery safely at waypoint 4.
             findings = self.validator.validate(repo, scan_dirs=["docs"])
             self.assertEqual(findings, [])
 
+    def test_check22_ast_attribute_def_grounding_nested_part(self):
+        """Verify that AttributeDef declarations inside PartDef AST blocks ground physical invariants."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            docs_dir = os.path.join(tmpdir, "docs", "conops")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(docs_dir, exist_ok=True)
+
+            sysml_content = """package SubsystemModel {
+    part def UndercarriageAssembly {
+        attribute landingGear : String = "None";
+        attribute chuteEnabled : Boolean = false;
+    }
+}
+"""
+            with open(os.path.join(schema_dir, "parts.sysml"), "w", encoding="utf-8") as f:
+                f.write(sysml_content)
+
+            conops_md = """# Subsystem ConOps
+
+## Landing & Recovery
+The flight controller lowers landing gear and deploys parachute upon approach.
+"""
+            with open(os.path.join(docs_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
+                f.write(conops_md)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            findings = self.validator.validate(repo, scan_dirs=["docs"])
+
+            self.assertTrue(len(findings) >= 2)
+            rule_ids = {f.rule_id for f in findings}
+            self.assertIn("semantic-prose-physical-invariant-violation", rule_ids)
+            findings_text = " ".join([str(f) for f in findings])
+            self.assertTrue("landing gear" in findings_text)
+            self.assertTrue("parachute" in findings_text)
+
+    def test_check22_cross_reference_configuration_and_numeric_claims(self):
+        """Verify cross-referencing configuration and numeric AST attribute declarations against narrative prose."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            docs_dir = os.path.join(tmpdir, "docs", "features")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(docs_dir, exist_ok=True)
+
+            sysml_content = """package PlatformSSOT {
+    attribute lifecycleType : String = "Expendable";
+    attribute waterProofing : String = "Disabled";
+    attribute recoverySystem : String = "None";
+
+    part def AvionicsCore {
+        attribute satelliteUplink : String = "No";
+    }
+}
+"""
+            with open(os.path.join(schema_dir, "platform.sysml"), "w", encoding="utf-8") as f:
+                f.write(sysml_content)
+
+            # Document 1: Positive claims -> must fail
+            with open(os.path.join(docs_dir, "Feat-Positive.md"), "w", encoding="utf-8") as f:
+                f.write("""# Feature: Cruise and Return
+The vehicle transmits high-bandwidth telemetry over satellite uplink and executes recovery landing.
+""")
+
+            # Document 2: Valid negative assertions -> must pass
+            with open(os.path.join(docs_dir, "Feat-Negative.md"), "w", encoding="utf-8") as f:
+                f.write("""# Feature: Expendable Terminal Phase
+The platform operates without vehicle recovery.
+Satellite uplink is not installed on this airframe.
+Water proofing is disabled for expendable operations.
+""")
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            findings = self.validator.validate(repo, scan_dirs=["docs"])
+
+            # Only Feat-Positive.md should have findings
+            violating_files = {f.detail.get("file") for f in findings if f.detail}
+            self.assertIn(os.path.join("docs", "features", "Feat-Positive.md"), violating_files)
+            self.assertNotIn(os.path.join("docs", "features", "Feat-Negative.md"), violating_files)
+
     def test_check22_baseline_verification_integration(self):
         """Verify check_semantic_prose_invariants function behaves properly in clean and failing workspaces."""
         with tempfile.TemporaryDirectory() as tmpdir:

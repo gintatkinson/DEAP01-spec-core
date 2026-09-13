@@ -259,10 +259,79 @@ def _is_physical_feature_attribute(norm_name: str, val_clean: str) -> bool:
     return True
 
 
+def _extract_attributes_from_sysml_pkg(pkg: Any, rel_path: str) -> List[NegativeInvariant]:
+    """Extract negative physical invariants and lifecycle invariants directly from SysMLPackage AST."""
+    invariants: List[NegativeInvariant] = []
+
+    def process_attr(attr: Any):
+        if not attr or not getattr(attr, "name", None):
+            return
+        name = attr.name.strip()
+        val_raw = str(attr.default_value).strip() if getattr(attr, "default_value", None) is not None else ""
+        val_clean = val_raw.strip('"\'`')
+        norm_name = _normalize_name(name)
+
+        if not _is_valid_identifier_key(name):
+            return
+
+        if norm_name in ("lifecycle", "lifecycletype", "operationalmode", "systemtype", "vehicleclass", "platformtype"):
+            if _is_expendable_lifecycle_value(val_clean):
+                invariants.append(NegativeInvariant(
+                    attribute_name=name,
+                    attribute_value=val_clean,
+                    source_file=rel_path,
+                    concept_domain="expendable_lifecycle",
+                    description=f"LifecycleType == '{val_clean}'"
+                ))
+        elif _is_negative_value(val_clean):
+            domain = "custom"
+            if "recovery" in norm_name or "recover" in norm_name:
+                domain = "recovery"
+            elif "chute" in norm_name or "parachute" in norm_name:
+                domain = "parachute"
+            elif "landinggear" in norm_name or "undercarriage" in norm_name or ("gear" in norm_name and not any(p in norm_name for p in ["switchgear", "gearbox", "gearratio"])):
+                domain = "landing_gear"
+            elif "landing" in norm_name or "runway" in norm_name or "autoland" in norm_name or "touchdown" in norm_name:
+                domain = "landing"
+            elif not _is_physical_feature_attribute(norm_name, val_clean):
+                return
+
+            invariants.append(NegativeInvariant(
+                attribute_name=name,
+                attribute_value=val_clean,
+                source_file=rel_path,
+                concept_domain=domain,
+                description=f"{name} == '{val_clean}'"
+            ))
+
+    def visit_pkg(p: Any):
+        if not p:
+            return
+        for a in getattr(p, "attribute_defs", []) or []:
+            process_attr(a)
+        for part in getattr(p, "part_defs", []) or []:
+            visit_part(part)
+        for sub in getattr(p, "sub_packages", []) or []:
+            visit_pkg(sub)
+
+    def visit_part(part: Any):
+        if not part:
+            return
+        for a in getattr(part, "attributes", []) or []:
+            process_attr(a)
+        for a in getattr(part, "attribute_defs", []) or []:
+            process_attr(a)
+        for sub_p in getattr(part, "parts", []) or []:
+            visit_part(sub_p)
+
+    visit_pkg(pkg)
+    return invariants
+
+
 def _extract_negative_invariants_from_sysml(
     sysml_files: List[str], repo_root: str
 ) -> List[NegativeInvariant]:
-    """Extract negative attributes and lifecycle invariants from SysML v2 files."""
+    """Extract negative attributes and lifecycle invariants from SysML v2 files via AST and regex."""
     invariants: List[NegativeInvariant] = []
 
     attr_regex = re.compile(
@@ -283,6 +352,16 @@ def _extract_negative_invariants_from_sysml(
         except Exception:
             continue
 
+        # 1. AST-based extraction via SysMLParser
+        if SysMLParser:
+            try:
+                pkg = SysMLParser.parse_text(content, default_name=os.path.splitext(os.path.basename(sf))[0])
+                ast_invs = _extract_attributes_from_sysml_pkg(pkg, rel_path)
+                invariants.extend(ast_invs)
+            except Exception:
+                pass
+
+        # 2. Line-level regex extraction for fallback / unparsed constructs
         lines = content.splitlines()
         for line in lines:
             # Strip comments

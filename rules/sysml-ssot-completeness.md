@@ -109,6 +109,30 @@ Check 23 enforces absolute physical fidelity, attribute-level AST closure, and f
   - YAML frontmatter metadata: `source_references` or `realized_ast_nodes` declaring the exact source files.
 - **Contextual Non-Normative Filtering**: Non-normative sections (e.g., Glossaries, Acronym lists, MCDA Trade Studies / Alternatives Analysis evaluating rejected design candidates) and Markdown code fences/comments are exempt from positive assertion drift checks.
 
+## M2 Metamodel Closed-Vocabulary Typing Invariant (Check 19 & Universal Parity Gates)
+
+To ensure pure schema-driven compilation and absolute platform decoupling, the DEAP upstream specification core compiler (`UPSTREAM_SPEC_CORE_COMPILER`) enforces the **M2 Metamodel Closed-Vocabulary Typing Invariant** across all 23 parity verification gates:
+
+### 1. Closed M2 Metamodel Allowlist (`ALLOWED_M2_METAMODEL_TYPES`)
+All upstream tools, validator modules, AST parsers, and prompt payload generators operate strictly within the closed set of abstract M2 metamodel entity definitions:
+- **Structural Core**: `Component`, `Class`, `Port`, `Interface`, `Statechart`, `Constraint`, `Signal`, `Event`, `AcceptanceCriterion`, `Scenario`, `TraceLink`
+- **SysML v2 Definitions**: `Package`, `PackageDefinition`, `PartDefinition`, `PortDefinition`, `StateDefinition`, `ItemDefinition`, `ActionDefinition`, `RequirementDefinition`, `UseCaseDefinition`, `ConstraintDefinition`, `AttributeDefinition`, `ConnectionDefinition`, `AllocationDefinition`, `ViewDefinition`, `ViewpointDefinition`
+- **Roles & Actor Boundary Types**: `ActorDefinition`, `HumanOperator`, `SystemController`, `SafetyInterlock`, `PhysicalActuator`, `Sensor`, `SystemUnderStudy`, `ExternalSystem`, `OperatorConsole`
+- **Canonical M2 Tokens & Meta Prefixes**: `Actor`, `Part`, `Item`, `Action`, `State`, `Requirement`, `UseCase`, `Attribute`, `Connection`, `Allocation`, `Transition`, `Guard`, `Trigger`, `Effect`, plus any entity prefixed with `meta_` or `Meta` (e.g., `meta_component`, `MetaPart`).
+
+### 2. Upstream M2 Compiler vs Downstream M1 Instance Boundary
+- **Upstream Spec Core Compiler**: Strictly prohibited from defining, hardcoding, or expecting concrete M1 domain instance entities (e.g., specific vehicle models, airframe names, flight control PID gains, medical dosage algorithms, or automotive ECUs). Upstream logic must be 100% abstract, generic, and schema-agnostic.
+- **Downstream Application Workspaces**: Concrete M1 domain models, OEM parameters, and system instances reside exclusively in downstream repositories (`DOWNSTREAM_APPLICATION_WORKSPACE`) and are parsed dynamically from `schema/*.sysml` AST nodes.
+
+### 3. Rejection Rule: `domain-metamodel-typing-violation`
+Any upstream Python script, AST visitor, validator dictionary, or static data structure that declares or returns unvalidated M1 domain instance tokens/dictionaries is rejected immediately by Check 19 (`check_domain_agnostic_ast_cleanliness` powered by `ClosedGrammarMetamodelValidator`) under the deterministic rule ID `domain-metamodel-typing-violation`.
+
+### 4. Context Sandboxing & Downstream Path Stripping (`sandbox_upstream_dispatch_payload`)
+When dispatching subagents in upstream compiler mode:
+- All prompt payloads undergo deterministic context sandboxing via `sandbox_upstream_dispatch_payload()`.
+- Any downstream customer workspace paths or external jail directories are automatically stripped.
+- The formal M2 Metamodel Contract directive is injected into subagent instructions to guarantee isolated abstract execution without context drift.
+
 ## Why
 
 Treating textual specifications and models as separate entities inevitably causes specification drift, where documentation diverges from the architectural model and code generation toolchains. Enforcing SysML v2 as the 100% Single Source of Truth guarantees model integrity, enables automated bidirectional validation, and provides an unbroken digital thread from high-level safety invariants to generated DO-178C C/SPARK Ada flight code.

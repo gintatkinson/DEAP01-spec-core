@@ -1026,6 +1026,69 @@ class TestSpecConopsEngineering(unittest.TestCase):
             f"Found invalid \\mathrm{{..._...}} in modular units: {found_violations}",
         )
 
+    def test_section_5_pace_template_and_schema_driven_guidelines(self):
+        """Verify Section 4.6 PACE C2 Link Communications Plan template and schema-driven extraction guidelines (Fixes #261)."""
+        for skill_path in [CONOPS_SKILL_PATH, AGENTS_CONOPS_SKILL_PATH]:
+            self.assertTrue(os.path.isfile(skill_path), f"Missing {skill_path}")
+            with open(skill_path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            self.assertIn("### 4.6 Section 5 PACE C2 Link Communications Plan Template & Schema-Driven Extraction Guidelines", content)
+            self.assertIn("Zero Hardcoded Synthetic Timeouts Invariant", content)
+            self.assertIn("Parametric Schema-Driven Extraction", content)
+            self.assertIn("tau_timeout_Primary", content)
+            self.assertIn("tau_timeout_Alternate", content)
+            self.assertIn("tau_timeout_Contingency", content)
+            self.assertIn("tau_timeout_Emergency", content)
+            self.assertIn("tau_hysteresis", content)
+
+            # Ensure prohibition of hardcoded synthetic constants
+            self.assertIn("tau_loss = 5.0 s", content)
+            self.assertIn("tau_reacquire = 15.0 s", content)
+            self.assertIn("tau_escalate = 30.0 s", content)
+            self.assertIn("strictly forbidden from hardcoding synthetic timeout constants", content)
+
+    def test_section_10_operational_sequence_diagram_and_safety_actuation_invariants(self):
+        """Verify Section 4.7 Operational sequence diagram template and safety-critical actuation invariants (Fixes #263)."""
+        for skill_path in [CONOPS_SKILL_PATH, AGENTS_CONOPS_SKILL_PATH]:
+            self.assertTrue(os.path.isfile(skill_path), f"Missing {skill_path}")
+            with open(skill_path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            self.assertIn("### 4.7 Section 10 Operational Sequence Diagram Template & Safety-Critical Actuation Invariants", content)
+            self.assertIn("Strict Prohibition of Autonomous High-Consequence Actuation", content)
+            self.assertIn("Mandatory Temporal Precedence of Human Consent", content)
+            self.assertIn("Abstract Temporal Safety Invariant Rule", content)
+            self.assertIn("Figure 10.1: Operational Sequence Diagram with Human Authorization & Safety Interlock Disengagement", content)
+
+            # Sequence diagram syntax and temporal precedence check
+            self.assertIn("sequenceDiagram", content)
+            self.assertIn('Operator ->> Console: Authorize_Action_Command', content)
+            self.assertIn('Console ->> Controller: Action_Authorized_Consent_Token', content)
+            self.assertIn('Controller ->> SafetyInterlock: Disengage_Safety_Interlock', content)
+            self.assertIn('SafetyInterlock -->> Controller: Interlock_Disengaged_State', content)
+            self.assertIn('Controller ->> Actuator: Command_Physical_Actuation', content)
+
+            # Purged domain concepts assertion
+            self.assertNotIn("Warhead", content)
+            self.assertNotIn("ESAD", content)
+            self.assertNotIn("DSC_IN1", content)
+            self.assertNotIn("Tactical Strike Mission", content)
+            self.assertNotIn("Ingress & Target Acquisition", content)
+
+            # Verify temporal order in text
+            pos_hitl_cmd = content.find("Operator ->> Console: Authorize_Action_Command")
+            pos_hitl_auth = content.find("Console ->> Controller: Action_Authorized_Consent_Token")
+            pos_phys_disengage = content.find("Controller ->> SafetyInterlock: Disengage_Safety_Interlock")
+            pos_phys_actuate = content.find("Controller ->> Actuator: Command_Physical_Actuation")
+
+            self.assertTrue(pos_hitl_cmd != -1)
+            self.assertTrue(pos_hitl_auth != -1)
+            self.assertTrue(pos_phys_disengage != -1)
+            self.assertTrue(pos_phys_actuate != -1)
+            self.assertTrue(pos_hitl_cmd < pos_hitl_auth < pos_phys_disengage < pos_phys_actuate,
+                            "Human consent must temporally precede physical interlock disengagement and actuation signals")
+
 
 if __name__ == "__main__":
     unittest.main()
