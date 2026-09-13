@@ -317,29 +317,184 @@ def _extract_numeric_scalar(val_str: str) -> Optional[float]:
     return None
 
 
+# ISO/IEC 80000 and SysML v2 ISQ Recognized Physical Measurement Units
+# In conformance with ISO/IEC 80000 and SysML v2 ISQ / MeasurementUnits metamodel:
+# (Length, Mass, Time, Pressure, Voltage, Power, Frequency, Velocity, Acceleration, Plane Angle, Current, Energy, Force, etc.)
+ISO_80000_PHYSICAL_UNITS: Dict[str, str] = {
+    # Length (ISO 80000-3)
+    "m": "m", "meter": "m", "meters": "m", "metre": "m", "metres": "m",
+    "km": "km", "kilometer": "km", "kilometers": "km",
+    "cm": "cm", "centimeter": "cm", "centimeters": "cm",
+    "mm": "mm", "millimeter": "mm", "millimeters": "mm",
+    "um": "um", "micrometer": "um", "micrometers": "um", "micron": "um", "microns": "um",
+    "nm": "nm", "nanometer": "nm", "nanometers": "nm",
+
+    # Mass (ISO 80000-4)
+    "kg": "kg", "kilogram": "kg", "kilograms": "kg",
+    "g": "g", "gram": "g", "grams": "g",
+    "mg": "mg", "milligram": "mg", "milligrams": "mg",
+    "ug": "ug", "microgram": "ug", "micrograms": "ug",
+    "t": "t", "tonne": "t", "tonnes": "t",
+
+    # Time (ISO 80000-3)
+    "s": "s", "sec": "s", "secs": "s", "second": "s", "seconds": "s",
+    "ms": "ms", "millisecond": "ms", "milliseconds": "ms",
+    "us": "us", "microsecond": "us", "microseconds": "us",
+    "ns": "ns", "nanosecond": "ns", "nanoseconds": "ns",
+    "min": "min", "minute": "min", "minutes": "min",
+    "hr": "hr", "hrs": "hr", "hour": "hr", "hours": "hr",
+    "d": "d", "day": "d", "days": "d",
+
+    # Pressure & Stress (ISO 80000-4)
+    "pa": "pa", "pascal": "pa", "pascals": "pa",
+    "kpa": "kpa", "kilopascal": "kpa", "kilopascals": "kpa",
+    "mpa": "mpa", "megapascal": "mpa", "megapascals": "mpa",
+    "hpa": "hpa", "hectopascal": "hpa",
+    "bar": "bar", "mbar": "mbar", "millibar": "mbar",
+    "psi": "psi",
+    "n/m^2": "pa", "n/m2": "pa",
+
+    # Voltage & Electric Potential (ISO 80000-6)
+    "v": "v", "volt": "v", "volts": "v",
+    "mv": "mv", "millivolt": "mv", "millivolts": "mv",
+    "kv": "kv", "kilovolt": "kv", "kilovolts": "kv",
+    "uv": "uv", "microvolt": "uv",
+
+    # Electric Current (ISO 80000-6)
+    "a": "a", "amp": "a", "amps": "a", "ampere": "a", "amperes": "a",
+    "ma": "ma", "milliamp": "ma", "milliamps": "ma",
+    "ka": "ka", "kiloamp": "ka",
+
+    # Power (ISO 80000-6)
+    "w": "w", "watt": "w", "watts": "w",
+    "kw": "kw", "kilowatt": "kw", "kilowatts": "kw",
+    "mw": "mw", "milliwatt": "mw", "milliwatts": "mw",
+    "gw": "gw", "gigawatt": "gw",
+
+    # Frequency (ISO 80000-3)
+    "hz": "hz", "hertz": "hz",
+    "khz": "khz", "kilohertz": "khz",
+    "mhz": "mhz", "megahertz": "mhz",
+    "ghz": "ghz", "gigahertz": "ghz",
+    "1/s": "hz", "s^-1": "hz",
+
+    # Velocity (ISO 80000-3)
+    "m/s": "m/s", "mps": "m/s", "m*s^-1": "m/s", "m s^-1": "m/s",
+    "km/h": "km/h", "kph": "km/h",
+    "knot": "knot", "knots": "knot",
+
+    # Acceleration (ISO 80000-3)
+    "m/s^2": "m/s^2", "m/s2": "m/s^2", "mps2": "m/s^2", "m*s^-2": "m/s^2",
+    "g": "g", "g-load": "g", "gload": "g",
+
+    # Plane Angle (ISO 80000-3)
+    "deg": "deg", "degree": "deg", "degrees": "deg", "deg_ang": "deg",
+    "rad": "rad", "radian": "rad", "radians": "rad",
+    "mrad": "mrad", "milliradian": "mrad",
+
+    # Energy & Work (ISO 80000-5)
+    "j": "j", "joule": "j", "joules": "j",
+    "kj": "kj", "kilojoule": "kj",
+    "wh": "wh", "watt-hour": "wh", "kwh": "kwh", "kilowatt-hour": "kwh",
+
+    # Force (ISO 80000-4)
+    "n": "n", "newton": "n", "newtons": "n",
+    "kn": "kn", "kilonewton": "kn",
+
+    # Electric Resistance & Impedance (ISO 80000-6)
+    "ohm": "ohm", "ohms": "ohm", "kohm": "kohm", "mohm": "mohm",
+
+    # Capacitance (ISO 80000-6)
+    "f": "f", "farad": "f", "uf": "uf", "nf": "nf", "pf": "pf",
+
+    # Dimensionless Ratio / Percentage
+    "%": "%", "pct": "%", "percent": "%",
+}
+
+# Atomic compound identifiers and standards citations
+ATOMIC_IDENTIFIER_PATTERN = re.compile(
+    r'\b[A-Za-z0-9]+(?:[-/_][A-Za-z0-9]+)+\b'
+)
+STANDARDS_CITATION_PATTERN = re.compile(
+    r'\b(?:DO|ARP|MIL|STD|ASTM|ISO|IEC|IEEE|STANAG|ARINC|RTCA|SAE|DEF-STAN)[-_ ]*[0-9]+[A-Za-z0-9]*\b',
+    re.I
+)
+
+
+def _is_numeric_range_or_quantity(tok: str) -> bool:
+    """
+    Checks if a compound token like '15-20' or '15-20g' is actually a numeric range/quantity
+    rather than an indivisible reference symbol / standard citation.
+    """
+    m = re.match(r'^(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)([a-zA-Z/%^]*)$', tok)
+    if m:
+        suffix = m.group(3).strip().lower()
+        if not suffix or suffix in ISO_80000_PHYSICAL_UNITS:
+            return True
+    return False
+
+
+def _get_protected_spans(line: str) -> List[Tuple[int, int]]:
+    """
+    Identifies spans of atomic compound identifiers and standards citations
+    that must be protected from being fragmented into numeric scalars or unit abbreviations.
+    """
+    spans: List[Tuple[int, int]] = []
+
+    for m in STANDARDS_CITATION_PATTERN.finditer(line):
+        spans.append((m.start(), m.end()))
+
+    for m in ATOMIC_IDENTIFIER_PATTERN.finditer(line):
+        tok = m.group(0)
+        if _is_numeric_range_or_quantity(tok):
+            continue
+        spans.append((m.start(), m.end()))
+
+    if not spans:
+        return []
+    spans.sort(key=lambda s: s[0])
+    merged: List[Tuple[int, int]] = [spans[0]]
+    for cur_s, cur_e in spans[1:]:
+        prev_s, prev_e = merged[-1]
+        if cur_s <= prev_e:
+            merged[-1] = (prev_s, max(prev_e, cur_e))
+        else:
+            merged.append((cur_s, cur_e))
+    return merged
+
+
+def _mask_spans(line: str, spans: List[Tuple[int, int]]) -> str:
+    """Replaces characters within specified spans with spaces while preserving string length."""
+    if not spans:
+        return line
+    chars = list(line)
+    for s, e in spans:
+        for i in range(max(0, s), min(e, len(chars))):
+            chars[i] = ' '
+    return "".join(chars)
+
+
 def _extract_unit(val_str: str, name_tokens: Optional[List[str]] = None) -> str:
-    """Extracts unit from value string or name tokens."""
+    """Extracts ISO/IEC 80000 recognized physical measurement unit from value string or name tokens."""
     if val_str:
         m = re.search(r'[-+]?\d+(?:\.\d+)?\s*\[?([a-zA-Z/%^]+)\]?', str(val_str))
         if m:
             cand = m.group(1).lower()
-            if cand in (
-                "g", "kg", "g-load", "m", "km", "s", "sec", "ms", "hz", "khz", "mhz", "ghz",
-                "v", "mv", "kv", "w", "kw", "mw", "a", "ma", "deg", "rad", "%", "mps", "kph",
-                "pa", "kpa", "bar", "n", "kn", "j", "kj"
-            ):
-                return cand
+            canon = ISO_80000_PHYSICAL_UNITS.get(cand)
+            if canon:
+                return canon
 
     if name_tokens:
         last_tok = name_tokens[-1].lower()
-        if last_tok in ("g", "kg", "ms", "sec", "deg", "rad", "hz", "v", "w", "pa", "mps", "kph", "pct"):
-            if last_tok == "mps":
-                return "m/s"
-            if last_tok == "pct":
-                return "%"
-            return last_tok
+        if last_tok in ISO_80000_PHYSICAL_UNITS:
+            return ISO_80000_PHYSICAL_UNITS[last_tok]
+        if last_tok == "mps":
+            return "m/s"
+        if last_tok == "pct":
+            return "%"
         if "g" in name_tokens and any(t in name_tokens for t in ("load", "accel", "acceleration", "limit")):
             return "g"
+    return ""
 
 def _is_lower_bound_name(name: str, tokens: Optional[List[str]] = None) -> bool:
     """
@@ -451,11 +606,23 @@ def _find_extracted_markdown_files(repo: WorkspaceRepository, schemas_dir: Optio
 
 
 @dataclass
+class ScopedNumericLimit:
+    """Scoped numeric limit extracted from schema AST with component ownership."""
+    key: str
+    limit_val: float
+    unit: str
+    bound_type: str  # "lower" | "upper"
+    owner: Optional[str] = None  # e.g. "esad", "battery", "airframe"
+    meaningful_tokens: List[str] = field(default_factory=list)
+
+
+@dataclass
 class SchemaGroundTruth:
     """Consolidated Ground Truth extracted from SysML AST and schema markdown."""
     structural_attributes: Dict[str, Union[int, str]] = field(default_factory=dict)
     numeric_limits: Dict[str, Tuple[float, str]] = field(default_factory=dict)  # map normalized key -> (limit_val, unit)
     numeric_bound_types: Dict[str, str] = field(default_factory=dict)  # map key -> "lower" | "upper"
+    scoped_numeric_limits: List[ScopedNumericLimit] = field(default_factory=list)
     attributes: Dict[str, Any] = field(default_factory=dict)
     declared_protocols: Set[str] = field(default_factory=set)
     raw_schema_text: str = ""
@@ -476,6 +643,53 @@ class FactualGroundingValidator(IValidator):
 
     def __init__(self, workspace_repo: Optional[WorkspaceRepository] = None, **kwargs):
         self.workspace_repo = workspace_repo
+
+    def _register_numeric_limit(
+        self,
+        gt: SchemaGroundTruth,
+        name: str,
+        limit_val: float,
+        unit: str,
+        bound_type: str,
+        owner: Optional[str] = None
+    ) -> None:
+        """Registers a numeric limit into SchemaGroundTruth with component-scoped metadata."""
+        name_norm = _normalize_name(name)
+        gt.numeric_limits[name_norm] = (limit_val, unit)
+        gt.numeric_bound_types[name_norm] = bound_type
+
+        tokens = _tokenize_identifier(name)
+        meaningful = [t for t in tokens if t not in ("limit", "value", "val", "real", "float")]
+
+        gt.scoped_numeric_limits.append(ScopedNumericLimit(
+            key=name_norm,
+            limit_val=limit_val,
+            unit=unit,
+            bound_type=bound_type,
+            owner=owner,
+            meaningful_tokens=meaningful
+        ))
+
+        if len(tokens) > 1:
+            if meaningful:
+                alias1 = "".join(meaningful)
+                alias2 = "_".join(meaningful)
+                gt.numeric_limits[alias1] = (limit_val, unit)
+                gt.numeric_limits[alias2] = (limit_val, unit)
+                gt.numeric_bound_types[alias1] = bound_type
+                gt.numeric_bound_types[alias2] = bound_type
+                if owner:
+                    owner_alias = f"{owner}_{alias1}"
+                    gt.numeric_limits[owner_alias] = (limit_val, unit)
+                    gt.numeric_bound_types[owner_alias] = bound_type
+                gt.scoped_numeric_limits.append(ScopedNumericLimit(
+                    key=alias1,
+                    limit_val=limit_val,
+                    unit=unit,
+                    bound_type=bound_type,
+                    owner=owner,
+                    meaningful_tokens=meaningful
+                ))
 
     def validate(
         self,
@@ -613,12 +827,12 @@ class FactualGroundingValidator(IValidator):
 
         return gt
 
-    def _extract_from_sysml(self, text: str, gt: SchemaGroundTruth) -> None:
-        """
-        Generic AST extraction for SysML attribute definitions:
-        Ingests ANY typed attribute `attribute <name> : <Type> = <val>;`
-        into gt.structural_attributes and/or gt.numeric_limits based on type and unit.
-        """
+    def _extract_sysml_attributes_from_block(
+        self,
+        text: str,
+        gt: SchemaGroundTruth,
+        owner: Optional[str] = None
+    ) -> None:
         attr_pattern = re.compile(
             r'\battribute\s+(?:def\s+)?([a-zA-Z0-9_]+)(?:\s*:\s*([a-zA-Z0-9_<>:]+))?\s*=\s*([^;]+);'
         )
@@ -667,19 +881,38 @@ class FactualGroundingValidator(IValidator):
             if scalar is not None and (is_real_type or unit or has_limit_tokens):
                 limit_val = float(scalar)
                 bound_type = "lower" if _is_lower_bound_name(name, tokens) else "upper"
-                gt.numeric_limits[name_norm] = (limit_val, unit)
-                gt.numeric_bound_types[name_norm] = bound_type
-                if len(tokens) > 1:
-                    meaningful_tokens = [t for t in tokens if t not in ("real", "value", "val")]
-                    if meaningful_tokens:
-                        gt.numeric_limits["".join(meaningful_tokens)] = (limit_val, unit)
-                        gt.numeric_limits["_".join(meaningful_tokens)] = (limit_val, unit)
-                        gt.numeric_bound_types["".join(meaningful_tokens)] = bound_type
-                        gt.numeric_bound_types["_".join(meaningful_tokens)] = bound_type
+                self._register_numeric_limit(gt, name, limit_val, unit, bound_type, owner=owner)
 
-        # Ingest part definitions directly from SysML text
-        part_pattern = re.compile(r'\bpart\s+(?:def\s+)?([a-zA-Z0-9_]+)\b')
+    def _extract_from_sysml(self, text: str, gt: SchemaGroundTruth) -> None:
+        """
+        Generic AST extraction for SysML attribute definitions with component scoping:
+        Ingests ANY typed attribute into gt.structural_attributes and/or gt.numeric_limits
+        with owning component tracking.
+        """
+        # Ingest part definitions directly from SysML text with their bodies
+        part_pattern = re.compile(r'\bpart\s+(?:def\s+)?([a-zA-Z0-9_]+)\s*\{([^}]*)\}', re.DOTALL)
+        part_spans: List[Tuple[int, int]] = []
         for match in part_pattern.finditer(text):
+            part_spans.append((match.start(), match.end()))
+            pname = match.group(1).strip()
+            pname_norm = _normalize_name(pname)
+            pbody = match.group(2)
+            if pname_norm:
+                gt.declared_parts.add(pname_norm)
+                gt.declared_ast_nodes.add(pname_norm)
+                for tok in _tokenize_identifier(pname):
+                    gt.declared_ast_nodes.add(tok)
+                    if tok not in NON_HARDWARE_GENERIC_TOKENS and len(tok) >= 3:
+                        gt.declared_parts.add(tok)
+            self._extract_sysml_attributes_from_block(pbody, gt, owner=pname_norm)
+
+        # Ingest package-level attributes (outside part defs)
+        top_level_text = _mask_spans(text, part_spans)
+        self._extract_sysml_attributes_from_block(top_level_text, gt, owner=None)
+
+        # Ingest any remaining part declarations without block braces
+        bare_part_pattern = re.compile(r'\bpart\s+(?:def\s+)?([a-zA-Z0-9_]+)\b')
+        for match in bare_part_pattern.finditer(text):
             pname = match.group(1).strip()
             pname_norm = _normalize_name(pname)
             if pname_norm:
@@ -702,7 +935,7 @@ class FactualGroundingValidator(IValidator):
             val_str = getattr(attr, "default_value", None) or getattr(attr, "doc", "") or ""
             if name and val_str:
                 stmt = f"attribute {name} : {type_str} = {val_str};"
-                self._extract_from_sysml(stmt, gt)
+                self._extract_sysml_attributes_from_block(stmt, gt, owner=None)
 
         # Ingest part_defs
         for part in getattr(pkg, "part_defs", []) or getattr(pkg, "parts", []) or []:
@@ -727,8 +960,8 @@ class FactualGroundingValidator(IValidator):
                 if _is_count_target(aname) and ascalar is not None and int(ascalar) not in STANDARD_PROTOCOL_NUMBERS:
                     gt.structural_attributes[pname_norm] = int(ascalar)
                 elif aname and aval:
-                    stmt = f"attribute {pname}_{aname} = {aval};"
-                    self._extract_from_sysml(stmt, gt)
+                    stmt = f"attribute {aname} = {aval};"
+                    self._extract_sysml_attributes_from_block(stmt, gt, owner=pname_norm)
 
         # Ingest sub_packages
         for nested in getattr(pkg, "sub_packages", []) or getattr(pkg, "packages", []) or []:
@@ -741,9 +974,22 @@ class FactualGroundingValidator(IValidator):
         into gt.structural_attributes and/or gt.numeric_limits without hardcoded keywords.
         """
         lines = text.splitlines()
+        current_heading = ""
+        current_owner: Optional[str] = None
         for line in lines:
             line_str = line.strip()
             if not line_str:
+                continue
+
+            m_h = re.match(r'^(#{1,6})\s+(.+)$', line_str)
+            if m_h:
+                current_heading = m_h.group(2).strip()
+                h_norm = _normalize_name(current_heading)
+                current_owner = None
+                for part in gt.declared_parts:
+                    if part in h_norm:
+                        current_owner = part
+                        break
                 continue
 
             # Check for Markdown table rows: | Property | Value | [Desc] |
@@ -757,6 +1003,13 @@ class FactualGroundingValidator(IValidator):
                     ):
                         continue
 
+                    row_owner = current_owner
+                    k_norm = _normalize_name(k)
+                    for part in gt.declared_parts:
+                        if part in k_norm:
+                            row_owner = part
+                            break
+
                     # If cell 1 is a type (e.g. Integer, Real, String), value is cell 2
                     type_hint = ""
                     if len(cells) >= 3 and cells[1].lower() in ("integer", "int", "real", "float", "string", "boolean"):
@@ -764,7 +1017,6 @@ class FactualGroundingValidator(IValidator):
                         v = cells[2]
 
                     clean_v = v.strip('"\'`')
-                    k_norm = _normalize_name(k)
                     gt.attributes[k_norm] = clean_v
                     gt.declared_ast_nodes.add(k_norm)
                     gt.declared_ast_nodes.add(_normalize_name(clean_v))
@@ -804,15 +1056,7 @@ class FactualGroundingValidator(IValidator):
                     if scalar is not None and (unit or has_limit_tokens or type_hint.lower() in ("real", "float")):
                         limit_val = float(scalar)
                         bound_type = "lower" if _is_lower_bound_name(k, tokens) else "upper"
-                        gt.numeric_limits[k_norm] = (limit_val, unit)
-                        gt.numeric_bound_types[k_norm] = bound_type
-                        if len(tokens) > 1:
-                            meaningful_tokens = [t for t in tokens if t not in ("limit", "value", "val")]
-                            if meaningful_tokens:
-                                gt.numeric_limits["".join(meaningful_tokens)] = (limit_val, unit)
-                                gt.numeric_limits["_".join(meaningful_tokens)] = (limit_val, unit)
-                                gt.numeric_bound_types["".join(meaningful_tokens)] = bound_type
-                                gt.numeric_bound_types["_".join(meaningful_tokens)] = bound_type
+                        self._register_numeric_limit(gt, k, limit_val, unit, bound_type, owner=row_owner)
 
                     # 3. If 3rd cell (Description) contains compound configuration descriptors, extract them generically
                     if len(cells) >= 3:
@@ -854,15 +1098,7 @@ class FactualGroundingValidator(IValidator):
                 elif scalar is not None and (unit or any(t in tokens for t in ("limit", "max", "min", "minimum", "low", "lower", "floor", "ceiling", "high", "load", "accel", "bound", "threshold"))):
                     limit_val = float(scalar)
                     bound_type = "lower" if _is_lower_bound_name(k, tokens) else "upper"
-                    gt.numeric_limits[k_norm] = (limit_val, unit)
-                    gt.numeric_bound_types[k_norm] = bound_type
-                    if len(tokens) > 1:
-                        meaningful_tokens = [t for t in tokens if t not in ("limit", "value", "val")]
-                        if meaningful_tokens:
-                            gt.numeric_limits["".join(meaningful_tokens)] = (limit_val, unit)
-                            gt.numeric_limits["_".join(meaningful_tokens)] = (limit_val, unit)
-                            gt.numeric_bound_types["".join(meaningful_tokens)] = bound_type
-                            gt.numeric_bound_types["_".join(meaningful_tokens)] = bound_type
+                    self._register_numeric_limit(gt, k, limit_val, unit, bound_type, owner=current_owner)
                 elif scalar is None and _is_config_target(k):
                     gt.structural_attributes[k_norm] = clean_v
                     root_tokens = [t for t in tokens if t not in ("configuration", "config", "type", "mode", "layout", "geometry", "architecture", "topology", "arrangement")]
@@ -1167,22 +1403,60 @@ class FactualGroundingValidator(IValidator):
         if not gt.numeric_limits:
             return []
 
-        seen_metric_keys: Set[Tuple[Tuple[str, ...], float, str, str]] = set()
-        metric_limits: List[Tuple[List[str], float, str, str, str]] = []
-        for k, (limit, unit) in gt.numeric_limits.items():
-            tokens = _tokenize_identifier(k)
-            meaningful = [t for t in tokens if t not in ("value", "val", "real", "float")]
-            bound_type = gt.numeric_bound_types.get(k)
-            if not bound_type:
-                bound_type = "lower" if _is_lower_bound_name(k, meaningful) else "upper"
-            sig = (tuple(sorted(meaningful)), limit, unit, bound_type)
-            if sig in seen_metric_keys:
-                continue
-            seen_metric_keys.add(sig)
-            metric_limits.append((meaningful, limit, unit, k, bound_type))
+    def _validate_numeric_assertions(
+        self,
+        content: str,
+        rel_path: str,
+        gt: SchemaGroundTruth
+    ) -> List[Finding]:
+        """
+        Validates numeric quantities and loads against declared limits in schema ground truth.
+        Enforces ISO/IEC 80000 & SysML v2 ISQ dimensional quantity typing, atomic identifier lexing,
+        fail-closed unitless attribute handling, and component-scoped contextual binding.
+        Emits Finding('factual-grounding-numeric-drift', ...).
+        """
+        findings: List[Finding] = []
+        lines = content.splitlines()
+
+        current_heading = "Header"
+        is_normative = True
+        in_code_block = False
+
+        if not gt.numeric_limits and not gt.scoped_numeric_limits:
+            return []
+
+        # Collect scoped numeric limits
+        scoped_limits: List[ScopedNumericLimit] = []
+        if gt.scoped_numeric_limits:
+            seen_sigs: Set[Tuple[str, float, str, str, Optional[str]]] = set()
+            for sl in gt.scoped_numeric_limits:
+                sig = (sl.key, sl.limit_val, sl.unit, sl.bound_type, sl.owner)
+                if sig not in seen_sigs:
+                    seen_sigs.add(sig)
+                    scoped_limits.append(sl)
+        else:
+            seen_sigs = set()
+            for k, (limit, unit) in gt.numeric_limits.items():
+                tokens = _tokenize_identifier(k)
+                meaningful = [t for t in tokens if t not in ("value", "val", "real", "float")]
+                bound_type = gt.numeric_bound_types.get(k)
+                if not bound_type:
+                    bound_type = "lower" if _is_lower_bound_name(k, meaningful) else "upper"
+                sig = (k, limit, unit, bound_type, None)
+                if sig in seen_sigs:
+                    continue
+                seen_sigs.add(sig)
+                scoped_limits.append(ScopedNumericLimit(
+                    key=k,
+                    limit_val=limit,
+                    unit=unit,
+                    bound_type=bound_type,
+                    owner=None,
+                    meaningful_tokens=meaningful
+                ))
 
         numeric_pattern = re.compile(
-            r'\b(\d+(?:\.\d+)?(?:\s*-\s*\d+(?:\.\d+)?)?)\s*([a-zA-Z/%^]+)\b'
+            r'\b(\d+(?:\.\d+)?(?:\s*-\s*\d+(?:\.\d+)?)?)\s*(%|[a-zA-Z/][a-zA-Z0-9/%^*_-]*\b)'
         )
 
         for lineno_1idx, line in enumerate(lines, start=1):
@@ -1212,15 +1486,27 @@ class FactualGroundingValidator(IValidator):
             if self._has_ssot_citation(line_str, content, rel_path):
                 continue
 
+            # (a) Atomic Identifier Lexing: protect compound designations and citations
+            protected_spans = _get_protected_spans(line_str)
+            search_line = _mask_spans(line_str, protected_spans)
+
             line_tokens = _tokenize_identifier(line_str)
+            heading_tokens = _tokenize_identifier(current_heading)
             reported_claims_on_line: Set[str] = set()
 
-            for match in numeric_pattern.finditer(line_str):
+            # (b) ISO/IEC 80000 Physical Dimensional Typing:
+            # An engineering numeric claim exists if and only if paired with recognized physical unit
+            for match in numeric_pattern.finditer(search_line):
                 val_range_str = match.group(1).strip()
-                unit_str = match.group(2).strip().lower()
-                claimed_str = match.group(0).strip()
+                unit_raw = match.group(2).strip()
+                claimed_str = line_str[match.start():match.end()].strip()
 
                 if claimed_str in reported_claims_on_line:
+                    continue
+
+                canon_unit = ISO_80000_PHYSICAL_UNITS.get(unit_raw.lower())
+                if canon_unit is None:
+                    # Non-dimensional prose: words that are not physical units are ignored
                     continue
 
                 numbers = [float(n) for n in re.findall(r'[-+]?\d+(?:\.\d+)?', val_range_str)]
@@ -1229,59 +1515,126 @@ class FactualGroundingValidator(IValidator):
                 max_claimed = max(numbers)
                 min_claimed = min(numbers)
 
-                for m_tokens, limit_val, limit_unit, metric_key, bound_type in metric_limits:
-                    unit_matches = False
-                    if limit_unit and unit_str:
-                        unit_matches = (_normalize_name(unit_str) == _normalize_name(limit_unit))
-                    elif not limit_unit:
-                        unit_matches = True
-
-                    if not unit_matches:
+                for metric in scoped_limits:
+                    if not metric.unit:
+                        # (c) Fail-closed: attributes without declared physical units do not match physical unit claims
                         continue
 
-                    token_matches = any(t in line_tokens for t in m_tokens)
-                    if not token_matches and limit_unit != "g":
+                    metric_canon_unit = ISO_80000_PHYSICAL_UNITS.get(metric.unit.lower(), metric.unit.lower())
+                    if canon_unit != metric_canon_unit:
                         continue
 
-                    if limit_unit == "g" and not token_matches:
-                        g_context = any(t in line_tokens for t in ("launch", "load", "accel", "acceleration", "gload", "rail", "profile"))
-                        if not g_context:
+                    # (d) Component-Scoped Contextual Binding
+                    if metric.owner:
+                        owner_toks = _tokenize_identifier(metric.owner)
+                        owner_in_line = (metric.owner in _normalize_name(line_str) or any(t in line_tokens for t in owner_toks if t not in NON_HARDWARE_GENERIC_TOKENS))
+                        owner_in_heading = (metric.owner in _normalize_name(current_heading) or any(t in heading_tokens for t in owner_toks if t not in NON_HARDWARE_GENERIC_TOKENS))
+
+                        # If line explicitly targets another declared component and does not mention this owner, skip
+                        other_parts = {p for p in gt.declared_parts if p != metric.owner and (p in line_tokens or p in _normalize_name(line_str))}
+                        if other_parts and not owner_in_line:
+                            continue
+                        if not (owner_in_line or owner_in_heading):
+                            continue
+                    else:
+                        token_matches = any(t in line_tokens for t in metric.meaningful_tokens)
+                        if not token_matches and metric.unit != "g":
                             continue
 
-                    if bound_type == "lower":
-                        if min_claimed < limit_val:
+                        if metric.unit == "g" and not token_matches:
+                            g_context = any(t in line_tokens for t in ("launch", "load", "accel", "acceleration", "gload", "rail", "profile", "catapult"))
+                            if not g_context:
+                                continue
+
+                    if metric.bound_type == "lower":
+                        if min_claimed < metric.limit_val:
                             findings.append(Finding(
                                 "factual-grounding-numeric-drift",
-                                f"{rel_path}:{lineno_1idx}: Fabricated numeric quantity '{claimed_str}' falls below schema ground truth lower bound ({limit_val:.1f}{limit_unit}) in {', '.join(gt.source_files) or 'schema/'}.",
+                                f"{rel_path}:{lineno_1idx}: Fabricated numeric quantity '{claimed_str}' falls below schema ground truth lower bound ({metric.limit_val:.1f}{metric.unit}) in {', '.join(gt.source_files) or 'schema/'}.",
                                 location=f"{rel_path}:{lineno_1idx}",
                                 detail={
                                     "file": rel_path,
                                     "line": lineno_1idx,
                                     "claimed": claimed_str,
-                                    "ground_truth_limit": limit_val,
-                                    "ground_truth_lower_bound": limit_val,
+                                    "ground_truth_limit": metric.limit_val,
+                                    "ground_truth_lower_bound": metric.limit_val,
                                     "bound_type": "lower",
-                                    "unit": limit_unit
+                                    "unit": metric.unit
                                 }
                             ))
                             reported_claims_on_line.add(claimed_str)
                             break
                     else:
-                        if max_claimed > (limit_val * 1.05):
+                        if max_claimed > (metric.limit_val * 1.05):
                             findings.append(Finding(
                                 "factual-grounding-numeric-drift",
-                                f"{rel_path}:{lineno_1idx}: Fabricated numeric quantity '{claimed_str}' exceeds schema ground truth limit ({limit_val:.1f}{limit_unit}) in {', '.join(gt.source_files) or 'schema/'}.",
+                                f"{rel_path}:{lineno_1idx}: Fabricated numeric quantity '{claimed_str}' exceeds schema ground truth limit ({metric.limit_val:.1f}{metric.unit}) in {', '.join(gt.source_files) or 'schema/'}.",
                                 location=f"{rel_path}:{lineno_1idx}",
                                 detail={
                                     "file": rel_path,
                                     "line": lineno_1idx,
                                     "claimed": claimed_str,
-                                    "ground_truth_limit": limit_val,
+                                    "ground_truth_limit": metric.limit_val,
                                     "bound_type": "upper",
-                                    "unit": limit_unit
+                                    "unit": metric.unit
                                 }
                             ))
                             reported_claims_on_line.add(claimed_str)
+                            break
+
+            # (c) Fail-Closed Unitless Attributes evaluation:
+            for metric in scoped_limits:
+                if metric.unit:
+                    continue  # Only evaluate unitless attributes here
+
+                # Strictly require an explicit attribute identifier match in local statement
+                has_explicit_id = (
+                    metric.key in _normalize_name(line_str)
+                    or (len(metric.meaningful_tokens) >= 2 and all(t in line_tokens for t in metric.meaningful_tokens))
+                )
+                if not has_explicit_id:
+                    continue
+
+                if metric.owner:
+                    owner_toks = _tokenize_identifier(metric.owner)
+                    owner_in_line = (metric.owner in _normalize_name(line_str) or any(t in line_tokens for t in owner_toks if t not in NON_HARDWARE_GENERIC_TOKENS))
+                    owner_in_heading = (metric.owner in _normalize_name(current_heading) or any(t in heading_tokens for t in owner_toks if t not in NON_HARDWARE_GENERIC_TOKENS))
+                    if not (owner_in_line or owner_in_heading):
+                        continue
+
+                for m_num in re.finditer(r'\b(\d+(?:\.\d+)?)\b', search_line):
+                    num_str = m_num.group(1)
+                    if num_str in reported_claims_on_line:
+                        continue
+                    # Check if followed by a physical unit
+                    post_text = search_line[m_num.end():m_num.end() + 10].strip()
+                    m_u = re.match(r'^([a-zA-Z/%^]+)', post_text)
+                    if m_u and m_u.group(1).lower() in ISO_80000_PHYSICAL_UNITS:
+                        continue
+
+                    num_val = float(num_str)
+                    if _is_protocol_or_standard_number(line_str, m_num.start(), m_num.end(), int(num_val)):
+                        continue
+
+                    if metric.bound_type == "lower":
+                        if num_val < metric.limit_val:
+                            findings.append(Finding(
+                                "factual-grounding-numeric-drift",
+                                f"{rel_path}:{lineno_1idx}: Fabricated numeric quantity '{num_str}' falls below schema ground truth lower bound ({metric.limit_val:.1f}) in {', '.join(gt.source_files) or 'schema/'}.",
+                                location=f"{rel_path}:{lineno_1idx}",
+                                detail={"file": rel_path, "line": lineno_1idx, "claimed": num_str, "ground_truth_limit": metric.limit_val, "bound_type": "lower"}
+                            ))
+                            reported_claims_on_line.add(num_str)
+                            break
+                    else:
+                        if num_val > (metric.limit_val * 1.05):
+                            findings.append(Finding(
+                                "factual-grounding-numeric-drift",
+                                f"{rel_path}:{lineno_1idx}: Fabricated numeric quantity '{num_str}' exceeds schema ground truth limit ({metric.limit_val:.1f}) in {', '.join(gt.source_files) or 'schema/'}.",
+                                location=f"{rel_path}:{lineno_1idx}",
+                                detail={"file": rel_path, "line": lineno_1idx, "claimed": num_str, "ground_truth_limit": metric.limit_val, "bound_type": "upper"}
+                            ))
+                            reported_claims_on_line.add(num_str)
                             break
 
         return findings

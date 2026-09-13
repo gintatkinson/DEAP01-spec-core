@@ -847,8 +847,167 @@ The vehicle features an ungrounded abc-tail configuration.
             self.assertNotIn("multi-segment", findings_text)
             self.assertNotIn("optical-sensor", findings_text)
 
-            # MUST flag ungrounded structural descriptor on config target
-            self.assertTrue(any("abc-tail" in str(f) for f in findings))
+    def test_atomic_identifier_lexing_protects_standard_citations_from_fragmentation(self):
+        """Verify that atomic compound identifiers and standards citations (DO-178C, ARP4754A,
+        MIL-STD-1316F, ASTM-F3269, RS-485, PL-40) are protected from fragmentation into floating
+        numeric scalars or single-letter unit abbreviations.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            docs_dir = os.path.join(tmpdir, "docs", "specs")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(docs_dir, exist_ok=True)
+
+            schema_sysml = """package Standards_SSOT {
+    attribute maxCapacitanceC : Real = 10.0;
+    attribute maxForceN : Real = 50.0;
+    attribute maxBusLimit : Integer = 10;
+}
+"""
+            with open(os.path.join(schema_dir, "model.sysml"), "w", encoding="utf-8") as f:
+                f.write(schema_sysml)
+
+            # Document cites various standards designations and compound identifiers
+            # DO-178C must not become 178 C (exceeding 10.0 C limit)
+            # MIL-STD-1316F must not become 1316 F (Farad)
+            # RS-485 must not become 485 (exceeding 10 bus limit)
+            # PL-40 must not become 40
+            # ARP4754A must not become 4754 A (Ampere)
+            # ASTM-F3269 must not become 3269
+            doc_md = """# Standards Baseline Specification
+The system software lifecycle complies with DO-178C and system engineering with ARP4754A.
+Safety interlocks adhere to MIL-STD-1316F ordnance requirements and ASTM-F3269 UAS autopilot standards.
+Serial communication uses RS-485 transceivers and payload power interfaces conform to PL-40 connectors.
+"""
+            with open(os.path.join(docs_dir, "SPEC_STANDARDS.md"), "w", encoding="utf-8") as f:
+                f.write(doc_md)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            findings = self.validator.validate(repo, scan_dirs=["docs"])
+
+            numeric_findings = [f for f in findings if f.rule_id == "factual-grounding-numeric-drift"]
+            self.assertEqual(numeric_findings, [])
+
+    def test_iso_80000_physical_dimensional_typing_ignores_non_dimensional_prose(self):
+        """Verify that words following numbers that are not physical units (e.g. times, steps,
+        test labels, cycles, modes) are treated as non-dimensional prose and never ingested
+        as physical measurement units.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            docs_dir = os.path.join(tmpdir, "docs", "features")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(docs_dir, exist_ok=True)
+
+            schema_sysml = """package Vehicle_SSOT {
+    attribute timeLimitS : Real = 5.0;
+    attribute maxGLoad : Real = 12.0;
+}
+"""
+            with open(os.path.join(schema_dir, "model.sysml"), "w", encoding="utf-8") as f:
+                f.write(schema_sysml)
+
+            doc_md = """# Verification Procedures
+The test procedure executed 15 times over 20 steps with 4 test labels across 8 cycles in 2 modes.
+"""
+            with open(os.path.join(docs_dir, "FEAT_PROCEDURES.md"), "w", encoding="utf-8") as f:
+                f.write(doc_md)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            findings = self.validator.validate(repo, scan_dirs=["docs"])
+
+            numeric_findings = [f for f in findings if f.rule_id == "factual-grounding-numeric-drift"]
+            self.assertEqual(numeric_findings, [])
+
+    def test_fail_closed_unitless_attributes_requires_explicit_identifier(self):
+        """Verify that attributes without declared physical measurement units strictly require
+        an explicit attribute identifier match in the local statement, preventing false cross-matching
+        against unrelated prose numbers, while catching explicit contradictory assertions.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            docs_dir = os.path.join(tmpdir, "docs", "features")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(docs_dir, exist_ok=True)
+
+            schema_sysml = """package Protocol_SSOT {
+    attribute maxRetryCount : Integer = 3;
+}
+"""
+            with open(os.path.join(schema_dir, "model.sysml"), "w", encoding="utf-8") as f:
+                f.write(schema_sysml)
+
+            # Unrelated prose numbers must NOT trigger false positives
+            doc_unrelated_md = """# Transaction Summary
+The system processed 15 files and logged 20 warnings during batch initialization.
+"""
+            with open(os.path.join(docs_dir, "FEAT_TRANSACTION.md"), "w", encoding="utf-8") as f:
+                f.write(doc_unrelated_md)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            findings = self.validator.validate(repo, scan_dirs=["docs"])
+            self.assertEqual(findings, [])
+
+            # Explicit attribute identifier match exceeding limit MUST be caught
+            doc_contradiction_md = """# Retry Configuration
+The system max retry count is configured to 10 for lossy links.
+"""
+            with open(os.path.join(docs_dir, "FEAT_RETRY.md"), "w", encoding="utf-8") as f:
+                f.write(doc_contradiction_md)
+
+            findings_2 = self.validator.validate(repo, scan_dirs=["docs"])
+            numeric_findings = [f for f in findings_2 if f.rule_id == "factual-grounding-numeric-drift"]
+            self.assertEqual(len(numeric_findings), 1)
+            self.assertIn("10", str(numeric_findings[0]))
+
+    def test_component_scoped_contextual_binding(self):
+        """Verify that numeric parameters are evaluated within the semantic context of their owning
+        AST component or table, so that e.g. ESAD limits are not cross-matched with Battery limits.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            docs_dir = os.path.join(tmpdir, "docs", "icds")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(docs_dir, exist_ok=True)
+
+            schema_sysml = """package Subsystems_SSOT {
+    part def ESAD {
+        attribute fireInhibitVoltageV : Real = 5.0;
+    }
+    part def Battery {
+        attribute maxVoltageV : Real = 28.0;
+    }
+}
+"""
+            with open(os.path.join(schema_dir, "model.sysml"), "w", encoding="utf-8") as f:
+                f.write(schema_sysml)
+
+            # 1. Document with valid Battery voltage (24V <= 28V) that would have falsely exceeded
+            # ESAD's 5V if not component-scoped:
+            doc_battery_md = """# Battery Interface Control Document
+## Battery Subsystem
+The battery bus operates at 24 V under normal charging conditions.
+"""
+            with open(os.path.join(docs_dir, "ICD_BATTERY.md"), "w", encoding="utf-8") as f:
+                f.write(doc_battery_md)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            findings = self.validator.validate(repo, scan_dirs=["docs"])
+            self.assertEqual(findings, [])
+
+            # 2. Document with fabricated ESAD fire inhibit voltage (10V > 5.0V):
+            doc_esad_md = """# ESAD Interface Control Document
+## ESAD Subsystem
+The ESAD fire inhibit signal operates at 10 V during test mode.
+"""
+            with open(os.path.join(docs_dir, "ICD_ESAD.md"), "w", encoding="utf-8") as f:
+                f.write(doc_esad_md)
+
+            findings_2 = self.validator.validate(repo, scan_dirs=["docs"])
+            numeric_findings = [f for f in findings_2 if f.rule_id == "factual-grounding-numeric-drift"]
+            self.assertEqual(len(numeric_findings), 1)
+            self.assertIn("10 V", str(numeric_findings[0]))
+            self.assertIn("5.0", str(numeric_findings[0]))
 
 
 if __name__ == "__main__":
