@@ -45,17 +45,26 @@ ConnectionDef = _sysml_ast.ConnectionDef
 # Standard external actors and boundary entities recognized across system architectures
 RECOGNIZED_EXTERNAL_ACTORS = {
     "operator", "operators", "pilot", "pilots", "remote_pilot", "remote pilot", "user", "users", "human", "supervisor", "coordinator", "technician",
+    "commander", "mission_commander", "mission commander", "flight_commander", "flight commander",
     "gcsoperator", "gcs operator", "payloadoperator", "payload operator", "launchassistant", "launch assistant", "crew", "multi_crew", "multi crew",
     "ground_station", "ground station", "gcs", "ground_control_station", "ground control station",
     "cloud", "server", "servers", "client", "clients", "database", "databases", "storage", "backend", "infrastructure", "hub", "gateway", "gateways",
     "ui", "console", "consoles", "display", "displays", "terminal", "terminals", "cockpit", "hmi", "gui", "station", "stations", "gse",
+    "ground_support_equipment", "ground support equipment", "support_equipment", "support equipment",
+    "launcher", "launchers", "pneumatic_launcher", "pneumatic launcher", "catapult", "rail_launcher", "rail launcher",
+    "recovery_system", "recovery system", "recovery_net", "recovery net", "parachute", "chute",
     "atc", "air_traffic_control", "air traffic control", "utm", "u-space", "authority", "authorities", "airspace_authority", "airspace authority",
     "external_system", "external system", "external", "externalsystems", "ext", "third_party", "gnss", "gps", "constellation", "constellations", "gnss_constellation", "weather", "weather_service", "weather service",
     "tactical_network", "tactical network", "tactical_networks", "tactical networks", "sitaware", "sitaware_hq", "sitaware hq", "atak", "delta",
     "environment", "environmental", "physical_world", "physical world", "atmosphere", "ground", "terrain", "space", "orbital",
     "power_grid", "power grid", "grid", "generator", "umbilical", "power_source", "power source",
     "telemetry_channel", "command_link", "radio", "radios", "transceiver", "datalink", "satcom", "satellite", "satellites",
-    "c2", "c2_channel", "c2_link", "pace", "channel", "channels", "bus", "reference", "timing", "positioning"
+    "c2", "c2_channel", "c2_link", "pace", "channel", "channels", "bus", "reference", "timing", "positioning",
+    "air_vehicle", "air vehicle", "air_vehicle_segment", "air vehicle segment", "ground_segment", "ground segment",
+    "ground_control_segment", "ground control segment", "launch_segment", "launch segment", "support_segment", "support segment",
+    "space_segment", "space segment", "primary_operational_segment", "primary operational segment",
+    "operational_segment", "operational segment", "airframe", "platform", "platforms",
+    "target", "target_system", "target system", "threat", "threat_system", "threat system"
 }
 
 # Procedural, workflow, lifecycle, and generic diagram structural tokens
@@ -80,6 +89,10 @@ RECOGNIZED_STRUCTURAL_TOKENS = {
     "pipeline", "phase1", "phase2", "phase3", "phase1a", "phase1b", "ssot", "conops", "stpa", "fmeca", "sysml",
     "epic", "feature", "story", "stories", "deliverable", "deliverables", "matrix", "sync",
     "port", "ports", "conn", "connection", "connections",
+    "segment", "segments", "airframe", "airframes", "vehicle", "vehicles",
+    "platform", "platforms", "supersystem", "supersystems", "primary", "support", "operational",
+    "launcher", "launchers", "recovery", "airvehicle", "groundcontrol", "launchsegment",
+    "supportsegment", "airvehiclesegment", "groundcontrolsegment", "operationalsegment",
     "pyr", "int", "la", "a5", "rot", "gs", "op", "wh", "sens", "act", "cat", "oc", "obc", "fcc", "esad", "ext", "seeker", "gimbal"
 }
 
@@ -314,6 +327,8 @@ class SemanticDiagramASTValidator(IValidator):
 
         part_names: Set[str] = set()
         part_norm: Set[str] = set()
+        package_names: Set[str] = set()
+        package_norm: Set[str] = set()
         port_names: Set[str] = set()
         port_norm: Set[str] = set()
         action_names: Set[str] = set()
@@ -328,9 +343,35 @@ class SemanticDiagramASTValidator(IValidator):
         use_case_norm: Set[str] = set()
         declared_actors: Set[str] = set()
 
+        def _ingest_pkg_name(name_str: Optional[str]):
+            if not name_str:
+                return
+            package_names.add(name_str)
+            p_norm = _normalize_identifier(name_str)
+            package_norm.add(p_norm)
+            part_norm.add(p_norm)
+            for tok in _tokenize_name(name_str):
+                if len(tok) >= 3 and tok not in ("ssot", "model", "package", "sysml"):
+                    package_norm.add(tok)
+                    part_norm.add(f"{tok}airframe")
+                    part_norm.add(f"{tok}vehicle")
+                    part_norm.add(f"{tok}platform")
+                    part_norm.add(f"{tok}system")
+                    part_norm.add(f"{tok}segment")
+                    part_norm.add(f"{tok}subsystem")
+
+        _ingest_pkg_name(getattr(pkg, "name", None))
+
         for p in all_parts:
             part_names.add(p.name)
-            part_norm.add(_normalize_identifier(p.name))
+            p_norm = _normalize_identifier(p.name)
+            part_norm.add(p_norm)
+            part_norm.add(f"{p_norm}segment")
+            part_norm.add(f"{p_norm}subsystem")
+            part_norm.add(f"{p_norm}system")
+            part_norm.add(f"{p_norm}airframe")
+            part_norm.add(f"{p_norm}vehicle")
+            part_norm.add(f"{p_norm}platform")
             for port in (p.ports or []):
                 port_names.add(port.name)
                 port_names.add(f"{p.name}.{port.name}")
@@ -390,6 +431,7 @@ class SemanticDiagramASTValidator(IValidator):
                 part_norm.add(_normalize_identifier(n))
 
         def _collect_subpkg_elements(p_pkg):
+            _ingest_pkg_name(getattr(p_pkg, "name", None))
             for uc in (getattr(p_pkg, "use_case_defs", []) or []):
                 use_case_names.add(uc.name)
                 use_case_norm.add(_normalize_identifier(uc.name))
@@ -424,6 +466,8 @@ class SemanticDiagramASTValidator(IValidator):
         return {
             "all_parts": all_parts,
             "all_conns": all_conns,
+            "package_names": package_names,
+            "package_norm": package_norm,
             "part_names": part_names,
             "part_norm": part_norm,
             "port_names": port_names,
@@ -478,15 +522,22 @@ class SemanticDiagramASTValidator(IValidator):
             "tracker", "flow", "panel", "wizard", "harness", "proof", "widget", "view",
             "controller", "dialog", "window", "viewmodel", "service", "manager",
             "handler", "adapter", "factory", "builder", "helper", "test", "entity",
-            "dto", "dao", "register", "field", "enum", "type"
+            "dto", "dao", "register", "field", "enum", "type",
+            "airframe", "segment", "segments", "vehicle", "platform", "launcher", "station"
         )):
             return True
 
-        # Check UAF / Architecture structural annotations and segments
-        if any(marker in id_norm or marker in lbl_norm for marker in ("userrole", "interfaceport", "performernode", "operationalrole", "segment", "stakeholder", "authority")):
+        # Check UAF / Architecture structural annotations, operational segments, and super-systems
+        if any(marker in id_norm or marker in lbl_norm for marker in (
+            "userrole", "interfaceport", "performernode", "operationalrole",
+            "segment", "segments", "stakeholder", "authority",
+            "airframe", "vehicle", "platform", "supersystem", "super_system",
+            "launcher", "launchrecovery", "recovery", "groundcontrol", "groundstation",
+            "airvehicle", "groundsegment", "spacesegment", "supportsegment", "primaryoperational"
+        )):
             return True
 
-        # Check external actors by exact match, normalized identifier, or token overlap
+        # Check external actors and operational entities by exact match, normalized identifier, or token overlap
         tokens = _tokenize_name(node_id) | _tokenize_name(label)
         if id_norm in RECOGNIZED_EXTERNAL_ACTORS or lbl_norm in RECOGNIZED_EXTERNAL_ACTORS:
             return True
@@ -495,6 +546,10 @@ class SemanticDiagramASTValidator(IValidator):
         if id_norm in ast["declared_actors"] or lbl_norm in ast["declared_actors"]:
             return True
         if any(tok in ast["declared_actors"] for tok in tokens if len(tok) >= 2):
+            return True
+
+        # Check package and system tokens
+        if any(pkg_n in id_norm or pkg_n in lbl_norm for pkg_n in ast.get("package_norm", set()) if len(pkg_n) >= 3):
             return True
 
         # Check AST parts, ports, actions, capabilities, states, items, use cases
@@ -533,7 +588,10 @@ class SemanticDiagramASTValidator(IValidator):
             "satcom", "network", "comms", "service", "gateway", "hub", "station",
             "console", "terminal", "umbilical",
             "computer", "controller", "fcc", "autopilot", "obc",
-            "safety", "safetynet", "rta", "monitor", "supervisor", "executive"
+            "safety", "safetynet", "rta", "monitor", "supervisor", "executive",
+            "segment", "system", "subsystem", "airframe", "platform", "supersystem",
+            "launcher", "gse", "equipment", "recovery", "vehicle", "ground", "support",
+            "operator", "target", "threat", "commander"
         )):
             return False
         tokens = _tokenize_name(name) | _tokenize_name(title_line)
@@ -551,7 +609,10 @@ class SemanticDiagramASTValidator(IValidator):
             "satcom", "network", "comms", "service", "gateway", "hub", "station",
             "console", "terminal", "umbilical",
             "computer", "controller", "fcc", "autopilot", "obc",
-            "safety", "safetynet", "rta", "monitor", "supervisor", "executive"
+            "safety", "safetynet", "rta", "monitor", "supervisor", "executive",
+            "segment", "system", "subsystem", "airframe", "platform", "supersystem",
+            "launcher", "gse", "equipment", "recovery", "vehicle", "ground", "support",
+            "operator", "target", "threat", "commander"
         )):
             return False
         tokens = _tokenize_name(name) | _tokenize_name(title_line)

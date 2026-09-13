@@ -103,6 +103,48 @@ DEFAULT_CONOPS_PARAMS: Dict[str, str] = {
 }
 
 
+def _sanitize_level_1b_operational_text(text: str) -> str:
+    """
+    Sanitizes text to enforce Level 1B operational abstraction (Fixes Issue #273).
+    Strips component-internal serial opcodes (0x10, 0x11, 0x12, 0x13, 0xB0, etc.),
+    baud rates (e.g., 115200 baud), CRC-16 polynomial equations (x^16 + x^12 + x^5 + 1),
+    and low-level wire protocol artifacts from ConOps architecture and Section 8 synthesis.
+    """
+    if not text:
+        return ""
+
+    s = text
+
+    # 1. Remove polynomial equations (e.g. x^16 + x^12 + x^5 + 1, x^16+x^12+x^5+1)
+    s = re.sub(r"x\^16\s*\+\s*x\^12\s*\+\s*x\^5\s*\+\s*1", "", s, flags=re.IGNORECASE)
+    s = re.sub(r"_?0x1021\b", "", s, flags=re.IGNORECASE)
+    s = re.sub(r"\bCRC-?16(?:-[A-Za-z0-9_]+)?(?:\s+polynomial(?:\s+(?:equation|formula))?)?\b", "Frame Integrity Check", s, flags=re.IGNORECASE)
+    s = re.sub(r"\bpolynomial\s+equation\b", "integrity validation", s, flags=re.IGNORECASE)
+
+    # 2. Remove baud rates (e.g. 115200 baud, at 115200 baud, 9600 baud, 921600 baud)
+    s = re.sub(r"\b(?:at\s+)?\d+(?:\.\d+)?\s*(?:k|M|G)?baud\b", "", s, flags=re.IGNORECASE)
+    s = re.sub(r"\b(?:at\s+)?(?:9600|19200|38400|57600|115200|230400|460800|921600)\s*(?:bps|baud)\b", "", s, flags=re.IGNORECASE)
+    s = re.sub(r"_(?:9600|19200|38400|57600|115200|230400|460800|921600)\b", "", s)
+
+    # 3. Remove serial opcodes (_0x10, 0x10, 0x11, 0x12, 0x13, 0xB0, etc.)
+    s = re.sub(r"\b(?:[Oo]pcode|[Oo]pcodes)\s+0x[0-9a-fA-F]+\b", "", s)
+    s = re.sub(r"\b(?:OPCODE|OPCODES)\s+0x[0-9a-fA-F]+\b", "", s)
+    s = re.sub(r"\b(?:[Oo]pcode|[Oo]pcodes)\s+[0-9]+\b", "", s)
+    s = re.sub(r"_?0x[0-9a-fA-F]+", "", s)
+    s = re.sub(r"\b(?:Opcode|opcode|OPCODE)\b", "", s)
+
+    # 4. Clean up punctuation artifacts, empty parens/brackets, duplicate commas, double spaces (horizontal whitespace only)
+    s = re.sub(r"\(\s*\)", "", s)
+    s = re.sub(r"\[\s*\]", "", s)
+    s = re.sub(r"\(\s*,+\s*", "(", s)
+    s = re.sub(r",+\s*\)", ")", s)
+    s = re.sub(r",\s*,+", ",", s)
+    s = re.sub(r"[ \t]+,\s*", ", ", s)
+    s = re.sub(r",\s*\.", ".", s)
+    s = re.sub(r"[ \t]{2,}", " ", s)
+    return s
+
+
 class SysMLParameterBindingEngine:
     """
     Automated SysML AST Parameter Binding Engine.
@@ -1463,9 +1505,11 @@ class SysMLParameterBindingEngine:
         """
         Generates Section 4.7 Super-System Architecture Markdown derived deterministically from SysML AST.
         Conforms to Option 3: Compact Subsystem Blocks with Embedded Port Attributes and Vertical Hierarchical Tiers (direction TB).
+        Guarantees Level 1B operational abstraction without component-internal serial opcodes, baud rates, or CRC formulas (Fixes #273).
         """
         parts = self.ast_parts if self.ast_parts else []
-        subsys_names = [getattr(p, "name", str(p)) for p in parts]
+        subsys_names = [_sanitize_level_1b_operational_text(getattr(p, "name", str(p))) for p in parts]
+        subsys_names = [n for n in subsys_names if n]
         subsys_summary = ", ".join(subsys_names) if subsys_names else "Declared System Subsystems"
 
         lines = [
@@ -1507,16 +1551,20 @@ class SysMLParameterBindingEngine:
                 lines.append(f'            subgraph {tier_subgraph_name}["{tier_label}"]')
                 lines.append('                direction TB')
                 for p in chunk:
-                    p_name = getattr(p, "name", str(p))
+                    raw_p_name = getattr(p, "name", str(p))
+                    p_name = _sanitize_level_1b_operational_text(raw_p_name) or raw_p_name
+                    p_name = re.sub(r'_?0x[0-9a-fA-F]+', '', p_name, flags=re.IGNORECASE) or "Subsystem"
                     p_node_id = re.sub(r'[^A-Za-z0-9_]', '_', p_name)
                     part_node_ids.append((p_node_id, p_name))
                     ports = getattr(p, "ports", []) or []
                     if ports:
                         port_items = []
                         for pt in ports:
-                            pt_name = getattr(pt, "name", "port")
+                            raw_pt_name = getattr(pt, "name", "port")
+                            clean_pt_name = _sanitize_level_1b_operational_text(raw_pt_name) or raw_pt_name
+                            clean_pt_name = re.sub(r'_?0x[0-9a-fA-F]+', '', clean_pt_name, flags=re.IGNORECASE) or "p_port"
                             pt_dir = (getattr(pt, "direction", "inout") or "inout").upper()
-                            port_items.append(f"<br/>• {pt_name} ({pt_dir})")
+                            port_items.append(f"<br/>• {clean_pt_name} ({pt_dir})")
                         port_text = "".join(port_items)
                     else:
                         p_prefix = re.sub(r'[^A-Za-z0-9]', '', p_name)[:4].upper() or "SUB"
@@ -1550,7 +1598,11 @@ class SysMLParameterBindingEngine:
         return "\n".join(lines)
 
     def _synthesize_subsystem_architecture_text(self, sys_id: str, dom: str = "") -> str:
-        """Generates Section 4.8 Subsystem Architecture Markdown for 100% of declared AST parts."""
+        """
+        Generates Section 4.8 Subsystem Architecture Markdown for 100% of declared AST parts.
+        Guarantees Level 1B operational abstraction without component-internal serial opcodes,
+        baud rates, or CRC formulas (Fixes #273).
+        """
         parts_to_render = self.ast_parts if self.ast_parts else []
 
         lines = [
@@ -1571,10 +1623,16 @@ class SysMLParameterBindingEngine:
             base_power_w = 75.0
 
         for idx, p in enumerate(parts_to_render, start=1):
-            p_name = getattr(p, "name", str(p))
-            p_doc = getattr(p, "doc", "").strip()
-            if not p_doc:
+            raw_name = getattr(p, "name", str(p))
+            p_name = _sanitize_level_1b_operational_text(raw_name) or raw_name
+            p_name = re.sub(r'_?0x[0-9a-fA-F]+', '', p_name, flags=re.IGNORECASE) or "Subsystem"
+
+            raw_doc = getattr(p, "doc", "").strip()
+            clean_doc = _sanitize_level_1b_operational_text(raw_doc)
+            if not clean_doc or len(clean_doc) < 10:
                 p_doc = f"Provides dedicated operational capability, deterministic state processing, and safety-critical execution for the {p_name} subsystem within {sys_id}."
+            else:
+                p_doc = clean_doc
 
             p_mass_kg = round(max(0.2, total_mtow / max(1, len(parts_to_render))), 2)
             p_power_w = round(max(5.0, base_power_w * (1.2 if "computer" in p_name.lower() or "proc" in p_name.lower() or "obc" in p_name.lower() else 0.5)), 1)
@@ -1591,10 +1649,26 @@ class SysMLParameterBindingEngine:
                 lines.append("| Port Name | Direction | Interface Type | Functional Binding / Interconnect |")
                 lines.append("| :--- | :--- | :--- | :--- |")
                 for port in ports:
-                    port_name = getattr(port, "name", "p_port")
+                    raw_port_name = getattr(port, "name", "p_port")
+                    port_name = _sanitize_level_1b_operational_text(raw_port_name) or raw_port_name
+                    port_name = re.sub(r'_?0x[0-9a-fA-F]+', '', port_name, flags=re.IGNORECASE) or "p_port"
                     port_dir = getattr(port, "direction", "inout") or "inout"
-                    port_type = getattr(port, "type_name", "Port") or "Port"
-                    port_doc = getattr(port, "doc", "") or f"Dedicated {port_name} interface link for {p_name}"
+                    raw_port_type = getattr(port, "type_name", "Port") or "Port"
+                    clean_port_type = _sanitize_level_1b_operational_text(raw_port_type)
+                    clean_port_type = re.sub(r'_?0x[0-9a-fA-F]+_?', '', clean_port_type, flags=re.IGNORECASE)
+                    clean_port_type = re.sub(r'_?\d{4,}_?', '', clean_port_type)
+                    if not clean_port_type or clean_port_type.strip() in ("", "Port"):
+                        port_type = "DeterministicSystemBus"
+                    else:
+                        port_type = clean_port_type.strip()
+
+                    raw_port_doc = getattr(port, "doc", "")
+                    clean_port_doc = _sanitize_level_1b_operational_text(raw_port_doc)
+                    if not clean_port_doc or len(clean_port_doc) < 5:
+                        port_doc = f"Dedicated {port_name} interface link for {p_name}"
+                    else:
+                        port_doc = clean_port_doc
+
                     lines.append(f"| **{port_name}** | {port_dir} | {port_type} | {port_doc} |")
             else:
                 lines.append("| Port Name | Direction | Interface Type | Functional Binding / Interconnect |")
@@ -1657,8 +1731,15 @@ class SysMLParameterBindingEngine:
                 lines.append(f"- **Phase_MaintenanceMode:** Supports interactive diagnostics, calibration verification, and tool-less modular LRU servicing.")
 
             if actions:
-                action_names = [getattr(a, "name", str(a)) for a in actions]
-                lines.append(f"- **Declared AST Actions:** `{', '.join(action_names)}`")
+                clean_action_names = []
+                for a in actions:
+                    raw_act = getattr(a, "name", str(a))
+                    clean_act = _sanitize_level_1b_operational_text(raw_act)
+                    clean_act = re.sub(r'_?0x[0-9a-fA-F]+', '', clean_act, flags=re.IGNORECASE)
+                    if clean_act:
+                        clean_action_names.append(clean_act)
+                if clean_action_names:
+                    lines.append(f"- **Declared AST Actions:** `{', '.join(clean_action_names)}`")
 
             lines.append("")
             lines.append(f"##### 4.8.{idx}.4 Safety Invariants & Containment Interlocks")
@@ -2527,6 +2608,19 @@ class SysMLParameterBindingEngine:
             return "5 ms"
         elif token_upper == "OPTX_CRITICALITY":
             return "High (DAL-A)"
+        elif token_upper in (
+            "OPCODE_TABLE",
+            "OPCODE_REFERENCE_TABLE",
+            "SUBSYSTEM_OPCODES",
+            "SERIAL_OPCODES",
+            "SERIAL_OPCODE_TABLE",
+            "WIRE_PROTOCOL_TABLE",
+            "CRC_POLYNOMIAL_TABLE",
+            "SERIAL_WIRE_PROTOCOL",
+        ):
+            return "Subsystem interactions are formalized exclusively as Level 1B Operational Information Exchanges (Op-Tx) and Level 1C Logical Signal Flows; component-internal serial opcode mappings and wire-level registers are deferred to Level 2 detailed design."
+        elif token_upper in ("SECTION_8_OPTX", "OPTX_TABLE", "OPTX_EXCHANGES_TABLE"):
+            return "Operational information exchanges are formally specified in the 16-channel Op-Tx Matrix (Section 7)."
         elif token_upper == "SCENARIO_NOMINAL_THREAD":
             return "Autonomous pre-flight BIT, launch, corridor survey, and precision recovery."
         elif token_upper == "SCENARIO_DEGRADED_THREAD":
@@ -3297,6 +3391,9 @@ class SysMLParameterBindingEngine:
         current = current.replace("Autonomous Cyber-Physical System Archetype", sys_target)
         current = current.replace("AutonomousSystemArchetype", sys_target)
 
+        # Enforce Level 1B Operational Abstraction across substituted ConOps text (Fixes #273)
+        current = _sanitize_level_1b_operational_text(current)
+
         return current
 
 
@@ -3637,7 +3734,10 @@ def assemble_document(
         sec4_8_match = re.search(r"(?:^|\n)###?\s*4\.8[.\s].*?(?=(?:\n###?\s*4\.[0-79]|\n##?\s*5[.\s]|\Z))", assembled, re.DOTALL)
         sec4_match = re.search(r"(?:^|\n)##?\s*4[.\s].*?(?=(?:\n##?\s*5[.\s]|\Z))", assembled, re.DOTALL)
         target_text = sec4_8_match.group(0) if sec4_8_match else (sec4_match.group(0) if sec4_match else assembled)
-        missing_parts = [p for p in sorted(param_engine.ast_part_names) if p not in target_text]
+        missing_parts = [
+            p for p in sorted(param_engine.ast_part_names)
+            if p not in target_text and _sanitize_level_1b_operational_text(p) not in target_text
+        ]
         if missing_parts:
             errors.append(
                 f"ConOps Section 4 AST Part Coverage Gate failed: Missing declared AST part def(s): {', '.join(missing_parts)} in Section 4."

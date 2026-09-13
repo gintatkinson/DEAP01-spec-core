@@ -1132,6 +1132,26 @@ class TestSpecConopsEngineering(unittest.TestCase):
             self.assertIn("<br/>• PORT_GCS_C2", content)
             self.assertIn("<br/>• PORT_FCS_C2", content)
 
+    def test_conops_level_1b_operational_boundary_and_icd_distinction(self):
+        """Verify §2.3, §4.4, §4.7, and §4.8 define the Level 1B operational boundary and exclude component-internal serial opcode tables and wire framing from ConOps (Fixes #271)."""
+        for skill_path in [CONOPS_SKILL_PATH, AGENTS_CONOPS_SKILL_PATH]:
+            self.assertTrue(os.path.isfile(skill_path), f"Missing {skill_path}")
+            with open(skill_path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            # Level 1B Operational Architecture scope and Level 1C ICD separation in §2.3, §4.4, §4.7, and §4.8
+            self.assertIn("High-Level Operational Architecture (OV-1 / OV-2 / High-Level SV-1)", content)
+            self.assertIn("Ground Segment, Air Vehicle Segment, Launch Segment, External Actors", content)
+            self.assertIn("Op-Tx: C2 Commands, Telemetry, Video, Target Tracks, Arming Authorization", content)
+            self.assertIn("Level 1C Interface Control Documents", content)
+            self.assertIn("ICD_01_SYSTEM_INTERFACE_MATRIX.md", content)
+            self.assertIn("ICD_02_MASTER_SIGNAL_DICTIONARY.md", content)
+            self.assertIn("NOT in the ConOps document", content)
+            self.assertIn("strictly excludes component-internal serial opcode reference tables", content)
+            self.assertIn("RS-485 serial framing", content)
+            self.assertIn("register bitmasks", content)
+            self.assertIn("CRC-16 equations", content)
+
 
 if __name__ == "__main__":
     unittest.main()

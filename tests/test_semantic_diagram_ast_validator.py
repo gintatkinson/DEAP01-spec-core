@@ -290,7 +290,63 @@ flowchart TD
         findings = self.validator.validate_diagram_ast(diagram, "docs/conops/CONOPS.md", self.pkg)
         self.assertEqual(len(findings), 0, f"Expected 0 findings for compact diagram, got: {findings}")
 
+    def test_high_level_conops_operational_segment_diagrams_pass_check21(self):
+        """Verify high-level operational segment diagrams in CONOPS.md pass Check 21 without false-positive topology violations (Issue #272)."""
+        diagram = """
+flowchart TD
+    subgraph LaunchSegment ["Launch & Recovery Segment"]
+        Launcher["Pneumatic Launcher"]
+        RecoveryNet["Recovery Net System"]
+    end
+
+    subgraph AirVehicleSegment ["Air Vehicle Segment"]
+        Avenger5Airframe["Avenger5Airframe"]
+    end
+
+    subgraph GroundControlSegment ["Ground Control Segment"]
+        GCS["Ground Control Station"]
+        Operator["Flight Commander"]
+    end
+
+    subgraph SupportSegment ["Support Segment"]
+        GSE["Ground Support Equipment"]
+    end
+
+    Operator --> GCS
+    GCS -->|"C2 Link (STANAG 4586)"| Avenger5Airframe
+    Avenger5Airframe -->|"Downlink Telemetry"| GCS
+    Launcher -->|"Mechanical Launch Rail"| Avenger5Airframe
+    Avenger5Airframe -->|"Arrested Recovery"| RecoveryNet
+    GSE -->|"Pre-Flight Calibration"| Avenger5Airframe
+"""
+        findings = self.validator.validate_diagram_ast(diagram, "docs/conops/CONOPS.md", self.pkg)
+        self.assertEqual(len(findings), 0, f"Expected 0 findings for high-level operational segment diagram, got: {findings}")
+
+    def test_primary_operational_and_support_segments_pass_check21(self):
+        """Verify Primary Operational Segment and Support Segment nodes pass Check 21 without false positives (Issue #272)."""
+        diagram = """
+flowchart TD
+    subgraph PrimaryOperationalSegment ["Primary Operational Segment"]
+        AirVehicle["Air Vehicle"]
+    end
+
+    subgraph GroundSegment ["Ground Segment"]
+        GCS["Ground Control Station"]
+    end
+
+    subgraph SupportSegment ["Support Segment"]
+        GSE["Ground Support Equipment"]
+    end
+
+    GCS --> AirVehicle
+    AirVehicle --> GCS
+    GSE --> AirVehicle
+"""
+        findings = self.validator.validate_diagram_ast(diagram, "docs/conops/CONOPS.md", self.pkg)
+        self.assertEqual(len(findings), 0, f"Expected 0 findings for primary/support segment diagram, got: {findings}")
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

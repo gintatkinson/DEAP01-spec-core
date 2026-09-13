@@ -1624,6 +1624,71 @@ Formal operational lifecycle stages across $\\Phi_{\\mathrm{lifecycle}}$:
         self.assertIn("CONN-01: Operator Command & Authorization", super_sys)
         self.assertIn("CONN-02: Bidirectional PACE C2 Datalink", super_sys)
 
+    def test_conops_architecture_level_1b_abstraction_zero_serial_opcodes_or_crc_polynomials(self):
+        """Verify ConOps synthesis maintains Level 1B operational abstraction without injecting serial opcodes, baud rates, or CRC formulas (Fixes #273)."""
+        sysml_code = """
+        package TestPlatform {
+            doc /* RS-485 serial bus operating at 115200 baud with CRC-16-CCITT polynomial equation x^16 + x^12 + x^5 + 1 (0x1021) */
+            part def PrimaryController_0x10 {
+                doc /* Handles opcode 0x10 and opcode 0x11 command frames over RS-485 at 115200 baud */
+                inout port p_serial_c2_0x10 : SerialPort_115200;
+                out port p_act_cmd_0x12 : CmdPort_0x12;
+                action exec_command_0x10;
+                action telemetry_frame_0xB0;
+            }
+            part def PowerDistribution_0x13 {
+                doc /* Power switching unit responding to opcode 0x13 over UART at 9600 baud */
+                in port p_pwr_in_0x13 : PwrPort_0x13;
+            }
+        }
+        """
+        engine = SysMLParameterBindingEngine(auto_detect=False)
+        engine.ingest_sysml_text(sysml_code)
+
+        super_sys = engine.resolve_token("SUPER_SYSTEM_ARCHITECTURE")
+        subsys_sec = engine.resolve_token("SUBSYSTEM_ARCHITECTURE_SECTION")
+
+        # Verify no serial opcodes or CRC equations in synthesized architecture text
+        for token in ("0x10", "0x11", "0x12", "0x13", "0xB0", "0x1021", "115200 baud", "9600 baud", "x^16 + x^12 + x^5 + 1"):
+            self.assertNotIn(token, super_sys, f"Token '{token}' should not appear in super-system architecture text")
+            self.assertNotIn(token, subsys_sec, f"Token '{token}' should not appear in subsystem architecture section")
+
+        # Verify opcode and wire protocol tokens resolve to clean Level 1B operational scope
+        for token_name in ("OPCODE_TABLE", "SERIAL_OPCODES", "SUBSYSTEM_OPCODES", "WIRE_PROTOCOL_TABLE", "CRC_POLYNOMIAL_TABLE", "SECTION_8_OPTX"):
+            resolved = engine.resolve_token(token_name)
+            self.assertTrue(len(resolved) > 10)
+            self.assertNotIn("0x10", resolved)
+            self.assertNotIn("x^16", resolved)
+
+        # Full assembly verification
+        with tempfile.TemporaryDirectory() as tmpdir:
+            input_dir = os.path.join(tmpdir, "units")
+            output_dir = os.path.join(tmpdir, "docs", "conops")
+            conops_units_dir = os.path.join(input_dir, "conops")
+            mission_units_dir = os.path.join(input_dir, "mission_intent")
+
+            _create_sample_conops_units(conops_units_dir, with_placeholders=True)
+            _create_sample_mission_intent_units(mission_units_dir, with_placeholders=True)
+
+            success = assemble_conops(
+                input_dir=input_dir,
+                output_dir=output_dir,
+                verify_only=False,
+                params=engine,
+            )
+            self.assertTrue(success, "assemble_conops() failed with low-level annotated SysML text")
+
+            conops_file = os.path.join(output_dir, "CONOPS.md")
+            with open(conops_file, "r", encoding="utf-8") as f:
+                conops_text = f.read()
+
+            for token in ("0x10", "0x11", "0x12", "0x13", "0xB0", "0x1021", "115200 baud", "x^16 + x^12 + x^5 + 1"):
+                self.assertNotIn(token, conops_text, f"Token '{token}' leaked into compiled CONOPS.md")
+
+            self.assertIn("PrimaryController Subsystem Architecture", conops_text)
+            self.assertIn("PowerDistribution Subsystem Architecture", conops_text)
+
 
 if __name__ == "__main__":
     unittest.main()
+
