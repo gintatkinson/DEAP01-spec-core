@@ -53,7 +53,7 @@ flowchart TD
         GSR["GroundStationRadio<br/>• rfl (INOUT: RFLink)"]
     end
 
-    subgraph AirVehicleSegment ["Air Vehicle Segment (Avenger5Airframe)"]
+    subgraph PrimaryVehicleSegment ["Primary Vehicle Segment (AlphaPlatform)"]
         direction TB
         OBC["OnboardComputer<br/>• c2Uplink (IN: C2Commands)<br/>• c2Downlink (OUT: C2Telemetry)<br/>• actuatorCmdOut (OUT: ActuatorCommand)<br/>• dscIn1Out (OUT: Discrete_ArmEnable)"]
         ESAD["ESAD<br/>• dscIn1 (IN: Discrete_ArmEnable)<br/>• initTrain (OUT: Initiation_Train)"]
@@ -83,7 +83,7 @@ flowchart TD
         GSR["GroundStationRadio<br/>• rfl (INOUT: RFLink)"]
     end
 
-    subgraph AirVehicleSegment ["Air Vehicle Segment (Avenger5Airframe)"]
+    subgraph PrimaryVehicleSegment ["Primary Vehicle Segment (AlphaPlatform)"]
         direction TB
         OBC["OnboardComputer<br/>• c2Uplink (IN: C2Commands)<br/>• c2Downlink (OUT: C2Telemetry)<br/>• actuatorCmdOut (OUT: ActuatorCommand)<br/>• dscIn1Out (OUT: Discrete_ArmEnable)"]
         ESAD["ESAD<br/>• dscIn1 (IN: Discrete_ArmEnable)<br/>• initTrain (OUT: Initiation_Train)"]
@@ -295,9 +295,9 @@ class TestCrossDocumentDiagramParity(unittest.TestCase):
             with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
                 f.write(SAMPLE_CONOPS_SV1)
 
-            # Rename AirVehicleSegment to AirborneSubsystem
+            # Rename PrimaryVehicleSegment to AirborneSubsystem
             report_mismatched_sg = SAMPLE_DELIVERABLES_MATCHING.replace(
-                'subgraph AirVehicleSegment',
+                'subgraph PrimaryVehicleSegment',
                 'subgraph AirborneSubsystem'
             )
 
@@ -307,7 +307,7 @@ class TestCrossDocumentDiagramParity(unittest.TestCase):
             repo = WorkspaceRepository(workspace_dir=tmpdir)
             findings = self.validator.validate(repo)
             self.assertTrue(len(findings) >= 1)
-            self.assertTrue(any("Missing subgraph 'AirVehicleSegment'" in str(f) for f in findings))
+            self.assertTrue(any("Missing subgraph 'PrimaryVehicleSegment'" in str(f) for f in findings))
 
     def test_upstream_clean_landing_zone(self):
         """Verify graceful 0 findings on clean landing zones (empty schema/ or .gitkeep)."""

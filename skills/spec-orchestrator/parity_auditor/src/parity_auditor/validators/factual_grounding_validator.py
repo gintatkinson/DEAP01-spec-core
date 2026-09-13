@@ -6,12 +6,11 @@ Enforces factual grounding and physical fidelity against SysML v2 AST and Level 
 2. Ingests raw schema texts, BOM tables, and dictionaries from schema/ and schema/extracted/.
 3. Gracefully passes on upstream clean landing zones (empty schema/).
 4. Evaluates specification documents in docs/ (CONOPS, STPA, features, epics, icds, use-cases, user-stories):
-   a) Control surface counts and structural descriptors (rule ID: 'factual-grounding-numeric-drift'):
-      - Detects ungrounded structural assertions (e.g. claiming "V-tail" when BOM specifies 4 ruddervators / X-tail,
-        or claiming 2 ruddervators when BOM has 4).
-   b) Numeric quantities (rule ID: 'factual-grounding-numeric-drift'):
-      - Detects fabricated numeric quantities (e.g. claiming "15-20g" or "18g" catapult launch acceleration
-        when not substantiated in schema ground truth or lacking SSOT citation).
+   a) Structural assertions and descriptors (rule ID: 'factual-grounding-numeric-drift'):
+      - Detects ungrounded structural assertions and component count drift against schema ground truth.
+      - Detects structural descriptor and configuration drift against schema ground truth.
+   b) Numeric quantities and limits (rule ID: 'factual-grounding-numeric-drift'):
+      - Detects fabricated numeric quantities and limit violations against schema ground truth.
    c) Electrical / communication protocols (rule ID: 'factual-grounding-unverified-protocol'):
       - Detects ungrounded protocol claims (e.g. "STANAG 4586", "STANAG 4609", "MIL-STD-1553", "ARINC 429",
         "CANopen", "MAVLink", "RS-485", etc.) mentioned in specifications that are not declared in schema/ or
@@ -35,7 +34,7 @@ import os
 import re
 import sys
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set, Tuple, Any, Sequence
+from typing import Dict, List, Optional, Set, Tuple, Any, Sequence, Union
 
 try:
     from .base import IValidator
@@ -127,6 +126,15 @@ def _normalize_name(name: str) -> str:
     return re.sub(r'[^a-zA-Z0-9]', '', str(name)).lower()
 
 
+def _tokenize_identifier(ident: str) -> List[str]:
+    """Splits an identifier by camelCase, snake_case, kebab-case, or spaces into lowercase words."""
+    if not ident:
+        return []
+    s = re.sub(r'[-_./:]', ' ', str(ident))
+    s = re.sub(r'([a-z0-9])([A-Z])', r'\1 \2', s)
+    return [t.lower() for t in s.split() if t.strip()]
+
+
 def _extract_numeric_scalar(val_str: str) -> Optional[float]:
     """Extract first numeric scalar value from a string."""
     if not val_str:
@@ -138,6 +146,33 @@ def _extract_numeric_scalar(val_str: str) -> Optional[float]:
         except ValueError:
             return None
     return None
+
+
+def _extract_unit(val_str: str, name_tokens: Optional[List[str]] = None) -> str:
+    """Extracts unit from value string or name tokens."""
+    if val_str:
+        m = re.search(r'[-+]?\d+(?:\.\d+)?\s*\[?([a-zA-Z/%^]+)\]?', str(val_str))
+        if m:
+            cand = m.group(1).lower()
+            if cand in (
+                "g", "kg", "g-load", "m", "km", "s", "sec", "ms", "hz", "khz", "mhz", "ghz",
+                "v", "mv", "kv", "w", "kw", "mw", "a", "ma", "deg", "rad", "%", "mps", "kph",
+                "pa", "kpa", "bar", "n", "kn", "j", "kj"
+            ):
+                return cand
+
+    if name_tokens:
+        last_tok = name_tokens[-1].lower()
+        if last_tok in ("g", "kg", "ms", "sec", "deg", "rad", "hz", "v", "w", "pa", "mps", "kph", "pct"):
+            if last_tok == "mps":
+                return "m/s"
+            if last_tok == "pct":
+                return "%"
+            return last_tok
+        if "g" in name_tokens and any(t in name_tokens for t in ("load", "accel", "acceleration", "limit")):
+            return "g"
+
+    return ""
 
 
 def _find_sysml_files(repo: WorkspaceRepository, schemas_dir: Optional[str] = None) -> List[str]:
@@ -197,16 +232,52 @@ def _find_extracted_markdown_files(repo: WorkspaceRepository, schemas_dir: Optio
 @dataclass
 class SchemaGroundTruth:
     """Consolidated Ground Truth extracted from SysML AST and schema markdown."""
-    control_surface_count: Optional[int] = None
-    ruddervator_count: Optional[int] = None
-    tail_configuration: Optional[str] = None  # e.g. "x-tail", "v-tail", "inverted-v-tail", "cruciform"
-    catapult_launch_limit_g: Optional[float] = None
-    max_g_load: Optional[float] = None
+    structural_attributes: Dict[str, Union[int, str]] = field(default_factory=dict)
+    numeric_limits: Dict[str, Tuple[float, str]] = field(default_factory=dict)  # map normalized key -> (limit_val, unit)
     attributes: Dict[str, Any] = field(default_factory=dict)
     declared_protocols: Set[str] = field(default_factory=set)
     raw_schema_text: str = ""
     source_files: List[str] = field(default_factory=list)
     has_concrete_schema: bool = False
+
+    # Backward compatibility properties
+    @property
+    def ruddervator_count(self) -> Optional[int]:
+        for k, v in self.structural_attributes.items():
+            if "ruddervator" in k and isinstance(v, int):
+                return v
+        return None
+
+    @property
+    def control_surface_count(self) -> Optional[int]:
+        for k, v in self.structural_attributes.items():
+            if ("controlsurface" in k or "ruddervator" in k) and isinstance(v, int):
+                return v
+        return None
+
+    @property
+    def tail_configuration(self) -> Optional[str]:
+        for k, v in self.structural_attributes.items():
+            if ("tail" in k or "empennage" in k) and isinstance(v, str):
+                return v
+        return None
+
+    @property
+    def catapult_launch_limit_g(self) -> Optional[float]:
+        for k, (limit, unit) in self.numeric_limits.items():
+            if "catapult" in k:
+                return limit
+        return None
+
+    @property
+    def max_g_load(self) -> Optional[float]:
+        for k, (limit, unit) in self.numeric_limits.items():
+            if "gload" in k or "maxg" in k:
+                return limit
+        return None
+
+
+GroundTruth = SchemaGroundTruth
 
 
 class FactualGroundingValidator(IValidator):
@@ -249,11 +320,11 @@ class FactualGroundingValidator(IValidator):
             except Exception:
                 continue
 
-            # a) Evaluate Control surface counts & structural descriptors
-            findings.extend(self._validate_structural_descriptors(content, rel_path, gt))
+            # a) Evaluate structural assertions & descriptors
+            findings.extend(self._validate_structural_assertions(content, rel_path, gt))
 
-            # b) Evaluate Numeric quantities (catapult acceleration / launch load / general limits)
-            findings.extend(self._validate_numeric_quantities(content, rel_path, gt))
+            # b) Evaluate numeric quantities & limits
+            findings.extend(self._validate_numeric_assertions(content, rel_path, gt))
 
             # c) Evaluate Electrical / communication protocols
             findings.extend(self._validate_protocols(content, rel_path, gt))
@@ -304,22 +375,7 @@ class FactualGroundingValidator(IValidator):
                 gt.has_concrete_schema = True
 
                 # Direct regex ingestion for SysML attributes
-                for match in re.finditer(r'\battribute\s+(?:def\s+)?([a-zA-Z0-9_]+)(?:\s*:\s*[a-zA-Z0-9_<>:]+)?\s*=\s*([^;]+);', text):
-                    aname = match.group(1).strip()
-                    aval = match.group(2).strip().strip('"\'`')
-                    aname_norm = _normalize_name(aname)
-                    gt.attributes[aname_norm] = aval
-                    ascalar = _extract_numeric_scalar(aval)
-                    if "ruddervator" in aname_norm and ascalar is not None:
-                        gt.ruddervator_count = int(ascalar)
-                    elif "controlsurface" in aname_norm and ascalar is not None:
-                        gt.control_surface_count = int(ascalar)
-                    elif ("catapult" in aname_norm or "launchload" in aname_norm or "launchaccel" in aname_norm) and ascalar is not None:
-                        gt.catapult_launch_limit_g = ascalar
-                    elif ("maxgload" in aname_norm or "gloadlimit" in aname_norm) and ascalar is not None:
-                        gt.max_g_load = ascalar
-                    elif "tailconfig" in aname_norm or "empennage" in aname_norm:
-                        gt.tail_configuration = aval.lower()
+                self._extract_from_sysml(text, gt)
 
                 # AST Parser ingestion
                 pkg = parser.parse(text)
@@ -338,7 +394,7 @@ class FactualGroundingValidator(IValidator):
                 gt.source_files.append(os.path.relpath(mf, workspace_dir))
                 gt.has_concrete_schema = True
 
-                self._ingest_schema_markdown(text, os.path.relpath(mf, workspace_dir), gt)
+                self._extract_from_markdown(text, os.path.relpath(mf, workspace_dir), gt)
             except Exception:
                 continue
 
@@ -358,117 +414,203 @@ class FactualGroundingValidator(IValidator):
 
         # Check if schema actually defines concrete architectural ground truth
         has_concrete = bool(
-            gt.attributes
-            or gt.control_surface_count
-            or gt.ruddervator_count
-            or gt.catapult_launch_limit_g
+            gt.structural_attributes
+            or gt.numeric_limits
+            or gt.attributes
             or gt.declared_protocols
-            or gt.tail_configuration
         )
         if not has_concrete:
             gt.has_concrete_schema = False
 
         return gt
 
+    def _extract_from_sysml(self, text: str, gt: SchemaGroundTruth) -> None:
+        """
+        Generic AST extraction for SysML attribute definitions:
+        Ingests ANY typed attribute `attribute <name> : <Type> = <val>;`
+        into gt.structural_attributes and/or gt.numeric_limits based on type and unit.
+        """
+        attr_pattern = re.compile(
+            r'\battribute\s+(?:def\s+)?([a-zA-Z0-9_]+)(?:\s*:\s*([a-zA-Z0-9_<>:]+))?\s*=\s*([^;]+);'
+        )
+        for match in attr_pattern.finditer(text):
+            name = match.group(1).strip()
+            type_str = match.group(2).strip() if match.group(2) else ""
+            raw_val = match.group(3).strip()
+            val_clean = raw_val.strip('"\'`')
+
+            name_norm = _normalize_name(name)
+            gt.attributes[name_norm] = val_clean
+
+            tokens = _tokenize_identifier(name)
+            unit = _extract_unit(raw_val, tokens)
+            scalar = _extract_numeric_scalar(raw_val)
+
+            # Categorize based on type (Integer/Real) and unit:
+            is_integer_type = type_str.lower() in ("integer", "int", "count", "natural", "cardinal")
+            is_integer_val = scalar is not None and (
+                is_integer_type or (not "." in val_clean and val_clean.isdigit() and not unit)
+            )
+
+            if is_integer_val:
+                int_val = int(scalar)
+                gt.structural_attributes[name_norm] = int_val
+                # Register base entity root (stripping count suffixes)
+                root_tokens = [t for t in tokens if t not in ("count", "qty", "quantity", "number", "num", "actuators")]
+                if root_tokens:
+                    root_key = "".join(root_tokens)
+                    gt.structural_attributes[root_key] = int_val
+            elif scalar is None or type_str.lower() in ("string", "str"):
+                gt.structural_attributes[name_norm] = val_clean
+                root_tokens = [t for t in tokens if t not in ("configuration", "config", "type", "mode", "layout", "geometry", "architecture", "topology")]
+                if root_tokens:
+                    root_key = "".join(root_tokens)
+                    gt.structural_attributes[root_key] = val_clean
+
+            # Check numeric limits / quantities:
+            is_real_type = type_str.lower() in ("real", "float", "double", "scalar")
+            has_limit_tokens = any(t in tokens for t in ("limit", "max", "maximum", "load", "accel", "bound", "threshold", "capacity"))
+            if scalar is not None and (is_real_type or unit or has_limit_tokens):
+                limit_val = float(scalar)
+                gt.numeric_limits[name_norm] = (limit_val, unit)
+                if len(tokens) > 1:
+                    meaningful_tokens = [t for t in tokens if t not in ("real", "value", "val")]
+                    if meaningful_tokens:
+                        gt.numeric_limits["".join(meaningful_tokens)] = (limit_val, unit)
+
     def _ingest_sysml_package(self, pkg: Any, gt: SchemaGroundTruth) -> None:
-        """Recursively ingests elements from a parsed SysMLPackage."""
+        """Recursively ingests elements from a parsed SysMLPackage using generic AST extraction."""
         if not pkg:
             return
 
         # Ingest attribute_defs
         for attr in getattr(pkg, "attribute_defs", []) or getattr(pkg, "attributes", []) or []:
             name = getattr(attr, "name", "")
+            type_str = getattr(attr, "type_name", None) or getattr(attr, "type", "") or ""
             val_str = getattr(attr, "default_value", None) or getattr(attr, "doc", "") or ""
-            norm_name = _normalize_name(name)
-            gt.attributes[norm_name] = val_str
-
-            scalar = _extract_numeric_scalar(val_str)
-            if "ruddervator" in norm_name and scalar is not None:
-                gt.ruddervator_count = int(scalar)
-            elif "controlsurface" in norm_name and scalar is not None:
-                gt.control_surface_count = int(scalar)
-            elif ("catapult" in norm_name or "launchload" in norm_name or "launchaccel" in norm_name) and scalar is not None:
-                gt.catapult_launch_limit_g = scalar
-            elif ("maxgload" in norm_name or "gloadlimit" in norm_name) and scalar is not None:
-                gt.max_g_load = scalar
-            elif "tailconfig" in norm_name or "empennage" in norm_name:
-                gt.tail_configuration = str(val_str).strip('"\'`').lower()
+            if name and val_str:
+                stmt = f"attribute {name} : {type_str} = {val_str};"
+                self._extract_from_sysml(stmt, gt)
 
         # Ingest part_defs
         for part in getattr(pkg, "part_defs", []) or getattr(pkg, "parts", []) or []:
             pname = getattr(part, "name", "")
             pname_norm = _normalize_name(pname)
-            # Check for part attributes or multiplicity
             for attr in getattr(part, "attributes", []) or getattr(part, "attribute_defs", []) or []:
-                aname_norm = _normalize_name(getattr(attr, "name", ""))
+                aname = getattr(attr, "name", "")
+                aname_norm = _normalize_name(aname)
                 aval = getattr(attr, "default_value", None) or ""
                 ascalar = _extract_numeric_scalar(aval)
                 if ("count" in aname_norm or "quantity" in aname_norm or "qty" in aname_norm) and ascalar is not None:
-                    if "ruddervator" in pname_norm:
-                        gt.ruddervator_count = int(ascalar)
-                    elif "controlsurface" in pname_norm:
-                        gt.control_surface_count = int(ascalar)
+                    gt.structural_attributes[pname_norm] = int(ascalar)
+                elif aname and aval:
+                    stmt = f"attribute {pname}_{aname} = {aval};"
+                    self._extract_from_sysml(stmt, gt)
 
         # Ingest sub_packages
         for nested in getattr(pkg, "sub_packages", []) or getattr(pkg, "packages", []) or []:
             self._ingest_sysml_package(nested, gt)
 
-    def _ingest_schema_markdown(self, text: str, rel_path: str, gt: SchemaGroundTruth) -> None:
-        """Parses extracted schema markdown for BOM counts, tail config, and launch limits."""
+    def _extract_from_markdown(self, text: str, rel_path: str, gt: SchemaGroundTruth) -> None:
+        """
+        Generic extraction from markdown:
+        Ingests ANY table row `| Property | Value |` or bullet `Property: Value`
+        into gt.structural_attributes and/or gt.numeric_limits without hardcoded keywords.
+        """
         lines = text.splitlines()
         for line in lines:
             line_str = line.strip()
             if not line_str:
                 continue
 
-            # 1. Ruddervator count: e.g. "4 ruddervators", "4x ruddervators", "| Ruddervator Actuators | 4 |"
-            m_rudder = re.search(r'\b(\d+)\s*(?:x\s*)?(?:independent\s*)?ruddervators?\b', line_str, re.I)
-            if m_rudder:
-                try:
-                    gt.ruddervator_count = int(m_rudder.group(1))
-                except ValueError:
-                    pass
-
-            # 2. Control surface count: e.g. "4 control surfaces", "| Control Surfaces | 4 |"
-            m_cs = re.search(r'\b(\d+)\s*(?:x\s*)?control\s+surfaces?\b', line_str, re.I)
-            if m_cs:
-                try:
-                    gt.control_surface_count = int(m_cs.group(1))
-                except ValueError:
-                    pass
-
-            # Table row BOM count: | Ruddervator | 4 | or | Actuator (Ruddervator) | 4 |
+            # Check for Markdown table rows: | Property | Value | [Desc] |
             if line_str.startswith("|") and line_str.endswith("|"):
                 cells = [c.strip() for c in line_str.split("|")[1:-1]]
                 if len(cells) >= 2:
                     k, v = cells[0], cells[1]
+                    # Skip table header and separator rows
+                    if k.startswith(":") or k.startswith("-") or k.lower() in (
+                        "component", "property", "parameter", "item", "attribute", "name", "field"
+                    ):
+                        continue
+
+                    # If cell 1 is a type (e.g. Integer, Real, String), value is cell 2
+                    type_hint = ""
+                    if len(cells) >= 3 and cells[1].lower() in ("integer", "int", "real", "float", "string", "boolean"):
+                        type_hint = cells[1]
+                        v = cells[2]
+
+                    clean_v = v.strip('"\'`')
                     k_norm = _normalize_name(k)
-                    v_scalar = _extract_numeric_scalar(v)
-                    if v_scalar is not None:
-                        if "ruddervator" in k_norm:
-                            gt.ruddervator_count = int(v_scalar)
-                        elif "controlsurface" in k_norm:
-                            gt.control_surface_count = int(v_scalar)
-                        elif "catapult" in k_norm or "launchaccel" in k_norm or "launchload" in k_norm:
-                            gt.catapult_launch_limit_g = v_scalar
-                        elif "maxg" in k_norm or "gload" in k_norm:
-                            gt.max_g_load = v_scalar
+                    gt.attributes[k_norm] = clean_v
 
-            # 3. Tail configuration: e.g. "X-tail", "V-tail", "inverted V-tail", "cruciform"
-            if re.search(r'\b(?:x-tail|x\s+tail|x-configuration)\b', line_str, re.I):
-                gt.tail_configuration = "x-tail"
-            elif re.search(r'\b(?:inverted\s+v-tail|inverted\s+v\s+tail)\b', line_str, re.I):
-                gt.tail_configuration = "inverted-v-tail"
-            elif re.search(r'\b(?:v-tail|v\s+tail)\b', line_str, re.I) and not gt.tail_configuration:
-                gt.tail_configuration = "v-tail"
+                    tokens = _tokenize_identifier(k)
+                    unit = _extract_unit(clean_v, tokens)
+                    scalar = _extract_numeric_scalar(clean_v)
 
-            # 4. Catapult launch limit / acceleration: e.g. "catapult launch limit of 12g", "catapult acceleration: 12 g"
-            m_launch = re.search(r'\b(?:catapult|launch)\b[^.\n]*?\b(\d+(?:\.\d+)?)\s*g\b', line_str, re.I)
-            if m_launch:
-                try:
-                    gt.catapult_launch_limit_g = float(m_launch.group(1))
-                except ValueError:
-                    pass
+                    # 1. Integer count structural attributes:
+                    is_int = scalar is not None and (
+                        type_hint.lower() in ("integer", "int") or
+                        (clean_v.isdigit() and not unit)
+                    )
+
+                    if is_int:
+                        int_val = int(scalar)
+                        gt.structural_attributes[k_norm] = int_val
+                        root_tokens = [t for t in tokens if t not in ("actuators", "count", "quantity", "qty", "surfaces")]
+                        if root_tokens:
+                            gt.structural_attributes["".join(root_tokens)] = int_val
+                            singular = root_tokens[-1].rstrip("s")
+                            gt.structural_attributes["".join(root_tokens[:-1] + [singular])] = int_val
+                    elif scalar is None or type_hint.lower() in ("string", "str"):
+                        gt.structural_attributes[k_norm] = clean_v
+                        root_tokens = [t for t in tokens if t not in ("configuration", "config", "type", "mode", "layout", "geometry", "bus")]
+                        if root_tokens:
+                            gt.structural_attributes["".join(root_tokens)] = clean_v
+
+                    # 2. Numeric limits:
+                    has_limit_tokens = any(t in tokens for t in ("limit", "max", "maximum", "load", "accel", "bound", "threshold", "capacity"))
+                    if scalar is not None and (unit or has_limit_tokens or type_hint.lower() in ("real", "float")):
+                        limit_val = float(scalar)
+                        gt.numeric_limits[k_norm] = (limit_val, unit)
+                        if len(tokens) > 1:
+                            meaningful_tokens = [t for t in tokens if t not in ("limit", "value", "val")]
+                            if meaningful_tokens:
+                                gt.numeric_limits["".join(meaningful_tokens)] = (limit_val, unit)
+
+                    # 3. If 3rd cell (Description) contains compound configuration descriptors, extract them generically
+                    if len(cells) >= 3:
+                        desc = cells[2]
+                        for m_desc in re.finditer(r'\b([a-zA-Z0-9]+(?:-[a-zA-Z0-9]+)?[- ][a-zA-Z0-9]+)\s+(?:arrangement|configuration|layout|geometry)\b', desc, re.I):
+                            cfg_val = m_desc.group(1).strip()
+                            cfg_tokens = _tokenize_identifier(cfg_val)
+                            if len(cfg_tokens) >= 2:
+                                noun = cfg_tokens[-1]
+                                gt.structural_attributes[noun] = cfg_val
+
+            # Check for bullet points: - Key: Value
+            m_bullet = re.match(r'^[-*]\s*([a-zA-Z0-9_\s]+)\s*[:=]\s*([^;\n]+)$', line_str)
+            if m_bullet:
+                k = m_bullet.group(1).strip()
+                v = m_bullet.group(2).strip()
+                clean_v = v.strip('"\'`')
+                k_norm = _normalize_name(k)
+                gt.attributes[k_norm] = clean_v
+                tokens = _tokenize_identifier(k)
+                unit = _extract_unit(clean_v, tokens)
+                scalar = _extract_numeric_scalar(clean_v)
+                if scalar is not None and clean_v.isdigit() and not unit:
+                    gt.structural_attributes[k_norm] = int(scalar)
+                    root_tokens = [t for t in tokens if t not in ("count", "qty", "quantity")]
+                    if root_tokens:
+                        gt.structural_attributes["".join(root_tokens)] = int(scalar)
+                elif scalar is not None and (unit or any(t in tokens for t in ("limit", "max", "load", "accel"))):
+                    gt.numeric_limits[k_norm] = (float(scalar), unit)
+                elif scalar is None:
+                    gt.structural_attributes[k_norm] = clean_v
+
+    # Backward-compatibility alias
+    _ingest_schema_markdown = _extract_from_markdown
 
     def _is_excluded_spec_file(self, rel_path: str, filename: str) -> bool:
         """
@@ -540,14 +682,14 @@ class FactualGroundingValidator(IValidator):
             return True
         return False
 
-    def _validate_structural_descriptors(
+    def _validate_structural_assertions(
         self,
         content: str,
         rel_path: str,
         gt: SchemaGroundTruth
     ) -> List[Finding]:
         """
-        Validates control surface counts and tail geometry against schema ground truth.
+        Validates structural component counts and configuration descriptors against schema ground truth.
         Emits Finding('factual-grounding-numeric-drift', ...).
         """
         findings: List[Finding] = []
@@ -557,8 +699,20 @@ class FactualGroundingValidator(IValidator):
         is_normative = True
         in_code_block = False
 
-        expected_count = gt.ruddervator_count or gt.control_surface_count
-        expected_tail = gt.tail_configuration
+        count_targets: Dict[str, int] = {}
+        config_targets: Dict[str, str] = {}
+
+        for k, v in gt.structural_attributes.items():
+            if isinstance(v, int):
+                count_targets[k] = v
+            elif isinstance(v, str) and len(v) >= 2:
+                config_targets[k] = v
+
+        WORD_NUMBERS = {
+            "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+            "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+            "single": 1, "dual": 2, "twin": 2, "triple": 3, "quad": 4, "octo": 8
+        }
 
         for lineno_1idx, line in enumerate(lines, start=1):
             line_str = line.strip()
@@ -587,55 +741,77 @@ class FactualGroundingValidator(IValidator):
             if self._has_ssot_citation(line_str, content, rel_path):
                 continue
 
-            # Check control surface count drift:
-            # E.g. Ground truth has 4 ruddervators, spec claims "2 ruddervators", "two ruddervators", "dual ruddervators", "3 ruddervators"
-            if expected_count is not None and expected_count == 4:
-                m_drift = re.search(r'\b(2|two|dual|3|three|6|six|8|eight)\s*(?:independent\s*)?ruddervators?\b', line_str, re.I)
-                if m_drift:
-                    claimed = m_drift.group(0)
-                    findings.append(Finding(
-                        "factual-grounding-numeric-drift",
-                        f"{rel_path}:{lineno_1idx}: Ungrounded structural assertion '{claimed}' contradicts schema ground truth ({expected_count} ruddervators) in {', '.join(gt.source_files) or 'schema/'}.",
-                        location=f"{rel_path}:{lineno_1idx}",
-                        detail={"file": rel_path, "line": lineno_1idx, "claimed": claimed, "expected": expected_count}
-                    ))
+            # 1. Check integer count assertions
+            matched_count_entities: Set[str] = set()
+            for entity_key, expected_count in count_targets.items():
+                if len(entity_key) < 3 or entity_key in matched_count_entities:
                     continue
 
-                # Spec claims "V-tail" when schema specifies 4 ruddervators / X-tail (V-tail conventionally has only 2 surfaces)
-                if expected_tail == "x-tail" or (expected_count == 4 and not expected_tail):
-                    if re.search(r'(?<!inverted\s)\bv-tail\b|\bv\s+tail\b', line_str, re.I):
-                        # Allow if explicitly clarified as 4-surface or X-tail or inverted V with 4 surfaces
-                        if not re.search(r'\b(?:4|four|x-tail)\b', line_str, re.I):
-                            findings.append(Finding(
-                                "factual-grounding-numeric-drift",
-                                f"{rel_path}:{lineno_1idx}: Structural descriptor 'V-tail' contradicts schema ground truth ({expected_count} ruddervators / X-tail configuration) in {', '.join(gt.source_files) or 'schema/'}.",
-                                location=f"{rel_path}:{lineno_1idx}",
-                                detail={"file": rel_path, "line": lineno_1idx, "descriptor": "V-tail", "expected": "X-tail / 4 ruddervators"}
-                            ))
+                pattern = re.compile(
+                    r'\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten|single|dual|twin|triple|quad)\s*(?:x\s*)?'
+                    r'((?:[a-zA-Z-]+\s+){0,2})' + re.escape(entity_key) + r'(?:s|\b)',
+                    re.I
+                )
+                m_count = pattern.search(line_str)
+                if m_count:
+                    num_word = m_count.group(1).lower()
+                    claimed_count = int(num_word) if num_word.isdigit() else WORD_NUMBERS.get(num_word)
+                    if claimed_count is not None and claimed_count != expected_count:
+                        claimed_text = m_count.group(0).strip()
+                        plural_suffix = "s" if not entity_key.endswith("s") else ""
+                        findings.append(Finding(
+                            "factual-grounding-numeric-drift",
+                            f"{rel_path}:{lineno_1idx}: Ungrounded structural assertion '{claimed_text}' contradicts schema ground truth ({expected_count} {entity_key}{plural_suffix}) in {', '.join(gt.source_files) or 'schema/'}.",
+                            location=f"{rel_path}:{lineno_1idx}",
+                            detail={"file": rel_path, "line": lineno_1idx, "claimed": claimed_text, "expected": expected_count}
+                        ))
+                        matched_count_entities.add(entity_key)
+                        break
+
+            # 2. Check configuration descriptor drift
+            reported_descriptors_on_line: Set[str] = set()
+            for entity_key, expected_cfg in config_targets.items():
+                if len(expected_cfg) < 3 or expected_cfg.upper() in gt.declared_protocols:
+                    continue
+
+                cfg_norm = _normalize_name(expected_cfg)
+                m_cfg_parts = re.match(r'^([a-zA-Z0-9]+)[- ]([a-zA-Z0-9]+)$', expected_cfg)
+                if m_cfg_parts:
+                    cfg_prefix = m_cfg_parts.group(1)
+                    cfg_noun = m_cfg_parts.group(2)
+
+                    pat_desc = re.compile(
+                        r'\b([a-zA-Z0-9]+(?:-[a-zA-Z0-9]+)?[- ]' + re.escape(cfg_noun) + r')\b',
+                        re.I
+                    )
+                    for m_desc in pat_desc.finditer(line_str):
+                        desc_claimed = m_desc.group(1).strip()
+                        if desc_claimed in reported_descriptors_on_line:
                             continue
-
-            elif expected_count is not None and expected_count == 2:
-                m_drift4 = re.search(r'\b(4|four|quad|x-tail)\s*(?:independent\s*)?ruddervators?\b', line_str, re.I)
-                if m_drift4:
-                    claimed = m_drift4.group(0)
-                    findings.append(Finding(
-                        "factual-grounding-numeric-drift",
-                        f"{rel_path}:{lineno_1idx}: Ungrounded structural assertion '{claimed}' contradicts schema ground truth ({expected_count} ruddervators) in {', '.join(gt.source_files) or 'schema/'}.",
-                        location=f"{rel_path}:{lineno_1idx}",
-                        detail={"file": rel_path, "line": lineno_1idx, "claimed": claimed, "expected": expected_count}
-                    ))
-                    continue
+                        desc_claimed_norm = _normalize_name(desc_claimed)
+                        if desc_claimed_norm != cfg_norm:
+                            if cfg_norm not in _normalize_name(line_str):
+                                findings.append(Finding(
+                                    "factual-grounding-numeric-drift",
+                                    f"{rel_path}:{lineno_1idx}: Structural descriptor '{desc_claimed}' contradicts schema ground truth ({expected_cfg}) in {', '.join(gt.source_files) or 'schema/'}.",
+                                    location=f"{rel_path}:{lineno_1idx}",
+                                    detail={"file": rel_path, "line": lineno_1idx, "descriptor": desc_claimed, "expected": expected_cfg}
+                                ))
+                                reported_descriptors_on_line.add(desc_claimed)
+                                break
 
         return findings
 
-    def _validate_numeric_quantities(
+    _validate_structural_descriptors = _validate_structural_assertions
+
+    def _validate_numeric_assertions(
         self,
         content: str,
         rel_path: str,
         gt: SchemaGroundTruth
     ) -> List[Finding]:
         """
-        Validates numeric quantities (such as catapult launch acceleration limits) against schema ground truth.
+        Validates numeric quantities and loads against declared limits in schema ground truth.
         Emits Finding('factual-grounding-numeric-drift', ...).
         """
         findings: List[Finding] = []
@@ -645,7 +821,18 @@ class FactualGroundingValidator(IValidator):
         is_normative = True
         in_code_block = False
 
-        gt_launch_limit = gt.catapult_launch_limit_g or gt.max_g_load or 12.0
+        if not gt.numeric_limits:
+            return []
+
+        metric_limits: List[Tuple[List[str], float, str, str]] = []
+        for k, (limit, unit) in gt.numeric_limits.items():
+            tokens = _tokenize_identifier(k)
+            meaningful = [t for t in tokens if t not in ("value", "val", "real", "float")]
+            metric_limits.append((meaningful, limit, unit, k))
+
+        numeric_pattern = re.compile(
+            r'\b(\d+(?:\.\d+)?(?:\s*-\s*\d+(?:\.\d+)?)?)\s*([a-zA-Z/%^]+)\b'
+        )
 
         for lineno_1idx, line in enumerate(lines, start=1):
             line_str = line.strip()
@@ -674,37 +861,60 @@ class FactualGroundingValidator(IValidator):
             if self._has_ssot_citation(line_str, content, rel_path):
                 continue
 
-            # Check for fabricated catapult launch load / acceleration values (e.g. "15-20g", "18g", "20g", "16g")
-            # Pattern: catapult launch [load/accel/limit] or launch acceleration followed by g numbers
-            m_catapult = re.search(
-                r'(?:\bcatapult\b|\blaunch\s+load\b|\blaunch\s+acceleration\b|\blaunch\s+g-load\b)[^.\n]*?\b(\d+(?:\.\d+)?(?:\s*-\s*\d+(?:\.\d+)?)?)\s*g\b',
-                line_str,
-                re.I
-            )
-            if not m_catapult:
-                # Also match: \d+g catapult launch
-                m_catapult = re.search(
-                    r'\b(\d+(?:\.\d+)?(?:\s*-\s*\d+(?:\.\d+)?)?)\s*g\b[^.\n]*?(?:\bcatapult\b|\blaunch\s+load\b|\blaunch\s+accel\b)',
-                    line_str,
-                    re.I
-                )
+            line_tokens = _tokenize_identifier(line_str)
+            reported_claims_on_line: Set[str] = set()
 
-            if m_catapult:
-                val_range_str = m_catapult.group(1).strip()
-                # Parse min/max in range or single number
+            for match in numeric_pattern.finditer(line_str):
+                val_range_str = match.group(1).strip()
+                unit_str = match.group(2).strip().lower()
+                claimed_str = match.group(0).strip()
+
+                if claimed_str in reported_claims_on_line:
+                    continue
+
                 numbers = [float(n) for n in re.findall(r'\d+(?:\.\d+)?', val_range_str)]
-                max_claimed = max(numbers) if numbers else 0.0
+                if not numbers:
+                    continue
+                max_claimed = max(numbers)
 
-                # If claimed exceeds ground truth by >10% or is an ungrounded high range like 15-20g vs 12g limit
-                if max_claimed > (gt_launch_limit * 1.05):
-                    findings.append(Finding(
-                        "factual-grounding-numeric-drift",
-                        f"{rel_path}:{lineno_1idx}: Fabricated numeric quantity '{val_range_str}g' catapult launch load contradicts schema ground truth limit ({gt_launch_limit:.1f}g) in {', '.join(gt.source_files) or 'schema/'}.",
-                        location=f"{rel_path}:{lineno_1idx}",
-                        detail={"file": rel_path, "line": lineno_1idx, "claimed": val_range_str, "ground_truth_limit": gt_launch_limit}
-                    ))
+                for m_tokens, limit_val, limit_unit, metric_key in metric_limits:
+                    unit_matches = False
+                    if limit_unit and unit_str:
+                        unit_matches = (_normalize_name(unit_str) == _normalize_name(limit_unit))
+                    elif not limit_unit:
+                        unit_matches = True
+
+                    if not unit_matches:
+                        continue
+
+                    token_matches = any(t in line_tokens for t in m_tokens)
+                    if not token_matches and limit_unit != "g":
+                        continue
+
+                    if limit_unit == "g" and not token_matches:
+                        g_context = any(t in line_tokens for t in ("launch", "load", "accel", "acceleration", "gload", "rail", "profile"))
+                        if not g_context:
+                            continue
+
+                    if max_claimed > (limit_val * 1.05):
+                        findings.append(Finding(
+                            "factual-grounding-numeric-drift",
+                            f"{rel_path}:{lineno_1idx}: Fabricated numeric quantity '{claimed_str}' exceeds schema ground truth limit ({limit_val:.1f}{limit_unit}) in {', '.join(gt.source_files) or 'schema/'}.",
+                            location=f"{rel_path}:{lineno_1idx}",
+                            detail={
+                                "file": rel_path,
+                                "line": lineno_1idx,
+                                "claimed": claimed_str,
+                                "ground_truth_limit": limit_val,
+                                "unit": limit_unit
+                            }
+                        ))
+                        reported_claims_on_line.add(claimed_str)
+                        break
 
         return findings
+
+    _validate_numeric_quantities = _validate_numeric_assertions
 
     def _validate_protocols(
         self,

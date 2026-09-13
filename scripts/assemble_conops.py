@@ -2304,7 +2304,7 @@ class SysMLParameterBindingEngine:
                         with open(cpath, "r", encoding="utf-8", errors="ignore") as f:
                             content = f.read()
                         content_lower = content.lower()
-                        if any(marker in content_lower for marker in ("avenger", "aviation", "aircraft", "uav")):
+                        if any(marker in content_lower for marker in ("aviation", "aircraft", "uav", "uas", "drone", "flight")):
                             continue
                     except Exception:
                         pass

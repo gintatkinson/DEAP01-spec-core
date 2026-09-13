@@ -88,13 +88,13 @@ Check 23 enforces absolute physical fidelity, attribute-level AST closure, and f
 
 ### 1. Mandatory SSOT Bill of Materials (BOM) Extraction & Parameter Grounding
 - **Level 0 Ground Truth Extraction**: All physical components, quantities, actuation mechanisms, and environmental/operational boundaries declared in Level 0 OEM specification tables and Bill of Materials (BOM) in `schema/` or `schema/extracted/` form the immutable parametric foundation of the system.
-- **AST Attribute Parameter Grounding**: Extracted physical parameters must be formally declared in SysML v2 as typed attributes (e.g. `attribute ruddervatorCount : Integer = 4;`, `attribute maxGLoad : Real = 12.0;`) or part definitions.
+- **AST Attribute Parameter Grounding**: Extracted physical parameters must be formally declared in SysML v2 as typed attributes (e.g. `attribute actuatorCount : Integer = 4;`, `attribute maxOperatingLimit : Real = 12.0;`) or part definitions.
 
 ### 2. Attribute-Level AST Closure
-- **Universal Parameter Alignment**: All numeric limits, control surface counts, empennage configurations, electrical/datalink communication protocols, and physical dimensions referenced across downstream specifications must be formally declared in and grounded against the SysML AST and schema ground truth.
+- **Universal Parameter Alignment**: All numeric limits, actuator and channel counts, structural configurations, electrical/datalink communication protocols, and physical dimensions referenced across downstream specifications must be formally declared in and grounded against the SysML AST and schema ground truth.
 - **Rejection of Ungrounded Structural Assertions**:
-  - *Control Surface & Empennage Drift*: Claiming a "V-tail" configuration when the BOM or SysML AST defines 4 ruddervators (an X-tail configuration), or asserting 2 control surfaces when 4 are defined, is strictly prohibited and rejected under rule `factual-grounding-numeric-drift`.
-  - *Fabricated Operational Limits & G-Loads*: Fabricating operational metrics or launch accelerations (e.g., claiming "15-20g" or "18g" catapult acceleration when the OEM limit is 12g or unsubstantiated) is strictly prohibited under rule `factual-grounding-numeric-drift`.
+  - *Structural & Component Drift*: Claiming a dual-redundant topology when the BOM or SysML AST defines 4 quad-redundant channels, or asserting 2 actuators when 4 are defined, is strictly prohibited and rejected under rule `factual-grounding-numeric-drift`.
+  - *Fabricated Operational Limits & Thresholds*: Fabricating operational limits or physical metrics (e.g., asserting an ungrounded 18g/18-bar dynamic load when the schema limit is 12.0 or unsubstantiated) is strictly prohibited under rule `factual-grounding-numeric-drift`.
   - *Unverified Communication & Electrical Protocols*: Mentioning ungrounded protocol standards (e.g., STANAG 4586, STANAG 4609, MIL-STD-1553, ARINC 429, CANopen) that are not declared in SysML AST port/item definitions or Level 0 OEM documents is rejected under rule `factual-grounding-unverified-protocol`.
 
 ### 3. Temporal Safety in Sequence Diagrams (Mandatory HITL Authorization)

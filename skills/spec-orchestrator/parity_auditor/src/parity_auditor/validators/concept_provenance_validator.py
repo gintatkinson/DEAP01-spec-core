@@ -653,7 +653,7 @@ class ConceptProvenanceValidator(IValidator):
                         ))
                         continue
 
-            # 2. Markdown List Items / Key-Values: - Opcode 0x11: PBIT or - Control surfaces: Ruddervator
+            # 2. Markdown List Items / Key-Values: - Opcode 0x11: PBIT or - Subsystem: PrimaryActuator
             m_list = re.match(r'^[-*]\s*(.+)$', line_str)
             if m_list:
                 item_text = m_list.group(1).strip()
@@ -673,7 +673,7 @@ class ConceptProvenanceValidator(IValidator):
                     ))
                     continue
 
-                # Key-value list item: - Control surfaces: Ruddervator
+                # Key-value list item: - Subsystem: PrimaryActuator
                 m_kv = re.match(r'^([^:\-=]+)\s*[:\-=]\s*([^\n]+)$', item_text)
                 if m_kv:
                     k_str = m_kv.group(1).strip()
@@ -714,12 +714,15 @@ class ConceptProvenanceValidator(IValidator):
             m_util = re.search(r'\butilizes\s+([^.\n]+?)(?:\s+control\s+surfaces?|\s+actuators?|\s+configuration|\.)', line_str, re.IGNORECASE)
             if m_util:
                 val_text = m_util.group(1).strip()
+                extracted_tokens = [t for t in re.split(r'[^a-zA-Z0-9]+', val_text.lower()) if len(t) > 1]
+                base_tokens = ["control", "surfaces", "surface"]
+                tokens = list(dict.fromkeys(base_tokens + extracted_tokens))
                 root_node.children.append(TypedASTNode(
                     node_id=f"prop_{len(root_node.children)}",
                     node_type="Property",
                     name="control_surfaces",
                     value=val_text,
-                    properties={"enabled": True, "normalized_name": "controlsurfaces", "tokens": ["control", "surfaces", "surface", "ruddervator", "vtail"]},
+                    properties={"enabled": True, "normalized_name": "controlsurfaces", "tokens": tokens},
                     source_file=rel_path,
                     line_number=lineno_1idx
                 ))
