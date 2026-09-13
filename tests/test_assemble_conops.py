@@ -29,6 +29,7 @@ from scripts.assemble_conops import (
     bind_parameters,
     extract_headings,
     generate_table_of_contents,
+    is_component_icd_document,
     validate_unit_integrity,
     verify_markdown_links,
 )
@@ -1763,6 +1764,101 @@ Formal operational lifecycle stages across $\\Phi_{\\mathrm{lifecycle}}$:
         clean_3 = _sanitize_level_1b_operational_text(raw_text_3)
         self.assertNotIn("uc-05", clean_3)
         self.assertNotIn("UC-06", clean_3)
+
+    def test_is_component_icd_document_detection(self):
+        """Verify is_component_icd_document identifies component ICD documents and distinguishes system specs (Issue #273)."""
+        # Path-based detections
+        self.assertTrue(is_component_icd_document("", file_path="schema/esad-icd-excalibur-ab00-0054.md"))
+        self.assertTrue(is_component_icd_document("", file_path="schema/actuator_icd_v1.md"))
+        self.assertTrue(is_component_icd_document("", file_path="docs/interfaces/interface_control_document.md"))
+        self.assertTrue(is_component_icd_document("", file_path="schema/icd_payload_controller.md"))
+        self.assertTrue(is_component_icd_document("", file_path="schema/radio-icd.md"))
+        self.assertTrue(is_component_icd_document("", file_path="schema/ICD_01_SYSTEM_INTERFACE_MATRIX.md"))
+        self.assertTrue(is_component_icd_document("", file_path="schema/ICD_02_MASTER_SIGNAL_DICTIONARY.md"))
+
+        # Text-based detections
+        icd_text_1 = """# ESAD Component Interface Control Document
+## 1. Scope
+This document specifies the wire-level RS-422 interface and serial opcodes.
+| Opcode | Command | Description |
+| :--- | :--- | :--- |
+| 0x10 | CMD_ARM | Arm electronic safe and arm device |
+"""
+        self.assertTrue(is_component_icd_document(icd_text_1))
+
+        icd_text_2 = """# Actuator Subsystem
+Document Type: Component-Level ICD
+## Serial Command Protocol
+Baud Rate: 115200 bps
+| Register | Function |
+| 0x01 | Set Position |
+"""
+        self.assertTrue(is_component_icd_document(icd_text_2))
+
+        # System-level specs should NOT be flagged as component ICDs
+        system_spec_text = """# ALPHA 500
+## System Technical Specifications
+| Parameter | Value |
+| :--- | :--- |
+| Cruise speed | 31 m/s |
+| Max speed | 42 m/s |
+| MTOW | 50.0 kg |
+"""
+        self.assertFalse(is_component_icd_document(system_spec_text, file_path="schema/system_spec.md"))
+        self.assertFalse(is_component_icd_document(system_spec_text, file_path="schema/alpha500_system_model.md"))
+        self.assertFalse(is_component_icd_document(system_spec_text))
+
+    def test_filter_component_icd_documents_from_conops_ingestion(self):
+        """Verify component ICD documents are excluded from ConOps synthesis while system specs continue to be ingested (Issue #273)."""
+        icd_doc = """# ESAD Component Interface Control Document
+| Parameter | Value |
+| :--- | :--- |
+| SERIAL_OPCODE_ARM | 0x10 |
+| SERIAL_OPCODE_FIRE | 0x11 |
+| BAUD_RATE | 115200 baud |
+| CRC_POLYNOMIAL | 0x1021 |
+"""
+        system_doc = """# Titan Orbiter
+| Parameter | Value |
+| :--- | :--- |
+| SYSTEM_IDENTIFIER | Titan Orbiter |
+| CRUISE_SPEED_MPS | 45.0 |
+| TOTAL_MTOW_KG | 120.0 |
+"""
+        # Ingestion directly via text and file_path
+        engine = SysMLParameterBindingEngine(auto_detect=False)
+        icd_result = engine.ingest_markdown_text(icd_doc, file_path="schema/esad-icd-excalibur-ab00-0054.md")
+        self.assertFalse(icd_result)
+        self.assertNotIn("SERIAL_OPCODE_ARM", engine.parameter_bindings)
+        self.assertNotIn("BAUD_RATE", engine.parameter_bindings)
+
+        sys_result = engine.ingest_markdown_text(system_doc, file_path="schema/titan_system_spec.md")
+        self.assertTrue(sys_result)
+        self.assertEqual(engine.resolve_token("SYSTEM_IDENTIFIER"), "Titan Orbiter")
+        self.assertEqual(engine.resolve_token("CRUISE_SPEED_MPS"), "45.0")
+        self.assertEqual(engine.resolve_token("TOTAL_MTOW_KG"), "120.0")
+
+        # Ingestion via workspace auto-detection
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            os.makedirs(schema_dir, exist_ok=True)
+
+            icd_file = os.path.join(schema_dir, "esad-icd-excalibur-ab00-0054.md")
+            with open(icd_file, "w", encoding="utf-8") as f:
+                f.write(icd_doc)
+
+            sys_file = os.path.join(schema_dir, "titan_system_spec.md")
+            with open(sys_file, "w", encoding="utf-8") as f:
+                f.write(system_doc)
+
+            auto_engine = SysMLParameterBindingEngine(workspace_dir=tmpdir, auto_detect=True)
+            # System spec parameters must be present
+            self.assertEqual(auto_engine.resolve_token("SYSTEM_IDENTIFIER"), "Titan Orbiter")
+            self.assertEqual(auto_engine.resolve_token("CRUISE_SPEED_MPS"), "45.0")
+            # Component ICD parameters must NOT be present
+            self.assertNotIn("SERIAL_OPCODE_ARM", auto_engine.parameter_bindings)
+            self.assertNotIn("BAUD_RATE", auto_engine.parameter_bindings)
+            self.assertNotIn("CRC_POLYNOMIAL", auto_engine.parameter_bindings)
 
 
 if __name__ == "__main__":

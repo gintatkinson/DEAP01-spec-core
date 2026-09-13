@@ -149,6 +149,38 @@ def _sanitize_level_1b_operational_text(text: str) -> str:
     return s.strip()
 
 
+def is_component_icd_document(text: str, file_path: str = "") -> bool:
+    """
+    Detects whether a markdown document is a component-level ICD rather than a system-level specification or schema.
+    Checks if file path contains '-icd-', '_icd_', or 'interface_control_document', or if text begins with component ICD markers.
+    Scopes component-level serial opcodes, wire protocols, baud rates, and register maps exclusively
+    to Level 1C ICD generators (ICD_01_SYSTEM_INTERFACE_MATRIX.md / ICD_02_MASTER_SIGNAL_DICTIONARY.md) (Fixes Issue #273).
+    """
+    if file_path:
+        norm_path = file_path.lower().replace("\\", "/")
+        base_name = os.path.basename(norm_path)
+        if any(marker in norm_path for marker in ("-icd-", "_icd_", "interface_control_document", "interface-control-document")):
+            return True
+        if base_name.startswith(("icd_", "icd-")) or base_name.endswith(("-icd.md", "_icd.md", "-icd.markdown", "_icd.markdown")):
+            return True
+
+    if text:
+        lower_prefix = text[:2000].lower().strip()
+        icd_markers = (
+            "interface control document",
+            "component interface control document",
+            "component-level icd",
+            "serial command protocol",
+            "serial interface control document",
+            "wire protocol specification",
+            "register map specification",
+        )
+        if any(marker in lower_prefix for marker in icd_markers):
+            return True
+
+    return False
+
+
 class SysMLParameterBindingEngine:
     """
     Automated SysML AST Parameter Binding Engine.
@@ -2125,15 +2157,20 @@ class SysMLParameterBindingEngine:
         try:
             with open(md_path, "r", encoding="utf-8") as f:
                 content = f.read()
-            return self.ingest_markdown_text(content)
+            return self.ingest_markdown_text(content, file_path=md_path)
         except Exception:
             return False
 
-    def ingest_markdown_text(self, text: str) -> bool:
+    def ingest_markdown_text(self, text: str, file_path: str = "") -> bool:
         """
         Parses Markdown specification text (tables, key-value lists, headings, and patterns)
         and ingests extracted parameters into parameter bindings.
+        Filters out component-level ICD documents to prevent low-level serial opcodes and
+        wire protocols from polluting operational ConOps synthesis (Fixes Issue #273).
         """
+        if is_component_icd_document(text, file_path=file_path):
+            return False
+
         ingested = False
         if not text or not text.strip():
             return False
@@ -2294,11 +2331,15 @@ class SysMLParameterBindingEngine:
                     if fname.endswith(".sysml"):
                         candidate_paths.append(os.path.join(schema_dir, fname))
                     elif (fname.endswith(".md") or fname.endswith(".markdown")) and fname.lower() not in ("readme.md",):
+                        if is_component_icd_document("", file_path=fname):
+                            continue
                         candidate_paths.append(os.path.join(schema_dir, fname))
 
         # Ingest existing candidates
         for cpath in candidate_paths:
             if os.path.isfile(cpath):
+                if (cpath.endswith(".md") or cpath.endswith(".markdown")) and is_component_icd_document("", file_path=cpath):
+                    continue
                 if cpath.endswith(".sysml") and "DOMAIN_TYPE" in self._explicit_keys and self.detected_domain != "aviation":
                     try:
                         with open(cpath, "r", encoding="utf-8", errors="ignore") as f:
