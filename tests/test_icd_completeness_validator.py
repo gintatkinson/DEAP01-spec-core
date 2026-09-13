@@ -98,13 +98,15 @@ Topological connectivity matrix.
 ## 2. Subsystem Topological Connectivity Graph
 ```mermaid
 flowchart TD
-    subgraph NavigationSubsystem ["Navigation Subsystem"]
-        P_NAV_OUT["PORT-NAV-OUT"]
+    subgraph NavigationSubsystem["Navigation Subsystem"]
+        direction TB
+        NavSub["Navigation Subsystem<br/>• PORT-NAV-OUT (OUT)"]
     end
-    subgraph FlightControlSubsystem ["Flight Control Subsystem"]
-        P_FCC_IN["PORT-FCC-IN"]
+    subgraph FlightControlSubsystem["Flight Control Subsystem"]
+        direction TB
+        FccSub["Flight Control Subsystem<br/>• PORT-FCC-IN (IN)"]
     end
-    P_NAV_OUT -->|"CONN-01"| P_FCC_IN
+    NavSub -->|"CONN-01"| FccSub
 ```
 
 ## 3. Canonical N² Subsystem Interface Matrix

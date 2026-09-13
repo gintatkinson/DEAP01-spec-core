@@ -28,6 +28,10 @@ from parity_auditor.validators.mermaid_syntax_validator import (
     MermaidSyntaxValidator,
     check_mermaid_text,
     validate_mermaid_quoted_label_content,
+    validate_mermaid_horizontal_flow,
+    validate_mermaid_node_label_line_wrapping,
+    validate_mermaid_subgraph_direction,
+    validate_mermaid_option3_compact_blocks,
 )
 from parity_auditor.core.findings import Finding
 
@@ -116,7 +120,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A["ESAD powered on - safety pin in place"] --> B["Normal Mode"]
+    A["ESAD powered on -<br/>safety pin in place"] --> B["Normal Mode"]
     Node["SitaWare HQ - ATAK - DELTA"] --> OutNode["Consumer Hub"]
 ```
 
@@ -188,6 +192,266 @@ flowchart TD
             self.assertIn("mermaid-quoted-label-slash-forbidden", rule_ids)
             self.assertTrue(all(isinstance(f, Finding) for f in findings))
 
+    # -------------------------------------------------------------------------
+    # Visual Ergonomics & Layout Invariant (Issue #274, Rules E1-E4)
+    # -------------------------------------------------------------------------
+
+    def test_rule_e1_horizontal_flow_rejected_when_node_count_gt_2(self):
+        """Rule E1: flowchart LR with > 2 nodes is rejected with clear actionable error."""
+        bad_md = """
+```mermaid
+flowchart LR
+    A["Node A"] --> B["Node B"]
+    B --> C["Node C"]
+```
+"""
+        findings = check_mermaid_text(bad_md, source="bad_lr.md")
+        rule_ids = [f.rule_id for f in findings]
+        self.assertIn("mermaid-horizontal-flow-prohibited", rule_ids)
+        e1_findings = [f for f in findings if f.rule_id == "mermaid-horizontal-flow-prohibited"]
+        self.assertEqual(len(e1_findings), 1)
+        self.assertIn("horizontal layout ('flowchart lr') is prohibited", str(e1_findings[0]))
+        self.assertIn("flowchart TD", str(e1_findings[0]))
+
+    def test_rule_e1_horizontal_flow_rejected_when_label_gt_25_chars(self):
+        """Rule E1: graph LR with 2 nodes but a label > 25 chars is rejected."""
+        bad_md = """
+```mermaid
+graph LR
+    A["Start Node"] --> B["A label exceeding twenty five characters"]
+```
+"""
+        findings = check_mermaid_text(bad_md, source="bad_lr_label.md")
+        rule_ids = [f.rule_id for f in findings]
+        self.assertIn("mermaid-horizontal-flow-prohibited", rule_ids)
+        self.assertIn("exceeding 25 characters", str(findings[0]))
+
+    def test_rule_e1_horizontal_flow_allowed_for_small_diagram(self):
+        """Rule E1: flowchart LR with <= 2 nodes and labels <= 25 chars passes cleanly."""
+        clean_md = """
+```mermaid
+flowchart LR
+    A["Start"] --> B["End"]
+```
+"""
+        findings = check_mermaid_text(clean_md, source="clean_lr.md")
+        self.assertEqual(len(findings), 0, f"Expected 0 findings but got: {findings}")
+
+    def test_rule_e1_vertical_flow_allowed_with_many_nodes(self):
+        """Rule E1: flowchart TD with many nodes passes E1 check."""
+        clean_md = """
+```mermaid
+flowchart TD
+    A["Node A"] --> B["Node B"]
+    B --> C["Node C"]
+    C --> D["Node D"]
+```
+"""
+        findings = check_mermaid_text(clean_md, source="clean_td.md")
+        self.assertEqual(len(findings), 0, f"Expected 0 findings but got: {findings}")
+
+    def test_rule_e2_unwrapped_label_gt_35_chars_rejected(self):
+        """Rule E2: Node label line exceeding 35 characters without <br/> is rejected."""
+        bad_md = """
+```mermaid
+flowchart TD
+    A["Guidance and Perception Unit and Autonomous Navigation Controller"] --> B["Actuator Core"]
+```
+"""
+        findings = check_mermaid_text(bad_md, source="bad_label_len.md")
+        rule_ids = [f.rule_id for f in findings]
+        self.assertIn("mermaid-node-label-line-wrapping-mandated", rule_ids)
+        e2_findings = [f for f in findings if f.rule_id == "mermaid-node-label-line-wrapping-mandated"]
+        self.assertEqual(len(e2_findings), 1)
+        self.assertIn("node label line exceeds 35 characters without '<br/>' wrapping", str(e2_findings[0]))
+
+    def test_rule_e2_wrapped_label_with_br_passes(self):
+        """Rule E2: Node labels wrapped with <br/> into lines <= 35 characters pass cleanly."""
+        clean_md = """
+```mermaid
+flowchart TD
+    A["Guidance and Perception Unit<br/>and Autonomous Navigation<br/>Controller"] --> B["Actuator Core"]
+```
+"""
+        findings = check_mermaid_text(clean_md, source="clean_label_wrap.md")
+        self.assertEqual(len(findings), 0, f"Expected 0 findings but got: {findings}")
+
+    def test_rule_e2_bold_tags_ignored_in_character_count(self):
+        """Rule E2: <b> and </b> tags are ignored when calculating line character length."""
+        clean_md = """
+```mermaid
+flowchart TD
+    GCS["<b>Ground Control Station (GCS)</b><br/>• PORT_GCS_C2 (INOUT)"]
+```
+"""
+        findings = check_mermaid_text(clean_md, source="clean_bold_label.md")
+        self.assertEqual(len(findings), 0, f"Expected 0 findings but got: {findings}")
+
+    def test_rule_e3_multi_subgraph_without_direction_tb_rejected(self):
+        """Rule E3: Diagram with >= 2 subgraphs missing direction TB/TD is rejected."""
+        bad_md = """
+```mermaid
+flowchart TD
+    subgraph Segment_One["Command Segment"]
+        A["Node A"]
+    end
+    subgraph Segment_Two["Platform Segment"]
+        B["Node B"]
+    end
+```
+"""
+        findings = check_mermaid_text(bad_md, source="bad_subgraph.md")
+        rule_ids = [f.rule_id for f in findings]
+        self.assertIn("mermaid-subgraph-direction-tb-mandated", rule_ids)
+        e3_findings = [f for f in findings if f.rule_id == "mermaid-subgraph-direction-tb-mandated"]
+        self.assertEqual(len(e3_findings), 2)
+        self.assertIn("Segment_One", str(e3_findings[0]))
+        self.assertIn("Segment_Two", str(e3_findings[1]))
+
+    def test_rule_e3_multi_subgraph_with_direction_tb_passes(self):
+        """Rule E3: Diagram with >= 2 subgraphs declaring explicit direction TB passes cleanly."""
+        clean_md = """
+```mermaid
+flowchart TD
+    subgraph Segment_One["Command Segment"]
+        direction TB
+        A["Node A"]
+    end
+    subgraph Segment_Two["Platform Segment"]
+        direction TB
+        B["Node B"]
+    end
+```
+"""
+        findings = check_mermaid_text(clean_md, source="clean_subgraph.md")
+        self.assertEqual(len(findings), 0, f"Expected 0 findings but got: {findings}")
+
+    def test_rule_e3_subgraph_with_4_sibling_nodes_without_direction_rejected(self):
+        """Rule E3: Single subgraph with >= 4 sibling nodes missing direction TB is rejected."""
+        bad_md = """
+```mermaid
+flowchart TD
+    subgraph Processing_Core["Processing Core"]
+        A["Task 1"]
+        B["Task 2"]
+        C["Task 3"]
+        D["Task 4"]
+    end
+```
+"""
+        findings = check_mermaid_text(bad_md, source="bad_4node_subgraph.md")
+        rule_ids = [f.rule_id for f in findings]
+        self.assertIn("mermaid-subgraph-direction-tb-mandated", rule_ids)
+
+    def test_rule_e3_subgraph_with_3_sibling_nodes_without_direction_passes(self):
+        """Rule E3: Single subgraph with < 4 sibling nodes does not require direction TB."""
+        clean_md = """
+```mermaid
+flowchart TD
+    subgraph Processing_Core["Processing Core"]
+        A["Task 1"]
+        B["Task 2"]
+        C["Task 3"]
+    end
+```
+"""
+        findings = check_mermaid_text(clean_md, source="clean_3node_subgraph.md")
+        self.assertEqual(len(findings), 0, f"Expected 0 findings but got: {findings}")
+
+    def test_rule_e4_exploded_port_nodes_in_architecture_diagram_rejected(self):
+        """Rule E4: Architecture diagram (SV-1 / ICD / STPA) with exploded standalone port nodes is rejected."""
+        bad_md = """
+```mermaid
+flowchart TD
+    %% DoDAF SV-1 System Interface Architecture
+    subgraph Platform_Segment["Air Vehicle Segment"]
+        direction TB
+        PORT_FCS_C2["PORT_FCS_C2 (INOUT)"]
+        PORT_FCS_CMD["PORT_FCS_CMD (OUT)"]
+    end
+```
+"""
+        findings = check_mermaid_text(bad_md, source="docs/conops/units/conops/04_USER_CLASSES_AND_STAKEHOLDERS.md")
+        rule_ids = [f.rule_id for f in findings]
+        self.assertIn("mermaid-option3-compact-block-mandated", rule_ids)
+        e4_findings = [f for f in findings if f.rule_id == "mermaid-option3-compact-block-mandated"]
+        self.assertTrue(len(e4_findings) >= 1)
+        self.assertIn("exploded port node or subgraph detected", str(e4_findings[0]))
+
+    def test_rule_e4_exploded_port_subgraph_in_architecture_diagram_rejected(self):
+        """Rule E4: Architecture diagram with exploded port subgraph is rejected."""
+        bad_md = """
+```mermaid
+flowchart TD
+    %% ICD System Interface Matrix
+    subgraph FCS_Ports["FCS Subsystem Ports"]
+        direction TB
+        P1["C2 Port (INOUT)"]
+    end
+```
+"""
+        findings = check_mermaid_text(bad_md, source="docs/icd/ICD_01_SYSTEM_INTERFACE_MATRIX.md")
+        rule_ids = [f.rule_id for f in findings]
+        self.assertIn("mermaid-option3-compact-block-mandated", rule_ids)
+
+    def test_rule_e4_option3_compact_diagram_passes(self):
+        """Rule E4: Canonical Option 3 compact blocks with embedded bulleted port attributes pass cleanly."""
+        clean_md = """
+# Canonical Option 3 SV-1 Architecture Diagram
+
+```mermaid
+flowchart TD
+    subgraph External_Actors["External Operating Environment and Actors (IEEE 1362 §5.1)"]
+        direction TB
+        Operator["Human Operator and Mission<br/>Supervisor (UC-01 and UC-03)"]
+        GNSS_Space["GNSS Constellation (Space Segment)"]
+        Environment["Atmospheric and<br/>Environmental Dynamics"]
+        RangeSafety["Range Safety Authority (UC-02)"]
+    end
+
+    subgraph Ground_Segment["Ground Command and Control Segment (IEEE 1362 §5.3)"]
+        direction TB
+        GCS["Ground Control Station (GCS)<br/>• PORT_GCS_C2 (INOUT)<br/>• PORT_GCS_DISP (OUT)"]
+    end
+
+    subgraph Platform_Segment["Air Vehicle and Primary Platform Segment (DoDAF SV-1)"]
+        direction TB
+        subgraph Tier1_Processing["Guidance & Perception Tier"]
+            direction TB
+            FCS["Flight and Guidance Controller<br/>• PORT_FCS_C2 (INOUT)<br/>• PORT_FCS_CMD (OUT)<br/>• PORT_FCS_TLM (IN)"]
+            NavSensors["Sensor Fusion Unit<br/>• PORT_NAV_RF (IN)<br/>• PORT_NAV_DATA (OUT)"]
+        end
+
+        subgraph Tier2_Actuation["Energy - Actuation & Safety Tier"]
+            direction TB
+            Actuators["Distributed Actuator Core<br/>• PORT_ACT_IN (IN)"]
+            Watchdog["Hardware Safety Watchdog<br/>• PORT_WD_IN (IN)<br/>• PORT_WD_TRIG (OUT)"]
+        end
+    end
+
+    subgraph Support_Segment["Launch and Auxiliary Support Segment (IEEE 1362 §5.3)"]
+        direction TB
+        GSE["Ground Support Equipment<br/>and Staging<br/>• PORT_GSE_PWR (OUT)"]
+    end
+
+    %% External Interface Connections
+    Operator -->|"CONN-01: Operator Command Input"| GCS
+    GNSS_Space -->|"CONN-02: L-Band RF Navigation Signals"| NavSensors
+    Environment -.->|"CONN-03: Aerodynamic Disturbance and Wind Gusts"| Actuators
+    RangeSafety -->|"CONN-04: Flight Termination Consent"| GCS
+
+    %% Segment Inter-Connects (Item Flows)
+    GCS <-->|"CONN-05: PACE Bidirectional C2 Datalink [PORT_GCS_C2 <-> PORT_FCS_C2]"| FCS
+    NavSensors -->|"CONN-06: Navigation State Estimates [PORT_NAV_DATA -> PORT_FCS_TLM]"| FCS
+    FCS -->|"CONN-07: Real-Time Actuator Demand Vector [PORT_FCS_CMD -> PORT_ACT_IN]"| Actuators
+    FCS -->|"CONN-08: Heartbeat Pulse and Safety Telemetry [PORT_FCS_CMD -> PORT_WD_IN]"| Watchdog
+    GSE -.->|"CONN-09: Regulated Pre-Flight Power and Diagnostics [PORT_GSE_PWR]"| Platform_Segment
+```
+"""
+        findings = check_mermaid_text(clean_md, source="docs/conops/units/conops/04_USER_CLASSES_AND_STAKEHOLDERS.md")
+        self.assertEqual(len(findings), 0, f"Expected 0 findings but got: {findings}")
+
 
 if __name__ == "__main__":
     unittest.main()
+

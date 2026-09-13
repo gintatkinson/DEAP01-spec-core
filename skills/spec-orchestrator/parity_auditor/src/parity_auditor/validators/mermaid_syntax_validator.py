@@ -26,6 +26,16 @@ Rules enforced
   classes after it are silently attached to the wrong namespace. Issue #279.
 * Commas and slashes inside quoted Mermaid labels in ``graph``, ``flowchart``,
   ``stateDiagram``, and ``stateDiagram-v2``. Issue #200.
+* Universal Mermaid Visual Ergonomics & Layout Invariants (Issue #274):
+  - Rule E1: Horizontal flow prohibition (``flowchart LR`` / ``graph LR`` prohibited
+    when node count > 2 or any label > 25 characters; mandate ``flowchart TD`` or ``flowchart TB``).
+  - Rule E2: Mandatory node label line-wrapping (single lines inside node labels
+    exceeding 35 characters must be wrapped with ``<br/>``, ignoring ``<b>`` / ``</b>``).
+  - Rule E3: Mandatory ``direction TB`` on subgraphs (diagrams with >= 2 subgraphs or
+    subgraphs with >= 4 sibling nodes must declare explicit ``direction TB`` or ``direction TD``).
+  - Rule E4: Universal Option 3 compact block standard (architecture/interface diagrams
+    SV-1, ICD, STPA must use Option 3 compact blocks with bulleted port attributes
+    ``• port (DIR)`` instead of exploded child port nodes or subgraphs).
 
 Deliberately not enforced
 -------------------------
@@ -45,7 +55,7 @@ Deliberately not enforced
 
 import os
 import re
-from typing import List, Optional, Sequence, Tuple
+from typing import List, Optional, Sequence, Set, Tuple
 
 from .base import IValidator
 from ..core.findings import Finding
@@ -144,41 +154,82 @@ _QUOTED_LABEL_FORBIDDEN = (",", "/")
 
 
 def validate_mermaid_quoted_label_content(line: str) -> List[Tuple[str, List[str]]]:
-    """Scan quoted strings for forbidden comma and slash characters."""
+    """Scan quoted strings for forbidden comma and slash characters (ignoring HTML tags)."""
     offending: List[Tuple[str, List[str]]] = []
     for quoted in re.finditer(r'"[^"]*"', line):
         inner = quoted.group(0)
-        conflict = [ch for ch in _QUOTED_LABEL_FORBIDDEN if ch in inner]
+        # Strip allowed HTML formatting tags (e.g. <br/>, <br>, <b>, </b>, <i>, </i>) before scanning for forbidden characters
+        clean_inner = re.sub(r"</?[a-zA-Z0-9_-]+\s*/?>", "", inner)
+        conflict = [ch for ch in _QUOTED_LABEL_FORBIDDEN if ch in clean_inner]
         if conflict:
             offending.append((inner, conflict))
     return offending
+
+
+def parse_line_nodes(line: str) -> List[Tuple[str, str]]:
+    """Extract (node_id, raw_label) pairs from node shape definitions on a line."""
+    line_strip = line.strip()
+    if not line_strip or line_strip.startswith("%%"):
+        return []
+    if re.match(r"^\s*(?:subgraph|direction|end|class|style|linkStyle|click|classDef)\b", line, re.I):
+        return []
+
+    # Strip edge labels between |...| first to avoid treating bracketed text in edge labels as node shapes
+    clean_line = re.sub(r"\|[^|]*\|", "", line)
+
+    nodes: List[Tuple[str, str]] = []
+    idx = 0
+    while idx < len(clean_line):
+        match = re.search(
+            r"(?<![a-zA-Z0-9_\-\&])([a-zA-Z0-9_]+)\s*(\[\[|\[\(|\(\[|\[\/|\[\\|\{\{|\{|\[|\(\(|\(|>)",
+            clean_line[idx:],
+        )
+        if not match:
+            break
+
+        nid = match.group(1)
+        opener = match.group(2)
+        closer = SHAPE_PAIRS.get(opener, "]")
+
+        start_idx = idx + match.end()
+        if clean_line[start_idx:].lstrip().startswith('"'):
+            q_start = clean_line.find('"', start_idx)
+            q_end = clean_line.find('"', q_start + 1)
+            if q_end != -1:
+                end_idx = clean_line.find(closer, q_end)
+            else:
+                end_idx = clean_line.find(closer, start_idx)
+        else:
+            end_idx = clean_line.find(closer, start_idx)
+
+        if end_idx != -1:
+            raw_label = clean_line[start_idx:end_idx].strip()
+            if nid.lower() not in ("subgraph", "direction", "end", "class", "style", "linkstyle", "click", "tb", "td", "lr", "rl", "bt"):
+                nodes.append((nid, raw_label))
+            idx = end_idx + len(closer)
+        else:
+            idx = start_idx
+    return nodes
 
 
 def validate_mermaid_node_label_quoting(line: str) -> List[str]:
     unquoted = []
     if re.match(r"^\s*(subgraph|class|note|style|linkStyle|click)\b", line, re.I):
         return []
-    
-    for match in re.finditer(r"\b([a-zA-Z0-9_]+)\s*(\[\[|\[\(|\(\[|\[\/|\[\\|\{\{|\{|\[|\(\(|\(|>)", line):
-        opener = match.group(2)
-        closer = SHAPE_PAIRS[opener]
-        
-        start_idx = match.end()
-        end_idx = line.find(closer, start_idx)
-        if end_idx != -1:
-            label = line[start_idx:end_idx].strip()
-            if not label:
-                continue
-            if not (label.startswith('"') and label.endswith('"')):
-                if re.search(r"[/:()\[\]]", label):
-                    unquoted.append(label)
+
+    for node_id, label in parse_line_nodes(line):
+        if not label:
+            continue
+        if not (label.startswith('"') and label.endswith('"')):
+            if re.search(r"[/:()\[\]]", label):
+                unquoted.append(label)
     return unquoted
 
 def validate_mermaid_subgraph_title_quoting(line: str) -> Optional[str]:
     match = re.match(r"^\s*subgraph\s+(.*)", line, re.I)
     if match:
         title = match.group(1).strip()
-        bracket_match = re.match(r"^[a-zA-Z0-9_]+\s*\[(.*?)\]\s*$", title)
+        bracket_match = re.match(r"^([a-zA-Z0-9_]+)\s*\[(.*?)\]\s*$", title)
         if bracket_match:
             title = bracket_match.group(1).strip()
         
@@ -192,11 +243,11 @@ def validate_mermaid_angle_bracket_escaping(line: str) -> Optional[str]:
     clean_line = re.sub(r"<<[a-zA-Z0-9_\-]+>>", "", clean_line, flags=re.IGNORECASE)
     
     # Strip longest arrows first to prevent partial replacements
-    arrows = [
+    arrows = sorted([
         "==>>", "==>", "-->>", "-->", "->>", "->",
         "<<==", "<==", "<<--", "<--", "<<-", "<-",
-        "-.->", "<-.-", "<-->", "<==>"
-    ]
+        "-.->", "<-.-", "<-->", "<==>", "<->"
+    ], key=len, reverse=True)
     for arrow in arrows:
         clean_line = clean_line.replace(arrow, "")
     
@@ -217,6 +268,198 @@ def validate_mermaid_angle_bracket_escaping(line: str) -> Optional[str]:
                 unquoted_bracket = char
                 break
     return unquoted_bracket
+
+
+def extract_node_ids_from_line(line: str) -> Set[str]:
+    """Extract node identifiers declared or referenced on a single diagram line."""
+    nodes: Set[str] = set()
+    line_strip = line.strip()
+    if not line_strip or line_strip.startswith("%%"):
+        return nodes
+    if re.match(r"^\s*(?:subgraph|direction|end|class|style|linkStyle|click|classDef)\b", line, re.I):
+        return nodes
+
+    # 1. Node shape definitions
+    for nid, _ in parse_line_nodes(line):
+        nodes.add(nid)
+
+    # 2. Node connections: e.g. A --> B, A -->|label| B, GCS <-->|"..."| FCS
+    clean_line = re.sub(r'"[^"]*"', '""', line)
+    for match in re.finditer(
+        r"\b([a-zA-Z0-9_]+)\s*(?:<[=-]+>|<-+>|<=+>|--[->x)]+>|-->|->>|->|==>|==>>|-.->|-.-|---|===|\.\.>|<--|<==|<<-)\s*(?:\|[^|]*\|\s*)?([a-zA-Z0-9_]+)\b",
+        clean_line,
+    ):
+        src, dst = match.group(1), match.group(2)
+        if src.lower() not in ("subgraph", "direction", "end", "class", "style", "linkstyle", "click", "tb", "td", "lr", "rl", "bt"):
+            nodes.add(src)
+        if dst.lower() not in ("subgraph", "direction", "end", "class", "style", "linkstyle", "click", "tb", "td", "lr", "rl", "bt"):
+            nodes.add(dst)
+
+    return nodes
+
+
+def extract_mermaid_nodes_and_labels(body: Sequence[str]) -> Tuple[Set[str], List[Tuple[int, str, str]]]:
+    """Extract all unique node IDs and (line_offset, node_id, raw_label) pairs from a flowchart/graph body."""
+    all_node_ids: Set[str] = set()
+    node_labels: List[Tuple[int, str, str]] = []
+
+    for offset, line in enumerate(body):
+        line_strip = line.strip()
+        if not line_strip or line_strip.startswith("%%"):
+            continue
+        if re.match(r"^\s*(?:direction|end|class|style|linkStyle|click|classDef)\b", line, re.I):
+            continue
+        if re.match(r"^\s*subgraph\b", line, re.I):
+            continue
+
+        for nid, raw_label in parse_line_nodes(line):
+            all_node_ids.add(nid)
+            node_labels.append((offset, nid, raw_label))
+
+        for nid in extract_node_ids_from_line(line):
+            all_node_ids.add(nid)
+
+    return all_node_ids, node_labels
+
+
+def validate_mermaid_horizontal_flow(first_line: str, body: Sequence[str]) -> Optional[Tuple[int, int]]:
+    """Rule E1: Flag error if diagram type is flowchart LR or graph LR when node count > 2 or any label > 25 chars.
+
+    Returns (node_count, max_label_length) if violated, else None.
+    """
+    if not re.match(r"^\s*(?:flowchart|graph)\s+LR\b", first_line, re.IGNORECASE):
+        return None
+
+    nodes, labels = extract_mermaid_nodes_and_labels(body)
+    max_label_len = 0
+    for _, _, raw_label in labels:
+        clean = raw_label.strip()
+        if clean.startswith('"') and clean.endswith('"'):
+            clean = clean[1:-1]
+        for seg in re.split(r"<br\s*/?>", clean, flags=re.I):
+            seg_clean = re.sub(r"</?b>", "", seg, flags=re.I).strip()
+            if len(seg_clean) > max_label_len:
+                max_label_len = len(seg_clean)
+
+    if len(nodes) > 2 or max_label_len > 25:
+        return len(nodes), max_label_len
+    return None
+
+
+def validate_mermaid_node_label_line_wrapping(body: Sequence[str]) -> List[Tuple[int, int, str]]:
+    """Rule E2: Flag error if any single line inside a node label exceeds 35 chars without <br/> wrapping.
+
+    Returns list of (line_offset, clean_line_length, clean_line_content).
+    """
+    violations: List[Tuple[int, int, str]] = []
+    _, labels = extract_mermaid_nodes_and_labels(body)
+    for offset, _, raw_label in labels:
+        clean = raw_label.strip()
+        if clean.startswith('"') and clean.endswith('"'):
+            clean = clean[1:-1]
+        for seg in re.split(r"<br\s*/?>", clean, flags=re.I):
+            seg_clean = re.sub(r"</?b>", "", seg, flags=re.I).strip()
+            if len(seg_clean) > 35:
+                violations.append((offset, len(seg_clean), seg_clean))
+    return violations
+
+
+def validate_mermaid_subgraph_direction(body: Sequence[str]) -> List[Tuple[int, str]]:
+    """Rule E3: Flag error if diagram contains >= 2 subgraphs or >= 4 sibling nodes inside a subgraph without direction TB/TD.
+
+    Returns list of (line_offset, subgraph_name).
+    """
+    violations: List[Tuple[int, str]] = []
+    subgraph_stack: List[dict] = []
+    subgraphs_list: List[dict] = []
+
+    for offset, line in enumerate(body):
+        line_strip = line.strip()
+        if not line_strip or line_strip.startswith("%%"):
+            continue
+
+        sg_match = re.match(r"^\s*subgraph\s+(.*)", line, re.I)
+        if sg_match:
+            raw_title = sg_match.group(1).strip()
+            bracket_match = re.match(r"^([a-zA-Z0-9_]+)\s*\[(.*?)\]\s*$", raw_title)
+            if bracket_match:
+                name = bracket_match.group(1).strip()
+            else:
+                name = raw_title.strip('"')
+            sg_info = {
+                "offset": offset,
+                "name": name,
+                "has_direction": False,
+                "nodes": set(),
+            }
+            subgraphs_list.append(sg_info)
+            subgraph_stack.append(sg_info)
+            continue
+
+        if re.match(r"^\s*direction\s+(?:TB|TD)\b", line, re.I):
+            if subgraph_stack:
+                subgraph_stack[-1]["has_direction"] = True
+            continue
+
+        if re.match(r"^\s*end\b", line, re.I):
+            if subgraph_stack:
+                subgraph_stack.pop()
+            continue
+
+        if subgraph_stack:
+            line_nodes = extract_node_ids_from_line(line)
+            for nid in line_nodes:
+                subgraph_stack[-1]["nodes"].add(nid)
+
+    total_subgraphs = len(subgraphs_list)
+    for sg in subgraphs_list:
+        if (total_subgraphs >= 2 or len(sg["nodes"]) >= 4) and not sg["has_direction"]:
+            violations.append((sg["offset"], sg["name"]))
+
+    return violations
+
+
+def validate_mermaid_option3_compact_blocks(body: Sequence[str], source: str = "") -> List[Tuple[int, str]]:
+    """Rule E4: Flag error if an architecture/interface diagram (SV-1, ICD, STPA) uses exploded port nodes/subgraphs.
+
+    Returns list of (line_offset, line_content).
+    """
+    full_text = "\n".join(body)
+    is_arch = (
+        bool(re.search(r"(sv-?1|icd|stpa|conops|system_interface|interface_matrix)", source, re.I))
+        or bool(re.search(r"\b(?:SV-?1|ICD|STPA|System\s+Interface|Interface\s+Matrix|DoDAF\s+SV-1)\b", full_text, re.I))
+    )
+    if not is_arch:
+        return []
+
+    violations: List[Tuple[int, str]] = []
+    for offset, line in enumerate(body):
+        line_strip = line.strip()
+        if not line_strip or line_strip.startswith("%%"):
+            continue
+
+        # Exploded port subgraph
+        sg_match = re.match(r"^\s*subgraph\s+(?:\"[^\"]+\"|([a-zA-Z0-9_]+))(?:\s*\[(.*?)\])?", line, re.I)
+        if sg_match:
+            sg_id = (sg_match.group(1) or "").lower()
+            sg_title = (sg_match.group(2) or "").lower()
+            if sg_id.startswith("port_") or sg_id.startswith("port-") or "ports" in sg_id or "ports" in sg_title:
+                violations.append((offset, line_strip))
+            continue
+
+        # Exploded port node
+        for node_id, raw_label in parse_line_nodes(line):
+            if re.match(r"^(?:PORT|port)[_-]", node_id):
+                violations.append((offset, line_strip))
+                break
+
+            clean_label = raw_label.strip('"').strip()
+            if (clean_label.startswith("PORT_") or clean_label.startswith("PORT-") or clean_label.startswith("port_") or clean_label.startswith("port-")) and "•" not in clean_label:
+                violations.append((offset, line_strip))
+                break
+
+    return violations
+
 
 def _blocks(text: str) -> Tuple[List[Tuple[int, List[str], str]], List[int]]:
     """Return ``(blocks, unclosed_starts)``.
@@ -302,6 +545,44 @@ def check_mermaid_text(text: str, source: str = "<input>") -> List[str]:
                 f"(''). The first non-comment line inside a mermaid block MUST declare a valid diagram type header.",
                 location=f"{source}"
             ))
+
+        if kind in ("graph", "flowchart"):
+            # Rule E1: Horizontal Flow Prohibition
+            h_flow = validate_mermaid_horizontal_flow(first_line_content, body)
+            if h_flow:
+                node_cnt, max_lbl = h_flow
+                errors.append(Finding(
+                    "mermaid-horizontal-flow-prohibited",
+                    f"{source}:{header_lineno}: horizontal layout ({first_line_content!r}) is prohibited for diagrams with more than 2 nodes or labels exceeding 25 characters (found {node_cnt} nodes, max label length {max_lbl}). Mandate 'flowchart TD' or 'flowchart TB'.",
+                    location=f"{source}"
+                ))
+
+            # Rule E2: Mandatory Node Label Line-Wrapping
+            for offset, clean_len, clean_line in validate_mermaid_node_label_line_wrapping(body):
+                lineno = start + offset + 1
+                errors.append(Finding(
+                    "mermaid-node-label-line-wrapping-mandated",
+                    f"{source}:{lineno}: node label line exceeds 35 characters without '<br/>' wrapping ({clean_len} chars: {clean_line!r}). Node labels must be wrapped with '<br/>' to maintain visual ergonomics.",
+                    location=f"{source}"
+                ))
+
+            # Rule E3: Mandatory direction TB on Subgraphs
+            for offset, sg_name in validate_mermaid_subgraph_direction(body):
+                lineno = start + offset + 1
+                errors.append(Finding(
+                    "mermaid-subgraph-direction-tb-mandated",
+                    f"{source}:{lineno}: subgraph {sg_name!r} is missing explicit 'direction TB' or 'direction TD' declaration. Subgraphs in multi-subgraph diagrams (>= 2) or with >= 4 nodes must declare 'direction TB' or 'direction TD'.",
+                    location=f"{source}"
+                ))
+
+            # Rule E4: Universal Option 3 Compact Block Standard
+            for offset, line_content in validate_mermaid_option3_compact_blocks(body, source=source):
+                lineno = start + offset + 1
+                errors.append(Finding(
+                    "mermaid-option3-compact-block-mandated",
+                    f"{source}:{lineno}: exploded port node or subgraph detected ({line_content!r}). Architecture and interface diagrams (SV-1, ICD, STPA) must use Option 3 compact blocks with embedded bulleted port attributes ('• port (DIR)') instead of exploded child port nodes or subgraphs.",
+                    location=f"{source}"
+                ))
 
         for offset, line in enumerate(body):
             lineno = start + offset + 1

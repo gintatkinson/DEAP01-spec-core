@@ -153,15 +153,17 @@ Every generated ICD document MUST open with the following exact table structure:
 ## 2. Subsystem Topological Connectivity Graph
 ```mermaid
 flowchart TD
-    subgraph SubsystemA ["Subsystem A - Name"]
-        P_A_OUT["PORT-SUBA-DATA_OUT"]
+    subgraph Tier1 ["Tier 1: Ingestion & Sensing"]
+        direction TB
+        SubA["<b>Subsystem A</b><br/>• PORT-SUBA-DATA_OUT (OUT: DataPort)"]
     end
 
-    subgraph SubsystemB ["Subsystem B - Name"]
-        P_B_IN["PORT-SUBB-DATA_IN"]
+    subgraph Tier2 ["Tier 2: Processing & Control"]
+        direction TB
+        SubB["<b>Subsystem B</b><br/>• PORT-SUBB-DATA_IN (IN: DataPort)"]
     end
 
-    P_A_OUT -->|"CONN-01 (Telemetry Stream)"| P_B_IN
+    SubA -->|"CONN-01 (Telemetry Stream)"| SubB
 ```
 
 ## 3. Canonical N² Subsystem Interface Matrix
@@ -255,6 +257,12 @@ To maintain pure platform independence and prevent premature hardware coupling:
 - **ZERO ECAD Pinouts**: Strictly prohibit references to PCB pin numbers, FPGA ball grid array (BGA) mappings, or microcontroller GPIO pin assignments.
 - **ZERO Wire Harness Drawings**: Strictly prohibit references to wire gauges (AWG), harness bundle numbers, terminal lugs, or shielding drawings.
 - **ZERO Transport Byte Framing**: Strictly prohibit transport-layer serialization details (e.g., CAN 11-bit/29-bit identifiers, ARINC 429 32-bit word label encodings, Ethernet MAC addresses, UART start/stop bits). All signals must remain logical entities defined by data types, physical SI units, valid ranges, update rates, and safe default states.
+- **Mandatory Compact Subsystem Blocks (Universal Zero Horizontal Sprawl Invariant)**:
+  - For `ICD_01_SYSTEM_INTERFACE_MATRIX.md` diagrams, strictly prohibit exploding individual ports into separate single-node subgraphs (e.g., strictly prohibiting 35-port exploded single-node subgraphs).
+  - Subsystems MUST be rendered using Option 3 Compact Subsystem Blocks with embedded bulleted port definitions:
+    `[<b>Subsystem Name</b><br/>• port_name (DIR: Type)<br/>• port_name2 (DIR: Type)]`
+  - Diagrams MUST use a 3-tier vertical hierarchy (`direction TB`) partitioned by logical tier (e.g., Tier 1: Ingestion & Sensing, Tier 2: Processing & Control, Tier 3: Actuation & Output) with a maximum of 3 columns to eliminate unconstrained horizontal sprawl.
+  - Node label lines MUST NOT exceed 35 characters and must be wrapped with `<br/>`.
 
 ### 4.3 LaTeX & KaTeX Mathematical Rendering Integrity
 Per [`rules/latex-katex-integrity.md`](rules/latex-katex-integrity.md):
@@ -271,6 +279,7 @@ Per [`rules/platform-independence.md`](rules/platform-independence.md):
 - Every Mermaid block must be strictly closed with ```` ``` ```` on a new line.
 - Enclose node labels and transitions containing slashes, colons, parentheses, brackets, or comparisons in double quotes.
 - Unquoted `<` and `>` characters are strictly forbidden across all diagram types.
+- **Universal Mermaid Diagram Ergonomics (Zero Horizontal Sprawl)**: Strictly enforce Rules E1 (Horizontal Flow Prohibition), E2 (Mandatory Node Label Line-Wrapping <= 35 chars per line with `<br/>`), E3 (Mandatory `direction TB` and Max 3-Column Vertical Tier Partitioning), and E4 (Universal Option 3 Compact Subsystem Blocks with Embedded Bulleted Ports).
 
 ---
 
@@ -288,6 +297,7 @@ Per [`rules/platform-independence.md`](rules/platform-independence.md):
    - Asserts 100% port connection parity (zero dangling ports: $\mathcal{D}_{\mathrm{port}} = \emptyset$).
    - Asserts 100% signal dictionary coverage of schema interface leaves ($\Omega_{\mathrm{coverage}} = 1.0$).
    - Asserts valid port foreign keys, non-empty SI units, bounded valid ranges, and explicit safe default values.
+   - Asserts topological connectivity diagram ergonomics (Option 3 Compact Subsystem Blocks, 3-tier vertical hierarchy `direction TB`, zero horizontal sprawl).
    - If verification fails, parse error findings, repair the generated ICD files, and re-run until passing with exit code 0.
 
 2. **Untracked Infrastructure Pre-Commit Check**:

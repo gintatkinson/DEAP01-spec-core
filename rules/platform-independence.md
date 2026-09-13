@@ -28,6 +28,23 @@
 - **Mermaid Class Member Brace Rules**: Curly braces (`{` `}`) are strictly prohibited inside Mermaid class member lines (e.g., do not write `+Decimal64 dim_0 {range = "-90.0..90.0"}`), as they crash GitHub and Mermaid CLI renderers. Use parentheses or simple brackets instead, e.g., `(default earth)` or `[default earth]`.
 - **Mermaid Sequence Diagram Participant Alias Rules**: Mermaid reserved keywords (`link`, `links`, `actor`, `participant`, `loop`, `opt`, `alt`, `rect`, `note`, `end`, `par`, `and`, `critical`, `option`, `break`, `activate`, `deactivate`, `autonumber`, `box`, `create`, `destroy`) MUST NOT be used as participant aliases or IDs in sequence diagrams (e.g. `participant link as Link Service` or `actor link as Link Interface`). The parser interprets reserved keywords as structural sequence grammar, breaking diagram rendering.
 
+## Universal Mermaid Diagram Ergonomics & Layout Invariant (Zero Horizontal Sprawl)
+
+To guarantee diagram readability, visual ergonomics, and prevent extreme horizontal aspect-ratio elongation across GitHub, GitLab, and IDE Markdown previewers, all Mermaid diagrams across all specifications, blueprinted interface documents, and architectural overviews MUST adhere to the following four ergonomics rules (E1–E4):
+
+- **Rule E1 (Horizontal Flow Prohibition)**: Unconstrained horizontal chaining and horizontal root layouts (`flowchart LR`, `graph LR`, `graph RL`) are strictly prohibited across all specification diagrams. Horizontal layouts force downstream renderers to scale diagrams into unreadable wide ribbons or trigger horizontal scrollbars. All flowcharts and topology graphs MUST use top-down orientation (`flowchart TD` or `graph TD`).
+- **Rule E2 (Mandatory Node Label Line-Wrapping <= 35 chars per line with `<br/>`)**: Long single-line node labels cause Mermaid boxes to stretch horizontally. Node labels MUST NOT exceed 35 characters on any single line. Any multi-word, descriptive, or compound label exceeding 35 characters MUST be broken into multiple lines using explicit `<br/>` tags inside the quoted string (e.g., `Node["Primary Telemetry Stream<br/>and Health Status Monitor"]`).
+- **Rule E3 (Mandatory `direction TB` and Max 3-Column Vertical Tier Partitioning)**: Multi-subsystem, interface, and topological connectivity diagrams MUST declare `direction TB` inside subgraphs and partition nodes into vertical tiers (e.g., Tier 1: Ingestion & Sensing, Tier 2: Core Processing & Control, Tier 3: Actuation & Output). Tier subgraphs or clusters MUST NOT exceed 3 columns horizontally. This vertical tiering guarantees visual hierarchy and bounds horizontal diagram width.
+- **Rule E4 (Universal Option 3 Compact Subsystem Blocks with Embedded Bulleted Ports)**: Large subsystem architectures with numerous interface ports MUST NOT explode individual ports into separate flowchart nodes within giant subgraphs (e.g., strictly prohibiting 35-port exploded single-node subgraphs). Subsystems MUST be rendered as compact subsystem block nodes with embedded bulleted port declarations using `<br/>` and `•` bullets inside a single node:
+  ```mermaid
+  flowchart TD
+      subgraph Tier1 ["Tier 1: Sensing & Inputs"]
+          direction TB
+          SubA["<b>Subsystem A</b><br/>• port_data_out (OUT: DataPort)<br/>• port_cmd_in (IN: CommandPort)"]
+      end
+  ```
+  Topological connections bind directly between subsystem block nodes with descriptive edge labels (e.g. `SubA -->|"CONN-01 (Telemetry)"| SubB`).
+
 ## Document integrity constraints
 
 These are the non-Mermaid constraints on the same corpus, enforced offline by
