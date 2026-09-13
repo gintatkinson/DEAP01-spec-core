@@ -345,6 +345,140 @@ flowchart TD
         findings = self.validator.validate_diagram_ast(diagram, "docs/conops/CONOPS.md", self.pkg)
         self.assertEqual(len(findings), 0, f"Expected 0 findings for primary/support segment diagram, got: {findings}")
 
+    def test_conops_sv1_figure_4_9_operational_subsystems_decoupled_from_icd_wiring(self):
+        """Verify ConOps Figure 4.9 / SV-1 accepts top-level subsystem part def nodes without requiring child LRUs or micro-pins (Issues #271, #272)."""
+        nested_model = """package UAS_Modular_System {
+    port def SerialBusPort {
+        out item DataPacket : String;
+    }
+    port def DiscreteSyncPort {
+        out item SyncPulse : Boolean;
+    }
+    port def PWMCommandPort {
+        out item DutyCycle : Float32;
+    }
+
+    part def NavigationSubsystem {
+        doc /* Top-level Navigation Subsystem */
+        out port nav_bus : SerialBusPort;
+        part def IMU_Core {
+            out port pps : DiscreteSyncPort;
+        }
+        part def GPS_Receiver {
+            out port pos_data : SerialBusPort;
+        }
+    }
+
+    part def FlightControlSubsystem {
+        doc /* Top-level Flight Control Subsystem */
+        in port nav_bus_in : SerialBusPort;
+        out port pwm_out : PWMCommandPort;
+        part def FCC_ProcessorCore {
+            in port sync_in : DiscreteSyncPort;
+        }
+    }
+
+    part def ActuationSubsystem {
+        doc /* Top-level Actuation Subsystem */
+        in port pwm_in : PWMCommandPort;
+        part def AileronServo {
+            in port pwm_ch1 : PWMCommandPort;
+        }
+        part def ElevatorServo {
+            in port pwm_ch2 : PWMCommandPort;
+        }
+    }
+
+    connection Conn_Wire_Nav_To_FCC {
+        connect NavigationSubsystem.nav_bus to FlightControlSubsystem.nav_bus_in;
+    }
+}
+"""
+        pkg = SysMLParser.parse_text(nested_model)
+
+        # High-level ConOps SV-1 / Figure 4.9 diagram:
+        # Exposes only top-level subsystem part defs and operational interconnections.
+        # Child sub-LRUs (IMU_Core, GPS_Receiver, FCC_ProcessorCore, AileronServo, ElevatorServo)
+        # and micro-pins (pps, pos_data, sync_in, pwm_ch1, pwm_ch2) are NOT exposed.
+        sv1_diagram = """
+flowchart TD
+    subgraph AirVehicleSegment ["Air Vehicle and Primary Platform Segment (DoDAF SV-1)"]
+        direction TB
+        NavigationSubsystem["Navigation Subsystem"]
+        FlightControlSubsystem["Flight Control Subsystem"]
+        ActuationSubsystem["Actuation Subsystem"]
+    end
+
+    subgraph GroundSegment ["Ground Command and Control Segment"]
+        GCS["Ground Control Station"]
+        Operator["Flight Commander"]
+    end
+
+    Operator --> GCS
+    GCS <-->|"Operational C2 / Telemetry Datalink"| FlightControlSubsystem
+    NavigationSubsystem -->|"High-Level Navigation Bus Stream"| FlightControlSubsystem
+    FlightControlSubsystem -->|"Real-Time Actuator Demand Vector"| ActuationSubsystem
+"""
+        findings = self.validator.validate_diagram_ast(
+            sv1_diagram,
+            source="docs/conops/CONOPS.md:42",
+            sysml_package=pkg,
+        )
+        self.assertEqual(len(findings), 0, f"Expected 0 findings for decoupled ConOps SV-1 diagram, got: {findings}")
+
+    def test_conops_sv1_direct_validate_nodes_and_connections_methods(self):
+        """Verify _validate_diagram_nodes and _validate_connections direct invocations with operational tier (Issues #271, #272)."""
+        ast = self.validator._build_ast_ground_truth(self.pkg)
+        nodes = {
+            "NavigationSubsystem": type("Node", (), {"label": "Navigation Subsystem"})(),
+            "FlightControlSubsystem": type("Node", (), {"label": "Flight Control Subsystem"})(),
+        }
+        conns = [
+            type("Conn", (), {
+                "from_node": "NavigationSubsystem",
+                "to_node": "FlightControlSubsystem",
+                "label": "Operational Interconnect",
+            })()
+        ]
+
+        node_findings = []
+        self.validator._validate_diagram_nodes(
+            nodes=nodes,
+            subgraphs={},
+            source="docs/conops/CONOPS.md:10",
+            ast=ast,
+            findings=node_findings,
+            is_operational_tier=True,
+        )
+        self.assertEqual(len(node_findings), 0, f"Expected 0 node findings, got: {node_findings}")
+
+        conn_findings = []
+        self.validator._validate_connections(
+            connections=conns,
+            nodes=nodes,
+            source="docs/conops/CONOPS.md:10",
+            ast=ast,
+            findings=conn_findings,
+            is_operational_tier=True,
+        )
+        self.assertEqual(len(conn_findings), 0, f"Expected 0 connection findings, got: {conn_findings}")
+
+    def test_conops_sv1_detects_true_phantom_node(self):
+        """Verify Check 21 still detects completely undeclared phantom nodes in ConOps diagrams."""
+        diagram = """
+flowchart TD
+    NavigationSubsystem --> FlightControlSubsystem
+    CompletelyFakePhantomDevice["Completely Fake Phantom Device XYZ"] --> FlightControlSubsystem
+"""
+        findings = self.validator.validate_diagram_ast(
+            diagram,
+            source="docs/conops/CONOPS.md:1",
+            sysml_package=self.pkg,
+        )
+        rule_ids = [f.rule_id for f in findings]
+        self.assertIn("semantic-diagram-undeclared-node", rule_ids)
+        self.assertTrue(any("CompletelyFakePhantomDevice" in str(f) for f in findings))
+
 
 if __name__ == "__main__":
     unittest.main()

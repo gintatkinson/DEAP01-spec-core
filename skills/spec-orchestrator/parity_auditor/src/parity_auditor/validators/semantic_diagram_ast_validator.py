@@ -265,19 +265,38 @@ class SemanticDiagramASTValidator(IValidator):
                 ))
                 continue
 
+            # Scope validation behavior based on document tier (Issue #272)
+            rel_parts = [p.lower() for p in rel_path.split(os.sep)]
+            is_conops = "conops" in rel_parts
+
             blocks = _extract_mermaid_blocks(content)
             for start_line, diag_type, block_text in blocks:
                 source_label = f"{rel_path}:{start_line}"
-                diag_findings = self.validate_diagram_ast(block_text, source=source_label, sysml_package=combined_pkg)
+                diag_findings = self.validate_diagram_ast(
+                    block_text,
+                    source=source_label,
+                    sysml_package=combined_pkg,
+                    is_operational_tier=is_conops,
+                )
                 findings.extend(diag_findings)
 
         return findings
 
-    def validate_diagram_ast(self, diagram_text: str, source: str, sysml_package: SysMLPackage) -> List[Finding]:
+    def validate_diagram_ast(
+        self,
+        diagram_text: str,
+        source: str,
+        sysml_package: SysMLPackage,
+        is_operational_tier: Optional[bool] = None,
+    ) -> List[Finding]:
         """Validate a single Mermaid diagram string against the SysML AST ground truth."""
         findings: List[Finding] = []
         if not diagram_text or not diagram_text.strip():
             return []
+
+        if is_operational_tier is None:
+            source_lower = source.lower().replace("\\", "/")
+            is_operational_tier = "docs/conops" in source_lower or "conops.md" in source_lower or "conops" in source_lower
 
         # 1. Build AST ground truth registry
         ast_elements = self._build_ast_ground_truth(sysml_package)
@@ -293,7 +312,14 @@ class SemanticDiagramASTValidator(IValidator):
             except Exception:
                 return []
 
-            self._validate_flowchart_semantics(parsed_flowchart, source, ast_elements, sysml_package, findings)
+            self._validate_flowchart_semantics(
+                parsed_flowchart,
+                source,
+                ast_elements,
+                sysml_package,
+                findings,
+                is_operational_tier=is_operational_tier,
+            )
 
         elif "classdiagram" in lower_text:
             try:
@@ -447,6 +473,25 @@ class SemanticDiagramASTValidator(IValidator):
 
         _collect_subpkg_elements(pkg)
 
+        # Collect top-level subsystem part def entities across root package and subpackages
+        top_level_parts: List[PartDef] = []
+        for p in (getattr(pkg, "part_defs", []) or []):
+            top_level_parts.append(p)
+        for sp in (getattr(pkg, "sub_packages", []) or []):
+            for p in (getattr(sp, "part_defs", []) or []):
+                top_level_parts.append(p)
+
+        top_level_part_names = {p.name for p in top_level_parts}
+        top_level_part_norm = {_normalize_identifier(p.name) for p in top_level_parts}
+        for p in top_level_parts:
+            p_norm = _normalize_identifier(p.name)
+            top_level_part_norm.add(f"{p_norm}subsystem")
+            top_level_part_norm.add(f"{p_norm}segment")
+            top_level_part_norm.add(f"{p_norm}system")
+            for tok in _tokenize_name(p.name):
+                if len(tok) >= 3:
+                    top_level_part_norm.add(tok)
+
         # Build connection directional map: src_part -> set of dest_parts
         conn_dir_map: Dict[str, Set[str]] = {}
         for conn in all_conns:
@@ -461,6 +506,9 @@ class SemanticDiagramASTValidator(IValidator):
         return {
             "all_parts": all_parts,
             "all_conns": all_conns,
+            "top_level_parts": top_level_parts,
+            "top_level_part_names": top_level_part_names,
+            "top_level_part_norm": top_level_part_norm,
             "package_names": package_names,
             "package_norm": package_norm,
             "part_names": part_names,
@@ -481,19 +529,28 @@ class SemanticDiagramASTValidator(IValidator):
             "conn_dir_map": conn_dir_map,
         }
 
-    def _is_declared_node(self, node_id: str, label: str, ast: Dict[str, Any], subgraphs: Dict[str, Any]) -> bool:
+    def _is_declared_node(
+        self,
+        node_id: str,
+        label: str,
+        ast: Dict[str, Any],
+        subgraphs: Dict[str, Any],
+        is_operational_tier: bool = False,
+    ) -> bool:
         """Check whether a flowchart node or label matches declared AST elements or recognized actors."""
         id_norm = _normalize_identifier(node_id)
         lbl_norm = _normalize_identifier(label)
+        title_line = re.split(r'<br\s*/?>|\n', label or "", flags=re.I)[0].strip()
+        title_norm = _normalize_identifier(title_line)
 
-        if not id_norm and not lbl_norm:
+        if not id_norm and not lbl_norm and not title_norm:
             return True
 
         # Check subgraphs
         for sg_id, sg in subgraphs.items():
             sg_id_norm = _normalize_identifier(sg_id)
             sg_lbl_norm = _normalize_identifier(getattr(sg, "label", "") or sg_id)
-            if id_norm in (sg_id_norm, sg_lbl_norm) or lbl_norm in (sg_id_norm, sg_lbl_norm):
+            if id_norm in (sg_id_norm, sg_lbl_norm) or lbl_norm in (sg_id_norm, sg_lbl_norm) or (title_norm and title_norm in (sg_id_norm, sg_lbl_norm)):
                 return True
             is_external_sg = (
                 "external" in sg_id_norm or "external" in sg_lbl_norm or
@@ -502,24 +559,24 @@ class SemanticDiagramASTValidator(IValidator):
             )
             if is_external_sg:
                 sg_nodes = getattr(sg, "nodes", []) or []
-                if node_id in sg_nodes or any(_normalize_identifier(n) == id_norm for n in sg_nodes):
+                if node_id in sg_nodes or any(_normalize_identifier(n) in (id_norm, title_norm) for n in sg_nodes if n):
                     return True
 
         # Check exact structural/procedural tokens
-        if id_norm in RECOGNIZED_STRUCTURAL_TOKENS or lbl_norm in RECOGNIZED_STRUCTURAL_TOKENS:
+        if id_norm in RECOGNIZED_STRUCTURAL_TOKENS or lbl_norm in RECOGNIZED_STRUCTURAL_TOKENS or (title_norm and title_norm in RECOGNIZED_STRUCTURAL_TOKENS):
             return True
 
         # Check procedural workflow / lifecycle / step / WBS / port / connection patterns
         procedural_prefix = re.compile(r'^(step\d*|phase\d*|p\d+[a-z_]|d[_\-]|pipeline\d*|abort|gate|mtc|lru|port|conn|task\d*|sortie|turnaround|diagnostics|pbit|ibit|cbit|check|pass|fail|l\d+|r\d+|wp[_\-]|wbs[_\-]|uc[_\-]|port[_\-]|conn[_\-])', re.I)
-        if procedural_prefix.match(node_id.strip()) or procedural_prefix.match(id_norm) or procedural_prefix.match(lbl_norm):
+        if procedural_prefix.match(node_id.strip()) or procedural_prefix.match(id_norm) or procedural_prefix.match(lbl_norm) or (title_norm and procedural_prefix.match(title_norm)):
             return True
 
         # Check use case, port, and connection prefixes
-        if id_norm.startswith(("uc", "usecase", "port", "conn", "p1_", "p2_", "d_")) or lbl_norm.startswith(("uc", "port", "conn", "p1_", "p2_", "d_")):
+        if id_norm.startswith(("uc", "usecase", "port", "conn", "p1_", "p2_", "d_")) or lbl_norm.startswith(("uc", "port", "conn", "p1_", "p2_", "d_")) or (title_norm and title_norm.startswith(("uc", "port", "conn", "p1_", "p2_", "d_"))):
             return True
 
         # Check structural metaclass, architectural, domain, UI, and data model suffixes
-        if any(id_norm.endswith(sfx) or lbl_norm.endswith(sfx) for sfx in (
+        if any(norm and norm.endswith(sfx) for norm in (id_norm, lbl_norm, title_norm) for sfx in (
             "subsystem", "def", "action", "constraint", "statechart", "statemachine",
             "gate", "matrix", "interface", "spec", "model", "operator", "package",
             "state", "mode", "waypoint", "point", "group", "vertex", "item", "sensor",
@@ -533,7 +590,7 @@ class SemanticDiagramASTValidator(IValidator):
             return True
 
         # Check UAF / Architecture structural annotations, operational segments, and super-systems
-        if any(marker in id_norm or marker in lbl_norm for marker in (
+        if any(marker in id_norm or marker in lbl_norm or (title_norm and marker in title_norm) for marker in (
             "userrole", "interfaceport", "performernode", "operationalrole",
             "segment", "segments", "stakeholder", "authority",
             "airframe", "vehicle", "platform", "supersystem", "super_system",
@@ -543,12 +600,12 @@ class SemanticDiagramASTValidator(IValidator):
             return True
 
         # Check external actors and operational entities by exact match, normalized identifier, or token overlap
-        tokens = _tokenize_name(node_id) | _tokenize_name(label)
-        if id_norm in RECOGNIZED_EXTERNAL_ACTORS or lbl_norm in RECOGNIZED_EXTERNAL_ACTORS:
+        tokens = _tokenize_name(node_id) | _tokenize_name(label) | _tokenize_name(title_line)
+        if id_norm in RECOGNIZED_EXTERNAL_ACTORS or lbl_norm in RECOGNIZED_EXTERNAL_ACTORS or (title_norm and title_norm in RECOGNIZED_EXTERNAL_ACTORS):
             return True
         if any(tok in RECOGNIZED_EXTERNAL_ACTORS for tok in tokens if len(tok) >= 2):
             return True
-        if id_norm in ast["declared_actors"] or lbl_norm in ast["declared_actors"]:
+        if id_norm in ast["declared_actors"] or lbl_norm in ast["declared_actors"] or (title_norm and title_norm in ast["declared_actors"]):
             return True
         if any(tok in ast["declared_actors"] for tok in tokens if len(tok) >= 2):
             return True
@@ -556,34 +613,50 @@ class SemanticDiagramASTValidator(IValidator):
         # Dynamic resolution of external participants against SysML AST part def classifiers and boundary ports
         for tok in tokens:
             if len(tok) >= 3:
-                if tok in ast.get("part_norm", set()) or tok in ast.get("port_norm", set()):
+                if tok in ast.get("part_norm", set()) or tok in ast.get("port_norm", set()) or tok in ast.get("top_level_part_norm", set()):
                     return True
 
         # Check package and system tokens
-        if any(pkg_n in id_norm or pkg_n in lbl_norm for pkg_n in ast.get("package_norm", set()) if len(pkg_n) >= 3):
+        if any(pkg_n in id_norm or pkg_n in lbl_norm or (title_norm and pkg_n in title_norm) for pkg_n in ast.get("package_norm", set()) if len(pkg_n) >= 3):
             return True
 
-        # Check AST parts, ports, actions, capabilities, states, items, use cases
+        # Check AST parts, top-level parts, ports, actions, capabilities, states, items, use cases
         target_sets = (
-            ast["part_norm"], ast["port_norm"], ast["action_norm"],
+            ast["part_norm"], ast.get("top_level_part_norm", set()), ast["port_norm"], ast["action_norm"],
             ast["capability_norm"], ast["item_norm"], ast["state_norm"],
             ast["use_case_norm"]
         )
         for t_set in target_sets:
-            if id_norm in t_set or lbl_norm in t_set:
+            if id_norm in t_set or lbl_norm in t_set or (title_norm and title_norm in t_set):
                 return True
             if any(tok in t_set for tok in tokens if len(tok) >= 3):
                 return True
 
         # Check if AST part or port is explicitly contained in node_id or label
         for p_norm in ast["part_norm"]:
-            if len(p_norm) >= 3 and (p_norm in id_norm or p_norm in lbl_norm):
+            if len(p_norm) >= 3 and (p_norm in id_norm or p_norm in lbl_norm or (title_norm and p_norm in title_norm)):
                 return True
         for port_norm in ast["port_norm"]:
-            if len(port_norm) >= 3 and (port_norm in id_norm or port_norm in lbl_norm):
+            if len(port_norm) >= 3 and (port_norm in id_norm or port_norm in lbl_norm or (title_norm and port_norm in title_norm)):
                 return True
         for item_norm in ast["item_norm"]:
-            if len(item_norm) >= 3 and (item_norm in id_norm or item_norm in lbl_norm):
+            if len(item_norm) >= 3 and (item_norm in id_norm or item_norm in lbl_norm or (title_norm and item_norm in title_norm)):
+                return True
+
+        # In operational tier (ConOps Level 1B), high-level operational concepts, mission performers,
+        # and segments are accepted without requiring internal child sub-LRU components or micro-pins.
+        if is_operational_tier:
+            if any(marker in id_norm or marker in lbl_norm or (title_norm and marker in title_norm) for marker in (
+                "operational", "mission", "c2", "datalink", "command", "telemetry",
+                "ground", "air", "space", "launch", "recovery", "support", "station",
+                "supervisor", "operator", "controller", "payload", "sensor", "actuator",
+                "external", "environment", "safety", "watchdog", "gse", "gcs"
+            )):
+                return True
+            if any(tok in (
+                "c2", "gcs", "fcs", "gse", "rf", "gps", "gnss", "nav", "imu", "act",
+                "actuator", "controller", "operator", "station", "platform", "vehicle"
+            ) for tok in tokens):
                 return True
 
         return False
@@ -640,17 +713,42 @@ class SemanticDiagramASTValidator(IValidator):
         source: str,
         ast: Dict[str, Any],
         pkg: SysMLPackage,
-        findings: List[Finding]
+        findings: List[Finding],
+        is_operational_tier: bool = False,
     ) -> None:
         """Validate flowchart nodes, directed edges, and actuator grounding."""
         nodes = getattr(flowchart, "nodes", {}) or {}
         connections = getattr(flowchart, "connections", []) or []
         subgraphs = getattr(flowchart, "subgraphs", {}) or {}
 
-        # 1. Validate Node Declarations (Check for Undeclared Phantom Nodes)
+        # 1. Validate Node Declarations (Check 21 _validate_diagram_nodes)
+        self._validate_diagram_nodes(
+            nodes, subgraphs, source, ast, findings, is_operational_tier=is_operational_tier
+        )
+
+        # 2. Validate Directed Edges & Connections (Check 21 _validate_connections)
+        self._validate_connections(
+            connections, nodes, source, ast, findings, is_operational_tier=is_operational_tier
+        )
+
+    def _validate_diagram_nodes(
+        self,
+        nodes: Dict[str, Any],
+        subgraphs: Dict[str, Any],
+        source: str,
+        ast: Dict[str, Any],
+        findings: List[Finding],
+        is_operational_tier: bool = False,
+    ) -> None:
+        """Validate flowchart nodes against SysML AST declarations and recognized actors.
+
+        For high-level operational architecture diagrams in docs/conops/CONOPS.md (e.g. Figure 4.9 / SV-1),
+        nodes representing declared top-level subsystem part def entities in the SysML AST are accepted
+        without requiring every internal child sub-LRU or micro-pin to be exposed.
+        """
         for node_id, node in nodes.items():
             label = getattr(node, "label", "") or node_id
-            if not self._is_declared_node(node_id, label, ast, subgraphs):
+            if not self._is_declared_node(node_id, label, ast, subgraphs, is_operational_tier=is_operational_tier):
                 findings.append(Finding(
                     "semantic-diagram-undeclared-node",
                     f"{source}: Topological drift: Undeclared phantom node '{node_id}' ('{label}') in diagram is not present in SysML AST or external actor roster.",
@@ -658,8 +756,52 @@ class SemanticDiagramASTValidator(IValidator):
                     detail={"node_id": node_id, "label": label}
                 ))
 
-        # 2. Validate Directed Edges & Signal/Telemetry Flow Parity
-        conn_dir_map = ast["conn_dir_map"]
+    def _validate_connections(
+        self,
+        connections: List[Any],
+        nodes: Dict[str, Any],
+        source: str,
+        ast: Dict[str, Any],
+        findings: List[Finding],
+        is_operational_tier: bool = False,
+    ) -> None:
+        """Validate flowchart connections, directed edges, and physical load paths.
+
+        For high-level operational architecture diagrams in docs/conops/CONOPS.md (e.g. Figure 4.9 / SV-1),
+        operational subsystem interconnections represent high-level operational and bus exchanges,
+        decoupled from pinout-level wire connections or child port allocations from Level 1C ICD.
+        """
+        conn_dir_map = ast.get("conn_dir_map", {})
+
+        # If operational tier (ConOps Level 1B), high-level operational interconnections
+        # route between subsystem nodes, segments, and external actors without mandating 1:1 parity
+        # with wire-level pinout contracts or requiring internal child sub-LRU expansion.
+        if is_operational_tier:
+            for conn in connections:
+                from_id = getattr(conn, "from_node", "")
+                to_id = getattr(conn, "to_node", "")
+                edge_label = (getattr(conn, "label", "") or "").lower()
+                if not from_id or not to_id:
+                    continue
+
+                from_node = nodes.get(from_id)
+                to_node = nodes.get(to_id)
+                from_label = getattr(from_node, "label", "") if from_node else from_id
+                to_label = getattr(to_node, "label", "") if to_node else to_id
+
+                is_telemetry_flow = any(k in edge_label for k in ("telemetry", "telemetry_data", "sensor_data", "measurement", "status", "stream", "report"))
+
+                # In operational views, telemetry flow pointing into a dedicated sensor from a non-sensor is invalid
+                if is_telemetry_flow and self._is_sensor_or_data_source(to_id, to_label) and not self._is_sensor_or_data_source(from_id, from_label):
+                    findings.append(Finding(
+                        "semantic-diagram-inverted-flow",
+                        f"{source}: Inverted signal/telemetry flow detected: telemetry flow '{edge_label}' directed from '{from_id}' to sensor '{to_id}'.",
+                        location=source,
+                        detail={"from_node": from_id, "to_node": to_id, "edge_label": edge_label}
+                    ))
+            return
+
+        # Detailed Level 1C / SyRS / Architecture Diagram Validation
         for conn in connections:
             from_id = getattr(conn, "from_node", "")
             to_id = getattr(conn, "to_node", "")
