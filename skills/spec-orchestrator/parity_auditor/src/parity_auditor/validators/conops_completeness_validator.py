@@ -1459,9 +1459,11 @@ class ConopsCompletenessValidator(IValidator):
         repo: Optional[WorkspaceRepository] = None,
     ) -> List[Finding]:
         """
-        Validates Section 4 Operational Architecture & Metamodel Coverage (Fixes #260):
+        Validates Section 4 Operational Architecture & Metamodel Coverage (Fixes #260, #267):
         1. Mandatory Super-System segment boundaries (Primary Operational Segment, Command & Control Segment, Auxiliary Support Segment / Launch).
-        2. 100% AST PartDef coverage from schema/DEAP_MODEL.sysml, schema/*.sysml, or .pipeline/schema.sysml.
+        2. Segment subgraphs in operational architecture diagram (IEEE 1362 §5.3 / DoDAF SV-1).
+        3. Port and connection taxonomy in Section 4.7 architecture specifications (PORT- / CONN-).
+        4. 100% AST PartDef coverage from schema/DEAP_MODEL.sysml, schema/*.sysml, or .pipeline/schema.sysml.
         """
         findings: List[Finding] = []
 
@@ -1479,7 +1481,40 @@ class ConopsCompletenessValidator(IValidator):
                 detail={"missing_segments": missing_segments, "file": rel_path},
             ))
 
-        # 2. Check 100% AST PartDef Coverage
+        # 2. Check Segment Subgraphs in Operational Architecture Diagram (Fixes #267)
+        has_subgraphs = bool(
+            re.search(r'subgraph\s+["\']?[A-Za-z0-9_\s\-]+(?:Segment|Boundary|Platform|Vehicle|Ground|Support|Actors)', sec4_content, re.IGNORECASE)
+            or (re.search(r'```(?:mermaid)?\s*\n\s*(?:flowchart|graph)\b', sec4_content, re.IGNORECASE) and re.search(r'\bsubgraph\b', sec4_content, re.IGNORECASE))
+        )
+        if not has_subgraphs:
+            findings.append(Finding(
+                "conops-architecture-subgraphs-missing",
+                f"ConOps Section 4 in '{rel_path}' is missing mandatory segment subgraphs in operational architecture diagram (IEEE 1362 §5.3 / DoDAF SV-1).",
+                location=f"{rel_path}:{sec4_line}",
+                detail={"file": rel_path},
+            ))
+
+        # 3. Check Discrete Port Definitions Taxonomy (PORT-...) (Fixes #267)
+        has_port_taxonomy = bool(re.search(r'\bPORT[-_][A-Za-z0-9_]+', sec4_content, re.IGNORECASE))
+        if not has_port_taxonomy:
+            findings.append(Finding(
+                "conops-port-taxonomy-missing",
+                f"ConOps Section 4 in '{rel_path}' is missing mandatory discrete port taxonomy ('PORT-...').",
+                location=f"{rel_path}:{sec4_line}",
+                detail={"file": rel_path},
+            ))
+
+        # 4. Check Traceable Connection Taxonomy (CONN-...) (Fixes #267)
+        has_conn_taxonomy = bool(re.search(r'\bCONN[-_][A-Za-z0-9_]+', sec4_content, re.IGNORECASE))
+        if not has_conn_taxonomy:
+            findings.append(Finding(
+                "conops-connection-taxonomy-missing",
+                f"ConOps Section 4 in '{rel_path}' is missing mandatory connection taxonomy ('CONN-...').",
+                location=f"{rel_path}:{sec4_line}",
+                detail={"file": rel_path},
+            ))
+
+        # 5. Check 100% AST PartDef Coverage
         sysml_files: List[str] = []
         if repo is not None:
             pipeline_sysml = os.path.join(repo.workspace_dir, ".pipeline", "schema.sysml")

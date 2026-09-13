@@ -246,6 +246,77 @@ def _get_valid_conops_content() -> str:
     lines.append("2. **Command & Control Segment (Ground Segment):** Hosts the telemetry ground control station (`GroundControlStation`), PACE communications terminals, and human operator supervisory consoles (`SupervisoryConsole`).")
     lines.append("3. **Auxiliary Support Segment (Launch and Recovery Segment / GSE):** Hosts mobile ground support equipment (`GroundSupportEquipment`), launch staging interfaces (`LaunchAndRecoveryUnit`), and battery charging stations (`BatteryManagementSystem`, `BMS`).")
     lines.append("")
+    lines.append("```mermaid")
+    lines.append("flowchart TD")
+    lines.append("    subgraph External_Actors[\"External Operating Environment and Actors (IEEE 1362 §5.1)\"]")
+    lines.append("        Operator[\"Human Operator and Mission Supervisor (UC-01 and UC-03)\"]")
+    lines.append("        GNSS_Space[\"GNSS Constellation (Space Segment)\"]")
+    lines.append("        Environment[\"Atmospheric and Environmental Dynamics\"]")
+    lines.append("        RangeSafety[\"Range Safety Authority (UC-02)\"]")
+    lines.append("    end")
+    lines.append("")
+    lines.append("    subgraph Ground_Segment[\"Ground Command and Control Segment (IEEE 1362 §5.3)\"]")
+    lines.append("        GCS[\"Ground Control Station (GCS)\"]")
+    lines.append("        PORT_GCS_C2[\"PORT-GCS-C2 (INOUT)\"]")
+    lines.append("        PORT_GCS_DISP[\"PORT-GCS-DISP (OUT)\"]")
+    lines.append("        GCS --- PORT_GCS_C2")
+    lines.append("        GCS --- PORT_GCS_DISP")
+    lines.append("    end")
+    lines.append("")
+    lines.append("    subgraph Platform_Segment[\"Air Vehicle and Primary Platform Segment (DoDAF SV-1)\"]")
+    lines.append("        subgraph Avionics_Bay[\"Avionics and Processing Core\"]")
+    lines.append("            FCS[\"FlightGuidanceController (Flight and Guidance)\"]")
+    lines.append("            PORT_FCS_C2[\"PORT-FCS-C2 (INOUT)\"]")
+    lines.append("            PORT_FCS_CMD[\"PORT-FCS-CMD (OUT)\"]")
+    lines.append("            PORT_FCS_TLM[\"PORT-FCS-TLM (IN)\"]")
+    lines.append("            FCS --- PORT_FCS_C2")
+    lines.append("            FCS --- PORT_FCS_CMD")
+    lines.append("            FCS --- PORT_FCS_TLM")
+    lines.append("        end")
+    lines.append("")
+    lines.append("        subgraph Navigation_Sensors[\"Perception and Navigation Subsystem\"]")
+    lines.append("            NavSensors[\"PerceptionFusionSubsystem (Sensors)\"]")
+    lines.append("            PORT_NAV_RF[\"PORT-NAV-RF (IN)\"]")
+    lines.append("            PORT_NAV_DATA[\"PORT-NAV-DATA (OUT)\"]")
+    lines.append("            NavSensors --- PORT_NAV_RF")
+    lines.append("            NavSensors --- PORT_NAV_DATA")
+    lines.append("        end")
+    lines.append("")
+    lines.append("        subgraph Power_Actuation[\"Energy and Actuation Subsystem\"]")
+    lines.append("            BMS[\"BatteryManagementSystem (BMS)\"]")
+    lines.append("            Actuators[\"ActuatorSubsystem (Actuators)\"]")
+    lines.append("            PORT_ACT_IN[\"PORT-ACT-IN (IN)\"]")
+    lines.append("            PORT_BMS_PWR[\"PORT-BMS-PWR (OUT)\"]")
+    lines.append("            Actuators --- PORT_ACT_IN")
+    lines.append("            BMS --- PORT_BMS_PWR")
+    lines.append("        end")
+    lines.append("")
+    lines.append("        subgraph Safety_Core[\"Autonomous Containment Subsystem\"]")
+    lines.append("            Watchdog[\"SafetyWatchdog\"]")
+    lines.append("            PORT_WD_IN[\"PORT-WD-IN (IN)\"]")
+    lines.append("            PORT_WD_TRIG[\"PORT-WD-TRIG (OUT)\"]")
+    lines.append("            Watchdog --- PORT_WD_IN")
+    lines.append("            Watchdog --- PORT_WD_TRIG")
+    lines.append("        end")
+    lines.append("    end")
+    lines.append("")
+    lines.append("    subgraph Support_Segment[\"Launch and Auxiliary Support Segment (IEEE 1362 §5.3)\"]")
+    lines.append("        GSE[\"GroundSupportEquipment and Staging\"]")
+    lines.append("        PORT_GSE_PWR[\"PORT-GSE-PWR (OUT)\"]")
+    lines.append("        GSE --- PORT_GSE_PWR")
+    lines.append("    end")
+    lines.append("")
+    lines.append("    Operator -->|\"CONN-01: Operator Command Input\"| PORT_GCS_DISP")
+    lines.append("    GNSS_Space -->|\"CONN-02: L-Band RF Navigation Signals\"| PORT_NAV_RF")
+    lines.append("    Environment -.->|\"CONN-03: Aerodynamic Disturbance and Wind Gusts\"| Actuators")
+    lines.append("    RangeSafety -->|\"CONN-04: Flight Termination Consent\"| GCS")
+    lines.append("    PORT_GCS_C2 ---|\"CONN-05: PACE Bidirectional C2 Datalink\"| PORT_FCS_C2")
+    lines.append("    PORT_NAV_DATA -->|\"CONN-06: Navigation State Estimates\"| PORT_FCS_TLM")
+    lines.append("    PORT_FCS_CMD -->|\"CONN-07: Real-Time Actuator Demand Vector\"| PORT_ACT_IN")
+    lines.append("    PORT_FCS_CMD -->|\"CONN-08: Heartbeat Pulse and Safety Telemetry\"| PORT_WD_IN")
+    lines.append("    PORT_GSE_PWR -.->|\"CONN-09: Regulated Pre-Flight Power and Diagnostics\"| Platform_Segment")
+    lines.append("```")
+    lines.append("")
 
     # Section 5
     lines.append("## 5. Operational Modes & Lifecycle Stages")
@@ -1759,22 +1830,34 @@ stateDiagram-v2
         self.assertIn("missing mandatory LaTeX sensitivity equation S_j(w)", str(sens_findings[0]))
 
     def test_conops_missing_segment_boundaries_fails(self):
-        """ConOps specification missing Section 4 Super-System segment boundaries emits conops-segment-boundaries-missing (Fixes #260)."""
+        """ConOps specification missing Section 4 Super-System segment boundaries emits conops-segment-boundaries-missing (Fixes #260, #267)."""
         full_content = _get_valid_conops_content()
-        # Remove Subsection 4.4 segment boundaries
+        # Remove Subsection 4.4 segment boundaries and all segment matches
         broken_content = full_content.replace(
             "### 4.4 Super-System Operational Architecture & Segment Boundaries",
             "### 4.4 Architecture Overview"
         ).replace(
             "Primary Operational Segment", "Primary Operations"
         ).replace(
+            "Air Vehicle and Primary Platform Segment", "Air Component"
+        ).replace(
             "Air Segment", "Air Component"
+        ).replace(
+            "Primary Platform Segment", "Primary Operations"
+        ).replace(
+            "Command and Control Segment", "Command Line Interface"
         ).replace(
             "Command & Control Segment", "Command Line Interface"
         ).replace(
             "Ground Segment", "Ground Base"
         ).replace(
+            "Ground Command and Control Segment", "Ground Operations Base"
+        ).replace(
             "Auxiliary Support Segment", "Auxiliary Tools"
+        ).replace(
+            "Support Segment", "Tools Component"
+        ).replace(
+            "Launch and Auxiliary Support Segment", "Auxiliary Tools"
         ).replace(
             "Launch", "Deploy"
         )
@@ -1783,6 +1866,39 @@ stateDiagram-v2
         seg_findings = [f for f in findings if f.rule_id == "conops-segment-boundaries-missing"]
         self.assertGreaterEqual(len(seg_findings), 1)
         self.assertIn("missing mandatory Super-System segment boundaries", str(seg_findings[0]))
+
+    def test_conops_missing_architecture_subgraphs_fails(self):
+        """ConOps specification missing segment subgraphs in Section 4 diagram emits conops-architecture-subgraphs-missing (Fixes #267)."""
+        full_content = _get_valid_conops_content()
+        # Remove subgraphs from Section 4
+        broken_content = full_content.replace("subgraph ", "%% subgraph_removed ")
+        val = ConopsCompletenessValidator()
+        findings = val._validate_conops_text(broken_content, "docs/conops/CONOPS.md")
+        subgraph_findings = [f for f in findings if f.rule_id == "conops-architecture-subgraphs-missing"]
+        self.assertEqual(len(subgraph_findings), 1)
+        self.assertIn("missing mandatory segment subgraphs in operational architecture diagram", str(subgraph_findings[0]))
+
+    def test_conops_missing_port_taxonomy_fails(self):
+        """ConOps specification missing PORT- taxonomy in Section 4 emits conops-port-taxonomy-missing (Fixes #267)."""
+        full_content = _get_valid_conops_content()
+        # Remove PORT- prefixes
+        broken_content = full_content.replace("PORT_", "NODE_").replace("PORT-", "NODE-")
+        val = ConopsCompletenessValidator()
+        findings = val._validate_conops_text(broken_content, "docs/conops/CONOPS.md")
+        port_findings = [f for f in findings if f.rule_id == "conops-port-taxonomy-missing"]
+        self.assertEqual(len(port_findings), 1)
+        self.assertIn("missing mandatory discrete port taxonomy", str(port_findings[0]))
+
+    def test_conops_missing_connection_taxonomy_fails(self):
+        """ConOps specification missing CONN- taxonomy in Section 4 emits conops-connection-taxonomy-missing (Fixes #267)."""
+        full_content = _get_valid_conops_content()
+        # Remove CONN- prefixes
+        broken_content = full_content.replace("CONN-", "LINK-")
+        val = ConopsCompletenessValidator()
+        findings = val._validate_conops_text(broken_content, "docs/conops/CONOPS.md")
+        conn_findings = [f for f in findings if f.rule_id == "conops-connection-taxonomy-missing"]
+        self.assertEqual(len(conn_findings), 1)
+        self.assertIn("missing mandatory connection taxonomy", str(conn_findings[0]))
 
     def test_conops_incomplete_partdef_coverage_fails(self):
         """ConOps Section 4 missing AST PartDefs declared in SysML model emits conops-partdef-coverage-incomplete (Fixes #260)."""

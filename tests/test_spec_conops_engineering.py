@@ -1089,6 +1089,34 @@ class TestSpecConopsEngineering(unittest.TestCase):
             self.assertTrue(pos_hitl_cmd < pos_hitl_auth < pos_phys_disengage < pos_phys_actuate,
                             "Human consent must temporally precede physical interlock disengagement and actuation signals")
 
+    def test_conops_primary_system_architecture_diagram_standard(self):
+        """Verify Section 4.4 mandates IEEE 1362 §5.3 / DoDAF SV-1 / ISO 29148 §6.4.2-§6.4.3 Primary System Architecture Diagram standard (Fixes #267)."""
+        for skill_path in [CONOPS_SKILL_PATH, AGENTS_CONOPS_SKILL_PATH]:
+            self.assertTrue(os.path.isfile(skill_path), f"Missing {skill_path}")
+            with open(skill_path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            self.assertIn("### 4.4 Mandatory AST Subsystem Architecture Invariant & Primary System Architecture Diagram (IEEE 1362 §5.3 / DoDAF SV-1 / ISO 29148 §6.4.2–§6.4.3)", content)
+            self.assertIn("Subsystem & Segment Decomposition (IEEE 1362 §5.3 / DoDAF SV-1)", content)
+            self.assertIn("Primary Vehicle / Cyber-Physical Platform Segment", content)
+            self.assertIn("Command & Control (C2) Segment", content)
+            self.assertIn("Auxiliary Support Segment", content)
+            self.assertIn("Discrete Port Definitions (SysML v2 Port Taxonomy)", content)
+            self.assertIn("PORT-<SUBSYS>-<NAME> (IN/OUT/INOUT)", content)
+            self.assertIn("Exhaustive Item Flows & Traceable Connections (ISO 29148 §6.4.3 / IEEE 1362 §5.3)", content)
+            self.assertIn("CONN-01", content)
+            self.assertIn("System Boundary & External Actor Interfaces (IEEE 1362 §5.1 / ISO 29148 §6.4.2)", content)
+            self.assertIn("Strict Exclusion of Internal Software Modules (DoDAF SV-4)", content)
+            self.assertIn("Canonical Compliant Mermaid SV-1 Diagram Template", content)
+            self.assertIn("flowchart TD", content)
+            self.assertIn("subgraph External_Actors", content)
+            self.assertIn("subgraph Ground_Segment", content)
+            self.assertIn("subgraph Platform_Segment", content)
+            self.assertIn("subgraph Support_Segment", content)
+            self.assertIn("PORT_GCS_C2", content)
+            self.assertIn("PORT_FCS_C2", content)
+            self.assertIn("CONN-05: PACE Bidirectional C2 Datalink", content)
+
 
 if __name__ == "__main__":
     unittest.main()

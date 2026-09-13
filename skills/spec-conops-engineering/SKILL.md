@@ -213,20 +213,105 @@ $$
 | Contingency Buffer | E_contingency | 40000.0 | J | Dynamic operational contingency energy reserve |
 | Total Bingo Threshold | E_bingo | 350000.0 | J | Critical return threshold condition |
 
-### 4.4 Mandatory AST Subsystem Architecture Invariant in Section 4
-Per ISO/IEC/IEEE 29148:2018 §6.4.2, INCOSE Systems Engineering Handbook v5.0, and the Pure Schema-Driven Compiler Invariant:
+### 4.4 Mandatory AST Subsystem Architecture Invariant & Primary System Architecture Diagram (IEEE 1362 §5.3 / DoDAF SV-1 / ISO 29148 §6.4.2–§6.4.3)
+Per IEEE 1362-1998 §5.3 (Operational Environment & System Architecture), DoDAF v2.02 SV-1 (Systems Interface Description), ISO/IEC/IEEE 29148:2018 §6.4.2–§6.4.3 (ConOps & OpsCon Architecture), INCOSE Systems Engineering Handbook v5.0 §3.3, and the Pure Schema-Driven Compiler Invariant:
+
 - **100% AST Part Coverage Invariant**: ConOps Section 4 must synthesize formal Super-System Architecture and dedicated Subsystem Architecture subsections for 100% of declared `part def` nodes present in the SysML AST.
-- **Super-System Architecture (Section 4.7)**:
-  1. Formal Operational Segments: Primary Vehicle / Cyber-Physical Platform Segment, Ground Command & Control Segment, Launch & Auxiliary Support Segment.
-  2. Super-System Architectural Connectivity Diagram: A valid Mermaid diagram (`flowchart TD` or `graph TD`) depicting segment boundaries, C2 data links, payload feeds, and ground interfaces with universal quoting and header compliance.
+- **Primary System Architecture Diagram & Super-System Architecture (Section 4.7)**:
+  1. **Subsystem & Segment Decomposition (IEEE 1362 §5.3 / DoDAF SV-1)**: 100% Line Replaceable Unit (LRU) and subsystem identification partitioned across three canonical operational segments with black-box abstraction:
+     - **Primary Vehicle / Cyber-Physical Platform Segment (Air Vehicle Segment)**: Hosts onboard flight autonomy, flight and guidance controllers, perception sensors, actuators, power distribution, and safety watchdogs.
+     - **Command & Control (C2) Segment (Ground Segment)**: Hosts telemetry ground control stations (GCS), PACE communications terminals, and human operator supervisory consoles.
+     - **Auxiliary Support Segment (Launch & Support Segment / GSE)**: Hosts mobile ground support equipment (GSE), launch/recovery staging interfaces, and battery charging systems.
+  2. **Discrete Port Definitions (SysML v2 Port Taxonomy)**: Typed physical and logical ports declared on each subsystem boundary adhering to canonical port notation (`PORT-<SUBSYS>-<NAME> (IN/OUT/INOUT)`).
+  3. **Exhaustive Item Flows & Traceable Connections (ISO 29148 §6.4.3 / IEEE 1362 §5.3)**: Every architectural link carries a traceable identifier matching the System Interface Matrix 1:1 (`CONN-01`..`CONN-N`) across:
+     - **Information / Signal Exchanges**: Telemetry streams, supervisory commands, sensor feeds, discrete safety lines.
+     - **Electrical Energy Transfers**: Regulated DC power distribution rails, battery charging buses.
+     - **Mechanical / Aerodynamic Interfaces**: Physical mounting interfaces, environmental separation envelopes, aerodynamic forces.
+  4. **System Boundary & External Actor Interfaces (IEEE 1362 §5.1 / ISO 29148 §6.4.2)**: Explicit boundary encapsulation enclosing the system segments and formal external actor interfaces (Supervisory Operators, Range Safety Officers, GNSS constellations, Environmental dynamics).
+  5. **Strict Exclusion of Internal Software Modules (DoDAF SV-4)**: ConOps SV-1 operates strictly at the physical and logical subsystem / LRU boundary. Internal software execution classes, internal algorithms, class methods, and function signatures belong in Level 2 detailed design / DoDAF SV-4 and are strictly prohibited in the Level 1B ConOps SV-1 diagram.
+  6. **Canonical Compliant Mermaid SV-1 Diagram Template**: The architecture diagram MUST be authored using a compliant Mermaid flowchart (`flowchart TD` or `flowchart TB`) declaring segment subgraphs, discrete port nodes, and bidirectional/directed connection links (`CONN-XX`).
+
+#### Figure 4.1: Canonical ConOps SV-1 Primary System Architecture Diagram Template
+```mermaid
+flowchart TD
+    subgraph External_Actors["External Operating Environment and Actors (IEEE 1362 §5.1)"]
+        Operator["Human Operator and Mission Supervisor (UC-01 and UC-03)"]
+        GNSS_Space["GNSS Constellation (Space Segment)"]
+        Environment["Atmospheric and Environmental Dynamics"]
+        RangeSafety["Range Safety Authority (UC-02)"]
+    end
+
+    subgraph Ground_Segment["Ground Command and Control Segment (IEEE 1362 §5.3)"]
+        GCS["Ground Control Station (GCS)"]
+        PORT_GCS_C2["PORT-GCS-C2 (INOUT)"]
+        PORT_GCS_DISP["PORT-GCS-DISP (OUT)"]
+        GCS --- PORT_GCS_C2
+        GCS --- PORT_GCS_DISP
+    end
+
+    subgraph Platform_Segment["Air Vehicle and Primary Platform Segment (DoDAF SV-1)"]
+        subgraph Avionics_Bay["Avionics and Processing Core"]
+            FCS["Flight and Guidance Controller"]
+            PORT_FCS_C2["PORT-FCS-C2 (INOUT)"]
+            PORT_FCS_CMD["PORT-FCS-CMD (OUT)"]
+            PORT_FCS_TLM["PORT-FCS-TLM (IN)"]
+            FCS --- PORT_FCS_C2
+            FCS --- PORT_FCS_CMD
+            FCS --- PORT_FCS_TLM
+        end
+
+        subgraph Navigation_Sensors["Perception and Navigation Subsystem"]
+            NavSensors["Sensor Fusion Unit"]
+            PORT_NAV_RF["PORT-NAV-RF (IN)"]
+            PORT_NAV_DATA["PORT-NAV-DATA (OUT)"]
+            NavSensors --- PORT_NAV_RF
+            NavSensors --- PORT_NAV_DATA
+        end
+
+        subgraph Power_Actuation["Energy and Actuation Subsystem"]
+            Actuators["Distributed Actuator Core"]
+            PORT_ACT_IN["PORT-ACT-IN (IN)"]
+            Actuators --- PORT_ACT_IN
+        end
+
+        subgraph Safety_Core["Autonomous Containment Subsystem"]
+            Watchdog["Hardware Safety Watchdog"]
+            PORT_WD_IN["PORT-WD-IN (IN)"]
+            PORT_WD_TRIG["PORT-WD-TRIG (OUT)"]
+            Watchdog --- PORT_WD_IN
+            Watchdog --- PORT_WD_TRIG
+        end
+    end
+
+    subgraph Support_Segment["Launch and Auxiliary Support Segment (IEEE 1362 §5.3)"]
+        GSE["Ground Support Equipment and Staging"]
+        PORT_GSE_PWR["PORT-GSE-PWR (OUT)"]
+        GSE --- PORT_GSE_PWR
+    end
+
+    %% External Interface Connections
+    Operator -->|"CONN-01: Operator Command Input"| PORT_GCS_DISP
+    GNSS_Space -->|"CONN-02: L-Band RF Navigation Signals"| PORT_NAV_RF
+    Environment -.->|"CONN-03: Aerodynamic Disturbance and Wind Gusts"| Actuators
+    RangeSafety -->|"CONN-04: Flight Termination Consent"| GCS
+
+    %% Segment Inter-Connects (Item Flows)
+    PORT_GCS_C2 ---|"CONN-05: PACE Bidirectional C2 Datalink"| PORT_FCS_C2
+    PORT_NAV_DATA -->|"CONN-06: Navigation State Estimates"| PORT_FCS_TLM
+    PORT_FCS_CMD -->|"CONN-07: Real-Time Actuator Demand Vector"| PORT_ACT_IN
+    PORT_FCS_CMD -->|"CONN-08: Heartbeat Pulse and Safety Telemetry"| PORT_WD_IN
+    PORT_GSE_PWR -.->|"CONN-09: Regulated Pre-Flight Power and Diagnostics"| Platform_Segment
+```
+
 - **Subsystem Architecture & AST Part Allocation (Section 4.8)**:
   For EVERY declared AST `part def` node $p \in \text{AST}$, Section 4 must contain a dedicated subsection (`#### 4.8.x {part.name} Subsystem Architecture`) specifying:
   1. **Functional Purpose & Scope**: Primary operational mission role derived from AST doc comments and actions.
-  2. **Physical & Logical Interface / Port Allocations**: Declared input, output, and bidirectional ports (`PortDef`) and bus interconnects.
+  2. **Physical & Logical Interface / Port Allocations**: Declared input, output, and bidirectional ports (`PORT-... (IN/OUT/INOUT)`) and bus interconnects.
   3. **Power, Mass & Resource Envelopes**: Operating electrical power draw, mass partition budget ($m_{\mathrm{alloc}}$), and thermal operating envelopes.
   4. **Operational Role & Statechart Integration**: Lifecycle mode allocation ($\Phi_{\mathrm{lifecycle}}$) and active operational states.
   5. **Safety Invariants, Containment Interlocks & FMECA Linkage**: Watchdog interlocks, emergency trigger containment bindings (`EMG-01`..`EMG-07`), and safety criticalities.
 - **Zero-Omission Rule**: Omitting any declared AST `part def` is strictly forbidden and triggers compiler validation failure during `assemble_conops.py` assembly.
+
 
 ### 4.5 100% Public Clause Citations
 - Every threat mitigation, normative requirement, and operational task must cite authoritative public standards clauses (e.g. `ISO/IEC/IEEE 29148:2018 §6.4.2`, `IEEE Std 1558-2020 §4.5`, `JARUS SORA v2.5 Annex B §2.1`, `RTCA DO-178C §6.3.1`, `MIL-STD-882E §4.4`).

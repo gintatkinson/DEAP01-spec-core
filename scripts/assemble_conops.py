@@ -1466,45 +1466,50 @@ class SysMLParameterBindingEngine:
         subsys_summary = ", ".join(subsys_names) if subsys_names else "Declared System Subsystems"
 
         lines = [
-            f"The **{sys_id}** super-system architecture formalizes the complete cyber-physical system boundary and segment allocations in accordance with ISO/IEC/IEEE 29148:2018 §6.4.2 and INCOSE Systems Engineering Handbook v5.0.",
+            f"The **{sys_id}** super-system architecture formalizes the complete cyber-physical system boundary and segment allocations in accordance with IEEE 1362 §5.3, DoDAF SV-1, ISO/IEC/IEEE 29148:2018 §6.4.2–§6.4.3, and INCOSE Systems Engineering Handbook v5.0.",
             "",
             f"The super-system decomposes across declared SysML AST architectural blocks:",
-            f"1. **Primary Operational Segment:** Houses constituent subsystems ({subsys_summary}) executing closed-loop mission activities.",
-            f"2. **Ground Command & Control Segment:** Provides supervisory oversight and failsafe abort authority.",
-            f"3. **Auxiliary Support Segment:** Provides pre-operational deployment, servicing, and diagnostic support.",
+            f"1. **Primary Operational Segment (Air Vehicle / Primary Platform Segment):** Houses constituent subsystems ({subsys_summary}) executing closed-loop mission activities.",
+            f"2. **Ground Command & Control Segment (Ground Segment):** Provides supervisory oversight and failsafe abort authority.",
+            f"3. **Launch & Auxiliary Support Segment (Launch & Support Segment):** Provides pre-operational deployment, servicing, and diagnostic support.",
             "",
             "```mermaid",
             "flowchart TD",
             f'    subgraph "Operational Super-System Architecture ({sys_id})"',
-            '        subgraph "Primary Operational Segment"',
-            f'            Platform["{sys_id} Core Platform"]',
-        ]
-        if subsys_names:
-            subsys_labels = "\\n".join(subsys_names[:6])
-            lines.append(f'            Subsystems["Constituent Subsystems\\n({subsys_labels})"]')
-        else:
-            lines.append('            Subsystems["Constituent Subsystems\\n(Declared System Subsystems)"]')
-        lines.extend([
-            '            Platform --> Subsystems',
-            '        end',
-            '',
-            '        subgraph "Ground Command & Control Segment"',
-            '            GCS["Ground Control Station / C2"]',
+            '        subgraph "External Operating Environment & Actors (IEEE 1362 §5.1)"',
             '            Operator["Supervisory Operator (SO / MS)"]',
-            '            Operator --> GCS',
+            '            Environment["External Environment & Infrastructure"]',
             '        end',
             '',
-            '        subgraph "Launch & Auxiliary Support Segment"',
+            '        subgraph "Primary Operational Segment (DoDAF SV-1)"',
+            f'            Platform["{sys_id} Core Platform"]',
+            '            PORT_PLAT_C2["PORT-PLAT-C2 (INOUT)"]',
+            '            PORT_PLAT_PWR["PORT-PLAT-PWR (IN)"]',
+            '            Platform --- PORT_PLAT_C2',
+            '            Platform --- PORT_PLAT_PWR',
+            '        end',
+            '',
+            '        subgraph "Ground Command & Control Segment (IEEE 1362 §5.3)"',
+            '            GCS["Ground Control Station / C2"]',
+            '            PORT_GCS_C2["PORT-GCS-C2 (INOUT)"]',
+            '            GCS --- PORT_GCS_C2',
+            '        end',
+            '',
+            '        subgraph "Launch & Auxiliary Support Segment (IEEE 1362 §5.3)"',
             '            Launch["Launch & Recovery System"]',
             '            GSE["Support Equipment & Maintenance"]',
+            '            PORT_GSE_PWR["PORT-GSE-PWR (OUT)"]',
+            '            GSE --- PORT_GSE_PWR',
             '        end',
             '',
-            '        GCS <-->|"Bidirectional C2 Telemetry & Command Link"| Platform',
-            '        Launch -.->|"Pre-Mission Deployment / Release"| Platform',
-            '        GSE -.->|"Servicing & Diagnostics"| Platform',
+            '        Operator -->|"CONN-01: Operator Command & Authorization"| GCS',
+            '        PORT_GCS_C2 <-->|"CONN-02: Bidirectional PACE C2 Datalink"| PORT_PLAT_C2',
+            '        PORT_GSE_PWR -.->|"CONN-03: Pre-Mission Power & Servicing"| PORT_PLAT_PWR',
+            '        Launch -.->|"CONN-04: Deployment & Recovery Interface"| Platform',
+            '        Environment -.->|"CONN-05: Environmental Dynamics & Disturbance"| Platform',
             '    end',
             "```",
-        ])
+        ]
         return "\n".join(lines)
 
     def _synthesize_subsystem_architecture_text(self, sys_id: str, dom: str = "") -> str:

@@ -79,6 +79,7 @@ RECOGNIZED_STRUCTURAL_TOKENS = {
     "systemusecases", "systemusecasessubsystem", "usecases", "usecasesubsystem",
     "pipeline", "phase1", "phase2", "phase3", "phase1a", "phase1b", "ssot", "conops", "stpa", "fmeca", "sysml",
     "epic", "feature", "story", "stories", "deliverable", "deliverables", "matrix", "sync",
+    "port", "ports", "conn", "connection", "connections",
     "pyr", "int", "la", "a5", "rot", "gs", "op", "wh", "sens", "act", "cat", "oc", "obc", "fcc", "esad", "ext", "seeker", "gimbal"
 }
 
@@ -460,13 +461,13 @@ class SemanticDiagramASTValidator(IValidator):
         if id_norm in RECOGNIZED_STRUCTURAL_TOKENS or lbl_norm in RECOGNIZED_STRUCTURAL_TOKENS:
             return True
 
-        # Check procedural workflow / lifecycle / step / WBS patterns
-        procedural_prefix = re.compile(r'^(step\d*|phase|abort|gate|mtc|lru|task\d*|sortie|turnaround|diagnostics|pbit|ibit|cbit|check|pass|fail|l\d+|wp[_\-]|wbs[_\-]|uc[_\-])', re.I)
+        # Check procedural workflow / lifecycle / step / WBS / port / connection patterns
+        procedural_prefix = re.compile(r'^(step\d*|phase|abort|gate|mtc|lru|port|conn|task\d*|sortie|turnaround|diagnostics|pbit|ibit|cbit|check|pass|fail|l\d+|wp[_\-]|wbs[_\-]|uc[_\-]|port[_\-]|conn[_\-])', re.I)
         if procedural_prefix.match(node_id.strip()) or procedural_prefix.match(id_norm) or procedural_prefix.match(lbl_norm):
             return True
 
-        # Check use case prefixes
-        if id_norm.startswith("uc") or id_norm.startswith("usecase") or lbl_norm.startswith("uc"):
+        # Check use case, port, and connection prefixes
+        if id_norm.startswith(("uc", "usecase", "port", "conn")) or lbl_norm.startswith(("uc", "port", "conn")):
             return True
 
         # Check structural metaclass, architectural, domain, UI, and data model suffixes
