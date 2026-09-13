@@ -359,7 +359,44 @@ Evaluating candidate protocols: STANAG 4586 and MIL-STD-1553 were analyzed but r
             findings = self.validator.validate(repo, scan_dirs=["docs"])
             self.assertEqual(findings, [])
 
+    def test_closed_world_rejects_arbitrary_ungrounded_descriptor(self):
+        """Verify that an arbitrary ungrounded compound structural descriptor (e.g. abc-tail) fails Check 23."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            docs_dir = os.path.join(tmpdir, "docs", "conops")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(docs_dir, exist_ok=True)
+
+            # Schema has NO tail or rudder configuration declared
+            schema_sysml = """package MinimalVehicle_SSOT {
+    attribute maxGLoad : Real = 12.0;
+    part def Airframe {
+        attribute massKg : Real = 25.0;
+    }
+}
+"""
+            with open(os.path.join(schema_dir, "model.sysml"), "w", encoding="utf-8") as f:
+                f.write(schema_sysml)
+
+            doc_md = """# Concept of Operations
+
+## Airframe Empennage Geometry
+The airframe is configured with an ungrounded abc-tail empennage and quantum-rudder for aerodynamic control.
+"""
+            with open(os.path.join(docs_dir, "CONOPS_EMPENNAGE.md"), "w", encoding="utf-8") as f:
+                f.write(doc_md)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            findings = self.validator.validate(repo, scan_dirs=["docs"])
+
+            self.assertTrue(len(findings) >= 1)
+            rule_ids = {f.rule_id for f in findings}
+            self.assertIn("factual-grounding-numeric-drift", rule_ids)
+            self.assertTrue(any("abc-tail" in str(f) for f in findings))
+
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

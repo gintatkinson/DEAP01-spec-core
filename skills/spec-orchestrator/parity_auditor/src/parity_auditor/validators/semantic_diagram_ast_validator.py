@@ -42,29 +42,16 @@ ItemDef = _sysml_ast.ItemDef
 ConnectionDef = _sysml_ast.ConnectionDef
 
 
-# Standard external actors and boundary entities recognized across system architectures
+# Universal abstract systems engineering boundary tokens (closed-world AST grounding per Issue #282)
+# Specifically purges customer drone & weapon keywords (catapult, sitaware, sitaware_hq, atak, warhead, airframe, recovery_net)
 RECOGNIZED_EXTERNAL_ACTORS = {
-    "operator", "operators", "pilot", "pilots", "remote_pilot", "remote pilot", "user", "users", "human", "supervisor", "coordinator", "technician",
-    "commander", "mission_commander", "mission commander", "flight_commander", "flight commander",
-    "gcsoperator", "gcs operator", "payloadoperator", "payload operator", "launchassistant", "launch assistant", "crew", "multi_crew", "multi crew",
-    "ground_station", "ground station", "gcs", "ground_control_station", "ground control station",
-    "cloud", "server", "servers", "client", "clients", "database", "databases", "storage", "backend", "infrastructure", "hub", "gateway", "gateways",
-    "ui", "console", "consoles", "display", "displays", "terminal", "terminals", "cockpit", "hmi", "gui", "station", "stations", "gse",
-    "ground_support_equipment", "ground support equipment", "support_equipment", "support equipment",
-    "launcher", "launchers", "pneumatic_launcher", "pneumatic launcher", "catapult", "rail_launcher", "rail launcher",
-    "recovery_system", "recovery system", "recovery_net", "recovery net", "parachute", "chute",
-    "atc", "air_traffic_control", "air traffic control", "utm", "u-space", "authority", "authorities", "airspace_authority", "airspace authority",
-    "external_system", "external system", "external", "externalsystems", "ext", "third_party", "gnss", "gps", "constellation", "constellations", "gnss_constellation", "weather", "weather_service", "weather service",
-    "tactical_network", "tactical network", "tactical_networks", "tactical networks", "sitaware", "sitaware_hq", "sitaware hq", "atak", "delta",
-    "environment", "environmental", "physical_world", "physical world", "atmosphere", "ground", "terrain", "space", "orbital",
-    "power_grid", "power grid", "grid", "generator", "umbilical", "power_source", "power source",
-    "telemetry_channel", "command_link", "radio", "radios", "transceiver", "datalink", "satcom", "satellite", "satellites",
-    "c2", "c2_channel", "c2_link", "pace", "channel", "channels", "bus", "reference", "timing", "positioning",
-    "air_vehicle", "air vehicle", "air_vehicle_segment", "air vehicle segment", "ground_segment", "ground segment",
-    "ground_control_segment", "ground control segment", "launch_segment", "launch segment", "support_segment", "support segment",
-    "space_segment", "space segment", "primary_operational_segment", "primary operational segment",
-    "operational_segment", "operational segment", "airframe", "platform", "platforms",
-    "target", "target_system", "target system", "threat", "threat_system", "threat system"
+    "operator", "operators", "user", "users", "human", "supervisor", "authority", "authorities",
+    "cloud", "server", "servers", "client", "clients", "database", "storage", "backend", "infrastructure",
+    "external_system", "external system", "external", "externalsystems", "ext", "third_party",
+    "environment", "environmental", "physical_world", "terrain", "space", "atmosphere",
+    "telemetry_channel", "command_link", "c2", "c2_channel", "c2_link", "channel", "channels", "datalink", "network",
+    "gnss", "gps", "constellation", "constellations", "gnss_constellation", "reference", "timing", "positioning", "satellite", "satellites",
+    "power_grid", "grid", "power_source"
 }
 
 # Procedural, workflow, lifecycle, and generic diagram structural tokens
@@ -94,6 +81,7 @@ RECOGNIZED_STRUCTURAL_TOKENS = {
     "platform", "platforms", "supersystem", "supersystems", "primary", "support", "operational",
     "launcher", "launchers", "recovery", "airvehicle", "groundcontrol", "launchsegment",
     "supportsegment", "airvehiclesegment", "groundcontrolsegment", "operationalsegment",
+    "gse", "equipment", "hardware",
     "pyr", "int", "la", "a5", "rot", "gs", "op", "wh", "sens", "act", "cat", "oc", "obc", "fcc", "esad", "ext", "seeker", "gimbal"
 }
 
@@ -373,11 +361,17 @@ class SemanticDiagramASTValidator(IValidator):
             part_norm.add(f"{p_norm}airframe")
             part_norm.add(f"{p_norm}vehicle")
             part_norm.add(f"{p_norm}platform")
+            for tok in _tokenize_name(p.name):
+                if len(tok) >= 3:
+                    part_norm.add(tok)
             for port in (p.ports or []):
                 port_names.add(port.name)
                 port_names.add(f"{p.name}.{port.name}")
                 port_norm.add(_normalize_identifier(port.name))
                 port_norm.add(_normalize_identifier(f"{p.name}.{port.name}"))
+                for tok in _tokenize_name(port.name):
+                    if len(tok) >= 3:
+                        port_norm.add(tok)
             for act in (p.actions or []):
                 action_names.add(act.name)
                 action_norm.add(_normalize_identifier(act.name))
@@ -501,6 +495,15 @@ class SemanticDiagramASTValidator(IValidator):
             sg_lbl_norm = _normalize_identifier(getattr(sg, "label", "") or sg_id)
             if id_norm in (sg_id_norm, sg_lbl_norm) or lbl_norm in (sg_id_norm, sg_lbl_norm):
                 return True
+            is_external_sg = (
+                "external" in sg_id_norm or "external" in sg_lbl_norm or
+                "actor" in sg_id_norm or "actor" in sg_lbl_norm or
+                "environment" in sg_id_norm or "environment" in sg_lbl_norm
+            )
+            if is_external_sg:
+                sg_nodes = getattr(sg, "nodes", []) or []
+                if node_id in sg_nodes or any(_normalize_identifier(n) == id_norm for n in sg_nodes):
+                    return True
 
         # Check exact structural/procedural tokens
         if id_norm in RECOGNIZED_STRUCTURAL_TOKENS or lbl_norm in RECOGNIZED_STRUCTURAL_TOKENS:
@@ -525,7 +528,7 @@ class SemanticDiagramASTValidator(IValidator):
             "handler", "adapter", "factory", "builder", "helper", "test", "entity",
             "dto", "dao", "register", "field", "enum", "type",
             "finding", "findings", "audit", "audits", "report", "reports", "deliverable", "deliverables", "codegen",
-            "airframe", "segment", "segments", "vehicle", "platform", "launcher", "station"
+            "airframe", "segment", "segments", "vehicle", "platform", "launcher", "station", "equipment"
         )):
             return True
 
@@ -550,6 +553,12 @@ class SemanticDiagramASTValidator(IValidator):
         if any(tok in ast["declared_actors"] for tok in tokens if len(tok) >= 2):
             return True
 
+        # Dynamic resolution of external participants against SysML AST part def classifiers and boundary ports
+        for tok in tokens:
+            if len(tok) >= 3:
+                if tok in ast.get("part_norm", set()) or tok in ast.get("port_norm", set()):
+                    return True
+
         # Check package and system tokens
         if any(pkg_n in id_norm or pkg_n in lbl_norm for pkg_n in ast.get("package_norm", set()) if len(pkg_n) >= 3):
             return True
@@ -562,6 +571,8 @@ class SemanticDiagramASTValidator(IValidator):
         )
         for t_set in target_sets:
             if id_norm in t_set or lbl_norm in t_set:
+                return True
+            if any(tok in t_set for tok in tokens if len(tok) >= 3):
                 return True
 
         # Check if AST part or port is explicitly contained in node_id or label
@@ -576,6 +587,9 @@ class SemanticDiagramASTValidator(IValidator):
                 return True
 
         return False
+
+    # Alias for external participant and node resolution
+    _is_valid_node = _is_declared_node
 
     def _is_actuator(self, name: str, label: str) -> bool:
         """Check if a node represents an actuator component."""

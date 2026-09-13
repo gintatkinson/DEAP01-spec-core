@@ -351,5 +351,38 @@ Water proofing is disabled for expendable operations.
             self.assertEqual(cm.exception.code, 1)
 
 
+    def test_check22_closed_world_part_def_resolution_for_custom_invariants(self):
+        """Verify dynamic closed-world part def resolution for custom negative physical invariants."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            docs_dir = os.path.join(tmpdir, "docs", "features")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(docs_dir, exist_ok=True)
+
+            # QuantumRudder is declared as a PartDef, so quantumRudder attribute is dynamically recognized as physical
+            sysml_content = """package CustomGroundingModel {
+    part def QuantumRudder {
+        attribute rudderAngle : Float64 = 0.0;
+    }
+
+    attribute quantumRudder : String = "Disabled";
+}
+"""
+            with open(os.path.join(schema_dir, "model.sysml"), "w", encoding="utf-8") as f:
+                f.write(sysml_content)
+
+            with open(os.path.join(docs_dir, "Feat-03.md"), "w", encoding="utf-8") as f:
+                f.write("""# Feature: Dynamic Grounding
+The vehicle actively steers using quantum rudder during terminal phase.
+""")
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            findings = self.validator.validate(repo, scan_dirs=["docs"])
+
+            self.assertTrue(len(findings) >= 1)
+            findings_text = " ".join([str(f) for f in findings])
+            self.assertIn("quantum rudder", findings_text)
+
+
 if __name__ == "__main__":
     unittest.main()

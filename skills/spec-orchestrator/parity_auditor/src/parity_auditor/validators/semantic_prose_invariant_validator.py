@@ -216,11 +216,8 @@ SIGNAL_STATUS_SUFFIXES = (
 
 PHYSICAL_EQUIPMENT_KEYWORDS = {
     "system", "device", "mechanism", "equipment", "hardware", "subsystem", "payload",
-    "sensor", "actuator", "armor", "wing", "rotor", "engine", "motor", "propeller",
-    "thruster", "turret", "hook", "float", "skid", "launcher", "catapult", "airframe",
-    "uplink", "downlink", "transponder", "radar", "lidar", "altimeter", "beacon",
-    "camera", "gimbal", "warhead", "chute", "parachute", "recovery", "landing",
-    "gear", "undercarriage", "flotation", "arresting", "waterproofing", "shielding"
+    "sensor", "actuator", "module", "component", "unit", "uplink", "downlink",
+    "transponder", "beacon", "waterproofing", "shielding"
 }
 
 
@@ -242,26 +239,64 @@ def _is_valid_identifier_key(k: str) -> bool:
     return True
 
 
-def _is_physical_feature_attribute(norm_name: str, val_clean: str) -> bool:
+def _is_physical_feature_attribute(
+    norm_name: str,
+    val_clean: str,
+    declared_parts: Optional[Set[str]] = None
+) -> bool:
     """Determine if a custom attribute represents a physical hardware/capability invariant."""
     if any(norm_name.endswith(sfx) for sfx in SIGNAL_STATUS_SUFFIXES):
         return False
     # Must have physical equipment keyword or explicit installation/presence prefix/suffix
     has_physical_kw = any(kw in norm_name for kw in PHYSICAL_EQUIPMENT_KEYWORDS)
+    has_part_match = bool(declared_parts and any(p in norm_name for p in declared_parts if len(p) >= 3))
     has_presence_affix = (
         norm_name.startswith(("has", "with", "enable", "support")) or
         norm_name.endswith(("installed", "equipped", "fitted", "present", "available", "capable", "capability", "enabled"))
     )
-    if not (has_physical_kw or has_presence_affix):
+    if not (has_physical_kw or has_part_match or has_presence_affix):
         return False
     if val_clean in ("0", "0.0") and not has_presence_affix:
         return False
     return True
 
 
-def _extract_attributes_from_sysml_pkg(pkg: Any, rel_path: str) -> List[NegativeInvariant]:
+def _extract_attributes_from_sysml_pkg(
+    pkg: Any, rel_path: str, declared_parts: Optional[Set[str]] = None
+) -> List[NegativeInvariant]:
     """Extract negative physical invariants and lifecycle invariants directly from SysMLPackage AST."""
     invariants: List[NegativeInvariant] = []
+    active_parts = declared_parts if declared_parts is not None else set()
+
+    # Ingest part definitions dynamically from pkg if available
+    if hasattr(pkg, "get_all_parts"):
+        try:
+            for p in pkg.get_all_parts():
+                if getattr(p, "name", None):
+                    p_name = p.name.strip()
+                    active_parts.add(_normalize_name(p_name))
+                    for w in _split_words(p_name):
+                        if len(w) >= 3:
+                            active_parts.add(w.lower())
+        except Exception:
+            pass
+
+    def harvest_parts(p: Any):
+        if not p:
+            return
+        for part in getattr(p, "part_defs", []) or []:
+            if getattr(part, "name", None):
+                p_name = part.name.strip()
+                active_parts.add(_normalize_name(p_name))
+                for w in _split_words(p_name):
+                    if len(w) >= 3:
+                        active_parts.add(w.lower())
+            for sub_p in getattr(part, "parts", []) or []:
+                harvest_parts(sub_p)
+        for sub in getattr(p, "sub_packages", []) or []:
+            harvest_parts(sub)
+
+    harvest_parts(pkg)
 
     def process_attr(attr: Any):
         if not attr or not getattr(attr, "name", None):
@@ -293,7 +328,7 @@ def _extract_attributes_from_sysml_pkg(pkg: Any, rel_path: str) -> List[Negative
                 domain = "landing_gear"
             elif "landing" in norm_name or "runway" in norm_name or "autoland" in norm_name or "touchdown" in norm_name:
                 domain = "landing"
-            elif not _is_physical_feature_attribute(norm_name, val_clean):
+            elif not _is_physical_feature_attribute(norm_name, val_clean, declared_parts=active_parts):
                 return
 
             invariants.append(NegativeInvariant(
@@ -329,11 +364,13 @@ def _extract_attributes_from_sysml_pkg(pkg: Any, rel_path: str) -> List[Negative
 
 
 def _extract_negative_invariants_from_sysml(
-    sysml_files: List[str], repo_root: str
+    sysml_files: List[str], repo_root: str, declared_parts: Optional[Set[str]] = None
 ) -> List[NegativeInvariant]:
     """Extract negative attributes and lifecycle invariants from SysML v2 files via AST and regex."""
     invariants: List[NegativeInvariant] = []
+    active_parts = declared_parts if declared_parts is not None else set()
 
+    part_def_regex = re.compile(r'\bpart\s+(?:def\s+)?([a-zA-Z0-9_]+)', re.I)
     attr_regex = re.compile(
         r'\battribute\s+(?:def\s+)?([a-zA-Z0-9_]+)(?:\s*:\s*([a-zA-Z0-9_<>:]+))?\s*=\s*([^;]+);',
         re.I
@@ -352,11 +389,19 @@ def _extract_negative_invariants_from_sysml(
         except Exception:
             continue
 
+        # Ingest declared parts from regex
+        for m in part_def_regex.finditer(content):
+            p_name = m.group(1).strip()
+            active_parts.add(_normalize_name(p_name))
+            for w in _split_words(p_name):
+                if len(w) >= 3:
+                    active_parts.add(w.lower())
+
         # 1. AST-based extraction via SysMLParser
         if SysMLParser:
             try:
                 pkg = SysMLParser.parse_text(content, default_name=os.path.splitext(os.path.basename(sf))[0])
-                ast_invs = _extract_attributes_from_sysml_pkg(pkg, rel_path)
+                ast_invs = _extract_attributes_from_sysml_pkg(pkg, rel_path, declared_parts=active_parts)
                 invariants.extend(ast_invs)
             except Exception:
                 pass
@@ -402,7 +447,7 @@ def _extract_negative_invariants_from_sysml(
                         domain = "landing_gear"
                     elif "landing" in norm_name or "runway" in norm_name or "autoland" in norm_name or "touchdown" in norm_name:
                         domain = "landing"
-                    elif not _is_physical_feature_attribute(norm_name, val_clean):
+                    elif not _is_physical_feature_attribute(norm_name, val_clean, declared_parts=active_parts):
                         continue
 
                     invariants.append(NegativeInvariant(
@@ -417,15 +462,18 @@ def _extract_negative_invariants_from_sysml(
 
 
 def _extract_negative_invariants_from_markdown(
-    md_files: List[str], repo_root: str
+    md_files: List[str], repo_root: str, declared_parts: Optional[Set[str]] = None
 ) -> List[NegativeInvariant]:
     """Extract negative attributes from extracted schema markdown tables and lists."""
     invariants: List[NegativeInvariant] = []
+    active_parts = declared_parts if declared_parts is not None else set()
 
     # Table row pattern: | Key | Value | ...
     table_row_regex = re.compile(r'^\s*\|\s*([^|]+)\|\s*([^|]+)\|')
     # Key-value pattern: - Key: Value or Key: Value
     kv_regex = re.compile(r'^\s*(?:-\s*)?([a-zA-Z0-9_\s]{2,40}):\s*([^`\n]+)$')
+    # Part declaration pattern in markdown
+    part_heading_regex = re.compile(r'^\s*#{1,6}\s*(?:Part|PartDef|Component|Subsystem)?\s*[:\-]?\s*([a-zA-Z0-9_]+)', re.I)
 
     for mf in md_files:
         rel_path = os.path.relpath(mf, repo_root)
@@ -437,7 +485,18 @@ def _extract_negative_invariants_from_markdown(
 
         for line in lines:
             line_str = line.strip()
-            if not line_str or line_str.startswith("#"):
+            if not line_str:
+                continue
+
+            m_part = part_heading_regex.match(line_str)
+            if m_part:
+                p_name = m_part.group(1).strip()
+                active_parts.add(_normalize_name(p_name))
+                for w in _split_words(p_name):
+                    if len(w) >= 3:
+                        active_parts.add(w.lower())
+
+            if line_str.startswith("#"):
                 continue
 
             k, v = None, None
@@ -483,7 +542,7 @@ def _extract_negative_invariants_from_markdown(
                     domain = "landing_gear"
                 elif "landing" in norm_k or "runway" in norm_k or "autoland" in norm_k or "touchdown" in norm_k:
                     domain = "landing"
-                elif not _is_physical_feature_attribute(norm_k, v_clean):
+                elif not _is_physical_feature_attribute(norm_k, v_clean, declared_parts=active_parts):
                     continue
 
                 invariants.append(NegativeInvariant(
@@ -828,9 +887,10 @@ class SemanticProseInvariantValidator(IValidator):
             return []
 
         # 2. Extract negative physical invariants
+        declared_parts: Set[str] = set()
         invariants: List[NegativeInvariant] = []
-        invariants.extend(_extract_negative_invariants_from_sysml(sysml_files, repo.workspace_dir))
-        invariants.extend(_extract_negative_invariants_from_markdown(md_schema_files, repo.workspace_dir))
+        invariants.extend(_extract_negative_invariants_from_sysml(sysml_files, repo.workspace_dir, declared_parts=declared_parts))
+        invariants.extend(_extract_negative_invariants_from_markdown(md_schema_files, repo.workspace_dir, declared_parts=declared_parts))
 
         # Deduplicate invariants by concept domain and normalized attribute name
         unique_invariants: List[NegativeInvariant] = []

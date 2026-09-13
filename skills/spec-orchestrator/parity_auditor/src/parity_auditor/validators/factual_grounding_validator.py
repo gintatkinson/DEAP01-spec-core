@@ -240,9 +240,11 @@ class SchemaGroundTruth:
     raw_schema_text: str = ""
     source_files: List[str] = field(default_factory=list)
     has_concrete_schema: bool = False
+    declared_ast_nodes: Set[str] = field(default_factory=set)
 
 
 GroundTruth = SchemaGroundTruth
+
 
 
 class FactualGroundingValidator(IValidator):
@@ -406,8 +408,12 @@ class FactualGroundingValidator(IValidator):
 
             name_norm = _normalize_name(name)
             gt.attributes[name_norm] = val_clean
+            gt.declared_ast_nodes.add(name_norm)
+            gt.declared_ast_nodes.add(_normalize_name(val_clean))
 
             tokens = _tokenize_identifier(name)
+            for t in tokens:
+                gt.declared_ast_nodes.add(t)
             unit = _extract_unit(raw_val, tokens)
             scalar = _extract_numeric_scalar(raw_val)
 
@@ -461,6 +467,14 @@ class FactualGroundingValidator(IValidator):
         for part in getattr(pkg, "part_defs", []) or getattr(pkg, "parts", []) or []:
             pname = getattr(part, "name", "")
             pname_norm = _normalize_name(pname)
+            if pname:
+                gt.declared_ast_nodes.add(pname_norm)
+                for tok in _tokenize_identifier(pname):
+                    gt.declared_ast_nodes.add(tok)
+            for port in getattr(part, "ports", []) or []:
+                port_name = getattr(port, "name", "")
+                if port_name:
+                    gt.declared_ast_nodes.add(_normalize_name(port_name))
             for attr in getattr(part, "attributes", []) or getattr(part, "attribute_defs", []) or []:
                 aname = getattr(attr, "name", "")
                 aname_norm = _normalize_name(aname)
@@ -508,8 +522,12 @@ class FactualGroundingValidator(IValidator):
                     clean_v = v.strip('"\'`')
                     k_norm = _normalize_name(k)
                     gt.attributes[k_norm] = clean_v
+                    gt.declared_ast_nodes.add(k_norm)
+                    gt.declared_ast_nodes.add(_normalize_name(clean_v))
 
                     tokens = _tokenize_identifier(k)
+                    for t in tokens:
+                        gt.declared_ast_nodes.add(t)
                     unit = _extract_unit(clean_v, tokens)
                     scalar = _extract_numeric_scalar(clean_v)
 
@@ -561,7 +579,12 @@ class FactualGroundingValidator(IValidator):
                 clean_v = v.strip('"\'`')
                 k_norm = _normalize_name(k)
                 gt.attributes[k_norm] = clean_v
+                gt.declared_ast_nodes.add(k_norm)
+                gt.declared_ast_nodes.add(_normalize_name(clean_v))
+
                 tokens = _tokenize_identifier(k)
+                for t in tokens:
+                    gt.declared_ast_nodes.add(t)
                 unit = _extract_unit(clean_v, tokens)
                 scalar = _extract_numeric_scalar(clean_v)
                 if scalar is not None and clean_v.isdigit() and not unit:
@@ -673,6 +696,31 @@ class FactualGroundingValidator(IValidator):
             elif isinstance(v, str) and len(v) >= 2:
                 config_targets[k] = v
 
+        # Collect all structural nouns: standard physical nouns + schema-derived nouns
+        structural_nouns: Set[str] = {
+            "tail", "rudder", "ruddervator", "wing", "fin", "surface", "canard",
+            "stabilizer", "aileron", "elevon", "fuselage", "airframe", "rotor",
+            "propeller", "boom", "pylon", "hull"
+        }
+        for k, v in config_targets.items():
+            m_parts = re.match(r'^([a-zA-Z0-9]+)[- ]([a-zA-Z0-9]+)$', str(v))
+            if m_parts:
+                structural_nouns.add(m_parts.group(2).lower())
+            if isinstance(k, str) and len(k) >= 3:
+                structural_nouns.add(k.lower())
+        for node in gt.declared_ast_nodes:
+            if len(node) >= 3 and node not in ("integer", "real", "boolean", "string", "float", "true", "false"):
+                structural_nouns.add(node.lower())
+
+        pat_compound_desc = re.compile(
+            r'\b([a-zA-Z0-9]+-(?:' + '|'.join(re.escape(n) for n in sorted(structural_nouns, key=len, reverse=True)) + r'))\b',
+            re.I
+        )
+        pat_standalone_desc = re.compile(
+            r'\b(cruciform)\b',
+            re.I
+        )
+
         WORD_NUMBERS = {
             "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
             "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
@@ -764,6 +812,32 @@ class FactualGroundingValidator(IValidator):
                                 ))
                                 reported_descriptors_on_line.add(desc_claimed)
                                 break
+
+            # 3. Closed-world structural descriptor resolution: check candidate compound & standalone descriptors
+            for pat in (pat_compound_desc, pat_standalone_desc):
+                for m_desc in pat.finditer(line_str):
+                    desc_claimed = m_desc.group(1).strip()
+                    if desc_claimed in reported_descriptors_on_line:
+                        continue
+                    if desc_claimed.upper() in gt.declared_protocols or any(p.upper() == desc_claimed.upper() for p in RECOGNIZED_PROTOCOLS):
+                        continue
+                    desc_claimed_norm = _normalize_name(desc_claimed)
+                    if not desc_claimed_norm or desc_claimed_norm.isdigit():
+                        continue
+                    is_declared = (
+                        desc_claimed_norm in gt.declared_ast_nodes
+                        or any(desc_claimed_norm == _normalize_name(v) for v in gt.structural_attributes.values() if isinstance(v, str))
+                        or any(desc_claimed_norm == k for k in gt.structural_attributes.keys())
+                        or desc_claimed_norm in _normalize_name(gt.raw_schema_text)
+                    )
+                    if not is_declared:
+                        findings.append(Finding(
+                            "factual-grounding-numeric-drift",
+                            f"{rel_path}:{lineno_1idx}: Ungrounded structural descriptor '{desc_claimed}' is not declared in schema ground truth or AST nodes in {', '.join(gt.source_files) or 'schema/'}.",
+                            location=f"{rel_path}:{lineno_1idx}",
+                            detail={"file": rel_path, "line": lineno_1idx, "descriptor": desc_claimed}
+                        ))
+                        reported_descriptors_on_line.add(desc_claimed)
 
         return findings
 
