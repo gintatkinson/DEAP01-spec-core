@@ -1282,6 +1282,140 @@ The catapult launch acceleration is 15g.
         self.assertIn("voltsv", gt.declared_ast_nodes)
         self.assertIn("altitudemslm", gt.declared_ast_nodes)
 
+    def test_markdown_table_keys_filter_pinout_indices(self):
+        """Verify that pure integers or keys with fewer than 3 alphabetic characters (e.g. pin numbers 7, 8, 12, P1)
+        are excluded from gt.structural_attributes, gt.declared_parts, and gt.attributes."""
+        from parity_auditor.validators.factual_grounding_validator import SchemaGroundTruth
+
+        pinout_md = """# Connector Pinout Specification
+
+## J1 Header Pinout
+| Pin | Function | Description |
+| :--- | :--- | :--- |
+| 1 | Ground | Power ground return |
+| 2 | VCC | 5V primary supply |
+| 7 | TX | RS-485 Differential Transmit |
+| 8 | RX | RS-485 Differential Receive |
+| 12 | EN | Line transceiver enable |
+| P1 | Shield | Chassis earth shield |
+| Ruddervator Actuators | 4 | Independent high-bandwidth control surface actuators |
+| Wingspan | 1.8 m | Main wing tip-to-tip span |
+"""
+        gt = SchemaGroundTruth()
+        self.validator._extract_from_markdown(pinout_md, "schema/pinout.md", gt)
+
+        # Pin numbers and indices must NOT be ingested as attributes or parts:
+        for pin_key in ("1", "2", "7", "8", "12", "p1"):
+            self.assertNotIn(pin_key, gt.attributes, f"Pin key {pin_key} was unexpectedly added to gt.attributes")
+            self.assertNotIn(pin_key, gt.structural_attributes, f"Pin key {pin_key} was unexpectedly added to gt.structural_attributes")
+            self.assertNotIn(pin_key, gt.declared_parts, f"Pin key {pin_key} was unexpectedly added to gt.declared_parts")
+
+        # Legitimate attributes with >= 3 alphabetic characters must be ingested:
+        self.assertIn("ruddervatoractuators", gt.attributes)
+        self.assertIn("wingspan", gt.attributes)
+        self.assertIn("wingspan", gt.numeric_limits)
+
+    def test_has_ssot_citation_recognizes_explicit_schema_paths_and_links(self):
+        """Verify that _has_ssot_citation recognizes explicit schema/ file paths, backticked paths,
+        and links in table rows and prose."""
+        # Bare path in table row:
+        line_table_bare = "| Catapult Launch Limit | 12g | schema/DEAP_MODEL.sysml#L42 |"
+        self.assertTrue(self.validator._has_ssot_citation(line_table_bare, line_table_bare, "docs/conops/CONOPS.md"))
+
+        # Backticked path in table row:
+        line_table_backticked = "| Catapult Launch Limit | 12g | `schema/DEAP_MODEL.sysml#L42` |"
+        self.assertTrue(self.validator._has_ssot_citation(line_table_backticked, line_table_backticked, "docs/conops/CONOPS.md"))
+
+        # Bare path in prose:
+        line_prose_bare = "The rail launch limit is strictly enforced at 12g per schema/DEAP_MODEL.sysml#L42."
+        self.assertTrue(self.validator._has_ssot_citation(line_prose_bare, line_prose_bare, "docs/features/FEAT_01.md"))
+
+        # Backticked path in prose:
+        line_prose_backticked = "The rail launch limit is strictly enforced at 12g per `schema/DEAP_MODEL.sysml`."
+        self.assertTrue(self.validator._has_ssot_citation(line_prose_backticked, line_prose_backticked, "docs/features/FEAT_01.md"))
+
+        # Relative path with ../:
+        line_relative = "Refer to ../schema/extracted/oem_spec.md for the ground truth configuration."
+        self.assertTrue(self.validator._has_ssot_citation(line_relative, line_relative, "docs/features/FEAT_01.md"))
+
+        # Markdown link:
+        line_md_link = "Grounded against [SSOT](schema/DEAP_MODEL.sysml)."
+        self.assertTrue(self.validator._has_ssot_citation(line_md_link, line_md_link, "docs/features/FEAT_01.md"))
+
+        # Negative case: line without schema citation:
+        line_uncited = "The rail launch limit is strictly enforced at 15g."
+        self.assertFalse(self.validator._has_ssot_citation(line_uncited, line_uncited, "docs/features/FEAT_01.md"))
+
+    def test_proximity_clause_matching_same_unit_metrics(self):
+        """Verify Proximity Clause Matching when multiple metrics of the same unit exist on a line:
+        Wingspan: 1.8 m matches wingspanM (1.8m), while Length: 1.6 m matches lengthM (1.6m)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            docs_dir = os.path.join(tmpdir, "docs", "features")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(docs_dir, exist_ok=True)
+
+            sysml_model = """package Vehicle_SSOT {
+    attribute wingspanM : Real = 1.8;
+    attribute lengthM : Real = 1.6;
+}
+"""
+            with open(os.path.join(schema_dir, "model.sysml"), "w", encoding="utf-8") as f:
+                f.write(sysml_model)
+
+            # Test 1: Grounded line matching both metrics cleanly without false drift:
+            doc_valid = """# Airframe Geometry
+## Dimensions
+Airframe dimensions: Wingspan: 1.8 m, Length: 1.6 m.
+"""
+            with open(os.path.join(docs_dir, "FEAT_GEOMETRY_VALID.md"), "w", encoding="utf-8") as f:
+                f.write(doc_valid)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            findings = self.validator.validate(repo, scan_dirs=["docs"])
+            self.assertEqual(findings, [], f"Expected 0 findings for valid proximity clause matching, got {findings}")
+
+            # Test 2: Drift in wingspan (2.2 m > 1.8 m), length remains valid (1.6 m <= 1.6 m):
+            doc_drift_wingspan = """# Airframe Geometry
+## Dimensions
+Airframe dimensions: Wingspan: 2.2 m, Length: 1.6 m.
+"""
+            with open(os.path.join(docs_dir, "FEAT_GEOMETRY_VALID.md"), "w", encoding="utf-8") as f:
+                f.write(doc_drift_wingspan)
+
+            findings_wingspan = self.validator.validate(repo, scan_dirs=["docs"])
+            self.assertEqual(len(findings_wingspan), 1)
+            self.assertEqual(findings_wingspan[0].rule_id, "factual-grounding-numeric-drift")
+            self.assertIn("2.2 m", findings_wingspan[0])
+            self.assertIn("1.8m", findings_wingspan[0])
+
+            # Test 3: Drift in length (2.2 m > 1.6 m), wingspan remains valid (1.8 m <= 1.8 m):
+            doc_drift_length = """# Airframe Geometry
+## Dimensions
+Airframe dimensions: Wingspan: 1.8 m, Length: 2.2 m.
+"""
+            with open(os.path.join(docs_dir, "FEAT_GEOMETRY_VALID.md"), "w", encoding="utf-8") as f:
+                f.write(doc_drift_length)
+
+            findings_length = self.validator.validate(repo, scan_dirs=["docs"])
+            self.assertEqual(len(findings_length), 1)
+            self.assertEqual(findings_length[0].rule_id, "factual-grounding-numeric-drift")
+            self.assertIn("2.2 m", findings_length[0])
+            self.assertIn("1.6m", findings_length[0])
+
+            # Test 4: Markdown table row with multiple cells:
+            doc_table = """# Airframe Geometry
+## Dimensions Table
+| Parameter | Value |
+| :--- | :--- |
+| Dimensions | Wingspan: 1.8 m, Length: 1.6 m |
+"""
+            with open(os.path.join(docs_dir, "FEAT_GEOMETRY_VALID.md"), "w", encoding="utf-8") as f:
+                f.write(doc_table)
+
+            findings_table = self.validator.validate(repo, scan_dirs=["docs"])
+            self.assertEqual(findings_table, [], f"Expected 0 findings for table proximity clause matching, got {findings_table}")
+
 
 if __name__ == "__main__":
     unittest.main()

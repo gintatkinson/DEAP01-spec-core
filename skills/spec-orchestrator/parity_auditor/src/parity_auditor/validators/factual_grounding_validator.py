@@ -1149,6 +1149,12 @@ class FactualGroundingValidator(IValidator):
                     ):
                         continue
 
+                    # Reject markdown table keys that are pure integers or digits (e.g. connector pin numbers 7, 8, 12 in pinout tables)
+                    # or shorter than 3 alphabetic characters. A pin number or row index is NOT a physical system attribute name.
+                    clean_k = k.strip("*_`[] \t")
+                    if clean_k.isdigit() or sum(1 for c in clean_k if c.isalpha()) < 3:
+                        continue
+
                     row_owner = current_owner
                     k_norm = _normalize_name(k)
                     for part in gt.declared_parts:
@@ -1316,8 +1322,10 @@ class FactualGroundingValidator(IValidator):
         # 1. Inline or block HTML comment citation
         if re.search(r'<!--\s*(?:Source|SSOT|Grounding|Reference):\s*[^>]+-->', line, re.I):
             return True
-        # 2. Markdown link to schema/
+        # 2. Markdown link to schema/ or explicit schema file path/link in table rows and prose (e.g. schema/DEAP_MODEL.sysml#L..., `schema/...`)
         if re.search(r'\[[^\]]+\]\([^)]*?schema/[^)]*\)', line, re.I):
+            return True
+        if re.search(r'(?:^|[\s`\'"(\[<|])(?:\.\.?/)?schema/[a-zA-Z0-9_./#:\-]+', line, re.I):
             return True
         # 3. Document-level frontmatter source references
         if re.search(r'(?:source_references|realized_ast_nodes|ssot_source):\s*\[?[^\n\]]+schema/[^\n\]]+', content, re.I):
@@ -1657,6 +1665,7 @@ class FactualGroundingValidator(IValidator):
                 max_claimed = max(numbers)
                 min_claimed = min(numbers)
 
+                candidate_metrics: List[ScopedNumericLimit] = []
                 for metric in scoped_limits:
                     if not metric.unit:
                         # (c) Fail-closed: attributes without declared physical units do not match physical unit claims
@@ -1678,44 +1687,6 @@ class FactualGroundingValidator(IValidator):
                             continue
                         if not (owner_in_line or owner_in_heading):
                             continue
-
-                        # Property Token Specificity:
-                        # If a component defines multiple attributes sharing the same physical unit,
-                        # match the numeric quantity against the attribute whose property tokens match the line / local context.
-                        same_owner_unit_metrics = [
-                            m for m in scoped_limits
-                            if m.owner == metric.owner and ISO_80000_PHYSICAL_UNITS.get(m.unit.lower(), m.unit.lower()) == canon_unit
-                        ]
-                        distinct_tokens = {tuple(m.meaningful_tokens) for m in same_owner_unit_metrics}
-                        if len(distinct_tokens) > 1:
-                            clause_start = 0
-                            for sep_match in re.finditer(r'[,;|]|\b(?:and|or)\b', line_str[:match.start()]):
-                                clause_start = sep_match.end()
-                            clause_end = len(line_str)
-                            m_end = re.search(r'[,;|]|\b(?:and|or)\b', line_str[match.end():])
-                            if m_end:
-                                clause_end = match.end() + m_end.start()
-                            local_clause = line_str[clause_start:clause_end]
-                            local_tokens = _tokenize_identifier(local_clause)
-
-                            def _metric_score(m: ScopedNumericLimit) -> int:
-                                if not m.meaningful_tokens:
-                                    return 0
-                                c_matches = sum(
-                                    1 for pt in m.meaningful_tokens
-                                    if pt in _normalize_name(local_clause) or any(_property_token_matches(pt, lt) for lt in local_tokens)
-                                )
-                                l_matches = sum(
-                                    1 for pt in m.meaningful_tokens
-                                    if pt in _normalize_name(line_str) or any(_property_token_matches(pt, lt) for lt in line_tokens)
-                                )
-                                return c_matches * 10 + l_matches
-
-                            best_score = max((_metric_score(m) for m in same_owner_unit_metrics), default=0)
-                            if best_score == 0:
-                                continue
-                            if _metric_score(metric) < best_score:
-                                continue
                     else:
                         token_matches = any(
                             any(_property_token_matches(t, lt) for lt in line_tokens)
@@ -1728,6 +1699,111 @@ class FactualGroundingValidator(IValidator):
                             g_context = any(t in line_tokens for t in ("launch", "load", "accel", "acceleration", "gload", "rail", "profile", "catapult"))
                             if not g_context:
                                 continue
+
+                    candidate_metrics.append(metric)
+
+                if not candidate_metrics:
+                    continue
+
+                # Proximity Clause Matching:
+                # When multiple metrics of the same unit exist on a line, match the numeric quantity
+                # against the metric whose meaningful property token appears in the nearest adjacent phrase or clause
+                # (e.g. Wingspan: 1.8 m matches wingspanM, not lengthM which appears later in Length: 1.6 m).
+                if len(candidate_metrics) > 1:
+                    distinct_tokens = {tuple(m.meaningful_tokens) for m in candidate_metrics}
+                    if len(distinct_tokens) > 1:
+                        sep_pattern = re.compile(r'[,;|]|\.\s+|\b(?:and|or|while|whereas|with)\b', re.I)
+                        clause_spans: List[Tuple[int, int]] = []
+                        last_end = 0
+                        for sm in sep_pattern.finditer(line_str):
+                            if sm.start() > last_end:
+                                clause_spans.append((last_end, sm.start()))
+                            last_end = sm.end()
+                        if last_end < len(line_str):
+                            clause_spans.append((last_end, len(line_str)))
+
+                        match_clause_idx = -1
+                        for idx, (c_start, c_end) in enumerate(clause_spans):
+                            if c_start <= match.start() and match.end() <= c_end:
+                                match_clause_idx = idx
+                                break
+
+                        if match_clause_idx == -1:
+                            c_start = 0
+                            for sm in sep_pattern.finditer(line_str[:match.start()]):
+                                c_start = sm.end()
+                            c_end = len(line_str)
+                            sm_end = sep_pattern.search(line_str[match.end():])
+                            if sm_end:
+                                c_end = match.end() + sm_end.start()
+                            local_clause = line_str[c_start:c_end]
+                            adjacent_clauses = [local_clause]
+                        else:
+                            local_clause = line_str[clause_spans[match_clause_idx][0]:clause_spans[match_clause_idx][1]]
+                            adjacent_clauses = [local_clause]
+                            if match_clause_idx > 0:
+                                adjacent_clauses.append(line_str[clause_spans[match_clause_idx - 1][0]:clause_spans[match_clause_idx - 1][1]])
+                            if match_clause_idx < len(clause_spans) - 1:
+                                adjacent_clauses.append(line_str[clause_spans[match_clause_idx + 1][0]:clause_spans[match_clause_idx + 1][1]])
+
+                        local_tokens = _tokenize_identifier(local_clause)
+
+                        def _metric_proximity_score(m: ScopedNumericLimit) -> float:
+                            if not m.meaningful_tokens:
+                                return 0.0
+                            c_matches = sum(
+                                1 for pt in m.meaningful_tokens
+                                if pt in _normalize_name(local_clause) or any(_property_token_matches(pt, lt) for lt in local_tokens)
+                            )
+                            adj_matches = 0
+                            if c_matches == 0 and len(adjacent_clauses) > 1:
+                                prec_clause = adjacent_clauses[1]
+                                prec_tokens = _tokenize_identifier(prec_clause)
+                                adj_matches = sum(
+                                    1 for pt in m.meaningful_tokens
+                                    if pt in _normalize_name(prec_clause) or any(_property_token_matches(pt, lt) for lt in prec_tokens)
+                                )
+                            l_matches = sum(
+                                1 for pt in m.meaningful_tokens
+                                if pt in _normalize_name(line_str) or any(_property_token_matches(pt, lt) for lt in line_tokens)
+                            )
+                            if l_matches == 0:
+                                return 0.0
+
+                            min_dist = float('inf')
+                            preceding_bonus = 0.0
+                            for m_tok in re.finditer(r'\b[a-zA-Z0-9_-]+\b', line_str):
+                                tok_word = m_tok.group(0)
+                                tok_tokens = _tokenize_identifier(tok_word)
+                                if any(any(_property_token_matches(pt, tt) for tt in tok_tokens) for pt in m.meaningful_tokens) or \
+                                   any((len(pt) >= 3 and _normalize_name(pt) in _normalize_name(tok_word)) for pt in m.meaningful_tokens):
+                                    w_start, w_end = m_tok.start(), m_tok.end()
+                                    is_preceding = False
+                                    if w_end <= match.start():
+                                        dist = float(match.start() - w_end)
+                                        is_preceding = True
+                                    elif w_start >= match.end():
+                                        dist = float(w_start - match.end())
+                                    else:
+                                        dist = 0.0
+                                        is_preceding = True
+                                    if dist < min_dist:
+                                        min_dist = dist
+                                        preceding_bonus = 1.0 if is_preceding else 0.0
+
+                            return (
+                                c_matches * 1000.0 +
+                                adj_matches * 500.0 +
+                                l_matches * 10.0 +
+                                preceding_bonus * 5.0 +
+                                (10.0 / (1.0 + min_dist))
+                            )
+
+                        best_score = max((_metric_proximity_score(m) for m in candidate_metrics), default=0.0)
+                        if best_score > 0.0:
+                            candidate_metrics = [m for m in candidate_metrics if _metric_proximity_score(m) >= best_score - 1e-6]
+
+                for metric in candidate_metrics:
 
                     if metric.bound_type == "lower":
                         if min_claimed < metric.limit_val - 1e-6:
