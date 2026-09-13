@@ -132,6 +132,47 @@ NON_HARDWARE_GENERIC_TOKENS: Set[str] = {
 }
 
 
+# Architectural tracer tags, requirement codes, and signal/interface prefixes
+TRACER_AND_SIGNAL_PREFIXES: Tuple[str, ...] = (
+    "SIG-", "REQ-", "CONN-", "FEAT-", "US-", "UC-", "EPIC-", "OP-",
+    "SC-", "RULE-", "TEST-", "OSO-", "UCA-", "HAZ-", "SAF-", "OBL-",
+    "INT-", "EXT-", "SYS-", "SW-", "HW-", "ICD-", "SPEC-", "DOC-",
+)
+
+
+def _is_tracer_or_signal_identifier(token: str) -> bool:
+    """
+    Checks if a token represents an architectural tracer tag, requirement code,
+    signal identifier, or interface tag (e.g. SIG-ESAD, REQ-01, CONN-BATTERY, FEAT-01).
+    Prevents such identifiers from being falsely classified as compound structural descriptors
+    (such as 'v-tail', 'abc-tail', 'X-tail').
+    """
+    if not token:
+        return False
+    tok_upper = token.upper()
+    if any(tok_upper.startswith(p) for p in TRACER_AND_SIGNAL_PREFIXES):
+        return True
+    m = re.match(r'^([A-Z0-9_]+)-', token)
+    if m:
+        prefix = m.group(1)
+        # Exclude single-letter uppercase prefixes (e.g. 'V-tail', 'X-tail', 'T-tail')
+        # which represent valid geometric structural shape descriptors rather than tracer tags.
+        if len(prefix) >= 2 or prefix.isdigit():
+            return True
+    return False
+
+
+def _get_enclosing_hyphenated_token(line: str, start: int, end: int) -> str:
+    """Extracts the full hyphenated identifier surrounding a regex match span."""
+    left = start
+    while left > 0 and (line[left - 1].isalnum() or line[left - 1] in "_-"):
+        left -= 1
+    right = end
+    while right < len(line) and (line[right].isalnum() or line[right] in "_-"):
+        right += 1
+    return line[left:right]
+
+
 def _normalize_name(name: str) -> str:
     """Normalize identifier by removing non-alphanumeric characters and lowercasing."""
     if not name:
@@ -853,6 +894,9 @@ class FactualGroundingValidator(IValidator):
                         desc_claimed = m_desc.group(1).strip()
                         if desc_claimed in reported_descriptors_on_line:
                             continue
+                        enclosing_tok = _get_enclosing_hyphenated_token(line_str, m_desc.start(), m_desc.end())
+                        if _is_tracer_or_signal_identifier(desc_claimed) or _is_tracer_or_signal_identifier(enclosing_tok):
+                            continue
                         desc_claimed_norm = _normalize_name(desc_claimed)
                         if desc_claimed_norm != cfg_norm:
                             if cfg_norm not in _normalize_name(line_str):
@@ -872,6 +916,9 @@ class FactualGroundingValidator(IValidator):
                     if desc_claimed in reported_descriptors_on_line:
                         continue
                     if desc_claimed.upper() in gt.declared_protocols or any(p.upper() == desc_claimed.upper() for p in RECOGNIZED_PROTOCOLS):
+                        continue
+                    enclosing_tok = _get_enclosing_hyphenated_token(line_str, m_desc.start(), m_desc.end())
+                    if _is_tracer_or_signal_identifier(desc_claimed) or _is_tracer_or_signal_identifier(enclosing_tok):
                         continue
                     desc_claimed_norm = _normalize_name(desc_claimed)
                     if not desc_claimed_norm or desc_claimed_norm.isdigit():

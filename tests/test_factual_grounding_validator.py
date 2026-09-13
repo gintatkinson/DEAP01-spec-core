@@ -408,6 +408,100 @@ The system operates in real-time mode with a two-step valid-range check, single-
             self.assertNotIn("single-stage", findings_text)
             self.assertNotIn("three-state", findings_text)
 
+    def test_tracer_and_signal_identifiers_excluded_from_structural_descriptors(self):
+        """Verify that signal/interface identifiers, requirement codes, and architectural tracer tags
+        (e.g. SIG-ESAD, SIG-ONBOARDCOMPUTER, REQ-01-AIRFRAME, CONN-BATTERY, FEAT-01-TAIL, US-01-WING)
+        are NOT classified as ungrounded compound structural descriptors, while actual ungrounded
+        structural descriptors (like abc-tail) continue to be flagged.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            docs_dir = os.path.join(tmpdir, "docs", "specs")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(docs_dir, exist_ok=True)
+
+            schema_sysml = """package AutonomousVehicle_SSOT {
+    attribute maxGLoad : Real = 12.0;
+    attribute tailConfiguration : String = "X-tail";
+
+    part def ESAD {
+        attribute massKg : Real = 1.2;
+    }
+
+    part def OnboardComputer {
+        attribute powerW : Real = 45.0;
+    }
+
+    part def Airframe {
+        attribute massKg : Real = 25.0;
+    }
+
+    part def Battery {
+        attribute voltageV : Real = 28.0;
+    }
+
+    part def Wing {
+        attribute spanM : Real = 3.5;
+    }
+}
+"""
+            with open(os.path.join(schema_dir, "model.sysml"), "w", encoding="utf-8") as f:
+                f.write(schema_sysml)
+
+            doc_md = """# Interface Control & Traceability Specification
+
+## Signals and Interfaces
+| Signal ID | Type | Description |
+| :--- | :--- | :--- |
+| SIG-ESAD | Discrete | Arming status and fire inhibit |
+| SIG-ONBOARDCOMPUTER | CAN | Telemetry health bus |
+
+## Architectural Tracing
+The airframe satisfies the following requirements and traces:
+- Requirement: REQ-01-AIRFRAME
+- Connector: CONN-BATTERY
+- Feature: FEAT-01-TAIL
+- User Story: US-01-WING
+- Use Case: UC-01
+- Epic: EPIC-01
+- Operator Scenario: OP-01
+- Safety Scenario: SC-01
+- Rule: RULE-01
+- Verification Test: TEST-01
+- Operational Safety Objective: OSO-01
+- Unsafe Control Action: UCA-01
+
+## Empennage Configuration
+The vehicle is equipped with an ungrounded abc-tail empennage.
+"""
+            with open(os.path.join(docs_dir, "ICD_SPEC.md"), "w", encoding="utf-8") as f:
+                f.write(doc_md)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            findings = self.validator.validate(repo, scan_dirs=["docs"])
+
+            findings_text = " ".join(str(f) for f in findings)
+            # Verify tracer tags and signal identifiers are NOT falsely flagged as structural descriptors
+            self.assertNotIn("SIG-ESAD", findings_text)
+            self.assertNotIn("SIG-ONBOARDCOMPUTER", findings_text)
+            self.assertNotIn("REQ-01-AIRFRAME", findings_text)
+            self.assertNotIn("01-AIRFRAME", findings_text)
+            self.assertNotIn("CONN-BATTERY", findings_text)
+            self.assertNotIn("FEAT-01-TAIL", findings_text)
+            self.assertNotIn("01-TAIL", findings_text)
+            self.assertNotIn("US-01-WING", findings_text)
+            self.assertNotIn("01-WING", findings_text)
+            self.assertNotIn("UC-01", findings_text)
+            self.assertNotIn("EPIC-01", findings_text)
+            self.assertNotIn("OP-01", findings_text)
+            self.assertNotIn("SC-01", findings_text)
+            self.assertNotIn("RULE-01", findings_text)
+            self.assertNotIn("TEST-01", findings_text)
+            self.assertNotIn("OSO-01", findings_text)
+            self.assertNotIn("UCA-01", findings_text)
+
+            # Verify actual ungrounded structural descriptor IS caught
+            self.assertTrue(any("abc-tail" in str(f) for f in findings))
 
 
 if __name__ == "__main__":
