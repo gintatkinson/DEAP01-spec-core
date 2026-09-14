@@ -312,6 +312,78 @@ def load_labels(workspace_dir: str, provider: Optional[str] = None) -> Dict[str,
     return labels
 
 
+def _resolve_token_from_git_credential(server_url_or_hostname: str) -> Optional[str]:
+    """Resolve authentication token using git credential fill.
+
+    Queries `git credential fill` with `protocol=https\nhost=<hostname>\n`.
+    Returns the password token if present, or None on failure/missing password.
+    """
+    if not server_url_or_hostname:
+        return None
+    try:
+        clean = server_url_or_hostname.strip()
+        if "://" in clean:
+            parsed = urllib.parse.urlparse(clean)
+            hostname = parsed.hostname or clean
+        else:
+            match = re.match(r"^(?:[^@]+@)?([^:/]+)", clean)
+            if match:
+                hostname = match.group(1)
+            else:
+                hostname = clean.split("/")[0].split(":")[0]
+        hostname = (hostname or "").strip()
+        if not hostname:
+            return None
+
+        credential_input = f"protocol=https\nhost={hostname}\n"
+        res = subprocess.run(
+            ["git", "credential", "fill"],
+            input=credential_input,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if res.returncode != 0 or not res.stdout:
+            return None
+
+        for line in res.stdout.splitlines():
+            line = line.strip()
+            if line.startswith("password="):
+                token = line.split("=", 1)[1].strip()
+                if token:
+                    return token
+        return None
+    except Exception:
+        return None
+
+
+def _resolve_github_token() -> Optional[str]:
+    """Resolve GitHub authentication token.
+
+    Checks environment variables (GITHUB_TOKEN, GH_TOKEN), gh CLI auth status,
+    .netrc entry for github.com, and falls back to git credential fill for github.com.
+    """
+    for var in ("GITHUB_TOKEN", "GH_TOKEN"):
+        val = os.environ.get(var)
+        if val and val.strip():
+            return val.strip()
+    gh_path = shutil.which("gh")
+    if gh_path:
+        try:
+            res = subprocess.run([gh_path, "auth", "token"], capture_output=True, text=True, timeout=5)
+            if res.returncode == 0 and res.stdout.strip():
+                return res.stdout.strip()
+        except Exception:
+            pass
+    try:
+        auth = netrc.netrc().authenticators("github.com")
+        if auth and auth[2] and auth[2].strip():
+            return auth[2].strip()
+    except Exception:
+        pass
+    return _resolve_token_from_git_credential("github.com")
+
+
 class GitLabV4LabelProvider:
     """
     GitLab REST API v4 Label Provider Adapter.
@@ -420,6 +492,9 @@ class GitLabV4LabelProvider:
                 return auth[2].strip(), "PRIVATE-TOKEN"
         except Exception:
             pass
+        cred_token = _resolve_token_from_git_credential(self.server_url)
+        if cred_token:
+            return cred_token, "PRIVATE-TOKEN"
         return None, "PRIVATE-TOKEN"
 
     def create_label(self, name: str, description: str = "", color: str = "#0E8A16") -> bool:
@@ -512,14 +587,21 @@ class GitHubCLILabelProvider:
     def __init__(
         self,
         repo: Optional[str] = None,
+        token: Optional[str] = None,
         dry_run: bool = False,
         offline: bool = False,
         workspace_dir: Optional[str] = None,
     ):
         self.repo = repo
+        self.token = token
         self.dry_run = dry_run
         self.offline = offline
         self.workspace_dir = workspace_dir or os.getcwd()
+
+    def _resolve_token(self) -> Optional[str]:
+        if self.token:
+            return self.token
+        return _resolve_github_token()
 
     def create_label(self, name: str, description: str = "", color: str = "0e8a16") -> bool:
         if not name:
@@ -543,6 +625,10 @@ class GitHubCLILabelProvider:
             print("  [offline] " + " ".join(cmd))
             return True
 
+        env = os.environ.copy()
+        if self.token:
+            env["GH_TOKEN"] = self.token
+
         try:
             result = subprocess.run(
                 cmd,
@@ -550,6 +636,7 @@ class GitHubCLILabelProvider:
                 capture_output=True,
                 text=True,
                 timeout=30,
+                env=env,
             )
             if result.returncode == 0:
                 print(f"  [ok] {name}")
@@ -561,6 +648,11 @@ class GitHubCLILabelProvider:
         except Exception as e:
             print(f"  [FAILED] {name}: {e}", file=sys.stderr)
             return False
+
+
+# Aliases for bootstrapper provider classes
+GitLabLabelBootstrapper = GitLabV4LabelProvider
+GitHubLabelBootstrapper = GitHubCLILabelProvider
 
 
 def bootstrap_labels(
@@ -589,6 +681,7 @@ def bootstrap_labels(
     else:
         provider = GitHubCLILabelProvider(
             repo=repo,
+            token=token,
             dry_run=dry_run,
             offline=offline,
             workspace_dir=workspace_dir,

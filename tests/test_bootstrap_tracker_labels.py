@@ -20,6 +20,9 @@ from bootstrap_tracker_labels import (
     LABEL_PRESENTATION,
     GitHubCLILabelProvider,
     GitLabV4LabelProvider,
+    GitHubLabelBootstrapper,
+    GitLabLabelBootstrapper,
+    _resolve_token_from_git_credential,
     bootstrap_labels,
     detect_tracker_provider,
     find_workspace_dir,
@@ -301,7 +304,8 @@ class TestGitLabV4LabelProvider(unittest.TestCase):
 
     @patch("shutil.which", return_value=None)
     @patch("netrc.netrc", side_effect=FileNotFoundError("~/.netrc not found"))
-    def test_netrc_token_resolution_missing_file(self, mock_netrc_class, mock_which):
+    @patch("bootstrap_tracker_labels._resolve_token_from_git_credential", return_value=None)
+    def test_netrc_token_resolution_missing_file(self, mock_git_cred, mock_netrc_class, mock_which):
         with patch.dict(os.environ, {}, clear=True):
             prov = GitLabV4LabelProvider(project_id="123")
             self.assertIsNone(prov.token)
@@ -473,5 +477,169 @@ class TestBootstrapLabelsEndToEnd(unittest.TestCase):
         self.assertEqual(exit_code, 0)
 
 
+class TestGitCredentialTokenResolution(unittest.TestCase):
+    """Unit tests verifying git credential fill token resolution and resilience."""
+
+    @patch("shutil.which", return_value=None)
+    @patch("netrc.netrc", side_effect=FileNotFoundError)
+    @patch("subprocess.run")
+    def test_gitlab_resolve_token_from_git_credential_success(
+        self, mock_subprocess, mock_netrc, mock_which
+    ):
+        mock_subprocess.return_value = MagicMock(
+            returncode=0,
+            stdout="protocol=https\nhost=gitlab.com\nusername=oauth2\npassword=glpat-xxxxxx\n",
+            stderr="",
+        )
+        with patch.dict(os.environ, {}, clear=True):
+            prov = GitLabV4LabelProvider(
+                server_url="https://gitlab.com",
+                project_id="123",
+            )
+            self.assertEqual(prov.token, "glpat-xxxxxx")
+            self.assertEqual(prov.token_type, "PRIVATE-TOKEN")
+
+            # Verify subprocess call arguments
+            mock_subprocess.assert_called_once_with(
+                ["git", "credential", "fill"],
+                input="protocol=https\nhost=gitlab.com\n",
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+
+    @patch("shutil.which", return_value=None)
+    @patch("netrc.netrc", side_effect=FileNotFoundError)
+    @patch("subprocess.run")
+    def test_gitlab_resolve_token_git_credential_custom_host(
+        self, mock_subprocess, mock_netrc, mock_which
+    ):
+        mock_subprocess.return_value = MagicMock(
+            returncode=0,
+            stdout="protocol=https\nhost=gitlab.internal.defense.gov\npassword=glpat-custom-token\n",
+            stderr="",
+        )
+        with patch.dict(os.environ, {}, clear=True):
+            prov = GitLabLabelBootstrapper(
+                server_url="https://gitlab.internal.defense.gov",
+                project_id="uas/safety",
+            )
+            self.assertEqual(prov.token, "glpat-custom-token")
+            self.assertEqual(prov.token_type, "PRIVATE-TOKEN")
+            mock_subprocess.assert_called_once_with(
+                ["git", "credential", "fill"],
+                input="protocol=https\nhost=gitlab.internal.defense.gov\n",
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+
+    @patch("shutil.which", return_value=None)
+    @patch("netrc.netrc", side_effect=FileNotFoundError)
+    @patch("subprocess.run")
+    def test_gitlab_resolve_token_git_credential_timeout(
+        self, mock_subprocess, mock_netrc, mock_which
+    ):
+        import subprocess as sp
+        mock_subprocess.side_effect = sp.TimeoutExpired(cmd=["git", "credential", "fill"], timeout=5)
+        with patch.dict(os.environ, {}, clear=True):
+            prov = GitLabV4LabelProvider(
+                server_url="https://gitlab.com",
+                project_id="123",
+            )
+            self.assertIsNone(prov.token)
+            self.assertEqual(prov.token_type, "PRIVATE-TOKEN")
+
+    @patch("shutil.which", return_value=None)
+    @patch("netrc.netrc", side_effect=FileNotFoundError)
+    @patch("subprocess.run")
+    def test_gitlab_resolve_token_git_credential_nonzero_returncode(
+        self, mock_subprocess, mock_netrc, mock_which
+    ):
+        mock_subprocess.return_value = MagicMock(
+            returncode=1,
+            stdout="",
+            stderr="fatal: credential helper error",
+        )
+        with patch.dict(os.environ, {}, clear=True):
+            prov = GitLabV4LabelProvider(
+                server_url="https://gitlab.com",
+                project_id="123",
+            )
+            self.assertIsNone(prov.token)
+            self.assertEqual(prov.token_type, "PRIVATE-TOKEN")
+
+    @patch("shutil.which", return_value=None)
+    @patch("netrc.netrc", side_effect=FileNotFoundError)
+    @patch("subprocess.run")
+    def test_gitlab_resolve_token_git_credential_empty_output(
+        self, mock_subprocess, mock_netrc, mock_which
+    ):
+        mock_subprocess.return_value = MagicMock(
+            returncode=0,
+            stdout="",
+            stderr="",
+        )
+        with patch.dict(os.environ, {}, clear=True):
+            prov = GitLabV4LabelProvider(
+                server_url="https://gitlab.com",
+                project_id="123",
+            )
+            self.assertIsNone(prov.token)
+            self.assertEqual(prov.token_type, "PRIVATE-TOKEN")
+
+    @patch("shutil.which", return_value=None)
+    @patch("netrc.netrc", side_effect=FileNotFoundError)
+    @patch("subprocess.run")
+    def test_gitlab_resolve_token_git_credential_missing_password_field(
+        self, mock_subprocess, mock_netrc, mock_which
+    ):
+        mock_subprocess.return_value = MagicMock(
+            returncode=0,
+            stdout="protocol=https\nhost=gitlab.com\nusername=testuser\n",
+            stderr="",
+        )
+        with patch.dict(os.environ, {}, clear=True):
+            prov = GitLabV4LabelProvider(
+                server_url="https://gitlab.com",
+                project_id="123",
+            )
+            self.assertIsNone(prov.token)
+            self.assertEqual(prov.token_type, "PRIVATE-TOKEN")
+
+    @patch("subprocess.run")
+    def test_github_provider_git_credential_fallback(self, mock_subprocess):
+        mock_subprocess.return_value = MagicMock(
+            returncode=0,
+            stdout="protocol=https\nhost=github.com\nusername=ghuser\npassword=ghp_secrettoken123\n",
+            stderr="",
+        )
+        token = _resolve_token_from_git_credential("github.com")
+        self.assertEqual(token, "ghp_secrettoken123")
+        mock_subprocess.assert_called_once_with(
+            ["git", "credential", "fill"],
+            input="protocol=https\nhost=github.com\n",
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+
+    @patch("shutil.which", return_value=None)
+    @patch("netrc.netrc", side_effect=FileNotFoundError)
+    @patch("subprocess.run")
+    def test_github_label_bootstrapper_resolves_credential_fallback(
+        self, mock_subprocess, mock_netrc, mock_which
+    ):
+        mock_subprocess.return_value = MagicMock(
+            returncode=0,
+            stdout="protocol=https\nhost=github.com\nusername=ghuser\npassword=ghp_secrettoken123\n",
+            stderr="",
+        )
+        with patch.dict(os.environ, {}, clear=True):
+            prov = GitHubLabelBootstrapper(repo="owner/repo")
+            self.assertEqual(prov._resolve_token(), "ghp_secrettoken123")
+
+
 if __name__ == "__main__":
     unittest.main()
+
