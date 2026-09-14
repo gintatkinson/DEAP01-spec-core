@@ -3963,6 +3963,8 @@ def assemble_conops(
                                 "--out", out_sysml,
                                 "--digest", out_digest,
                             ]
+                            if os.path.normpath(detected_schema) == os.path.normpath(out_sysml) or os.path.abspath(detected_schema) == os.path.abspath(out_sysml):
+                                cmd.append("--allow-schema-overwrite")
                             print(f"[*] Running automated SysML v2 reverse-synchronization hook: {' '.join(cmd)}")
                             res = subprocess.run(cmd, cwd=effective_ws, capture_output=True, text=True)
                             if res.returncode != 0:

@@ -125,6 +125,9 @@ class TestPromptCatalogIntegrity(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        if not os.path.isdir(os.path.join(REPO_ROOT, ".pipeline", "upstream")):
+            raise unittest.SkipTest("Skipping prompt catalog integrity test in downstream repository")
+
         readme_path = os.path.join(REPO_ROOT, "README.md")
         installer_path = os.path.join(REPO_ROOT, "scripts", "install_pipeline.sh")
 
@@ -553,6 +556,24 @@ class TestPromptCatalogIntegrity(unittest.TestCase):
         self.assertIn("#### 4.5.1 Worker 2A / Synthesis Driver", self.installer_content)
         self.assertIn("#### 4.5.2 Worker 2B / Simulation Driver", self.installer_content)
         self.assertIn("#### 4.5.3 Two-Path MBD Artifact & Deliverable Hierarchy", self.installer_content)
+
+
+class TestPromptCatalogDownstreamSkip(unittest.TestCase):
+    """Verify downstream skip behavior for prompt catalog integrity test."""
+
+    def test_downstream_workspace_skips_prompt_catalog_integrity(self):
+        """Verify setUpClass skips cleanly in downstream repositories where .pipeline/upstream is missing."""
+        import unittest.mock
+        with unittest.mock.patch("os.path.isdir") as mock_isdir:
+            def isdir_side_effect(path):
+                if os.path.normpath(path) == os.path.normpath(os.path.join(REPO_ROOT, ".pipeline", "upstream")):
+                    return False
+                return os.path.isdir(path)
+            # Use real isdir for everything else
+            real_isdir = os.path.isdir
+            mock_isdir.side_effect = lambda p: False if os.path.normpath(p) == os.path.normpath(os.path.join(REPO_ROOT, ".pipeline", "upstream")) else real_isdir(p)
+            with self.assertRaises(unittest.SkipTest):
+                TestPromptCatalogIntegrity.setUpClass()
 
 
 if __name__ == "__main__":

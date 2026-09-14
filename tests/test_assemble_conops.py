@@ -1860,6 +1860,30 @@ Baud Rate: 115200 bps
             self.assertNotIn("BAUD_RATE", auto_engine.parameter_bindings)
             self.assertNotIn("CRC_POLYNOMIAL", auto_engine.parameter_bindings)
 
+    def test_assemble_conops_inplace_reverse_sync_allows_schema_overwrite(self):
+        """Verify automated reverse-sync in assemble_conops succeeds when detected_schema and out_sysml are both .pipeline/schema.sysml (Defect 3)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            pipeline_dir = os.path.join(tmpdir, ".pipeline")
+            os.makedirs(pipeline_dir, exist_ok=True)
+            schema_file = os.path.join(pipeline_dir, "schema.sysml")
+            with open(schema_file, "w", encoding="utf-8") as f:
+                f.write("""package TestPlatform {
+    part def PlatformController;
+}
+""")
+            input_dir = os.path.join(tmpdir, "units")
+            conops_units_dir = os.path.join(input_dir, "conops")
+            _create_sample_conops_units(conops_units_dir, with_placeholders=True)
+            output_dir = os.path.join(tmpdir, "docs", "conops")
+
+            success = assemble_conops(
+                input_dir=input_dir,
+                output_dir=output_dir,
+                workspace_dir=tmpdir,
+                verify_only=False,
+            )
+            self.assertTrue(success, "assemble_conops() failed during in-place schema reverse-sync")
+
 
 if __name__ == "__main__":
     unittest.main()
