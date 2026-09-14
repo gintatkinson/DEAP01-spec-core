@@ -349,60 +349,8 @@ EOF
 
 # Transform and scaffold downstream .agents/AGENTS.md and root AGENTS.md with full governance armor
 mkdir -p "$TARGET_DIR/.agents"
-python3 - "$INSTALLER_ROOT" "$TARGET_DIR" << 'EOF'
-import os, sys
+python3 "$INSTALLER_ROOT/scripts/scaffold_downstream_agents.py" "$INSTALLER_ROOT" "$TARGET_DIR"
 
-installer_root = sys.argv[1]
-target_dir = sys.argv[2]
-src_agents_path = os.path.join(installer_root, 'AGENTS.md')
-
-with open(src_agents_path, 'r', encoding='utf-8') as f:
-    content = f.read()
-
-upstream_header = '''## Repository Role & Scope Classification
-- **Repository Classification:** `UPSTREAM_SPEC_CORE_COMPILER` (Digital Engineering Agent Platform Core Specification Compiler)
-- **Sentinel Indicator:** The presence of `.pipeline/upstream/` and `skills/spec-orchestrator/` denotes that this repository is the **Upstream Specification Core Compiler**, NOT a downstream customer application workspace or domain template.
-- **Domain Template & Customer Data Boundary:** Domain-specific platforms (e.g. UAS safety, automotive, medical) and customer applications belong in downstream distribution repositories, and must NOT be committed to this upstream specification core compiler repository.'''
-
-downstream_header = '''## Repository Role & Scope Classification
-- **Repository Classification:** `DOWNSTREAM_CUSTOMER_PROJECT` (Domain-Specific Safety-Critical Engineering Project)
-- **Sentinel Indicator:** The absence of `.pipeline/upstream/` denotes that this repository is an active **Downstream Customer Project Workspace**, authorized for concrete application code implementation and domain feature delivery.
-- **Customer Application Scope:** Customer-specific application code, domain nodes/modules, domain tests, mission envelopes, and proprietary safety models are developed, tested, and maintained directly within this project workspace across any target domain (Aerospace, Medical, Space, Industrial AGV, Subsea, Rail).'''
-
-if upstream_header in content:
-    transformed = content.replace(upstream_header, downstream_header)
-else:
-    import re
-    transformed = re.sub(
-        r'## Repository Role & Scope Classification\n- \*\*Repository Classification:\*\* `UPSTREAM_SPEC_CORE_COMPILER`[^\n]*\n- \*\*Sentinel Indicator:\*\* [^\n]*\n- \*\*Domain Template & Customer Data Boundary:\*\* [^\n]*',
-        downstream_header,
-        content
-    )
-
-dot_agents_path = os.path.join(target_dir, '.agents', 'AGENTS.md')
-root_agents_path = os.path.join(target_dir, 'AGENTS.md')
-
-with open(dot_agents_path, 'w', encoding='utf-8') as f:
-    f.write(transformed)
-
-with open(root_agents_path, 'w', encoding='utf-8') as f:
-    f.write(transformed)
-EOF
-
-# Scaffold downstream root CLAUDE.md if missing
-if [ ! -f "$TARGET_DIR/CLAUDE.md" ]; then
-  cat << 'EOF' > "$TARGET_DIR/CLAUDE.md"
-# Claude Code Project Guidelines
-
-## Primary Commercial Toolchain Integration Context
-This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
-
-## Workflow & Quality Gates
-- Follow all pipeline rules in `rules/` and skills in `skills/` and `.agents/skills/`.
-- Strict Planning Gate: Do not execute unauthorized modifications without an approved implementation plan.
-- Execute baseline verification: `pytest tests/test_baseline.py` and `python3 scripts/verify_downstream_baseline.py --no-domain`.
-EOF
-fi
 
 # Scaffold downstream root README.md if missing
 if [ ! -f "$TARGET_DIR/README.md" ]; then
