@@ -49,15 +49,39 @@ Formal operational lifecycle stages across $\\Phi_{\\mathrm{lifecycle}}$:
 - **Phase_ContingencyFailsafe:** Autonomous return-to-base and controlled containment.
 - **Phase_SecureShutdown:** Post-mission payload encryption and shutdown.
 - **Phase_MaintenanceMode:** Diagnostic telemetry analysis and component swap.
-"""
-    if with_placeholders:
-        u4_content += """
+
 ### 4.7 Super-System Architecture & Segment Boundaries
 {{SUPER_SYSTEM_ARCHITECTURE}}
 
 ### 4.8 Subsystem Architecture & AST Part Allocation
 {{SUBSYSTEM_ARCHITECTURE_SECTION}}
 """
+
+    curr = os.path.abspath(units_dir)
+    ws_candidate = curr
+    while curr and curr != os.path.dirname(curr):
+        if os.path.basename(curr) in ("units", "conops", "mission_intent"):
+            curr = os.path.dirname(curr)
+            ws_candidate = curr
+        else:
+            break
+    if not os.path.exists(os.path.join(ws_candidate, ".pipeline", "upstream")):
+        schema_dir = os.path.join(ws_candidate, "schema")
+        os.makedirs(schema_dir, exist_ok=True)
+        schema_file = os.path.join(schema_dir, "sample_subsystems.sysml")
+        if not os.path.exists(schema_file):
+            with open(schema_file, "w", encoding="utf-8") as f:
+                f.write("""package SamplePlatform {
+    part def PrimaryFlightComputer {
+        doc /* Core autonomous flight controller */
+        inout port p_c2 : C2Port;
+    }
+    part def PowerManagementUnit {
+        doc /* Regulated power distribution unit */
+        inout port p_pwr : PwrPort;
+    }
+}
+""")
 
     units = {
         "01_METADATA_AND_OVERVIEW.md": f"""# Concept of Operations (ConOps): {token_val}
@@ -292,7 +316,8 @@ Standards list.
             _create_sample_conops_units(tmpdir, with_placeholders=False)
             unit_files = [os.path.join(tmpdir, f) for f in sorted(os.listdir(tmpdir)) if f.endswith(".md")]
 
-            valid, errors = validate_unit_integrity(unit_files)
+            engine = SysMLParameterBindingEngine(auto_detect=False)
+            valid, errors = validate_unit_integrity(unit_files, param_engine=engine)
             self.assertTrue(valid, f"Unit integrity failed on clean units: {errors}")
             self.assertEqual(errors, [])
 
@@ -1328,7 +1353,7 @@ Carries up to a 5 kg sensor payload.
             self.assertIn("SubsystemB Subsystem Architecture", assembled)
             self.assertIn("SubsystemC Subsystem Architecture", assembled)
 
-            # 2. Manual unit without SubsystemC should fail coverage gate for SubsystemC
+            # 2. Manual unit omitting placeholders raises ValueError (Issue #299 / #302)
             with open(u4_path, "w", encoding="utf-8") as f:
                 f.write("""# 4. Operational Modes & Subsystems
 ### 4.8 Subsystem Architecture
@@ -1337,18 +1362,20 @@ Functional purpose for SubsystemA.
 #### 4.8.2 SubsystemB Subsystem Architecture
 Functional purpose for SubsystemB.
 """)
-            assembled_bad, errors_bad = assemble_document(tmpdir, params=engine, canonical_whitelist=CANONICAL_CONOPS_UNITS)
-            self.assertTrue(any("Coverage Gate failed: Missing declared AST part def(s): SubsystemC" in e for e in errors_bad))
+            with self.assertRaises(ValueError) as ctx:
+                assemble_document(tmpdir, params=engine, canonical_whitelist=CANONICAL_CONOPS_UNITS)
+            self.assertIn("omits required placeholder {{SUPER_SYSTEM_ARCHITECTURE}} or {{SUBSYSTEM_ARCHITECTURE_SECTION}}", str(ctx.exception))
 
-            # 3. Complete omission of Section 4.8 / placeholders fails with coverage error for all declared parts
+            # 3. Complete omission of Section 4.8 / placeholders also raises ValueError
             with open(u4_path, "w", encoding="utf-8") as f:
                 f.write("""# 4. Operational Modes & Lifecycle Stages
 Formal operational lifecycle stages across $\\Phi_{\\mathrm{lifecycle}}$:
 - **Phase_Startup:** Built-In-Test self-check and navigation calibration.
 - **Phase_NominalExecution:** Automated waypoint tracking and payload monitoring.
 """)
-            assembled_omitted, errors_omitted = assemble_document(tmpdir, params=engine, canonical_whitelist=CANONICAL_CONOPS_UNITS)
-            self.assertTrue(any("Coverage Gate failed: Missing declared AST part def(s): SubsystemA, SubsystemB, SubsystemC" in e for e in errors_omitted))
+            with self.assertRaises(ValueError) as ctx:
+                assemble_document(tmpdir, params=engine, canonical_whitelist=CANONICAL_CONOPS_UNITS)
+            self.assertIn("omits required placeholder {{SUPER_SYSTEM_ARCHITECTURE}} or {{SUBSYSTEM_ARCHITECTURE_SECTION}}", str(ctx.exception))
 
     def test_subsystem_architecture_lifecycle_archetypes(self):
         """Verify synthesized lifecycle phases across all LifecycleType archetypes (Issue #268)."""
@@ -1743,10 +1770,12 @@ Formal operational lifecycle stages across $\\Phi_{\\mathrm{lifecycle}}$:
         super_sys_fb = engine_fallback.resolve_token("SUPER_SYSTEM_ARCHITECTURE")
         subsys_sec_fb = engine_fallback.resolve_token("SUBSYSTEM_ARCHITECTURE_SECTION")
 
-        self.assertIn("NavModule<br/>• PORT-NAVM-C2 (INOUT)<br/>• PORT-NAVM-DATA (INOUT)<br/>• PORT-NAVM-PWR (IN)", super_sys_fb)
-        self.assertIn("| **PORT-NAVM-C2** | INOUT | DiscreteSafetyInterlock |", subsys_sec_fb)
-        self.assertIn("| **PORT-NAVM-DATA** | INOUT | DeterministicSystemBus |", subsys_sec_fb)
-        self.assertIn("| **PORT-NAVM-PWR** | IN | DC_PowerRail_28V |", subsys_sec_fb)
+        self.assertIn('NavModule["NavModule"]', super_sys_fb)
+        self.assertNotIn("PORT-NAVM-C2", super_sys_fb)
+        self.assertNotIn("PORT-NAVM-DATA", super_sys_fb)
+        self.assertNotIn("PORT-NAVM-PWR", super_sys_fb)
+        self.assertIn("*Factual Note: No discrete external physical or logical ports are explicitly declared in the OEM specification. Interfacing is managed via internal structural integration.*", subsys_sec_fb)
+        self.assertNotIn("PORT-NAVM-C2", subsys_sec_fb)
 
     def test_sanitize_level_1b_operational_text_filters_level_2_use_cases(self):
         """Verify _sanitize_level_1b_operational_text strips Level 2 system use cases (uc-xx / (UC-xx))."""
@@ -1766,34 +1795,36 @@ Formal operational lifecycle stages across $\\Phi_{\\mathrm{lifecycle}}$:
         self.assertNotIn("UC-06", clean_3)
 
     def test_is_component_icd_document_detection(self):
-        """Verify is_component_icd_document identifies component ICD documents and distinguishes system specs (Issue #273)."""
-        # Path-based detections
-        self.assertTrue(is_component_icd_document("", file_path="schema/esad-icd-excalibur-ab00-0054.md"))
-        self.assertTrue(is_component_icd_document("", file_path="schema/actuator_icd_v1.md"))
-        self.assertTrue(is_component_icd_document("", file_path="docs/interfaces/interface_control_document.md"))
-        self.assertTrue(is_component_icd_document("", file_path="schema/icd_payload_controller.md"))
-        self.assertTrue(is_component_icd_document("", file_path="schema/radio-icd.md"))
-        self.assertTrue(is_component_icd_document("", file_path="schema/ICD_01_SYSTEM_INTERFACE_MATRIX.md"))
-        self.assertTrue(is_component_icd_document("", file_path="schema/ICD_02_MASTER_SIGNAL_DICTIONARY.md"))
+        """Verify is_component_icd_document identifies packet traces and distinguishes OEM specs (Issue #273, #296)."""
+        # Path-based detections for wire packet traces and protocol capture logs
+        self.assertTrue(is_component_icd_document("", file_path="schema/wire_packet_trace.pcap"))
+        self.assertTrue(is_component_icd_document("", file_path="schema/packet-capture.log"))
+        self.assertTrue(is_component_icd_document("", file_path="schema/wireshark_dump.pcapng"))
+        self.assertTrue(is_component_icd_document("", file_path="docs/telemetry/raw_trace.bin"))
+        self.assertTrue(is_component_icd_document("", file_path="schema/protocol_capture_stream.txt"))
+        self.assertTrue(is_component_icd_document("", file_path="schema/serial_packet_trace.log"))
 
         # Text-based detections
-        icd_text_1 = """# ESAD Component Interface Control Document
-## 1. Scope
-This document specifies the wire-level RS-422 interface and serial opcodes.
-| Opcode | Command | Description |
-| :--- | :--- | :--- |
-| 0x10 | CMD_ARM | Arm electronic safe and arm device |
+        trace_text_1 = """# Wire Packet Trace Log
+Time: 12:00:01.000
+Raw packet trace payload: 0x55 0xAA 0x01 0x02
 """
-        self.assertTrue(is_component_icd_document(icd_text_1))
+        self.assertTrue(is_component_icd_document(trace_text_1))
 
-        icd_text_2 = """# Actuator Subsystem
-Document Type: Component-Level ICD
-## Serial Command Protocol
-Baud Rate: 115200 bps
-| Register | Function |
-| 0x01 | Set Position |
+        trace_text_2 = """# Protocol Capture Log
+Wireshark Capture Export
+Frame 1: 64 bytes on wire
 """
-        self.assertTrue(is_component_icd_document(icd_text_2))
+        self.assertTrue(is_component_icd_document(trace_text_2))
+
+        # Legitimate OEM subsystem hardware specifications MUST NOT be flagged as component ICDs (Issue #296)
+        self.assertFalse(is_component_icd_document("", file_path="schema/esad-icd-excalibur-ab00-0054.md"))
+        self.assertFalse(is_component_icd_document("", file_path="schema/actuator_icd_v1.md"))
+        self.assertFalse(is_component_icd_document("", file_path="docs/interfaces/interface_control_document.md"))
+        self.assertFalse(is_component_icd_document("", file_path="schema/icd_payload_controller.md"))
+        self.assertFalse(is_component_icd_document("", file_path="schema/radio-icd.md"))
+        self.assertFalse(is_component_icd_document("", file_path="schema/ICD_01_SYSTEM_INTERFACE_MATRIX.md"))
+        self.assertFalse(is_component_icd_document("", file_path="schema/ICD_02_MASTER_SIGNAL_DICTIONARY.md"))
 
         # System-level specs should NOT be flagged as component ICDs
         system_spec_text = """# ALPHA 500
@@ -1809,14 +1840,17 @@ Baud Rate: 115200 bps
         self.assertFalse(is_component_icd_document(system_spec_text))
 
     def test_filter_component_icd_documents_from_conops_ingestion(self):
-        """Verify component ICD documents are excluded from ConOps synthesis while system specs continue to be ingested (Issue #273)."""
-        icd_doc = """# ESAD Component Interface Control Document
-| Parameter | Value |
+        """Verify packet trace logs are excluded from ConOps synthesis while OEM subsystem specs continue to be ingested (Issue #273, #296)."""
+        trace_doc = """# Wire Packet Trace
+| Packet ID | Hex Payload |
 | :--- | :--- |
-| SERIAL_OPCODE_ARM | 0x10 |
-| SERIAL_OPCODE_FIRE | 0x11 |
-| BAUD_RATE | 115200 baud |
-| CRC_POLYNOMIAL | 0x1021 |
+| PKT-01 | 0xDEADBEEF |
+| PKT-02 | 0xCAFEBABE |
+"""
+        oem_subsystem_doc = """# Subsystem Hardware Specification: ESAD
+| Subsystem | Scope | Mass (kg) | Power (W) |
+| :--- | :--- | :--- | :--- |
+| ESADModule | Electronic Safe and Arm Device | 1.2 | 15.0 |
 """
         system_doc = """# Titan Orbiter
 | Parameter | Value |
@@ -1827,10 +1861,13 @@ Baud Rate: 115200 bps
 """
         # Ingestion directly via text and file_path
         engine = SysMLParameterBindingEngine(auto_detect=False)
-        icd_result = engine.ingest_markdown_text(icd_doc, file_path="schema/esad-icd-excalibur-ab00-0054.md")
-        self.assertFalse(icd_result)
-        self.assertNotIn("SERIAL_OPCODE_ARM", engine.parameter_bindings)
-        self.assertNotIn("BAUD_RATE", engine.parameter_bindings)
+        trace_result = engine.ingest_markdown_text(trace_doc, file_path="schema/wire_packet_trace.md")
+        self.assertFalse(trace_result)
+        self.assertNotIn("PKT_01", engine.parameter_bindings)
+
+        oem_result = engine.ingest_markdown_text(oem_subsystem_doc, file_path="schema/esad-icd-excalibur-ab00-0054.md")
+        self.assertTrue(oem_result)
+        self.assertIn("ESADModule", engine.ast_part_names)
 
         sys_result = engine.ingest_markdown_text(system_doc, file_path="schema/titan_system_spec.md")
         self.assertTrue(sys_result)
@@ -1843,22 +1880,25 @@ Baud Rate: 115200 bps
             schema_dir = os.path.join(tmpdir, "schema")
             os.makedirs(schema_dir, exist_ok=True)
 
-            icd_file = os.path.join(schema_dir, "esad-icd-excalibur-ab00-0054.md")
-            with open(icd_file, "w", encoding="utf-8") as f:
-                f.write(icd_doc)
+            trace_file = os.path.join(schema_dir, "wire_packet_trace.md")
+            with open(trace_file, "w", encoding="utf-8") as f:
+                f.write(trace_doc)
+
+            oem_file = os.path.join(schema_dir, "esad-icd-excalibur-ab00-0054.md")
+            with open(oem_file, "w", encoding="utf-8") as f:
+                f.write(oem_subsystem_doc)
 
             sys_file = os.path.join(schema_dir, "titan_system_spec.md")
             with open(sys_file, "w", encoding="utf-8") as f:
                 f.write(system_doc)
 
             auto_engine = SysMLParameterBindingEngine(workspace_dir=tmpdir, auto_detect=True)
-            # System spec parameters must be present
+            # System spec parameters and OEM subsystem must be present
             self.assertEqual(auto_engine.resolve_token("SYSTEM_IDENTIFIER"), "Titan Orbiter")
             self.assertEqual(auto_engine.resolve_token("CRUISE_SPEED_MPS"), "45.0")
-            # Component ICD parameters must NOT be present
-            self.assertNotIn("SERIAL_OPCODE_ARM", auto_engine.parameter_bindings)
-            self.assertNotIn("BAUD_RATE", auto_engine.parameter_bindings)
-            self.assertNotIn("CRC_POLYNOMIAL", auto_engine.parameter_bindings)
+            self.assertIn("ESADModule", auto_engine.ast_part_names)
+            # Packet trace parameters must NOT be present
+            self.assertNotIn("PKT_01", auto_engine.parameter_bindings)
 
     def test_assemble_conops_inplace_reverse_sync_allows_schema_overwrite(self):
         """Verify automated reverse-sync in assemble_conops succeeds when detected_schema and out_sysml are both .pipeline/schema.sysml (Defect 3)."""
@@ -1883,6 +1923,241 @@ Baud Rate: 115200 bps
                 verify_only=False,
             )
             self.assertTrue(success, "assemble_conops() failed during in-place schema reverse-sync")
+
+    def test_unit_4_missing_placeholders_raises_value_error(self):
+        """Verify fail-closed gate: assemble_document raises ValueError if Unit 4 omits required architecture placeholders (Issue #299, #302)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            conops_units_dir = os.path.join(tmpdir, "units", "conops")
+            _create_sample_conops_units(conops_units_dir, with_placeholders=True)
+            u4_path = os.path.join(conops_units_dir, "04_USER_CLASSES_AND_STAKEHOLDERS.md")
+
+            # Case 1: Omit {{SUPER_SYSTEM_ARCHITECTURE}}
+            with open(u4_path, "w", encoding="utf-8") as f:
+                f.write("""# 4. User Classes & Stakeholders
+## 4.8 Subsystem Architecture
+{{SUBSYSTEM_ARCHITECTURE_SECTION}}
+""")
+            with self.assertRaises(ValueError) as ctx1:
+                assemble_document(conops_units_dir, canonical_whitelist=CANONICAL_CONOPS_UNITS)
+            self.assertEqual(
+                str(ctx1.exception),
+                "04_USER_CLASSES_AND_STAKEHOLDERS.md omits required placeholder {{SUPER_SYSTEM_ARCHITECTURE}} or {{SUBSYSTEM_ARCHITECTURE_SECTION}}."
+            )
+
+            # Case 2: Omit {{SUBSYSTEM_ARCHITECTURE_SECTION}}
+            with open(u4_path, "w", encoding="utf-8") as f:
+                f.write("""# 4. User Classes & Stakeholders
+## 4.7 Super-System Architecture
+{{SUPER_SYSTEM_ARCHITECTURE}}
+""")
+            with self.assertRaises(ValueError) as ctx2:
+                assemble_document(conops_units_dir, canonical_whitelist=CANONICAL_CONOPS_UNITS)
+            self.assertEqual(
+                str(ctx2.exception),
+                "04_USER_CLASSES_AND_STAKEHOLDERS.md omits required placeholder {{SUPER_SYSTEM_ARCHITECTURE}} or {{SUBSYSTEM_ARCHITECTURE_SECTION}}."
+            )
+
+    def test_zero_oem_parts_discovered_raises_runtime_error(self):
+        """Verify fail-closed gate: auto_detect_workspace_parameters raises RuntimeError when candidate dirs exist but 0 OEM parts discovered (Issue #302)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create schema directory with a YAML file declaring parameters but 0 SubsystemParts
+            schema_dir = os.path.join(tmpdir, "schema")
+            os.makedirs(schema_dir, exist_ok=True)
+            with open(os.path.join(schema_dir, "empty_subsystems.yaml"), "w", encoding="utf-8") as f:
+                f.write("""title: Empty Subsystems Model
+version: "1.0.0"
+parameters:
+  MAX_ALTITUDE_M: 120.0
+""")
+
+            with self.assertRaises(RuntimeError) as ctx:
+                SysMLParameterBindingEngine(workspace_dir=tmpdir, auto_detect=True)
+            self.assertEqual(
+                str(ctx.exception),
+                "FATAL: Ingestion engine discovered 0 valid OEM subsystem parts across "
+                "schema/, docs/architecture/, and docs/research/. Provide valid OEM hardware specifications."
+            )
+
+    def test_multiformat_schema_ingestion(self):
+        """Verify multi-format schema ingestion across YAML, JSON, SysML, and Markdown (Issue #296, #302)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            os.makedirs(schema_dir, exist_ok=True)
+
+            # 1. YAML OEM hardware specification
+            yaml_path = os.path.join(schema_dir, "gimbal_camera.yaml")
+            with open(yaml_path, "w", encoding="utf-8") as f:
+                f.write("""subsystems:
+  - name: GimbalCamera
+    doc: Electro-optical and infrared tracking gimbal
+    mass_kg: 1.8
+    power_w: 22.0
+    ports:
+      - name: p_video_stream
+        direction: out
+        type: VideoStreamPort
+      - name: p_gimbal_pwr
+        direction: in
+        type: PwrRail28V
+""")
+
+            # 2. JSON OEM hardware specification
+            json_path = os.path.join(schema_dir, "lidar_scanner.json")
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump({
+                    "subsystems": [
+                        {
+                            "name": "LiDARScanner",
+                            "doc": "Solid-state pulsed LiDAR scanner",
+                            "mass_kg": 0.9,
+                            "power_w": 18.0,
+                            "ports": [
+                                {
+                                    "name": "p_pointcloud",
+                                    "direction": "out",
+                                    "type": "PointCloudPort"
+                                }
+                            ]
+                        }
+                    ]
+                }, f)
+
+            # 3. Markdown OEM specification table
+            md_path = os.path.join(schema_dir, "radar_altimeter.md")
+            with open(md_path, "w", encoding="utf-8") as f:
+                f.write("""# Subsystem Specification: Radar Altimeter
+| Subsystem | Purpose | Mass (kg) | Power (W) | Ports |
+| :--- | :--- | :--- | :--- | :--- |
+| RadarAltimeter | Precision low-altitude radar altimetry | 0.5 | 8.0 | p_alt_tlm (out) |
+""")
+
+            engine = SysMLParameterBindingEngine(workspace_dir=tmpdir, auto_detect=True)
+            self.assertIn("GimbalCamera", engine.ast_part_names)
+            self.assertIn("LiDARScanner", engine.ast_part_names)
+            self.assertIn("RadarAltimeter", engine.ast_part_names)
+            self.assertEqual(len(engine.ast_parts), 3)
+
+            # Check port attributes extracted
+            gimbal_part = next(p for p in engine.ast_parts if p.name == "GimbalCamera")
+            port_names = [getattr(pt, "name", "") for pt in gimbal_part.ports]
+            self.assertIn("p_video_stream", port_names)
+            self.assertIn("p_gimbal_pwr", port_names)
+
+    def test_dynamic_architecture_synthesis_and_subclause_tolerance(self):
+        """Verify dynamic Section 4.7 OV-2 and Section 4.8 4-tier subclauses with +/- 15% tolerance tables (Issue #297, #299)."""
+        sysml_model = """
+        package AutonomousPlatform {
+            part def MissionComputer {
+                doc /* Core autonomous mission computing and flight control */
+                inout port p_c2 : C2LinkPort;
+                out port p_act : ActuatorCommandPort;
+            }
+            part def ElectroOpticalSensor {
+                doc /* Dual-spectrum imaging sensor */
+                out port p_stream : VideoPort;
+                in port p_pwr : PwrPort;
+            }
+            part def BatteryPowerModule {
+                doc /* Smart lithium-ion energy storage system */
+                inout port p_bus : PowerBusPort;
+            }
+        }
+        """
+        engine = SysMLParameterBindingEngine(auto_detect=False)
+        engine.ingest_sysml_text(sysml_model)
+
+        # 1. Section 4.7 Super-System Architecture (DoDAF OV-2)
+        super_sys = engine.resolve_token("SUPER_SYSTEM_ARCHITECTURE")
+        self.assertIn("```mermaid", super_sys)
+        self.assertIn("flowchart TD", super_sys)
+        self.assertIn('subgraph Super_System["Operational Super-System Architecture (AutonomousPlatform)"]', super_sys)
+        self.assertIn('Operator["Human Operator & Mission Supervisor"]', super_sys)
+        self.assertIn('Environment["External Environment & Infrastructure"]', super_sys)
+        self.assertIn('subgraph Platform_Segment["Primary Operational Segment (DoDAF SV-1)"]', super_sys)
+
+        # Confirm GSE / Launch segments are completely expunged (Issue #297)
+        self.assertNotIn("GCS", super_sys)
+        self.assertNotIn("Ground_Control_Station", super_sys)
+        self.assertNotIn("GSE", super_sys)
+        self.assertNotIn("Support_Segment", super_sys)
+        self.assertNotIn("Launch_Segment", super_sys)
+        self.assertNotIn("PORT_PLAT_C2", super_sys)
+        self.assertNotIn("PORT_GSE_PWR", super_sys)
+
+        # 2. Section 4.8 Subsystem Architecture (DoDAF SV-1 / SV-4) 4-tier subclauses
+        subsys_sec = engine.resolve_token("SUBSYSTEM_ARCHITECTURE_SECTION")
+        for idx, p_name in enumerate(["MissionComputer", "ElectroOpticalSensor", "BatteryPowerModule"], start=1):
+            self.assertIn(f"#### 4.8.{idx} {p_name} Subsystem Architecture", subsys_sec)
+            self.assertIn(f"##### 4.8.{idx}.1 Interfaces (SV-1 / SV-2) - Physical & Logical Interface Allocations", subsys_sec)
+            self.assertIn(f"##### 4.8.{idx}.2 Functional Allocation (SV-4) - Scope & Mission Role", subsys_sec)
+            self.assertIn(f"- **Allocated Operational Activity:** `/// OperationalAllocation: [OA-{idx:02d}]`", subsys_sec)
+            self.assertIn(f"##### 4.8.{idx}.3 Resource Budgets - Resource & Operating Envelope Allocations", subsys_sec)
+            self.assertIn(f"##### 4.8.{idx}.4 Lifecycle Modes - Operational Lifecycle & Statechart Integration", subsys_sec)
+
+        # Confirm +/- 15% tolerance table headers and bounds
+        self.assertIn("| Resource Parameter | Nominal Allocation | Min (-15% Tolerance) | Max (+15% Tolerance) | Engineering Units | Allocation Description |", subsys_sec)
+        self.assertIn("Safety Invariants & Containment Interlocks", subsys_sec)
+
+    def test_empty_candidate_schema_dir_raises_runtime_error_and_cli_exits_1(self):
+        """Verify empty schema/ candidate directory raises RuntimeError and CLI exits with code 1 (Issue #302)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            os.makedirs(schema_dir, exist_ok=True)
+            # Empty schema directory with only .gitkeep
+            with open(os.path.join(schema_dir, ".gitkeep"), "w") as f:
+                f.write("")
+
+            with self.assertRaises(RuntimeError) as ctx:
+                SysMLParameterBindingEngine(workspace_dir=tmpdir, auto_detect=True)
+            self.assertIn("discovered 0 valid OEM subsystem parts", str(ctx.exception))
+
+            # Run CLI on this workspace
+            script_path = os.path.join(REPO_ROOT, "scripts", "assemble_conops.py")
+            res = subprocess.run(
+                [sys.executable, script_path, "--workspace", tmpdir],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(res.returncode, 1)
+            self.assertIn("discovered 0 valid OEM subsystem parts", res.stderr)
+
+    def test_empty_workspace_with_units_raises_runtime_error_and_cli_exits_1(self):
+        """Verify downstream workspace with units but 0 parts raises RuntimeError before compiling CONOPS.md and CLI exits 1 (Issue #302)."""
+        import shutil
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create units directory but no schema directory (0 OEM parts)
+            input_dir = os.path.join(tmpdir, "docs", "conops", "units")
+            conops_units_dir = os.path.join(input_dir, "conops")
+            _create_sample_conops_units(conops_units_dir, with_placeholders=False)
+            # Remove auto-created schema dir from _create_sample_conops_units if created
+            schema_dir = os.path.join(tmpdir, "schema")
+            if os.path.exists(schema_dir):
+                shutil.rmtree(schema_dir)
+
+            output_dir = os.path.join(tmpdir, "docs", "conops")
+
+            # Binding engine with 0 parts
+            engine = SysMLParameterBindingEngine(workspace_dir=tmpdir, auto_detect=False)
+            self.assertEqual(len(engine.ast_parts), 0)
+
+            with self.assertRaises(RuntimeError) as ctx:
+                assemble_conops(
+                    input_dir=input_dir,
+                    output_dir=output_dir,
+                    workspace_dir=tmpdir,
+                    params=engine,
+                )
+            self.assertIn("discovered 0 valid OEM subsystem parts", str(ctx.exception))
+
+            # Run CLI on this workspace
+            script_path = os.path.join(REPO_ROOT, "scripts", "assemble_conops.py")
+            res = subprocess.run(
+                [sys.executable, script_path, "--workspace", tmpdir, "--input-dir", input_dir, "--output-dir", output_dir],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(res.returncode, 1)
+            self.assertIn("discovered 0 valid OEM subsystem parts", res.stderr)
 
 
 if __name__ == "__main__":

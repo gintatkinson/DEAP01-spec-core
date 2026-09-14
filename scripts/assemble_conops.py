@@ -22,6 +22,24 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
+try:
+    import yaml
+except ImportError:
+    yaml = None
+
+_parity_auditor_src = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "skills", "spec-orchestrator", "parity_auditor", "src"
+)
+if _parity_auditor_src not in sys.path:
+    sys.path.insert(0, _parity_auditor_src)
+
+from parity_auditor.parsers.schema_router import (
+    SubsystemPart,
+    SubsystemPort,
+    extract_subsystem_parts,
+)
+
 
 class LifecycleType(str, Enum):
     """Formal lifecycle archetypes for cyber-physical mission systems."""
@@ -151,31 +169,50 @@ def _sanitize_level_1b_operational_text(text: str) -> str:
 
 def is_component_icd_document(text: str, file_path: str = "") -> bool:
     """
-    Detects whether a markdown document is a component-level ICD rather than a system-level specification or schema.
-    Checks if file path contains '-icd-', '_icd_', or 'interface_control_document', or if text begins with component ICD markers.
-    Scopes component-level serial opcodes, wire protocols, baud rates, and register maps exclusively
-    to Level 1C ICD generators (ICD_01_SYSTEM_INTERFACE_MATRIX.md / ICD_02_MASTER_SIGNAL_DICTIONARY.md) (Fixes Issue #273).
+    Detects whether a document is a low-level raw wire-packet trace or standalone protocol capture log.
+    Refactored for Issue #296: Does NOT discard legitimate OEM subsystem hardware specifications
+    in schema/, docs/architecture/, or docs/research/ just because they contain tables, pinouts,
+    or the phrase 'interface control document'.
+    Only excludes low-level raw wire-packet traces or standalone protocol capture logs.
     """
+    trace_path_markers = (
+        "wire_packet_trace",
+        "wire-packet-trace",
+        "packet_capture",
+        "packet-capture",
+        "wireshark",
+        "raw_trace",
+        "raw-trace",
+        "protocol_capture",
+        "protocol-capture",
+        "serial_packet_trace",
+        "serial-packet-trace",
+        "pcap_trace",
+        "pcap-trace",
+    )
     if file_path:
         norm_path = file_path.lower().replace("\\", "/")
         base_name = os.path.basename(norm_path)
-        if any(marker in norm_path for marker in ("-icd-", "_icd_", "interface_control_document", "interface-control-document")):
-            return True
-        if base_name.startswith(("icd_", "icd-")) or base_name.endswith(("-icd.md", "_icd.md", "-icd.markdown", "_icd.markdown")):
+        if any(marker in norm_path or marker in base_name for marker in trace_path_markers):
             return True
 
     if text:
         lower_prefix = text[:2000].lower().strip()
-        icd_markers = (
-            "interface control document",
-            "component interface control document",
-            "component-level icd",
-            "serial command protocol",
-            "serial interface control document",
-            "wire protocol specification",
-            "register map specification",
+        trace_text_markers = (
+            "wire packet trace",
+            "wire_packet_trace",
+            "packet capture",
+            "packet_capture",
+            "wireshark capture",
+            "raw wire packet trace",
+            "raw packet trace",
+            "protocol capture log",
+            "standalone protocol capture",
+            "serial packet trace",
+            "pcap trace",
+            "pcap_trace",
         )
-        if any(marker in lower_prefix for marker in icd_markers):
+        if any(marker in lower_prefix for marker in trace_text_markers):
             return True
 
     return False
@@ -1542,6 +1579,7 @@ class SysMLParameterBindingEngine:
         Generates Section 4.7 Super-System Architecture Markdown derived deterministically from SysML AST.
         Conforms to Option 3: Compact Subsystem Blocks with Embedded Port Attributes and Vertical Hierarchical Tiers (direction TB).
         Guarantees Level 1B operational abstraction without component-internal serial opcodes, baud rates, or CRC formulas (Fixes #273).
+        Dynamic architecture view strictly synthesized from self.ast_parts and external boundary actors (Fixes #297, #299).
         """
         parts = self.ast_parts if self.ast_parts else []
         subsys_names = [_sanitize_level_1b_operational_text(getattr(p, "name", str(p))) for p in parts]
@@ -1549,12 +1587,10 @@ class SysMLParameterBindingEngine:
         subsys_summary = ", ".join(subsys_names) if subsys_names else "Declared System Subsystems"
 
         lines = [
-            f"The **{sys_id}** super-system architecture formalizes the complete cyber-physical system boundary and segment allocations in accordance with IEEE 1362 §5.3, DoDAF SV-1, ISO/IEC/IEEE 15288:2023 (§6.4.2 & §6.4.3), ISO/IEC/IEEE 29148:2018 §6.4.2–§6.4.3, and INCOSE Systems Engineering Handbook v5.0 (§3.4.4).",
+            f"The **{sys_id}** architecture formalizes the complete system boundary and segment allocations in accordance with IEEE 1362 §5.3, DoDAF OV-2 / SV-1, ISO/IEC/IEEE 15288:2023 (§6.4.2 & §6.4.3), ISO/IEC/IEEE 29148:2018 §6.4.2–§6.4.3, and INCOSE Systems Engineering Handbook v5.0 (§3.4.4).",
             "",
             f"The super-system decomposes across declared SysML AST architectural blocks conforming to Option 3 (Compact Subsystem Blocks with Embedded Port Attributes and max 3-column vertical tier partitioning):",
-            f"1. **Primary Operational Segment (Air Vehicle / Primary Platform Segment):** Houses constituent subsystems ({subsys_summary}) executing closed-loop mission activities.",
-            f"2. **Ground Command & Control Segment (Ground Segment):** Provides supervisory oversight and failsafe abort authority.",
-            f"3. **Launch & Auxiliary Support Segment (Launch & Support Segment):** Provides pre-operational deployment, servicing, and diagnostic support.",
+            f"- **Constituent Operational Subsystems ({subsys_summary}):** Houses constituent subsystems executing closed-loop mission activities derived strictly from authentic OEM specifications.",
             "",
             "```mermaid",
             "flowchart TD",
@@ -1563,13 +1599,8 @@ class SysMLParameterBindingEngine:
             '',
             '        subgraph External_Actors["External Operating Environment & Actors (IEEE 1362 §5.1)"]',
             '            direction TB',
-            '            Operator["Supervisory Operator (SO / MS)"]',
+            '            Operator["Human Operator & Mission Supervisor"]',
             '            Environment["External Environment & Infrastructure"]',
-            '        end',
-            '',
-            '        subgraph Ground_Segment["Ground Command & Control Segment (IEEE 1362 §5.3)"]',
-            '            direction TB',
-            '            GCS["Ground Control Station / C2<br/>• PORT_GCS_C2 (INOUT)<br/>• PORT_GCS_DISP (OUT)"]',
             '        end',
             '',
             '        subgraph Platform_Segment["Primary Operational Segment (DoDAF SV-1)"]',
@@ -1602,33 +1633,28 @@ class SysMLParameterBindingEngine:
                             pt_dir = (getattr(pt, "direction", "inout") or "inout").upper()
                             port_items.append(f"<br/>• {clean_pt_name} ({pt_dir})")
                         port_text = "".join(port_items)
+                        lines.append(f'                {p_node_id}["{p_name}{port_text}"]')
                     else:
-                        p_prefix = re.sub(r'[^A-Za-z0-9]', '', p_name)[:4].upper() or "SUB"
-                        port_text = f"<br/>• PORT-{p_prefix}-C2 (INOUT)<br/>• PORT-{p_prefix}-DATA (INOUT)<br/>• PORT-{p_prefix}-PWR (IN)"
-                    lines.append(f'                {p_node_id}["{p_name}{port_text}"]')
+                        lines.append(f'                {p_node_id}["{p_name}"]')
                 lines.append('            end')
         else:
-            lines.append(f'            Platform["{sys_id} Core Platform<br/>• PORT_PLAT_C2 (INOUT)<br/>• PORT_PLAT_PWR (IN)"]')
-            part_node_ids.append(("Platform", f"{sys_id} Core Platform"))
+            lines.append(f'            Platform["{sys_id} Core System"]')
+            part_node_ids.append(("Platform", f"{sys_id} Core System"))
 
         lines.append('        end')
         lines.append('')
-        lines.append('        subgraph Support_Segment["Launch & Auxiliary Support Segment (IEEE 1362 §5.3)"]')
-        lines.append('            direction TB')
-        lines.append('            Launch["Launch & Recovery System"]')
-        lines.append('            GSE["Support Equipment & Maintenance<br/>• PORT_GSE_PWR (OUT)"]')
-        lines.append('        end')
-        lines.append('')
-        lines.append('        Operator -->|"CONN-01: Operator Command & Authorization"| GCS')
         if part_node_ids:
             primary_node = part_node_ids[0][0]
-            lines.append(f'        GCS <-->|"CONN-02: Bidirectional PACE C2 Datalink [PORT_GCS_C2 <-> PORT_PLAT_C2]"| {primary_node}')
-            lines.append(f'        GSE -.->|"CONN-03: Pre-Mission Power & Servicing [PORT_GSE_PWR]"| {primary_node}')
-            lines.append(f'        Launch -.->|"CONN-04: Deployment & Recovery Interface"| {primary_node}')
-            lines.append(f'        Environment -.->|"CONN-05: Environmental Dynamics & Disturbance"| {primary_node}')
+            lines.append(f'        Operator -->|"CONN-01: Operator Command & Authorization"| {primary_node}')
+            lines.append(f'        Operator <-->|"CONN-02: Bidirectional PACE C2 Datalink"| {primary_node}')
+            lines.append(f'        Environment -.->|"CONN-03: Environmental Dynamics & Disturbance"| {primary_node}')
             if len(part_node_ids) > 1:
-                for idx_p, (other_node, _other_name) in enumerate(part_node_ids[1:], start=6):
+                for idx_p, (other_node, _other_name) in enumerate(part_node_ids[1:], start=4):
                     lines.append(f'        {primary_node} <-->|"CONN-{idx_p:02d}: Internal Bus & Inter-Subsystem Control"| {other_node}')
+        else:
+            lines.append('        Operator -->|"CONN-01: Operator Command & Authorization"| Platform_Segment')
+            lines.append('        Operator <-->|"CONN-02: Bidirectional PACE C2 Datalink"| Platform_Segment')
+            lines.append('        Environment -.->|"CONN-03: Environmental Dynamics & Disturbance"| Platform_Segment')
         lines.append('    end')
         lines.append('```')
         return "\n".join(lines)
@@ -1638,6 +1664,7 @@ class SysMLParameterBindingEngine:
         Generates Section 4.8 Subsystem Architecture Markdown for 100% of declared AST parts.
         Guarantees Level 1B operational abstraction without component-internal serial opcodes,
         baud rates, or CRC formulas (Fixes #273).
+        Synthesizes 4-tier subclauses for 100% of declared OEM parts (Fixes #297, #299, #302).
         """
         parts_to_render = self.ast_parts if self.ast_parts else []
 
@@ -1670,8 +1697,29 @@ class SysMLParameterBindingEngine:
             else:
                 p_doc = clean_doc
 
-            p_mass_kg = round(max(0.2, total_mtow / max(1, len(parts_to_render))), 2)
-            p_power_w = round(max(5.0, base_power_w * (1.2 if "computer" in p_name.lower() or "proc" in p_name.lower() or "obc" in p_name.lower() else 0.5)), 1)
+            # Mass & Power derivation with +/- 15% tolerance
+            p_mass_val = getattr(p, "mass_kg", None)
+            if p_mass_val is not None:
+                try:
+                    p_mass_kg = round(float(p_mass_val), 2)
+                except Exception:
+                    p_mass_kg = round(max(0.2, total_mtow / max(1, len(parts_to_render))), 2)
+            else:
+                p_mass_kg = round(max(0.2, total_mtow / max(1, len(parts_to_render))), 2)
+
+            p_power_val = getattr(p, "power_w", None)
+            if p_power_val is not None:
+                try:
+                    p_power_w = round(float(p_power_val), 1)
+                except Exception:
+                    p_power_w = round(max(5.0, base_power_w * (1.2 if any(k in p_name.lower() for k in ("computer", "proc", "obc", "controller")) else 0.5)), 1)
+            else:
+                p_power_w = round(max(5.0, base_power_w * (1.2 if any(k in p_name.lower() for k in ("computer", "proc", "obc", "controller")) else 0.5)), 1)
+
+            p_mass_min = round(p_mass_kg * 0.85, 2)
+            p_mass_max = round(p_mass_kg * 1.15, 2)
+            p_power_min = round(p_power_w * 0.85, 1)
+            p_power_max = round(p_power_w * 1.15, 1)
 
             ports = getattr(p, "ports", []) or []
             actions = getattr(p, "actions", []) or []
@@ -1679,8 +1727,9 @@ class SysMLParameterBindingEngine:
             lines.append(f"#### 4.8.{idx} {p_name} Subsystem Architecture")
             lines.append(f"- **Functional Purpose & Scope:** {p_doc}")
             lines.append("")
-            lines.append(f"##### 4.8.{idx}.1 Physical & Logical Interface Allocations")
 
+            # 4.8.{idx}.1 Interfaces (SV-1 / SV-2) - Physical & Logical Interface Allocations
+            lines.append(f"##### 4.8.{idx}.1 Interfaces (SV-1 / SV-2) - Physical & Logical Interface Allocations")
             if ports:
                 lines.append("| Port Name | Direction | Interface Type | Functional Binding / Interconnect |")
                 lines.append("| :--- | :--- | :--- | :--- |")
@@ -1707,24 +1756,38 @@ class SysMLParameterBindingEngine:
 
                     lines.append(f"| **{port_name}** | {port_dir} | {port_type} | {port_doc} |")
             else:
-                p_prefix = re.sub(r'[^A-Za-z0-9]', '', p_name)[:4].upper() or "SUB"
-                lines.append("| Port Name | Direction | Interface Type | Functional Binding / Interconnect |")
-                lines.append("| :--- | :--- | :--- | :--- |")
-                lines.append(f"| **PORT-{p_prefix}-C2** | INOUT | DiscreteSafetyInterlock | Dedicated command, control, and watchdog interlock |")
-                lines.append(f"| **PORT-{p_prefix}-DATA** | INOUT | DeterministicSystemBus | Bidirectional inter-subsystem data and telemetry bus |")
-                lines.append(f"| **PORT-{p_prefix}-PWR** | IN | DC_PowerRail_28V | Regulated DC electrical power input rail |")
+                lines.append("*Factual Note: No discrete external physical or logical ports are explicitly declared in the OEM specification. Interfacing is managed via internal structural integration.*")
 
             lines.append("")
-            lines.append(f"##### 4.8.{idx}.2 Resource & Operating Envelope Allocations")
-            lines.append("| Specification Parameter | Nominal Value / Bound | Engineering Units | Allocation Description |")
-            lines.append("| :--- | :--- | :--- | :--- |")
-            lines.append(f"| Allocated Operating Power | {p_power_w} | W | Nominal continuous electrical power draw |")
-            lines.append(f"| Allocated Mass Budget | {p_mass_kg} | kg | Allocated physical weight budget within MTOW |")
-            lines.append(f"| Operating Temperature Range | {{{{OPERATING_TEMP_MIN_C}}}} to {{{{OPERATING_TEMP_MAX_C}}}} | deg C | Environmental stress qualification envelope |")
-            lines.append(f"| Ingress Protection Rating | {{{{INGRESS_PROTECTION_RATING}}}} | IP Rating | Environmental enclosure sealing qualification |")
 
+            # 4.8.{idx}.2 Functional Allocation (SV-4) - Scope & Mission Role
+            lines.append(f"##### 4.8.{idx}.2 Functional Allocation (SV-4) - Scope & Mission Role")
+            lines.append(f"- **Primary Mission Role & Scope:** {p_doc}")
+            if actions:
+                clean_action_names = []
+                for a in actions:
+                    raw_act = getattr(a, "name", str(a))
+                    clean_act = _sanitize_level_1b_operational_text(raw_act)
+                    clean_act = re.sub(r'_?0x[0-9a-fA-F]+', '', clean_act, flags=re.IGNORECASE)
+                    if clean_act:
+                        clean_action_names.append(clean_act)
+                if clean_action_names:
+                    lines.append(f"- **Declared Operational Actions:** `{', '.join(clean_action_names)}`")
+            lines.append(f"- **Allocated Operational Activity:** `/// OperationalAllocation: [OA-{idx:02d}]`")
             lines.append("")
-            lines.append(f"##### 4.8.{idx}.3 Operational Lifecycle & Statechart Integration")
+
+            # 4.8.{idx}.3 Resource Budgets - Resource & Operating Envelope Allocations
+            lines.append(f"##### 4.8.{idx}.3 Resource Budgets - Resource & Operating Envelope Allocations")
+            lines.append("| Resource Parameter | Nominal Allocation | Min (-15% Tolerance) | Max (+15% Tolerance) | Engineering Units | Allocation Description |")
+            lines.append("| :--- | :--- | :--- | :--- | :--- | :--- |")
+            lines.append(f"| Allocated Operating Power | {p_power_w} | {p_power_min} | {p_power_max} | W | Continuous operating electrical power draw |")
+            lines.append(f"| Allocated Mass Budget | {p_mass_kg} | {p_mass_min} | {p_mass_max} | kg | Allocated physical weight budget within MTOW |")
+            lines.append(f"| Operating Temperature Range | {{{{OPERATING_TEMP_MIN_C}}}} to {{{{OPERATING_TEMP_MAX_C}}}} | {{{{OPERATING_TEMP_MIN_C}}}} | {{{{OPERATING_TEMP_MAX_C}}}} | deg C | Environmental stress qualification envelope |")
+            lines.append(f"| Ingress Protection Rating | {{{{INGRESS_PROTECTION_RATING}}}} | IP54 | IP67 | Rating | Environmental enclosure sealing qualification |")
+            lines.append("")
+
+            # 4.8.{idx}.4 Lifecycle Modes - Operational Lifecycle & Statechart Integration
+            lines.append(f"##### 4.8.{idx}.4 Lifecycle Modes - Operational Lifecycle & Statechart Integration")
             lines.append(f"The `{p_name}` subsystem actively participates across operational lifecycle stages ($\\Phi_{{\\mathrm{{lifecycle}}}}$):")
 
             lifecycle_type = (
@@ -1767,20 +1830,7 @@ class SysMLParameterBindingEngine:
                 lines.append(f"- **Phase_SecureShutdown:** Safely de-energizes power stages, latches mechanical actuators into safe positions, and archives diagnostic logs.")
                 lines.append(f"- **Phase_MaintenanceMode:** Supports interactive diagnostics, calibration verification, and tool-less modular LRU servicing.")
 
-            if actions:
-                clean_action_names = []
-                for a in actions:
-                    raw_act = getattr(a, "name", str(a))
-                    clean_act = _sanitize_level_1b_operational_text(raw_act)
-                    clean_act = re.sub(r'_?0x[0-9a-fA-F]+', '', clean_act, flags=re.IGNORECASE)
-                    if clean_act:
-                        clean_action_names.append(clean_act)
-                if clean_action_names:
-                    lines.append(f"- **Declared AST Actions:** `{', '.join(clean_action_names)}`")
-
-            lines.append("")
-            lines.append(f"##### 4.8.{idx}.4 Safety Invariants & Containment Interlocks")
-            lines.append(f"The `{p_name}` subsystem is bound to the system safety net with independent hardware watchdog monitoring and emergency containment triggers (`EMG-01` through `EMG-07`). Any persistent anomaly or boundary breach triggers deterministic containment within $t_{{\\mathrm{{resp}}}} \\le \\tau_{{\\text{{containment\\_req}}}}$.")
+            lines.append(f"- **Safety Invariants & Containment Interlocks:** The `{p_name}` subsystem is bound to the system safety net with independent hardware watchdog monitoring and emergency containment triggers (`EMG-01` through `EMG-07`). Any persistent anomaly or boundary breach triggers deterministic containment within $t_{{\\mathrm{{resp}}}} \\le \\tau_{{\\text{{containment\\_req}}}}$.")
             lines.append("")
 
         return "\n".join(lines)
@@ -2006,18 +2056,63 @@ class SysMLParameterBindingEngine:
             self._explicit_keys.add(k)
 
     def ingest_file(self, file_path: str) -> bool:
-        """Ingests a file based on its extension."""
+        """
+        Ingests a specification or schema file across multi-format extensions
+        (.sysml, .yaml, .yml, .json, .proto, .idl, .arxml, .md, .markdown).
+        Extracts OEM subsystem parts via extract_subsystem_parts and ingests
+        parameter dictionaries into parameter_bindings.
+        """
         abs_path = os.path.abspath(file_path) if not os.path.isabs(file_path) else file_path
         if not os.path.isfile(abs_path):
             return False
 
-        if abs_path.endswith(".json"):
-            return self.ingest_json_file(abs_path)
-        elif abs_path.endswith(".sysml"):
-            return self.ingest_sysml_file(abs_path)
-        elif abs_path.endswith(".md") or abs_path.endswith(".markdown"):
-            return self.ingest_markdown_file(abs_path)
-        return False
+        ext = os.path.splitext(abs_path)[1].lower()
+        supported_exts = {".sysml", ".yaml", ".yml", ".json", ".proto", ".idl", ".arxml", ".md", ".markdown"}
+        if ext not in supported_exts:
+            return False
+
+        if is_component_icd_document("", file_path=abs_path):
+            return False
+
+        # 1. Extract subsystem parts
+        parts = []
+        try:
+            parts = extract_subsystem_parts(abs_path)
+            for p in parts:
+                if p.name and p.name not in self.ast_part_names:
+                    self.ast_parts.append(p)
+                    self.ast_part_names.add(p.name)
+                    self._explicit_keys.add(p.name)
+                    self._explicit_keys.add(p.name.upper())
+        except Exception:
+            parts = []
+
+        # 2. File-type specific parameter bindings
+        ingested = bool(parts)
+        if ext == ".json":
+            if self.ingest_json_file(abs_path):
+                ingested = True
+        elif ext in (".yaml", ".yml"):
+            if yaml:
+                try:
+                    with open(abs_path, "r", encoding="utf-8") as f:
+                        ydata = yaml.safe_load(f)
+                    if isinstance(ydata, dict):
+                        self.ingest_dictionary(ydata)
+                        ingested = True
+                except Exception:
+                    pass
+        elif ext == ".sysml":
+            if self.ingest_sysml_file(abs_path):
+                ingested = True
+        elif ext in (".md", ".markdown"):
+            if self.ingest_markdown_file(abs_path):
+                ingested = True
+
+        if parts:
+            self._derive_subsystem_architecture()
+
+        return ingested
 
     def ingest_json_file(self, json_path: str) -> bool:
         """Parses a JSON file and ingests its parameters."""
@@ -2175,6 +2270,19 @@ class SysMLParameterBindingEngine:
         if not text or not text.strip():
             return False
 
+        # Extract OEM subsystem parts from markdown text
+        try:
+            md_parts = extract_subsystem_parts(text)
+            for p in md_parts:
+                if p.name and p.name not in self.ast_part_names:
+                    self.ast_parts.append(p)
+                    self.ast_part_names.add(p.name)
+                    self._explicit_keys.add(p.name)
+                    self._explicit_keys.add(p.name.upper())
+                    ingested = True
+        except Exception:
+            pass
+
         # 1. System Title Extraction: Look for `# <SYSTEM_NAME>`
         for line in text.splitlines():
             line_str = line.strip()
@@ -2302,56 +2410,90 @@ class SysMLParameterBindingEngine:
         self._derive_domain_ontology()
         self._derive_operational_intent()
         self._derive_lifecycle_contract()
+        self._derive_subsystem_architecture()
 
         return ingested
 
     def auto_detect_workspace_parameters(self, search_dirs: Optional[List[str]] = None) -> None:
-        """Auto-detects parameter dictionaries, markdown specs, and SysML AST symbols across workspace."""
+        """
+        Auto-detects parameter dictionaries, markdown specs, and OEM subsystem parts across workspace.
+        Scans schema/, docs/architecture/, and docs/research/ candidate directories for multi-format
+        schema files (.sysml, .yaml, .yml, .json, .proto, .idl, .arxml, .md, .markdown).
+        Honors Upstream Distribution Template Clean Landing Zone Invariant by skipping candidate
+        directory scanning when .pipeline/upstream is detected.
+        Fails closed with RuntimeError if candidate directories are scanned but 0 valid OEM parts are found (Issue #302).
+        """
         if search_dirs is None:
             search_dirs = []
             curr = os.path.abspath(self.workspace_dir)
             for _ in range(5):
                 search_dirs.append(curr)
+                if (
+                    os.path.isdir(os.path.join(curr, ".pipeline"))
+                    or os.path.isdir(os.path.join(curr, ".git"))
+                    or os.path.isdir(os.path.join(curr, "schema"))
+                ):
+                    break
                 parent = os.path.dirname(curr)
                 if parent == curr:
                     break
                 curr = parent
 
-        candidate_paths = []
+        candidate_dirs_scanned = False
+        supported_exts = {".sysml", ".yaml", ".yml", ".json", ".proto", ".idl", ".arxml", ".md", ".markdown"}
+
         for sdir in search_dirs:
-            candidate_paths.extend([
+            # Check upstream guard: if sdir contains .pipeline/upstream, skip candidate directory scanning
+            if os.path.isdir(os.path.join(sdir, ".pipeline", "upstream")):
+                continue
+
+            # Check individual candidate files in sdir
+            for cand_f in (
                 os.path.join(sdir, ".pipeline", "schema.sysml"),
                 os.path.join(sdir, ".pipeline", "schema-digest.json"),
                 os.path.join(sdir, ".pipeline", "domain_config.json"),
                 os.path.join(sdir, "schema", "domain_config.json"),
-            ])
-            schema_dir = os.path.join(sdir, "schema")
-            if os.path.isdir(schema_dir):
-                for fname in sorted(os.listdir(schema_dir)):
-                    if fname.endswith(".sysml"):
-                        candidate_paths.append(os.path.join(schema_dir, fname))
-                    elif (fname.endswith(".md") or fname.endswith(".markdown")) and fname.lower() not in ("readme.md",):
-                        if is_component_icd_document("", file_path=fname):
-                            continue
-                        candidate_paths.append(os.path.join(schema_dir, fname))
+            ):
+                if os.path.isfile(cand_f):
+                    self.ingest_file(cand_f)
 
-        # Ingest existing candidates
-        for cpath in candidate_paths:
-            if os.path.isfile(cpath):
-                if (cpath.endswith(".md") or cpath.endswith(".markdown")) and is_component_icd_document("", file_path=cpath):
-                    continue
-                if cpath.endswith(".sysml") and "DOMAIN_TYPE" in self._explicit_keys and self.detected_domain != "aviation":
-                    try:
-                        with open(cpath, "r", encoding="utf-8", errors="ignore") as f:
-                            content = f.read()
-                        content_lower = content.lower()
-                        if any(marker in content_lower for marker in ("aviation", "aircraft", "uav", "uas", "drone", "flight")):
-                            continue
-                    except Exception:
-                        pass
-                self.ingest_file(cpath)
+            # Check candidate directories: schema, docs/architecture, docs/research
+            for rel_dir in ("schema", os.path.join("docs", "architecture"), os.path.join("docs", "research")):
+                cdir = os.path.join(sdir, rel_dir)
+                if os.path.isdir(cdir):
+                    candidate_dirs_scanned = True
+                    cdir_files = []
+                    for root, _, files in os.walk(cdir):
+                        for fname in files:
+                            if fname.startswith("."):
+                                continue
+                            ext = os.path.splitext(fname)[1].lower()
+                            if ext in supported_exts:
+                                cdir_files.append(os.path.join(root, fname))
+
+                    if cdir_files:
+                        for fpath in sorted(cdir_files):
+                            if is_component_icd_document("", file_path=fpath):
+                                continue
+                            if fpath.endswith(".sysml") and "DOMAIN_TYPE" in self._explicit_keys and self.detected_domain != "aviation":
+                                try:
+                                    with open(fpath, "r", encoding="utf-8", errors="ignore") as f:
+                                        content = f.read()
+                                    content_lower = content.lower()
+                                    if any(marker in content_lower for marker in ("aviation", "aircraft", "uav", "uas", "drone", "flight")):
+                                        continue
+                                except Exception:
+                                    pass
+                            self.ingest_file(fpath)
+
+        if candidate_dirs_scanned and len(self.ast_parts) == 0:
+            raise RuntimeError(
+                "FATAL: Ingestion engine discovered 0 valid OEM subsystem parts across "
+                "schema/, docs/architecture/, and docs/research/. Provide valid OEM hardware specifications."
+            )
 
         self._derive_lifecycle_contract()
+        self._derive_subsystem_architecture()
 
     def auto_discover_sources(self, root_dir: str) -> None:
         """Auto-detects parameter dictionaries and SysML AST symbols across repository root."""
@@ -3687,6 +3829,15 @@ def assemble_document(
 
     unit_paths = [os.path.join(units_dir, f) for f in filenames]
 
+    # Required placeholder gate for Unit 4 (Issues #299, #302)
+    for path in unit_paths:
+        fname = os.path.basename(path)
+        if fname in ("04_USER_CLASSES_AND_STAKEHOLDERS.md", "04_SYSTEM_CAPABILITIES_AND_FUNCTIONS.md"):
+            with open(path, "r", encoding="utf-8") as f:
+                u4_raw = f.read()
+            if "{{SUPER_SYSTEM_ARCHITECTURE}}" not in u4_raw or "{{SUBSYSTEM_ARCHITECTURE_SECTION}}" not in u4_raw:
+                raise ValueError("04_USER_CLASSES_AND_STAKEHOLDERS.md omits required placeholder {{SUPER_SYSTEM_ARCHITECTURE}} or {{SUBSYSTEM_ARCHITECTURE_SECTION}}.")
+
     # Validate unit integrity with parameter binding
     is_valid, integrity_errors = validate_unit_integrity(unit_paths, param_engine=param_engine)
     if not is_valid:
@@ -3869,6 +4020,28 @@ def assemble_conops(
 
     all_errors: List[str] = []
 
+    # Fail-closed check: if 0 AST parts and workspace does not have .pipeline/upstream
+    target_ws = ws_dir or (os.path.abspath(workspace_dir) if workspace_dir else None)
+    has_upstream = False
+    if target_ws:
+        curr = os.path.abspath(target_ws)
+        while curr and curr != os.path.dirname(curr):
+            if os.path.isdir(os.path.join(curr, ".pipeline", "upstream")):
+                has_upstream = True
+                break
+            if os.path.isdir(os.path.join(curr, ".git")):
+                break
+            parent = os.path.dirname(curr)
+            if parent == curr:
+                break
+            curr = parent
+
+    if len(param_engine.ast_parts) == 0 and not has_upstream:
+        raise RuntimeError(
+            "FATAL: Ingestion engine discovered 0 valid OEM subsystem parts across "
+            "schema/, docs/architecture/, and docs/research/. Provide valid OEM hardware specifications."
+        )
+
     # 1. Assemble CONOPS.md
     if conops_units_dir and os.path.isdir(conops_units_dir):
         print(f"[*] Assembling Concept of Operations from '{conops_units_dir}' [domain={detected_dom}]...")
@@ -3988,6 +4161,12 @@ def main() -> int:
         help="Target workspace or project directory (optional positional argument).",
     )
     parser.add_argument(
+        "--workspace",
+        dest="workspace_flag",
+        default=None,
+        help="Target workspace or project directory.",
+    )
+    parser.add_argument(
         "--input-dir",
         default=None,
         help="Input directory containing 'conops/' and 'mission_intent/' unit markdown directories (default: docs/conops/units).",
@@ -4016,7 +4195,8 @@ def main() -> int:
 
     args = parser.parse_args()
 
-    workspace = os.path.abspath(args.workspace) if args.workspace else os.getcwd()
+    target_ws = args.workspace_flag or args.workspace
+    workspace = os.path.abspath(target_ws) if target_ws else os.getcwd()
 
     input_dir = args.input_dir
     if not input_dir:
@@ -4041,15 +4221,19 @@ def main() -> int:
     if not output_dir:
         output_dir = os.path.join(workspace, "docs", "conops")
 
-    success = assemble_conops(
-        input_dir=input_dir,
-        output_dir=output_dir,
-        verify_only=args.verify,
-        params=args.params,
-        domain=args.domain,
-        workspace_dir=workspace,
-    )
-    return 0 if success else 1
+    try:
+        success = assemble_conops(
+            input_dir=input_dir,
+            output_dir=output_dir,
+            verify_only=args.verify,
+            params=args.params,
+            domain=args.domain,
+            workspace_dir=workspace,
+        )
+        return 0 if success else 1
+    except (RuntimeError, ValueError) as err:
+        print(f"[!] Assembly execution failed: {err}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":

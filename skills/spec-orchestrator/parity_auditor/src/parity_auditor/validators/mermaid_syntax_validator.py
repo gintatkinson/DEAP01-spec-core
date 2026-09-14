@@ -441,9 +441,15 @@ def validate_mermaid_option3_compact_blocks(body: Sequence[str], source: str = "
         # Exploded port subgraph
         sg_match = re.match(r"^\s*subgraph\s+(?:\"[^\"]+\"|([a-zA-Z0-9_]+))(?:\s*\[(.*?)\])?", line, re.I)
         if sg_match:
-            sg_id = (sg_match.group(1) or "").lower()
-            sg_title = (sg_match.group(2) or "").lower()
-            if sg_id.startswith("port_") or sg_id.startswith("port-") or "ports" in sg_id or "ports" in sg_title:
+            sg_raw = sg_match.group(1) or ""
+            sg_title = sg_match.group(2) or ""
+            sg_id_tokens = [t.lower() for t in re.findall(r"[A-Z]+(?=[A-Z][a-z]|\b|_|-)|[A-Z]?[a-z]+|\d+", sg_raw)]
+            is_port_sg = (
+                re.match(r"^(?:port|ports)[_-]", sg_raw, re.I)
+                or any(t in ("port", "ports") for t in sg_id_tokens)
+                or bool(re.search(r"\bports?\b", sg_title, re.I))
+            )
+            if is_port_sg:
                 violations.append((offset, line_strip))
             continue
 

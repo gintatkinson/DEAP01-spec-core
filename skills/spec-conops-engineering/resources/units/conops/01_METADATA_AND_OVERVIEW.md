@@ -180,7 +180,7 @@ flowchart TB
         InfrastructureHub["Infrastructure & Cloud Hub<br/>(PerformerNode: InfrastructureHub)"]
     end
 
-    subgraph Support_Segment["Support & Ground Support<br/>Equipment (GSE) Segment"]
+    subgraph SupportSegment["Support & Ground Support<br/>Equipment (GSE) Segment"]
         direction TB
         GroundSupportEquipment["GSE Diagnostic & Power Station<br/>(PerformerNode: GSEStation)"]
         MaintenanceTerminal["Field Maintenance Terminal<br/>(PerformerNode:<br/>MaintenanceTerminal)"]
