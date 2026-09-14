@@ -6,30 +6,35 @@
 
 # Concept of Operations (ConOps): {{SYSTEM_IDENTIFIER}}
 
+## Table of Contents
+- [1. Scope & System Identification](#1-scope--system-identification)
+- [2. Current Situation & Deficiency Analysis (Predecessors)](#2-current-situation--deficiency-analysis-predecessors)
+- [3. Proposed Capabilities & Trade-Offs (Pugh Decision Matrix)](#3-proposed-capabilities--trade-offs-pugh-decision-matrix)
+- [4. Operational User Classes, Stakeholder Community & Systems Architecture](#4-operational-user-classes-stakeholder-community--systems-architecture)
+- [5. Operational State Space & SORA 4D Volume Risk Assessment](#5-operational-state-space--sora-4d-volume-risk-assessment)
+- [6. OMG UAF Operational Activity Taxonomy](#6-omg-uaf-operational-activity-taxonomy)
+- [7. Operational Information Exchange (Op-Tx) Matrix](#7-operational-information-exchange-op-tx-matrix)
+- [8. Operational Environments & MIL-STD-810H](#8-operational-environments--mil-std-810h)
+- [9. Multi-Threaded Operational Scenarios & Timelines](#9-multi-threaded-operational-scenarios--timelines)
+- [10. Maintenance & Sustainment Concepts (O/I/D Maintenance)](#10-maintenance--sustainment-concepts-oid-maintenance)
+- [11. Operational Impacts, Limitations & Trade Studies](#11-operational-impacts-limitations--trade-studies)
+- [12. 7-Row Emergency Decision & Contingency Matrix](#12-7-row-emergency-decision--contingency-matrix)
+
 ## 1. Scope & System Identification
 - **System Identifier:** `{{SYSTEM_IDENTIFIER}}`
 - **Operational Domain:** `{{OPERATIONAL_DOMAIN}}`
 - **Operational Boundaries:** {{OPERATIONAL_BOUNDARIES}}
 - **Stakeholder Roster:** {{STAKEHOLDER_ROSTER}}
 
-## 2. Normative Standards & Regulatory Baseline
-| Standard ID | Issuing Body | Title / Baseline | Applicable Clauses |
-| :--- | :--- | :--- | :--- |
-| ISO/IEC/IEEE 29148:2018 | ISO/IEEE | Systems and Software Engineering -- Requirements Engineering | §6.4.2 ConOps & §6.4.3 OpsCon |
-| OMG UAF v1.2 / v2.0 | OMG | Unified Architecture Framework | Operational Domain (Op-*) |
-| NATO STANAG 4586 | NATO | Standard Interfaces of Autonomous Control Systems | Interoperability Profiles |
-| JARUS SORA v2.5 | JARUS | Specific Operations Risk Assessment | Annex B (Ground Risk & GRB) |
-| RTCA DO-178C / DO-254 | RTCA | Software and Electronic Hardware Considerations | Safety Assurance |
-
-## 3. Current Situation & Deficiency Analysis (Predecessors)
+## 2. Current Situation & Deficiency Analysis (Predecessors)
 - **Current Operational Baseline:** {{CURRENT_OPERATIONAL_BASELINE}}
 - **Operational Deficiencies:** {{OPERATIONAL_DEFICIENCIES}}
 
-## 4. Operational Justification & Priority Matrix (Trade-Offs)
+## 3. Proposed Capabilities & Trade-Offs (Pugh Decision Matrix)
 - **Mission Drivers & Value Proposition:** {{MISSION_DRIVERS_AND_VALUE_PROPOSITION}}
 - **Trade-Off Analysis:** {{TRADE_OFF_ANALYSIS}}
 
-### 4.1 Pugh Decision Matrix & Architectural Sensitivity Analysis
+### 3.1 Pugh Decision Matrix & Architectural Sensitivity Analysis
 $$
 \begin{aligned}
 S_j(w) &= \sum_{i=1}^{M} w_i \cdot c_{ij} \\
@@ -45,9 +50,9 @@ $$
 | Lifecycle Maintenance Cost | {{WEIGHT_CRIT_3}} | 0 (Datum) | {{SCORE_A_3}} | {{SCORE_B_3}} | {{SCORE_C_3}} |
 | **Weighted Total Score S_j(w)** | **1.00** | **0.00** | **{{WEIGHTED_SCORE_A}}** | **{{WEIGHTED_SCORE_B}}** | **{{WEIGHTED_SCORE_C}}** |
 
-
-## 5. Operational Modes & Lifecycle Stages
-Formal operational lifecycle stages across $\Phi_{\mathrm{lifecycle}}$:
+## 4. Operational User Classes, Stakeholder Community & Systems Architecture
+- **User Classes & Stakeholder Taxonomy:** {{USER_CLASSES_AND_STAKEHOLDERS}}
+- **Operational Lifecycle Modes across $\Phi_{\mathrm{lifecycle}}$:**
 - **Phase_Startup:** {{PHASE_STARTUP_DESCRIPTION}}
 - **Phase_NominalExecution:** {{PHASE_NOMINAL_EXECUTION_DESCRIPTION}}
 - **Phase_DegradedMode:** {{PHASE_DEGRADED_MODE_DESCRIPTION}}
@@ -55,7 +60,13 @@ Formal operational lifecycle stages across $\Phi_{\mathrm{lifecycle}}$:
 - **Phase_SecureShutdown:** {{PHASE_SECURE_SHUTDOWN_DESCRIPTION}}
 - **Phase_MaintenanceMode:** {{PHASE_MAINTENANCE_MODE_DESCRIPTION}}
 
-## 6. 4D Operational Volume & SORA Ground Risk Buffer Mathematics
+### 4.7 Super-System Architecture
+{{SUPER_SYSTEM_ARCHITECTURE}}
+
+### 4.8 Subsystem Architecture
+{{SUBSYSTEM_ARCHITECTURE_SECTION}}
+
+## 5. Operational State Space & SORA 4D Volume Risk Assessment
 $$
 \begin{aligned}
 V_{\mathrm{4D}} &= V_{\mathrm{SpatialGeometry}} \cup V_{\mathrm{ContingencyVolume}} \cup V_{\mathrm{GRB}} \\
@@ -74,31 +85,42 @@ $$
 | Terminal Velocity | v_terminal | {{V_TERMINAL_MPS}} | m/s | Estimated unpowered descent terminal velocity |
 | Impact Kinetic Energy | E_impact | {{E_IMPACT_JOULES}} | J | Kinetic energy at operational boundary impact |
 
-## 7. OMG UAF Operational Activity Taxonomy
+## 6. OMG UAF Operational Activity Taxonomy
 | Activity ID | Activity Name | Description | Gate 24 Allocation Tag |
 | :--- | :--- | :--- | :--- |
 | OA-01 | {{OA_ACTIVITY_NAME}} | {{OA_DESCRIPTION}} | `/// OperationalAllocation: [OA-01]` |
 
-## 8. Operational Information Exchange (Op-Tx) Matrix
+## 7. Operational Information Exchange (Op-Tx) Matrix
 | Exchange ID | Source Node | Destination Node | Information Item | Data Rate | Max Latency | Criticality |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | OpTx-01 | {{OPTX_SOURCE_NODE}} | {{OPTX_DEST_NODE}} | {{OPTX_INFO_ITEM}} | {{OPTX_DATA_RATE}} | {{OPTX_MAX_LATENCY}} | {{OPTX_CRITICALITY}} |
 
-## 9. Operational Environments & Constraints
+## 8. Operational Environments & MIL-STD-810H
 - **Ambient Temperature:** {{AMBIENT_TEMPERATURE_RANGE}}
 - **Environmental Ingress:** {{ENVIRONMENTAL_INGRESS_RATING}}
 - **Electromagnetic / RF Environment:** {{RF_ENVIRONMENT_CONSTRAINTS}}
 - **Physical Spatial Constraints:** {{PHYSICAL_SPATIAL_CONSTRAINTS}}
 
-## 10. Multi-Threaded Operational Scenarios
+## 9. Multi-Threaded Operational Scenarios & Timelines
 - **Scenario 1 (Nominal Execution):** {{SCENARIO_NOMINAL_THREAD}}
 - **Scenario 2 (Degraded Mode & Mitigation):** {{SCENARIO_DEGRADED_THREAD}}
 - **Scenario 3 (Contingency Recovery):** {{SCENARIO_CONTINGENCY_THREAD}}
 
-## 11. Maintenance & Sustainment Concepts (O/I/D Maintenance)
+## 10. Maintenance & Sustainment Concepts (O/I/D Maintenance)
+| Maintenance Level | Primary Facility | Scope of Work | Personnel Qualification | Authorized Spares / LRUs |
+| :--- | :--- | :--- | :--- | :--- |
+| O-Level (Organizational) | {{O_LEVEL_FACILITY}} | {{O_LEVEL_SCOPE}} | {{O_LEVEL_PERSONNEL}} | {{O_LEVEL_SPARES}} |
+| I-Level (Intermediate) | {{I_LEVEL_FACILITY}} | {{I_LEVEL_SCOPE}} | {{I_LEVEL_PERSONNEL}} | {{I_LEVEL_SPARES}} |
+| D-Level (Depot) | {{D_LEVEL_FACILITY}} | {{D_LEVEL_SCOPE}} | {{D_LEVEL_PERSONNEL}} | {{D_LEVEL_SPARES}} |
+
 - **O-Level (Organizational):** {{O_LEVEL_MAINTENANCE_DESCRIPTION}}
 - **I-Level (Intermediate):** {{I_LEVEL_MAINTENANCE_DESCRIPTION}}
 - **D-Level (Depot):** {{D_LEVEL_MAINTENANCE_DESCRIPTION}}
+
+## 11. Operational Impacts, Limitations & Trade Studies
+- **Operational Impacts:** {{OPERATIONAL_IMPACTS}}
+- **System Limitations:** {{SYSTEM_LIMITATIONS}}
+- **Documented Trade Studies:** {{DOCUMENTED_TRADE_STUDIES}}
 
 ## 12. 7-Row Emergency Decision & Contingency Matrix
 | Trigger ID | Contingency Trigger | Detection Mechanism | Automated Containment Action | Failsafe State | Max Response Time | HITL Role |

@@ -1,20 +1,20 @@
 r"""
-Gate 26: ConOps & Mission Intent Completeness Validator Engine (ISO 29148 / NATO STANAG 4586 / OMG UAF).
+Gate 26: ConOps & Mission Intent Completeness Validator Engine (ISO 29148 / NATO STANAG 4586 / OMG UAF / IEEE 1362).
 
 Enforces:
 1. ConopsCompletenessValidator:
    12 Mandatory Sections for Concept of Operations (CONOPS.md):
-   - 1. Scope & System Identification
-   - 2. Normative Standards & Regulatory Baseline
-   - 3. Current Situation & Deficiency Analysis (Predecessors)
-   - 4. Operational Justification & Priority Matrix (Trade-Offs)
-   - 5. Operational Modes & Lifecycle Stages (\Phi_{lifecycle})
-   - 6. 4D Operational Volume & SORA Ground Risk Buffer (GRB) Mathematics
-   - 7. OMG UAF Operational Activity Taxonomy (with Gate 24 tags)
-   - 8. Operational Information Exchange (Op-Tx) Matrix
-   - 9. Operational Environments & Physical Constraints
-   - 10. Multi-Threaded Operational Scenarios
-   - 11. Maintenance & Sustainment Concepts (O/I/D Maintenance)
+   - 1. Scope & System Identification (or Scope, Identification & Normative Baseline)
+   - 2. Current Situation & Deficiency Analysis (Predecessors)
+   - 3. Proposed Capabilities & Trade-Offs (Pugh Decision Matrix)
+   - 4. Operational User Classes, Stakeholder Community & Systems Architecture (including Sec 4.7 Super-System & Sec 4.8 Subsystem Architecture)
+   - 5. Operational State Space & SORA 4D Volume Risk Assessment
+   - 6. OMG UAF Operational Activity Taxonomy (with Gate 24 tags)
+   - 7. Operational Information Exchange (Op-Tx) Matrix
+   - 8. Operational Environments & MIL-STD-810H
+   - 9. Multi-Threaded Operational Scenarios & Timelines
+   - 10. Maintenance & Sustainment Concepts (O/I/D Maintenance)
+   - 11. Operational Impacts, Limitations & Trade Studies
    - 12. 7-Row Emergency Decision & Contingency Matrix (EMG-01..07)
 
 2. MissionIntentCompletenessValidator:
@@ -46,6 +46,7 @@ try:
     from ..core.findings import Finding
     from ..core.workspace import WorkspaceRepository, extract_metadata_from_content
     from ..parsers.research_inventory import parse_research_inventory
+    from ..parsers.schema_router import extract_subsystem_parts
     from .coverage_digest_validator import _normalize_obligation_id, _parse_obligation_tags
     from .obligation_witness_validator import _parse_witness_tags
 except (ImportError, ValueError):
@@ -56,6 +57,7 @@ except (ImportError, ValueError):
     from parity_auditor.core.findings import Finding
     from parity_auditor.core.workspace import WorkspaceRepository, extract_metadata_from_content
     from parity_auditor.parsers.research_inventory import parse_research_inventory
+    from parity_auditor.parsers.schema_router import extract_subsystem_parts
     from parity_auditor.validators.coverage_digest_validator import _normalize_obligation_id, _parse_obligation_tags
     from parity_auditor.validators.obligation_witness_validator import _parse_witness_tags
 
@@ -665,16 +667,7 @@ def _validate_mermaid_integrity(content: str, rel_path: str, prefix: str = "cono
 
 
 MANDATORY_CONOPS_TABLE_SCHEMAS: Dict[int, Dict[str, Any]] = {
-    2: {
-        "name": "Normative Standards Baseline",
-        "required_columns": [
-            ("standard_id", ["standard_id", "standard", "id"]),
-            ("issuing_body", ["issuing_body", "issuing_org", "issuing_organization", "body", "org", "organization"]),
-            ("title", ["title", "title_baseline", "title_baseline_description", "standard_title"]),
-            ("applicable_clauses", ["applicable_clauses", "applicable_clauses_focus_area", "clauses", "clause"]),
-        ],
-    },
-    6: {
+    5: {
         "name": "SORA 4D Volume & GRB Parameters",
         "required_columns": [
             ("parameter", ["parameter", "param", "parameter_name", "name"]),
@@ -684,7 +677,7 @@ MANDATORY_CONOPS_TABLE_SCHEMAS: Dict[int, Dict[str, Any]] = {
             ("description", ["description", "desc"]),
         ],
     },
-    7: {
+    6: {
         "name": "OMG UAF Activity Taxonomy",
         "required_columns": [
             ("activity_id", ["activity_id", "activity", "oa_id", "id"]),
@@ -693,7 +686,7 @@ MANDATORY_CONOPS_TABLE_SCHEMAS: Dict[int, Dict[str, Any]] = {
             ("gate_24_allocation_tag", ["gate_24_allocation_tag", "allocation_tag", "allocation", "gate24_allocation_tag"]),
         ],
     },
-    8: {
+    7: {
         "name": "Op-Tx Information Exchange Matrix",
         "required_columns": [
             ("exchange_id", ["exchange_id", "exchange", "optx_id", "id"]),
@@ -705,7 +698,7 @@ MANDATORY_CONOPS_TABLE_SCHEMAS: Dict[int, Dict[str, Any]] = {
             ("criticality", ["criticality", "criticality_level", "dal", "safety_criticality"]),
         ],
     },
-    11: {
+    10: {
         "name": "O/I/D Maintenance Hierarchy",
         "required_columns": [
             ("maintenance_level", ["maintenance_level", "maintenance_tier", "tier", "level", "organizational_level"]),
@@ -785,17 +778,17 @@ class ConopsCompletenessValidator(IValidator):
     """
 
     MANDATORY_SECTIONS: List[Dict[str, Any]] = [
-        {"num": 1, "title": "Scope & System Identification", "aliases": ["scope", "system identification", "system boundary"]},
-        {"num": 2, "title": "Normative Standards & Regulatory Baseline", "aliases": ["normative standards", "regulatory baseline", "applicable documents", "standards"]},
-        {"num": 3, "title": "Current Situation & Deficiency Analysis", "aliases": ["current situation", "deficiency analysis", "predecessor", "predecessors", "deficiencies"]},
-        {"num": 4, "title": "Operational Justification & Priority Matrix", "aliases": ["operational justification", "priority matrix", "justification", "trade-off", "trade-offs", "priorities"]},
-        {"num": 5, "title": "Operational Modes & Lifecycle Stages", "aliases": ["operational modes", "lifecycle stages", "lifecycle", "modes", "stages", "phi_lifecycle"]},
-        {"num": 6, "title": "4D Operational Volume & SORA Ground Risk Buffer Mathematics", "aliases": ["4d operational volume", "ground risk buffer", "sora", "operational volume", "grb math", "grb"]},
-        {"num": 7, "title": "OMG UAF Operational Activity Taxonomy", "aliases": ["operational activity taxonomy", "uaf operational activities", "operational activities", "uaf activities", "oa-"]},
-        {"num": 8, "title": "Operational Information Exchange (Op-Tx) Matrix", "aliases": ["operational information exchange", "op-tx matrix", "op-tx table", "information exchange", "op-tx"]},
-        {"num": 9, "title": "Operational Environments & Constraints", "aliases": ["operational environments", "physical constraints", "constraints", "environmental constraints"]},
-        {"num": 10, "title": "Multi-Threaded Operational Scenarios", "aliases": ["operational scenarios", "scenarios", "multi-threaded", "operational threads"]},
-        {"num": 11, "title": "Maintenance & Sustainment Concepts", "aliases": ["maintenance & sustainment", "maintenance concepts", "sustainment", "o/i/d maintenance", "maintenance", "o-level"]},
+        {"num": 1, "title": "Scope & System Identification", "aliases": ["scope", "system identification", "system boundary", "scope, system identification & normative baseline", "scope, identification & normative baseline", "normative baseline"]},
+        {"num": 2, "title": "Current Situation & Deficiency Analysis (Predecessors)", "aliases": ["current situation", "deficiency analysis", "predecessor", "predecessors", "deficiencies", "operational motivation", "deficiency analysis & operational motivation"]},
+        {"num": 3, "title": "Proposed Capabilities & Trade-Offs (Pugh Decision Matrix)", "aliases": ["proposed capabilities", "trade-off", "trade-offs", "pugh decision matrix", "pugh matrix", "operational justification", "justification"]},
+        {"num": 4, "title": "Operational User Classes, Stakeholder Community & Systems Architecture", "aliases": ["user classes", "stakeholder community", "systems architecture", "super-system", "subsystem architecture", "stakeholder taxonomy", "operational lifecycle modes", "user classes, stakeholder taxonomy & operational lifecycle modes", "stakeholders"]},
+        {"num": 5, "title": "Operational State Space & SORA 4D Volume Risk Assessment", "aliases": ["operational state space", "sora", "4d volume", "boundary containment", "risk assessment", "ground risk buffer", "grb math", "grb"]},
+        {"num": 6, "title": "OMG UAF Operational Activity Taxonomy", "aliases": ["operational activity taxonomy", "uaf operational activities", "operational activities", "uaf activities", "oa-", "omg uaf"]},
+        {"num": 7, "title": "Operational Information Exchange (Op-Tx) Matrix", "aliases": ["operational information exchange", "op-tx matrix", "op-tx table", "information exchange", "op-tx"]},
+        {"num": 8, "title": "Operational Environments & MIL-STD-810H", "aliases": ["operational environments", "mil-std-810h", "environmental stress qualification", "physical constraints", "environmental constraints", "environmental envelopes"]},
+        {"num": 9, "title": "Multi-Threaded Operational Scenarios & Timelines", "aliases": ["operational scenarios", "scenarios", "multi-threaded", "operational threads", "system timelines", "timelines"]},
+        {"num": 10, "title": "Maintenance & Sustainment Concepts (O/I/D Maintenance)", "aliases": ["maintenance & sustainment", "maintenance concepts", "sustainment", "o/i/d maintenance", "maintenance", "o-level", "support equipment", "gse support"]},
+        {"num": 11, "title": "Operational Impacts, Limitations & Trade Studies", "aliases": ["operational impacts", "system limitations", "trade studies", "impacts", "limitations", "documented trade studies"]},
         {"num": 12, "title": "7-Row Emergency Decision & Contingency Matrix", "aliases": ["emergency decision", "contingency matrix", "7-row emergency", "emergency matrix", "emergency decision & contingency matrix", "emg-"]},
     ]
 
@@ -1149,31 +1142,35 @@ class ConopsCompletenessValidator(IValidator):
         if "TEMPLATE" not in rel_path.upper():
             findings.extend(self._validate_conops_table_schemas(content, rel_path, matched_sections))
 
-        # Section 4: Operational Justification & Priority Matrix (Fixes #130, #260)
+        # Section 3: Proposed Capabilities & Trade-Offs (Pugh Decision Matrix) (Fixes #130, #298)
+        if 3 in matched_sections and "TEMPLATE" not in rel_path.upper():
+            _, sec3_line, sec3_content = matched_sections[3]
+            findings.extend(self._validate_pugh_decision_matrix(content, rel_path, sec3_content, sec3_line))
+
+        # Section 4: Operational User Classes, Stakeholder Community & Systems Architecture (Fixes #130, #260, #298, #301)
         if 4 in matched_sections and "TEMPLATE" not in rel_path.upper():
             _, sec4_line, sec4_content = matched_sections[4]
-            findings.extend(self._validate_pugh_decision_matrix(content, rel_path, sec4_content, sec4_line))
             findings.extend(self._validate_operational_architecture_coverage(content, rel_path, sec4_content, sec4_line, repo=repo))
 
-        # Section 6: SORA 4D Volume & GRB Math Validation
-        if 6 in matched_sections:
-            _, sec6_line, sec6_content = matched_sections[6]
-            h_max_val, v_wind_val, theta_val, r_grb_val = _extract_sora_parameters(sec6_content)
+        # Section 5: SORA 4D Volume & GRB Math Validation (Fixes #298)
+        if 5 in matched_sections:
+            _, sec5_line, sec5_content = matched_sections[5]
+            h_max_val, v_wind_val, theta_val, r_grb_val = _extract_sora_parameters(sec5_content)
 
             if h_max_val is not None and v_wind_val is not None and r_grb_val is not None and self.strict_sora_math:
                 r_calc = calculate_sora_grb_radius(h_max_m=h_max_val, theta_impact_deg=theta_val, v_wind_max_mps=v_wind_val)
                 if r_grb_val < (r_calc - 1.0):
                     findings.append(Finding(
                         "conops-sora-grb-underdimensioned",
-                        f"Ground Risk Buffer radius R_GRB = {r_grb_val:.1f} m in Section 6 is under-dimensioned against JARUS SORA v2.5 theoretical minimum {r_calc:.1f} m (for h_max={h_max_val} m, v_wind={v_wind_val} m/s).",
-                        location=f"{rel_path}:{sec6_line}",
-                        detail={"declared_r_grb": r_grb_val, "minimum_r_grb": r_calc},
+                        f"Ground Risk Buffer radius R_GRB = {r_grb_val:.1f} m in Section 5 is under-dimensioned against JARUS SORA v2.5 theoretical minimum {r_calc:.1f} m (for h_max={h_max_val} m, v_wind={v_wind_val} m/s).",
+                        location=f"{rel_path}:{sec5_line}",
+                        detail={"declared_r_grb": r_grb_val, "minimum_r_grb": r_calc, "section": 5},
                     ))
 
-        # Section 10: Multi-Threaded Operational Scenarios Timeline Steps (Fixes #114, #130)
-        if 10 in matched_sections and "TEMPLATE" not in rel_path.upper():
-            _, sec10_line, sec10_content = matched_sections[10]
-            findings.extend(self._validate_scenario_timeline_steps(content, rel_path, sec10_content, sec10_line))
+        # Section 9: Multi-Threaded Operational Scenarios Timeline Steps (Fixes #114, #130, #298)
+        if 9 in matched_sections and "TEMPLATE" not in rel_path.upper():
+            _, sec9_line, sec9_content = matched_sections[9]
+            findings.extend(self._validate_scenario_timeline_steps(content, rel_path, sec9_content, sec9_line))
 
         # Section 12: 7-Row Emergency Decision Matrix Validation
         if 12 in matched_sections:
@@ -1252,19 +1249,19 @@ class ConopsCompletenessValidator(IValidator):
         self,
         content: str,
         rel_path: str,
-        sec10_content: str,
-        sec10_line: int,
+        sec9_content: str,
+        sec9_line: int,
     ) -> List[Finding]:
         """
-        Validates timeline step count in Section 10 (Multi-Threaded Operational Scenarios) (Fixes #114, #130):
+        Validates timeline step count in Section 9 (Multi-Threaded Operational Scenarios & Timelines) (Fixes #114, #130, #298):
         - SCN-01 / Scenario 1 >= 8 steps (nominal lifecycle thread)
         - SCN-02 / Scenario 2 >= 6 steps
         - SCN-03 / Scenario 3 >= 6 steps
         """
         findings: List[Finding] = []
         
-        # Split Section 10 into scenario sub-blocks by headers
-        scenario_blocks = re.split(r'(?=^#{2,4}\s+)', sec10_content, flags=re.MULTILINE)
+        # Split Section 9 into scenario sub-blocks by headers
+        scenario_blocks = re.split(r'(?=^#{2,4}\s+)', sec9_content, flags=re.MULTILINE)
 
         def _count_steps(block_text: str) -> int:
             # 1. Check table rows
@@ -1304,8 +1301,8 @@ class ConopsCompletenessValidator(IValidator):
                         findings.append(Finding(
                             "conops-scenario-steps-truncated",
                             f"{scn_title} in '{rel_path}' has {cnt} lifecycle step(s); minimum required: {min_steps} steps.",
-                            location=f"{rel_path}:{sec10_line}",
-                            detail={"scenario": scn_key, "step_count": cnt, "min_required": min_steps, "file": rel_path},
+                            location=f"{rel_path}:{sec9_line}",
+                            detail={"scenario": scn_key, "step_count": cnt, "min_required": min_steps, "file": rel_path, "section": 9},
                         ))
                     break
 
@@ -1389,11 +1386,11 @@ class ConopsCompletenessValidator(IValidator):
         self,
         content: str,
         rel_path: str,
-        sec4_content: str,
-        sec4_line: int,
+        sec3_content: str,
+        sec3_line: int,
     ) -> List[Finding]:
         """
-        Validates Section 4 Operational Justification & Priority Matrix (Fixes #130):
+        Validates Section 3 Proposed Capabilities & Trade-Offs (Pugh Decision Matrix) (Fixes #130, #298):
         1. Mandatory Pugh decision matrix table evaluating candidate architectures against criteria and weights.
         2. Mandatory LaTeX sensitivity equation S_j(w) in display math block.
         """
@@ -1401,12 +1398,12 @@ class ConopsCompletenessValidator(IValidator):
 
         # Check for Pugh decision matrix
         has_pugh_keyword = bool(
-            re.search(r'\bpugh\b', sec4_content, re.IGNORECASE)
+            re.search(r'\bpugh\b', sec3_content, re.IGNORECASE)
             or re.search(r'\bpugh\b', content, re.IGNORECASE)
         )
-        sec4_tables, _ = _parse_commonmark_tables(sec4_content)
+        sec3_tables, _ = _parse_commonmark_tables(sec3_content)
         has_decision_table = False
-        for tbl in sec4_tables:
+        for tbl in sec3_tables:
             for row in tbl:
                 keys_and_vals = " ".join(list(row.keys()) + list(row.values())).lower()
                 if (
@@ -1422,30 +1419,30 @@ class ConopsCompletenessValidator(IValidator):
             if has_decision_table:
                 break
 
-        if not (has_pugh_keyword and (has_decision_table or sec4_tables)):
+        if not (has_pugh_keyword and (has_decision_table or sec3_tables)):
             findings.append(Finding(
                 "conops-pugh-matrix-missing",
-                f"Section 4 Operational Justification & Priority Matrix is missing mandatory Pugh decision matrix in '{rel_path}'.",
-                location=f"{rel_path}:{sec4_line}",
-                detail={"file": rel_path, "section": 4},
+                f"Section 3 Proposed Capabilities & Trade-Offs is missing mandatory Pugh decision matrix in '{rel_path}'.",
+                location=f"{rel_path}:{sec3_line}",
+                detail={"file": rel_path, "section": 3},
             ))
 
         # Check for LaTeX sensitivity equation S_j(w)
         has_sensitivity_formula = bool(
-            re.search(r'S[_\s]*\{?j\}?\s*(?:\([^\)]+\)|\[[^\]]+\])', sec4_content)
+            re.search(r'S[_\s]*\{?j\}?\s*(?:\([^\)]+\)|\[[^\]]+\])', sec3_content)
             or re.search(r'S[_\s]*\{?j\}?\s*(?:\([^\)]+\)|\[[^\]]+\])', content)
         )
         has_math_block = bool(
-            re.search(r'\$\$[\s\S]*?S[_\s]*\{?j\}?[\s\S]*?\$\$', sec4_content)
+            re.search(r'\$\$[\s\S]*?S[_\s]*\{?j\}?[\s\S]*?\$\$', sec3_content)
             or re.search(r'\$\$[\s\S]*?S[_\s]*\{?j\}?[\s\S]*?\$\$', content)
         )
 
         if not (has_sensitivity_formula and has_math_block):
             findings.append(Finding(
                 "conops-pugh-sensitivity-missing",
-                f"Section 4 Operational Justification & Priority Matrix is missing mandatory LaTeX sensitivity equation S_j(w) for Pugh decision analysis in '{rel_path}'.",
-                location=f"{rel_path}:{sec4_line}",
-                detail={"file": rel_path, "section": 4},
+                f"Section 3 Proposed Capabilities & Trade-Offs is missing mandatory LaTeX sensitivity equation S_j(w) for Pugh decision analysis in '{rel_path}'.",
+                location=f"{rel_path}:{sec3_line}",
+                detail={"file": rel_path, "section": 3},
             ))
 
         return findings
@@ -1514,56 +1511,62 @@ class ConopsCompletenessValidator(IValidator):
                 detail={"file": rel_path},
             ))
 
-        # 5. Check 100% AST PartDef Coverage
-        sysml_files: List[str] = []
-        if repo is not None:
-            pipeline_sysml = os.path.join(repo.workspace_dir, ".pipeline", "schema.sysml")
-            if os.path.isfile(pipeline_sysml):
-                sysml_files.append(pipeline_sysml)
-            for s_name in ("schema", "schemas"):
-                cand_dir = os.path.join(repo.workspace_dir, s_name)
-                if os.path.isdir(cand_dir):
-                    for root, _, files in os.walk(cand_dir):
-                        for f in sorted(files):
-                            if f.endswith(".sysml") and not f.startswith("."):
-                                p = os.path.join(root, f)
-                                if p not in sysml_files:
-                                    sysml_files.append(p)
+        # 5. Check 100% AST PartDef Coverage (Fixes #260, #301)
+        schema_targets: List[str] = []
+        workspace_dir = repo.workspace_dir if repo is not None else "."
+
+        pipeline_sysml = os.path.join(workspace_dir, ".pipeline", "schema.sysml")
+        if os.path.isfile(pipeline_sysml):
+            schema_targets.append(pipeline_sysml)
+
+        for s_name in ("schema", "schemas"):
+            cand_dir = os.path.join(workspace_dir, s_name)
+            if os.path.isdir(cand_dir):
+                schema_targets.append(cand_dir)
+
+        for root_f in ("schema.sysml", "DEAP_MODEL.sysml"):
+            cand_file = os.path.join(workspace_dir, root_f)
+            if os.path.isfile(cand_file) and cand_file not in schema_targets:
+                schema_targets.append(cand_file)
+
+        extracted_parts = extract_subsystem_parts(schema_targets) if schema_targets else []
+        part_defs: Set[str] = {p.name for p in extracted_parts if p.name}
+
+        if not part_defs:
+            findings.append(Finding(
+                "conops-no-subsystems-declared",
+                f"No subsystem part definitions were found in the workspace schemas ('schema/', '.pipeline/schema.sysml'). ConOps operational architecture coverage cannot be verified.",
+                location=f"{rel_path}:{sec4_line}",
+                detail={"file": rel_path, "schema_targets": schema_targets},
+            ))
+            return findings
+
+        sorted_parts = sorted(list(part_defs))
+        sec48_match = re.search(r'(?:^|\n)#{3,4}\s+4\.8\b', sec4_content)
+        if not sec48_match:
+            findings.append(Finding(
+                "conops-partdef-coverage-incomplete",
+                f"ConOps Section 4 in '{rel_path}' is missing Subsection 4.8 ('Subsystem Architecture'); cannot verify AST PartDef coverage for {len(sorted_parts)} declared part(s): {', '.join(sorted_parts)}.",
+                location=f"{rel_path}:{sec4_line}",
+                detail={"missing_partdefs": sorted_parts, "file": rel_path},
+            ))
         else:
-            if os.path.isfile(".pipeline/schema.sysml"):
-                sysml_files.append(".pipeline/schema.sysml")
-            if os.path.isdir("schema"):
-                for root, _, files in os.walk("schema"):
-                    for f in sorted(files):
-                        if f.endswith(".sysml") and not f.startswith("."):
-                            p = os.path.join(root, f)
-                            if p not in sysml_files:
-                                sysml_files.append(p)
+            start_pos = sec48_match.start()
+            rest = sec4_content[sec48_match.end():]
+            next_heading = re.search(r'\n#{2,3}\s+(?!4\.8\b)', rest)
+            if next_heading:
+                sec48_content = sec4_content[start_pos : sec48_match.end() + next_heading.start()]
+            else:
+                sec48_content = sec4_content[start_pos:]
 
-        part_defs: Set[str] = set()
-        for sf in sysml_files:
-            try:
-                with open(sf, "r", encoding="utf-8", errors="ignore") as f:
-                    sf_content = f.read()
-                clean_sf = re.sub(r'/\*.*?\*/', '', sf_content, flags=re.DOTALL)
-                clean_sf = re.sub(r'//.*$', '', clean_sf, flags=re.MULTILINE)
-                matches = re.findall(r'\bpart\s+(?:def\s+)?([A-Za-z0-9_]+)\b', clean_sf)
-                for m in matches:
-                    if m:
-                        part_defs.add(m)
-            except Exception:
-                pass
-
-        if part_defs:
-            sorted_parts = sorted(list(part_defs))
             missing_parts = [
                 p for p in sorted_parts
-                if not re.search(rf'\b{re.escape(p)}\b', sec4_content, re.IGNORECASE)
+                if not re.search(rf'\b{re.escape(p)}\b', sec48_content, re.IGNORECASE)
             ]
             if missing_parts:
                 findings.append(Finding(
                     "conops-partdef-coverage-incomplete",
-                    f"ConOps Section 4 in '{rel_path}' does not provide 100% AST PartDef coverage; missing {len(missing_parts)} PartDef(s): {', '.join(missing_parts)}.",
+                    f"ConOps Section 4.8 in '{rel_path}' does not provide 100% AST PartDef coverage; missing {len(missing_parts)} PartDef(s): {', '.join(missing_parts)}.",
                     location=f"{rel_path}:{sec4_line}",
                     detail={"missing_partdefs": missing_parts, "file": rel_path},
                 ))
@@ -1769,31 +1772,53 @@ class ConopsCompletenessValidator(IValidator):
 
 # Concept of Operations (ConOps): {{SYSTEM_IDENTIFIER}}
 
+## Table of Contents
+- [1. Scope & System Identification](#1-scope--system-identification)
+- [2. Current Situation & Deficiency Analysis (Predecessors)](#2-current-situation--deficiency-analysis-predecessors)
+- [3. Proposed Capabilities & Trade-Offs (Pugh Decision Matrix)](#3-proposed-capabilities--trade-offs-pugh-decision-matrix)
+- [4. Operational User Classes, Stakeholder Community & Systems Architecture](#4-operational-user-classes-stakeholder-community--systems-architecture)
+- [5. Operational State Space & SORA 4D Volume Risk Assessment](#5-operational-state-space--sora-4d-volume-risk-assessment)
+- [6. OMG UAF Operational Activity Taxonomy](#6-omg-uaf-operational-activity-taxonomy)
+- [7. Operational Information Exchange (Op-Tx) Matrix](#7-operational-information-exchange-op-tx-matrix)
+- [8. Operational Environments & MIL-STD-810H](#8-operational-environments--mil-std-810h)
+- [9. Multi-Threaded Operational Scenarios & Timelines](#9-multi-threaded-operational-scenarios--timelines)
+- [10. Maintenance & Sustainment Concepts (O/I/D Maintenance)](#10-maintenance--sustainment-concepts-oid-maintenance)
+- [11. Operational Impacts, Limitations & Trade Studies](#11-operational-impacts-limitations--trade-studies)
+- [12. 7-Row Emergency Decision & Contingency Matrix](#12-7-row-emergency-decision--contingency-matrix)
+
 ## 1. Scope & System Identification
 - **System Identifier:** `{{SYSTEM_IDENTIFIER}}`
 - **Operational Domain:** `{{OPERATIONAL_DOMAIN}}`
 - **Operational Boundaries:** {{OPERATIONAL_BOUNDARIES}}
 - **Stakeholder Roster:** {{STAKEHOLDER_ROSTER}}
 
-## 2. Normative Standards & Regulatory Baseline
-| Standard ID | Issuing Body | Title / Baseline | Applicable Clauses |
-| :--- | :--- | :--- | :--- |
-| ISO/IEC/IEEE 29148:2018 | ISO/IEEE | Systems and Software Engineering -- Requirements Engineering | §6.4.2 ConOps & §6.4.3 OpsCon |
-| OMG UAF v1.2 / v2.0 | OMG | Unified Architecture Framework | Operational Domain (Op-*) |
-| NATO STANAG 4586 | NATO | Standard Interfaces of Autonomous Control Systems | Interoperability Profiles |
-| JARUS SORA v2.5 | JARUS | Specific Operations Risk Assessment | Annex B (Ground Risk & GRB) |
-| RTCA DO-178C / DO-254 | RTCA | Software and Electronic Hardware Considerations | Safety Assurance |
-
-## 3. Current Situation & Deficiency Analysis (Predecessors)
+## 2. Current Situation & Deficiency Analysis (Predecessors)
 - **Current Operational Baseline:** {{CURRENT_OPERATIONAL_BASELINE}}
 - **Operational Deficiencies:** {{OPERATIONAL_DEFICIENCIES}}
 
-## 4. Operational Justification & Priority Matrix (Trade-Offs)
+## 3. Proposed Capabilities & Trade-Offs (Pugh Decision Matrix)
 - **Mission Drivers & Value Proposition:** {{MISSION_DRIVERS_AND_VALUE_PROPOSITION}}
 - **Trade-Off Analysis:** {{TRADE_OFF_ANALYSIS}}
 
-## 5. Operational Modes & Lifecycle Stages
-Formal operational lifecycle stages across $\Phi_{\mathrm{lifecycle}}$:
+### 3.1 Pugh Decision Matrix & Architectural Sensitivity Analysis
+$$
+\begin{aligned}
+S_j(w) &= \sum_{i=1}^{M} w_i \cdot c_{ij} \\
+\sum_{i=1}^{M} w_i &= 1.0 \\
+\frac{\partial S_j}{\partial w_i} &= c_{ij}
+\end{aligned}
+$$
+
+| Evaluation Criterion | Weight (w_i) | Baseline (Datum) | Candidate Architecture A | Candidate Architecture B | Candidate Architecture C |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| Operational Reliability | {{WEIGHT_CRIT_1}} | 0 (Datum) | {{SCORE_A_1}} | {{SCORE_B_1}} | {{SCORE_C_1}} |
+| Containment Response Latency | {{WEIGHT_CRIT_2}} | 0 (Datum) | {{SCORE_A_2}} | {{SCORE_B_2}} | {{SCORE_C_2}} |
+| Lifecycle Maintenance Cost | {{WEIGHT_CRIT_3}} | 0 (Datum) | {{SCORE_A_3}} | {{SCORE_B_3}} | {{SCORE_C_3}} |
+| **Weighted Total Score S_j(w)** | **1.00** | **0.00** | **{{WEIGHTED_SCORE_A}}** | **{{WEIGHTED_SCORE_B}}** | **{{WEIGHTED_SCORE_C}}** |
+
+## 4. Operational User Classes, Stakeholder Community & Systems Architecture
+- **User Classes & Stakeholder Taxonomy:** {{USER_CLASSES_AND_STAKEHOLDERS}}
+- **Operational Lifecycle Modes across $\Phi_{\mathrm{lifecycle}}$:**
 - **Phase_Startup:** {{PHASE_STARTUP_DESCRIPTION}}
 - **Phase_NominalExecution:** {{PHASE_NOMINAL_EXECUTION_DESCRIPTION}}
 - **Phase_DegradedMode:** {{PHASE_DEGRADED_MODE_DESCRIPTION}}
@@ -1801,7 +1826,13 @@ Formal operational lifecycle stages across $\Phi_{\mathrm{lifecycle}}$:
 - **Phase_SecureShutdown:** {{PHASE_SECURE_SHUTDOWN_DESCRIPTION}}
 - **Phase_MaintenanceMode:** {{PHASE_MAINTENANCE_MODE_DESCRIPTION}}
 
-## 6. 4D Operational Volume & SORA Ground Risk Buffer Mathematics
+### 4.7 Super-System Architecture
+{{SUPER_SYSTEM_ARCHITECTURE}}
+
+### 4.8 Subsystem Architecture
+{{SUBSYSTEM_ARCHITECTURE_SECTION}}
+
+## 5. Operational State Space & SORA 4D Volume Risk Assessment
 $$
 \begin{aligned}
 V_{\mathrm{4D}} &= V_{\mathrm{SpatialGeometry}} \cup V_{\mathrm{ContingencyVolume}} \cup V_{\mathrm{GRB}} \\
@@ -1820,31 +1851,42 @@ $$
 | Terminal Velocity | v_terminal | {{V_TERMINAL_MPS}} | m/s | Estimated unpowered descent terminal velocity |
 | Impact Kinetic Energy | E_impact | {{E_IMPACT_JOULES}} | J | Kinetic energy at operational boundary impact |
 
-## 7. OMG UAF Operational Activity Taxonomy
+## 6. OMG UAF Operational Activity Taxonomy
 | Activity ID | Activity Name | Description | Gate 24 Allocation Tag |
 | :--- | :--- | :--- | :--- |
 | OA-01 | {{OA_ACTIVITY_NAME}} | {{OA_DESCRIPTION}} | `/// OperationalAllocation: [OA-01]` |
 
-## 8. Operational Information Exchange (Op-Tx) Matrix
+## 7. Operational Information Exchange (Op-Tx) Matrix
 | Exchange ID | Source Node | Destination Node | Information Item | Data Rate | Max Latency | Criticality |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | OpTx-01 | {{OPTX_SOURCE_NODE}} | {{OPTX_DEST_NODE}} | {{OPTX_INFO_ITEM}} | {{OPTX_DATA_RATE}} | {{OPTX_MAX_LATENCY}} | {{OPTX_CRITICALITY}} |
 
-## 9. Operational Environments & Constraints
+## 8. Operational Environments & MIL-STD-810H
 - **Ambient Temperature:** {{AMBIENT_TEMPERATURE_RANGE}}
 - **Environmental Ingress:** {{ENVIRONMENTAL_INGRESS_RATING}}
 - **Electromagnetic / RF Environment:** {{RF_ENVIRONMENT_CONSTRAINTS}}
 - **Physical Spatial Constraints:** {{PHYSICAL_SPATIAL_CONSTRAINTS}}
 
-## 10. Multi-Threaded Operational Scenarios
+## 9. Multi-Threaded Operational Scenarios & Timelines
 - **Scenario 1 (Nominal Execution):** {{SCENARIO_NOMINAL_THREAD}}
 - **Scenario 2 (Degraded Mode & Mitigation):** {{SCENARIO_DEGRADED_THREAD}}
 - **Scenario 3 (Contingency Recovery):** {{SCENARIO_CONTINGENCY_THREAD}}
 
-## 11. Maintenance & Sustainment Concepts (O/I/D Maintenance)
+## 10. Maintenance & Sustainment Concepts (O/I/D Maintenance)
+| Maintenance Level | Primary Facility | Scope of Work | Personnel Qualification | Authorized Spares / LRUs |
+| :--- | :--- | :--- | :--- | :--- |
+| O-Level (Organizational) | {{O_LEVEL_FACILITY}} | {{O_LEVEL_SCOPE}} | {{O_LEVEL_PERSONNEL}} | {{O_LEVEL_SPARES}} |
+| I-Level (Intermediate) | {{I_LEVEL_FACILITY}} | {{I_LEVEL_SCOPE}} | {{I_LEVEL_PERSONNEL}} | {{I_LEVEL_SPARES}} |
+| D-Level (Depot) | {{D_LEVEL_FACILITY}} | {{D_LEVEL_SCOPE}} | {{D_LEVEL_PERSONNEL}} | {{D_LEVEL_SPARES}} |
+
 - **O-Level (Organizational):** {{O_LEVEL_MAINTENANCE_DESCRIPTION}}
 - **I-Level (Intermediate):** {{I_LEVEL_MAINTENANCE_DESCRIPTION}}
 - **D-Level (Depot):** {{D_LEVEL_MAINTENANCE_DESCRIPTION}}
+
+## 11. Operational Impacts, Limitations & Trade Studies
+- **Operational Impacts:** {{OPERATIONAL_IMPACTS}}
+- **System Limitations:** {{SYSTEM_LIMITATIONS}}
+- **Documented Trade Studies:** {{DOCUMENTED_TRADE_STUDIES}}
 
 ## 12. 7-Row Emergency Decision & Contingency Matrix
 | Trigger ID | Contingency Trigger | Detection Mechanism | Automated Containment Action | Failsafe State | Max Response Time | HITL Role |

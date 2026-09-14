@@ -35,6 +35,21 @@ from parity_auditor.validators.conops_completeness_validator import (
 )
 
 
+def _write_default_test_schema(tmpdir: str) -> None:
+    """Helper to write default SysML schema with matching parts for ConOps Section 4.8."""
+    schema_dir = os.path.join(tmpdir, "schema")
+    os.makedirs(schema_dir, exist_ok=True)
+    sysml_content = """
+    package TestAutonomousSystem {
+        part def FlightGuidanceController;
+        part def BatteryManagementSystem;
+        part def ActuatorSubsystem;
+    }
+    """
+    with open(os.path.join(schema_dir, "DEAP_MODEL.sysml"), "w", encoding="utf-8") as f:
+        f.write(sysml_content)
+
+
 def _get_valid_conops_content() -> str:
     lines = []
     # Header metadata
@@ -49,16 +64,16 @@ def _get_valid_conops_content() -> str:
     lines.append("## Table of Contents")
     lines.append("")
     lines.append("- [1. Scope & System Identification](#1-scope--system-identification)")
-    lines.append("- [2. Normative Standards & Regulatory Baseline](#2-normative-standards--regulatory-baseline)")
-    lines.append("- [3. Current Situation & Deficiency Analysis (Predecessors)](#3-current-situation--deficiency-analysis-predecessors)")
-    lines.append("- [4. Operational Justification & Priority Matrix (Trade-Offs)](#4-operational-justification--priority-matrix-trade-offs)")
-    lines.append("- [5. Operational Modes & Lifecycle Stages](#5-operational-modes--lifecycle-stages)")
-    lines.append("- [6. 4D Operational Volume & SORA Ground Risk Buffer Mathematics](#6-4d-operational-volume--sora-ground-risk-buffer-mathematics)")
-    lines.append("- [7. OMG UAF Operational Activity Taxonomy](#7-omg-uaf-operational-activity-taxonomy)")
-    lines.append("- [8. Operational Information Exchange (Op-Tx) Matrix](#8-operational-information-exchange-op-tx-matrix)")
-    lines.append("- [9. Operational Environments & Constraints](#9-operational-environments--constraints)")
-    lines.append("- [10. Multi-Threaded Operational Scenarios](#10-multi-threaded-operational-scenarios)")
-    lines.append("- [11. Maintenance & Sustainment Concepts (O/I/D Maintenance)](#11-maintenance--sustainment-concepts-oid-maintenance)")
+    lines.append("- [2. Current Situation & Deficiency Analysis (Predecessors)](#2-current-situation--deficiency-analysis-predecessors)")
+    lines.append("- [3. Proposed Capabilities & Trade-Offs (Pugh Decision Matrix)](#3-proposed-capabilities--trade-offs-pugh-decision-matrix)")
+    lines.append("- [4. Operational User Classes, Stakeholder Community & Systems Architecture](#4-operational-user-classes-stakeholder-community--systems-architecture)")
+    lines.append("- [5. Operational State Space & SORA 4D Volume Risk Assessment](#5-operational-state-space--sora-4d-volume-risk-assessment)")
+    lines.append("- [6. OMG UAF Operational Activity Taxonomy](#6-omg-uaf-operational-activity-taxonomy)")
+    lines.append("- [7. Operational Information Exchange (Op-Tx) Matrix](#7-operational-information-exchange-op-tx-matrix)")
+    lines.append("- [8. Operational Environments & MIL-STD-810H](#8-operational-environments--mil-std-810h)")
+    lines.append("- [9. Multi-Threaded Operational Scenarios & Timelines](#9-multi-threaded-operational-scenarios--timelines)")
+    lines.append("- [10. Maintenance & Sustainment Concepts (O/I/D Maintenance)](#10-maintenance--sustainment-concepts-oid-maintenance)")
+    lines.append("- [11. Operational Impacts, Limitations & Trade Studies](#11-operational-impacts-limitations--trade-studies)")
     lines.append("- [12. 7-Row Emergency Decision & Contingency Matrix](#12-7-row-emergency-decision--contingency-matrix)")
     lines.append("")
     
@@ -134,15 +149,11 @@ def _get_valid_conops_content() -> str:
     lines.append("### 1.4 Operational Assumptions & Constraints")
     lines.append("- Assumption 1: All operations occur within surveyed operational ranges carrying active spectrum clearance.")
     lines.append("- Assumption 2: Power infrastructure at ground staging sites provides continuous regulated charging.")
-    lines.append("- Assumption 3: GNSS space vehicle geometry provides Dilution of Precision (DOP) $\le 2.5$ under nominal sky views.")
+    lines.append("- Assumption 3: GNSS space vehicle geometry provides Dilution of Precision (DOP) <= 2.5 under nominal sky views.")
     lines.append("- Constraint 1: System shall maintain minimum statutory lateral separation from non-cooperative boundaries.")
     lines.append("- Constraint 2: All safety-critical state transitions execute deterministically with zero unhandled exceptions.")
     lines.append("")
-
-    # Section 2
-    lines.append("## 2. Normative Standards & Regulatory Baseline")
-    lines.append("")
-    lines.append("### 2.1 Applicable Normative Standards Register")
+    lines.append("### 1.5 Applicable Normative Standards Register")
     lines.append("The engineering, verification, safety assurance, and operation of the platform strictly conform to the following standards baseline:")
     lines.append("")
     lines.append("| Standard ID | Issuing Body | Title / Baseline Description | Applicable Clauses & Focus Area |")
@@ -160,27 +171,15 @@ def _get_valid_conops_content() -> str:
     lines.append("| IEEE 1588-2019 | IEEE | Precision Clock Synchronization Protocol for Networked Measurement Systems | Sub-microsecond deterministic time distribution |")
     lines.append("| NIST SP 800-82r3 | NIST | Guide to Industrial Control Systems (ICS) Security | §5: ICS Security Architecture and Telemetry Encryption |")
     lines.append("")
-    lines.append("### 2.2 Clause-Level Allocation & Verification Compliance")
-    lines.append("The normative obligations are systematically realized through formal verification mechanisms:")
-    lines.append("")
-    lines.append("| Obligation ID | Source Standard | Target Subsystem | Realization Mechanism | Verification Level |")
-    lines.append("| :--- | :--- | :--- | :--- | :--- |")
-    lines.append("| `OBL-CONOPS-01` | ISO/IEC/IEEE 29148 §6.4.2 | Entire System | 12-Section Canonical ConOps document structure | Gate 26 Automated Audit |")
-    lines.append("| `OBL-CONOPS-02` | JARUS SORA v2.5 Annex B | Guidance Subsystem | Real-time Ground Risk Buffer dimension calculation | Gate 26 Mathematical Verification |")
-    lines.append("| `OBL-CONOPS-03` | NATO STANAG 4586 §3.2 | Communications Core | Multi-tier PACE C2 link failover arbitration | Datalink Telemetry Verification |")
-    lines.append("| `OBL-CONOPS-04` | MIL-STD-882E §4.3 | Safety Core | 7-Row Deterministic Emergency Decision Matrix | Automated Statechart Reachability |")
-    lines.append("| `OBL-CONOPS-05` | OMG UAF v2.0 Op-Tx | Middleware Core | Strict schema-validated Op-Tx message taxonomy | Gate 24 Model Allocation Check |")
-    lines.append("| `OBL-CONOPS-06` | RTCA DO-178C DAL-A | Watchdog Subsystem | Dedicated hardware watchdog with independent power rail | Hardware Hardware-in-the-Loop Test |")
-    lines.append("")
 
-    # Section 3
-    lines.append("## 3. Current Situation & Deficiency Analysis (Predecessors)")
+    # Section 2
+    lines.append("## 2. Current Situation & Deficiency Analysis (Predecessors)")
     lines.append("")
-    lines.append("### 3.1 Predecessor Operational Baseline")
+    lines.append("### 2.1 Predecessor Operational Baseline")
     lines.append("Predecessor operational configurations relied on legacy point-to-point analog telemetry links, manual piloting paradigms, and non-deterministic software controllers.")
     lines.append("These systems exhibited significant limitations in operational tempo, environmental resilience, and failsafe containment determinism.")
     lines.append("")
-    lines.append("### 3.2 Detailed Deficiency Taxonomy")
+    lines.append("### 2.2 Detailed Deficiency Taxonomy")
     lines.append("Operational field reviews and risk evaluations identified six structural deficiencies in predecessor architectures:")
     lines.append("1. **Single-Point C2 Link Vulnerabilities:** Legacy systems lacked multi-tier PACE failover, causing complete loss of situational awareness during RF degradation.")
     lines.append("2. **Under-Dimensioned Risk Containment:** Ground Risk Buffers were calculated using heuristic approximations rather than formal SORA v2.5 kinetic equations.")
@@ -189,7 +188,7 @@ def _get_valid_conops_content() -> str:
     lines.append("5. **Unstructured Maintenance Protocols:** Lack of structured O/I/D maintenance level task allocation resulted in extended diagnostic downtime.")
     lines.append("6. **Sub-Optimal Energy Management:** Battery reserve thresholds were static and did not dynamically compute wind-compensated return energy dynamics.")
     lines.append("")
-    lines.append("### 3.3 Predecessor vs Modernized Target Comparison")
+    lines.append("### 2.3 Predecessor vs Modernized Target Comparison")
     lines.append("The operational capabilities of predecessor architectures versus the modernized archetype are contrasted below:")
     lines.append("")
     lines.append("| Capability Dimension | Predecessor Operational Baseline | Modernized Target Archetype | Improvement Factor |")
@@ -201,17 +200,17 @@ def _get_valid_conops_content() -> str:
     lines.append("| Turnaround Inspection Time | 45 minutes (Manual Checklist) | <= 5 minutes (Automated O-Level BIT Scan) | 9x Faster Sortie Turnaround |")
     lines.append("")
 
-    # Section 4
-    lines.append("## 4. Operational Justification & Priority Matrix (Trade-Offs)")
+    # Section 3
+    lines.append("## 3. Proposed Capabilities & Trade-Offs (Pugh Decision Matrix)")
     lines.append("")
-    lines.append("### 4.1 Mission Drivers & Value Propositions")
+    lines.append("### 3.1 Mission Drivers & Value Propositions")
     lines.append("The Autonomous Cyber-Physical System Archetype resolves predecessor deficiencies by introducing deterministic safety architectures, verified mathematical containment, and structured UAF activity modeling.")
     lines.append("The core mission value propositions include:")
     lines.append("- Uncompromised public safety through formally verified 4D ground risk containment.")
     lines.append("- Continuous situational awareness across remote and contested operating environments.")
     lines.append("- Standardized digital engineering lifecycle compatibility conforming to DEAP specifications.")
     lines.append("")
-    lines.append("### 4.2 Pugh Decision Matrix & Architectural Trade-Off Analysis")
+    lines.append("### 3.2 Pugh Decision Matrix & Architectural Trade-Off Analysis")
     lines.append("To determine the optimal system architecture, a multi-criteria Pugh Decision Matrix analysis was performed.")
     lines.append("The candidates evaluated against the legacy baseline (Datum) include:")
     lines.append("- **Baseline (Datum):** Legacy Simplex Architecture with Manual Override.")
@@ -219,7 +218,7 @@ def _get_valid_conops_content() -> str:
     lines.append("- **Candidate B (Selected):** Distributed Fault-Tolerant Core with Hardware Safety Watchdog and Multi-Tier PACE C2.")
     lines.append("- **Candidate C:** Triple Modular Redundancy (TMR) Core with Ballistic Recovery Subsystem.")
     lines.append("")
-    lines.append("The multi-criteria Pugh score $S_j(w)$ and sensitivity equations $\\frac{\\partial S_j}{\\partial w_i}$ are formulated as:")
+    lines.append("The multi-criteria Pugh score $S_j(w)$ and sensitivity equations \\frac{\\partial S_j}{\\partial w_i} are formulated as:")
     lines.append("")
     lines.append("$$")
     lines.append("\\begin{aligned}")
@@ -239,19 +238,51 @@ def _get_valid_conops_content() -> str:
     lines.append("| Lifecycle Cost & Complexity | 0.10 | 0 (Datum) | -1 (-0.10) | 0 (0.00) | -2 (-0.20) |")
     lines.append("| **Weighted Total Score S_j(w)** | **1.00** | **0.00** | **+0.50** | **+1.65** | **+0.40** |")
     lines.append("")
-    lines.append("### 4.3 Sensitivity Analysis & Gradient Robustness")
+    lines.append("### 3.3 Sensitivity Analysis & Gradient Robustness")
     lines.append("Sensitivity analysis demonstrates that Candidate Architecture B remains optimal across all weight variations.")
-    lines.append("Even when cost weighting increases to $w_6 = 0.30$, Candidate B maintains a score advantage of $> 0.85$ over Candidate A and Candidate C.")
-    lines.append("The partial derivative vector $\\nabla S_B = [2, 2, 2, 2, 1, 0]^T$ proves strict dominance across all primary safety criteria.")
+    lines.append("Even when cost weighting increases to $w_6 = 0.30$, Candidate B maintains a score advantage of > 0.85 over Candidate A and Candidate C.")
+    lines.append("The partial derivative vector \\nabla S_B = [2, 2, 2, 2, 1, 0]^T proves strict dominance across all primary safety criteria.")
     lines.append("")
-    lines.append("### 4.4 Super-System Operational Architecture & Segment Boundaries")
+
+    # Section 4
+    lines.append("## 4. Operational User Classes, Stakeholder Community & Systems Architecture")
+    lines.append("")
+    lines.append("### 4.1 Operational User Classes & Operator Roles")
+    lines.append("Certified user classes (UCL-01 through UCL-04) govern human-machine interactions across the operational lifecycle:")
+    lines.append("- **UCL-01 Primary Operator:** Command authorization, flight plan uplink, and supervisory control.")
+    lines.append("- **UCL-02 Range Safety Officer:** Independent airspace deconfliction, abort consent, and geofence supervision.")
+    lines.append("- **UCL-03 Payload Specialist:** Sensor management, mission data downlink parsing, and camera gimbal control.")
+    lines.append("- **UCL-04 Maintenance Engineer:** Pre-flight inspection, battery state of health evaluation, and BIT diagnostics.")
+    lines.append("")
+    lines.append("### 4.2 Formal Operational Lifecycle Stages Across \\Phi_{\\mathrm{lifecycle}}")
+    lines.append("The system lifecycle is partitioned into six formal operational stages conforming to ISO/IEC/IEEE 29148:2018:")
+    lines.append("- **Phase_Startup:** Power-on Built-In-Test (PBIT), sensor calibration, cryptographic key verification, and geofence initialization.")
+    lines.append("- **Phase_NominalExecution:** Automated waypoint tracking, sensor payload operation, situational telemetry relay, and guidance.")
+    lines.append("- **Phase_DegradedMode:** Subsystem anomaly handling, simplex sensor fallback, and reduced performance envelope operation.")
+    lines.append("- **Phase_ContingencyFailsafe:** Emergency contingency execution, autonomous lost-link loiter, return-to-base, or divert routing.")
+    lines.append("- **Phase_SecureShutdown:** Controlled touchdown, power bus de-energization, diagnostic blackbox offload, and cryptographic clearing.")
+    lines.append("- **Phase_MaintenanceMode:** Diagnostic interface connection, I-Level/D-Level calibration, firmware flashing, and hardware maintenance.")
+    lines.append("")
+    lines.append("### 4.3 Mode Transition Rules & Preemption Matrix")
+    lines.append("The operational state transitions are governed by deterministic guard conditions and timing bounds:")
+    lines.append("")
+    lines.append("| Source Operational Mode | Triggering Event / Anomaly | Target Operational Mode | Guard Condition / State Predicate | Max Latency Deadline |")
+    lines.append("| :--- | :--- | :--- | :--- | :--- |")
+    lines.append("| Phase_Startup | PBIT_Success_Event | Phase_NominalExecution | All health flags pass and C2 link active | <= 100 ms |")
+    lines.append("| Phase_NominalExecution | Sensor_Disparity_Event | Phase_DegradedMode | Disparity persistence > 50 ms | <= 50 ms |")
+    lines.append("| Phase_NominalExecution | Critical_Failsafe_Trigger | Phase_ContingencyFailsafe | EMG-01..07 active trigger | <= 20 ms |")
+    lines.append("| Phase_DegradedMode | C2_Heartbeat_Timeout | Phase_ContingencyFailsafe | Heartbeat age > 5.0 s | <= 50 ms |")
+    lines.append("| Phase_ContingencyFailsafe | Safe_Touchdown_Verified | Phase_SecureShutdown | Ground contact verified by weight sensor | <= 100 ms |")
+    lines.append("| Phase_SecureShutdown | Maintenance_Interface_Active | Phase_MaintenanceMode | Ground interlock enabled | <= 500 ms |")
+    lines.append("")
+    lines.append("### 4.7 Super-System Operational Architecture & Segment Boundaries")
     lines.append("The operational architecture partitions the system across three mandatory Super-System segment boundaries:")
     lines.append("1. **Primary Operational Segment (Air Segment):** Hosts onboard flight autonomy, flight and guidance controllers (`FlightGuidanceController`, `FlightControlSubsystem`, `FCS`, `NavigationSubsystem`), perception sensors (`PerceptionFusionSubsystem`, `Sensors`), actuators (`ActuatorSubsystem`, `Actuators`, `Containment`), and safety watchdogs (`SafetyWatchdog`, `Watchdog`, `Compute_Subsystem`, `Power_Subsystem`).")
     lines.append("2. **Command & Control Segment (Ground Segment):** Hosts the telemetry ground control station (`GroundControlStation`), PACE communications terminals, and human operator supervisory consoles (`SupervisoryConsole`).")
     lines.append("3. **Auxiliary Support Segment (Launch and Recovery Segment / GSE):** Hosts mobile ground support equipment (`GroundSupportEquipment`), launch staging interfaces (`LaunchAndRecoveryUnit`), and battery charging stations (`BatteryManagementSystem`, `BMS`).")
     lines.append("")
     lines.append("```mermaid")
-    lines.append("flowchart TD")
+    lines.append("flowchart TB")
     lines.append("    subgraph External_Actors[\"External Operating Environment and Actors (IEEE 1362 §5.1)\"]")
     lines.append("        direction TB")
     lines.append("        Operator[\"Human Operator and Mission<br/>Supervisor (UC-01 and UC-03)\"]")
@@ -297,36 +328,29 @@ def _get_valid_conops_content() -> str:
     lines.append("    GSE -.->|\"CONN-09: Regulated Pre-Flight Power and Diagnostics\"| Platform_Segment")
     lines.append("```")
     lines.append("")
+    lines.append("### 4.8 Subsystem Architecture & Metamodel Allocations")
+    lines.append("The platform subsystems realize high-level operational capabilities and trace to declared AST parts:")
+    lines.append("")
+    lines.append("#### 4.8.1 FlightGuidanceController Subsystem Architecture")
+    lines.append("The `FlightGuidanceController` (also realizing `FlightControlSubsystem`, `FCS`, and `Compute_Subsystem`) executes real-time 4D waypoint tracking, inner-loop attitude stabilization, and contingency recovery navigation.")
+    lines.append("It hosts ports `PORT-FCS-C2` (bidirectional telemetry), `PORT-FCS-CMD` (actuator demand), and `PORT-FCS-TLM` (internal telemetry ingestion).")
+    lines.append("")
+    lines.append("#### 4.8.2 BatteryManagementSystem Subsystem Architecture")
+    lines.append("The `BatteryManagementSystem` (`BMS`, `Power_Subsystem`) manages smart energy distribution across dual redundant DC buses, monitors cell thermal profiles, and computes Bingo energy margins.")
+    lines.append("It interfaces via `PORT-BMS-PWR` to supply regulated power to compute cores and actuation surfaces.")
+    lines.append("")
+    lines.append("#### 4.8.3 ActuatorSubsystem Architecture")
+    lines.append("The `ActuatorSubsystem` (incorporating `Actuators` and `Containment`) provides multi-channel servo actuation with microsecond-level pulse-width response and dynamic torque monitoring.")
+    lines.append("It receives demand vectors via `PORT-ACT-IN` and reports instantaneous health telemetry back to the controller.")
+    lines.append("")
+    lines.append("#### 4.8.4 NavigationSubsystem & Perception Architecture")
+    lines.append("The `NavigationSubsystem` (hosting `Sensors` and `Watchdog`) provides sensor fusion, navigation telemetry, and safety watchdog monitoring.")
+    lines.append("")
 
     # Section 5
-    lines.append("## 5. Operational Modes & Lifecycle Stages")
+    lines.append("## 5. Operational State Space & SORA 4D Volume Risk Assessment")
     lines.append("")
-    lines.append("### 5.1 Formal Operational Lifecycle Stages Across \\Phi_{\\mathrm{lifecycle}}")
-    lines.append("The system lifecycle is partitioned into six formal operational stages conforming to ISO/IEC/IEEE 29148:2018:")
-    lines.append("- **Phase_Startup:** Power-on Built-In-Test (PBIT), sensor calibration, cryptographic key verification, and geofence initialization.")
-    lines.append("- **Phase_NominalExecution:** Automated waypoint tracking, sensor payload operation, situational telemetry relay, and guidance.")
-    lines.append("- **Phase_DegradedMode:** Subsystem anomaly handling, simplex sensor fallback, and reduced performance envelope operation.")
-    lines.append("- **Phase_ContingencyFailsafe:** Emergency contingency execution, autonomous lost-link loiter, return-to-base, or divert routing.")
-    lines.append("- **Phase_SecureShutdown:** Controlled touchdown, power bus de-energization, diagnostic blackbox offload, and cryptographic clearing.")
-    lines.append("- **Phase_MaintenanceMode:** Diagnostic interface connection, I-Level/D-Level calibration, firmware flashing, and hardware maintenance.")
-    lines.append("")
-    lines.append("### 5.2 Mode Transition Rules & Preemption Matrix")
-    lines.append("The operational state transitions are governed by deterministic guard conditions and timing bounds:")
-    lines.append("")
-    lines.append("| Source Operational Mode | Triggering Event / Anomaly | Target Operational Mode | Guard Condition / State Predicate | Max Latency Deadline |")
-    lines.append("| :--- | :--- | :--- | :--- | :--- |")
-    lines.append("| Phase_Startup | PBIT_Success_Event | Phase_NominalExecution | All health flags pass and C2 link active | <= 100 ms |")
-    lines.append("| Phase_NominalExecution | Sensor_Disparity_Event | Phase_DegradedMode | Disparity persistence > 50 ms | <= 50 ms |")
-    lines.append("| Phase_NominalExecution | Critical_Failsafe_Trigger | Phase_ContingencyFailsafe | EMG-01..07 active trigger | <= 20 ms |")
-    lines.append("| Phase_DegradedMode | C2_Heartbeat_Timeout | Phase_ContingencyFailsafe | Heartbeat age > 5.0 s | <= 50 ms |")
-    lines.append("| Phase_ContingencyFailsafe | Safe_Touchdown_Verified | Phase_SecureShutdown | Ground contact verified by weight sensor | <= 100 ms |")
-    lines.append("| Phase_SecureShutdown | Maintenance_Interface_Active | Phase_MaintenanceMode | Ground interlock enabled | <= 500 ms |")
-    lines.append("")
-
-    # Section 6
-    lines.append("## 6. 4D Operational Volume & SORA Ground Risk Buffer Mathematics")
-    lines.append("")
-    lines.append("### 6.1 4D Operational Volume Mathematical Formulation")
+    lines.append("### 5.1 4D Operational Volume Mathematical Formulation")
     lines.append("The 4D operational volume $V_{\\mathrm{4D}}$ comprises the nominal flight geometry volume $V_{\\mathrm{FlightGeometry}}$, the contingency volume $V_{\\mathrm{ContingencyVolume}}$, and the Ground Risk Buffer $V_{\\mathrm{GRB}}$ calculated in accordance with JARUS SORA v2.5 Annex B:")
     lines.append("")
     lines.append("$$")
@@ -336,7 +360,7 @@ def _get_valid_conops_content() -> str:
     lines.append("\\end{aligned}")
     lines.append("$$")
     lines.append("")
-    lines.append("### 6.2 SORA Ground Risk Buffer Parameter Register")
+    lines.append("### 5.2 SORA Ground Risk Buffer Parameter Register")
     lines.append("The physical and operational parameters governing containment volume dimensioning are defined in the following table:")
     lines.append("")
     lines.append("| Parameter | Symbol | Value | Units | Description |")
@@ -350,15 +374,15 @@ def _get_valid_conops_content() -> str:
     lines.append("| Terminal Velocity | v_terminal | 25.0 | m/s | Estimated unpowered descent terminal velocity |")
     lines.append("| Impact Kinetic Energy | E_impact | 1562.5 | J | Kinetic energy at operational boundary impact (m=5.0 kg) |")
     lines.append("")
-    lines.append("### 6.3 SORA Compliance Assessment")
+    lines.append("### 5.3 SORA Compliance Assessment")
     lines.append("The theoretical minimum buffer radius for $h_{\\mathrm{max}} = 120.0\\text{ m}$ and $v_{\\mathrm{wind,max}} = 15.0\\text{ m/s}$ is $R_{\\mathrm{calc}} = 194.20\\text{ m}$.")
     lines.append("The declared Ground Risk Buffer $R_{\\mathrm{GRB}} = 200.0\\text{ m}$ exceeds the theoretical floor, guaranteeing containment compliance.")
     lines.append("")
 
-    # Section 7
-    lines.append("## 7. OMG UAF Operational Activity Taxonomy")
+    # Section 6
+    lines.append("## 6. OMG UAF Operational Activity Taxonomy")
     lines.append("")
-    lines.append("### 7.1 Doctrinal Operational Activities (Op-Pr View)")
+    lines.append("### 6.1 Doctrinal Operational Activities (Op-Pr View)")
     lines.append("In conformance with OMG UAF v2.0 Operational Performer (Op-Pr) view, operational tasks are categorized into structured, discrete activities carrying formal Gate 24 allocation tags:")
     lines.append("")
     lines.append("| Activity ID | Activity Name | Description | Gate 24 Allocation Tag |")
@@ -377,10 +401,10 @@ def _get_valid_conops_content() -> str:
     lines.append("| OA-12 | GroundAuditLogSynchronization | Transfers cryptographic verification hashes and sensor diagnostic traces to ground | `/// OperationalAllocation: [OA-12]` |")
     lines.append("")
 
-    # Section 8
-    lines.append("## 8. Operational Information Exchange (Op-Tx) Matrix")
+    # Section 7
+    lines.append("## 7. Operational Information Exchange (Op-Tx) Matrix")
     lines.append("")
-    lines.append("### 8.1 Operational Information Exchange Matrix (Op-Tx View)")
+    lines.append("### 7.1 Operational Information Exchange Matrix (Op-Tx View)")
     lines.append("The inter-subsystem and external information exchange flows are formalized in the following Op-Tx Matrix:")
     lines.append("")
     lines.append("| Exchange ID | Source Node | Destination Node | Information Item | Data Rate | Max Latency | Criticality |")
@@ -398,7 +422,7 @@ def _get_valid_conops_content() -> str:
     lines.append("| OpTx-11 | OpticalTracker | GuidanceFilter | RelativeTargetBearingVector | 30 Hz | 33 ms | Medium (DAL-B) |")
     lines.append("| OpTx-12 | RangeSafetyTerminal | WatchdogSubsystem | EncryptedAbortTriggerFrame | Event | 10 ms | Catastrophic (DAL-A) |")
     lines.append("")
-    lines.append("### 8.2 Operational Interaction Sequence & Exchange Protocol")
+    lines.append("### 7.2 Operational Interaction Sequence & Exchange Protocol")
     lines.append("The interaction sequence between operators, flight controller, safety watchdog, and actuation devices is specified below:")
     lines.append("")
     lines.append("```mermaid")
@@ -430,10 +454,10 @@ def _get_valid_conops_content() -> str:
     lines.append("```")
     lines.append("")
 
-    # Section 9
-    lines.append("## 9. Operational Environments & Constraints")
+    # Section 8
+    lines.append("## 8. Operational Environments & MIL-STD-810H")
     lines.append("")
-    lines.append("### 9.1 Environmental Limits Register")
+    lines.append("### 8.1 Environmental Limits Register")
     lines.append("The system is qualified for operation across rigorous environmental envelopes conforming to MIL-STD-810H and statutory operating constraints:")
     lines.append("")
     lines.append("| Environmental Dimension | Nominal Range | Extreme Limit | Verification Standard | Operational Constraint Rule |")
@@ -450,10 +474,10 @@ def _get_valid_conops_content() -> str:
     lines.append("| Solar Radiation Flux | 0 to 1120 W/m^2 | 1200 W/m^2 | MIL-STD-810H Method 505.7 | Thermal shielding over optical sensor ports |")
     lines.append("")
 
-    # Section 10
-    lines.append("## 10. Multi-Threaded Operational Scenarios")
+    # Section 9
+    lines.append("## 9. Multi-Threaded Operational Scenarios & Timelines")
     lines.append("")
-    lines.append("### 10.1 Scenario 1: Nominal Autonomous Mission Execution")
+    lines.append("### 9.1 Scenario 1: Nominal Autonomous Mission Execution")
     lines.append("- **Thread Context:** Nominal automated staging, ingress corridor traversal, area monitoring, and precision recovery.")
     lines.append("- **Step 1:** Pre-flight power-on BIT completes in 20 s with 100% component pass confirmation.")
     lines.append("- **Step 2:** Automated ascent to operational ceiling $h = 100.0\\text{ m}$ at climb rate $v_z = 3.0\\text{ m/s}$.")
@@ -466,7 +490,7 @@ def _get_valid_conops_content() -> str:
     lines.append("- **Step 9:** Autonomous vertical descent initiated over primary surveyed recovery zone.")
     lines.append("- **Step 10:** Touchdown confirmed by weight-on-wheels sensor; motors shut down with remaining energy $> 25\\%$.")
     lines.append("")
-    lines.append("### 10.2 Scenario 2: Primary Navigation Degradation & Inertial Fallback")
+    lines.append("### 9.2 Scenario 2: Primary Navigation Degradation & Inertial Fallback")
     lines.append("- **Thread Context:** Loss of primary GNSS carrier lock during mid-mission transit.")
     lines.append("- **Step 1:** Navigation filter detects pseudo-range jump and FOM degradation exceeding 2.0.")
     lines.append("- **Step 2:** System automatically transitions from `Phase_NominalExecution` to `Phase_DegradedMode`.")
@@ -477,7 +501,7 @@ def _get_valid_conops_content() -> str:
     lines.append("- **Step 7:** Optical feature tracking locates primary recovery marker during terminal descent.")
     lines.append("- **Step 8:** System lands safely within secondary containment zone with zero geofence excursions.")
     lines.append("")
-    lines.append("### 10.3 Scenario 3: Lost C2 Link Contingency & Autonomous RTB")
+    lines.append("### 9.3 Scenario 3: Lost C2 Link Contingency & Autonomous RTB")
     lines.append("- **Thread Context:** Complete RF link loss exceeding heartbeat timeout threshold $\\tau_{\\mathrm{loss}} = 5.0\\text{ s}$.")
     lines.append("- **Step 1:** Primary C2 heartbeat timer expires; system switches automatically to Alternate LTE channel.")
     lines.append("- **Step 2:** Alternate channel unacknowledged after 3.0 s; system enters `Phase_ContingencyFailsafe`.")
@@ -486,7 +510,7 @@ def _get_valid_conops_content() -> str:
     lines.append("- **Step 5:** Autonomous vertical descent and engine shutdown at primary recovery pad.")
     lines.append("- **Step 6:** System rest confirmation verified and non-volatile diagnostic logs secured.")
     lines.append("")
-    lines.append("### 10.4 Scenario 4: Dynamic Divert to Secondary Recovery Site")
+    lines.append("### 9.4 Scenario 4: Dynamic Divert to Secondary Recovery Site")
     lines.append("- **Thread Context:** Primary recovery point obstructed by unpredicted severe localized weather.")
     lines.append("- **Step 1:** Environmental monitor reports gust velocity exceeding 15.0 m/s at primary landing site.")
     lines.append("- **Step 2:** Guidance computer computes remaining energy against secondary divert destination.")
@@ -496,25 +520,40 @@ def _get_valid_conops_content() -> str:
     lines.append("- **Step 6:** Vehicle secured at secondary recovery point and recovery telemetry broadcast.")
     lines.append("")
 
-    # Section 11
-    lines.append("## 11. Maintenance & Sustainment Concepts (O/I/D Maintenance)")
+    # Section 10
+    lines.append("## 10. Maintenance & Sustainment Concepts (O/I/D Maintenance)")
     lines.append("")
-    lines.append("### 11.1 Three-Tier Maintenance Allocation Model")
+    lines.append("### 10.1 Three-Tier Maintenance Allocation Model")
     lines.append("The maintenance and sustainment concept follows a three-tier doctrinal structure:")
     lines.append("")
-    lines.append("| Maintenance Tier | Organizational Level | Maintenance Tasks & Work Scope | Tooling & Equipment | Interval / Trigger |")
+    lines.append("| Maintenance Level | Primary Facility | Scope of Work | Personnel Qualification | Authorized Spares / LRUs |")
     lines.append("| :--- | :--- | :--- | :--- | :--- |")
-    lines.append("| **O-Level** (Organizational) | Field Staging Site | Pre/post-operation inspections, modular battery hot-swap, visual check, PBIT review | Field Diagnostic Tablet, Standard Hand Tools | Every mission turnaround |")
-    lines.append("| **I-Level** (Intermediate) | Mobile Support Unit | Actuator calibration, sensor alignment, modular LRU swap, harness continuity test | Automated Test Bench, Calibrated Fixtures | 100 operating hours / unscheduled fault |")
-    lines.append("| **D-Level** (Depot) | Central Overhaul Facility | Airframe structural overhaul, composite NDI inspection, safety computer recertification | Ultrasonic NDI, Environmental Chamber | 500 operating hours / major overhaul |")
-    lines.append("| **O-Level Logistics** | Supply Point | Spare modular battery packs, quick-release fasteners, prop adapters | Portable Storage Cases | Continuous readiness |")
-    lines.append("| **I-Level Diagnostics** | Calibration Lab | Inertial measurement unit bias calibration and optical bench alignment | Precision Rate Table | 250 operating hours |")
-    lines.append("| **D-Level Recertification**| Qualification Facility | Environmental stress screening and full software regression test | Hardware-in-the-Loop Simulator | 1000 operating hours |")
+    lines.append("| **O-Level (Organizational)** | Field Staging Site | Pre/post-operation inspections, modular battery hot-swap, visual check, PBIT review | Field Diagnostic Tablet, Standard Hand Tools | Spare modular battery packs, quick-release fasteners |")
+    lines.append("| **I-Level (Intermediate)** | Mobile Support Unit | Actuator calibration, sensor alignment, modular LRU swap, harness continuity test | Automated Test Bench, Calibrated Fixtures | Calibrated sensors, servo actuators, flight compute modules |")
+    lines.append("| **D-Level (Depot)** | Central Overhaul Facility | Airframe structural overhaul, composite NDI inspection, safety computer recertification | Ultrasonic NDI, Environmental Chamber | Complete airframe core, backplane motherboard, containment modules |")
     lines.append("")
-    lines.append("### 11.2 Spares Provisioning & Diagnostic Offload Strategy")
+    lines.append("### 10.2 Spares Provisioning & Diagnostic Offload Strategy")
     lines.append("- Spares Provisioning: Critical line-replaceable units (LRUs) are provisioned in modular, field-swappable enclosures.")
     lines.append("- Diagnostic Telemetry: High-speed USB-C and optical diagnostic interfaces enable 100 MB/s blackbox audit log extraction.")
     lines.append("- Preventive Maintenance: Firmware hash checks and component lifetime counters are audited prior to every operating window.")
+    lines.append("")
+
+    # Section 11
+    lines.append("## 11. Operational Impacts, Limitations & Trade Studies")
+    lines.append("")
+    lines.append("### 11.1 Operational Impacts on Existing Infrastructure")
+    lines.append("The introduction of the autonomous platform streamlines operational staging footprints while maintaining interoperability with existing tactical networks.")
+    lines.append("Key infrastructure impacts include automated diagnostic offload, reduced manual checkout staffing, and standardized electrical charging interfaces.")
+    lines.append("")
+    lines.append("### 11.2 System Operational Limitations")
+    lines.append("Operational envelopes are strictly bounded by statutory safety thresholds:")
+    lines.append("- Maximum operational altitude ceiling is restricted to 120.0 m AGL under nominal airspace authorizations.")
+    lines.append("- Operations are prohibited under extreme icing conditions or crosswinds exceeding 15.0 m/s.")
+    lines.append("- Continuous telemetry reachability requires at least one active PACE channel with latency < 500 ms.")
+    lines.append("")
+    lines.append("### 11.3 Documented Architectural Trade Studies")
+    lines.append("Trade study TS-01 evaluated centralized vs distributed RTOS processing cores. The distributed architecture was selected to eliminate single-point failures.")
+    lines.append("Trade study TS-02 assessed ballistic parachute deployment vs controlled autorotation. Ballistic containment was chosen for guaranteed 0.02 s termination response.")
     lines.append("")
 
     # Section 12
@@ -888,6 +927,7 @@ class TestConOpsAndMissionIntentValidators(unittest.TestCase):
 
             # Case 3: Only valid CONOPS.md present (MISSION_INTENT.md missing)
             os.remove(os.path.join(conops_dir, "MISSION_INTENT.md"))
+            _write_default_test_schema(tmpdir)
             with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
                 f.write(_get_valid_conops_content())
 
@@ -930,6 +970,7 @@ class TestConOpsAndMissionIntentValidators(unittest.TestCase):
             self.assertEqual(mission_val.validate(mock_repo), [])
 
             # Case 3: Only CONOPS.md present
+            _write_default_test_schema(tmpdir)
             with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
                 f.write(_get_valid_conops_content())
             self.assertEqual(conops_val.validate(mock_repo), [])
@@ -952,6 +993,7 @@ class TestConOpsAndMissionIntentValidators(unittest.TestCase):
     def test_valid_conops_and_mission_intent_passes_100_percent(self):
         """Fully compliant CONOPS.md (12 sections) and MISSION_INTENT.md (10 sections) return 0 findings."""
         with tempfile.TemporaryDirectory() as tmpdir:
+            _write_default_test_schema(tmpdir)
             conops_dir = os.path.join(tmpdir, "docs", "conops")
             os.makedirs(conops_dir, exist_ok=True)
 
@@ -972,16 +1014,17 @@ class TestConOpsAndMissionIntentValidators(unittest.TestCase):
             self.assertEqual(mission_findings, [], f"Unexpected Mission Intent findings: {mission_findings}")
 
     def test_conops_missing_mandatory_section_fails(self):
-        """Missing mandatory Section 6 in CONOPS.md triggers finding 'conops-section-missing'."""
+        """Missing mandatory Section 5 in CONOPS.md triggers finding 'conops-section-missing'."""
         with tempfile.TemporaryDirectory() as tmpdir:
+            _write_default_test_schema(tmpdir)
             conops_dir = os.path.join(tmpdir, "docs", "conops")
             os.makedirs(conops_dir, exist_ok=True)
 
             content = _get_valid_conops_content()
-            # Remove Section 6
-            sec6_idx = content.find("## 6. 4D Operational Volume")
-            sec7_idx = content.find("## 7. OMG UAF Operational Activity")
-            truncated_content = content[:sec6_idx] + content[sec7_idx:]
+            # Remove Section 5
+            sec5_idx = content.find("## 5. Operational State Space")
+            sec6_idx = content.find("## 6. OMG UAF Operational Activity")
+            truncated_content = content[:sec5_idx] + content[sec6_idx:]
 
             with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
                 f.write(truncated_content)
@@ -992,7 +1035,7 @@ class TestConOpsAndMissionIntentValidators(unittest.TestCase):
 
             missing_errors = [f for f in findings if f.rule_id == "conops-section-missing"]
             self.assertTrue(len(missing_errors) >= 1)
-            self.assertIn("4D Operational Volume", str(missing_errors[0]))
+            self.assertIn("Operational State Space", str(missing_errors[0]))
 
     def test_conops_sora_grb_underdimensioned_fails(self):
         """SORA Ground Risk Buffer radius less than theoretical minimum triggers 'conops-sora-grb-underdimensioned'."""
@@ -1281,6 +1324,7 @@ class TestConOpsAndMissionIntentValidators(unittest.TestCase):
     def test_conops_complete_emergency_depth_and_statechart_passes(self):
         """ConOps with complete Section 12 depth and Mermaid statechart passes Gate 26 validation."""
         with tempfile.TemporaryDirectory() as tmpdir:
+            _write_default_test_schema(tmpdir)
             conops_dir = os.path.join(tmpdir, "docs", "conops")
             os.makedirs(conops_dir, exist_ok=True)
 
@@ -1354,6 +1398,7 @@ stateDiagram-v2
     def test_conops_emergency_statechart_esad_closure_passes(self):
         """ConOps with complete ESAD FSM including ESAD_FAULT and terminal states passes with zero errors."""
         with tempfile.TemporaryDirectory() as tmpdir:
+            _write_default_test_schema(tmpdir)
             conops_dir = os.path.join(tmpdir, "docs", "conops")
             os.makedirs(conops_dir, exist_ok=True)
 
@@ -1470,8 +1515,11 @@ stateDiagram-v2
             with open(os.path.join(conops_dir, "MISSION_INTENT.md"), "w", encoding="utf-8") as f:
                 f.write(_get_valid_mission_intent_content())
 
-            # SysML model providing Gate 24 allocations
+            # SysML model providing Gate 24 allocations and subsystem parts
             sysml_content = """package SystemSSOT {
+    part def FlightGuidanceController;
+    part def BatteryManagementSystem;
+    part def ActuatorSubsystem;
     doc /* /// OperationalAllocation: [OA-01, OA-02, OA-03, Phase_Startup, Phase_NominalExecution, Phase_DegradedMode, Phase_ContingencyFailsafe, Phase_SecureShutdown, Phase_MaintenanceMode] */
 }
 """
@@ -1786,9 +1834,9 @@ stateDiagram-v2
         self.assertIn("flowchart TB", str(diagram_findings[0]))
 
     def test_conops_missing_pugh_matrix_fails(self):
-        """ConOps specification missing Section 4 Pugh decision matrix emits conops-pugh-matrix-missing (Fixes #130)."""
+        """ConOps specification missing Section 3 Pugh decision matrix emits conops-pugh-matrix-missing (Fixes #130, #298)."""
         full_content = _get_valid_conops_content()
-        # Remove Pugh decision matrix table and keyword in Section 4
+        # Remove Pugh decision matrix table and keyword in Section 3
         broken_content = re.sub(r'\| Evaluation Criterion \(i\)[\s\S]*?\n\n', '\n\n', full_content)
         broken_content = broken_content.replace("Pugh", "Trade-Off")
         val = ConopsCompletenessValidator()
@@ -1798,7 +1846,7 @@ stateDiagram-v2
         self.assertIn("missing mandatory Pugh decision matrix", str(pugh_findings[0]))
 
     def test_conops_missing_pugh_sensitivity_equation_fails(self):
-        """ConOps specification missing LaTeX sensitivity equation S_j(w) in Section 4 emits conops-pugh-sensitivity-missing (Fixes #130)."""
+        """ConOps specification missing LaTeX sensitivity equation S_j(w) in Section 3 emits conops-pugh-sensitivity-missing (Fixes #130, #298)."""
         full_content = _get_valid_conops_content()
         # Remove math block with S_j(w)
         broken_content = re.sub(r'\$\$\s*\\begin\{aligned\}\s*S_j\(w\)[\s\S]*?\\end\{aligned\}\s*\$\$', '$$ J = w_i $$', full_content)
@@ -1936,6 +1984,53 @@ stateDiagram-v2
 
             arch_findings = [f for f in findings if f.rule_id in ("conops-segment-boundaries-missing", "conops-partdef-coverage-incomplete")]
             self.assertEqual(arch_findings, [])
+
+    def test_conops_no_subsystems_declared_fails(self):
+        """ConOps validation fails with conops-no-subsystems-declared when workspace schemas declare 0 parts (Fixes #301)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(conops_dir, exist_ok=True)
+
+            # Schema with no part definitions
+            with open(os.path.join(schema_dir, "empty_model.sysml"), "w", encoding="utf-8") as f:
+                f.write("package EmptyPackage { }")
+
+            with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
+                f.write(_get_valid_conops_content())
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            val = ConopsCompletenessValidator()
+            findings = val.validate(repo)
+
+            no_subsystems = [f for f in findings if f.rule_id == "conops-no-subsystems-declared"]
+            self.assertEqual(len(no_subsystems), 1)
+            self.assertIn("No subsystem part definitions were found", str(no_subsystems[0]))
+
+    def test_conops_missing_section_4_8_fails(self):
+        """ConOps Section 4 missing Subsection 4.8 emits conops-partdef-coverage-incomplete (Fixes #301)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            _write_default_test_schema(tmpdir)
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            os.makedirs(conops_dir, exist_ok=True)
+
+            content = _get_valid_conops_content()
+            # Remove Subsection 4.8
+            sec48_idx = content.find("### 4.8 Subsystem Architecture")
+            sec5_idx = content.find("## 5. Operational State Space")
+            truncated_content = content[:sec48_idx] + content[sec5_idx:]
+
+            with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
+                f.write(truncated_content)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            val = ConopsCompletenessValidator()
+            findings = val.validate(repo)
+
+            part_findings = [f for f in findings if f.rule_id == "conops-partdef-coverage-incomplete"]
+            self.assertEqual(len(part_findings), 1)
+            self.assertIn("missing Subsection 4.8", str(part_findings[0]))
 
     def test_mission_intent_table_aware_energy_reserve_extraction_prevents_false_inequality_trigger(self):
         """
@@ -2447,7 +2542,7 @@ Standards body
         # Replace Section 1 with a hollow 2-line stub while maintaining document >= 800 lines
         hollow_sec1 = "## 1. Scope & System Identification\n- Scope: Minimal stub.\n"
         hollow_conops = re.sub(
-            r'## 1\. Scope & System Identification[\s\S]*?(?=## 2\. Normative Standards)',
+            r'## 1\. Scope & System Identification[\s\S]*?(?=## 2\.)',
             hollow_sec1 + "\n",
             base_conops,
         )
@@ -2472,7 +2567,7 @@ Standards body
             "| Exchange ID | Source Node | Information Item | Data Rate | Criticality |",
         )
         findings_optx = val._validate_conops_text(broken_optx, "docs/conops/CONOPS.md")
-        optx_schema_findings = [f for f in findings_optx if f.rule_id == "conops-table-schema-invalid" and f.detail.get("section") == 8]
+        optx_schema_findings = [f for f in findings_optx if f.rule_id == "conops-table-schema-invalid" and f.detail.get("section") == 7]
         self.assertGreaterEqual(len(optx_schema_findings), 1, f"Expected Op-Tx table schema finding: {findings_optx}")
 
         # 2. Broken SORA table (missing Symbol and Units)
@@ -2485,7 +2580,7 @@ Standards body
             "| Parameter | Value | Description |",
         )
         findings_sora = val._validate_conops_text(broken_sora, "docs/conops/CONOPS.md")
-        sora_schema_findings = [f for f in findings_sora if f.rule_id == "conops-table-schema-invalid" and f.detail.get("section") == 6]
+        sora_schema_findings = [f for f in findings_sora if f.rule_id == "conops-table-schema-invalid" and f.detail.get("section") == 5]
         self.assertGreaterEqual(len(sora_schema_findings), 1, f"Expected SORA table schema finding: {findings_sora}")
 
         # 3. Broken Emergency Matrix (missing Failsafe State and Max Response Time)
@@ -2502,7 +2597,7 @@ Standards body
         self.assertGreaterEqual(len(emg_schema_findings), 1, f"Expected Emergency table schema finding: {findings_emg}")
 
     def test_conops_truncated_timeline_steps_fails(self):
-        """Verify that ConOps Section 10 with truncated timeline steps is rejected (Fixes #114, #130)."""
+        """Verify that ConOps Section 9 with truncated timeline steps is rejected (Fixes #114, #130, #298)."""
         base_conops = _get_valid_conops_content()
         val = ConopsCompletenessValidator()
 

@@ -650,7 +650,7 @@ class SemanticDiagramASTValidator(IValidator):
                 "operational", "mission", "c2", "datalink", "command", "telemetry",
                 "ground", "air", "space", "launch", "recovery", "support", "station",
                 "supervisor", "operator", "controller", "payload", "sensor", "actuator",
-                "external", "environment", "safety", "watchdog", "gse", "gcs"
+                "external", "environment", "safety", "watchdog", "gse", "gcs", "containment"
             )):
                 return True
             if any(tok in (
