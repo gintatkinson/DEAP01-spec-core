@@ -18,7 +18,7 @@ The maintenance and sustainment concept is structured into three discrete, forma
 | Visual structural integrity check | Modular LRU swap (t <= tau_swap_LRU) | Full environmental stress screening |
 
 1. **Organizational-Level (O-Level) Maintenance:**
-   - **Scope & Location:** Executed directly at the operating base or field staging area by certified Maintenance Technicians (`UC-04`).
+   - **Scope & Location:** Executed directly at the operating base or field staging area by certified Maintenance Technicians (`UCL-04`).
    - **Activities:**
      - Pre-operation visual structural walkaround checking enclosure integrity and sensor cleanliness.
      - Automated power-on Built-In-Test (PBIT) diagnostics executed via the operator terminal in $t_{\mathrm{PBIT}} \le \tau_{\text{PBIT\_max}}$.
@@ -47,8 +47,8 @@ In accordance with ISO/IEC/IEEE 29148:2018 §5.2.4 and MIL-STD-882E §4.3, all l
 
 | Task Card ID | Task Card Title & Scope | Maintenance Tier | Execution Trigger & Interval | Target SLA Duration | Required Qualifications & Tooling | Sign-Off Authority & Verification Protocol | Public Clause Citation |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **MTC-01** | Pre-Sortie / Pre-Operation Inspection | O-Level (Organizational) | Prior to each operational sortie launch (T0 - Delta_t_pre) | t_insp <= 10 min | Certified Maintenance Technician (UC-04); Field Tool Kit (FTK-01) | Maintenance Technician sign-off on SE-02; PBIT 100% PASS verification | ISO/IEC/IEEE 29148:2018 §5.2.4 |
-| **MTC-01A** | Rapid Sortie Turnaround (15-min SLA) | O-Level (Organizational) | Consecutive operational sorties during active deployment | t_turnaround <= {{RAPID_TURNAROUND_SLA_MIN}} min | Maintenance Technician (UC-04); Resource Hub (SE-01); Terminal (SE-02) | Dual-Technician sign-off; BMS state-of-charge check; Sortie Release Token | INCOSE SEH v5.0 §3.2 |
+| **MTC-01** | Pre-Sortie / Pre-Operation Inspection | O-Level (Organizational) | Prior to each operational sortie launch (T0 - Delta_t_pre) | t_insp <= 10 min | Certified Maintenance Technician (UCL-04); Field Tool Kit (FTK-01) | Maintenance Technician sign-off on SE-02; PBIT 100% PASS verification | ISO/IEC/IEEE 29148:2018 §5.2.4 |
+| **MTC-01A** | Rapid Sortie Turnaround (15-min SLA) | O-Level (Organizational) | Consecutive operational sorties during active deployment | t_turnaround <= {{RAPID_TURNAROUND_SLA_MIN}} min | Maintenance Technician (UCL-04); Resource Hub (SE-01); Terminal (SE-02) | Dual-Technician sign-off; BMS state-of-charge check; Sortie Release Token | INCOSE SEH v5.0 §3.2 |
 | **MTC-02** | Scheduled 50-Hour Phase Check | I-Level (Intermediate) | Cumulative runtime reaching {{PHASE_CHECK_INTERVAL_HOURS}} operating hours (+/- 5 hr) | t_phase <= 120 min | Senior Maintenance Specialist; Test Box (SE-04); Alignment Rig (SE-05) | Intermediate Maintenance Certificate; Diagnostic calibration record | ISO/IEC/IEEE 29148:2018 §6.4.2 |
 | **MTC-03** | 100-Hour Major Overhaul | D-Level (Depot / Factory) | Cumulative runtime reaching {{OVERHAUL_INTERVAL_HOURS}} operating hours (+/- 10 hr) | t_overhaul <= 24 hr | Factory Depot Engineering Team; Phased-Array NDI; ESS Test Chamber | Factory Recertification Certificate; NDI structural inspection dossier | MIL-STD-1629A Method 101 |
 | **MTC-04** | Unscheduled Field LRU Swap | I-Level / O-Level Workshop | On-condition upon diagnostic BIT failure or anomaly alert | t_swap <= tau_swap_LRU (2 to 10 min) | Field Maintenance Technician; Field Spares Kit (FSK-01); Test Box (SE-04) | Automated bus discovery PASS; Configuration hash verification log | MIL-HDBK-470A §4.3 |
@@ -57,17 +57,27 @@ In accordance with ISO/IEC/IEEE 29148:2018 §5.2.4 and MIL-STD-882E §4.3, all l
 #### 10.1.2 Rapid Sortie Turnaround Workflow & 7-Step Protocol
 To achieve sustained high-tempo operational availability ($N_{\mathrm{sorties}} \ge N_{\mathrm{target}}$), the system enforces a strict 15-minute Service Level Agreement (SLA) rapid turnaround protocol ($t_{\text{turnaround}} \le \tau_{\text{turnaround\_max}} = {{RAPID_TURNAROUND_SLA_MIN}}\text{ min}$) executed through the following 7-step sequence (Fixes #124, #140):
 
+The 7-step turnaround sequence encompasses:
+- Step 1: System Ingress & Safe-State Disarm
+- Step 2: Telemetry Data Offload & Log Audit
+- Step 3: Rapid Energy Module Hot-Swap
+- Step 4: Rapid Visual & Structural Inspection
+- Step 5: Mission Re-Tasking & Key Injection
+- Step 6: Automated PBIT Diagnostics
+- Step 7: Final Arming & Sortie Release
+- Contingency: Abort Turnaround & Route to MTC-04 LRU Swap
+
 ```mermaid
 flowchart TD
-    Step1["Step 1: System Ingress & Safe-State Disarm<br/>(T+0 to T+2 min)"] --> Step2["Step 2: Telemetry Data Offload & Log Audit<br/>(T+2 to T+4 min)"]
-    Step2 --> Step3["Step 3: Rapid Energy Module Hot-Swap<br/>(T+4 to T+6 min, t_swap <= 2 min)"]
-    Step3 --> Step4["Step 4: Rapid Visual & Structural Inspection<br/>(T+6 to T+9 min)"]
-    Step4 --> Step5["Step 5: Mission Re-Tasking & Key Injection<br/>(T+9 to T+11 min)"]
-    Step5 --> Step6["Step 6: Automated PBIT Diagnostics<br/>(T+11 to T+13 min, t_PBIT <= tau_PBIT_max)"]
-    Step6 --> GateCheck{"PBIT Diagnostics & Safety Interlocks"}
-    GateCheck -- "PASS (100%)" --> Step7["Step 7: Final Arming & Sortie Release<br/>(T+13 to T+15 min)"]
-    GateCheck -- "FAIL" --> AbortMTC04["Abort Turnaround & Route to MTC-04 LRU Swap"]
-    Step7 --> SortieLaunch["Nominal Sortie Launch (Phase_NominalExecution)"]
+    Step1["Step 1: System Ingress &<br/>Safe-State Disarm<br/>(T+0 to T+2 min)"] --> Step2["Step 2: Telemetry Data Offload<br/>& Log Audit<br/>(T+2 to T+4 min)"]
+    Step2 --> Step3["Step 3: Rapid Energy Module<br/>Hot-Swap<br/>(T+4 to T+6 min)<br/>(t_swap <= 2 min)"]
+    Step3 --> Step4["Step 4: Rapid Visual &<br/>Structural Inspection<br/>(T+6 to T+9 min)"]
+    Step4 --> Step5["Step 5: Mission Re-Tasking &<br/>Key Injection<br/>(T+9 to T+11 min)"]
+    Step5 --> Step6["Step 6: Automated PBIT Diagnostics<br/>(T+11 to T+13 min)<br/>(t_PBIT <= tau_PBIT_max)"]
+    Step6 --> GateCheck{"PBIT Diagnostics &<br/>Safety Interlocks"}
+    GateCheck -- "PASS (100%)" --> Step7["Step 7: Final Arming &<br/>Sortie Release<br/>(T+13 to T+15 min)"]
+    GateCheck -- "FAIL" --> AbortMTC04["Abort Turnaround &<br/>Route to MTC-04 LRU Swap"]
+    Step7 --> SortieLaunch["Nominal Sortie Launch<br/>(Phase_NominalExecution)"]
 ```
 
 1. **Step 1: System Recovery & Ingress Safe-Area Positioning ($T_0 + 0\text{ min}$ to $T_0 + 2\text{ min}$):**

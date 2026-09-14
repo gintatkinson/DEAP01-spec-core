@@ -1,3 +1,9 @@
+---
+title: "Architectural Blueprint: Pure Domain-Independent FDIR Framework for DEAP"
+version: "1.0.0"
+date: "2026-09-14"
+---
+
 # Architectural Blueprint: Pure Domain-Independent FDIR Framework for DEAP
 
 **Classification:** Upstream Specification Core Compiler (`DEAP01-spec-core`) & Downstream Templates  

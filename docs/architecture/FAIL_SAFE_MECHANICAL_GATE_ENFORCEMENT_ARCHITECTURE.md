@@ -1,3 +1,9 @@
+---
+title: "Fail-Safe Mechanical Gate Enforcement & Automated Defect Generation Architecture"
+version: "1.0.0"
+date: "2026-09-14"
+---
+
 # Fail-Safe Mechanical Gate Enforcement & Automated Defect Generation Architecture
 
 **Document ID:** `SPEC-DEAP-FAIL-SAFE-GATE-01`  

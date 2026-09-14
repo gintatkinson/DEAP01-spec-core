@@ -158,57 +158,63 @@ The following Unified Architecture Framework (UAF) operational context diagram d
 ```mermaid
 flowchart TB
     subgraph SpaceSegment["Space & Orbital Segment"]
+        direction TB
         GNSSConstellation["GNSS Satellite Constellation<br/>(InterfacePort: GNSSService)"]
-        SatcomRelay["SATCOM Satellite Network<br/>(InterfacePort: SatcomRelayService)"]
+        SatcomRelay["SATCOM Satellite Network<br/>(InterfacePort:<br/>SatcomRelayService)"]
     end
 
-    subgraph VehicleSegment["Cyber-Physical Vehicle Segment (System Under Design)"]
+    subgraph VehicleSegment["Cyber-Physical Vehicle Segment<br/>(System Under Design)"]
+        direction TB
         CoreController["Core Controller Subsystem<br/>(PerformerNode: CoreController)"]
         SensorSuite["Integrated Sensor Suite<br/>(PerformerNode: SensorSuite)"]
-        ActuatorSubsystem["Propulsion & Actuator Subsystem<br/>(PerformerNode: ActuatorSubsystem)"]
+        ActuatorSubsystem["Propulsion & Actuator Subsystem<br/>(PerformerNode:<br/>ActuatorSubsystem)"]
         PayloadSubsystem["Mission Processing Payload<br/>(PerformerNode: PayloadSubsystem)"]
         VehicleComms["PACE Communications Node<br/>(InterfacePort: VehicleComms)"]
         SafetyWatchdog["Independent Safety Watchdog<br/>(PerformerNode: SafetyWatchdog)"]
     end
 
     subgraph ControlSegment["Control & Infrastructure Segment"]
+        direction TB
         OperatorConsole["Supervisory Operator Console<br/>(PerformerNode: OperatorConsole)"]
         GroundCommsArray["Communications Gateway Array<br/>(InterfacePort: GroundGateway)"]
         InfrastructureHub["Infrastructure & Cloud Hub<br/>(PerformerNode: InfrastructureHub)"]
     end
 
-    subgraph SupportSegment["Support & Ground Support Equipment (GSE) Segment"]
+    subgraph SupportSegment["Support & Ground Support<br/>Equipment (GSE) Segment"]
+        direction TB
         GroundSupportEquipment["GSE Diagnostic & Power Station<br/>(PerformerNode: GSEStation)"]
-        MaintenanceTerminal["Field Maintenance Terminal<br/>(PerformerNode: MaintenanceTerminal)"]
+        MaintenanceTerminal["Field Maintenance Terminal<br/>(PerformerNode:<br/>MaintenanceTerminal)"]
     end
 
-    subgraph OperationalRoles["Operational Roles (Human Stakeholders)"]
+    subgraph OperationalRoles["Operational Roles<br/>(Human Stakeholders)"]
+        direction TB
         SystemOperator["System Operator<br/>(UserRole: SystemOperator)"]
         SafetySupervisor["Safety Supervisor<br/>(UserRole: SafetySupervisor)"]
         OperationsCoordinator["Operations Coordinator<br/>(UserRole: OperationsCoordinator)"]
         MaintenanceTechnician["Maintenance Technician<br/>(UserRole: MaintenanceTechnician)"]
     end
 
-    subgraph ExternalAuthorities["External Authorities & Regulatory Services"]
-        AirspaceAuthority["Civil Aviation & Airspace Authority / UTM<br/>(InterfacePort: UTMService)"]
+    subgraph ExternalAuthorities["External Authorities &<br/>Regulatory Services"]
+        direction TB
+        AirspaceAuthority["Civil Aviation & Airspace<br/>Authority - UTM<br/>(InterfacePort: UTMService)"]
         WeatherDataService["Meteorological & Weather Service<br/>(InterfacePort: WeatherService)"]
     end
 
     GNSSConstellation -->|"1. Positioning & Timing Signals"| SensorSuite
     SatcomRelay ---|"2. Emergency SATCOM C2 Link"| VehicleComms
-    VehicleComms ---|"3. Primary/Alternate PACE Datalink"| GroundCommsArray
+    VehicleComms ---|"3. Primary - Alternate PACE<br/>Datalink"| GroundCommsArray
     SensorSuite -->|"4. Raw & Filtered State Telemetry"| CoreController
     CoreController -->|"5. Deterministic Actuation Demands"| ActuatorSubsystem
     PayloadSubsystem -->|"6. High-Throughput Feature Data"| CoreController
     SafetyWatchdog -.->|"7. Safety Veto & Failsafe Interlock"| ActuatorSubsystem
     GroundCommsArray ---|"8. Telemetry & Control Bus"| OperatorConsole
-    OperatorConsole ---|"9. Cloud Telemetry & Mission Archiving"| InfrastructureHub
+    OperatorConsole ---|"9. Cloud Telemetry &<br/>Mission Archiving"| InfrastructureHub
     SystemOperator ---|"10. Supervisory Mission Control"| OperatorConsole
-    SafetySupervisor ---|"11. Safety Monitor & Emergency Veto"| OperatorConsole
+    SafetySupervisor ---|"11. Safety Monitor &<br/>Emergency Veto"| OperatorConsole
     OperationsCoordinator -->|"12. Flight Plan & Mission Tasking"| SystemOperator
-    MaintenanceTechnician ---|"13. Diagnostic Calibration & BIT Checkout"| MaintenanceTerminal
-    GroundSupportEquipment ---|"14. Power Charging & GSE Umbilical Link"| CoreController
-    OperatorConsole ---|"15. Dynamic Geo-Zone & Flight Authorization"| AirspaceAuthority
+    MaintenanceTechnician ---|"13. Diagnostic Calibration &<br/>BIT Checkout"| MaintenanceTerminal
+    GroundSupportEquipment ---|"14. Power Charging &<br/>GSE Umbilical Link"| CoreController
+    OperatorConsole ---|"15. Dynamic Geo-Zone &<br/>Flight Authorization"| AirspaceAuthority
 ```
 
 ### 1.5 Normative Standards & Regulatory Baseline

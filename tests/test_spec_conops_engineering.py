@@ -755,8 +755,8 @@ class TestSpecConopsEngineering(unittest.TestCase):
         # Traceability references
         self.assertIn("Fixes #120, #119", content)
 
-        # User classes UC-01 to UC-05
-        for uc in ["UC-01", "UC-02", "UC-03", "UC-04", "UC-05"]:
+        # User classes UCL-01 to UCL-05
+        for uc in ["UCL-01", "UCL-02", "UCL-03", "UCL-04", "UCL-05"]:
             self.assertIn(f"**{uc}**", content)
 
         # Section 4.4: 6-Dimensional NASA-TLX Table
