@@ -80,8 +80,31 @@ RECOGNIZED_PROTOCOLS = [
     "SpaceWire", "SpaceFibre", "AFDX", "ARINC 664",
     "100BASE-TX", "1000BASE-T", "10GBASE-T", "Ethernet",
     "RS-485", "RS-422", "RS-232", "Modbus", "Modbus RTU", "Modbus TCP",
-    "Profibus", "Profinet", "EtherCAT", "Micro-D"
+    "Profibus", "Profinet", "EtherCAT", "Micro-D",
+    # Digital ESC & motor protocols
+    "DShot", "DShot150", "DShot300", "DShot600", "DShot1200",
+    "ProShot", "ProShot1000", "MultiShot", "OneShot", "OneShot125", "OneShot42",
+    # Serial receiver & telemetry protocols
+    "CRSF", "Crossfire", "SBUS", "S.BUS", "IBUS", "FPort", "F.Port", "DSM2", "DSMX",
+    # Pulse & signal protocols
+    "PWM", "PPM",
 ]
+
+# Epistemic tier annotation pattern for declared engineering decisions and TBD parameters
+EPISTEMIC_EXEMPTION_PATTERN = re.compile(
+    r'\[TIER-(?:3|4)(?::\s*[^\]]+)?\]',
+    re.I
+)
+
+
+def _has_epistemic_exemption(line: str) -> bool:
+    """
+    Checks if a line contains an epistemic tier exemption ([TIER-3: DESIGN] or [TIER-4: TBD]).
+    Tier 3 (Design Decisions) and Tier 4 (TBD/Unspecified) are acknowledged engineering
+    decisions rather than fabricated OEM claims.
+    """
+    return bool(EPISTEMIC_EXEMPTION_PATTERN.search(line))
+
 
 # Physical arming/firing target entity tokens in sequence diagrams
 PHYSICAL_ARMING_TARGET_TOKENS = {
@@ -789,10 +812,190 @@ class SchemaGroundTruth:
     has_concrete_schema: bool = False
     declared_ast_nodes: Set[str] = field(default_factory=set)
     declared_parts: Set[str] = field(default_factory=set)
+    declared_frequencies: Set[str] = field(default_factory=set)
 
 
 GroundTruth = SchemaGroundTruth
 
+
+class MechanicalSectionSlicer:
+    """
+    Parses Markdown AST headers and slices text under specific section locators (§X.Y.Z or Header Titles).
+    Verifies that claimed tokens exist in the exact section text slice before validating citations.
+    """
+    def __init__(self, workspace_dir: str):
+        self.workspace_dir = workspace_dir
+        self._cache: Dict[str, Dict[str, str]] = {}
+        self._raw_cache: Dict[str, str] = {}
+
+    def _resolve_path(self, file_rel_path: str) -> Optional[str]:
+        if not file_rel_path:
+            return None
+        full_path = os.path.join(self.workspace_dir, file_rel_path) if not os.path.isabs(file_rel_path) else file_rel_path
+        if os.path.isfile(full_path):
+            return full_path
+        if not file_rel_path.startswith("schema/"):
+            cand = os.path.join(self.workspace_dir, "schema", file_rel_path)
+            if os.path.isfile(cand):
+                return cand
+        elif file_rel_path.startswith("schema/"):
+            cand = os.path.join(self.workspace_dir, file_rel_path[len("schema/"):])
+            if os.path.isfile(cand):
+                return cand
+        return None
+
+    def get_file_text(self, file_rel_path: str) -> Optional[str]:
+        full_path = self._resolve_path(file_rel_path)
+        if not full_path:
+            return None
+        if full_path not in self._raw_cache:
+            try:
+                with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
+                    self._raw_cache[full_path] = f.read()
+            except Exception:
+                return None
+        return self._raw_cache.get(full_path)
+
+    def _index_sections(self, full_path: str) -> Dict[str, str]:
+        text = self.get_file_text(full_path)
+        if text is None:
+            return {}
+        lines = text.splitlines(keepends=True)
+        sections: Dict[str, str] = {}
+
+        headers: List[Tuple[int, int, str]] = []  # (line_idx, level, heading_text)
+        for idx, line in enumerate(lines):
+            m = re.match(r'^(#{1,6})\s+(.+)$', line.strip())
+            if m:
+                level = len(m.group(1))
+                heading = m.group(2).strip()
+                headers.append((idx, level, heading))
+
+        if not headers:
+            sections["root"] = "".join(lines)
+            return sections
+
+        if headers[0][0] > 0:
+            sections["root"] = "".join(lines[:headers[0][0]])
+
+        for i, (start_line, level, heading) in enumerate(headers):
+            end_line = len(lines)
+            for next_idx in range(i + 1, len(headers)):
+                next_start, next_level, _ = headers[next_idx]
+                if next_level <= level:
+                    end_line = next_start
+                    break
+            sec_text = "".join(lines[start_line:end_line])
+
+            heading_lower = heading.lower().strip()
+            sections[heading_lower] = sec_text
+
+            m_sec = re.search(r'§?\s*(\d+(?:\.\d+)*)', heading)
+            if m_sec:
+                sec_num = m_sec.group(1).strip()
+                sections[sec_num] = sec_text
+                sections[f"§{sec_num}"] = sec_text
+                sections[f"section {sec_num}"] = sec_text
+                sections[f"clause {sec_num}"] = sec_text
+
+            slug = re.sub(r'[^a-z0-9]', '', heading_lower)
+            if slug:
+                sections[slug] = sec_text
+
+            words_only = re.sub(r'^[§0-9.\-:\s]+', '', heading).strip().lower()
+            if words_only and words_only != heading_lower:
+                sections[words_only] = sec_text
+                words_slug = re.sub(r'[^a-z0-9]', '', words_only)
+                if words_slug:
+                    sections[words_slug] = sec_text
+
+        return sections
+
+    def slice_section(self, file_rel_path: str, section_locator: str) -> Optional[str]:
+        full_path = self._resolve_path(file_rel_path)
+        if not full_path:
+            return None
+        if full_path not in self._cache:
+            self._cache[full_path] = self._index_sections(full_path)
+        sections = self._cache[full_path]
+
+        norm_loc = section_locator.strip("§ #").lower()
+        if norm_loc in sections:
+            return sections[norm_loc]
+
+        m_sec = re.search(r'(\d+(?:\.\d+)*)', section_locator)
+        if m_sec and m_sec.group(1) in sections:
+            return sections[m_sec.group(1)]
+
+        slug = re.sub(r'[^a-z0-9]', '', section_locator.lower())
+        if slug in sections:
+            return sections[slug]
+
+        for k, v in sections.items():
+            if norm_loc and (norm_loc in k or k in norm_loc):
+                return v
+
+        return None
+
+    def verify_claimed_tokens(
+        self,
+        file_rel_path: str,
+        section_locator: Optional[str],
+        tokens: List[str]
+    ) -> Tuple[bool, List[str], str]:
+        full_path = self._resolve_path(file_rel_path)
+        if not full_path:
+            return False, tokens, f"Cited file '{file_rel_path}' not found in workspace."
+
+        if section_locator:
+            text_slice = self.slice_section(file_rel_path, section_locator)
+            if text_slice is None:
+                return False, tokens, f"Section '{section_locator}' not found in '{file_rel_path}'."
+        else:
+            text_slice = self.get_file_text(file_rel_path)
+            if text_slice is None:
+                return False, tokens, f"Could not read content from '{file_rel_path}'."
+
+        if not tokens:
+            loc_desc = f"section '{section_locator}'" if section_locator else f"file '{file_rel_path}'"
+            return False, [], f"No relevant claim tokens provided to verify against {loc_desc} in '{file_rel_path}'."
+
+        norm_slice = text_slice.lower()
+        condensed_slice = re.sub(r'[^a-z0-9]', '', norm_slice)
+
+        missing: List[str] = []
+        for tok in tokens:
+            tok_clean = tok.strip().lower()
+            if not tok_clean:
+                continue
+
+            if tok_clean in norm_slice:
+                continue
+
+            tok_condensed = re.sub(r'[^a-z0-9]', '', tok_clean)
+            if tok_condensed and tok_condensed in condensed_slice:
+                continue
+
+            m_q = re.match(r'^(\d+(?:\.\d+)?)\s*([a-zA-Z/%^]+)$', tok.strip())
+            if m_q:
+                num_s = m_q.group(1)
+                unit_s = m_q.group(2)
+                int_s = str(int(float(num_s))) if float(num_s).is_integer() else num_s
+                q_pat = re.compile(r'\b' + re.escape(int_s) + r'(?:\.0+)?\s*' + re.escape(unit_s) + r'\b', re.I)
+                if q_pat.search(norm_slice):
+                    continue
+
+            parts = [p for p in re.split(r'[^a-z0-9]', tok_clean) if p]
+            if len(parts) > 1 and all(p in norm_slice for p in parts):
+                continue
+
+            missing.append(tok)
+
+        if missing:
+            loc_desc = f"section '{section_locator}'" if section_locator else f"file '{file_rel_path}'"
+            return False, missing, f"Tokens {missing} missing from {loc_desc} in '{file_rel_path}'."
+
+        return True, [], ""
 
 
 class FactualGroundingValidator(IValidator):
@@ -802,6 +1005,12 @@ class FactualGroundingValidator(IValidator):
 
     def __init__(self, workspace_repo: Optional[WorkspaceRepository] = None, **kwargs):
         self.workspace_repo = workspace_repo
+        self._section_slicer: Optional[MechanicalSectionSlicer] = None
+        if workspace_repo:
+            self._section_slicer = MechanicalSectionSlicer(workspace_repo.workspace_dir)
+        self._citation_fraud_findings: List[Finding] = []
+        self._seen_fraud_sigs: Set[Tuple[str, str, str]] = set()
+
 
     def _register_numeric_limit(
         self,
@@ -891,6 +1100,11 @@ class FactualGroundingValidator(IValidator):
         """
         Executes factual grounding and physical SSOT verification.
         """
+        self.workspace_repo = repo
+        self._section_slicer = MechanicalSectionSlicer(repo.workspace_dir)
+        self._citation_fraud_findings = []
+        self._seen_fraud_sigs = set()
+
         findings: List[Finding] = []
 
         # 1. Ingest Schema Ground Truth
@@ -924,6 +1138,9 @@ class FactualGroundingValidator(IValidator):
 
             # d) Evaluate Temporal safety in Mermaid sequence diagrams
             findings.extend(self._validate_sequence_diagram_temporal_safety(content, rel_path))
+
+        # Include mechanically detected citation fraud findings
+        findings.extend(self._citation_fraud_findings)
 
         return findings
 
@@ -998,12 +1215,33 @@ class FactualGroundingValidator(IValidator):
             pattern = re.compile(r'\b' + re.escape(proto) + r'\b', re.I)
             if pattern.search(gt.raw_schema_text):
                 gt.declared_protocols.add(_normalize_name(proto))
+            else:
+                proto_norm = _normalize_name(proto)
+                if proto_norm and re.search(r'\b' + re.escape(proto_norm) + r'\b', gt.raw_schema_text, re.I):
+                    gt.declared_protocols.add(proto_norm)
 
         # Check for generic protocol keywords declared in schema (e.g. "RS-485", "CAN", "UART", "MAVLink")
         generic_protos = ["rs485", "rs422", "rs232", "can", "canopen", "mavlink", "ethernet", "spacewire", "milstd1553", "arinc429", "modbus", "uart", "spi", "i2c"]
         for gp in generic_protos:
-            if re.search(r'\b' + gp + r'\b', _normalize_name(gt.raw_schema_text)):
+            if re.search(r'\b' + gp + r'\b', gt.raw_schema_text, re.I) or gp in _normalize_name(gt.raw_schema_text):
                 gt.declared_protocols.add(gp)
+
+        # 4. Detect declared frequencies / execution rates across raw schema text & numeric limits
+        for m in re.finditer(r'\b(\d+(?:\.\d+)?)\s*(Hz|kHz|MHz|GHz)\b', gt.raw_schema_text, re.I):
+            val_f = float(m.group(1))
+            unit_str = m.group(2).lower()
+            if unit_str == "khz":
+                val_f *= 1000.0
+            gt.declared_frequencies.add(str(int(val_f) if val_f.is_integer() else val_f))
+            gt.declared_frequencies.add(f"{int(val_f) if val_f.is_integer() else val_f} hz")
+            gt.declared_frequencies.add(f"{int(val_f) if val_f.is_integer() else val_f}hz")
+
+        for k, (limit, unit) in gt.numeric_limits.items():
+            if unit and unit.lower() in ("hz", "khz"):
+                val_f = limit * (1000.0 if unit.lower() == "khz" else 1.0)
+                gt.declared_frequencies.add(str(int(val_f) if val_f.is_integer() else val_f))
+                gt.declared_frequencies.add(f"{int(val_f) if val_f.is_integer() else val_f} hz")
+                gt.declared_frequencies.add(f"{int(val_f) if val_f.is_integer() else val_f}hz")
 
         # Check if schema actually defines concrete architectural ground truth
         has_concrete = bool(
@@ -1011,6 +1249,7 @@ class FactualGroundingValidator(IValidator):
             or gt.numeric_limits
             or gt.attributes
             or gt.declared_protocols
+            or gt.declared_frequencies
         )
         if not has_concrete:
             gt.has_concrete_schema = False
@@ -1510,25 +1749,318 @@ class FactualGroundingValidator(IValidator):
                 return True
         return False
 
-    def _has_ssot_citation(self, line: str, content: str, rel_path: str, gt: Optional[SchemaGroundTruth] = None) -> bool:
-        """Checks if a claim or file carries an explicit SSOT citation."""
-        # 1. Inline or block HTML comment citation
-        if re.search(r'<!--\s*(?:Source|SSOT|Grounding|Reference):\s*[^>]+-->', line, re.I):
+    def _extract_citation_target(self, line: str) -> Tuple[Optional[str], Optional[str]]:
+        """
+        Extracts target file path and optional section locator from a citation in line.
+        Returns (file_path, section_locator).
+        """
+        # 1. HTML comment e.g. <!-- Source: schema/a5-user-manual-2.md §7.2.3 -->
+        m_comment = re.search(
+            r'<!--\s*(?:Source|SSOT|Grounding|Reference):\s*([^\s>]+)(?:\s+([^>]+?))?\s*-->',
+            line,
+            re.I
+        )
+        if m_comment:
+            target = m_comment.group(1).strip()
+            loc = m_comment.group(2).strip() if m_comment.group(2) else None
+            if '#' in target and not loc:
+                parts = target.split('#', 1)
+                target = parts[0]
+                loc = parts[1]
+            return target, loc
+
+        # 2. Markdown link e.g. [User Manual §7.2.3](schema/a5-user-manual-2.md) or [Manual](schema/a5-user-manual-2.md#723)
+        m_link = re.search(r'\[([^\]]*)\]\(([^)]*?schema/[^)]*)\)', line, re.I)
+        if m_link:
+            link_text = m_link.group(1).strip()
+            link_target = m_link.group(2).strip()
+            loc = None
+            if '#' in link_target:
+                parts = link_target.split('#', 1)
+                link_target = parts[0]
+                loc = parts[1]
+            if not loc and ('§' in link_text or re.search(r'\b\d+(?:\.\d+)+\b', link_text)):
+                loc = link_text
+            return link_target, loc
+
+        # 3. Path in prose or table e.g. `schema/a5-user-manual-2.md` §7.2.3 or schema/a5-user-manual-2.md §7.2.3
+        m_path = re.search(
+            r'(?:^|[\s`\'"(\[<|])(?:\.\.?/)?(schema/[a-zA-Z0-9_./\-]+\.[a-zA-Z0-9]+)(?:#([a-zA-Z0-9_\-]+))?',
+            line,
+            re.I
+        )
+        if m_path:
+            target = m_path.group(1).strip()
+            loc = m_path.group(2).strip() if m_path.group(2) else None
+            m_sec = re.search(r'§\s*([0-9]+(?:\.[0-9]+)*)', line)
+            if m_sec:
+                loc = m_sec.group(0).strip()
+            return target, loc
+
+        # 4. Bare filename in schema e.g. a5-user-manual-2.md §7.2.3
+        m_bare = re.search(
+            r'\b([a-zA-Z0-9_\-]+\.(?:md|sysml))\b(?:\s+(?:§\s*([0-9]+(?:\.[0-9]+)*)|#\s*([a-zA-Z0-9_\-]+)))?',
+            line,
+            re.I
+        )
+        if m_bare:
+            fn = m_bare.group(1)
+            loc = m_bare.group(2) or m_bare.group(3)
+            if loc:
+                loc = f"§{loc}" if m_bare.group(2) else loc
+            return fn, loc
+
+        return None, None
+
+    def _extract_candidate_tokens(self, line: str) -> List[str]:
+        """Extracts candidate technical tokens (quantities with units, protocols) from line."""
+        clean = re.sub(r'<!--.*?-->', '', line)
+        clean = re.sub(r'\[([^\]]*)\]\([^)]*?schema/[^)]*\)', r'\1', clean)
+        clean = re.sub(r'(?:^|[\s`\'"(\[<|])(?:\.\.?/)?schema/[a-zA-Z0-9_./#:\-]+', '', clean)
+        clean = re.sub(r'§\s*\d+(?:\.\d+)*', '', clean)
+        clean = re.sub(r'\[TIER-[0-9][^\]]*\]', '', clean)
+
+        tokens: List[str] = []
+
+        # 1. Numeric quantities with units (e.g. "50 Hz", "400 Hz", "12g", "25 kg")
+        for m in re.finditer(r'\b(\d+(?:\.\d+)?)\s*(%|[a-zA-Z/][a-zA-Z0-9/%^*_-]*\b)', clean):
+            cand_tok = clean[m.start():m.end()].strip()
+            unit_part = m.group(2).strip().lower()
+            if unit_part in ISO_80000_PHYSICAL_UNITS or unit_part == "%":
+                tokens.append(cand_tok)
+
+        # 2. Recognized protocols (e.g. "PWM", "DShot600", "RS-485", "MAVLink")
+        for proto in sorted(RECOGNIZED_PROTOCOLS, key=len, reverse=True):
+            if re.search(r'\b' + re.escape(proto) + r'\b', clean, re.I):
+                if proto not in tokens:
+                    tokens.append(proto)
+
+        return tokens
+
+    def _is_frequency_declared(self, val_f: float, freq_token: str, gt: SchemaGroundTruth) -> bool:
+        """Checks if a frequency quantity is declared in schema ground truth."""
+        if not gt.has_concrete_schema:
             return True
-        # 2. Markdown link to schema/ or explicit schema file path/link in table rows and prose (e.g. schema/DEAP_MODEL.sysml#L..., `schema/...`)
-        if re.search(r'\[[^\]]+\]\([^)]*?schema/[^)]*\)', line, re.I):
+        int_val = int(val_f) if val_f.is_integer() else None
+        candidates = {str(val_f), str(int_val)} if int_val is not None else {str(val_f)}
+        for c in candidates:
+            if c in gt.declared_frequencies or f"{c} hz" in gt.declared_frequencies or f"{c}hz" in gt.declared_frequencies:
+                return True
+
+        for k, (limit, unit) in gt.numeric_limits.items():
+            if unit and unit.lower() in ("hz", "khz"):
+                lim_f = limit * (1000.0 if unit.lower() == "khz" else 1.0)
+                if abs(lim_f - val_f) < 1e-6:
+                    return True
+
+        for sl in gt.scoped_numeric_limits:
+            if sl.unit and sl.unit.lower() in ("hz", "khz"):
+                lim_f = sl.limit_val * (1000.0 if sl.unit.lower() == "khz" else 1.0)
+                if abs(lim_f - val_f) < 1e-6:
+                    return True
+
+        if gt.raw_schema_text:
+            num_pattern = re.escape(str(int_val if int_val is not None else val_f))
+            if re.search(r'\b' + num_pattern + r'\s*Hz\b', gt.raw_schema_text, re.I):
+                return True
+
+        return False
+
+    def _is_token_in_ground_truth(self, tok: str, gt: Optional[SchemaGroundTruth]) -> bool:
+        """Verifies whether a token is declared, derived, or grounded in SchemaGroundTruth."""
+        if not gt:
+            return False
+
+        t_clean = tok.strip()
+        t_norm = _normalize_name(t_clean)
+
+        # 1. Direct matches in AST identifiers, protocols, and parts
+        if (
+            t_norm in gt.declared_protocols
+            or t_norm in gt.declared_ast_nodes
+            or t_norm in gt.declared_parts
+            or (t_clean.lower() in gt.raw_schema_text.lower())
+        ):
             return True
-        if re.search(r'(?:^|[\s`\'"(\[<|])(?:\.\.?/)?schema/[a-zA-Z0-9_./#:\-]+', line, re.I):
-            return True
-        # 3. Explicit citation of schema source files by filename or path
-        if gt and gt.source_files:
+
+        # 2. Check if frequency is declared
+        m_freq = re.match(r'^(\d+(?:\.\d+)?)\s*(hz|khz|mhz|ghz)$', t_clean, re.I)
+        if m_freq:
+            val_f = float(m_freq.group(1))
+            unit_str = m_freq.group(2).lower()
+            if unit_str == "khz":
+                val_f *= 1000.0
+            elif unit_str == "mhz":
+                val_f *= 1000000.0
+            elif unit_str == "ghz":
+                val_f *= 1000000000.0
+            if self._is_frequency_declared(val_f, t_clean, gt):
+                return True
+
+        # 3. Check numeric quantities with units (e.g. "12g", "25 kg", "12.0 g")
+        m_quant = re.match(r'^(\d+(?:\.\d+)?)\s*([a-zA-Z/%^]+)$', t_clean)
+        if m_quant:
+            val_f = float(m_quant.group(1))
+            unit_str = m_quant.group(2).strip().lower()
+            canon_unit = ISO_80000_PHYSICAL_UNITS.get(unit_str, unit_str)
+
+            # Check gt.numeric_limits
+            for key, (lim_val, lim_unit) in gt.numeric_limits.items():
+                if abs(lim_val - val_f) < 1e-6:
+                    lim_unit_norm = lim_unit.lower() if lim_unit else ""
+                    lim_canon = ISO_80000_PHYSICAL_UNITS.get(lim_unit_norm, lim_unit_norm)
+                    if lim_canon == canon_unit or lim_unit_norm == unit_str:
+                        return True
+                    if unit_str in ("g", "kg", "m", "s", "v", "a", "w") and (unit_str in key or key.endswith(unit_str)):
+                        return True
+
+            # Check gt.scoped_numeric_limits
+            for sl in gt.scoped_numeric_limits:
+                if abs(sl.limit_val - val_f) < 1e-6:
+                    sl_unit_norm = sl.unit.lower() if sl.unit else ""
+                    sl_canon = ISO_80000_PHYSICAL_UNITS.get(sl_unit_norm, sl_unit_norm)
+                    if sl_canon == canon_unit or sl_unit_norm == unit_str:
+                        return True
+                    if unit_str in ("g", "kg", "m", "s", "v", "a", "w") and (unit_str in sl.key or sl.key.endswith(unit_str)):
+                        return True
+
+            # Check gt.structural_attributes
+            if val_f.is_integer():
+                int_v = int(val_f)
+                for k, v in gt.structural_attributes.items():
+                    if v == int_v:
+                        return True
+
+            # Check raw schema text for scalar value + unit/property occurrence
+            num_s = str(int(val_f) if val_f.is_integer() else val_f)
+            if re.search(r'\b' + re.escape(num_s) + r'(?:\.0+)?\b', gt.raw_schema_text) and (
+                re.search(r'\b' + re.escape(unit_str) + r'\b', gt.raw_schema_text, re.I)
+                or re.search(r'[A-Za-z]' + re.escape(unit_str) + r'\b', gt.raw_schema_text)
+            ):
+                return True
+
+        return False
+
+    def _has_ssot_citation(
+        self,
+        line: str,
+        content: str,
+        rel_path: str,
+        gt: Optional[SchemaGroundTruth] = None,
+        candidate_tokens: Optional[List[str]] = None,
+        lineno: int = 1,
+        claim_text: str = ""
+    ) -> bool:
+        """
+        Checks if a claim carries a valid, verified SSOT citation.
+        Performs mechanical markdown section text slicing when a section locator is specified.
+        Emits Finding('factual-grounding-citation-fraud', ...) if claimed tokens are missing from cited section.
+        Document-level frontmatter references do NOT exempt lines from validation.
+        """
+        target_file, locator = self._extract_citation_target(line)
+
+        # Check for citation of schema source files by basename
+        if not target_file and gt and gt.source_files:
             for sf in gt.source_files:
                 bname = os.path.basename(sf)
                 if len(bname) >= 5 and (bname in line or sf in line):
-                    return True
-        # 4. Document-level frontmatter source references
-        if re.search(r'(?:source_references|realized_ast_nodes|ssot_source):\s*\[?[^\n\]]+schema/[^\n\]]+', content, re.I):
+                    target_file = sf
+                    m_sec = re.search(r'§\s*([0-9]+(?:\.[0-9]+)*)', line)
+                    if m_sec:
+                        locator = m_sec.group(0).strip()
+                    break
+
+        if not target_file:
+            return False
+
+        # Ignore line number anchors like #L42 as section locators
+        if locator and re.match(r'^L\d+', locator, re.I):
+            locator = None
+
+        tokens = candidate_tokens if candidate_tokens is not None else self._extract_candidate_tokens(line)
+
+        # Ensure slicer is initialized
+        if self._section_slicer is None:
+            ws_dir = self.workspace_repo.workspace_dir if self.workspace_repo else os.getcwd()
+            self._section_slicer = MechanicalSectionSlicer(ws_dir)
+
+        reported_claim = claim_text.strip() if claim_text else line.strip()
+
+        # If citation cites a specific section (e.g. §7.2.3 or # Section Title)
+        if locator:
+            ok, missing, reason = self._section_slicer.verify_claimed_tokens(target_file, locator, tokens)
+            if not ok:
+                msg = f"{rel_path}:{lineno}: Critical citation fraud: claim '{reported_claim}' cites '{target_file} {locator}', but token(s) {missing} do not exist within the {locator} text block in {target_file}." if missing else f"{rel_path}:{lineno}: Critical citation fraud: claim '{reported_claim}' cites '{target_file} {locator}': {reason}"
+                fraud_finding = Finding(
+                    "factual-grounding-citation-fraud",
+                    msg,
+                    location=f"{rel_path}:{lineno}",
+                    detail={
+                        "file": rel_path,
+                        "line": lineno,
+                        "claimed": reported_claim,
+                        "target_file": target_file,
+                        "section": locator,
+                        "missing_tokens": missing,
+                        "reason": reason
+                    }
+                )
+                sig = (fraud_finding.rule_id, fraud_finding.location, str(fraud_finding.detail.get("missing_tokens", reason)))
+                if sig not in self._seen_fraud_sigs:
+                    self._seen_fraud_sigs.add(sig)
+                    self._citation_fraud_findings.append(fraud_finding)
+                return False  # Do NOT exempt!
             return True
+
+        # If citation is file-level (no section locator)
+        resolved = self._section_slicer._resolve_path(target_file)
+        if resolved and os.path.isfile(resolved):
+            if tokens:
+                ok, missing, reason = self._section_slicer.verify_claimed_tokens(target_file, None, tokens)
+                if not ok:
+                    truly_missing = []
+                    for t in missing:
+                        if self._is_token_in_ground_truth(t, gt):
+                            continue
+                        truly_missing.append(t)
+                    if truly_missing:
+                        fraud_finding = Finding(
+                            "factual-grounding-citation-fraud",
+                            f"{rel_path}:{lineno}: Critical citation fraud: claim '{reported_claim}' cites '{target_file}', but token(s) {truly_missing} do not exist in the cited source.",
+                            location=f"{rel_path}:{lineno}",
+                            detail={
+                                "file": rel_path,
+                                "line": lineno,
+                                "claimed": reported_claim,
+                                "target_file": target_file,
+                                "missing_tokens": truly_missing,
+                                "reason": reason
+                            }
+                        )
+                        sig = (fraud_finding.rule_id, fraud_finding.location, str(fraud_finding.detail.get("missing_tokens")))
+                        if sig not in self._seen_fraud_sigs:
+                            self._seen_fraud_sigs.add(sig)
+                            self._citation_fraud_findings.append(fraud_finding)
+                        return False
+            return True
+
+        # If file is not on disk, fail closed with citation fraud error
+        fraud_finding = Finding(
+            "factual-grounding-citation-fraud",
+            f"{rel_path}:{lineno}: Critical citation fraud: cited source file '{target_file}' does not exist in workspace.",
+            location=f"{rel_path}:{lineno}",
+            detail={
+                "file": rel_path,
+                "line": lineno,
+                "claimed": reported_claim,
+                "target_file": target_file,
+                "reason": f"Cited source file '{target_file}' does not exist in workspace."
+            }
+        )
+        sig = (fraud_finding.rule_id, fraud_finding.location, fraud_finding.detail.get("reason", ""))
+        if sig not in self._seen_fraud_sigs:
+            self._seen_fraud_sigs.add(sig)
+            self._citation_fraud_findings.append(fraud_finding)
         return False
 
     def _validate_structural_assertions(
@@ -1548,6 +2080,7 @@ class FactualGroundingValidator(IValidator):
         non_normative_depth: Optional[int] = None
         is_normative = True
         in_code_block = False
+        in_frontmatter = False
 
         count_targets: Dict[str, int] = {}
         config_targets: Dict[str, str] = {}
@@ -1598,18 +2131,31 @@ class FactualGroundingValidator(IValidator):
             "single": 1, "dual": 2, "twin": 2, "triple": 3, "quad": 4, "octo": 8
         }
 
+        current_citation: Optional[str] = None
+
         for lineno_1idx, line in enumerate(lines, start=1):
             line_str = line.strip()
+
+            if lineno_1idx == 1 and line_str == "---":
+                in_frontmatter = True
+                continue
+            if in_frontmatter:
+                if line_str == "---":
+                    in_frontmatter = False
+                continue
 
             if line_str.startswith("```"):
                 in_code_block = not in_code_block
                 continue
             if in_code_block or not line_str:
+                if not line_str:
+                    current_citation = None
                 continue
 
             # Heading detection
             m_head = re.match(r'^(#{1,6})\s+(.+)$', line_str)
             if m_head:
+                current_citation = None
                 level = len(m_head.group(1))
                 current_heading = m_head.group(2).strip()
                 if non_normative_depth is not None and level <= non_normative_depth:
@@ -1622,13 +2168,26 @@ class FactualGroundingValidator(IValidator):
             if not is_normative:
                 continue
 
+            # Track block/paragraph citation comments (e.g. <!-- Source: ... -->)
+            if re.search(r'<!--\s*(?:Source|SSOT|Grounding|Reference):\s*[^>]+-->', line_str, re.I):
+                current_citation = line_str
+                if re.match(r'^\s*<!--\s*(?:Source|SSOT|Grounding|Reference):\s*[^>]+-->\s*$', line_str, re.I):
+                    continue
+
             # Skip rejected trade study rows
             if re.search(r'\b(?:rejected|discarded|eliminated|not\s+selected|cons|fail)\b', line_str, re.I):
                 continue
 
-            # Check if line has explicit SSOT citation
-            if self._has_ssot_citation(line_str, content, rel_path, gt):
+            # Skip lines with epistemic exemptions ([TIER-3: DESIGN], [TIER-4: TBD])
+            if _has_epistemic_exemption(line_str):
                 continue
+
+            # Check if line has explicit SSOT citation (inline or block)
+            citation_to_check = line_str if self._extract_citation_target(line_str)[0] else current_citation
+            if citation_to_check:
+                candidate_tokens = self._extract_candidate_tokens(line_str)
+                if self._has_ssot_citation(citation_to_check, content, rel_path, gt, candidate_tokens=candidate_tokens, lineno=lineno_1idx, claim_text=line_str):
+                    continue
 
             # 1. Check integer count assertions
             matched_count_entities: Set[str] = set()
@@ -1822,18 +2381,33 @@ class FactualGroundingValidator(IValidator):
             r'\b(\d+(?:\.\d+)?(?:\s*[-\u2013\u2014]\s*\d+(?:\.\d+)?)?)\s*(%|[a-zA-Z/][a-zA-Z0-9/%^*_-]*\b)'
         )
 
+        current_citation: Optional[str] = None
+
+        in_frontmatter = False
+
         for lineno_1idx, line in enumerate(lines, start=1):
             line_str = line.strip()
+
+            if lineno_1idx == 1 and line_str == "---":
+                in_frontmatter = True
+                continue
+            if in_frontmatter:
+                if line_str == "---":
+                    in_frontmatter = False
+                continue
 
             if line_str.startswith("```"):
                 in_code_block = not in_code_block
                 continue
             if in_code_block or not line_str:
+                if not line_str:
+                    current_citation = None
                 continue
 
             # Heading detection
             m_head = re.match(r'^(#{1,6})\s+(.+)$', line_str)
             if m_head:
+                current_citation = None
                 level = len(m_head.group(1))
                 current_heading = m_head.group(2).strip()
                 if non_normative_depth is not None and level <= non_normative_depth:
@@ -1846,6 +2420,12 @@ class FactualGroundingValidator(IValidator):
             if not is_normative:
                 continue
 
+            # Track block/paragraph citation comments (e.g. <!-- Source: ... -->)
+            if re.search(r'<!--\s*(?:Source|SSOT|Grounding|Reference):\s*[^>]+-->', line_str, re.I):
+                current_citation = line_str
+                if re.match(r'^\s*<!--\s*(?:Source|SSOT|Grounding|Reference):\s*[^>]+-->\s*$', line_str, re.I):
+                    continue
+
             # Skip rejected trade study rows
             if re.search(r'\b(?:rejected|discarded|eliminated|not\s+selected|cons|fail|exceeds\s+limit)\b', line_str, re.I):
                 continue
@@ -1854,9 +2434,16 @@ class FactualGroundingValidator(IValidator):
             if re.search(r'\bpending\s+arbitration\b', line_str, re.I):
                 continue
 
-            # Check if line has explicit SSOT citation
-            if self._has_ssot_citation(line_str, content, rel_path, gt):
+            # Skip lines with epistemic exemptions ([TIER-3: DESIGN], [TIER-4: TBD])
+            if _has_epistemic_exemption(line_str):
                 continue
+
+            # Check if line has explicit SSOT citation (inline or block)
+            citation_to_check = line_str if self._extract_citation_target(line_str)[0] else current_citation
+            if citation_to_check:
+                candidate_tokens = self._extract_candidate_tokens(line_str)
+                if self._has_ssot_citation(citation_to_check, content, rel_path, gt, candidate_tokens=candidate_tokens, lineno=lineno_1idx, claim_text=line_str):
+                    continue
 
             # (a) Atomic Identifier Lexing: protect compound designations and citations
             protected_spans = _get_protected_spans(line_str)
@@ -2221,19 +2808,33 @@ class FactualGroundingValidator(IValidator):
         non_normative_depth: Optional[int] = None
         is_normative = True
         in_code_block = False
+        in_frontmatter = False
+
+        current_citation: Optional[str] = None
 
         for lineno_1idx, line in enumerate(lines, start=1):
             line_str = line.strip()
+
+            if lineno_1idx == 1 and line_str == "---":
+                in_frontmatter = True
+                continue
+            if in_frontmatter:
+                if line_str == "---":
+                    in_frontmatter = False
+                continue
 
             if line_str.startswith("```"):
                 in_code_block = not in_code_block
                 continue
             if in_code_block or not line_str:
+                if not line_str:
+                    current_citation = None
                 continue
 
             # Heading detection
             m_head = re.match(r'^(#{1,6})\s+(.+)$', line_str)
             if m_head:
+                current_citation = None
                 level = len(m_head.group(1))
                 current_heading = m_head.group(2).strip()
                 if non_normative_depth is not None and level <= non_normative_depth:
@@ -2246,17 +2847,29 @@ class FactualGroundingValidator(IValidator):
             if not is_normative:
                 continue
 
+            # Track block/paragraph citation comments (e.g. <!-- Source: ... -->)
+            if re.search(r'<!--\s*(?:Source|SSOT|Grounding|Reference):\s*[^>]+-->', line_str, re.I):
+                current_citation = line_str
+                if re.match(r'^\s*<!--\s*(?:Source|SSOT|Grounding|Reference):\s*[^>]+-->\s*$', line_str, re.I):
+                    continue
+
             # Skip rejected trade study rows or evaluation options
             if re.search(r'\b(?:rejected|discarded|eliminated|not\s+selected|candidate\s+option|option\s+[a-z0-9]|alternative)\b', line_str, re.I):
                 continue
 
-            # Check if line has explicit SSOT citation
-            if self._has_ssot_citation(line_str, content, rel_path, gt):
+            # Skip lines with epistemic exemptions ([TIER-3: DESIGN], [TIER-4: TBD])
+            if _has_epistemic_exemption(line_str):
                 continue
 
+            # Check if line has explicit SSOT citation (inline or block)
+            citation_to_check = line_str if self._extract_citation_target(line_str)[0] else current_citation
+            if citation_to_check:
+                candidate_tokens = self._extract_candidate_tokens(line_str)
+                if self._has_ssot_citation(citation_to_check, content, rel_path, gt, candidate_tokens=candidate_tokens, lineno=lineno_1idx, claim_text=line_str):
+                    continue
 
             # Skip standards citations / regulatory references (e.g. "NATO STANAG 4586", "STANAG 4586 §3.2", "ISO/IEC/IEEE", "RTCA DO-178C")
-            if "§" in line_str or re.search(r'\b(?:NATO|RTCA|SAE|IEEE|ISO|MIL-STD|ARINC)\s+[A-Z0-9\-_]+(?:\s+§|\s+Ed\.|\s+Rev|\s*\|)', line_str, re.I):
+            if re.search(r'\b(?:NATO|RTCA|SAE|IEEE|ISO|MIL-STD|ARINC)\s+[A-Z0-9\-_]+(?:\s+§|\s+Ed\.|\s+Rev|\s*\|)', line_str, re.I):
                 continue
             if re.search(r'\b(?:normative\s+reference|standard\s+reference|reference\s+standard|compliance\s+reference|regulatory\s+reference)\b', line_str, re.I):
                 continue
@@ -2265,11 +2878,14 @@ class FactualGroundingValidator(IValidator):
                 continue
 
             # Check for protocol claims in line
-            for proto in RECOGNIZED_PROTOCOLS:
+            reported_protocols_on_line: Set[str] = set()
+            for proto in sorted(RECOGNIZED_PROTOCOLS, key=len, reverse=True):
                 # Match word boundary
                 pat = re.compile(r'\b' + re.escape(proto) + r'\b', re.I)
                 if pat.search(line_str):
                     proto_norm = _normalize_name(proto)
+                    if proto_norm in reported_protocols_on_line:
+                        continue
                     if proto_norm not in gt.declared_protocols:
                         findings.append(Finding(
                             "factual-grounding-unverified-protocol",
@@ -2277,6 +2893,35 @@ class FactualGroundingValidator(IValidator):
                             location=f"{rel_path}:{lineno_1idx}",
                             detail={"file": rel_path, "line": lineno_1idx, "protocol": proto}
                         ))
+                        reported_protocols_on_line.add(proto_norm)
+
+            # Check for ungrounded execution rates (e.g. "400 Hz inner loop", "30 Hz GUI", "100 Hz outer loop")
+            if not re.search(r'\b(?:simulation\s+engine|digital\s+twin|discrete\s+solver|dual-track\s+mbd|sitl\s+integrator)\b', line_str, re.I):
+                m_freq = re.search(r'\b(\d+(?:\.\d+)?)\s*(Hz|kHz)\b', line_str, re.I)
+                m_rate_context = re.search(
+                    r'\b(?:inner\s+loop|outer\s+loop|gui|display|telemetry|control\s+loop|rate\s+loop|attitude\s+loop|servo\s+rate|refresh\s+rate|update\s+rate|execution\s+rate|pid\s+loop|task\s+rate|loop\s+rate|loop)\b',
+                    line_str,
+                    re.I
+                )
+                if m_freq and m_rate_context:
+                    for m_all_freq in re.finditer(r'\b(\d+(?:\.\d+)?)\s*(Hz|kHz)\b', line_str, re.I):
+                        freq_val = float(m_all_freq.group(1))
+                        if m_all_freq.group(2).lower() == "khz":
+                            freq_val *= 1000.0
+                        freq_token = m_all_freq.group(0)
+                        is_declared = self._is_frequency_declared(freq_val, freq_token, gt)
+                        if not is_declared:
+                            findings.append(Finding(
+                                "factual-grounding-unverified-protocol",
+                                f"{rel_path}:{lineno_1idx}: Ungrounded execution rate claim '{freq_token}' ({m_rate_context.group(0)}) is not declared in schema ground truth or substantiated by SSOT citation.",
+                                location=f"{rel_path}:{lineno_1idx}",
+                                detail={
+                                    "file": rel_path,
+                                    "line": lineno_1idx,
+                                    "claimed": freq_token,
+                                    "context": m_rate_context.group(0)
+                                }
+                            ))
 
         return findings
 

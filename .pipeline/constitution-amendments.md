@@ -874,3 +874,51 @@ Add the normative Derivation-Annotation Contract clause to the Phase 0 Safety En
 
 Non-destructive: additive airworthiness governance clause, line count maintained at 260 lines, all 16 quality gates preserved.
 
+---
+
+## AMEND-0020 -- Prohibition of Unapproved Plan Abandonment & Mandatory Plan Continuity
+
+- **Date:** 2026-09-14
+- **Logged:** 2026-09-14
+- **Motivating issue:** User directive -- "you are not allowed to abandon plans without approval from me.. put this in the constitution"
+- **Approved by:** "Proceed to execution" (automatic policy approval of approved amendment proposal)
+- **Destructive:** no
+- **Line count:** 266
+- **Resulting SHA-256:** `8d60c87bb0f48798756de1c4001d06af39ace7aa90481a506fd5727297e382a4`
+
+### Change
+
+Section *Universal Quality Gates*, subsection *Strict Planning Mode Gate*, lines 163–167.
+
+Renamed section header to *Strict Planning Mode Gate & Plan Continuity Mandate* and added explicit third bullet point codifying the strict prohibition against abandoning, altering, or discarding approved implementation plans without explicit user approval.
+
+### Rationale
+
+Codifies the user's directive preventing agents from exhibiting reactive thrashing, abandoning in-flight work packages, leaving uncommitted changes stranded, or impulsively proposing wholesale file purges when receiving feedback or encountering friction. All plan changes must be documented and explicitly approved by the user.
+
+Non-destructive: purely additive governance constraint, line count maintained/expanded.
+
+---
+
+## AMEND-0021 -- Repository Artifact Management Mandate (Zero-Ephemeral Storage)
+
+- **Date:** 2026-09-14
+- **Logged:** 2026-09-14
+- **Motivating issue:** User directive -- "artifacts are only managed in the repo.. get that into the constitution immediately"
+- **Approved by:** "Proceed to execution" (automatic policy approval of approved amendment proposal)
+- **Destructive:** no
+- **Line count:** 267
+- **Resulting SHA-256:** `7bdf273b9fa439de14fa4ecc08c958659b174a43e29f500875134f2304c1cb5c`
+
+### Change
+
+Section *Agent Behavior*, subsection *Documentation Standards*, lines 151-158.
+
+Renamed subsection to *Documentation & Repository Artifact Management Standards* and added the explicit normative mandate requiring all engineering artifacts, solution documents, and blueprints to be committed directly inside the repository, barring primary storage in ephemeral application scratchpads.
+
+### Rationale
+
+Eliminates the loss of architectural solution documents, engineering decisions, and context across sessions and subagents. Guarantees that all artifacts are version-controlled, durable, and visible to all subagents and CI/CD quality gates.
+
+Non-destructive: additive governance clause, line count expanded.
+

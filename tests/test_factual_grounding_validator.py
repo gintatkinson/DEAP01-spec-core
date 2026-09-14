@@ -28,7 +28,10 @@ if parity_src not in sys.path:
     sys.path.insert(0, parity_src)
 
 from parity_auditor.core.workspace import WorkspaceRepository
-from parity_auditor.validators.factual_grounding_validator import FactualGroundingValidator
+from parity_auditor.validators.factual_grounding_validator import (
+    FactualGroundingValidator,
+    MechanicalSectionSlicer,
+)
 from parity_auditor.aggregator import AGGREGATING_VALIDATORS
 from scripts.verify_downstream_baseline import check_factual_grounding
 
@@ -1317,34 +1320,51 @@ The catapult launch acceleration is 15g.
 
     def test_has_ssot_citation_recognizes_explicit_schema_paths_and_links(self):
         """Verify that _has_ssot_citation recognizes explicit schema/ file paths, backticked paths,
-        and links in table rows and prose."""
-        # Bare path in table row:
-        line_table_bare = "| Catapult Launch Limit | 12g | schema/DEAP_MODEL.sysml#L42 |"
-        self.assertTrue(self.validator._has_ssot_citation(line_table_bare, line_table_bare, "docs/conops/CONOPS.md"))
+        and links in table rows and prose, and fails closed when cited file does not exist on disk."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            extracted_dir = os.path.join(schema_dir, "extracted")
+            os.makedirs(extracted_dir, exist_ok=True)
 
-        # Backticked path in table row:
-        line_table_backticked = "| Catapult Launch Limit | 12g | `schema/DEAP_MODEL.sysml#L42` |"
-        self.assertTrue(self.validator._has_ssot_citation(line_table_backticked, line_table_backticked, "docs/conops/CONOPS.md"))
+            with open(os.path.join(schema_dir, "DEAP_MODEL.sysml"), "w", encoding="utf-8") as f:
+                f.write(SAMPLE_GROUND_TRUTH_SYSML + "\n// 12g catapult launch limit\n")
+            with open(os.path.join(extracted_dir, "oem_spec.md"), "w", encoding="utf-8") as f:
+                f.write("# OEM Spec\nGround truth configuration details.\n")
 
-        # Bare path in prose:
-        line_prose_bare = "The rail launch limit is strictly enforced at 12g per schema/DEAP_MODEL.sysml#L42."
-        self.assertTrue(self.validator._has_ssot_citation(line_prose_bare, line_prose_bare, "docs/features/FEAT_01.md"))
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            validator = FactualGroundingValidator(workspace_repo=repo)
 
-        # Backticked path in prose:
-        line_prose_backticked = "The rail launch limit is strictly enforced at 12g per `schema/DEAP_MODEL.sysml`."
-        self.assertTrue(self.validator._has_ssot_citation(line_prose_backticked, line_prose_backticked, "docs/features/FEAT_01.md"))
+            # Bare path in table row:
+            line_table_bare = "| Catapult Launch Limit | 12g | schema/DEAP_MODEL.sysml#L42 |"
+            self.assertTrue(validator._has_ssot_citation(line_table_bare, line_table_bare, "docs/conops/CONOPS.md"))
 
-        # Relative path with ../:
-        line_relative = "Refer to ../schema/extracted/oem_spec.md for the ground truth configuration."
-        self.assertTrue(self.validator._has_ssot_citation(line_relative, line_relative, "docs/features/FEAT_01.md"))
+            # Backticked path in table row:
+            line_table_backticked = "| Catapult Launch Limit | 12g | `schema/DEAP_MODEL.sysml#L42` |"
+            self.assertTrue(validator._has_ssot_citation(line_table_backticked, line_table_backticked, "docs/conops/CONOPS.md"))
 
-        # Markdown link:
-        line_md_link = "Grounded against [SSOT](schema/DEAP_MODEL.sysml)."
-        self.assertTrue(self.validator._has_ssot_citation(line_md_link, line_md_link, "docs/features/FEAT_01.md"))
+            # Bare path in prose:
+            line_prose_bare = "The rail launch limit is strictly enforced at 12g per schema/DEAP_MODEL.sysml#L42."
+            self.assertTrue(validator._has_ssot_citation(line_prose_bare, line_prose_bare, "docs/features/FEAT_01.md"))
 
-        # Negative case: line without schema citation:
-        line_uncited = "The rail launch limit is strictly enforced at 15g."
-        self.assertFalse(self.validator._has_ssot_citation(line_uncited, line_uncited, "docs/features/FEAT_01.md"))
+            # Backticked path in prose:
+            line_prose_backticked = "The rail launch limit is strictly enforced at 12g per `schema/DEAP_MODEL.sysml`."
+            self.assertTrue(validator._has_ssot_citation(line_prose_backticked, line_prose_backticked, "docs/features/FEAT_01.md"))
+
+            # Relative path with ../:
+            line_relative = "Refer to ../schema/extracted/oem_spec.md for the ground truth configuration."
+            self.assertTrue(validator._has_ssot_citation(line_relative, line_relative, "docs/features/FEAT_01.md"))
+
+            # Markdown link:
+            line_md_link = "Grounded against [SSOT](schema/DEAP_MODEL.sysml)."
+            self.assertTrue(validator._has_ssot_citation(line_md_link, line_md_link, "docs/features/FEAT_01.md"))
+
+            # Fail-closed case: cited file does not exist on disk:
+            line_missing_file = "| Limit | 12g | schema/NONEXISTENT.sysml |"
+            self.assertFalse(validator._has_ssot_citation(line_missing_file, line_missing_file, "docs/conops/CONOPS.md"))
+
+            # Negative case: line without schema citation:
+            line_uncited = "The rail launch limit is strictly enforced at 15g."
+            self.assertFalse(validator._has_ssot_citation(line_uncited, line_uncited, "docs/features/FEAT_01.md"))
 
     def test_proximity_clause_matching_same_unit_metrics(self):
         """Verify Proximity Clause Matching when multiple metrics of the same unit exist on a line:
@@ -1506,6 +1526,215 @@ Compliance verified under Phase 1 lifecycle activities and Clause 4.2 safety man
             repo = WorkspaceRepository(workspace_dir=tmpdir)
             findings = self.validator.validate(repo, scan_dirs=["docs"])
             self.assertEqual(findings, [], f"Expected 0 findings for pre-masked procedural identifiers, got {findings}")
+
+    def test_mechanical_section_slicer_indexing_and_verification(self):
+        """Verify that MechanicalSectionSlicer correctly indexes sections and verifies claimed tokens."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manual_text = """# AVENGER 5 OEM System Manual
+
+## 1.5 System Limits
+The maximum catapult launch acceleration limit is strictly 12 g.
+Operating temperature envelope is -20 C to +55 C.
+
+## 7.2.3 Wiggle Action
+Perform manual pre-flight check of all control surface servos.
+Verify smooth mechanical deflection without binding or jitter.
+"""
+            manual_path = os.path.join(tmpdir, "a5-user-manual.md")
+            with open(manual_path, "w", encoding="utf-8") as f:
+                f.write(manual_text)
+
+            slicer = MechanicalSectionSlicer(tmpdir)
+
+            # 1. Verify that "12 g" exists under §1.5
+            ok, missing, reason = slicer.verify_claimed_tokens("a5-user-manual.md", "§1.5", ["12 g"])
+            self.assertTrue(ok)
+            self.assertEqual(missing, [])
+
+            # 2. Verify that "12g" token matches "12 g" in text under §1.5
+            ok, missing, reason = slicer.verify_claimed_tokens("a5-user-manual.md", "§1.5", ["12g"])
+            self.assertTrue(ok)
+            self.assertEqual(missing, [])
+
+            # 3. Verify that claimed tokens "50 Hz" and "PWM" under §7.2.3 fail (DEF-03 citation fraud)
+            ok, missing, reason = slicer.verify_claimed_tokens("a5-user-manual.md", "§7.2.3", ["50 Hz", "PWM"])
+            self.assertFalse(ok)
+            self.assertIn("50 Hz", missing)
+            self.assertIn("PWM", missing)
+
+            # 4. Verify slicing by heading title
+            ok, missing, reason = slicer.verify_claimed_tokens("a5-user-manual.md", "Wiggle Action", ["deflection"])
+            self.assertTrue(ok)
+
+    def test_citation_fraud_detection_on_fabricated_servo_protocol(self):
+        """Verify that a spec claiming '50 Hz PWM' citing §7.2.3 emits citation fraud when missing from §7.2.3."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            docs_dir = os.path.join(tmpdir, "docs", "features")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(docs_dir, exist_ok=True)
+
+            manual_text = """# User Manual
+## 7.2.3 Wiggle Action
+Move the flight stick through full deflection to verify control surface responsiveness.
+"""
+            with open(os.path.join(schema_dir, "a5-user-manual.md"), "w", encoding="utf-8") as f:
+                f.write(manual_text)
+
+            with open(os.path.join(schema_dir, "model.sysml"), "w", encoding="utf-8") as f:
+                f.write(SAMPLE_GROUND_TRUTH_SYSML)
+
+            doc_md = """# Actuation Profile
+<!-- Source: schema/a5-user-manual.md §7.2.3 -->
+The ruddervator servos operate over a 50 Hz PWM interface.
+"""
+            with open(os.path.join(docs_dir, "FEAT_ACTUATION.md"), "w", encoding="utf-8") as f:
+                f.write(doc_md)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            findings = self.validator.validate(repo, scan_dirs=["docs"])
+            rule_ids = [f.rule_id for f in findings]
+            self.assertIn("factual-grounding-citation-fraud", rule_ids)
+            fraud_findings = [f for f in findings if f.rule_id == "factual-grounding-citation-fraud"]
+            self.assertTrue(any("50 Hz" in f or "PWM" in f for f in fraud_findings))
+
+    def test_rejects_ungrounded_digital_esc_protocols(self):
+        """Verify that digital ESC and receiver protocols (DShot600, ProShot, CRSF, SBUS) are rejected when not in schema."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            docs_dir = os.path.join(tmpdir, "docs", "features")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(docs_dir, exist_ok=True)
+
+            with open(os.path.join(schema_dir, "model.sysml"), "w", encoding="utf-8") as f:
+                f.write(SAMPLE_GROUND_TRUTH_SYSML)
+
+            doc_md = """# Motor & Actuator Protocols
+The ESC subsystem communicates via DShot600 digital ESC protocol.
+Backchannel telemetry uses CRSF protocol and SBUS receiver packets.
+Auxiliary actuators use ProShot signaling.
+"""
+            with open(os.path.join(docs_dir, "FEAT_ESC.md"), "w", encoding="utf-8") as f:
+                f.write(doc_md)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            findings = self.validator.validate(repo, scan_dirs=["docs"])
+            rule_ids = [f.rule_id for f in findings]
+            self.assertIn("factual-grounding-unverified-protocol", rule_ids)
+            findings_text = " ".join(findings)
+            self.assertIn("DShot600", findings_text)
+            self.assertIn("CRSF", findings_text)
+            self.assertIn("SBUS", findings_text)
+            self.assertIn("ProShot", findings_text)
+
+    def test_rejects_ungrounded_execution_rates(self):
+        """Verify that synthetic execution rates (400 Hz inner loop, 30 Hz GUI) are rejected when not in schema."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            docs_dir = os.path.join(tmpdir, "docs", "features")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(docs_dir, exist_ok=True)
+
+            with open(os.path.join(schema_dir, "model.sysml"), "w", encoding="utf-8") as f:
+                f.write(SAMPLE_GROUND_TRUTH_SYSML)
+
+            doc_md = """# Execution Frequencies
+The flight control law runs a 400 Hz inner loop for attitude control.
+Operator display updates run at 30 Hz GUI refresh rate.
+"""
+            with open(os.path.join(docs_dir, "FEAT_RATES.md"), "w", encoding="utf-8") as f:
+                f.write(doc_md)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            findings = self.validator.validate(repo, scan_dirs=["docs"])
+            rule_ids = [f.rule_id for f in findings]
+            self.assertIn("factual-grounding-unverified-protocol", rule_ids)
+            findings_text = " ".join(findings)
+            self.assertIn("400 Hz", findings_text)
+            self.assertIn("30 Hz", findings_text)
+
+    def test_epistemic_exemption_tags_allow_design_decisions_and_tbd(self):
+        """Verify that [TIER-3: DESIGN] and [TIER-4: TBD] exempt ungrounded protocols and rates from findings."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            docs_dir = os.path.join(tmpdir, "docs", "features")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(docs_dir, exist_ok=True)
+
+            with open(os.path.join(schema_dir, "model.sysml"), "w", encoding="utf-8") as f:
+                f.write(SAMPLE_GROUND_TRUTH_SYSML)
+
+            doc_md = """# Platform Decisions & TBD Allocations
+The ESC subsystem uses DShot600 digital protocol [TIER-3: DESIGN].
+The attitude controller executes at 400 Hz [TIER-3: DESIGN].
+Lost link timeout is OEM_UNSPECIFIED_TBD [TIER-4: TBD].
+Servo refresh rate is unspecified [TIER-4: OEM-UNSPECIFIED-TBD].
+"""
+            with open(os.path.join(docs_dir, "FEAT_EXEMPTIONS.md"), "w", encoding="utf-8") as f:
+                f.write(doc_md)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            findings = self.validator.validate(repo, scan_dirs=["docs"])
+            self.assertEqual(findings, [])
+
+    def test_frontmatter_source_references_does_not_bypass_ungrounded_checks(self):
+        """Verify that document frontmatter source_references does not bypass ungrounded protocol/rate checking."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            docs_dir = os.path.join(tmpdir, "docs", "features")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(docs_dir, exist_ok=True)
+
+            with open(os.path.join(schema_dir, "model.sysml"), "w", encoding="utf-8") as f:
+                f.write(SAMPLE_GROUND_TRUTH_SYSML)
+
+            doc_md = """---
+source_references:
+  - schema/model.sysml
+---
+# Flight Control Subsystem
+The ESC communicates over DShot600 without an explicit epistemic tier tag.
+The control loop executes at 400 Hz inner loop rate.
+"""
+            with open(os.path.join(docs_dir, "FEAT_BYPASS_TEST.md"), "w", encoding="utf-8") as f:
+                f.write(doc_md)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            findings = self.validator.validate(repo, scan_dirs=["docs"])
+            rule_ids = {f.rule_id for f in findings}
+            self.assertIn("factual-grounding-unverified-protocol", rule_ids)
+            findings_text = " ".join(findings)
+            self.assertIn("DShot600", findings_text)
+            self.assertIn("400 Hz", findings_text)
+
+    def test_valid_section_citation_with_matching_tokens_accepted(self):
+        """Verify that a spec citing a section with matching tokens passes cleanly without citation fraud."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            docs_dir = os.path.join(tmpdir, "docs", "features")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(docs_dir, exist_ok=True)
+
+            manual_text = """# User Manual
+## 1.5 System Limits
+The maximum catapult launch acceleration limit is strictly 12 g.
+"""
+            with open(os.path.join(schema_dir, "a5-user-manual.md"), "w", encoding="utf-8") as f:
+                f.write(manual_text)
+
+            with open(os.path.join(schema_dir, "model.sysml"), "w", encoding="utf-8") as f:
+                f.write(SAMPLE_GROUND_TRUTH_SYSML)
+
+            doc_md = """# Launch Acceleration
+<!-- Source: schema/a5-user-manual.md §1.5 -->
+The catapult launch acceleration limit is strictly enforced at 12 g.
+"""
+            with open(os.path.join(docs_dir, "FEAT_LAUNCH.md"), "w", encoding="utf-8") as f:
+                f.write(doc_md)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            findings = self.validator.validate(repo, scan_dirs=["docs"])
+            self.assertEqual(findings, [])
 
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@ title: "Project Constitution -- Functional Layer"
 project: "Digital Engineering Agent Platform (DEAP)"
 tier: functional
 created: "2026-06-29"
-last_updated: "2026-09-05"
+last_updated: "2026-09-14"
 ---
 
 # Project Constitution: Digital Engineering Agent Platform (DEAP)
@@ -148,10 +148,11 @@ graph TD
 - Specification work: directly on the default branch or a single `spec/<module>` branch if the change is large.
 - Implementation work: `feat/<issue-number>-<short-description>` branches.
 
-### Documentation Standards
+### Documentation & Repository Artifact Management Standards
 - All generated markdown files include YAML frontmatter.
 - All generated markdown files include a "Source References" section at the bottom.
 - No orphan documents -- every file must be linked from at least one tracker issue.
+- **Repository Artifact Management Mandate (Zero-Ephemeral Storage)**: All engineering artifacts, design blueprints, solution documents, architectural specifications, implementation plans, and reports MUST be created, managed, and committed directly within the active Git repository (e.g. under `docs/architecture/`, `docs/reports/`, `docs/designs/`, or `schema/`). Storing primary architectural decisions, solution documents, or engineering specifications exclusively in ephemeral application cache directories outside the repository (such as `<appDataDir>/brain/<conversation-id>/`) is strictly prohibited. Every artifact establishing architectural baselines, safety rationales, or implementation contracts must be version-controlled in Git in lockstep with the decision, ensuring full provenance, cross-session durability, and subagent accessibility.
 
 ### Idempotency
 - Re-running any pipeline skill MUST NOT create duplicate issues or documents.
@@ -160,9 +161,10 @@ graph TD
 - If a validation gate fails, HALT immediately. Do not proceed to the next phase.
 - If you suspect the failure is due to a pipeline tooling bug or schema limitation, report it as an issue to the upstream repository.
 
-### Strict Planning Mode Gate (Insurmountable Approval Gate)
+### Strict Planning Mode Gate & Plan Continuity Mandate
 - Under NO circumstances may the agent invoke any file-writing, file-modifying, or command-running tools that alter the codebase/repository files unless BOTH of the following hold: (1) the specific file and its exact changes are documented in an approved implementation plan, AND (2) the user has explicitly typed "Proceed", "Approved", or "Approve plan" in the conversation history of the current turn sequence. An authorization keyword alone is NOT sufficient. See `.agents/AGENTS.md` § Strict Planning Gate, which takes precedence, and `rules/user-authorization-lock.md` § Precedence.
 - If a plan is written, the agent MUST immediately terminate its turn and stop calling tools to wait for approval.
+- **Prohibition of Unapproved Plan Abandonment & Mandatory Plan Continuity**: Once an implementation plan has been established, approved, or has in-flight work packages, the agent is strictly forbidden from abandoning, altering, replacing, or discarding the plan without explicit user review and authorization in the current conversation turn. The agent is strictly prohibited from reacting to user feedback, criticism, or diagnostic friction by unilaterally dropping planned work packages, abandoning uncommitted changes, or impulsively proposing wholesale file deletions, purges, or scope redirections. Any proposed deviation, scope refinement, or plan adjustment MUST be documented as an updated implementation plan and explicitly approved by the user before changing execution course.
 
 ## Universal Quality Gates
 

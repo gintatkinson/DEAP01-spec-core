@@ -294,6 +294,139 @@ sequenceDiagram
                 check_factual_grounding_and_provenance(tmpdir)
             self.assertEqual(cm_alias.exception.code, 1)
 
+    def test_check23_rejects_citation_fraud_with_system_exit(self):
+        """Verify that Check 23 gate exits with code 1 when citation fraud is detected."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            docs_dir = os.path.join(tmpdir, "docs", "features")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(docs_dir, exist_ok=True)
+
+            with open(os.path.join(schema_dir, "model.sysml"), "w", encoding="utf-8") as f:
+                f.write(SAMPLE_GROUND_TRUTH_SYSML)
+
+            manual_text = """# User Manual
+## 7.2.3 Wiggle Action
+Perform pre-flight deflection test on control surfaces.
+"""
+            with open(os.path.join(schema_dir, "a5-user-manual.md"), "w", encoding="utf-8") as f:
+                f.write(manual_text)
+
+            with open(os.path.join(docs_dir, "FEAT_SERVO.md"), "w", encoding="utf-8") as f:
+                f.write("""# Actuation Profile
+<!-- Source: schema/a5-user-manual.md §7.2.3 -->
+The ruddervator servos operate over a 50 Hz PWM interface.
+""")
+
+            with self.assertRaises(SystemExit) as cm:
+                check_factual_grounding(tmpdir)
+            self.assertEqual(cm.exception.code, 1)
+
+    def test_check23_rejects_ungrounded_dshot_protocol(self):
+        """Verify that Check 23 gate exits with code 1 when ungrounded DShot600 ESC protocol is claimed."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            docs_dir = os.path.join(tmpdir, "docs", "features")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(docs_dir, exist_ok=True)
+
+            with open(os.path.join(schema_dir, "model.sysml"), "w", encoding="utf-8") as f:
+                f.write(SAMPLE_GROUND_TRUTH_SYSML)
+
+            with open(os.path.join(docs_dir, "FEAT_ESC.md"), "w", encoding="utf-8") as f:
+                f.write("""# ESC Interface
+The motor ESC communicates over DShot600 digital ESC protocol.
+""")
+
+            with self.assertRaises(SystemExit) as cm:
+                check_factual_grounding(tmpdir)
+            self.assertEqual(cm.exception.code, 1)
+
+    def test_check23_rejects_ungrounded_execution_rates(self):
+        """Verify that Check 23 gate exits with code 1 when ungrounded 400 Hz inner loop rate is claimed."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            docs_dir = os.path.join(tmpdir, "docs", "features")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(docs_dir, exist_ok=True)
+
+            with open(os.path.join(schema_dir, "model.sysml"), "w", encoding="utf-8") as f:
+                f.write(SAMPLE_GROUND_TRUTH_SYSML)
+
+            with open(os.path.join(docs_dir, "FEAT_RATES.md"), "w", encoding="utf-8") as f:
+                f.write("""# Loop Execution
+The attitude control system executes at 400 Hz inner loop rate.
+""")
+
+            with self.assertRaises(SystemExit) as cm:
+                check_factual_grounding(tmpdir)
+            self.assertEqual(cm.exception.code, 1)
+
+    def test_check23_accepts_epistemic_exemption_tags(self):
+        """Verify that Check 23 gate accepts [TIER-3: DESIGN] and [TIER-4: TBD] without exiting."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            docs_dir = os.path.join(tmpdir, "docs", "features")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(docs_dir, exist_ok=True)
+
+            with open(os.path.join(schema_dir, "model.sysml"), "w", encoding="utf-8") as f:
+                f.write(SAMPLE_GROUND_TRUTH_SYSML)
+
+            with open(os.path.join(docs_dir, "FEAT_EXEMPT.md"), "w", encoding="utf-8") as f:
+                f.write("""# Platform Decisions
+The motor ESC operates over DShot600 digital protocol [TIER-3: DESIGN].
+The attitude controller executes at 400 Hz [TIER-3: DESIGN].
+Lost link timeout is OEM_UNSPECIFIED_TBD [TIER-4: TBD].
+""")
+
+            # Should complete without SystemExit
+            check_factual_grounding(tmpdir)
+
+    def test_check23_rejects_ungrounded_dshot_with_section_symbol_citation(self):
+        """Verify that Check 23 gate rejects ungrounded DShot600 protocol even when § section symbol is on line (Issue #286)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            docs_dir = os.path.join(tmpdir, "docs", "features")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(docs_dir, exist_ok=True)
+
+            with open(os.path.join(schema_dir, "model.sysml"), "w", encoding="utf-8") as f:
+                f.write(SAMPLE_GROUND_TRUTH_SYSML)
+
+            with open(os.path.join(schema_dir, "manual.md"), "w", encoding="utf-8") as f:
+                f.write("# Manual\n\n## 7.2.3 Checklist\nGeneral system check.\n")
+
+            with open(os.path.join(docs_dir, "FEAT_ESC.md"), "w", encoding="utf-8") as f:
+                f.write("""# ESC Interface
+The motor ESC communicates over DShot600 as defined in schema/manual.md §7.2.3.
+""")
+
+            with self.assertRaises(SystemExit) as cm:
+                check_factual_grounding(tmpdir)
+            self.assertEqual(cm.exception.code, 1)
+
+    def test_check23_rejects_missing_file_citation(self):
+        """Verify that Check 23 gate exits with code 1 when a cited file does not exist on disk (Issue #286)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            docs_dir = os.path.join(tmpdir, "docs", "features")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(docs_dir, exist_ok=True)
+
+            with open(os.path.join(schema_dir, "model.sysml"), "w", encoding="utf-8") as f:
+                f.write(SAMPLE_GROUND_TRUTH_SYSML)
+
+            with open(os.path.join(docs_dir, "FEAT_MISSING.md"), "w", encoding="utf-8") as f:
+                f.write("""# Interface
+<!-- Source: schema/phantom-spec.md §1.2 -->
+The servos operate at 50 Hz.
+""")
+
+            with self.assertRaises(SystemExit) as cm:
+                check_factual_grounding(tmpdir)
+            self.assertEqual(cm.exception.code, 1)
+
 
 if __name__ == "__main__":
     unittest.main()
