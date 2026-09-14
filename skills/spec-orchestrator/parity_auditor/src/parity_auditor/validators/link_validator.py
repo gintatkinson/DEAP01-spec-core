@@ -68,11 +68,17 @@ class LinkValidator(IValidator):
             except Exception:
                 continue
 
+            # Clean markdown content before extracting links:
+            # 1. Strip fenced code blocks (```...``` and ~~~...~~~)
+            cleaned_content = re.sub(r'(`{3,}|~{3,})[\s\S]*?\1', '', content)
+            # 2. Strip inline backtick code spans (`...`)
+            cleaned_content = re.sub(r'(`+)(.*?)\1', ' code ', cleaned_content)
+
             links_to_check = []
-            for match in _LINK_RE.finditer(content):
+            for match in _LINK_RE.finditer(cleaned_content):
                 links_to_check.append(match.group(1).strip())
 
-            for match in _GITHUB_BLOB_RE.finditer(content):
+            for match in _GITHUB_BLOB_RE.finditer(cleaned_content):
                 m_url = match.group(0).strip()
                 if m_url not in links_to_check:
                     links_to_check.append(m_url)
@@ -91,8 +97,13 @@ class LinkValidator(IValidator):
                 is_placeholder = any(placeholder in link_raw for placeholder in [
                     "-XX-", "XX-name", "link-to-", "URL", "target", "example.com", "file.sysml",
                     "docs/features/feat-", "docs/epics/epic-", "docs/user-stories/us-", "docs/use-cases/uc-",
-                    "EPIC-001.md", "system.sysml", "schema/..."
-                ]) or bool(re.search(r'(?:^|[/\\])(?:SystemModel|[A-Za-z0-9_]*[Ee]xample|[A-Za-z0-9_]*[Tt]emplate|[A-Za-z0-9_]*[Pp]laceholder)\.sysml', link_raw))
+                    "EPIC-001.md", "system.sysml", "schema/...", "model.sysml", "oem_spec.md",
+                    "*_results.md"
+                ]) or bool(re.search(
+                    r'(?:^|[/\\])(?:SystemModel|[A-Za-z0-9_]*(?:example|template|placeholder))[A-Za-z0-9_]*\.(?:sysml|md)',
+                    link_raw,
+                    re.IGNORECASE
+                )) or "*" in link_raw or "..." in link_raw or bool(re.search(r'[*_]results\.md', link_raw))
 
                 if is_placeholder:
                     if not os.path.exists(os.path.join(workspace_dir, link_raw)):

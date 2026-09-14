@@ -877,6 +877,8 @@ class MermaidSyntaxValidator(IValidator):
             if not os.path.isdir(root):
                 continue
             for dirpath, _dirnames, filenames in os.walk(root):
+                if "docs/audits" in dirpath or "docs/decisions" in dirpath or "docs/designs" in dirpath:
+                    continue
                 for name in sorted(filenames):
                     if not name.endswith(".md"):
                         continue

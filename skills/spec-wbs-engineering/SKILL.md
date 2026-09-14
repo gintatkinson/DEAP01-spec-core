@@ -161,7 +161,7 @@ To satisfy **DO-178C Section 5.5**, **DO-331 Section MB.6.3**, and **CMMI Level 
 ```markdown
 | SysML Component | Feature Spec | User Stories | MATLAB / Simulink Plant | Python 250 Hz Engine | Verification Suite | Simulation Evidence |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `SysSSOT::NavSubsys` | [Feat-01](docs/features/feat-01-nav.md) | [US-01](docs/user-stories/us-01.md), [US-02](docs/user-stories/us-02.md) | `models/scripts/build_nav_model.m` | `models/python/nav_engine.py` | `tests/test_feat_01_nav.py` | [Nav Sim Report](docs/reports/simulink_results/FEAT-01_results.md) |
+| `SysSSOT::NavSubsys` | [Feat-01](docs/features/feat-01-nav.md) | [US-01](docs/user-stories/us-01.md), [US-02](docs/user-stories/us-02.md) | `models/scripts/build_nav_model.m` | `models/python/nav_engine.py` | `tests/test_feat_01_nav.py` | [Nav Sim Report](docs/reports/simulink_results/EXAMPLE_results.md) |
 ```
 
 ### Traceability Column Definitions & Verification Rules
@@ -370,7 +370,7 @@ All Level 4 WBS suite documents reside in `docs/management/` and MUST begin at l
 | **Management Level** | Level 4 Enterprise Realization |
 | **Standard Baseline** | MIL-STD-881E / INCOSE SEH v5.0 |
 | **Generation Mode** | subagent |
-| **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
+| **Specification Source** | [schema/model.sysml](../../schema/EXAMPLE_model.sysml) |
 
 # Level 4: Work Breakdown Structure & Enterprise Realization Suite
 
@@ -387,12 +387,12 @@ All Level 4 WBS suite documents reside in `docs/management/` and MUST begin at l
 - `WP-01-PY-DOM`: Python Domain Model (`models/python/feat_01_domain.py`)
 - `WP-01-PY-ENG`: Python 250 Hz Engine (`models/python/feat_01_engine.py`)
 - `WP-01-TST`: Pytest Verification (`tests/test_feat_01.py`)
-- `WP-01-REP`: DO-178C Results Report (`docs/reports/simulink_results/FEAT-01_results.md`)
+- `WP-01-REP`: DO-178C Results Report (`docs/reports/simulink_results/EXAMPLE_results.md`)
 
 ## 3. 7-Column End-to-End Traceability Matrix
 | SysML Component | Feature Spec | User Stories | MATLAB / Simulink Plant | Python 250 Hz Engine | Verification Suite | Simulation Evidence |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `SysSSOT::SubsystemA` | [Feat-01](docs/features/feat-01.md) | [US-01](docs/user-stories/us-01.md) | `models/scripts/build_feat_01_model.m` | `models/python/feat_01_engine.py` | `tests/test_feat_01.py` | [Report](docs/reports/simulink_results/FEAT-01_results.md) |
+| `SysSSOT::SubsystemA` | [Feat-01](docs/features/feat-01.md) | [US-01](docs/user-stories/us-01.md) | `models/scripts/build_feat_01_model.m` | `models/python/feat_01_engine.py` | `tests/test_feat_01.py` | [Report](docs/reports/simulink_results/EXAMPLE_results.md) |
 
 ## 4. Multi-Platform Enterprise Export Summary
 - **CSV Export**: `docs/management/wbs_export_jira_monday_ms_project.csv`

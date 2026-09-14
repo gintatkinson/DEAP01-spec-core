@@ -105,7 +105,7 @@ Check 23 enforces absolute physical fidelity, attribute-level AST closure, and f
 ### 4. SSOT Citation Contract & Machine-Resolvable Provenance
 - **Traceability Citations**: Any specification claim or parametric assertion derived from OEM baseline data must carry explicit, machine-resolvable citations. Acceptable forms include:
   - HTML citation comments: `<!-- Source: schema/model.sysml -->` or `<!-- SSOT: schema/extracted/oem_bom.md -->`
-  - Markdown links to schema files: `[OEM Airframe Spec](schema/extracted/oem_spec.md)`
+  - Markdown links to schema files: `[OEM Airframe Spec](schema/.../oem_spec.md)`
   - YAML frontmatter metadata: `source_references` or `realized_ast_nodes` declaring the exact source files.
 - **Contextual Non-Normative Filtering**: Non-normative sections (e.g., Glossaries, Acronym lists, MCDA Trade Studies / Alternatives Analysis evaluating rejected design candidates) and Markdown code fences/comments are exempt from positive assertion drift checks.
 
