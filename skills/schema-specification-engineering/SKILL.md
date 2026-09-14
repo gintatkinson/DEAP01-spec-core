@@ -225,7 +225,7 @@ For each Bounded Context, partition its subtree into cohesive functional feature
     ```mermaid
     stateDiagram-v2
         [*] --> InitialState
-        InitialState --> [*] : "operationOne(input) / Action"
+        InitialState --> [*] : "operationOne(input) - Action"
     ```
 
     ## 4. Operational Considerations
@@ -415,7 +415,7 @@ For each Bounded Context, partition its subtree into cohesive functional feature
 
 1. **Mandatory Local Validation Gate:** Before committing, pushing, or creating issues in the backlog, the subagent MUST execute the local validation check:
    ```bash
-   ./skills/spec-orchestrator/scripts/verify_model_coverage.py --spec-only --allow-missing-specs
+   ./skills/spec-orchestrator/scripts/verify_model_coverage.py --spec-only --allow-missing-specs --only <spec>
    ```
    If the linter fails (returns a non-zero exit code), the subagent MUST parse the errors, fix all generated Feature and Epic markdown files, and re-run the linter until it passes with exit code 0.
    Before committing the generated markdown files, the agent MUST run a check for untracked pipeline infrastructure files. If untracked files are found in `.pipeline/`, `skills/`, `rules/`, or `scripts/`, they must be staged and committed alongside the markdown files using `git add` to prevent remote divergence:

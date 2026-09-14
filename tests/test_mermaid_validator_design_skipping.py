@@ -44,15 +44,16 @@ class TestMermaidValidatorDesignSkipping(unittest.TestCase):
         shutil.rmtree(self.test_dir, ignore_errors=True)
 
     def test_mermaid_validator_skips_non_normative_directories(self):
-        """Verify that MermaidSyntaxValidator skips docs/designs/, docs/audits/, and docs/decisions/."""
+        """Verify that MermaidSyntaxValidator skips docs/designs/, docs/audits/, docs/decisions/, and docs/architecture/."""
         # Create directories
         docs_dir = os.path.join(self.test_dir, "docs")
         designs_dir = os.path.join(docs_dir, "designs")
         audits_dir = os.path.join(docs_dir, "audits")
         decisions_dir = os.path.join(docs_dir, "decisions")
+        architecture_dir = os.path.join(docs_dir, "architecture")
         features_dir = os.path.join(docs_dir, "features")
 
-        for d in [designs_dir, audits_dir, decisions_dir, features_dir]:
+        for d in [designs_dir, audits_dir, decisions_dir, architecture_dir, features_dir]:
             os.makedirs(d, exist_ok=True)
 
         bad_diagram = (
@@ -69,6 +70,9 @@ class TestMermaidValidatorDesignSkipping(unittest.TestCase):
             f.write(bad_diagram)
 
         with open(os.path.join(decisions_dir, "decision_doc.md"), "w", encoding="utf-8") as f:
+            f.write(bad_diagram)
+
+        with open(os.path.join(architecture_dir, "arch_doc.md"), "w", encoding="utf-8") as f:
             f.write(bad_diagram)
 
         repo = WorkspaceRepository(self.test_dir)

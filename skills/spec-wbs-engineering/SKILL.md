@@ -50,29 +50,33 @@ You should invoke this skill as **Phase 4 (Worker WBS - Work Breakdown Structure
 ```mermaid
 flowchart TD
     subgraph Upstream["Upstream Engineering Baselines"]
-        SYSML["SysML v2 AST (.pipeline/schema.sysml)"]
+        direction TB
+        SYSML["SysML v2 AST<br/>(.pipeline - schema.sysml)"]
         CONOPS["Level 1B ConOps & Mission Intent"]
-        ICD["Level 1C Logical Interface Specifications"]
-        STPA["Level 1B Safety Matrix (STPA / FMECA)"]
-        SPECS["Level 2 Backlog (Epics, Features, Stories, Use Cases)"]
+        ICD["Level 1C Logical<br/>Interface Specifications"]
+        STPA["Level 1B Safety Matrix<br/>(STPA - FMECA)"]
+        SPECS["Level 2 Backlog<br/>(Epics - Features<br/>Stories - Use Cases)"]
     end
 
     subgraph WorkerWBS["Phase 4: Worker WBS (spec-wbs-engineering)"]
-        WBS_DECOMP["5-Tier MIL-STD-881E WBS Decomposition"]
-        MBD_REG["7-Package MBD Dual-Track Realization Allocation"]
-        TRACE_7COL["7-Column End-to-End Traceability Matrix"]
+        direction TB
+        WBS_DECOMP["5-Tier MIL-STD-881E<br/>WBS Decomposition"]
+        MBD_REG["7-Package MBD Dual-Track<br/>Realization Allocation"]
+        TRACE_7COL["7-Column End-to-End<br/>Traceability Matrix"]
     end
 
     subgraph Deliverables["Authoritative Deliverables Suite"]
-        DOC_WBS["docs/management/WBS_DELIVERABLES_SUITE.md"]
-        CSV_EXP["docs/management/wbs_export_jira_monday_ms_project.csv"]
-        JSON_AST["docs/management/wbs_export.json"]
+        direction TB
+        DOC_WBS["docs - management -<br/>WBS_DELIVERABLES_SUITE.md"]
+        CSV_EXP["docs - management -<br/>wbs_export_jira_<br/>monday_ms_project.csv"]
+        JSON_AST["docs - management -<br/>wbs_export.json"]
     end
 
     subgraph EnterprisePM["Enterprise Program Management Targets"]
+        direction TB
         JIRA["Atlassian Jira Software"]
         MONDAY["Monday.com Work OS"]
-        MSPROJ["Microsoft Project (MPP/XML)"]
+        MSPROJ["Microsoft Project (MPP - XML)"]
     end
 
     SYSML --> WorkerWBS
@@ -98,11 +102,11 @@ Adhering to **MIL-STD-881E** and **INCOSE SE Handbook v5.0**, the Worker WBS str
 
 ```mermaid
 flowchart TD
-    L1["Level 1: Program Root / Integrated System (1.0)"]
+    L1["Level 1: Program Root -<br/>Integrated System (1.0)"]
     L2_1["Level 2: Subsystem Segment A (1.1)"]
     L2_N["Level 2: Subsystem Segment N (1.N)"]
-    L3_1["Level 3: Prime Mission Product / Feature (1.1.1)"]
-    L3_2["Level 3: Prime Mission Product / Feature (1.1.2)"]
+    L3_1["Level 3: Prime Mission<br/>Product - Feature (1.1.1)"]
+    L3_2["Level 3: Prime Mission<br/>Product - Feature (1.1.2)"]
     
     L4_SPEC["WP-xxx-SPEC: Feature Spec"]
     L4_MAT["WP-xxx-MAT-PARAM: MATLAB Params"]

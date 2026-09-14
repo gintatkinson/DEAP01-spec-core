@@ -155,12 +155,12 @@ Every generated ICD document MUST open with the following exact table structure:
 flowchart TD
     subgraph Tier1 ["Tier 1: Ingestion & Sensing"]
         direction TB
-        SubA["<b>Subsystem A</b><br/>• PORT-SUBA-DATA_OUT (OUT: DataPort)"]
+        SubA["<b>Subsystem A</b><br/>• PORT-SUBA-DATA_OUT<br/>(OUT: DataPort)"]
     end
 
     subgraph Tier2 ["Tier 2: Processing & Control"]
         direction TB
-        SubB["<b>Subsystem B</b><br/>• PORT-SUBB-DATA_IN (IN: DataPort)"]
+        SubB["<b>Subsystem B</b><br/>• PORT-SUBB-DATA_IN<br/>(IN: DataPort)"]
     end
 
     SubA -->|"CONN-01 (Telemetry Stream)"| SubB
@@ -292,7 +292,7 @@ Per [`rules/platform-independence.md`](rules/platform-independence.md):
    ```
    and the model coverage verifier:
    ```bash
-   ./skills/spec-orchestrator/scripts/verify_model_coverage.py --spec-only --allow-missing-specs
+   ./skills/spec-orchestrator/scripts/verify_model_coverage.py --spec-only --allow-missing-specs --only <spec>
    ```
    - Asserts 100% port connection parity (zero dangling ports: $\mathcal{D}_{\mathrm{port}} = \emptyset$).
    - Asserts 100% signal dictionary coverage of schema interface leaves ($\Omega_{\mathrm{coverage}} = 1.0$).

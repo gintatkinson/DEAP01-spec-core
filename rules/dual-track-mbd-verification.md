@@ -15,24 +15,27 @@ Safety-critical aerospace systems governed by RTCA DO-178C / EUROCAE ED-12C and 
 ```mermaid
 flowchart TD
     subgraph SSOT["SysML v2 Architectural & Behavioral SSOT"]
-        SYSML["SysML v2 AST Model: .pipeline/schema.sysml"]
-        SPECS["Backlog Specs (Epics, Features, BDD User Stories)"]
+        direction TB
+        SYSML["SysML v2 AST Model:<br/>.pipeline - schema.sysml"]
+        SPECS["Backlog Specs<br/>(Epics - Features - BDD Stories)"]
     end
 
-    subgraph TrackA["Track A: Native MATLAB / Simulink Synthesis (Commercial Toolchain)"]
-        M_BUILD["Programmatic Builders: models/scripts/build_*.m"]
-        M_PARAM["Parameter Dictionaries: models/matlab/*_params.m"]
-        SLDD["Simulink Data Dictionaries (.sldd)"]
-        SLX["Simulink / Stateflow Models (.slx)"]
-        CODER["Embedded Coder: DO-178C C / SPARK Ada Synthesis"]
-        SLDV["Simulink Design Verifier / Polyspace"]
+    subgraph TrackA["Track A: Native MATLAB - Simulink Synthesis"]
+        direction TB
+        M_BUILD["Programmatic Builders:<br/>models - scripts - build_*.m"]
+        M_PARAM["Parameter Dictionaries:<br/>models - matlab - *_params.m"]
+        SLDD["Simulink Data<br/>Dictionaries (.sldd)"]
+        SLX["Simulink - Stateflow<br/>Models (.slx)"]
+        CODER["Embedded Coder:<br/>DO-178C C - SPARK Ada"]
+        SLDV["Simulink Design Verifier<br/>and Polyspace"]
     end
 
-    subgraph TrackB["Track B: Headless CI Digital Twin Engine (License-Free)"]
-        PY_DOMAIN["Domain Models & State Enums: models/python/*_domain.py"]
-        PY_ENGINE["Discrete Simulation Engines: models/python/*_engine.py"]
-        PY_TEST["Automated CI Test Runners: tests/test_*_simulation.py"]
-        CI_REPORT["Formal Results Reports: docs/reports/simulink_results/*.md"]
+    subgraph TrackB["Track B: Headless CI Digital Twin Engine"]
+        direction TB
+        PY_DOMAIN["Domain Models and Enums:<br/>models - python - *_domain.py"]
+        PY_ENGINE["Discrete Sim Engines:<br/>models - python - *_engine.py"]
+        PY_TEST["Automated CI Test Runners:<br/>tests - test_*_simulation.py"]
+        CI_REPORT["Formal Results Reports:<br/>docs - simulink_results - *.md"]
     end
 
     SYSML --> M_BUILD
@@ -50,7 +53,7 @@ flowchart TD
     PY_ENGINE --> PY_TEST
     PY_TEST --> CI_REPORT
 
-    SLX -.->|"Discrete Equivalence (dt, guards, polynomials, tol <= 1e-6)"| PY_ENGINE
+    SLX -.->|"Discrete Equivalence (dt; guards; polynomials; tol <= 1e-6)"| PY_ENGINE
 ```
 
 ## The Four Non-Negotiable Core Invariants

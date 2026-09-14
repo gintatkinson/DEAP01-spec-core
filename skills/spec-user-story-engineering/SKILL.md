@@ -157,8 +157,8 @@ sequenceDiagram
 ```mermaid
 stateDiagram-v2
     [*] --> InitialState
-    InitialState --> ActiveState : "activate [activationCodeIsValid == true] / initializeSession"
-    ActiveState --> TerminatedState : "expire [timeElapsed >= timeoutLimit] / cleanupResources"
+    InitialState --> ActiveState : "activate [activationCodeIsValid == true] - initializeSession"
+    ActiveState --> TerminatedState : "expire [timeElapsed >= timeoutLimit] - cleanupResources"
     TerminatedState --> [*]
 ```
 
@@ -235,7 +235,7 @@ Normative Specification: [Normative Specification](link-to-specification)
 ## Step 5: Zero-Fault Backlog Synchronization
 1. **Mandatory Local Validation Gate:** Before committing, pushing, or creating issues in the backlog, the subagent MUST execute the local validation check:
    ```bash
-   ./skills/spec-orchestrator/scripts/verify_model_coverage.py --spec-only --allow-missing-specs
+   ./skills/spec-orchestrator/scripts/verify_model_coverage.py --spec-only --allow-missing-specs --only <spec>
    ```
    If the linter fails (returns a non-zero exit code), the subagent MUST parse the errors, fix all generated User Story markdown files, and re-run the linter until it passes with exit code 0.
    Before committing the generated markdown files, the agent MUST run a check for untracked pipeline infrastructure files. If untracked files are found in `.pipeline/`, `skills/`, `rules/`, or `scripts/`, they must be staged and committed alongside the markdown files using `git add` to prevent remote divergence:

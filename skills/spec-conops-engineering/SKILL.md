@@ -269,9 +269,9 @@ Per IEEE 1362-1998 §5.3 (Operational Environment & System Architecture), DoDAF 
 flowchart TD
     subgraph External_Actors["External Operating Environment and Actors (IEEE 1362 §5.1)"]
         direction TB
-        Operator["Human Operator and Mission Supervisor"]
+        Operator["Human Operator and<br/>Mission Supervisor"]
         GNSS_Space["GNSS Constellation (Space Segment)"]
-        Environment["Atmospheric and Environmental Dynamics"]
+        Environment["Atmospheric and<br/>Environmental Dynamics"]
         RangeSafety["Range Safety Authority"]
     end
 

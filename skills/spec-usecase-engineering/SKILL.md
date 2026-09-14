@@ -139,8 +139,8 @@ graph TD
 ```mermaid
 stateDiagram-v2
     [*] --> InitialState
-    InitialState --> State1 : "Event/Transition"
-    State1 --> State2 : "Event/Transition"
+    InitialState --> State1 : "Event - Transition"
+    State1 --> State2 : "Event - Transition"
 ```
 
 ## 7. Operational Context
@@ -187,7 +187,7 @@ Normative Specification: [Normative Specification](link-to-specification)
 ## Step 5: Zero-Fault Backlog Synchronization
 1. **Mandatory Local Validation Gate:** Before committing, pushing, or creating issues in the backlog, the subagent MUST execute the local validation check:
    ```bash
-   ./skills/spec-orchestrator/scripts/verify_model_coverage.py --spec-only --allow-missing-specs
+   ./skills/spec-orchestrator/scripts/verify_model_coverage.py --spec-only --allow-missing-specs --only <spec>
    ```
    If the linter fails (returns a non-zero exit code), the subagent MUST parse the errors, fix all generated Use Case markdown files, and re-run the linter until it passes with exit code 0.
    Before committing the generated markdown files, the agent MUST run a check for untracked pipeline infrastructure files. If untracked files are found in `.pipeline/`, `skills/`, `rules/`, or `scripts/`, they must be staged and committed alongside the markdown files using `git add` to prevent remote divergence:
