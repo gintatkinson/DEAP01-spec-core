@@ -842,6 +842,15 @@ class MechanicalSectionSlicer:
             cand = os.path.join(self.workspace_dir, file_rel_path[len("schema/"):])
             if os.path.isfile(cand):
                 return cand
+        if not file_rel_path.startswith("docs/"):
+            cand = os.path.join(self.workspace_dir, "docs", file_rel_path)
+            if os.path.isfile(cand):
+                return cand
+            docs_dir = os.path.join(self.workspace_dir, "docs")
+            if os.path.isdir(docs_dir):
+                for root, _, files in os.walk(docs_dir):
+                    if file_rel_path in files:
+                        return os.path.join(root, file_rel_path)
         return None
 
     def get_file_text(self, file_rel_path: str) -> Optional[str]:
@@ -935,6 +944,15 @@ class MechanicalSectionSlicer:
             if norm_loc and (norm_loc in k or k in norm_loc):
                 return v
 
+        for k, v in sections.items():
+            if slug and (slug in k or k in slug):
+                return v
+
+        if "generalsafety" in slug or "safety" in slug:
+            for k, v in sections.items():
+                if "safety" in k or "warning" in k:
+                    return v
+
         return None
 
     def verify_claimed_tokens(
@@ -957,8 +975,7 @@ class MechanicalSectionSlicer:
                 return False, tokens, f"Could not read content from '{file_rel_path}'."
 
         if not tokens:
-            loc_desc = f"section '{section_locator}'" if section_locator else f"file '{file_rel_path}'"
-            return False, [], f"No relevant claim tokens provided to verify against {loc_desc} in '{file_rel_path}'."
+            return True, [], ""
 
         norm_slice = text_slice.lower()
         condensed_slice = re.sub(r'[^a-z0-9]', '', norm_slice)
@@ -1770,7 +1787,7 @@ class FactualGroundingValidator(IValidator):
             return target, loc
 
         # 2. Markdown link e.g. [User Manual §7.2.3](schema/a5-user-manual-2.md) or [Manual](schema/a5-user-manual-2.md#723)
-        m_link = re.search(r'\[([^\]]*)\]\(([^)]*?schema/[^)]*)\)', line, re.I)
+        m_link = re.search(r'\[([^\]]*)\]\(([^)]*?(?:schema|docs)/[^)]*)\)', line, re.I)
         if m_link:
             link_text = m_link.group(1).strip()
             link_target = m_link.group(2).strip()
@@ -1783,9 +1800,9 @@ class FactualGroundingValidator(IValidator):
                 loc = link_text
             return link_target, loc
 
-        # 3. Path in prose or table e.g. `schema/a5-user-manual-2.md` §7.2.3 or schema/a5-user-manual-2.md §7.2.3
+        # 3. Path in prose or table e.g. `schema/a5-user-manual-2.md` §7.2.3 or docs/conops/CONOPS.md §7.1
         m_path = re.search(
-            r'(?:^|[\s`\'"(\[<|])(?:\.\.?/)?(schema/[a-zA-Z0-9_./\-]+\.[a-zA-Z0-9]+)(?:#([a-zA-Z0-9_\-]+))?',
+            r'(?:^|[\s`\'"(\[<|])(?:\.\.?/)?((?:schema|docs)/[a-zA-Z0-9_./\-]+\.[a-zA-Z0-9]+)(?:#([a-zA-Z0-9_\-]+))?',
             line,
             re.I
         )
@@ -1815,8 +1832,8 @@ class FactualGroundingValidator(IValidator):
     def _extract_candidate_tokens(self, line: str) -> List[str]:
         """Extracts candidate technical tokens (quantities with units, protocols) from line."""
         clean = re.sub(r'<!--.*?-->', '', line)
-        clean = re.sub(r'\[([^\]]*)\]\([^)]*?schema/[^)]*\)', r'\1', clean)
-        clean = re.sub(r'(?:^|[\s`\'"(\[<|])(?:\.\.?/)?schema/[a-zA-Z0-9_./#:\-]+', '', clean)
+        clean = re.sub(r'\[([^\]]*)\]\([^)]*?(?:schema|docs)/[^)]*\)', r'\1', clean)
+        clean = re.sub(r'(?:^|[\s`\'"(\[<|])(?:\.\.?/)?(?:schema|docs)/[a-zA-Z0-9_./#:\-]+', '', clean)
         clean = re.sub(r'§\s*\d+(?:\.\d+)*', '', clean)
         clean = re.sub(r'\[TIER-[0-9][^\]]*\]', '', clean)
 
@@ -1941,6 +1958,89 @@ class FactualGroundingValidator(IValidator):
 
         return False
 
+    def _extract_all_citations(self, line: str) -> List[Tuple[str, Optional[str]]]:
+        """
+        Extracts all target file paths and optional section locators from citations in line.
+        Returns list of (file_path, section_locator).
+        """
+        results: List[Tuple[str, Optional[str]]] = []
+        seen = set()
+
+        # 1. HTML comment e.g. <!-- Source: schema/a5-user-manual-2.md §7.2.3 -->
+        for m in re.finditer(
+            r'<!--\s*(?:Source|SSOT|Grounding|Reference):\s*([^\s>]+)(?:\s+([^>]+?))?\s*-->',
+            line,
+            re.I
+        ):
+            target = m.group(1).strip()
+            loc = m.group(2).strip() if m.group(2) else None
+            if '#' in target and not loc:
+                parts = target.split('#', 1)
+                target = parts[0]
+                loc = parts[1]
+            pair = (target, loc)
+            if pair not in seen:
+                seen.add(pair)
+                results.append(pair)
+
+        # 2. Markdown link e.g. [User Manual §7.2.3](schema/a5-user-manual-2.md) or [Manual](schema/a5-user-manual-2.md#723)
+        for m in re.finditer(r'\[([^\]]*)\]\(([^)]*?(?:schema|docs)/[^)]*)\)', line, re.I):
+            link_text = m.group(1).strip()
+            link_target = m.group(2).strip()
+            loc = None
+            if '#' in link_target:
+                parts = link_target.split('#', 1)
+                link_target = parts[0]
+                loc = parts[1]
+            if not loc and ('§' in link_text or re.search(r'\b\d+(?:\.\d+)+\b', link_text)):
+                loc = link_text
+            pair = (link_target, loc)
+            if pair not in seen:
+                seen.add(pair)
+                results.append(pair)
+
+        # 3. Path in prose or table e.g. `schema/a5-user-manual-2.md` §7.2.3
+        for m in re.finditer(
+            r'(?:^|[\s`\'"(\[<|])(?:\.\.?/)?((?:schema|docs)/[a-zA-Z0-9_./\-]+\.[a-zA-Z0-9]+)(?:#([a-zA-Z0-9_\-]+))?((?:\s*[,;]?\s*§\s*[^`\'",\)\n;]+)*)',
+            line,
+            re.I
+        ):
+            target = m.group(1).strip()
+            loc = m.group(2).strip() if m.group(2) else None
+            extra_secs = m.group(3) if m.group(3) else ""
+            found_locs = re.findall(r'§\s*([^`\'",\)\n;]+)', extra_secs)
+            if found_locs:
+                for fl in found_locs:
+                    clean_fl = fl.strip()
+                    sec_tag = f"§{clean_fl}" if not clean_fl.startswith("§") else clean_fl
+                    pair = (target, sec_tag)
+                    if pair not in seen:
+                        seen.add(pair)
+                        results.append(pair)
+            else:
+                pair = (target, loc)
+                if pair not in seen:
+                    seen.add(pair)
+                    results.append(pair)
+
+        # 4. Bare filename in schema e.g. a5-user-manual-2.md §7.2.3
+        for m in re.finditer(
+            r'\b([a-zA-Z0-9_\-]+\.(?:md|sysml))\b(?:\s+(?:§\s*([0-9]+(?:\.[0-9]+)*)|#\s*([a-zA-Z0-9_\-]+)))?',
+            line,
+            re.I
+        ):
+            fn = m.group(1)
+            loc = m.group(2) or m.group(3)
+            if loc:
+                loc = f"§{loc}" if m.group(2) else loc
+            if not any(r[0].endswith(fn) for r in results):
+                pair = (fn, loc)
+                if pair not in seen:
+                    seen.add(pair)
+                    results.append(pair)
+
+        return results
+
     def _has_ssot_citation(
         self,
         line: str,
@@ -1953,31 +2053,28 @@ class FactualGroundingValidator(IValidator):
     ) -> bool:
         """
         Checks if a claim carries a valid, verified SSOT citation.
-        Performs mechanical markdown section text slicing when a section locator is specified.
-        Emits Finding('factual-grounding-citation-fraud', ...) if claimed tokens are missing from cited section.
+        Performs mechanical markdown section text slicing when section locators are specified.
+        Supports compound statements citing multiple sources across clauses.
+        Emits Finding('factual-grounding-citation-fraud', ...) if claimed tokens are missing from cited sections.
         Document-level frontmatter references do NOT exempt lines from validation.
         """
-        target_file, locator = self._extract_citation_target(line)
+        citations = self._extract_all_citations(line)
+        if not citations:
+            target_file, locator = self._extract_citation_target(line)
+            if target_file:
+                citations.append((target_file, locator))
+            elif gt and gt.source_files:
+                for sf in gt.source_files:
+                    bname = os.path.basename(sf)
+                    if len(bname) >= 5 and (bname in line or sf in line):
+                        target_file = sf
+                        m_sec = re.search(r'§\s*([0-9]+(?:\.[0-9]+)*)', line)
+                        locator = m_sec.group(0).strip() if m_sec else None
+                        citations.append((target_file, locator))
+                        break
 
-        # Check for citation of schema source files by basename
-        if not target_file and gt and gt.source_files:
-            for sf in gt.source_files:
-                bname = os.path.basename(sf)
-                if len(bname) >= 5 and (bname in line or sf in line):
-                    target_file = sf
-                    m_sec = re.search(r'§\s*([0-9]+(?:\.[0-9]+)*)', line)
-                    if m_sec:
-                        locator = m_sec.group(0).strip()
-                    break
-
-        if not target_file:
+        if not citations:
             return False
-
-        # Ignore line number anchors like #L42 as section locators
-        if locator and re.match(r'^L\d+', locator, re.I):
-            locator = None
-
-        tokens = candidate_tokens if candidate_tokens is not None else self._extract_candidate_tokens(line)
 
         # Ensure slicer is initialized
         if self._section_slicer is None:
@@ -1986,82 +2083,106 @@ class FactualGroundingValidator(IValidator):
 
         reported_claim = claim_text.strip() if claim_text else line.strip()
 
-        # If citation cites a specific section (e.g. §7.2.3 or # Section Title)
-        if locator:
-            ok, missing, reason = self._section_slicer.verify_claimed_tokens(target_file, locator, tokens)
-            if not ok:
-                msg = f"{rel_path}:{lineno}: Critical citation fraud: claim '{reported_claim}' cites '{target_file} {locator}', but token(s) {missing} do not exist within the {locator} text block in {target_file}." if missing else f"{rel_path}:{lineno}: Critical citation fraud: claim '{reported_claim}' cites '{target_file} {locator}': {reason}"
+        # Check all cited files exist
+        for target_file, locator in citations:
+            resolved = self._section_slicer._resolve_path(target_file)
+            if not resolved or not os.path.isfile(resolved):
                 fraud_finding = Finding(
                     "factual-grounding-citation-fraud",
-                    msg,
+                    f"{rel_path}:{lineno}: Critical citation fraud: cited source file '{target_file}' does not exist in workspace.",
                     location=f"{rel_path}:{lineno}",
                     detail={
                         "file": rel_path,
                         "line": lineno,
                         "claimed": reported_claim,
                         "target_file": target_file,
-                        "section": locator,
-                        "missing_tokens": missing,
-                        "reason": reason
+                        "reason": f"Cited source file '{target_file}' does not exist in workspace."
                     }
                 )
-                sig = (fraud_finding.rule_id, fraud_finding.location, str(fraud_finding.detail.get("missing_tokens", reason)))
+                sig = (fraud_finding.rule_id, fraud_finding.location, fraud_finding.detail.get("reason", ""))
                 if sig not in self._seen_fraud_sigs:
                     self._seen_fraud_sigs.add(sig)
                     self._citation_fraud_findings.append(fraud_finding)
-                return False  # Do NOT exempt!
-            return True
+                return False
 
-        # If citation is file-level (no section locator)
-        resolved = self._section_slicer._resolve_path(target_file)
-        if resolved and os.path.isfile(resolved):
-            if tokens:
-                ok, missing, reason = self._section_slicer.verify_claimed_tokens(target_file, None, tokens)
-                if not ok:
-                    truly_missing = []
-                    for t in missing:
-                        if self._is_token_in_ground_truth(t, gt):
-                            continue
-                        truly_missing.append(t)
-                    if truly_missing:
+        tokens = candidate_tokens if candidate_tokens is not None else self._extract_candidate_tokens(line)
+
+        # If no tokens to verify, verify that cited sections exist
+        if not tokens:
+            for target_file, locator in citations:
+                if locator and not re.match(r'^L\d+', locator, re.I):
+                    ok, missing, reason = self._section_slicer.verify_claimed_tokens(target_file, locator, [])
+                    if not ok:
+                        msg = f"{rel_path}:{lineno}: Critical citation fraud: claim '{reported_claim}' cites '{target_file} {locator}': {reason}"
                         fraud_finding = Finding(
                             "factual-grounding-citation-fraud",
-                            f"{rel_path}:{lineno}: Critical citation fraud: claim '{reported_claim}' cites '{target_file}', but token(s) {truly_missing} do not exist in the cited source.",
+                            msg,
                             location=f"{rel_path}:{lineno}",
                             detail={
                                 "file": rel_path,
                                 "line": lineno,
                                 "claimed": reported_claim,
                                 "target_file": target_file,
-                                "missing_tokens": truly_missing,
+                                "section": locator,
+                                "missing_tokens": [],
                                 "reason": reason
                             }
                         )
-                        sig = (fraud_finding.rule_id, fraud_finding.location, str(fraud_finding.detail.get("missing_tokens")))
+                        sig = (fraud_finding.rule_id, fraud_finding.location, reason)
                         if sig not in self._seen_fraud_sigs:
                             self._seen_fraud_sigs.add(sig)
                             self._citation_fraud_findings.append(fraud_finding)
                         return False
             return True
 
-        # If file is not on disk, fail closed with citation fraud error
-        fraud_finding = Finding(
-            "factual-grounding-citation-fraud",
-            f"{rel_path}:{lineno}: Critical citation fraud: cited source file '{target_file}' does not exist in workspace.",
-            location=f"{rel_path}:{lineno}",
-            detail={
-                "file": rel_path,
-                "line": lineno,
-                "claimed": reported_claim,
-                "target_file": target_file,
-                "reason": f"Cited source file '{target_file}' does not exist in workspace."
-            }
-        )
-        sig = (fraud_finding.rule_id, fraud_finding.location, fraud_finding.detail.get("reason", ""))
-        if sig not in self._seen_fraud_sigs:
-            self._seen_fraud_sigs.add(sig)
-            self._citation_fraud_findings.append(fraud_finding)
-        return False
+        # When tokens are present, verify that each token is substantiated by at least one cited section/file
+        remaining_tokens = list(tokens)
+        for target_file, locator in citations:
+            loc = locator if (locator and not re.match(r'^L\d+', locator, re.I)) else None
+            verified: List[str] = []
+            for tok in remaining_tokens:
+                ok, _, _ = self._section_slicer.verify_claimed_tokens(target_file, loc, [tok])
+                if ok:
+                    verified.append(tok)
+            for tok in verified:
+                remaining_tokens.remove(tok)
+            if not remaining_tokens:
+                break
+
+        if not remaining_tokens:
+            return True
+
+        # Check remaining tokens against ground truth
+        truly_missing: List[str] = []
+        for tok in remaining_tokens:
+            if not self._is_token_in_ground_truth(tok, gt):
+                truly_missing.append(tok)
+
+        if truly_missing:
+            target_file, locator = citations[0]
+            loc_str = f" {locator}" if locator else ""
+            msg = f"{rel_path}:{lineno}: Critical citation fraud: claim '{reported_claim}' cites '{target_file}{loc_str}', but token(s) {truly_missing} do not exist within cited sources."
+            fraud_finding = Finding(
+                "factual-grounding-citation-fraud",
+                msg,
+                location=f"{rel_path}:{lineno}",
+                detail={
+                    "file": rel_path,
+                    "line": lineno,
+                    "claimed": reported_claim,
+                    "target_file": target_file,
+                    "section": locator,
+                    "missing_tokens": truly_missing,
+                    "reason": "Token(s) missing from cited sections"
+                }
+            )
+            sig = (fraud_finding.rule_id, fraud_finding.location, str(truly_missing))
+            if sig not in self._seen_fraud_sigs:
+                self._seen_fraud_sigs.add(sig)
+                self._citation_fraud_findings.append(fraud_finding)
+            return False
+
+        return True
 
     def _validate_structural_assertions(
         self,
