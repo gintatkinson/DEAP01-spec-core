@@ -1736,6 +1736,83 @@ The catapult launch acceleration limit is strictly enforced at 12 g.
             findings = self.validator.validate(repo, scan_dirs=["docs"])
             self.assertEqual(findings, [])
 
+    def test_katex_math_expressions_extracted_and_grounded_issue288(self):
+        """Verify that KaTeX math expressions are normalized, extracted, and grounded (Issue #288)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            docs_dir = os.path.join(tmpdir, "docs", "features")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(docs_dir, exist_ok=True)
+
+            schema_sysml = """package Vehicle_Limits {
+    attribute catapultPressureLimitBar : Real = 12.0;
+    attribute climbAltitudeLimitM : Real = 40.0;
+    attribute loiterRadiusLimitM : Real = 250.0;
+    attribute terminalDiveSpeedLimitMps : Real = 50.0;
+    attribute maxPitchAngleDeg : Real = 10.0;
+}
+"""
+            with open(os.path.join(schema_dir, "model.sysml"), "w", encoding="utf-8") as f:
+                f.write(schema_sysml)
+
+            # 1. Unsubstantiated / Ungrounded document with KaTeX claims exceeding limits
+            doc_ungrounded_md = """# Flight Envelopes Specification
+## Mission Profiles
+Pneumatic catapult acceleration ($13\\text{--}14\\text{ bar}$), automated climb ($h \\ge 50\\text{ m}$).
+Platform loiter ($r = 300\\text{ m}$), terminal dive ($\\le 55\\text{ m/s}$).
+Maximum pitch angle ($15^\\circ$).
+"""
+            with open(os.path.join(docs_dir, "FEAT_KATEX_UNGROUNDED.md"), "w", encoding="utf-8") as f:
+                f.write(doc_ungrounded_md)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            findings = self.validator.validate(repo, scan_dirs=["docs"])
+            drift_findings = [f for f in findings if f.rule_id == "factual-grounding-numeric-drift"]
+            self.assertGreaterEqual(len(drift_findings), 4)
+            findings_text = " ".join(str(f) for f in drift_findings)
+            self.assertIn("13-14 bar", findings_text)
+            self.assertIn("50 m", findings_text)
+            self.assertIn("300 m", findings_text)
+            self.assertIn("55 m/s", findings_text)
+
+            # 2. Document substantiated by an SSOT citation passes cleanly
+            manual_md = """# Launch and Flight Manual
+## 2.1 Flight Regimes
+Pneumatic catapult acceleration (13-14 bar), automated climb (h >= 50 m).
+Platform loiter (r = 300 m), terminal dive (<= 55 m/s).
+Maximum pitch angle (15 deg).
+"""
+            with open(os.path.join(schema_dir, "flight-manual.md"), "w", encoding="utf-8") as f:
+                f.write(manual_md)
+
+            doc_cited_md = """# Flight Envelopes Specification
+<!-- Source: schema/flight-manual.md §2.1 -->
+Pneumatic catapult acceleration ($13\\text{--}14\\text{ bar}$), automated climb ($h \\ge 50\\text{ m}$).
+Platform loiter ($r = 300\\text{ m}$), terminal dive ($\\le 55\\text{ m/s}$).
+Maximum pitch angle ($15^\\circ$).
+"""
+            os.remove(os.path.join(docs_dir, "FEAT_KATEX_UNGROUNDED.md"))
+            with open(os.path.join(docs_dir, "FEAT_KATEX_CITED.md"), "w", encoding="utf-8") as f:
+                f.write(doc_cited_md)
+
+            findings_cited = self.validator.validate(repo, scan_dirs=["docs"])
+            self.assertEqual(findings_cited, [])
+
+            # 3. Document with KaTeX claims within schema ground truth limits passes cleanly
+            doc_grounded_md = """# Flight Envelopes Specification
+## Mission Profiles
+Pneumatic catapult acceleration ($10\\text{--}11\\text{ bar}$), automated climb ($h \\ge 35\\text{ m}$).
+Platform loiter ($r = 200\\text{ m}$), terminal dive ($\\le 45\\text{ m/s}$).
+Maximum pitch angle ($8^\\circ$).
+"""
+            os.remove(os.path.join(docs_dir, "FEAT_KATEX_CITED.md"))
+            with open(os.path.join(docs_dir, "FEAT_KATEX_GROUNDED.md"), "w", encoding="utf-8") as f:
+                f.write(doc_grounded_md)
+
+            findings_grounded = self.validator.validate(repo, scan_dirs=["docs"])
+            drift_grounded = [f for f in findings_grounded if f.rule_id == "factual-grounding-numeric-drift"]
+            self.assertEqual(drift_grounded, [])
+
 
 if __name__ == "__main__":
     unittest.main()

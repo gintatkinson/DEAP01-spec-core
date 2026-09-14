@@ -496,15 +496,72 @@ SECTION_AND_TRACER_PATTERN = re.compile(
 
 def _is_numeric_range_or_quantity(tok: str) -> bool:
     """
-    Checks if a compound token like '15-20' or '15-20g' is actually a numeric range/quantity
-    rather than an indivisible reference symbol / standard citation.
+    Checks if a compound token like '15-20', '15-20g', or 'm/s' is actually a numeric range/quantity
+    or physical unit rather than an indivisible reference symbol / standard citation.
     """
+    if tok.lower() in ISO_80000_PHYSICAL_UNITS:
+        return True
     m = re.match(r'^(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)([a-zA-Z/%^]*)$', tok)
     if m:
         suffix = m.group(3).strip().lower()
         if not suffix or suffix in ISO_80000_PHYSICAL_UNITS:
             return True
     return False
+
+
+def _normalize_math_block(inner: str) -> str:
+    """Normalizes the interior content of a KaTeX math expression ($...$ or $$...$$)."""
+    s = inner
+    # 1. En-dashes / em-dashes / hyphens inside \text{...} or raw LaTeX
+    s = re.sub(r'\\text\{--+\}', '-', s)
+    s = re.sub(r'\\text\{-\}', '-', s)
+    s = re.sub(r'--+', '-', s)
+    # 2. Degree symbol \circ, ^{\circ}, ^\circ
+    s = re.sub(r'\^?\s*\{?\\circ\}?', ' deg', s)
+    # 3. Relational and mathematical operators (\ge, \le, \sim, \approx, \pm, \times, \cdot)
+    s = re.sub(r'\\(?:ge|geq)\b', '>=', s)
+    s = re.sub(r'\\(?:le|leq)\b', '<=', s)
+    s = re.sub(r'\\(?:sim|approx)\b', '~', s)
+    s = re.sub(r'\\pm\b', '+/-', s)
+    s = re.sub(r'\\times\b', '*', s)
+    s = re.sub(r'\\cdot\b', '*', s)
+    # 4. Text and font wrappers: \text{...}, \mathrm{...}, etc.
+    s = re.sub(r'\\(?:text|mathrm|operatorname|mathbf|mathit)\{([^}]*)\}', r' \1 ', s)
+    # 5. Remove remaining LaTeX command backslashes
+    s = re.sub(r'\\[a-zA-Z]+', '', s)
+    # 6. Remove braces, backslashes, carets
+    s = s.replace('{', '').replace('}', '').replace('\\', '').replace('^', '')
+    # 7. Normalize range hyphens e.g. 13 - 14 -> 13-14
+    s = re.sub(r'(\d+)\s*-\s*(\d+)', r'\1-\2', s)
+    # 8. Normalize relational operators spacing e.g. >=50 -> >= 50
+    s = re.sub(r'([><]=?)\s*(\d)', r'\1 \2', s)
+    # 9. Normalize whitespace
+    s = re.sub(r'\s+', ' ', s).strip()
+    return s
+
+
+def _normalize_katex_math_expressions(text: str) -> str:
+    """
+    Normalizes KaTeX/LaTeX math expressions into plain-text engineering representations.
+    Translates inline ($...$) and display ($$...$$) math expressions:
+    - \\text{--} or \\text{-} -> -
+    - \\text{([a-zA-Z/%^*_-]+)} -> \\1
+    - \\ge, \\le, \\sim, \\approx, \\pm -> >=, <=, ~, ~, +/-
+    - \\circ -> deg
+    - Strips math delimiters ($) and braces so that:
+      '$13\\text{--}14\\text{ bar}$' -> '13-14 bar'
+      '$h \\ge 50\\text{ m}$' -> 'h >= 50 m'
+      '$r = 300\\text{ m}$' -> 'r = 300 m'
+      '$\\le 55\\text{ m/s}$' -> '<= 55 m/s'
+      '$15^\\circ$' -> '15 deg'
+    """
+    if '$' not in text:
+        return text
+    # Display math $$ ... $$
+    text = re.sub(r'\$\$(.*?)\$\$', lambda m: _normalize_math_block(m.group(1)), text, flags=re.DOTALL)
+    # Inline math $ ... $
+    text = re.sub(r'(?<!\\)\$(.*?)(?<!\\)\$', lambda m: _normalize_math_block(m.group(1)), text)
+    return text
 
 
 def _get_protected_spans(line: str) -> List[Tuple[int, int]]:
@@ -977,6 +1034,7 @@ class MechanicalSectionSlicer:
         if not tokens:
             return True, [], ""
 
+        text_slice = _normalize_katex_math_expressions(text_slice)
         norm_slice = text_slice.lower()
         condensed_slice = re.sub(r'[^a-z0-9]', '', norm_slice)
 
@@ -1028,6 +1086,7 @@ class FactualGroundingValidator(IValidator):
         self._citation_fraud_findings: List[Finding] = []
         self._seen_fraud_sigs: Set[Tuple[str, str, str]] = set()
 
+    _normalize_katex_math_expressions = staticmethod(_normalize_katex_math_expressions)
 
     def _register_numeric_limit(
         self,
@@ -1831,7 +1890,8 @@ class FactualGroundingValidator(IValidator):
 
     def _extract_candidate_tokens(self, line: str) -> List[str]:
         """Extracts candidate technical tokens (quantities with units, protocols) from line."""
-        clean = re.sub(r'<!--.*?-->', '', line)
+        clean = _normalize_katex_math_expressions(line)
+        clean = re.sub(r'<!--.*?-->', '', clean)
         clean = re.sub(r'\[([^\]]*)\]\([^)]*?(?:schema|docs)/[^)]*\)', r'\1', clean)
         clean = re.sub(r'(?:^|[\s`\'"(\[<|])(?:\.\.?/)?(?:schema|docs)/[a-zA-Z0-9_./#:\-]+', '', clean)
         clean = re.sub(r'§\s*\d+(?:\.\d+)*', '', clean)
@@ -1839,8 +1899,8 @@ class FactualGroundingValidator(IValidator):
 
         tokens: List[str] = []
 
-        # 1. Numeric quantities with units (e.g. "50 Hz", "400 Hz", "12g", "25 kg")
-        for m in re.finditer(r'\b(\d+(?:\.\d+)?)\s*(%|[a-zA-Z/][a-zA-Z0-9/%^*_-]*\b)', clean):
+        # 1. Numeric quantities with units (e.g. "50 Hz", "400 Hz", "12g", "25 kg", "13-14 bar")
+        for m in re.finditer(r'\b(\d+(?:\.\d+)?(?:\s*[-\u2013\u2014]\s*\d+(?:\.\d+)?)?)\s*(%|[a-zA-Z/][a-zA-Z0-9/%^*_-]*\b)', clean):
             cand_tok = clean[m.start():m.end()].strip()
             unit_part = m.group(2).strip().lower()
             if unit_part in ISO_80000_PHYSICAL_UNITS or unit_part == "%":
@@ -1914,46 +1974,54 @@ class FactualGroundingValidator(IValidator):
             if self._is_frequency_declared(val_f, t_clean, gt):
                 return True
 
-        # 3. Check numeric quantities with units (e.g. "12g", "25 kg", "12.0 g")
-        m_quant = re.match(r'^(\d+(?:\.\d+)?)\s*([a-zA-Z/%^]+)$', t_clean)
+        # 3. Check numeric quantities with units (e.g. "12g", "25 kg", "12.0 g", "13-14 bar")
+        m_quant = re.match(r'^(\d+(?:\.\d+)?(?:\s*[-\u2013\u2014]\s*\d+(?:\.\d+)?)?)\s*([a-zA-Z/%^]+)$', t_clean)
         if m_quant:
-            val_f = float(m_quant.group(1))
+            val_range_str = m_quant.group(1)
             unit_str = m_quant.group(2).strip().lower()
             canon_unit = ISO_80000_PHYSICAL_UNITS.get(unit_str, unit_str)
+            numbers = [float(n) for n in re.findall(r'\d+(?:\.\d+)?', val_range_str)]
+            if not numbers:
+                return False
 
-            # Check gt.numeric_limits
-            for key, (lim_val, lim_unit) in gt.numeric_limits.items():
-                if abs(lim_val - val_f) < 1e-6:
-                    lim_unit_norm = lim_unit.lower() if lim_unit else ""
-                    lim_canon = ISO_80000_PHYSICAL_UNITS.get(lim_unit_norm, lim_unit_norm)
-                    if lim_canon == canon_unit or lim_unit_norm == unit_str:
-                        return True
-                    if unit_str in ("g", "kg", "m", "s", "v", "a", "w") and (unit_str in key or key.endswith(unit_str)):
-                        return True
+            def _is_num_in_gt(val_f: float) -> bool:
+                # Check gt.numeric_limits
+                for key, (lim_val, lim_unit) in gt.numeric_limits.items():
+                    if abs(lim_val - val_f) < 1e-6:
+                        lim_unit_norm = lim_unit.lower() if lim_unit else ""
+                        lim_canon = ISO_80000_PHYSICAL_UNITS.get(lim_unit_norm, lim_unit_norm)
+                        if lim_canon == canon_unit or lim_unit_norm == unit_str:
+                            return True
+                        if unit_str in ("g", "kg", "m", "s", "v", "a", "w") and (unit_str in key or key.endswith(unit_str)):
+                            return True
 
-            # Check gt.scoped_numeric_limits
-            for sl in gt.scoped_numeric_limits:
-                if abs(sl.limit_val - val_f) < 1e-6:
-                    sl_unit_norm = sl.unit.lower() if sl.unit else ""
-                    sl_canon = ISO_80000_PHYSICAL_UNITS.get(sl_unit_norm, sl_unit_norm)
-                    if sl_canon == canon_unit or sl_unit_norm == unit_str:
-                        return True
-                    if unit_str in ("g", "kg", "m", "s", "v", "a", "w") and (unit_str in sl.key or sl.key.endswith(unit_str)):
-                        return True
+                # Check gt.scoped_numeric_limits
+                for sl in gt.scoped_numeric_limits:
+                    if abs(sl.limit_val - val_f) < 1e-6:
+                        sl_unit_norm = sl.unit.lower() if sl.unit else ""
+                        sl_canon = ISO_80000_PHYSICAL_UNITS.get(sl_unit_norm, sl_unit_norm)
+                        if sl_canon == canon_unit or sl_unit_norm == unit_str:
+                            return True
+                        if unit_str in ("g", "kg", "m", "s", "v", "a", "w") and (unit_str in sl.key or sl.key.endswith(unit_str)):
+                            return True
 
-            # Check gt.structural_attributes
-            if val_f.is_integer():
-                int_v = int(val_f)
-                for k, v in gt.structural_attributes.items():
-                    if v == int_v:
-                        return True
+                # Check gt.structural_attributes
+                if val_f.is_integer():
+                    int_v = int(val_f)
+                    for k, v in gt.structural_attributes.items():
+                        if v == int_v:
+                            return True
 
-            # Check raw schema text for scalar value + unit/property occurrence
-            num_s = str(int(val_f) if val_f.is_integer() else val_f)
-            if re.search(r'\b' + re.escape(num_s) + r'(?:\.0+)?\b', gt.raw_schema_text) and (
-                re.search(r'\b' + re.escape(unit_str) + r'\b', gt.raw_schema_text, re.I)
-                or re.search(r'[A-Za-z]' + re.escape(unit_str) + r'\b', gt.raw_schema_text)
-            ):
+                # Check raw schema text for scalar value + unit/property occurrence
+                num_s = str(int(val_f) if val_f.is_integer() else val_f)
+                if re.search(r'\b' + re.escape(num_s) + r'(?:\.0+)?\b', gt.raw_schema_text) and (
+                    re.search(r'\b' + re.escape(unit_str) + r'\b', gt.raw_schema_text, re.I)
+                    or re.search(r'[A-Za-z]' + re.escape(unit_str) + r'\b', gt.raw_schema_text)
+                ):
+                    return True
+                return False
+
+            if all(_is_num_in_gt(n) for n in numbers):
                 return True
 
         return False
@@ -2303,6 +2371,8 @@ class FactualGroundingValidator(IValidator):
             if _has_epistemic_exemption(line_str):
                 continue
 
+            line_str = _normalize_katex_math_expressions(line_str)
+
             # Check if line has explicit SSOT citation (inline or block)
             citation_to_check = line_str if self._extract_citation_target(line_str)[0] else current_citation
             if citation_to_check:
@@ -2558,6 +2628,8 @@ class FactualGroundingValidator(IValidator):
             # Skip lines with epistemic exemptions ([TIER-3: DESIGN], [TIER-4: TBD])
             if _has_epistemic_exemption(line_str):
                 continue
+
+            line_str = _normalize_katex_math_expressions(line_str)
 
             # Check if line has explicit SSOT citation (inline or block)
             citation_to_check = line_str if self._extract_citation_target(line_str)[0] else current_citation
@@ -2981,6 +3053,8 @@ class FactualGroundingValidator(IValidator):
             # Skip lines with epistemic exemptions ([TIER-3: DESIGN], [TIER-4: TBD])
             if _has_epistemic_exemption(line_str):
                 continue
+
+            line_str = _normalize_katex_math_expressions(line_str)
 
             # Check if line has explicit SSOT citation (inline or block)
             citation_to_check = line_str if self._extract_citation_target(line_str)[0] else current_citation

@@ -6,7 +6,7 @@
 **Date:** 2026-09-14  
 **Target Repository:** `gintatkinson/DEAP01-spec-core` (Upstream Specification Core Compiler)  
 **Related Issue:** [GitHub Issue #287](https://github.com/gintatkinson/DEAP01-spec-core/issues/287)  
-**Applicable Governance:** [.pipeline/constitution.md](file:///Users/perkunas/jail/DEAP01-spec-core/.pipeline/constitution.md), [rules/user-authorization-lock.md](file:///Users/perkunas/jail/DEAP01-spec-core/rules/user-authorization-lock.md), [rules/platform-independence.md](file:///Users/perkunas/jail/DEAP01-spec-core/rules/platform-independence.md), [rules/latex-katex-integrity.md](file:///Users/perkunas/jail/DEAP01-spec-core/rules/latex-katex-integrity.md)
+**Applicable Governance:** [.pipeline/constitution.md](../../.pipeline/constitution.md), [rules/user-authorization-lock.md](../../rules/user-authorization-lock.md), [rules/platform-independence.md](../../rules/platform-independence.md), [rules/latex-katex-integrity.md](../../rules/latex-katex-integrity.md)
 
 ---
 
@@ -355,12 +355,12 @@ stateDiagram-v2
 
 | Governance Clause | Source File | Enforcement Mechanism |
 | :--- | :--- | :--- |
-| **Universal Quality Gates** | [.pipeline/constitution.md:169-192](file:///Users/perkunas/jail/DEAP01-spec-core/.pipeline/constitution.md#L169-L192) | Layer 1 Pre-Commit Hook & Layer 2 Baseline Engine |
-| **Strict Planning Mode Gate** | [.pipeline/constitution.md:164-168](file:///Users/perkunas/jail/DEAP01-spec-core/.pipeline/constitution.md#L164-L168) | Pre-commit hook inspection of approved plan |
-| **User Authorization Lock** | [rules/user-authorization-lock.md](file:///Users/perkunas/jail/DEAP01-spec-core/rules/user-authorization-lock.md) | OS-level trapping of unapproved write operations |
-| **Anti-Symptom Patching Mandate** | [rules/user-authorization-lock.md:45-48](file:///Users/perkunas/jail/DEAP01-spec-core/rules/user-authorization-lock.md#L45-L48) | Mandatory 5 Whys and 4-pillar analysis in defect dossiers |
-| **Platform Independence & Mermaid Rules** | [rules/platform-independence.md:14-47](file:///Users/perkunas/jail/DEAP01-spec-core/rules/platform-independence.md#L14-L47) | Strict top-down orientation, wrapped labels, closed fences |
-| **KaTeX Mathematical Integrity** | [rules/latex-katex-integrity.md:8-22](file:///Users/perkunas/jail/DEAP01-spec-core/rules/latex-katex-integrity.md#L8-L22) | Pure symbolic math in display blocks; no units in formulas |
+| **Universal Quality Gates** | [.pipeline/constitution.md:169-192](../../.pipeline/constitution.md#L169-L192) | Layer 1 Pre-Commit Hook & Layer 2 Baseline Engine |
+| **Strict Planning Mode Gate** | [.pipeline/constitution.md:164-168](../../.pipeline/constitution.md#L164-L168) | Pre-commit hook inspection of approved plan |
+| **User Authorization Lock** | [rules/user-authorization-lock.md](../../rules/user-authorization-lock.md) | OS-level trapping of unapproved write operations |
+| **Anti-Symptom Patching Mandate** | [rules/user-authorization-lock.md:45-48](../../rules/user-authorization-lock.md#L45-L48) | Mandatory 5 Whys and 4-pillar analysis in defect dossiers |
+| **Platform Independence & Mermaid Rules** | [rules/platform-independence.md:14-47](../../rules/platform-independence.md#L14-L47) | Strict top-down orientation, wrapped labels, closed fences |
+| **KaTeX Mathematical Integrity** | [rules/latex-katex-integrity.md:8-22](../../rules/latex-katex-integrity.md#L8-L22) | Pure symbolic math in display blocks; no units in formulas |
 
 ### 6.2 Audit Source
 
