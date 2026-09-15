@@ -113,8 +113,8 @@ git status
 git log -n 1 --oneline
 
 # 3. Read this handoff document in full
-cat /Users/perkunas/.gemini/antigravity/brain/d8a79103-b16c-42fc-8767-613f5878467e/FORENSIC_REMEDIATION_HANDOFF.md
+cat $APP_DATA_DIR/brain/$CONVERSATION_ID/FORENSIC_REMEDIATION_HANDOFF.md
 
 # 4. View approved implementation plan
-cat /Users/perkunas/.gemini/antigravity/brain/d8a79103-b16c-42fc-8767-613f5878467e/implementation_plan.md
+cat $APP_DATA_DIR/brain/$CONVERSATION_ID/implementation_plan.md
 ```

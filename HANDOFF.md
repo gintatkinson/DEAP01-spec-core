@@ -34,7 +34,7 @@
 
 ## 2. Universal Agent Entrypoint: `HANDOFF.md` at Repository Root
 
-The incoming agent (regardless of runtime, harness, or AI model) lands at the repository root. This document (`/Users/perkunas/jail/DEAP01-spec-core/HANDOFF.md`) is the authoritative briefing and operational manual.
+The incoming agent (regardless of runtime, harness, or AI model) lands at the repository root. This document (`./HANDOFF.md`) is the authoritative briefing and operational manual.
 
 ---
 
