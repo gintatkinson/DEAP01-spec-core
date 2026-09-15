@@ -26,3 +26,9 @@ This update enforces the Pure Schema-Driven Compiler Invariant in the `reverse_s
 ## Backlog & Tracker Synchronization
 - Committed and pushed to remote branch `feat/312-enforce-schema-immutability`.
 - Issue #312 labeled with `status:fixed-resolved` and verification evidence posted on GitHub.
+
+## Phase 7: Orchestrator Sequence Diagram Update
+- **skills/spec-orchestrator/SKILL.md**
+  - Updated the Multi-Agent Orchestration Lifecycle sequence diagram (lines 145-195) to include `Comp` (Step 0: SysML Compilation Gate) and `SSOT` (SysML v2 SSOT).
+  - Inserted Phase 0 Pre-Flight / Pre-computation showing `compile_sysml.py --compile` establishing `.pipeline/schema.sysml`.
+  - Added a note indicating Phase 1.5 Interface Spec Worker completes the Level 1C Systems Engineering Baseline before Agile Backlog projection.
