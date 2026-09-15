@@ -295,3 +295,22 @@ Generalize `05_AIRSPACE_AND_SORA_RISK.md` to `05_OPERATIONAL_STATE_SPACE_AND_RIS
 
 ### 6.3 Execution Note
 Per AGENTS.md, after approval, I will dispatch a context-isolated subagent with `skills/spec-conops-engineering/SKILL.md` (or another appropriate writing skill) to perform the rewrite and file operations.
+
+---
+
+## Phase 7 -- Update spec-orchestrator Multi-Agent Orchestration Lifecycle Diagram
+
+> Status: AWAITING USER APPROVAL
+
+### 7.1 Objective
+Update the `skills/spec-orchestrator/SKILL.md` sequence diagram to reflect Step 0 SysML compilation and Phase 1.5 completion criteria.
+
+### 7.2 Proposed Changes
+- **WP-I1 (Sequence Diagram Update)**: Edit `skills/spec-orchestrator/SKILL.md` (lines 145-195):
+  - Add participant `Comp as "Step 0: SysML Compilation Gate"`.
+  - Add participant `SSOT as "SysML v2 SSOT"`.
+  - Insert Phase 0 showing `Coord->>Comp: Step 0: Execute compile_sysml.py --compile on schema/` and `Comp->>SSOT: Establishes .pipeline/schema.sysml & schema-digest.json`.
+  - Insert note after Phase 1.5 showing Phase 1.5 completes the Level 1C Systems Engineering Baseline before Agile Backlog projection.
+
+### 7.3 Verification
+- Use `mermaid_syntax_validator` or manual check to verify diagram parsing.
