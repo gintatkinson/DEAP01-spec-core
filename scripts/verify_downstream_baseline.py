@@ -848,6 +848,7 @@ class ASTValidationReport:
     syntax_errors: List[str] = field(default_factory=list)
     missing_fmeca_parts: List[str] = field(default_factory=list)
     undeclared_fmeca_parts: List[str] = field(default_factory=list)
+    incomplete_fmeca_parts: List[str] = field(default_factory=list)
     missing_dimensions: List[str] = field(default_factory=list)
     missing_port_modes: List[str] = field(default_factory=list)
     part_criticalities: Dict[str, int] = field(default_factory=dict)
@@ -878,6 +879,8 @@ class ASTValidationReport:
             summary += f", {len(self.missing_fmeca_parts)} missing FMECA part(s)"
         if self.undeclared_fmeca_parts:
             summary += f", {len(self.undeclared_fmeca_parts)} undeclared FMECA part(s)"
+        if self.incomplete_fmeca_parts:
+            summary += f", {len(self.incomplete_fmeca_parts)} incomplete FMECA part(s)"
         if self.missing_port_modes:
             summary += f", {len(self.missing_port_modes)} missing high-criticality port mode(s)"
         if self.missing_dimensions:
@@ -1039,18 +1042,45 @@ def check_fmeca_ast_coverage(content: str, model_text: Optional[str] = None) -> 
                 expected_parts = [p.name for p in pkg_obj.get_all_parts()]
                 table_components = set(fmeca_data["components"].keys())
                 missing_parts = []
-                for p in expected_parts:
-                    matched = False
-                    for c in table_components:
-                        if _component_matches(c, p):
-                            matched = True
-                            break
-                    if not matched:
-                        missing_parts.append(p)
+                incomplete_parts = []
+                
+                for p_name in expected_parts:
+                    matched_rows = []
+                    for row in fmeca_data.get("rows", []):
+                        if _component_matches(row.get("component", ""), p_name):
+                            matched_rows.append(row)
+                    
+                    if not matched_rows:
+                        missing_parts.append(p_name)
+                    else:
+                        valid_row_found = False
+                        for row in matched_rows:
+                            if not row.get("failure_mode"):
+                                continue
+                            try:
+                                s = int(row.get("s", ""))
+                                o = int(row.get("o", ""))
+                                d = int(row.get("d", ""))
+                                rpn = int(row.get("rpn", ""))
+                                if 1 <= s <= 10 and 1 <= o <= 10 and 1 <= d <= 10 and rpn == s * o * d:
+                                    valid_row_found = True
+                                    break
+                            except (ValueError, TypeError):
+                                pass
+                        
+                        if not valid_row_found:
+                            incomplete_parts.append(p_name)
+
                 if missing_parts:
                     report.missing_fmeca_parts.extend(missing_parts)
                     errors.append(
                         f"Pillar 7 violation: FMECA table missing declared AST part def component(s): {', '.join(sorted(missing_parts))}."
+                    )
+                    
+                if incomplete_parts:
+                    report.incomplete_fmeca_parts.extend(incomplete_parts)
+                    errors.append(
+                        f"Pillar 7 violation: MIL-STD-1629A Method 101 non-compliance: Subsystem(s) {', '.join(sorted(incomplete_parts))} lack complete failure mode entry with valid Severity (1-10), Occurrence (1-10), Detection (1-10), and RPN."
                     )
 
                 undeclared_parts = [c for c in table_components if not any(_component_matches(c, p) for p in expected_parts)]
@@ -1772,6 +1802,8 @@ def validate_safety_matrix_ast(content: str, model_text: Optional[str] = None) -
             report.missing_fmeca_parts.extend(fmeca_report.missing_fmeca_parts)
         if fmeca_report.undeclared_fmeca_parts:
             report.undeclared_fmeca_parts.extend(fmeca_report.undeclared_fmeca_parts)
+        if fmeca_report.incomplete_fmeca_parts:
+            report.incomplete_fmeca_parts.extend(fmeca_report.incomplete_fmeca_parts)
         if fmeca_report.missing_port_modes:
             report.missing_port_modes.extend(fmeca_report.missing_port_modes)
         if fmeca_report.missing_dimensions:

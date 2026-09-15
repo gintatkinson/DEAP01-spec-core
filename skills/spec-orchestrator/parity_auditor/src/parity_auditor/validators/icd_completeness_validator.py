@@ -945,12 +945,22 @@ class ICDCompletenessValidator(IValidator):
                     detail={"port_id": sp.full_name}
                 ))
 
+        # Create a mapping of SysML port names/full names to ICD port IDs
+        sysml_to_icd_port = {}
+        for p in icd01_ports:
+            sysml_to_icd_port[p.port_name] = p.port_id
+            if p.subsystem:
+                sysml_to_icd_port[f"{p.subsystem}.{p.port_name}"] = p.port_id
+
         # 13. Check SysML connections missing from ICD_01 roster
         for sc in sysml_model.connections:
             is_in_icd = False
+            sc_src_id = sysml_to_icd_port.get(sc.source_full) or sysml_to_icd_port.get(sc.source_port) or sc.source_full
+            sc_dst_id = sysml_to_icd_port.get(sc.dest_full) or sysml_to_icd_port.get(sc.dest_port) or sc.dest_full
+
             for c in icd01_connections:
-                src_match = (sc.source_full == c.source_port) or (sc.source_port == c.source_port)
-                dst_match = (sc.dest_full == c.dest_port) or (sc.dest_port == c.dest_port)
+                src_match = (sc.source_full == c.source_port) or (sc.source_port == c.source_port) or (sc_src_id == c.source_port)
+                dst_match = (sc.dest_full == c.dest_port) or (sc.dest_port == c.dest_port) or (sc_dst_id == c.dest_port)
                 if src_match and dst_match:
                     is_in_icd = True
                     break

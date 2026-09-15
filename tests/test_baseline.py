@@ -23,6 +23,7 @@ from scripts.verify_downstream_baseline import (
     CartesianProductValidator,
     ProofBlockAST,
     _validate_domain_types,
+    check_fmeca_ast_coverage,
 )
 
 def test_python_runtime_environment():
@@ -865,7 +866,41 @@ class TestValidateDomainTypes(unittest.TestCase):
             _validate_domain_types(tmpdir, tmpdir, "dart", "lib/src/domain")
 
 
+class TestFmecaASTCoverage(unittest.TestCase):
+    """
+    Unit tests for check_fmeca_ast_coverage Method 101 Subsystem Coverage validation.
+    /// Realises: [TestFmecaASTCoverage]
+    """
+
+    def test_incomplete_fmeca_parts_caught(self):
+        """Verify that FMECA coverage gate catches subsystems with incomplete failure mode entries."""
+        content = '''
+| ID | Component | Failure Mode | Severity | Occurrence | Detection | RPN | Basis |
+|---|---|---|---|---|---|---|---|
+| F-1 | valid_part | mode1 | 5 | 5 | 2 | 50 | SSOT |
+| F-2 | invalid_part1 | mode2 | | 5 | 2 | 10 | SSOT |
+| F-3 | invalid_part2 | mode3 | 5 | 5 | 2 | 51 | SSOT |
+'''
+        # Mock sysml model with parts: valid_part, invalid_part1, invalid_part2, missing_part
+        model_text = '''
+package MockSafetyModel {
+    part def valid_part;
+    part def invalid_part1;
+    part def invalid_part2;
+    part def missing_part;
+}
+'''
+        errors, report = check_fmeca_ast_coverage(content, model_text)
+        
+        self.assertIn('missing_part', report.missing_fmeca_parts)
+        
+        self.assertIn('invalid_part1', report.incomplete_fmeca_parts)
+        self.assertIn('invalid_part2', report.incomplete_fmeca_parts)
+        self.assertNotIn('valid_part', report.incomplete_fmeca_parts)
+        
+        found_incomplete_err = any("MIL-STD-1629A Method 101 non-compliance" in e for e in errors)
+        self.assertTrue(found_incomplete_err, "Missing incomplete failure mode error message.")
+
+
 if __name__ == "__main__":
     unittest.main()
-
-
