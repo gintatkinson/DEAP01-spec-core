@@ -757,6 +757,78 @@ class TestDeterministicSemanticSolvers(unittest.TestCase):
         self.assertFalse(passed)
         self.assertTrue(any("collateral damage" in e for e in errors))
 
+    def test_solver5_schema_driven_forbidden_terms_failure(self):
+        conops = "Custom space robotics platform incorporating an unauthorized gyro sensor."
+        passed, errors, details = solve_forbidden_cross_domain_ontology(
+            workspace_path="/test_projects/run_custom",
+            conops_text=conops,
+            domain_config={"forbidden_terms": ["gyro sensor", "reaction wheel"]}
+        )
+        self.assertFalse(passed)
+        self.assertTrue(any("gyro sensor" in e for e in errors))
+        self.assertIn("gyro sensor", details.get("forbidden_terms", []))
+
+    def test_solver5_schema_driven_forbidden_terms_clean(self):
+        conops = "Custom space robotics platform with star tracker and magnetorquer."
+        passed, errors, _ = solve_forbidden_cross_domain_ontology(
+            workspace_path="/test_projects/run_custom",
+            conops_text=conops,
+            domain_config={"forbidden_terms": ["airframe", "parachute"]}
+        )
+        self.assertTrue(passed, f"Expected clean pass, got: {errors}")
+
+    def test_solver5_schema_driven_allowed_terms_clean(self):
+        conops = "Satellite payload with star tracker, reaction wheel, and magnetorquer."
+        passed, errors, details = solve_forbidden_cross_domain_ontology(
+            workspace_path="/test_projects/run_custom",
+            conops_text=conops,
+            domain_config={
+                "allowed_terms": ["star tracker", "reaction wheel", "magnetorquer", "payload"]
+            }
+        )
+        self.assertTrue(passed, f"Expected clean pass, got: {errors}")
+        self.assertIn("star tracker", details.get("allowed_terms", []))
+
+    def test_solver5_schema_driven_allowed_terms_cross_domain_failure(self):
+        conops = "Satellite payload with star tracker and unauthorized airframe structure."
+        passed, errors, _ = solve_forbidden_cross_domain_ontology(
+            workspace_path="/test_projects/run_custom",
+            conops_text=conops,
+            domain_config={
+                "allowed_terms": ["star tracker", "reaction wheel"]
+            }
+        )
+        self.assertFalse(passed)
+        self.assertTrue(any("airframe" in e for e in errors))
+
+    def test_solver5_schema_driven_allowed_terms_exempts_archetype(self):
+        # Even if non-aircraft, explicitly allowing 'airframe' exempts it
+        conops = "Subsea crawler with composite pressure airframe structure."
+        passed, errors, _ = solve_forbidden_cross_domain_ontology(
+            workspace_path="/test_projects/run_03_subsea_auv",
+            conops_text=conops,
+            domain_config={
+                "is_aircraft": False,
+                "allowed_terms": ["airframe"]
+            }
+        )
+        self.assertTrue(passed, f"Expected airframe to be allowed, got: {errors}")
+
+    def test_solver5_schema_driven_nested_vocabulary_config(self):
+        conops = "Medical workstation referencing weapons release protocol."
+        passed, errors, _ = solve_forbidden_cross_domain_ontology(
+            workspace_path="/test_projects/run_07_medical_robot",
+            conops_text=conops,
+            domain_config={
+                "vocabulary": {
+                    "forbidden_terms": ["weapons release"],
+                    "allowed_terms": ["trocar", "surgeon"]
+                }
+            }
+        )
+        self.assertFalse(passed)
+        self.assertTrue(any("weapons release" in e for e in errors))
+
     # -----------------------------------------------------------------------
     # Solver 6: Positive Domain Lexicon Density Floor
     # -----------------------------------------------------------------------

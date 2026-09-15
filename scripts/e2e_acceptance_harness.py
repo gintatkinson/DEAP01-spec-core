@@ -800,68 +800,159 @@ def solve_forbidden_cross_domain_ontology(
 
     combined_text = conops_text + "\n" + intent_text
 
-    # Rule A: Non-aircraft platforms
+    # Extract dynamic vocabulary configurations from domain_config / schema
+    forbidden_terms_config = None
+    allowed_terms_config = None
+    if cfg:
+        forbidden_terms_config = cfg.get("forbidden_terms")
+        if forbidden_terms_config is None and isinstance(cfg.get("vocabulary"), dict):
+            forbidden_terms_config = cfg["vocabulary"].get("forbidden_terms") or cfg["vocabulary"].get("forbidden")
+
+        allowed_terms_config = cfg.get("allowed_terms")
+        if allowed_terms_config is None and isinstance(cfg.get("vocabulary"), dict):
+            allowed_terms_config = cfg["vocabulary"].get("allowed_terms") or cfg["vocabulary"].get("allowed")
+
+    # Helper function for matching terms in text
+    def _term_matches_in_text(term_str: str, text: str) -> bool:
+        term_clean = term_str.strip()
+        if not term_clean:
+            return False
+        try:
+            if re.match(r"^[\w\s\-]+$", term_clean):
+                if _term_to_regex(term_clean).search(text):
+                    return True
+        except Exception:
+            pass
+        prefix = r"\b" if term_clean[0].isalnum() else ""
+        suffix = r"\b" if term_clean[-1].isalnum() else ""
+        pat = rf"{prefix}{re.escape(term_clean)}{suffix}"
+        return bool(re.search(pat, text, re.IGNORECASE))
+
+    # Dynamic Check 1: Explicitly configured forbidden_terms
+    if forbidden_terms_config is not None and isinstance(forbidden_terms_config, (list, tuple, set)):
+        details["forbidden_terms"] = list(forbidden_terms_config)
+        for f_term in forbidden_terms_config:
+            f_term_str = str(f_term).strip()
+            if not f_term_str:
+                continue
+            if _term_matches_in_text(f_term_str, combined_text):
+                errors.append(
+                    f"Forbidden ontology term '{f_term_str}' found in specification text"
+                )
+
+    # Dynamic Check 2: Explicitly configured allowed_terms
+    allowed_terms_set = set()
+    if allowed_terms_config is not None and isinstance(allowed_terms_config, (list, tuple, set)):
+        details["allowed_terms"] = list(allowed_terms_config)
+        allowed_terms_set = {str(t).strip().lower() for t in allowed_terms_config if str(t).strip()}
+
+        # Build candidate domain terms to validate against allowed_terms
+        candidate_terms = set()
+        # 1. Terms from POSITIVE_DOMAIN_LEXICONS
+        for lex_list in POSITIVE_DOMAIN_LEXICONS.values():
+            for t in lex_list:
+                candidate_terms.add(t.lower())
+        # 2. Archetype terms
+        for t in [
+            "parachute", "altitude agl", "airframe", "astm f3411", "remote id",
+            "weapons release", "collateral damage", "roe-01", "roe-02", "roe-03",
+            "roe-04", "roe-05", "roe-06",
+        ]:
+            candidate_terms.add(t.lower())
+        # 3. Explicit candidate terms if provided
+        for cand_key in ("candidate_terms", "domain_terms", "terms_to_check"):
+            if cfg and cand_key in cfg and isinstance(cfg[cand_key], (list, tuple, set)):
+                for t in cfg[cand_key]:
+                    candidate_terms.add(str(t).strip().lower())
+
+        for cand_term in sorted(candidate_terms):
+            if _term_matches_in_text(cand_term, combined_text):
+                # Verify if cand_term is covered by allowed_terms_set
+                is_allowed = (
+                    cand_term in allowed_terms_set
+                    or any(cand_term == a or cand_term in a or a in cand_term for a in allowed_terms_set)
+                )
+                if not is_allowed:
+                    errors.append(
+                        f"Disallowed cross-domain ontology term '{cand_term}' found in specification text (not in allowed_terms)"
+                    )
+
+    # Helper to check if a term is allowed by allowed_terms_set
+    def _is_explicitly_allowed(term_str: str) -> bool:
+        if not allowed_terms_set:
+            return False
+        t_lower = term_str.lower()
+        return (
+            t_lower in allowed_terms_set
+            or any(t_lower == a or t_lower in a or a in t_lower for a in allowed_terms_set)
+        )
+
+    # Rule A: Non-aircraft platforms (backwards-compatible archetype rules)
     if is_non_aircraft:
         # 1. V_stall > 0
-        v_stall_matches = re.findall(
-            r"V_stall\s*\|\s*<=?\s*([1-9]\d*(?:\.\d+)?|0\.\d*[1-9]\d*)",
-            combined_text,
-            re.IGNORECASE,
-        )
-        if not v_stall_matches:
+        if not _is_explicitly_allowed("v_stall"):
             v_stall_matches = re.findall(
-                r"V_stall\s*=\s*([1-9]\d*(?:\.\d+)?|0\.\d*[1-9]\d*)",
+                r"V_stall\s*\|\s*<=?\s*([1-9]\d*(?:\.\d+)?|0\.\d*[1-9]\d*)",
                 combined_text,
                 re.IGNORECASE,
             )
-        if not v_stall_matches:
-            v_stall_matches = re.findall(
-                r"\|\s*Minimum Controllable / Stall Velocity\s*\|\s*V_stall\s*\|\s*<=?\s*([1-9]\d*(?:\.\d+)?|0\.\d*[1-9]\d*)",
-                combined_text,
-                re.IGNORECASE,
-            )
-        if v_stall_matches:
-            errors.append(
-                f"Forbidden ontology in non-aircraft domain: positive stall velocity 'V_stall = {v_stall_matches[0]} m/s' (> 0)"
-            )
+            if not v_stall_matches:
+                v_stall_matches = re.findall(
+                    r"V_stall\s*=\s*([1-9]\d*(?:\.\d+)?|0\.\d*[1-9]\d*)",
+                    combined_text,
+                    re.IGNORECASE,
+                )
+            if not v_stall_matches:
+                v_stall_matches = re.findall(
+                    r"\|\s*Minimum Controllable / Stall Velocity\s*\|\s*V_stall\s*\|\s*<=?\s*([1-9]\d*(?:\.\d+)?|0\.\d*[1-9]\d*)",
+                    combined_text,
+                    re.IGNORECASE,
+                )
+            if v_stall_matches:
+                errors.append(
+                    f"Forbidden ontology in non-aircraft domain: positive stall velocity 'V_stall = {v_stall_matches[0]} m/s' (> 0)"
+                )
 
         # 2. parachute
-        if re.search(r"\bparachute\b", combined_text, re.IGNORECASE):
+        if not _is_explicitly_allowed("parachute") and re.search(r"\bparachute\b", combined_text, re.IGNORECASE):
             errors.append("Forbidden ontology in non-aircraft domain: references aeronautical 'parachute'")
 
         # 3. altitude AGL
-        if re.search(r"\b(?:altitude\s+AGL|m\s+AGL)\b", combined_text, re.IGNORECASE):
+        if not (_is_explicitly_allowed("altitude agl") or _is_explicitly_allowed("agl")) and re.search(r"\b(?:altitude\s+AGL|m\s+AGL)\b", combined_text, re.IGNORECASE):
             errors.append("Forbidden ontology in non-aircraft domain: references aeronautical 'altitude AGL'")
 
         # 4. airframe
-        if re.search(r"\bairframe\b", combined_text, re.IGNORECASE):
+        if not _is_explicitly_allowed("airframe") and re.search(r"\bairframe\b", combined_text, re.IGNORECASE):
             errors.append("Forbidden ontology in non-aircraft domain: references aeronautical 'airframe'")
 
         # 5. ASTM F3411 Remote ID
-        if re.search(r"(?:ASTM\s+F3411|\bRemote\s+ID\b)", combined_text, re.IGNORECASE):
-            errors.append("Forbidden ontology in non-aircraft domain: references UAS standard 'ASTM F3411 Remote ID'")
+        if not (_is_explicitly_allowed("astm f3411") or _is_explicitly_allowed("remote id")) and re.search(r"(?:ASTM\s+F3411|\bRemote\s+ID\b)", combined_text, re.IGNORECASE):
+            errors.append("Forbidden ontology in non-aircraft domain: references aeronautical 'ASTM F3411 Remote ID'")
 
-    # Rule B: Civilian platforms
+    # Rule B: Civilian platforms (backwards-compatible archetype rules)
     if is_civilian:
         # 1. ROE-01..06
-        roe_matches = re.findall(r"\bROE-0[1-6]\b", combined_text)
-        if roe_matches:
-            errors.append(
-                f"Forbidden ontology in civilian domain: references military Rules of Engagement {sorted(set(roe_matches))}"
-            )
+        if not _is_explicitly_allowed("roe"):
+            roe_matches = re.findall(r"\bROE-0[1-6]\b", combined_text)
+            if roe_matches:
+                errors.append(
+                    f"Forbidden ontology in civilian domain: references military Rules of Engagement {sorted(set(roe_matches))}"
+                )
 
         # 2. PID
-        if re.search(r"\bPID\b", combined_text):
+        if not _is_explicitly_allowed("pid") and re.search(r"\bPID\b", combined_text):
             errors.append("Forbidden ontology in civilian domain: references military tactical Positive Identification ('PID')")
 
         # 3. weapons release
-        if re.search(r"\bweapons?\s+release\b", combined_text, re.IGNORECASE):
+        if not _is_explicitly_allowed("weapons release") and re.search(r"\bweapons?\s+release\b", combined_text, re.IGNORECASE):
             errors.append("Forbidden ontology in civilian domain: references military 'weapons release'")
 
         # 4. collateral damage
-        if re.search(r"\bcollateral\s+damage\b", combined_text, re.IGNORECASE):
+        if not _is_explicitly_allowed("collateral damage") and re.search(r"\bcollateral\s+damage\b", combined_text, re.IGNORECASE):
             errors.append("Forbidden ontology in civilian domain: references military 'collateral damage'")
 
+    # Deduplicate errors while preserving order
+    errors = list(dict.fromkeys(errors))
     passed = len(errors) == 0
     return passed, errors, details
 

@@ -131,8 +131,8 @@ class TestCompileSysmlUpgrades(unittest.TestCase):
         expr0 = c0.expression if hasattr(c0, 'expression') else c0['expression']
         expr2 = c2.expression if hasattr(c2, 'expression') else c2['expression']
 
-        self.assertIn("c2LinkLossDuration", expr0)
-        self.assertIn("batterySoC", expr2)
+        self.assertIn("systemCommandIssued == true", expr0)
+        self.assertIn("reactionLatency <= maxAllowedLatency", expr2)
 
         # Verify full package compilation
         sysml_text = compile_stpa_to_sysml(self.sample_stpa_4guidewords, "UAS_SafetyPackage")

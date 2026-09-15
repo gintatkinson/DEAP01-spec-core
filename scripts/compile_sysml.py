@@ -400,48 +400,27 @@ def _derive_formal_rta_expression(uca: Dict[str, Any]) -> str:
     clean_ctx = re.sub(r'\\ge', '>=', clean_ctx)
 
     # Check for timeout / link loss invariants
-    if "tloss" in clean_ctx.lower() or "t_loss" in clean_ctx.lower() or "timeout" in clean_ctx.lower():
+    if "tloss" in clean_ctx.lower() or "timeout" in clean_ctx.lower() or "loss" in clean_ctx.lower():
         return "lossDuration <= timeoutLimit"
 
     if "not providing" in category:
-        if "30" in clean_ctx or "bvlos" in clean_ctx.lower():
-            return "c2LinkLossDuration < 30.0"
-        elif "c2" in clean_ctx.lower() or "loss" in clean_ctx.lower() or "link" in clean_ctx.lower():
-            return "lossDuration <= timeoutLimit"
-        elif "pressure" in clean_ctx.lower() or "bar" in clean_ctx.lower():
-            return "railPressure >= 13.0"
-        elif "distance" in clean_ctx.lower() or "boundary" in clean_ctx.lower():
-            return "distanceToBoundary >= 50.0"
+        if "boundary" in clean_ctx.lower():
+            return "distanceToBoundary >= minDistance"
         else:
             return "systemCommandIssued == true"
     elif "providing" in category:
-        if "flare" in clean_ctx.lower() or "agl" in clean_ctx.lower():
-            return "altitudeAGL > 2.0"
-        elif "cruise" in clean_ctx.lower():
-            return "flightPhase != Cruise"
-        elif "corridor" in clean_ctx.lower() or "boundary" in clean_ctx.lower():
+        if "boundary" in clean_ctx.lower() or "corridor" in clean_ctx.lower():
             return "boundaryInBounds == true"
         else:
             return "systemStateValid == true"
     elif "too late" in category:
-        if "soc" in clean_ctx.lower() or "battery" in clean_ctx.lower():
-            return "batterySoC >= 0.20"
-        elif "velocity" in clean_ctx.lower() or "m/s" in clean_ctx.lower() or "v =" in clean_ctx.lower():
-            return "boundaryCrossVelocity <= 31.0"
-        else:
-            return "reactionLatency <= maxAllowedLatency"
+        return "reactionLatency <= maxAllowedLatency"
     elif "stopped too soon" in category:
-        if "altitude" in clean_ctx.lower():
-            return "transitAltitude >= safeTransitAltitude"
-        else:
-            return "commandHoldDuration >= minRequiredDuration"
+        return "commandHoldDuration >= minRequiredDuration"
     elif "applied too long" in category:
-        if "turn" in clean_ctx.lower():
-            return "turnHoldDuration <= maxTurnDuration"
-        else:
-            return "actionDuration <= maxAllowedDuration"
+        return "holdDuration <= maxAllowedDuration"
     else:
-        return "systemParameter <= maxThreshold"
+        return "systemStateValid == true"
 
 
 def compile_uca_to_constraint(uca: Dict[str, Any]) -> Any:
