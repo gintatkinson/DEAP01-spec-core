@@ -195,7 +195,7 @@ sequenceDiagram
 ```
 
 ## Phase 0: Pre-Flight / Pre-computation
-1. **SysML v2 Ingestion & AST Digest**: Ingest input schemas (OMG IDL, AUTOSAR ARXML, Protobuf, OpenAPI, or native SysML v2) using `sysmlv2_ingest.py` to produce canonical `.pipeline/schema.sysml` and `.pipeline/schema-digest.json`. This generates formal AST nodes (`package`, `part def`, `item def`, `action def`, `state def`, `port def`, `requirement def`, and `use case def`) establishing the 100% Single Source of Truth for Phases 1–3 per `rules/sysml-ssot-completeness.md`.
+1. **Step 0 SysML Compilation Gate**: Compile input models using `python3 scripts/compile_sysml.py --compile` to produce canonical `.pipeline/schema.sysml` and `.pipeline/schema-digest.json`. This generates formal AST nodes (`package`, `part def`, `item def`, `action def`, `state def`, `port def`, `requirement def`, and `use case def`) establishing the 100% Single Source of Truth for Phases 1–3 per `rules/sysml-ssot-completeness.md`.
 2. **YANG Compilation (conditional)**: If `.yang` files are present in the schema directory, run the YANG-to-LUI compiler to generate the UI layout:
    ```bash
    python3 scripts/compile_yang.py --input schema/model.yang --output app_flutter/assets/logical-layout.json

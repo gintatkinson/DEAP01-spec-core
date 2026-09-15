@@ -394,7 +394,7 @@ Immediately following installation, any AI agent (Antigravity, Claude Code, Gemi
 1. **Read Governance Constitution**: Execute `view_file` on `.pipeline/constitution.md` to ingest the platform-independent functional governance layer and zero-mocking persistence mandates.
 2. **Load Project Skills**: Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` (and any active skills under `skills/` or `.agents/skills/`) to initialize feature-driven implementation protocols and review gates.
 3. **Load Governance Rules**: Ingest `AGENTS.md` and `rules/` to enforce project-scoped agentic rules, context-isolated subagent dispatch loops, and role boundary locks.
-4. **Load Platform Profile**: Read the target platform execution profile (`.pipeline/profiles/ros2_cpp.md` for ROS2 C++ Real-Time Nodes or `.pipeline/profiles/px4_module.md` for PX4 Autopilot Flight Modules) to establish platform-specific build, test, and lifecycle constraints.
+4. **Load Platform Profile**: Read the target platform execution profile (`.pipeline/profiles/flutter.md`, `.pipeline/profiles/react.md`, `.pipeline/profiles/ros2_cpp.md`, or `.pipeline/profiles/px4_module.md`) to establish platform-specific build, test, and lifecycle constraints.
 5. **Bootstrap Tracker Labels & Verify Baseline**: Verify that repository issue tracker labels and baseline tests pass by running `pytest tests/` and `python3 scripts/verify_downstream_baseline.py --no-domain`.
 
 ---
@@ -407,19 +407,10 @@ This catalog contains the complete, unabridged, copy-pasteable operator prompt s
 
 ```mermaid
 flowchart LR
-    subgraph Ingestion["Universal Multi-Document & Schema Ingestion"]
-        Doc1["Operational Intent (docs/conops/*.md)"]
-        Doc2["Interface & Model Schemas (schema/*)"]
-        Doc3["Architectural Blueprints (docs/architecture/*.md)"]
-        Doc4["Prompt Directives (Fallback: Auto-Persist docs/conops/MISSION_INTENT.md)"]
-    end
-    Doc1 --> Worker_0A["Worker 0A: CONOPS Synthesizer"]
-    Doc2 --> Worker_0A
-    Doc3 --> Worker_0A
-    Doc4 --> Worker_0A
-    Worker_0A -->|"docs/conops/CONOPS.md"| Worker_0B["Worker 0B: STPA / FMECA / SORA Assurer"]
-    Worker_0B -->|"docs/safety/STPA_MATRIX.md & SORA SAIL"| Worker_0C["Worker 0C: SysML v2 Authoring Worker"]
-    Worker_0C -->|"DEAP_MODEL.sysml & Handoff AST JSON"| Pipeline_1["Pipeline 1 Projection Engine"]
+    Step0["Step 0: SysML Model Ingestion & Compilation Gate (python3 scripts/compile_sysml.py --compile)"]
+    Step0 -->|"Compiled AST"| Worker_0A["Worker 0A: CONOPS Synthesizer"]
+    Worker_0A -->|"docs/conops/CONOPS.md"| Worker_0B["Worker 0B: STPA / FMECA Assurer"]
+    Worker_0B -->|"docs/safety/STPA_MATRIX.md"| Step3["Step 3: Level 1C ICD Extraction & Level 2 Specifications"]
 ```
 
 ### 4.2 Pipeline 0 Execution Prompts
@@ -449,8 +440,8 @@ Execute front-end CONOPS synthesis for the target cyber-physical system using Un
 
 2. Ingestion & Analysis Scope:
    - Schema-derived operational envelope (physical boundaries, operating dynamics, environmental constraints, payload/actuator configurations).
-   - Domain-specific operational lifecycle phases: Initialization, Normal Operation, Degraded/Contingency Modes, and Safe Shutdown/Transition.
-   - Dynamic stakeholder roles derived from the system operational context (e.g., System Operators, Dispatchers/Supervisors, Field Maintenance Technicians, External Management/Telemetry Interfaces).
+   - Domain-specific operational lifecycle phases: Initialization, Standby, Active Operation, Degraded Mode, Failsafe.
+   - Dynamic stakeholder roles derived from the system operational context.
    - Domain-specific regulatory and safety classification relevant to the operational envelope.
 
 3. Output Requirements:
@@ -463,24 +454,24 @@ Execute front-end CONOPS synthesis for the target cyber-physical system using Un
 PROCEED
 ```
 
-#### 4.2.2 Worker 0B: STPA Hazard Analysis, FMECA & Domain Safety Assurer Prompt
+#### 4.2.2 Worker 0B: STPA Hazard Analysis & Domain Safety Assurer Prompt
 
 ```text
 Execute `view_file` on `skills/spec-orchestrator/SKILL.md` as your very first step before taking any action.
 
 Repository Classification: DOWNSTREAM_CUSTOMER_PROJECT (or UPSTREAM_SPEC_CORE_COMPILER depending on execution context)
 
-Role: Worker 0B -- STPA Hazard Analysis, FMECA & Domain Safety Assurer
+Role: Worker 0B -- STPA Hazard Analysis & Domain Safety Assurer
 
 Primary Commercial Toolchain Integration Context:
 This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
 
 Directive:
-Perform STPA hazard analysis, FMECA failure mode criticality evaluation, and domain safety risk assessment based on `docs/conops/CONOPS.md`.
+Perform STPA hazard analysis, FMECA failure mode criticality evaluation, and domain safety risk assessment based on `docs/conops/CONOPS.md` and compiled AST.
 
 1. Standards Compliance & Domain Safety Framework:
-   - Dynamic Domain Safety Framework Selection: Apply the applicable safety framework governing the target domain (e.g., ISO 14971/IEC 62304 for Medical, EN 50128 for Rail, DNV-GL for Marine, ECSS for Space, ISO 3691-4 for Industrial AGV, SORA/DO-178C for Aviation).
-   - Run-Time Assurance (RTA) Monitor Architecture & Safety Net switching (e.g., ASTM F3269-17 or domain-equivalent safety monitor pattern).
+   - Dynamic Domain Safety Framework Selection: Apply the applicable safety framework governing the target domain.
+   - Run-Time Assurance (RTA) Monitor Architecture & Safety Net switching.
    - Domain-specific hazard detection, telemetry monitoring, and contingency guidance standards.
 
 2. Output Requirements:
@@ -488,42 +479,14 @@ Perform STPA hazard analysis, FMECA failure mode criticality evaluation, and dom
      1. System Losses ($L-1..N$)
      2. System Hazards ($H-1..N$)
      3. Hierarchical Control Structure Topology (defining System Controllers, Supervisors/RTA Monitors, Actuators, Sensors)
-     4. Unsafe Control Actions ($UCA-1..N$) covering all 4 failure modes: (a) Not providing causes hazard, (b) Providing causes hazard, (c) Providing too early, too late, or out of order, (d) Stopped too soon or applied too long
+     4. Unsafe Control Actions ($UCA-1..N$) covering all 4 failure modes.
      5. Loss Scenarios ($LS-1..N$) & Causal Factors
      6. Formal Safety Constraints ($SC-1..N$)
      7. FMECA Criticality Matrix: Component failure modes with 15+ rows, Severity ($S$), Occurrence ($O$), Detection ($D$), and Risk Priority Numbers ($\text{RPN} = S \times O \times D$)
-     8. Domain Safety Framework & Risk Mitigations Table: Risk class classification, integrity levels, and comprehensive mapping of domain safety objectives and mitigations (e.g., ISO 14971/IEC 62304, EN 50128, DNV-GL, ECSS, ISO 3691-4, SORA OSO-01..24)
+     8. Domain Safety Framework & Risk Mitigations Table.
    - Include Run-Time Assurance (RTA) Safety Net monitor architecture.
    - Include MATLAB / Simulink / Stateflow / Embedded Coder model integration baseline hooks and SLDV formal proof properties.
    - KaTeX / LaTeX Math Formatting Mandate: All multi-line aligned equations MUST be enclosed in `\begin{aligned} ... \end{aligned}` within `$$` delimiters on dedicated lines. Bare alignment tabs `&` outside an alignment environment (`aligned`, `matrix`, `cases`) and `\begin{align*}` environments are strictly forbidden. Markdown Table Math Prohibition Rule: Strictly ban `$ ... $` and `$$ ... $$` LaTeX math delimiters inside table headers, rows, and cells; plain text and Unicode (e.g. `Initial S`, `ΔV`, `λ`, `°C`, `≥`, `≤`, `→`, `10⁻⁶`) must be used instead, with 1:1 column count match between header and delimiter rows.
-
-PROCEED
-```
-
-#### 4.2.3 Worker 0C: SysML v2 Architectural & Safety Model Author Prompt
-
-```text
-Execute `view_file` on `skills/spec-orchestrator/SKILL.md` as your very first step before taking any action.
-
-Repository Classification: DOWNSTREAM_CUSTOMER_PROJECT (or UPSTREAM_SPEC_CORE_COMPILER depending on execution context)
-
-Role: Worker 0C -- SysML v2 Architectural & Safety Model Author
-
-Primary Commercial Toolchain Integration Context:
-This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
-
-Directive:
-Formalize the CONOPS (`CONOPS.md`), STPA hazard matrices, FMECA ratings, and domain safety requirements (`STPA_MATRIX.md`) into a canonical SysML v2 textual model and serialized AST handoff contract based on the derived domain architecture.
-
-1. Model Engineering Mandate:
-   - Construct canonical `DEAP_MODEL.sysml` conforming to SysML v2 textual specification standards (`package`, `req`, `part`, `port`, `state`, `satisfy`, `verify`) based on the derived domain architecture.
-   - Define safety statecharts for Run-Time Assurance (RTA) switching logic, contingency operational modes, and fail-safe transitions.
-   - Establish MATLAB / Simulink / Stateflow export compatibility for safety-critical code synthesis.
-   - KaTeX / LaTeX Math Formatting Mandate: Ensure any statechart/mathematical transition guards and formal expressions follow standard escaping and valid KaTeX blocks (all multi-line aligned equations MUST be enclosed in `\begin{aligned} ... \end{aligned}` within `$$` delimiters on dedicated lines; bare alignment tabs `&` outside an alignment environment and `\begin{align*}` are strictly forbidden). Markdown Table Math Prohibition Rule: Strictly ban `$ ... $` and `$$ ... $$` LaTeX math delimiters inside table headers, rows, and cells; plain text and Unicode (e.g. `Initial S`, `ΔV`, `λ`, `°C`, `≥`, `≤`, `→`, `10⁻⁶`) must be used instead, with 1:1 column count match between header and delimiter rows.
-
-2. Output Requirements:
-   - Generate canonical `DEAP_MODEL.sysml` under `schema/DEAP_MODEL.sysml` (or `.pipeline/schema.sysml`).
-   - Generate canonical `pipeline0_handoff_contract.json` under `.pipeline/contracts/pipeline0_handoff_contract.json` for downstream Pipeline 1 Agile projection and Pipeline 2 code generation.
 
 PROCEED
 ```

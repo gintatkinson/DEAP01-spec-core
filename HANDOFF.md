@@ -108,7 +108,10 @@ Verified state of all 8 completed remediation packages:
 | Issue | Commit | Status | Capabilities Delivered |
 | :--- | :--- | :--- | :--- |
 | **#315** | `12162e7` | `status:fixed-resolved` | Mechanical commit message non-closure gate + git hook (`verify_commit_messages.py`). |
-| **Pillar 2** | `402d56c` | `status:fixed-resolved` | Skill prompt quarantine across all skills (`SKILL.md`). |
+| **#293** | `5afda13` | `status:fixed-resolved` | Prompt Verification Scoping with `--only`. |
+| **#289** | `00a0627` | `status:fixed-resolved` | Git Credential Token Fallback in `bootstrap_tracker_labels.py`. |
+| **#290** | `55ce7b6` | `status:fixed-resolved` | Shell Script Heredoc Hardening (`install_pipeline.sh`). |
+| **#315** | `402d56c` | `status:fixed-resolved` | Commit Message Non-Closure Invariant (refs #315). |
 | **#317** | `dff9efa` | `status:fixed-resolved` | Eliminated faulty hardcoded UAS unit test prose assertions. |
 | **#316** | `ce4f021` | `status:fixed-resolved` | OEM source file/line provenance tracking in subsystem synthesis (`schema_router.py`). |
 | **#296** | `f97197c` | `status:fixed-resolved` | Calibrated `is_component_icd_document()` for packet traces (`assemble_conops.py`). |
@@ -123,7 +126,7 @@ Verified state of all 8 completed remediation packages:
 
 ## 8. Actionable Implementation Dossiers for ALL Remaining Work Packages
 
-### Work Package A: Issue #308 (SysML-as-Step-0 Re-architecture)
+### Work Package A: Issue #308, #311 & #312 (SysML-as-Step-0 Re-architecture & Delegation Gates)
 * **Target Files**:
   - `scripts/compile_sysml.py`
   - `README.md`
@@ -150,7 +153,7 @@ Verified state of all 8 completed remediation packages:
   3. Neutral commit: `fix(prompts): add --only check scoping to subagent verification prompts (refs #293)`.
 
 ### Work Package C: Issue #289 (Git Credential Token Fallback)
-* **Target Files**: `scripts/bootstrap_tracker_labels.py`.
+* **Target Files**: `skills/spec-orchestrator/skills/spec-orchestrator/scripts/bootstrap_tracker_labels.py`.
 * **Implementation Blueprint**:
   1. Add token resolution fallback using `git credential fill` when `GITHUB_TOKEN` is unset in headless CI/workstations.
   2. Neutral commit: `fix(tracker): add git credential fill fallback for label bootstrapping (refs #289)`.

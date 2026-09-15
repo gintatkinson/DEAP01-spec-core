@@ -317,7 +317,7 @@ After copying the pipeline, configure Gemini / Antigravity to load the skills an
    1. **Read Governance Constitution**: Execute `view_file` on `.pipeline/constitution.md` to ingest the platform-independent functional governance layer and zero-mocking persistence mandates.
    2. **Load Project Skills**: Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` (and any active skills under `skills/` or `.agents/skills/`, such as `skills/spec-wbs-engineering/SKILL.md`) to initialize feature-driven implementation protocols and review gates.
    3. **Load Governance Rules**: Ingest `AGENTS.md` (or `.agents/AGENTS.md`) and `rules/` to enforce project-scoped agentic rules, context-isolated subagent dispatch loops, and role boundary locks.
-   4. **Load Platform Profile**: Read the target platform execution profile (`.pipeline/profiles/ros2_cpp.md` for ROS2 C++ Real-Time Nodes or `.pipeline/profiles/px4_module.md` for PX4 Autopilot Flight Modules) to establish platform-specific build, test, and lifecycle constraints.
+   4. **Load Platform Profile**: Read the target platform execution profile (`.pipeline/profiles/flutter.md`, `.pipeline/profiles/react.md`, `.pipeline/profiles/ros2_cpp.md`, or `.pipeline/profiles/px4_module.md`) to establish platform-specific build, test, and lifecycle constraints.
    5. **Bootstrap Tracker Labels**: Verify that repository issue tracker labels are synchronized and operational by running `python3 skills/spec-orchestrator/scripts/bootstrap_tracker_labels.py --dry-run` or verifying label bootstrapping status.
 
 ### 5.5 AGENTS.md Setup
@@ -495,29 +495,18 @@ The platform includes a deterministic Work Breakdown Structure (WBS) & Enterpris
 
 ## 8. Pipeline 0: Pre-Spec Safety Engineering Execution Workflow
 
-Pipeline 0 (**Pre-Spec Safety Engineering Engine**) serves as the front-end systems engineering, hazard identification, and safety modeling pipeline within the Digital Engineering Agent Platform (DEAP) framework. Operating prior to downstream Agile backlog projection (Pipeline 1) and automated code synthesis (Pipeline 2), Pipeline 0 ingests unstructured customer intent, mission flight profiles, and airspace constraints to produce normative safety specifications, STPA/FMECA analysis, SORA SAIL assurance models, and SysML v2 textual AST artifacts.
-
-> **Illustrative Schema Payloads Note:** All flight mission profiles, UAS airframe parameters, and STPA hazard analysis examples referenced in Pipeline 0 workflows below are illustrative domain schema payloads demonstrating front-end AST ingestion, STPA synthesis, and serialized AST contract generation. `DEAP01-spec-core` is the upstream abstract specification compiler.
+Pipeline 0 (**Pre-Spec Safety Engineering Engine**) serves as the front-end systems engineering, hazard identification, and safety modeling pipeline within the Digital Engineering Agent Platform (DEAP) framework. Operating prior to downstream Agile backlog projection (Pipeline 1) and automated code synthesis (Pipeline 2), Pipeline 0 ingests unstructured customer intent and constraints to produce normative safety specifications, STPA/FMECA analysis, assurance models, and SysML v2 textual AST artifacts.
 
 ### 8.1 Master-Worker Subagent Topology
 
-Pipeline 0 deploys three specialized, context-isolated subagent workers operating in a strict serial execution loop to prevent context bloat and memory leakage:
+Pipeline 0 deploys specialized, context-isolated subagent workers operating in a strict serial execution loop to prevent context bloat and memory leakage:
 
 ```mermaid
 flowchart LR
-    subgraph Ingestion["Universal Multi-Document & Schema Ingestion"]
-        Doc1["Operational Intent (docs/conops/*.md)"]
-        Doc2["Interface & Model Schemas (schema/*)"]
-        Doc3["Architectural Blueprints (docs/architecture/*.md)"]
-        Doc4["Prompt Directives (Fallback: Auto-Persist docs/conops/MISSION_INTENT.md)"]
-    end
-    Doc1 --> Worker_0A["Worker 0A: CONOPS Synthesizer"]
-    Doc2 --> Worker_0A
-    Doc3 --> Worker_0A
-    Doc4 --> Worker_0A
-    Worker_0A -->|"docs/conops/CONOPS.md"| Worker_0B["Worker 0B: STPA / FMECA / SORA Assurer"]
-    Worker_0B -->|"docs/safety/STPA_MATRIX.md & SORA SAIL"| Worker_0C["Worker 0C: SysML v2 Authoring Worker"]
-    Worker_0C -->|"DEAP_MODEL.sysml & Handoff AST JSON"| Pipeline_1["Pipeline 1 Projection Engine"]
+    Step0["Step 0: SysML Model Ingestion & Compilation Gate (python3 scripts/compile_sysml.py --compile)"]
+    Step0 -->|"Compiled AST"| Worker_0A["Worker 0A: CONOPS Synthesizer"]
+    Worker_0A -->|"docs/conops/CONOPS.md"| Worker_0B["Worker 0B: STPA / FMECA Assurer"]
+    Worker_0B -->|"docs/safety/STPA_MATRIX.md"| Step3["Step 3: Level 1C ICD Extraction & Level 2 Specifications"]
 ```
 
 ### 8.2 Subagent Execution Roles
@@ -525,42 +514,34 @@ flowchart LR
 #### 8.2.1 Worker 0A: CONOPS & Mission Scenario Synthesizer
 - **Role Description:** Context-isolated front-end synthesizer responsible for executing Universal Multi-Document & Schema Ingestion across operational intent documents, interface schemas, and architectural blueprints to produce a structured Concept of Operations (`CONOPS.md`) and persisting intent in `MISSION_INTENT.md` when operating from prompt fallback.
 - **Primary Inputs (Universal Multi-Document & Schema Ingestion):**
+  - **Compiled AST:** SysML compilation output from Step 0.
   - **Operational Intent Documents (`docs/conops/*.md`):** All customer mission intent specifications and operational scenario markdown files in `docs/conops/` (excluding `README.md`).
   - **Interface & Model Schemas (`schema/*`):** Pre-existing customer models and interface definitions (`*.sysml`, `*.proto`, `*.arxml`, `*.json`, `*.yaml`, `*.idl`) establishing physical and functional boundaries, port definitions, and telemetry contracts.
   - **Architectural Blueprints (`docs/architecture/*.md`):** Existing system architectural specifications, network topology blueprints, and safety frameworks in `docs/architecture/` (and `docs/architecture/blueprints/`).
   - **Prompt-Based Fallback Directives:** Raw natural language prompt parameters, stakeholder objectives, and operational constraints when no intent files exist in `docs/conops/` (triggering auto-persistence of `docs/conops/MISSION_INTENT.md`).
-  - Flight mission envelope parameters (altitude boundaries, ground speed limits, payload type, airspace classification, population density).
-  - Stakeholder role definitions (Remote Pilot, Command Center Operator, Fleet Manager, ATC/UTM interface).
+  - Stakeholder role definitions.
 - **Deliverables & Outputs:**
   - `docs/conops/MISSION_INTENT.md`: Ingested or auto-persisted customer mission intent contract under git version control.
-  - `docs/conops/CONOPS.md`: Structured Concept of Operations detailing mission objectives, flight operational phases (Pre-Flight, Launch, Cruise, Mission Execution, Approach, Landing, Contingency RTL), system physical and functional boundaries reconciled with customer schemas and architectural blueprints, environmental envelope constraints, and MATLAB / Simulink / Stateflow control law synthesis hooks.
+  - `docs/conops/CONOPS.md`: Structured Concept of Operations detailing mission objectives, operational phases (Initialization, Standby, Active Operation, Degraded Mode, Failsafe), system physical and functional boundaries reconciled with customer schemas and architectural blueprints, environmental envelope constraints, and MATLAB / Simulink / Stateflow control law synthesis hooks.
 
-#### 8.2.2 Worker 0B: STPA Hazard Analysis, FMECA & SORA SAIL Assurer
-- **Role Description:** Safety engineering subagent that performs System-Theoretic Process Analysis (STPA), Failure Mode, Effects, and Criticality Analysis (FMECA), and JARUS SORA v2.5 SAIL I–VI risk assessment on the system boundary defined by Worker 0A to produce the authoritative 8-pillar `docs/safety/STPA_MATRIX.md` safety baseline.
+#### 8.2.2 Worker 0B: STPA Hazard Analysis & FMECA Assurer
+- **Role Description:** Safety engineering subagent that performs System-Theoretic Process Analysis (STPA), Failure Mode, Effects, and Criticality Analysis (FMECA), and risk assessment on the system boundary defined by Worker 0A to produce the authoritative 8-pillar `docs/safety/STPA_MATRIX.md` safety baseline.
 - **Primary Inputs:**
   - `CONOPS.md` generated by Worker 0A.
-  - Regulatory safety mandates (JARUS SORA v2.5 SAIL I–VI, ASTM F3269-17 RTA, RTCA DO-365B DAA).
+  - Compiled AST from Step 0.
+  - Regulatory safety mandates.
 - **Deliverables & Outputs:**
-  - `docs/safety/STPA_MATRIX.md`: Complete 8-pillar STPA & SORA assurance specification adhering to:
+  - `docs/safety/STPA_MATRIX.md`: Complete 8-pillar STPA assurance specification adhering to:
     1. **System Losses ($L-1..N$):** High-level unacceptable losses to stakeholders, people, or equipment.
     2. **System Hazards ($H-1..N$):** Hazardous system states and containment boundaries.
     3. **Hierarchical Control Structure Topology:** Control loops, controllers, actuators, sensors, and RTA safety monitors.
-    4. **Unsafe Control Actions ($UCA-1..N$):** Comprehensive identification across all 4 failure modes (Not providing, Providing, Too early/too late/out of order, Stopped too soon/applied too long).
+    4. **Unsafe Control Actions ($UCA-1..N$):** Comprehensive identification across all 4 failure modes.
     5. **Loss Scenarios ($LS-1..N$) & Causal Factors:** Failure and loss causal scenarios.
     6. **Formal Safety Constraints ($SC-1..N$):** Mandatory safety invariants and envelope protections.
     7. **FMECA Criticality Matrix:** Component failure modes with 15+ rows, Severity ($S$), Occurrence ($O$), Detection ($D$), and Risk Priority Numbers ($\text{RPN} = S \times O \times D$).
-    8. **SORA SAIL Risk Mitigations & OSO Traceability Table:** Final GRC, ARC, SAIL I–VI classification, and complete coverage of all 24 SORA Operational Safety Objectives (OSO-01 through OSO-24).
-    - **ASTM F3269-17 RTA Architecture & Safety Net:** Certified recovery switching logic and advanced control isolation.
+    8. **Risk Mitigations Traceability Table.**
+    - **Run-Time Assurance (RTA) Architecture & Safety Net:** Certified recovery switching logic and advanced control isolation.
     - **MATLAB / Simulink / Stateflow Hooks:** SLDV proof invariants and Stateflow supervisor statecharts for control law synthesis.
-
-#### 8.2.3 Worker 0C: SysML v2 Architectural & Safety Model Author
-- **Role Description:** Systems architecture subagent that formalizes the CONOPS, STPA hazard matrices, FMECA ratings, and SORA SAIL requirements into normative SysML v2 textual code blocks and AST handoff contracts.
-- **Primary Inputs:**
-  - `CONOPS.md` from Worker 0A.
-  - `STPA_MATRIX.md` and SORA SAIL risk matrices from Worker 0B.
-- **Deliverables & Outputs:**
-  - `DEAP_MODEL.sysml`: Standard-compliant SysML v2 model containing `package`, `req` (Safety Requirements), `part` (Subsystems & Safety Controllers), `port` (Real-Time Telemetry/Command Interfaces), `state` (Run-Time Assurance & Contingency Statecharts), and `satisfy` / `verify` traceability links.
-  - `pipeline0_handoff_contract.json`: Serialized AST payload for seamless downstream projection into Pipeline 1 (Agile Epics & Features) and Pipeline 2 (ROS2 C++ & PX4 implementation).
 
 ### 8.3 Pipeline 0 Command-Line Execution Prompts
 
@@ -589,8 +570,8 @@ Execute front-end CONOPS synthesis for the target cyber-physical system using Un
 
 2. Ingestion & Analysis Scope:
    - Schema-derived operational envelope (physical boundaries, operating dynamics, environmental constraints, payload/actuator configurations).
-   - Domain-specific operational lifecycle phases: Initialization, Normal Operation, Degraded/Contingency Modes, and Safe Shutdown/Transition.
-   - Dynamic stakeholder roles derived from the system operational context (e.g., System Operators, Dispatchers/Supervisors, Field Maintenance Technicians, External Management/Telemetry Interfaces).
+   - Domain-specific operational lifecycle phases: Initialization, Standby, Active Operation, Degraded Mode, Failsafe.
+   - Dynamic stakeholder roles derived from the system operational context.
    - Domain-specific regulatory and safety classification relevant to the operational envelope.
 
 3. Output Requirements:
@@ -603,24 +584,24 @@ Execute front-end CONOPS synthesis for the target cyber-physical system using Un
 PROCEED
 ```
 
-#### 8.3.2 Worker 0B: STPA Hazard Analysis, FMECA & Domain Safety Assurer Prompt
+#### 8.3.2 Worker 0B: STPA Hazard Analysis & Domain Safety Assurer Prompt
 
 ```text
 Execute `view_file` on `skills/spec-orchestrator/SKILL.md` as your very first step before taking any action.
 
 Repository Classification: DOWNSTREAM_CUSTOMER_PROJECT (or UPSTREAM_SPEC_CORE_COMPILER depending on execution context)
 
-Role: Worker 0B -- STPA Hazard Analysis, FMECA & Domain Safety Assurer
+Role: Worker 0B -- STPA Hazard Analysis & Domain Safety Assurer
 
 Primary Commercial Toolchain Integration Context:
 This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
 
 Directive:
-Perform STPA hazard analysis, FMECA failure mode criticality evaluation, and domain safety risk assessment based on `docs/conops/CONOPS.md`.
+Perform STPA hazard analysis, FMECA failure mode criticality evaluation, and domain safety risk assessment based on `docs/conops/CONOPS.md` and compiled AST.
 
 1. Standards Compliance & Domain Safety Framework:
-   - Dynamic Domain Safety Framework Selection: Apply the applicable safety framework governing the target domain (e.g., ISO 14971/IEC 62304 for Medical, EN 50128 for Rail, DNV-GL for Marine, ECSS for Space, ISO 3691-4 for Industrial AGV, SORA/DO-178C for Aviation).
-   - Run-Time Assurance (RTA) Monitor Architecture & Safety Net switching (e.g., ASTM F3269-17 or domain-equivalent safety monitor pattern).
+   - Dynamic Domain Safety Framework Selection: Apply the applicable safety framework governing the target domain.
+   - Run-Time Assurance (RTA) Monitor Architecture & Safety Net switching.
    - Domain-specific hazard detection, telemetry monitoring, and contingency guidance standards.
 
 2. Output Requirements:
@@ -628,42 +609,14 @@ Perform STPA hazard analysis, FMECA failure mode criticality evaluation, and dom
      1. System Losses ($L-1..N$)
      2. System Hazards ($H-1..N$)
      3. Hierarchical Control Structure Topology (defining System Controllers, Supervisors/RTA Monitors, Actuators, Sensors)
-     4. Unsafe Control Actions ($UCA-1..N$) covering all 4 failure modes: (a) Not providing causes hazard, (b) Providing causes hazard, (c) Providing too early, too late, or out of order, (d) Stopped too soon or applied too long
+     4. Unsafe Control Actions ($UCA-1..N$) covering all 4 failure modes.
      5. Loss Scenarios ($LS-1..N$) & Causal Factors
      6. Formal Safety Constraints ($SC-1..N$)
      7. FMECA Criticality Matrix: Component failure modes with 15+ rows, Severity ($S$), Occurrence ($O$), Detection ($D$), and Risk Priority Numbers ($\text{RPN} = S \times O \times D$)
-     8. Domain Safety Framework & Risk Mitigations Table: Risk class classification, integrity levels, and comprehensive mapping of domain safety objectives and mitigations (e.g., ISO 14971/IEC 62304, EN 50128, DNV-GL, ECSS, ISO 3691-4, SORA OSO-01..24)
+     8. Domain Safety Framework & Risk Mitigations Table.
    - Include Run-Time Assurance (RTA) Safety Net monitor architecture.
    - Include MATLAB / Simulink / Stateflow / Embedded Coder model integration baseline hooks and SLDV formal proof properties.
    - KaTeX / LaTeX Math Formatting Mandate: All multi-line aligned equations MUST be enclosed in `\begin{aligned} ... \end{aligned}` within `$$` delimiters on dedicated lines. Bare alignment tabs `&` outside an alignment environment (`aligned`, `matrix`, `cases`) and `\begin{align*}` environments are strictly forbidden. Markdown Table Math Prohibition Rule: Strictly ban `$ ... $` and `$$ ... $$` LaTeX math delimiters inside table headers, rows, and cells; plain text and Unicode (e.g. `Initial S`, `ΔV`, `λ`, `°C`, `≥`, `≤`, `→`, `10⁻⁶`) must be used instead, with 1:1 column count match between header and delimiter rows.
-
-PROCEED
-```
-
-#### 8.3.3 Worker 0C: SysML v2 Architectural & Safety Model Author Prompt
-
-```text
-Execute `view_file` on `skills/spec-orchestrator/SKILL.md` as your very first step before taking any action.
-
-Repository Classification: DOWNSTREAM_CUSTOMER_PROJECT (or UPSTREAM_SPEC_CORE_COMPILER depending on execution context)
-
-Role: Worker 0C -- SysML v2 Architectural & Safety Model Author
-
-Primary Commercial Toolchain Integration Context:
-This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
-
-Directive:
-Formalize the CONOPS (`CONOPS.md`), STPA hazard matrices, FMECA ratings, and domain safety requirements (`STPA_MATRIX.md`) into a canonical SysML v2 textual model and serialized AST handoff contract based on the derived domain architecture.
-
-1. Model Engineering Mandate:
-   - Construct canonical `DEAP_MODEL.sysml` conforming to SysML v2 textual specification standards (`package`, `req`, `part`, `port`, `state`, `satisfy`, `verify`) based on the derived domain architecture.
-   - Define safety statecharts for Run-Time Assurance (RTA) switching logic, contingency operational modes, and fail-safe transitions.
-   - Establish MATLAB / Simulink / Stateflow export compatibility for safety-critical code synthesis.
-   - KaTeX / LaTeX Math Formatting Mandate: Ensure any statechart/mathematical transition guards and formal expressions follow standard escaping and valid KaTeX blocks (all multi-line aligned equations MUST be enclosed in `\begin{aligned} ... \end{aligned}` within `$$` delimiters on dedicated lines; bare alignment tabs `&` outside an alignment environment and `\begin{align*}` are strictly forbidden). Markdown Table Math Prohibition Rule: Strictly ban `$ ... $` and `$$ ... $$` LaTeX math delimiters inside table headers, rows, and cells; plain text and Unicode (e.g. `Initial S`, `ΔV`, `λ`, `°C`, `≥`, `≤`, `→`, `10⁻⁶`) must be used instead, with 1:1 column count match between header and delimiter rows.
-
-2. Output Requirements:
-   - Generate canonical `DEAP_MODEL.sysml` under `schema/DEAP_MODEL.sysml` (or `.pipeline/schema.sysml`).
-   - Generate canonical `pipeline0_handoff_contract.json` under `.pipeline/contracts/pipeline0_handoff_contract.json` for downstream Pipeline 1 Agile projection and Pipeline 2 code generation.
 
 PROCEED
 ```
@@ -672,15 +625,15 @@ PROCEED
 
 ```mermaid
 flowchart TD
-    Step1["Step 1: Ingest Mission Profile & Synthesize CONOPS (Worker 0A)"] --> Step2["Step 2: Execute STPA, FMECA & SORA SAIL Assessment (Worker 0B)"]
-    Step2 --> Step3["Step 3: Formalize SysML v2 Safety Model & Statecharts (Worker 0C)"]
-    Step3 --> Step4["Step 4: Compile SysML v2 AST & Generate Handoff JSON Contract"]
-    Step4 --> Downstream["Handoff to Pipeline 1 (Projection) & Pipeline 2 (Code Synthesis)"]
+    Step0["Step 0: SysML Model Ingestion & Compilation Gate"] --> Step1["Step 1: Ingest Mission Profile & Synthesize CONOPS (Worker 0A)"]
+    Step1 --> Step2["Step 2: Execute STPA & FMECA Assessment (Worker 0B)"]
+    Step2 --> Step3["Step 3: Level 1C ICD Extraction & Level 2 Specifications"]
+    Step3 --> Downstream["Handoff to Pipeline 1 (Projection) & Pipeline 2 (Code Synthesis)"]
 ```
 
 ### 8.5 Pipeline 0 Handoff JSON Contract (`pipeline0_handoff_contract.json`)
 
-The interface between Pipeline 0 safety modeling, Pipeline 1 specification engineering, and Pipeline 2 ROS2/PX4 safety implementation is strictly governed by `pipeline0_handoff_contract.json` (synthesized from multi-document operational intent in `docs/conops/` (`MISSION_INTENT.md` or customer intent specifications), customer interface schemas in `schema/`, architectural blueprints in `docs/architecture/`, `docs/conops/CONOPS.md`, and `docs/safety/STPA_MATRIX.md`):
+The interface between Pipeline 0 safety modeling, Pipeline 1 specification engineering, and Pipeline 2 safety implementation is strictly governed by `pipeline0_handoff_contract.json`:
 
 ```json
 {
@@ -689,32 +642,29 @@ The interface between Pipeline 0 safety modeling, Pipeline 1 specification engin
     "identifier": "DEAP-PIPELINE-0-HANDOFF-001",
     "timestamp": "2026-08-11T00:00:00Z",
     "source_model": "DEAP_MODEL.sysml",
-    "governance_status": "APPROVED",
-    "regulatory_target": ["ARP4754A", "ARP4761", "JARUS SORA v2.5", "DO-178C", "DO-254", "ASTM F3269"]
+    "governance_status": "APPROVED"
   },
   "conops_summary": {
     "mission_intent_path": "docs/conops/MISSION_INTENT.md",
     "document_path": "docs/conops/CONOPS.md",
-    "mission_type": "UAS BVLOS Urban Infrastructure Inspection",
-    "operational_phases": ["PRE_FLIGHT", "TAKEOFF", "CRUISE", "INSPECTION", "APPROACH", "LANDING", "RTA_BACKUP"]
+    "mission_type": "System Supervision & Mission Control",
+    "operational_phases": ["INITIALIZATION", "STANDBY", "ACTIVE_OPERATION", "DEGRADED_MODE", "FAILSAFE"]
   },
   "safety_matrix": {
     "document_path": "docs/safety/STPA_MATRIX.md",
     "system_losses": [
-      { "id": "L-1", "title": "Loss of Aircraft Control / Uncontrolled Flight Into Terrain (UFIT)" },
-      { "id": "L-2", "title": "Airspace Collision with Manned Aircraft" }
+      { "id": "L-1", "title": "Loss of System Operational Safety / Physical Asset Damage" }
     ],
     "hazards": [
-      { "id": "H-1", "loss_refs": ["L-1"], "title": "Flight Controller Command Saturation during High-Wind Turbulence" },
-      { "id": "H-2", "loss_refs": ["L-2"], "title": "Loss of Remote ID & DAA Telemetry Stream" }
+      { "id": "H-1", "loss_refs": ["L-1"], "title": "Actuator Command Saturation / Unbounded Control Output" }
     ],
     "unsafe_control_actions": [
       {
         "id": "UCA-1",
         "hazard_ref": "H-1",
-        "control_action": "Execute Pitch Command",
+        "control_action": "Execute Actuator Command",
         "failure_mode": "Provided Wrong / Out of Range",
-        "safety_constraint": "SC-1: Pitch command must be rate-limited and bounded by pitch envelope protection safety statechart."
+        "safety_constraint": "SC-1: Actuator command must be rate-limited and bounded by envelope protection safety statechart."
       }
     ]
   },
@@ -722,8 +672,8 @@ The interface between Pipeline 0 safety modeling, Pipeline 1 specification engin
     "requirements": [
       {
         "id": "REQ-SYS-001",
-        "name": "EnvelopeProtectionRequirement",
-        "text": "The flight control system shall enforce pitch angle limits between -15 deg and +25 deg.",
+        "name": "ActuatorConstraintRequirement",
+        "text": "The system controller shall enforce actuation angle limits.",
         "stpa_ref": "SC-1",
         "dal": "DAL A"
       }
@@ -731,7 +681,7 @@ The interface between Pipeline 0 safety modeling, Pipeline 1 specification engin
     "parts": [
       {
         "id": "PART-SYS-001",
-        "name": "FlightControlSystem",
+        "name": "SystemController",
         "ports": ["p_telemetry", "p_actuator_cmd"],
         "subparts": ["PrimaryController", "RunTimeAssuranceMonitor"]
       }
