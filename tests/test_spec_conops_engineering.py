@@ -729,7 +729,7 @@ class TestSpecConopsEngineering(unittest.TestCase):
         self.assertEqual(violations, [], f"Forbidden domain nouns found in 09_SCENARIOS_AND_TIMELINES.md: {violations}")
 
     def test_conops_04_user_classes_and_stakeholders_structure(self):
-        """Verify 04_USER_CLASSES_AND_STAKEHOLDERS.md populates Section 4.4 NASA-TLX matrix, Section 4.4.1 shift rotation, Section 4.5.1 4-way handoff diagram, and Section 4.5.2 timeout & rejection protocol (Fixes #120, #119)."""
+        """Verify 04_USER_CLASSES_AND_STAKEHOLDERS.md populates Section 4.4 NASA-TLX matrix, Section 4.4.1 shift rotation, Section 4.5 operational authority delegation protocol, and Section 4.6 lifecycle stages (Fixes #120, #119, #313)."""
         self.assertTrue(os.path.isfile(CONOPS_04_USER_CLASSES_PATH), f"Missing {CONOPS_04_USER_CLASSES_PATH}")
         self.assertTrue(os.path.isfile(AGENTS_CONOPS_04_USER_CLASSES_PATH), f"Missing {AGENTS_CONOPS_04_USER_CLASSES_PATH}")
 
@@ -747,9 +747,7 @@ class TestSpecConopsEngineering(unittest.TestCase):
         self.assertIn("### 4.3 Skill Prerequisites & Minimum Qualifications", content)
         self.assertIn("### 4.4 Workload Constraints & Human Factors Considerations", content)
         self.assertIn("### 4.4.1 Operational Shift Rotation Protocol", content)
-        self.assertIn("### 4.5 Authority Handoff Chains & Control Transfer Protocols", content)
-        self.assertIn("### 4.5.1 Abstract Cryptographic 4-Way Control Handoff Sequence Diagram", content)
-        self.assertIn("### 4.5.2 Timeout & Rejection Protocol", content)
+        self.assertIn("### 4.5 Operational Authority Delegation & Supervisory Handover Protocol", content)
         self.assertIn("### 4.6 Operational Lifecycle Stages", content)
 
         # Traceability references
@@ -781,29 +779,8 @@ class TestSpecConopsEngineering(unittest.TestCase):
         self.assertIn("t_rest >= 30.0 min", content)
         self.assertIn("t_daily_max <= 8.0 hr", content)
 
-        # Section 4.5.1: Sequence diagram with 4 participants across 9 steps
-        self.assertIn("sequenceDiagram", content)
-        participants = ["PrimaryConsole", "VehicleController", "SecondaryConsole", "CryptographicAuthService"]
-        for p in participants:
-            self.assertIn(p, content)
-
-        for step in [
-            "1. Request Handoff Token",
-            "2. Issue Signed Token",
-            "3. Transmit Control Request",
-            "4. Validate Token",
-            "5. Token Verification Response",
-            "6. Command Control Relinquishment",
-            "7. Acknowledge Relinquish",
-            "8. Grant Active C2 Authority",
-            "9. Confirm Active C2",
-        ]:
-            self.assertIn(step, content)
-
-        # Section 4.5.2: Bounded Timeout Recovery (tau_timeout = 5.0 s) & 4 Rejection Criteria
-        self.assertIn("5.0", content)
-        for rej in ["REJ-01", "REJ-02", "REJ-03", "REJ-04"]:
-            self.assertIn(f"**{rej}**", content)
+        # Section 4.5: Operational Authority Delegation & Supervisory Handover Protocol
+        self.assertIn("{{SUPERVISORY_AUTHORITY_HANDOFF_SECTION}}", content)
 
         # Markdown Table Math Prohibition: No $ in table lines
         table_lines = [line for line in content.splitlines() if line.startswith("|")]

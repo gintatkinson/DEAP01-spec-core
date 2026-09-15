@@ -102,83 +102,18 @@ The shift rotation protocol incorporates the following mandatory operational rul
 4. **Mandatory Shift Handover Overlap ($t_{\mathrm{overlap}} \ge 15.0\text{ min}$):** Incoming and outgoing operators must participate in a structured handover briefing covering current system state, trajectory corridors, environmental conditions, and resource reserves before transferring control authority.
 5. **Fatigue-Triggered Reassignment:** If an operator exhibits elevated NASA-TLX scores exceeding nominal limits (Score > 35) or experiences continuous high-workload degraded mode management, the Mission Supervisor is empowered to mandate an immediate relief rotation.
 
-### 4.5 Authority Handoff Chains & Control Transfer Protocols
-Handoff of command and control (C2) authority between Operator Stations (e.g., PrimaryConsole to SecondaryConsole) or between human supervisory stations and autonomous execution modes follows a strict cryptographic 4-way handshake with handoff completion time bounded by $t_{\mathrm{handoff}} \le \tau_{\text{handoff\_max}}$ (Fixes #120, #119).
+### 4.5 Operational Authority Delegation & Supervisory Handover Protocol
+Operational supervisory authority transfer between certified User Classes (e.g. System Operator UCL-01 to incoming System Operator UCL-01, or delegation to Mission Supervisor UCL-03) follows a structured operational protocol bounded by operational response thresholds ($t_{\mathrm{handoff}} \le \tau_{\text{handoff\_max}}$):
 
-The handoff workflow comprises four key operational phases:
-1. **Initiation:** The standby station (SecondaryConsole) initiates a transfer request by obtaining a cryptographically signed authorization token from the CryptographicAuthService.
-2. **Validation:** The vehicle controller (VehicleController) verifies the cryptographic signature, token timestamp, and authorization scope against public key infrastructure (PKI) certificates.
-3. **State Alignment & Relinquishment:** The active station (PrimaryConsole) acknowledges the transfer order, synchronizes the current telemetry and command state digest, and transitions to monitor-only mode.
-4. **Commit & Active Control:** VehicleController binds the new session key, grants master C2 authority to SecondaryConsole, and confirms bidirectional heartbeat connectivity.
+1. **Handover Briefing & Status Review:** The outgoing operator reviews current system state vector, active trajectory or operating corridors, environmental stress metrics, and remaining energy/resource reserves with the incoming operator.
+2. **State Alignment & Parameter Verification:** The incoming operator verifies that telemetry parameters, boundary containment margins, and active mission goals match operational constraints.
+3. **Formal Relinquishment & Assumption:** The outgoing operator formally relinquishes supervisory control; the incoming operator confirms positive assumption of command and control responsibility.
+4. **Operational Log & Audit Archival:** The delegation transaction is timestamped and recorded in the tamper-evident mission log.
 
-### 4.5.1 Abstract Cryptographic 4-Way Control Handoff Sequence Diagram
-The interaction between the four primary architectural entities (`PrimaryConsole`, `VehicleController`, `SecondaryConsole`, `CryptographicAuthService`) across the 9 cryptographic token steps is formalized below:
+Where architectural subsystem control handoffs or automated cryptographic handshakes are declared in the system model, they are derived dynamically from the SysML architecture:
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant SecondaryConsole as "Secondary Console (Standby C2)"
-    participant CryptographicAuthService as "Cryptographic Auth Service"
-    participant VehicleController as "Vehicle Controller"
-    participant PrimaryConsole as "Primary Console (Active C2)"
+{{SUPERVISORY_AUTHORITY_HANDOFF_SECTION}}
 
-    SecondaryConsole->>CryptographicAuthService: 1. Request Handoff Token (SessionID, Nonce_S, SecondaryCert)
-    CryptographicAuthService-->>SecondaryConsole: 2. Issue Signed Token (Token_ID, SignedClaims, ExpireTime)
-    SecondaryConsole->>VehicleController: 3. Transmit Control Request (Token_ID, SignedClaims, Nonce_V)
-    VehicleController->>CryptographicAuthService: 4. Validate Token & Certificate (Token_ID, SignedClaims, PubKey_S)
-    CryptographicAuthService-->>VehicleController: 5. Token Verification Response (Status_Valid, Signature_Auth)
-    VehicleController->>PrimaryConsole: 6. Command Control Relinquishment (TransferID, TargetConsoleID)
-    PrimaryConsole-->>VehicleController: 7. Acknowledge Relinquish & State Digest (StateDigest_P, Nonce_Ack)
-    VehicleController->>SecondaryConsole: 8. Grant Active C2 Authority (SessionKey, StateInitDigest)
-    SecondaryConsole-->>VehicleController: 9. Confirm Active C2 & Telemetry Sync (TelemetrySyncAck, Nonce_V)
-```
-
-The 9 discrete cryptographic token steps are defined as follows:
-1. **Step 1 (Token Request):** `SecondaryConsole` transmits a handoff token request containing its unique identity (`SecondaryID`), session nonce (`Nonce_S`), and digital certificate (`SecondaryCert`) to `CryptographicAuthService`.
-2. **Step 2 (Token Issue):** `CryptographicAuthService` validates permissions and issues a signed, time-stamped authorization token (`Token_ID`, `SignedClaims`, `ExpireTime`) back to `SecondaryConsole`.
-3. **Step 3 (Control Transfer Request):** `SecondaryConsole` transmits the signed authorization token and a fresh session nonce (`Nonce_V`) to `VehicleController`.
-4. **Step 4 (Validation Request):** `VehicleController` queries `CryptographicAuthService` to verify the digital signature, token validity period, and authorization scope against `PubKey_S`.
-5. **Step 5 (Validation Confirmation):** `CryptographicAuthService` confirms cryptographic validity and returns `Status_Valid` with authentication signature `Signature_Auth` to `VehicleController`.
-6. **Step 6 (Relinquish Command):** `VehicleController` issues a formal command to `PrimaryConsole` to relinquish active control authority (`Relinquish_C2_Command(TransferID, TargetConsoleID)`).
-7. **Step 7 (Relinquish Acknowledgment):** `PrimaryConsole` returns an acknowledgment containing the latest telemetry state digest (`StateDigest_P`) and transitions to monitor-only state.
-8. **Step 8 (C2 Grant):** `VehicleController` transmits `C2_Authority_Grant` with newly negotiated cryptographic session keys (`SessionKey`) and state initialization parameters to `SecondaryConsole`.
-9. **Step 9 (Confirmation & Committal):** `SecondaryConsole` transmits `Confirm_Active_C2` with telemetry synchronization confirmation (`TelemetrySyncAck`), committing active C2 authority.
-
-### 4.5.2 Timeout & Rejection Protocol
-To guarantee deterministic execution and prevent command deadlocks during control transfer, the handoff protocol incorporates bounded timeout recovery and explicit rejection safety criteria (Fixes #120, #119):
-
-$$
-\begin{aligned}
-\tau_{\mathrm{handoff}} &\le \tau_{\mathrm{timeout}} = 5.0 \\
-t_{\mathrm{RTT}} &\le \tau_{\text{RTT\_max}} \\
-P_{\mathrm{loss}} &\le P_{\text{loss\_max}}
-\end{aligned}
-$$
-
-- Parameter Definitions & Engineering Units:
-- tau_handoff: Total elapsed duration of the 4-way cryptographic handoff sequence (s).
-- tau_timeout: Maximum allowable timeout window before automatic abort (tau_timeout = 5.0 s).
-- t_RTT: Round-trip transport latency between SecondaryConsole and VehicleController (ms).
-- tau_RTT_max: Maximum permissible round-trip time for C2 authority transfer (tau_RTT_max = 100.0 ms).
-- P_loss: Measured packet loss rate on the candidate control channel (%).
-- P_loss_max: Maximum permissible packet loss rate threshold (P_loss_max = 1.0%).
-
-#### Bounded Timeout Recovery (tau_timeout = 5.0 s)
-The timeout recovery mechanism guarantees bounded execution time and fail-safe state preservation:
-1. **Watchdog Timer Activation:** `VehicleController` initializes a dedicated hardware watchdog timer with deadline $\tau_{\mathrm{timeout}} = {{HANDOFF_TIMEOUT_SEC:5.0}}\text{ s}$ upon receipt of the initial transfer request (Step 3).
-2. **Deterministic Abort:** If the full 9-step handoff sequence fails to complete within $\tau_{\mathrm{timeout}} = 5.0\text{ s}$, `VehicleController` unconditionally aborts the transaction and drops pending session tokens.
-3. **Safe State Retention / Reversion:** Active C2 authority remains locked at `PrimaryConsole`. If `PrimaryConsole` has already entered a disconnected or unresponsive state, `VehicleController` immediately transitions to `Contingency_LostLinkFallback` (trigger `EMG-01`).
-4. **Session Zeroization & Alerting:** All ephemeral session keys, authorization tokens, and staging buffers associated with the failed transfer are cryptographically zeroized, and timeout alert notifications are dispatched to both consoles.
-
-#### Deterministic Rejection Safety Criteria
-The system deterministically rejects control handoff requests upon meeting any of the four safety criteria specified below:
-
-| Rejection Criterion ID | Rejection Trigger Condition | Detection & Verification Mechanism | Deterministic System Action |
-| :--- | :--- | :--- | :--- |
-| **REJ-01** | Cryptographic Token Invalidation | Digital signature verification failure, expired token validity timestamp (t_current > t_expire), or revoked authorization certificate | Immediate transaction reject; security audit event logged; C2 retained at PrimaryConsole |
-| **REJ-02** | Telemetry / State Desynchronization | State parameter buffer discrepancy Delta_s > Delta_s_threshold between PrimaryConsole and SecondaryConsole | Immediate transaction reject; state re-synchronization alert dispatched; C2 retained at PrimaryConsole |
-| **REJ-03** | Active Contingency / Emergency State | Vehicle actively executing emergency response procedures (EMG-01 through EMG-07) or operating in degraded containment mode | Interlock inhibition of handoff; transfer rejected; autonomous containment state machine takes precedence |
-| **REJ-04** | Datalink Quality & Latency Degradation | Candidate control link exceeds round-trip latency bound (t_RTT > tau_RTT_max) or packet loss threshold (P_loss > P_loss_max) | Immediate transaction reject; link quality alert dispatched; C2 retained at PrimaryConsole |
 
 ### 4.6 Operational Lifecycle Stages ($\Phi_{\mathrm{lifecycle}}$)
 The system operates across six mutually exclusive, deterministic lifecycle stages:
