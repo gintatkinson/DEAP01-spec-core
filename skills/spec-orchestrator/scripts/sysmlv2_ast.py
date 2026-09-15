@@ -52,11 +52,51 @@ class AttributeDef:
 
 
 @dataclass
+class ItemFlowDef:
+    name: str
+    direction: str = "out"
+    item_type: str = "Item"
+    doc: str = ""
+    rate_hz: Optional[float] = None
+    unit: str = ""
+    valid_range: str = ""
+    default_value: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "direction": self.direction,
+            "item_type": self.item_type,
+            "doc": self.doc,
+            "rate_hz": self.rate_hz,
+            "unit": self.unit,
+            "valid_range": self.valid_range,
+            "default_value": self.default_value,
+        }
+
+    def to_sysml(self, indent: int = 4) -> str:
+        pad = " " * indent
+        doc_str = f"{pad}doc /* {self.doc} */\n" if self.doc else ""
+        dir_prefix = f"{self.direction} " if self.direction else ""
+        return f"{doc_str}{pad}{dir_prefix}flow {self.name} : {self.item_type};"
+
+
+@dataclass
 class PortDef:
     name: str
     type_name: str = "Port"
     direction: str = "inout"
     doc: str = ""
+    is_conjugated: bool = False
+    port_category: str = "DataPort"
+    protocol_family: str = ""
+    electrical_attributes: Dict[str, Any] = field(default_factory=dict)
+    item_flows: List[ItemFlowDef] = field(default_factory=list)
+
+    def __post_init__(self):
+        if self.type_name and self.type_name.startswith("~"):
+            self.is_conjugated = True
+            self.type_name = self.type_name.lstrip("~").strip() or "Port"
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -64,13 +104,39 @@ class PortDef:
             "type_name": self.type_name,
             "direction": self.direction,
             "doc": self.doc,
+            "is_conjugated": self.is_conjugated,
+            "port_category": self.port_category,
+            "protocol_family": self.protocol_family,
+            "electrical_attributes": dict(self.electrical_attributes or {}),
+            "item_flows": [f.to_dict() for f in (self.item_flows or [])],
         }
 
     def to_sysml(self, indent: int = 4) -> str:
         pad = " " * indent
         doc_str = f"{pad}doc /* {self.doc} */\n" if self.doc else ""
         dir_prefix = f"{self.direction} " if self.direction and self.direction != "inout" else ""
-        return f"{doc_str}{pad}{dir_prefix}port {self.name} : {self.type_name};"
+        conj_prefix = "~" if self.is_conjugated and not self.type_name.startswith("~") else ""
+        type_str = f"{conj_prefix}{self.type_name}" if self.type_name else "Port"
+        has_body = bool(self.item_flows or self.electrical_attributes)
+        if has_body:
+            lines = [f"{doc_str}{pad}{dir_prefix}port {self.name} : {type_str} {{"]
+            if self.protocol_family:
+                lines.append(f"{pad}    attribute protocol_family : String = \"{self.protocol_family}\";")
+            if self.port_category and self.port_category != "DataPort":
+                lines.append(f"{pad}    attribute port_category : String = \"{self.port_category}\";")
+            for k, v in (self.electrical_attributes or {}).items():
+                if k not in ("protocol_family", "port_category"):
+                    if isinstance(v, int):
+                        lines.append(f"{pad}    attribute {k} : Integer = {v};")
+                    elif isinstance(v, float):
+                        lines.append(f"{pad}    attribute {k} : Real = {v};")
+                    else:
+                        lines.append(f"{pad}    attribute {k} : String = \"{v}\";")
+            for f in (self.item_flows or []):
+                lines.append(f.to_sysml(indent + 4))
+            lines.append(f"{pad}}}")
+            return "\n".join(lines)
+        return f"{doc_str}{pad}{dir_prefix}port {self.name} : {type_str};"
 
 
 @dataclass
@@ -525,16 +591,32 @@ class ConnectionDef:
     target_port: str = ""
     doc: str = ""
     severity: int = 1
+    source_part: str = ""
+    target_part: str = ""
+    item_flow_ref: str = ""
+    protocol: str = ""
+    latency_ms: Optional[float] = None
     attributes: Dict[str, Any] = field(default_factory=dict)
     attribute_defs: List[AttributeDef] = field(default_factory=list)
+
+    def __post_init__(self):
+        if not self.source_part and self.source_port and "." in self.source_port:
+            self.source_part = self.source_port.split(".", 1)[0]
+        if not self.target_part and self.target_port and "." in self.target_port:
+            self.target_part = self.target_port.split(".", 1)[0]
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "name": self.name,
+            "source_part": self.source_part,
             "source_port": self.source_port,
+            "target_part": self.target_part,
             "target_port": self.target_port,
             "doc": self.doc,
             "severity": self.severity,
+            "item_flow_ref": self.item_flow_ref,
+            "protocol": self.protocol,
+            "latency_ms": self.latency_ms,
             "attributes": dict(self.attributes or {}),
         }
 
@@ -543,22 +625,21 @@ class ConnectionDef:
         lines = []
         if self.doc:
             lines.append(f"{pad}doc /* {self.doc} */")
+        lines.append(f"{pad}connection def {self.name} {{")
         if self.source_port and self.target_port:
-            lines.append(f"{pad}connection def {self.name} {{")
             lines.append(f"{pad}    connect {self.source_port} to {self.target_port};")
-            if self.severity != 1:
-                lines.append(f"{pad}    attribute severity : Integer = {self.severity};")
-            for attr in (self.attribute_defs or []):
-                if attr.name not in ("source_port", "target_port", "severity"):
-                    lines.append(attr.to_sysml(indent + 4))
-            lines.append(f"{pad}}}")
-        else:
-            lines.append(f"{pad}connection def {self.name} {{")
-            if self.severity != 1:
-                lines.append(f"{pad}    attribute severity : Integer = {self.severity};")
-            for attr in (self.attribute_defs or []):
+        if self.severity != 1:
+            lines.append(f"{pad}    attribute severity : Integer = {self.severity};")
+        if self.protocol and not any(a.name == "protocol" for a in (self.attribute_defs or [])):
+            lines.append(f"{pad}    attribute protocol : String = \"{self.protocol}\";")
+        if self.latency_ms is not None and not any(a.name in ("latency_ms", "latency") for a in (self.attribute_defs or [])):
+            lines.append(f"{pad}    attribute latency_ms : Real = {self.latency_ms};")
+        if self.item_flow_ref and not any(a.name in ("item_flow_ref", "item_flow") for a in (self.attribute_defs or [])):
+            lines.append(f"{pad}    attribute item_flow_ref : String = \"{self.item_flow_ref}\";")
+        for attr in (self.attribute_defs or []):
+            if attr.name not in ("source_port", "target_port", "severity", "protocol", "latency_ms", "latency", "item_flow_ref", "item_flow"):
                 lines.append(attr.to_sysml(indent + 4))
-            lines.append(f"{pad}}}")
+        lines.append(f"{pad}}}")
         return "\n".join(lines)
 
 
@@ -567,9 +648,11 @@ SysMLRequirementDef = RequirementDef
 SysMLStateDef = StateDef
 SysMLUseCaseDef = UseCaseDef
 SysMLItemDef = ItemDef
+SysMLItemFlowDef = ItemFlowDef
 SysMLHazardDef = HazardDef
 SysMLRiskDef = RiskDef
 SysMLConnectionDef = ConnectionDef
+SysMLPortDef = PortDef
 
 
 @dataclass
@@ -1400,6 +1483,13 @@ class SysMLParser:
                     else:
                         container.connections.append(conn_obj)
 
+                elif re.search(r'(?:~?\s*\b(?:in|out|inout)\s+)?~?\s*port\b', header):
+                    port_obj = self._parse_port_block(d)
+                    if isinstance(container, SysMLPackage):
+                        container.port_defs.append(port_obj)
+                    else:
+                        container.ports.append(port_obj)
+
             elif d["type"] == "statement":
                 stmt = d["statement"]
                 doc = d.get("doc", "")
@@ -1466,7 +1556,7 @@ class SysMLParser:
                     else:
                         container.actions.append(act_obj)
 
-                elif re.search(r'\b(?:in|out|inout)?\s*port\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt):
+                elif re.search(r'(?:~?\s*\b(?:in|out|inout)\s+)?~?\s*port\b', stmt):
                     port_obj = self._parse_port_stmt(stmt, doc)
                     if isinstance(container, SysMLPackage):
                         container.port_defs.append(port_obj)
@@ -1519,7 +1609,7 @@ class SysMLParser:
                     else:
                         container.connections.append(conn_obj)
 
-                elif re.search(r'\bconnect\b', stmt):
+                elif re.search(r'\bconnect\b|\b(?:item\s+)?flow\s+from\b', stmt):
                     conn_obj = self._parse_connect_stmt(stmt, doc)
                     if conn_obj:
                         if isinstance(container, SysMLPackage):
@@ -1824,17 +1914,166 @@ class SysMLParser:
             parameters=parameters
         )
 
+    def _parse_item_flow_stmt(self, stmt: str, doc: str = "") -> ItemFlowDef:
+        dir_m = re.search(r'\b(in|out|inout)\b', stmt)
+        direction = dir_m.group(1) if dir_m else "out"
+
+        m_name = re.search(r'\b(?:item\s+)?flow\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt)
+        name = m_name.group(1) if m_name else "ItemFlow"
+
+        type_m = re.search(r':\s*([a-zA-Z0-9_<>:]+)', stmt)
+        if type_m:
+            item_type = type_m.group(1).strip()
+        else:
+            of_m = re.search(r'\b(?:of|item)\s+([a-zA-Z0-9_]+)', stmt)
+            item_type = of_m.group(1).strip() if of_m else "Item"
+
+        rate_m = re.search(r'\b(?:rate|rate_hz)\s*[:=]?\s*([0-9.]+)\s*(?:Hz)?', stmt, re.IGNORECASE)
+        rate_hz = float(rate_m.group(1)) if rate_m else None
+
+        unit_m = re.search(r'\bunit\s*[:=]\s*["\']?([^"\';\],]+)', stmt, re.IGNORECASE)
+        unit = unit_m.group(1).strip() if unit_m else ""
+
+        range_m = re.search(r'\b(?:valid_)?range\s*[:=]\s*["\']?(\[[^\]]+\]|[^"\';\],]+)', stmt, re.IGNORECASE)
+        valid_range = range_m.group(1).strip() if range_m else ""
+
+        def_m = re.search(r'\bdefault(?:_value)?\s*[:=]\s*["\']?([^"\';\],]+)', stmt, re.IGNORECASE)
+        default_value = def_m.group(1).strip() if def_m else None
+
+        return ItemFlowDef(
+            name=name,
+            direction=direction,
+            item_type=item_type,
+            doc=doc,
+            rate_hz=rate_hz,
+            unit=unit,
+            valid_range=valid_range,
+            default_value=default_value,
+        )
+
     def _parse_port_stmt(self, stmt: str, doc: str = "") -> PortDef:
         dir_m = re.search(r'\b(in|out|inout)\b', stmt)
         direction = dir_m.group(1) if dir_m else "inout"
 
-        m = re.search(r'\bport\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt)
+        is_conjugated = bool('~' in stmt)
+
+        m = re.search(r'\bport\s+(?:def\s+)?~?\s*([a-zA-Z0-9_]+)', stmt)
         name = m.group(1) if m else "Port"
 
-        type_m = re.search(r':\s*([a-zA-Z0-9_<>:]+)', stmt)
+        type_m = re.search(r':\s*~?\s*([a-zA-Z0-9_<>:]+)', stmt)
         type_name = type_m.group(1).strip() if type_m else "Port"
+        if type_name.startswith("~"):
+            is_conjugated = True
+            type_name = type_name.lstrip("~").strip() or "Port"
 
-        return PortDef(name=name, type_name=type_name, direction=direction, doc=doc)
+        # Port category detection
+        m_cat = re.search(r'\b(?:port_)?category\s*[:=]\s*["\']?([a-zA-Z0-9_]+)', stmt + " " + doc, re.IGNORECASE)
+        if m_cat:
+            port_category = m_cat.group(1)
+        else:
+            text_check = f"{type_name} {name} {stmt} {doc}"
+            if re.search(r'\bCommand(?:Port)?\b', text_check, re.IGNORECASE):
+                port_category = "CommandPort"
+            elif re.search(r'\bTelemetry(?:Port)?\b', text_check, re.IGNORECASE):
+                port_category = "TelemetryPort"
+            elif re.search(r'\bEvent(?:Port)?\b', text_check, re.IGNORECASE):
+                port_category = "EventPort"
+            else:
+                port_category = "DataPort"
+
+        # Protocol family detection
+        m_proto = re.search(r'\b(?:protocol_family|protocol)\s*[:=]\s*["\']?([^"\';\],]+)', stmt + " " + doc, re.IGNORECASE)
+        if m_proto:
+            protocol_family = m_proto.group(1).strip()
+        else:
+            text_check = f"{stmt} {doc} {type_name}"
+            if re.search(r'\bARINC[- ]?429\b', text_check, re.IGNORECASE):
+                protocol_family = "ARINC 429"
+            elif re.search(r'\bMIL[- ]?STD[- ]?1553\b', text_check, re.IGNORECASE):
+                protocol_family = "MIL-STD-1553"
+            elif re.search(r'\bCAN\b|\bCAN[- ]?(?:FD|Bus)\b', text_check, re.IGNORECASE):
+                protocol_family = "CAN"
+            elif re.search(r'\bEthernet\b|\bAFDX\b', text_check, re.IGNORECASE):
+                protocol_family = "Ethernet"
+            elif re.search(r'\bRS[- ]?485\b', text_check, re.IGNORECASE):
+                protocol_family = "RS-485"
+            elif re.search(r'\bDiscrete\b', text_check, re.IGNORECASE):
+                protocol_family = "Discrete"
+            elif re.search(r'\bUART\b', text_check, re.IGNORECASE):
+                protocol_family = "UART"
+            elif re.search(r'\bSPI\b', text_check, re.IGNORECASE):
+                protocol_family = "SPI"
+            elif re.search(r'\bI2C\b', text_check, re.IGNORECASE):
+                protocol_family = "I2C"
+            elif re.search(r'\bSpaceWire\b', text_check, re.IGNORECASE):
+                protocol_family = "SpaceWire"
+            else:
+                protocol_family = ""
+
+        electrical_attributes: Dict[str, Any] = {}
+        m_baud = re.search(r'\bbaud(?:_rate)?\s*[:=]\s*([0-9]+)', stmt + " " + doc, re.IGNORECASE)
+        if m_baud:
+            electrical_attributes["baud_rate"] = int(m_baud.group(1))
+        m_volt = re.search(r'\bvoltage(?:_domain)?\s*[:=]\s*["\']?([0-9a-zA-Z._]+)', stmt + " " + doc, re.IGNORECASE)
+        if m_volt:
+            electrical_attributes["voltage_domain"] = m_volt.group(1)
+        m_wire = re.search(r'\bwire(?:_count)?\s*[:=]\s*([0-9]+)', stmt + " " + doc, re.IGNORECASE)
+        if m_wire:
+            electrical_attributes["wire_count"] = int(m_wire.group(1))
+        m_imp = re.search(r'\bimpedance\s*[:=]\s*["\']?([0-9a-zA-Z._]+)', stmt + " " + doc, re.IGNORECASE)
+        if m_imp:
+            electrical_attributes["impedance"] = m_imp.group(1)
+
+        item_flows: List[ItemFlowDef] = []
+        if re.search(r'\b(?:item\s+)?flow\b', stmt):
+            item_flows.append(self._parse_item_flow_stmt(stmt, doc))
+
+        return PortDef(
+            name=name,
+            type_name=type_name,
+            direction=direction,
+            doc=doc,
+            is_conjugated=is_conjugated,
+            port_category=port_category,
+            protocol_family=protocol_family,
+            electrical_attributes=electrical_attributes,
+            item_flows=item_flows,
+        )
+
+    def _parse_port_block(self, decl: Dict[str, Any]) -> PortDef:
+        header = decl["header"]
+        doc = decl.get("doc", "")
+        port = self._parse_port_stmt(header, doc)
+
+        body_decls = self._scan_declarations(decl.get("body", ""))
+        for d in body_decls:
+            if d["type"] == "statement":
+                stmt = d["statement"]
+                stmt_doc = d.get("doc", "")
+                if re.search(r'\b(?:item\s+)?flow\b', stmt):
+                    flow_obj = self._parse_item_flow_stmt(stmt, stmt_doc)
+                    port.item_flows.append(flow_obj)
+                elif re.search(r'\battribute\s+', stmt):
+                    attr = self._parse_attribute_stmt(stmt, stmt_doc)
+                    val = attr.default_value if attr.default_value is not None else attr.type_name
+                    if isinstance(val, str):
+                        val_clean = val.strip('"\'; ')
+                        if val_clean.isdigit():
+                            val = int(val_clean)
+                        else:
+                            val = val_clean
+                    port.electrical_attributes[attr.name] = val
+                    if attr.name in ("protocol", "protocol_family") and attr.default_value:
+                        port.protocol_family = attr.default_value.strip('"\'; ')
+                    elif attr.name in ("category", "port_category") and attr.default_value:
+                        port.port_category = attr.default_value.strip('"\'; ')
+            elif d["type"] == "block":
+                b_header = d["header"]
+                b_doc = d.get("doc", "")
+                if re.search(r'\b(?:item\s+)?flow\b', b_header):
+                    flow_obj = self._parse_item_flow_stmt(b_header, b_doc)
+                    port.item_flows.append(flow_obj)
+        return port
 
     def _parse_attribute_stmt(self, stmt: str, doc: str = "") -> AttributeDef:
         m = re.search(r'\battribute\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt)
@@ -2275,12 +2514,67 @@ class SysMLParser:
         if target_port:
             attributes["target_port"] = target_port
 
+        combined_text = decl.get("header", "") + " " + decl.get("body", "") + " " + doc
+        protocol = ""
+        if "protocol" in attributes:
+            raw_p = str(attributes["protocol"]).strip('"\'; ')
+            if raw_p.lower() not in ("string", "type", ""):
+                protocol = raw_p
+        elif "protocol_family" in attributes:
+            protocol = str(attributes["protocol_family"]).strip('"\'; ')
+        if not protocol:
+            m_proto = re.search(r'\b(?:protocol_family|protocol)\s*(?::\s*[a-zA-Z0-9_]+\s*)?[:=]\s*["\']?([^"\';\s]+)', combined_text, re.IGNORECASE)
+            if m_proto:
+                protocol = m_proto.group(1).strip('"\'; ')
+
+        latency_ms = None
+        if "latency_ms" in attributes:
+            try:
+                latency_ms = float(str(attributes["latency_ms"]).strip('"\'; '))
+            except (ValueError, TypeError):
+                pass
+        elif "latency" in attributes:
+            try:
+                latency_ms = float(str(attributes["latency"]).strip('"\'; '))
+            except (ValueError, TypeError):
+                pass
+        if latency_ms is None:
+            m_lat = re.search(r'\blatency(?:_ms)?\s*(?::\s*[a-zA-Z0-9_]+\s*)?[:=]\s*([0-9.]+)', combined_text, re.IGNORECASE)
+            if m_lat:
+                try:
+                    latency_ms = float(m_lat.group(1))
+                except ValueError:
+                    pass
+
+        item_flow_ref = ""
+        if "item_flow_ref" in attributes:
+            raw_flow = str(attributes["item_flow_ref"]).strip('"\'; ')
+            if raw_flow.lower() not in ("string", "type", ""):
+                item_flow_ref = raw_flow
+        elif "item_flow" in attributes:
+            item_flow_ref = str(attributes["item_flow"]).strip('"\'; ')
+        if not item_flow_ref:
+            m_flow = re.search(r'\b(?:item_flow(?:_ref)?|flow)\s*(?::\s*[a-zA-Z0-9_]+\s*)?[:=]\s*["\']?([^"\';\s]+)', combined_text, re.IGNORECASE)
+            if not m_flow:
+                m_flow = re.search(r'\b(?:flow\s+of|item\s+flow|item)\s+([a-zA-Z0-9_]+)', combined_text)
+            if not m_flow:
+                m_flow = re.search(r'\bflow\s+(?!from\b|to\b|of\b)([a-zA-Z0-9_]+)', combined_text)
+            item_flow_ref = m_flow.group(1).strip('"\';\\]\\[ ') if m_flow else ""
+
+        source_part = str(attributes.get("source_part", ""))
+        target_part = str(attributes.get("target_part", ""))
+
         return ConnectionDef(
             name=name,
             source_port=source_port,
             target_port=target_port,
             doc=doc,
             severity=severity,
+            source_part=source_part,
+            target_part=target_part,
+            item_flow_ref=item_flow_ref,
+            protocol=protocol,
+            latency_ms=latency_ms,
             attributes=attributes,
             attribute_defs=attribute_defs,
         )
@@ -2310,12 +2604,28 @@ class SysMLParser:
         if target_port:
             attributes["target_port"] = target_port
 
+        m_proto = re.search(r'\b(?:protocol_family|protocol)\s*(?::\s*[a-zA-Z0-9_]+\s*)?[:=]\s*["\']?([^"\';\s]+)', stmt + " " + doc, re.IGNORECASE)
+        protocol = m_proto.group(1).strip('"\';\\]\\[ ') if m_proto else ""
+
+        m_lat = re.search(r'\blatency(?:_ms)?\s*(?::\s*[a-zA-Z0-9_]+\s*)?[:=]\s*([0-9.]+)', stmt + " " + doc, re.IGNORECASE)
+        latency_ms = float(m_lat.group(1)) if m_lat else None
+
+        m_flow = re.search(r'\b(?:item_flow(?:_ref)?|flow)\s*(?::\s*[a-zA-Z0-9_]+\s*)?[:=]\s*["\']?([^"\';\s]+)', stmt, re.IGNORECASE)
+        if not m_flow:
+            m_flow = re.search(r'\b(?:flow\s+of|item\s+flow|item)\s+([a-zA-Z0-9_]+)', stmt)
+        if not m_flow:
+            m_flow = re.search(r'\bflow\s+(?!from\b|to\b|of\b)([a-zA-Z0-9_]+)', stmt)
+        item_flow_ref = m_flow.group(1).strip('"\';\\]\\[ ') if m_flow else ""
+
         return ConnectionDef(
             name=name,
             source_port=source_port,
             target_port=target_port,
             doc=doc,
             severity=severity,
+            item_flow_ref=item_flow_ref,
+            protocol=protocol,
+            latency_ms=latency_ms,
             attributes=attributes,
         )
 
@@ -2333,20 +2643,25 @@ class SysMLParser:
             source_port = m_to.group(1)
             target_port = m_to.group(2)
         else:
-            m_arrow = re.search(r'\bconnect\s+([a-zA-Z0-9_\.]+)\s*->\s*([a-zA-Z0-9_\.]+)', stmt)
-            if m_arrow:
-                source_port = m_arrow.group(1)
-                target_port = m_arrow.group(2)
+            m_flow_from = re.search(r'\b(?:item\s+)?flow\s+from\s+([a-zA-Z0-9_\.]+)\s+to\s+([a-zA-Z0-9_\.]+)', stmt)
+            if m_flow_from:
+                source_port = m_flow_from.group(1)
+                target_port = m_flow_from.group(2)
             else:
-                m_paren = re.search(r'\bconnect\s*\(\s*([a-zA-Z0-9_\.]+)\s*,\s*([a-zA-Z0-9_\.]+)\s*\)', stmt)
-                if m_paren:
-                    source_port = m_paren.group(1)
-                    target_port = m_paren.group(2)
+                m_arrow = re.search(r'\bconnect\s+([a-zA-Z0-9_\.]+)\s*->\s*([a-zA-Z0-9_\.]+)', stmt)
+                if m_arrow:
+                    source_port = m_arrow.group(1)
+                    target_port = m_arrow.group(2)
                 else:
-                    m_comma = re.search(r'\bconnect\s+([a-zA-Z0-9_\.]+)\s*,\s*([a-zA-Z0-9_\.]+)', stmt)
-                    if m_comma:
-                        source_port = m_comma.group(1)
-                        target_port = m_comma.group(2)
+                    m_paren = re.search(r'\bconnect\s*\(\s*([a-zA-Z0-9_\.]+)\s*,\s*([a-zA-Z0-9_\.]+)\s*\)', stmt)
+                    if m_paren:
+                        source_port = m_paren.group(1)
+                        target_port = m_paren.group(2)
+                    else:
+                        m_comma = re.search(r'\bconnect\s+([a-zA-Z0-9_\.]+)\s*,\s*([a-zA-Z0-9_\.]+)', stmt)
+                        if m_comma:
+                            source_port = m_comma.group(1)
+                            target_port = m_comma.group(2)
 
         if not name:
             if source_port and target_port:
@@ -2363,11 +2678,27 @@ class SysMLParser:
         if target_port:
             attributes["target_port"] = target_port
 
+        m_proto = re.search(r'\b(?:protocol_family|protocol)\s*(?::\s*[a-zA-Z0-9_]+\s*)?[:=]\s*["\']?([^"\';\s]+)', stmt + " " + doc, re.IGNORECASE)
+        protocol = m_proto.group(1).strip('"\';\\]\\[ ') if m_proto else ""
+
+        m_lat = re.search(r'\blatency(?:_ms)?\s*(?::\s*[a-zA-Z0-9_]+\s*)?[:=]\s*([0-9.]+)', stmt + " " + doc, re.IGNORECASE)
+        latency_ms = float(m_lat.group(1)) if m_lat else None
+
+        m_flow = re.search(r'\b(?:item_flow(?:_ref)?|flow)\s*(?::\s*[a-zA-Z0-9_]+\s*)?[:=]\s*["\']?([^"\';\s]+)', stmt, re.IGNORECASE)
+        if not m_flow:
+            m_flow = re.search(r'\b(?:flow\s+of|item\s+flow|item)\s+([a-zA-Z0-9_]+)', stmt)
+        if not m_flow:
+            m_flow = re.search(r'\bflow\s+(?!from\b|to\b|of\b)([a-zA-Z0-9_]+)', stmt)
+        item_flow_ref = m_flow.group(1).strip('"\';\\]\\[ ') if m_flow else ""
+
         return ConnectionDef(
             name=name,
             source_port=source_port,
             target_port=target_port,
             doc=doc,
             severity=severity,
+            item_flow_ref=item_flow_ref,
+            protocol=protocol,
+            latency_ms=latency_ms,
             attributes=attributes,
         )

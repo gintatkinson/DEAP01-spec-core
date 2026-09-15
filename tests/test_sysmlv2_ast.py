@@ -23,9 +23,12 @@ from sysmlv2_ast import (
     HazardDef,
     RiskDef,
     ConnectionDef,
+    ItemFlowDef,
     SysMLHazardDef,
     SysMLRiskDef,
     SysMLConnectionDef,
+    SysMLItemFlowDef,
+    SysMLPortDef,
     SysMLParser,
 )
 
@@ -272,6 +275,236 @@ class TestSysMLv2ASTHazardRiskConnection(unittest.TestCase):
         self.assertIn("R2", names)
         self.assertIn("C1", names)
         self.assertIn("C2", names)
+
+    def test_item_flow_def(self):
+        """Verify ItemFlowDef defaults, custom instantiation, dictionary export, and SysML serialization."""
+        self.assertIs(SysMLItemFlowDef, ItemFlowDef)
+        self.assertIs(SysMLPortDef, PortDef)
+
+        # Default values
+        flow_default = ItemFlowDef(name="default_flow")
+        self.assertEqual(flow_default.name, "default_flow")
+        self.assertEqual(flow_default.direction, "out")
+        self.assertEqual(flow_default.item_type, "Item")
+        self.assertEqual(flow_default.doc, "")
+        self.assertIsNone(flow_default.rate_hz)
+        self.assertEqual(flow_default.unit, "")
+        self.assertEqual(flow_default.valid_range, "")
+        self.assertIsNone(flow_default.default_value)
+        self.assertEqual(flow_default.to_sysml().strip(), "out flow default_flow : Item;")
+
+        # Custom values
+        flow_custom = ItemFlowDef(
+            name="nav_telemetry",
+            direction="in",
+            item_type="NavigationData",
+            doc="Navigation sensor stream",
+            rate_hz=50.0,
+            unit="m/s",
+            valid_range="[-500.0, 500.0]",
+            default_value="0.0",
+        )
+        self.assertEqual(flow_custom.to_dict(), {
+            "name": "nav_telemetry",
+            "direction": "in",
+            "item_type": "NavigationData",
+            "doc": "Navigation sensor stream",
+            "rate_hz": 50.0,
+            "unit": "m/s",
+            "valid_range": "[-500.0, 500.0]",
+            "default_value": "0.0",
+        })
+        self.assertIn("in flow nav_telemetry : NavigationData;", flow_custom.to_sysml())
+        self.assertIn("doc /* Navigation sensor stream */", flow_custom.to_sysml())
+
+    def test_enhanced_port_def(self):
+        """Verify PortDef conjugation, category, protocol family, electrical attributes, and item flows."""
+        # Conjugated port by explicit flag
+        p_conj1 = PortDef(name="sensor_port", type_name="SensorPort", is_conjugated=True)
+        self.assertTrue(p_conj1.is_conjugated)
+        self.assertEqual(p_conj1.type_name, "SensorPort")
+        self.assertIn("port sensor_port : ~SensorPort;", p_conj1.to_sysml())
+
+        # Conjugated port auto-detected via type_name prefix
+        p_conj2 = PortDef(name="client_port", type_name="~ServicePort")
+        self.assertTrue(p_conj2.is_conjugated)
+        self.assertEqual(p_conj2.type_name, "ServicePort")
+        self.assertIn("port client_port : ~ServicePort;", p_conj2.to_sysml())
+
+        # Enhanced PortDef with all fields
+        f1 = ItemFlowDef(name="command_stream", direction="in", item_type="CommandMsg", rate_hz=20.0)
+        p_full = PortDef(
+            name="cmd_in",
+            direction="in",
+            type_name="ActuatorCommandPort",
+            doc="Actuator command input",
+            port_category="CommandPort",
+            protocol_family="MIL-STD-1553",
+            electrical_attributes={"baud_rate": 1000000, "voltage_domain": "28V"},
+            item_flows=[f1],
+        )
+        p_dict = p_full.to_dict()
+        self.assertEqual(p_dict["name"], "cmd_in")
+        self.assertEqual(p_dict["direction"], "in")
+        self.assertEqual(p_dict["port_category"], "CommandPort")
+        self.assertEqual(p_dict["protocol_family"], "MIL-STD-1553")
+        self.assertEqual(p_dict["electrical_attributes"]["baud_rate"], 1000000)
+        self.assertEqual(p_dict["electrical_attributes"]["voltage_domain"], "28V")
+        self.assertEqual(len(p_dict["item_flows"]), 1)
+        self.assertEqual(p_dict["item_flows"][0]["name"], "command_stream")
+
+        sysml_repr = p_full.to_sysml()
+        self.assertIn("in port cmd_in : ActuatorCommandPort {", sysml_repr)
+        self.assertIn("attribute protocol_family : String = \"MIL-STD-1553\";", sysml_repr)
+        self.assertIn("attribute port_category : String = \"CommandPort\";", sysml_repr)
+        self.assertIn("attribute baud_rate : Integer = 1000000;", sysml_repr)
+        self.assertIn("in flow command_stream : CommandMsg;", sysml_repr)
+
+    def test_enhanced_connection_def(self):
+        """Verify ConnectionDef part extraction, item flow reference, protocol, and latency."""
+        # Auto-population of source_part and target_part from port names
+        c = ConnectionDef(
+            name="Conn_FCS_Actuator",
+            source_port="FlightController.act_cmd_out",
+            target_port="ActuatorDriver.act_cmd_in",
+            severity=4,
+            protocol="CAN",
+            latency_ms=2.5,
+            item_flow_ref="ActuatorCommandFlow",
+        )
+        self.assertEqual(c.source_part, "FlightController")
+        self.assertEqual(c.target_part, "ActuatorDriver")
+        self.assertEqual(c.protocol, "CAN")
+        self.assertEqual(c.latency_ms, 2.5)
+        self.assertEqual(c.item_flow_ref, "ActuatorCommandFlow")
+
+        c_dict = c.to_dict()
+        self.assertEqual(c_dict["source_part"], "FlightController")
+        self.assertEqual(c_dict["target_part"], "ActuatorDriver")
+        self.assertEqual(c_dict["protocol"], "CAN")
+        self.assertEqual(c_dict["latency_ms"], 2.5)
+        self.assertEqual(c_dict["item_flow_ref"], "ActuatorCommandFlow")
+
+        c_sysml = c.to_sysml()
+        self.assertIn("connection def Conn_FCS_Actuator {", c_sysml)
+        self.assertIn("connect FlightController.act_cmd_out to ActuatorDriver.act_cmd_in;", c_sysml)
+        self.assertIn("attribute severity : Integer = 4;", c_sysml)
+        self.assertIn("attribute protocol : String = \"CAN\";", c_sysml)
+        self.assertIn("attribute latency_ms : Real = 2.5;", c_sysml)
+        self.assertIn("attribute item_flow_ref : String = \"ActuatorCommandFlow\";", c_sysml)
+
+        # Explicitly set parts are preserved
+        c_explicit = ConnectionDef(
+            name="Conn_Explicit",
+            source_part="CustomSource",
+            target_part="CustomTarget",
+            source_port="SubA.port1",
+            target_port="SubB.port2",
+        )
+        self.assertEqual(c_explicit.source_part, "CustomSource")
+        self.assertEqual(c_explicit.target_part, "CustomTarget")
+
+    def test_parse_port_conjugation_and_typing(self):
+        """Verify SysMLParser parses conjugated ports, port categories, protocols, and port blocks."""
+        sysml_text = """
+        package AvionicsPackage {
+            part def FlightComputer {
+                ~port sensor_in : SensorPort;
+                out port nav_out : ~NavPort;
+                in port cmd_in : CommandPort;
+                port telem_out : TelemetryPort [protocol: ARINC 429] [baud: 100000];
+            }
+
+            port def GPSInterfacePort {
+                doc /* GPS Interface Port Definition */
+                attribute protocol_family = "RS-485";
+                attribute baud_rate : Integer = 115200;
+                attribute voltage_domain = "12V";
+                out flow gps_fix : GPSFixMsg [rate: 10Hz, unit: m];
+            }
+        }
+        """
+        pkg = SysMLParser.parse_text(sysml_text)
+        self.assertEqual(len(pkg.part_defs), 1)
+        fc = pkg.part_defs[0]
+        self.assertEqual(len(fc.ports), 4)
+
+        p_map = {p.name: p for p in fc.ports}
+        # sensor_in: ~port
+        self.assertTrue(p_map["sensor_in"].is_conjugated)
+        self.assertEqual(p_map["sensor_in"].type_name, "SensorPort")
+
+        # nav_out: port : ~NavPort
+        self.assertTrue(p_map["nav_out"].is_conjugated)
+        self.assertEqual(p_map["nav_out"].type_name, "NavPort")
+        self.assertEqual(p_map["nav_out"].direction, "out")
+
+        # cmd_in: CommandPort category
+        self.assertEqual(p_map["cmd_in"].port_category, "CommandPort")
+        self.assertEqual(p_map["cmd_in"].direction, "in")
+
+        # telem_out: TelemetryPort, protocol, baud_rate
+        self.assertEqual(p_map["telem_out"].port_category, "TelemetryPort")
+        self.assertEqual(p_map["telem_out"].protocol_family, "ARINC 429")
+        self.assertEqual(p_map["telem_out"].electrical_attributes.get("baud_rate"), 100000)
+
+        # GPSInterfacePort in package port_defs
+        self.assertEqual(len(pkg.port_defs), 1)
+        gps_port = pkg.port_defs[0]
+        self.assertEqual(gps_port.name, "GPSInterfacePort")
+        self.assertEqual(gps_port.protocol_family, "RS-485")
+        self.assertEqual(gps_port.electrical_attributes.get("baud_rate"), 115200)
+        self.assertEqual(gps_port.electrical_attributes.get("voltage_domain"), "12V")
+        self.assertEqual(len(gps_port.item_flows), 1)
+        fix_flow = gps_port.item_flows[0]
+        self.assertEqual(fix_flow.name, "gps_fix")
+        self.assertEqual(fix_flow.direction, "out")
+        self.assertEqual(fix_flow.item_type, "GPSFixMsg")
+        self.assertEqual(fix_flow.rate_hz, 10.0)
+        self.assertEqual(fix_flow.unit, "m")
+
+    def test_parse_enhanced_connections_and_flows(self):
+        """Verify SysMLParser parses connection blocks and connect statements with protocol, latency, and item flows."""
+        sysml_text = """
+        package InterconnectPackage {
+            connection def ConnEthernet {
+                doc /* High-speed link */
+                connect MissionComputer.eth_out to DataRecorder.eth_in;
+                attribute protocol : String = "Ethernet";
+                attribute latency_ms : Real = 0.5;
+                attribute item_flow_ref : String = "SensorPayloadStream";
+            }
+
+            connect SensorHub.can_out to FlightController.can_in [protocol: CAN] [latency: 2.0] flow of SensorTelemetry;
+
+            flow from GuidanceUnit.pos_out to NavigationFilter.pos_in item PositionFlow;
+        }
+        """
+        pkg = SysMLParser.parse_text(sysml_text)
+        self.assertEqual(len(pkg.connection_defs), 3)
+
+        c_map = {c.name: c for c in pkg.connection_defs}
+
+        c_eth = c_map["ConnEthernet"]
+        self.assertEqual(c_eth.source_part, "MissionComputer")
+        self.assertEqual(c_eth.source_port, "MissionComputer.eth_out")
+        self.assertEqual(c_eth.target_part, "DataRecorder")
+        self.assertEqual(c_eth.target_port, "DataRecorder.eth_in")
+        self.assertEqual(c_eth.protocol, "Ethernet")
+        self.assertEqual(c_eth.latency_ms, 0.5)
+        self.assertEqual(c_eth.item_flow_ref, "SensorPayloadStream")
+
+        c_can = next(c for c in pkg.connection_defs if "SensorHub" in c.source_port)
+        self.assertEqual(c_can.source_part, "SensorHub")
+        self.assertEqual(c_can.target_part, "FlightController")
+        self.assertEqual(c_can.protocol, "CAN")
+        self.assertEqual(c_can.latency_ms, 2.0)
+        self.assertEqual(c_can.item_flow_ref, "SensorTelemetry")
+
+        c_pos = next(c for c in pkg.connection_defs if "GuidanceUnit" in c.source_port)
+        self.assertEqual(c_pos.source_part, "GuidanceUnit")
+        self.assertEqual(c_pos.target_part, "NavigationFilter")
+        self.assertEqual(c_pos.item_flow_ref, "PositionFlow")
 
 
 if __name__ == "__main__":
