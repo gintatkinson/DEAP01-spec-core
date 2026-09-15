@@ -541,8 +541,8 @@ system: "AutonomousSurveillancePlatform"
 ### 4.2 User Class Taxonomy
 | User Class ID | Title | Player or Operator | Interfacing Stakeholder | Characteristics & Responsibilities | Training & Qualification | Constraint Source |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **UC-01** | System Operator (SO) | Direct Operator | Operational Safety Authority | Primary responsibility for mission supervision and failsafe override | Certified Operator | ISO 29148 |
-| **UC-02** | Payload Specialist (PS) | Direct Operator | Analytics Team | Multi-modal sensor tasking and telemetry inspection | Certified Specialist | ISO 29148 |
+| **UCL-01** | System Operator (SO) | Direct Operator | Operational Safety Authority | Primary responsibility for mission supervision and failsafe override | Certified Operator | ISO 29148 |
+| **UCL-02** | Payload Specialist (PS) | Direct Operator | Analytics Team | Multi-modal sensor tasking and telemetry inspection | Certified Specialist | ISO 29148 |
 
 ### 4.7 Super-System Architecture & Segment Boundaries
 ```mermaid
@@ -681,7 +681,7 @@ classDiagram
 ### 4.2 User Class Taxonomy
 | User Class ID | Title | Player or Operator | Interfacing Stakeholder | Characteristics & Responsibilities | Training & Qualification | Constraint Source |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **UC-01** | Safety Pilot | Direct Operator | ATC | Handles emergency manual intervention | Certified Pilot | FAA Part 107 |
+| **UCL-01** | Safety Pilot | Direct Operator | ATC | Handles emergency manual intervention | Certified Pilot | FAA Part 107 |
 
 ### 4.7 Super-System Architecture
 ```mermaid

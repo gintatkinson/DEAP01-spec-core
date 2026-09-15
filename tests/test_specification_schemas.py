@@ -136,7 +136,7 @@ def _get_valid_sample_conops_payload() -> Dict[str, Any]:
         },
         "user_classes": [
             {
-                "id": "UC-01",
+                "id": "UCL-01",
                 "title": "Range Safety Officer",
                 "player_or_operator": "Operator",
                 "interfacing_stakeholder": "Air Traffic Control",

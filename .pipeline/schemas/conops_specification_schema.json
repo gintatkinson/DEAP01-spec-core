@@ -150,7 +150,8 @@
         "properties": {
           "id": {
             "type": "string",
-            "description": "Unique user class identifier (e.g., UC-01)."
+            "description": "Unique user class identifier (e.g., UCL-01).",
+            "pattern": "^UCL-[0-9]{2}$"
           },
           "title": {
             "type": "string",
