@@ -1823,6 +1823,12 @@ Formal operational lifecycle stages across $\\Phi_{\\mathrm{lifecycle}}$:
         self.assertIn("| **p_video_data** | OUT | VideoPort |", subsys_sec)
         self.assertIn("| **p_pwr_in** | IN | PwrPort |", subsys_sec)
 
+        # Provenance column and [TIER-1: OEM] assertions
+        self.assertIn("| Port Name | Direction | Interface Type | Functional Binding / Interconnect | OEM / SSOT Source |", subsys_sec)
+        self.assertIn("[p_c2_link](schema/DEAP_MODEL.sysml) [TIER-1: OEM]", subsys_sec)
+        self.assertIn("[FlightComputer](schema/DEAP_MODEL.sysml) [TIER-1: OEM]", subsys_sec)
+        self.assertIn("| Resource Parameter | Nominal Allocation | Min (-15% Tolerance) | Max (+15% Tolerance) | Engineering Units | Allocation Description | OEM / SSOT Source |", subsys_sec)
+
         # Test Case 2: AST without explicit ports (fallback ports parity)
         sysml_code_fallback = """
         package TestPlatform {
@@ -2162,7 +2168,7 @@ parameters:
             self.assertIn(f"##### 4.8.{idx}.4 Lifecycle Modes - Operational Lifecycle & Statechart Integration", subsys_sec)
 
         # Confirm +/- 15% tolerance table headers and bounds
-        self.assertIn("| Resource Parameter | Nominal Allocation | Min (-15% Tolerance) | Max (+15% Tolerance) | Engineering Units | Allocation Description |", subsys_sec)
+        self.assertIn("| Resource Parameter | Nominal Allocation | Min (-15% Tolerance) | Max (+15% Tolerance) | Engineering Units | Allocation Description | OEM / SSOT Source |", subsys_sec)
         self.assertIn("Safety Invariants & Containment Interlocks", subsys_sec)
 
     def test_empty_candidate_schema_dir_raises_runtime_error_and_cli_exits_1(self):
@@ -2225,6 +2231,38 @@ parameters:
             )
             self.assertEqual(res.returncode, 1)
             self.assertIn("discovered 0 valid OEM subsystem parts", res.stderr)
+
+    def test_synthesize_subsystem_architecture_provenance_columns(self):
+        """Verify _synthesize_subsystem_architecture_text generates tables with OEM / SSOT Source and [TIER-1: OEM]."""
+        sysml_code = """package DronePlatform {
+    part def PrimaryOBC {
+        doc /* Core onboard computer */
+        inout port c2_link : C2Interface;
+        out port actuator_bus : MotorInterface;
+    }
+}
+"""
+        with tempfile.NamedTemporaryFile(suffix=".sysml", mode="w+", encoding="utf-8", delete=False) as f:
+            f.write(sysml_code)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            engine = SysMLParameterBindingEngine(auto_detect=False)
+            engine.ingest_file(temp_path)
+            subsys_sec = engine.resolve_token("SUBSYSTEM_ARCHITECTURE_SECTION")
+
+            # Verify SV-1/SV-2 interface table has OEM / SSOT Source column and [TIER-1: OEM]
+            self.assertIn("| Port Name | Direction | Interface Type | Functional Binding / Interconnect | OEM / SSOT Source |", subsys_sec)
+            self.assertIn(f"[c2_link]({temp_path}#L4) [TIER-1: OEM]", subsys_sec)
+            self.assertIn(f"[actuator_bus]({temp_path}#L5) [TIER-1: OEM]", subsys_sec)
+
+            # Verify Resource Budgets table has OEM / SSOT Source column citing part and line
+            self.assertIn("| Resource Parameter | Nominal Allocation | Min (-15% Tolerance) | Max (+15% Tolerance) | Engineering Units | Allocation Description | OEM / SSOT Source |", subsys_sec)
+            self.assertIn(f"[PrimaryOBC]({temp_path}#L2) [TIER-1: OEM]", subsys_sec)
+        finally:
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
 
 
 if __name__ == "__main__":

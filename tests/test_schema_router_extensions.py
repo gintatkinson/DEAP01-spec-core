@@ -243,6 +243,9 @@ model GuidanceModel
         self.assertEqual(port_default.direction, "INOUT")
         self.assertEqual(port_default.type_name, "Port")
         self.assertEqual(port_default.doc, "")
+        self.assertEqual(port_default.source_file, "")
+        self.assertIsNone(port_default.source_line)
+        self.assertEqual(port_default.epistemic_tier, "[TIER-1: OEM]")
 
         port_custom = SubsystemPort(name="gps_in", direction="in", type_name="GpsMsg", doc="GPS input stream")
         self.assertEqual(port_custom.direction, "IN")
@@ -252,6 +255,9 @@ model GuidanceModel
             "direction": "in",
             "type_name": "GpsMsg",
             "doc": "GPS input stream",
+            "source_file": "",
+            "source_line": None,
+            "epistemic_tier": "[TIER-1: OEM]",
         })
 
         # SubsystemPart defaults
@@ -264,6 +270,9 @@ model GuidanceModel
         self.assertEqual(part_default.actions, [])
         self.assertEqual(part_default.attributes, {})
         self.assertEqual(part_default.constraints, [])
+        self.assertEqual(part_default.source_file, "")
+        self.assertIsNone(part_default.source_line)
+        self.assertEqual(part_default.epistemic_tier, "[TIER-1: OEM]")
 
         part_full = SubsystemPart(
             name="NavigationUnit",
@@ -282,6 +291,51 @@ model GuidanceModel
         self.assertEqual(part_dict["name"], "NavigationUnit")
         self.assertEqual(part_dict["mass_kg"], 1.85)
         self.assertEqual(part_dict["power_w"], 32.0)
+        self.assertEqual(part_dict["source_file"], "")
+        self.assertIsNone(part_dict["source_line"])
+        self.assertEqual(part_dict["epistemic_tier"], "[TIER-1: OEM]")
+
+    test_subsystem_part_and_port_dataclasses = test_canonical_dataclasses
+
+    def test_extract_subsystem_parts_preserves_source_provenance(self):
+        content = """package ProvenanceTest {
+    // Top-level flight controller
+    part def FlightController {
+        doc /* Primary mission processor */
+        attribute mass_kg : Real = 1.2;
+        attribute power_w : Real = 18.0;
+        inout port p_c2 : C2Port;
+        out port p_motor : MotorPwm;
+    }
+}
+"""
+        with tempfile.NamedTemporaryFile(suffix=".sysml", mode="w+", encoding="utf-8", delete=False) as f:
+            f.write(content)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            parts = extract_subsystem_parts(temp_path)
+            self.assertEqual(len(parts), 1)
+            fc = parts[0]
+            self.assertEqual(fc.name, "FlightController")
+            self.assertEqual(fc.source_file, temp_path)
+            self.assertEqual(fc.source_line, 3)
+            self.assertEqual(fc.epistemic_tier, "[TIER-1: OEM]")
+            self.assertEqual(len(fc.ports), 2)
+
+            p_c2 = next(p for p in fc.ports if p.name == "p_c2")
+            self.assertEqual(p_c2.source_file, temp_path)
+            self.assertEqual(p_c2.source_line, 7)
+            self.assertEqual(p_c2.epistemic_tier, "[TIER-1: OEM]")
+
+            p_motor = next(p for p in fc.ports if p.name == "p_motor")
+            self.assertEqual(p_motor.source_file, temp_path)
+            self.assertEqual(p_motor.source_line, 8)
+            self.assertEqual(p_motor.epistemic_tier, "[TIER-1: OEM]")
+        finally:
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
 
     def test_extract_subsystem_parts_sysml(self):
         content = """package FlightSystem {

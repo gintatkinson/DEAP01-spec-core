@@ -52,6 +52,9 @@ class SubsystemPort:
     direction: str = "inout"
     type_name: str = "Port"
     doc: str = ""
+    source_file: str = ""
+    source_line: Optional[int] = None
+    epistemic_tier: str = "[TIER-1: OEM]"
 
     def __post_init__(self) -> None:
         if not isinstance(self.direction, DirectionStr):
@@ -63,6 +66,9 @@ class SubsystemPort:
             "direction": str(self.direction),
             "type_name": self.type_name,
             "doc": self.doc,
+            "source_file": self.source_file,
+            "source_line": self.source_line,
+            "epistemic_tier": self.epistemic_tier,
         }
 
 
@@ -78,11 +84,20 @@ class SubsystemPart:
     actions: List[Any] = field(default_factory=list)
     attributes: Dict[str, Any] = field(default_factory=dict)
     constraints: List[Any] = field(default_factory=list)
+    source_file: str = ""
+    source_line: Optional[int] = None
+    epistemic_tier: str = "[TIER-1: OEM]"
 
     def __post_init__(self) -> None:
         normalized_ports: List[SubsystemPort] = []
         for p in self.ports:
             if isinstance(p, SubsystemPort):
+                if not p.source_file and self.source_file:
+                    p.source_file = self.source_file
+                if p.source_line is None and self.source_line is not None:
+                    p.source_line = self.source_line
+                if not p.epistemic_tier and self.epistemic_tier:
+                    p.epistemic_tier = self.epistemic_tier
                 normalized_ports.append(p)
             elif isinstance(p, dict):
                 normalized_ports.append(
@@ -91,6 +106,9 @@ class SubsystemPart:
                         direction=str(p.get("direction") or p.get("dir") or "inout"),
                         type_name=str(p.get("type_name") or p.get("type") or "Port"),
                         doc=str(p.get("doc") or p.get("description") or ""),
+                        source_file=str(p.get("source_file") or self.source_file or ""),
+                        source_line=p.get("source_line") if p.get("source_line") is not None else self.source_line,
+                        epistemic_tier=str(p.get("epistemic_tier") or self.epistemic_tier or "[TIER-1: OEM]"),
                     )
                 )
             elif isinstance(p, (list, tuple)) and len(p) >= 1:
@@ -98,7 +116,20 @@ class SubsystemPart:
                 p_dir = str(p[1]) if len(p) > 1 else "inout"
                 p_type = str(p[2]) if len(p) > 2 else "Port"
                 p_doc = str(p[3]) if len(p) > 3 else ""
-                normalized_ports.append(SubsystemPort(name=p_name, direction=p_dir, type_name=p_type, doc=p_doc))
+                p_source_file = str(p[4]) if len(p) > 4 else self.source_file
+                p_source_line = p[5] if len(p) > 5 else self.source_line
+                p_tier = str(p[6]) if len(p) > 6 else self.epistemic_tier
+                normalized_ports.append(
+                    SubsystemPort(
+                        name=p_name,
+                        direction=p_dir,
+                        type_name=p_type,
+                        doc=p_doc,
+                        source_file=p_source_file,
+                        source_line=p_source_line,
+                        epistemic_tier=p_tier,
+                    )
+                )
         self.ports = normalized_ports
 
     def to_dict(self) -> Dict[str, Any]:
@@ -111,6 +142,9 @@ class SubsystemPart:
             "actions": list(self.actions),
             "attributes": dict(self.attributes),
             "constraints": list(self.constraints),
+            "source_file": self.source_file,
+            "source_line": self.source_line,
+            "epistemic_tier": self.epistemic_tier,
         }
 
 
@@ -179,7 +213,7 @@ def _strip_nested_part_defs(body: str) -> str:
     return "".join(res)
 
 
-def _extract_from_sysml(content: str) -> List[SubsystemPart]:
+def _extract_from_sysml(content: str, filepath: str = "") -> List[SubsystemPart]:
     """Extract SubsystemPart objects from SysML v2 source."""
     parts: List[SubsystemPart] = []
     pattern = re.compile(r"(?:(?:doc\s*/\*|\/\*)\s*(.*?)\*\/\s*)?part\s+(?:def\s+)?([a-zA-Z0-9_]+)\s*\{")
@@ -190,6 +224,7 @@ def _extract_from_sysml(content: str) -> List[SubsystemPart]:
         m = pattern.search(content, pos)
         if not m:
             break
+        part_line = content[:m.start()].count("\n") + 1
         pre_doc = (m.group(1) or "").strip()
         if pre_doc.startswith("doc"):
             pre_doc = pre_doc[3:].strip()
@@ -234,7 +269,21 @@ def _extract_from_sysml(content: str) -> List[SubsystemPart]:
             p_dir = pm.group(2) or "inout"
             p_name = pm.group(3)
             p_type = pm.group(4) or "Port"
-            ports.append(SubsystemPort(name=p_name, direction=DirectionStr(p_dir), type_name=p_type, doc=p_doc))
+            port_kw_m = re.search(r"\b(?:(?:in|out|inout)\s+)?port\b", pm.group(0))
+            offset_in_pm = port_kw_m.start() if port_kw_m else 0
+            p_idx = content.find(pm.group(0), m.start())
+            p_line = content[: p_idx + offset_in_pm].count("\n") + 1 if p_idx != -1 else part_line
+            ports.append(
+                SubsystemPort(
+                    name=p_name,
+                    direction=DirectionStr(p_dir),
+                    type_name=p_type,
+                    doc=p_doc,
+                    source_file=filepath,
+                    source_line=p_line,
+                    epistemic_tier="[TIER-1: OEM]",
+                )
+            )
 
         # Attributes
         attributes: Dict[str, Any] = {}
@@ -277,6 +326,9 @@ def _extract_from_sysml(content: str) -> List[SubsystemPart]:
                 actions=actions,
                 attributes=attributes,
                 constraints=constraints,
+                source_file=filepath,
+                source_line=part_line,
+                epistemic_tier="[TIER-1: OEM]",
             )
         )
         seen_names.add(name)
@@ -291,13 +343,27 @@ def _extract_from_sysml(content: str) -> List[SubsystemPart]:
                 s_doc = s_doc[3:].strip()
             if not s_doc:
                 s_doc = _extract_preceding_doc(content, sm.start())
-            parts.append(SubsystemPart(name=s_name, doc=s_doc))
+            stmt_line = content[:sm.start()].count("\n") + 1
+            parts.append(
+                SubsystemPart(
+                    name=s_name,
+                    doc=s_doc,
+                    source_file=filepath,
+                    source_line=stmt_line,
+                    epistemic_tier="[TIER-1: OEM]",
+                )
+            )
             seen_names.add(s_name)
 
     return parts
 
 
-def _parse_subsystem_dict(d: Dict[str, Any], default_name: str = "") -> Optional[SubsystemPart]:
+def _parse_subsystem_dict(
+    d: Dict[str, Any],
+    default_name: str = "",
+    filepath: str = "",
+    content: str = "",
+) -> Optional[SubsystemPart]:
     """Parse a single dictionary into a SubsystemPart."""
     name = str(d.get("name") or d.get("id") or d.get("subsystem") or d.get("component") or default_name or "").strip()
     if not name:
@@ -313,6 +379,19 @@ def _parse_subsystem_dict(d: Dict[str, Any], default_name: str = "") -> Optional
         power_val = d.get("wattage")
     power_w = _parse_float(power_val)
 
+    part_line = d.get("source_line")
+    part_pos = 0
+    if part_line is None and content:
+        m = re.search(rf'(?:name|subsystem|component|id)[\'"]?\s*:\s*[\'"]?{re.escape(name)}[\'"]?|[\'"]?{re.escape(name)}[\'"]?\s*:', content)
+        if not m:
+            m = re.search(rf'\b{re.escape(name)}\b', content)
+        if m:
+            part_pos = m.start()
+            part_line = content[:part_pos].count("\n") + 1
+
+    source_file = str(d.get("source_file") or filepath or "")
+    epistemic_tier = str(d.get("epistemic_tier") or "[TIER-1: OEM]")
+
     ports: List[SubsystemPort] = []
     raw_ports = d.get("ports") or d.get("interfaces") or []
     if isinstance(raw_ports, list):
@@ -324,7 +403,26 @@ def _parse_subsystem_dict(d: Dict[str, Any], default_name: str = "") -> Optional
                 p_dir = str(p.get("direction") or p.get("dir") or p.get("flow") or "inout").strip()
                 p_type = str(p.get("type_name") or p.get("type") or p.get("data_type") or "Port").strip()
                 p_doc = str(p.get("doc") or p.get("description") or "").strip()
-                ports.append(SubsystemPort(name=p_name, direction=DirectionStr(p_dir), type_name=p_type, doc=p_doc))
+                p_file = str(p.get("source_file") or source_file)
+                p_line = p.get("source_line")
+                if p_line is None and content:
+                    pm = re.search(rf'\b{re.escape(p_name)}\b', content[part_pos:])
+                    if pm:
+                        p_line = content[:part_pos + pm.start()].count("\n") + 1
+                    else:
+                        p_line = part_line
+                p_tier = str(p.get("epistemic_tier") or epistemic_tier)
+                ports.append(
+                    SubsystemPort(
+                        name=p_name,
+                        direction=DirectionStr(p_dir),
+                        type_name=p_type,
+                        doc=p_doc,
+                        source_file=p_file,
+                        source_line=p_line,
+                        epistemic_tier=p_tier,
+                    )
+                )
             elif isinstance(p, str):
                 p_clean = p.strip()
                 if not p_clean:
@@ -342,21 +440,75 @@ def _parse_subsystem_dict(d: Dict[str, Any], default_name: str = "") -> Optional
                 else:
                     p_name = p_clean.strip()
                     p_type = "Port"
-                ports.append(SubsystemPort(name=p_name, direction=DirectionStr(p_dir), type_name=p_type))
+                p_line = None
+                if content:
+                    pm = re.search(rf'\b{re.escape(p_name)}\b', content[part_pos:])
+                    if pm:
+                        p_line = content[:part_pos + pm.start()].count("\n") + 1
+                    else:
+                        p_line = part_line
+                ports.append(
+                    SubsystemPort(
+                        name=p_name,
+                        direction=DirectionStr(p_dir),
+                        type_name=p_type,
+                        source_file=source_file,
+                        source_line=p_line,
+                        epistemic_tier=epistemic_tier,
+                    )
+                )
     elif isinstance(raw_ports, dict):
         for pk, pv in raw_ports.items():
             pk_name = str(pk).strip()
+            p_line = None
+            if content:
+                pm = re.search(rf'\b{re.escape(pk_name)}\b', content[part_pos:])
+                if pm:
+                    p_line = content[:part_pos + pm.start()].count("\n") + 1
+                else:
+                    p_line = part_line
             if isinstance(pv, dict):
                 p_dir = str(pv.get("direction") or pv.get("dir") or "inout").strip()
                 p_type = str(pv.get("type_name") or pv.get("type") or "Port").strip()
                 p_doc = str(pv.get("doc") or pv.get("description") or "").strip()
-                ports.append(SubsystemPort(name=pk_name, direction=DirectionStr(p_dir), type_name=p_type, doc=p_doc))
+                p_file = str(pv.get("source_file") or source_file)
+                p_l = pv.get("source_line") if pv.get("source_line") is not None else p_line
+                p_t = str(pv.get("epistemic_tier") or epistemic_tier)
+                ports.append(
+                    SubsystemPort(
+                        name=pk_name,
+                        direction=DirectionStr(p_dir),
+                        type_name=p_type,
+                        doc=p_doc,
+                        source_file=p_file,
+                        source_line=p_l,
+                        epistemic_tier=p_t,
+                    )
+                )
             elif isinstance(pv, str):
                 pv_clean = pv.strip()
                 if pv_clean.lower() in ("in", "out", "inout"):
-                    ports.append(SubsystemPort(name=pk_name, direction=DirectionStr(pv_clean), type_name="Port"))
+                    ports.append(
+                        SubsystemPort(
+                            name=pk_name,
+                            direction=DirectionStr(pv_clean),
+                            type_name="Port",
+                            source_file=source_file,
+                            source_line=p_line,
+                            epistemic_tier=epistemic_tier,
+                        )
+                    )
                 else:
-                    ports.append(SubsystemPort(name=pk_name, direction=DirectionStr("inout"), type_name=pv_clean))
+                    ports.append(
+                        SubsystemPort(
+                            name=pk_name,
+                            direction=DirectionStr("inout"),
+                            type_name=pv_clean,
+                            source_file=source_file,
+                            source_line=p_line,
+                            epistemic_tier=epistemic_tier,
+                        )
+                    )
 
     actions = list(d.get("actions") or d.get("operations") or d.get("methods") or [])
     attributes = dict(d.get("attributes") or d.get("properties") or {})
@@ -371,16 +523,19 @@ def _parse_subsystem_dict(d: Dict[str, Any], default_name: str = "") -> Optional
         actions=actions,
         attributes=attributes,
         constraints=constraints,
+        source_file=source_file,
+        source_line=part_line,
+        epistemic_tier=epistemic_tier,
     )
 
 
-def _extract_from_dict_or_list(data: Any) -> List[SubsystemPart]:
+def _extract_from_dict_or_list(data: Any, filepath: str = "", content: str = "") -> List[SubsystemPart]:
     """Traverse JSON/YAML structured data to extract SubsystemPart collections."""
     parts: List[SubsystemPart] = []
     if isinstance(data, list):
         for item in data:
             if isinstance(item, dict):
-                p = _parse_subsystem_dict(item)
+                p = _parse_subsystem_dict(item, filepath=filepath, content=content)
                 if p:
                     parts.append(p)
     elif isinstance(data, dict):
@@ -390,17 +545,17 @@ def _extract_from_dict_or_list(data: Any) -> List[SubsystemPart]:
                 if isinstance(val, list):
                     for item in val:
                         if isinstance(item, dict):
-                            p = _parse_subsystem_dict(item)
+                            p = _parse_subsystem_dict(item, filepath=filepath, content=content)
                             if p:
                                 parts.append(p)
                 elif isinstance(val, dict):
                     for k, v in val.items():
                         if isinstance(v, dict):
-                            p = _parse_subsystem_dict(v, default_name=k)
+                            p = _parse_subsystem_dict(v, default_name=k, filepath=filepath, content=content)
                             if p:
                                 parts.append(p)
         if not parts:
-            p = _parse_subsystem_dict(data)
+            p = _parse_subsystem_dict(data, filepath=filepath, content=content)
             if p and (p.mass_kg is not None or p.power_w is not None or p.ports or p.actions or p.doc):
                 parts.append(p)
             else:
@@ -408,38 +563,38 @@ def _extract_from_dict_or_list(data: Any) -> List[SubsystemPart]:
                     if isinstance(v, dict) and any(
                         x in v for x in ("ports", "interfaces", "mass", "mass_kg", "power", "power_w", "actions")
                     ):
-                        p = _parse_subsystem_dict(v, default_name=k)
+                        p = _parse_subsystem_dict(v, default_name=k, filepath=filepath, content=content)
                         if p:
                             parts.append(p)
     return parts
 
 
-def _extract_from_yaml(content: str) -> List[SubsystemPart]:
+def _extract_from_yaml(content: str, filepath: str = "") -> List[SubsystemPart]:
     """Extract SubsystemPart objects from YAML content."""
     if yaml is not None:
         try:
             data = yaml.safe_load(content)
-            return _extract_from_dict_or_list(data)
+            return _extract_from_dict_or_list(data, filepath=filepath, content=content)
         except Exception:
             pass
     try:
         data = json.loads(content)
-        return _extract_from_dict_or_list(data)
+        return _extract_from_dict_or_list(data, filepath=filepath, content=content)
     except Exception:
         return []
 
 
-def _extract_from_json(content: str) -> List[SubsystemPart]:
+def _extract_from_json(content: str, filepath: str = "") -> List[SubsystemPart]:
     """Extract SubsystemPart objects from JSON content."""
     try:
         data = json.loads(content)
-        return _extract_from_dict_or_list(data)
+        return _extract_from_dict_or_list(data, filepath=filepath, content=content)
     except Exception as exc:
         logger.debug("Failed to parse JSON content: %s", exc)
         return []
 
 
-def _extract_from_proto(text: str) -> List[SubsystemPart]:
+def _extract_from_proto(text: str, filepath: str = "") -> List[SubsystemPart]:
     """Extract SubsystemPart objects from Protobuf messages and services."""
     parts: List[SubsystemPart] = []
 
@@ -447,6 +602,7 @@ def _extract_from_proto(text: str) -> List[SubsystemPart]:
     msg_pat = re.compile(r"\bmessage\s+([a-zA-Z0-9_]+)\s*\{", re.DOTALL)
     for m in msg_pat.finditer(text):
         name = m.group(1)
+        part_line = text[:m.start()].count("\n") + 1
         doc = _extract_preceding_doc(text, m.start())
         start = m.end()
         depth = 1
@@ -468,7 +624,18 @@ def _extract_from_proto(text: str) -> List[SubsystemPart]:
             f_type = fm.group(1)
             f_name = fm.group(2)
             attributes[f_name] = f_type
-            ports.append(SubsystemPort(name=f_name, direction=DirectionStr("inout"), type_name=f_type, doc=f_doc))
+            f_line = text[:start + fm.start()].count("\n") + 1
+            ports.append(
+                SubsystemPort(
+                    name=f_name,
+                    direction=DirectionStr("inout"),
+                    type_name=f_type,
+                    doc=f_doc,
+                    source_file=filepath,
+                    source_line=f_line,
+                    epistemic_tier="[TIER-1: OEM]",
+                )
+            )
 
         mass_kg: Optional[float] = None
         m_match = re.search(r"mass(?:_kg)?\s*[:=]\s*([0-9\.]+)", doc, re.IGNORECASE)
@@ -482,7 +649,15 @@ def _extract_from_proto(text: str) -> List[SubsystemPart]:
 
         parts.append(
             SubsystemPart(
-                name=name, doc=doc, ports=ports, mass_kg=mass_kg, power_w=power_w, attributes=attributes
+                name=name,
+                doc=doc,
+                ports=ports,
+                mass_kg=mass_kg,
+                power_w=power_w,
+                attributes=attributes,
+                source_file=filepath,
+                source_line=part_line,
+                epistemic_tier="[TIER-1: OEM]",
             )
         )
 
@@ -490,6 +665,7 @@ def _extract_from_proto(text: str) -> List[SubsystemPart]:
     srv_pat = re.compile(r"\bservice\s+([a-zA-Z0-9_]+)\s*\{", re.DOTALL)
     for m in srv_pat.finditer(text):
         name = m.group(1)
+        part_line = text[:m.start()].count("\n") + 1
         doc = _extract_preceding_doc(text, m.start())
         start = m.end()
         depth = 1
@@ -513,15 +689,34 @@ def _extract_from_proto(text: str) -> List[SubsystemPart]:
             in_t = rm.group(2)
             out_t = rm.group(3)
             actions.append(r_name)
+            r_line = text[:start + rm.start()].count("\n") + 1
             ports.append(
-                SubsystemPort(name=r_name, direction=DirectionStr("inout"), type_name=f"{in_t}->{out_t}", doc=r_doc)
+                SubsystemPort(
+                    name=r_name,
+                    direction=DirectionStr("inout"),
+                    type_name=f"{in_t}->{out_t}",
+                    doc=r_doc,
+                    source_file=filepath,
+                    source_line=r_line,
+                    epistemic_tier="[TIER-1: OEM]",
+                )
             )
-        parts.append(SubsystemPart(name=name, doc=doc, ports=ports, actions=actions))
+        parts.append(
+            SubsystemPart(
+                name=name,
+                doc=doc,
+                ports=ports,
+                actions=actions,
+                source_file=filepath,
+                source_line=part_line,
+                epistemic_tier="[TIER-1: OEM]",
+            )
+        )
 
     return parts
 
 
-def _extract_from_idl(text: str) -> List[SubsystemPart]:
+def _extract_from_idl(text: str, filepath: str = "") -> List[SubsystemPart]:
     """Extract SubsystemPart objects from OMG IDL interfaces and component declarations."""
     parts: List[SubsystemPart] = []
 
@@ -529,6 +724,7 @@ def _extract_from_idl(text: str) -> List[SubsystemPart]:
     if_pat = re.compile(r"\binterface\s+([a-zA-Z0-9_]+)\s*\{", re.DOTALL)
     for m in if_pat.finditer(text):
         name = m.group(1)
+        part_line = text[:m.start()].count("\n") + 1
         doc = _extract_preceding_doc(text, m.start())
         start = m.end()
         depth = 1
@@ -553,7 +749,18 @@ def _extract_from_idl(text: str) -> List[SubsystemPart]:
             op_name = om.group(2)
             o_doc = _extract_preceding_doc(body, om.start())
             actions.append(op_name)
-            ports.append(SubsystemPort(name=op_name, direction=DirectionStr("inout"), type_name=ret_t, doc=o_doc))
+            op_line = text[:start + om.start()].count("\n") + 1
+            ports.append(
+                SubsystemPort(
+                    name=op_name,
+                    direction=DirectionStr("inout"),
+                    type_name=ret_t,
+                    doc=o_doc,
+                    source_file=filepath,
+                    source_line=op_line,
+                    epistemic_tier="[TIER-1: OEM]",
+                )
+            )
 
         # Attributes
         attr_pat = re.compile(r"\b(?:readonly\s+)?attribute\s+([a-zA-Z0-9_:\<\>]+)\s+([a-zA-Z0-9_]+)\s*;")
@@ -572,6 +779,9 @@ def _extract_from_idl(text: str) -> List[SubsystemPart]:
                 power_w=power_w,
                 actions=actions,
                 attributes=attributes,
+                source_file=filepath,
+                source_line=part_line,
+                epistemic_tier="[TIER-1: OEM]",
             )
         )
 
@@ -579,6 +789,7 @@ def _extract_from_idl(text: str) -> List[SubsystemPart]:
     comp_pat = re.compile(r"\bcomponent\s+([a-zA-Z0-9_]+)\s*\{", re.DOTALL)
     for m in comp_pat.finditer(text):
         name = m.group(1)
+        part_line = text[:m.start()].count("\n") + 1
         doc = _extract_preceding_doc(text, m.start())
         start = m.end()
         depth = 1
@@ -593,25 +804,58 @@ def _extract_from_idl(text: str) -> List[SubsystemPart]:
         ports = []
         prov_pat = re.compile(r"\bprovides\s+([a-zA-Z0-9_:\<\>]+)\s+([a-zA-Z0-9_]+)\s*;")
         for pm in prov_pat.finditer(body):
-            ports.append(SubsystemPort(name=pm.group(2), direction=DirectionStr("in"), type_name=pm.group(1)))
+            p_line = text[:start + pm.start()].count("\n") + 1
+            ports.append(
+                SubsystemPort(
+                    name=pm.group(2),
+                    direction=DirectionStr("in"),
+                    type_name=pm.group(1),
+                    source_file=filepath,
+                    source_line=p_line,
+                    epistemic_tier="[TIER-1: OEM]",
+                )
+            )
         uses_pat = re.compile(r"\buses\s+([a-zA-Z0-9_:\<\>]+)\s+([a-zA-Z0-9_]+)\s*;")
         for um in uses_pat.finditer(body):
-            ports.append(SubsystemPort(name=um.group(2), direction=DirectionStr("out"), type_name=um.group(1)))
+            u_line = text[:start + um.start()].count("\n") + 1
+            ports.append(
+                SubsystemPort(
+                    name=um.group(2),
+                    direction=DirectionStr("out"),
+                    type_name=um.group(1),
+                    source_file=filepath,
+                    source_line=u_line,
+                    epistemic_tier="[TIER-1: OEM]",
+                )
+            )
         port_pat = re.compile(r"\b(in|out|inout)?\s*port\s+([a-zA-Z0-9_:\<\>]+)\s+([a-zA-Z0-9_]+)\s*;")
         for ppm in port_pat.finditer(body):
+            pp_line = text[:start + ppm.start()].count("\n") + 1
             ports.append(
                 SubsystemPort(
                     name=ppm.group(3),
                     direction=DirectionStr(ppm.group(1) or "inout"),
                     type_name=ppm.group(2),
+                    source_file=filepath,
+                    source_line=pp_line,
+                    epistemic_tier="[TIER-1: OEM]",
                 )
             )
-        parts.append(SubsystemPart(name=name, doc=doc, ports=ports))
+        parts.append(
+            SubsystemPart(
+                name=name,
+                doc=doc,
+                ports=ports,
+                source_file=filepath,
+                source_line=part_line,
+                epistemic_tier="[TIER-1: OEM]",
+            )
+        )
 
     return parts
 
 
-def _extract_from_arxml(content: str) -> List[SubsystemPart]:
+def _extract_from_arxml(content: str, filepath: str = "") -> List[SubsystemPart]:
     """Extract SubsystemPart objects from AUTOSAR XML SW component definitions."""
     try:
         root = ET.fromstring(content)
@@ -667,12 +911,20 @@ def _extract_from_arxml(content: str) -> List[SubsystemPart]:
                             elif pctag == "DESC":
                                 p_doc = "".join(p_child.itertext()).strip()
                         if p_name:
+                            p_line = None
+                            if content:
+                                pm = re.search(rf"<SHORT-NAME>\s*{re.escape(p_name)}\s*</SHORT-NAME>", content)
+                                if pm:
+                                    p_line = content[:pm.start()].count("\n") + 1
                             ports.append(
                                 SubsystemPort(
                                     name=p_name,
                                     direction=DirectionStr(direction),
                                     type_name=p_type,
                                     doc=p_doc,
+                                    source_file=filepath,
+                                    source_line=p_line,
+                                    epistemic_tier="[TIER-1: OEM]",
                                 )
                             )
                 elif c_tag == "INTERNAL-BEHAVIORS":
@@ -682,6 +934,11 @@ def _extract_from_arxml(content: str) -> List[SubsystemPart]:
                                 if strip_ns(r_child.tag) == "SHORT-NAME" and r_child.text:
                                     actions.append(r_child.text.strip())
             if name:
+                part_line = None
+                if content:
+                    m = re.search(rf"<SHORT-NAME>\s*{re.escape(name)}\s*</SHORT-NAME>", content)
+                    if m:
+                        part_line = content[:m.start()].count("\n") + 1
                 parts.append(
                     SubsystemPart(
                         name=name,
@@ -690,12 +947,15 @@ def _extract_from_arxml(content: str) -> List[SubsystemPart]:
                         mass_kg=mass_kg,
                         power_w=power_w,
                         actions=actions,
+                        source_file=filepath,
+                        source_line=part_line,
+                        epistemic_tier="[TIER-1: OEM]",
                     )
                 )
     return parts
 
 
-def _extract_from_markdown(text: str) -> List[SubsystemPart]:
+def _extract_from_markdown(text: str, filepath: str = "") -> List[SubsystemPart]:
     """Extract SubsystemPart objects from Markdown tables declaring subsystems and ports."""
     def is_port_col(h: str) -> bool:
         return any(x in h for x in ("port", "interface", "signal")) or h in ("io", "inputs", "outputs", "inout")
@@ -742,6 +1002,7 @@ def _extract_from_markdown(text: str) -> List[SubsystemPart]:
                             raw_name = cols[name_idx]
                             clean_name = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", raw_name)
                             clean_name = re.sub(r"[*_`]", "", clean_name).strip()
+                            row_line_num = j + 1
                             if clean_name and not clean_name.startswith("---"):
                                 doc = cols[desc_idx] if desc_idx is not None and desc_idx < len(cols) else ""
                                 doc = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", doc)
@@ -792,6 +1053,9 @@ def _extract_from_markdown(text: str) -> List[SubsystemPart]:
                                                     name=p_name,
                                                     direction=DirectionStr(p_dir),
                                                     type_name=p_type,
+                                                    source_file=filepath,
+                                                    source_line=row_line_num,
+                                                    epistemic_tier="[TIER-1: OEM]",
                                                 )
                                             )
                                 parts.append(
@@ -801,6 +1065,9 @@ def _extract_from_markdown(text: str) -> List[SubsystemPart]:
                                         ports=ports,
                                         mass_kg=mass_val,
                                         power_w=power_val,
+                                        source_file=filepath,
+                                        source_line=row_line_num,
+                                        epistemic_tier="[TIER-1: OEM]",
                                     )
                                 )
                         j += 1
@@ -818,40 +1085,40 @@ def _extract_from_content(content: str, ext: str = "", filepath: str = "") -> Li
 
     ext_clean = ext.lower()
     if ext_clean in (".sysml", ".kerml"):
-        return _extract_from_sysml(content)
+        return _extract_from_sysml(content, filepath=filepath)
     elif ext_clean in (".yaml", ".yml"):
-        return _extract_from_yaml(content)
+        return _extract_from_yaml(content, filepath=filepath)
     elif ext_clean == ".json":
-        return _extract_from_json(content)
+        return _extract_from_json(content, filepath=filepath)
     elif ext_clean == ".proto":
-        return _extract_from_proto(content)
+        return _extract_from_proto(content, filepath=filepath)
     elif ext_clean == ".idl":
-        return _extract_from_idl(content)
+        return _extract_from_idl(content, filepath=filepath)
     elif ext_clean == ".arxml":
-        return _extract_from_arxml(content)
+        return _extract_from_arxml(content, filepath=filepath)
     elif ext_clean in (".md", ".markdown"):
-        return _extract_from_markdown(content)
+        return _extract_from_markdown(content, filepath=filepath)
 
     # Content-based heuristic detection when extension is missing or generic
     if content_stripped.startswith("<?xml") or "<AUTOSAR" in content_stripped or "<AR-PACKAGE" in content_stripped:
-        return _extract_from_arxml(content)
+        return _extract_from_arxml(content, filepath=filepath)
     if 'syntax = "proto' in content_stripped or 'syntax="proto' in content_stripped or re.search(r"\b(?:message|service)\s+[a-zA-Z0-9_]+\s*\{", content_stripped):
-        return _extract_from_proto(content)
+        return _extract_from_proto(content, filepath=filepath)
     if re.search(r"\bmodule\s+[a-zA-Z0-9_]+\s*\{", content_stripped) and re.search(r"\b(?:interface|component)\s+[a-zA-Z0-9_]+", content_stripped):
-        return _extract_from_idl(content)
+        return _extract_from_idl(content, filepath=filepath)
     if re.search(r"\bpart\s+(?:def\s+)?[a-zA-Z0-9_]+\s*\{", content_stripped):
-        return _extract_from_sysml(content)
+        return _extract_from_sysml(content, filepath=filepath)
     if content_stripped.startswith("{") or content_stripped.startswith("["):
-        res = _extract_from_json(content)
+        res = _extract_from_json(content, filepath=filepath)
         if res:
             return res
     if "|" in content_stripped and any(l.strip().startswith("|") for l in content_stripped.splitlines()):
-        res = _extract_from_markdown(content)
+        res = _extract_from_markdown(content, filepath=filepath)
         if res:
             return res
 
     # Fallback to YAML/JSON traversal
-    return _extract_from_yaml(content)
+    return _extract_from_yaml(content, filepath=filepath)
 
 
 def extract_subsystem_parts(target: Union[str, List[str]]) -> List[SubsystemPart]:

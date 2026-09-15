@@ -1731,8 +1731,8 @@ class SysMLParameterBindingEngine:
             # 4.8.{idx}.1 Interfaces (SV-1 / SV-2) - Physical & Logical Interface Allocations
             lines.append(f"##### 4.8.{idx}.1 Interfaces (SV-1 / SV-2) - Physical & Logical Interface Allocations")
             if ports:
-                lines.append("| Port Name | Direction | Interface Type | Functional Binding / Interconnect |")
-                lines.append("| :--- | :--- | :--- | :--- |")
+                lines.append("| Port Name | Direction | Interface Type | Functional Binding / Interconnect | OEM / SSOT Source |")
+                lines.append("| :--- | :--- | :--- | :--- | :--- |")
                 for port in ports:
                     raw_port_name = getattr(port, "name", "p_port")
                     port_name = _sanitize_level_1b_operational_text(raw_port_name) or raw_port_name
@@ -1754,7 +1754,19 @@ class SysMLParameterBindingEngine:
                     else:
                         port_doc = clean_port_doc
 
-                    lines.append(f"| **{port_name}** | {port_dir} | {port_type} | {port_doc} |")
+                    port_src_file = getattr(port, "source_file", None) or getattr(p, "source_file", None)
+                    port_src_line = getattr(port, "source_line", None) if getattr(port, "source_file", None) else getattr(p, "source_line", None)
+                    port_tier = getattr(port, "epistemic_tier", None) or getattr(p, "epistemic_tier", "[TIER-1: OEM]") or "[TIER-1: OEM]"
+
+                    if port_src_file:
+                        if port_src_line is not None:
+                            prov_str = f"[{port_name}]({port_src_file}#L{port_src_line}) {port_tier}"
+                        else:
+                            prov_str = f"[{port_name}]({port_src_file}) {port_tier}"
+                    else:
+                        prov_str = f"[{port_name}](schema/DEAP_MODEL.sysml) {port_tier}"
+
+                    lines.append(f"| **{port_name}** | {port_dir} | {port_type} | {port_doc} | {prov_str} |")
             else:
                 lines.append("*Factual Note: No discrete external physical or logical ports are explicitly declared in the OEM specification. Interfacing is managed via internal structural integration.*")
 
@@ -1777,13 +1789,24 @@ class SysMLParameterBindingEngine:
             lines.append("")
 
             # 4.8.{idx}.3 Resource Budgets - Resource & Operating Envelope Allocations
+            part_src_file = getattr(p, "source_file", None)
+            part_src_line = getattr(p, "source_line", None)
+            part_tier = getattr(p, "epistemic_tier", "[TIER-1: OEM]") or "[TIER-1: OEM]"
+            if part_src_file:
+                if part_src_line is not None:
+                    part_prov_str = f"[{p_name}]({part_src_file}#L{part_src_line}) {part_tier}"
+                else:
+                    part_prov_str = f"[{p_name}]({part_src_file}) {part_tier}"
+            else:
+                part_prov_str = f"[{p_name}](schema/DEAP_MODEL.sysml) {part_tier}"
+
             lines.append(f"##### 4.8.{idx}.3 Resource Budgets - Resource & Operating Envelope Allocations")
-            lines.append("| Resource Parameter | Nominal Allocation | Min (-15% Tolerance) | Max (+15% Tolerance) | Engineering Units | Allocation Description |")
-            lines.append("| :--- | :--- | :--- | :--- | :--- | :--- |")
-            lines.append(f"| Allocated Operating Power | {p_power_w} | {p_power_min} | {p_power_max} | W | Continuous operating electrical power draw |")
-            lines.append(f"| Allocated Mass Budget | {p_mass_kg} | {p_mass_min} | {p_mass_max} | kg | Allocated physical weight budget within MTOW |")
-            lines.append(f"| Operating Temperature Range | {{{{OPERATING_TEMP_MIN_C}}}} to {{{{OPERATING_TEMP_MAX_C}}}} | {{{{OPERATING_TEMP_MIN_C}}}} | {{{{OPERATING_TEMP_MAX_C}}}} | deg C | Environmental stress qualification envelope |")
-            lines.append(f"| Ingress Protection Rating | {{{{INGRESS_PROTECTION_RATING}}}} | IP54 | IP67 | Rating | Environmental enclosure sealing qualification |")
+            lines.append("| Resource Parameter | Nominal Allocation | Min (-15% Tolerance) | Max (+15% Tolerance) | Engineering Units | Allocation Description | OEM / SSOT Source |")
+            lines.append("| :--- | :--- | :--- | :--- | :--- | :--- | :--- |")
+            lines.append(f"| Allocated Operating Power | {p_power_w} | {p_power_min} | {p_power_max} | W | Continuous operating electrical power draw | {part_prov_str} |")
+            lines.append(f"| Allocated Mass Budget | {p_mass_kg} | {p_mass_min} | {p_mass_max} | kg | Allocated physical weight budget within MTOW | {part_prov_str} |")
+            lines.append(f"| Operating Temperature Range | {{{{OPERATING_TEMP_MIN_C}}}} to {{{{OPERATING_TEMP_MAX_C}}}} | {{{{OPERATING_TEMP_MIN_C}}}} | {{{{OPERATING_TEMP_MAX_C}}}} | deg C | Environmental stress qualification envelope | {part_prov_str} |")
+            lines.append(f"| Ingress Protection Rating | {{{{INGRESS_PROTECTION_RATING}}}} | IP54 | IP67 | Rating | Environmental enclosure sealing qualification | {part_prov_str} |")
             lines.append("")
 
             # 4.8.{idx}.4 Lifecycle Modes - Operational Lifecycle & Statechart Integration
@@ -3930,10 +3953,22 @@ def assemble_document(
     if is_conops and param_engine.ast_part_names:
         sec4_8_match = re.search(r"(?:^|\n)###?\s*4\.8[.\s].*?(?=(?:\n###?\s*4\.[0-79]|\n##?\s*5[.\s]|\Z))", assembled, re.DOTALL)
         sec4_match = re.search(r"(?:^|\n)##?\s*4[.\s].*?(?=(?:\n##?\s*5[.\s]|\Z))", assembled, re.DOTALL)
-        target_text = sec4_8_match.group(0) if sec4_8_match else (sec4_match.group(0) if sec4_match else assembled)
+        arch_match = re.search(r"(?:^|\n)##?\s*.*?(?:Architecture|Subsystem).*?(?=(?:\n##?\s*[0-9]+[.\s]|\Z))", assembled, re.DOTALL | re.IGNORECASE)
+        candidate_sections = [
+            s for s in [
+                sec4_8_match.group(0) if sec4_8_match else None,
+                sec4_match.group(0) if sec4_match else None,
+                arch_match.group(0) if arch_match else None,
+                assembled,
+            ]
+            if s
+        ]
         missing_parts = [
             p for p in sorted(param_engine.ast_part_names)
-            if p not in target_text and _sanitize_level_1b_operational_text(p) not in target_text
+            if not any(
+                p in sec or _sanitize_level_1b_operational_text(p) in sec
+                for sec in candidate_sections
+            )
         ]
         if missing_parts:
             errors.append(
