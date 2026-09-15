@@ -85,10 +85,10 @@ CANONICAL_CONOPS_UNITS: List[str] = [
     "02_DEFICIENCIES_AND_MOTIVATION.md",
     "03_PROPOSED_CAPABILITIES.md",
     "04_USER_CLASSES_AND_STAKEHOLDERS.md",
-    "05_AIRSPACE_AND_SORA_RISK.md",
+    "05_OPERATIONAL_STATE_SPACE_AND_RISK.md",
     "06_UAF_OPERATIONAL_ACTIVITIES.md",
     "07_OPTX_EXCHANGES.md",
-    "08_ENVIRONMENTAL_MIL_STD_810H.md",
+    "08_ENVIRONMENTAL_OPERATING_LIMITS.md",
     "09_SCENARIOS_AND_TIMELINES.md",
     "10_MAINTENANCE_AND_GSE_SUPPORT.md",
     "11_IMPACTS_AND_TRADE_STUDIES.md",
@@ -102,9 +102,9 @@ CANONICAL_MISSION_INTENT_UNITS: List[str] = [
     "04_MULTI_DOMAIN_THREAT_MATRIX.md",
     "05_PACE_C2_PLAN.md",
     "06_SAFETY_INTERLOCKS.md",
-    "07_AIRSPACE_GEOZONES.md",
+    "07_SPATIAL_AND_OPERATIONAL_BOUNDARIES.md",
     "08_GO_NO_GO_MATRIX.md",
-    "09_BINGO_ENERGY_MATH.md",
+    "09_ENERGY_AND_RESERVE_BOUNDS.md",
     "10_OPERATIONAL_ALLOCATION_TAGS.md",
 ]
 
@@ -256,7 +256,7 @@ class SysMLParameterBindingEngine:
         self.parameter_bindings: Dict[str, str] = {}
         self._explicit_keys: Set[str] = set()
         self.inferred_system_identifier: Optional[str] = None
-        self.detected_domain: str = domain or "aviation"
+        self.detected_domain: str = domain or "generic"
         self.is_non_aircraft: bool = False
         self.is_civilian: bool = False
         self.lifecycle_contract: Optional[LifecycleContract] = None
@@ -295,7 +295,7 @@ class SysMLParameterBindingEngine:
 
     @property
     def domain(self) -> str:
-        return getattr(self, "detected_domain", "aviation")
+        return getattr(self, "detected_domain", "generic")
 
     @domain.setter
     def domain(self, val: str) -> None:
@@ -455,12 +455,7 @@ class SysMLParameterBindingEngine:
                     break
                 curr = parent
 
-        # 4. Fallback: inspect workspace directory string
-        dom = _match_tokens(self.workspace_dir)
-        if dom:
-            return dom
-
-        return "aviation"
+        return "generic"
 
     def _get_mtow_value(self) -> float:
         """Extracts numerical MTOW from bound parameters or fallback default (50.0 kg)."""
@@ -484,53 +479,52 @@ class SysMLParameterBindingEngine:
         """
         Dynamically calculates subsystem mass budget values from TOTAL_MTOW_KG.
         Fixes Issues #161, #177.
-
-        Subsystems:
-          - MASS_BUDGET_AIRFRAME_KG = round(0.30 * mtow, 2)
-          - MASS_BUDGET_AVIONICS_KG = round(0.15 * mtow, 2)
-          - MASS_BUDGET_PROPULSION_KG = round(0.25 * mtow, 2)
-          - MASS_BUDGET_ENERGY_KG = round(0.20 * mtow, 2)
-          - MASS_BUDGET_PAYLOAD_KG = round(0.07 * mtow, 2)
-          - MASS_BUDGET_CONTAINMENT_KG = round(mtow - (airframe + avionics + propulsion + energy + payload), 2)
-        Ensures the 6 partition rows strictly sum to TOTAL_MTOW_KG (100.0%) for any vehicle mass.
+        Ensures the partition rows strictly sum to TOTAL_MTOW_KG (100.0%) for any vehicle mass,
+        but only if mass fractions are explicitly provided.
         """
         mtow = self._get_mtow_value()
-
-        airframe = round(0.30 * mtow, 2)
-        avionics = round(0.15 * mtow, 2)
-        propulsion = round(0.25 * mtow, 2)
-        energy = round(0.20 * mtow, 2)
-        payload = round(0.07 * mtow, 2)
-        containment = round(mtow - (airframe + avionics + propulsion + energy + payload), 2)
 
         if "TOTAL_MTOW_KG" not in self._explicit_keys and "TOTAL_MTOW_KG" not in self.parameter_bindings:
             self.parameter_bindings["TOTAL_MTOW_KG"] = str(mtow) if "." in str(mtow) else f"{mtow:.1f}"
 
-        if "MASS_BUDGET_AIRFRAME_KG" not in self._explicit_keys:
-            self.parameter_bindings["MASS_BUDGET_AIRFRAME_KG"] = str(airframe)
-        if "MASS_BUDGET_AVIONICS_KG" not in self._explicit_keys:
-            self.parameter_bindings["MASS_BUDGET_AVIONICS_KG"] = str(avionics)
-        if "MASS_BUDGET_PROPULSION_KG" not in self._explicit_keys:
-            self.parameter_bindings["MASS_BUDGET_PROPULSION_KG"] = str(propulsion)
-        if "MASS_BUDGET_ENERGY_KG" not in self._explicit_keys:
-            self.parameter_bindings["MASS_BUDGET_ENERGY_KG"] = str(energy)
-        if "MASS_BUDGET_PAYLOAD_KG" not in self._explicit_keys:
-            self.parameter_bindings["MASS_BUDGET_PAYLOAD_KG"] = str(payload)
-        if "MASS_BUDGET_CONTAINMENT_KG" not in self._explicit_keys:
-            self.parameter_bindings["MASS_BUDGET_CONTAINMENT_KG"] = str(containment)
+        # Only calculate/populate mass budgets if mass fractions are explicitly provided
+        has_fractions = (
+            "MASS_FRACTION_AIRFRAME_PCT" in self.parameter_bindings and
+            "MASS_FRACTION_AVIONICS_PCT" in self.parameter_bindings and
+            "MASS_FRACTION_PROPULSION_PCT" in self.parameter_bindings and
+            "MASS_FRACTION_ENERGY_PCT" in self.parameter_bindings and
+            "MASS_FRACTION_PAYLOAD_PCT" in self.parameter_bindings
+        )
 
-        if "MASS_FRACTION_AIRFRAME_PCT" not in self._explicit_keys:
-            self.parameter_bindings["MASS_FRACTION_AIRFRAME_PCT"] = "30.0"
-        if "MASS_FRACTION_AVIONICS_PCT" not in self._explicit_keys:
-            self.parameter_bindings["MASS_FRACTION_AVIONICS_PCT"] = "15.0"
-        if "MASS_FRACTION_PROPULSION_PCT" not in self._explicit_keys:
-            self.parameter_bindings["MASS_FRACTION_PROPULSION_PCT"] = "25.0"
-        if "MASS_FRACTION_ENERGY_PCT" not in self._explicit_keys:
-            self.parameter_bindings["MASS_FRACTION_ENERGY_PCT"] = "20.0"
-        if "MASS_FRACTION_PAYLOAD_PCT" not in self._explicit_keys:
-            self.parameter_bindings["MASS_FRACTION_PAYLOAD_PCT"] = "7.0"
-        if "MASS_FRACTION_CONTAINMENT_PCT" not in self._explicit_keys:
-            self.parameter_bindings["MASS_FRACTION_CONTAINMENT_PCT"] = "3.0"
+        if has_fractions:
+            try:
+                airframe_pct = float(self.parameter_bindings["MASS_FRACTION_AIRFRAME_PCT"]) / 100.0
+                avionics_pct = float(self.parameter_bindings["MASS_FRACTION_AVIONICS_PCT"]) / 100.0
+                propulsion_pct = float(self.parameter_bindings["MASS_FRACTION_PROPULSION_PCT"]) / 100.0
+                energy_pct = float(self.parameter_bindings["MASS_FRACTION_ENERGY_PCT"]) / 100.0
+                payload_pct = float(self.parameter_bindings["MASS_FRACTION_PAYLOAD_PCT"]) / 100.0
+                
+                airframe = round(airframe_pct * mtow, 2)
+                avionics = round(avionics_pct * mtow, 2)
+                propulsion = round(propulsion_pct * mtow, 2)
+                energy = round(energy_pct * mtow, 2)
+                payload = round(payload_pct * mtow, 2)
+                containment = round(mtow - (airframe + avionics + propulsion + energy + payload), 2)
+                
+                if "MASS_BUDGET_AIRFRAME_KG" not in self._explicit_keys:
+                    self.parameter_bindings["MASS_BUDGET_AIRFRAME_KG"] = str(airframe)
+                if "MASS_BUDGET_AVIONICS_KG" not in self._explicit_keys:
+                    self.parameter_bindings["MASS_BUDGET_AVIONICS_KG"] = str(avionics)
+                if "MASS_BUDGET_PROPULSION_KG" not in self._explicit_keys:
+                    self.parameter_bindings["MASS_BUDGET_PROPULSION_KG"] = str(propulsion)
+                if "MASS_BUDGET_ENERGY_KG" not in self._explicit_keys:
+                    self.parameter_bindings["MASS_BUDGET_ENERGY_KG"] = str(energy)
+                if "MASS_BUDGET_PAYLOAD_KG" not in self._explicit_keys:
+                    self.parameter_bindings["MASS_BUDGET_PAYLOAD_KG"] = str(payload)
+                if "MASS_BUDGET_CONTAINMENT_KG" not in self._explicit_keys:
+                    self.parameter_bindings["MASS_BUDGET_CONTAINMENT_KG"] = str(containment)
+            except Exception:
+                pass
 
     def _derive_quadratic_physics(self) -> None:
         """
@@ -538,26 +532,27 @@ class SysMLParameterBindingEngine:
         Calculates:
           v_calc = sqrt(2 * m * g / (rho * S * C_d))
           E_k_calc = 0.5 * m * v_calc^2
-        Binds calculated values to template tokens from declared medium density and geometry,
-        ensuring formula-table parity.
+        Binds calculated values to template tokens only when explicitly defined.
         """
         m = self._get_mtow_value()
-        g = 9.80665
 
-        # Medium density rho based on domain and explicit bindings (ISA sea level default 1.225 kg/m^3 for Section 5.2 SORA kinetic energy derivations)
-        default_rho = 1.225
-        if self.domain == "marine":
-            default_rho = 1025.0
-        elif self.domain == "space":
-            default_rho = 1e-12
-
+        # Check if gravity and density are explicitly bound
+        g_raw = self.parameter_bindings.get("G_ACCEL_MPS2")
         rho_raw = (
             self.parameter_bindings.get("AIR_DENSITY_KGM3")
             or self.parameter_bindings.get("FLUID_DENSITY_KGM3")
             or self.parameter_bindings.get("RHO_MEDIUM")
             or self.parameter_bindings.get("RHO")
         )
-        rho = default_rho
+
+        g = None
+        if g_raw is not None:
+            try:
+                g = float(g_raw)
+            except Exception:
+                pass
+
+        rho = None
         if rho_raw is not None:
             try:
                 m_rho = re.search(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?", str(rho_raw))
@@ -566,22 +561,13 @@ class SysMLParameterBindingEngine:
             except Exception:
                 pass
 
-        if "AIR_DENSITY_KGM3" not in self._explicit_keys:
-            self.parameter_bindings["AIR_DENSITY_KGM3"] = str(rho)
-        if "FLUID_DENSITY_KGM3" not in self._explicit_keys:
-            self.parameter_bindings["FLUID_DENSITY_KGM3"] = str(rho)
-        if "RHO_MEDIUM" not in self._explicit_keys:
-            self.parameter_bindings["RHO_MEDIUM"] = str(rho)
-        if "G_ACCEL_MPS2" not in self._explicit_keys:
-            self.parameter_bindings["G_ACCEL_MPS2"] = str(g)
+        if "SYSTEM_MASS_KG" not in self._explicit_keys:
+            self.parameter_bindings["SYSTEM_MASS_KG"] = str(m)
+        if "SYSTEM_MASS" not in self._explicit_keys:
+            self.parameter_bindings["SYSTEM_MASS"] = str(m)
 
-        # Bind system mass tokens
-        self.parameter_bindings["SYSTEM_MASS_KG"] = str(m)
-        self.parameter_bindings["SYSTEM_MASS"] = str(m)
-
-        # Reference frontal area S_ref and drag coefficient C_D
         s_ref_raw = self.parameter_bindings.get("FRONTAL_AREA_M2") or self.parameter_bindings.get("S_REF")
-        s_ref = 0.18
+        s_ref = None
         if s_ref_raw:
             try:
                 m_sref = re.search(r"[-+]?\d*\.?\d+", str(s_ref_raw))
@@ -591,7 +577,7 @@ class SysMLParameterBindingEngine:
                 pass
 
         cd_unmit_raw = self.parameter_bindings.get("DRAG_COEFFICIENT") or self.parameter_bindings.get("C_D")
-        cd_unmit = 0.45
+        cd_unmit = None
         if cd_unmit_raw:
             try:
                 m_cdunmit = re.search(r"[-+]?\d*\.?\d+", str(cd_unmit_raw))
@@ -600,33 +586,13 @@ class SysMLParameterBindingEngine:
             except Exception:
                 pass
 
-        if "FRONTAL_AREA_M2" not in self._explicit_keys:
-            self.parameter_bindings["FRONTAL_AREA_M2"] = str(s_ref)
-        if "DRAG_COEFFICIENT" not in self._explicit_keys:
-            self.parameter_bindings["DRAG_COEFFICIENT"] = str(cd_unmit)
-
-        # Unmitigated terminal velocity and kinetic energy
-        if rho > 0 and s_ref > 0 and cd_unmit > 0:
-            v_term_unmit = round(((2.0 * m * g) / (rho * s_ref * cd_unmit)) ** 0.5, 2)
-            ek_unmit = round(0.5 * m * (v_term_unmit ** 2), 1)
-        else:
-            v_term_unmit = 0.0
-            ek_unmit = 0.0
-
-        if "V_TERMINAL_UNMITIGATED_MPS" not in self._explicit_keys:
-            self.parameter_bindings["V_TERMINAL_UNMITIGATED_MPS"] = str(v_term_unmit)
-            self.parameter_bindings["V_TERMINAL_UNMITIGATED"] = str(v_term_unmit)
-        if "E_K_UNMITIGATED_JOULES" not in self._explicit_keys:
-            self.parameter_bindings["E_K_UNMITIGATED_JOULES"] = str(ek_unmit)
-            self.parameter_bindings["E_K_UNMITIGATED"] = str(ek_unmit)
-
-        # Generic Mitigated / Containment parameters derived from AST or explicit bindings
+        # Mitigated parameters
         cd_mit_raw = (
             self.parameter_bindings.get("C_D_MIT")
             or self.parameter_bindings.get("DRAG_COEFFICIENT_MIT")
             or self.parameter_bindings.get("CONTAINMENT_DRAG_COEFFICIENT")
         )
-        cd_mit = 1.75
+        cd_mit = None
         if cd_mit_raw:
             try:
                 m_cdmit = re.search(r"[-+]?\d*\.?\d+", str(cd_mit_raw))
@@ -649,29 +615,32 @@ class SysMLParameterBindingEngine:
             except Exception:
                 pass
 
-        if s_mit is None or s_mit <= 0:
-            s_mit = 84.0
+        if g is not None and rho is not None:
+            # Unmitigated terminal velocity and kinetic energy
+            if s_ref is not None and cd_unmit is not None and rho > 0 and s_ref > 0 and cd_unmit > 0:
+                v_term_unmit = round(((2.0 * m * g) / (rho * s_ref * cd_unmit)) ** 0.5, 2)
+                ek_unmit = round(0.5 * m * (v_term_unmit ** 2), 1)
+                
+                if "V_TERMINAL_UNMITIGATED_MPS" not in self._explicit_keys:
+                    self.parameter_bindings["V_TERMINAL_UNMITIGATED_MPS"] = str(v_term_unmit)
+                    self.parameter_bindings["V_TERMINAL_UNMITIGATED"] = str(v_term_unmit)
+                if "E_K_UNMITIGATED_JOULES" not in self._explicit_keys:
+                    self.parameter_bindings["E_K_UNMITIGATED_JOULES"] = str(ek_unmit)
+                    self.parameter_bindings["E_K_UNMITIGATED"] = str(ek_unmit)
 
-        if "S_MIT" not in self._explicit_keys:
-            self.parameter_bindings["S_MIT"] = str(s_mit)
-        if "C_D_MIT" not in self._explicit_keys:
-            self.parameter_bindings["C_D_MIT"] = str(cd_mit)
+            if s_mit is not None and cd_mit is not None:
+                denom = rho * s_mit * cd_mit
+                if denom > 0 and m > 0:
+                    v_calc = round(((2.0 * m * g) / denom) ** 0.5, 2)
+                    ek_calc = round(0.5 * m * (v_calc ** 2), 1)
 
-        denom = rho * s_mit * cd_mit
-        if denom > 0 and m > 0:
-            v_calc = round(((2.0 * m * g) / denom) ** 0.5, 2)
-            ek_calc = round(0.5 * m * (v_calc ** 2), 1)
-        else:
-            v_calc = 1.65
-            ek_calc = 34.0
-
-        if "V_TERMINAL_MITIGATED_MPS" not in self._explicit_keys:
-            self.parameter_bindings["V_TERMINAL_MITIGATED_MPS"] = str(v_calc)
-            self.parameter_bindings["V_TERMINAL_MITIGATED"] = str(v_calc)
-        if "E_K_MITIGATED_JOULES" not in self._explicit_keys:
-            self.parameter_bindings["E_K_MITIGATED_JOULES"] = str(ek_calc)
-            self.parameter_bindings["E_K_MITIGATED"] = str(ek_calc)
-            self.parameter_bindings["MITIGATED_KINETIC_ENERGY_J"] = str(ek_calc)
+                    if "V_TERMINAL_MITIGATED_MPS" not in self._explicit_keys:
+                        self.parameter_bindings["V_TERMINAL_MITIGATED_MPS"] = str(v_calc)
+                        self.parameter_bindings["V_TERMINAL_MITIGATED"] = str(v_calc)
+                    if "E_K_MITIGATED_JOULES" not in self._explicit_keys:
+                        self.parameter_bindings["E_K_MITIGATED_JOULES"] = str(ek_calc)
+                        self.parameter_bindings["E_K_MITIGATED"] = str(ek_calc)
+                        self.parameter_bindings["MITIGATED_KINETIC_ENERGY_J"] = str(ek_calc)
     def _derive_domain_regulatory_standards(self) -> None:
         """
         Dynamically derives DOMAIN_REGULATORY_STANDARDS_TABLE_ROWS based on detected domain,

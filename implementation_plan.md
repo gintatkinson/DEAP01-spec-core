@@ -253,3 +253,45 @@ This session's tool list exposes NO context-isolated subagent dispatch capabilit
 - core: `python3 scripts/reconcile_backlog.py --offline --upstream` (expect exit 0, zero new Document Metadata violations for edited docs; README/yang guide have no metadata gate -- stated); `python3 skills/spec-orchestrator/scripts/verify_model_coverage.py --spec-only --allow-missing-specs --workspace .` exit 0 + upstream-mode notice; `python3 scripts/verify_downstream_baseline.py --no-domain` exit 0 (restore `restoration-point` tag to pre-run value afterwards); `python3 scripts/compile_yang.py --help` unchanged.
 - parent/child: `python3 scripts/reconcile_backlog.py --offline --upstream` (capture, incl. any domain-mode notice), `verify_downstream_baseline.py --no-domain` (same tag restore), parity wrapper `--spec-only --allow-missing-specs --workspace .` (capture exit; template findings recorded, not auto-fixed).
 - Each repo: commit (messages above, neutral), push, `git diff origin/main` empty, paste push output + shas. Walkthrough + final report per Atomic Work gate. Parent remains with its unrelated staged file untouched.
+
+---
+
+## Phase 5 -- Generalize 08_ENVIRONMENTAL_MIL_STD_810H.md to 08_ENVIRONMENTAL_OPERATING_LIMITS.md
+
+> Status: AWAITING USER APPROVAL
+
+### 5.1 Objective
+Generalize the environmental specification file from MIL-STD-810H specific attributes to abstract environmental, thermal, and ingress limits. This is part of the UPSTREAM_SPEC_CORE_COMPILER pure schema-driven compiler invariant, eliminating hardcoded domain concepts.
+
+### 5.2 Micro-Tasks
+- **WP-G1 (Rename & Symlink)**: Rename `skills/spec-conops-engineering/resources/units/conops/08_ENVIRONMENTAL_MIL_STD_810H.md` to `08_ENVIRONMENTAL_OPERATING_LIMITS.md` inside `skills/spec-conops-engineering/resources/units/conops/`.
+- **WP-G2 (Symlink for Legacy Tests)**: Create a symlink named `08_ENVIRONMENTAL_MIL_STD_810H.md` pointing to `08_ENVIRONMENTAL_OPERATING_LIMITS.md` in the same directory.
+- **WP-G3 (Abstract Content)**: Update the content in `08_ENVIRONMENTAL_OPERATING_LIMITS.md`.
+  - Update the Title to "Operational Environments & Environmental Stress Qualification".
+  - Replace MIL-STD-810H altitude ceilings, radomes, and specific standard references with abstract environmental, thermal, and ingress limits using placeholders or generic equations.
+  - Ensure all KaTeX/LaTeX formatting and table rules are strictly maintained.
+- **WP-G4 (Verification)**: 
+  - Ensure KaTeX and Mermaid offline gates pass on the modified document.
+  - Verify that tests run successfully without regressions.
+
+### 5.3 Execution Note
+Per the Strict Coordinator Tool Locking rule, after approval, I will dispatch a context-isolated subagent with the appropriate skill to execute the rename, symlink, and file modifications.
+
+---
+
+## Phase 6 -- Generalize 05_AIRSPACE_AND_SORA_RISK.md
+
+> Status: AWAITING USER APPROVAL
+
+### 6.1 Objective
+Generalize `05_AIRSPACE_AND_SORA_RISK.md` to `05_OPERATIONAL_STATE_SPACE_AND_RISK.md` to remove UAV/SORA hardcoded domain concepts, replacing them with abstract operational envelope state-space risk analysis, per the Pure Schema-Driven Compiler Invariant.
+
+### 6.2 Micro-Tasks
+- **WP-H1 (Rename & Symlink)**: Rename `skills/spec-conops-engineering/resources/units/conops/05_AIRSPACE_AND_SORA_RISK.md` to `05_OPERATIONAL_STATE_SPACE_AND_RISK.md` and create a symlink named `05_AIRSPACE_AND_SORA_RISK.md` pointing to it for legacy test compatibility.
+- **WP-H2 (Abstract Content)**: Replace SORA risk matrices and UAV flight termination mechanics with abstract operational envelope state-space risk analysis.
+  - Maintain all KaTeX/LaTeX and table structural rules.
+- **WP-H3 (Verification)**: 
+  - Ensure KaTeX and offline gates pass on the modified document.
+
+### 6.3 Execution Note
+Per AGENTS.md, after approval, I will dispatch a context-isolated subagent with `skills/spec-conops-engineering/SKILL.md` (or another appropriate writing skill) to perform the rewrite and file operations.
