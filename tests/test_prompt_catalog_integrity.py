@@ -535,6 +535,8 @@ class TestPromptCatalogIntegrity(unittest.TestCase):
                 p,
             )
             p = re.sub(r"Worker 0D -- Interface Specification Worker \(.*?\)", "Worker 0D -- Interface Specification Worker <ROLE>", p)
+            p = re.sub(r"Worker 1C -- Operational.*?\(Use Cases & Realization Matrices\)", "Worker 1C -- Operational Spec Worker (Use Cases & Realization Matrices)", p)
+            p = re.sub(r"Worker 1D -- Work Breakdown Structure \(WBS\) & Work Package Decomposition Spec Worker", "Worker 1D -- WBS & Work Package Decomposition Spec Worker", p)
             return p
 
         for key in ["worker_0a", "worker_0b", "worker_0c", "worker_0d", "worker_1a", "worker_1b", "worker_1c", "worker_1d", "worker_2a", "worker_2b"]:
