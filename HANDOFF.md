@@ -120,6 +120,8 @@ Verified state of all 8 completed remediation packages:
 | **#291** | `da9c7b2` | `status:fixed-resolved` | User class `UCL-xx` vs use case `uc-xx` taxonomy regex (`conops_specification_schema.json`). |
 | **#327** | `2fdbd60` | `status:fixed-resolved` | ConOps Unit Deduplication & Canonical Template Streamlining. |
 | **#319, #320** | `0eda164` | `status:fixed-resolved` | Abstract RTA formal constraints & dynamic acceptance vocabulary. |
+| **#296, #297, #299, #302, #305** | `6173af4` | `status:fixed-resolved` | Multi-format schema ingestion, ConOps resource unit synchronization, Link/Mermaid validator scoping |
+| **#298, #301** | `f562fa5` | `status:fixed-resolved` | Gate 26 IEEE 1362-1998 12-section layout harmonization and fail-open bypass removal |
 
 * **Landing Zones**: `schema/`, `docs/epics/`, `docs/features/`, `docs/user-stories/`, `docs/use-cases/` contain **ONLY `.gitkeep`**.
 * **Working Tree**: Clean on branch `main`, up to date with `origin/main`. Zero domain pollution.

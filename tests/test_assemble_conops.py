@@ -2405,6 +2405,34 @@ parameters:
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
 
+    def test_cli_workspace_isolation_with_explicit_io(self):
+        """Verify CLI workspace auto-detection prevents process CWD schema leakage."""
+        with tempfile.TemporaryDirectory() as fake_cwd:
+            os.makedirs(os.path.join(fake_cwd, ".pipeline"))
+            with open(os.path.join(fake_cwd, ".pipeline", "schema.sysml"), "w") as f:
+                f.write("package FakePackage { part def AntennaRotator; part def AutopilotCore; }\n")
+
+            with tempfile.TemporaryDirectory() as fixture_dir:
+                os.makedirs(os.path.join(fixture_dir, ".pipeline", "upstream"))
+
+                input_dir = os.path.join(fixture_dir, "units", "aviation", "conops")
+                os.makedirs(input_dir)
+                with open(os.path.join(input_dir, "00_intro.md"), "w") as f:
+                    f.write("# Introduction\n")
+
+                output_dir = os.path.join(fixture_dir, "docs", "conops")
+                os.makedirs(output_dir)
+
+                script_path = os.path.join(REPO_ROOT, "scripts", "assemble_conops.py")
+
+                res = subprocess.run(
+                    [sys.executable, script_path, "--input-dir", input_dir, "--output-dir", output_dir],
+                    cwd=fake_cwd,
+                    capture_output=True,
+                    text=True
+                )
+                self.assertEqual(res.returncode, 0, f"Expected success but got failure: {res.stderr}\n{res.stdout}")
+
 
 if __name__ == "__main__":
     unittest.main()

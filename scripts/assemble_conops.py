@@ -4232,8 +4232,14 @@ def main() -> int:
 
     args = parser.parse_args()
 
+    explicit_io = bool(args.input_dir or args.output_dir)
     target_ws = args.workspace_flag or args.workspace
-    workspace = os.path.abspath(target_ws) if target_ws else os.getcwd()
+    if target_ws:
+        workspace = os.path.abspath(target_ws)
+    elif not explicit_io:
+        workspace = os.getcwd()
+    else:
+        workspace = None
 
     input_dir = args.input_dir
     if not input_dir:
