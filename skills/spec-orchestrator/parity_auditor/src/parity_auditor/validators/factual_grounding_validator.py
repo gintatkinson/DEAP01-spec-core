@@ -543,24 +543,29 @@ def _normalize_math_block(inner: str) -> str:
 def _normalize_katex_math_expressions(text: str) -> str:
     """
     Normalizes KaTeX/LaTeX math expressions into plain-text engineering representations.
-    Translates inline ($...$) and display ($$...$$) math expressions:
+    Translates inline ($...$, \\(...\\)) and display ($$...$$, \\[...]\\) math expressions:
     - \\text{--} or \\text{-} -> -
     - \\text{([a-zA-Z/%^*_-]+)} -> \\1
     - \\ge, \\le, \\sim, \\approx, \\pm -> >=, <=, ~, ~, +/-
     - \\circ -> deg
-    - Strips math delimiters ($) and braces so that:
+    - Strips math delimiters and braces so that:
       '$13\\text{--}14\\text{ bar}$' -> '13-14 bar'
       '$h \\ge 50\\text{ m}$' -> 'h >= 50 m'
       '$r = 300\\text{ m}$' -> 'r = 300 m'
       '$\\le 55\\text{ m/s}$' -> '<= 55 m/s'
       '$15^\\circ$' -> '15 deg'
+      '\\( 50\\text{ m} \\)' -> '50 m'
     """
-    if '$' not in text:
+    if '$' not in text and r'\(' not in text and r'\[' not in text:
         return text
     # Display math $$ ... $$
-    text = re.sub(r'\$\$(.*?)\$\$', lambda m: _normalize_math_block(m.group(1)), text, flags=re.DOTALL)
+    text = re.sub(r'\$\$(.*?)\$\$', lambda m: " " + _normalize_math_block(m.group(1)) + " ", text, flags=re.DOTALL)
     # Inline math $ ... $
-    text = re.sub(r'(?<!\\)\$(.*?)(?<!\\)\$', lambda m: _normalize_math_block(m.group(1)), text)
+    text = re.sub(r'(?<!\\)\$(.*?)(?<!\\)\$', lambda m: " " + _normalize_math_block(m.group(1)) + " ", text)
+    # Display math \[ ... \]
+    text = re.sub(r'\\\[(.*?)\\\]', lambda m: " " + _normalize_math_block(m.group(1)) + " ", text, flags=re.DOTALL)
+    # Inline math \( ... \)
+    text = re.sub(r'\\\((.*?)\\\)', lambda m: " " + _normalize_math_block(m.group(1)) + " ", text)
     return text
 
 
@@ -2801,6 +2806,49 @@ class FactualGroundingValidator(IValidator):
                     candidate_metrics.append(metric)
 
                 if not candidate_metrics:
+                    # Check if this physical quantity corresponds to a declared AST attribute node in the schema
+                    is_declared_ast_property = False
+                    unit_aliases = [u for u, c in ISO_80000_PHYSICAL_UNITS.items() if c == canon_unit]
+                    for node in gt.declared_ast_nodes:
+                        for u in unit_aliases:
+                            if node.endswith(u) and len(node) > len(u):
+                                prefix = node[:-len(u)]
+                                prefix_toks = _tokenize_identifier(prefix)
+                                if any(any(_property_token_matches(pt, lt) for lt in line_tokens) for pt in prefix_toks if pt not in NON_HARDWARE_GENERIC_TOKENS):
+                                    is_declared_ast_property = True
+                                    break
+                        if is_declared_ast_property:
+                            break
+
+                    if is_declared_ast_property:
+                        continue
+
+                    has_citation = False
+                    if citation_to_check:
+                        candidate_tokens = self._extract_candidate_tokens(line_str)
+                        has_citation = self._has_ssot_citation(
+                            citation_to_check,
+                            content,
+                            rel_path,
+                            gt,
+                            candidate_tokens=candidate_tokens,
+                            lineno=lineno_1idx,
+                            claim_text=claimed_str,
+                        )
+                    if not has_citation:
+                        findings.append(Finding(
+                            "factual-grounding-numeric-drift",
+                            f"{rel_path}:{lineno_1idx}: Ungrounded physical assertion '{claimed_str}' is not declared in schema ground truth or AST nodes in {', '.join(gt.source_files) or 'schema/'}.",
+                            location=f"{rel_path}:{lineno_1idx}",
+                            detail={
+                                "file": rel_path,
+                                "line": lineno_1idx,
+                                "claimed": claimed_str,
+                                "unit": canon_unit,
+                                "reason": f"Physical quantity '{claimed_str}' has no matching schema property in {', '.join(gt.source_files) or 'schema/'} and lacks verified SSOT citation."
+                            }
+                        ))
+                        reported_claims_on_line.add(claimed_str)
                     continue
 
                 # Proximity Clause Matching:

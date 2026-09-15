@@ -427,6 +427,118 @@ The servos operate at 50 Hz.
                 check_factual_grounding(tmpdir)
             self.assertEqual(cm.exception.code, 1)
 
+    def test_check23_rejects_uncited_katex_math_expressions_issue288(self):
+        """Verify that KaTeX math expressions fail Check 23 gate with SystemExit(1)
+        and factual-grounding-numeric-drift when uncited and not in schema (Issue #288).
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            docs_dir = os.path.join(tmpdir, "docs", "features")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(docs_dir, exist_ok=True)
+
+            with open(os.path.join(schema_dir, "model.sysml"), "w", encoding="utf-8") as f:
+                f.write(SAMPLE_GROUND_TRUTH_SYSML)
+
+            doc_md = """# Flight Envelopes
+## Operating Limits
+Pneumatic catapult acceleration ($13\\text{--}14\\text{ bar}$), automated climb ($h \\ge 50\\text{ m}$).
+Platform loiter ($r = 300\\text{ m}$), terminal dive ($\\le 55\\text{ m/s}$).
+Minimum clear altitude is \\( 50\\text{ m} \\).
+"""
+            with open(os.path.join(docs_dir, "FEAT_KATEX.md"), "w", encoding="utf-8") as f:
+                f.write(doc_md)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            findings = self.validator.validate(repo, scan_dirs=["docs"])
+            drift_findings = [f for f in findings if f.rule_id == "factual-grounding-numeric-drift"]
+            self.assertGreaterEqual(len(drift_findings), 4)
+            findings_text = " ".join(str(f) for f in drift_findings)
+            self.assertIn("13-14 bar", findings_text)
+            self.assertIn("50 m", findings_text)
+            self.assertIn("300 m", findings_text)
+            self.assertIn("55 m/s", findings_text)
+
+            with self.assertRaises(SystemExit) as cm:
+                check_factual_grounding(tmpdir)
+            self.assertEqual(cm.exception.code, 1)
+
+    def test_check23_accepts_katex_math_expressions_with_ssot_citation_issue288(self):
+        """Verify that KaTeX math expressions pass Check 23 gate cleanly
+        when substantiated by an explicit verified SSOT citation (Issue #288).
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            docs_dir = os.path.join(tmpdir, "docs", "features")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(docs_dir, exist_ok=True)
+
+            with open(os.path.join(schema_dir, "model.sysml"), "w", encoding="utf-8") as f:
+                f.write(SAMPLE_GROUND_TRUTH_SYSML)
+
+            manual_md = """# Flight Systems Manual
+## 3.2 Operating Envelopes
+Pneumatic catapult acceleration (13-14 bar), automated climb (h >= 50 m).
+Platform loiter (r = 300 m), terminal dive (<= 55 m/s).
+Minimum clear altitude is 50 m.
+"""
+            with open(os.path.join(schema_dir, "flight-manual.md"), "w", encoding="utf-8") as f:
+                f.write(manual_md)
+
+            doc_md = """# Flight Envelopes
+<!-- Source: schema/flight-manual.md §3.2 -->
+Pneumatic catapult acceleration ($13\\text{--}14\\text{ bar}$), automated climb ($h \\ge 50\\text{ m}$).
+Platform loiter ($r = 300\\text{ m}$), terminal dive ($\\le 55\\text{ m/s}$).
+Minimum clear altitude is \\( 50\\text{ m} \\).
+"""
+            with open(os.path.join(docs_dir, "FEAT_KATEX_CITED.md"), "w", encoding="utf-8") as f:
+                f.write(doc_md)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            findings = self.validator.validate(repo, scan_dirs=["docs"])
+            self.assertEqual(findings, [])
+
+            # Check 23 gate must pass without SystemExit
+            check_factual_grounding(tmpdir)
+
+    def test_check23_accepts_katex_math_expressions_declared_in_schema_issue288(self):
+        """Verify that KaTeX math expressions pass Check 23 gate cleanly
+        when declared in schema ground truth limits (Issue #288).
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            docs_dir = os.path.join(tmpdir, "docs", "features")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(docs_dir, exist_ok=True)
+
+            schema_sysml = """package GroundedLimits_SSOT {
+    attribute catapultPressureLimitBar : Real = 15.0;
+    attribute climbAltitudeLimitM : Real = 60.0;
+    attribute loiterRadiusLimitM : Real = 350.0;
+    attribute terminalDiveSpeedLimitMps : Real = 60.0;
+    attribute clearAltitudeLimitM : Real = 60.0;
+}
+"""
+            with open(os.path.join(schema_dir, "model.sysml"), "w", encoding="utf-8") as f:
+                f.write(schema_sysml)
+
+            doc_md = """# Flight Envelopes
+## Operating Limits
+Pneumatic catapult acceleration ($13\\text{--}14\\text{ bar}$), automated climb ($h \\ge 50\\text{ m}$).
+Platform loiter ($r = 300\\text{ m}$), terminal dive ($\\le 55\\text{ m/s}$).
+Minimum clear altitude is \\( 50\\text{ m} \\).
+"""
+            with open(os.path.join(docs_dir, "FEAT_KATEX_GROUNDED.md"), "w", encoding="utf-8") as f:
+                f.write(doc_md)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            findings = self.validator.validate(repo, scan_dirs=["docs"])
+            drift_findings = [f for f in findings if f.rule_id == "factual-grounding-numeric-drift"]
+            self.assertEqual(drift_findings, [])
+
+            # Check 23 gate must pass without SystemExit
+            check_factual_grounding(tmpdir)
+
 
 if __name__ == "__main__":
     unittest.main()
