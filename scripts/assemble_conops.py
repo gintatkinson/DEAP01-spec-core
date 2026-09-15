@@ -172,19 +172,25 @@ def is_component_icd_document(text: str, file_path: str = "") -> bool:
     Detects whether a document is a low-level raw wire-packet trace or standalone protocol capture log.
     Refactored for Issue #296: Does NOT discard legitimate OEM subsystem hardware specifications
     in schema/, docs/architecture/, or docs/research/ just because they contain tables, pinouts,
-    or the phrase 'interface control document'.
-    Only excludes low-level raw wire-packet traces or standalone protocol capture logs.
+    interface matrices, or the phrase 'interface control document'.
+    Only excludes low-level raw wire-packet traces, raw packet captures, or standalone protocol capture logs.
     """
     trace_path_markers = (
         "wire_packet_trace",
         "wire-packet-trace",
         "packet_capture",
         "packet-capture",
+        "packet_dump",
+        "packet-dump",
         "wireshark",
         "raw_trace",
         "raw-trace",
+        "raw_packet_trace",
+        "raw-packet-trace",
         "protocol_capture",
         "protocol-capture",
+        "protocol_dump",
+        "protocol-dump",
         "serial_packet_trace",
         "serial-packet-trace",
         "pcap_trace",
@@ -193,6 +199,8 @@ def is_component_icd_document(text: str, file_path: str = "") -> bool:
     if file_path:
         norm_path = file_path.lower().replace("\\", "/")
         base_name = os.path.basename(norm_path)
+        if base_name.endswith((".pcap", ".pcapng", ".cap")):
+            return True
         if any(marker in norm_path or marker in base_name for marker in trace_path_markers):
             return True
 
@@ -203,10 +211,13 @@ def is_component_icd_document(text: str, file_path: str = "") -> bool:
             "wire_packet_trace",
             "packet capture",
             "packet_capture",
+            "packet capture dump",
             "wireshark capture",
             "raw wire packet trace",
             "raw packet trace",
+            "raw packet capture",
             "protocol capture log",
+            "protocol dump log",
             "standalone protocol capture",
             "serial packet trace",
             "pcap trace",

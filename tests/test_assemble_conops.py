@@ -1876,6 +1876,10 @@ Formal operational lifecycle stages across $\\Phi_{\\mathrm{lifecycle}}$:
         self.assertTrue(is_component_icd_document("", file_path="docs/telemetry/raw_trace.bin"))
         self.assertTrue(is_component_icd_document("", file_path="schema/protocol_capture_stream.txt"))
         self.assertTrue(is_component_icd_document("", file_path="schema/serial_packet_trace.log"))
+        self.assertTrue(is_component_icd_document("", file_path="schema/flight_network_capture.pcap"))
+        self.assertTrue(is_component_icd_document("", file_path="schema/packet_dump.log"))
+        self.assertTrue(is_component_icd_document("", file_path="docs/telemetry/protocol_dump.txt"))
+        self.assertTrue(is_component_icd_document("", file_path="schema/raw_packet_trace.bin"))
 
         # Text-based detections
         trace_text_1 = """# Wire Packet Trace Log
@@ -1890,6 +1894,21 @@ Frame 1: 64 bytes on wire
 """
         self.assertTrue(is_component_icd_document(trace_text_2))
 
+        trace_text_3 = """# Packet Capture Dump
+Frame 001: 0xDEADBEEF
+"""
+        self.assertTrue(is_component_icd_document(trace_text_3))
+
+        trace_text_4 = """# Raw Wire Packet Trace
+Payload: 0x01 0x02 0x03 0x04
+"""
+        self.assertTrue(is_component_icd_document(trace_text_4))
+
+        trace_text_5 = """# Standalone Protocol Capture
+Protocol capture export from serial line
+"""
+        self.assertTrue(is_component_icd_document(trace_text_5))
+
         # Legitimate OEM subsystem hardware specifications MUST NOT be flagged as component ICDs (Issue #296)
         self.assertFalse(is_component_icd_document("", file_path="schema/esad-icd-excalibur-ab00-0054.md"))
         self.assertFalse(is_component_icd_document("", file_path="schema/actuator_icd_v1.md"))
@@ -1898,6 +1917,10 @@ Frame 1: 64 bytes on wire
         self.assertFalse(is_component_icd_document("", file_path="schema/radio-icd.md"))
         self.assertFalse(is_component_icd_document("", file_path="schema/ICD_01_SYSTEM_INTERFACE_MATRIX.md"))
         self.assertFalse(is_component_icd_document("", file_path="schema/ICD_02_MASTER_SIGNAL_DICTIONARY.md"))
+        self.assertFalse(is_component_icd_document("", file_path="schema/bms_subsystem_spec.md"))
+        self.assertFalse(is_component_icd_document("", file_path="schema/motor_controller_spec.md"))
+        self.assertFalse(is_component_icd_document("", file_path="docs/architecture/avionics_spec.md"))
+        self.assertFalse(is_component_icd_document("", file_path="docs/research/sensor_payload_spec.md"))
 
         # System-level specs should NOT be flagged as component ICDs
         system_spec_text = """# ALPHA 500
@@ -1911,6 +1934,110 @@ Frame 1: 64 bytes on wire
         self.assertFalse(is_component_icd_document(system_spec_text, file_path="schema/system_spec.md"))
         self.assertFalse(is_component_icd_document(system_spec_text, file_path="schema/alpha500_system_model.md"))
         self.assertFalse(is_component_icd_document(system_spec_text))
+
+        # Authentic OEM Subsystem Specifications containing interface descriptions, pinouts, and markdown port tables
+        battery_spec_text = """# Battery Management System Specification
+## Subsystem Interface Description & Connector Pinouts
+The Battery Management System monitors cell voltage and temperature across battery packs.
+### Subsystem Table
+| Subsystem | Scope | Mass (kg) | Power (W) | Interfaces / Ports |
+| :--- | :--- | :--- | :--- | :--- |
+| BatteryManagementSystem | Main vehicle energy storage and cell balancing | 12.5 | 40.0 | CAN_BUS_A:inout, E_STOP_IN:in |
+
+### Connector Pinout Table
+| Pin | Signal | Direction | Function |
+| :--- | :--- | :--- | :--- |
+| 1 | VBAT_POS | Out | +48V Battery power rail |
+| 2 | VBAT_NEG | Out | Battery return ground |
+"""
+        motor_spec_text = """# Brushless Motor Controller Specification
+## Subsystem Interface Description and Port Definitions
+High-frequency PWM propulsion driver for brushless motors.
+### Subsystem Table
+| Component | Function | Mass (kg) | Power (W) | Ports |
+| :--- | :--- | :--- | :--- | :--- |
+| MotorController | Dual FOC brushless propulsion drive | 3.5 | 1200.0 | PWM_IN:in, TELEM_OUT:out, HALL_A:in |
+
+### Physical Bus Interface & Pinout
+| Pin | Signal | Direction | Description |
+| :--- | :--- | :--- | :--- |
+| 1 | PHASE_U | Out | Motor stator Phase U |
+| 2 | PHASE_V | Out | Motor stator Phase V |
+"""
+        avionics_spec_text = """# Integrated Avionics Computer Subsystem Specification
+## Subsystem Interface Description and Bus Pinouts
+Primary flight computer executing navigation, guidance, and flight control statecharts.
+### Subsystem Table
+| Subsystem | Description | Mass (kg) | Power (W) | Interfaces |
+| :--- | :--- | :--- | :--- | :--- |
+| AvionicsComputer | Primary navigation and guidance flight computer | 2.8 | 35.0 | ARINC429_RX:in, MIL1553_BUS:inout |
+
+### Connector Pinout Table
+| Pin | Signal | Direction | Description |
+| :--- | :--- | :--- | :--- |
+| 1 | 1553_A_HI | InOut | MIL-STD-1553 Bus A Positive |
+| 2 | 1553_A_LO | InOut | MIL-STD-1553 Bus A Negative |
+"""
+        sensor_spec_text = """# EO/IR Gimbal Payload Specification
+## Subsystem Interface Description & Port Table
+Stabilized optical and infrared sensor package.
+### Subsystem Table
+| Subsystem | Scope | Mass (kg) | Power (W) | Interfaces |
+| :--- | :--- | :--- | :--- | :--- |
+| GimbalPayloadSensor | Dual EO/IR stabilized surveillance sensor | 4.2 | 50.0 | VIDEO_STREAM:out, GIMBAL_CMD:in |
+
+### Payload Signal Pinout
+| Pin | Signal | Direction | Function |
+| :--- | :--- | :--- | :--- |
+| 1 | HD_SDI_TX | Out | 1080p60 uncompressed video stream |
+| 2 | RS422_RX | In | Gimbal slew rate control |
+"""
+        oem_specs = [
+            ("BatteryManagementSystem", battery_spec_text, "schema/bms_subsystem_spec.md"),
+            ("MotorController", motor_spec_text, "schema/motor_controller_spec.md"),
+            ("AvionicsComputer", avionics_spec_text, "docs/architecture/avionics_spec.md"),
+            ("GimbalPayloadSensor", sensor_spec_text, "docs/research/sensor_payload_spec.md"),
+        ]
+
+        # Verify all OEM specs return False for is_component_icd_document
+        for name, spec, path in oem_specs:
+            self.assertFalse(is_component_icd_document(spec, file_path=path), f"{name} falsely classified as ICD with path")
+            self.assertFalse(is_component_icd_document(spec), f"{name} falsely classified as ICD without path")
+
+        # Verify all OEM specs are ingested into self.ast_parts and ports are bound
+        engine = SysMLParameterBindingEngine(auto_detect=False)
+        for name, spec, path in oem_specs:
+            res = engine.ingest_markdown_text(spec, file_path=path)
+            self.assertTrue(res, f"Failed to ingest {name}")
+            self.assertIn(name, engine.ast_part_names, f"{name} not added to ast_part_names")
+
+        self.assertEqual(len(engine.ast_parts), 4)
+        part_map = {p.name: p for p in engine.ast_parts}
+        self.assertIn("BatteryManagementSystem", part_map)
+        self.assertIn("MotorController", part_map)
+        self.assertIn("AvionicsComputer", part_map)
+        self.assertIn("GimbalPayloadSensor", part_map)
+
+        # Verify extracted ports
+        bms_part = part_map["BatteryManagementSystem"]
+        bms_port_names = [p.name for p in bms_part.ports]
+        self.assertIn("CAN_BUS_A", bms_port_names)
+        self.assertIn("E_STOP_IN", bms_port_names)
+
+        motor_part = part_map["MotorController"]
+        motor_port_names = [p.name for p in motor_part.ports]
+        self.assertIn("PWM_IN", motor_port_names)
+        self.assertIn("TELEM_OUT", motor_port_names)
+
+        avionics_part = part_map["AvionicsComputer"]
+        avionics_port_names = [p.name for p in avionics_part.ports]
+        self.assertIn("ARINC429_RX", avionics_port_names)
+        self.assertIn("MIL1553_BUS", avionics_port_names)
+
+        sensor_part = part_map["GimbalPayloadSensor"]
+        sensor_port_names = [p.name for p in sensor_part.ports]
+        self.assertIn("VIDEO_STREAM", sensor_port_names)
+        self.assertIn("GIMBAL_CMD", sensor_port_names)
 
     def test_filter_component_icd_documents_from_conops_ingestion(self):
         """Verify packet trace logs are excluded from ConOps synthesis while OEM subsystem specs continue to be ingested (Issue #273, #296)."""
@@ -1957,19 +2084,33 @@ Frame 1: 64 bytes on wire
             with open(trace_file, "w", encoding="utf-8") as f:
                 f.write(trace_doc)
 
+            trace_pcap = os.path.join(schema_dir, "packet_capture.pcap")
+            with open(trace_pcap, "w", encoding="utf-8") as f:
+                f.write("RAW_PCAP_BINARY_DATA")
+
             oem_file = os.path.join(schema_dir, "esad-icd-excalibur-ab00-0054.md")
             with open(oem_file, "w", encoding="utf-8") as f:
                 f.write(oem_subsystem_doc)
+
+            bms_file = os.path.join(schema_dir, "bms_subsystem_spec.md")
+            with open(bms_file, "w", encoding="utf-8") as f:
+                f.write("""# Battery Subsystem
+| Subsystem | Scope | Mass (kg) | Power (W) | Interfaces / Ports |
+| :--- | :--- | :--- | :--- | :--- |
+| BatteryModule | Main 48V pack | 15.0 | 50.0 | CAN_BUS:inout |
+""")
 
             sys_file = os.path.join(schema_dir, "titan_system_spec.md")
             with open(sys_file, "w", encoding="utf-8") as f:
                 f.write(system_doc)
 
             auto_engine = SysMLParameterBindingEngine(workspace_dir=tmpdir, auto_detect=True)
-            # System spec parameters and OEM subsystem must be present
+            # System spec parameters and OEM subsystems must be present
             self.assertEqual(auto_engine.resolve_token("SYSTEM_IDENTIFIER"), "Titan Orbiter")
             self.assertEqual(auto_engine.resolve_token("CRUISE_SPEED_MPS"), "45.0")
             self.assertIn("ESADModule", auto_engine.ast_part_names)
+            self.assertIn("BatteryModule", auto_engine.ast_part_names)
+            self.assertEqual(len(auto_engine.ast_parts), 2)
             # Packet trace parameters must NOT be present
             self.assertNotIn("PKT_01", auto_engine.parameter_bindings)
 
