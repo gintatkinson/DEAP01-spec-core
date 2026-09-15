@@ -1,3 +1,8 @@
+---
+Version: "1.0"
+Date: "2026-09-15"
+---
+
 # Solution Walkthrough: Enforce Schema Immutability (Issue #312)
 
 ## Overview
