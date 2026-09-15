@@ -250,19 +250,19 @@ class TestReverseSysMLSync(unittest.TestCase):
 
         attr_names = {a.name: a for a in fc_part.attributes}
         self.assertIn("firmwareVersion", attr_names, "Original firmwareVersion attribute must be preserved 100%")
-        self.assertIn("activeRouteId", attr_names, "New activeRouteId attribute must be merged in")
+        self.assertNotIn("activeRouteId", attr_names, "Synthetic activeRouteId attribute must NOT be injected (Issue #312)")
 
         action_names = {a.name: a for a in fc_part.actions}
         self.assertIn("CalibrateSensors", action_names, "Original CalibrateSensors action must be preserved 100%")
-        self.assertIn("ExecuteManeuver", action_names, "New ExecuteManeuver action must be merged in")
+        self.assertNotIn("ExecuteManeuver", action_names, "Synthetic ExecuteManeuver action must NOT be injected (Issue #312)")
 
         op_names = {o.name: o for o in fc_part.operations}
         self.assertIn("GetStatus", op_names, "Original GetStatus operation must be preserved 100%")
-        self.assertIn("ComputeThrustVector", op_names, "New ComputeThrustVector operation must be merged in")
+        self.assertNotIn("ComputeThrustVector", op_names, "Synthetic ComputeThrustVector operation must NOT be injected (Issue #312)")
 
         con_names = {c.name: c for c in fc_part.constraints}
         self.assertIn("FirmwareIntegrityConstraint", con_names, "Original FirmwareIntegrityConstraint must be preserved 100%")
-        self.assertIn("ThermalLimitConstraint", con_names, "New ThermalLimitConstraint must be merged in")
+        self.assertNotIn("ThermalLimitConstraint", con_names, "Synthetic ThermalLimitConstraint must NOT be injected (Issue #312)")
 
         # 3. Verify Use Case, Interaction, Test Case, Capability, and STPA constraint additions
         self.assertEqual(len(parsed_pkg.use_case_defs), 1)
@@ -741,17 +741,17 @@ flowchart TD
             # Verify base schema elements preserved 100%
             port_names = {p.name: p for p in fc_part.ports}
             self.assertIn("c2Port", port_names, "Original c2Port port must be preserved")
-            self.assertIn("p_imu_stream", port_names, "ConOps p_imu_stream port must be merged")
-            self.assertIn("p_pwm_out", port_names, "ConOps p_pwm_out port must be merged")
+            self.assertNotIn("p_imu_stream", port_names, "ConOps p_imu_stream port must NOT be injected (Issue #312)")
+            self.assertNotIn("p_pwm_out", port_names, "ConOps p_pwm_out port must NOT be injected (Issue #312)")
 
             action_names = {a.name for a in fc_part.actions}
             self.assertIn("CalibrateSensors", action_names, "Original CalibrateSensors action must be preserved")
-            self.assertIn("ArmedStateCheck", action_names, "ConOps ArmedStateCheck action must be merged")
-            self.assertIn("ExecuteFailsafe", action_names, "ConOps ExecuteFailsafe action must be merged")
+            self.assertNotIn("ArmedStateCheck", action_names, "ConOps ArmedStateCheck action must NOT be injected (Issue #312)")
+            self.assertNotIn("ExecuteFailsafe", action_names, "ConOps ExecuteFailsafe action must NOT be injected (Issue #312)")
 
-            # Verify user class actor added to parts
+            # Verify user class actor NOT added to parts
             safety_pilot = next((p for p in reparsed_pkg.part_defs if p.name == "SafetyPilot"), None)
-            self.assertIsNotNone(safety_pilot, "SafetyPilot user class must be merged as a PartDef")
+            self.assertIsNone(safety_pilot, "SafetyPilot user class must NOT be merged as a PartDef (Issue #312)")
 
             # Verify super-system subpackages
             subpkg_names = {s.name for s in reparsed_pkg.sub_packages}
@@ -764,6 +764,32 @@ flowchart TD
             self.assertIn("sha256", digest_data)
             self.assertGreaterEqual(digest_data["node_counts"]["part_defs"], 2)
             self.assertGreaterEqual(digest_data["node_counts"]["packages"], 1)
+
+    def test_reverse_sync_structural_ast_immutability(self):
+        """Verify that reverse-sync against markdown with prose part/port tables leaves the structural AST strictly identical to the base schema."""
+        pkg, digest = reverse_sync_specs_to_sysml(
+            docs_dir=self.docs_dir,
+            schema_path=self.base_schema_path,
+            output_path=self.out_sysml,
+            digest_path=self.out_digest,
+            allow_schema_overwrite=False,
+        )
+
+        reparsed_pkg = SysMLParser.parse_file(self.out_sysml)
+        base_pkg = SysMLParser.parse_file(self.base_schema_path)
+
+        # Verify part defs count remains exactly the same as base schema
+        self.assertEqual(len(reparsed_pkg.part_defs), len(base_pkg.part_defs))
+
+        for base_part in base_pkg.part_defs:
+            synced_part = next((p for p in reparsed_pkg.part_defs if p.name == base_part.name), None)
+            self.assertIsNotNone(synced_part)
+            
+            # Parts, ports, attributes, actions, operations must be strictly identical
+            self.assertEqual({p.name for p in synced_part.ports}, {p.name for p in base_part.ports})
+            self.assertEqual({a.name for a in synced_part.attributes}, {a.name for a in base_part.attributes})
+            self.assertEqual({a.name for a in synced_part.actions}, {a.name for a in base_part.actions})
+            self.assertEqual({o.name for o in synced_part.operations}, {o.name for o in base_part.operations})
 
 
 if __name__ == "__main__":

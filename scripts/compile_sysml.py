@@ -2277,8 +2277,9 @@ def reverse_sync_specs_to_sysml(
                     conops_parts, conops_pkgs = extract_conops_from_markdown(content, file)
                     for pkg_node in conops_pkgs:
                         _merge_subpackage_into_package(pkg, pkg_node)
-                    for part in conops_parts:
-                        _merge_part_into_package(pkg, part)
+                    # Issue #312: Structural AST elements are strictly immutable. Do not merge prose parts.
+                    # for part in conops_parts:
+                    #     _merge_part_into_package(pkg, part)
 
                 # Use Cases
                 elif "use-cases" in rel_dir or "use_cases" in rel_dir or file.lower().startswith("uc-") or file.lower().startswith("uc_"):
@@ -2296,9 +2297,7 @@ def reverse_sync_specs_to_sysml(
 
                 # Features
                 elif "features" in rel_dir or file.lower().startswith("feat-") or file.lower().startswith("feat_"):
-                    feat_parts = extract_features_from_markdown(content, file)
-                    for part in feat_parts:
-                        _merge_part_into_package(pkg, part)
+                    pass  # Issue #312: Structural AST elements are strictly immutable. Do not extract/merge prose parts.
 
                 # Epics
                 elif "epics" in rel_dir or file.lower().startswith("epic-") or file.lower().startswith("epic_"):
