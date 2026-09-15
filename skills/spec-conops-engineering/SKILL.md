@@ -92,7 +92,7 @@ The ConOps specification tree consists of 12 canonical modular units:
 | `05_AIRSPACE_AND_SORA_RISK.md` | `## 5. Operational State Space, Boundary Containment & Risk Assessment` | `airspace_sora` | 4D volume mathematical formulation, Ground Risk Buffer ($R_{\mathrm{GRB}}$) equation, and SORA impact parameters table. |
 | `06_UAF_OPERATIONAL_ACTIVITIES.md` | `## 6. OMG UAF Operational Activity Taxonomy` | `uaf_activities` | Open-ended UAF activity roster (`OA-01`..`OA-N`) with mandatory Gate 24 allocation tags (`/// OperationalAllocation: [OA-XX]`). |
 | `07_OPTX_EXCHANGES.md` | `## 7. Operational Information Exchange (Op-Tx) Matrix` | `optx_exchanges` | Information exchange roster (`OpTx-01`..`OpTx-N`) specifying source, destination, data rates, latency limits, criticality; captures high-level operational information exchanges (C2 Commands, Telemetry, Video, Target Tracks, Arming Authorization) and strictly excludes component-internal serial opcode reference tables. |
-| `08_ENVIRONMENTAL_MIL_STD_810H.md` | `## 8. Operational Environments & MIL-STD-810H Environmental Stress Qualification` | `environmental_envelopes` | Ambient temperature, ingress protection (IP), electromagnetic/RF environment, spatial clearance envelopes. |
+| `08_ENVIRONMENTAL_OPERATING_LIMITS.md` | `## 8. Environmental Operating Limits & Stress Qualification` | `environmental_envelopes` | Ambient temperature, ingress protection (IP), electromagnetic/RF environment, spatial clearance envelopes. |
 | `09_SCENARIOS_AND_TIMELINES.md` | `## 9. Multi-Threaded Operational Scenarios & System Timelines` | `scenarios` | Nominal, degraded, and contingency scenario threads with sequential execution steps and exit criteria. |
 | `10_MAINTENANCE_AND_GSE_SUPPORT.md` | `## 10. Maintenance & Sustainment Concepts (O/I/D Maintenance)` | `maintenance` | Three-tier maintenance model: Organizational (O-Level), Intermediate (I-Level), Depot (D-Level). |
 | `11_IMPACTS_AND_TRADE_STUDIES.md` | `## 11. Operational Impacts, System Limitations & Documented Trade Studies` | `proposed_capabilities` | Mission drivers, value propositions, engineering trade-off evaluations. |
@@ -143,7 +143,7 @@ docs/conops/
     │   ├── 05_AIRSPACE_AND_SORA_RISK.md
     │   ├── 06_UAF_OPERATIONAL_ACTIVITIES.md
     │   ├── 07_OPTX_EXCHANGES.md
-    │   ├── 08_ENVIRONMENTAL_MIL_STD_810H.md
+    │   ├── 08_ENVIRONMENTAL_OPERATING_LIMITS.md
     │   ├── 09_SCENARIOS_AND_TIMELINES.md
     │   ├── 10_MAINTENANCE_AND_GSE_SUPPORT.md
     │   ├── 11_IMPACTS_AND_TRADE_STUDIES.md
