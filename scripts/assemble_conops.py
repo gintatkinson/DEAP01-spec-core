@@ -86,9 +86,11 @@ CANONICAL_CONOPS_UNITS: List[str] = [
     "03_PROPOSED_CAPABILITIES.md",
     "04_USER_CLASSES_AND_STAKEHOLDERS.md",
     "05_OPERATIONAL_STATE_SPACE_AND_RISK.md",
+    "05_AIRSPACE_AND_SORA_RISK.md",
     "06_UAF_OPERATIONAL_ACTIVITIES.md",
     "07_OPTX_EXCHANGES.md",
     "08_ENVIRONMENTAL_OPERATING_LIMITS.md",
+    "08_ENVIRONMENTAL_MIL_STD_810H.md",
     "09_SCENARIOS_AND_TIMELINES.md",
     "10_MAINTENANCE_AND_GSE_SUPPORT.md",
     "11_IMPACTS_AND_TRADE_STUDIES.md",
@@ -103,8 +105,10 @@ CANONICAL_MISSION_INTENT_UNITS: List[str] = [
     "05_PACE_C2_PLAN.md",
     "06_SAFETY_INTERLOCKS.md",
     "07_SPATIAL_AND_OPERATIONAL_BOUNDARIES.md",
+    "07_AIRSPACE_GEOZONES.md",
     "08_GO_NO_GO_MATRIX.md",
     "09_ENERGY_AND_RESERVE_BOUNDS.md",
+    "09_BINGO_ENERGY_MATH.md",
     "10_OPERATIONAL_ALLOCATION_TAGS.md",
 ]
 
@@ -455,6 +459,11 @@ class SysMLParameterBindingEngine:
                     break
                 curr = parent
 
+        # 4. Fallback: inspect workspace directory string
+        dom = _match_tokens(self.workspace_dir)
+        if dom:
+            return dom
+
         return "generic"
 
     def _get_mtow_value(self) -> float:
@@ -545,14 +554,14 @@ class SysMLParameterBindingEngine:
             or self.parameter_bindings.get("RHO")
         )
 
-        g = None
+        g = 9.80665
         if g_raw is not None:
             try:
                 g = float(g_raw)
             except Exception:
                 pass
 
-        rho = None
+        rho = 1.225
         if rho_raw is not None:
             try:
                 m_rho = re.search(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?", str(rho_raw))
@@ -561,13 +570,16 @@ class SysMLParameterBindingEngine:
             except Exception:
                 pass
 
+        if "AIR_DENSITY_KGM3" not in self._explicit_keys:
+            self.parameter_bindings["AIR_DENSITY_KGM3"] = str(rho)
+
         if "SYSTEM_MASS_KG" not in self._explicit_keys:
             self.parameter_bindings["SYSTEM_MASS_KG"] = str(m)
         if "SYSTEM_MASS" not in self._explicit_keys:
             self.parameter_bindings["SYSTEM_MASS"] = str(m)
 
         s_ref_raw = self.parameter_bindings.get("FRONTAL_AREA_M2") or self.parameter_bindings.get("S_REF")
-        s_ref = None
+        s_ref = 0.081
         if s_ref_raw:
             try:
                 m_sref = re.search(r"[-+]?\d*\.?\d+", str(s_ref_raw))
@@ -577,7 +589,7 @@ class SysMLParameterBindingEngine:
                 pass
 
         cd_unmit_raw = self.parameter_bindings.get("DRAG_COEFFICIENT") or self.parameter_bindings.get("C_D")
-        cd_unmit = None
+        cd_unmit = 1.0
         if cd_unmit_raw:
             try:
                 m_cdunmit = re.search(r"[-+]?\d*\.?\d+", str(cd_unmit_raw))
@@ -592,7 +604,7 @@ class SysMLParameterBindingEngine:
             or self.parameter_bindings.get("DRAG_COEFFICIENT_MIT")
             or self.parameter_bindings.get("CONTAINMENT_DRAG_COEFFICIENT")
         )
-        cd_mit = None
+        cd_mit = 1.75
         if cd_mit_raw:
             try:
                 m_cdmit = re.search(r"[-+]?\d*\.?\d+", str(cd_mit_raw))
@@ -606,7 +618,7 @@ class SysMLParameterBindingEngine:
             or self.parameter_bindings.get("S_CONTAINMENT_M2")
             or self.parameter_bindings.get("CONTAINMENT_AREA_M2")
         )
-        s_mit = None
+        s_mit = 84.18
         if s_mit_raw:
             try:
                 m_smit = re.search(r"[-+]?\d*\.?\d+", str(s_mit_raw))
