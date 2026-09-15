@@ -930,6 +930,38 @@ class ICDCompletenessValidator(IValidator):
                     detail={"signal_id": s.signal_id, "source_port": s.source_port, "dest_port": s.dest_port, "signal_rate": sig_rate, "subscriber_rate": dst_rate}
                 ))
 
+        # 12. Check SysML ports missing from ICD_01 roster
+        for sp in sysml_model.ports:
+            is_in_icd = False
+            for p in icd01_ports:
+                if sp.full_name in (p.port_id, p.port_name, f"{p.subsystem}.{p.port_name}") or sp.name in (p.port_id, p.port_name, f"{p.subsystem}.{p.port_name}"):
+                    is_in_icd = True
+                    break
+            if not is_in_icd:
+                findings.append(Finding(
+                    "icd-port-missing-from-roster",
+                    f"SysML directional port '{sp.full_name}' ({sp.direction} {sp.type_name}) declared in schema is missing from ICD_01 Port Roster Table.",
+                    location="docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md",
+                    detail={"port_id": sp.full_name}
+                ))
+
+        # 13. Check SysML connections missing from ICD_01 roster
+        for sc in sysml_model.connections:
+            is_in_icd = False
+            for c in icd01_connections:
+                src_match = (sc.source_full == c.source_port) or (sc.source_port == c.source_port)
+                dst_match = (sc.dest_full == c.dest_port) or (sc.dest_port == c.dest_port)
+                if src_match and dst_match:
+                    is_in_icd = True
+                    break
+            if not is_in_icd:
+                findings.append(Finding(
+                    "icd-connection-missing-from-roster",
+                    f"SysML connection '{sc.name}' ({sc.source_full} to {sc.dest_full}) declared in schema is missing from ICD_01 Connection Binding Roster Table.",
+                    location="docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md",
+                    detail={"connection_id": sc.name, "source": sc.source_full, "dest": sc.dest_full}
+                ))
+
         return findings
 
 
