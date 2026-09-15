@@ -109,15 +109,17 @@ Verified state of all 8 completed remediation packages:
 | :--- | :--- | :--- | :--- |
 | **#315** | `12162e7` | `status:fixed-resolved` | Mechanical commit message non-closure gate + git hook (`verify_commit_messages.py`). |
 | **#293** | `5afda13` | `status:fixed-resolved` | Prompt Verification Scoping with `--only`. |
-| **#289** | `00a0627` | `status:fixed-resolved` | Git Credential Token Fallback in `bootstrap_tracker_labels.py`. |
+| **#289** | `00a0627` | `status:fixed-resolved` | Git Credential Token Fallback in `skills/spec-orchestrator/scripts/bootstrap_tracker_labels.py`. |
 | **#290** | `55ce7b6` | `status:fixed-resolved` | Shell Script Heredoc Hardening (`install_pipeline.sh`). |
-| **#315** | `402d56c` | `status:fixed-resolved` | Commit Message Non-Closure Invariant (refs #315). |
+| **#315** | `402d56c` | `status:fixed-resolved` | Commit message non-closure rule across skill files (refs #315). |
 | **#317** | `dff9efa` | `status:fixed-resolved` | Eliminated faulty hardcoded UAS unit test prose assertions. |
 | **#316** | `ce4f021` | `status:fixed-resolved` | OEM source file/line provenance tracking in subsystem synthesis (`schema_router.py`). |
 | **#296** | `f97197c` | `status:fixed-resolved` | Calibrated `is_component_icd_document()` for packet traces (`assemble_conops.py`). |
 | **#288** | `1b6bcc6` | `status:fixed-resolved` | KaTeX math expression tokenizer & Check 23 grounding (`factual_grounding_validator.py`). |
 | **#314** | `a3a71f1` | `status:fixed-resolved` | AST port typing, conjugated ports (`~`), item flows in `sysmlv2_ast.py`. |
 | **#291** | `da9c7b2` | `status:fixed-resolved` | User class `UCL-xx` vs use case `uc-xx` taxonomy regex (`conops_specification_schema.json`). |
+| **#327** | `2fdbd60` | `status:fixed-resolved` | ConOps Unit Deduplication & Canonical Template Streamlining. |
+| **#319, #320** | `0eda164` | `status:fixed-resolved` | Abstract RTA formal constraints & dynamic acceptance vocabulary. |
 
 * **Landing Zones**: `schema/`, `docs/epics/`, `docs/features/`, `docs/user-stories/`, `docs/use-cases/` contain **ONLY `.gitkeep`**.
 * **Working Tree**: Clean on branch `main`, up to date with `origin/main`. Zero domain pollution.
@@ -144,25 +146,6 @@ Verified state of all 8 completed remediation packages:
   4. Strip legacy heuristic guessing from `scripts/assemble_conops.py`.
   5. Add regression tests in `tests/test_compile_sysml.py`.
   6. Neutral commit: `feat(sysml): establish Step 0 compilation gate and resequence pipeline 0 (refs #308)`.
-
-### Work Package B: Issue #293 (Prompt Verification Scoping with `--only`)
-* **Target Files**: `skills/spec-orchestrator/SKILL.md`, prompt templates, verification scripts.
-* **Implementation Blueprint**:
-  1. Update prompt templates to accept and pass `--only <check_name>`.
-  2. Prevents full-scan token exhaustion during micro-tasks.
-  3. Neutral commit: `fix(prompts): add --only check scoping to subagent verification prompts (refs #293)`.
-
-### Work Package C: Issue #289 (Git Credential Token Fallback)
-* **Target Files**: `skills/spec-orchestrator/skills/spec-orchestrator/scripts/bootstrap_tracker_labels.py`.
-* **Implementation Blueprint**:
-  1. Add token resolution fallback using `git credential fill` when `GITHUB_TOKEN` is unset in headless CI/workstations.
-  2. Neutral commit: `fix(tracker): add git credential fill fallback for label bootstrapping (refs #289)`.
-
-### Work Package D: Issue #290 (Shell Script Heredoc Hardening)
-* **Target Files**: `scripts/install_pipeline.sh`.
-* **Implementation Blueprint**:
-  1. Quote heredocs (`cat << 'EOF'`) to protect variable expansions (`$1`, `$repo`).
-  2. Neutral commit: `fix(installer): harden heredoc delimiters to prevent premature variable expansion (refs #290)`.
 
 ---
 
