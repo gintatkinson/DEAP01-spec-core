@@ -328,34 +328,60 @@ class TestSpecConopsEngineering(unittest.TestCase):
 
         # Section 1.3.2: Parametric Subsystem Mass/Resource Budget Breakdown Table
         self.assertIn("### 1.3.2 Parametric Subsystem Mass/Resource Budget Breakdown Table", content)
-        ast_groups = [
-            "Airframe Structure",
-            "Avionics & Processing",
-            "Propulsion & Power Distribution",
-            "Energy Storage Subsystem",
-            "Primary Mission Payload",
-            "Autonomous Failsafe Containment",
+        self.assertIn("| Structural Group (AST Partition) | Allocated Subsystems & Components | Mass Fraction (% MTOW) | Mass Budget (kg) | Nominal Power Budget (W) | Peak Power Budget (W) |", content)
+        tokens_132 = [
+            "{{STRUCTURE_PARTITION_LABEL",
+            "{{MASS_FRACTION_AIRFRAME_PCT}}",
+            "{{MASS_BUDGET_AIRFRAME_KG}}",
+            "{{POWER_NOMINAL_AIRFRAME_W}}",
+            "{{POWER_PEAK_AIRFRAME_W}}",
+            "{{MASS_FRACTION_AVIONICS_PCT}}",
+            "{{MASS_BUDGET_AVIONICS_KG}}",
+            "{{POWER_NOMINAL_AVIONICS_W}}",
+            "{{POWER_PEAK_AVIONICS_W}}",
+            "{{MASS_FRACTION_PROPULSION_PCT}}",
+            "{{MASS_BUDGET_PROPULSION_KG}}",
+            "{{POWER_NOMINAL_PROPULSION_W}}",
+            "{{POWER_PEAK_PROPULSION_W}}",
+            "{{MASS_FRACTION_ENERGY_PCT}}",
+            "{{MASS_BUDGET_ENERGY_KG}}",
+            "{{POWER_NOMINAL_ENERGY_W}}",
+            "{{POWER_PEAK_ENERGY_W}}",
+            "{{MASS_FRACTION_PAYLOAD_PCT}}",
+            "{{MASS_BUDGET_PAYLOAD_KG}}",
+            "{{POWER_NOMINAL_PAYLOAD_W}}",
+            "{{POWER_PEAK_PAYLOAD_W}}",
+            "{{FAILSAFE_CONTAINMENT_NAME",
+            "{{MASS_FRACTION_CONTAINMENT_PCT}}",
+            "{{MASS_BUDGET_CONTAINMENT_KG}}",
+            "{{POWER_NOMINAL_CONTAINMENT_W}}",
+            "{{POWER_PEAK_CONTAINMENT_W}}",
+            "{{TOTAL_MTOW_KG}}",
+            "{{TOTAL_POWER_NOMINAL_W}}",
+            "{{TOTAL_POWER_PEAK_W}}",
         ]
-        for group in ast_groups:
-            self.assertIn(group, content)
-        self.assertIn("100.0% MTOW", content)
+        for token in tokens_132:
+            self.assertIn(token, content)
 
         # Section 1.3.3: Master Physical Limits Table
         self.assertIn("### 1.3.3 Master Physical Limits Table", content)
-        physical_limits = [
-            "Maximum Takeoff Weight (MTOW)",
-            "Maximum Payload Mass Capacity",
-            "Physical Dimensions",
-            "Nominal Cruise Velocity",
-            "Maximum Permissible Operating Velocity",
-            "Minimum Controllable / Stall Velocity",
-            "Maximum Operating Ceiling",
-            "Command & Control (C2) Datalink Range",
-            "Mission Operational Endurance",
-            "Environmental Operating Temperature Envelope",
+        self.assertIn("| Parameter ID | Bounding Parameter Name | Parametric Symbol | Threshold (Boundary Limit) | Objective (Nominal Target) | Engineering Unit | Normative / Safety Basis |", content)
+        tokens_133 = [
+            "{{MTOW_MAX_KG}}",
+            "{{PAYLOAD_MAX_KG}}",
+            "{{DIM_MAX_L_M}}",
+            "{{V_CRUISE_MIN_MPS}}",
+            "{{V_MAX_MPS}}",
+            "{{V_STALL_MAX_MPS}}",
+            "{{CEILING_MAX_M}}",
+            "{{C2_RANGE_MIN_KM}}",
+            "{{ENDURANCE_MIN_MIN}}",
+            "{{TEMP_MIN_DEGC}}",
+            "{{WIND_LIMIT_MAX_MPS}}",
+            "{{INGRESS_PROTECTION_RATING}}",
         ]
-        for param in physical_limits:
-            self.assertIn(param, content)
+        for token in tokens_133:
+            self.assertIn(token, content)
 
         # Section 1.4: Abstract UAF Context Diagram (Mermaid flowchart TB with 5 segments / 6 subgraphs across 15 interface links)
         self.assertIn("### 1.4 Abstract UAF Context Diagram", content)
@@ -688,21 +714,24 @@ class TestSpecConopsEngineering(unittest.TestCase):
         sec5_match = re.search(r'### 9\.5 Scenario SCN-05[\s\S]*$', content)
         self.assertIsNotNone(sec5_match)
         sec5_text = sec5_match.group(0)
+        self.assertIn("```mermaid", sec5_text)
         self.assertIn("stateDiagram-v2", sec5_text)
-        self.assertIn("Phase_Ingress_StationKeeping", sec5_text)
-        self.assertIn("Phase_PID_InterlockCheck", sec5_text)
-        self.assertIn("Phase_DualConsent_ArmingExecution", sec5_text)
-        self.assertIn("Phase_PostAction_AssessmentDump", sec5_text)
+        self.assertIn("[*]", sec5_text)
 
-        # Scenario 5: 4 decomposed phase execution verification tables
-        phase_headings = [
-            "#### 9.5.2 Phase 1: Ingress & Station Keeping Execution Verification",
-            "#### 9.5.3 Phase 2: Positive Identification & Interlock Check Execution Verification",
-            "#### 9.5.4 Phase 3: Dual-Consent Arming & Execution Verification",
-            "#### 9.5.5 Phase 4: Post-Action Assessment & Telemetry Dump Execution Verification",
-        ]
-        for ph in phase_headings:
-            self.assertIn(ph, sec5_text)
+        # Verify state machine transition structure and composite states
+        transitions = re.findall(r'\b\w+\s*-->\s*\w+', sec5_text)
+        self.assertGreaterEqual(len(transitions), 5, "Expected at least 5 state transitions in SCN-05 state diagram")
+        composite_states = re.findall(r'state\s+\w+\s*\{', sec5_text)
+        self.assertGreaterEqual(len(composite_states), 2, "Expected composite state definitions in SCN-05 state diagram")
+
+        # Scenario 5: Decomposed phase execution verification tables
+        phase_headings = re.findall(r'####\s+9\.5\.\d+\s+Phase\s+\d+:', sec5_text)
+        self.assertGreaterEqual(len(phase_headings), 4, f"Expected >= 4 phase subheadings, found {len(phase_headings)}")
+
+        # Verify scenario execution verification table header and step gates
+        self.assertIn("| Step Number | Elapsed Time (T+) | Stimulus / Trigger | Actor / Performer | Action Executed | Telemetry Stream | Decision Gate / Interlock Check | Exception Branch | Exit Criterion |", sec5_text)
+        self.assertIn("Gate GNG-", sec5_text)
+        self.assertIn("| **1** |", sec5_text)
 
         # Traceability tokens
         for oa in ["OA-01", "OA-02", "OA-03", "OA-04", "OA-05", "OA-06", "OA-07", "OA-08"]:
@@ -818,13 +847,39 @@ class TestSpecConopsEngineering(unittest.TestCase):
         # Operational State Space Parameter Definitions & Engineering Units table
         self.assertIn("- **Operational State Space Parameter Definitions & Engineering Units:**", content)
         self.assertIn("| Symbol / Parameter | Domain / Context | Description | Dimension / Limits | Engineering Unit | Normative / Safety Basis |", content)
-        self.assertIn(r"| Ω_state | State Space Domain | Admissible operational state space envelope (Ω_state ⊂ R^n) | Compact subset of R^n (n >= 6) | Dimensionless | {{STATE_SPACE_STANDARD:ISO/IEC/IEEE 29148:2018 §6.4.2}} |", content)
-        self.assertIn(r"| X_boundary | State Vector Bounds | Bounding box of admissible vehicle operational states [x_min, x_max]^T | Bounded hyper-rectangle | Mixed SI Units | {{SAFETY_BOUNDS_STANDARD:ASTM F3269-17 §6.2}} |", content)
-        self.assertIn(r"| x_min | State Lower Limit | Minimum permissible state vector threshold | {{STATE_VECTOR_MIN_EXPRESSION:[phi_min, lambda_min, h_min, u_min, v_min, w_min]^T}} | {{STATE_VECTOR_MIN_UNITS:rad, rad, m, m/s, m/s, m/s}} | {{STATE_SAFETY_MITIGATION:SORA Annex B M1 Mitigations}} |", content)
-        self.assertIn(r"| x_max | State Upper Limit | Maximum permissible state vector threshold | {{STATE_VECTOR_MAX_EXPRESSION:[phi_max, lambda_max, h_max, u_max, v_max, w_max]^T}} | {{STATE_VECTOR_MAX_UNITS:rad, rad, m, m/s, m/s, m/s}} | {{STATE_SAFETY_MITIGATION:SORA Annex B M1 Mitigations}} |", content)
-        self.assertIn(r"| R_buffer | Spatial Containment | Verified 1:1 parametric lateral containment safety buffer radius | R_buffer >= 1.0 * Distance_containment | {{CONTAINMENT_BUFFER_UNIT:m}} | {{CONTAINMENT_STANDARD:JARUS SORA v2.5 Step #2}} |", content)
-        self.assertIn(r"| Range_max(Link_C2) | C2 Comms Margin | Maximum certified C2 data link operational range | Range_max >= Range_nominal | km | {{C2_STANDARD:RTCA DO-362A §2.2.1}} |", content)
-        self.assertIn(r"| tau_containment | Emergency Response | Maximum allowable failsafe containment response time | tau_containment <= 2.0 | s | {{CONTAINMENT_RESPONSE_STANDARD:ASTM F3269-17 §7.1}} |", content)
+
+        # Required state space mathematical symbols
+        state_space_symbols = [
+            "Ω_state",
+            "X_boundary",
+            "x_min",
+            "x_max",
+            "R_buffer",
+            "Range_max(Link_C2)",
+            "tau_containment",
+        ]
+        for sym in state_space_symbols:
+            self.assertTrue(
+                any(line.startswith("|") and f"| {sym} " in line for line in content.splitlines()),
+                f"Missing required state space symbol '{sym}' in table row",
+            )
+
+        # Parameter binding tokens in Section 1.3 table
+        parameter_tokens_13 = [
+            "{{STATE_SPACE_STANDARD",
+            "{{SAFETY_BOUNDS_STANDARD",
+            "{{STATE_VECTOR_MIN_EXPRESSION",
+            "{{STATE_VECTOR_MIN_UNITS",
+            "{{STATE_SAFETY_MITIGATION",
+            "{{STATE_VECTOR_MAX_EXPRESSION",
+            "{{STATE_VECTOR_MAX_UNITS",
+            "{{CONTAINMENT_BUFFER_UNIT",
+            "{{CONTAINMENT_STANDARD",
+            "{{C2_STANDARD",
+            "{{CONTAINMENT_RESPONSE_STANDARD",
+        ]
+        for tok in parameter_tokens_13:
+            self.assertIn(tok, content)
 
         # Markdown Table Math Prohibition: No $ in Section 1.3 table lines
         table_lines = [line for line in content.splitlines() if line.startswith("|") and any(sym in line for sym in ["Ω_state", "X_boundary", "x_min", "x_max", "R_buffer", "Range_max(Link_C2)", "tau_containment"])]

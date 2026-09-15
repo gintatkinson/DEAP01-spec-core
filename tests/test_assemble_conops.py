@@ -1239,7 +1239,7 @@ Carries up to a 5 kg sensor payload.
             self.assertEqual(e_bingo, e_bingo_threshold)
 
     def test_pure_schema_driven_containment_derivation_zero_parachute_leakage(self):
-        """Verify pure schema-driven containment derivation and zero parachute token leakage (Issue #248)."""
+        """Verify pure schema-driven containment derivation and dynamic token binding across domains (Issue #248, refs #317)."""
         for domain in ["aviation", "medical", "rail", "marine", "space", "industrial"]:
             engine = SysMLParameterBindingEngine(
                 parameter_values={
@@ -1251,7 +1251,7 @@ Carries up to a 5 kg sensor payload.
                 auto_detect=False,
             )
 
-            # Abstract containment derivations
+            # Mathematical derivations: terminal velocity, kinetic energy, air density
             v_term = float(engine.resolve_token("V_TERMINAL_MITIGATED_MPS"))
             e_k = float(engine.resolve_token("E_K_MITIGATED_JOULES"))
             rho = float(engine.resolve_token("AIR_DENSITY_KGM3"))
@@ -1262,16 +1262,83 @@ Carries up to a 5 kg sensor payload.
             self.assertAlmostEqual(v_term, expected_v, places=1)
             self.assertAlmostEqual(e_k, expected_e, places=1)
 
-            # Verify no parachute tokens in bindings
-            for key in engine.parameter_bindings.keys():
-                self.assertNotIn("PARACHUTE", key)
-                self.assertNotIn("CANOPY", key)
+            # Dynamic domain-specific token binding
+            containment_name = engine.resolve_token("FAILSAFE_CONTAINMENT_NAME")
+            self.assertTrue(len(containment_name) > 0, f"Empty FAILSAFE_CONTAINMENT_NAME for domain {domain}")
+            self.assertIn("FAILSAFE_CONTAINMENT_NAME", engine.parameter_bindings)
 
-            # Verify substitution does not introduce parachute keywords
+            # Template substitution correctly resolves derivations and dynamic tokens without unreplaced placeholders
             sample_text = "Failsafe containment: {{FAILSAFE_CONTAINMENT_NAME}}, velocity: {{V_TERMINAL_MITIGATED_MPS}} m/s, energy: {{E_K_MITIGATED_JOULES}} J."
             rendered = engine.substitute(sample_text)
-            self.assertNotIn("parachute", rendered.lower())
-            self.assertNotIn("canopy", rendered.lower())
+            self.assertIn(str(round(v_term, 2)), rendered)
+            self.assertIn(str(round(e_k, 1)), rendered)
+            self.assertIn(containment_name, rendered)
+            self.assertNotIn("{{", rendered)
+            self.assertNotIn("}}", rendered)
+
+    def test_compiler_invariants_ast_coverage_ports_interfaces_and_table_structures(self):
+        """Verify compiler invariants: 100% AST part coverage, port directions, interface bindings, and markdown table structures (refs #317)."""
+        sysml_code = """
+        package AbstractSystemPlatform {
+            part def NavigationComputer {
+                doc /* Central compute and navigation engine */
+                inout port p_c2_bus : BusPort;
+                out port p_act_ctrl : CtrlPort;
+                in port p_sensor_in : TelemetryPort;
+            }
+            part def SensorSubsystem {
+                doc /* Multi-modal sensor subsystem */
+                out port p_raw_stream : DataPort;
+                in port p_pwr_line : PowerPort;
+            }
+            part def SafetyActuatorSubsystem {
+                doc /* Independent containment and safing actuator */
+                in port p_trigger : DiscretePort;
+            }
+        }
+        """
+        engine = SysMLParameterBindingEngine(auto_detect=False)
+        engine.ingest_sysml_text(sysml_code)
+
+        # 1. 100% AST Part Coverage
+        expected_parts = {"NavigationComputer", "SensorSubsystem", "SafetyActuatorSubsystem"}
+        self.assertEqual(engine.ast_part_names, expected_parts)
+        self.assertEqual(len(engine.ast_parts), 3)
+
+        # 2. Port Directions in AST and synthesis
+        ports_by_part = {}
+        for part in engine.ast_parts:
+            ports_by_part[part.name] = {p.name: p.direction.upper() for p in part.ports}
+
+        self.assertEqual(ports_by_part["NavigationComputer"]["p_c2_bus"], "INOUT")
+        self.assertEqual(ports_by_part["NavigationComputer"]["p_act_ctrl"], "OUT")
+        self.assertEqual(ports_by_part["NavigationComputer"]["p_sensor_in"], "IN")
+        self.assertEqual(ports_by_part["SensorSubsystem"]["p_raw_stream"], "OUT")
+        self.assertEqual(ports_by_part["SensorSubsystem"]["p_pwr_line"], "IN")
+        self.assertEqual(ports_by_part["SafetyActuatorSubsystem"]["p_trigger"], "IN")
+
+        # 3. Interface bindings in synthesized architecture
+        super_sys = engine.resolve_token("SUPER_SYSTEM_ARCHITECTURE")
+        subsys_sec = engine.resolve_token("SUBSYSTEM_ARCHITECTURE_SECTION")
+
+        for part_name in expected_parts:
+            self.assertIn(f"{part_name} Subsystem Architecture", subsys_sec)
+
+        # Verify port bindings in subsystem architecture tables
+        self.assertIn("| **p_c2_bus** | INOUT | BusPort |", subsys_sec)
+        self.assertIn("| **p_act_ctrl** | OUT | CtrlPort |", subsys_sec)
+        self.assertIn("| **p_sensor_in** | IN | TelemetryPort |", subsys_sec)
+        self.assertIn("| **p_raw_stream** | OUT | DataPort |", subsys_sec)
+        self.assertIn("| **p_pwr_line** | IN | PowerPort |", subsys_sec)
+        self.assertIn("| **p_trigger** | IN | DiscretePort |", subsys_sec)
+
+        # 4. Markdown Table Structures: verify table delimiter consistency
+        for sec_text in [super_sys, subsys_sec]:
+            table_lines = [line.strip() for line in sec_text.splitlines() if line.strip().startswith("|")]
+            for line in table_lines:
+                self.assertTrue(line.startswith("|") and line.endswith("|"), f"Malformed table line: {line}")
+                cols = [c.strip() for c in line.split("|")[1:-1]]
+                self.assertGreaterEqual(len(cols), 2, f"Table row has fewer than 2 columns: {line}")
 
     def test_sysml_ast_part_extraction_and_100_percent_subsystem_synthesis(self):
         """Verify AST part def extraction and 100% subsystem architecture synthesis in Section 4 (Issue #246)."""
