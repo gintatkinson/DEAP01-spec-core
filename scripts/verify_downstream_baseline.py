@@ -3098,5 +3098,32 @@ def _run_verification(args, dest, repo_root, is_flutter, is_react):
                 sys.exit(1)
 
 if __name__ == "__main__":
-    main()
-
+    try:
+        main()
+    except SystemExit as e:
+        if getattr(e, 'code', 0) != 0:
+            import time, argparse
+            parser = argparse.ArgumentParser(add_help=False)
+            parser.add_argument("destination", nargs="?", default=".")
+            args, _ = parser.parse_known_args()
+            repo_root = os.path.abspath(args.destination)
+            
+            defects_dir = os.path.join(repo_root, ".pipeline", "defects")
+            os.makedirs(defects_dir, exist_ok=True)
+            
+            ts = int(time.time())
+            json_path = os.path.join(defects_dir, f"defect_{ts}.json")
+            dossier = {
+                "timestamp": ts,
+                "exit_code": e.code,
+                "failed_checks": ["baseline_verification"],
+                "errors": ["Verification failed, see logs for details"],
+                "target_repository": repo_root
+            }
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump(dossier, f, indent=2)
+                
+            md_path = os.path.join(defects_dir, f"defect_{ts}.md")
+            with open(md_path, "w", encoding="utf-8") as f:
+                f.write(f"# Baseline Verification Defect\n\nTimestamp: {ts}\nExit Code: {e.code}\n\nVerification failed. Please review the pipeline logs.\n")
+        raise

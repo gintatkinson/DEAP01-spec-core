@@ -897,9 +897,45 @@ package MockSafetyModel {
         self.assertIn('invalid_part1', report.incomplete_fmeca_parts)
         self.assertIn('invalid_part2', report.incomplete_fmeca_parts)
         self.assertNotIn('valid_part', report.incomplete_fmeca_parts)
-        
         found_incomplete_err = any("MIL-STD-1629A Method 101 non-compliance" in e for e in errors)
         self.assertTrue(found_incomplete_err, "Missing incomplete failure mode error message.")
+
+
+class TestDefectDossierGeneration(unittest.TestCase):
+    """Unit tests for automated defect dossier generation."""
+    
+    def test_defect_dossier_generation_on_failure(self):
+        """Verify that a failing baseline check automatically generates a JSON/MD dossier."""
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        verify_script = os.path.join(repo_root, "scripts", "verify_downstream_baseline.py")
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            res = subprocess.run(
+                [sys.executable, verify_script, tmpdir],
+                cwd=tmpdir,
+                capture_output=True,
+                text=True
+            )
+            self.assertNotEqual(res.returncode, 0, "Expected verification to fail on empty directory")
+            
+            defects_dir = os.path.join(tmpdir, ".pipeline", "defects")
+            self.assertTrue(os.path.isdir(defects_dir), f"Defects directory not created at {defects_dir}")
+            
+            files = os.listdir(defects_dir)
+            json_files = [f for f in files if f.startswith("defect_") and f.endswith(".json")]
+            md_files = [f for f in files if f.startswith("defect_") and f.endswith(".md")]
+            
+            self.assertTrue(len(json_files) >= 1, "Defect JSON file not generated")
+            self.assertTrue(len(md_files) >= 1, "Defect MD file not generated")
+            
+            with open(os.path.join(defects_dir, json_files[0]), "r", encoding="utf-8") as f:
+                data = json.load(f)
+                
+            self.assertIn("timestamp", data)
+            self.assertIn("exit_code", data)
+            self.assertIn("failed_checks", data)
+            self.assertIn("errors", data)
+            self.assertIn("target_repository", data)
 
 
 if __name__ == "__main__":

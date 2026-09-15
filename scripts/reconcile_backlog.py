@@ -4551,6 +4551,14 @@ def assert_no_mock_cli(workspace_dir=None):
                 sys.exit(1)
 
 def main():
+    import subprocess
+    verify_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "verify_downstream_baseline.py")
+    if os.path.isfile(verify_script):
+        res = subprocess.run([sys.executable, verify_script])
+        if res.returncode != 0:
+            sys.stderr.write("[ERROR] Pre-flight baseline verification failed. Reconciliation aborted to prevent broken state sync.\n")
+            sys.exit(res.returncode)
+
     parser = argparse.ArgumentParser(
         description="Backlog reconciliation script that synchronises local markdown spec files with an external issue tracker (e.g. GitHub Issues, GitLab Issues)."
     )
