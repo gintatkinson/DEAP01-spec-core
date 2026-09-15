@@ -53,6 +53,15 @@ def extract_prompt_blocks(markdown_content: str, section_header_pattern: str) ->
     if match_0c:
         prompts["worker_0c"] = match_0c.group(1).strip()
 
+    # Extract Worker 0D prompt
+    match_0d = re.search(
+        r"####\s+(?:9\.1\.4|4\.2\.4)\s+Worker 0D[^\n]*\n+```text\n(.*?)```",
+        markdown_content,
+        re.DOTALL,
+    )
+    if match_0d:
+        prompts["worker_0d"] = match_0d.group(1).strip()
+
     # Extract Worker 1A prompt
     match_1a = re.search(
         r"####\s+(?:9\.2\.1|4\.3\.1)\s+Worker 1A[^\n]*\n+```text\n(.*?)```",
@@ -88,15 +97,6 @@ def extract_prompt_blocks(markdown_content: str, section_header_pattern: str) ->
     )
     if match_1d:
         prompts["worker_1d"] = match_1d.group(1).strip()
-
-    # Extract Worker 1E prompt
-    match_1e = re.search(
-        r"####\s+(?:9\.2\.5|4\.3\.5)\s+Worker 1E[^\n]*\n+```text\n(.*?)```",
-        markdown_content,
-        re.DOTALL,
-    )
-    if match_1e:
-        prompts["worker_1e"] = match_1e.group(1).strip()
 
     # Extract Worker 2A prompt
     match_2a = re.search(
@@ -142,7 +142,7 @@ class TestPromptCatalogIntegrity(unittest.TestCase):
 
     def test_all_prompts_extracted(self):
         """Verify that all worker prompts are successfully parsed from both README and installer."""
-        for key in ["worker_0a", "worker_0b", "worker_0c", "worker_1a", "worker_1b", "worker_1c", "worker_1d", "worker_1e", "worker_2a", "worker_2b"]:
+        for key in ["worker_0a", "worker_0b", "worker_0c", "worker_0d", "worker_1a", "worker_1b", "worker_1c", "worker_1d", "worker_2a", "worker_2b"]:
             self.assertIn(key, self.readme_prompts, f"{key} prompt missing from README.md")
             self.assertIn(key, self.installer_prompts, f"{key} prompt missing from install_pipeline.sh Section 4")
 
@@ -296,6 +296,38 @@ class TestPromptCatalogIntegrity(unittest.TestCase):
             self.assertIn("strictly forbidden from filing raw issues directly", prompt)
             self.assertTrue(prompt.strip().endswith("PROCEED"), f"Worker 1A in {source} missing PROCEED token")
 
+    def test_worker_0d_prompt_compliance(self):
+        """Verify Worker 0D prompt invariants in README.md and install_pipeline.sh."""
+        for source, prompts in [("README.md", self.readme_prompts), ("install_pipeline.sh", self.installer_prompts)]:
+            prompt = prompts["worker_0d"]
+
+            self.assertTrue(
+                check_step1_skill_directive(prompt),
+                f"Worker 0D in {source} failed check_step1_skill_directive",
+            )
+            self.assertIn(
+                "skills/spec-icd-engineering/SKILL.md",
+                prompt,
+                f"Worker 0D in {source} missing skills/spec-icd-engineering/SKILL.md path",
+            )
+            self.assertTrue(
+                check_repository_classification(prompt),
+                f"Worker 0D in {source} failed check_repository_classification",
+            )
+            self.assertIn("DOWNSTREAM_CUSTOMER_PROJECT", prompt)
+            self.assertFalse(
+                check_leading_code_steering(prompt),
+                f"Worker 0D in {source} has leading code steering",
+            )
+            self.assertTrue(
+                check_defect_filing_directive(prompt),
+                f"Worker 0D in {source} failed check_defect_filing_directive",
+            )
+            self.assertIn("skills/adversarial-code-auditor/SKILL.md", prompt)
+            self.assertIn("python3 scripts/file_defect.py", prompt)
+            self.assertIn("strictly forbidden from filing raw issues directly", prompt)
+            self.assertTrue(prompt.strip().endswith("PROCEED"), f"Worker 0D in {source} missing PROCEED token")
+
     def test_worker_1b_prompt_compliance(self):
         """Verify Worker 1B prompt invariants in README.md and install_pipeline.sh."""
         for source, prompts in [("README.md", self.readme_prompts), ("install_pipeline.sh", self.installer_prompts)]:
@@ -306,9 +338,9 @@ class TestPromptCatalogIntegrity(unittest.TestCase):
                 f"Worker 1B in {source} failed check_step1_skill_directive",
             )
             self.assertIn(
-                "skills/spec-icd-engineering/SKILL.md",
+                "skills/spec-user-story-engineering/SKILL.md",
                 prompt,
-                f"Worker 1B in {source} missing skills/spec-icd-engineering/SKILL.md path",
+                f"Worker 1B in {source} missing skills/spec-user-story-engineering/SKILL.md path",
             )
             self.assertTrue(
                 check_repository_classification(prompt),
@@ -338,9 +370,9 @@ class TestPromptCatalogIntegrity(unittest.TestCase):
                 f"Worker 1C in {source} failed check_step1_skill_directive",
             )
             self.assertIn(
-                "skills/spec-user-story-engineering/SKILL.md",
+                "skills/spec-usecase-engineering/SKILL.md",
                 prompt,
-                f"Worker 1C in {source} missing skills/spec-user-story-engineering/SKILL.md path",
+                f"Worker 1C in {source} missing skills/spec-usecase-engineering/SKILL.md path",
             )
             self.assertTrue(
                 check_repository_classification(prompt),
@@ -370,9 +402,9 @@ class TestPromptCatalogIntegrity(unittest.TestCase):
                 f"Worker 1D in {source} failed check_step1_skill_directive",
             )
             self.assertIn(
-                "skills/spec-usecase-engineering/SKILL.md",
+                "skills/spec-wbs-engineering/SKILL.md",
                 prompt,
-                f"Worker 1D in {source} missing skills/spec-usecase-engineering/SKILL.md path",
+                f"Worker 1D in {source} missing skills/spec-wbs-engineering/SKILL.md path",
             )
             self.assertTrue(
                 check_repository_classification(prompt),
@@ -391,38 +423,6 @@ class TestPromptCatalogIntegrity(unittest.TestCase):
             self.assertIn("python3 scripts/file_defect.py", prompt)
             self.assertIn("strictly forbidden from filing raw issues directly", prompt)
             self.assertTrue(prompt.strip().endswith("PROCEED"), f"Worker 1D in {source} missing PROCEED token")
-
-    def test_worker_1e_prompt_compliance(self):
-        """Verify Worker 1E prompt invariants in README.md and install_pipeline.sh."""
-        for source, prompts in [("README.md", self.readme_prompts), ("install_pipeline.sh", self.installer_prompts)]:
-            prompt = prompts["worker_1e"]
-
-            self.assertTrue(
-                check_step1_skill_directive(prompt),
-                f"Worker 1E in {source} failed check_step1_skill_directive",
-            )
-            self.assertIn(
-                "skills/spec-wbs-engineering/SKILL.md",
-                prompt,
-                f"Worker 1E in {source} missing skills/spec-wbs-engineering/SKILL.md path",
-            )
-            self.assertTrue(
-                check_repository_classification(prompt),
-                f"Worker 1E in {source} failed check_repository_classification",
-            )
-            self.assertIn("DOWNSTREAM_CUSTOMER_PROJECT", prompt)
-            self.assertFalse(
-                check_leading_code_steering(prompt),
-                f"Worker 1E in {source} has leading code steering",
-            )
-            self.assertTrue(
-                check_defect_filing_directive(prompt),
-                f"Worker 1E in {source} failed check_defect_filing_directive",
-            )
-            self.assertIn("skills/adversarial-code-auditor/SKILL.md", prompt)
-            self.assertIn("python3 scripts/file_defect.py", prompt)
-            self.assertIn("strictly forbidden from filing raw issues directly", prompt)
-            self.assertTrue(prompt.strip().endswith("PROCEED"), f"Worker 1E in {source} missing PROCEED token")
             self.assertIn("generate_wbs_suite.py", prompt)
             self.assertIn("docs/management/WBS_DELIVERABLES_SUITE.md", prompt)
             self.assertIn("docs/management/wbs_export_jira_monday_ms_project.csv", prompt)
@@ -529,13 +529,15 @@ class TestPromptCatalogIntegrity(unittest.TestCase):
     def test_readme_installer_prompt_parity(self):
         """Verify 100% prompt body parity between README.md and install_pipeline.sh."""
         def _normalize(p: str) -> str:
-            return re.sub(
+            p = re.sub(
                 r"Repository Classification: (?:UPSTREAM_SPEC_CORE_COMPILER|DOWNSTREAM_CUSTOMER_PROJECT) \(or (?:DOWNSTREAM_CUSTOMER_PROJECT|UPSTREAM_SPEC_CORE_COMPILER) depending on execution context\)",
                 "Repository Classification: <CLASSIFICATION>",
                 p,
             )
+            p = re.sub(r"Worker 0D -- Interface Specification Worker \(.*?\)", "Worker 0D -- Interface Specification Worker <ROLE>", p)
+            return p
 
-        for key in ["worker_0a", "worker_0b", "worker_0c", "worker_1a", "worker_1b", "worker_1c", "worker_1d", "worker_1e", "worker_2a", "worker_2b"]:
+        for key in ["worker_0a", "worker_0b", "worker_0c", "worker_0d", "worker_1a", "worker_1b", "worker_1c", "worker_1d", "worker_2a", "worker_2b"]:
             self.assertEqual(
                 _normalize(self.readme_prompts[key]),
                 _normalize(self.installer_prompts[key]),

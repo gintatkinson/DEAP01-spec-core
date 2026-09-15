@@ -519,6 +519,39 @@ Formalize the CONOPS (`CONOPS.md`), STPA hazard matrices, FMECA ratings, and dom
 PROCEED
 ```
 
+#### 4.2.4 Worker 0D: Interface Specification Worker (Logical ICD & Signal Dictionary) Prompt
+
+```text
+Execute `view_file` on `skills/spec-icd-engineering/SKILL.md` as your very first step before taking any action.
+
+Repository Classification: UPSTREAM_SPEC_CORE_COMPILER (or DOWNSTREAM_CUSTOMER_PROJECT depending on execution context)
+
+Role: Worker 0D -- Interface Specification Worker (Logical ICD & Signal Dictionary)
+
+Primary Commercial Toolchain Integration Context:
+This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
+
+Directive:
+Synthesize Level 1C Logical Interface Specifications and Signal Dictionaries from formal SysML v2 AST interface blocks:
+
+1. AST Interface Parsing:
+   - Ingest `.pipeline/schema.sysml` and `.pipeline/schema-digest.json`.
+   - Extract directional ports (`port def`), connection bindings (`connection`), formal interface contracts (`interface def`), and information payloads (`item flow`).
+   - Ingest safety constraints (`SC-1..N`) and hazard allocations from `docs/safety/STPA_MATRIX.md` to map safety-critical signal bounds.
+
+2. Deliverable Generation & Quality Gate:
+   - Generate `docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md` containing subsystem boundary graphs, N² communication matrix, and topological port bindings.
+   - Generate `docs/interfaces/ICD_02_MASTER_SIGNAL_DICTIONARY.md` containing signal identifiers (`SIG-*`), data types, units, sampling frequencies, update rates, latency bounds, and fail-safe default values.
+   - Run Gate 23 ICD completeness validation: `python3 skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/icd_completeness_validator.py`.
+   - Register the ICD suite under the `icd` issue label using `./skills/spec-orchestrator/scripts/create_issue.sh "<file>" "icd" "<title>"`.
+   - Verify published issue body integrity via live tracker inspection.
+
+Defect Filing Directive:
+If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `python3 scripts/file_defect.py`. Issue auto-closing keywords or issue close commands are strictly forbidden.
+
+PROCEED
+```
+
 ### 4.3 Pipeline 1 Agile Backlog Projection Prompts
 
 Execute the following prompts to extract full Agile backlogs (Epics, Level 1C ICD Interface Matrices, BDD User Stories, and UML Use Cases) with closed-loop tracker synchronization:
@@ -557,47 +590,15 @@ If any compiler fault, schema inconsistency, or invariant violation is discovere
 PROCEED
 ```
 
-#### 4.3.2 Worker 1B: Interface Spec Worker (Logical ICD & Signal Dictionary) Prompt
 
-```text
-Execute `view_file` on `skills/spec-icd-engineering/SKILL.md` as your very first step before taking any action.
-
-Repository Classification: DOWNSTREAM_CUSTOMER_PROJECT (or UPSTREAM_SPEC_CORE_COMPILER depending on execution context)
-
-Role: Worker 1B -- Interface Specification Worker (Worker ICD)
-
-Primary Commercial Toolchain Integration Context:
-This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
-
-Directive:
-Synthesize Level 1C Logical Interface Specifications and Signal Dictionaries from formal SysML v2 AST interface blocks:
-
-1. AST Interface Parsing:
-   - Ingest `.pipeline/schema.sysml` and `.pipeline/schema-digest.json`.
-   - Extract directional ports (`port def`), connection bindings (`connection`), formal interface contracts (`interface def`), and information payloads (`item flow`).
-   - Ingest safety constraints (`SC-1..N`) and hazard allocations from `docs/safety/STPA_MATRIX.md` to map safety-critical signal bounds.
-
-2. Deliverable Generation & Quality Gate:
-   - Generate `docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md` containing subsystem boundary graphs, N² communication matrix, and topological port bindings.
-   - Generate `docs/interfaces/ICD_02_MASTER_SIGNAL_DICTIONARY.md` containing signal identifiers (`SIG-*`), data types, units, sampling frequencies, update rates, latency bounds, and fail-safe default values.
-   - Run Gate 23 ICD completeness validation: `python3 skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/icd_completeness_validator.py`.
-   - Register the ICD suite under the `icd` issue label using `./skills/spec-orchestrator/scripts/create_issue.sh "<file>" "icd" "<title>"`.
-   - Verify published issue body integrity via live tracker inspection.
-
-Defect Filing Directive:
-If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `python3 scripts/file_defect.py`. Issue auto-closing keywords or issue close commands are strictly forbidden.
-
-PROCEED
-```
-
-#### 4.3.3 Worker 1C: Behavioral Spec Worker (User Stories & Statecharts) Prompt
+#### 4.3.2 Worker 1B: Behavioral Spec Worker (User Stories & Statecharts) Prompt
 
 ```text
 Execute `view_file` on `skills/spec-user-story-engineering/SKILL.md` as your very first step before taking any action.
 
 Repository Classification: DOWNSTREAM_CUSTOMER_PROJECT (or UPSTREAM_SPEC_CORE_COMPILER depending on execution context)
 
-Role: Worker 1C -- Behavioral Specification Worker (User Stories & Statecharts)
+Role: Worker 1B -- Behavioral Specification Worker (User Stories & Statecharts)
 
 Primary Commercial Toolchain Integration Context:
 This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
@@ -623,14 +624,14 @@ If any compiler fault, schema inconsistency, or invariant violation is discovere
 PROCEED
 ```
 
-#### 4.3.4 Worker 1D: System Interaction Spec Worker (UML Use Cases & Realization Matrix) Prompt
+#### 4.3.3 Worker 1C: Operational Spec Worker (Use Cases & Realization Matrices) Prompt
 
 ```text
 Execute `view_file` on `skills/spec-usecase-engineering/SKILL.md` as your very first step before taking any action.
 
 Repository Classification: DOWNSTREAM_CUSTOMER_PROJECT (or UPSTREAM_SPEC_CORE_COMPILER depending on execution context)
 
-Role: Worker 1D -- System Interaction Specification Worker (UML Use Cases)
+Role: Worker 1C -- Operational Spec Worker (Use Cases & Realization Matrices)
 
 Primary Commercial Toolchain Integration Context:
 This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
@@ -656,14 +657,14 @@ If any compiler fault, schema inconsistency, or invariant violation is discovere
 PROCEED
 ```
 
-#### 4.3.5 Worker 1E / Phase 4: Work Breakdown Structure & Enterprise Realization Worker (Worker WBS) Prompt
+#### 4.3.4 Worker 1D: WBS & Work Package Decomposition Spec Worker Prompt
 
 ```text
 Execute `view_file` on `skills/spec-wbs-engineering/SKILL.md` as your very first step before taking any action.
 
 Repository Classification: DOWNSTREAM_CUSTOMER_PROJECT (or UPSTREAM_SPEC_CORE_COMPILER depending on execution context)
 
-Role: Worker 1E -- Work Breakdown Structure & Enterprise Realization Worker (Worker WBS)
+Role: Worker 1D -- WBS & Work Package Decomposition Spec Worker
 
 Primary Commercial Toolchain Integration Context:
 This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).

@@ -146,6 +146,8 @@ Phases NOT marked `[P]` are strictly sequential -- the validation gate of phase 
 sequenceDiagram
     autonumber
     participant Coord as "Master Orchestrator (Coordinator)"
+    participant Comp as "Step 0: SysML Compilation Gate"
+    participant SSOT as "SysML v2 SSOT"
     participant W_R as "Phase 0.5: Normative Research Worker"
     participant W_CO as "Phase 0.75: ConOps & Mission Intent Tree Worker"
     participant W_A as "Phase 1: Structural Spec Worker"
@@ -153,6 +155,10 @@ sequenceDiagram
     participant W_B as "Phase 2: Behavioral Spec Worker"
     participant W_C as "Phase 3: System Interaction Spec Worker"
     participant W_D as "Phase 4: Reconciliation & Verification"
+
+    Note over Coord,SSOT: Phase 0 - Pre-Flight / Pre-computation
+    Coord->>Comp: Step 0: Execute compile_sysml.py --compile on schema/
+    Comp->>SSOT: Establishes .pipeline/schema.sysml & schema-digest.json
 
     Note over Coord,W_R: Phase 0.5 - Normative-Completeness Research
     Coord->>W_R: Dispatch Normative Research Task (AST PartDef Manifest & Standards)
@@ -177,6 +183,7 @@ sequenceDiagram
     W_ICD->>W_ICD: Parse port def, connection, interface def & item flow nodes
     W_ICD->>W_ICD: Synthesize ICD_01_SYSTEM_INTERFACE_MATRIX.md & ICD_02_MASTER_SIGNAL_DICTIONARY.md
     W_ICD-->>Coord: Return Level 1C ICD Suite (docs/interfaces/)
+    Note over Coord,W_ICD: Completes Level 1C Systems Engineering Baseline before Agile Backlog projection
 
     Note over Coord,W_B: Phase 2 - Behavioral Extraction
     Coord->>W_B: Dispatch Behavioral Task (action def, state def, port def)

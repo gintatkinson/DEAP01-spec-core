@@ -69,7 +69,7 @@ class TestUnscopedPromptsRemediation(unittest.TestCase):
             content = f.read()
 
         prompts = extract_prompt_blocks(content, r"### 4\.3")
-        for worker_key in ["worker_1a", "worker_1c", "worker_1d"]:
+        for worker_key in ["worker_1a", "worker_1b", "worker_1c"]:
             self.assertIn(worker_key, prompts, f"{worker_key} prompt not found in install_pipeline.sh")
             prompt = prompts[worker_key]
             self.assertRegex(
@@ -79,15 +79,15 @@ class TestUnscopedPromptsRemediation(unittest.TestCase):
             )
 
     def test_readme_worker_prompts_mandate_only(self):
-        """Verify Worker 1A, 1C, 1D prompt templates in README.md mandate --only <spec_file>."""
+        """Verify Worker 1A, 1B, 1C prompt templates in README.md mandate --only <spec_file>."""
         readme_path = os.path.join(REPO_ROOT, "README.md")
         self.assertTrue(os.path.isfile(readme_path), f"Missing {readme_path}")
 
         with open(readme_path, "r", encoding="utf-8") as f:
             content = f.read()
 
-        prompts = extract_prompt_blocks(content, r"### 9\.2")
-        for worker_key in ["worker_1a", "worker_1c", "worker_1d"]:
+        prompts = extract_prompt_blocks(content, r"### (4\.3|9\.2)") # Note: README uses 9.2 or 4.3 depending on version
+        for worker_key in ["worker_1a", "worker_1b", "worker_1c"]:
             self.assertIn(worker_key, prompts, f"{worker_key} prompt not found in README.md")
             prompt = prompts[worker_key]
             self.assertRegex(

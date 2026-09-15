@@ -504,9 +504,10 @@ Pipeline 0 deploys specialized, context-isolated subagent workers operating in a
 ```mermaid
 flowchart LR
     Step0["Step 0: SysML Model Ingestion & Compilation Gate (python3 scripts/compile_sysml.py --compile)"]
-    Step0 -->|"Compiled AST"| Worker_0A["Worker 0A: CONOPS Synthesizer"]
-    Worker_0A -->|"docs/conops/CONOPS.md"| Worker_0B["Worker 0B: STPA / FMECA Assurer"]
-    Worker_0B -->|"docs/safety/STPA_MATRIX.md"| Step3["Step 3: Level 1C ICD Extraction & Level 2 Specifications"]
+    Step0 -->|"Compiled AST"| Worker_0A["Worker 0A: CONOPS & Operational Scenario Synthesizer (Level 1A)"]
+    Worker_0A -->|"docs/conops/CONOPS.md"| Worker_0B["Worker 0B: STPA Hazard Analysis, FMECA & Domain Safety Assurer (Level 1B)"]
+    Worker_0B -->|"docs/safety/STPA_MATRIX.md"| Worker_0C["Worker 0C: SysML v2 Architectural & Safety Model Author"]
+    Worker_0C -->|"schema/DEAP_MODEL.sysml"| Worker_0D["Worker 0D: Interface Specification Worker -- Logical ICD & Master Signal Dictionary (Level 1C)"]
 ```
 
 ### 8.2 Subagent Execution Roles
@@ -551,15 +552,17 @@ To execute Pipeline 0 via context-isolated subagents in your AI agent environmen
 
 ```mermaid
 flowchart TD
-    Step0["Step 0: SysML Model Ingestion & Compilation Gate"] --> Step1["Step 1: Ingest Mission Profile & Synthesize CONOPS (Worker 0A)"]
+    Step0["Step 0: SysML Model Ingestion & Compilation Gate (python3 scripts/compile_sysml.py --compile)"] --> Step1["Step 1: Ingest Mission Profile & Synthesize CONOPS (Worker 0A)"]
     Step1 --> Step2["Step 2: Execute STPA & FMECA Assessment (Worker 0B)"]
-    Step2 --> Step3["Step 3: Level 1C ICD Extraction & Level 2 Specifications"]
-    Step3 --> Downstream["Handoff to Pipeline 1 (Projection) & Pipeline 2 (Code Synthesis)"]
+    Step2 --> Step3["Step 3: SysML v2 Architectural & Safety Model Author (Worker 0C)"]
+    Step3 --> Step4["Step 4: Interface Specification Worker -- Logical ICD & Master Signal Dictionary (Worker 0D)"]
+    Step4 --> Downstream["Handoff to Pipeline 1 (Projection) & Pipeline 2 (Code Synthesis)"]
 ```
 
 ### 8.5 Pipeline 0 Handoff JSON Contract (`pipeline0_handoff_contract.json`)
 
-The interface between Pipeline 0 safety modeling, Pipeline 1 specification engineering, and Pipeline 2 safety implementation is strictly governed by `pipeline0_handoff_contract.json`:
+The interface between Pipeline 0 safety modeling, Pipeline 1 specification engineering, and Pipeline 2 safety implementation is strictly governed by `pipeline0_handoff_contract.json`. The `pipeline0_handoff_contract.json` is finalized after Gate 23 (ICD completeness validation) passes for `ICD_01` and `ICD_02`:
+
 
 ```json
 {
@@ -734,9 +737,42 @@ Formalize the CONOPS (`CONOPS.md`), STPA hazard matrices, FMECA ratings, and dom
 PROCEED
 ```
 
+#### 9.1.4 Worker 0D: Interface Specification Worker (Logical ICD & Signal Dictionary) Prompt
+
+```text
+Execute `view_file` on `skills/spec-icd-engineering/SKILL.md` as your very first step before taking any action.
+
+Repository Classification: UPSTREAM_SPEC_CORE_COMPILER (or DOWNSTREAM_CUSTOMER_PROJECT depending on execution context)
+
+Role: Worker 0D -- Interface Specification Worker (Worker ICD)
+
+Primary Commercial Toolchain Integration Context:
+This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
+
+Directive:
+Synthesize Level 1C Logical Interface Specifications and Signal Dictionaries from formal SysML v2 AST interface blocks:
+
+1. AST Interface Parsing:
+   - Ingest `.pipeline/schema.sysml` and `.pipeline/schema-digest.json`.
+   - Extract directional ports (`port def`), connection bindings (`connection`), formal interface contracts (`interface def`), and information payloads (`item flow`).
+   - Ingest safety constraints (`SC-1..N`) and hazard allocations from `docs/safety/STPA_MATRIX.md` to map safety-critical signal bounds.
+
+2. Deliverable Generation & Quality Gate:
+   - Generate `docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md` containing subsystem boundary graphs, N² communication matrix, and topological port bindings.
+   - Generate `docs/interfaces/ICD_02_MASTER_SIGNAL_DICTIONARY.md` containing signal identifiers (`SIG-*`), data types, units, sampling frequencies, update rates, latency bounds, and fail-safe default values.
+   - Run Gate 23 ICD completeness validation: `python3 skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/icd_completeness_validator.py`.
+   - Register the ICD suite under the `icd` issue label using `./skills/spec-orchestrator/scripts/create_issue.sh "<file>" "icd" "<title>"`.
+   - Verify published issue body integrity via live tracker inspection.
+
+Defect Filing Directive:
+If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `python3 scripts/file_defect.py`. Issue auto-closing keywords or issue close commands are strictly forbidden.
+
+PROCEED
+```
+
 ### 9.2 Pipeline 1 Prompts (Agile Specification Backlog Projection)
 
-Execute the following prompts to extract full Agile backlogs (Epics, Level 1C ICD Interface Matrices, BDD User Stories, and UML Use Cases) with closed-loop tracker synchronization:
+Execute the following prompts to extract full Agile backlogs (Epics, BDD User Stories, and UML Use Cases) with closed-loop tracker synchronization:
 
 #### 9.2.1 Worker 1A: Structural Spec Worker (Epics & Features) Prompt
 
@@ -772,47 +808,14 @@ If any compiler fault, schema inconsistency, or invariant violation is discovere
 PROCEED
 ```
 
-#### 9.2.2 Worker 1B: Interface Spec Worker (Logical ICD & Signal Dictionary) Prompt
-
-```text
-Execute `view_file` on `skills/spec-icd-engineering/SKILL.md` as your very first step before taking any action.
-
-Repository Classification: UPSTREAM_SPEC_CORE_COMPILER (or DOWNSTREAM_CUSTOMER_PROJECT depending on execution context)
-
-Role: Worker 1B -- Interface Specification Worker (Worker ICD)
-
-Primary Commercial Toolchain Integration Context:
-This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
-
-Directive:
-Synthesize Level 1C Logical Interface Specifications and Signal Dictionaries from formal SysML v2 AST interface blocks:
-
-1. AST Interface Parsing:
-   - Ingest `.pipeline/schema.sysml` and `.pipeline/schema-digest.json`.
-   - Extract directional ports (`port def`), connection bindings (`connection`), formal interface contracts (`interface def`), and information payloads (`item flow`).
-   - Ingest safety constraints (`SC-1..N`) and hazard allocations from `docs/safety/STPA_MATRIX.md` to map safety-critical signal bounds.
-
-2. Deliverable Generation & Quality Gate:
-   - Generate `docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md` containing subsystem boundary graphs, N² communication matrix, and topological port bindings.
-   - Generate `docs/interfaces/ICD_02_MASTER_SIGNAL_DICTIONARY.md` containing signal identifiers (`SIG-*`), data types, units, sampling frequencies, update rates, latency bounds, and fail-safe default values.
-   - Run Gate 23 ICD completeness validation: `python3 skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/icd_completeness_validator.py`.
-   - Register the ICD suite under the `icd` issue label using `./skills/spec-orchestrator/scripts/create_issue.sh "<file>" "icd" "<title>"`.
-   - Verify published issue body integrity via live tracker inspection.
-
-Defect Filing Directive:
-If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `python3 scripts/file_defect.py`. Issue auto-closing keywords or issue close commands are strictly forbidden.
-
-PROCEED
-```
-
-#### 9.2.3 Worker 1C: Behavioral Spec Worker (User Stories & Statecharts) Prompt
+#### 9.2.2 Worker 1B: Behavioral Spec Worker (User Stories & Statecharts) Prompt
 
 ```text
 Execute `view_file` on `skills/spec-user-story-engineering/SKILL.md` as your very first step before taking any action.
 
 Repository Classification: UPSTREAM_SPEC_CORE_COMPILER (or DOWNSTREAM_CUSTOMER_PROJECT depending on execution context)
 
-Role: Worker 1C -- Behavioral Specification Worker (User Stories & Statecharts)
+Role: Worker 1B -- Behavioral Specification Worker (User Stories & Statecharts)
 
 Primary Commercial Toolchain Integration Context:
 This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
@@ -838,14 +841,14 @@ If any compiler fault, schema inconsistency, or invariant violation is discovere
 PROCEED
 ```
 
-#### 9.2.4 Worker 1D: System Interaction Spec Worker (UML Use Cases & Realization Matrix) Prompt
+#### 9.2.3 Worker 1C: Operational Spec Worker (Use Cases & Realization Matrices) Prompt
 
 ```text
 Execute `view_file` on `skills/spec-usecase-engineering/SKILL.md` as your very first step before taking any action.
 
 Repository Classification: UPSTREAM_SPEC_CORE_COMPILER (or DOWNSTREAM_CUSTOMER_PROJECT depending on execution context)
 
-Role: Worker 1D -- System Interaction Specification Worker (UML Use Cases)
+Role: Worker 1C -- Operational Specification Worker (Use Cases & Realization Matrices)
 
 Primary Commercial Toolchain Integration Context:
 This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
@@ -871,14 +874,14 @@ If any compiler fault, schema inconsistency, or invariant violation is discovere
 PROCEED
 ```
 
-#### 9.2.5 Worker 1E / Phase 4: Work Breakdown Structure & Enterprise Realization Worker (Worker WBS) Prompt
+#### 9.2.4 Worker 1D: WBS & Work Package Decomposition Spec Worker Prompt
 
 ```text
 Execute `view_file` on `skills/spec-wbs-engineering/SKILL.md` as your very first step before taking any action.
 
 Repository Classification: UPSTREAM_SPEC_CORE_COMPILER (or DOWNSTREAM_CUSTOMER_PROJECT depending on execution context)
 
-Role: Worker 1E -- Work Breakdown Structure & Enterprise Realization Worker (Worker WBS)
+Role: Worker 1D -- Work Breakdown Structure (WBS) & Work Package Decomposition Spec Worker
 
 Primary Commercial Toolchain Integration Context:
 This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
