@@ -2556,12 +2556,82 @@ def parse_sysml(content: str) -> Dict[str, List[str]]:
 extract_sysml_ast = parse_sysml
 
 
+def enforce_pipeline0_compilation_gate(schema_path: Optional[str] = None, output_path: str = ".pipeline/schema.sysml", digest_path: str = ".pipeline/schema-digest.json") -> int:
+    """
+    Implements pipeline 0 compilation gate.
+    If schema_path is None, search for a .sysml file in schema/.
+    If schema file does not exist, fail closed (print descriptive error to stderr and return 1).
+    Parse the file using SysMLParser.parse_file(schema_path).
+    If parsing fails, returns None, or the package has 0 structural elements (parts, constraints, ports, etc.), fail closed (print descriptive error to stderr and return 1).
+    Serialize the package AST via pkg.to_sysml() and write atomically to output_path using _atomic_write_file.
+    Compute SHA-256 hash and node counts, writing atomically to digest_path using _atomic_write_json. Format should match how reverse_sync does it (sha256, total_lines, node_counts, schema_nodes).
+    Return 0 on success.
+    """
+    import glob
+    if schema_path is None:
+        schema_files = glob.glob("schema/*.sysml")
+        if not schema_files:
+            print("Error: No schema file provided and none found in schema/", file=sys.stderr)
+            return 1
+        schema_path = schema_files[0]
+        
+    if not os.path.exists(schema_path):
+        print(f"Error: Schema file does not exist: {schema_path}", file=sys.stderr)
+        return 1
+        
+    if SysMLParser is None:
+        print("Error: SysMLParser is not available.", file=sys.stderr)
+        return 1
+
+    try:
+        pkg = SysMLParser.parse_file(schema_path)
+    except Exception as e:
+        print(f"Error parsing schema file {schema_path}: {e}", file=sys.stderr)
+        return 1
+        
+    if pkg is None:
+        print(f"Error: Parsing {schema_path} returned None.", file=sys.stderr)
+        return 1
+        
+    node_counts = pkg.node_counts() if hasattr(pkg, "node_counts") else {}
+    schema_nodes = pkg.get_all_node_names() if hasattr(pkg, "get_all_node_names") else []
+    
+    total_elements = sum(v for k, v in node_counts.items() if k != 'packages') if node_counts else len([n for n in schema_nodes if n != getattr(pkg, 'name', '')])
+    if total_elements == 0:
+        print(f"Error: Schema file {schema_path} contains 0 structural elements.", file=sys.stderr)
+        return 1
+        
+    try:
+        sysml_text = pkg.to_sysml() if hasattr(pkg, "to_sysml") else ""
+        _atomic_write_file(output_path, sysml_text)
+        
+        with open(output_path, "rb") as f:
+            content_bytes = f.read()
+        sha256_hash = hashlib.sha256(content_bytes).hexdigest()
+        total_lines = len(content_bytes.decode("utf-8", errors="replace").splitlines())
+        
+        digest_data = {
+            "sha256": sha256_hash,
+            "total_lines": total_lines,
+            "node_counts": node_counts,
+            "schema_nodes": schema_nodes
+        }
+        _atomic_write_json(digest_path, digest_data)
+        
+    except Exception as e:
+        print(f"Error writing compiled schema or digest: {e}", file=sys.stderr)
+        return 1
+
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="SysML v2 Compiler, STPA Safety Constraints & Closed-Loop Reverse Synchronization Engine",
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument("file", nargs="?", default=None, help="SysML v2 (.sysml) or STPA markdown file path")
+    parser.add_argument("--compile", action="store_true", help="Execute Pipeline 0 compilation gate")
     parser.add_argument("--reverse-sync", action="store_true", help="Execute closed-loop reverse synchronization from markdown specs to SysML v2 SSOT")
     parser.add_argument("--docs", "--docs-dir", dest="docs_dir", default="docs", help="Path to markdown specifications directory (default: docs)")
     parser.add_argument("--schema", "--schema-path", dest="schema_path", default=None, help="Path to base/input schema file (e.g. schema/DEAP_MODEL.sysml)")
@@ -2584,6 +2654,13 @@ def main():
             args.schema_path,
             args.out_dir,
             fmeca_scoring_config=args.fmeca_scoring_config,
+        ))
+
+    if args.compile:
+        sys.exit(enforce_pipeline0_compilation_gate(
+            schema_path=args.schema_path or args.file,
+            output_path=args.output_path,
+            digest_path=args.digest_path
         ))
 
     if args.reverse_sync:
