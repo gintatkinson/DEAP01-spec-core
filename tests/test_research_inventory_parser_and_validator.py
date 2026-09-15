@@ -75,6 +75,7 @@ SAMPLE_VALID_RESEARCH_INVENTORY = r"""
 ## 2. Normative Standards & Baseline Documents Inventory
 | Standard / Baseline ID | Issuing Body | Title | Applicable Clauses | Obligation Category | Declared Total | Clause Citation |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| ISO/IEC/IEEE 15288:2023 | ISO/IEC/IEEE | Systems and Software Engineering | §6.4.2, §6.4.3 | System Engineering | 2 | ISO/IEC/IEEE 15288:2023 §6.4.2, §6.4.3 |
 | ISO/IEC/IEEE 29148:2018 | ISO/IEC/IEEE | Systems and Software Engineering -- Requirements Engineering | §6.4.2 ConOps, §6.4.3 OpsCon, §8.4 System Requirements | Requirements Engineering | 3 | ISO/IEC/IEEE 29148:2018 §6.4.2, §6.4.3, §8.4 |
 | NATO STANAG 4586 | NATO | Standard Interfaces of Autonomous Control Systems | Interoperability Profiles & DLI/VCI Interfaces | Interoperability | 2 | STANAG 4586 Ed. 4 §3.2, §4.1 |
 | RTCA DO-178C / DO-254 | RTCA / EUROCAE | Software and Electronic Hardware Considerations in Airborne Systems | §6.3 Software Architecture, §11.0 Software Life Cycle Data | Safety Assurance | 2 | DO-178C §6.3, DO-254 §11.0 |
@@ -103,7 +104,7 @@ SAMPLE_VALID_RESEARCH_INVENTORY = r"""
 ## 6. Normative Completeness & Gap Analysis
 | Metric Parameter | Value | Target Threshold | Compliance Status |
 | :--- | :--- | :--- | :--- |
-| Declared Total Normative Obligations | 9 | $\ge 1$ | Conforming |
+| Declared Total Normative Obligations | 11 | $\ge 1$ | Conforming |
 | Declared Total Safety Constraints | 2 | $\ge 1$ | Conforming |
 | Clause Citation Traceability Percentage | 100% | 100% | Conforming |
 | Un-Cited / Speculative Additions | 0 | 0 (Strict Zero Tolerance) | Conforming |
@@ -184,9 +185,9 @@ class TestResearchInventoryParser(unittest.TestCase):
     def test_parse_valid_document_extracts_standards(self):
         doc = parse_research_inventory(SAMPLE_VALID_RESEARCH_INVENTORY)
         self.assertIsInstance(doc, ResearchInventoryDocument)
-        self.assertEqual(len(doc.standards), 4)
+        self.assertEqual(len(doc.standards), 5)
 
-        std0 = doc.standards[0]
+        std0 = doc.standards[1]
         self.assertEqual(std0.standard_id, "ISO/IEC/IEEE 29148:2018")
         self.assertEqual(std0.issuing_body, "ISO/IEC/IEEE")
         self.assertEqual(std0.title, "Systems and Software Engineering -- Requirements Engineering")
@@ -221,12 +222,13 @@ class TestResearchInventoryParser(unittest.TestCase):
     def test_declared_totals_calculations(self):
         doc = parse_research_inventory(SAMPLE_VALID_RESEARCH_INVENTORY)
         totals_by_std = doc.get_totals_by_standard()
+        self.assertEqual(totals_by_std["ISO/IEC/IEEE 15288:2023"], 2)
         self.assertEqual(totals_by_std["ISO/IEC/IEEE 29148:2018"], 3)
         self.assertEqual(totals_by_std["NATO STANAG 4586"], 2)
         self.assertEqual(totals_by_std["RTCA DO-178C / DO-254"], 2)
         self.assertEqual(totals_by_std["MIL-STD-882E"], 2)
 
-        self.assertEqual(doc.get_total_declared_obligations(), 9)
+        self.assertEqual(doc.get_total_declared_obligations(), 11)
 
         totals_by_cat = doc.get_totals_by_category()
         self.assertEqual(totals_by_cat["Requirements Engineering"], 3)
@@ -279,6 +281,28 @@ class TestClauseCitationValidator(unittest.TestCase):
         doc = parse_research_inventory(SAMPLE_VALID_RESEARCH_INVENTORY)
         findings = validator.validate_document(doc, "docs/research/RESEARCH_INVENTORY.md")
         self.assertEqual(findings, [], f"Expected 0 findings, got: {findings}")
+
+    def test_validator_flags_missing_mandatory_standard(self):
+        """Verify that the validator flags a missing mandatory standard."""
+        bad_inventory = SAMPLE_VALID_RESEARCH_INVENTORY.replace(
+            "| ISO/IEC/IEEE 15288:2023 | ISO/IEC/IEEE | Systems and Software Engineering | §6.4.2, §6.4.3 | System Engineering | 2 | ISO/IEC/IEEE 15288:2023 §6.4.2, §6.4.3 |",
+            ""
+        )
+        validator = ResearchInventoryValidator()
+        doc = parse_research_inventory(bad_inventory)
+        findings = validator.validate_document(doc, "docs/research/RESEARCH_INVENTORY.md")
+        self.assertTrue(any(f.rule_id == "spec.research_inventory.missing_mandatory_standard" and "ISO-15288" in str(f) for f in findings))
+
+    def test_validator_flags_missing_mandatory_clause(self):
+        """Verify that the validator flags a missing mandatory clause within a mandatory standard."""
+        bad_inventory = SAMPLE_VALID_RESEARCH_INVENTORY.replace(
+            "§6.4.2, §6.4.3 |",
+            "§6.4.2 |"
+        )
+        validator = ResearchInventoryValidator()
+        doc = parse_research_inventory(bad_inventory)
+        findings = validator.validate_document(doc, "docs/research/RESEARCH_INVENTORY.md")
+        self.assertTrue(any(f.rule_id == "spec.research_inventory.missing_mandatory_clause" and "6.4.3" in str(f) for f in findings))
 
     def test_validator_flags_uncited_standards(self):
         bad_inventory = SAMPLE_VALID_RESEARCH_INVENTORY.replace(

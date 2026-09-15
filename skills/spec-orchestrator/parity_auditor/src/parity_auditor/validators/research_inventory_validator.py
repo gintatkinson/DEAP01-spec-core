@@ -20,7 +20,7 @@ Enforces:
 
 import os
 import re
-from typing import List, Optional, Set
+from typing import Dict, List, Optional, Set
 
 from .base import IValidator
 from ..core.findings import Finding
@@ -38,11 +38,29 @@ from ..parsers.research_inventory import (
     normalize_header_key,
 )
 
+"""
+MANDATORY_STANDARDS_BASELINE maps mandatory standard identifiers to their required clauses.
+"""
+MANDATORY_STANDARDS_BASELINE: Dict[str, Set[str]] = {
+    "ISO-15288": {"6.4.2", "6.4.3"},
+    "ISO-29148": {"6.4.2", "6.4.3"},
+    "MIL-STD-882E": {"201", "205"},
+}
+
 
 class ResearchInventoryValidator(IValidator):
     """Validator for Cited Research Inventory and Declared-Total Population Register."""
 
     def validate(self, repo: WorkspaceRepository) -> List[Finding]:
+        """
+        Validates the workspace repository for the presence and correctness of the Research Inventory.
+
+        Args:
+            repo (WorkspaceRepository): The workspace repository to validate.
+
+        Returns:
+            List[Finding]: A list of validation findings.
+        """
         findings: List[Finding] = []
         workspace_dir = repo.workspace_dir
         research_dir = os.path.join(workspace_dir, "docs", "research")
@@ -97,7 +115,46 @@ class ResearchInventoryValidator(IValidator):
         """Validates a parsed ResearchInventoryDocument against schema and citation rules."""
         findings: List[Finding] = []
 
-        # 1. Check Section 2: Normative Standards & Baseline Documents Inventory table
+        if not is_template:
+            # 1. Check Mandatory Standards and Clauses
+            aliases_map = {
+                "ISO-15288": ["iso/iec/ieee 15288", "iso 15288", "15288"],
+                "ISO-29148": ["iso/iec/ieee 29148", "iso 29148", "29148"],
+                "MIL-STD-882E": ["mil-std-882e", "mil std 882e"],
+            }
+
+            for mandatory_std, aliases in aliases_map.items():
+                found_std = False
+                cited_clauses_for_std = ""
+                for std in doc.standards:
+                    std_id_lower = str(std.standard_id).lower().strip()
+                    if any(alias in std_id_lower for alias in aliases):
+                        found_std = True
+                        cited_clauses_for_std += f" {std.applicable_clauses} {std.clause_citation} "
+                
+                if not found_std:
+                    findings.append(
+                        Finding(
+                            rule_id="spec.research_inventory.missing_mandatory_standard",
+                            message=f"{rel_path}: Missing mandatory standard {mandatory_std}.",
+                            location=rel_path,
+                            detail={"missing_standard": mandatory_std},
+                        )
+                    )
+                else:
+                    req_clauses = MANDATORY_STANDARDS_BASELINE.get(mandatory_std, set())
+                    for req_clause in req_clauses:
+                        if req_clause not in cited_clauses_for_std:
+                            findings.append(
+                                Finding(
+                                    rule_id="spec.research_inventory.missing_mandatory_clause",
+                                    message=f"{rel_path}: {mandatory_std} is missing mandatory clause {req_clause}.",
+                                    location=rel_path,
+                                    detail={"standard": mandatory_std, "missing_clause": req_clause},
+                                )
+                            )
+
+        # 2. Check Section 2: Normative Standards & Baseline Documents Inventory table
         if not doc.standards:
             findings.append(
                 Finding(
@@ -107,6 +164,7 @@ class ResearchInventoryValidator(IValidator):
                     detail={"section": "2. Normative Standards & Baseline Documents Inventory"},
                 )
             )
+
 
         # 2. Check Section 2 schema headers if raw content is provided
         if content:

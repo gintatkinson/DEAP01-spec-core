@@ -381,6 +381,27 @@ class TestObligationWitnessValidator(unittest.TestCase):
             self.assertGreaterEqual(len(phantom_findings), 1)
             self.assertTrue(any("OBL-GHOST-42" in str(f) or "GHOST-42" in str(f) for f in phantom_findings))
 
+    def test_witness_registry_ignores_phantom_witnesses_in_python_string_literals(self):
+        """Python string literals containing phantom tags inside test functions must NOT get registered as phantom witnesses."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            os.makedirs(os.path.join(tmpdir, ".pipeline", "logical-ui"), exist_ok=True)
+            with open(os.path.join(tmpdir, ".pipeline", "logical-ui", "codebase_rules.json"), "w") as f:
+                f.write('{"meta": {"upstream_repository": "gintatkinson/DEAP01-spec-core"}}\n')
+
+            os.makedirs(os.path.join(tmpdir, "docs", "research"), exist_ok=True)
+            with open(os.path.join(tmpdir, "docs", "research", "RESEARCH_INVENTORY.md"), "w") as f:
+                f.write(SAMPLE_RESEARCH_INVENTORY)
+
+            os.makedirs(os.path.join(tmpdir, "tests"), exist_ok=True)
+            with open(os.path.join(tmpdir, "tests", "test_string_literal.py"), "w") as f:
+                f.write('def test_ghost():\n    literal = "/// ObligationWitness: [OBL-PHANTOM-99]"\n    pass\n')
+
+            repo = WorkspaceRepository(tmpdir)
+            findings = self.validator.validate(repo, allow_missing_specs=True)
+            phantom_findings = [f for f in findings if "phantom" in f.rule_id or "phantom" in str(f).lower()]
+            self.assertEqual(len(phantom_findings), 0, "String literals in Python should not be parsed as witness tags")
+
+
     def test_witness_registry_flags_unwitnessed_conops_obligation_even_with_allow_missing_specs(self):
         """When an obligation is allocated to CONOPS.md, missing witness in CONOPS.md emits obligation-unwitnessed."""
         with tempfile.TemporaryDirectory() as tmpdir:

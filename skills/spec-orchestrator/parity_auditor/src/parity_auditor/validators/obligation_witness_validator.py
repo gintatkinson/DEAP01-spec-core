@@ -21,9 +21,11 @@ Enforces:
    Generates docs/research/OBLIGATION_WITNESS_REGISTRY.md
 """
 
+import io
 import os
 import re
 import sys
+import tokenize
 from typing import Dict, List, Optional, Set, Tuple, Any
 
 try:
@@ -320,6 +322,21 @@ class ObligationWitnessValidator(IValidator):
                     except Exception:
                         continue
 
+                    if f.endswith(".py"):
+                        try:
+                            for tok_type, tok_string, (srow, _), _, _ in tokenize.generate_tokens(io.StringIO(content).readline):
+                                if tok_type == tokenize.COMMENT:
+                                    tags = _parse_witness_tags(tok_string)
+                                    loc = f"{rel_path}:{srow}"
+                                    for t in tags:
+                                        if t in registry.records:
+                                            registry.records[t].test_witnesses.append(loc)
+                                        else:
+                                            registry.phantom_witnesses.setdefault(t, []).append(loc)
+                            continue
+                        except (tokenize.TokenError, IndentationError):
+                            pass
+
                     for lineno_1idx, line in enumerate(content.splitlines(), start=1):
                         tags = _parse_witness_tags(line)
                         loc = f"{rel_path}:{lineno_1idx}"
@@ -357,6 +374,23 @@ class ObligationWitnessValidator(IValidator):
                         continue
 
                     is_model = "model" in rel_path.lower() or f.endswith(".sysml") or f.endswith(".m")
+                    if f.endswith(".py"):
+                        try:
+                            for tok_type, tok_string, (srow, _), _, _ in tokenize.generate_tokens(io.StringIO(content).readline):
+                                if tok_type == tokenize.COMMENT:
+                                    tags = _parse_witness_tags(tok_string)
+                                    loc = f"{rel_path}:{srow}"
+                                    for t in tags:
+                                        if t in registry.records:
+                                            if is_model:
+                                                registry.records[t].model_witnesses.append(loc)
+                                            else:
+                                                registry.records[t].code_witnesses.append(loc)
+                                        else:
+                                            registry.phantom_witnesses.setdefault(t, []).append(loc)
+                            continue
+                        except (tokenize.TokenError, IndentationError):
+                            pass
 
                     for lineno_1idx, line in enumerate(content.splitlines(), start=1):
                         tags = _parse_witness_tags(line)
