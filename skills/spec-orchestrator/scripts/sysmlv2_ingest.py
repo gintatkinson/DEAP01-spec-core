@@ -39,8 +39,17 @@ except ImportError:
     from skills.spec_orchestrator.scripts.translators.openapi_translator import OpenAPITranslator
 
 
+RAW_EXTENSIONS = {".md", ".pdf", ".txt", ".doc", ".docx"}
+
 def detect_format(schema_path: str, content: str) -> str:
+    """
+    Detect the schema format from the file extension and content.
+    
+    /// Realises: [SpecName/detect_format]
+    """
     ext = os.path.splitext(schema_path)[1].lower()
+    if ext in RAW_EXTENSIONS:
+        return "raw"
     if ext == ".sysml":
         return "sysml"
     elif ext == ".idl":
@@ -174,6 +183,12 @@ def ingest_schema(
     allowed_parts: Optional[Union[List[str], Set[str], str]] = None,
     negative_invariants: Optional[Union[List[str], Set[str], str]] = None,
 ) -> Tuple[SysMLPackage, Dict[str, Any]]:
+    """
+    Ingests the given schema file, translates it to SysML v2 format, and writes
+    it to output_path. Generates a digest at digest_path.
+    
+    /// Realises: [SpecName/ingest_schema]
+    """
     if not os.path.exists(schema_path):
         raise FileNotFoundError(f"Schema file not found: {schema_path}")
 
@@ -190,7 +205,9 @@ def ingest_schema(
     fmt = format_type.lower()
     file_basename = os.path.splitext(os.path.basename(schema_path))[0]
 
-    if fmt in ("sysml", "sysmlv2", "sysml_v2"):
+    if fmt == "raw":
+        raise RuntimeError("AST translation is required for raw document formats. SSOT ingestion failed.")
+    elif fmt in ("sysml", "sysmlv2", "sysml_v2"):
         pkg = SysMLParser.parse_text(content_text, default_name=file_basename)
     elif fmt in ("idl", "omg_idl"):
         translator = IDLTranslator()

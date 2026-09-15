@@ -298,6 +298,30 @@ class TestSysMLv2IngestASTFiltering(unittest.TestCase):
             self.assertNotIn("part def ExtraneousSensor", sysml_out)
             self.assertIn("assert constraint assert_exclusion_extraneoussensor", sysml_out)
 
+    def test_raw_document_ingestion_reporting(self) -> None:
+        """
+        Verify that ingesting a .md or .txt file raises a RuntimeError stating
+        that AST translation is required, and does not raise a ValueError.
+        
+        /// Realises: [SpecName/test_raw_document_ingestion_reporting]
+        """
+        raw_content = "This is a raw document."
+        with tempfile.TemporaryDirectory() as tmpdir:
+            input_file = os.path.join(tmpdir, "document.md")
+            output_sysml = os.path.join(tmpdir, "out.sysml")
+            digest_json = os.path.join(tmpdir, "digest.json")
+            
+            with open(input_file, "w", encoding="utf-8") as f:
+                f.write(raw_content)
+                
+            with self.assertRaises(RuntimeError) as context:
+                ingest_schema(
+                    schema_path=input_file,
+                    output_path=output_sysml,
+                    digest_path=digest_json,
+                )
+            
+            self.assertIn("AST translation is required", str(context.exception))
 
 if __name__ == "__main__":
     unittest.main()

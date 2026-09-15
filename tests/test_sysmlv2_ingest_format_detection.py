@@ -34,12 +34,9 @@ class TestSysMLv2IngestFormatDetection(unittest.TestCase):
     def test_detect_format_unsupported_extensions_raise_value_error(self) -> None:
         """Calling detect_format with unsupported extensions must raise ValueError instead of returning 'idl'."""
         unsupported_files = [
-            ("document.pdf", "%PDF-1.4 binary stream data"),
-            ("notes.docx", "PK\x03\x04 archive data"),
             ("program.exe", "MZ executable binary"),
             ("archive.zip", "PK\x03\x04 compressed payload"),
             ("data.bin", "\x00\x01\x02\x03 raw binary"),
-            ("readme.txt", "This is plain unstructured documentation text."),
         ]
         for filename, content in unsupported_files:
             with self.subTest(filename=filename):
@@ -70,11 +67,11 @@ class TestSysMLv2IngestFormatDetection(unittest.TestCase):
     def test_detect_format_content_fallback_supported(self) -> None:
         """Calling detect_format without a recognized extension but with valid schema content must detect format."""
         content_cases = [
-            ("unknown_ext.txt", "package MyPackage { part def Sensor {}; }", "sysml"),
-            ("unknown_ext.txt", "module Spaceflight { struct Telemetry { long id; }; };", "idl"),
-            ("unknown_ext.txt", "<AUTOSAR><AR-PACKAGES></AR-PACKAGES></AUTOSAR>", "autosar"),
-            ("unknown_ext.txt", 'syntax = "proto3"; message Coordinate { double lat = 1; }', "protobuf"),
-            ("unknown_ext.txt", '{"openapi": "3.0.0", "paths": {}}', "openapi"),
+            ("unknown_ext.xyz", "package MyPackage { part def Sensor {}; }", "sysml"),
+            ("unknown_ext.xyz", "module Spaceflight { struct Telemetry { long id; }; };", "idl"),
+            ("unknown_ext.xyz", "<AUTOSAR><AR-PACKAGES></AR-PACKAGES></AUTOSAR>", "autosar"),
+            ("unknown_ext.xyz", 'syntax = "proto3"; message Coordinate { double lat = 1; }', "protobuf"),
+            ("unknown_ext.xyz", '{"openapi": "3.0.0", "paths": {}}', "openapi"),
         ]
         for filename, content, expected_fmt in content_cases:
             with self.subTest(content=content[:20], expected_fmt=expected_fmt):
@@ -84,16 +81,16 @@ class TestSysMLv2IngestFormatDetection(unittest.TestCase):
     def test_ingest_schema_unsupported_extension_raises_value_error(self) -> None:
         """ingest_schema must raise ValueError when given a file with an unsupported extension in auto mode."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            pdf_path = os.path.join(tmpdir, "architecture_spec.pdf")
+            exe_path = os.path.join(tmpdir, "architecture_spec.exe")
             out_sysml = os.path.join(tmpdir, "schema.sysml")
             out_digest = os.path.join(tmpdir, "schema-digest.json")
-            with open(pdf_path, "wb") as f:
-                f.write(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF")
+            with open(exe_path, "wb") as f:
+                f.write(b"MZ executable binary payload")
 
             with self.assertRaises(ValueError) as ctx:
-                ingest_schema(pdf_path, format_type="auto", output_path=out_sysml, digest_path=out_digest)
+                ingest_schema(exe_path, format_type="auto", output_path=out_sysml, digest_path=out_digest)
             self.assertIn("Unsupported schema format", str(ctx.exception))
-            self.assertIn("architecture_spec.pdf", str(ctx.exception))
+            self.assertIn("architecture_spec.exe", str(ctx.exception))
 
     def test_ingest_schema_unsupported_explicit_format_raises_value_error(self) -> None:
         """ingest_schema must raise ValueError when given an unsupported explicit format string."""
@@ -124,7 +121,7 @@ class TestSysMLv2IngestFormatDetection(unittest.TestCase):
             )
             self.assertNotEqual(result.returncode, 0)
             combined_output = result.stdout + result.stderr
-            self.assertIn("Unsupported schema format", combined_output)
+            self.assertIn("AST translation is required", combined_output)
 
     def test_cli_positional_unsupported_pdf_exits_nonzero(self) -> None:
         """Running the CLI with a positional unsupported .pdf schema must fail closed with non-zero exit code."""
@@ -142,7 +139,7 @@ class TestSysMLv2IngestFormatDetection(unittest.TestCase):
             )
             self.assertNotEqual(result.returncode, 0)
             combined_output = result.stdout + result.stderr
-            self.assertIn("Unsupported schema format", combined_output)
+            self.assertIn("AST translation is required", combined_output)
 
 
 if __name__ == "__main__":
