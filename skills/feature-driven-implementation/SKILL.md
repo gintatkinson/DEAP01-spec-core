@@ -39,6 +39,7 @@ This skill integrates subagent-driven development, TDD execution discipline, two
     Everything else is logged and execution continues. "This is the only viable path" is not a finding -- if the task as written cannot be delivered without a critical deviation, that is the report, and the plan is what changes.
 15. **Subagent Research & Write Delegation:** The coordinator is strictly required to delegate all framework/dependency research tasks (Step 1.5) to a dedicated research subagent, and all codebase/specification micro-task write operations (Step 3) to dedicated implementer subagents.
 16. **Closed-Loop Payload Verification Gate & Anti-Complacency Rule:** Exit code 0 is NEVER sufficient proof of success. After modifying or publishing any GitHub issue or document, the agent MUST run `gh issue view <ID>` or `gh api` to fetch the live published payload and inspect links, Mermaid headers, and syntax. Optimism bias is prohibited: agents must cite empirical output of live payload inspection before declaring completion.
+17. **Commit Message Non-Closure Invariant:** Agents and automated scripts are strictly prohibited from using issue auto-closing keywords (`fix`, `fixes`, `fixed`, `close`, `closes`, `closed`, `resolve`, `resolves`, `resolved` preceding `#<id>`) in git commit messages. All commit messages referencing issues MUST use neutral citations: `(#<id>)` or `(refs #<id>)` to prevent server-side premature auto-closure (`.pipeline/constitution.md:266`, `rules/tracker-source-of-truth.md`).
 
 ---
 
@@ -155,7 +156,7 @@ Configure the dispatch method dynamically based on the current agent orchestrato
 - **RED:** Write failing unit tests for both Happy Path AND all alternate/exception flows declared in specs before entering the GREEN refactoring phase. Run them and confirm they fail with the expected error.
 - **GREEN:** Write the minimal code to make all tests pass. Run them. Confirm they pass.
 - **REFACTOR:** Clean up the code while keeping tests green. Run tests again.
-- **COMMIT:** Commit the passing micro-task with a descriptive message.
+- **COMMIT:** Commit the passing micro-task with a descriptive message adhering to the Commit Message Non-Closure Invariant (neutral citations: `(#<id>)` or `(refs #<id>)`).
 - **SELF-REVIEW:** Implementer reviews own changes before handing back.
 
 **A.2 Output Integrity Verification**
@@ -221,6 +222,7 @@ Before proceeding to Step 4, perform explicit grep or file-reading checks of all
 - Never skip the re-review loop (reviewer found issues = implementer fixes = review again).
 - **Cross-Cutting Field Preservation:** When adding fields to domain models, all constructors, `copyWith` methods, and `valueWriters` MUST preserve new fields across all paths. Micro-tasks MUST explicitly include regression tasks for existing constructors, `copyWith` methods, and `valueWriters`.
 - **Governance Acknowledgment Invariant:** No subagent may proceed to code generation without submitting and receiving coordinator approval of a complete governance acknowledgment.
+- **Commit Message Non-Closure Invariant:** Agents and automated scripts are strictly prohibited from using issue auto-closing keywords (`fix`, `fixes`, `fixed`, `close`, `closes`, `closed`, `resolve`, `resolves`, `resolved` preceding `#<id>`) in git commit messages. All commit messages referencing issues MUST use neutral citations: `(#<id>)` or `(refs #<id>)` to prevent server-side premature auto-closure (`.pipeline/constitution.md:266`, `rules/tracker-source-of-truth.md`).
 
 ### Step 3.8: Systematic Debugging (When Tests Fail Unexpectedly)
 
@@ -250,11 +252,11 @@ If a test fails with an unexpected error during Step 3, follow the 4-phase debug
    >
    > **ZERO-TRUST COLLISION CHECK:** Before updating or creating this file, search the repository and history for the target filename to check its existing content. If it exists, read it first and append/merge the new changes rather than overwriting. If there is a filename mismatch or conflict, alert the user and resolve the naming conflict immediately.
 3. **Backlog Reconciliation**: Run the backlog reconciliation script to synchronize all checklists, updated spec bodies (such as fixed Mermaid diagrams), and issue states back to GitHub: python3 skills/spec-orchestrator/scripts/reconcile_backlog.py
-4. Commit and push the solution document using the configured commit command template.
+4. Commit and push the solution document using the configured commit command template with neutral issue citations (e.g. `docs(designs): add solution walkthrough (refs #<id>)` or `(#<id>)`). Never use auto-closing keywords (`fix`, `fixes`, `close`, `closes`, `resolve`, `resolves` preceding `#<id>`).
 5. Mark the feature issue `Fixed / Resolved` on the active issue tracker provider: apply the `status:fixed-resolved` label and embed a comment pointing to the committed solution document, dynamically constructing the URL using `meta.upstream_repository` from configuration. Leave the issue open -- `Closed` requires Product Owner validation (`.pipeline/constitution.md:161`).
 6. Update the local parent Epic checklist:
    - Mark the completed feature as completed (`[x]`).
-   - Commit and push the updated Epic checklist file.
+   - Commit and push the updated Epic checklist file (using neutral citations: `docs(epic): update checklist (#<id>)`).
 
 ### Step 6: Agentic Epic Closure (CRITICAL)
 1. Inspect the local Epic checklist.

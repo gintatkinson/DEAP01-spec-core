@@ -60,6 +60,10 @@ Must use Mermaid fenced blocks (```` ```mermaid ````) with valid syntax. No ASCI
 
 **All Mermaid syntax constraints are defined in `rules/platform-independence.md` and MUST be observed in full.** Most importantly here: no semicolons in `Note` statements or message text, and no curly braces in class member lines. Step D check 7 enforces these mechanically.
 
+### 1.6 Governance & Invariants
+
+- **Commit Message Non-Closure Invariant**: Agents and automated scripts are strictly prohibited from using issue auto-closing keywords (`fix`, `fixes`, `fixed`, `close`, `closes`, `closed`, `resolve`, `resolves`, `resolved` preceding `#<id>`) in git commit messages. All commit messages referencing issues MUST use neutral citations: `(#<id>)` or `(refs #<id>)` to prevent server-side premature auto-closure (`.pipeline/constitution.md:266`, `rules/tracker-source-of-truth.md`).
+
 ## 2. Output Format
 
 Every finding MUST produce output matching this skeleton character-for-character in section headers and field labels. Replace `[...]` placeholders with real content. Do not change the structure.
@@ -252,8 +256,9 @@ not a full Mermaid grammar parser, so a pass is not proof the diagram renders.
      ```
 4. Title format: `[AUDIT] [filename.ext]: [Brief description]`
 5. If mode is `bug-based` and finding confirms a known issue, post a comment (`gh issue comment` on GitHub, or `glab issue note` / direct notes REST API on GitLab) instead of creating a new issue.
-6. Sleep 1 second between issues.
-7. Return: issue URLs with severities.
+6. **Commit Message Hygiene**: When staging or committing audit artifacts, defect dossiers, or regression tests, all commit messages MUST adhere to the Commit Message Non-Closure Invariant using neutral citations `(#<id>)` or `(refs #<id>)`, strictly avoiding auto-closing keywords.
+7. Sleep 1 second between issues.
+8. Return: issue URLs with severities.
 
 ## 4. Example -- Complete Compliant Output
 

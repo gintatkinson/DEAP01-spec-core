@@ -53,7 +53,7 @@ Dispatch a subagent to: Document all evidence, code snippets, logs, error messag
 Dispatch a subagent to: Distinguish root cause from symptoms. Apply "5 whys" to drill to the actual cause. Verify the root cause explains ALL observed symptoms. Return root cause with file:line references.
 
 ## Step 6 -- Fix Subagent
-Dispatch a subagent to: Design and implement the minimal fix. Consider side effects. Add regression tests. Document the fix. Stage, commit, and push all changes to the remote repository. Update the GitHub issue with root cause and fix details. Return fix summary and issue URL.
+Dispatch a subagent to: Design and implement the minimal fix. Consider side effects. Add regression tests. Document the fix. Stage, commit, and push all changes to the remote repository. All commit messages MUST adhere to the Commit Message Non-Closure Invariant (`.pipeline/constitution.md:266`, `rules/tracker-source-of-truth.md`): use neutral citations `(refs #<id>)` or `(#<id>)` (e.g., `git commit -m "fix(scope): remediate bug (refs #<id>)"`), strictly forbidding auto-closing keywords (`fix`, `fixes`, `fixed`, `close`, `closes`, `closed`, `resolve`, `resolves`, `resolved` preceding `#<id>`). Update the GitHub issue with root cause and fix details. Return fix summary and issue URL.
 
 ## Step 7 -- Verification Subagent
 Dispatch a subagent to:
@@ -92,6 +92,7 @@ On completion of the current bug, query the repository for the next unresolved b
 
 ## Persistence Rules
 - **Subagent Self-Reading Mandate**: Every subagent dispatched under this protocol MUST use the file-reading tool to read `skills/debug-protocol/SKILL.md` in full as its VERY FIRST action. It must then follow the output format, evidence standards, and closing procedures defined in this file exactly. Do NOT rely on the coordinator's abbreviated step summary.
+- **Commit Message Non-Closure Invariant**: Agents and automated scripts are strictly prohibited from using issue auto-closing keywords (`fix`, `fixes`, `fixed`, `close`, `closes`, `closed`, `resolve`, `resolves`, `resolved` preceding `#<id>`) in git commit messages. All commit messages referencing issues MUST use neutral citations: `(#<id>)` or `(refs #<id>)` to prevent server-side premature auto-closure (`.pipeline/constitution.md:266`, `rules/tracker-source-of-truth.md`).
 - Each step MUST use a fresh subagent -- do not reuse or combine
 - Do NOT skip or combine steps
 - Document every attempt even if the bug isn't fully solved
@@ -104,6 +105,6 @@ On completion of the current bug, query the repository for the next unresolved b
 - [ ] Step 3 subagent dispatched and reported
 - [ ] Step 4 subagent dispatched and reported
 - [ ] Step 5 subagent dispatched and reported
-- [ ] Step 6 subagent dispatched, fix applied, changes committed and pushed, issue updated
+- [ ] Step 6 subagent dispatched, fix applied, changes committed and pushed (using neutral citation `(refs #<id>)` or `(#<id>)`), issue updated
 - [ ] Step 7: Verification subagent dispatched, three proofs validated, issue marked `Fixed / Resolved` with mechanical proof
 - [ ] Loop closed (bug fixed) or loop restarted (bug persists)

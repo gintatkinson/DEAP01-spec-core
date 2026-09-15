@@ -50,6 +50,7 @@ If any phase, worker, compiler, or validation gate fails during orchestration (w
 4. **Invariants & Escalation**:
    - **Never skip a validation gate.** If a gate cannot be satisfied, the pipeline remains halted until systematically resolved and verified.
    - **Automated Upstream Reporting**: If the failure is due to a pipeline tooling bug in `DEAP01-spec-core` (linter, reconciler, or parser), file an upstream defect report (`python3 scripts/file_defect.py --repo gintatkinson/DEAP01-spec-core --title "Tooling Bug: [Command] failed" --body-file [payload_path] --label "bug"`) and escalate to the human operator with the issue URL.
+   - **Commit Message Non-Closure Invariant**: Agents and automated scripts are strictly prohibited from using issue auto-closing keywords (`fix`, `fixes`, `fixed`, `close`, `closes`, `closed`, `resolve`, `resolves`, `resolved` preceding `#<id>`) in git commit messages. All commit messages referencing issues MUST use neutral citations: `(#<id>)` or `(refs #<id>)` to prevent server-side premature auto-closure (`.pipeline/constitution.md:266`, `rules/tracker-source-of-truth.md`).
 
 ## Pre-Flight Git Repository Verification
 Before performing any orchestration steps, the agent MUST run `git ls-files` on:
@@ -58,7 +59,7 @@ Before performing any orchestration steps, the agent MUST run `git ls-files` on:
 3. `rules/`
 4. `scripts/`
 
-If any of these verification checks fail (i.e. the files are untracked or missing), the agent MUST halt and instruct the operator to add, commit, and push them first:
+If any of these verification checks fail (i.e. the files are untracked or missing), the agent MUST halt and instruct the operator to add, commit, and push them first (adhering to the Commit Message Non-Closure Invariant with neutral citations):
 ```bash
 git add .pipeline/ skills/ rules/ scripts/ app_flutter/
 git commit -m "chore: bootstrap pipeline infrastructure"
