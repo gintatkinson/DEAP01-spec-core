@@ -104,6 +104,7 @@ is found, HALT and escalate as a blocker. Do not substitute direct coordinator w
 ## Atomic Work Execution & Walkthrough Gates
 - All tasks must be executed as atomic work packages. Once a specific set of changes (e.g. bug fixes or a feature) is implemented, verified, and committed, the agent MUST immediately generate a focused walkthrough for that atomic package and close the loop.
 - You are strictly forbidden from commingling unrelated or multi-phase tasks in a single cumulative walkthrough. Unrelated changes or follow-up tasks must be treated as separate atomic packages with their own implementation plans, git branches/commits, and walkthroughs.
+- **Mandatory Tracker Issue Transition Gate**: Before generating any walkthrough or declaring an atomic package complete, the agent MUST verify that every issue referenced in the commit log since the start of the work package carries the `status:fixed-resolved` (or `status::fixed-resolved` on GitLab) label and contains a posted verification evidence comment. Leaving fixed issues unlabelled is strictly forbidden.
 
 ## Mandatory Upstream Tooling Bug Reporting
 - If a bug, edge case, or limitation is identified in the shared pipeline scripts (e.g., `verify_model_coverage.py`, `reconcile_backlog.py`), the executing agent is strictly required to file a corresponding defect report upstream on `gintatkinson/DEAP01-spec-core`.

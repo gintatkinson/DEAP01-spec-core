@@ -27,6 +27,12 @@
 
 DEAP supports multi-provider issue tracking across GitHub (SaaS/Enterprise) and GitLab (GitLab.com, Self-Hosted EE/CE, and Air-Gapped / SCIF defense enclaves). All issue lifecycle management operations adhere to unified semantics across providers.
 
+### Mandatory Resolved Status Transition Invariant
+
+Whenever an agent or subagent delivers a commit referencing an issue via `(refs #<id>)` or `(#<id>)`, the coordinator MUST transition that issue on the configured tracker to `status:fixed-resolved` (or `status::fixed-resolved` on GitLab) and post an evidence comment containing the commit SHA, passing test outputs, and diff before declaring the task or work package complete. 
+
+Declaring completion, generating a walkthrough, or stopping while leaving referenced issues in raw `bug` state without the `status:fixed-resolved` label is strictly forbidden. While `Closed` requires Product Owner authority, reaching `status:fixed-resolved` is the mandatory completion gate for engineering execution.
+
 ### GitLab Scoped Label Taxonomy
 
 GitLab issue tracking uses native scoped labels (`key::value`) to ensure mutual exclusivity and deterministic state tracking:
