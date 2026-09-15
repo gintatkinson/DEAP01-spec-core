@@ -183,7 +183,7 @@ def _extract_sora_parameters(sec6_content: str) -> Tuple[Optional[float], Option
                     pass
 
             if num_val is not None:
-                if re.search(r'\bh[_\s]*max\b', symbol, re.IGNORECASE) or re.search(r'\bmax(?:imum)?\s+altitude\b', param_name, re.IGNORECASE):
+                if re.search(r'\b(?:h[_\s]*max|boundary[_\s]*max)\b', symbol, re.IGNORECASE) or re.search(r'\bmax(?:imum)?\s+altitude\b', param_name, re.IGNORECASE):
                     h_max_val = num_val
                 elif re.search(r'\bv[_\s]*wind(?:[_\s]*max)?\b', symbol, re.IGNORECASE) or re.search(r'\bmax(?:imum)?\s+wind\b', param_name, re.IGNORECASE):
                     v_wind_val = num_val
@@ -194,7 +194,7 @@ def _extract_sora_parameters(sec6_content: str) -> Tuple[Optional[float], Option
 
     # Fallback to regex
     if h_max_val is None:
-        m_h = re.search(r'h[_\s]*max[^\d]*([0-9]+(?:\.[0-9]+)?)', sec6_content, re.IGNORECASE)
+        m_h = re.search(r'(?:h[_\s]*max|boundary[_\s]*max)[^\d]*([0-9]+(?:\.[0-9]+)?)', sec6_content, re.IGNORECASE)
         if not m_h:
             m_h = re.search(r'(?:max(?:imum)?\s+altitude|operating\s+ceiling)[^\d]*([0-9]+(?:\.[0-9]+)?)', sec6_content, re.IGNORECASE)
         if m_h:
@@ -814,7 +814,7 @@ class ConopsCompletenessValidator(IValidator):
         "EMG-04",  # Critical Sensor Fault
         "EMG-05",  # Geofence Breach / Airspace Conflict
         "EMG-06",  # Structural / Actuation Anomaly
-        "EMG-07",  # Flight Termination Command
+        "EMG-07",  # Emergency / Critical Process Termination Command
     ]
 
     MANDATORY_EMERGENCY_SUBSECTIONS: List[Dict[str, Any]] = [

@@ -43,7 +43,7 @@ ConnectionDef = _sysml_ast.ConnectionDef
 
 
 # Universal abstract systems engineering boundary tokens (closed-world AST grounding per Issue #282)
-# Specifically purges customer drone & weapon keywords (catapult, sitaware, sitaware_hq, atak, warhead, airframe, recovery_net)
+# Specifically purges customer-specific domain keywords and generalizes to abstract boundaries
 RECOGNIZED_EXTERNAL_ACTORS = {
     "operator", "operators", "user", "users", "human", "supervisor", "authority", "authorities",
     "cloud", "server", "servers", "client", "clients", "database", "storage", "backend", "infrastructure",

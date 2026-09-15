@@ -2,7 +2,7 @@
 
 # Rule: Dual-Track Model-Based Design (MBD) Architecture & Headless CI Verification Protocol
 
-**ALWAYS enforce:** All control law, flight dynamics, safety statechart, and physical estimation features in the Digital Engineering Autonomous Pipeline (DEAP) MUST adhere strictly to the Dual-Track Model-Based Design (MBD) and Headless CI Verification Protocol. Every aerospace control or safety feature must deliver both native MATLAB / Simulink synthesis artifacts and a standalone, license-free digital twin execution engine for automated continuous integration.
+**ALWAYS enforce:** All control law, operating dynamics, safety statechart, and physical estimation features in the Digital Engineering Autonomous Pipeline (DEAP) MUST adhere strictly to the Dual-Track Model-Based Design (MBD) and Headless CI Verification Protocol. Every cyber-physical control or safety feature must deliver both native MATLAB / Simulink synthesis artifacts and a standalone, license-free digital twin execution engine for automated continuous integration.
 
 ## Scope and Normative Authority
 
@@ -78,7 +78,7 @@ flowchart TD
 
 ## Deliverable Layout & Artifact Structure
 
-Every feature containing control laws, flight guidance, physical plant estimators, or safety state machines MUST deliver the following artifact set:
+Every feature containing control laws, system guidance, physical plant estimators, or safety state machines MUST deliver the following artifact set:
 
 ```
 models/

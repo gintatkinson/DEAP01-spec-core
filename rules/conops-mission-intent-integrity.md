@@ -53,7 +53,7 @@ In accordance with DoDAF v2.02 SV-1, IEEE 1362 §5.3, ISO/IEC/IEEE 15288:2023, I
 ### 1. Pure Open Schema Contract ($N \ge N_{\mathrm{min}}$)
 - **Zero Static Row Caps**: Artificial upper bounds, hardcoded array limits, or truncation heuristics in tabular specifications or lists are strictly forbidden. All schema contracts defined in `.pipeline/schemas/conops_specification_schema.json` and `.pipeline/schemas/mission_intent_specification_schema.json` are open collections ($N \ge N_{\mathrm{min}}$).
 - **Minimum Cardinality Enforcement**: Specifications MUST satisfy domain-specific minimum cardinalities without restriction on upper expansion:
-  * **Emergency Decision Matrix**: Minimum 7 canonical triggers ($N \ge 7$) covering `EMG-01` through `EMG-07` (Lost C2, Navigation Loss, Propulsion Failure, Sensor Fault, Geofence Breach, Structural Anomaly, Flight Termination).
+  * **Emergency Decision Matrix**: Minimum 7 canonical triggers ($N \ge 7$) covering `EMG-01` through `EMG-07` (Lost C2, Navigation Loss, Propulsion Failure, Sensor Fault, Geofence Breach, Structural Anomaly, Emergency / Critical Process Termination (Flight Termination / Safe Shutdown)).
   * **PACE C2 Plan**: Minimum 4 communication tiers ($N \ge 4$) covering `Primary`, `Alternate`, `Contingency`, and `Emergency`.
   * **METL Tasks**: Minimum 1 task ($N \ge 1$), expanding to full doctrinal mission scope.
   * **Threat Matrix**: Minimum 1 threat ($N \ge 1$), expanding to all applicable operational threats.
@@ -61,17 +61,18 @@ In accordance with DoDAF v2.02 SV-1, IEEE 1362 §5.3, ISO/IEC/IEEE 15288:2023, I
   * **UAF Operational Activities**: Minimum 1 activity ($N \ge 1$).
   * **Operational Information Exchanges (Op-Tx)**: Minimum 1 exchange ($N \ge 1$).
 
-### 2. Open Multi-Domain Threat Taxonomy
-The Threat and Electronic Warfare / Cyber Environment Matrix MUST cover multi-domain threats across all canonical operational domains:
-1. **Kinetic**: External projectiles, mid-air collisions, physical interceptors, ballistic fragmentation, ground obstacles.
+### 2. Open Multi-Domain Operational Threat Matrices
+- **10-Domain Minimum Requirement**: To guarantee comprehensive risk characterization beyond simple mechanical hardware failures, the Multi-Domain Operational Threat & Contested Environment Matrix MUST explicitly address at least one threat vector from every one of the following 10 operational threat domains ($N \ge 10$):
+1. **Kinetic**: Ballistic impact, hostile shrapnel, mid-air object collision (e.g., bird strike, debris), explosive blast overpressure.
 2. **Mechanical**: Structural flutter, fatigue failure, control surface/actuator jamming, motor bearing seizure, propeller delamination.
-3. **Power / Thermal**: Battery cell thermal runaway, power rail brownout, electronic speed controller (ESC) thermal throttling, generator disconnect.
-4. **Environmental**: Extreme ambient temperature, severe turbulence/wind gusts exceeding airframe limits, icing/pitot probe freeze, lightning discharge, heavy precipitation, volcanic particulate.
-5. **EW / Cyber**: GNSS spoofing/jamming, RF command uplink jamming, telemetry sniffing, man-in-the-middle packet injection, unauthorized command injection, firmware tampering.
-6. **Optical**: High-energy laser blinding of optical tracking sensors, sensor dazzling, camera saturation, optical flow denial.
-7. **Signature / Acoustic**: Acoustic emission harmonics, infrared plume radiation, radar cross-section (RCS) observability.
-8. **Human Factors**: Ground operator input disparity, pilot fatigue, unauthorized control override, communication protocol desynchronization.
-9. **CBRN**: Chemical plumes, biological particulates, radiological contamination, toxic corrosive environments.
+3. **Power/Thermal**: Primary battery/fuel cell thermal runaway, BMS fault, catastrophic cell voltage collapse, primary/secondary bus isolation failure.
+4. **Environmental**: Extreme ambient temperature, severe turbulence/wind gusts exceeding structural / physical envelope limits, icing/pitot probe freeze, lightning discharge, heavy precipitation, volcanic particulate.
+5. **Electronic Warfare (EW)**: Wide-band RF jamming, GNSS spoofing, narrow-band interference, intentional C2 denial, telemetry spoofing.
+6. **Cyber**: Denial of Service (DoS), unauthorized cryptographic key rotation, payload buffer overflow exploit, man-in-the-middle (MitM) command insertion, compromised zero-trust endpoints.
+7. **Optical**: Camera sensor dazzle/blinding (e.g., directed laser), environmental saturation (sun glare), target occlusion/fog.
+8. **Signature**: Unintended radar cross-section (RCS) spike, abnormal acoustic signature emission, unanticipated thermal blooming.
+9. **Human Factors**: Ground operator input disparity, operator / pilot fatigue, unauthorized control override, communication protocol desynchronization.
+10. **CBRN**: Chemical plumes, biological particulates, radiological contamination, toxic corrosive environments.
 
 Restricting threat analysis to an arbitrary single domain or omitting applicable threat vectors is strictly prohibited.
 
