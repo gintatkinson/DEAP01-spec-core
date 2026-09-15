@@ -9,7 +9,7 @@
 
 ## 8. Operational Environments & MIL-STD-810H Environmental Stress Qualification
 
-In accordance with abstract environmental and thermal stress constraints (Reference Fixes #127, #134, #137), the system is engineered to maintain full functional performance, structural containment, and deterministic safety execution across a parametric environmental stress envelope:
+In accordance with MIL-STD-810H, MIL-STD-461G, and IEC 60529 (Reference Fixes #127, #134, #137), the system is engineered to maintain full functional performance, structural containment, and deterministic safety execution across a parametric environmental stress envelope:
 
 $$
 \begin{aligned}
@@ -38,7 +38,7 @@ $$
 
 ### 8.1 Master 12-Method Environmental Stress Qualification Table
 
-The following master qualification table establishes the formal verification baseline across canonical environmental stress methods:
+The following master qualification table establishes the formal verification baseline across all 12 canonical MIL-STD-810H environmental stress methods:
 
 | Method ID | Environmental Stress Method Name | Procedure Numbers | Operational Limits | Storage / Transit Limits | Verification Standards |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -61,7 +61,7 @@ The following master qualification table establishes the formal verification bas
 
 #### 8.2.1 Method M-500.6 -- Low Pressure (Altitude)
 - **Applicable Procedures:** Procedure I (Storage/Air Transport), Procedure II (Operation/Air Carriage), and Procedure III (Rapid Decompression) per {{M500_PROCEDURES}}.
-- **Environmental Envelope:** Operating ambient atmospheric pressure down to $P_{\text{op\_min}}$ (`{{M500_OP_PRESSURE_KPA}}` kPa, equivalent to an operational ambient pressure ceiling equivalent to $P_{\text{op\_min}}$); unpowered storage/transit pressure down to $P_{\text{store\_min}}$ (`{{M500_STORE_PRESSURE_KPA}}` kPa, equivalent to a unpowered storage pressure equivalent to $P_{\text{store\_min}}$). Rapid decompression rate $\Delta P / \Delta t \le \dot{P}_{\text{decomp\_max}}$ (`{{M500_DECOMPRESSION_RATE_KPA_S}}` kPa/s).
+- **Environmental Envelope:** Operating ambient atmospheric pressure down to $P_{\text{op\_min}}$ (`{{M500_OP_PRESSURE_KPA}}` kPa, equivalent to an operational altitude ceiling $h_{\text{alt\_max}}$ of `{{M500_OP_ALTITUDE_M}}` m above sea level); unpowered storage/transit pressure down to $P_{\text{store\_min}}$ (`{{M500_STORE_PRESSURE_KPA}}` kPa, equivalent to a cargo hold ceiling $h_{\text{store\_max}}$ of `{{M500_STORE_ALTITUDE_M}}` m). Rapid decompression rate $\Delta P / \Delta t \le \dot{P}_{\text{decomp\_max}}$ (`{{M500_DECOMPRESSION_RATE_KPA_S}}` kPa/s).
 - **Exposure Duration:** Minimum chamber dwell duration $t_{\text{dwell}} \ge \tau_{\text{alt\_dwell\_min}}$ (`{{M500_DWELL_DURATION_HR}}` hr) following chamber pressure stabilization; rapid decompression transition execution time $\Delta t \le \tau_{\text{decomp\_time}}$ (`{{M500_DECOMPRESSION_TIME_S}}` s).
 - **Operational Functional Checks:** Continuous execution of Power-On Built-In-Test (PBIT) and Periodic BIT (CBIT), real-time bus telemetry verification, power converter voltage regulation under low-pressure dielectric conditions, and structural seal differential pressure monitoring.
 - **Acceptance Criteria:** Zero structural deformation or elastomeric seal rupture (`{{M500_STRUCTURAL_INTEGRITY_CRITERIA}}`); no dielectric breakdown, corona discharge, or electrical arcing across high-voltage power distribution buses; zero outgassing damage to optical sensor covers or conformal-coated electronics; nominal state estimation execution throughout low-pressure dwell.
@@ -89,10 +89,10 @@ The following master qualification table establishes the formal verification bas
 
 #### 8.2.5 Method M-505.7 -- Solar Radiation (Sunshine)
 - **Applicable Procedures:** Procedure I (Cycling / Diurnal Heating Simulation) and Procedure II (Steady State / Actinic Photodegradation Effects) per {{M505_PROCEDURES}}.
-- **Environmental Envelope:** Peak simulated solar spectral irradiance $I_{\text{solar\_peak}} \le I_{\text{solar\_max}}$ (`{{M505_PEAK_IRRADIANCE_W_M2}}` W/m², spectral distribution encompassing UV-A, UV-B, visible, and infrared wavelengths per applicable standards) under continuous chamber ambient air temperature up to $T_{\text{solar\_amb}}$ (`{{M505_SOLAR_AMB_TEMP_C}}` °C).
+- **Environmental Envelope:** Peak simulated solar spectral irradiance $I_{\text{solar\_peak}} \le I_{\text{solar\_max}}$ (`{{M505_PEAK_IRRADIANCE_W_M2}}` W/m², spectral distribution encompassing UV-A, UV-B, visible, and infrared wavelengths per MIL-STD-810H Table 505.7-I) under continuous chamber ambient air temperature up to $T_{\text{solar\_amb}}$ (`{{M505_SOLAR_AMB_TEMP_C}}` °C).
 - **Exposure Duration:** Procedure I: minimum $N_{\text{solar\_cycles}}$ (`{{M505_DIURNAL_CYCLE_COUNT}}` continuous 24-hr diurnal heating cycles); Procedure II: continuous actinic exposure for $t_{\text{actinic}} \ge \tau_{\text{actinic\_min}}$ (`{{M505_ACTINIC_EXPOSURE_HR}}` hr).
 - **Operational Functional Checks:** Continuous monitoring of internal enclosure internal thermal rise ($\Delta T_{\text{internal}} \le \Delta T_{\text{internal\_max}}$), optical perception window transmissivity measurement, surface coating reflectance evaluation, and telemetry health stream verification during peak irradiance.
-- **Acceptance Criteria:** Internal compartment temperature rise constrained within thermal design margins (`{{M505_MAX_INTERNAL_TEMP_RISE_C}}` °C); zero chalking, blistering, peeling, or photolytic embrittlement of exterior polymers, protective covers, and seal materials; optical transmissivity degradation across sensor covers $\Delta \text{Trans} \le \Delta \text{Trans}_{\text{max}}$ (`{{M505_MAX_TRANSMISSIVITY_LOSS_PCT}}`%).
+- **Acceptance Criteria:** Internal compartment temperature rise constrained within thermal design margins (`{{M505_MAX_INTERNAL_TEMP_RISE_C}}` °C); zero chalking, blistering, peeling, or photolytic embrittlement of exterior polymers, radomes, and seal materials; optical transmissivity degradation across sensor covers $\Delta \text{Trans} \le \Delta \text{Trans}_{\text{max}}$ (`{{M505_MAX_TRANSMISSIVITY_LOSS_PCT}}`%).
 
 #### 8.2.6 Method M-506.6 -- Rain / Blowing Rain
 - **Applicable Procedures:** Procedure I (Blowing Rain), Procedure II (Exaggerated Rain / Watertightness), and Procedure III (Drip / Condensation Ingress) per {{M506_PROCEDURES}}.
@@ -106,7 +106,7 @@ The following master qualification table establishes the formal verification bas
 - **Environmental Envelope:** Relative humidity $\text{RH} \ge \text{RH}_{\text{aggravated}}$ (`{{M507_AGGRAVATED_RH_PCT}}`% ± 4% RH) across cyclic thermal profile $[T_{\text{hum\_low}}, T_{\text{hum\_high}}]$ (`[{{M507_HUMID_LOW_TEMP_C}} °C, {{M507_HUMID_HIGH_TEMP_C}} °C]`).
 - **Exposure Duration:** Aggravated cyclic exposure spanning $N_{\text{humid\_cycles}}$ (`{{M507_HUMID_CYCLE_COUNT}}` continuous 24-hr cycles, total exposure duration $t_{\text{humid\_total}} \ge \tau_{\text{humid\_total\_min}}$ of `{{M507_TOTAL_HUMID_HOURS}}` hr).
 - **Operational Functional Checks:** Operational checkouts conducted at high-temperature / high-humidity plateau during alternating cycles (e.g., cycles 2, 5, 8, and 10); high-voltage dielectric breakdown test; post-exposure operational baseline verification within $t_{\text{post}} \le \tau_{\text{post\_humid\_check}}$ (`{{M507_POST_CHECK_HOURS}}` hr) of chamber egress.
-- **Acceptance Criteria:** Zero electrical short circuits, dielectric breakdown, or insulation leakage ($R_{\text{ins}} \ge R_{\text{ins\_min}}$); zero micro-corrosion on gold/nickel-plated connector pins; zero delamination or dendritic conductive growth on conformal-coated printed circuit assemblies; zero fungal growth or degradation of potting materials per applicable environmental standards.
+- **Acceptance Criteria:** Zero electrical short circuits, dielectric breakdown, or insulation leakage ($R_{\text{ins}} \ge R_{\text{ins\_min}}$); zero micro-corrosion on gold/nickel-plated connector pins; zero delamination or dendritic conductive growth on conformal-coated printed circuit assemblies; zero fungal growth or degradation of potting materials per MIL-STD-810H Method 508.8.
 
 #### 8.2.8 Method M-509.7 -- Salt Fog
 - **Applicable Procedures:** Procedure I (Aggravated Marine / Atmospheric Corrosion Cycling) per {{M509_PROCEDURES}}.
@@ -158,9 +158,9 @@ The following master qualification table establishes the formal verification bas
 ---
 
 ### 8.4 Electromagnetic Compatibility (EMC/EMI) & RF Environments
-- **Radiated Susceptibility (RS103):** Withstands High-Intensity Radiated Fields (HIRF) up to $E_{\text{field}}$ (`{{EMC_RS103_FIELD_STRENGTH_V_M}}` V/m) across frequency spectrum $f \in [2\text{ MHz}, 40\text{ GHz}]$ per applicable EMC standards without processor resets or telemetry corruption.
-- **Conducted Susceptibility (CS114 / CS115 / CS116):** Power and signal interconnects withstand bulk cable injection and damped sinusoidal transients up to applicable EMC susceptibility limits.
-- **Radiated & Conducted Emissions (RE102 / CE102):** Narrowband and broadband radiated emissions suppressed below applicable EMC emission limits to prevent self-interference with integrated RF communications and reference receivers.
+- **Radiated Susceptibility (RS103):** Withstands High-Intensity Radiated Fields (HIRF) up to $E_{\text{field}}$ (`{{EMC_RS103_FIELD_STRENGTH_V_M}}` V/m) across frequency spectrum $f \in [2\text{ MHz}, 40\text{ GHz}]$ per MIL-STD-461G Method RS103 without processor resets or telemetry corruption.
+- **Conducted Susceptibility (CS114 / CS115 / CS116):** Power and signal interconnects withstand bulk cable injection and damped sinusoidal transients up to declared MIL-STD-461G Curve 5 limits.
+- **Radiated & Conducted Emissions (RE102 / CE102):** Narrowband and broadband radiated emissions suppressed below MIL-STD-461G RE102 limits to prevent self-interference with integrated RF communications and reference receivers.
 - **External Reference Signal Denial Resilience:** Capable of maintaining autonomous closed-loop state estimation and boundary containment for up to $t_{\text{denied}} \ge \tau_{\text{denied\_max}}$ (`{{SIGNAL_DENIAL_MAX_DURATION_S}}` s) of continuous external positioning signal loss via dead reckoning and kinematic state observers with spatial drift rate bounded by $\text{Drift} \le \text{Drift}_{\text{max}}$ (`{{MAX_DEAD_RECKONING_DRIFT_M_S}}` m/s).
 
 ---

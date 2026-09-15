@@ -561,7 +561,14 @@ class SysMLParameterBindingEngine:
             except Exception:
                 pass
 
-        rho = 1.225
+        if getattr(self, "domain", None) == "marine":
+            default_rho = 1025.0
+        elif getattr(self, "domain", None) == "space":
+            default_rho = 1.0e-12
+        else:
+            default_rho = 1.225
+            
+        rho = default_rho
         if rho_raw is not None:
             try:
                 m_rho = re.search(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?", str(rho_raw))
@@ -572,6 +579,10 @@ class SysMLParameterBindingEngine:
 
         if "AIR_DENSITY_KGM3" not in self._explicit_keys:
             self.parameter_bindings["AIR_DENSITY_KGM3"] = str(rho)
+        if "FLUID_DENSITY_KGM3" not in self._explicit_keys:
+            self.parameter_bindings["FLUID_DENSITY_KGM3"] = str(rho)
+        if "RHO_MEDIUM" not in self._explicit_keys:
+            self.parameter_bindings["RHO_MEDIUM"] = str(rho)
 
         if "SYSTEM_MASS_KG" not in self._explicit_keys:
             self.parameter_bindings["SYSTEM_MASS_KG"] = str(m)
