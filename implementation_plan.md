@@ -1,10 +1,10 @@
 # Goal Description
 
-Implement Work Package 4.2 to resolve Issue #303 (Tokenized Python comment scanner). This will prevent Python string literals containing obligation witness tags (like `OBL-PHANTOM-99` used in tests) from leaking into `registry.phantom_witnesses` by using Python's `tokenize` module to only scan tokens of type `tokenize.COMMENT`.
+Implement Work Package 4.3 to resolve Issue #300 (Scaffolding and Prompt Catalog) and Issue #295 (Raw document schema ingestion). 
 
 ## User Review Required
 
-Please review this implementation plan. Since the prompt included the PROCEED keyword, I am still required by the Strict Planning Gate to verify the implementation plan with you first before directly making code modifications.
+Please review this implementation plan. As required by the Strict Planning Gate, I must verify the implementation plan with you first before making code modifications, even if PROCEED was provided.
 
 ## Open Questions
 
@@ -12,31 +12,41 @@ None. The requirements are clear.
 
 ## Proposed Changes
 
-### Core Auditing Logic
+### Issue #300 - Scaffolding and Prompt Catalog
 
-#### [MODIFY] obligation_witness_validator.py
-- **Path:** `/Users/perkunas/jail/DEAP01-spec-core/skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/obligation_witness_validator.py`
-- Add imports for `tokenize` and `io`.
-- Modify `build_witness_registry` Step 3 (Test Witnesses) and Step 4 (Code Witnesses):
-  - When scanning a `.py` file, instantiate `io.StringIO(content)` and use `tokenize.generate_tokens()`.
-  - Filter for tokens where the token type equals `tokenize.COMMENT`.
-  - Scan the token string for witness tags.
-  - Track line numbers from the token metadata (1-indexed).
-  - Add a fallback mechanism (e.g. via try-except on `tokenize.TokenError` or generic Exception) that reverts to raw splitlines if tokenization fails.
+#### [MODIFY] scripts/install_pipeline.sh
+- **Path:** `/Users/perkunas/jail/DEAP01-spec-core/scripts/install_pipeline.sh`
+- **Changes:** Update line 194's `mkdir -p` command to include `"$TARGET_DIR/docs/conops/units/conops"`, `"$TARGET_DIR/docs/conops/units/mission_intent"`, and `"$TARGET_DIR/docs/interfaces"`.
 
-### Tests
+#### [NEW] docs/OPERATOR_PROMPT_CATALOG.md
+- **Path:** `/Users/perkunas/jail/DEAP01-spec-core/docs/OPERATOR_PROMPT_CATALOG.md`
+- **Changes:** Create a new markdown file containing all standardized operator usage prompts extracted and aligned with `README.md` Section 9 and `scripts/install_pipeline.sh` Section 4.2.
+  - Section for Pipeline 0 (Workers 0A, 0B, 0C, 0D).
+  - Section for Pipeline 1 (Workers 1A, 1B, 1C, 1D).
+  - Section for Pipeline 2 and Synthesis Driver (Workers 2A, 2B).
+  - These prompts will satisfy DEAP prompt integrity checks (`tests/test_prompt_catalog_integrity.py`).
 
-#### [MODIFY] test_coverage_digest_and_witness_registry.py
-- **Path:** `/Users/perkunas/jail/DEAP01-spec-core/tests/test_coverage_digest_and_witness_registry.py`
-- Add a new test method (e.g., `test_witness_registry_ignores_python_string_literals`).
-- Construct a dummy `.py` file that includes a string literal containing `/// ObligationWitness: [OBL-PHANTOM-99]`.
-- Verify that `build_witness_registry` does not flag it as a phantom witness.
+### Issue #295 - Raw document schema ingestion
+
+#### [MODIFY] skills/spec-orchestrator/scripts/sysmlv2_ingest.py
+- **Path:** `/Users/perkunas/jail/DEAP01-spec-core/skills/spec-orchestrator/scripts/sysmlv2_ingest.py`
+- **Changes:**
+  - Define `RAW_EXTENSIONS = {".md", ".pdf", ".txt", ".doc", ".docx"}`.
+  - In `detect_format`, check if the extension is in `RAW_EXTENSIONS` and return `"raw"`.
+  - In `ingest_schema`, when `fmt == "raw"`, raise a structured, actionable SSOT reporting exception that names the raw document and indicates AST translation is required instead of raising the generic `ValueError: Unsupported schema format`.
+
+#### [MODIFY] tests/test_sysmlv2_ingest.py
+- **Path:** `/Users/perkunas/jail/DEAP01-spec-core/tests/test_sysmlv2_ingest.py`
+- **Changes:** Add unit tests to verify that passing raw `.md` or `.txt` files to the ingestor yields the structured actionable raw document handling/reporting exception, ensuring the generic `ValueError` is not thrown.
 
 ## Verification Plan
 
 ### Automated Tests
-- Run `PYTHONPATH=skills/spec-orchestrator/parity_auditor/src python3 -m unittest tests/test_coverage_digest_and_witness_registry.py` from the root directory `/Users/perkunas/jail/DEAP01-spec-core` and ensure 0 issues.
-- Run the linter `flake8` or `black --check` (or similar, if applicable) to ensure structural correctness.
+- Run `python3 -m unittest tests/test_prompt_catalog_integrity.py`
+- Run `python3 -m unittest discover -s tests -p "test_sysml*.py"`
+- Ensure all tests pass.
 
-### Manual Verification
-- Code review of the changes to confirm tokenization logic is correctly integrated and falls back properly.
+### Commit and Tracker Updates
+- When verified, commit using neutral reference `fix(scaffolding): add modular units, prompt catalog, and raw doc ingestion (refs #300, refs #295)`
+- Push to `origin/main`
+- Apply `status:fixed-resolved` label and post verification evidence comments to #300 and #295 on GitHub.
