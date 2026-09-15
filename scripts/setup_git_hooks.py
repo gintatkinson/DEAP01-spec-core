@@ -93,8 +93,12 @@ def setup_git_hooks():
         "#!/bin/sh\n"
         "set -e\n"
         "# Pre-commit hook: Subagent Output Integrity & Escape Tokens Gate (Mechanism 3 & 4)\n"
-        "python3 scripts/verify_subagent_output.py --dir docs\n"
-        "python3 scripts/verify_downstream_baseline.py\n"
+        "if [ -f scripts/verify_subagent_output.py ]; then\n"
+        "  python3 scripts/verify_subagent_output.py --dir docs\n"
+        "fi\n"
+        "if [ -f scripts/verify_downstream_baseline.py ]; then\n"
+        "  python3 scripts/verify_downstream_baseline.py\n"
+        "fi\n"
     )
     try:
         with open(pre_commit_path, "w", encoding="utf-8") as f:

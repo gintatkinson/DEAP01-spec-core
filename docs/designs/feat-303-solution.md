@@ -1,6 +1,8 @@
 ---
 issue_id: 303
-title: Tokenized Python comment scanner
+title: "Feature Implementation: Tokenized Python comment scanner"
+version: "1.0"
+date: "2026-09-15"
 ---
 
 # Feature Implementation: Tokenized Python comment scanner

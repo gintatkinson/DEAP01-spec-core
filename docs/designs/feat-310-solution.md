@@ -1,4 +1,11 @@
-# Work Package 4.1 Solution Walkthrough (Issue #310)
+---
+issue_id: 310
+title: "Feature Implementation: Closed-world port and connection parity"
+version: "1.0"
+date: "2026-09-15"
+---
+
+# Feature Implementation: Closed-world port and connection parity
 
 ## Overview
 Implemented closed-world parity validators for `ICD_01_SYSTEM_INTERFACE_MATRIX.md` against SysML ports and connections in the core compiler.

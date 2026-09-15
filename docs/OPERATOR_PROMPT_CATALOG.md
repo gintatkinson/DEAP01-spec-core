@@ -1,3 +1,9 @@
+---
+title: Operator Prompt Catalog
+version: "1.0"
+date: "2026-09-15"
+---
+
 # Operator Prompt Catalog
 
 This catalog contains the standardized operator usage prompts for the Digital Engineering Agent Platform (DEAP) lifecycle.

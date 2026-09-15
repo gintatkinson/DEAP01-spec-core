@@ -1,4 +1,11 @@
-# Solution Walkthrough: Issue #307
+---
+issue_id: 307
+title: "Feature Implementation: Closed-world mandatory standard baseline"
+version: "1.0"
+date: "2026-09-15"
+---
+
+# Feature Implementation: Closed-world mandatory standard baseline
 
 ## Overview
 Implemented the Closed-world mandatory standard baseline (WP 4.2).
