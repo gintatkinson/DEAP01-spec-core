@@ -1,6 +1,8 @@
 ---
 issue_id: 295
-title: "Solution Walkthrough: Raw Document Schema Ingestion"
+title: "Solution Walkthrough: Raw Document Schema Ingestion (Issue #295)"
+version: "1.0"
+date: "2026-09-15"
 ---
 
 # Solution Walkthrough: Raw Document Schema Ingestion (Issue #295)
