@@ -28,7 +28,7 @@ def extract_prompt_blocks(markdown_content: str, section_header_pattern: str) ->
     
     # Extract Worker 0A prompt
     match_0a = re.search(
-        r"####\s+(?:8\.3\.1|4\.2\.1)\s+Worker 0A[^\n]*\n+```text\n(.*?)```",
+        r"####\s+(?:9\.1\.1|4\.2\.1)\s+Worker 0A[^\n]*\n+```text\n(.*?)```",
         markdown_content,
         re.DOTALL,
     )
@@ -37,7 +37,7 @@ def extract_prompt_blocks(markdown_content: str, section_header_pattern: str) ->
 
     # Extract Worker 0B prompt
     match_0b = re.search(
-        r"####\s+(?:8\.3\.2|4\.2\.2)\s+Worker 0B[^\n]*\n+```text\n(.*?)```",
+        r"####\s+(?:9\.1\.2|4\.2\.2)\s+Worker 0B[^\n]*\n+```text\n(.*?)```",
         markdown_content,
         re.DOTALL,
     )
@@ -46,7 +46,7 @@ def extract_prompt_blocks(markdown_content: str, section_header_pattern: str) ->
 
     # Extract Worker 0C prompt
     match_0c = re.search(
-        r"####\s+(?:8\.3\.3|4\.2\.3)\s+Worker 0C[^\n]*\n+```text\n(.*?)```",
+        r"####\s+(?:9\.1\.3|4\.2\.3)\s+Worker 0C[^\n]*\n+```text\n(.*?)```",
         markdown_content,
         re.DOTALL,
     )
@@ -137,7 +137,7 @@ class TestPromptCatalogIntegrity(unittest.TestCase):
         with open(installer_path, "r", encoding="utf-8") as f:
             cls.installer_content = f.read()
 
-        cls.readme_prompts = extract_prompt_blocks(cls.readme_content, r"### 8\.3")
+        cls.readme_prompts = extract_prompt_blocks(cls.readme_content, r"### 9\.1")
         cls.installer_prompts = extract_prompt_blocks(cls.installer_content, r"### 4\.2")
 
     def test_all_prompts_extracted(self):
