@@ -48,6 +48,7 @@ class TestSetupGitHooksCLI(unittest.TestCase):
         script_file = self.repo / "scripts" / "setup_git_hooks.py"
         gitignore_file = self.repo / ".gitignore"
         pre_commit_file = self.repo / ".git" / "hooks" / "pre-commit"
+        commit_msg_file = self.repo / ".git" / "hooks" / "commit-msg"
 
         res = subprocess.run(
             [sys.executable, str(script_file)],
@@ -60,6 +61,9 @@ class TestSetupGitHooksCLI(unittest.TestCase):
         self.assertEqual(res.returncode, 0, f"Expected returncode 0 without arguments, got {res.returncode}\nSTDERR:\n{res.stderr}")
         self.assertTrue(pre_commit_file.exists(), "pre-commit hook was not created")
         self.assertTrue(os.access(str(pre_commit_file), os.X_OK), "pre-commit hook is not executable")
+        self.assertTrue(commit_msg_file.exists(), "commit-msg hook was not created")
+        self.assertTrue(os.access(str(commit_msg_file), os.X_OK), "commit-msg hook is not executable")
+        self.assertIn("verify_commit_messages.py", commit_msg_file.read_text(encoding="utf-8"))
         self.assertTrue(gitignore_file.exists(), ".gitignore was not created")
         gitignore_content = gitignore_file.read_text(encoding="utf-8")
         self.assertIn("Pipeline infrastructure", gitignore_content)
@@ -69,6 +73,7 @@ class TestSetupGitHooksCLI(unittest.TestCase):
         script_file = self.repo / "scripts" / "setup_git_hooks.py"
         gitignore_file = self.repo / ".gitignore"
         pre_commit_file = self.repo / ".git" / "hooks" / "pre-commit"
+        commit_msg_file = self.repo / ".git" / "hooks" / "commit-msg"
 
         res = subprocess.run(
             [sys.executable, str(script_file), "--install"],
@@ -81,6 +86,9 @@ class TestSetupGitHooksCLI(unittest.TestCase):
         self.assertEqual(res.returncode, 0, f"Expected returncode 0 with --install, got {res.returncode}\nSTDERR:\n{res.stderr}")
         self.assertTrue(pre_commit_file.exists(), "pre-commit hook was not created")
         self.assertTrue(os.access(str(pre_commit_file), os.X_OK), "pre-commit hook is not executable")
+        self.assertTrue(commit_msg_file.exists(), "commit-msg hook was not created")
+        self.assertTrue(os.access(str(commit_msg_file), os.X_OK), "commit-msg hook is not executable")
+        self.assertIn("verify_commit_messages.py", commit_msg_file.read_text(encoding="utf-8"))
         self.assertTrue(gitignore_file.exists(), ".gitignore was not created")
         gitignore_content = gitignore_file.read_text(encoding="utf-8")
         self.assertIn("Pipeline infrastructure", gitignore_content)
@@ -89,6 +97,7 @@ class TestSetupGitHooksCLI(unittest.TestCase):
         """Calling setup_git_hooks.py with --help must print usage and exit 0 without side effects."""
         script_file = self.repo / "scripts" / "setup_git_hooks.py"
         pre_commit_file = self.repo / ".git" / "hooks" / "pre-commit"
+        commit_msg_file = self.repo / ".git" / "hooks" / "commit-msg"
 
         res = subprocess.run(
             [sys.executable, str(script_file), "--help"],
@@ -102,6 +111,7 @@ class TestSetupGitHooksCLI(unittest.TestCase):
         self.assertTrue("usage:" in res.stdout.lower() or "usage:" in res.stderr.lower())
         self.assertTrue("--install" in res.stdout or "--install" in res.stderr)
         self.assertFalse(pre_commit_file.exists(), "pre-commit hook should not have been created on --help")
+        self.assertFalse(commit_msg_file.exists(), "commit-msg hook should not have been created on --help")
 
     def test_invalid_flag_exits_code_2(self):
         """Calling setup_git_hooks.py with an invalid flag must exit with returncode 2."""

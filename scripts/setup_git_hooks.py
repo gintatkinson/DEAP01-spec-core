@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 Clean up Git hooks and whitelist pipeline infrastructure directories.
-Removes pre-commit and pre-push hooks to prevent auto-triggered compiler runs.
+Installs pre-commit hook and commit-msg hook (enforcing .pipeline/constitution.md:266).
+Removes pre-push hooks to prevent auto-triggered compiler runs.
 Appends whitelist rules to .gitignore and stages pipeline directories.
 """
 
@@ -102,6 +103,21 @@ def setup_git_hooks():
         print(f"Error setting pre-commit hook: {e}", file=sys.stderr)
         errored = True
 
+    commit_msg_path = os.path.join(hooks_dir, "commit-msg")
+    commit_msg_script = (
+        "#!/bin/sh\n"
+        "# Commit-msg hook: Reject auto-closing trigger keywords (.pipeline/constitution.md:266)\n"
+        'python3 scripts/verify_commit_messages.py --msg-file "$1"\n'
+    )
+    try:
+        with open(commit_msg_path, "w", encoding="utf-8") as f:
+            f.write(commit_msg_script)
+        os.chmod(commit_msg_path, 0o755)
+        print(f"Successfully installed Git commit-msg hook: {commit_msg_path}")
+    except Exception as e:
+        print(f"Error setting commit-msg hook: {e}", file=sys.stderr)
+        errored = True
+
     pre_push_path = os.path.join(hooks_dir, "pre-push")
     if os.path.exists(pre_push_path):
         try:
@@ -115,6 +131,10 @@ def setup_git_hooks():
         sys.exit(1)
 
     _whitelist_infrastructure(repo_root)
+
+
+# Alias install_hooks to setup_git_hooks for API parity
+install_hooks = setup_git_hooks
 
 
 def main():
