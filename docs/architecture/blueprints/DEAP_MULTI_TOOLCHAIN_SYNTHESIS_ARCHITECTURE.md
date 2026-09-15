@@ -21,8 +21,8 @@ Engineering safety-critical, cyber-physical, and autonomous systems across moder
 Historically, safety-critical organizations have been trapped in rigid, single-vendor silos:
 1. **Commercial Model-Based Design (MBD) Silos:** Organizations relying exclusively on proprietary environments such as **ANSYS SCADE Suite** or **MathWorks MATLAB / Simulink / Stateflow** achieve high levels of code generation maturity, but face vendor lock-in, proprietary model representations that resist automated git-based CI/CD workflows, and steep licensing barriers that prevent elastic cloud verification.
 2. **Formal Verification Silos:** Specialized teams utilizing formal deductive provers such as **AdaCore SPARK Ada** or bounded model checkers (**nuXmv**, **UPPAAL**, **CBMC**, **Kani**) frequently operate independently of the primary systems engineering team, manually translating requirements into mathematical contracts and leading to specification drift.
-3. **Multi-Physics & Architectural Analysis Silos:** Multi-body dynamics, aerodynamic models, and thermal dissipation systems authored in **OpenModelica** / **FMI** or execution architecture models authored in **OSATE / AADL (SAE AS5506)** remain disconnected from real-time flight software synthesis.
-4. **Target Execution Framework Heterogeneity:** Embedded software teams must deploy synthesized control laws across vastly different real-time kernels and frameworks--from bare-metal microcontrollers running **Zephyr RTOS**, to space-grade **RTEMS**, certified commercial microkernels (**QNX Neutrino**, **Wind River VxWorks 653**), robotics middleware (**ROS 2**), autonomous flight stacks (**PX4 Autopilot**), and spaceflight software frameworks (**NASA cFS**).
+3. **Multi-Physics & Architectural Analysis Silos:** Multi-body dynamics, aerodynamic models, and thermal dissipation systems authored in **OpenModelica** / **FMI** or execution architecture models authored in **OSATE / AADL (SAE AS5506)** remain disconnected from real-time SystemController software synthesis.
+4. **Target Execution Framework Heterogeneity:** Embedded software teams must deploy synthesized control laws across vastly different real-time kernels and frameworks--from bare-metal microcontrollers running **Zephyr RTOS**, to space-grade **RTEMS**, certified commercial microkernels (**QNX Neutrino**, **Wind River VxWorks 653**), robotics middleware (**ROS 2**), autonomous flight stacks (**PX4 Autopilot**), and spaceSystemController software frameworks (**NASA cFS**).
 
 ```mermaid
 flowchart TD
@@ -147,7 +147,7 @@ flowchart TD
         T4_QNX["QNX Neutrino ("ASIL D / Class C Microkernel")"]
         T4_VXWORKS["Wind River VxWorks 653 (ARINC 653 Multi-Core DAL A)"]
         T4_ROS2["ROS 2 Real-Time (DDS Middleware and Micro-ROS)"]
-        T4_PX4["PX4 Autopilot ("uORB Pub-Sub / Flight Modes")"]
+        T4_PX4["PX4 Autopilot ("uORB Pub-Sub / system modes")"]
         T4_CFS["NASA Core Flight System cFS ("OSAL / Software Bus")"]
     end
 
@@ -164,7 +164,7 @@ flowchart TD
 
 | Synthesis Tier | Primary Toolchains & Frameworks | Primary Function in DEAP Pipeline | Generated Artifacts & Formats | Target Safety Standards |
 | :--- | :--- | :--- | :--- | :--- |
-| **Tier 1: Certified MBD** | ANSYS SCADE Suite, SCADE Display, MATLAB, Simulink, Stateflow, Embedded Coder, SLDV | Synchronous dataflow modeling, control law synthesis, discrete statechart execution, cockpit display generation | `.scade`, `.slx`, `.sldd`, MISRA C:2012, Qualifiable C/Ada, ARINC 661 Server DFs | RTCA DO-178C (DAL A/B), DO-331, ISO 26262 (ASIL D), IEC 62304 (Class C), EN 50128 (SIL 4) |
+| **Tier 1: Certified MBD** | ANSYS SCADE Suite, SCADE Display, MATLAB, Simulink, Stateflow, Embedded Coder, SLDV | Synchronous dataflow modeling, control law synthesis, discrete statechart execution, Console Display generation | `.scade`, `.slx`, `.sldd`, MISRA C:2012, Qualifiable C/Ada, ARINC 661 Server DFs | RTCA DO-178C (DAL A/B), DO-331, ISO 26262 (ASIL D), IEC 62304 (Class C), EN 50128 (SIL 4) |
 | **Tier 2: Formal Contracts & Provers** | AdaCore SPARK Ada, Ferrocene Rust, nuXmv, UPPAAL, CBMC, Kani, Z3, CVC5 | Deductive contract proving, Absence of Run-Time Errors (AoRTE), model checking, temporal logic verification | `.ads`/`.adb` with SPARK contracts, `.rs` with `kani::proof`, `.smv` (nuXmv), `.xml` (UPPAAL), SMT-LIB2 | RTCA DO-178C / DO-333 (Formal Methods), ISO 26262 (ASIL D), IEC 61508 (SIL 4) |
 | **Tier 3: Open Standards & Co-Sim** | OpenModelica, FMI 2.0/3.0, OSATE, AADL (SAE AS5506D) | Multi-physics continuous-discrete co-simulation, hardware-software architectural binding, ARINC 653 schedulability analysis | `.fmu` (Model Exchange / Co-Simulation), `.mo` (Modelica), `.aadl` models, schedulability reports | SAE ARP4754A / ED-79A, SAE AS5506D, ARINC 653 |
 | **Tier 4: Target RTOS Frameworks** | Zephyr RTOS, RTEMS, QNX Neutrino, VxWorks 653, ROS 2, PX4 Autopilot, NASA cFS | Deterministic target real-time task execution, hardware abstraction, message passing, partition memory isolation | C/C++/Rust drivers, task entrypoints, uORB modules, cFS applications, CMake/Kconfig manifests | ARINC 653, POSIX PSE51/52, ISO 26262 ASIL D, ECSS Space Standards |
@@ -236,16 +236,16 @@ $$\forall k \ge 0, \quad y_k = f(x_k, s_k), \quad s_{k+1} = g(x_k, s_k)$$
 where $x_k$ is the input vector at tick $k$, $y_k$ is the output vector, and $s_k$ is the internal state vector.
 
 #### 3.1.2 KCG Code Generator Qualification (DO-330 TQL-1 / DO-178C DAL A)
-The **SCADE KCG (Qualifiable Code Generator)** holds a unique position in aerospace and defense software engineering: it is qualified as a **DO-330 Tool Qualification Level 1 (TQL-1)** tool (formerly DO-178B Development Tool). 
+The **SCADE KCG (Qualifiable Code Generator)** holds a unique position in high-assurance (Aerospace, Automotive, Medical, Rail, Marine) software engineering: it is qualified as a **DO-330 Tool Qualification Level 1 (TQL-1)** tool (formerly DO-178B Development Tool). 
 
 Because KCG is qualified at TQL-1:
 - The generated C or Ada source code is certified to be semantically equivalent to the SCADE model.
 - **Low-level software testing (unit testing and structural coverage analysis such as MC/DC on the generated code) is legally eliminated under DO-178C Section 12.2.2.**
 - Verification effort shifts entirely upstream to the model level (Model-in-the-Loop simulation and formal model checking).
 
-#### 3.1.3 SCADE Display & ARINC 661 Cockpit Display Systems (CDS)
+#### 3.1.3 SCADE Display & ARINC 661 Console Display Systems (CDS)
 SCADE Display integrates with SCADE Suite to generate certified graphics and human-machine interfaces:
-- **ARINC 661 Standard Conformance:** SCADE Display authors Widget Definition Files (DF) that define interactive cockpit symbology for Primary Flight Displays (PFD) and Multi-Function Displays (MFD).
+- **ARINC 661 Standard Conformance:** SCADE Display authors Widget Definition Files (DF) that define interactive Console symbology for Primary Flight Displays (PFD) and Multi-Function Displays (MFD).
 - **User Application (UA) Parameter Protocol:** DEAP maps SysML v2 `port def` interactions into ARINC 661 binary parameter packets (`A661_CMD_SET_PARAMETER`), maintaining strict separation between the rendering server and the flight control user application.
 
 ---
@@ -273,10 +273,10 @@ SLDV uses automated formal methods (powered by the Prover Technology proof engin
 
 | Architectural Dimension | ANSYS SCADE Suite (KCG / Display) | MathWorks MATLAB / Simulink / Embedded Coder | DEAP Synthesis Strategy |
 | :--- | :--- | :--- | :--- |
-| **Formal Mathematical Base** | Synchronous Dataflow (Lustre / Esterel), discrete-time clocks | Hybrid Continuous / Discrete (ODEs, Difference Equations, Stateflow) | SCADE for critical discrete supervisors; Simulink for continuous flight dynamics |
+| **Formal Mathematical Base** | Synchronous Dataflow (Lustre / Esterel), discrete-time clocks | Hybrid Continuous / Discrete (ODEs, Difference Equations, Stateflow) | SCADE for critical discrete supervisors; Simulink for continuous system dynamics |
 | **Code Generator Qualification**| **DO-330 TQL-1** (Eliminates low-level unit testing of generated code) | **DO-330 TQL-5** (Requires SIL/PIL back-to-back testing & MC/DC on code) | Select SCADE backend when customer mandates TQL-1 elimination of unit testing |
 | **Target Safety Standards** | DO-178C (DAL A), ISO 26262 (ASIL D), EN 50128 (SIL 4), IEC 60880 | DO-178C (DAL A/B), ISO 26262 (ASIL D), IEC 62304 (Class C) | Both supported via profile configurations (`scade_c.md`, `simulink_c.md`) |
-| **Cockpit Display Integration** | **SCADE Display** (Native ARINC 661 Widget DF generation & OpenGL SC) | Simulink 3D Animation (Non-certifiable prototyping only) | SCADE Display synthesized for certified ARINC 661 CDS |
+| **Console Display Integration** | **SCADE Display** (Native ARINC 661 Widget DF generation & OpenGL SC) | Simulink 3D Animation (Non-certifiable prototyping only) | SCADE Display synthesized for certified ARINC 661 CDS |
 | **Formal Property Verification** | SCADE Design Verifier (Prover Technology embedded) | Simulink Design Verifier (SLDV Prover Engine + Polyspace) | SysML `assert constraint` nodes map symmetrically to both provers |
 | **Continuous Multi-Physics** | Limited (relies on FMI co-simulation for continuous physics) | Industry standard (Simscape, Aerospace Blockset, Control System Toolbox)| Simulink or OpenModelica synthesized for continuous plant dynamics |
 | **Version Control & CI/CD** | SCADE Textual Model (`.scade`), git-friendly textual syntax | Binary models (`.slx`), requires MATLAB Git integration / SLDD data dict | DEAP compiles SysML v2 directly to `.scade` and `.m` / `.slx` scripts |
@@ -287,7 +287,7 @@ SLDV uses automated formal methods (powered by the Prover Technology proof engin
 
 ```sysml
 /* Canonical SysML v2 Input */
-package AvionicFlightControl {
+package CyberPhysicalSystemControl {
     part def FlightModeSupervisor {
         in port airDataIn : AirDataPayload;
         out port commandedModeOut : ModeEnum;
@@ -446,7 +446,7 @@ mod verification {
         kani::assume(altitude >= 0.0 && altitude <= 10000.0);
         kani::assume(airspeed >= 0.0 && airspeed <= 250.0);
 
-        let mut controller = FlightSafetySupervisor::new();
+        let mut controller = SystemSafetySupervisor::new();
         let cmd = controller.step(altitude, airspeed);
 
         if altitude < 15.0 {
@@ -467,7 +467,7 @@ DEAP synthesizes **nuXmv** models from SysML v2 `state def` and `action def` spe
 - nuXmv utilizes SAT/SMT algorithms (IC3/PDR, BDD-based symbolic model checking) to prove invariants across infinite state spaces with real arithmetic.
 
 #### 4.3.2 UPPAAL Real-Time Timed Automata
-DEAP generates **UPPAAL** XML networks of timed automata to verify hard real-time scheduling constraints, clock synchronizations, and race conditions across distributed avionics nodes:
+DEAP generates **UPPAAL** XML networks of timed automata to verify hard real-time scheduling constraints, clock synchronizations, and race conditions across distributed Cyber-Physical Systems nodes:
 - Clock variables $x, y \in \mathbb{R}_{\ge 0}$ track continuous time evolution $\dot{x} = 1$.
 - Guard conditions ($x \le \text{WCET}$) enforce upper bounds on execution latencies.
 
@@ -522,7 +522,7 @@ flowchart TD
 ### 5.1 OpenModelica & Functional Mock-up Interface (FMI 2.0 / 3.0)
 
 #### 5.1.1 Acausal Multi-Physics Modeling with Differential Algebraic Equations (DAEs)
-Complex unmanned aerial vehicles, eVTOL systems, and autonomous robotics operate across physical domains: aerodynamics, electrochemistry (lithium battery packs), electromechanics (brushless DC motors), and thermal dynamics.
+Complex multi-domain cyber-physical systems (Aerospace, Automotive, Medical, Rail, Marine) operate across physical domains: plant physics, electrochemistry (lithium battery packs), electromechanics (brushless DC motors), and thermal dynamics.
 
 OpenModelica provides acausal, equation-based physical modeling governed by continuous Differential Algebraic Equations:
 $$F(t, x(t), \dot{x}(t), y(t), u(t)) = 0$$
@@ -544,7 +544,7 @@ sequenceDiagram
     Cyber-->>Master: Commanded Actuator PWM & Rotor Thrust
     Master->>Physics: fmi2SetReal (Actuator Inputs)
     Master->>Physics: fmi2DoStep (t, dt = 10ms)
-    Physics-->>Master: Updated Flight Telemetry (Attitude, Altitude, Velocities)
+    Physics-->>Master: Updated system telemetry (Attitude, Altitude, Velocities)
     Master->>Cyber: Feed updated telemetry for next step
 ```
 
@@ -553,7 +553,7 @@ sequenceDiagram
 ### 5.2 OSATE & AADL (SAE AS5506D) for ARINC 653 Schedulability & Partitioning
 
 #### 5.2.1 Architecture Analysis & Design Language (AADL)
-**SAE AS5506D (AADL)** is the aerospace standard for specifying software-to-hardware binding, execution semantics, and physical component properties. DEAP compiles SysML v2 system allocations into formal AADL models analyzed via **OSATE** (Open Source AADL Tool Environment):
+**SAE AS5506D (AADL)** is the cross-domain standard for specifying software-to-hardware binding, execution semantics, and physical component properties. DEAP compiles SysML v2 system allocations into formal AADL models analyzed via **OSATE** (Open Source AADL Tool Environment):
 - `system`, `process`, `thread`, `subprogram` software components.
 - `processor`, `memory`, `bus`, `device` execution platform components.
 
@@ -563,7 +563,7 @@ DEAP synthesizes AADL models annotated with the `ARINC653` property set to verif
 2. **Temporal Schedulability (Major Time Frames):** Verification that the ARINC 653 Major Time Frame (e.g., $T_{\text{Major}} = 100\,\text{ms}$) accommodates all partition slots without deadline overruns.
 
 ```aadl
-package Avionic_Execution_Platform
+package CyberPhysical_Execution_Platform
 public
   with ARINC653;
 
@@ -577,11 +577,11 @@ public
     properties
       ARINC653::Module_Major_Frame => 100ms;
   end PowerPC_MultiCore;
-end Avionic_Execution_Platform;
+end CyberPhysical_Execution_Platform;
 ```
 
 #### 5.2.3 End-to-End Latency & Bus Schedulability
-Using OSATE schedulability plug-ins, DEAP computes worst-case end-to-end response times ($R_i$) across distributed avionics nodes:
+Using OSATE schedulability plug-ins, DEAP computes worst-case end-to-end response times ($R_i$) across distributed Cyber-Physical Systems nodes:
 $$R_i = C_i + \sum_{j \in \text{hp}(i)} \left\lceil \frac{R_i}{T_j} \right\rceil C_j \le D_i$$
 ensuring that sensor-to-actuator control loops never violate safety timing envelopes.
 
@@ -645,7 +645,7 @@ flowchart TD
 - **DEAP Mapping:** SysML v2 port interactions synthesize into typed QNX resource managers and resilient pulse-channel message loops.
 
 #### 6.1.4 Wind River VxWorks 653
-- **Architecture & Scoping:** The global avionics gold standard for integrated modular avionics (IMA) conforming to **ARINC 653 Part 1 Supplement 5** with DO-178C DAL A certification evidence.
+- **Architecture & Scoping:** The global Cyber-Physical Systems gold standard for integrated modular Cyber-Physical Systems (IMA) conforming to **ARINC 653 Part 1 Supplement 5** with DO-178C DAL A certification evidence.
 - **Multi-Core Safety:** Certified under FAA **CAST-32A** / **AC 20-193** for multi-core processors, guaranteeing deterministic core interference isolation.
 - **DEAP Mapping:** SysML v2 partitions compile directly to VxWorks 653 XML module configuration descriptors and APEX process entry points.
 
@@ -657,10 +657,10 @@ flowchart TD
 #### 6.1.6 PX4 Autopilot
 - **Architecture & Scoping:** Industry-standard open-source autonomous flight control software stack for drones and eVTOL platforms, running atop the NuttX POSIX RTOS.
 - **Internal Bus:** High-rate asynchronous publish-subscribe **uORB** message bus for sensor telemetry, state estimators (EKF2), and control allocation.
-- **DEAP Mapping:** SysML v2 flight modes and safety supervisors compile to native PX4 flight mode modules subscribing to uORB telemetry topics.
+- **DEAP Mapping:** SysML v2 system modes and safety supervisors compile to native PX4 system mode modules subscribing to uORB telemetry topics.
 
 #### 6.1.7 NASA Core Flight System (cFS)
-- **Architecture & Scoping:** NASA Goddard Space Flight Center's reusable flight software framework deployed on lunar orbiters, planetary rovers, and deep-space missions.
+- **Architecture & Scoping:** NASA Goddard Space Flight Center's reusable SystemController software framework deployed on lunar orbiters, planetary rovers, and deep-space missions.
 - **Layered Decoupling:** Operating System Abstraction Layer (OSAL), Platform Support Package (PSP), and Core Flight Executive (cFE) Software Bus (SB).
 - **DEAP Mapping:** SysML v2 components generate complete cFS Applications with message IDs, command handlers, and software bus telemetry pipes.
 

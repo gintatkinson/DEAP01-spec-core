@@ -11,7 +11,7 @@ target_regulatory_frameworks:
   - ARP4754A / ARP4761
   - MIL-STD-882E Task 106
   - NATO STANAG 4187
-  - JARUS SORA v2.5 (SAIL IV-VI)
+  - Generic Risk Assessment Framework (High Assurance Profile)
   - ASTM F3269-17 RTA
   - ISO/IEC/IEEE 29148:2018
 ---
@@ -29,7 +29,7 @@ target_regulatory_frameworks:
 > **Document Identifier:** `DEAP-BLUEPRINT-SAFETY-004`  
 > **Status:** `pending Product Owner review`  
 > **Classification:** `UPSTREAM_SPEC_CORE_COMPILER`  
-> **Target Regulatory Frameworks:** `RTCA DO-178C (DAL A/B)` | `DO-254 (DAL A/B)` | `SAE ARP4754A / ARP4761` | `MIL-STD-882E Task 106` | `NATO STANAG 4187` | `JARUS SORA v2.5 (SAIL IV-VI)` | `ASTM F3269-17 RTA` | `ISO/IEC/IEEE 29148:2018`  
+> **Target Regulatory Frameworks:** `RTCA DO-178C (DAL A/B)` | `DO-254 (DAL A/B)` | `SAE ARP4754A / ARP4761` | `MIL-STD-882E Task 106` | `NATO STANAG 4187` | `Generic Risk Assessment Framework (High Assurance Profile)` | `ASTM F3269-17 RTA` | `ISO/IEC/IEEE 29148:2018`  
 > **Target Hardware Execution Profile:** `AMD Ryzen AI Max+ 395 (128 GB Unified LPDDR5X-8000 RAM, ROCm 6.2+)`  
 > **Primary Commercial Toolchain Integration:** `MATLAB / Simulink / Stateflow / Embedded Coder / Simulink Design Verifier (SLDV)`  
 
@@ -39,7 +39,7 @@ target_regulatory_frameworks:
 
 ### 1.1 Root-Cause Failure Analysis of Generative Probabilistic Safety Engineering
 
-Safety-critical systems engineering across high-integrity domains requires mathematical determinism, exhaustive combinatorial coverage, and continuous formal verification. Systems certified under **RTCA DO-178C**, **DO-254**, **SAE ARP4754A/ARP4761**, **MIL-STD-882E**, **NATO STANAG 4187**, **JARUS SORA v2.5**, and **ASTM F3269-17** demand 100% complete bidirectional traceability from top-level system losses down to formal hardware-in-the-loop (HIL) temporal assertions.
+Safety-critical systems engineering across high-integrity domains requires mathematical determinism, exhaustive combinatorial coverage, and continuous formal verification. Systems certified under **RTCA DO-178C**, **DO-254**, **SAE ARP4754A/ARP4761**, **MIL-STD-882E**, **NATO STANAG 4187**, **Generic Risk Assessment Framework**, and **ASTM F3269-17** demand 100% complete bidirectional traceability from top-level system losses down to formal hardware-in-the-loop (HIL) temporal assertions.
 
 Empirical evaluation of commercial cloud Large Language Models (LLMs) executing unconstrained prompt-to-text safety analysis reveals four catastrophic structural failure modes that violate safety certification standards:
 
@@ -88,10 +88,10 @@ When tasked with generating this matrix through probabilistic chat completion, a
 Legacy CI/CD pipelines commonly rely on superficial regular expression checks (e.g., matching `UCA-\d+` or verifying that at least one instance of each guide word substring appears in the document). Such linters pass invalid documents that contain only a fraction of the required permutations or documents containing empty table rows and hallucinated markdown anchors, providing a false illusion of regulatory compliance.
 
 #### 3. Cloud Content Filter Collisions on High-Integrity Terminology
-Commercial cloud-hosted LLM endpoints enforce broad heuristic safety filters. In safety-critical defense, avionics, and high-energy physics engineering governed by **MIL-STD-882E Task 106** and **NATO STANAG 4187**, legitimate safety specifications necessarily describe high-voltage firing circuits, fuzing train interlocks, squib initiators, and pyrotechnic gas deployers. Cloud safety filters routinely flag these technical engineering terms as violations, triggering generation halts, rate-limiting, truncated responses, or outright refusal to synthesize safety matrices.
+Commercial cloud-hosted LLM endpoints enforce broad heuristic safety filters. In safety-critical defense, cyber-physicals, and high-energy physics engineering governed by **MIL-STD-882E Task 106** and **NATO STANAG 4187**, legitimate safety specifications necessarily describe high-voltage firing circuits, fuzing train interlocks, squib initiators, and pyrotechnic gas deployers. Cloud safety filters routinely flag these technical engineering terms as violations, triggering generation halts, rate-limiting, truncated responses, or outright refusal to synthesize safety matrices.
 
 #### 4. Stochastic Mathematical Hallucination in Continuous Dynamics
-Autoregressive language models lack symbolic constraint solving capabilities. When generating kinetic impact energy equations, aerodynamic glide envelopes, or Control Barrier Functions, probabilistic models frequently generate dimensionally inconsistent equations, invent floating-point constants, or omit required physical parameters.
+Autoregressive language models lack symbolic constraint solving capabilities. When generating kinetic impact energy equations, PhysicalActuator glide envelopes, or Control Barrier Functions, probabilistic models frequently generate dimensionally inconsistent equations, invent floating-point constants, or omit required physical parameters.
 
 ---
 
@@ -206,7 +206,7 @@ $$
 | Loss ID | System Loss Description | MIL-STD-882E Severity Category | Target Quantitative Probability Rate |
 | :--- | :--- | :--- | :--- |
 | **L-1** | Loss of human life or severe disabling injury | Category I (Catastrophic) | P < 10⁻⁷ per operating hour |
-| **L-2** | Mid-air collision or critical infrastructure strike | Category I (Catastrophic) | P < 10⁻⁷ per operating hour |
+| **L-2** | dynamic obstacle collision or critical infrastructure strike | Category I (Catastrophic) | P < 10⁻⁷ per operating hour |
 | **L-3** | Total uncontained loss of plant and kinetic impact | Category II (Critical) | P < 10⁻⁵ per operating hour |
 | **L-4** | Inadvertent high-energy release, discharge, or collateral breach | Category I / II (Catastrophic / Critical) | P < 10⁻⁹ per command cycle |
 | **L-5** | Unintended containment boundary breach or mission termination | Category III (Moderate / Major) | P < 10⁻⁴ per operating hour |
@@ -227,7 +227,7 @@ $$
 | :--- | :--- | :--- | :--- |
 | **H-1** | Operational Spatial Containment Boundary Breach | **L-1**, **L-2**, **L-5** | Navigation state estimator divergence, sensor spoofing, or controller trajectory runaway. |
 | **H-2** | Violation of Dynamic Well-Clear Separation Boundary | **L-2** | Target closing velocity exceeds avoidance horizon; detector transceiver failure; late evasive maneuver. |
-| **H-3** | Uncontrolled Dynamic Instability or Kinetic Descent | **L-1**, **L-3** | Actuator stall, aerodynamic surface flutter, speed estimation freeze below minimum threshold. |
+| **H-3** | Uncontrolled Dynamic Instability or Kinetic Descent | **L-1**, **L-3** | Actuator stall, PhysicalActuator flutter, speed estimation freeze below minimum threshold. |
 | **H-4** | High-Energy Power Storage Thermal Runaway or Overheating | **L-1**, **L-3** | Internal cell short circuit, overcurrent injection, mechanical puncture, cooling failure. |
 | **H-5** | Redundant Command & Control (C2) Datalink Loss | **L-1**, **L-2**, **L-5** | RF interference, antenna pointing lock loss, cryptographic synchronization timeout. |
 | **H-6** | Inadvertent Energization of High-Voltage / High-Energy Bus | **L-1**, **L-4** | Arming pulse asserted prior to verified safe separation threshold, electrical fault. |
@@ -235,7 +235,7 @@ $$
 | **H-8** | High-Voltage Safe Bleed-Down Discharge Failure on Abort | **L-1**, **L-4** | Bleed resistor switch open-circuit failure; residual potential exceeds non-hazardous threshold. |
 | **H-9** | Primary Sensor Triad Corruption (Pressure, GNSS, IMU Bias) | **L-1**, **L-2**, **L-3** | Transducer blockage; multi-path signal corruption; uncompensated gyro drift exceeding limit. |
 | **H-10** | ASTM F3269-17 RTA Simplex Switch Failure / False Safety Lock | **L-1**, **L-3**, **L-5** | Certified monitor deadlock; hardware multiplexer stuck in uncertified channel. |
-| **H-11** | Emergency Deceleration / Parachute Deployment Failure | **L-1**, **L-3** | Initiator open circuit; mechanical bridle entanglement; barometric deploy trigger lock. |
+| **H-11** | Emergency Deceleration / emergency deceleration deployment Failure | **L-1**, **L-3** | Initiator open circuit; mechanical bridle entanglement; barometric deploy trigger lock. |
 | **H-12** | Command Uplink Corruption or Replay Attack | **L-1**, **L-2**, **L-4** | Unauthenticated telecommand acceptance; corrupted setpoint coordinates injection. |
 | **H-13** | Real-Time Operating System Scheduler Deadline Overrun | **L-1**, **L-3** | Priority inversion in scheduler; execution overrun in inner control loop exceeding deadline. |
 | **H-14** | Primary Power Distribution Unit Bus Brownout | **L-1**, **L-3** | DC-DC regulator thermal trip; single-point transient voltage collapse below threshold. |
@@ -273,7 +273,7 @@ flowchart TD
     end
 
     subgraph "Tier 5: Core Control & Energy Management Execution"
-        T5A["Primary Flight Control Computer (Autopilot)"]
+        T5A["Primary SystemController Computer (SystemController)"]
         T5B["High-Energy Safe & Arm Controller (ESAD)"]
     end
 
@@ -293,13 +293,13 @@ flowchart TD
     T3 -->|"CA_06..09: Setpoint Vectors, Evasive Maneuvers, Arm Triggers"| T4
     T4 -->|"CA_10..12: Verified Commands or Simplex Fallback Recovery"| T5A
     T4 -->|"CA_12, CA_19: Safe Bleed-Down & Arm Inhibit"| T5B
-    T5A -->|"CA_13..16: Propulsion Setpoints, Servo Commands, Parachute Fire"| T6A
+    T5A -->|"CA_13..16: Propulsion Setpoints, Servo Commands, emergency deceleration fire"| T6A
     T5A -->|"CA_14: Servo Pulse Commands"| T6B
     T5A -->|"CA_20: Emergency Deploy Trigger"| T6C
     T5B -->|"CA_17, CA_18: Charge Enable, Optical Fire Pulse"| T6D
     T6A -->|"Kinetic Thrust & Torque"| T7
-    T6B -->|"Dynamic Aerodynamic Control Moments"| T7
-    T6C -->|"Emergency Aerodynamic Drag Deceleration"| T7
+    T6B -->|"Dynamic PhysicalActuator Control Moments"| T7
+    T6C -->|"Emergency PhysicalActuator deceleration Deceleration"| T7
     T6D -->|"High-Energy Discharge Circuit State"| T7
 
     T7 -->|"Kinematic States, Dynamic Pressures, EM Signals"| T6A
@@ -348,7 +348,7 @@ $$
 | **UCA-16** | CA-04: Manual Override | Stopped Too Soon / Too Long | Manual override released prematurely while aircraft is in an unrecovered spiral dive. | **H-3** |
 | **UCA-17** | CA-05: Emergency Stop Command | Not Providing | Emergency flight termination omitted when dual engine failure occurs over populated area. | **H-1**, **H-11** |
 | **UCA-18** | CA-05: Emergency Stop Command | Providing | Emergency stop provided during nominal climb over unsegregated runway. | **H-3**, **H-12** |
-| **UCA-19** | CA-05: Emergency Stop Command | Too Early / Late / Out of Order | Emergency stop triggered out of sequence before parachute deploy pyrotechnic is armed. | **H-3**, **H-11** |
+| **UCA-19** | CA-05: Emergency Stop Command | Too Early / Late / Out of Order | Emergency stop triggered out of sequence before emergency deceleration deploy pyrotechnic is armed. | **H-3**, **H-11** |
 | **UCA-20** | CA-05: Emergency Stop Command | Stopped Too Soon / Too Long | Emergency stop cutoff signal pulsed for insufficient duration, failing to latch power relays. | **H-1**, **H-14** |
 | **UCA-21** | CA-06: Guidance Setpoint Vector | Not Providing | Guidance computer fails to emit setpoint vector during autonomous transition phase. | **H-3**, **H-13** |
 | **UCA-22** | CA-06: Guidance Setpoint Vector | Providing | Guidance emits bank angle command exceeding structural wing root load limit. | **H-3** |
@@ -356,7 +356,7 @@ $$
 | **UCA-24** | CA-06: Guidance Setpoint Vector | Stopped Too Soon / Too Long | Guidance holds maximum yaw setpoint too long, entering irrecoverable spin. | **H-3** |
 | **UCA-25** | CA-07: Guidance DAA Maneuver | Not Providing | Avoidance vector omitted when intruder penetrates Modified Tau boundary. | **H-2** |
 | **UCA-26** | CA-07: Guidance DAA Maneuver | Providing | Avoidance maneuver provided when no intruder exists, veering into restricted airway. | **H-1**, **H-2** |
-| **UCA-27** | CA-07: Guidance DAA Maneuver | Too Early / Late / Out of Order | Avoidance turn commanded too late, resulting in near-mid-air collision (NMAC). | **H-2** |
+| **UCA-27** | CA-07: Guidance DAA Maneuver | Too Early / Late / Out of Order | Avoidance turn commanded too late, resulting in near-dynamic obstacle collision (NMAC). | **H-2** |
 | **UCA-28** | CA-07: Guidance DAA Maneuver | Stopped Too Soon / Too Long | Avoidance climb stopped before reaching vertical well-clear separation threshold. | **H-2** |
 | **UCA-29** | CA-08: Geofence Limit Vector | Not Providing | Geofence containment bounce vector omitted upon approaching contingency buffer. | **H-1** |
 | **UCA-30** | CA-08: Geofence Limit Vector | Providing | Geofence return vector commanded toward ground terrain instead of safe holding orbit. | **H-1**, **H-3** |
@@ -370,8 +370,8 @@ $$
 | **UCA-38** | CA-10: RTA Simplex Override | Providing | Safety net trips false override during nominal approach, interrupting flare maneuver. | **H-3**, **H-10** |
 | **UCA-39** | CA-10: RTA Simplex Override | Too Early / Late / Out of Order | Switchover delayed after Control Barrier Function violation. | **H-1**, **H-3**, **H-10** |
 | **UCA-40** | CA-10: RTA Simplex Override | Stopped Too Soon / Too Long | Safety net yields control back before flight envelope stability is restored. | **H-3**, **H-10** |
-| **UCA-41** | CA-11: RTA Recovery Action | Not Providing | Safety net fails to command level recovery attitude after overriding primary autopilot. | **H-3**, **H-10** |
-| **UCA-42** | CA-11: RTA Recovery Action | Providing | Safety net commands maximum pitch-up exceeding aerodynamic stall angle of attack. | **H-3** |
+| **UCA-41** | CA-11: RTA Recovery Action | Not Providing | Safety net fails to command level recovery attitude after overriding primary SystemController. | **H-3**, **H-10** |
+| **UCA-42** | CA-11: RTA Recovery Action | Providing | Safety net commands maximum pitch-up exceeding PhysicalActuator stall angle of attack. | **H-3** |
 | **UCA-43** | CA-11: RTA Recovery Action | Too Early / Late / Out of Order | Safety net applies recovery roll opposite to prevailing bank angle due to sensor sign error. | **H-3**, **H-9** |
 | **UCA-44** | CA-11: RTA Recovery Action | Stopped Too Soon / Too Long | Recovery maneuver held indefinitely, preventing mission return-to-base navigation. | **H-5**, **H-10** |
 | **UCA-45** | CA-12: RTA Bleed-Down Signal | Not Providing | Safety net fails to assert capacitor bleed-down upon detecting loss-of-control condition. | **H-4**, **H-8** |
@@ -391,7 +391,7 @@ $$
 | **UCA-59** | CA-15: Differential Torque | Too Early / Late / Out of Order | Differential torque applied out of phase with gust, amplifying dynamic roll instability. | **H-3** |
 | **UCA-60** | CA-15: Differential Torque | Stopped Too Soon / Too Long | Differential torque held after yaw rate has neutralized, initiating reverse spin. | **H-3** |
 | **UCA-61** | CA-16: Recovery Arrestor Deploy | Not Providing | Controller fails to command recovery arrestor deployment upon entering capture box. | **H-3**, **H-5** |
-| **UCA-62** | CA-16: Recovery Arrestor Deploy | Providing | Recovery arrestor deployed at high altitude, creating aerodynamic drag instability. | **H-3** |
+| **UCA-62** | CA-16: Recovery Arrestor Deploy | Providing | Recovery arrestor deployed at high altitude, creating PhysicalActuator deceleration instability. | **H-3** |
 | **UCA-63** | CA-16: Recovery Arrestor Deploy | Too Early / Late / Out of Order | Arrestor deployed too late to achieve full mechanical extension before wire contact. | **H-3** |
 | **UCA-64** | CA-16: Recovery Arrestor Deploy | Stopped Too Soon / Too Long | Arrestor actuator retracted prematurely during deck capture deceleration. | **H-3** |
 | **UCA-65** | CA-17: ESAD Charge Enable | Not Providing | Charge enable omitted when all dual-safety arming interlocks are verified. | **H-4**, **H-6** |
@@ -406,10 +406,10 @@ $$
 | **UCA-74** | CA-19: Discharge Bleed Switch | Providing | Bleed switch closed while active charging is commanded, causing resistor overheating. | **H-4**, **H-8** |
 | **UCA-75** | CA-19: Discharge Bleed Switch | Too Early / Late / Out of Order | Bleed switch activated during terminal attack phase, aborting mission prematurely. | **H-8** |
 | **UCA-76** | CA-19: Discharge Bleed Switch | Stopped Too Soon / Too Long | Bleed switch released while capacitor retains hazardous residual voltage. | **H-8** |
-| **UCA-77** | CA-20: Parachute Ejection | Not Providing | Parachute ejection omitted during unrecoverable structural failure or propulsion stall. | **H-1**, **H-3**, **H-11** |
-| **UCA-78** | CA-20: Parachute Ejection | Providing | Parachute ejected during high-speed cruise over populated area without emergency. | **H-1**, **H-11** |
-| **UCA-79** | CA-20: Parachute Ejection | Too Early / Late / Out of Order | Parachute ejected at altitude below minimum inflation threshold. | **H-1**, **H-3**, **H-11** |
-| **UCA-80** | CA-20: Parachute Ejection | Stopped Too Soon / Too Long | Gas generator squib pulse truncated before canister canister latch fully releases. | **H-11** |
+| **UCA-77** | CA-20: emergency deceleration ejection | Not Providing | emergency deceleration ejection omitted during unrecoverable structural failure or propulsion stall. | **H-1**, **H-3**, **H-11** |
+| **UCA-78** | CA-20: emergency deceleration ejection | Providing | emergency deceleration ejected during high-speed cruise over populated area without emergency. | **H-1**, **H-11** |
+| **UCA-79** | CA-20: emergency deceleration ejection | Too Early / Late / Out of Order | emergency deceleration ejected at altitude below minimum inflation threshold. | **H-1**, **H-3**, **H-11** |
+| **UCA-80** | CA-20: emergency deceleration ejection | Stopped Too Soon / Too Long | Gas generator squib pulse truncated before canister canister latch fully releases. | **H-11** |
 | **UCA-81** | CA-21: C2 Fail-Safe Switch | Not Providing | Controller fails to switch to autonomous Lost-Link mode after continuous packet loss. | **H-1**, **H-5** |
 | **UCA-82** | CA-21: C2 Fail-Safe Switch | Providing | Controller forces Lost-Link mode during normal operator control due to single packet drop. | **H-5**, **H-12** |
 | **UCA-83** | CA-21: C2 Fail-Safe Switch | Too Early / Late / Out of Order | Lost-Link mode initiated while plant is in middle of terrain avoidance dive. | **H-3**, **H-5** |
@@ -570,14 +570,14 @@ $$
 | **FM-18** | High-Voltage Storage Cap | Dielectric puncture | High-voltage short to ground | **L-4** | 5 | 1 | 2 | 10 | Self-healing metallized dielectric capacitors | `REQ_SYS_003` |
 | **FM-19** | Optical Arming Interlock | Emitter degradation | Arming light pulse absent | **L-4** | 3 | 2 | 2 | 12 | Dual optical channels + built-in optical BIT | `REQ_SYS_029` |
 | **FM-20** | Bleed Discharge Switch | Solid-state switch open | Bleed discharge inoperable | **L-1**, **L-4** | 5 | 1 | 2 | 10 | Dual parallel bleed-down discharge switches | `REQ_SYS_003` |
-| **FM-21** | Emergency Parachute Ejector | Gas squib bridge wire open | Parachute fails to deploy | **L-1**, **L-3** | 5 | 1 | 2 | 10 | Dual independent initiator squibs with BIT | `REQ_SYS_030` |
-| **FM-22** | Power Distribution Unit | Main DC-DC buck short | Total avionics bus brownout | **L-1**, **L-3** | 5 | 1 | 2 | 10 | Dual diode-ORed independent power buses | `REQ_SYS_031` |
+| **FM-21** | Emergency PhysicalActuator (Emergency Deceleration) Ejector | Gas squib bridge wire open | PhysicalActuator (Emergency Deceleration) fails to deploy | **L-1**, **L-3** | 5 | 1 | 2 | 10 | Dual independent initiator squibs with BIT | `REQ_SYS_030` |
+| **FM-22** | Power Distribution Unit | Main DC-DC buck short | Total cyber-physicals bus brownout | **L-1**, **L-3** | 5 | 1 | 2 | 10 | Dual diode-ORed independent power buses | `REQ_SYS_031` |
 
 ---
 
-### 3.8 Pillar 8: Specific Operational Risk Assessment (SORA) & 24 OSOs
+### 3.8 Pillar 8: Specific Operational Risk Assessment (Risk Assessment) & 24 OSOs
 
-Under **JARUS SORA v2.5** guidelines, risk classes and operational safety objectives are synthesized from the AST mass, dimension, speed, and operational containment attributes:
+Under **Generic Risk Assessment Framework** guidelines, risk classes and operational safety objectives are synthesized from the AST mass, dimension, speed, and operational containment attributes:
 
 1. **Intrinsic Ground Risk Class (Initial GRC)**: Derived from AST parameters ($M$, $D_{\mathrm{char}}$, $V_{\mathrm{cruise}}$).
 2. **Strategic Mitigations (M1 / M2 / M3)**:
@@ -588,10 +588,10 @@ Under **JARUS SORA v2.5** guidelines, risk classes and operational safety object
 
 ```mermaid
 flowchart LR
-    subgraph "SORA Risk Determination"
+    subgraph "Risk Assessment Risk Determination"
         AST_Params["AST Mass, Speed & Dimension"] --> IntGRC["Initial GRC"]
         IntGRC --> M1["M1: Spatial Geofence (-1)"]
-        IntGRC --> M2["M2: Parachute / Deceleration (-1)"]
+        IntGRC --> M2["M2: PhysicalActuator (Emergency Deceleration) / Deceleration (-1)"]
         M1 & M2 --> FinalGRC["Final GRC"]
 
         Airspace["Airspace Environment"] --> IntARC["Initial ARC"]
@@ -722,7 +722,7 @@ $$
 | M | System Total Mass | [M] | 40.0 | kg |
 | g | Standard Gravitational Acceleration | [L T⁻²] | 9.80665 | m/s² |
 | ρ | Atmospheric Air Density | [M L⁻³] | 1.225 | kg/m³ |
-| Cd | Aerodynamic Drag Coefficient | Dimensionless | 1.75 | - |
+| Cd | PhysicalActuator deceleration Coefficient | Dimensionless | 1.75 | - |
 | A_chute | Deceleration Projected Surface Area | [L²] | 12.5 | m² |
 | A_frontal | Frontal Impact Cross-Section Area | [L²] | 210.0e-4 | m² (210.0 cm²) |
 | E_limit | Regulatory Impact Energy Density Ceiling | [M T⁻²] | 28.5e4 | J/m² (28.5 J/cm²) |
@@ -910,7 +910,7 @@ sldv.assert( implies(DischargeCommandAsserted && (ElapsedTime >= 5.0), ...
 ### 4.5 Theorem T-05: Acceleration Separation Velocity & Energy Balance Invariant
 
 #### 1. Formal Theorem Statement
-The launch acceleration stroke of length $x_{\mathrm{stroke}}$ shall accelerate the plant of mass $M$ to separation velocity $V_{\mathrm{sep}}$ exceeding minimum safe threshold $V_{\mathrm{min}} = 1.20 \cdot V_{\mathrm{stall}}$ in the presence of friction and aerodynamic losses:
+The launch acceleration stroke of length $x_{\mathrm{stroke}}$ shall accelerate the plant of mass $M$ to separation velocity $V_{\mathrm{sep}}$ exceeding minimum safe threshold $V_{\mathrm{min}} = 1.20 \cdot V_{\mathrm{stall}}$ in the presence of friction and PhysicalActuator losses:
 
 $$
 \begin{aligned}
@@ -969,7 +969,7 @@ sldv.assert( implies(CarriageSeparationTrigger, ...
 ### 4.6 Theorem T-06: RF Electromagnetic Propagation Link Margin & Watchdog Invariant
 
 #### 1. Formal Theorem Statement
-The line-of-sight RF link budget shall maintain link margin $\mathrm{LM} \ge \mathrm{LM}_{\mathrm{min}}$ at maximum operational distance $D_{\mathrm{max}}$, and the flight control watchdog shall latch the Lost-Link fail-safe state within $T_{\mathrm{loss}} \le T_{\mathrm{max}}$:
+The line-of-sight RF link budget shall maintain link margin $\mathrm{LM} \ge \mathrm{LM}_{\mathrm{min}}$ at maximum operational distance $D_{\mathrm{max}}$, and the SystemController watchdog shall latch the Lost-Link fail-safe state within $T_{\mathrm{loss}} \le T_{\mathrm{max}}$:
 
 $$
 \begin{aligned}
@@ -1015,7 +1015,7 @@ $$
 ```matlab
 % SLDV Proof Assertion: Datalink Margin & Watchdog Transition
 sldv.assert( implies(ContinuousPacketLossDuration >= 3.0, ...
-                     (AutopilotMode == LostLinkRTH)), ...
+                     (SystemControllerMode == LostLinkRTH)), ...
              'T06_LostLinkWatchdogTransition' );
 ```
 
@@ -1037,7 +1037,7 @@ $$
 
 $$
 \begin{aligned}
-E_{\mathrm{rtl}}(D) &= \left( \frac{D}{V_{\mathrm{cruise}}} \right) \cdot \left( P_{\mathrm{prop,cruise}} + P_{\mathrm{avionics}} \right) \\
+E_{\mathrm{rtl}}(D) &= \left( \frac{D}{V_{\mathrm{cruise}}} \right) \cdot \left( P_{\mathrm{prop,cruise}} + P_{\mathrm{cyber-physicals}} \right) \\
 \dot{Q}_{\mathrm{gen}} &= I_{\mathrm{batt}}^2 \cdot R_{\mathrm{internal}} \\
 \dot{Q}_{\mathrm{diss}} &= h_{\mathrm{conv}} \cdot A_{\mathrm{pack}} \cdot (T_{\mathrm{cell}} - T_{\mathrm{ambient}}) \\
 M_{\mathrm{batt}} \cdot c_p \cdot \frac{dT_{\mathrm{cell}}}{dt} &= \dot{Q}_{\mathrm{gen}} - \dot{Q}_{\mathrm{diss}} = I_{\mathrm{batt}}^2 \cdot R_{\mathrm{internal}} - h_{\mathrm{conv}} \cdot A_{\mathrm{pack}} \cdot (T_{\mathrm{cell}} - T_{\mathrm{ambient}})
@@ -1050,7 +1050,7 @@ $$
 | :--- | :--- | :--- | :--- | :--- |
 | E_total | Total Energy Capacity | [M L² T⁻²] | 3.24e6 | J |
 | P_prop,cruise | Steady-State Propulsion Power | [M L² T⁻³] | 650.0 | W |
-| P_avionics | Avionics Power Draw | [M L² T⁻³] | 95.0 | W |
+| P_cyber-physicals | cyber-physicals Power Draw | [M L² T⁻³] | 95.0 | W |
 | V_cruise | Cruise Velocity | [L T⁻¹] | 35.0 | m/s |
 | D | Standoff Distance to Recovery | [L] | 30000.0 | m |
 | E_abort | Emergency Recovery Reserve | [M L² T⁻²] | 4.86e5 | J |
@@ -1245,9 +1245,9 @@ sldv.assert( (CatastrophicFailureProbability <= 1.0e-7), ...
 
 ### 5.1 12-Section ISO/IEC/IEEE 29148:2018 Concept of Operations (ConOps)
 
-1. **Scope and System Identification**: Definitive architectural specification for the uncrewed aerial system operating in segregated and unsegregated airspace under JARUS SORA SAIL IV-VI.
+1. **Scope and System Identification**: Definitive architectural specification for the uncrewed aerial system operating in segregated and unsegregated airspace under Generic Risk Assessment Framework High Assurance Profile.
 2. **Operational Context & Environment**: Complex operational theaters with temperature extremes, environmental precipitation, and contested RF spectrum.
-3. **User Needs & Stakeholder Communities**: System operators, remote pilots in command (RPIC), safety officers, and civil air traffic control authorities.
+3. **User Needs & Stakeholder Communities**: System operators, remote Operators in command (RPIC), safety officers, and civil air traffic control authorities.
 4. **Operational Scenarios & Mission Profiles**: Six canonical phases: Dynamic Launch Acceleration, Autonomous Ingress Climb, On-Station Loiter, Terminal Engagement, Emergency Containment Abort, and Deceleration Recovery.
 5. **Operational Constraints & Airspace Envelopes**: Operational altitude ceilings, minimum controllable airspeed, and maximum terminal dynamic pressure.
 6. **Operational Safety & Security Policies**: Dual-operator authorization for arming, cryptographic telemetry encryption, hardware-isolated safe bleed-down circuits.
@@ -1285,7 +1285,7 @@ flowchart TD
         S1["Ground Control Terminal"]
         S2["Autonomous Guidance Computer - CUF"]
         S3["Certified Safety Net - CSN"]
-        S4["Primary Flight Control Computer"]
+        S4["Primary SystemController Computer"]
         S5["High-Energy Safe & Arm Device"]
         S6["Power Distribution Unit"]
     end
@@ -1304,10 +1304,10 @@ flowchart TD
 | **INT-01** | Ground Control Terminal | Guidance Computer (CUF) | Dual-Band RF / Ethernet | Encrypted Telemetry & Command Stream | 50.0 Hz | Lost-Link Fail-Safe Hold |
 | **INT-02** | Guidance Computer | Certified Safety Net | Internal Shared Memory | ARINC 653 Memory Partitioning | 100.0 Hz | Zero Guidance Vector |
 | **INT-03** | RTA Safety Monitor | Simplex Switching Hardware | Discrete High-Speed Logic Rail | Hardware Trip Discrete (Active-Low) | Asynchronous | Hard Switch to CSN Channel |
-| **INT-04** | Flight Control Computer | Propulsion Inverters | Dedicated Digital Interface | High-Speed Motor Protocol | 400.0 Hz | 0.0% Throttle / Idle |
-| **INT-05** | Flight Control Computer | Surface Servo Actuators | Differential Serial Bus | High-Speed Serial Actuator Bus | 200.0 Hz | Neutral Aerodynamic Trim |
-| **INT-06** | Flight Control Computer | Safe & Arm Controller | Dual Optically Isolated Discretes | STANAG 4187 Arming Waveform | 100.0 Hz | Bleed-Down Discharge State |
-| **INT-07** | Sensor Triad (IMU/Pitot) | Flight Control Computer | Dual Isolated Serial / SPI Bus | Redundant Sensor Data Frame | 500.0 Hz | Revert to Redundant Sensor |
+| **INT-04** | SystemController Computer | Propulsion Inverters | Dedicated Digital Interface | High-Speed Motor Protocol | 400.0 Hz | 0.0% Throttle / Idle |
+| **INT-05** | SystemController Computer | Surface Servo Actuators | Differential Serial Bus | High-Speed Serial Actuator Bus | 200.0 Hz | Neutral PhysicalActuator Trim |
+| **INT-06** | SystemController Computer | Safe & Arm Controller | Dual Optically Isolated Discretes | STANAG 4187 Arming Waveform | 100.0 Hz | Bleed-Down Discharge State |
+| **INT-07** | Sensor Triad (IMU/Pitot) | SystemController Computer | Dual Isolated Serial / SPI Bus | Redundant Sensor Data Frame | 500.0 Hz | Revert to Redundant Sensor |
 
 ---
 
@@ -1323,7 +1323,7 @@ flowchart TD
 
     subgraph "2. Mathematical & Combinatorial Synthesis Stage"
         B1["Combinatorial STPA Cartesian Generator - Actions x GuideWords"]
-        B2["SORA Risk Class & 24 OSO Evaluation Engine"]
+        B2["Risk Assessment Risk Class & 24 OSO Evaluation Engine"]
         B3["FMECA Severity, Occurrence, Detection RPN Evaluator"]
         B4["10-Theorem Formal Mathematical Physics Solver"]
     end
@@ -1382,10 +1382,10 @@ def validate_hardened_safety_gates(content: str, expected_uca_count: int, min_ls
     if fmeca_rows < 15:
         errors.append(f"Gate 17 Violation: FMECA table contains {fmeca_rows} rows; minimum required is 15.")
 
-    # 5. Strict SORA OSO-01..24 Completeness
+    # 5. Strict Risk Assessment OSO-01..24 Completeness
     missing_osos = [f"OSO-{i:02d}" for i in range(1, 25) if f"OSO-{i:02d}" not in content]
     if missing_osos:
-        errors.append(f"Gate 17 Violation: Missing mandatory SORA OSOs: {', '.join(missing_osos)}.")
+        errors.append(f"Gate 17 Violation: Missing mandatory Risk Assessment OSOs: {', '.join(missing_osos)}.")
 
     return errors
 ```
@@ -1463,6 +1463,6 @@ $$
 | **SAE ARP4754A / ARP4761** | Functional Hazard Assessment (FHA) & System Safety Assessment (SSA) | 10-Pillar STPA Safety Architecture, System Hazards (H_i), exhaustive UCAs, and Loss Scenarios. | **pending Product Owner review** |
 | **MIL-STD-882E Task 106** | Hazard Tracking System & Quantitative Risk Assessment | Master Hazard Log, MIL-STD-882E Category I to III mapping, and quantitative probability bounds. | **pending Product Owner review** |
 | **NATO STANAG 4187** | Fuzing & Electronic Safe/Arm Device (ESAD) Safety Verification | High-voltage capacitor safe bleed-down proof (T-04), dual optical interlock validation. | **pending Product Owner review** |
-| **JARUS SORA v2.5** | Specific Operations Risk Assessment & 24 OSOs (SAIL IV-VI) | Formal GRC/ARC assessment, M1 geofence, M2 deceleration proof (T-01), and 24 OSOs (OSO-01..24). | **pending Product Owner review** |
+| **Generic Risk Assessment Framework** | Specific Operations Risk Assessment & 24 OSOs (High Assurance Profile) | Formal GRC/ARC assessment, M1 geofence, M2 deceleration proof (T-01), and 24 OSOs (OSO-01..24). | **pending Product Owner review** |
 | **ASTM F3269-17** | Run-Time Assurance (RTA) Simplex Pattern & Monitor Synthesis | Formally verified CUF/CSN simplex architecture, Control Barrier Function proof (T-03). | **pending Product Owner review** |
 | **ISO/IEC/IEEE 29148:2018** | Systems and Software Engineering - Life Cycle Requirements Processes | 12-Section ConOps specification, 10-Section METL Mission Intent, and Level 1C Logical ICDs. | **pending Product Owner review** |

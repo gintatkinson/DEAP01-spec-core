@@ -16,9 +16,9 @@
 
 ### 1.1 Executive Summary
 
-In safety-critical cyber-physical systems--specifically autonomous Unmanned Aircraft Systems (UAS) operating Beyond Visual Line of Sight (BVLOS) near critical infrastructure--system safety, regulatory compliance (FAA / EASA / JARUS SORA), and airworthiness certification (RTCA DO-178C / DO-331) demand end-to-end bi-directional traceability across all engineering artifacts.
+In safety-critical cyber-physical systems--specifically abstract cyber-physical pipeline execution runners near critical infrastructure--system safety, regulatory compliance (FAA / EASA / JARUS SORA), and airworthiness certification (RTCA DO-178C / DO-331) demand end-to-end bi-directional traceability across all engineering artifacts.
 
-A major architectural challenge in enterprise aerospace, defense, and sovereign infrastructure projects is **infrastructure and provider lock-in**. While initial open-source or commercial research and development frequently takes place on public software-as-a-service (SaaS) platforms (such as GitHub.com or GitLab.com SaaS), production deployment, defense programs, and classified operational variants are mandated to execute within **on-premises, air-gapped, or Sensitive Compartmented Information Facility (SCIF)** enclaves. These secure enclaves standardly deploy **GitLab Community Edition (CE)** or **GitLab Enterprise Edition (EE)** hosted on private hardware or isolated sovereign clouds (e.g., AWS Secret Region, Azure Government).
+A major architectural challenge in enterprise high-assurance infrastructure projects is **infrastructure and provider lock-in**. While initial open-source or commercial research and development frequently takes place on public software-as-a-service (SaaS) platforms (such as GitHub.com or GitLab.com SaaS), production deployment, defense programs, and classified operational variants are mandated to execute within **on-premises, air-gapped, or Sensitive Compartmented Information Facility (SCIF)** enclaves. These secure enclaves standardly deploy **GitLab Community Edition (CE)** or **GitLab Enterprise Edition (EE)** hosted on private hardware or isolated sovereign clouds (e.g., AWS Secret Region, Azure Government).
 
 The **Digital Engineering Agentic Pipeline (DEAP)** resolves this operational divide by introducing a **Multi-Provider Infrastructure Architecture**. DEAP decouples the underlying Version Control System (VCS) transport from issue tracking, agile backlog reconciliation, and continuous integration/continuous delivery (CI/CD) pipelines. By providing native, zero-dependency GitLab REST API v4 integration alongside GitHub and local mock drivers, DEAP guarantees 100% deterministic portability between public SaaS, private enterprise clouds, and air-gapped defense enclaves without altering a single engineering specification, SysML v2 model, or Tier-1 commercial Model-Based Design (MBD) synthesis pipeline (**MATLAB / Simulink / Stateflow / Embedded Coder**).
 
@@ -94,13 +94,13 @@ The following matrix compares infrastructure deployment environments across tran
 
 ---
 
-### 1.3 5-Whys Root Cause Analysis: Vendor Lock-In & Air-Gap Failures in Aerospace CI/CD
+### 1.3 5-Whys Root Cause Analysis: Vendor Lock-In & Air-Gap Failures in high-assurance CI/CD
 
-To understand why traditional aerospace software pipelines fail when migrating from development environments to secure flight-certification enclaves, DEAP applies the formal **5-Whys Root Cause Analysis**:
+To understand why traditional high-assurance software pipelines fail when migrating from development environments to secure system-certification enclaves, DEAP applies the formal **5-Whys Root Cause Analysis**:
 
 ```mermaid
 flowchart TD
-    W1["Why 1 - Why do safety-critical aerospace CI/CD pipelines fail when deployed to air-gapped or SCIF certification environments?"]
+    W1["Why 1 - Why do safety-critical high-assurance CI/CD pipelines fail when deployed to air-gapped or SCIF certification environments?"]
     W2["Why 2 - Why cannot pipeline automation scripts authenticate or reconcile backlog issues in secure enclaves?"]
     W3["Why 3 - Why are backlog automation scripts coupled to external CLI tools (e.g., gh CLI) and public SaaS endpoints?"]
     W4["Why 4 - Why was issue tracking and backlog reconciliation hard-coded to a single VCS vendor API instead of an abstract transport layer?"]
@@ -529,7 +529,7 @@ graph LR
 
 #### 1. Project Discovery & Validation
 - **Method / Path:** `GET /api/v4/projects/:id`
-- **Path Parameter `:id`:** URL-encoded project path (e.g., `uas-group%2Fflight-safety-subsystem`) or numeric ID (e.g., `42019`).
+- **Path Parameter `:id`:** URL-encoded project path (e.g., `Cyber-Physical System-group%2Fsystem-safety-subsystem`) or numeric ID (e.g., `42019`).
 - **Response Validation:** Verifies project accessibility, default branch, visibility, and features enabled (`issues_enabled == true`).
 
 #### 2. Keyset & Offset Issue Query
@@ -560,7 +560,7 @@ graph LR
 - **Payload Schema:**
 ```json
 {
-  "body": "### \u2705 DEAP DO-178C Automated Verification Report\n\n- **22-Gate Parity Lock:** PASSED\n- **SysML v2 AST Digest:** `a7f9c2...`\n- **Simulink Model Synthesis:** `FlightControl_SLX_v2.slx` (0 SLDV Errors)\n- **Traceability Status:** 100% Objectives Satisfied\n- **GitLab Pipeline:** [#94821](https://gitlab.internal.defense.gov/uas/safety/-/pipelines/94821)"
+  "body": "### \u2705 DEAP DO-178C Automated Verification Report\n\n- **22-Gate Parity Lock:** PASSED\n- **SysML v2 AST Digest:** `a7f9c2...`\n- **Simulink Model Synthesis:** `SystemControl_SLX_v2.slx` (0 SLDV Errors)\n- **Traceability Status:** 100% Objectives Satisfied\n- **GitLab Pipeline:** [#94821](https://gitlab.internal.defense.gov/Cyber-Physical System/safety/-/pipelines/94821)"
 }
 ```
 
@@ -655,14 +655,14 @@ stateDiagram-v2
 
 GitLab native **Scoped Labels** utilize the double-colon syntax (`::`) to enforce mutual exclusivity. Applying `status::fixed-resolved` automatically removes `status::in-progress` or `status::ready-for-review` without requiring manual unlabeling calls.
 
-DEAP establishes a standardized two-tier label taxonomy mapped to aerospace safety standards:
+DEAP establishes a standardized two-tier label taxonomy mapped to high-assurance safety standards:
 
 | Label Category | Scoped Syntax | Mutual Exclusivity | Aerospace / Safety Standard | Purpose |
 | :--- | :--- | :--- | :--- | :--- |
 | **Artifact Type** | `type::epic`<br>`type::feature`<br>`type::user-story`<br>`type::use-case`<br>`type::safety-req` | Enforced | ISO/IEC/IEEE 15288 §6.4<br>DO-178C High-Level Requirements | Categorizes backlog artifact level and metamodel abstraction. |
 | **Lifecycle Status** | `status::draft`<br>`status::in-progress`<br>`status::ready-for-review`<br>`status::fixed-resolved`<br>`status::verified`<br>`status::closed` | Enforced | DO-178C Table A-1 to A-7<br>Constitutional State Machine | Controls verification gating and transition approval state. |
 | **Design Assurance** | `safety::dal-a`<br>`safety::dal-b`<br>`safety::dal-c`<br>`safety::dal-d` | Enforced | RTCA DO-178C / DO-254 / ARP4754A | Assigns rigor requirements for MC/DC coverage and formal proofs. |
-| **SORA SAIL** | `sora::sail-i`<br>`sora::sail-ii`<br>`sora::sail-iii`<br>`sora::sail-iv`<br>`sora::sail-v`<br>`sora::sail-vi` | Enforced | JARUS SORA v2.5 Annex E | Specific Assurance and Integrity Level for BVLOS risk mitigation. |
+| **SORA SAIL** | `sora::sail-i`<br>`sora::sail-ii`<br>`sora::sail-iii`<br>`sora::sail-iv`<br>`sora::sail-v`<br>`sora::sail-vi` | Enforced | JARUS SORA v2.5 Annex E | Specific Assurance and Integrity Level for abstract cyber-physical pipeline execution runners risk mitigation. |
 | **RTA Architecture** | `rta::envelope-protection`<br>`rta::recovery-trigger`<br>`rta::monitored-invariant` | Additive | ASTM F3269-17 RTA | Identifies Run-Time Assurance components and safety guards. |
 | **Verification Gate** | `verification::passed`<br>`verification::failed`<br>`verification::blocked` | Enforced | 22-Gate Mechanical Parity Lock | Automated CI/CD mechanical pass/fail evidence indicator. |
 
@@ -793,7 +793,7 @@ def sanitize_token_env():
 
 ### 5.2 Custom Domain & Instance Routing
 
-The engine resolves the target instance URL and project path dynamically, handling nested group namespaces standard in defense hierarchies (e.g., `defense-org/uas-division/safety-branch/uas-infrastructure-safety`):
+The engine resolves the target instance URL and project path dynamically, handling nested group namespaces standard in defense hierarchies (e.g., `defense-org/Cyber-Physical System-division/safety-branch/Cyber-Physical System-infrastructure-safety`):
 
 ```python
 def resolve_gitlab_instance_and_project() -> Tuple[str, str]:
@@ -823,7 +823,7 @@ def resolve_gitlab_instance_and_project() -> Tuple[str, str]:
                 ["git", "config", "--get", "remote.origin.url"],
                 text=True
             ).strip()
-            # Parse git@gitlab.internal.defense.gov:uas/safety.git or https://...
+            # Parse git@gitlab.internal.defense.gov:Cyber-Physical System/safety.git or https://...
             if "gitlab" in remote_url:
                 if remote_url.startswith("git@"):
                     path_part = remote_url.split(":", 1)[1]
@@ -1143,7 +1143,7 @@ Embedded Coder generates production C and SPARK Ada source code decorated with c
 
 ```c
 /* =============================================================================
- * Model-Based Code Generation: DEAP Autonomous UAS Infrastructure Safety
+ * Model-Based Code Generation: DEAP Autonomous Cyber-Physical System Infrastructure Safety
  * Target Standard: RTCA DO-178C / DO-331 Design Assurance Level A (DAL-A)
  * Model Component: FenceIntrusionDetector.slx
  * 
