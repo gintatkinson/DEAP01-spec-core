@@ -15,10 +15,10 @@ Scope: all `.md` files, Dart `///` doc comments in `app_flutter/lib/`
 | Doc | Lines | Status | Missing Content | Est. Effort | Agent |
 |-----|-------|--------|----------------|-------------|-------|
 | `README.md` (repo root) | 456 | EXISTS but no ToC | Add table of contents, quick-start badge, link to docs/ | Small | Agent A |
-| `app_flutter/README.md` | 17 | EXISTS - generic Flutter template | Replace with project-specific: architecture overview, key domain types, data sources, build/run commands | Medium | Agent B |
-| `app_test_harness/README.md` | 17 | EXISTS - generic Flutter template | Replace with project-specific: purpose (test harness for what), relationship to app_flutter, run instructions | Small | Agent B |
-| `docs/operations/install-guide.md` | 0 | **MISSING** | Prerequisites (Python 3, Flutter SDK, Node, Java), full clone/build/run flow, platform selection, environment variables | Medium | Agent C |
-| `docs/operations/api-reference.md` | 0 | **MISSING** | Document public Dart API surface: domain types, data sources, layout components, view models. Auto-generated or hand-curated reference | Large | Agent D |
+| `app_flutter/README.md` | 196 | COMPLETED | Architecture overview, key domain types, data sources, build/run commands | Medium | Agent B |
+| `app_test_harness/README.md` | 124 | COMPLETED | Purpose, relationship to app_flutter, headless execution, run instructions | Small | Agent B |
+| `docs/operations/install-guide.md` | 377 | COMPLETED | Comprehensive ISO 15288 §6.4.13 install guide: prerequisites, setup, downstream install, gates, troubleshooting | Medium | Agent C |
+| `docs/operations/api-reference.md` | 617 | COMPLETED | Comprehensive public API reference: DataSource, resolvers, persistence, viewmodels, layout, quality gates | Large | Agent D |
 | `docs/operations/domain-deployment.md` | 729 | EXISTS, good quality | Has ToC, prerequisites, steps, examples, troubleshooting. Verify file paths referenced (assets/properties_db.db, scripts) are still accurate | Small | Agent C |
 | `docs/operations/firebase-configuration.md` | 448 | EXISTS, good quality | Has ToC, prerequisites, local/cloud modes, data model, seeding, troubleshooting. Verify script paths exist | Small | Agent C |
 | `docs/operations/yang-compiler-guide.md` | 856 | EXISTS, good quality | Has ToC, overview, installation, usage, mapping reference, integration, examples, limitations, troubleshooting. Verify pyang version compatibility | Small | Agent C |
@@ -26,8 +26,7 @@ Scope: all `.md` files, Dart `///` doc comments in `app_flutter/lib/`
 | `docs/use-cases/uc-*.md` (6 files) | 54-104 each | EXISTS | All have standard use-case template. Verify file paths and references to `docs/features/` are current | Small | Agent A |
 
 ### Summary: Documentation Gaps
-- **Missing**: `install-guide.md`, `api-reference.md`
-- **Needs rewrite**: `app_flutter/README.md`, `app_test_harness/README.md`
+- **Completed**: `install-guide.md` (P1), `api-reference.md` (P2), `app_flutter/README.md` (P3), `app_test_harness/README.md` (P3)
 - **Needs minor updates**: root `README.md` (add ToC), operational docs (verify paths)
 
 ---

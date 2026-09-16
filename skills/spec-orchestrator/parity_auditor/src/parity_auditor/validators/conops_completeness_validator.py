@@ -1988,9 +1988,42 @@ class MissionIntentCompletenessValidator(IValidator):
         {"num": 3, "title": "Measures of Effectiveness (MoE) & Measures of Performance (MoP) Metrics", "aliases": ["measures of effectiveness", "measures of performance", "moe", "mop", "moe/mop", "metrics"]},
         {"num": 4, "title": "Multi-Domain Operational Threat & Contested Environment Matrix", "aliases": ["threat", "multi-domain threat", "electronic warfare", "ew matrix", "cyber environment", "threat matrix", "contested environment"]},
         {"num": 5, "title": "PACE C2 Link Communications Plan", "aliases": ["pace c2", "pace plan", "pace communications plan", "c2 link communications plan", "pace"]},
-        {"num": 6, "title": "Rules of Engagement (ROE) & Weapon/Sensor Interlocks", "aliases": ["rules of engagement", "roe", "weapon/sensor interlocks", "sensor interlocks", "roe interlocks", "interlocks", "safety constraints & subsystem interlocks", "safety constraints", "safety interlocks", "subsystem interlocks"]},
+        {
+            "num": 6,
+            "title": "Rules of Engagement (ROE) & Weapon/Sensor Interlocks",
+            "aliases": [
+                "rules of engagement",
+                "roe",
+                "rules of engagement (roe)",
+                "safety constraints & subsystem interlocks",
+                "safety constraints and subsystem interlocks",
+                "rules of engagement & weapon/sensor interlocks",
+                "rules of engagement and weapon/sensor interlocks",
+                "weapon/sensor interlocks",
+                "sensor interlocks",
+                "roe interlocks",
+                "interlocks",
+                "safety constraints",
+                "safety interlocks",
+                "subsystem interlocks",
+            ],
+        },
         {"num": 7, "title": "Airspace Deconfliction & U-space Dynamic Geo-Zones", "aliases": ["airspace deconfliction", "u-space", "geo-zones", "dynamic geo-zones", "airspace", "geofence"]},
-        {"num": 8, "title": "Go/No-Go Decision Matrix", "aliases": ["go/no-go", "go-no-go", "go / no-go decision matrix", "go / no-go matrix", "gng-"]},
+        {
+            "num": 8,
+            "title": "Go/No-Go Decision Matrix",
+            "aliases": [
+                "go/no-go",
+                "go-no-go",
+                "go / no-go decision matrix",
+                "go / no-go matrix",
+                "gng-",
+                "tactical decision matrix",
+                "tactical mission go/no-go decision matrix",
+                "tactical go/no-go decision matrix",
+            ],
+            "optional": True,
+        },
         {"num": 9, "title": "Bingo Energy Mathematics & Secondary Divert Protocols", "aliases": ["bingo energy", "secondary divert", "divert protocols", "bingo energy mathematics", "bingo", "divert"]},
         {"num": 10, "title": "Gate 24 MissionTask Traceability Tags", "aliases": ["gate 24", "missiontask traceability", "traceability tags", "allocation tags", "operationalallocation"]},
     ]
@@ -2011,6 +2044,60 @@ class MissionIntentCompletenessValidator(IValidator):
     def __init__(self, strict_bingo_math: bool = True) -> None:
         self.strict_bingo_math = strict_bingo_math
 
+    def _check_conops_has_go_no_go(
+        self,
+        rel_path: str,
+        repo: Optional[WorkspaceRepository] = None,
+        conops_content: Optional[str] = None,
+    ) -> bool:
+        """
+        Checks if CONOPS.md contains a Tactical Mission Go/No-Go Decision Matrix
+        (e.g., under Section 9, 10, or 12) per IEEE 1362 §6.0, ISO 29148 §6.4.3.4, and NASA SP-2016-6105 (Fixes #335).
+        """
+        candidate_texts: List[str] = []
+        if conops_content:
+            candidate_texts.append(conops_content)
+
+        # Look in workspace repo if available
+        if repo is not None:
+            c_dir = os.path.join(repo.workspace_dir, "docs", "conops")
+            if os.path.isdir(c_dir):
+                for root, _, files in os.walk(c_dir):
+                    for f in sorted(files):
+                        if ("CONOPS" in f.upper()) and f.endswith(".md") and "TEMPLATE" not in f.upper():
+                            try:
+                                with open(os.path.join(root, f), "r", encoding="utf-8", errors="ignore") as c_f:
+                                    candidate_texts.append(c_f.read())
+                            except Exception:
+                                pass
+
+        # Look relative to rel_path
+        if rel_path:
+            dir_name = os.path.dirname(rel_path)
+            candidates = [
+                os.path.join(dir_name, "CONOPS.md"),
+                os.path.join("docs", "conops", "CONOPS.md"),
+            ]
+            for c_path in candidates:
+                if os.path.isfile(c_path):
+                    try:
+                        with open(c_path, "r", encoding="utf-8", errors="ignore") as c_f:
+                            candidate_texts.append(c_f.read())
+                    except Exception:
+                        pass
+
+        for text in candidate_texts:
+            if re.search(r'\bgo\s*[-/]\s*no-?go\b', text, re.IGNORECASE):
+                return True
+            if re.search(r'\btactical\s+(?:mission\s+)?decision\s+matrix\b', text, re.IGNORECASE):
+                return True
+            if re.search(r'\bgng-[0-9]+\b', text, re.IGNORECASE):
+                return True
+            if re.search(r'\bdecision\s+matrix\b', text, re.IGNORECASE) and re.search(r'\b(?:go|no-go|tactical)\b', text, re.IGNORECASE):
+                return True
+
+        return False
+
     def validate(self, repo: WorkspaceRepository, **kwargs) -> List[Finding]:
         findings: List[Finding] = []
         workspace_dir = repo.workspace_dir
@@ -2024,6 +2111,28 @@ class MissionIntentCompletenessValidator(IValidator):
                 "Mission Intent corpus directory 'docs/conops' is missing in workspace.",
                 location="docs/conops",
             )]
+
+        # Read CONOPS content if present for cross-specification Section 8 decoupling (Fixes #335)
+        conops_content: Optional[str] = None
+        conops_file = os.path.join(conops_dir, "CONOPS.md")
+        if os.path.isfile(conops_file):
+            try:
+                with open(conops_file, "r", encoding="utf-8", errors="ignore") as cf:
+                    conops_content = cf.read()
+            except Exception:
+                pass
+        if not conops_content:
+            for root, _, files in os.walk(conops_dir):
+                for f in sorted(files):
+                    if ("CONOPS" in f.upper()) and f.endswith(".md") and "TEMPLATE" not in f.upper():
+                        try:
+                            with open(os.path.join(root, f), "r", encoding="utf-8", errors="ignore") as cf:
+                                conops_content = cf.read()
+                                break
+                        except Exception:
+                            pass
+                if conops_content:
+                    break
 
         mission_files: List[str] = []
         for root, _, files in os.walk(conops_dir):
@@ -2053,11 +2162,17 @@ class MissionIntentCompletenessValidator(IValidator):
                 ))
                 continue
 
-            findings.extend(self._validate_mission_text(content, rel_path, repo=repo))
+            findings.extend(self._validate_mission_text(content, rel_path, repo=repo, conops_content=conops_content))
 
         return findings
 
-    def _validate_mission_text(self, content: str, rel_path: str, repo: Optional[WorkspaceRepository] = None) -> List[Finding]:
+    def _validate_mission_text(
+        self,
+        content: str,
+        rel_path: str,
+        repo: Optional[WorkspaceRepository] = None,
+        conops_content: Optional[str] = None,
+    ) -> List[Finding]:
         findings: List[Finding] = []
         sections_list = _extract_markdown_sections_list(content)
         sections = _extract_markdown_sections(content)
@@ -2168,7 +2283,30 @@ class MissionIntentCompletenessValidator(IValidator):
                     continue
             content_sections.append((h, l_num, c))
 
-        # Check Table of Contents Completeness for non-templates (Fixes #148)
+        # Check if Section 8 Go/No-Go is present in MISSION_INTENT.md (Fixes #335)
+        sec8_req = next((r for r in self.MANDATORY_SECTIONS if r["num"] == 8), None)
+        sec8_aliases = sec8_req["aliases"] if sec8_req else ["go/no-go", "go-no-go"]
+        sec8_title = sec8_req["title"] if sec8_req else "Go/No-Go Decision Matrix"
+        sec8_present = bool(_find_matching_section(content_sections, 8, sec8_title, sec8_aliases))
+
+        sec8_handled = False
+        if sec8_present:
+            sec8_handled = True
+        else:
+            # Check if handled in ConOps (Sec 9, 10, 12, etc.) or if MISSION_INTENT is a valid 9-section Acquirer Intent
+            conops_has_gng = self._check_conops_has_go_no_go(rel_path, repo=repo, conops_content=conops_content)
+            other_sections_present = True
+            for req in self.MANDATORY_SECTIONS:
+                if req["num"] == 8:
+                    continue
+                if not _find_matching_section(content_sections, req["num"], req["title"], req["aliases"]):
+                    other_sections_present = False
+                    break
+            is_valid_9_section_intent = (8 <= len(content_sections) <= 10) and other_sections_present
+            if conops_has_gng or is_valid_9_section_intent:
+                sec8_handled = True
+
+        # Check Table of Contents Completeness for non-templates (Fixes #148, #335)
         if "TEMPLATE" not in rel_path.upper():
             toc_matches = [
                 s for s in sections_list
@@ -2188,6 +2326,10 @@ class MissionIntentCompletenessValidator(IValidator):
                     sec_num = req["num"]
                     sec_title = req["title"]
                     sec_aliases = req["aliases"]
+
+                    # If Section 8 is decoupled / handled in ConOps, it is not required in TOC
+                    if sec_num == 8 and sec8_handled and not sec8_present:
+                        continue
 
                     num_pattern_text = rf'\[(?:section\s+)?{sec_num}[.\s:\-]'
                     num_pattern_anchor = rf'\(#(?:section-)?{sec_num}[-_]'
@@ -2260,11 +2402,12 @@ class MissionIntentCompletenessValidator(IValidator):
             else:
                 seen_h2_headers[h_norm] = (l_num, h)
 
-        # Check Exact Section Cardinality (Fixes #148)
-        if len(content_sections) != 10:
+        # Check Section Cardinality (Fixes #148, #335)
+        # Allows 8 to 10 sections when Section 8 (Go/No-Go) is handled in ConOps or in 9-section Acquirer Intent
+        if not (8 <= len(content_sections) <= 10):
             findings.append(Finding(
                 "mission-section-cardinality-mismatch",
-                f"Mission Intent specification '{rel_path}' has section cardinality mismatch (found {len(content_sections)} section(s); expected exactly 10 sections).",
+                f"Mission Intent specification '{rel_path}' has section cardinality mismatch (found {len(content_sections)} section(s); expected 8 to 10 sections).",
                 location=rel_path,
                 detail={
                     "severity": "CRITICAL",
@@ -2274,7 +2417,7 @@ class MissionIntentCompletenessValidator(IValidator):
                 },
             ))
 
-        # Check for 10 Mandatory Sections
+        # Check for Mandatory Sections (Fixes #335)
         matched_sections: Dict[int, Tuple[str, int, str]] = {}
         for req in self.MANDATORY_SECTIONS:
             sec_num = req["num"]
@@ -2284,6 +2427,8 @@ class MissionIntentCompletenessValidator(IValidator):
             if res:
                 matched_sections[sec_num] = res
             else:
+                if sec_num == 8 and sec8_handled:
+                    continue
                 findings.append(Finding(
                     "mission-section-missing",
                     f"Mandatory Mission Intent Section {sec_num} ('{title}') is missing or empty in '{rel_path}'.",

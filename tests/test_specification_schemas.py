@@ -518,13 +518,16 @@ class TestSpecificationSchemas(unittest.TestCase):
             "threat_matrix",
             "pace_c2_plan",
             "airspace_geozones",
-            "go_no_go_matrix",
             "bingo_energy_math",
             "allocation_tags",
         ]
         for sec in required_sections:
             self.assertIn(sec, schema.get("required", []), f"Missing required section '{sec}' in Mission Intent schema")
             self.assertIn(sec, schema.get("properties", {}), f"Missing property definition '{sec}' in Mission Intent schema")
+
+        # Verify go_no_go_matrix is defined in properties but decoupled from top-level required (Issue #335)
+        self.assertIn("go_no_go_matrix", schema.get("properties", {}))
+        self.assertNotIn("go_no_go_matrix", schema.get("required", []))
 
         # Verify both roe_interlocks and safety_interlocks are defined in properties
         self.assertIn("roe_interlocks", schema.get("properties", {}))
@@ -600,6 +603,16 @@ class TestSpecificationSchemas(unittest.TestCase):
         errors = _validate_json_schema_instance(schema, payload)
         self.assertEqual(errors, [], f"Valid Mission Intent payload failed schema validation: {errors}")
 
+    def test_mission_intent_schema_validates_without_go_no_go_matrix(self):
+        """Verify that a 9-section Mission Intent payload without go_no_go_matrix passes schema validation (Issue #335)."""
+        with open(MISSION_INTENT_SCHEMA_PATH, "r", encoding="utf-8") as f:
+            schema = json.load(f)
+
+        payload = _get_valid_sample_mission_intent_payload()
+        del payload["go_no_go_matrix"]
+        errors = _validate_json_schema_instance(schema, payload)
+        self.assertEqual(errors, [], f"9-section Mission Intent payload without go_no_go_matrix failed: {errors}")
+
     def test_mission_intent_schema_supports_both_safety_and_roe_interlocks(self):
         """Verify that Mission Intent schema validates payloads with safety_interlocks, roe_interlocks, or both (#266)."""
         with open(MISSION_INTENT_SCHEMA_PATH, "r", encoding="utf-8") as f:
@@ -672,6 +685,9 @@ class TestSpecificationSchemas(unittest.TestCase):
 
         payload = _get_valid_sample_mission_intent_payload()
         payload["pace_c2_plan"] = payload["pace_c2_plan"][:3]  # 3 tiers instead of 4
+
+        errors = _validate_json_schema_instance(schema, payload)
+        self.assertTrue(any("minimum is 4" in err for err in errors), errors)
 
     def test_conops_schema_architecture_properties(self):
         """Verify CONOPS schema defines super_system_architecture, subsystem_architecture, and system_interface_topology (Issue #256)."""

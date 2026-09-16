@@ -691,5 +691,28 @@ date: 2026-08-31
             self.assertEqual(errors, [])
 
 
+class TestOperationsDocumentationCompleteness(unittest.TestCase):
+    """Verifies that mandatory operations documentation exists and fulfills minimum coverage."""
+
+    def test_mandatory_operations_documents_exist_and_non_empty(self):
+        ops_dir = os.path.join(repo_root, "docs", "operations")
+
+        required_docs = {
+            "install-guide.md": 100,  # Minimum line count for comprehensive install guide
+            "api-reference.md": 250,  # Minimum line count covering public APIs and ViewModels
+        }
+
+        for doc_name, min_lines in required_docs.items():
+            doc_path = os.path.join(ops_dir, doc_name)
+            self.assertTrue(os.path.isfile(doc_path), f"Missing mandatory operational document: {doc_name}")
+            with open(doc_path, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+            self.assertGreaterEqual(
+                len(lines),
+                min_lines,
+                f"Operational document {doc_name} is truncated ({len(lines)} < {min_lines} lines)",
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
