@@ -449,34 +449,6 @@ Standards list.
             self.assertIn("## 6. Safety Constraints & Subsystem Interlocks", doc_safety)
             self.assertIn("INT-01", doc_safety)
 
-    def test_assemble_mission_intent_9_units_without_go_no_go_matrix(self):
-        """Verify assemble_document deterministically compiles a 9-unit directory without 08_GO_NO_GO_MATRIX.md (Issue #335)."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            mission_units_dir = os.path.join(tmpdir, "mission_intent")
-            _create_sample_mission_intent_units(mission_units_dir, with_placeholders=False)
-
-            # Remove 08_GO_NO_GO_MATRIX.md to simulate decoupled 9-unit Acquirer Intent
-            gng_path = os.path.join(mission_units_dir, "08_GO_NO_GO_MATRIX.md")
-            self.assertTrue(os.path.isfile(gng_path))
-            os.remove(gng_path)
-
-            doc_9unit, errors_9unit = assemble_document(
-                units_dir=mission_units_dir,
-                doc_title="Tactical Mission Intent & Execution Plan",
-                canonical_whitelist=CANONICAL_MISSION_INTENT_UNITS,
-            )
-            self.assertEqual(errors_9unit, [], f"Expected clean assembly of 9 units, got errors: {errors_9unit}")
-            self.assertNotIn("## 8. Go/No-Go Decision Matrix", doc_9unit)
-            self.assertIn("## 1. Commander's Intent", doc_9unit)
-            self.assertIn("## 7. Airspace Deconfliction", doc_9unit)
-            self.assertIn("## 9. Bingo Energy Mathematics", doc_9unit)
-            self.assertIn("## 10. Gate 24 MissionTask Traceability Tags", doc_9unit)
-
-            # Verify TOC excludes Section 8
-            self.assertNotIn("[8. Go/No-Go Decision Matrix]", doc_9unit)
-            self.assertIn("[1. Commander's Intent", doc_9unit)
-            self.assertIn("[9. Bingo Energy Mathematics", doc_9unit)
-
 
 class TestSysMLParameterBindingEngine(unittest.TestCase):
     """

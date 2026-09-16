@@ -106,17 +106,11 @@ CANONICAL_MISSION_INTENT_UNITS: List[str] = [
     "05_PACE_C2_PLAN.md",
     "06_SAFETY_INTERLOCKS.md",
     "07_AIRSPACE_GEOZONES.md",
-    "08_GO_NO_GO_MATRIX.md",  # Optional: Decoupled to ConOps Sec 9/10/12 per IEEE 1362 / ISO 29148 (Issue #335)
+    "08_GO_NO_GO_MATRIX.md",
     "09_ENERGY_AND_RESERVE_BOUNDS.md",
     "09_BINGO_ENERGY_MATH.md",
     "10_OPERATIONAL_ALLOCATION_TAGS.md",
 ]
-
-# Canonical optional unit file whitelists (Issue #335)
-OPTIONAL_MISSION_INTENT_UNITS: Set[str] = {
-    "08_GO_NO_GO_MATRIX.md",
-}
-
 
 # Canonical default ConOps parameters dictionary
 DEFAULT_CONOPS_PARAMS: Dict[str, str] = {

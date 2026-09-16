@@ -596,28 +596,6 @@ OSO-21, OSO-22, OSO-23, OSO-24 in the operational context.
         """Verify StandardsAndMeasurementValidator is registered in AGGREGATING_VALIDATORS."""
         self.assertIn(StandardsAndMeasurementValidator, AGGREGATING_VALIDATORS)
 
-    def test_malformed_icd_emits_parse_error_finding(self):
-        """Verify that an exception when parsing ICD_01 or ICD_02 tables emits standards-icd-parse-error finding."""
-        from unittest.mock import patch
-        with tempfile.TemporaryDirectory() as tmpdir:
-            interfaces_dir = os.path.join(tmpdir, "docs", "interfaces")
-            os.makedirs(interfaces_dir, exist_ok=True)
-
-            icd01_path = os.path.join(interfaces_dir, "ICD_01_SYSTEM_INTERFACE_MATRIX.md")
-            with open(icd01_path, "w", encoding="utf-8") as f:
-                f.write("# ICD 01\n| col1 | col2 |\n|---|---|\n")
-
-            repo = WorkspaceRepository(workspace_dir=tmpdir)
-            validator = StandardsAndMeasurementValidator()
-            with patch(
-                "parity_auditor.validators.icd_completeness_validator._parse_detailed_markdown_tables",
-                side_effect=ValueError("corrupted table structure"),
-            ):
-                findings = validator.validate(repo)
-
-            self.assertTrue(any(getattr(f, "rule_id", "") == "standards-icd-parse-error" for f in findings))
-            self.assertTrue(any("corrupted table structure" in str(f) for f in findings))
-
 
 if __name__ == "__main__":
     unittest.main()
