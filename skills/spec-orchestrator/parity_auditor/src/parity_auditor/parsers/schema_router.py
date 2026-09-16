@@ -970,12 +970,12 @@ def _extract_from_markdown(text: str, filepath: str = "") -> List[SubsystemPart]
             h_lowers = [re.sub(r"[^a-zA-Z0-9]", "", h.lower()) for h in headers]
             name_idx = None
             for idx, h in enumerate(h_lowers):
-                if any(x in h for x in ("subsystem", "component", "part", "module", "lru", "unit")) or h == "name":
+                if (any(x in h for x in ("subsystem", "component", "part", "module", "lru", "hardwareunit", "subsystemunit")) and h not in ("unit", "units", "measurementunit", "engineeringunit")) or (h == "name" and not any(x in h_lowers for x in ("file", "variable", "parameter"))):
                     name_idx = idx
                     break
             if name_idx is not None and i + 1 < len(lines):
                 sep_line = lines[i + 1].strip()
-                if sep_line.startswith("|") and "-" in sep_line:
+                if re.match(r"^\|(?:\s*:?-+:?\s*\|)+$", sep_line):
                     desc_idx = next(
                         (
                             idx
@@ -991,6 +991,11 @@ def _extract_from_markdown(text: str, filepath: str = "") -> List[SubsystemPart]
                         (idx for idx, h in enumerate(h_lowers) if any(x in h for x in ("power", "watt"))), None
                     )
                     ports_idx = next((idx for idx, h in enumerate(h_lowers) if is_port_col(h)), None)
+
+                    is_packing_list = any(x in h_lowers for x in ("qty", "quantity", "comment")) and ports_idx is None and mass_idx is None and power_idx is None
+                    if is_packing_list or (desc_idx is None and mass_idx is None and power_idx is None and ports_idx is None):
+                        i += 1
+                        continue
 
                     j = i + 2
                     while j < len(lines):
