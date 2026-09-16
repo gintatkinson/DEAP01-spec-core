@@ -337,6 +337,9 @@ Class GuidanceEngine { ... }
             validator = OperationalAllocationValidator()
             errors = validator.validate(repo, allow_missing_specs=True)
 
+            self.assertEqual(len(errors), 1)
+            self.assertIn("OA-99", str(errors[0]))
+
     def test_fresh_workspace_phase1_conops_and_mission_intent_partial_tags_passes(self):
         """Verify that in a fresh workspace containing Phase 1 Level 1 specifications (CONOPS.md / MISSION_INTENT.md)
         with allocation tags in Mission Intent but empty docs/features landing zone, Gate 24 exhibits clean
