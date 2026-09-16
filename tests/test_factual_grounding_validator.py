@@ -1813,6 +1813,32 @@ Maximum pitch angle ($8^\\circ$).
             drift_grounded = [f for f in findings_grounded if f.rule_id == "factual-grounding-numeric-drift"]
             self.assertEqual(drift_grounded, [])
 
+    def test_pipeline_schema_citation_resolution(self):
+        """Verify .pipeline/schema.sysml and bare schema.sysml citation resolution."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            pipeline_dir = os.path.join(tmpdir, ".pipeline")
+            docs_dir = os.path.join(tmpdir, "docs")
+            os.makedirs(pipeline_dir, exist_ok=True)
+            os.makedirs(docs_dir, exist_ok=True)
+
+            schema_content = """package TestSystem {
+    attribute operatingVoltageV : Real = 24.0;
+}
+"""
+            with open(os.path.join(pipeline_dir, "schema.sysml"), "w", encoding="utf-8") as f:
+                f.write(schema_content)
+
+            doc_content = """# System Specification
+The system operates at 24.0 V per `.pipeline/schema.sysml` and [SysML](.pipeline/schema.sysml).
+Also operates at 24.0 V per `schema.sysml`.
+"""
+            with open(os.path.join(docs_dir, "SPEC.md"), "w", encoding="utf-8") as f:
+                f.write(doc_content)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            findings = self.validator.validate(repo, scan_dirs=["docs"])
+            self.assertEqual(findings, [])
+
 
 if __name__ == "__main__":
     unittest.main()
