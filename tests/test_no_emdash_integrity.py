@@ -20,9 +20,9 @@ def _scan_directory(dir_path):
     if not os.path.isdir(dir_path):
         return violations
 
+    excluded = {".git", ".venv", "venv", "__pycache__", "node_modules", ".dart_tool", "build"}
     for root, dirs, files in os.walk(dir_path):
-        if ".git" in dirs:
-            dirs.remove(".git")
+        dirs[:] = [d for d in dirs if d not in excluded]
         for f in files:
             file_path = os.path.join(root, f)
             try:

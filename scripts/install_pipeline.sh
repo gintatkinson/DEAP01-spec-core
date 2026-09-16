@@ -156,12 +156,29 @@ if [ "$TARGET_DIR" = "$INSTALLER_ROOT" ]; then
   exit 1
 fi
 
+# Preserve any existing downstream project metadata or configuration
+PRESERVED_METADATA=""
+PRESERVED_PROFILE_CONFIG=""
+if [ -f "$TARGET_DIR/.pipeline/project_metadata.json" ]; then
+  PRESERVED_METADATA=$(cat "$TARGET_DIR/.pipeline/project_metadata.json")
+fi
+if [ -f "$TARGET_DIR/.pipeline/profile_config.json" ]; then
+  PRESERVED_PROFILE_CONFIG=$(cat "$TARGET_DIR/.pipeline/profile_config.json")
+fi
+
 rm -rf "$TARGET_DIR/skills" "$TARGET_DIR/rules" "$TARGET_DIR/.pipeline" "$TARGET_DIR/.agents" "$TARGET_DIR/scripts"
 cp -RP "$INSTALLER_ROOT/skills" "$TARGET_DIR/"
 cp -RP "$INSTALLER_ROOT/rules" "$TARGET_DIR/"
 cp -RP "$INSTALLER_ROOT/.pipeline" "$TARGET_DIR/"
 rm -rf "$TARGET_DIR/.pipeline/upstream"
 rm -rf "$TARGET_DIR/.pipeline/diagnostics"
+
+if [ -n "$PRESERVED_METADATA" ]; then
+  echo "$PRESERVED_METADATA" > "$TARGET_DIR/.pipeline/project_metadata.json"
+fi
+if [ -n "$PRESERVED_PROFILE_CONFIG" ]; then
+  echo "$PRESERVED_PROFILE_CONFIG" > "$TARGET_DIR/.pipeline/profile_config.json"
+fi
 cp -RP "$INSTALLER_ROOT/.agents" "$TARGET_DIR/"
 cp -RP "$INSTALLER_ROOT/scripts" "$TARGET_DIR/"
 if [ ! -e "$TARGET_DIR/schema" ]; then
@@ -352,22 +369,139 @@ mkdir -p "$TARGET_DIR/.agents"
 python3 "$INSTALLER_ROOT/scripts/scaffold_downstream_agents.py" "$INSTALLER_ROOT" "$TARGET_DIR"
 
 
-# Scaffold downstream root README.md if missing or if it contains platform onboarding boilerplate
+# Scaffold downstream root README.md if missing, boilerplate, or missing operator prompt catalog
 if [ ! -f "$TARGET_DIR/README.md" ] || \
    grep -qE "Getting started with GitLab|To make it easy for you to get started" "$TARGET_DIR/README.md" || \
-   ! grep -qE "# Downstream Cyber-Physical Infrastructure Safety Project|DEAP" "$TARGET_DIR/README.md"; then
-  cat << 'EOF' > "$TARGET_DIR/README.md"
-# Downstream Cyber-Physical Infrastructure Safety Project
+   ! grep -qE "Multi-Pipeline Operator Prompt Catalog|Operator Prompt Catalog" "$TARGET_DIR/README.md"; then
 
-> **Repository Role:** `DOWNSTREAM_APPLICATION_WORKSPACE`  
-> **Primary Technology Profiles:** `ROS2 C++ Real-Time` | `Target Embedded Platform Execution Profile`  
-> **Target Regulatory Frameworks:** `JARUS SORA v2.5 (SAIL I–VI)` | `ASTM F3269-17 RTA` | `ASTM F3411-22a Remote ID` | `RTCA DO-365B DAA`  
+  # Extract domain project metadata from existing project artifacts
+  DOMAIN_PROJECT_NAME=""
+  DOMAIN_PROJECT_DESC=""
+  DOMAIN_TECH_PROFILE=""
+  DOMAIN_REGULATORY=""
+
+  # 1. Check existing README.md before overwriting (e.g. GitLab initial commit: "# <project_name>\n\nGetting started with GitLab...")
+  if [ -f "$TARGET_DIR/README.md" ]; then
+    CANDIDATE_TITLE=$(grep -E '^# ' "$TARGET_DIR/README.md" | head -n 1 | sed 's/^# *//' | tr -d '\r\n')
+    if ! echo "$CANDIDATE_TITLE" | grep -qE "Getting started with GitLab|Downstream Cyber-Physical Infrastructure Safety Project|Downstream Safety-Critical Engineering Project"; then
+      DOMAIN_PROJECT_NAME="$CANDIDATE_TITLE"
+    fi
+  fi
+
+  # 2. Check .pipeline/project_metadata.json if present
+  if [ -f "$TARGET_DIR/.pipeline/project_metadata.json" ]; then
+    META_NAME=$(python3 -c "import json; data=json.load(open('$TARGET_DIR/.pipeline/project_metadata.json')); print(data.get('project_name') or data.get('name') or '')" 2>/dev/null || true)
+    if [ -n "$META_NAME" ] && [ -z "$DOMAIN_PROJECT_NAME" ]; then
+      DOMAIN_PROJECT_NAME="$META_NAME"
+    fi
+    META_DESC=$(python3 -c "import json; data=json.load(open('$TARGET_DIR/.pipeline/project_metadata.json')); print(data.get('description') or '')" 2>/dev/null || true)
+    if [ -n "$META_DESC" ]; then
+      DOMAIN_PROJECT_DESC="$META_DESC"
+    fi
+    META_PROF=$(python3 -c "import json; data=json.load(open('$TARGET_DIR/.pipeline/project_metadata.json')); print(data.get('technology_profile') or data.get('profile') or '')" 2>/dev/null || true)
+    if [ -n "$META_PROF" ]; then
+      DOMAIN_TECH_PROFILE="$META_PROF"
+    fi
+    META_REG=$(python3 -c "import json; data=json.load(open('$TARGET_DIR/.pipeline/project_metadata.json')); print(data.get('regulatory_frameworks') or '')" 2>/dev/null || true)
+    if [ -n "$META_REG" ]; then
+      DOMAIN_REGULATORY="$META_REG"
+    fi
+  fi
+
+  # 3. Check codebase_rules.json if present
+  if [ -z "$DOMAIN_PROJECT_NAME" ] && [ -f "$TARGET_DIR/codebase_rules.json" ]; then
+    CR_NAME=$(python3 -c "import json; data=json.load(open('$TARGET_DIR/codebase_rules.json')); print(data.get('project_name') or data.get('name') or '')" 2>/dev/null || true)
+    if [ -n "$CR_NAME" ]; then
+      DOMAIN_PROJECT_NAME="$CR_NAME"
+    fi
+  fi
+
+  # 4. Check pubspec.yaml (Flutter / Dart)
+  if [ -f "$TARGET_DIR/pubspec.yaml" ]; then
+    if [ -z "$DOMAIN_PROJECT_NAME" ]; then
+      PUB_NAME=$(grep -E '^name:' "$TARGET_DIR/pubspec.yaml" | head -n 1 | sed 's/^name:[[:space:]]*//' | tr -d '\r\n')
+      [ -n "$PUB_NAME" ] && DOMAIN_PROJECT_NAME="$PUB_NAME"
+    fi
+    if [ -z "$DOMAIN_PROJECT_DESC" ]; then
+      PUB_DESC=$(grep -E '^description:' "$TARGET_DIR/pubspec.yaml" | head -n 1 | sed 's/^description:[[:space:]]*//' | tr -d '\r\n')
+      [ -n "$PUB_DESC" ] && DOMAIN_PROJECT_DESC="$PUB_DESC"
+    fi
+    [ -z "$DOMAIN_TECH_PROFILE" ] && DOMAIN_TECH_PROFILE="\`Flutter / Dart Embedded & Operator Console Profile\`"
+  fi
+
+  # 5. Check package.json (React / TypeScript Web)
+  if [ -f "$TARGET_DIR/package.json" ]; then
+    if [ -z "$DOMAIN_PROJECT_NAME" ]; then
+      PKG_NAME=$(python3 -c "import json; data=json.load(open('$TARGET_DIR/package.json')); print(data.get('name') or '')" 2>/dev/null || true)
+      [ -n "$PKG_NAME" ] && DOMAIN_PROJECT_NAME="$PKG_NAME"
+    fi
+    if [ -z "$DOMAIN_PROJECT_DESC" ]; then
+      PKG_DESC=$(python3 -c "import json; data=json.load(open('$TARGET_DIR/package.json')); print(data.get('description') or '')" 2>/dev/null || true)
+      [ -n "$PKG_DESC" ] && DOMAIN_PROJECT_DESC="$PKG_DESC"
+    fi
+    [ -z "$DOMAIN_TECH_PROFILE" ] && DOMAIN_TECH_PROFILE="\`React / TypeScript Web Operator Profile\`"
+  fi
+
+  # 6. Check pyproject.toml
+  if [ -f "$TARGET_DIR/pyproject.toml" ]; then
+    if [ -z "$DOMAIN_PROJECT_NAME" ]; then
+      PYP_NAME=$(grep -E '^name[[:space:]]*=' "$TARGET_DIR/pyproject.toml" | head -n 1 | sed -E 's/^name[[:space:]]*=[[:space:]]*["\x27]([^"\x27]+)["\x27]/\1/' | tr -d '\r\n')
+      if [ -n "$PYP_NAME" ] && [ "$PYP_NAME" != "deap01-spec-core" ]; then
+        DOMAIN_PROJECT_NAME="$PYP_NAME"
+      fi
+    fi
+  fi
+
+  # 7. Check active platform profile configuration
+  if [ -z "$DOMAIN_TECH_PROFILE" ]; then
+    if [ -f "$TARGET_DIR/.pipeline/profile_config.json" ]; then
+      CONF_PROF=$(python3 -c "import json; data=json.load(open('$TARGET_DIR/.pipeline/profile_config.json')); print(data.get('active_profile') or '')" 2>/dev/null || true)
+      [ -n "$CONF_PROF" ] && DOMAIN_TECH_PROFILE="\`$CONF_PROF\`"
+    elif [ -f "$TARGET_DIR/CMakeLists.txt" ] || [ -f "$TARGET_DIR/package.xml" ]; then
+      DOMAIN_TECH_PROFILE="\`ROS2 C++ Real-Time\` | \`Target Embedded Platform Execution Profile\`"
+    fi
+  fi
+
+  # Fallbacks if still empty
+  if [ -z "$DOMAIN_PROJECT_NAME" ]; then
+    DIR_BASE=$(basename "$(cd "$TARGET_DIR" 2>/dev/null && pwd || echo "$TARGET_DIR")")
+    if [ -n "$DIR_BASE" ] && [ "$DIR_BASE" != "." ] && [ "$DIR_BASE" != "/" ]; then
+      DOMAIN_PROJECT_NAME="$DIR_BASE"
+    else
+      DOMAIN_PROJECT_NAME="Downstream Cyber-Physical Infrastructure Safety Project"
+    fi
+  fi
+
+  if [ -z "$DOMAIN_PROJECT_DESC" ]; then
+    DOMAIN_PROJECT_DESC="This repository is an installed downstream implementation workspace governed by the **Digital Engineering Agent Platform (DEAP)** for cyber-physical infrastructure safety, real-time control, run-time assurance (RTA), and autonomous operations."
+  fi
+
+  if [ -z "$DOMAIN_TECH_PROFILE" ]; then
+    DOMAIN_TECH_PROFILE="\`ROS2 C++ Real-Time\` | \`Target Embedded Platform Execution Profile\`"
+  fi
+
+  if [ -z "$DOMAIN_REGULATORY" ]; then
+    DOMAIN_REGULATORY="\`JARUS SORA v2.5 (SAIL I–VI)\` | \`ASTM F3269-17 RTA\` | \`ASTM F3411-22a Remote ID\` | \`RTCA DO-365B DAA\`"
+  fi
+
+  if [ "$DOMAIN_PROJECT_NAME" = "Downstream Cyber-Physical Infrastructure Safety Project" ]; then
+    README_TITLE="# Downstream Cyber-Physical Infrastructure Safety Project"
+  else
+    README_TITLE="# ${DOMAIN_PROJECT_NAME} -- Downstream Cyber-Physical Infrastructure Safety Project"
+  fi
+
+  cat << EOF > "$TARGET_DIR/README.md"
+$README_TITLE
+
+> **Repository Role:** \`DOWNSTREAM_APPLICATION_WORKSPACE\`  
+> **Primary Technology Profiles:** $DOMAIN_TECH_PROFILE  
+> **Target Regulatory Frameworks:** $DOMAIN_REGULATORY  
 
 ---
 
 ## 1. System Overview
 
-This repository is an installed downstream implementation workspace governed by the **Digital Engineering Agent Platform (DEAP)** for cyber-physical infrastructure safety, real-time control, run-time assurance (RTA), and autonomous operations.
+$DOMAIN_PROJECT_DESC
 
 ### 1.1 Primary Commercial Toolchain Integration Context
 
@@ -377,12 +511,12 @@ This platform explicitly declares **MATLAB / Simulink / Stateflow / Embedded Cod
 
 ## 2. Pipeline Structure & Governance
 
-- `.agents/` & `AGENTS.md`: Agent behavior rules, role boundaries, and subagent dispatch protocols.
-- `CLAUDE.md`: Claude Code guidelines and verification gates.
-- `.pipeline/`: Constitution (`constitution.md`), domain specifications, and execution profiles (`profiles/ros2_cpp.md`, `profiles/px4_module.md`).
-- `rules/` & `skills/`: Platform engineering rules and agent workflow skills (including SysML v2 SSOT completeness in `rules/sysml-ssot-completeness.md`).
-- `schema/`: Contract definitions and SysML v2 schemas.
-- `tests/`: Automated baseline verification and safety compliance tests.
+- \`.agents/\` & \`AGENTS.md\`: Agent behavior rules, role boundaries, and subagent dispatch protocols.
+- \`CLAUDE.md\`: Claude Code guidelines and verification gates.
+- \`.pipeline/\`: Constitution (\`constitution.md\`), domain specifications, and execution profiles (\`profiles/ros2_cpp.md\`, \`profiles/px4_module.md\`).
+- \`rules/\` & \`skills/\`: Platform engineering rules and agent workflow skills (including SysML v2 SSOT completeness in \`rules/sysml-ssot-completeness.md\`).
+- \`schema/\`: Contract definitions and SysML v2 schemas.
+- \`tests/\`: Automated baseline verification and safety compliance tests.
 
 ---
 
@@ -391,16 +525,19 @@ This platform explicitly declares **MATLAB / Simulink / Stateflow / Embedded Cod
 Immediately following installation, any AI agent (Antigravity, Claude Code, Gemini CLI, Cursor) initializing in this repository MUST execute the following sequence before accepting user directives or executing task implementations:
 
 0. **Detect Repository Role & Scope**:
-   - Inspect whether `.pipeline/upstream/` exists on disk.
+   - Inspect whether \`.pipeline/upstream/\` exists on disk.
    - If absent -> **Downstream Customer Project Mode**: Authorized for customer feature implementation and domain codebase delivery.
-1. **Read Governance Constitution**: Execute `view_file` on `.pipeline/constitution.md` to ingest the platform-independent functional governance layer and zero-mocking persistence mandates.
-2. **Load Project Skills**: Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` (and any active skills under `skills/` or `.agents/skills/`) to initialize feature-driven implementation protocols and review gates.
-3. **Load Governance Rules**: Ingest `AGENTS.md` and `rules/` to enforce project-scoped agentic rules, context-isolated subagent dispatch loops, and role boundary locks.
-4. **Load Platform Profile**: Read the target platform execution profile (`.pipeline/profiles/flutter.md`, `.pipeline/profiles/react.md`, `.pipeline/profiles/ros2_cpp.md`, or `.pipeline/profiles/px4_module.md`) to establish platform-specific build, test, and lifecycle constraints.
-5. **Bootstrap Tracker Labels & Verify Baseline**: Verify that repository issue tracker labels and baseline tests pass by running `pytest tests/` and `python3 scripts/verify_downstream_baseline.py --no-domain`.
+1. **Read Governance Constitution**: Execute \`view_file\` on \`.pipeline/constitution.md\` to ingest the platform-independent functional governance layer and zero-mocking persistence mandates.
+2. **Load Project Skills**: Execute \`view_file\` on \`skills/feature-driven-implementation/SKILL.md\` (and any active skills under \`skills/\` or \`.agents/skills/\`) to initialize feature-driven implementation protocols and review gates.
+3. **Load Governance Rules**: Ingest \`AGENTS.md\` and \`rules/\` to enforce project-scoped agentic rules, context-isolated subagent dispatch loops, and role boundary locks.
+4. **Load Platform Profile**: Read the target platform execution profile (\`.pipeline/profiles/flutter.md\`, \`.pipeline/profiles/react.md\`, \`.pipeline/profiles/ros2_cpp.md\`, or \`.pipeline/profiles/px4_module.md\`) to establish platform-specific build, test, and lifecycle constraints.
+5. **Bootstrap Tracker Labels & Verify Baseline**: Verify that repository issue tracker labels and baseline tests pass by running \`pytest tests/\` and \`python3 scripts/verify_downstream_baseline.py --no-domain\`.
 
 ---
 
+EOF
+
+  cat << 'EOF' >> "$TARGET_DIR/README.md"
 ## 4. Multi-Pipeline Operator Prompt Catalog & Autonomous Execution Workflows
 
 This catalog contains the complete, unabridged, copy-pasteable operator prompt suite for executing all stages of the Digital Engineering Agent Platform (DEAP) lifecycle across context-isolated subagents in Antigravity, Claude Code, Gemini CLI, Cursor, and Cascade.

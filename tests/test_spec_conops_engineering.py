@@ -1293,8 +1293,8 @@ class TestSpecConopsEngineering(unittest.TestCase):
         """Verify relativize_markdown_links normalizes schema/... and docs/... links while preserving external URLs and anchors."""
         from scripts.assemble_conops import relativize_markdown_links
 
-        workspace_dir = "/Users/workspace/project"
-        output_file = "/Users/workspace/project/docs/conops/CONOPS.md"
+        workspace_dir = "/tmp/workspace/project"
+        output_file = "/tmp/workspace/project/docs/conops/CONOPS.md"
 
         sample_text = (
             "1. Schema link: [DEAP Model](schema/model.sysml)\n"

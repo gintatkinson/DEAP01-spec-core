@@ -944,5 +944,58 @@ class TestDefectDossierGeneration(unittest.TestCase):
             self.assertIn("target_repository", data)
 
 
+class TestDownstreamReadmeCustomization(unittest.TestCase):
+    """Verify that install_pipeline.sh customizes README.md with domain project metadata."""
+
+    def test_installer_scaffolds_domain_metadata_readme(self):
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        installer_path = os.path.join(repo_root, "scripts", "install_pipeline.sh")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            meta_dir = os.path.join(tmpdir, ".pipeline")
+            os.makedirs(meta_dir, exist_ok=True)
+            with open(os.path.join(meta_dir, "project_metadata.json"), "w", encoding="utf-8") as f:
+                json.dump({
+                    "project_name": "Autonomous Ocean Vessel RTA",
+                    "description": "Marine autonomous navigation safety and run-time assurance supervisor.",
+                    "technology_profile": "`C++ / ROS2 Subsea Profile`",
+                    "regulatory_frameworks": "`DNV-GL Autonomous Ships` | `IMO Maritime Safety`",
+                }, f, indent=2)
+
+            res = subprocess.run(
+                ["bash", installer_path, tmpdir, "-p", "github"],
+                cwd=repo_root,
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            self.assertEqual(res.returncode, 0, f"install_pipeline.sh failed: {res.stderr}")
+
+            readme_path = os.path.join(tmpdir, "README.md")
+            self.assertTrue(os.path.isfile(readme_path), "Target README.md missing")
+            with open(readme_path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            self.assertIn("Autonomous Ocean Vessel RTA", content)
+            self.assertIn("Marine autonomous navigation safety", content)
+            self.assertIn("`C++ / ROS2 Subsea Profile`", content)
+            self.assertIn("Multi-Pipeline Operator Prompt Catalog", content)
+
+
+class TestFailClosedValidation(unittest.TestCase):
+    """Verify that verify_downstream_baseline.py fails closed upon check failure."""
+
+    def test_verify_fails_on_broken_icd_schema(self):
+        from scripts.verify_downstream_baseline import check_icd_completeness
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            os.makedirs(schema_dir, exist_ok=True)
+            with open(os.path.join(schema_dir, "model.sysml"), "w") as f:
+                f.write("package TestPkg {\n    part def Controller {\n        out port cmd_port : CmdData;\n    }\n}\n")
+            with self.assertRaises(SystemExit) as cm:
+                check_icd_completeness(tmpdir)
+            self.assertEqual(cm.exception.code, 1)
+
+
 if __name__ == "__main__":
     unittest.main()
