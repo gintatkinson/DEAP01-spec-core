@@ -951,8 +951,13 @@ class StandardsAndMeasurementValidator(IValidator):
                                 port_types[pname] = ptype
                         elif "connection_id" in row and "source_port" in row and "dest_port" in row:
                             connections.append(row)
-            except Exception:
-                pass
+            except Exception as exc:
+                findings.append(Finding(
+                    "standards-icd-parse-error",
+                    f"Failed to parse Level 1C interface matrix '{icd01_path}': {exc}",
+                    location=os.path.relpath(icd01_path, workspace_dir),
+                    detail={"error": str(exc), "file": icd01_path},
+                ))
 
         if os.path.isfile(icd02_path):
             try:
@@ -964,8 +969,13 @@ class StandardsAndMeasurementValidator(IValidator):
                     for row in tbl.rows:
                         if "signal_id" in row or "signal_name" in row:
                             signals.append(row)
-            except Exception:
-                pass
+            except Exception as exc:
+                findings.append(Finding(
+                    "standards-icd-parse-error",
+                    f"Failed to parse Level 1C master signal dictionary '{icd02_path}': {exc}",
+                    location=os.path.relpath(icd02_path, workspace_dir),
+                    detail={"error": str(exc), "file": icd02_path},
+                ))
 
         # 4. Theorem 3 (Dimensional Homogeneity): Assert D(e_src) == D(e_dst)
         for sig in signals:
