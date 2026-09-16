@@ -2171,6 +2171,36 @@ Stabilized optical and infrared sensor package.
                 "04_USER_CLASSES_AND_STAKEHOLDERS.md omits required placeholder {{SUPER_SYSTEM_ARCHITECTURE}} or {{SUBSYSTEM_ARCHITECTURE_SECTION}}."
             )
 
+    def test_unit_4_concrete_architecture_without_placeholders_succeeds(self):
+        """Verify that when Unit 4 has concrete architecture (SV-1 with mermaid diagram and Subsystem Architecture with LRU/Subsystem details) without placeholders, assemble_document succeeds and does not raise ValueError (Issue #313)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            conops_units_dir = os.path.join(tmpdir, "units", "conops")
+            _create_sample_conops_units(conops_units_dir, with_placeholders=True)
+            u4_path = os.path.join(conops_units_dir, "04_USER_CLASSES_AND_STAKEHOLDERS.md")
+
+            with open(u4_path, "w", encoding="utf-8") as f:
+                f.write("""# 4. User Classes, Stakeholders & System Architecture
+
+### 4.1 Super-System Operational Architecture (DoDAF SV-1)
+
+```mermaid
+flowchart TB
+    Operator["Remote Operator"] --> C2["Command & Control"]
+```
+
+### 4.3 Subsystem Architecture
+
+#### 4.3.1 Primary Flight Computer (PrimaryFlightComputer) LRU Subsystem
+Dedicated avionics processing unit.
+
+#### 4.3.2 Power Management Unit (PowerManagementUnit) LRU Subsystem
+Regulated power distribution unit.
+""")
+            output, errors = assemble_document(conops_units_dir, canonical_whitelist=CANONICAL_CONOPS_UNITS)
+            self.assertEqual(errors, [])
+            self.assertIn("Super-System Operational Architecture (DoDAF SV-1)", output)
+            self.assertIn("Primary Flight Computer (PrimaryFlightComputer) LRU Subsystem", output)
+
     def test_zero_oem_parts_discovered_raises_runtime_error(self):
         """Verify fail-closed gate: auto_detect_workspace_parameters raises RuntimeError when candidate dirs exist but 0 OEM parts discovered (Issue #302)."""
         with tempfile.TemporaryDirectory() as tmpdir:

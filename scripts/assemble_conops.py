@@ -3910,13 +3910,16 @@ def assemble_document(
 
     unit_paths = [os.path.join(units_dir, f) for f in filenames]
 
-    # Required placeholder gate for Unit 4 (Issues #299, #302)
+    # Required placeholder gate for Unit 4 (Issues #299, #302, #313)
     for path in unit_paths:
         fname = os.path.basename(path)
         if fname in ("04_SYSTEM_ARCHITECTURE.md", "04_USER_CLASSES_AND_STAKEHOLDERS.md", "04_SYSTEM_CAPABILITIES_AND_FUNCTIONS.md"):
             with open(path, "r", encoding="utf-8") as f:
                 u4_raw = f.read()
-            if "{{SUPER_SYSTEM_ARCHITECTURE}}" not in u4_raw or "{{SUBSYSTEM_ARCHITECTURE_SECTION}}" not in u4_raw:
+            has_concrete_super_sys = ("### 4.1" in u4_raw or "Super-System" in u4_raw or "Super-system" in u4_raw) and ("```mermaid" in u4_raw or "SV-1" in u4_raw)
+            has_concrete_subsystems = ("### 4.3" in u4_raw or "### 4.8" in u4_raw or "Subsystem Architecture" in u4_raw) and ("LRU" in u4_raw or "Subsystem" in u4_raw or "Part" in u4_raw)
+            has_concrete_arch = has_concrete_super_sys and has_concrete_subsystems
+            if not has_concrete_arch and ("{{SUPER_SYSTEM_ARCHITECTURE}}" not in u4_raw or "{{SUBSYSTEM_ARCHITECTURE_SECTION}}" not in u4_raw):
                 raise ValueError(f"{fname} omits required placeholder {{{{SUPER_SYSTEM_ARCHITECTURE}}}} or {{{{SUBSYSTEM_ARCHITECTURE_SECTION}}}}.")
 
     # Validate unit integrity with parameter binding
