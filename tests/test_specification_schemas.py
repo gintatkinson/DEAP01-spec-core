@@ -673,6 +673,9 @@ class TestSpecificationSchemas(unittest.TestCase):
         payload = _get_valid_sample_mission_intent_payload()
         payload["pace_c2_plan"] = payload["pace_c2_plan"][:3]  # 3 tiers instead of 4
 
+        errors = _validate_json_schema_instance(schema, payload)
+        self.assertTrue(any("minimum is 4" in err for err in errors), errors)
+
     def test_conops_schema_architecture_properties(self):
         """Verify CONOPS schema defines super_system_architecture, subsystem_architecture, and system_interface_topology (Issue #256)."""
         with open(CONOPS_SCHEMA_PATH, "r", encoding="utf-8") as f:
