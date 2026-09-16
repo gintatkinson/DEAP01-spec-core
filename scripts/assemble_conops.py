@@ -3833,6 +3833,16 @@ def relativize_markdown_links(text: str, output_file: str, workspace_dir: str) -
                 target_abs = os.path.normpath(os.path.join(abs_ws_dir, path_part.lstrip("/\\")))
         elif is_explicit_rel:
             target_abs = os.path.normpath(os.path.join(abs_output_dir, path_part))
+            if not os.path.exists(target_abs):
+                cand_ws = os.path.normpath(os.path.join(abs_ws_dir, path_part.lstrip("./\\")))
+                cand_docs = os.path.normpath(os.path.join(abs_ws_dir, "docs", path_part.lstrip("./\\")))
+                cand_schema = os.path.normpath(os.path.join(abs_ws_dir, "schema", os.path.basename(path_part)))
+                if os.path.exists(cand_ws):
+                    target_abs = cand_ws
+                elif os.path.exists(cand_docs):
+                    target_abs = cand_docs
+                elif os.path.exists(cand_schema):
+                    target_abs = cand_schema
         else:
             # Workspace-relative path (schema/..., docs/..., etc.)
             target_abs = os.path.normpath(os.path.join(abs_ws_dir, path_part))
