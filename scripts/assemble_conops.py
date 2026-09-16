@@ -3753,6 +3753,106 @@ def verify_markdown_links(content: str) -> List[str]:
     return errors
 
 
+def relativize_markdown_links(text: str, output_file: str, workspace_dir: str) -> str:
+    """
+    Deterministically normalizes markdown links [label](target) so they resolve
+    relative to the directory of output_file.
+
+    External URLs (http://, https://, mailto:, etc.) and in-page anchors (#...)
+    are preserved as-is. Existing anchors (#anchor) attached to relative links
+    are preserved.
+    """
+    if not text:
+        return ""
+
+    abs_ws_dir = os.path.abspath(workspace_dir)
+    if os.path.isabs(output_file):
+        abs_output_file = os.path.abspath(output_file)
+    else:
+        abs_output_file = os.path.abspath(os.path.join(abs_ws_dir, output_file))
+    abs_output_dir = os.path.dirname(abs_output_file)
+
+    def _replace_link(match: re.Match) -> str:
+        label = match.group("label")
+        raw_target = match.group("target")
+        target_trimmed = raw_target.strip()
+
+        if not target_trimmed:
+            return match.group(0)
+
+        # Handle angle brackets <url>
+        has_angle_brackets = False
+        if target_trimmed.startswith("<") and ">" in target_trimmed:
+            end_angle = target_trimmed.find(">")
+            url_part = target_trimmed[1:end_angle].strip()
+            title_part = target_trimmed[end_angle + 1 :]
+            has_angle_brackets = True
+        else:
+            # Handle optional link title: url "title"
+            parts = target_trimmed.split(None, 1)
+            if len(parts) == 2 and (
+                parts[1].startswith('"') or parts[1].startswith("'") or parts[1].startswith("(")
+            ):
+                url_part = parts[0]
+                title_part = " " + parts[1]
+            else:
+                url_part = target_trimmed
+                title_part = ""
+
+        # Preserve external URLs and in-page anchors
+        if (
+            url_part.startswith("#")
+            or url_part.startswith("http://")
+            or url_part.startswith("https://")
+            or url_part.startswith("mailto:")
+            or url_part.startswith("ftp://")
+            or re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", url_part)
+            or not url_part
+        ):
+            return match.group(0)
+
+        # Separate path and anchor
+        if "#" in url_part:
+            path_part, anchor_part = url_part.split("#", 1)
+            anchor_suffix = "#" + anchor_part
+        else:
+            path_part = url_part
+            anchor_suffix = ""
+
+        if not path_part:
+            return match.group(0)
+
+        # Normalize path_part resolution
+        is_explicit_rel = path_part.startswith("./") or path_part.startswith("../") or path_part in (".", "..")
+        is_abs = path_part.startswith("/") or (len(path_part) > 2 and path_part[1] == ":" and path_part[2] in ("/", "\\"))
+
+        if is_abs:
+            if path_part.startswith(abs_ws_dir):
+                target_abs = os.path.normpath(path_part)
+            else:
+                target_abs = os.path.normpath(os.path.join(abs_ws_dir, path_part.lstrip("/\\")))
+        elif is_explicit_rel:
+            target_abs = os.path.normpath(os.path.join(abs_output_dir, path_part))
+        else:
+            # Workspace-relative path (schema/..., docs/..., etc.)
+            target_abs = os.path.normpath(os.path.join(abs_ws_dir, path_part))
+
+        new_rel = os.path.relpath(target_abs, abs_output_dir).replace(os.sep, "/")
+        if path_part.startswith("./") and not new_rel.startswith(".") and new_rel:
+            new_rel = "./" + new_rel
+
+        new_url = new_rel + anchor_suffix
+        if has_angle_brackets:
+            new_target = f"<{new_url}>{title_part}"
+        else:
+            new_target = f"{new_url}{title_part}"
+
+        return f"[{label}]({new_target})"
+
+    link_pattern = re.compile(r"\[(?P<label>(?:\\\]|[^\]])+)\]\((?P<target>[^)\n]+)\)")
+    return link_pattern.sub(_replace_link, text)
+
+
 def validate_unit_integrity(
     unit_paths: List[str],
     param_engine: Optional[SysMLParameterBindingEngine] = None,
@@ -4152,6 +4252,7 @@ def assemble_conops(
         elif not verify_only:
             os.makedirs(output_dir, exist_ok=True)
             out_file = os.path.join(output_dir, "CONOPS.md")
+            conops_doc = relativize_markdown_links(conops_doc, out_file, ws_dir)
             with open(out_file, "w", encoding="utf-8") as f:
                 f.write(conops_doc)
             print(f"[+] Successfully wrote compiled ConOps to '{out_file}'.")
@@ -4172,6 +4273,7 @@ def assemble_conops(
         elif not verify_only:
             os.makedirs(output_dir, exist_ok=True)
             out_file = os.path.join(output_dir, "MISSION_INTENT.md")
+            mission_doc = relativize_markdown_links(mission_doc, out_file, ws_dir)
             with open(out_file, "w", encoding="utf-8") as f:
                 f.write(mission_doc)
             print(f"[+] Successfully wrote compiled Mission Intent to '{out_file}'.")

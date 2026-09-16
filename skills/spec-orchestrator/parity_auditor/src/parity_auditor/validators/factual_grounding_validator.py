@@ -896,6 +896,13 @@ class MechanicalSectionSlicer:
         full_path = os.path.join(self.workspace_dir, file_rel_path) if not os.path.isabs(file_rel_path) else file_rel_path
         if os.path.isfile(full_path):
             return full_path
+        # Strip leading relative navigation (e.g. ../../schema/... or ../research/...)
+        clean_rel = re.sub(r'^(?:\.\.[\\/])+', '', file_rel_path).lstrip('./')
+        if clean_rel:
+            clean_full = os.path.join(self.workspace_dir, clean_rel)
+            if os.path.isfile(clean_full):
+                return clean_full
+            file_rel_path = clean_rel
         if file_rel_path == "schema.sysml":
             pipeline_cand = os.path.join(self.workspace_dir, ".pipeline", "schema.sysml")
             if os.path.isfile(pipeline_cand):

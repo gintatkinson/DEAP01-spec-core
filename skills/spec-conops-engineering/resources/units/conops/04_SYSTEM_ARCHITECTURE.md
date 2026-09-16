@@ -16,9 +16,9 @@ Physical subsystems, computational nodes, and functional elements are allocated 
 
 | Subsystem Part | Operational Segment | SSOT Ground Truth Source & Citation | Primary Functional Role |
 | :--- | :--- | :--- | :--- |
-| `CoreController` | Primary Operational Segment | [schema/<source_file>](schema/<source_file>#anchor) ("OEM Clause Title") \| SysML v2: `part def <NodeName>` | Realizes core operational mission functions |
-| `TelemetryTerminal` | Command & Control Segment | [schema/<source_file>](schema/<source_file>#anchor) ("OEM Clause Title") \| SysML v2: `part def <NodeName>` | Encrypted PACE Communications |
-| `GroundSupportUnit` | Auxiliary Support Segment | [schema/<source_file>](schema/<source_file>#anchor) ("OEM Clause Title") \| SysML v2: `part def <NodeName>` | Pre-Operation Power & Diagnostics |
+| `CoreController` | Primary Operational Segment | [../../schema/<source_file>](../../schema/<source_file>#anchor) ("OEM Clause Title") \| SysML v2: `part def <NodeName>` | Realizes core operational mission functions |
+| `TelemetryTerminal` | Command & Control Segment | [../../schema/<source_file>](../../schema/<source_file>#anchor) ("OEM Clause Title") \| SysML v2: `part def <NodeName>` | Encrypted PACE Communications |
+| `GroundSupportUnit` | Auxiliary Support Segment | [../../schema/<source_file>](../../schema/<source_file>#anchor) ("OEM Clause Title") \| SysML v2: `part def <NodeName>` | Pre-Operation Power & Diagnostics |
 
 {{SEGMENT_ALLOCATION_MATRIX}}
 
@@ -31,7 +31,7 @@ Detailed architectural decomposition of all physical and logical subsystems deri
 - **Power, Mass & Resource Envelopes:** Operating electrical power draw, mass partition budget ($m_{\mathrm{alloc}}$), and thermal operating envelopes.
 - **Operational Role & Statechart Integration:** Lifecycle mode allocation ($\Phi_{\mathrm{lifecycle}}$) and active operational states.
 - **Safety Invariants, Containment Interlocks & FMECA Linkage:** Watchdog interlocks, emergency trigger containment bindings (`EMG-01`..`EMG-07`), and safety criticalities.
-- **SSOT Ground Truth Mapping:** [schema/<source_file>](schema/<source_file>#anchor) ("OEM Clause Title") | SysML v2: `part def <NodeName>`
+- **SSOT Ground Truth Mapping:** [../../schema/<source_file>](../../schema/<source_file>#anchor) ("OEM Clause Title") | SysML v2: `part def <NodeName>`
 
 {{SUBSYSTEM_ARCHITECTURE_SECTION}}
 

@@ -1289,6 +1289,57 @@ class TestSpecConopsEngineering(unittest.TestCase):
             self.assertIn("100% Mathematical Parity with Section 4.8 Allocation Table", content)
             self.assertIn("Every subsystem block in the SV-1 diagram embeds the exact set of typed logical and physical ports (`• PORT-... (DIRECTION)`) matching the Section 4.8 Physical & Logical Interface Allocations table rows 1:1, derived deterministically from 100% of declared AST `part def` nodes in exact lockstep.", content)
 
+    def test_relativize_markdown_links(self):
+        """Verify relativize_markdown_links normalizes schema/... and docs/... links while preserving external URLs and anchors."""
+        from scripts.assemble_conops import relativize_markdown_links
+
+        workspace_dir = "/Users/workspace/project"
+        output_file = "/Users/workspace/project/docs/conops/CONOPS.md"
+
+        sample_text = (
+            "1. Schema link: [DEAP Model](schema/model.sysml)\n"
+            "2. Schema link with anchor: [Core Controller](schema/model.sysml#CoreController)\n"
+            "3. Docs research link: [Research Inventory](docs/research/RESEARCH_INVENTORY.md)\n"
+            "4. Docs link with anchor: [Obligation](docs/research/RESEARCH_INVENTORY.md#OBL-01)\n"
+            "5. In-page anchor: [Scope Section](#1-scope-system-identification)\n"
+            "6. External HTTPS: [GitHub Repo](https://github.com/example/repo#readme)\n"
+            "7. External HTTP: [Standard Org](http://example.org/spec)\n"
+            "8. External mailto: [Contact](mailto:dev@example.com)\n"
+            "9. Existing document-relative link: [Subsystem](../../schema/hardware.sysml#power)\n"
+            "10. Table 4.2 template syntax: [../../schema/<source_file>](../../schema/<source_file>#anchor) (\"OEM Clause Title\") | SysML v2: `part def <NodeName>`\n"
+        )
+
+        relativized = relativize_markdown_links(sample_text, output_file, workspace_dir)
+
+        # 1. Schema relative link normalized to ../../schema/...
+        self.assertIn("[DEAP Model](../../schema/model.sysml)", relativized)
+        self.assertIn("[Core Controller](../../schema/model.sysml#CoreController)", relativized)
+
+        # 2. Docs relative link normalized to ../research/...
+        self.assertIn("[Research Inventory](../research/RESEARCH_INVENTORY.md)", relativized)
+        self.assertIn("[Obligation](../research/RESEARCH_INVENTORY.md#OBL-01)", relativized)
+
+        # 3. In-page anchor preserved as-is
+        self.assertIn("[Scope Section](#1-scope-system-identification)", relativized)
+
+        # 4. External URLs preserved as-is
+        self.assertIn("[GitHub Repo](https://github.com/example/repo#readme)", relativized)
+        self.assertIn("[Standard Org](http://example.org/spec)", relativized)
+        self.assertIn("[Contact](mailto:dev@example.com)", relativized)
+
+        # 5. Existing relative links with anchors preserved as-is
+        self.assertIn("[Subsystem](../../schema/hardware.sysml#power)", relativized)
+        self.assertIn("[../../schema/<source_file>](../../schema/<source_file>#anchor)", relativized)
+
+        # Test with relative output_file path
+        rel_output = "docs/conops/MISSION_INTENT.md"
+        rel_test = relativize_markdown_links(
+            "[Sensors](schema/sensors.sysml#SENS-01)",
+            rel_output,
+            workspace_dir,
+        )
+        self.assertEqual(rel_test, "[Sensors](../../schema/sensors.sysml#SENS-01)")
+
 
 if __name__ == "__main__":
     unittest.main()
