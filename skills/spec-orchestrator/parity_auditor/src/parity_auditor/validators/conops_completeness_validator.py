@@ -778,10 +778,10 @@ class ConopsCompletenessValidator(IValidator):
     """
 
     MANDATORY_SECTIONS: List[Dict[str, Any]] = [
-        {"num": 1, "title": "Scope & System Identification", "aliases": ["scope", "system identification", "system boundary", "scope, system identification & normative baseline", "scope, identification & normative baseline", "normative baseline"]},
+        {"num": 1, "title": "Scope & System Identification", "aliases": ["scope", "system identification", "system boundary", "scope, system identification & normative baseline", "scope, identification & normative baseline", "normative baseline", "stakeholder community", "user classes", "stakeholder taxonomy", "operational context"]},
         {"num": 2, "title": "Current Situation & Deficiency Analysis (Predecessors)", "aliases": ["current situation", "deficiency analysis", "predecessor", "predecessors", "deficiencies", "operational motivation", "deficiency analysis & operational motivation"]},
         {"num": 3, "title": "Proposed Capabilities & Trade-Offs (Pugh Decision Matrix)", "aliases": ["proposed capabilities", "trade-off", "trade-offs", "pugh decision matrix", "pugh matrix", "operational justification", "justification"]},
-        {"num": 4, "title": "Operational User Classes, Stakeholder Community & Systems Architecture", "aliases": ["user classes", "stakeholder community", "systems architecture", "super-system", "subsystem architecture", "stakeholder taxonomy", "operational lifecycle modes", "user classes, stakeholder taxonomy & operational lifecycle modes", "stakeholders"]},
+        {"num": 4, "title": "System Operational Architecture & Physical Subsystem Decomposition", "aliases": ["systems architecture", "system operational architecture", "physical subsystem decomposition", "super-system", "subsystem architecture", "system architecture", "physical architecture", "operational architecture"]},
         {"num": 5, "title": "Operational State Space & SORA 4D Volume Risk Assessment", "aliases": ["operational state space", "sora", "4d volume", "boundary containment", "risk assessment", "ground risk buffer", "grb math", "grb"]},
         {"num": 6, "title": "OMG UAF Operational Activity Taxonomy", "aliases": ["operational activity taxonomy", "uaf operational activities", "operational activities", "uaf activities", "oa-", "omg uaf"]},
         {"num": 7, "title": "Operational Information Exchange (Op-Tx) Matrix", "aliases": ["operational information exchange", "op-tx matrix", "op-tx table", "information exchange", "op-tx"]},
@@ -1147,7 +1147,7 @@ class ConopsCompletenessValidator(IValidator):
             _, sec3_line, sec3_content = matched_sections[3]
             findings.extend(self._validate_pugh_decision_matrix(content, rel_path, sec3_content, sec3_line))
 
-        # Section 4: Operational User Classes, Stakeholder Community & Systems Architecture (Fixes #130, #260, #298, #301)
+        # Section 4: System Operational Architecture & Physical Subsystem Decomposition (Fixes #130, #260, #298, #301)
         if 4 in matched_sections and "TEMPLATE" not in rel_path.upper():
             _, sec4_line, sec4_content = matched_sections[4]
             findings.extend(self._validate_operational_architecture_coverage(content, rel_path, sec4_content, sec4_line, repo=repo))
@@ -1542,7 +1542,9 @@ class ConopsCompletenessValidator(IValidator):
             return findings
 
         sorted_parts = sorted(list(part_defs))
-        sec48_match = re.search(r'(?:^|\n)#{3,4}\s+4\.8\b', sec4_content)
+        sec48_match = re.search(r'(?:^|\n)#{3,4}\s+(?:4\.3|4\.8)\b[^\n]*subsystem\s+architecture', sec4_content, re.IGNORECASE)
+        if not sec48_match:
+            sec48_match = re.search(r'(?:^|\n)#{3,4}\s+4\.8\b', sec4_content)
         if not sec48_match:
             findings.append(Finding(
                 "conops-partdef-coverage-incomplete",
@@ -1553,7 +1555,8 @@ class ConopsCompletenessValidator(IValidator):
         else:
             start_pos = sec48_match.start()
             rest = sec4_content[sec48_match.end():]
-            next_heading = re.search(r'\n#{2,3}\s+(?!4\.8\b)', rest)
+            sec_num = "4.3" if "4.3" in sec48_match.group(0) else "4.8"
+            next_heading = re.search(rf'\n#{{2,3}}\s+(?!{re.escape(sec_num)}\b)', rest)
             if next_heading:
                 sec48_content = sec4_content[start_pos : sec48_match.end() + next_heading.start()]
             else:
@@ -1776,7 +1779,7 @@ class ConopsCompletenessValidator(IValidator):
 - [1. Scope & System Identification](#1-scope--system-identification)
 - [2. Current Situation & Deficiency Analysis (Predecessors)](#2-current-situation--deficiency-analysis-predecessors)
 - [3. Proposed Capabilities & Trade-Offs (Pugh Decision Matrix)](#3-proposed-capabilities--trade-offs-pugh-decision-matrix)
-- [4. Operational User Classes, Stakeholder Community & Systems Architecture](#4-operational-user-classes-stakeholder-community--systems-architecture)
+- [4. System Operational Architecture & Physical Subsystem Decomposition](#4-system-operational-architecture--physical-subsystem-decomposition)
 - [5. Operational State Space & SORA 4D Volume Risk Assessment](#5-operational-state-space--sora-4d-volume-risk-assessment)
 - [6. OMG UAF Operational Activity Taxonomy](#6-omg-uaf-operational-activity-taxonomy)
 - [7. Operational Information Exchange (Op-Tx) Matrix](#7-operational-information-exchange-op-tx-matrix)
@@ -1791,6 +1794,9 @@ class ConopsCompletenessValidator(IValidator):
 - **Operational Domain:** `{{OPERATIONAL_DOMAIN}}`
 - **Operational Boundaries:** {{OPERATIONAL_BOUNDARIES}}
 - **Stakeholder Roster:** {{STAKEHOLDER_ROSTER}}
+
+### 1.4 User Classes and Other Involved Personnel
+{{USER_CLASSES_AND_STAKEHOLDERS}}
 
 ## 2. Current Situation & Deficiency Analysis (Predecessors)
 - **Current Operational Baseline:** {{CURRENT_OPERATIONAL_BASELINE}}
@@ -1816,23 +1822,28 @@ $$
 | Lifecycle Maintenance Cost | {{WEIGHT_CRIT_3}} | 0 (Datum) | {{SCORE_A_3}} | {{SCORE_B_3}} | {{SCORE_C_3}} |
 | **Weighted Total Score S_j(w)** | **1.00** | **0.00** | **{{WEIGHTED_SCORE_A}}** | **{{WEIGHTED_SCORE_B}}** | **{{WEIGHTED_SCORE_C}}** |
 
-## 4. Operational User Classes, Stakeholder Community & Systems Architecture
-- **User Classes & Stakeholder Taxonomy:** {{USER_CLASSES_AND_STAKEHOLDERS}}
-- **Operational Lifecycle Modes across $\Phi_{\mathrm{lifecycle}}$:**
-- **Phase_Startup:** {{PHASE_STARTUP_DESCRIPTION}}
-- **Phase_NominalExecution:** {{PHASE_NOMINAL_EXECUTION_DESCRIPTION}}
-- **Phase_DegradedMode:** {{PHASE_DEGRADED_MODE_DESCRIPTION}}
-- **Phase_ContingencyFailsafe:** {{PHASE_CONTINGENCY_FAILSAFE_DESCRIPTION}}
-- **Phase_SecureShutdown:** {{PHASE_SECURE_SHUTDOWN_DESCRIPTION}}
-- **Phase_MaintenanceMode:** {{PHASE_MAINTENANCE_MODE_DESCRIPTION}}
+## 4. System Operational Architecture & Physical Subsystem Decomposition
 
-### 4.7 Super-System Architecture
+### 4.1 Super-System Operational Architecture & Segment Boundaries
 {{SUPER_SYSTEM_ARCHITECTURE}}
 
-### 4.8 Subsystem Architecture
+### 4.2 Super-System Segment Allocation Matrix
+{{SEGMENT_ALLOCATION_MATRIX}}
+
+### 4.3 Subsystem Architecture (100% AST Part Coverage)
 {{SUBSYSTEM_ARCHITECTURE_SECTION}}
 
+### 4.4 Port Taxonomy & Interface Interconnects
+{{PORT_TAXONOMY_SECTION}}
+
+### 4.5 Level 0 SSOT Model Binding Statement
+{{MODEL_BINDING_STATEMENT}}
+
 ## 5. Operational State Space & SORA 4D Volume Risk Assessment
+
+### 5.1 Operational Lifecycle Modes across $\Phi_{\mathrm{lifecycle}}$
+{{OPERATIONAL_LIFECYCLE_MODES}}
+
 $$
 \begin{aligned}
 V_{\mathrm{4D}} &= V_{\mathrm{SpatialGeometry}} \cup V_{\mathrm{ContingencyVolume}} \cup V_{\mathrm{GRB}} \\

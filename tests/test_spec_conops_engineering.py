@@ -29,6 +29,8 @@ MISSION_01_COMMANDERS_INTENT_PATH = os.path.join(REPO_ROOT, "skills", "spec-cono
 AGENTS_MISSION_01_COMMANDERS_INTENT_PATH = os.path.join(REPO_ROOT, ".agents", "skills", "spec-conops-engineering", "resources", "units", "mission_intent", "01_COMMANDERS_INTENT.md")
 CONOPS_02_DEFICIENCIES_PATH = os.path.join(REPO_ROOT, "skills", "spec-conops-engineering", "resources", "units", "conops", "02_DEFICIENCIES_AND_MOTIVATION.md")
 AGENTS_CONOPS_02_DEFICIENCIES_PATH = os.path.join(REPO_ROOT, ".agents", "skills", "spec-conops-engineering", "resources", "units", "conops", "02_DEFICIENCIES_AND_MOTIVATION.md")
+CONOPS_04_SYSTEM_ARCH_PATH = os.path.join(REPO_ROOT, "skills", "spec-conops-engineering", "resources", "units", "conops", "04_SYSTEM_ARCHITECTURE.md")
+AGENTS_CONOPS_04_SYSTEM_ARCH_PATH = os.path.join(REPO_ROOT, ".agents", "skills", "spec-conops-engineering", "resources", "units", "conops", "04_SYSTEM_ARCHITECTURE.md")
 CONOPS_04_USER_CLASSES_PATH = os.path.join(REPO_ROOT, "skills", "spec-conops-engineering", "resources", "units", "conops", "04_USER_CLASSES_AND_STAKEHOLDERS.md")
 AGENTS_CONOPS_04_USER_CLASSES_PATH = os.path.join(REPO_ROOT, ".agents", "skills", "spec-conops-engineering", "resources", "units", "conops", "04_USER_CLASSES_AND_STAKEHOLDERS.md")
 CONOPS_08_ENVIRONMENTAL_PATH = os.path.join(REPO_ROOT, "skills", "spec-conops-engineering", "resources", "units", "conops", "08_ENVIRONMENTAL_MIL_STD_810H.md")
@@ -828,6 +830,46 @@ class TestSpecConopsEngineering(unittest.TestCase):
         # Parametric placeholders check
         placeholders = re.findall(r"\{\{[A-Za-z0-9_]+(?::[^\}]*)?\}\}", content)
         self.assertGreaterEqual(len(placeholders), 5, f"Expected >= 5 parametric placeholders, found {len(placeholders)}")
+
+    def test_conops_04_system_architecture(self):
+        """Verify 04_SYSTEM_ARCHITECTURE.md establishes Section 4 as Physical & Operational Architecture with sections 4.1-4.5 and required placeholders."""
+        self.assertTrue(os.path.isfile(CONOPS_04_SYSTEM_ARCH_PATH), f"Missing {CONOPS_04_SYSTEM_ARCH_PATH}")
+        self.assertTrue(os.path.isfile(AGENTS_CONOPS_04_SYSTEM_ARCH_PATH), f"Missing {AGENTS_CONOPS_04_SYSTEM_ARCH_PATH}")
+
+        with open(CONOPS_04_SYSTEM_ARCH_PATH, "r", encoding="utf-8") as f:
+            content = f.read()
+        with open(AGENTS_CONOPS_04_SYSTEM_ARCH_PATH, "r", encoding="utf-8") as f:
+            mirror_content = f.read()
+
+        self.assertEqual(content, mirror_content, "Mirror mismatch between skills/ and .agents/ for 04_SYSTEM_ARCHITECTURE.md")
+
+        # Section 4 Header
+        self.assertIn("## 4. System Operational Architecture & Physical Subsystem Decomposition", content)
+
+        # Subsections 4.1 to 4.5
+        self.assertIn("### 4.1 Super-System Operational Architecture & Segment Boundaries", content)
+        self.assertIn("{{SUPER_SYSTEM_ARCHITECTURE}}", content)
+
+        self.assertIn("### 4.2 Super-System Segment Allocation Matrix", content)
+        self.assertIn("{{SEGMENT_ALLOCATION_MATRIX}}", content)
+
+        self.assertIn("### 4.3 Subsystem Architecture (100% AST Part Coverage)", content)
+        self.assertIn("{{SUBSYSTEM_ARCHITECTURE_SECTION}}", content)
+
+        self.assertIn("### 4.4 Port Taxonomy & Interface Interconnects", content)
+        self.assertIn("{{PORT_TAXONOMY_SECTION}}", content)
+
+        self.assertIn("### 4.5 Level 0 SSOT Model Binding Statement", content)
+        self.assertIn("{{MODEL_BINDING_STATEMENT}}", content)
+
+        # Domain Agnosticism check
+        from tests.test_canonical_templates import FORBIDDEN_DOMAIN_NOUNS
+        violations = []
+        for pat in FORBIDDEN_DOMAIN_NOUNS:
+            matches = re.findall(pat, content, re.IGNORECASE)
+            if matches:
+                violations.append(f"Found forbidden domain noun '{matches[0]}' matching pattern '{pat}'")
+        self.assertEqual(violations, [], f"Forbidden domain nouns found in 04_SYSTEM_ARCHITECTURE.md: {violations}")
 
     def test_section_1_3_system_boundary_math_and_table(self):
         """Verify Section 1.3 in 01_METADATA_AND_OVERVIEW.md has valid KaTeX math formatting and formal Parameter Definitions table with plain text symbols (Fixes #151, #155)."""

@@ -88,7 +88,7 @@ The ConOps specification tree consists of 12 canonical modular units:
 | `01_METADATA_AND_OVERVIEW.md` | `## 1. Scope, System Identification & Normative Baseline` | `operational_context`, `user_classes` | System ID, domain classification, physical/legal boundaries, stakeholder roster, user classes (UCL-xx). |
 | `02_DEFICIENCIES_AND_MOTIVATION.md` | `## 2. Current Situation, Deficiency Analysis & Operational Motivation` | `deficiencies` | Predecessor baseline, technical, operational, and human deficiencies. |
 | `03_PROPOSED_CAPABILITIES.md` | `## 3. Proposed Capabilities & Operational Justification (Trade-Offs)` | `proposed_capabilities` | Mission drivers, value propositions, engineering trade-off evaluations. |
-| `04_USER_CLASSES_AND_STAKEHOLDERS.md` | `## 4. User Classes, Stakeholder Taxonomy & Operational Lifecycle Modes` | `operational_context` | User Classes (UCL-01..UCL-N), formal operational lifecycle stages: Phase_Startup, Phase_NominalExecution, Phase_DegradedMode, Phase_ContingencyFailsafe, Phase_SecureShutdown, Phase_MaintenanceMode; Super-System Architecture (Air Vehicle, Ground Segment, Launch System) conforming to Option 3 (Compact Subsystem Blocks with Embedded Port Attributes and max 3-column vertical tier partitioning); and Subsystem Architecture subsections covering 100% of declared AST `part def` nodes. |
+| `04_SYSTEM_ARCHITECTURE.md` | `## 4. System Operational Architecture & Physical Subsystem Decomposition` | `system_architecture` / `operational_context` | Super-System Architecture (Air Vehicle, Ground Segment, Launch System) conforming to Option 3 (Compact Subsystem Blocks with Embedded Port Attributes and max 3-column vertical tier partitioning); Subsystem Architecture subsections covering 100% of declared AST `part def` nodes; Port Taxonomy and SSOT Model Binding statement (accepts backward-compatible alias `04_USER_CLASSES_AND_STAKEHOLDERS.md`). |
 | `05_AIRSPACE_AND_SORA_RISK.md` | `## 5. Operational State Space, Boundary Containment & Risk Assessment` | `airspace_sora` | 4D volume mathematical formulation, Ground Risk Buffer ($R_{\mathrm{GRB}}$) equation, and SORA impact parameters table. |
 | `06_UAF_OPERATIONAL_ACTIVITIES.md` | `## 6. OMG UAF Operational Activity Taxonomy` | `uaf_activities` | Open-ended UAF activity roster (`OA-01`..`OA-N`) with mandatory Gate 24 allocation tags (`/// OperationalAllocation: [OA-XX]`). |
 | `07_OPTX_EXCHANGES.md` | `## 7. Operational Information Exchange (Op-Tx) Matrix` | `optx_exchanges` | Information exchange roster (`OpTx-01`..`OpTx-N`) specifying source, destination, data rates, latency limits, criticality; captures high-level operational information exchanges (C2 Commands, Telemetry, Video, Target Tracks, Arming Authorization) and strictly excludes component-internal serial opcode reference tables. |
@@ -139,7 +139,7 @@ docs/conops/
     │   ├── 01_METADATA_AND_OVERVIEW.md
     │   ├── 02_DEFICIENCIES_AND_MOTIVATION.md
     │   ├── 03_PROPOSED_CAPABILITIES.md
-    │   ├── 04_USER_CLASSES_AND_STAKEHOLDERS.md
+    │   ├── 04_SYSTEM_ARCHITECTURE.md
     │   ├── 05_AIRSPACE_AND_SORA_RISK.md
     │   ├── 06_UAF_OPERATIONAL_ACTIVITIES.md
     │   ├── 07_OPTX_EXCHANGES.md
