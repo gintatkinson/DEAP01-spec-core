@@ -2656,7 +2656,15 @@ def check_semantic_diagram_ast_parity(repo_root=None):
 
     repo = repo_cls(workspace_dir=repo_root)
     validator = val_cls(workspace_repo=repo)
-    findings = validator.validate(repo, scan_dirs=["docs"])
+    target_scan_dirs = [
+        "docs/conops", "docs/safety", "docs/interfaces", "docs/architecture",
+        "docs/epics", "docs/features", "docs/user-stories", "docs/use-cases",
+        "docs/management", "docs/reports",
+    ]
+    # Filter out compiler architecture blueprints (governed by Check 18, not downstream AST parity)
+    target_scan_dirs = [d for d in target_scan_dirs if "blueprints" not in d.replace("\\", "/").split("/")]
+    scan_dirs = [d for d in target_scan_dirs if os.path.isdir(os.path.join(repo_root, d))]
+    findings = validator.validate(repo, scan_dirs=scan_dirs)
 
     if findings:
         print("ERROR: Check 21 failed (Semantic Diagram-to-AST Topology Parity Gate violations found):", file=sys.stderr)

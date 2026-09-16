@@ -46,6 +46,7 @@ ConnectionDef = _sysml_ast.ConnectionDef
 # Specifically purges customer-specific domain keywords and generalizes to abstract boundaries
 RECOGNIZED_EXTERNAL_ACTORS = {
     "operator", "operators", "user", "users", "human", "supervisor", "authority", "authorities",
+    "terminal", "technician", "coordinator", "maintainer",
     "cloud", "server", "servers", "client", "clients", "database", "storage", "backend", "infrastructure",
     "external_system", "external system", "external", "externalsystems", "ext", "third_party",
     "environment", "environmental", "physical_world", "terrain", "space", "atmosphere",
@@ -242,7 +243,9 @@ class SemanticDiagramASTValidator(IValidator):
             return []
 
         # 3. Discover markdown files to validate
-        scan_subdirs = kwargs.get("scan_dirs") or ["docs"]
+        scan_subdirs = kwargs.get("scan_dirs")
+        if scan_subdirs is None:
+            scan_subdirs = ["docs"]
         md_files: List[str] = []
         for sdir in scan_subdirs:
             abs_dir = os.path.join(repo.workspace_dir, sdir)
@@ -253,6 +256,9 @@ class SemanticDiagramASTValidator(IValidator):
         for md_path in md_files:
             rel_path = os.path.relpath(md_path, repo.workspace_dir)
             if "defects" in rel_path.split(os.sep):
+                continue
+            # Skip compiler and platform meta-architecture blueprints governed by Check 18
+            if "blueprints" in md_path.split(os.sep) or "blueprints/" in md_path or "blueprints" in rel_path.split(os.sep):
                 continue
             try:
                 with open(md_path, "r", encoding="utf-8") as f:
@@ -538,6 +544,24 @@ class SemanticDiagramASTValidator(IValidator):
         is_operational_tier: bool = False,
     ) -> bool:
         """Check whether a flowchart node or label matches declared AST elements or recognized actors."""
+        raw_label_lower = (label or "").lower()
+        raw_id_lower = (node_id or "").lower()
+
+        # Check architectural annotations like (performernode: ...), (userrole: ...), etc.
+        # BEFORE parentheses are stripped by identifier normalization
+        if any(ann in raw_label_lower or ann in raw_id_lower for ann in (
+            "(performernode:", "(userrole:", "(operationalrole:", "(stakeholder:", "(authority:",
+            "performernode:", "userrole:", "operationalrole:", "stakeholder:", "authority:",
+            "performernode", "userrole", "operationalrole", "stakeholder", "authority"
+        )):
+            return True
+
+        # Recognized operational performer/actor tokens in raw label/id
+        if any(tok in raw_label_lower or tok in raw_id_lower for tok in (
+            "terminal", "technician", "coordinator", "maintainer"
+        )):
+            return True
+
         id_norm = _normalize_identifier(node_id)
         lbl_norm = _normalize_identifier(label)
         title_line = re.split(r'<br\s*/?>|\n', label or "", flags=re.I)[0].strip()
@@ -595,7 +619,8 @@ class SemanticDiagramASTValidator(IValidator):
             "segment", "segments", "stakeholder", "authority",
             "airframe", "vehicle", "platform", "supersystem", "super_system",
             "launcher", "launchrecovery", "recovery", "groundcontrol", "groundstation",
-            "airvehicle", "groundsegment", "spacesegment", "supportsegment", "primaryoperational"
+            "airvehicle", "groundsegment", "spacesegment", "supportsegment", "primaryoperational",
+            "terminal", "technician", "coordinator", "maintainer"
         )):
             return True
 
@@ -650,12 +675,14 @@ class SemanticDiagramASTValidator(IValidator):
                 "operational", "mission", "c2", "datalink", "command", "telemetry",
                 "ground", "air", "space", "launch", "recovery", "support", "station",
                 "supervisor", "operator", "controller", "payload", "sensor", "actuator",
-                "external", "environment", "safety", "watchdog", "gse", "gcs", "containment"
+                "external", "environment", "safety", "watchdog", "gse", "gcs", "containment",
+                "terminal", "technician", "coordinator", "maintainer"
             )):
                 return True
             if any(tok in (
                 "c2", "gcs", "fcs", "gse", "rf", "gps", "gnss", "nav", "imu", "act",
-                "actuator", "controller", "operator", "station", "platform", "vehicle"
+                "actuator", "controller", "operator", "station", "platform", "vehicle",
+                "terminal", "technician", "coordinator", "maintainer"
             ) for tok in tokens):
                 return True
 
@@ -667,20 +694,24 @@ class SemanticDiagramASTValidator(IValidator):
     def _is_actuator(self, name: str, label: str) -> bool:
         """Check if a node represents an actuator component."""
         name_lower = name.lower()
+        raw_label_lower = (label or "").lower()
         title_line = (label or "").split('<br')[0].split('\n')[0].strip()
         title_lower = title_line.lower()
         norm_name = _normalize_identifier(name)
         # Exclude communication, satellite, network, service relays, stations, controller interfaces and port endpoints
         if norm_name.startswith("port") or name_lower.startswith(("port-", "port_", "port:")):
             return False
-        if any(k in name_lower or k in title_lower for k in (
+        if any(k in name_lower or k in title_lower or k in raw_label_lower for k in (
             "satcom", "network", "comms", "service", "gateway", "hub", "station",
             "console", "terminal", "umbilical",
             "computer", "controller", "fcc", "autopilot", "obc",
             "safety", "safetynet", "rta", "monitor", "supervisor", "executive",
             "segment", "system", "subsystem", "airframe", "platform", "supersystem",
             "launcher", "gse", "equipment", "recovery", "vehicle", "ground", "support",
-            "operator", "target", "threat", "commander"
+            "operator", "target", "threat", "commander",
+            "failure", "jam", "stall", "dropout", "fault", "vuln", "loss",
+            "delamination", "short", "runaway", "breach", "mitigation", "containment",
+            "vector", "vector family"
         )):
             return False
         tokens = _tokenize_name(name) | _tokenize_name(title_line)

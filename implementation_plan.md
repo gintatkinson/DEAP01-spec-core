@@ -15,11 +15,11 @@ None. The requirements are clear.
 ### Issue #300 - Scaffolding and Prompt Catalog
 
 #### [MODIFY] scripts/install_pipeline.sh
-- **Path:** `/Users/perkunas/jail/DEAP01-spec-core/scripts/install_pipeline.sh`
+- **Path:** `./scripts/install_pipeline.sh`
 - **Changes:** Update line 194's `mkdir -p` command to include `"$TARGET_DIR/docs/conops/units/conops"`, `"$TARGET_DIR/docs/conops/units/mission_intent"`, and `"$TARGET_DIR/docs/interfaces"`.
 
 #### [NEW] docs/OPERATOR_PROMPT_CATALOG.md
-- **Path:** `/Users/perkunas/jail/DEAP01-spec-core/docs/OPERATOR_PROMPT_CATALOG.md`
+- **Path:** `./docs/OPERATOR_PROMPT_CATALOG.md`
 - **Changes:** Create a new markdown file containing all standardized operator usage prompts extracted and aligned with `README.md` Section 9 and `scripts/install_pipeline.sh` Section 4.2.
   - Section for Pipeline 0 (Workers 0A, 0B, 0C, 0D).
   - Section for Pipeline 1 (Workers 1A, 1B, 1C, 1D).
@@ -29,14 +29,14 @@ None. The requirements are clear.
 ### Issue #295 - Raw document schema ingestion
 
 #### [MODIFY] skills/spec-orchestrator/scripts/sysmlv2_ingest.py
-- **Path:** `/Users/perkunas/jail/DEAP01-spec-core/skills/spec-orchestrator/scripts/sysmlv2_ingest.py`
+- **Path:** `./skills/spec-orchestrator/scripts/sysmlv2_ingest.py`
 - **Changes:**
   - Define `RAW_EXTENSIONS = {".md", ".pdf", ".txt", ".doc", ".docx"}`.
   - In `detect_format`, check if the extension is in `RAW_EXTENSIONS` and return `"raw"`.
   - In `ingest_schema`, when `fmt == "raw"`, raise a structured, actionable SSOT reporting exception that names the raw document and indicates AST translation is required instead of raising the generic `ValueError: Unsupported schema format`.
 
 #### [MODIFY] tests/test_sysmlv2_ingest.py
-- **Path:** `/Users/perkunas/jail/DEAP01-spec-core/tests/test_sysmlv2_ingest.py`
+- **Path:** `./tests/test_sysmlv2_ingest.py`
 - **Changes:** Add unit tests to verify that passing raw `.md` or `.txt` files to the ingestor yields the structured actionable raw document handling/reporting exception, ensuring the generic `ValueError` is not thrown.
 
 ## Verification Plan

@@ -479,6 +479,105 @@ flowchart TD
         self.assertIn("semantic-diagram-undeclared-node", rule_ids)
         self.assertTrue(any("CompletelyFakePhantomDevice" in str(f) for f in findings))
 
+    def test_architectural_annotations_recognized_before_parentheses_strip(self):
+        """Verify architectural annotations like (PerformerNode: ...), (UserRole: ...), etc. are recognized."""
+        ast = self.validator._build_ast_ground_truth(self.pkg)
+        test_cases = [
+            ("CoreController", "Core Controller Subsystem<br/>(PerformerNode: CoreController)"),
+            ("OperatorConsole", "Supervisory Operator Console<br/>(UserRole: Operator)"),
+            ("GroundLead", "Mission Commander<br/>(OperationalRole: GroundLead)"),
+            ("CertBody", "Civil Aviation Authority<br/>(Stakeholder: CertBody)"),
+            ("RangeSafety", "Range Safety Watchdog<br/>(Authority: RangeSafety)"),
+        ]
+        for node_id, label in test_cases:
+            is_declared = self.validator._is_declared_node(
+                node_id=node_id,
+                label=label,
+                ast=ast,
+                subgraphs={},
+                is_operational_tier=False,
+            )
+            self.assertTrue(is_declared, f"Expected node '{node_id}' with label '{label}' to be recognized as declared.")
+
+    def test_operational_performer_tokens_recognized(self):
+        """Verify terminal, technician, coordinator, maintainer are recognized as valid operational performers."""
+        ast = self.validator._build_ast_ground_truth(self.pkg)
+        tokens = [
+            ("MaintenanceTerminal", "Field Maintenance Terminal"),
+            ("FieldTechnician", "Field Technician Node"),
+            ("MissionCoordinator", "Mission Coordinator Console"),
+            ("SystemMaintainer", "System Maintainer Performer"),
+        ]
+        for node_id, label in tokens:
+            is_declared = self.validator._is_declared_node(
+                node_id=node_id,
+                label=label,
+                ast=ast,
+                subgraphs={},
+                is_operational_tier=False,
+            )
+            self.assertTrue(is_declared, f"Expected operational token '{node_id}' to be recognized.")
+
+    def test_threat_and_failure_taxonomy_nodes_not_flagged_as_actuators(self):
+        """Verify threat taxonomy nodes like TM1['Actuator Jam / Hardover'] are excluded from actuator classification."""
+        threat_nodes = [
+            ("TM1", "Actuator Jam / Hardover"),
+            ("F1", "Servo Stall Failure"),
+            ("H1", "Valve Dropout Hazard"),
+            ("T2", "Actuator Threat Vector Family"),
+            ("V1", "Control Surface Runaway Vulnerability"),
+            ("M1", "Actuator Delamination Mitigation"),
+            ("C1", "Thermal Runaway Containment"),
+        ]
+        for node_id, label in threat_nodes:
+            self.assertFalse(
+                self.validator._is_actuator(node_id, label),
+                f"Node '{node_id}' with label '{label}' should be excluded from actuator classification.",
+            )
+
+    def test_threat_taxonomy_diagram_has_zero_ungrounded_actuator_findings(self):
+        """Verify a threat taxonomy diagram with actuator failure modes produces 0 ungrounded actuator errors."""
+        diagram = """
+flowchart TD
+    subgraph ThreatTaxonomy ["Actuator Threat Model & Failure Modes"]
+        TM1["Actuator Jam / Hardover"]
+        F1["Servo Stall Failure"]
+        TM1 --> F1
+    end
+"""
+        findings = self.validator.validate_diagram_ast(
+            diagram,
+            source="docs/safety/FMECA.md:10",
+            sysml_package=self.pkg,
+        )
+        ungrounded = [f for f in findings if f.rule_id == "semantic-diagram-ungrounded-component"]
+        self.assertEqual(len(ungrounded), 0, f"Expected 0 ungrounded component findings, got: {ungrounded}")
+
+    def test_skip_compiler_blueprints(self):
+        """Verify markdown files in blueprints/ are skipped by SemanticDiagramASTValidator (Check 21)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            schema_dir = os.path.join(tmpdir, "schema")
+            blueprints_dir = os.path.join(tmpdir, "docs", "architecture", "blueprints")
+            os.makedirs(schema_dir, exist_ok=True)
+            os.makedirs(blueprints_dir, exist_ok=True)
+
+            with open(os.path.join(schema_dir, "model.sysml"), "w", encoding="utf-8") as f:
+                f.write(SAMPLE_SYSML_MODEL)
+
+            # Diagram with undeclared nodes that would otherwise fail Check 21
+            with open(os.path.join(blueprints_dir, "BLUEPRINT.md"), "w", encoding="utf-8") as f:
+                f.write("""# Compiler Architecture Blueprint
+```mermaid
+flowchart TD
+    CompilerCore --> ASTTransformer
+    ASTTransformer --> CodeGenerator
+```
+""")
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            findings = self.validator.validate(repo)
+            self.assertEqual(len(findings), 0, f"Expected blueprints to be skipped, but got: {findings}")
+
 
 if __name__ == "__main__":
     unittest.main()
