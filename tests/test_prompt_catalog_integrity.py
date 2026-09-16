@@ -28,7 +28,7 @@ def extract_prompt_blocks(markdown_content: str, section_header_pattern: str) ->
     
     # Extract Worker 0A prompt
     match_0a = re.search(
-        r"####\s+(?:9\.1\.1|4\.2\.1)\s+Worker 0A[^\n]*\n+```text\n(.*?)```",
+        r"(?:####\s+(?:9\.1\.1|4\.2\.1)\s+Worker 0A[^\n]*|###\s+Worker 0A[^\n]*)\n+```text\n(.*?)```",
         markdown_content,
         re.DOTALL,
     )
@@ -37,7 +37,7 @@ def extract_prompt_blocks(markdown_content: str, section_header_pattern: str) ->
 
     # Extract Worker 0B prompt
     match_0b = re.search(
-        r"####\s+(?:9\.1\.2|4\.2\.2)\s+Worker 0B[^\n]*\n+```text\n(.*?)```",
+        r"(?:####\s+(?:9\.1\.2|4\.2\.2)\s+Worker 0B[^\n]*|###\s+Worker 0B[^\n]*)\n+```text\n(.*?)```",
         markdown_content,
         re.DOTALL,
     )
@@ -46,7 +46,7 @@ def extract_prompt_blocks(markdown_content: str, section_header_pattern: str) ->
 
     # Extract Worker 0C prompt
     match_0c = re.search(
-        r"####\s+(?:9\.1\.3|4\.2\.3)\s+Worker 0C[^\n]*\n+```text\n(.*?)```",
+        r"(?:####\s+(?:9\.1\.3|4\.2\.3)\s+Worker 0C[^\n]*|###\s+Worker 0C[^\n]*)\n+```text\n(.*?)```",
         markdown_content,
         re.DOTALL,
     )
@@ -55,7 +55,7 @@ def extract_prompt_blocks(markdown_content: str, section_header_pattern: str) ->
 
     # Extract Worker 0D prompt
     match_0d = re.search(
-        r"####\s+(?:9\.1\.4|4\.2\.4)\s+Worker 0D[^\n]*\n+```text\n(.*?)```",
+        r"(?:####\s+(?:9\.1\.4|4\.2\.4)\s+Worker 0D[^\n]*|###\s+Worker 0D[^\n]*)\n+```text\n(.*?)```",
         markdown_content,
         re.DOTALL,
     )
@@ -64,7 +64,7 @@ def extract_prompt_blocks(markdown_content: str, section_header_pattern: str) ->
 
     # Extract Worker 1A prompt
     match_1a = re.search(
-        r"####\s+(?:9\.2\.1|4\.3\.1)\s+Worker 1A[^\n]*\n+```text\n(.*?)```",
+        r"(?:####\s+(?:9\.2\.1|4\.3\.1)\s+Worker 1A[^\n]*|###\s+Worker 1A[^\n]*)\n+```text\n(.*?)```",
         markdown_content,
         re.DOTALL,
     )
@@ -73,7 +73,7 @@ def extract_prompt_blocks(markdown_content: str, section_header_pattern: str) ->
 
     # Extract Worker 1B prompt
     match_1b = re.search(
-        r"####\s+(?:9\.2\.2|4\.3\.2)\s+Worker 1B[^\n]*\n+```text\n(.*?)```",
+        r"(?:####\s+(?:9\.2\.2|4\.3\.2)\s+Worker 1B[^\n]*|###\s+Worker 1B[^\n]*)\n+```text\n(.*?)```",
         markdown_content,
         re.DOTALL,
     )
@@ -82,7 +82,7 @@ def extract_prompt_blocks(markdown_content: str, section_header_pattern: str) ->
 
     # Extract Worker 1C prompt
     match_1c = re.search(
-        r"####\s+(?:9\.2\.3|4\.3\.3)\s+Worker 1C[^\n]*\n+```text\n(.*?)```",
+        r"(?:####\s+(?:9\.2\.3|4\.3\.3)\s+Worker 1C[^\n]*|###\s+Worker 1C[^\n]*)\n+```text\n(.*?)```",
         markdown_content,
         re.DOTALL,
     )
@@ -91,7 +91,7 @@ def extract_prompt_blocks(markdown_content: str, section_header_pattern: str) ->
 
     # Extract Worker 1D prompt
     match_1d = re.search(
-        r"####\s+(?:9\.2\.4|4\.3\.4)\s+Worker 1D[^\n]*\n+```text\n(.*?)```",
+        r"(?:####\s+(?:9\.2\.4|4\.3\.4)\s+Worker 1D[^\n]*|###\s+Worker 1D[^\n]*)\n+```text\n(.*?)```",
         markdown_content,
         re.DOTALL,
     )
@@ -100,7 +100,7 @@ def extract_prompt_blocks(markdown_content: str, section_header_pattern: str) ->
 
     # Extract Worker 2A prompt
     match_2a = re.search(
-        r"####\s+(?:9\.4\.1|4\.5\.1)\s+Worker 2A?[^\n]*\n+```text\n(.*?)```",
+        r"(?:####\s+(?:9\.4\.1|4\.5\.1)\s+Worker 2A?[^\n]*|###\s+Worker 2A[^\n]*)\n+```text\n(.*?)```",
         markdown_content,
         re.DOTALL,
     )
@@ -110,7 +110,7 @@ def extract_prompt_blocks(markdown_content: str, section_header_pattern: str) ->
 
     # Extract Worker 2B prompt
     match_2b = re.search(
-        r"####\s+(?:9\.4\.2|4\.5\.2)\s+Worker 2B[^\n]*\n+```text\n(.*?)```",
+        r"(?:####\s+(?:9\.4\.2|4\.5\.2)\s+Worker 2B[^\n]*|###\s+Worker 2B[^\n]*)\n+```text\n(.*?)```",
         markdown_content,
         re.DOTALL,
     )
@@ -130,6 +130,7 @@ class TestPromptCatalogIntegrity(unittest.TestCase):
 
         readme_path = os.path.join(REPO_ROOT, "README.md")
         installer_path = os.path.join(REPO_ROOT, "scripts", "install_pipeline.sh")
+        catalog_path = os.path.join(REPO_ROOT, "docs", "OPERATOR_PROMPT_CATALOG.md")
 
         with open(readme_path, "r", encoding="utf-8") as f:
             cls.readme_content = f.read()
@@ -140,15 +141,26 @@ class TestPromptCatalogIntegrity(unittest.TestCase):
         cls.readme_prompts = extract_prompt_blocks(cls.readme_content, r"### 9\.1")
         cls.installer_prompts = extract_prompt_blocks(cls.installer_content, r"### 4\.2")
 
+        if os.path.isfile(catalog_path):
+            with open(catalog_path, "r", encoding="utf-8") as f:
+                cls.catalog_content = f.read()
+            cls.catalog_prompts = extract_prompt_blocks(cls.catalog_content, "")
+
     def test_all_prompts_extracted(self):
-        """Verify that all worker prompts are successfully parsed from both README and installer."""
+        """Verify that all worker prompts are successfully parsed from README, installer, and catalog."""
         for key in ["worker_0a", "worker_0b", "worker_0c", "worker_0d", "worker_1a", "worker_1b", "worker_1c", "worker_1d", "worker_2a", "worker_2b"]:
             self.assertIn(key, self.readme_prompts, f"{key} prompt missing from README.md")
             self.assertIn(key, self.installer_prompts, f"{key} prompt missing from install_pipeline.sh Section 4")
+            if hasattr(self, "catalog_prompts"):
+                self.assertIn(key, self.catalog_prompts, f"{key} prompt missing from docs/OPERATOR_PROMPT_CATALOG.md")
 
     def test_worker_0a_prompt_compliance(self):
-        """Verify Worker 0A prompt invariants in README.md and install_pipeline.sh."""
-        for source, prompts in [("README.md", self.readme_prompts), ("install_pipeline.sh", self.installer_prompts)]:
+        """Verify Worker 0A prompt invariants in README.md, install_pipeline.sh, and catalog."""
+        sources = [("README.md", self.readme_prompts), ("install_pipeline.sh", self.installer_prompts)]
+        if hasattr(self, "catalog_prompts"):
+            sources.append(("docs/OPERATOR_PROMPT_CATALOG.md", self.catalog_prompts))
+
+        for source, prompts in sources:
             prompt = prompts["worker_0a"]
             
             # Step 1 skill directive on spec-conops-engineering
@@ -180,6 +192,47 @@ class TestPromptCatalogIntegrity(unittest.TestCase):
             self.assertIn("physical boundaries, operating dynamics, environmental constraints", prompt)
             self.assertIn("Initialization, Normal Operation, Degraded/Contingency Modes, and Safe Shutdown/Transition", prompt)
             self.assertIn("Dynamic stakeholder roles derived from the system operational context", prompt)
+
+            # Modular unit authoring under docs/conops/units/
+            self.assertIn(
+                "docs/conops/units/",
+                prompt,
+                f"Worker 0A in {source} missing modular unit authoring under docs/conops/units/",
+            )
+
+            # assemble_conops.py deterministic assembly execution
+            self.assertIn(
+                "assemble_conops.py",
+                prompt,
+                f"Worker 0A in {source} missing assemble_conops.py execution",
+            )
+
+            # Research ingestion: docs/research/RESEARCH_INVENTORY.md or FAILURE_MODE_REGISTRY.md
+            self.assertTrue(
+                "docs/research/RESEARCH_INVENTORY.md" in prompt or "FAILURE_MODE_REGISTRY.md" in prompt,
+                f"Worker 0A in {source} missing research ingestion (RESEARCH_INVENTORY.md or FAILURE_MODE_REGISTRY.md)",
+            )
+
+            # Defect Filing Directive
+            self.assertTrue(
+                check_defect_filing_directive(prompt),
+                f"Worker 0A in {source} failed check_defect_filing_directive",
+            )
+            self.assertIn(
+                "skills/adversarial-code-auditor/SKILL.md",
+                prompt,
+                f"Worker 0A in {source} missing skills/adversarial-code-auditor/SKILL.md in defect filing directive",
+            )
+            self.assertIn(
+                "python3 scripts/file_defect.py",
+                prompt,
+                f"Worker 0A in {source} missing python3 scripts/file_defect.py in defect filing directive",
+            )
+            self.assertIn(
+                "strictly forbidden from filing raw issues directly",
+                prompt,
+                f"Worker 0A in {source} missing prohibition against filing raw issues directly",
+            )
 
             # Zero hardcoded UAS flight specifics in Worker 0A prompt
             self.assertNotIn("flight altitude boundaries", prompt)
@@ -545,6 +598,12 @@ class TestPromptCatalogIntegrity(unittest.TestCase):
                 _normalize(self.installer_prompts[key]),
                 f"{key} prompt differs between README.md and install_pipeline.sh",
             )
+            if hasattr(self, "catalog_prompts") and key in self.catalog_prompts:
+                self.assertEqual(
+                    _normalize(self.readme_prompts[key]),
+                    _normalize(self.catalog_prompts[key]),
+                    f"{key} prompt differs between README.md and docs/OPERATOR_PROMPT_CATALOG.md",
+                )
 
     def test_downstream_readme_scaffolding_sections(self):
         """Verify all 5 catalog sections are present in install_pipeline.sh downstream README."""

@@ -148,6 +148,12 @@ def test_instructions_and_readme_accessible():
     readme_path = os.path.join(repo_root, "README.md")
     assert os.path.isfile(readme_path), f"Root README.md missing in repository at {repo_root}"
     assert os.path.getsize(readme_path) > 0, f"Root README.md is empty in repository at {repo_root}"
+    with open(readme_path, "r", encoding="utf-8") as f:
+        readme_content = f.read()
+    assert (
+        "# Downstream Cyber-Physical Infrastructure Safety Project" in readme_content
+        or "Operator Prompt Catalog" in readme_content
+    ), f"Root README.md at {repo_root} lacks canonical DEAP downstream content (missing title or Operator Prompt Catalog)"
 
     agent_entrypoints = [
         os.path.join(repo_root, "AGENTS.md"),

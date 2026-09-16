@@ -492,6 +492,17 @@ def check_downstream_instructions_exist(repo_root):
     if os.path.getsize(readme_path) == 0:
         print(f"ERROR: Check 14 failed: README.md is empty in repository root '{repo_root}'.", file=sys.stderr)
         sys.exit(1)
+    with open(readme_path, "r", encoding="utf-8") as f:
+        readme_content = f.read()
+    if not (
+        "# Downstream Cyber-Physical Infrastructure Safety Project" in readme_content
+        or "Operator Prompt Catalog" in readme_content
+    ):
+        print(
+            f"ERROR: Check 14 failed: README.md in '{repo_root}' lacks canonical downstream content (missing '# Downstream Cyber-Physical Infrastructure Safety Project' or 'Operator Prompt Catalog').",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     agent_entrypoints = [
         os.path.join(repo_root, "AGENTS.md"),
