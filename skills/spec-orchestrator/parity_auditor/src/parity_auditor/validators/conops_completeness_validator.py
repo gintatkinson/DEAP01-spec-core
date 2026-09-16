@@ -1988,7 +1988,7 @@ class MissionIntentCompletenessValidator(IValidator):
         {"num": 3, "title": "Measures of Effectiveness (MoE) & Measures of Performance (MoP) Metrics", "aliases": ["measures of effectiveness", "measures of performance", "moe", "mop", "moe/mop", "metrics"]},
         {"num": 4, "title": "Multi-Domain Operational Threat & Contested Environment Matrix", "aliases": ["threat", "multi-domain threat", "electronic warfare", "ew matrix", "cyber environment", "threat matrix", "contested environment"]},
         {"num": 5, "title": "PACE C2 Link Communications Plan", "aliases": ["pace c2", "pace plan", "pace communications plan", "c2 link communications plan", "pace"]},
-        {"num": 6, "title": "Rules of Engagement (ROE) & Weapon/Sensor Interlocks", "aliases": ["rules of engagement", "roe", "weapon/sensor interlocks", "sensor interlocks", "roe interlocks", "interlocks", "safety constraints & subsystem interlocks", "safety constraints", "safety interlocks", "subsystem interlocks"]},
+        {"num": 6, "title": "Rules of Engagement (ROE) & Weapon/Sensor Interlocks", "aliases": ["rules of engagement", "roe", "operational rules of engagement", "weapon/sensor interlocks", "sensor interlocks", "roe interlocks", "interlocks", "safety constraints & subsystem interlocks", "safety constraints", "safety interlocks", "subsystem interlocks"]},
         {"num": 7, "title": "Airspace Deconfliction & U-space Dynamic Geo-Zones", "aliases": ["airspace deconfliction", "u-space", "geo-zones", "dynamic geo-zones", "airspace", "geofence"]},
         {"num": 8, "title": "Go/No-Go Decision Matrix", "aliases": ["go/no-go", "go-no-go", "go / no-go decision matrix", "go / no-go matrix", "gng-"]},
         {"num": 9, "title": "Bingo Energy Mathematics & Secondary Divert Protocols", "aliases": ["bingo energy", "secondary divert", "divert protocols", "bingo energy mathematics", "bingo", "divert"]},
@@ -2189,6 +2189,10 @@ class MissionIntentCompletenessValidator(IValidator):
                     sec_title = req["title"]
                     sec_aliases = req["aliases"]
 
+                    # If Section 8 is optional and not present in content_sections, skip checking it in TOC (Issue #335)
+                    if sec_num == 8 and not _find_matching_section(content_sections, sec_num, sec_title, sec_aliases):
+                        continue
+
                     num_pattern_text = rf'\[(?:section\s+)?{sec_num}[.\s:\-]'
                     num_pattern_anchor = rf'\(#(?:section-)?{sec_num}[-_]'
                     found_in_toc = bool(
@@ -2260,21 +2264,21 @@ class MissionIntentCompletenessValidator(IValidator):
             else:
                 seen_h2_headers[h_norm] = (l_num, h)
 
-        # Check Exact Section Cardinality (Fixes #148)
-        if len(content_sections) != 10:
+        # Check Section Cardinality (8 to 10 sections) (Fixes #148, #335)
+        if not (8 <= len(content_sections) <= 10):
             findings.append(Finding(
                 "mission-section-cardinality-mismatch",
-                f"Mission Intent specification '{rel_path}' has section cardinality mismatch (found {len(content_sections)} section(s); expected exactly 10 sections).",
+                f"Mission Intent specification '{rel_path}' has section cardinality mismatch (found {len(content_sections)} section(s); expected 8 to 10 sections).",
                 location=rel_path,
                 detail={
                     "severity": "CRITICAL",
-                    "expected_sections": 10,
+                    "expected_sections": "8 to 10",
                     "actual_sections": len(content_sections),
                     "file": rel_path,
                 },
             ))
 
-        # Check for 10 Mandatory Sections
+        # Check for Mandatory Sections
         matched_sections: Dict[int, Tuple[str, int, str]] = {}
         for req in self.MANDATORY_SECTIONS:
             sec_num = req["num"]
@@ -2284,6 +2288,9 @@ class MissionIntentCompletenessValidator(IValidator):
             if res:
                 matched_sections[sec_num] = res
             else:
+                if sec_num == 8:
+                    # Section 8 ("Go/No-Go Decision Matrix") is optional if not present in Mission Intent (Issue #335)
+                    continue
                 findings.append(Finding(
                     "mission-section-missing",
                     f"Mandatory Mission Intent Section {sec_num} ('{title}') is missing or empty in '{rel_path}'.",

@@ -105,6 +105,8 @@ CANONICAL_MISSION_INTENT_UNITS: List[str] = [
     "04_MULTI_DOMAIN_THREAT_MATRIX.md",
     "05_PACE_C2_PLAN.md",
     "06_SAFETY_INTERLOCKS.md",
+    "06_RULES_OF_ENGAGEMENT.md",
+    "06_ROE_SAFETY_INTERLOCKS.md",
     "07_AIRSPACE_GEOZONES.md",
     "08_GO_NO_GO_MATRIX.md",
     "09_ENERGY_AND_RESERVE_BOUNDS.md",
@@ -3986,10 +3988,10 @@ def assemble_document(
             whitelist_set.add("04_SYSTEM_ARCHITECTURE.md")
             whitelist_set.add("04_USER_CLASSES_AND_STAKEHOLDERS.md")
             whitelist_set.add("04_SYSTEM_CAPABILITIES_AND_FUNCTIONS.md")
-        if "06_SAFETY_INTERLOCKS.md" in whitelist_set:
-            whitelist_set.add("06_ROE_SAFETY_INTERLOCKS.md")
-        if "06_ROE_SAFETY_INTERLOCKS.md" in whitelist_set:
+        if any(x in whitelist_set for x in ("06_SAFETY_INTERLOCKS.md", "06_ROE_SAFETY_INTERLOCKS.md", "06_RULES_OF_ENGAGEMENT.md")):
             whitelist_set.add("06_SAFETY_INTERLOCKS.md")
+            whitelist_set.add("06_ROE_SAFETY_INTERLOCKS.md")
+            whitelist_set.add("06_RULES_OF_ENGAGEMENT.md")
         for f in sorted(all_md_files):
             if f not in whitelist_set:
                 print(f"[Warning] Skipping non-canonical/deprecated unit file '{f}' in '{units_dir}'.")
@@ -4004,15 +4006,19 @@ def assemble_document(
                         filenames.append("04_USER_CLASSES_AND_STAKEHOLDERS.md")
                     elif "04_SYSTEM_CAPABILITIES_AND_FUNCTIONS.md" in all_md_files:
                         filenames.append("04_SYSTEM_CAPABILITIES_AND_FUNCTIONS.md")
+            elif f in ("06_SAFETY_INTERLOCKS.md", "06_ROE_SAFETY_INTERLOCKS.md", "06_RULES_OF_ENGAGEMENT.md"):
+                unit6_handled = any(x in filenames for x in ("06_SAFETY_INTERLOCKS.md", "06_ROE_SAFETY_INTERLOCKS.md", "06_RULES_OF_ENGAGEMENT.md"))
+                if not unit6_handled:
+                    if f in all_md_files:
+                        filenames.append(f)
+                    else:
+                        for alt in ("06_RULES_OF_ENGAGEMENT.md", "06_SAFETY_INTERLOCKS.md", "06_ROE_SAFETY_INTERLOCKS.md"):
+                            if alt in all_md_files and alt not in filenames:
+                                filenames.append(alt)
+                                break
             elif f in all_md_files:
                 if f not in filenames:
                     filenames.append(f)
-            elif f == "06_SAFETY_INTERLOCKS.md" and "06_ROE_SAFETY_INTERLOCKS.md" in all_md_files:
-                if "06_ROE_SAFETY_INTERLOCKS.md" not in filenames:
-                    filenames.append("06_ROE_SAFETY_INTERLOCKS.md")
-            elif f == "06_ROE_SAFETY_INTERLOCKS.md" and "06_SAFETY_INTERLOCKS.md" in all_md_files:
-                if "06_SAFETY_INTERLOCKS.md" not in filenames:
-                    filenames.append("06_SAFETY_INTERLOCKS.md")
         if not filenames:
             return "", [f"No canonical unit files from whitelist found in '{units_dir}'."]
     else:
