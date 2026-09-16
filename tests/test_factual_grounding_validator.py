@@ -332,6 +332,10 @@ Evaluating candidate protocols: STANAG 4586 and MIL-STD-1553 were analyzed but r
             with open(os.path.join(docs_dir, "CONOPS_TRADE_STUDIES.md"), "w", encoding="utf-8") as f:
                 f.write(doc_md)
 
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            findings = self.validator.validate(repo, scan_dirs=["docs"])
+            self.assertEqual(findings, [])
+
     def test_excludes_retrospective_defect_reports_and_audit_summaries(self):
         """Verify that retrospective defect reports under docs/reports/defects/ and *AUDIT.md / *audit*.md files are excluded."""
         with tempfile.TemporaryDirectory() as tmpdir:
