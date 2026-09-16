@@ -122,6 +122,7 @@ class TestLinkValidatorBacktickStripping(unittest.TestCase):
                     "- [Example Results](docs/reports/simulink_results/EXAMPLE_results.md)\n"
                     "- [Example Model](../../schema/EXAMPLE_model.sysml)\n"
                     "- [Wildcard Spec](docs/reports/simulink_results/*.md)\n"
+                    "- [SSOT Mapping](schema/<source_file>#anchor)\n"
                 )
 
             repo = WorkspaceRepository(tmpdir)

@@ -862,6 +862,10 @@ class TestSpecConopsEngineering(unittest.TestCase):
         self.assertIn("### 4.5 Level 0 SSOT Model Binding Statement", content)
         self.assertIn("{{MODEL_BINDING_STATEMENT}}", content)
 
+        # SSOT Ground-Truth Citation Mapping (Table 4.2 and Subsection 4.3 6th bullet)
+        self.assertIn("SSOT Ground Truth Source & Citation", content)
+        self.assertIn("- **SSOT Ground Truth Mapping:**", content)
+
         # Domain Agnosticism check
         from tests.test_canonical_templates import FORBIDDEN_DOMAIN_NOUNS
         violations = []
@@ -870,6 +874,18 @@ class TestSpecConopsEngineering(unittest.TestCase):
             if matches:
                 violations.append(f"Found forbidden domain noun '{matches[0]}' matching pattern '{pat}'")
         self.assertEqual(violations, [], f"Forbidden domain nouns found in 04_SYSTEM_ARCHITECTURE.md: {violations}")
+
+    def test_conops_skill_section_4_ssot_mandates(self):
+        """Verify SKILL.md mandates SSOT Ground Truth Source & Citation in Table 4.2 and SSOT Ground Truth Mapping 6th bullet in Subsection 4.3."""
+        with open(CONOPS_SKILL_PATH, "r", encoding="utf-8") as f:
+            skill_content = f.read()
+        agents_skill_path = os.path.join(REPO_ROOT, ".agents", "skills", "spec-conops-engineering", "SKILL.md")
+        with open(agents_skill_path, "r", encoding="utf-8") as f:
+            agents_skill_content = f.read()
+        self.assertEqual(skill_content, agents_skill_content, "Mirror mismatch between skills/ and .agents/ for SKILL.md")
+        self.assertIn("SSOT Ground Truth Source & Citation", skill_content)
+        self.assertIn("- **SSOT Ground Truth Mapping:**", skill_content)
+        self.assertIn("Section 4 Review Checklist for Worker ConOps", skill_content)
 
     def test_section_1_3_system_boundary_math_and_table(self):
         """Verify Section 1.3 in 01_METADATA_AND_OVERVIEW.md has valid KaTeX math formatting and formal Parameter Definitions table with plain text symbols (Fixes #151, #155)."""

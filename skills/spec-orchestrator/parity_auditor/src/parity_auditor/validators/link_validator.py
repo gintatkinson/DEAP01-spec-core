@@ -103,7 +103,8 @@ class LinkValidator(IValidator):
                     r'(?:^|[/\\])(?:SystemModel|[A-Za-z0-9_]*(?:example|template|placeholder))[A-Za-z0-9_]*\.(?:sysml|md)',
                     link_raw,
                     re.IGNORECASE
-                )) or "*" in link_raw or "..." in link_raw or bool(re.search(r'[*_]results\.md', link_raw))
+                )) or "*" in link_raw or "..." in link_raw or "<" in link_raw or ">" in link_raw or bool(re.search(r'[*_]results\.md', link_raw))
+
 
                 if is_placeholder:
                     if not os.path.exists(os.path.join(workspace_dir, link_raw)):

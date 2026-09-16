@@ -314,13 +314,25 @@ flowchart TD
     GSE -.->|"CONN-09: Regulated Pre-Flight Power and Diagnostics [PORT_GSE_PWR]"| Platform_Segment
 ```
 
-- **Subsystem Architecture & AST Part Allocation (Section 4.8)**:
-  For EVERY declared AST `part def` node $p \in \text{AST}$, Section 4 must contain a dedicated subsection (`#### 4.8.x {part.name} Subsystem Architecture`) specifying:
+- **Super-System Segment Allocation Matrix (Table 4.2 / Section 4.2)**:
+  Physical subsystems, computational nodes, and functional elements must be allocated across operational segments enforcing clear physical and organizational ownership boundaries. Table 4.2 MUST include the `SSOT Ground Truth Source & Citation` column as column 3 (between `Operational Segment` and `Primary Functional Role`):
+  `| Subsystem Part | Operational Segment | SSOT Ground Truth Source & Citation | Primary Functional Role |`
+  Every row must provide direct machine-resolvable links to Level 0 schema documents and SysML AST part bindings (e.g. `[schema/<source_file>](schema/<source_file>#anchor) ("OEM Clause Title") | SysML v2: \`part def <NodeName>\``).
+
+- **Subsystem Architecture & AST Part Allocation (Subsection 4.3 / Section 4.8)**:
+  For EVERY declared AST `part def` node $p \in \text{AST}$, Section 4 must contain a dedicated subsection (`#### 4.3.x {part.name} Subsystem Architecture` / `#### 4.8.x {part.name} Subsystem Architecture`) specifying:
   1. **Functional Purpose & Scope**: Primary operational mission role derived from AST doc comments and actions.
   2. **Physical & Logical Interface / Port Allocations**: Declared input, output, and bidirectional ports (`PORT-... (IN/OUT/INOUT)`) and high-level bus interconnects in 100% lockstep parity with the SV-1 diagram. Detailed wire pinouts, register layouts, and serial framing are deferred to Level 1C ICD.
   3. **Power, Mass & Resource Envelopes**: Operating electrical power draw, mass partition budget ($m_{\mathrm{alloc}}$), and thermal operating envelopes.
   4. **Operational Role & Statechart Integration**: Lifecycle mode allocation ($\Phi_{\mathrm{lifecycle}}$) and active operational states.
   5. **Safety Invariants, Containment Interlocks & FMECA Linkage**: Watchdog interlocks, emergency trigger containment bindings (`EMG-01`..`EMG-07`), and safety criticalities.
+  6. **SSOT Ground Truth Mapping**: Mandatory 6th bullet providing direct machine-resolvable links to Level 0 schema documents and SysML AST part bindings: `- **SSOT Ground Truth Mapping:** [schema/<source_file>](schema/<source_file>#anchor) ("OEM Clause Title") | SysML v2: \`part def <NodeName>\``. Every subsystem entry in Subsection 4.3 must contain this 6th bullet.
+- **Section 4 Review Checklist for Worker ConOps**:
+  The `Worker ConOps` MUST verify the following before finalizing Section 4:
+  - [ ] **Table 4.2 SSOT Column Mandate**: Table 4.2 (`### 4.2 Super-System Segment Allocation Matrix`) includes the `SSOT Ground Truth Source & Citation` column as column 3 (between `Operational Segment` and `Primary Functional Role`), and every allocated subsystem cites an authoritative Level 0 schema document and SysML AST part binding.
+  - [ ] **Subsection 4.3 6th Bullet Mandate**: Every subsystem entry in Subsection 4.3 (`### 4.3 Subsystem Architecture (100% AST Part Coverage)`) contains the mandatory 6th bullet: `- **SSOT Ground Truth Mapping:** [schema/<source_file>](schema/<source_file>#anchor) ("OEM Clause Title") | SysML v2: \`part def <NodeName>\`` providing direct machine-resolvable links to Level 0 schema documents and SysML AST part bindings.
+  - [ ] **100% AST Part Coverage**: 100% of declared AST `part def` nodes have dedicated subsections in Subsection 4.3 in lockstep mathematical parity with the SV-1 diagram.
+  - [ ] **Option 3 Compact Blocks & Vertical Tiers**: Mermaid SV-1 diagram implements Option 3 with embedded port attributes and vertical layout (`direction TB`) capped at 3 horizontal columns.
 - **Zero-Omission Rule**: Omitting any declared AST `part def` is strictly forbidden and triggers compiler validation failure during `assemble_conops.py` assembly.
 - **Level 1B Operational Boundary & Section 8 Op-Tx Exclusions**: Section 4.8 and Section 8 (Op-Tx) capture high-level operational information exchanges (Op-Tx: C2 Commands, Telemetry, Video, Target Tracks, Arming Authorization) and strictly exclude component-internal serial opcode reference tables, register bitmasks, RS-485 serial framing, and CRC-16 equations, which belong strictly in Level 1C Interface Control Documents (`ICD_01_SYSTEM_INTERFACE_MATRIX.md` and `ICD_02_MASTER_SIGNAL_DICTIONARY.md`).
 
