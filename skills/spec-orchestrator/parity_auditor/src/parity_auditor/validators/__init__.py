@@ -43,4 +43,8 @@ from .executive_deliverable_traceability_validator import (
     RULE_TABLE_UNANCHORED,
     RULE_DIAGRAM_INCOMPLETE,
 )
+from .architecture_viewpoint_validator import (
+    ArchitectureViewpointValidator,
+    CANONICAL_DIAGRAMS,
+)
 

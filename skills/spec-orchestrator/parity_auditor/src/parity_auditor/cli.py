@@ -57,6 +57,7 @@ try:
     from .validators.semantic_diagram_ast_validator import SemanticDiagramASTValidator
     from .validators.semantic_prose_invariant_validator import SemanticProseInvariantValidator
     from .validators.factual_grounding_validator import FactualGroundingValidator
+    from .validators.architecture_viewpoint_validator import ArchitectureViewpointValidator
     from .utils.diagnostics import serialize_diagnostics
     from .utils.comment_utils import strip_comments_and_strings
 except (ImportError, ValueError):
@@ -97,6 +98,7 @@ except (ImportError, ValueError):
     from parity_auditor.validators.semantic_diagram_ast_validator import SemanticDiagramASTValidator
     from parity_auditor.validators.semantic_prose_invariant_validator import SemanticProseInvariantValidator
     from parity_auditor.validators.factual_grounding_validator import FactualGroundingValidator
+    from parity_auditor.validators.architecture_viewpoint_validator import ArchitectureViewpointValidator
     from parity_auditor.utils.diagnostics import serialize_diagnostics
     from parity_auditor.utils.comment_utils import strip_comments_and_strings
 
@@ -1634,11 +1636,26 @@ def _main_impl():
         for err in factual_grounding_errors:
             print(f"  - {err}")
         has_failed = True
+    print("\n=== Architecture Viewpoint & Diagram Completeness Audit (Gate 30) ===")
+    architecture_viewpoint_validator = ArchitectureViewpointValidator()
+    architecture_viewpoint_errors = _scope_findings(
+        architecture_viewpoint_validator.validate(
+            repo,
+            allow_missing_specs=getattr(args, 'allow_missing_specs', True),
+            spec_only=getattr(args, 'spec_only', False),
+        ),
+        getattr(args, 'only', None)
+    )
+    if architecture_viewpoint_errors:
+        print("[!] Architecture Viewpoint & Diagram Completeness Violations Identified:")
+        for err in architecture_viewpoint_errors:
+            print(f"  - {err}")
+        has_failed = True
     else:
-        print("Success: Factual grounding, structural descriptors, protocols, and sequence diagram temporal safety verified.")
+        print("Success: 11 canonical architecture viewpoint diagrams verified across 5 viewpoints.")
 
     if has_failed:
-        all_errors = (uml_errors or []) + (behavioral_errors or []) + (codebase_errors or []) + (doc_errors or []) + (dependency_errors or []) + (sync_errors or []) + (schema_mapping_errors or []) + (profile_scoping_errors or []) + (test_completeness_errors or []) + (cardinality_errors or []) + (spec_filename_errors or []) + (spec_title_errors or []) + (mermaid_syntax_errors or []) + (katex_errors or []) + (logical_ui_errors or []) + (docstring_errors or []) + (profile_compliance_errors or []) + (package_allocation_errors or []) + (feature_op_errors or []) + (interaction_errors or []) + (safety_constraint_errors or []) + (acceptance_test_errors or []) + (missing_spec_errors or []) + (source_ref_errors or []) + (link_errors or []) + (concept_provenance_errors or []) + (safety_trace_errors or []) + (doc_metadata_errors or []) + (icd_completeness_errors or []) + (operational_allocation_errors or []) + (standards_measurement_errors or []) + (conops_errors or []) + (mission_intent_errors or []) + (research_inventory_errors or []) + (coverage_digest_errors or []) + (obligation_witness_errors or []) + (semantic_diagram_errors or []) + (semantic_prose_errors or []) + (factual_grounding_errors or [])
+        all_errors = (uml_errors or []) + (behavioral_errors or []) + (codebase_errors or []) + (doc_errors or []) + (dependency_errors or []) + (sync_errors or []) + (schema_mapping_errors or []) + (profile_scoping_errors or []) + (test_completeness_errors or []) + (cardinality_errors or []) + (spec_filename_errors or []) + (spec_title_errors or []) + (mermaid_syntax_errors or []) + (katex_errors or []) + (logical_ui_errors or []) + (docstring_errors or []) + (profile_compliance_errors or []) + (package_allocation_errors or []) + (feature_op_errors or []) + (interaction_errors or []) + (safety_constraint_errors or []) + (acceptance_test_errors or []) + (missing_spec_errors or []) + (source_ref_errors or []) + (link_errors or []) + (concept_provenance_errors or []) + (safety_trace_errors or []) + (doc_metadata_errors or []) + (icd_completeness_errors or []) + (operational_allocation_errors or []) + (standards_measurement_errors or []) + (conops_errors or []) + (mission_intent_errors or []) + (research_inventory_errors or []) + (coverage_digest_errors or []) + (obligation_witness_errors or []) + (semantic_diagram_errors or []) + (semantic_prose_errors or []) + (factual_grounding_errors or []) + (architecture_viewpoint_errors or [])
 
 
         compiled_errors = all_errors

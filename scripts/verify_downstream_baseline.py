@@ -3358,6 +3358,59 @@ def check_obligation_witness(repo_root=None):
 check_obligation_witness_gate = check_obligation_witness
 
 
+def _load_architecture_viewpoint_validator():
+    """Import ArchitectureViewpointValidator and WorkspaceRepository fail-closed."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(script_dir)
+    spec_dir = os.path.join(project_root, "skills", "spec-orchestrator", "scripts")
+    parity_src = os.path.join(project_root, "skills", "spec-orchestrator", "parity_auditor", "src")
+    scripts_dir = os.path.join(project_root, "scripts")
+    for p in (scripts_dir, spec_dir, parity_src):
+        if p not in sys.path:
+            sys.path.insert(0, p)
+    try:
+        from parity_auditor.validators.architecture_viewpoint_validator import ArchitectureViewpointValidator
+        from parity_auditor.core.workspace import WorkspaceRepository
+        return ArchitectureViewpointValidator, WorkspaceRepository
+    except Exception as e:
+        print(f"ERROR: Failed to load ArchitectureViewpointValidator: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def check_architecture_viewpoint_diagrams(repo_root=None):
+    """Check 30: Architecture Viewpoint & Diagram Completeness Gate (Gate 30).
+
+    Validates presence, completeness, and syntax integrity of the 11 canonical architecture diagrams across the 5 viewpoints (DoDAF 2.02 / OMG UAF v2.0 / ISO/IEC/IEEE 29148 / MIL-STD-882E / STPA / SORA).
+    """
+    if repo_root is None:
+        repo_root = os.getcwd()
+
+    val_cls, repo_cls = _load_architecture_viewpoint_validator()
+    if val_cls is None or repo_cls is None:
+        print("ERROR: Check 30 failed: ArchitectureViewpointValidator or WorkspaceRepository unavailable.", file=sys.stderr)
+        sys.exit(1)
+
+    repo = repo_cls(workspace_dir=repo_root)
+    validator = val_cls()
+    try:
+        findings = validator.validate(repo, allow_missing_specs=True, spec_only=True)
+    except Exception as e:
+        print(f"ERROR: Check 30 execution failed: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    if findings:
+        print("ERROR: Check 30 failed (Architecture Viewpoint & Diagram Completeness violations found):", file=sys.stderr)
+        for f in findings:
+            print(f"  - {f}", file=sys.stderr)
+        sys.exit(1)
+
+    print("Success: Check 30 verified (Architecture Viewpoint & Diagram Completeness Gate passed -- all 11 canonical diagrams verified).")
+
+
+check_architecture_viewpoint = check_architecture_viewpoint_diagrams
+check_architecture_viewpoint_gate = check_architecture_viewpoint_diagrams
+
+
 def check_mermaid_syntax(repo_root=None):
     """Check 13B: Mermaid Syntax & Ergonomics Gate.
 
@@ -3394,7 +3447,7 @@ def check_mermaid_syntax(repo_root=None):
 
 
 def run_all_checks(repo_root=None):
-    """Run all baseline checks (Checks 10 through 29)."""
+    """Run all baseline checks (Checks 10 through 30)."""
     if repo_root is None:
         repo_root = os.getcwd()
     check_gitignore_exists(repo_root)
@@ -3409,7 +3462,7 @@ def run_all_checks(repo_root=None):
     verify_upstream_blueprint_domain_cleanliness(repo_root)
     check_domain_agnostic_ast_cleanliness(repo_root)
     check_wbs_suite_integrity(repo_root)
-    # Mandatory Gates 21 through 29
+    # Mandatory Gates 21 through 30
     check_semantic_diagram_ast_parity(repo_root)
     check_semantic_prose_invariants(repo_root)
     check_factual_grounding(repo_root)
@@ -3422,6 +3475,7 @@ def run_all_checks(repo_root=None):
     check_executive_deliverable_traceability(repo_root)
     check_coverage_digest(repo_root)
     check_obligation_witness(repo_root)
+    check_architecture_viewpoint_diagrams(repo_root)
 
 def _run_verification(args, dest, repo_root, is_flutter, is_react):
     # Run Checks 10 through 25
