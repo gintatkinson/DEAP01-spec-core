@@ -171,6 +171,7 @@ class TestCompileSysmlUpgrades(unittest.TestCase):
             repo = WorkspaceRepository(tmpdir)
             validator = LinkValidator()
             findings = validator.validate(repo)
+            self.assertTrue(any("file:///" in str(f) for f in findings), f"Expected file:/// violation, got: {findings}")
 
     def test_compiler_domain_decoupling_defaults(self):
         """Verify generic fallback names across STPA compiler, reverse sync, and use case extractors."""
