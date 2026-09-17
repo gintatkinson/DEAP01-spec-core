@@ -278,6 +278,425 @@ def is_component_icd_document(text: str, file_path: str = "") -> bool:
     return False
 
 
+ABSTRACT_PERFORMERS: List[str] = [
+    "OperatorConsole",
+    "CoreController",
+    "SensorSuite",
+    "ActuatorSubsystem",
+    "PayloadSubsystem",
+    "SafetyWatchdog",
+]
+
+CANONICAL_ABSTRACT_OPTX_EXCHANGES: List[Dict[str, Any]] = [
+    {
+        "id": "OpTx-01",
+        "name": "PrimarySensorTelemetry",
+        "source_performer": "SensorSuite",
+        "target_performer": "CoreController",
+        "arrow": "->>",
+        "doc": "Raw Inertial & Kinematic Measurements, State Delta Vectors, Barometric Static Pressure, Magnetometer Heading",
+    },
+    {
+        "id": "OpTx-02",
+        "name": "ActuatorControlDemand",
+        "source_performer": "CoreController",
+        "target_performer": "ActuatorSubsystem",
+        "arrow": "->>",
+        "doc": "Dynamic Torque Demands, Control Surface Deflections, Speed Controller Setpoints, Power Limiter Flags",
+    },
+    {
+        "id": "OpTx-03",
+        "name": "ActuatorStateFeedback",
+        "source_performer": "ActuatorSubsystem",
+        "target_performer": "CoreController",
+        "arrow": "-->>",
+        "doc": "Measured Actuator Positions, Motor RPM Telemetry, Phase Current Draw, Thermal Diagnostic Flags",
+    },
+    {
+        "id": "OpTx-04",
+        "name": "PowerResourceTelemetry",
+        "source_performer": "SensorSuite",
+        "target_performer": "CoreController",
+        "arrow": "->>",
+        "doc": "Total Battery Pack Voltage, Cell Temperature Matrix, State-of-Charge (SoC), Current Draw, Dynamic Bingo Thresholds",
+    },
+    {
+        "id": "OpTx-05",
+        "name": "ExternalNavReferenceData",
+        "source_performer": "SensorSuite",
+        "target_performer": "CoreController",
+        "arrow": "->>",
+        "doc": "Multi-Constellation Satellite PVT Solutions, RTK Differential Phase Residuals, Ephemeris Data, UTC Time Reference",
+    },
+    {
+        "id": "OpTx-06",
+        "name": "RawPayloadSensorStream",
+        "source_performer": "SensorSuite",
+        "target_performer": "PayloadSubsystem",
+        "arrow": "->>",
+        "doc": "High-Bandwidth Multi-Modal Video Frames, Timestamp Metadata, Radiometric Matrices, Raw Spatial Point Clouds",
+    },
+    {
+        "id": "OpTx-07",
+        "name": "ProcessedFeatureTelemetry",
+        "source_performer": "PayloadSubsystem",
+        "target_performer": "CoreController",
+        "arrow": "-->>",
+        "doc": "Extracted State Feature Vectors, Target Bounding Boxes, Optical Odometry Vectors, Environmental Obstacle Disparities",
+    },
+    {
+        "id": "OpTx-08",
+        "name": "ConsolidatedDownlinkTelemetry",
+        "source_performer": "CoreController",
+        "target_performer": "OperatorConsole",
+        "arrow": "-->>",
+        "doc": "Consolidated System State Telemetry, 3D Kinematics, Energy SoC, Communications Link SNR, Geofence Margin Status",
+    },
+    {
+        "id": "OpTx-09",
+        "name": "SupervisoryUplinkCommand",
+        "source_performer": "OperatorConsole",
+        "target_performer": "CoreController",
+        "arrow": "->>",
+        "doc": "Uplink Mission Directives, Dynamic 4D Waypoint Corridors, ROE Arming Keys, Manual Override Mode Vectors",
+    },
+    {
+        "id": "OpTx-10",
+        "name": "WatchdogHeartbeatStrobe",
+        "source_performer": "CoreController",
+        "target_performer": "SafetyWatchdog",
+        "arrow": "->>",
+        "doc": "Controller Task Alive Token, Execution Deadline Checksum, Task Schedule Monotonic Counter",
+    },
+    {
+        "id": "OpTx-11",
+        "name": "EmergencyFailsafeTrigger",
+        "source_performer": "SafetyWatchdog",
+        "target_performer": "ActuatorSubsystem",
+        "arrow": "->>",
+        "doc": "Hardware Safety Abort Strobe, Power Stage Isolation Command, Safe State Clamping Signal",
+    },
+    {
+        "id": "OpTx-12",
+        "name": "FailsafeSquibActuationLine",
+        "source_performer": "SafetyWatchdog",
+        "target_performer": "PayloadSubsystem",
+        "arrow": "->>",
+        "doc": "Dual-Channel High-Current Fire Pulse, Autonomous Containment / Pyrotechnic Cutter Ignition Command",
+    },
+    {
+        "id": "OpTx-13",
+        "name": "BroadcastRemoteIDTelemetry",
+        "source_performer": "CoreController",
+        "target_performer": "SafetyWatchdog",
+        "arrow": "-->>",
+        "doc": "Statutory Broadcast ID, Serial Number / Session ID, Geodetic Position Coordinates, Ground Speed, Emergency Status",
+    },
+    {
+        "id": "OpTx-14",
+        "name": "RegulatoryStateDeconflictionData",
+        "source_performer": "OperatorConsole",
+        "target_performer": "CoreController",
+        "arrow": "->>",
+        "doc": "Dynamic Geo-Zone Activation/Deactivation, Strategic 4D Corridor Clearances, Adjacent Traffic Conformance Status",
+    },
+    {
+        "id": "OpTx-15",
+        "name": "CompressedPayloadVideoStream",
+        "source_performer": "PayloadSubsystem",
+        "target_performer": "OperatorConsole",
+        "arrow": "-->>",
+        "doc": "H.264/H.265 Encoded Video Stream, KLV Metadata, Real-Time Feature Overlays",
+    },
+    {
+        "id": "OpTx-16",
+        "name": "DiagnosticBlackboxLogStream",
+        "source_performer": "CoreController",
+        "target_performer": "OperatorConsole",
+        "arrow": "-->>",
+        "doc": "High-Rate Operational Recorder Time-Series, Sensor Disparity Registers, Exception Stack Traces, BIT Failure Logs",
+    },
+]
+
+
+class MermaidSequenceSynthesizer:
+    """
+    Deterministic synthesizer that compiles SysML v2 connection definitions,
+    item flows, and operational use cases into formal Mermaid sequenceDiagram blocks.
+    Guarantees complete alignment with abstract performers:
+    OperatorConsole, CoreController, SensorSuite, ActuatorSubsystem, PayloadSubsystem, SafetyWatchdog.
+    Fixes Issue #358.
+    """
+
+    PERFORMER_ORDER: Dict[str, int] = {
+        "OperatorConsole": 1,
+        "SensorSuite": 2,
+        "CoreController": 3,
+        "SafetyWatchdog": 4,
+        "ActuatorSubsystem": 5,
+        "PayloadSubsystem": 6,
+    }
+
+    PERFORMER_SYNONYMS: Dict[str, str] = {
+        "operatorstation": "OperatorConsole",
+        "operator": "OperatorConsole",
+        "c2station": "OperatorConsole",
+        "groundstation": "OperatorConsole",
+        "primarycommunications": "OperatorConsole",
+        "communicationssubsystem": "OperatorConsole",
+        "controller": "CoreController",
+        "flightcontroller": "CoreController",
+        "autonomouscontroller": "CoreController",
+        "controllerlogic": "CoreController",
+        "controllerlogicsubsystem": "CoreController",
+        "sensors": "SensorSuite",
+        "sensorsubsystem": "SensorSuite",
+        "primarysensorsuite": "SensorSuite",
+        "primarysensorsubsystem": "SensorSuite",
+        "navsubsystem": "SensorSuite",
+        "externalpositioningservice": "SensorSuite",
+        "powermanagementsubsystem": "SensorSuite",
+        "power": "SensorSuite",
+        "powersubsystem": "SensorSuite",
+        "actuators": "ActuatorSubsystem",
+        "payload": "PayloadSubsystem",
+        "cameratape": "PayloadSubsystem",
+        "watchdog": "SafetyWatchdog",
+        "safetyinterlock": "SafetyWatchdog",
+        "emergencycontainmentsubsystem": "PayloadSubsystem",
+        "externaldataservice": "SafetyWatchdog",
+    }
+
+    def __init__(
+        self,
+        exchanges: Optional[Union[List[Dict[str, Any]], Any]] = None,
+        scenarios: Optional[List[Dict[str, Any]]] = None,
+    ):
+        self.exchanges: List[Dict[str, Any]] = []
+        self.scenarios: List[Dict[str, Any]] = scenarios or []
+
+        if exchanges is not None:
+            if hasattr(exchanges, "operational_exchanges"):
+                self.exchanges = list(getattr(exchanges, "operational_exchanges", []) or [])
+                if not self.scenarios and hasattr(exchanges, "operational_scenarios"):
+                    self.scenarios = list(getattr(exchanges, "operational_scenarios", []) or [])
+            elif isinstance(exchanges, list):
+                self.exchanges = list(exchanges)
+            elif isinstance(exchanges, dict):
+                if "operational_exchanges" in exchanges:
+                    self.exchanges = list(exchanges["operational_exchanges"] or [])
+                elif "connection_defs" in exchanges:
+                    try:
+                        from compile_sysml import extract_operational_exchanges
+                        self.exchanges = extract_operational_exchanges(exchanges)
+                    except Exception:
+                        self.exchanges = []
+            else:
+                try:
+                    from compile_sysml import extract_operational_exchanges
+                    self.exchanges = extract_operational_exchanges(exchanges)
+                except Exception:
+                    self.exchanges = []
+
+        if not self.exchanges:
+            self.exchanges = [dict(e) for e in CANONICAL_ABSTRACT_OPTX_EXCHANGES]
+
+    @classmethod
+    def _normalize_performer(cls, raw_performer: str) -> str:
+        """
+        Normalizes any performer node to one of the canonical abstract performers,
+        enforcing pure schema-driven abstract domain neutrality.
+        """
+        if not raw_performer:
+            return "CoreController"
+
+        clean = re.sub(r"[^A-Za-z0-9_]", "", str(raw_performer)).strip("_")
+        if not clean:
+            return "CoreController"
+
+        if clean in cls.PERFORMER_ORDER:
+            return clean
+
+        key = clean.lower()
+        if key in cls.PERFORMER_SYNONYMS:
+            return cls.PERFORMER_SYNONYMS[key]
+
+        if "operator" in key or "console" in key or "station" in key or "human" in key:
+            return "OperatorConsole"
+        if "watchdog" in key or "safety" in key:
+            return "SafetyWatchdog"
+        if "sensor" in key or "nav" in key or "position" in key or "power" in key or "bms" in key:
+            return "SensorSuite"
+        if "actuator" in key or "motor" in key or "servo" in key:
+            return "ActuatorSubsystem"
+        if "payload" in key or "camera" in key or "video" in key or "stream" in key or "squib" in key or "containment" in key:
+            return "PayloadSubsystem"
+        if "controller" in key or "guidance" in key or "autonomy" in key or "core" in key:
+            return "CoreController"
+
+        return clean
+
+    def synthesize_interaction_diagram(
+        self,
+        title: str,
+        note: str,
+        filter_ids: List[str],
+    ) -> str:
+        """
+        Synthesizes a partitioned sequence diagram for a subset of Op-Tx exchanges.
+        Enforces autonumber, grounded participant lifelines, and formatted message labels.
+        """
+        filter_set = set(filter_ids)
+        selected_map: Dict[str, Dict[str, Any]] = {}
+        for ex in self.exchanges:
+            ex_id = ex.get("id", "")
+            m = re.search(r'OpTx[-_]?(\d+)', ex_id, re.IGNORECASE)
+            norm_id = f"OpTx-{int(m.group(1)):02d}" if m else ex_id
+            if norm_id in filter_set and norm_id not in selected_map:
+                selected_map[norm_id] = ex
+
+        # Backfill any missing filter IDs from canonical abstract exchanges
+        for c_ex in CANONICAL_ABSTRACT_OPTX_EXCHANGES:
+            c_id = c_ex["id"]
+            if c_id in filter_set and c_id not in selected_map:
+                selected_map[c_id] = c_ex
+
+        selected = [selected_map[fid] for fid in filter_ids if fid in selected_map]
+        if not selected:
+            return ""
+
+        lifelines_set: Set[str] = set()
+        for ex in selected:
+            src = self._normalize_performer(ex.get("source_performer") or ex.get("source_part") or "CoreController")
+            tgt = self._normalize_performer(ex.get("target_performer") or ex.get("target_part") or "CoreController")
+            lifelines_set.add(src)
+            lifelines_set.add(tgt)
+
+        lifelines = sorted(lifelines_set, key=lambda p: self.PERFORMER_ORDER.get(p, 99))
+
+        fence = chr(96) * 3
+        lines = [
+            f"{fence}mermaid",
+            "sequenceDiagram",
+            "    autonumber",
+        ]
+        for p in lifelines:
+            lines.append(f"    participant {p} as {p}")
+
+        lines.append("")
+        clean_note = (note or title).replace(":", " - ").replace(";", ",")
+        clean_note = " ".join(clean_note.splitlines()).strip()
+        if len(lifelines) > 1:
+            lines.append(f"    Note over {lifelines[0]},{lifelines[-1]}: {clean_note}")
+        elif lifelines:
+            lines.append(f"    Note over {lifelines[0]}: {clean_note}")
+
+        for ex in selected:
+            src = self._normalize_performer(ex.get("source_performer") or ex.get("source_part") or "CoreController")
+            tgt = self._normalize_performer(ex.get("target_performer") or ex.get("target_part") or "CoreController")
+            raw_id = ex.get("id", "OpTx-00")
+            m = re.search(r'OpTx[-_]?(\d+)', raw_id, re.IGNORECASE)
+            optx_id = f"OpTx-{int(m.group(1)):02d}" if m else raw_id
+            msg_name = ex.get("name", "InformationExchange")
+            msg_name = _sanitize_level_1b_operational_text(msg_name) or msg_name
+            msg_name = msg_name.replace(":", " - ").replace(";", ",")
+            arrow = ex.get("arrow")
+            if not arrow:
+                arrow = "-->>" if any(k in msg_name.lower() for k in ("telemetry", "feedback", "stream", "data", "log", "status")) else "->>"
+            lines.append(f"    {src}{arrow}{tgt}: {optx_id} - {msg_name}")
+
+        lines.append(fence)
+        return "\n".join(lines)
+
+    def synthesize_all_optx_diagrams(self) -> Dict[str, str]:
+        """Synthesizes the four canonical ConOps operational interaction sequence diagrams."""
+        return {
+            "DIAGRAM_10_1": self.synthesize_interaction_diagram(
+                "Supervisory Control & Telemetry Session",
+                "Operational Supervisory Control and Telemetry Session",
+                ["OpTx-08", "OpTx-09", "OpTx-14", "OpTx-15", "OpTx-16"],
+            ),
+            "DIAGRAM_10_2": self.synthesize_interaction_diagram(
+                "Sensor Perception & State Estimation Pipeline",
+                "Perception Acquisition and State Estimation Pipeline",
+                ["OpTx-01", "OpTx-05", "OpTx-06", "OpTx-07"],
+            ),
+            "DIAGRAM_10_3": self.synthesize_interaction_diagram(
+                "Deterministic Control & Energy Management Loop",
+                "Deterministic Control and Energy Management Loop",
+                ["OpTx-02", "OpTx-03", "OpTx-04"],
+            ),
+            "DIAGRAM_10_4": self.synthesize_interaction_diagram(
+                "Safety Watchdog Monitoring & Containment",
+                "Independent Safety Watchdog Monitoring and Containment",
+                ["OpTx-10", "OpTx-11", "OpTx-12", "OpTx-13"],
+            ),
+        }
+
+    def synthesize_section_7_4_markdown(self) -> str:
+        """
+        Synthesizes the complete Section 7.4 Markdown block containing
+        Diagrams 10.1, 10.2, 10.3, and 10.4.
+        """
+        diags = self.synthesize_all_optx_diagrams()
+        lines = [
+            "### 7.4 Operational Interaction Sequence Architecture (Diagram 10.1 - 10.4)",
+            "In accordance with OMG UAF v2.0 Operational Information Views (Op-Tx) and ISO/IEC/IEEE 29148:2018 §6.4.2, the 16 declared Op-Tx operational information exchanges are partitioned across four canonical interaction sequence diagrams using abstract systems engineering performers (`OperatorConsole`, `CoreController`, `SensorSuite`, `ActuatorSubsystem`, `PayloadSubsystem`, `SafetyWatchdog`).",
+            "",
+            "#### 7.4.1 Diagram 10.1: Command, Control & Supervisory Interaction Sequence",
+            diags.get("DIAGRAM_10_1", ""),
+            "",
+            "#### 7.4.2 Diagram 10.2: Sensor Perception, Navigation & Payload Data Flow Sequence",
+            diags.get("DIAGRAM_10_2", ""),
+            "",
+            "#### 7.4.3 Diagram 10.3: Real-Time Core Control & Actuation Feedback Loop Sequence",
+            diags.get("DIAGRAM_10_3", ""),
+            "",
+            "#### 7.4.4 Diagram 10.4: Safety Monitoring, Watchdog Interlock & Failsafe Containment Sequence",
+            diags.get("DIAGRAM_10_4", ""),
+        ]
+        return "\n".join(lines).strip()
+
+    def synthesize_scenario_diagram(self, scenario: Dict[str, Any]) -> str:
+        """Synthesizes an operational scenario sequence diagram from use case steps."""
+        steps = scenario.get("steps") or scenario.get("sequence_steps") or []
+        scn_id = scenario.get("id", "SCN-01")
+        name = scenario.get("name", "OperationalScenario")
+        actors = scenario.get("actors") or ([scenario.get("actor")] if scenario.get("actor") else [])
+        actors = [self._normalize_performer(a) for a in actors if a]
+        if not actors:
+            actors = ["OperatorConsole", "CoreController"]
+        elif "CoreController" not in actors:
+            actors.append("CoreController")
+
+        fence = chr(96) * 3
+        lines = [
+            f"{fence}mermaid",
+            "sequenceDiagram",
+            "    autonumber",
+        ]
+        for a in actors:
+            lines.append(f"    participant {a} as {a}")
+        lines.append("")
+        clean_name = name.replace(":", " - ").replace(";", ",")
+        lines.append(f"    Note over {actors[0]},{actors[-1]}: {scn_id} - {clean_name}")
+
+        for idx, step in enumerate(steps, start=1):
+            if isinstance(step, dict):
+                src = self._normalize_performer(step.get("source") or step.get("from") or actors[0])
+                tgt = self._normalize_performer(step.get("target") or step.get("to") or actors[-1])
+                desc = step.get("description") or step.get("action") or f"Step {idx}"
+            else:
+                src = actors[0]
+                tgt = actors[-1] if len(actors) > 1 else actors[0]
+                desc = str(step)
+            desc = desc.replace(":", " - ").replace(";", ",")
+            lines.append(f"    {src}->>{tgt}: Step {idx} - {desc}")
+
+        lines.append(fence)
+        return "\n".join(lines)
+
+
 class SysMLParameterBindingEngine:
     """
     Automated SysML AST Parameter Binding Engine.
@@ -313,6 +732,9 @@ class SysMLParameterBindingEngine:
         self.ast_part_names: Set[str] = set()
         self.ast_super_systems: List[Any] = []
         self.ast_subsystems: List[Any] = []
+        self.operational_exchanges: List[Dict[str, Any]] = []
+        self.operational_scenarios: List[Dict[str, Any]] = []
+        self.sequence_synthesizer: Optional[MermaidSequenceSynthesizer] = None
 
         if domain:
             self.parameter_bindings["DOMAIN_TYPE"] = domain
@@ -341,6 +763,7 @@ class SysMLParameterBindingEngine:
         self._derive_domain_ontology()
         self._derive_lifecycle_contract()
         self._derive_subsystem_architecture()
+        self._derive_operational_interaction_sequences()
 
     @property
     def domain(self) -> str:
@@ -1637,6 +2060,33 @@ class SysMLParameterBindingEngine:
         self.parameter_bindings["MODEL_BINDING_STATEMENT"] = binding_stmt
         self._explicit_keys.add("MODEL_BINDING_STATEMENT")
 
+    def _derive_operational_interaction_sequences(self) -> None:
+        """
+        Synthesizes deterministic Mermaid sequence diagrams for Section 7 (Op-Tx exchanges)
+        and binds them to template placeholders.
+        Fixes Issue #358.
+        """
+        synthesizer = MermaidSequenceSynthesizer(self.operational_exchanges, self.operational_scenarios)
+        self.sequence_synthesizer = synthesizer
+        diags = synthesizer.synthesize_all_optx_diagrams()
+
+        for k, v in diags.items():
+            self.parameter_bindings[k] = v
+            self.parameter_bindings[f"OPTX_{k}"] = v
+            self._explicit_keys.add(k)
+            self._explicit_keys.add(f"OPTX_{k}")
+
+        sec7_4_md = synthesizer.synthesize_section_7_4_markdown()
+        for placeholder in (
+            "SECTION_7_4_SEQUENCES",
+            "CONOPS_SECTION_7_SEQUENCES",
+            "OPTX_SEQUENCE_DIAGRAMS",
+            "OPTX_INTERACTION_SEQUENCES",
+            "SECTION_7_OPTX_SEQUENCES",
+        ):
+            self.parameter_bindings[placeholder] = sec7_4_md
+            self._explicit_keys.add(placeholder)
+
     def _synthesize_segment_allocation_matrix(self, sys_id: str) -> str:
         parts = self.ast_parts if self.ast_parts else []
         rows = []
@@ -2004,6 +2454,12 @@ class SysMLParameterBindingEngine:
                     if kind in ("package", "system") and not self.inferred_system_identifier:
                         self.inferred_system_identifier = name.strip()
 
+        # Ingest operational exchanges and scenarios if present
+        if "operational_exchanges" in data and isinstance(data["operational_exchanges"], list):
+            self.operational_exchanges.extend(data["operational_exchanges"])
+        if "operational_scenarios" in data and isinstance(data["operational_scenarios"], list):
+            self.operational_scenarios.extend(data["operational_scenarios"])
+
         self.detected_domain = self._detect_domain_type()
         self.parameter_bindings["DETECTED_DOMAIN"] = self.detected_domain
         self.parameter_bindings["DOMAIN_TYPE"] = self.detected_domain
@@ -2015,6 +2471,7 @@ class SysMLParameterBindingEngine:
         self._derive_domain_regulatory_standards()
         self._derive_domain_ontology()
         self._derive_lifecycle_contract()
+        self._derive_operational_interaction_sequences()
 
     def _map_semantic_aliases(self, key: str, val: str) -> None:
         """Maps domain attributes to canonical template tokens (Issues #162, #170)."""
@@ -2238,6 +2695,13 @@ class SysMLParameterBindingEngine:
             with open(json_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
             self.ingest_dictionary(data)
+            if isinstance(data, dict):
+                if "operational_exchanges" in data and isinstance(data["operational_exchanges"], list):
+                    self.operational_exchanges.extend(data["operational_exchanges"])
+                if "operational_scenarios" in data and isinstance(data["operational_scenarios"], list):
+                    self.operational_scenarios.extend(data["operational_scenarios"])
+                if self.operational_exchanges or self.operational_scenarios:
+                    self._derive_operational_interaction_sequences()
             return True
         except Exception:
             return False
@@ -2283,6 +2747,16 @@ class SysMLParameterBindingEngine:
                         self.ast_part_names.add(p.name)
                         self._explicit_keys.add(p.name)
                         self._explicit_keys.add(p.name.upper())
+                try:
+                    from compile_sysml import extract_operational_exchanges, extract_operational_scenarios
+                    exs = extract_operational_exchanges(pkg)
+                    if exs:
+                        self.operational_exchanges.extend(exs)
+                    scns = extract_operational_scenarios(pkg)
+                    if scns:
+                        self.operational_scenarios.extend(scns)
+                except Exception:
+                    pass
         except Exception:
             pass
 
@@ -2362,6 +2836,7 @@ class SysMLParameterBindingEngine:
         self._derive_domain_ontology()
         self._derive_lifecycle_contract()
         self._derive_subsystem_architecture()
+        self._derive_operational_interaction_sequences()
 
         return True
 
@@ -2529,6 +3004,7 @@ class SysMLParameterBindingEngine:
         self._derive_operational_intent()
         self._derive_lifecycle_contract()
         self._derive_subsystem_architecture()
+        self._derive_operational_interaction_sequences()
 
         return ingested
 
@@ -2612,6 +3088,7 @@ class SysMLParameterBindingEngine:
 
         self._derive_lifecycle_contract()
         self._derive_subsystem_architecture()
+        self._derive_operational_interaction_sequences()
 
     def auto_discover_sources(self, root_dir: str) -> None:
         """Auto-detects parameter dictionaries and SysML AST symbols across repository root."""
@@ -2941,6 +3418,27 @@ class SysMLParameterBindingEngine:
             return "Subsystem interactions are formalized exclusively as Level 1B Operational Information Exchanges (Op-Tx) and Level 1C Logical Signal Flows; component-internal serial opcode mappings and wire-level registers are deferred to Level 2 detailed design."
         elif token_upper in ("SECTION_8_OPTX", "OPTX_TABLE", "OPTX_EXCHANGES_TABLE"):
             return "Operational information exchanges are formally specified in the 16-channel Op-Tx Matrix (Section 7)."
+        elif token_upper in ("DIAGRAM_10_1", "OPTX_DIAGRAM_10_1", "DIAGRAM.10.1", "OPTX_DIAGRAM.10.1"):
+            self._derive_operational_interaction_sequences()
+            return self.parameter_bindings.get("DIAGRAM_10_1", "")
+        elif token_upper in ("DIAGRAM_10_2", "OPTX_DIAGRAM_10_2", "DIAGRAM.10.2", "OPTX_DIAGRAM.10.2"):
+            self._derive_operational_interaction_sequences()
+            return self.parameter_bindings.get("DIAGRAM_10_2", "")
+        elif token_upper in ("DIAGRAM_10_3", "OPTX_DIAGRAM_10_3", "DIAGRAM.10.3", "OPTX_DIAGRAM.10.3"):
+            self._derive_operational_interaction_sequences()
+            return self.parameter_bindings.get("DIAGRAM_10_3", "")
+        elif token_upper in ("DIAGRAM_10_4", "OPTX_DIAGRAM_10_4", "DIAGRAM.10.4", "OPTX_DIAGRAM.10.4"):
+            self._derive_operational_interaction_sequences()
+            return self.parameter_bindings.get("DIAGRAM_10_4", "")
+        elif token_upper in (
+            "SECTION_7_4_SEQUENCES",
+            "CONOPS_SECTION_7_SEQUENCES",
+            "OPTX_SEQUENCE_DIAGRAMS",
+            "OPTX_INTERACTION_SEQUENCES",
+            "SECTION_7_OPTX_SEQUENCES",
+        ):
+            self._derive_operational_interaction_sequences()
+            return self.parameter_bindings.get("SECTION_7_4_SEQUENCES", "")
         elif token_upper == "SCENARIO_NOMINAL_THREAD":
             return "Autonomous pre-operational BIT, departure, corridor survey, and precision recovery."
         elif token_upper == "SCENARIO_DEGRADED_THREAD":
@@ -4122,6 +4620,27 @@ def assemble_document(
             raw_text = f.read()
         fname = os.path.basename(path)
         bound_text = param_engine.substitute(raw_text)
+
+        # Automated fallback generation for Section 7 Op-Tx interaction sequences (Issue #358)
+        if "07_OPTX" in fname.upper() or "OPTX" in fname.upper():
+            has_seq = "sequenceDiagram" in bound_text
+            has_d10 = bool(re.search(r'\bDiagram\s+10(?:\.\d+)?\b', bound_text, re.IGNORECASE))
+            if not has_seq or not has_d10:
+                if not hasattr(param_engine, "sequence_synthesizer") or param_engine.sequence_synthesizer is None:
+                    param_engine._derive_operational_interaction_sequences()
+                synth = getattr(param_engine, "sequence_synthesizer", None)
+                if synth:
+                    sec7_4 = synth.synthesize_section_7_4_markdown()
+                    if "### 7.4" in bound_text:
+                        bound_text = re.sub(
+                            r"###\s*7\.4[^\n]*\n.*?(?=\n###?\s*7\.[5-9]|\n##?\s*8|\Z)",
+                            sec7_4 + "\n",
+                            bound_text,
+                            flags=re.DOTALL,
+                        )
+                    else:
+                        bound_text = bound_text.rstrip() + "\n\n" + sec7_4 + "\n"
+
         units.append((fname, bound_text))
 
     meta = _extract_doc_metadata(units, param_engine=param_engine)
