@@ -1167,6 +1167,11 @@ class ConopsCompletenessValidator(IValidator):
                         detail={"declared_r_grb": r_grb_val, "minimum_r_grb": r_calc, "section": 5},
                     ))
 
+        # Section 7: Operational Information Exchange (Op-Tx) Sequence Parity (Fixes #354)
+        if 7 in matched_sections and "TEMPLATE" not in rel_path.upper():
+            _, sec7_line, sec7_content = matched_sections[7]
+            findings.extend(self._validate_optx_sequence_parity(content, rel_path, sec7_content, sec7_line))
+
         # Section 9: Multi-Threaded Operational Scenarios Timeline Steps (Fixes #114, #130, #298)
         if 9 in matched_sections and "TEMPLATE" not in rel_path.upper():
             _, sec9_line, sec9_content = matched_sections[9]
@@ -1243,6 +1248,81 @@ class ConopsCompletenessValidator(IValidator):
                             "file": rel_path,
                         },
                     ))
+        return findings
+
+    def _validate_optx_sequence_parity(
+        self,
+        content: str,
+        rel_path: str,
+        sec7_content: str,
+        sec7_line: int,
+    ) -> List[Finding]:
+        """
+        Validates semantic parity between Section 7 Op-Tx declared exchanges
+        and operational interaction sequence diagrams (Diagram 10.1 - 10.4)
+        (Fixes #354).
+        """
+        findings: List[Finding] = []
+
+        # 1. Parse Section 7 tables to extract declared Op-Tx exchange identifiers
+        sec7_tables, _ = _parse_commonmark_tables(sec7_content)
+        declared_exchanges: List[str] = []
+        declared_display: Dict[str, str] = {}
+        for tbl in sec7_tables:
+            for row in tbl:
+                full_row_str = " ".join(str(v) for v in row.values())
+                m_optx = re.search(r'\b(OpTx-0*[0-9]+)\b', full_row_str, re.IGNORECASE)
+                if m_optx:
+                    raw_id = m_optx.group(1)
+                    m_num = re.search(r'[0-9]+', raw_id)
+                    if m_num:
+                        norm_id = f"OpTx-{int(m_num.group(0)):02d}"
+                        if norm_id not in declared_exchanges:
+                            declared_exchanges.append(norm_id)
+                            declared_display[norm_id] = raw_id
+
+        if not declared_exchanges:
+            return findings
+
+        # 2. Extract sequenceDiagram blocks in Section 7
+        raw_blocks = re.findall(r'```(?:mermaid)?\s*\n([\s\S]*?)```', sec7_content, re.IGNORECASE)
+        seq_blocks: List[str] = []
+        for b in raw_blocks:
+            body_lines = [l.strip() for l in b.splitlines() if l.strip() and not l.strip().startswith("%%")]
+            if body_lines and re.match(r'^sequenceDiagram\b', body_lines[0], re.IGNORECASE):
+                seq_blocks.append(b)
+
+        if not seq_blocks:
+            return findings
+
+        combined_seq_text = "\n".join(seq_blocks)
+        has_optx_ref = bool(re.search(r'\bOpTx-0*[0-9]+\b', combined_seq_text, re.IGNORECASE))
+        has_diagram_10 = bool(re.search(r'\bDiagram\s+10(?:\.\d+)?\b', sec7_content, re.IGNORECASE))
+
+        # Check Op-Tx sequence parity if diagrams reference OpTx, cite Diagram 10, or in 07_OPTX unit
+        if has_optx_ref or has_diagram_10 or "07_OPTX" in rel_path.upper():
+            found_ref_norms: Set[str] = set()
+            for ref_match in re.finditer(r'\bOpTx-0*([0-9]+)\b', combined_seq_text, re.IGNORECASE):
+                found_ref_norms.add(f"OpTx-{int(ref_match.group(1)):02d}")
+
+            uncovered: List[str] = []
+            for norm_id in declared_exchanges:
+                if norm_id not in found_ref_norms:
+                    uncovered.append(declared_display.get(norm_id, norm_id))
+
+            if uncovered:
+                findings.append(Finding(
+                    "conops-optx-sequence-unrealized",
+                    f"Section 7 Op-Tx operational exchange(s) [{', '.join(uncovered)}] are not realized in any operational sequence diagram in '{rel_path}'.",
+                    location=f"{rel_path}:{sec7_line}",
+                    detail={
+                        "section": 7,
+                        "unrealized_exchanges": uncovered,
+                        "declared_count": len(declared_exchanges),
+                        "file": rel_path,
+                    },
+                ))
+
         return findings
 
     def _validate_scenario_timeline_steps(

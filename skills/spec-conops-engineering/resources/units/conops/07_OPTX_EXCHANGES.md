@@ -96,3 +96,68 @@ $$
 - **Allocated Exchanges:** `OpTx-11` and `OpTx-12`.
 - **Physical & Electrical Topology:** Optoisolated, point-to-point discrete wiring and high-current solid-state power switches directly routed between the independent Safety Watchdog and emergency containment / actuator isolation hardware.
 - **Safety Interlock Architecture:** Dual-switch configuration incorporating independent high-side solid-state switch and low-side ground clamp with pull-down resistors. Actuation requires simultaneous coincidence of hardware interlock permissive signals and Safety Watchdog abort triggers, eliminating false-trigger vulnerability to EMI transients or processor brownouts. Guarantees deterministic sub-millisecond actuation ($t_{\text{actuate}} \le \tau_{\text{squib\_latency\_max}} \le 10\text{ ms}$) triggering {{FAILSAFE_DESCENT_SYSTEM:ballistic recovery deployment}}, propulsion power cutoff, or emergency safe-state clamping.
+
+### 7.4 Operational Interaction Sequence Architecture (Diagram 10.1 - 10.4)
+In accordance with OMG UAF v2.0 Operational Information Views (Op-Tx) and ISO/IEC/IEEE 29148:2018 §6.4.2, the 16 declared Op-Tx operational information exchanges are partitioned across four canonical interaction sequence diagrams using abstract systems engineering performers (`OperatorConsole`, `CoreController`, `SensorSuite`, `ActuatorSubsystem`, `PayloadSubsystem`, `SafetyWatchdog`).
+
+#### 7.4.1 Diagram 10.1: Command, Control & Supervisory Interaction Sequence
+```mermaid
+sequenceDiagram
+    autonumber
+    participant OperatorConsole as OperatorConsole
+    participant CoreController as CoreController
+    participant PayloadSubsystem as PayloadSubsystem
+
+    Note over OperatorConsole,CoreController: Operational Supervisory Control & Telemetry Session
+    OperatorConsole->>CoreController: OpTx-09: SupervisoryUplinkCommand
+    CoreController-->>OperatorConsole: OpTx-08: ConsolidatedDownlinkTelemetry
+    OperatorConsole->>CoreController: OpTx-14: RegulatoryStateDeconflictionData
+    PayloadSubsystem-->>OperatorConsole: OpTx-15: CompressedPayloadVideoStream
+    CoreController-->>OperatorConsole: OpTx-16: DiagnosticBlackboxLogStream
+```
+
+#### 7.4.2 Diagram 10.2: Sensor Perception, Navigation & Payload Data Flow Sequence
+```mermaid
+sequenceDiagram
+    autonumber
+    participant SensorSuite as SensorSuite
+    participant CoreController as CoreController
+    participant PayloadSubsystem as PayloadSubsystem
+
+    Note over SensorSuite,PayloadSubsystem: Perception Acquisition & State Estimation Pipeline
+    SensorSuite->>CoreController: OpTx-01: PrimarySensorTelemetry
+    SensorSuite->>CoreController: OpTx-05: ExternalNavReferenceData
+    SensorSuite->>PayloadSubsystem: OpTx-06: RawPayloadSensorStream
+    PayloadSubsystem-->>CoreController: OpTx-07: ProcessedFeatureTelemetry
+```
+
+#### 7.4.3 Diagram 10.3: Real-Time Core Control & Actuation Feedback Loop Sequence
+```mermaid
+sequenceDiagram
+    autonumber
+    participant SensorSuite as SensorSuite
+    participant CoreController as CoreController
+    participant ActuatorSubsystem as ActuatorSubsystem
+
+    Note over SensorSuite,ActuatorSubsystem: Deterministic Control & Energy Management Loop
+    SensorSuite->>CoreController: OpTx-04: PowerResourceTelemetry
+    CoreController->>ActuatorSubsystem: OpTx-02: ActuatorControlDemand
+    ActuatorSubsystem-->>CoreController: OpTx-03: ActuatorStateFeedback
+```
+
+#### 7.4.4 Diagram 10.4: Safety Monitoring, Watchdog Interlock & Failsafe Containment Sequence
+```mermaid
+sequenceDiagram
+    autonumber
+    participant CoreController as CoreController
+    participant SafetyWatchdog as SafetyWatchdog
+    participant ActuatorSubsystem as ActuatorSubsystem
+    participant PayloadSubsystem as PayloadSubsystem
+
+    Note over CoreController,PayloadSubsystem: Independent Safety Watchdog Monitoring & Containment
+    CoreController->>SafetyWatchdog: OpTx-10: WatchdogHeartbeatStrobe
+    CoreController-->>SafetyWatchdog: OpTx-13: BroadcastRemoteIDTelemetry
+    SafetyWatchdog->>ActuatorSubsystem: OpTx-11: EmergencyFailsafeTrigger
+    SafetyWatchdog->>PayloadSubsystem: OpTx-12: FailsafeSquibActuationLine
+```
+
