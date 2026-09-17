@@ -379,7 +379,8 @@
           "id",
           "name",
           "description",
-          "allocation_tag"
+          "allocation_tag",
+          "ssot_source"
         ],
         "properties": {
           "id": {
@@ -393,6 +394,15 @@
           "description": {
             "type": "string",
             "description": "Technical description of the operational activity."
+          },
+          "allocated_performer": {
+            "type": "string",
+            "description": "Operational performer or subsystem allocated to execute this activity."
+          },
+          "ssot_source": {
+            "type": "string",
+            "minLength": 3,
+            "description": "Authoritative Single Source of Truth citation (e.g., schema path, STANAG, MIL-STD, DO-178C, ISO standard)."
           },
           "allocation_tag": {
             "type": "string",

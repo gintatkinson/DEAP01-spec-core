@@ -18,15 +18,17 @@ Enforces:
 7. Automated synthesis of OP_TO_RES_ALLOCATION_MATRIX.md.
 """
 
+import json
 import os
 import re
 import sys
-from typing import Dict, List, Optional, Set, Tuple, Any
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 try:
     from .base import IValidator
     from ..core.findings import Finding
     from ..core.workspace import WorkspaceRepository
+    from ..utils.sysml_loader import load_sysml_ast_members
 except (ImportError, ValueError):
     _src_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
     if _src_dir not in sys.path:
@@ -34,20 +36,211 @@ except (ImportError, ValueError):
     from parity_auditor.validators.base import IValidator
     from parity_auditor.core.findings import Finding
     from parity_auditor.core.workspace import WorkspaceRepository
+    from parity_auditor.utils.sysml_loader import load_sysml_ast_members
+
+try:
+    _sysml_ast = load_sysml_ast_members(["SysMLPackage", "SysMLParser", "ActionDef"])
+    SysMLPackage = _sysml_ast.SysMLPackage
+    SysMLParser = _sysml_ast.SysMLParser
+    ActionDef = _sysml_ast.ActionDef
+except Exception:
+    SysMLPackage = None
+    SysMLParser = None
+    ActionDef = None
+
+CONOPS_SCHEMA_REL_PATH = os.path.join(".pipeline", "schemas", "conops_specification_schema.json")
+
+DEFAULT_UAF_ACTIVITY_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "required": ["id", "name", "description", "allocation_tag", "ssot_source"],
+    "properties": {
+        "id": {
+            "type": "string",
+            "description": "Unique activity identifier (e.g., OA-01).",
+        },
+        "name": {
+            "type": "string",
+            "description": "Formal activity name matching UAF operational activity definition.",
+        },
+        "description": {
+            "type": "string",
+            "description": "Technical description of the operational activity.",
+        },
+        "allocated_performer": {
+            "type": "string",
+            "description": "Operational performer or subsystem allocated to execute this activity.",
+        },
+        "ssot_source": {
+            "type": "string",
+            "minLength": 3,
+            "description": "Authoritative Single Source of Truth citation (e.g., schema path, STANAG, MIL-STD, DO-178C, ISO standard).",
+        },
+        "allocation_tag": {
+            "type": "string",
+            "description": "Gate 24 allocation tag (e.g., /// OperationalAllocation: [OA-01]).",
+        },
+    },
+    "additionalProperties": True,
+}
+
+GENERIC_PLACEHOLDERS: Set[str] = {
+    "tbd", "none", "n/a", "na", "unknown", "unspecified",
+    "placeholder", "-", "--", "---", "", "todo", "null", "undefined",
+}
 
 
-RE_PROVENANCE_HEADER = re.compile(
-    r'\b(ssot|ground\s*truth|source|reference|citation|standard|authority|provenance)\b',
-    re.IGNORECASE
-)
-RE_VALID_CITATION = re.compile(
-    r'(?:schema/[A-Za-z0-9_.-]+|\b(?:STANAG|MIL[- ]?STD|DO[- ]?178[A-Z]?|DO[- ]?254[A-Z]?|ARP[- ]?4754[A-Z]?|ARP[- ]?4761[A-Z]?|ISO|IEEE|ASTM|FAA|EASA|SORA|JARUS)\b|\b(?:OEM|ICD|SRS|FHA|PSSA|CONOPS|Flight\s*Manual|Maintenance\s*Manual)\b|[A-Za-z0-9_.-]+\.(?:pdf|docx?|sysml|md))',
-    re.IGNORECASE
-)
-RE_PLACEHOLDER_CITATION = re.compile(
-    r'^(?:tbd|none|n/?a|unknown|unspecified|placeholder|-|\s*)$',
-    re.IGNORECASE
-)
+def load_uaf_activities_schema(workspace_dir: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Ingests .pipeline/schemas/conops_specification_schema.json to load the schema
+    contract for uaf_activities.
+    """
+    candidates = []
+    if workspace_dir:
+        candidates.append(os.path.join(workspace_dir, CONOPS_SCHEMA_REL_PATH))
+
+    cur = os.path.dirname(os.path.abspath(__file__))
+    while True:
+        candidate = os.path.join(cur, CONOPS_SCHEMA_REL_PATH)
+        candidates.append(candidate)
+        parent = os.path.dirname(cur)
+        if parent == cur:
+            break
+        cur = parent
+
+    for cand in candidates:
+        if os.path.isfile(cand):
+            try:
+                with open(cand, "r", encoding="utf-8") as f:
+                    schema_data = json.load(f)
+                items_schema = (
+                    schema_data.get("properties", {})
+                    .get("uaf_activities", {})
+                    .get("items")
+                )
+                if isinstance(items_schema, dict):
+                    return items_schema
+            except Exception:
+                pass
+
+    return DEFAULT_UAF_ACTIVITY_SCHEMA
+
+
+def _map_column_header_to_property(header: str) -> Optional[str]:
+    """
+    Maps markdown table column headers to schema property names:
+    'id', 'name', 'allocated_performer', 'description', 'ssot_source', 'allocation_tag'.
+    """
+    clean = re.sub(r'[*`_#\[\]]', '', header).strip().lower()
+    if not clean:
+        return None
+
+    # Check performer / allocated resource
+    if any(k in clean for k in ("performer", "allocated node", "allocated resource", "subsystem")):
+        return "allocated_performer"
+
+    # Check SSOT / provenance / ground truth / source / citation
+    if any(k in clean for k in ("ssot", "citation", "ground truth", "provenance", "source", "reference", "authority", "standard")):
+        return "ssot_source"
+
+    # Check allocation tag / traceability tag
+    if any(k in clean for k in ("allocation tag", "gate 24", "allocation_tag", "tag")) or (
+        "allocation" in clean and "performer" not in clean
+    ):
+        return "allocation_tag"
+
+    # Check id (activity id, metl id, task id, phase id)
+    if "id" in clean or clean in ("activity", "metl", "task", "phase"):
+        return "id"
+
+    # Check name / title
+    if any(k in clean for k in ("name", "title")):
+        return "name"
+
+    # Check description / summary / purpose / scope
+    if any(k in clean for k in ("desc", "summary", "purpose", "scope")):
+        return "description"
+
+    return None
+
+
+def _clean_markdown(text: str) -> str:
+    """
+    Strips markdown formatting wrappers (backticks, bold/italics asterisks, brackets)
+    while preserving meaningful internal characters like underscores in identifiers
+    and paths (e.g. `schema/system_architecture.sysml` -> schema/system_architecture.sysml).
+    """
+    s = text.strip()
+    # Strip enclosing backticks
+    if s.startswith("`") and s.endswith("`") and len(s) >= 2:
+        s = s[1:-1].strip()
+    # Strip enclosing brackets
+    if s.startswith("[") and s.endswith("]") and len(s) >= 2:
+        s = s[1:-1].strip()
+    # Strip enclosing bold / italics asterisks
+    while (s.startswith("**") and s.endswith("**") and len(s) >= 4) or (
+        s.startswith("*") and s.endswith("*") and len(s) >= 2
+    ):
+        if s.startswith("**") and s.endswith("**"):
+            s = s[2:-2].strip()
+        elif s.startswith("*") and s.endswith("*"):
+            s = s[1:-1].strip()
+    # Strip enclosing italics underscores if not part of identifier (e.g. _italic_)
+    if s.startswith("_") and s.endswith("_") and len(s) >= 2 and s.count("_") == 2:
+        s = s[1:-1].strip()
+    return s.strip()
+
+
+def _validate_activity_against_schema(
+    activity: Dict[str, Any], schema: Dict[str, Any]
+) -> List[str]:
+    """
+    Validates an extracted operational activity dictionary against the JSON schema contract.
+    Checks:
+    - Required fields are present and non-empty
+    - Value types match property schema (e.g. string)
+    - minLength constraints
+    - Non-placeholder values (rejecting TBD, N/A, Unspecified, etc.)
+    """
+    errors: List[str] = []
+    required_fields = schema.get("required", [])
+
+    for req in required_fields:
+        if req not in activity or activity[req] is None:
+            errors.append(f"missing required property '{req}'")
+        else:
+            val = activity[req]
+            if isinstance(val, str) and not val.strip():
+                errors.append(f"required property '{req}' is empty")
+
+    props = schema.get("properties", {})
+    for key, val in activity.items():
+        if key in ("location", "raw_row"):
+            continue
+        if key not in props:
+            continue
+
+        prop_schema = props[key]
+        expected_type = prop_schema.get("type")
+
+        if expected_type == "string":
+            if not isinstance(val, str):
+                errors.append(f"property '{key}' expected string, got {type(val).__name__}")
+                continue
+
+            clean_val = _clean_markdown(val)
+
+            # Placeholder check for string fields
+            if clean_val.lower() in GENERIC_PLACEHOLDERS:
+                errors.append(f"property '{key}' contains placeholder value '{val}'")
+
+            # minLength check
+            min_len = prop_schema.get("minLength")
+            if min_len is not None and len(clean_val) < min_len:
+                errors.append(
+                    f"property '{key}' length {len(clean_val)} is less than minLength {min_len}"
+                )
+
+    return errors
 
 
 def _normalize_oa_id(raw_id: str) -> str:
@@ -62,8 +255,7 @@ def _normalize_oa_id(raw_id: str) -> str:
         'Startup' -> 'STARTUP'
         'Phase 1: Startup' -> 'STARTUP'
     """
-    raw = raw_id.strip()
-    raw = re.sub(r'[*`_\[\]]', '', raw).strip()
+    raw = _clean_markdown(raw_id)
     
     # Strip leading 'Phase N:' or 'Phase N -'
     m_phase_prefix = re.match(r'^Phase\s*\d*[:\-\s]+\s*(.+)$', raw, re.IGNORECASE)
@@ -139,6 +331,10 @@ class OperationalAllocationValidator(IValidator):
     - Zero Ungrounded Operational Activities (Theorem 3: U_ungrounded = empty)
     """
 
+    def __init__(self, workspace_dir: Optional[str] = None):
+        self.workspace_dir = workspace_dir
+        self.extracted_activities: Dict[str, Dict[str, Any]] = {}
+
     def extract_conops_universe(
         self, repo: WorkspaceRepository
     ) -> Tuple[Dict[str, str], Dict[str, str], Dict[str, Tuple[str, str]]]:
@@ -159,6 +355,7 @@ class OperationalAllocationValidator(IValidator):
         ops_universe: Dict[str, str] = {}
         ops_locations: Dict[str, str] = {}
         ops_citations: Dict[str, Tuple[str, str]] = {}
+        self.extracted_activities.clear()
 
         conops_files: List[Tuple[str, str]] = []
         for root, _, files in os.walk(conops_dir):
@@ -179,19 +376,19 @@ class OperationalAllocationValidator(IValidator):
             in_phases_section = False
             in_activities_section = False
             in_table = False
-            provenance_col_idx: Optional[int] = None
+            table_col_map: Dict[int, str] = {}
 
             for lineno_1idx, line in enumerate(lines, start=1):
                 stripped = line.strip()
                 if not stripped:
                     in_table = False
-                    provenance_col_idx = None
+                    table_col_map = {}
                     continue
 
                 # Section tracking
                 if stripped.startswith("#"):
                     in_table = False
-                    provenance_col_idx = None
+                    table_col_map = {}
                     header_lower = stripped.lower()
                     if "phase" in header_lower or "lifecycle" in header_lower or "mode" in header_lower:
                         in_phases_section = True
@@ -203,7 +400,7 @@ class OperationalAllocationValidator(IValidator):
                         in_phases_section = False
                         in_activities_section = False
 
-                # 1. Parse markdown tables with Activity ID or Phase columns
+                # 1. Parse markdown tables with structured column extraction
                 if stripped.startswith("|") and stripped.endswith("|"):
                     parts = [p.strip() for p in stripped.split("|")[1:-1]]
                     # Check if separator row (| :--- | :--- |)
@@ -213,47 +410,66 @@ class OperationalAllocationValidator(IValidator):
 
                     if len(parts) >= 2:
                         first_col = parts[0]
-                        second_col = parts[1]
                         # Check if first column is an OA or MET identifier: `OA-01`, OA_1, MET-01, etc.
                         m_oa = re.search(r'\b((?:OA|MET|METL)[_-]?\d+[a-zA-Z0-9_-]*)\b', first_col, re.IGNORECASE)
 
                         # Check if table header row defining columns
-                        has_prov_header = any(RE_PROVENANCE_HEADER.search(p) for p in parts)
+                        mapped_cols = {idx: _map_column_header_to_property(col) for idx, col in enumerate(parts)}
+                        has_mapped_cols = any(mapped_cols.values())
+
                         is_header_row = (
                             not m_oa
                             and (
                                 not in_table
-                                or has_prov_header
+                                or has_mapped_cols
                                 or any(h in first_col.lower() for h in ("activity", "phase", "task", "metl", "lifecycle"))
                             )
                         )
                         if is_header_row:
                             in_table = True
-                            provenance_col_idx = None
-                            for idx, col in enumerate(parts):
-                                if RE_PROVENANCE_HEADER.search(col):
-                                    provenance_col_idx = idx
-                                    break
+                            table_col_map = mapped_cols
                             continue
 
                         in_table = True
 
+                        # Build structured row dict mapping property names
+                        row_dict: Dict[str, Any] = {}
+                        for idx, prop_name in table_col_map.items():
+                            if prop_name and idx < len(parts):
+                                clean_val = _clean_markdown(parts[idx])
+                                row_dict[prop_name] = clean_val
+
+                        loc = f"{rel_path}:{lineno_1idx}"
+                        row_dict["location"] = loc
+
                         if m_oa:
                             raw_id = m_oa.group(1)
                             canon = _normalize_oa_id(raw_id)
-                            display_name = re.sub(r'[*`_]', '', second_col).strip() or raw_id
+                            display_name = (
+                                row_dict.get("name")
+                                or (_clean_markdown(parts[1]) if len(parts) > 1 else raw_id)
+                                or raw_id
+                            )
+                            row_dict["id"] = canon
+                            row_dict.setdefault("name", display_name)
+                            row_dict.setdefault("description", display_name)
+
+                            # Default allocation_tag if not in table columns
+                            if "allocation_tag" not in row_dict or not row_dict["allocation_tag"]:
+                                row_dict["allocation_tag"] = f"/// OperationalAllocation: [{canon}]"
+
                             ops_universe[canon] = display_name
-                            loc = f"{rel_path}:{lineno_1idx}"
                             if canon not in ops_locations:
                                 ops_locations[canon] = loc
-                            if provenance_col_idx is not None and provenance_col_idx < len(parts):
-                                citation_str = parts[provenance_col_idx].strip()
-                                ops_citations[canon] = (citation_str, loc)
+                            if "ssot_source" in row_dict and row_dict["ssot_source"]:
+                                ops_citations[canon] = (row_dict["ssot_source"], loc)
+
+                            self.extracted_activities[canon] = row_dict
                             continue
 
                         # Check if table row defines a phase name
                         if in_phases_section or "phase" in first_col.lower():
-                            clean_name = re.sub(r'[*`_]', '', first_col).strip()
+                            clean_name = _clean_markdown(first_col)
                             if clean_name and not clean_name.lower().startswith("phase id") and not clean_name.lower().startswith("---"):
                                 canon = _normalize_oa_id(clean_name)
                                 if canon and canon not in ("PHASE", "NAME", "ID", "DESCRIPTION"):
@@ -263,31 +479,35 @@ class OperationalAllocationValidator(IValidator):
                             continue
                 else:
                     in_table = False
-                    provenance_col_idx = None
+                    table_col_map = {}
 
                 # 2. Parse bullet points / headings:
-                # - **OA-01**: Sensor calibration ...
-                # - **Phase 1: Startup**
-                # ### OA-01: Initialization
-                # ### Phase 1: Startup
                 oa_match = re.search(r'\b((?:OA|MET|METL)[_-]?\d+[a-zA-Z0-9_-]*)\b', stripped, re.IGNORECASE)
                 if oa_match:
                     raw_id = oa_match.group(1)
                     canon = _normalize_oa_id(raw_id)
-                    # Extract name after colon or dash if present
                     m_desc = re.search(r'(?:(?:OA|MET|METL)[_-]?\d+[a-zA-Z0-9_-]*)[*`_]*\s*[:\-]\s*(.+)$', stripped, re.IGNORECASE)
                     display_name = m_desc.group(1).strip() if m_desc else raw_id
-                    display_name = re.sub(r'[*`_]', '', display_name).strip()
+                    display_name = _clean_markdown(display_name)
+                    loc = f"{rel_path}:{lineno_1idx}"
                     ops_universe[canon] = display_name
                     if canon not in ops_locations:
-                        ops_locations[canon] = f"{rel_path}:{lineno_1idx}"
+                        ops_locations[canon] = loc
+                    if canon not in self.extracted_activities:
+                        self.extracted_activities[canon] = {
+                            "id": canon,
+                            "name": display_name,
+                            "description": display_name,
+                            "location": loc,
+                            "allocation_tag": f"/// OperationalAllocation: [{canon}]",
+                        }
                     continue
 
                 # Parse Phase declarations: - **Phase 1: Startup** or ### Phase 1: Startup
                 phase_match = re.search(r'\bPhase\s*\d*[:\-\s]+\s*([a-zA-Z0-9_-]+)', stripped, re.IGNORECASE)
                 if phase_match:
                     phase_name = phase_match.group(1).strip()
-                    phase_name = re.sub(r'[*`_]', '', phase_name).strip()
+                    phase_name = _clean_markdown(phase_name)
                     if phase_name:
                         canon = _normalize_oa_id(phase_name)
                         ops_universe[canon] = phase_name
@@ -308,6 +528,101 @@ class OperationalAllocationValidator(IValidator):
                                 ops_locations[canon] = f"{rel_path}:{lineno_1idx}"
 
         return ops_universe, ops_locations, ops_citations
+
+    def extract_sysml_actions(self, repo: WorkspaceRepository) -> List[Dict[str, Any]]:
+        """
+        Ingests SysML v2 AST action def and activity def nodes using load_sysml_ast_members
+        when SysML models are present.
+        """
+        workspace_dir = repo.workspace_dir
+        actions: List[Dict[str, Any]] = []
+
+        scan_dirs = ["schema", ".pipeline"]
+        sysml_files: List[Tuple[str, str]] = []
+        for sdir in scan_dirs:
+            full_dir = os.path.join(workspace_dir, sdir)
+            if os.path.isdir(full_dir):
+                for root, _, files in os.walk(full_dir):
+                    for f in sorted(files):
+                        if f.endswith(".sysml") and f != "README.md":
+                            full_p = os.path.join(root, f)
+                            rel_p = os.path.relpath(full_p, workspace_dir)
+                            sysml_files.append((full_p, rel_p))
+
+        for full_p, rel_p in sysml_files:
+            try:
+                with open(full_p, "r", encoding="utf-8", errors="ignore") as f:
+                    content = f.read()
+            except Exception:
+                continue
+
+            if not content.strip():
+                continue
+
+            # 1. AST-based extraction via SysMLParser
+            if SysMLParser is not None:
+                try:
+                    pkg = SysMLParser.parse_text(
+                        content,
+                        default_name=os.path.splitext(os.path.basename(rel_p))[0],
+                    )
+                    self._collect_ast_actions(pkg, rel_p, actions)
+                except Exception:
+                    pass
+
+            # 2. Direct extraction for activity def and action def declarations
+            for m in re.finditer(
+                r'(?:(?:doc\s*/\*|\s*/\*)(.*?)\*/\s*)?\b(action|activity)\s+(?:def\s+)?([a-zA-Z0-9_]+)',
+                content,
+                re.DOTALL | re.IGNORECASE,
+            ):
+                doc_comment = (m.group(1) or "").strip()
+                kind = f"{m.group(2).lower()} def"
+                act_name = m.group(3)
+                if not any(a["name"] == act_name and a["file"] == rel_p for a in actions):
+                    actions.append({
+                        "name": act_name,
+                        "syntax_form": kind,
+                        "doc": doc_comment,
+                        "location": f"{rel_p}:{act_name}",
+                        "canonical_id": _normalize_oa_id(act_name),
+                        "file": rel_p,
+                    })
+
+        return actions
+
+    def _collect_ast_actions(
+        self, pkg: Any, rel_path: str, actions: List[Dict[str, Any]]
+    ):
+        if not pkg:
+            return
+
+        def _add_action(act: Any):
+            act_name = getattr(act, "name", "")
+            if not act_name:
+                return
+            act_doc = getattr(act, "doc", "") or ""
+            if not any(a["name"] == act_name and a["file"] == rel_path for a in actions):
+                actions.append({
+                    "name": act_name,
+                    "syntax_form": "action def",
+                    "doc": act_doc,
+                    "location": f"{rel_path}:{act_name}",
+                    "canonical_id": _normalize_oa_id(act_name),
+                    "file": rel_path,
+                })
+
+        for act in (getattr(pkg, "action_defs", []) or []):
+            _add_action(act)
+        for act in (getattr(pkg, "actions", []) or []):
+            _add_action(act)
+
+        for part in (getattr(pkg, "part_defs", []) or []):
+            for act in (getattr(part, "actions", []) or []):
+                _add_action(act)
+
+        for sub in (getattr(pkg, "sub_packages", []) or []):
+            self._collect_ast_actions(sub, rel_path, actions)
 
     def extract_allocation_tags(self, repo: WorkspaceRepository) -> Tuple[Dict[str, List[str]], Dict[str, List[str]]]:
         """
@@ -362,6 +677,25 @@ class OperationalAllocationValidator(IValidator):
                     tags = _parse_allocation_tags(line)
                     loc = f"{rel_path}:{lineno_1idx}"
                     for t in tags:
+                        if loc not in allocated_tags.get(t, []):
+                            allocated_tags.setdefault(t, []).append(loc)
+                        if loc not in raw_tag_map.get(t, []):
+                            raw_tag_map.setdefault(t, []).append(loc)
+
+        # Ingest SysML v2 AST action def and activity def nodes using load_sysml_ast_members
+        sysml_actions = self.extract_sysml_actions(repo)
+        for act in sysml_actions:
+            loc = act["location"]
+            canon_id = act["canonical_id"]
+            if canon_id.startswith("OA-") or canon_id.startswith("MET-"):
+                if loc not in allocated_tags.get(canon_id, []):
+                    allocated_tags.setdefault(canon_id, []).append(loc)
+                if loc not in raw_tag_map.get(canon_id, []):
+                    raw_tag_map.setdefault(canon_id, []).append(loc)
+            if act.get("doc"):
+                for t in _parse_allocation_tags(act["doc"]):
+                    existing = allocated_tags.get(t, [])
+                    if not any(e.startswith(f"{act['file']}:") for e in existing):
                         allocated_tags.setdefault(t, []).append(loc)
                         raw_tag_map.setdefault(t, []).append(loc)
 
@@ -412,7 +746,7 @@ class OperationalAllocationValidator(IValidator):
         - Theorem 2 (Zero Phantom Tags): P_phantom = T_{tags} \setminus \Omega_{ops} = \emptyset
         - Theorem 3 (Zero Ungrounded Operational Activities): U_ungrounded = \emptyset
         """
-        ops_universe, ops_locations, ops_citations = self.extract_conops_universe(repo)
+        ops_universe, ops_locations, _ = self.extract_conops_universe(repo)
         allocated_tags, _ = self.extract_allocation_tags(repo)
 
         # Upstream clean landing zones: if both are empty, pass gracefully
@@ -454,21 +788,22 @@ class OperationalAllocationValidator(IValidator):
                     detail={"phantom_tag": phantom, "location": loc}
                 ))
 
-        # Theorem 3: Zero Ungrounded Operational Activities (strictly enforced)
+        # Theorem 3: Zero Ungrounded Operational Activities (schema-driven validation)
+        uaf_schema = load_uaf_activities_schema(repo.workspace_dir)
         for canon_id in sorted(ops_universe.keys()):
             if canon_id.startswith("OA-") or canon_id.startswith("MET-") or canon_id.startswith("METL-"):
                 disp_name = ops_universe.get(canon_id, canon_id)
                 loc = ops_locations.get(canon_id, "docs/conops/CONOPS.md")
-                cit_info = ops_citations.get(canon_id)
+                act_data = self.extracted_activities.get(canon_id)
+
                 is_unanchored = False
-                if not cit_info:
+                if not act_data:
                     is_unanchored = True
                 else:
-                    citation_str, cit_loc = cit_info
-                    if cit_loc:
-                        loc = cit_loc
-                    clean_cit = re.sub(r'[*`_\[\]]', '', citation_str).strip()
-                    if not clean_cit or RE_PLACEHOLDER_CITATION.match(clean_cit) or not RE_VALID_CITATION.search(citation_str):
+                    if "location" in act_data:
+                        loc = act_data["location"]
+                    schema_errors = _validate_activity_against_schema(act_data, uaf_schema)
+                    if any("ssot_source" in err for err in schema_errors) or "ssot_source" not in act_data:
                         is_unanchored = True
 
                 if is_unanchored:

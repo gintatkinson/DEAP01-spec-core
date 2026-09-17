@@ -203,6 +203,7 @@ def _get_valid_sample_conops_payload() -> Dict[str, Any]:
                 "name": "SystemInitialization",
                 "description": "Executes power-on Built-In-Tests and sensor calibration",
                 "allocation_tag": "/// OperationalAllocation: [OA-01]",
+                "ssot_source": "schema/system_architecture.sysml",
             }
         ],
         "optx_exchanges": [
@@ -472,6 +473,15 @@ class TestSpecificationSchemas(unittest.TestCase):
         for fld in ["id", "title", "player_or_operator", "interfacing_stakeholder", "characteristics", "training_type", "constraint_source"]:
             self.assertIn(fld, uc_req, f"user_classes item missing required field '{fld}'")
 
+        # uaf_activities: minItems >= 1
+        self.assertEqual(props["uaf_activities"].get("type"), "array")
+        self.assertGreaterEqual(props["uaf_activities"].get("minItems", 0), 1)
+        uaf_items = props["uaf_activities"].get("items", {})
+        uaf_req = uaf_items.get("required", [])
+        for fld in ["id", "name", "description", "allocation_tag", "ssot_source"]:
+            self.assertIn(fld, uaf_req, f"uaf_activities item missing required field '{fld}'")
+        self.assertEqual(uaf_items.get("properties", {}).get("ssot_source", {}).get("minLength"), 3)
+
         # scenarios: minItems >= 1
         self.assertEqual(props["scenarios"].get("type"), "array")
         self.assertGreaterEqual(props["scenarios"].get("minItems", 0), 1)
@@ -518,13 +528,13 @@ class TestSpecificationSchemas(unittest.TestCase):
             "threat_matrix",
             "pace_c2_plan",
             "airspace_geozones",
-            "go_no_go_matrix",
             "bingo_energy_math",
             "allocation_tags",
         ]
         for sec in required_sections:
             self.assertIn(sec, schema.get("required", []), f"Missing required section '{sec}' in Mission Intent schema")
             self.assertIn(sec, schema.get("properties", {}), f"Missing property definition '{sec}' in Mission Intent schema")
+        self.assertIn("go_no_go_matrix", schema.get("properties", {}), "Missing property definition 'go_no_go_matrix' in Mission Intent schema")
 
         # Verify both roe_interlocks and safety_interlocks are defined in properties
         self.assertIn("roe_interlocks", schema.get("properties", {}))

@@ -534,6 +534,114 @@ Class GuidanceEngine { ... }
 
             self.assertEqual(errors, [])
 
+    def test_schema_driven_table_parsing_with_all_columns(self):
+        """Verify structured table parsing extracts rows as typed dictionaries mapping to schema properties."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            features_dir = os.path.join(tmpdir, "docs", "features")
+            os.makedirs(conops_dir, exist_ok=True)
+            os.makedirs(features_dir, exist_ok=True)
+
+            conops_md = """# Concept of Operations
+## Operational Activities
+| Activity ID | Activity Name | Allocated Performer Node & Resource | Operational Description | Traceability & Gate 24 Allocation Tag | SSOT Ground Truth Source & Citation |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `OA-01` | System Initialization | PrimarySensorSubsystem | Perform boot BIT tests | `/// OperationalAllocation: [OA-01]` | `schema/system_architecture.sysml` |
+"""
+            with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
+                f.write(conops_md)
+
+            feat_md = """# Feature 01
+/// OperationalAllocation: [OA-01]
+"""
+            with open(os.path.join(features_dir, "FEAT_01.md"), "w", encoding="utf-8") as f:
+                f.write(feat_md)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            validator = OperationalAllocationValidator()
+            errors = validator.validate(repo)
+            self.assertEqual(errors, [])
+
+            # Check extracted activities dictionary
+            act = validator.extracted_activities.get("OA-01")
+            self.assertIsNotNone(act)
+            self.assertEqual(act["id"], "OA-01")
+            self.assertEqual(act["name"], "System Initialization")
+            self.assertEqual(act["allocated_performer"], "PrimarySensorSubsystem")
+            self.assertEqual(act["description"], "Perform boot BIT tests")
+            self.assertEqual(act["allocation_tag"], "/// OperationalAllocation: [OA-01]")
+            self.assertEqual(act["ssot_source"], "schema/system_architecture.sysml")
+
+    def test_schema_validation_minLength_enforced(self):
+        """Verify that ssot_source shorter than minLength (3) emits operational-activity-unanchored-provenance."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            features_dir = os.path.join(tmpdir, "docs", "features")
+            os.makedirs(conops_dir, exist_ok=True)
+            os.makedirs(features_dir, exist_ok=True)
+
+            conops_md = """# CONOPS
+## Operational Activities
+| Activity ID | Name | Description | SSOT Ground Truth Source & Citation |
+| :--- | :--- | :--- | :--- |
+| `OA-01` | Initialization | System boot | 12 |
+"""
+            with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
+                f.write(conops_md)
+
+            feat_md = """# Feature 01
+/// OperationalAllocation: [OA-01]
+"""
+            with open(os.path.join(features_dir, "FEAT_01.md"), "w", encoding="utf-8") as f:
+                f.write(feat_md)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            validator = OperationalAllocationValidator()
+            errors = validator.validate(repo)
+            self.assertEqual(len(errors), 1)
+            self.assertEqual(errors[0].rule_id, "operational-activity-unanchored-provenance")
+            self.assertIn("OA-01", str(errors[0]))
+
+    def test_sysml_action_def_and_activity_def_ingestion(self):
+        """Verify SysML v2 AST action def and activity def nodes are ingested using load_sysml_ast_members."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            schema_dir = os.path.join(tmpdir, "schema")
+            os.makedirs(conops_dir, exist_ok=True)
+            os.makedirs(schema_dir, exist_ok=True)
+
+            conops_md = """# Concept of Operations
+## Operational Activities
+| Activity ID | Name | Description | SSOT Ground Truth Source & Citation |
+| :--- | :--- | :--- | :--- |
+| `OA-01` | Boot Sequence | Power on BIT | `schema/system_architecture.sysml` |
+| `OA-02` | Guidance Loop | Real-time control | `schema/system_architecture.sysml` |
+"""
+            with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
+                f.write(conops_md)
+
+            sysml_content = """package SubsystemAllocations {
+    action def OA_01;
+    activity def GuidanceLoop {
+        doc /* /// OperationalAllocation: [OA-02] */
+    }
+}
+"""
+            with open(os.path.join(schema_dir, "system.sysml"), "w", encoding="utf-8") as f:
+                f.write(sysml_content)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            validator = OperationalAllocationValidator()
+            # Verify extract_sysml_actions finds both action def and activity def
+            actions = validator.extract_sysml_actions(repo)
+            act_names = {a["name"] for a in actions}
+            self.assertIn("OA_01", act_names)
+            self.assertIn("GuidanceLoop", act_names)
+
+            # Both OA-01 (via action def name) and OA-02 (via activity def doc tag) should be allocated
+            errors = validator.validate(repo, allow_missing_specs=False)
+            self.assertEqual(errors, [])
+
 
 if __name__ == "__main__":
     unittest.main()
