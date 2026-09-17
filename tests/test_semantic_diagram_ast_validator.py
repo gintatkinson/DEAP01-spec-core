@@ -500,13 +500,19 @@ flowchart TD
             self.assertTrue(is_declared, f"Expected node '{node_id}' with label '{label}' to be recognized as declared.")
 
     def test_operational_performer_tokens_recognized(self):
-        """Verify terminal, technician, coordinator, maintainer are recognized as valid operational performers."""
+        """Verify terminal, technician, coordinator, maintainer, maintenance, lead, commander, crew, armorer, operator are recognized."""
         ast = self.validator._build_ast_ground_truth(self.pkg)
         tokens = [
             ("MaintenanceTerminal", "Field Maintenance Terminal"),
             ("FieldTechnician", "Field Technician Node"),
             ("MissionCoordinator", "Mission Coordinator Console"),
             ("SystemMaintainer", "System Maintainer Performer"),
+            ("FacilityMaintenance", "Facility Maintenance Post"),
+            ("TeamLead", "Mission Team Lead"),
+            ("FlightCommander", "Tactical Flight Commander"),
+            ("GroundCrew", "Ground Operations Crew"),
+            ("PayloadArmorer", "Safety Payload Armorer"),
+            ("SystemOperator", "Autonomous System Operator"),
         ]
         for node_id, label in tokens:
             is_declared = self.validator._is_declared_node(
@@ -517,6 +523,27 @@ flowchart TD
                 is_operational_tier=False,
             )
             self.assertTrue(is_declared, f"Expected operational token '{node_id}' to be recognized.")
+
+    def test_dodaf_operational_and_functional_activity_identifiers_recognized(self):
+        """Verify canonical DoDAF operational activity (oa) and functional operation (fn) identifiers are recognized."""
+        ast = self.validator._build_ast_ground_truth(self.pkg)
+        identifiers = [
+            ("OA01", "Pre-Flight Inspection Activity"),
+            ("oa_02", "Autonomous Waypoint Navigation"),
+            ("oa-03", "Contingency Return Activity"),
+            ("FN01", "Sensor Fusion Pipeline Operation"),
+            ("fn_02", "Payload Release Functional Step"),
+            ("fn-03", "Battery Thermal Monitoring Function"),
+        ]
+        for node_id, label in identifiers:
+            is_declared = self.validator._is_declared_node(
+                node_id=node_id,
+                label=label,
+                ast=ast,
+                subgraphs={},
+                is_operational_tier=False,
+            )
+            self.assertTrue(is_declared, f"Expected DoDAF activity '{node_id}' with label '{label}' to be recognized.")
 
     def test_threat_and_failure_taxonomy_nodes_not_flagged_as_actuators(self):
         """Verify threat taxonomy nodes like TM1['Actuator Jam / Hardover'] are excluded from actuator classification."""

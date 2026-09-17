@@ -558,7 +558,7 @@ class SemanticDiagramASTValidator(IValidator):
 
         # Recognized operational performer/actor tokens in raw label/id
         if any(tok in raw_label_lower or tok in raw_id_lower for tok in (
-            "terminal", "technician", "coordinator", "maintainer"
+            "terminal", "technician", "coordinator", "maintainer", "maintenance", "lead", "commander", "crew", "armorer", "operator"
         )):
             return True
 
@@ -591,7 +591,7 @@ class SemanticDiagramASTValidator(IValidator):
             return True
 
         # Check procedural workflow / lifecycle / step / WBS / port / connection patterns
-        procedural_prefix = re.compile(r'^(step\d*|phase\d*|p\d+[a-z_]|d[_\-]|pipeline\d*|abort|gate|mtc|lru|port|conn|task\d*|sortie|turnaround|diagnostics|pbit|ibit|cbit|check|pass|fail|l\d+|r\d+|wp[_\-]|wbs[_\-]|uc[_\-]|port[_\-]|conn[_\-])', re.I)
+        procedural_prefix = re.compile(r'^(step\d*|phase\d*|p\d+[a-z_]|d[_\-]|pipeline\d*|abort|gate|mtc|lru|port|conn|task\d*|oa\d*|oa[_\-]|fn\d*|fn[_\-]|sortie|turnaround|diagnostics|pbit|ibit|cbit|check|pass|fail|l\d+|r\d+|wp[_\-]|wbs[_\-]|uc[_\-]|port[_\-]|conn[_\-])', re.I)
         if procedural_prefix.match(node_id.strip()) or procedural_prefix.match(id_norm) or procedural_prefix.match(lbl_norm) or (title_norm and procedural_prefix.match(title_norm)):
             return True
 
