@@ -603,6 +603,235 @@ def _matches_canonical_diagram(
 
 
 # =============================================================================
+# Gate 30 SV-1 Multi-Segment Layout & Rule E3 Tiering Helpers (Issue #342)
+# =============================================================================
+
+@dataclass
+class _SV1Subgraph:
+    id: str
+    label: str
+    depth: int
+    parent: Optional["_SV1Subgraph"] = None
+    children: List["_SV1Subgraph"] = field(default_factory=list)
+    flat_nodes: Set[str] = field(default_factory=set)
+    all_nodes: Set[str] = field(default_factory=set)
+    internal_spacers: List[Tuple[str, str]] = field(default_factory=list)
+
+
+def _parse_sv1_structure(non_comment_lines: List[str]) -> Tuple[List[_SV1Subgraph], List[_SV1Subgraph], List[Tuple[str, str]], List[Tuple[str, str]]]:
+    """
+    Parses an SV-1 Mermaid flowchart to discover:
+    - all_subgraphs: all subgraphs declared in the diagram
+    - top_level_segments: subgraphs corresponding to operational segments
+    - all_spacers: all '~~~' rank spacer pairs found in the block
+    - inter_segment_spacers: spacer pairs connecting two different segment subgraphs
+    """
+    subgraph_pattern = re.compile(
+        r"^\s*subgraph\s+(?:([A-Za-z0-9_\-]+)\s*(?:\[(.*?)\])?|(?:\"([^\"]+)\"))",
+        re.IGNORECASE,
+    )
+    end_pattern = re.compile(r"^\s*end\b", re.IGNORECASE)
+    spacer_pattern = re.compile(r"([A-Za-z0-9_\-]+)\s*~~~\s*([A-Za-z0-9_\-]+)")
+    node_decl_pattern = re.compile(r"^\s*([A-Za-z0-9_\-]+)\s*(?:\[|\(|\{|\(\()")
+
+    stack: List[_SV1Subgraph] = []
+    all_subgraphs: List[_SV1Subgraph] = []
+    all_spacers: List[Tuple[str, str]] = []
+
+    for line in non_comment_lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+
+        # 1. Subgraph declaration
+        m_sub = subgraph_pattern.match(stripped)
+        if m_sub:
+            sg_id = m_sub.group(1) or m_sub.group(3) or ""
+            sg_label = (m_sub.group(2) or sg_id).strip('"')
+            sub = _SV1Subgraph(
+                id=sg_id,
+                label=sg_label,
+                depth=len(stack),
+                parent=stack[-1] if stack else None,
+            )
+            if stack:
+                stack[-1].children.append(sub)
+            stack.append(sub)
+            all_subgraphs.append(sub)
+            continue
+
+        # 2. Subgraph end
+        if end_pattern.match(stripped):
+            if stack:
+                stack.pop()
+            continue
+
+        # 3. Spacers
+        if "~~~" in stripped:
+            for m_sp in spacer_pattern.finditer(stripped):
+                u, v = m_sp.group(1), m_sp.group(2)
+                all_spacers.append((u, v))
+                if stack:
+                    stack[-1].internal_spacers.append((u, v))
+            continue
+
+        # 4. Filter out keywords / directions / classes / styles
+        first_token = stripped.split()[0].lower() if stripped.split() else ""
+        if first_token in ("direction", "classdef", "class", "style", "click", "linkstyle"):
+            continue
+
+        # 5. Filter out edges (--> , ==> , -.-> , <--> , <==> , etc.)
+        if re.search(r"-->|---|-.->|==>|<-->|<==>", stripped):
+            continue
+
+        # 6. Node definitions
+        m_node = node_decl_pattern.match(stripped)
+        if m_node:
+            nid = m_node.group(1)
+            if nid.lower() not in ("subgraph", "direction", "end", "class", "style", "classdef"):
+                if stack:
+                    stack[-1].flat_nodes.add(nid)
+                    for anc in stack:
+                        anc.all_nodes.add(nid)
+            continue
+
+        # 7. Bare node identifier on line
+        m_ident = re.match(r"^([A-Za-z0-9_\-]+)$", stripped)
+        if m_ident:
+            nid = m_ident.group(1)
+            if nid.lower() not in ("subgraph", "direction", "end", "class", "style", "classdef"):
+                if stack:
+                    stack[-1].flat_nodes.add(nid)
+                    for anc in stack:
+                        anc.all_nodes.add(nid)
+
+    # Identify top-level segment subgraphs
+    # Matching External, Ground, Support, Air_Vehicle, Platform, Segment
+    seg_name_pattern = re.compile(
+        r"(?i)\b(external|ground|support|air_vehicle|platform|segment)\b|(?:external|ground|support|air_vehicle|platform|segment)",
+        re.IGNORECASE,
+    )
+    tier_name_pattern = re.compile(r"(?i)tier", re.IGNORECASE)
+    super_system_pattern = re.compile(r"(?i)super_?system", re.IGNORECASE)
+
+    top_level_segments: List[_SV1Subgraph] = []
+    for sg in all_subgraphs:
+        # Exclude super system wrappers
+        if super_system_pattern.search(sg.id) or super_system_pattern.search(sg.label):
+            continue
+        # Exclude tier subgraphs
+        if tier_name_pattern.search(sg.id) or tier_name_pattern.search(sg.label):
+            continue
+        # Must match segment keywords
+        if not (seg_name_pattern.search(sg.id) or seg_name_pattern.search(sg.label)):
+            continue
+        # Must be top-level (parent is None or parent is super system wrapper)
+        if sg.parent is not None:
+            p_id = sg.parent.id
+            p_label = sg.parent.label
+            is_p_super = bool(super_system_pattern.search(p_id) or super_system_pattern.search(p_label))
+            if not is_p_super:
+                continue
+        top_level_segments.append(sg)
+
+    # Resolve inter-segment spacers
+    def _find_segment(ident: str) -> Optional[_SV1Subgraph]:
+        clean_id = ident.strip().strip('"')
+        for s in top_level_segments:
+            if s.id == clean_id or s.label == clean_id:
+                return s
+            if clean_id in s.all_nodes:
+                return s
+            for c in s.children:
+                if c.id == clean_id or c.label == clean_id:
+                    return s
+        return None
+
+    inter_segment_spacers: List[Tuple[str, str]] = []
+    for u, v in all_spacers:
+        s_u = _find_segment(u)
+        s_v = _find_segment(v)
+        if s_u is not None and s_v is not None and s_u.id != s_v.id:
+            inter_segment_spacers.append((s_u.id, s_v.id))
+
+    return all_subgraphs, top_level_segments, all_spacers, inter_segment_spacers
+
+
+def _validate_sv1_diagram(block: ParsedMermaidBlock, spec: Dict[str, Any], b_loc: str) -> List[Finding]:
+    """
+    Validates SV-1 diagram against Gate 30 rules:
+    - Segment subgraph presence
+    - Cycle rejection (bidirectional links <--> or <==>)
+    - Inter-segment vertical spacer gate (Rule E3 rank spacers '~~~')
+    - Subsystem tiering gate (Rule E3 max 3-column vertical tier partitioning)
+    """
+    findings: List[Finding] = []
+
+    # 1. Operational segment subgraph presence
+    segment_subgraphs = [sg for sg in block.subgraphs if "segment" in sg.lower()]
+    if not segment_subgraphs and not block.subgraphs:
+        findings.append(Finding(
+            RULE_INCOMPLETE_DIAGRAM,
+            f"{b_loc}: Diagram SV-1 ({spec['name']}) lacks operational segment subgraphs allocating physical subsystems.",
+            location=b_loc,
+            detail={"diagram_id": "SV-1", "subgraphs": block.subgraphs},
+        ))
+
+    # 2. Cycle rejection check (bidirectional links <--> or <==>)
+    bidi_edges = [l.strip() for l in block.non_comment_lines if re.search(r"<-->|<==>", l)]
+    if bidi_edges:
+        findings.append(Finding(
+            RULE_INCOMPLETE_DIAGRAM,
+            f"{b_loc}: Diagram SV-1 ({spec['name']}) contains {len(bidi_edges)} bidirectional links ('<-->') triggering Dagre rank collapse onto a single horizontal line (violates Rule E3). Use directed flows ('-->') instead.",
+            location=b_loc,
+            detail={"diagram_id": "SV-1", "bidi_edges": bidi_edges[:3]},
+        ))
+
+    # 3. Parse subgraphs, nodes, and spacers
+    all_subgraphs, top_level_segments, all_spacers, inter_segment_spacers = _parse_sv1_structure(block.non_comment_lines)
+
+    # 4. Inter-Segment Vertical Spacer Gate (Rule E3)
+    if len(top_level_segments) >= 2:
+        connected_segs: Set[str] = set()
+        for s1, s2 in inter_segment_spacers:
+            connected_segs.add(s1)
+            connected_segs.add(s2)
+        if not inter_segment_spacers or len(connected_segs) < len(top_level_segments):
+            findings.append(Finding(
+                RULE_INCOMPLETE_DIAGRAM,
+                f"{b_loc}: Diagram SV-1 contains multiple segment subgraphs without vertical rank spacers ('~~~') between segments, causing horizontal rank sprawl (violates Rule E3).",
+                location=b_loc,
+                detail={"diagram_id": "SV-1", "rule": "conops-sv1-unconstrained-segments"},
+            ))
+
+    # 5. Rule E3 Subsystem Tiering Gate
+    for seg in top_level_segments:
+        if len(seg.all_nodes) > 3:
+            tier_children = [
+                c for c in seg.children
+                if re.search(r"(?i)tier", c.id) or re.search(r"(?i)tier", c.label)
+            ]
+            tier_ids = {t.id for t in tier_children}
+            internal_tier_spacers = [sp for sp in all_spacers if sp[0] in tier_ids and sp[1] in tier_ids]
+
+            has_untiered = (
+                len(tier_children) == 0
+                or len(seg.flat_nodes) > 3
+                or any(len(t.all_nodes) > 3 for t in tier_children)
+                or (len(tier_children) > 1 and not internal_tier_spacers)
+            )
+            if has_untiered:
+                findings.append(Finding(
+                    RULE_INCOMPLETE_DIAGRAM,
+                    f"{b_loc}: Diagram SV-1 segment contains > 3 subsystems without internal tier subgraphs and vertical rank spacers ('~~~') (violates Rule E3 max 3-column vertical tier partitioning).",
+                    location=b_loc,
+                    detail={"diagram_id": "SV-1", "rule": "conops-sv1-untiered-subsystems"},
+                ))
+
+    return findings
+
+
+# =============================================================================
 # ArchitectureViewpointValidator Class (Gate 30)
 # =============================================================================
 
@@ -755,35 +984,9 @@ class ArchitectureViewpointValidator(IValidator):
                             detail={"diagram_id": canon_id, "nodes": len(block.nodes)}
                         ))
 
-                # Diagram 3 (SV-1) Segment Subgraph Invariant
+                # Diagram 3 (SV-1) Segment Subgraph Invariant & Rule E3 Layout Gates
                 if canon_id == "SV-1":
-                    segment_subgraphs = [sg for sg in block.subgraphs if "segment" in sg.lower()]
-                    if not segment_subgraphs and not block.subgraphs:
-                        findings.append(Finding(
-                            RULE_INCOMPLETE_DIAGRAM,
-                            f"{b_loc}: Diagram {canon_id} ({spec['name']}) lacks operational segment subgraphs allocating physical subsystems.",
-                            location=b_loc,
-                            detail={"diagram_id": canon_id, "subgraphs": block.subgraphs}
-                        ))
-
-                    bidi_edges = [l.strip() for l in block.non_comment_lines if re.search(r"<-->|<==>", l)]
-                    if bidi_edges:
-                        findings.append(Finding(
-                            RULE_INCOMPLETE_DIAGRAM,
-                            f"{b_loc}: Diagram {canon_id} ({spec['name']}) contains {len(bidi_edges)} bidirectional links ('<-->') triggering Dagre rank collapse onto a single horizontal line (violates Rule E3). Use directed flows ('-->') instead.",
-                            location=b_loc,
-                            detail={"diagram_id": canon_id, "bidi_edges": bidi_edges[:3]}
-                        ))
-                    tier_subgraphs = [sg for sg in block.subgraphs if re.match(r"^Tier_\d+\b", sg, re.I)]
-                    if len(tier_subgraphs) > 1:
-                        has_tier_spacer = any("~~~" in l for l in block.non_comment_lines)
-                        if not has_tier_spacer:
-                            findings.append(Finding(
-                                RULE_INCOMPLETE_DIAGRAM,
-                                f"{b_loc}: Diagram {canon_id} ({spec['name']}) declares {len(tier_subgraphs)} tier subgraphs without vertical rank spacers ('~~~') between tiers (violates Rule E3 max 3-column vertical tier partitioning).",
-                                location=b_loc,
-                                detail={"diagram_id": canon_id, "tier_subgraphs": tier_subgraphs}
-                            ))
+                    findings.extend(_validate_sv1_diagram(block, spec, b_loc))
 
                 # Diagram 9 (STPA-CONTROL) Closed-Loop Invariant
                 if canon_id == "STPA-CONTROL":
@@ -889,34 +1092,9 @@ class ArchitectureViewpointValidator(IValidator):
                             location=b_loc
                         ))
 
+                # Diagram 3 (SV-1) Segment Subgraph Invariant & Rule E3 Layout Gates
                 if canon_id == "SV-1":
-                    segment_subgraphs = [sg for sg in block.subgraphs if "segment" in sg.lower()]
-                    if not segment_subgraphs and not block.subgraphs:
-                        findings.append(Finding(
-                            RULE_INCOMPLETE_DIAGRAM,
-                            f"{b_loc}: Diagram {canon_id} ({spec['name']}) lacks operational segment subgraphs allocating physical subsystems.",
-                            location=b_loc,
-                            detail={"diagram_id": canon_id, "subgraphs": block.subgraphs}
-                        ))
-
-                    bidi_edges = [l.strip() for l in block.non_comment_lines if re.search(r"<-->|<==>", l)]
-                    if bidi_edges:
-                        findings.append(Finding(
-                            RULE_INCOMPLETE_DIAGRAM,
-                            f"{b_loc}: Diagram {canon_id} ({spec['name']}) contains {len(bidi_edges)} bidirectional links ('<-->') triggering Dagre rank collapse onto a single horizontal line (violates Rule E3). Use directed flows ('-->') instead.",
-                            location=b_loc,
-                            detail={"diagram_id": canon_id, "bidi_edges": bidi_edges[:3]}
-                        ))
-                    tier_subgraphs = [sg for sg in block.subgraphs if re.match(r"^Tier_\d+\b", sg, re.I)]
-                    if len(tier_subgraphs) > 1:
-                        has_tier_spacer = any("~~~" in l for l in block.non_comment_lines)
-                        if not has_tier_spacer:
-                            findings.append(Finding(
-                                RULE_INCOMPLETE_DIAGRAM,
-                                f"{b_loc}: Diagram {canon_id} ({spec['name']}) declares {len(tier_subgraphs)} tier subgraphs without vertical rank spacers ('~~~') between tiers (violates Rule E3 max 3-column vertical tier partitioning).",
-                                location=b_loc,
-                                detail={"diagram_id": canon_id, "tier_subgraphs": tier_subgraphs}
-                            ))
+                    findings.extend(_validate_sv1_diagram(block, spec, b_loc))
 
                 if canon_id == "STPA-CONTROL":
                     if len(block.edges) < 2:

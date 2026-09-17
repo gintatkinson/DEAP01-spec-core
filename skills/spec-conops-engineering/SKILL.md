@@ -256,13 +256,20 @@ Per IEEE 1362-1998 §5.3 (Operational Environment & System Architecture), DoDAF 
      Operational diagrams (Figure 4.9) capture high-level subsystem interconnections and buses; detailed pin-to-pin wiring contracts and serial framing are deferred to Level 1C ICDs.
   4. **System Boundary & External Actor Interfaces (IEEE 1362 §5.1 / ISO 29148 §6.4.2)**: Explicit boundary encapsulation enclosing the system segments and formal external actor interfaces (Supervisory Operators, Range Safety Officers, GNSS constellations, Environmental dynamics).
   5. **Strict Exclusion of Internal Software Modules (DoDAF SV-4)**: ConOps SV-1 operates strictly at the physical and logical subsystem / LRU boundary. Internal software execution classes, internal algorithms, class methods, and function signatures belong in Level 2 detailed design / DoDAF SV-4 and are strictly prohibited in the Level 1B ConOps SV-1 diagram. Detailed physical wire pinouts, signal dictionaries, ICD connection matrices (Level 1C), and internal software classes/methods (Level 2) are strictly decoupled from Level 1B operational architecture.
-  6. **Option 3 Standard: Compact Subsystem Blocks with Embedded Port Attributes & Vertical Hierarchical Tiers**:
-     - **Embedded Port Attributes**: All subsystem blocks MUST embed their discrete ports as bulleted attributes inside the subsystem node definition (`[<b>Name</b><br/>• PORT-... (DIRECTION)]`), rather than rendering individual ports as separate downstream child nodes or nested single-component subgraphs.
-     - **Vertical Hierarchical Tier Partitioning (`direction TB`)**: Subgraphs and segment partitions MUST enforce top-to-bottom vertical layout (`direction TB`) with a maximum of 3 columns horizontally (max 3-column vertical tier partitioning). Flat horizontal layout (`direction LR` or unrestricted horizontal chaining) is strictly prohibited to prevent unreadable horizontal diagram sprawl.
-     - **100% Mathematical Parity with Section 4.8 Allocation Table**: Every subsystem block in the SV-1 diagram embeds the exact set of typed logical and physical ports (`• PORT-... (DIRECTION)`) matching the Section 4.8 Physical & Logical Interface Allocations table rows 1:1, derived deterministically from 100% of declared AST `part def` nodes in exact lockstep.
-     - **Direct Traceable Interconnects**: Directed and bidirectional connection links (`CONN-01`..`CONN-N`) route directly between compact subsystem nodes and external actors, specifying the logical/physical flow and port bindings in the connection label.
-  7. **Canonical Compliant Mermaid SV-1 Diagram Template**: The architecture diagram MUST be authored using a compliant Mermaid flowchart (`flowchart TD` or `flowchart TB`) declaring segment subgraphs, discrete port nodes, and bidirectional/directed connection links (`CONN-XX`).
-  8. **Operational Architecture Scope (Section 4.7)**: Section 4.7 represents High-Level Operational Architecture (OV-1 / OV-2 / High-Level SV-1) partitioned across operational segments (Ground Segment, Air Vehicle Segment, Launch Segment, External Actors) with operational information exchanges (Op-Tx: C2 Commands, Telemetry, Video, Target Tracks, Arming Authorization). ConOps Figure 4.9 captures high-level operational subsystem interconnections, buses, and architectural segments. It does NOT mandate 1:1 parity with detailed pinout-level wire connections or private internal LRU child ports from Level 1C ICDs (`ICD_01_SYSTEM_INTERFACE_MATRIX.md`). Detailed internal wire-level interconnects, pinouts, RS-485 serial framing, opcodes (0x10, 0x11, etc.), register bitmasks, and CRC-16 equations belong strictly in Level 1C Interface Control Documents (`ICD_01_SYSTEM_INTERFACE_MATRIX.md` and `ICD_02_MASTER_SIGNAL_DICTIONARY.md`), NOT in the ConOps document.
+   6. **Option 3 Standard: Compact Subsystem Blocks with Embedded Port Attributes, Vertical Hierarchical Tiers & Segment Layout Enforcement**:
+      - **Embedded Port Attributes**: All subsystem blocks MUST embed their discrete ports as bulleted attributes inside the subsystem node definition (`[<b>Name</b><br/>• PORT-... (DIRECTION)]`), rather than rendering individual ports as separate downstream child nodes or nested single-component subgraphs. All node label lines MUST NOT exceed 35 characters and must be wrapped with `<br/>` per Rule E2.
+      - **Vertical Hierarchical Tier Partitioning (`direction TB`) & Rule E3 Tiering**: Subgraphs and segment partitions MUST enforce top-to-bottom vertical layout (`direction TB`) with a maximum of 3 columns horizontally (max 3-column vertical tier partitioning). For large subsystem counts (15–25 subsystems), subsystems within a segment MUST be partitioned into 5–6 functional tiers of at most 3 nodes per row (`AV_Tier1` through `AV_Tier6` or `Tier_1` through `Tier_N`) chained with internal invisible rank spacers (`~~~`). Flat horizontal layout (`direction LR`), flat declaration of > 3 subsystems in a segment without tier subgraphs, or untiered horizontal chaining is strictly prohibited to prevent unreadable horizontal diagram sprawl (Rule E3).
+      - **Mandatory 4-Segment Vertical Chaining Pattern**: Top-level operational segment subgraphs MUST be chained vertically using invisible rank spacers (`~~~`) connecting the segments in top-to-bottom sequence:
+        ```mermaid
+        External_Actors ~~~ Ground_Segment
+        Ground_Segment ~~~ Air_Vehicle_Segment
+        Air_Vehicle_Segment ~~~ Support_Segment
+        ```
+        Omitting rank spacers between segments causes Dagre to place all segments on Rank 0 (collapsing onto a single horizontal line across Markdown/Mermaid renderers).
+      - **100% Mathematical Parity with Section 4.8 Allocation Table**: Every subsystem block in the SV-1 diagram embeds the exact set of typed logical and physical ports (`• PORT-... (DIRECTION)`) matching the Section 4.8 Physical & Logical Interface Allocations table rows 1:1, derived deterministically from 100% of declared AST `part def` nodes in exact lockstep.
+      - **Direct Traceable Interconnects**: Directed connection links (`CONN-01`..`CONN-N`) route directly between compact subsystem nodes and external actors using directed flows (`-->`), strictly avoiding bidirectional links (`<-->` or `<==>`) which trigger Dagre rank collapse onto a single horizontal line (Rule E3).
+   7. **Canonical Compliant Mermaid SV-1 Diagram Template**: The architecture diagram MUST be authored using a compliant Mermaid flowchart (`flowchart TD` or `flowchart TB`) declaring segment subgraphs, discrete port nodes, internal tier subgraphs with `~~~` spacers, mandatory inter-segment vertical spacers, and directed connection links (`CONN-XX`).
+   8. **Operational Architecture Scope (Section 4.7)**: Section 4.7 represents High-Level Operational Architecture (OV-1 / OV-2 / High-Level SV-1) partitioned across operational segments (Ground Segment, Air Vehicle Segment, Launch Segment, External Actors) with operational information exchanges (Op-Tx: C2 Commands, Telemetry, Video, Target Tracks, Arming Authorization). ConOps Figure 4.9 captures high-level operational subsystem interconnections, buses, and architectural segments. It does NOT mandate 1:1 parity with detailed pinout-level wire connections or private internal LRU child ports from Level 1C ICDs (`ICD_01_SYSTEM_INTERFACE_MATRIX.md`). Detailed internal wire-level interconnects, pinouts, RS-485 serial framing, opcodes (0x10, 0x11, etc.), register bitmasks, and CRC-16 equations belong strictly in Level 1C Interface Control Documents (`ICD_01_SYSTEM_INTERFACE_MATRIX.md` and `ICD_02_MASTER_SIGNAL_DICTIONARY.md`), NOT in the ConOps document.
 
 #### Figure 4.1: Canonical ConOps SV-1 Primary System Architecture Diagram Template (Option 3: Compact Blocks & Vertical Tiers)
 ```mermaid
@@ -280,21 +287,21 @@ flowchart TD
         GCS["Ground Control Station (GCS)<br/>• PORT_GCS_C2 (INOUT)<br/>• PORT_GCS_DISP (OUT)"]
     end
 
-    subgraph Platform_Segment["Air Vehicle and Primary Platform Segment (DoDAF SV-1)"]
+    subgraph Air_Vehicle_Segment["Air Vehicle and Primary Platform Segment (DoDAF SV-1)"]
         direction TB
-        subgraph Tier1_Processing["Guidance & Perception Tier"]
+        subgraph AV_Tier1["Tier 1 - Guidance & Perception"]
             direction TB
             FCS["Flight and Guidance Controller<br/>• PORT_FCS_C2 (INOUT)<br/>• PORT_FCS_CMD (OUT)<br/>• PORT_FCS_TLM (IN)"]
             NavSensors["Sensor Fusion Unit<br/>• PORT_NAV_RF (IN)<br/>• PORT_NAV_DATA (OUT)"]
         end
 
-        subgraph Tier2_Actuation["Energy - Actuation & Safety Tier"]
+        subgraph AV_Tier2["Tier 2 - Energy, Actuation & Safety"]
             direction TB
             Actuators["Distributed Actuator Core<br/>• PORT_ACT_IN (IN)"]
             Watchdog["Hardware Safety Watchdog<br/>• PORT_WD_IN (IN)<br/>• PORT_WD_TRIG (OUT)"]
         end
 
-        Tier1_Processing ~~~ Tier2_Actuation
+        AV_Tier1 ~~~ AV_Tier2
     end
 
     subgraph Support_Segment["Launch and Auxiliary Support Segment (IEEE 1362 §5.3)"]
@@ -302,8 +309,9 @@ flowchart TD
         GSE["Ground Support Equipment<br/>and Staging<br/>• PORT_GSE_PWR (OUT)"]
     end
 
-    Ground_Segment ~~~ Platform_Segment
-    Platform_Segment ~~~ Support_Segment
+    External_Actors ~~~ Ground_Segment
+    Ground_Segment ~~~ Air_Vehicle_Segment
+    Air_Vehicle_Segment ~~~ Support_Segment
 
     %% External Interface Connections
     Operator -->|"CONN-01: Operator Command Input"| GCS
@@ -316,7 +324,7 @@ flowchart TD
     NavSensors -->|"CONN-06: Navigation State Estimates [PORT_NAV_DATA -> PORT_FCS_TLM]"| FCS
     FCS -->|"CONN-07: Real-Time Actuator Demand Vector [PORT_FCS_CMD -> PORT_ACT_IN]"| Actuators
     FCS -->|"CONN-08: Heartbeat Pulse and Safety Telemetry [PORT_FCS_CMD -> PORT_WD_IN]"| Watchdog
-    GSE -.->|"CONN-09: Regulated Pre-Flight Power and Diagnostics [PORT_GSE_PWR]"| Platform_Segment
+    GSE -.->|"CONN-09: Regulated Pre-Flight Power and Diagnostics [PORT_GSE_PWR]"| Air_Vehicle_Segment
 ```
 
 - **Super-System Segment Allocation Matrix (Table 4.2 / Section 4.2)**:

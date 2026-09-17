@@ -173,6 +173,50 @@ def _sanitize_level_1b_operational_text(text: str) -> str:
     return s.strip()
 
 
+def _wrap_mermaid_label(text: str, max_width: int = 35) -> str:
+    """
+    Wraps text into segments <= max_width characters using <br/>.
+    Enforces Rule E2 / Rule E3 visual ergonomics (Issue #342).
+    """
+    if not text:
+        return text
+    segments = re.split(r"(<br\s*/?>|\r?\n)", text, flags=re.I)
+    out_parts: List[str] = []
+    for seg in segments:
+        if re.match(r"^(<br\s*/?>|\r?\n)$", seg, flags=re.I):
+            out_parts.append(seg)
+            continue
+        clean_seg = re.sub(r"</?[a-zA-Z0-9_-]+\s*/?>", "", seg).strip()
+        if len(clean_seg) <= max_width:
+            out_parts.append(seg)
+        else:
+            words = seg.split()
+            lines: List[str] = []
+            curr: List[str] = []
+            curr_len = 0
+            for w in words:
+                w_clean = re.sub(r"</?[a-zA-Z0-9_-]+\s*/?>", "", w)
+                w_len = len(w_clean)
+                if w_len > max_width:
+                    if curr:
+                        lines.append(" ".join(curr))
+                        curr = []
+                        curr_len = 0
+                    for c_idx in range(0, len(w), max_width):
+                        lines.append(w[c_idx:c_idx + max_width])
+                elif curr and curr_len + 1 + w_len > max_width:
+                    lines.append(" ".join(curr))
+                    curr = [w]
+                    curr_len = w_len
+                else:
+                    curr.append(w)
+                    curr_len += (1 if curr else 0) + w_len
+            if curr:
+                lines.append(" ".join(curr))
+            out_parts.append("<br/>".join(lines))
+    return "".join(out_parts)
+
+
 def is_component_icd_document(text: str, file_path: str = "") -> bool:
     """
     Detects whether a document is a low-level raw wire-packet trace or standalone protocol capture log.
@@ -1664,6 +1708,7 @@ class SysMLParameterBindingEngine:
                     p_name = re.sub(r'_?0x[0-9a-fA-F]+', '', p_name, flags=re.IGNORECASE) or "Subsystem"
                     p_node_id = re.sub(r'[^A-Za-z0-9_]', '_', p_name)
                     part_node_ids.append((p_node_id, p_name))
+                    wrapped_p_name = _wrap_mermaid_label(p_name, max_width=35)
                     ports = getattr(p, "ports", []) or []
                     if ports:
                         port_items = []
@@ -1672,11 +1717,13 @@ class SysMLParameterBindingEngine:
                             clean_pt_name = _sanitize_level_1b_operational_text(raw_pt_name) or raw_pt_name
                             clean_pt_name = re.sub(r'_?0x[0-9a-fA-F]+', '', clean_pt_name, flags=re.IGNORECASE) or "p_port"
                             pt_dir = (getattr(pt, "direction", "inout") or "inout").upper()
-                            port_items.append(f"<br/>• {clean_pt_name} ({pt_dir})")
+                            port_line = f"• {clean_pt_name} ({pt_dir})"
+                            wrapped_port = _wrap_mermaid_label(port_line, max_width=35)
+                            port_items.append(f"<br/>{wrapped_port}")
                         port_text = "".join(port_items)
-                        lines.append(f'                {p_node_id}["{p_name}{port_text}"]')
+                        lines.append(f'                {p_node_id}["{wrapped_p_name}{port_text}"]')
                     else:
-                        lines.append(f'                {p_node_id}["{p_name}"]')
+                        lines.append(f'                {p_node_id}["{wrapped_p_name}"]')
                 lines.append('            end')
             if len(tier_subgraphs) > 1:
                 for t_idx in range(len(tier_subgraphs) - 1):
@@ -1687,18 +1734,20 @@ class SysMLParameterBindingEngine:
 
         lines.append('        end')
         lines.append('')
+        lines.append('        External_Actors ~~~ Platform_Segment')
+        lines.append('')
         if part_node_ids:
             primary_node = part_node_ids[0][0]
-            lines.append(f'        Operator -->|"CONN-01: Operator Command & Authorization"| {primary_node}')
-            lines.append(f'        Operator -->|"CONN-02: Bidirectional PACE C2 Datalink"| {primary_node}')
-            lines.append(f'        Environment -.->|"CONN-03: Environmental Dynamics & Disturbance"| {primary_node}')
+            lines.append(f'        Operator -->|"CONN-01: Operator Command Input"| {primary_node}')
+            lines.append(f'        Operator -->|"CONN-02: PACE C2 Datalink"| {primary_node}')
+            lines.append(f'        Environment -.->|"CONN-03: Environment Dynamics"| {primary_node}')
             if len(part_node_ids) > 1:
                 for idx_p, (other_node, _other_name) in enumerate(part_node_ids[1:], start=4):
-                    lines.append(f'        {primary_node} -->|"CONN-{idx_p:02d}: Internal Bus & Inter-Subsystem Demand"| {other_node}')
+                    lines.append(f'        {primary_node} -->|"CONN-{idx_p:02d}: Subsystem Demand"| {other_node}')
         else:
-            lines.append('        Operator -->|"CONN-01: Operator Command & Authorization"| Platform_Segment')
-            lines.append('        Operator -->|"CONN-02: Bidirectional PACE C2 Datalink"| Platform_Segment')
-            lines.append('        Environment -.->|"CONN-03: Environmental Dynamics & Disturbance"| Platform_Segment')
+            lines.append('        Operator -->|"CONN-01: Operator Command Input"| Platform_Segment')
+            lines.append('        Operator -->|"CONN-02: PACE C2 Datalink"| Platform_Segment')
+            lines.append('        Environment -.->|"CONN-03: Environment Dynamics"| Platform_Segment')
         lines.append('    end')
         lines.append('```')
         return "\n".join(lines)
