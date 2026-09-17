@@ -12,15 +12,17 @@ and FMECA failure modes, compiling them into formal SysML v2 `constraint def` an
 `assert constraint` expressions for Run-Time Assurance (RTA) mathematical verification
 with Simulink Design Verifier (SLDV) and Embedded Coder synthesis.
 
-Implements Closed-Loop Bidirectional Synchronization (--reverse-sync):
+Implements Closed-Loop Bidirectional Synchronization (--reverse-sync and --forward-sync):
 Extracts Concept of Operations (ConOps), Use Cases, User Stories, Features, Epics, and Safety Matrices from markdown
 specifications into canonical SysML v2 AST nodes, merging them deterministically into
 the SysML Single Source of Truth (.pipeline/schema.sysml) and regenerating .pipeline/schema-digest.json.
+Compiles canonical Markdown specifications from SysML v2 AST SSOT models (--forward-sync).
 
 Usage:
     python3 scripts/compile_sysml.py <file.sysml>
     python3 scripts/compile_sysml.py --stpa <stpa_file.md>
     python3 scripts/compile_sysml.py --reverse-sync [--docs docs/] [--schema schema/DEAP_MODEL.sysml] [--out .pipeline/schema.sysml] [--digest .pipeline/schema-digest.json]
+    python3 scripts/compile_sysml.py --forward-sync [--schema .pipeline/schema.sysml] [--docs docs/] [--out-dir build/generated_specs/] [--dry-run]
 """
 
 import sys
@@ -611,15 +613,17 @@ def parse_stpa_ucas(content: str) -> List[Dict[str, Any]]:
 
     # Pattern 1: Markdown table row with explicit UCA ID
     # | UCA ID | Controller | Control Action | STPA UCA Category | Context | Hazard | Severity | SAIL |
+    # or
+    # | UCA ID | Controller | Control Action | Guide Word | Context / State | Resulting Hazard | Safety Constraint | Severity |
     row_pattern = re.compile(
-        r'\|\s*(?:\*\*)?(UCA(?:-[A-Za-z0-9_]+)?-\d+)(?:\*\*)?\s*\|'
-        r'\s*([^|]+)\s*\|'
-        r'\s*([^|]+)\s*\|'
-        r'\s*([^|]+)\s*\|'
-        r'\s*([^|]+)\s*\|'
-        r'\s*([^|]+)\s*\|'
-        r'\s*([^|]+)\s*\|'
-        r'(?:\s*([^|\n]+)\s*\|)?'
+        r'(?m)^\s*\|\s*(?:\*\*)?(UCA(?:-[A-Za-z0-9_]+)?-\d+)(?:\*\*)?\s*\|'
+        r'\s*([^|\r\n]+)\s*\|'
+        r'\s*([^|\r\n]+)\s*\|'
+        r'\s*([^|\r\n]+)\s*\|'
+        r'\s*([^|\r\n]+)\s*\|'
+        r'\s*([^|\r\n]+)\s*\|'
+        r'\s*([^|\r\n]+)\s*\|'
+        r'(?:\s*([^|\r\n]+)\s*\|)?'
     )
 
     for match in row_pattern.finditer(content):
@@ -629,8 +633,17 @@ def parse_stpa_ucas(content: str) -> List[Dict[str, Any]]:
         category = match.group(4).strip().strip('*')
         context = match.group(5).strip()
         hazard = match.group(6).strip().strip('*')
-        severity = match.group(7).strip()
-        sail = match.group(8).strip() if match.group(8) else ""
+        col7 = match.group(7).strip()
+        col8 = match.group(8).strip() if match.group(8) else ""
+
+        if col7.startswith("SC") or "constraint" in col7.lower():
+            constraint = col7
+            severity = col8 or "Critical"
+            sail = ""
+        else:
+            constraint = ""
+            severity = col7
+            sail = col8
 
         ucas.append({
             "id": uca_id,
@@ -639,7 +652,7 @@ def parse_stpa_ucas(content: str) -> List[Dict[str, Any]]:
             "category": category,
             "context": context,
             "hazard": hazard,
-            "constraint": "",
+            "constraint": constraint,
             "severity": severity,
             "sail": sail
         })
@@ -1876,14 +1889,14 @@ def extract_epics_from_markdown(content: str, filename: str = "") -> List[Any]:
 
     row_pattern = re.compile(
         r'\|\s*(?:\*\*)?([A-Za-z0-9_]+)(?:\*\*)?\s*\|'
-        r'\s*([^|]+)\s*\|'
-        r'\s*([^|\n]+)\s*\|'
+        r'\s*([^|\r\n]+)\s*\|'
+        r'\s*([^|\r\n]+)\s*\|'
     )
     for match in row_pattern.finditer(body):
         cap_name = match.group(1).strip()
         pkg_name = match.group(2).strip()
         desc = match.group(3).strip()
-        if cap_name.lower() in ("capability", "capability name", "name"):
+        if cap_name.lower() in ("capability", "capability name", "name", "description"):
             continue
         if not any(getattr(c, "name", "") == cap_name for c in capabilities):
             if SysMLCapabilityDef:
@@ -3152,6 +3165,585 @@ def _atomic_write_json(filepath: str, data: Any, indent: int = 2) -> None:
     os.replace(temp_name, abs_path)
 
 
+def forward_sync_sysml_to_specs(
+    schema_path: Optional[str] = None,
+    docs_dir: str = "docs",
+    out_dir: Optional[str] = None,
+    dry_run: bool = False,
+) -> Dict[str, str]:
+    """
+    Executes Closed-Loop Forward Synchronization from the SysML v2 AST
+    Single Source of Truth (.pipeline/schema.sysml) into canonical markdown specifications.
+
+    Generates:
+    - Epics (EPIC-*.md) from CapabilityDef
+    - Features (FEAT-*.md) from PartDef & ActionDef
+    - User Stories (US-*.md) from SysMLInteractionDef & SysMLTestCaseDef
+    - Use Cases (UC-*.md) from UseCaseDef
+    - Safety Matrix (STPA_MATRIX.md) from SysMLConstraintDef and MatrixGenerator
+
+    Parameters:
+        schema_path: Path to input SysML v2 schema file (default: .pipeline/schema.sysml).
+        docs_dir: Default destination markdown directory for downstream workspaces (default: docs).
+        out_dir: Optional explicit output directory. Mandatory in upstream templates when not in dry_run.
+        dry_run: If True, simulates generation without writing files to disk.
+
+    Returns:
+        Dict[str, str] mapping relative file paths to their generated markdown content.
+    """
+    if not schema_path:
+        default_schema = os.path.join(PROJECT_ROOT, ".pipeline", "schema.sysml")
+        if os.path.exists(default_schema):
+            schema_path = default_schema
+        else:
+            raise FileNotFoundError("No schema path provided and default '.pipeline/schema.sysml' does not exist.")
+
+    if not os.path.exists(schema_path):
+        if "package " in schema_path or "part def " in schema_path:
+            if SysMLParser is None:
+                raise RuntimeError("SysMLParser is not available to parse schema text.")
+            pkg = SysMLParser.parse_text(schema_path)
+        else:
+            raise FileNotFoundError(f"Base schema file not found: {schema_path}")
+    else:
+        if SysMLParser is None:
+            raise RuntimeError("SysMLParser is not available to parse base schema.")
+        try:
+            pkg = SysMLParser.parse_file(schema_path)
+        except Exception as exc:
+            raise RuntimeError(f"Failed to parse base schema '{schema_path}': {exc}") from exc
+
+    if pkg is None:
+        raise RuntimeError(f"Failed to parse base schema '{schema_path}': parser returned None.")
+
+    is_upstream = os.path.isdir(os.path.join(PROJECT_ROOT, ".pipeline", "upstream"))
+
+    if out_dir:
+        resolved_out_dir = os.path.abspath(out_dir)
+        print(f"[SysML v2 Forward-Sync] Routing output to explicit directory: '{resolved_out_dir}'")
+    elif is_upstream:
+        if dry_run:
+            resolved_out_dir = os.path.abspath(docs_dir if os.path.isabs(docs_dir) else os.path.join(PROJECT_ROOT, docs_dir))
+        else:
+            raise RuntimeError(
+                "In upstream repository, --forward-sync must write to an explicit --out-dir (e.g. build/generated_specs/) "
+                "or use --dry-run to protect clean landing zones (docs/epics/, docs/features/, docs/user-stories/, docs/use-cases/)."
+            )
+    else:
+        resolved_out_dir = os.path.abspath(docs_dir if os.path.isabs(docs_dir) else os.path.join(PROJECT_ROOT, docs_dir))
+
+    generated_files: Dict[str, str] = {}
+
+    # 1. Epics (EPIC-*.md) from CapabilityDef
+    capabilities: List[Any] = []
+    if hasattr(pkg, "get_all_capabilities"):
+        capabilities = pkg.get_all_capabilities()
+    elif hasattr(pkg, "capability_defs"):
+        capabilities = list(pkg.capability_defs or [])
+    elif isinstance(pkg, dict):
+        capabilities = list(pkg.get("capability_defs", []) or [])
+
+    if not capabilities:
+        all_parts = pkg.get_all_parts() if hasattr(pkg, "get_all_parts") else (getattr(pkg, "part_defs", []) or [])
+        for p in all_parts:
+            p_name = getattr(p, "name", str(p))
+            if p_name:
+                desc = f"Autonomous operational capability management for {p_name} subsystem"
+                if SysMLCapabilityDef:
+                    capabilities.append(SysMLCapabilityDef(
+                        name=f"{p_name}Capability",
+                        subsystem=p_name,
+                        description=desc,
+                        doc=desc,
+                    ))
+                else:
+                    capabilities.append({
+                        "name": f"{p_name}Capability",
+                        "subsystem": p_name,
+                        "description": desc,
+                        "doc": desc,
+                    })
+
+    for idx, cap in enumerate(capabilities, start=1):
+        cap_name = getattr(cap, "name", "") if hasattr(cap, "name") else cap.get("name", f"Capability_{idx}")
+        cap_name = _sanitize_id(cap_name)
+        subsys = (
+            getattr(cap, "subsystem", "")
+            or getattr(cap, "parent_package", "")
+            or getattr(cap, "package_ref", "")
+            or (cap.get("subsystem", "") if isinstance(cap, dict) else "")
+            or "CoreController"
+        )
+        subsys = _sanitize_id(subsys)
+        doc = (
+            getattr(cap, "doc", "")
+            or getattr(cap, "description", "")
+            or (cap.get("description", "") if isinstance(cap, dict) else "")
+            or f"System capability specification for {cap_name}"
+        )
+
+        epic_content = f"""---
+title: "Epic {idx:02d}: {cap_name}"
+type: epic
+subsystem: "{subsys}"
+generation_mode: subagent
+---
+
+# Epic {idx:02d}: {cap_name}
+
+## Metadata
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Title** | Epic {idx:02d}: {cap_name} |
+| **Type** | epic |
+| **Subsystem** | {subsys} |
+| **Generation Mode** | subagent |
+
+## Subsystem Capability Allocations
+
+| Capability | Subsystem | Description |
+| :--- | :--- | :--- |
+| **{cap_name}** | {subsys} | {doc} |
+
+## Architectural Context
+
+```mermaid
+classDiagram
+    class {subsys} {{
+        +perform{cap_name}()
+    }}
+```
+"""
+        rel_path = os.path.join("epics", f"EPIC-{idx:02d}-{cap_name}.md")
+        generated_files[rel_path] = epic_content
+
+    # 2. Features (FEAT-*.md) from PartDef & ActionDef
+    parts: List[Any] = []
+    if hasattr(pkg, "get_all_parts"):
+        parts = pkg.get_all_parts()
+    elif hasattr(pkg, "part_defs"):
+        parts = list(pkg.part_defs or [])
+    elif isinstance(pkg, dict):
+        parts = list(pkg.get("part_defs", []) or [])
+
+    if not parts:
+        abstract_performer_names = [
+            "OperatorConsole",
+            "CoreController",
+            "SensorSuite",
+            "ActuatorSubsystem",
+            "SafetyWatchdog",
+        ]
+        for ap in abstract_performer_names:
+            if PartDef:
+                parts.append(PartDef(name=ap, doc=f"Abstract system performer {ap}"))
+            else:
+                parts.append({"name": ap, "doc": f"Abstract system performer {ap}"})
+
+    for idx, part in enumerate(parts, start=1):
+        part_name = getattr(part, "name", "") if hasattr(part, "name") else part.get("name", f"Part_{idx}")
+        part_name = _sanitize_id(part_name)
+        part_doc = (
+            getattr(part, "doc", "")
+            if hasattr(part, "doc")
+            else (part.get("doc", "") if isinstance(part, dict) else "")
+        )
+        if not part_doc:
+            part_doc = f"Architecture, logical operations, and interface control for {part_name} subsystem"
+
+        part_attrs = (
+            getattr(part, "attributes", [])
+            if hasattr(part, "attributes")
+            else (part.get("attributes", []) if isinstance(part, dict) else [])
+        )
+        part_actions = (
+            getattr(part, "actions", [])
+            if hasattr(part, "actions")
+            else (part.get("actions", []) if isinstance(part, dict) else [])
+        )
+        part_ops = (
+            getattr(part, "operations", [])
+            if hasattr(part, "operations")
+            else (part.get("operations", []) if isinstance(part, dict) else [])
+        )
+
+        member_lines: List[str] = []
+        for attr in part_attrs:
+            a_name = getattr(attr, "name", "") if hasattr(attr, "name") else attr.get("name", "")
+            a_type = (
+                getattr(attr, "type_name", "String")
+                if hasattr(attr, "type_name")
+                else attr.get("type_name", "String")
+            )
+            if a_name:
+                member_lines.append(f"        +{a_type} {a_name}")
+
+        logical_ops_bullets: List[str] = []
+        all_acts_ops = list(part_actions) + list(part_ops)
+        if not all_acts_ops:
+            default_act_name = f"Execute{part_name}Task"
+            member_lines.append(f"        +void {default_act_name}(String inCommand)")
+            logical_ops_bullets.append(
+                f"- `+{default_act_name}(String inCommand) : void` : Executes core operations for {part_name}"
+            )
+        else:
+            for act in all_acts_ops:
+                act_name = getattr(act, "name", "") if hasattr(act, "name") else act.get("name", "ExecuteTask")
+                act_name = _sanitize_id(act_name)
+                in_params = (
+                    getattr(act, "in_params", [])
+                    if hasattr(act, "in_params")
+                    else (act.get("in_params", []) if isinstance(act, dict) else [])
+                )
+                param_strs: List[str] = []
+                for p in in_params:
+                    p_type = getattr(p, "type_name", "String") if hasattr(p, "type_name") else p.get("type_name", "String")
+                    p_n = getattr(p, "name", "param") if hasattr(p, "name") else p.get("name", "param")
+                    param_strs.append(f"{p_type} in_{p_n}")
+                param_sig = ", ".join(param_strs)
+                member_lines.append(f"        +void {act_name}({param_sig})")
+                logical_ops_bullets.append(
+                    f"- `+{act_name}({param_sig}) : void` : Dispatches control action {act_name}"
+                )
+
+        if not member_lines:
+            member_lines.append("        +String status")
+
+        members_block = "\n".join(member_lines)
+        logical_ops_block = "\n".join(logical_ops_bullets)
+
+        feat_content = f"""---
+title: "Feature {idx:02d}: {part_name} Architecture & Control"
+type: feature
+part: "{part_name}"
+part_def: "{part_name}"
+generation_mode: subagent
+---
+
+# Feature {idx:02d}: {part_name} Architecture & Control
+
+## Metadata
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Title** | Feature {idx:02d}: {part_name} |
+| **Type** | feature |
+| **Part** | {part_name} |
+| **Generation Mode** | subagent |
+
+## Architectural Structure
+
+```mermaid
+classDiagram
+    class {part_name} {{
+{members_block}
+    }}
+```
+
+## Logical Operations & Interface Messages
+{logical_ops_block}
+
+## Interface Requirements
+### 1. Payload Schema
+Formal schema and interface definition for {part_name}.
+
+### 2. Validation & Constraints
+Formal constraints and invariants enforced by {part_name}.
+"""
+        rel_path = os.path.join("features", f"FEAT-{idx:02d}-{part_name}.md")
+        generated_files[rel_path] = feat_content
+
+    # 3. User Stories (US-*.md) from SysMLInteractionDef & SysMLTestCaseDef
+    interactions: List[Any] = []
+    if hasattr(pkg, "interaction_defs"):
+        interactions.extend(pkg.interaction_defs or [])
+    for p in parts:
+        interactions.extend(getattr(p, "interactions", []) or [])
+
+    test_cases: List[Any] = []
+    if hasattr(pkg, "test_case_defs"):
+        test_cases.extend(pkg.test_case_defs or [])
+    for p in parts:
+        test_cases.extend(getattr(p, "test_cases", []) or [])
+
+    if not interactions:
+        canonical_interactions = [
+            {
+                "name": "TelemetrySync",
+                "lifelines": ["SensorSuite", "CoreController"],
+                "messages": ["ProcessSensorStream"],
+                "triggers": ["PeriodicTelemetryTimer"],
+                "subject": "CoreController",
+            },
+            {
+                "name": "CommandExecution",
+                "lifelines": ["OperatorConsole", "CoreController", "ActuatorSubsystem"],
+                "messages": ["SendMissionPlan", "CommandActuatorSetpoint"],
+                "triggers": ["OperatorCommandEvent"],
+                "subject": "CoreController",
+            },
+            {
+                "name": "SafetyWatchdogInteraction",
+                "lifelines": ["CoreController", "SafetyWatchdog"],
+                "messages": ["MonitorHeartbeat", "AssertSafetyConstraint"],
+                "triggers": ["HeartbeatTimeout"],
+                "subject": "SafetyWatchdog",
+            },
+        ]
+        for ci in canonical_interactions:
+            if SysMLInteractionDef:
+                interactions.append(SysMLInteractionDef(
+                    name=ci["name"],
+                    lifelines=ci["lifelines"],
+                    messages=ci["messages"],
+                    triggers=ci["triggers"],
+                    doc=f"System interaction for {ci['name']}",
+                ))
+            else:
+                interactions.append(ci)
+
+    for idx, inter in enumerate(interactions, start=1):
+        inter_name = getattr(inter, "name", "") if hasattr(inter, "name") else inter.get("name", f"Interaction_{idx}")
+        inter_name = _sanitize_id(inter_name)
+        lifelines = getattr(inter, "lifelines", []) if hasattr(inter, "lifelines") else inter.get("lifelines", [])
+        if not lifelines:
+            lifelines = ["OperatorConsole", "CoreController"]
+        messages = getattr(inter, "messages", []) if hasattr(inter, "messages") else inter.get("messages", [])
+        if not messages:
+            messages = ["ExecuteTask"]
+        triggers = getattr(inter, "triggers", []) if hasattr(inter, "triggers") else inter.get("triggers", [])
+        trig_name = triggers[0] if triggers else "OperationalTrigger"
+
+        matching_tc = None
+        if idx <= len(test_cases):
+            matching_tc = test_cases[idx - 1]
+        tc_name = getattr(matching_tc, "name", f"TC_{inter_name}") if matching_tc else f"TC_{inter_name}"
+        subject_part = (
+            getattr(matching_tc, "subject_part", lifelines[1] if len(lifelines) > 1 else lifelines[0])
+            if matching_tc
+            else (lifelines[1] if len(lifelines) > 1 else lifelines[0])
+        )
+
+        seq_lines = ["sequenceDiagram", "    autonumber"]
+        for ll in lifelines:
+            seq_lines.append(f"    participant {ll}")
+        for i in range(len(lifelines) - 1):
+            msg = messages[i] if i < len(messages) else messages[0]
+            seq_lines.append(f"    {lifelines[i]}->>{lifelines[i+1]}: {msg}()")
+        seq_diagram_str = "\n".join(seq_lines)
+
+        us_content = f"""---
+title: "User Story {idx:02d}: {inter_name}"
+type: user-story
+interaction: "{inter_name}"
+interaction_def: "{inter_name}"
+test_case: "{tc_name}"
+test_case_def: "{tc_name}"
+subject: "{subject_part}"
+generation_mode: subagent
+---
+
+# User Story {idx:02d}: {inter_name}
+
+## Metadata
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Title** | User Story {idx:02d}: {inter_name} |
+| **Type** | user-story |
+| **Interaction** | {inter_name} |
+| **Test Case** | {tc_name} |
+| **Subject** | {subject_part} |
+| **Generation Mode** | subagent |
+
+## Sequence Diagram
+
+```mermaid
+{seq_diagram_str}
+```
+
+## Acceptance Criteria (BDD)
+
+Scenario: Verify {inter_name} Nominal Flow
+  Given the system is initialized in nominal operational state
+  When the {trig_name} occurs
+  Then the command is executed successfully within real-time latency bounds.
+
+## Test Steps
+- step InitializeTestHarness
+- step DispatchCommand
+- step VerifyTelemetryResponse
+"""
+        rel_path = os.path.join("user-stories", f"US-{idx:02d}-{inter_name}.md")
+        generated_files[rel_path] = us_content
+
+    # 4. Use Cases (UC-*.md) from UseCaseDef
+    use_cases: List[Any] = []
+    if hasattr(pkg, "get_all_use_cases"):
+        use_cases = pkg.get_all_use_cases()
+    elif hasattr(pkg, "use_case_defs"):
+        use_cases = list(pkg.use_case_defs or [])
+    elif isinstance(pkg, dict):
+        use_cases = list(pkg.get("use_case_defs", []) or [])
+
+    if not use_cases:
+        canonical_ucs = [
+            {
+                "name": "ExecuteAutonomousMission",
+                "subject": "CoreController",
+                "actors": ["OperatorConsole"],
+                "objective": "Execute scheduled autonomous mission profile within operational envelope.",
+            },
+            {
+                "name": "HandleSafetyFailsafe",
+                "subject": "SafetyWatchdog",
+                "actors": ["CoreController"],
+                "objective": "Detect boundary violation and command failsafe hold state.",
+            },
+            {
+                "name": "CalibrateSensors",
+                "subject": "SensorSuite",
+                "actors": ["OperatorConsole"],
+                "objective": "Perform pre-operational sensor calibration and built-in self test.",
+            },
+        ]
+        for cuc in canonical_ucs:
+            if UseCaseDef:
+                use_cases.append(UseCaseDef(
+                    name=cuc["name"],
+                    subject=cuc["subject"],
+                    actors=cuc["actors"],
+                    objective=cuc["objective"],
+                    doc=cuc["objective"],
+                ))
+            else:
+                use_cases.append(cuc)
+
+    for idx, uc in enumerate(use_cases, start=1):
+        uc_name = getattr(uc, "name", "") if hasattr(uc, "name") else uc.get("name", f"UseCase_{idx}")
+        uc_name = _sanitize_id(uc_name)
+        subject = getattr(uc, "subject", "CoreController") if hasattr(uc, "subject") else uc.get("subject", "CoreController")
+        subject = _sanitize_id(subject) or "CoreController"
+        actors = getattr(uc, "actors", []) if hasattr(uc, "actors") else uc.get("actors", [])
+        if not actors:
+            single_act = getattr(uc, "actor", "OperatorConsole") if hasattr(uc, "actor") else uc.get("actor", "OperatorConsole")
+            actors = [single_act] if single_act else ["OperatorConsole"]
+        actors_clean = [_sanitize_id(str(a)) for a in actors if _sanitize_id(str(a))]
+        if not actors_clean:
+            actors_clean = ["OperatorConsole"]
+        actors_yaml = "\n".join([f"  - {a}" for a in actors_clean])
+        primary_actor = actors_clean[0]
+        objective = (
+            getattr(uc, "objective", "")
+            or getattr(uc, "doc", "")
+            or (uc.get("objective", "") if isinstance(uc, dict) else "")
+            or f"Execute formal operational objective for {uc_name}"
+        )
+
+        uc_content = f"""---
+title: "Use Case {idx:02d}: {uc_name}"
+type: use-case
+use_case_def: "{uc_name}"
+use_case: "{uc_name}"
+subject: "{subject}"
+subject_part: "{subject}"
+actors:
+{actors_yaml}
+objective: "{objective}"
+generation_mode: subagent
+---
+
+# Use Case {idx:02d}: {uc_name}
+
+## Metadata
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Title** | Use Case {idx:02d}: {uc_name} |
+| **Type** | use-case |
+| **Subject Part** | `{subject}` |
+| **Actors** | {', '.join(actors_clean)} |
+| **Objective** | {objective} |
+| **Generation Mode** | subagent |
+
+## Operational Flow
+
+```mermaid
+flowchart TD
+    Actor["{primary_actor}"] --> Action["{uc_name}"]
+    Action --> Target["{subject}"]
+```
+
+## Primary Scenario Steps
+1. Actor `{primary_actor}` initiates `{uc_name}`.
+2. Subject `{subject}` verifies precondition status.
+3. System completes operation within specified performance envelope.
+"""
+        rel_path = os.path.join("use-cases", f"UC-{idx:02d}-{uc_name}.md")
+        generated_files[rel_path] = uc_content
+
+    # 5. Safety Matrix (STPA_MATRIX.md) from SysMLConstraintDef and MatrixGenerator
+    constraints: List[Any] = []
+    if hasattr(pkg, "get_all_constraints"):
+        constraints = pkg.get_all_constraints()
+    elif hasattr(pkg, "constraint_defs"):
+        constraints = list(pkg.constraint_defs or [])
+    elif isinstance(pkg, dict):
+        constraints = list(pkg.get("constraint_defs", []) or [])
+
+    if not constraints:
+        default_constraints = [
+            ("SC_01_TrajectoryBoundary", "trajectory_deviation <= 1.0", "The system shall maintain trajectory position within boundary limits"),
+            ("SC_02_ActuatorCommandRate", "actuator_command_rate <= 100.0", "The system shall constrain actuator command rate to prevent saturation"),
+            ("SC_03_WatchdogHeartbeat", "watchdog_timeout <= 0.05", "The SafetyWatchdog shall trigger failsafe if heartbeat exceeds timeout"),
+        ]
+        for c_name, c_expr, c_doc in default_constraints:
+            if SysMLConstraintDef:
+                constraints.append(SysMLConstraintDef(name=c_name, expression=c_expr, doc=c_doc, is_assertion=True))
+            else:
+                constraints.append({"name": c_name, "expression": c_expr, "doc": c_doc, "is_assertion": True})
+
+    sc_table_lines = [
+        "| SC ID | Constraint Statement / Description | Controller / Subsystem | Traceability / UCA |",
+        "| :--- | :--- | :--- | :--- |",
+    ]
+    for idx, con in enumerate(constraints, start=1):
+        c_name = getattr(con, "name", f"SC_{idx}") if hasattr(con, "name") else con.get("name", f"SC_{idx}")
+        c_expr = getattr(con, "expression", "") if hasattr(con, "expression") else con.get("expression", "")
+        c_doc = getattr(con, "doc", "") if hasattr(con, "doc") else con.get("doc", "")
+        stmt = c_doc or f"The system shall enforce invariant {c_name} ({c_expr})"
+        sc_table_lines.append(f"| **SC-{idx:02d}** | {stmt} | CoreController | UCA-{idx:03d} |")
+    sc_table_block = "\n".join(sc_table_lines)
+
+    ctrl_parts = [p for p in parts if getattr(p, "actions", None)]
+    stpa_uca_table = MatrixGenerator.generate_stpa_uca_cartesian(controllers=ctrl_parts if ctrl_parts else None)
+    fmeca_table = MatrixGenerator.generate_fmeca_matrix()
+
+    stpa_matrix_content = f"""# STPA Safety & Failure Mode Tracking Matrix
+
+## 1. Formal Safety Constraints
+{sc_table_block}
+
+## 2. STPA Unsafe Control Actions (UCA) Matrix
+{stpa_uca_table}
+
+## 3. FMECA Failure Mode Criticality Matrix
+{fmeca_table}
+"""
+    generated_files[os.path.join("safety", "STPA_MATRIX.md")] = stpa_matrix_content
+    generated_files["STPA_MATRIX.md"] = stpa_matrix_content
+
+    # Write files if not dry_run
+    if not dry_run:
+        for rel_path, content in generated_files.items():
+            dest_file = os.path.join(resolved_out_dir, rel_path)
+            _atomic_write_file(dest_file, content)
+        print(f"[SysML v2 Forward-Sync] Successfully synchronized {len(generated_files)} specifications from '{schema_path}' -> '{resolved_out_dir}'")
+    else:
+        for rel_path, content in generated_files.items():
+            print(f"[SysML v2 Forward-Sync] [DRY RUN] Would generate: {rel_path} ({len(content)} bytes)")
+        print(f"[SysML v2 Forward-Sync] [DRY RUN] Simulated synchronization of {len(generated_files)} specifications.")
+
+    return generated_files
+
+
 def reverse_sync_specs_to_sysml(
     docs_dir: str = "docs",
     schema_path: Optional[str] = None,
@@ -3630,19 +4222,21 @@ def enforce_pipeline0_compilation_gate(schema_path: Optional[str] = None, output
 
 def main():
     parser = argparse.ArgumentParser(
-        description="SysML v2 Compiler, STPA Safety Constraints & Closed-Loop Reverse Synchronization Engine",
+        description="SysML v2 Compiler, STPA Safety Constraints & Closed-Loop Bidirectional Synchronization Engine",
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument("file", nargs="?", default=None, help="SysML v2 (.sysml) or STPA markdown file path")
     parser.add_argument("--compile", action="store_true", help="Execute Pipeline 0 compilation gate")
     parser.add_argument("--reverse-sync", action="store_true", help="Execute closed-loop reverse synchronization from markdown specs to SysML v2 SSOT")
+    parser.add_argument("--forward-sync", action="store_true", help="Execute closed-loop forward synchronization from SysML v2 SSOT to markdown specs")
+    parser.add_argument("--dry-run", action="store_true", default=False, help="Simulate forward synchronization without writing files to disk")
     parser.add_argument("--docs", "--docs-dir", dest="docs_dir", default="docs", help="Path to markdown specifications directory (default: docs)")
     parser.add_argument("--schema", "--schema-path", dest="schema_path", default=None, help="Path to base/input schema file (e.g. schema/DEAP_MODEL.sysml)")
     parser.add_argument("--out", "--output", dest="output_path", default=".pipeline/schema.sysml", help="Path to output .sysml SSOT file (default: .pipeline/schema.sysml)")
     parser.add_argument("--digest", "--digest-path", dest="digest_path", default=".pipeline/schema-digest.json", help="Path to output schema digest JSON (default: .pipeline/schema-digest.json)")
     parser.add_argument("--stpa", "--compile-stpa", action="store_true", help="Compile STPA hazard matrix to SysML constraint notation")
     parser.add_argument("--stpa-transpile", action="store_true", help="Execute dynamic Cartesian STPA transpilation from a SysML v2 schema into the 10-pillar safety artifact suite")
-    parser.add_argument("--out-dir", dest="out_dir", default=None, help="Output directory for the STPA transpiler artifact suite (--stpa-transpile)")
+    parser.add_argument("--out-dir", dest="out_dir", default=None, help="Output directory for generated specifications (--forward-sync) or STPA transpiler artifact suite (--stpa-transpile)")
     parser.add_argument("--fmeca-scoring-config", dest="fmeca_scoring_config", default=None, help="Path to JSON file with generic categorical FMECA scoring scales (--stpa-transpile)")
     parser.add_argument("--allow-schema-overwrite", action="store_true", default=False, help="Allow in-place overwrite of base input schema file")
 
@@ -3673,6 +4267,22 @@ def main():
             output_path=args.output_path,
             digest_path=args.digest_path,
             allow_schema_overwrite=args.allow_schema_overwrite,
+        )
+        return
+
+    if args.forward_sync:
+        schema_target = args.schema_path or args.file
+        if not schema_target:
+            default_ssot = os.path.join(PROJECT_ROOT, ".pipeline", "schema.sysml")
+            if os.path.exists(default_ssot):
+                schema_target = default_ssot
+            else:
+                parser.error("--forward-sync requires --schema <file.sysml> or a positional .sysml file")
+        forward_sync_sysml_to_specs(
+            schema_path=schema_target,
+            docs_dir=args.docs_dir,
+            out_dir=args.out_dir,
+            dry_run=args.dry_run,
         )
         return
 
