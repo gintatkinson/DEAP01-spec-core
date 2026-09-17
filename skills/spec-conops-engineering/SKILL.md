@@ -260,7 +260,7 @@ Per IEEE 1362-1998 §5.3 (Operational Environment & System Architecture), DoDAF 
       - **Embedded Port Attributes**: All subsystem blocks MUST embed their discrete ports as bulleted attributes inside the subsystem node definition (`[<b>Name</b><br/>• PORT-... (DIRECTION)]`), rather than rendering individual ports as separate downstream child nodes or nested single-component subgraphs. All node label lines MUST NOT exceed 35 characters and must be wrapped with `<br/>` per Rule E2.
       - **Vertical Hierarchical Tier Partitioning (`direction TB`) & Rule E3 Tiering**: Subgraphs and segment partitions MUST enforce top-to-bottom vertical layout (`direction TB`) with a maximum of 3 columns horizontally (max 3-column vertical tier partitioning). For large subsystem counts (15–25 subsystems), subsystems within a segment MUST be partitioned into 5–6 functional tiers of at most 3 nodes per row (`AV_Tier1` through `AV_Tier6` or `Tier_1` through `Tier_N`) chained with internal invisible rank spacers (`~~~`). Flat horizontal layout (`direction LR`), flat declaration of > 3 subsystems in a segment without tier subgraphs, or untiered horizontal chaining is strictly prohibited to prevent unreadable horizontal diagram sprawl (Rule E3).
       - **Mandatory 4-Segment Vertical Chaining Pattern**: Top-level operational segment subgraphs MUST be chained vertically using invisible rank spacers (`~~~`) connecting the segments in top-to-bottom sequence:
-        ```mermaid
+        ```text
         External_Actors ~~~ Ground_Segment
         Ground_Segment ~~~ Air_Vehicle_Segment
         Air_Vehicle_Segment ~~~ Support_Segment
@@ -295,7 +295,7 @@ flowchart TD
             NavSensors["Sensor Fusion Unit<br/>• PORT_NAV_RF (IN)<br/>• PORT_NAV_DATA (OUT)"]
         end
 
-        subgraph AV_Tier2["Tier 2 - Energy, Actuation & Safety"]
+        subgraph AV_Tier2["Tier 2 - Energy Actuation and Safety"]
             direction TB
             Actuators["Distributed Actuator Core<br/>• PORT_ACT_IN (IN)"]
             Watchdog["Hardware Safety Watchdog<br/>• PORT_WD_IN (IN)<br/>• PORT_WD_TRIG (OUT)"]

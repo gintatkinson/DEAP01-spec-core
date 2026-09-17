@@ -872,12 +872,14 @@ class ArchitectureViewpointValidator(IValidator):
         # Upstream Clean Landing Zone Invariant:
         # In upstream template repos, if landing zones are clean (.gitkeep/README.md), exit 0.
         if is_upstream:
-            concrete_specs = [
+            active_spec_files = [
                 sf for sf in spec_files
                 if not os.path.basename(sf).lower() in ("readme.md", ".gitkeep")
                 and "template" not in os.path.basename(sf).lower()
+                and "blueprints" not in sf.lower()
+                and "docs/architecture" not in sf.replace("\\", "/")
             ]
-            if not concrete_specs:
+            if not active_spec_files:
                 return []
 
         # If downstream and no specification documents found
