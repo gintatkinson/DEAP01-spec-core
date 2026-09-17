@@ -1396,6 +1396,11 @@ class ArchitectureViewpointValidator(IValidator):
         """
         Direct content validation helper for unit tests and semantic verification scripts.
         """
+        if target_diagrams is not None and not allow_partial_snippets:
+            raise ValueError(
+                "target_diagrams scoping is only permitted when allow_partial_snippets=True for isolated snippet unit tests."
+            )
+
         findings: List[Finding] = []
         blocks, syntax_findings = _extract_blocks_and_syntax_findings(content, rel_path)
         findings.extend(syntax_findings)
@@ -1518,3 +1523,8 @@ class ArchitectureViewpointValidator(IValidator):
                         ))
 
         return findings
+
+
+def validate_architecture_viewpoints(repo: WorkspaceRepository, **kwargs) -> List[Finding]:
+    """Execute Gate 30 architecture viewpoint validation on workspace repository."""
+    return ArchitectureViewpointValidator().validate(repo, **kwargs)

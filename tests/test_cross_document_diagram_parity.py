@@ -582,7 +582,7 @@ flowchart TD
 ```
 """
         findings = self.validator.validate_markdown_content(
-            sv4_text, "docs/conops/CONOPS.md", target_diagrams={"SV-4"}
+            sv4_text, "docs/conops/CONOPS.md", target_diagrams={"SV-4"}, allow_partial_snippets=True
         )
         self.assertEqual(findings, [])
 
@@ -599,7 +599,7 @@ flowchart TD
 ```
 """
         findings = self.validator.validate_markdown_content(
-            sv4_text, "docs/conops/CONOPS.md", target_diagrams={"SV-4"}
+            sv4_text, "docs/conops/CONOPS.md", target_diagrams={"SV-4"}, allow_partial_snippets=True
         )
         incomplete = [f for f in findings if f.rule_id == RULE_INCOMPLETE_DIAGRAM]
         self.assertTrue(len(incomplete) >= 1)
@@ -619,7 +619,7 @@ flowchart TD
 ```
 """
         findings = self.validator.validate_markdown_content(
-            sv4_text, "docs/conops/CONOPS.md", target_diagrams={"SV-4"}
+            sv4_text, "docs/conops/CONOPS.md", target_diagrams={"SV-4"}, allow_partial_snippets=True
         )
         incomplete = [f for f in findings if f.rule_id == RULE_INCOMPLETE_DIAGRAM]
         self.assertTrue(len(incomplete) >= 1)
@@ -642,7 +642,7 @@ sequenceDiagram
 ```
 """
         findings = self.validator.validate_markdown_content(
-            sv4_text, "docs/conops/CONOPS.md", target_diagrams={"SV-4"}
+            sv4_text, "docs/conops/CONOPS.md", target_diagrams={"SV-4"}, allow_partial_snippets=True
         )
         incomplete = [f for f in findings if f.rule_id == RULE_INCOMPLETE_DIAGRAM]
         self.assertTrue(len(incomplete) >= 1)
@@ -665,7 +665,7 @@ flowchart TD
 ```
 """
         findings = self.validator.validate_markdown_content(
-            sv4_text, "docs/conops/CONOPS.md", target_diagrams={"SV-4"}
+            sv4_text, "docs/conops/CONOPS.md", target_diagrams={"SV-4"}, allow_partial_snippets=True
         )
         incomplete = [f for f in findings if f.rule_id == RULE_INCOMPLETE_DIAGRAM]
         self.assertTrue(len(incomplete) >= 1)
@@ -785,7 +785,7 @@ flowchart TD
 ```
 """
         findings = self.validator.validate_markdown_content(
-            ov5a_text, "docs/conops/CONOPS.md", target_diagrams={"OV-5a"}
+            ov5a_text, "docs/conops/CONOPS.md", target_diagrams={"OV-5a"}, allow_partial_snippets=True
         )
         self.assertEqual(findings, [])
 
@@ -814,7 +814,7 @@ mindmap
 ```
 """
         findings = self.validator.validate_markdown_content(
-            ov5a_mindmap_text, "docs/conops/CONOPS.md", target_diagrams={"OV-5a"}
+            ov5a_mindmap_text, "docs/conops/CONOPS.md", target_diagrams={"OV-5a"}, allow_partial_snippets=True
         )
         self.assertEqual(findings, [])
 
@@ -831,7 +831,7 @@ flowchart TD
 ```
 """
         findings = self.validator.validate_markdown_content(
-            ov5a_text, "docs/conops/CONOPS.md", target_diagrams={"OV-5a"}
+            ov5a_text, "docs/conops/CONOPS.md", target_diagrams={"OV-5a"}, allow_partial_snippets=True
         )
         incomplete = [f for f in findings if f.rule_id == RULE_INCOMPLETE_DIAGRAM]
         self.assertTrue(len(incomplete) >= 1)
@@ -856,7 +856,7 @@ flowchart TD
 ```
 """
         findings = self.validator.validate_markdown_content(
-            ov5a_text, "docs/conops/CONOPS.md", target_diagrams={"OV-5a"}
+            ov5a_text, "docs/conops/CONOPS.md", target_diagrams={"OV-5a"}, allow_partial_snippets=True
         )
         incomplete = [f for f in findings if f.rule_id == RULE_INCOMPLETE_DIAGRAM]
         self.assertTrue(len(incomplete) >= 1)
@@ -876,7 +876,7 @@ flowchart TD
 ```
 """
         findings = self.validator.validate_markdown_content(
-            ov5a_text, "docs/conops/CONOPS.md", target_diagrams={"OV-5a"}
+            ov5a_text, "docs/conops/CONOPS.md", target_diagrams={"OV-5a"}, allow_partial_snippets=True
         )
         incomplete = [f for f in findings if f.rule_id == RULE_INCOMPLETE_DIAGRAM]
         self.assertTrue(len(incomplete) >= 1)
@@ -900,7 +900,7 @@ flowchart TD
 ```
 """
         findings = self.validator.validate_markdown_content(
-            ov5a_text, "docs/conops/CONOPS.md", target_diagrams={"OV-5a"}
+            ov5a_text, "docs/conops/CONOPS.md", target_diagrams={"OV-5a"}, allow_partial_snippets=True
         )
         incomplete = [f for f in findings if f.rule_id == RULE_INCOMPLETE_DIAGRAM]
         self.assertTrue(len(incomplete) >= 1)
@@ -924,7 +924,7 @@ sequenceDiagram
 ```
 """
         findings = self.validator.validate_markdown_content(
-            ov5a_text, "docs/conops/CONOPS.md", target_diagrams={"OV-5a"}
+            ov5a_text, "docs/conops/CONOPS.md", target_diagrams={"OV-5a"}, allow_partial_snippets=True
         )
         incomplete = [f for f in findings if f.rule_id == RULE_INCOMPLETE_DIAGRAM]
         self.assertTrue(len(incomplete) >= 1)
@@ -1031,7 +1031,7 @@ flowchart TD
 ```
 """
         findings = self.validator.validate_markdown_content(
-            ov4_text, "docs/conops/CONOPS.md", target_diagrams={"OV-4"}
+            ov4_text, "docs/conops/CONOPS.md", target_diagrams={"OV-4"}, allow_partial_snippets=True
         )
         self.assertEqual(findings, [])
 
@@ -1048,7 +1048,7 @@ flowchart TD
 ```
 """
         findings = self.validator.validate_markdown_content(
-            ov4_text, "docs/conops/CONOPS.md", target_diagrams={"OV-4"}
+            ov4_text, "docs/conops/CONOPS.md", target_diagrams={"OV-4"}, allow_partial_snippets=True
         )
         incomplete = [f for f in findings if f.rule_id == RULE_INCOMPLETE_DIAGRAM]
         self.assertTrue(len(incomplete) >= 1)
@@ -1073,7 +1073,7 @@ flowchart TD
 ```
 """
         findings = self.validator.validate_markdown_content(
-            ov4_text, "docs/conops/CONOPS.md", target_diagrams={"OV-4"}
+            ov4_text, "docs/conops/CONOPS.md", target_diagrams={"OV-4"}, allow_partial_snippets=True
         )
         incomplete = [f for f in findings if f.rule_id == RULE_INCOMPLETE_DIAGRAM]
         self.assertTrue(len(incomplete) >= 1)
@@ -1097,7 +1097,7 @@ flowchart TD
 ```
 """
         findings = self.validator.validate_markdown_content(
-            ov4_text, "docs/conops/CONOPS.md", target_diagrams={"OV-4"}
+            ov4_text, "docs/conops/CONOPS.md", target_diagrams={"OV-4"}, allow_partial_snippets=True
         )
         incomplete = [f for f in findings if f.rule_id == RULE_INCOMPLETE_DIAGRAM]
         self.assertTrue(len(incomplete) >= 1)
@@ -1121,7 +1121,7 @@ sequenceDiagram
 ```
 """
         findings = self.validator.validate_markdown_content(
-            ov4_text, "docs/conops/CONOPS.md", target_diagrams={"OV-4"}
+            ov4_text, "docs/conops/CONOPS.md", target_diagrams={"OV-4"}, allow_partial_snippets=True
         )
         incomplete = [f for f in findings if f.rule_id == RULE_INCOMPLETE_DIAGRAM]
         self.assertTrue(len(incomplete) >= 1)

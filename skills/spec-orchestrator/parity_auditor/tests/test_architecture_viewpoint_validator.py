@@ -2,6 +2,15 @@ import unittest
 import tempfile
 import os
 import shutil
+import sys
+
+repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
+if repo_root not in sys.path:
+    sys.path.insert(0, repo_root)
+
+parity_src = os.path.join(repo_root, "skills", "spec-orchestrator", "parity_auditor", "src")
+if parity_src not in sys.path:
+    sys.path.insert(0, parity_src)
 
 from parity_auditor.core.workspace import WorkspaceRepository
 from parity_auditor.validators.architecture_viewpoint_validator import (
@@ -266,6 +275,58 @@ sequenceDiagram
         findings1 = self.validator.validate(self.repo)
         findings2 = validate_architecture_viewpoints(self.repo)
         self.assertEqual([f.rule_id for f in findings1], [f.rule_id for f in findings2])
+
+    def test_target_diagrams_without_allow_partial_snippets_raises_value_error(self):
+        """Verify target_diagrams without allow_partial_snippets=True raises ValueError (Issue #350)."""
+        content = """
+# Super-System Segment Allocation
+```mermaid
+graph TB
+    %% SV-1
+    subgraph segment1
+        A1 --> A2
+    end
+```
+"""
+        with self.assertRaises(ValueError) as ctx:
+            self.validator.validate_markdown_content(
+                content, "docs/conops/CONOPS.md", target_diagrams={"SV-1"}
+            )
+        self.assertIn(
+            "target_diagrams scoping is only permitted when allow_partial_snippets=True for isolated snippet unit tests.",
+            str(ctx.exception)
+        )
+
+        with self.assertRaises(ValueError) as ctx2:
+            self.validator.validate_markdown_content(
+                content, "docs/conops/CONOPS.md", target_diagrams={"SV-1"}, allow_partial_snippets=False
+            )
+        self.assertIn(
+            "target_diagrams scoping is only permitted when allow_partial_snippets=True for isolated snippet unit tests.",
+            str(ctx2.exception)
+        )
+
+    def test_target_diagrams_with_allow_partial_snippets_allowed(self):
+        """Verify target_diagrams scoping works when allow_partial_snippets=True (Issue #350)."""
+        content = """
+# Super-System Segment Allocation
+```mermaid
+graph TB
+    %% SV-1
+    subgraph segment1
+        A1 --> A2
+    end
+    subgraph segment2
+        B1 --> B2
+    end
+    segment1 ~~~ segment2
+```
+"""
+        findings = self.validator.validate_markdown_content(
+            content, "docs/conops/CONOPS.md", target_diagrams={"SV-1"}, allow_partial_snippets=True
+        )
+        self.assertEqual(findings, [])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -48,5 +48,6 @@ from .architecture_viewpoint_validator import (
     CANONICAL_DIAGRAMS,
     RULE_OV6C_MISSING_SCENARIO_DIAGRAM,
     _validate_ov6c_scenario_coverage,
+    validate_architecture_viewpoints,
 )
 

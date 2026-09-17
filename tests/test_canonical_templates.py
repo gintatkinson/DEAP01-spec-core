@@ -354,6 +354,7 @@ class TestCanonicalTemplates(unittest.TestCase):
             content,
             "skills/spec-conops-engineering/resources/units/conops/06_UAF_OPERATIONAL_ACTIVITIES.md",
             target_diagrams={"OV-5a"},
+            allow_partial_snippets=True,
         )
         self.assertEqual(findings, [], f"ConOps unit 06 OV-5a failed Gate 30 validation: {findings}")
 
@@ -451,6 +452,7 @@ class TestCanonicalTemplates(unittest.TestCase):
             content,
             "skills/spec-conops-engineering/resources/units/conops/01_METADATA_AND_OVERVIEW.md",
             target_diagrams={"OV-4"},
+            allow_partial_snippets=True,
         )
         self.assertEqual(findings, [], f"ConOps unit 01 OV-4 failed Gate 30 validation: {findings}")
 
@@ -468,6 +470,7 @@ class TestCanonicalTemplates(unittest.TestCase):
             content,
             "skills/spec-conops-engineering/resources/units/conops/04_SYSTEM_ARCHITECTURE.md",
             target_diagrams={"SV-4"},
+            allow_partial_snippets=True,
         )
         self.assertEqual(findings, [], f"ConOps unit 04 SV-4 failed Gate 30 validation: {findings}")
 
@@ -485,6 +488,7 @@ class TestCanonicalTemplates(unittest.TestCase):
             content,
             "skills/spec-conops-engineering/resources/units/conops/05_OPERATIONAL_STATE_SPACE_AND_RISK.md",
             target_diagrams={"SPATIAL-4D"},
+            allow_partial_snippets=True,
         )
         self.assertEqual(findings, [], f"ConOps unit 05 SPATIAL-4D failed Gate 30 validation: {findings}")
 
@@ -513,6 +517,7 @@ class TestCanonicalTemplates(unittest.TestCase):
             content,
             "skills/spec-conops-engineering/resources/units/conops/06_UAF_OPERATIONAL_ACTIVITIES.md",
             target_diagrams={"OV-5b"},
+            allow_partial_snippets=True,
         )
         self.assertEqual(findings, [], f"ConOps unit 06 OV-5b failed Gate 30 validation: {findings}")
 
@@ -529,6 +534,7 @@ class TestCanonicalTemplates(unittest.TestCase):
             content,
             "skills/spec-conops-engineering/resources/units/conops/09_SCENARIOS_AND_TIMELINES.md",
             target_diagrams={"OV-6c"},
+            allow_partial_snippets=True,
         )
         self.assertEqual(findings, [], f"ConOps unit 09 OV-6c failed Gate 30 validation: {findings}")
 
