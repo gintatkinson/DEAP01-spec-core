@@ -161,8 +161,9 @@ def validate_defect_body(
         errors.append(f"Unbalanced code blocks: found odd number ({fence_count}) of ``` fences.")
 
     # Check 10: No ASCII art UML arrows outside code fences
-    # Strip all code blocks
+    # Strip all code blocks and HTML comments (e.g. <!-- test-target: ... -->)
     non_code_text = re.sub(r"```.*?```", "", body_text, flags=re.DOTALL)
+    non_code_text = re.sub(r"<!--.*?-->", "", non_code_text, flags=re.DOTALL)
     ascii_arrows = re.findall(r"(->>|-->|→)", non_code_text)
     if ascii_arrows:
         errors.append(
@@ -183,7 +184,7 @@ STOPWORDS = {
     "by", "to", "of", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had",
     "do", "does", "did", "audit", "bug", "defect", "issue", "file", "error", "fails", "failed",
     "failing", "missing", "pillar", "critical", "important", "suggestion", "nitpick", "src",
-    "scripts", "tests", "validators", "core", "parity_auditor"
+    "scripts", "tests", "validators", "validator", "validation", "gate", "core", "parity_auditor"
 }
 
 
@@ -320,9 +321,17 @@ def fetch_existing_issues(
     return []
 
 
-def resolve_label(severity: Optional[str], provider: str = "github", explicit_label: Optional[str] = None) -> str:
+def resolve_label(severity: Optional[str], provider: str = "github", explicit_label: Optional[Any] = None) -> Any:
     """Resolve issue label from finding severity and provider target."""
     if explicit_label:
+        if isinstance(explicit_label, list):
+            flat_labels: List[str] = []
+            for item in explicit_label:
+                for sub in str(item).split(","):
+                    sub_clean = sub.strip()
+                    if sub_clean and sub_clean not in flat_labels:
+                        flat_labels.append(sub_clean)
+            return flat_labels if len(flat_labels) > 1 else (flat_labels[0] if flat_labels else "bug")
         return explicit_label
 
     prov = provider.lower()
@@ -338,7 +347,7 @@ def file_defect_issue(
     title: str,
     body_file: str,
     repo: str,
-    label: str,
+    label: Any,
     provider: str = "github",
     dry_run: bool = False,
     existing_issues: Optional[List[Dict[str, Any]]] = None,
@@ -394,11 +403,13 @@ def file_defect_issue(
             repo,
             "--title",
             title,
-            "--label",
-            label,
-            "--body-file",
-            body_file,
         ]
+        if isinstance(label, list):
+            for l in label:
+                cmd.extend(["--label", str(l)])
+        elif label:
+            cmd.extend(["--label", str(label)])
+        cmd.extend(["--body-file", body_file])
     else:  # gitlab
         cmd = [
             "glab",
@@ -408,11 +419,13 @@ def file_defect_issue(
             repo,
             "--title",
             title,
-            "--label",
-            label,
-            "--description",
-            body_content,
         ]
+        if isinstance(label, list):
+            for l in label:
+                cmd.extend(["--label", str(l)])
+        elif label:
+            cmd.extend(["--label", str(label)])
+        cmd.extend(["--description", body_content])
 
     print(f"Executing: {' '.join(cmd)}")
     res = subprocess.run(cmd, capture_output=True, text=True)
@@ -436,7 +449,7 @@ def main():
     parser.add_argument("--title", default=None, help="Issue title (required unless --validate-only/--dry-run)")
     parser.add_argument("--body-file", required=True, help="Path to defect dossier markdown file")
     parser.add_argument("--repo", default="gintatkinson/DEAP01-spec-core", help="Target repository (e.g. owner/repo)")
-    parser.add_argument("--label", default=None, help="Issue label (optional, resolved from severity if omitted)")
+    parser.add_argument("--label", action="append", default=None, help="Issue label (optional, resolved from severity if omitted)")
     parser.add_argument("--provider", default="github", choices=["github", "gitlab"], help="Issue tracker provider")
     parser.add_argument("--dry-run", "--validate-only", dest="dry_run", action="store_true", help="Validate body schema without calling issue create")
 

@@ -411,6 +411,43 @@ class TestFileDefectIntegrity(unittest.TestCase):
             if os.path.exists(tf_path):
                 os.remove(tf_path)
 
+    def test_html_comment_test_target_passes_check_10(self):
+        """Verify that <!-- test-target: ... --> HTML comments do not trigger ASCII art arrow rejection."""
+        body = SAMPLE_COMPLIANT_CRITICAL.replace(
+            "## 1. Context and References\n",
+            "## 1. Context and References\n\n<!-- test-target: tests/test_bridge_reproducer.py -->\n"
+        )
+        errors = validate_defect_body(body, title="[AUDIT] bridge.cpp: crash")
+        self.assertEqual(errors, [])
+
+    def test_distinct_defects_on_same_validator_with_gate_tokens(self):
+        """Verify that distinct defects on the same validator mentioning Gate and validation do not falsely collide."""
+        existing = [
+            {
+                "number": 343,
+                "title": "[AUDIT] [operational_allocation_validator.py]: Gate 24 lacks SSOT provenance and grounding citation validation for UAF Operational Activities",
+                "body": "FILE_LOCATION: skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/operational_allocation_validator.py:179-206",
+                "state": "open",
+                "labels": ["bug", "audit"],
+            }
+        ]
+        cand_body = SAMPLE_COMPLIANT_CRITICAL.replace(
+            "cesium_native_bridge/src/bridge.cpp:56-61",
+            "skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/operational_allocation_validator.py:39-253"
+        )
+        cand_title = "[AUDIT] [operational_allocation_validator.py]: Gate 24 regresses to brittle regex line scraping instead of schema-driven AST validation"
+        dup = find_duplicate_issue(
+            candidate_title=cand_title,
+            candidate_body=cand_body,
+            existing_issues=existing,
+        )
+        self.assertIsNone(dup)
+
+    def test_multiple_labels_resolution(self):
+        """Verify that resolve_label supports list and comma-separated multiple labels."""
+        self.assertEqual(resolve_label("Critical", explicit_label=["bug", "audit"]), ["bug", "audit"])
+        self.assertEqual(resolve_label("Important", explicit_label="bug,audit"), "bug,audit")
+
 
 if __name__ == "__main__":
     unittest.main()
