@@ -78,12 +78,7 @@ RECOGNIZED_STRUCTURAL_TOKENS = {
     "epic", "feature", "story", "stories", "deliverable", "deliverables", "matrix", "sync",
     "port", "ports", "conn", "connection", "connections",
     "audit", "audits", "crit", "sug", "nit", "finding", "findings", "codegen", "gate",
-    "segment", "segments", "airframe", "airframes", "vehicle", "vehicles",
-    "platform", "platforms", "supersystem", "supersystems", "primary", "support", "operational",
-    "launcher", "launchers", "recovery", "airvehicle", "groundcontrol", "launchsegment",
-    "supportsegment", "airvehiclesegment", "groundcontrolsegment", "operationalsegment",
-    "gse", "equipment", "hardware",
-    "pyr", "int", "la", "a5", "rot", "gs", "op", "wh", "sens", "act", "cat", "oc", "obc", "fcc", "esad", "ext", "seeker", "gimbal"
+    "segment", "segments", "platform", "platforms", "supersystem", "supersystems", "primary", "support", "operational"
 }
 
 ACTUATOR_KEYWORDS = (
@@ -599,27 +594,23 @@ class SemanticDiagramASTValidator(IValidator):
         if id_norm.startswith(("uc", "usecase", "port", "conn", "p1_", "p2_", "d_")) or lbl_norm.startswith(("uc", "port", "conn", "p1_", "p2_", "d_")) or (title_norm and title_norm.startswith(("uc", "port", "conn", "p1_", "p2_", "d_"))):
             return True
 
-        # Check structural metaclass, architectural, domain, UI, and data model suffixes
+        # Check structural metaclass, architectural, UI, and data model suffixes
         if any(norm and norm.endswith(sfx) for norm in (id_norm, lbl_norm, title_norm) for sfx in (
             "subsystem", "def", "action", "constraint", "statechart", "statemachine",
             "gate", "matrix", "interface", "spec", "model", "operator", "package",
-            "state", "mode", "waypoint", "point", "group", "vertex", "item", "sensor",
+            "state", "mode", "waypoint", "point", "group", "vertex", "item",
             "tracker", "flow", "panel", "wizard", "harness", "proof", "widget", "view",
             "controller", "dialog", "window", "viewmodel", "service", "manager",
             "handler", "adapter", "factory", "builder", "helper", "test", "entity",
             "dto", "dao", "register", "field", "enum", "type",
-            "finding", "findings", "audit", "audits", "report", "reports", "deliverable", "deliverables", "codegen",
-            "airframe", "segment", "segments", "vehicle", "platform", "launcher", "station", "equipment"
+            "finding", "findings", "audit", "audits", "report", "reports", "deliverable", "deliverables", "codegen"
         )):
             return True
 
-        # Check UAF / Architecture structural annotations, operational segments, and super-systems
+        # Check UAF / Architecture structural annotations and abstract system roles
         if any(marker in id_norm or marker in lbl_norm or (title_norm and marker in title_norm) for marker in (
             "userrole", "interfaceport", "performernode", "operationalrole",
-            "segment", "segments", "stakeholder", "authority",
-            "airframe", "vehicle", "platform", "supersystem", "super_system",
-            "launcher", "launchrecovery", "recovery", "groundcontrol", "groundstation",
-            "airvehicle", "groundsegment", "spacesegment", "supportsegment", "primaryoperational",
+            "stakeholder", "authority", "supersystem", "super_system",
             "terminal", "technician", "coordinator", "maintainer"
         )):
             return True

@@ -605,6 +605,69 @@ flowchart TD
             findings = self.validator.validate(repo)
             self.assertEqual(len(findings), 0, f"Expected blueprints to be skipped, but got: {findings}")
 
+    def test_ungrounded_equipment_strictly_rejected_when_undeclared(self):
+        """Verify ungrounded equipment (Launch_System, A5_Gimbal) is strictly rejected when undeclared in SysML AST."""
+        diagram = """
+flowchart TD
+    NavigationSubsystem --> FlightControlSubsystem
+    Launch_System["Launch & Recovery Equipment"] --> FlightControlSubsystem
+    FlightControlSubsystem --> A5_Gimbal["Seeker Gimbal"]
+"""
+        findings = self.validator.validate_diagram_ast(diagram, "docs/architecture/flow.md", self.pkg)
+        rule_ids = [f.rule_id for f in findings]
+        self.assertIn("semantic-diagram-undeclared-node", rule_ids)
+        undeclared_nodes = [f.detail.get("node_id") for f in findings if f.rule_id == "semantic-diagram-undeclared-node"]
+        self.assertIn("Launch_System", undeclared_nodes)
+        self.assertIn("A5_Gimbal", undeclared_nodes)
+
+    def test_grounded_equipment_declared_in_sysml_passes_zero_errors(self):
+        """Verify equipment declared in SysML AST passes with 0 errors."""
+        model_with_equipment = """package Grounded_Equipment_SSOT {
+    port def CmdPort {
+        out item Cmd : Float32;
+    }
+    port def InPort {
+        in item Cmd : Float32;
+    }
+
+    part def Launch_System {
+        out port cmd_out : CmdPort;
+    }
+
+    part def A5_Gimbal {
+        in port cmd_in : InPort;
+    }
+
+    connection Conn_Launch_To_Gimbal {
+        connect Launch_System.cmd_out to A5_Gimbal.cmd_in;
+    }
+}
+"""
+        pkg = SysMLParser.parse_text(model_with_equipment)
+        diagram = """
+flowchart TD
+    Launch_System["Launch & Recovery Equipment"] --> A5_Gimbal["Seeker Gimbal"]
+"""
+        findings = self.validator.validate_diagram_ast(diagram, "docs/architecture/flow.md", pkg)
+        self.assertEqual(len(findings), 0, f"Expected 0 findings for grounded equipment, got: {findings}")
+
+    def test_purged_domain_and_customer_tokens_rejected_when_undeclared(self):
+        """Verify purged domain/customer tokens (Seeker, Gimbal, Launcher, GSE) are strictly rejected when undeclared."""
+        diagram = """
+flowchart TD
+    NavigationSubsystem --> FlightControlSubsystem
+    Seeker["Seeker"] --> FlightControlSubsystem
+    Gimbal["Gimbal"] --> FlightControlSubsystem
+    Launcher["Launcher Device"] --> FlightControlSubsystem
+    GSE["Ground Support Hardware"] --> FlightControlSubsystem
+"""
+        findings = self.validator.validate_diagram_ast(diagram, "docs/architecture/flow.md", self.pkg)
+        undeclared = [f.detail.get("node_id") for f in findings if f.rule_id == "semantic-diagram-undeclared-node"]
+        self.assertIn("Seeker", undeclared)
+        self.assertIn("Gimbal", undeclared)
+        self.assertIn("Launcher", undeclared)
+        self.assertIn("GSE", undeclared)
+
 
 if __name__ == "__main__":
     unittest.main()
