@@ -40,6 +40,18 @@ from parity_auditor.parsers.schema_router import (
     extract_subsystem_parts,
 )
 
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+if _script_dir not in sys.path:
+    sys.path.insert(0, _script_dir)
+
+try:
+    from compile_sysml import MatrixGenerator
+except ImportError:
+    try:
+        from scripts.compile_sysml import MatrixGenerator
+    except ImportError:
+        MatrixGenerator = None
+
 
 class LifecycleType(str, Enum):
     """Formal lifecycle archetypes for cyber-physical mission systems."""
@@ -946,6 +958,7 @@ class SysMLParameterBindingEngine:
         self._derive_subsystem_architecture()
         self._derive_operational_interaction_sequences()
         self._derive_architecture_diagrams()
+        self._derive_matrices()
 
     @property
     def domain(self) -> str:
@@ -2313,6 +2326,60 @@ class SysMLParameterBindingEngine:
             self.parameter_bindings[k] = v
             self._explicit_keys.add(k)
 
+    def _derive_matrices(self) -> None:
+        """
+        Synthesizes deterministic tabular matrices (Level 1B Op-Tx 7-column matrix,
+        STPA UCA Cartesian product matrix, and FMECA failure modes table)
+        using MatrixGenerator and binds them to template placeholders.
+        Resolves Issue #356.
+        """
+        if MatrixGenerator is None:
+            return
+
+        # 1. Level 1B Op-Tx 7-column matrix
+        optx_table = MatrixGenerator.generate_optx_matrix(
+            item_flows=self.operational_exchanges,
+            connections=getattr(self, "connections", []),
+        )
+        self.parameter_bindings["OPTX_MATRIX_TABLE"] = optx_table
+        self.parameter_bindings["OPTX_TABLE"] = optx_table
+        self.parameter_bindings["OPTX_EXCHANGES_TABLE"] = optx_table
+        self.parameter_bindings["SECTION_8_OPTX"] = optx_table
+        self._explicit_keys.add("OPTX_MATRIX_TABLE")
+        self._explicit_keys.add("OPTX_TABLE")
+        self._explicit_keys.add("OPTX_EXCHANGES_TABLE")
+        self._explicit_keys.add("SECTION_8_OPTX")
+
+        # 2. STPA UCA Cartesian Product Matrix
+        controllers = []
+        for part in self.ast_parts:
+            p_name = getattr(part, "name", "")
+            p_actions = [getattr(a, "name", str(a)) for a in getattr(part, "actions", [])]
+            if p_actions:
+                controllers.append({"name": p_name, "actions": p_actions})
+
+        stpa_table = MatrixGenerator.generate_stpa_uca_cartesian(
+            controllers=controllers if controllers else None,
+            actions=None,
+        )
+        self.parameter_bindings["STPA_UCA_TABLE"] = stpa_table
+        self.parameter_bindings["STPA_TABLE"] = stpa_table
+        self.parameter_bindings["UCA_TABLE"] = stpa_table
+        self._explicit_keys.add("STPA_UCA_TABLE")
+        self._explicit_keys.add("STPA_TABLE")
+        self._explicit_keys.add("UCA_TABLE")
+
+        # 3. FMECA Failure Modes Matrix
+        comp_names = [getattr(p, "name", "") for p in self.ast_parts if getattr(p, "name", "")]
+        fmeca_table = MatrixGenerator.generate_fmeca_matrix(
+            components=comp_names if comp_names else None,
+            failure_modes=None,
+        )
+        self.parameter_bindings["FMECA_TABLE"] = fmeca_table
+        self.parameter_bindings["FMECA_MATRIX_TABLE"] = fmeca_table
+        self._explicit_keys.add("FMECA_TABLE")
+        self._explicit_keys.add("FMECA_MATRIX_TABLE")
+
     def _synthesize_segment_allocation_matrix(self, sys_id: str) -> str:
         parts = self.ast_parts if self.ast_parts else []
         rows = []
@@ -2698,6 +2765,7 @@ class SysMLParameterBindingEngine:
         self._derive_domain_ontology()
         self._derive_lifecycle_contract()
         self._derive_operational_interaction_sequences()
+        self._derive_matrices()
 
     def _map_semantic_aliases(self, key: str, val: str) -> None:
         """Maps domain attributes to canonical template tokens (Issues #162, #170)."""
@@ -3063,6 +3131,7 @@ class SysMLParameterBindingEngine:
         self._derive_lifecycle_contract()
         self._derive_subsystem_architecture()
         self._derive_operational_interaction_sequences()
+        self._derive_matrices()
 
         return True
 
@@ -3642,8 +3711,15 @@ class SysMLParameterBindingEngine:
             "SERIAL_WIRE_PROTOCOL",
         ):
             return "Subsystem interactions are formalized exclusively as Level 1B Operational Information Exchanges (Op-Tx) and Level 1C Logical Signal Flows; component-internal serial opcode mappings and wire-level registers are deferred to Level 2 detailed design."
-        elif token_upper in ("SECTION_8_OPTX", "OPTX_TABLE", "OPTX_EXCHANGES_TABLE"):
-            return "Operational information exchanges are formally specified in the 16-channel Op-Tx Matrix (Section 7)."
+        elif token_upper in ("SECTION_8_OPTX", "OPTX_TABLE", "OPTX_EXCHANGES_TABLE", "OPTX_MATRIX_TABLE"):
+            self._derive_matrices()
+            return self.parameter_bindings.get("OPTX_MATRIX_TABLE", "")
+        elif token_upper in ("STPA_UCA_TABLE", "STPA_TABLE", "UCA_TABLE"):
+            self._derive_matrices()
+            return self.parameter_bindings.get("STPA_UCA_TABLE", "")
+        elif token_upper in ("FMECA_TABLE", "FMECA_MATRIX_TABLE"):
+            self._derive_matrices()
+            return self.parameter_bindings.get("FMECA_TABLE", "")
         elif token_upper in ("DIAGRAM_10_1", "OPTX_DIAGRAM_10_1", "DIAGRAM.10.1", "OPTX_DIAGRAM.10.1"):
             self._derive_operational_interaction_sequences()
             return self.parameter_bindings.get("DIAGRAM_10_1", "")

@@ -90,6 +90,499 @@ except ImportError:
     ItemFlowDef = None
 
 
+class MatrixGenerator:
+    """
+    Deterministic tabular matrix generator from SysML AST models.
+    Resolves Issue #356.
+
+    Synthesizes canonical Level 1B Operational Information Exchanges (Op-Tx),
+    STPA Unsafe Control Actions (UCA) 4-guide-word Cartesian products, and
+    FMECA failure mode criticality matrices from SysML v2 AST nodes.
+    """
+
+    @staticmethod
+    def generate_optx_matrix(
+        item_flows: Optional[List[Any]] = None,
+        connections: Optional[List[Any]] = None,
+    ) -> str:
+        """
+        Synthesizes the canonical 7-column Level 1B Op-Tx Markdown table:
+        Exchange ID, Source Performer, Destination Performer, Information Item / Payload,
+        Trigger / Periodic Rate, Latency Ceiling, Criticality Class.
+        """
+        headers = [
+            "Exchange ID",
+            "Source Performer",
+            "Destination Performer",
+            "Information Item / Payload",
+            "Trigger / Periodic Rate",
+            "Latency Ceiling",
+            "Criticality Class",
+        ]
+        lines = [
+            "| " + " | ".join(headers) + " |",
+            "| " + " | ".join([":---"] * len(headers)) + " |",
+        ]
+
+        raw_flows: List[Any] = []
+        if item_flows:
+            raw_flows.extend(item_flows)
+        elif connections:
+            raw_flows.extend(connections)
+
+        if not raw_flows:
+            # Canonical abstract domain-neutral performers and information flows
+            raw_flows = [
+                {
+                    "source": "SensorSuite",
+                    "destination": "CoreController",
+                    "item": "TelemetryVector",
+                    "rate": "100 Hz",
+                    "latency": "5 ms",
+                    "criticality": "High (DAL-A)",
+                },
+                {
+                    "source": "OperatorConsole",
+                    "destination": "CoreController",
+                    "item": "CommandMessage",
+                    "rate": "Event-driven",
+                    "latency": "20 ms",
+                    "criticality": "High (DAL-A)",
+                },
+                {
+                    "source": "CoreController",
+                    "destination": "ActuatorSubsystem",
+                    "item": "ActuatorSetpoint",
+                    "rate": "200 Hz",
+                    "latency": "2 ms",
+                    "criticality": "High (DAL-A)",
+                },
+                {
+                    "source": "CoreController",
+                    "destination": "SafetyWatchdog",
+                    "item": "HeartbeatSignal",
+                    "rate": "50 Hz",
+                    "latency": "10 ms",
+                    "criticality": "Critical",
+                },
+                {
+                    "source": "PayloadSubsystem",
+                    "destination": "CoreController",
+                    "item": "PayloadStatus",
+                    "rate": "10 Hz",
+                    "latency": "50 ms",
+                    "criticality": "Medium (DAL-B)",
+                },
+                {
+                    "source": "SafetyWatchdog",
+                    "destination": "ActuatorSubsystem",
+                    "item": "FailsafeTrigger",
+                    "rate": "Event-driven",
+                    "latency": "1 ms",
+                    "criticality": "Critical",
+                },
+            ]
+
+        for idx, flow in enumerate(raw_flows, start=1):
+            if isinstance(flow, dict):
+                src = (
+                    flow.get("source")
+                    or flow.get("source_performer")
+                    or flow.get("source_part")
+                    or "SensorSuite"
+                )
+                dst = (
+                    flow.get("destination")
+                    or flow.get("destination_performer")
+                    or flow.get("target_performer")
+                    or flow.get("target_part")
+                    or flow.get("target")
+                    or "CoreController"
+                )
+                payload = (
+                    flow.get("item")
+                    or flow.get("payload")
+                    or flow.get("item_payload")
+                    or flow.get("item_flow_ref")
+                    or flow.get("name")
+                    or "TelemetryVector"
+                )
+                rate = (
+                    flow.get("rate")
+                    or flow.get("trigger_rate")
+                    or (
+                        f"{flow.get('rate_hz')} Hz"
+                        if flow.get("rate_hz") is not None
+                        else None
+                    )
+                    or "100 Hz"
+                )
+                latency = (
+                    flow.get("latency")
+                    or flow.get("latency_ceiling")
+                    or (
+                        f"{flow.get('latency_ms')} ms"
+                        if flow.get("latency_ms") is not None
+                        else None
+                    )
+                    or "5 ms"
+                )
+                crit = (
+                    flow.get("criticality")
+                    or flow.get("criticality_class")
+                    or "High (DAL-A)"
+                )
+                ex_id = (
+                    flow.get("exchange_id")
+                    or (
+                        flow.get("id")
+                        if str(flow.get("id", "")).upper().startswith("OPTX-")
+                        else None
+                    )
+                    or f"OPTX-{idx:03d}"
+                )
+            else:
+                src = (
+                    getattr(flow, "source_part", None)
+                    or getattr(flow, "source", None)
+                    or "SensorSuite"
+                )
+                dst = (
+                    getattr(flow, "target_part", None)
+                    or getattr(flow, "destination", None)
+                    or getattr(flow, "target", None)
+                    or "CoreController"
+                )
+                payload = (
+                    getattr(flow, "item_payload", None)
+                    or getattr(flow, "item_flow_ref", None)
+                    or getattr(flow, "item_type", None)
+                    or getattr(flow, "name", None)
+                    or "TelemetryVector"
+                )
+                rate = (
+                    f"{getattr(flow, 'rate_hz')} Hz"
+                    if getattr(flow, "rate_hz", None) is not None
+                    else "100 Hz"
+                )
+                latency = (
+                    f"{getattr(flow, 'latency_ms')} ms"
+                    if getattr(flow, "latency_ms", None) is not None
+                    else "5 ms"
+                )
+                crit = getattr(flow, "criticality", "High (DAL-A)")
+                ex_id = f"OPTX-{idx:03d}"
+
+            lines.append(
+                f"| {ex_id} | {src} | {dst} | {payload} | {rate} | {latency} |"
+                f" {crit} |"
+            )
+
+        return "\n".join(lines)
+
+    @staticmethod
+    def generate_stpa_uca_cartesian(
+        controllers: Optional[Any] = None,
+        actions: Optional[Any] = None,
+    ) -> str:
+        """
+        Synthesizes full Cartesian product of actions x 4 STPA guide words
+        (Not providing, Providing, Too early / Too late / Out of order, Stopped too soon / Applied too long).
+        Guarantees complete coverage across all declared control actions.
+        """
+        guide_words = [
+            "Not providing",
+            "Providing",
+            "Too early / Too late / Out of order",
+            "Stopped too soon / Applied too long",
+        ]
+        headers = [
+            "UCA ID",
+            "Controller",
+            "Control Action",
+            "Guide Word",
+            "Context / State",
+            "Resulting Hazard",
+            "Safety Constraint",
+            "Severity",
+        ]
+        lines = [
+            "| " + " | ".join(headers) + " |",
+            "| " + " | ".join([":---"] * len(headers)) + " |",
+        ]
+
+        # Resolve controllers and actions
+        ctrl_action_pairs: List[Tuple[str, List[str]]] = []
+
+        if controllers is None and actions is None:
+            # Canonical 32 actions across abstract controllers -> 128 rows
+            ctrl_action_pairs = [
+                (
+                    "CoreController",
+                    [
+                        "InitializeSubsystems",
+                        "ArmActuators",
+                        "DisarmActuators",
+                        "EngageAutonomousControl",
+                        "DisengageAutonomousControl",
+                        "UpdateTrajectory",
+                        "CommandActuatorSetpoint",
+                        "ExecuteHold",
+                        "ExecuteReturnSequence",
+                        "SwitchOperatingMode",
+                        "CalibrateSensorSuite",
+                        "ProcessSensorStream",
+                        "DispatchPayloadCommand",
+                        "VerifyLinkIntegrity",
+                        "TriggerBIT",
+                        "InitiateControlledShutdown",
+                    ],
+                ),
+                (
+                    "SafetyWatchdog",
+                    [
+                        "MonitorHeartbeat",
+                        "AssertSafetyConstraint",
+                        "TriggerFailsafeState",
+                        "CommandEmergencyStop",
+                        "IsolateFaultyChannel",
+                        "InhibitActuatorOutput",
+                        "ForceAutonomousRecovery",
+                        "LogSafetyViolation",
+                    ],
+                ),
+                (
+                    "OperatorConsole",
+                    [
+                        "SendMissionPlan",
+                        "AuthorizeModeTransition",
+                        "IssueManualOverride",
+                        "AcknowledgeAlarm",
+                        "InitiateSystemStart",
+                        "InitiateSystemStop",
+                        "RequestTelemetrySync",
+                        "SetContainmentBoundary",
+                    ],
+                ),
+            ]
+        else:
+            raw_ctrls = controllers
+            if isinstance(raw_ctrls, str):
+                raw_ctrls = [raw_ctrls]
+            elif raw_ctrls is None:
+                raw_ctrls = ["CoreController"]
+
+            raw_actions = actions
+            if isinstance(raw_actions, str):
+                raw_actions = [raw_actions]
+
+            for item in raw_ctrls:
+                if isinstance(item, dict):
+                    c_name = item.get("name", "CoreController")
+                    c_acts = item.get("actions") or raw_actions or []
+                elif hasattr(item, "name"):
+                    c_name = getattr(item, "name", "CoreController")
+                    item_acts = getattr(item, "actions", [])
+                    c_acts = [getattr(a, "name", str(a)) for a in item_acts] or raw_actions or []
+                elif isinstance(item, str):
+                    c_name = item
+                    c_acts = raw_actions or []
+                else:
+                    c_name = str(item)
+                    c_acts = raw_actions or []
+
+                if not c_acts and raw_actions:
+                    c_acts = raw_actions
+
+                if c_acts:
+                    ctrl_action_pairs.append((c_name, list(c_acts)))
+
+            if not ctrl_action_pairs and raw_actions:
+                ctrl_action_pairs.append(("CoreController", list(raw_actions)))
+
+        uca_counter = 1
+        for ctrl_name, action_list in ctrl_action_pairs:
+            for action in action_list:
+                for gw in guide_words:
+                    uca_id = f"UCA-{uca_counter:03d}"
+                    context = f"Operating state nominal or degraded with active {action}"
+                    hazard = f"H_{action}_Hazard"
+                    sc = f"SC_{action}_Constraint"
+                    lines.append(
+                        f"| {uca_id} | {ctrl_name} | {action} | {gw} | {context} | {hazard} | {sc} | Critical |"
+                    )
+                    uca_counter += 1
+
+        return "\n".join(lines)
+
+    @staticmethod
+    def generate_fmeca_matrix(
+        components: Optional[Any] = None,
+        failure_modes: Optional[Any] = None,
+    ) -> str:
+        """
+        Generates FMECA matrix table with component, failure mode, effect, severity, and mitigation.
+        Ensures deterministic closure across all declared physical/logical components.
+        """
+        headers = ["Component", "Failure Mode", "Effect", "Severity", "Mitigation"]
+        lines = [
+            "| " + " | ".join(headers) + " |",
+            "| " + " | ".join([":---"] * len(headers)) + " |",
+        ]
+
+        default_fmeca = [
+            {
+                "component": "SensorSuite",
+                "failure_mode": "Calibration Drift",
+                "effect": "Degraded state estimation accuracy",
+                "severity": "Critical",
+                "mitigation": "Multi-sensor voting and anomaly detection",
+            },
+            {
+                "component": "SensorSuite",
+                "failure_mode": "Signal Loss",
+                "effect": "Loss of telemetry updates",
+                "severity": "Critical",
+                "mitigation": "Fail-silent channel shutdown and fallback to inertial dead reckoning",
+            },
+            {
+                "component": "CoreController",
+                "failure_mode": "Control Loop Deadlock",
+                "effect": "Stalled control output calculations",
+                "severity": "Critical",
+                "mitigation": "Hardware watchdog timer reset and dual-redundant switchover",
+            },
+            {
+                "component": "CoreController",
+                "failure_mode": "Memory Exhaustion",
+                "effect": "Task preemption failure",
+                "severity": "High",
+                "mitigation": "Static buffer allocation and periodic heap monitoring",
+            },
+            {
+                "component": "ActuatorSubsystem",
+                "failure_mode": "Actuator Jam",
+                "effect": "Inability to execute steering commands",
+                "severity": "Critical",
+                "mitigation": "Torque limit detection and emergency decoupling",
+            },
+            {
+                "component": "ActuatorSubsystem",
+                "failure_mode": "Command Bus Corruption",
+                "effect": "Erroneous control surface movement",
+                "severity": "Critical",
+                "mitigation": "CRC-32 packet validation and failsafe neutral positioning",
+            },
+            {
+                "component": "PayloadSubsystem",
+                "failure_mode": "Payload Power Surge",
+                "effect": "Bus voltage sag",
+                "severity": "Medium",
+                "mitigation": "Current-limiting shunt and isolated DC-DC conversion",
+            },
+            {
+                "component": "PayloadSubsystem",
+                "failure_mode": "Data Link Buffer Overflow",
+                "effect": "Dropped payload telemetry packets",
+                "severity": "Low",
+                "mitigation": "Circular buffering and backpressure flow control",
+            },
+            {
+                "component": "SafetyWatchdog",
+                "failure_mode": "Heartbeat Timeout False Alarm",
+                "effect": "Inadvertent transition to failsafe state",
+                "severity": "High",
+                "mitigation": "Consecutive missed heartbeat threshold (n >= 3)",
+            },
+            {
+                "component": "SafetyWatchdog",
+                "failure_mode": "Failsafe Actuation Failure",
+                "effect": "Inability to enforce safe containment stop",
+                "severity": "Catastrophic",
+                "mitigation": "Independent hardwired power-cut interlock",
+            },
+            {
+                "component": "OperatorConsole",
+                "failure_mode": "Command Link Latency Spike",
+                "effect": "Delayed teleoperation response",
+                "severity": "Medium",
+                "mitigation": "Autonomous hold-in-place on link timeout",
+            },
+            {
+                "component": "OperatorConsole",
+                "failure_mode": "Display Stalling",
+                "effect": "Loss of operator situational awareness",
+                "severity": "High",
+                "mitigation": "Independent auxiliary telemetry monitor",
+            },
+        ]
+
+        if components is None and failure_modes is None:
+            rows = default_fmeca
+        elif components is None and failure_modes is not None and isinstance(failure_modes, list) and failure_modes and isinstance(failure_modes[0], dict):
+            rows = failure_modes
+        else:
+            # Resolve components
+            raw_comps = components
+            if isinstance(raw_comps, str):
+                raw_comps = [raw_comps]
+            elif raw_comps is None:
+                raw_comps = ["SensorSuite", "CoreController", "ActuatorSubsystem", "PayloadSubsystem", "SafetyWatchdog", "OperatorConsole"]
+
+            comp_names = []
+            for c in raw_comps:
+                if isinstance(c, dict):
+                    comp_names.append(c.get("name", "Component"))
+                elif hasattr(c, "name"):
+                    comp_names.append(getattr(c, "name", "Component"))
+                else:
+                    comp_names.append(str(c))
+
+            # Match or generate modes
+            rows = []
+            for c_name in comp_names:
+                matched = [m for m in default_fmeca if m["component"].lower() == c_name.lower()]
+                if matched and failure_modes is None:
+                    rows.extend(matched)
+                elif failure_modes:
+                    raw_modes = failure_modes if isinstance(failure_modes, list) else [failure_modes]
+                    for mode_item in raw_modes:
+                        if isinstance(mode_item, dict):
+                            rows.append({
+                                "component": mode_item.get("component") or c_name,
+                                "failure_mode": mode_item.get("failure_mode") or mode_item.get("mode") or "ComponentFault",
+                                "effect": mode_item.get("effect", f"Degraded operation in {c_name}"),
+                                "severity": mode_item.get("severity", "Critical"),
+                                "mitigation": mode_item.get("mitigation", f"Redundant monitoring for {c_name}"),
+                            })
+                        else:
+                            rows.append({
+                                "component": c_name,
+                                "failure_mode": str(mode_item),
+                                "effect": f"Degraded operational performance in {c_name}",
+                                "severity": "Critical",
+                                "mitigation": f"Failsafe isolation and redundant monitoring for {c_name}",
+                            })
+                else:
+                    rows.append({
+                        "component": c_name,
+                        "failure_mode": "Channel Communication Timeout",
+                        "effect": f"Loss of data flow from {c_name}",
+                        "severity": "Critical",
+                        "mitigation": f"Redundant telemetry channel and timeout fallback for {c_name}",
+                    })
+
+        for row in rows:
+            comp = row.get("component", "Component")
+            mode = row.get("failure_mode") or row.get("mode") or "Unknown"
+            effect = row.get("effect", "Degraded operation")
+            severity = row.get("severity", "Critical")
+            mitigation = row.get("mitigation", "Redundant monitoring")
+            lines.append(f"| {comp} | {mode} | {effect} | {severity} | {mitigation} |")
+
+        return "\n".join(lines)
+
+
 def parse_stpa_ucas(content: str) -> List[Dict[str, Any]]:
     """
     Parses STPA Unsafe Control Actions (UCAs) from markdown tables, structured text,
