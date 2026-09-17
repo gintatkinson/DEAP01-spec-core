@@ -396,6 +396,9 @@ class SemanticDiagramASTValidator(IValidator):
                 if uc.actor:
                     declared_actors.add(uc.actor.lower())
                     declared_actors.add(_normalize_identifier(uc.actor))
+                for act in (getattr(uc, "actors", []) or []):
+                    declared_actors.add(act.lower())
+                    declared_actors.add(_normalize_identifier(act))
 
         for port in (pkg.port_defs or []):
             port_names.add(port.name)
@@ -421,6 +424,9 @@ class SemanticDiagramASTValidator(IValidator):
             if uc.actor:
                 declared_actors.add(uc.actor.lower())
                 declared_actors.add(_normalize_identifier(uc.actor))
+            for act in (getattr(uc, "actors", []) or []):
+                declared_actors.add(act.lower())
+                declared_actors.add(_normalize_identifier(act))
 
         # Collect all node names recursively from package and all subpackages
         if hasattr(pkg, "get_all_node_names"):
@@ -436,6 +442,9 @@ class SemanticDiagramASTValidator(IValidator):
                 if getattr(uc, "actor", None):
                     declared_actors.add(uc.actor.lower())
                     declared_actors.add(_normalize_identifier(uc.actor))
+                for act in (getattr(uc, "actors", []) or []):
+                    declared_actors.add(act.lower())
+                    declared_actors.add(_normalize_identifier(act))
             for cap in (getattr(p_pkg, "capability_defs", []) or []):
                 capability_names.add(cap.name)
                 capability_norm.add(_normalize_identifier(cap.name))
@@ -557,7 +566,7 @@ class SemanticDiagramASTValidator(IValidator):
             return True
 
         # Procedural workflow step / lifecycle / WBS prefixes (pure flowchart workflow syntax)
-        procedural_prefix = re.compile(r'^(step\d*|phase\d*|task\d*|p\d+[a-z_]|d[_\-]|wp[_\-]|wbs[_\-]|oa\d*|oa[_\-]|fn\d*|fn[_\-]|gate\d*|abort\d*|decision\d*|branch\d*)', re.I)
+        procedural_prefix = re.compile(r'^(step\d*|phase\d*|task\d*|p\d+[a-z_]|d[_\-]|wp[_\-]|wbs[_\-]|oa\d*|oa[_\-]|fn\d*|fn[_\-]|gate\d*|abort\d*|decision\d*|branch\d*|role\d*|role[_\-]|usr\d*|usr[_\-]|actor\d*|actor[_\-]|vol\d*|vol[_\-]|zone\d*|zone[_\-]|geo\d*|geo[_\-]|env\d*|env[_\-])', re.I)
         if (procedural_prefix.match(node_id.strip()) or procedural_prefix.match(id_norm) or
             procedural_prefix.match(lbl_norm) or (title_norm and procedural_prefix.match(title_norm))):
             return True

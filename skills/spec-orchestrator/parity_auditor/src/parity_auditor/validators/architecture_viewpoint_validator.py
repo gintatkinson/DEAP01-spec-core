@@ -576,14 +576,20 @@ def _matches_canonical_diagram(
     if canon_id == "OV-5a":
         if re.search(r"\bOV-?2\b|\bOperational\s+Node\s+Connectivity\b", combined_text, re.IGNORECASE):
             return False
+    if canon_id in ("SPATIAL-4D", "SORA-4D"):
+        if re.search(r"\bOV-?6c\b|\bScenario\s+Lifeline\b", combined_text, re.IGNORECASE):
+            return False
+    if canon_id == "OV-6c":
+        if re.search(r"\bSPATIAL-?4D\b|\b4D\s+Spatial\s+Volume\b|\bGround\s+Risk\s+Buffer\b", combined_text, re.IGNORECASE):
+            return False
 
     # 1. Explicit comment / diagram tag match
     # e.g., %% OV-1, %% Diagram 1, <!-- OV-1 -->
     tag_patterns = [
         rf"%%.*?\b{canon_id}\b",
-        rf"%%.*?diagram\s+{spec['diagram_num']}\b",
+        rf"%%.*?diagram\s+{spec['diagram_num']}(?!\.\d)\b",
         rf"<!--.*?\b{canon_id}\b.*?-->",
-        rf"\bdiagram\s+{spec['diagram_num']}\b",
+        rf"\bdiagram\s+{spec['diagram_num']}(?!\.\d)\b",
     ]
     if orig_canon_id != canon_id:
         tag_patterns.extend([
