@@ -35,6 +35,11 @@ from parity_auditor.validators.cross_document_diagram_parity_validator import (
     validate_cross_document_diagram_parity,
     RULE_ID,
 )
+from parity_auditor.validators.architecture_viewpoint_validator import (
+    ArchitectureViewpointValidator,
+    RULE_OV6C_MISSING_SCENARIO_DIAGRAM,
+    _validate_ov6c_scenario_coverage,
+)
 from parity_auditor.aggregator import AGGREGATING_VALIDATORS
 from scripts.verify_downstream_baseline import (
     check_cross_document_diagram_parity,
@@ -340,6 +345,178 @@ class TestCrossDocumentDiagramParity(unittest.TestCase):
             # Should complete without error
             check_cross_document_diagram_parity(tmpdir)
             check_cross_document_diagram_parity_gate(tmpdir)
+
+
+class TestArchitectureViewpointValidator(unittest.TestCase):
+    """Test suite verifying Diagram 7 (OV-6c) scenario-to-diagram parity."""
+
+    def setUp(self):
+        self.validator = ArchitectureViewpointValidator()
+
+    def test_ov6c_scenario_coverage_passes_when_all_scenarios_have_diagrams(self):
+        """Verify passing when 100% of scenarios have accompanying sequence diagrams."""
+        scenario_text = """# Operational Scenarios
+
+### 9.1 Scenario SCN-01: Nominal Sortie Thread
+Nominal operational mission lifecycle.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Operator as "Human Operator"
+    participant Controller as "System Controller"
+    Operator ->> Controller: Initialize_Mission
+    Controller -->> Operator: Mission_Ready
+```
+
+### 9.2 Scenario SCN-02: GNSS-Denied Navigation
+Degraded navigation thread under satellite denial.
+
+```mermaid
+%% OV-6c Scenario Lifeline Sequence
+sequenceDiagram
+    autonumber
+    participant Sensors as "Sensor Fusion"
+    participant Controller as "System Controller"
+    Sensors ->> Controller: Visual_Odometry_Lock
+    Controller -->> Sensors: Acknowledge_State
+```
+
+### Scenario SCN-03: Lost C2 Link
+Communications failover thread.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Router as "PACE Router"
+    participant Watchdog as "Safety Watchdog"
+    Router ->> Watchdog: Link_Timeout_Breached
+    Watchdog -->> Router: Latch_Safe_Mode
+```
+"""
+        findings = _validate_ov6c_scenario_coverage(scenario_text, "docs/conops/CONOPS.md")
+        self.assertEqual(len(findings), 0)
+
+    def test_ov6c_scenario_coverage_fails_when_scenario_lacks_diagram(self):
+        """Verify finding emitted when a scenario lacks a sequenceDiagram."""
+        scenario_text = """# Operational Scenarios
+
+### 9.1 Scenario SCN-01: Nominal Sortie
+```mermaid
+sequenceDiagram
+    participant A as "Actor A"
+    participant B as "Actor B"
+    A ->> B: Step_1
+```
+
+### 9.2 Scenario SCN-02: Tactical Abort
+This scenario has only prose and a table, but lacks a sequenceDiagram.
+
+| Step | Action |
+| :--- | :--- |
+| 1 | Abort execution |
+
+### 9.3 Scenario SCN-03: Bingo Energy Divert
+```mermaid
+sequenceDiagram
+    participant C as "Controller"
+    participant P as "Power System"
+    C ->> P: Query_Energy
+```
+"""
+        findings = _validate_ov6c_scenario_coverage(
+            scenario_text, "docs/conops/units/conops/09_SCENARIOS_AND_TIMELINES.md"
+        )
+        self.assertEqual(len(findings), 1)
+        finding = findings[0]
+        self.assertEqual(finding.rule_id, RULE_OV6C_MISSING_SCENARIO_DIAGRAM)
+        self.assertIn("SCN-02", str(finding))
+        self.assertIn("Diagram 7 (OV-6c)", str(finding))
+        self.assertIn("violates 100% scenario lifeline coverage", str(finding))
+        self.assertEqual(finding.detail["scenario_id"], "SCN-02")
+        self.assertEqual(finding.detail["rule"], "conops-ov6c-missing-scenario-diagram")
+
+    def test_ov6c_subsections_do_not_prematurely_close_scenario(self):
+        """Verify level 4 subsections do not cut off scenario inspection before the diagram."""
+        scenario_text = """# Operational Scenarios
+
+### 9.5 Scenario SCN-05: Controlled Safety Interlock Action
+Scenario SCN-05 details.
+
+#### 9.5.1 Safety Interlock Prerequisites
+Prerequisites text.
+
+#### 9.5.2 Lifeline Sequence
+```mermaid
+sequenceDiagram
+    actor Operator as "Human Operator"
+    participant Controller as "System Controller"
+    Operator ->> Controller: Consent_Token
+```
+
+### 9.6 Scenario SCN-06: SORA Containment Termination
+Next scenario.
+
+```mermaid
+sequenceDiagram
+    participant Watchdog as "Safety Watchdog"
+    participant Actuator as "Flight Termination"
+    Watchdog ->> Actuator: Trigger_Termination
+```
+"""
+        findings = _validate_ov6c_scenario_coverage(scenario_text, "docs/conops/CONOPS.md")
+        self.assertEqual(len(findings), 0)
+
+    def test_validate_markdown_content_wires_ov6c_scenario_check(self):
+        """Verify validate_markdown_content executes scenario coverage check."""
+        scenario_text = """# CONOPS
+
+### 9.1 Scenario SCN-01: Nominal Sortie
+Text without any diagram.
+"""
+        findings = self.validator.validate_markdown_content(scenario_text, "docs/conops/CONOPS.md")
+        missing_scenario_findings = [
+            f for f in findings if f.rule_id == RULE_OV6C_MISSING_SCENARIO_DIAGRAM
+        ]
+        self.assertEqual(len(missing_scenario_findings), 1)
+        self.assertIn("SCN-01", str(missing_scenario_findings[0]))
+
+    def test_validate_markdown_content_respects_target_diagrams_filter(self):
+        """Verify validate_markdown_content skips scenario check when target_diagrams excludes OV-6c."""
+        scenario_text = """# CONOPS
+
+### 9.1 Scenario SCN-01: Nominal Sortie
+Text without any diagram.
+"""
+        findings = self.validator.validate_markdown_content(
+            scenario_text, "docs/conops/CONOPS.md", target_diagrams={"SV-1"}
+        )
+        missing_scenario_findings = [
+            f for f in findings if f.rule_id == RULE_OV6C_MISSING_SCENARIO_DIAGRAM
+        ]
+        self.assertEqual(len(missing_scenario_findings), 0)
+
+    def test_validate_wires_ov6c_scenario_check_in_workspace(self):
+        """Verify validate() flags missing scenario diagrams in CONOPS.md."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            os.makedirs(conops_dir, exist_ok=True)
+            conops_file = os.path.join(conops_dir, "CONOPS.md")
+
+            with open(conops_file, "w", encoding="utf-8") as f:
+                f.write("""# Concept of Operations
+
+### 9.1 Scenario SCN-01: Nominal Lifecycle
+Only prose, no sequence diagram.
+""")
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            findings = self.validator.validate(repo, allow_missing_specs=True)
+            missing_scenario_findings = [
+                f for f in findings if f.rule_id == RULE_OV6C_MISSING_SCENARIO_DIAGRAM
+            ]
+            self.assertEqual(len(missing_scenario_findings), 1)
+            self.assertIn("SCN-01", str(missing_scenario_findings[0]))
 
 
 if __name__ == "__main__":

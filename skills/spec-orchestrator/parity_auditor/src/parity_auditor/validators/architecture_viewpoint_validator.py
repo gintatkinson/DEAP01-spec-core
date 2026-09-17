@@ -51,6 +51,7 @@ RULE_EMPTY_DIAGRAM = "architecture-viewpoint-empty-diagram"
 RULE_SYNTAX_ERROR = "architecture-viewpoint-syntax-error"
 RULE_INCOMPLETE_DIAGRAM = "architecture-viewpoint-incomplete"
 RULE_AST_UNBOUND = "architecture-viewpoint-ast-unbound"
+RULE_OV6C_MISSING_SCENARIO_DIAGRAM = "conops-ov6c-missing-scenario-diagram"
 
 ALLOWED_DIAGRAM_KINDS = {
     "graph", "flowchart", "sequencediagram", "statediagram", "statediagram-v2",
@@ -831,6 +832,48 @@ def _validate_sv1_diagram(block: ParsedMermaidBlock, spec: Dict[str, Any], b_loc
     return findings
 
 
+def _validate_ov6c_scenario_coverage(content: str, rel_path: str) -> List[Finding]:
+    """
+    Validates that 100% of declared operational scenarios (SCN-01..SCN-N)
+    contain an accompanying Diagram 7 (OV-6c) Mermaid sequenceDiagram block.
+    """
+    findings: List[Finding] = []
+    scenario_header_pattern = re.compile(
+        r"(?m)^###\s*(?:9\.\d+\s*)?(?:Scenario\s*\d*[:\s]*)?.*?\b(SCN-\d+)\b(.*?)$"
+    )
+    sequence_diagram_pattern = re.compile(
+        r"```mermaid\s*\n(?:\s*%%[^\n]*\n)*\s*sequenceDiagram\b",
+        re.IGNORECASE,
+    )
+    next_section_pattern = re.compile(r"(?m)^###?\s")
+
+    scenario_matches = list(scenario_header_pattern.finditer(content))
+    for m in scenario_matches:
+        scn_id = m.group(1)
+        lineno = content[:m.start()].count("\n") + 1
+
+        next_head = next_section_pattern.search(content, m.end())
+        if next_head:
+            block_text = content[m.start():next_head.start()]
+        else:
+            block_text = content[m.start():]
+
+        if not sequence_diagram_pattern.search(block_text):
+            findings.append(Finding(
+                RULE_OV6C_MISSING_SCENARIO_DIAGRAM,
+                f"{rel_path}:{lineno}: Operational scenario '{scn_id}' lacks an accompanying Diagram 7 (OV-6c) Mermaid sequenceDiagram lifeline sequence (violates 100% scenario lifeline coverage).",
+                location=f"{rel_path}:{lineno}",
+                detail={
+                    "rel_path": rel_path,
+                    "line": lineno,
+                    "scenario_id": scn_id,
+                    "rule": RULE_OV6C_MISSING_SCENARIO_DIAGRAM,
+                },
+            ))
+
+    return findings
+
+
 # =============================================================================
 # ArchitectureViewpointValidator Class (Gate 30)
 # =============================================================================
@@ -840,6 +883,8 @@ class ArchitectureViewpointValidator(IValidator):
     Gate 30 Validator enforcing presence, completeness, and syntax integrity
     for the 11 canonical architecture diagrams across 5 viewpoints.
     """
+
+    _validate_ov6c_scenario_coverage = staticmethod(_validate_ov6c_scenario_coverage)
 
     def validate(self, repo: WorkspaceRepository, **kwargs) -> List[Finding]:
         findings: List[Finding] = []
@@ -919,6 +964,12 @@ class ArchitectureViewpointValidator(IValidator):
             # Extract N^2 markdown tables
             matrix_tables = _extract_markdown_matrix_tables(content, rel_path)
             all_matrix_tables.extend(matrix_tables)
+
+            # Validate OV-6c scenario lifeline coverage for CONOPS.md and 09_ scenario files
+            base_fname = os.path.basename(fpath).lower()
+            if base_fname == "conops.md" or base_fname.startswith("09_"):
+                scenario_findings = _validate_ov6c_scenario_coverage(content, rel_path)
+                findings.extend(scenario_findings)
 
         # 3. Classify detected diagrams against the 11 canonical diagrams
         matched_diagrams: Dict[str, List[ParsedMermaidBlock]] = {k: [] for k in CANONICAL_DIAGRAMS}
@@ -1032,6 +1083,10 @@ class ArchitectureViewpointValidator(IValidator):
         findings: List[Finding] = []
         blocks, syntax_findings = _extract_blocks_and_syntax_findings(content, rel_path)
         findings.extend(syntax_findings)
+
+        # Validate OV-6c scenario lifeline coverage
+        if target_diagrams is None or "OV-6c" in target_diagrams:
+            findings.extend(_validate_ov6c_scenario_coverage(content, rel_path))
 
         matrix_tables = _extract_markdown_matrix_tables(content, rel_path)
 
