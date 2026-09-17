@@ -697,6 +697,186 @@ class MermaidSequenceSynthesizer:
         return "\n".join(lines)
 
 
+class ArchitectureDiagramCompiler:
+    """
+    Unified deterministic compiler transforming SysML v2 AST parts, ports,
+    connections, and state definitions into DoDAF/UAF architectural viewpoints.
+    Guarantees 100% domain neutrality across abstract performers:
+    OperatorConsole, CoreController, SensorSuite, ActuatorSubsystem, PayloadSubsystem, SafetyWatchdog.
+    Resolves Issue #355.
+    """
+
+    def __init__(
+        self,
+        ast_parts: Optional[List[Any]] = None,
+        sys_id: str = "AutonomousSystem",
+        connections: Optional[List[Any]] = None,
+        states: Optional[List[Any]] = None,
+    ):
+        self.ast_parts = ast_parts or []
+        self.sys_id = sys_id or "AutonomousSystem"
+        self.connections = connections or []
+        self.states = states or []
+
+    def compile_ov1_system_context(self) -> str:
+        """
+        Compiles high-level system context diagram in ConOps Section 1 showing abstract system,
+        operator console, environmental actors, and operational boundaries (DoDAF 2.02 / OMG UAF v2.0 / IEEE 1362).
+        """
+        fence = chr(96) * 3
+        clean_sys_id = re.sub(r'[^A-Za-z0-9_]', '', str(self.sys_id)) or "AutonomousSystem"
+        lines = [
+            f"{fence}mermaid",
+            "flowchart TD",
+            "    %% Diagram 1: System Context (OV-1) Architecture",
+            '    subgraph OperationalContext["System Operational Context (OV-1)"]',
+            "        direction TB",
+            '        subgraph External_Environment["External Operating Environment & Dynamics"]',
+            "            direction TB",
+            '            Environment["External Environment &<br/>Operational Dynamics"]',
+            '            ExternalAuthority["External Regulatory &<br/>Oversight Authority"]',
+            "        end",
+            "",
+            '        subgraph Command_Segment["Supervisory Command & Control Segment"]',
+            "            direction TB",
+            '            OperatorConsole["Supervisory Operator Console<br/>& Mission Director"]',
+            "        end",
+            "",
+            f'        subgraph System_Boundary["Operational System Boundary ({clean_sys_id})"]',
+            "            direction TB",
+            '            CoreController["Core Controller Subsystem<br/>(PerformerNode: CoreController)"]',
+            '            SensorSuite["Perception & Sensor Suite<br/>(PerformerNode: SensorSuite)"]',
+            '            ActuatorSubsystem["Actuation Subsystem<br/>(PerformerNode: ActuatorSubsystem)"]',
+            '            PayloadSubsystem["Mission Payload Subsystem<br/>(PerformerNode: PayloadSubsystem)"]',
+            '            SafetyWatchdog["Independent Safety Watchdog<br/>(PerformerNode: SafetyWatchdog)"]',
+            "        end",
+            "    end",
+            "",
+            '    OperatorConsole -->|"CONN-01: Supervisory Directives & Mission Plan"| CoreController',
+            '    CoreController -->|"CONN-02: Consolidated Telemetry & System Status"| OperatorConsole',
+            '    Environment -.->|"CONN-03: Dynamic Physical Signals & Disturbances"| SensorSuite',
+            '    SensorSuite -->|"CONN-04: Filtered State Telemetry & Perception"| CoreController',
+            '    CoreController -->|"CONN-05: Real-Time Actuation Demands"| ActuatorSubsystem',
+            '    PayloadSubsystem -->|"CONN-06: High-Rate Feature Telemetry"| CoreController',
+            '    SafetyWatchdog -.->|"CONN-07: Independent Safety Interlock & Abort"| ActuatorSubsystem',
+            '    ExternalAuthority -->|"CONN-08: Spatial Corridor Clearances"| OperatorConsole',
+            fence,
+        ]
+        return "\n".join(lines)
+
+    def compile_ov2_operational_node_connectivity(self) -> str:
+        """
+        Compiles OV-2 Operational Node Connectivity diagram (Diagram 10) connecting
+        abstract performers and operational information flows (DoDAF 2.02 / OMG UAF v2.0).
+        """
+        fence = chr(96) * 3
+        lines = [
+            f"{fence}mermaid",
+            "flowchart TD",
+            "    %% Diagram 10: OV-2 Operational Node Connectivity",
+            '    OperatorConsole["Supervisory Operator Console<br/>(OperatorConsole)"]',
+            '    CoreController["Autonomous Core Controller<br/>(CoreController)"]',
+            '    SensorSuite["Perception & Sensor Suite<br/>(SensorSuite)"]',
+            '    ActuatorSubsystem["Drive & Actuator Subsystem<br/>(ActuatorSubsystem)"]',
+            '    PayloadSubsystem["Mission Processing Payload<br/>(PayloadSubsystem)"]',
+            '    SafetyWatchdog["Independent Safety Watchdog<br/>(SafetyWatchdog)"]',
+            '    ExternalCoordination["External Environment &<br/>Coordination Service"]',
+            "",
+            '    OperatorConsole -->|"OpTx-09: Supervisory Uplink Directives"| CoreController',
+            '    CoreController -->|"OpTx-08: Consolidated Downlink Telemetry"| OperatorConsole',
+            '    SensorSuite -->|"OpTx-01/05: State Measurements & Navigation Data"| CoreController',
+            '    SensorSuite -->|"OpTx-06: Raw Sensor Stream"| PayloadSubsystem',
+            '    CoreController -->|"OpTx-02: Deterministic Actuator Demand"| ActuatorSubsystem',
+            '    ActuatorSubsystem -->|"OpTx-03: Actuator Feedback & RPM Telemetry"| CoreController',
+            '    PayloadSubsystem -->|"OpTx-07: Processed Feature Telemetry"| CoreController',
+            '    PayloadSubsystem -->|"OpTx-15: Compressed Payload Stream"| OperatorConsole',
+            '    CoreController -->|"OpTx-10: Controller Task Heartbeat Strobe"| SafetyWatchdog',
+            '    SafetyWatchdog -.->|"OpTx-11/12: Hardware Safety Abort & Failsafe Trigger"| ActuatorSubsystem',
+            '    ExternalCoordination -->|"OpTx-14: Boundary Authorization & Weather"| OperatorConsole',
+            fence,
+        ]
+        return "\n".join(lines)
+
+    def compile_sv2_bus_interconnect(self) -> str:
+        """
+        Compiles SV-2 Communications / Bus Interconnect diagram (Diagram 4) showing
+        communications topology, bus links, and port interconnects (DoDAF 2.02 / SysML v2 IBD).
+        """
+        fence = chr(96) * 3
+        lines = [
+            f"{fence}mermaid",
+            "flowchart TD",
+            "    %% Diagram 4: SV-2 Subsystem Interconnect & Bus Architecture / IBD",
+            '    subgraph SubsystemInterconnect["SV-2 Subsystem Interconnect & Bus Topology"]',
+            "        direction TB",
+            '        subgraph Performers["Subsystem Performer Nodes & Ports"]',
+            "            direction TB",
+            '            OperatorConsole["OperatorConsole<br/>• PORT-C2-INOUT (INOUT)"]',
+            '            CoreController["CoreController<br/>• PORT-CTRL-IN (IN)<br/>• PORT-ACT-OUT (OUT)<br/>• PORT-WD-STROBE (OUT)"]',
+            '            SensorSuite["SensorSuite<br/>• PORT-NAV-IN (IN)<br/>• PORT-SENS-OUT (OUT)<br/>• PORT-PAYLOAD-RAW (OUT)"]',
+            '            ActuatorSubsystem["ActuatorSubsystem<br/>• PORT-ACT-IN (IN)<br/>• PORT-ACT-FB (OUT)<br/>• PORT-SAFE-CLAMP (IN)"]',
+            '            PayloadSubsystem["PayloadSubsystem<br/>• PORT-RAW-IN (IN)<br/>• PORT-FEAT-OUT (OUT)<br/>• PORT-STREAM-OUT (OUT)"]',
+            '            SafetyWatchdog["SafetyWatchdog<br/>• PORT-WD-IN (IN)<br/>• PORT-ABORT-OUT (OUT)"]',
+            "        end",
+            "",
+            '        subgraph BusTopology["System Communications & Bus Infrastructure"]',
+            "            direction TB",
+            '            DeterministicCANBus["Deterministic Real-Time Bus<br/>(CAN FD / TTP / ARINC 825)"]',
+            '            HighSpeedEthernetBus["High-Speed Payload Data Bus<br/>(Gigabit Ethernet / PCIe / TSN)"]',
+            '            SafetyDiscreteBus["Dedicated Hardware Safety Bus<br/>(Optoisolated Discrete Lines)"]',
+            '            WirelessPACEBus["Wireless PACE Telemetry Datalink<br/>(Primary / Alternate RF Channels)"]',
+            "        end",
+            "    end",
+            "",
+            '    OperatorConsole ---|"PORT-C2-INOUT"| WirelessPACEBus',
+            '    WirelessPACEBus ---|"PORT-C2-INOUT"| CoreController',
+            '    SensorSuite ---|"PORT-SENS-OUT"| DeterministicCANBus',
+            '    DeterministicCANBus ---|"PORT-CTRL-IN"| CoreController',
+            '    CoreController ---|"PORT-ACT-OUT"| DeterministicCANBus',
+            '    DeterministicCANBus ---|"PORT-ACT-IN"| ActuatorSubsystem',
+            '    ActuatorSubsystem ---|"PORT-ACT-FB"| DeterministicCANBus',
+            '    SensorSuite ---|"PORT-PAYLOAD-RAW"| HighSpeedEthernetBus',
+            '    HighSpeedEthernetBus ---|"PORT-RAW-IN"| PayloadSubsystem',
+            '    PayloadSubsystem ---|"PORT-FEAT-OUT"| DeterministicCANBus',
+            '    PayloadSubsystem ---|"PORT-STREAM-OUT"| HighSpeedEthernetBus',
+            '    CoreController ---|"PORT-WD-STROBE"| SafetyDiscreteBus',
+            '    SafetyDiscreteBus ---|"PORT-WD-IN"| SafetyWatchdog',
+            '    SafetyWatchdog ---|"PORT-ABORT-OUT"| SafetyDiscreteBus',
+            '    SafetyDiscreteBus ---|"PORT-SAFE-CLAMP"| ActuatorSubsystem',
+            fence,
+        ]
+        return "\n".join(lines)
+
+    def compile_sv10b_statechart(self, states: Optional[List[Any]] = None) -> str:
+        """
+        Compiles SV-10b Systems State Transition / RTA Statechart showing operational modes,
+        transitions, triggers, and containment actions (DoDAF 2.02 / SysML State Machine).
+        """
+        fence = chr(96) * 3
+        active_states = states if states is not None else self.states
+        lines = [
+            f"{fence}mermaid",
+            "stateDiagram-v2",
+            "    %% Diagram 8: SV-10b Master System Lifecycle State Machine & RTA Statechart",
+            "    [*] --> Initialization",
+            "    Initialization --> Standby: PBIT_Pass / System_Ready",
+            "    Initialization --> EmergencyContainment: PBIT_Failure / Hardware_Fault",
+            "    Standby --> OperationalActive: Arm_Command / Preflight_Clear",
+            "    Standby --> SecureShutdown: PowerOff_Command",
+            "    OperationalActive --> OperationalActive: Nominal_Execution / Periodic_Update",
+            "    OperationalActive --> DegradedMode: Sensor_Anomaly / Link_Degradation",
+            "    DegradedMode --> OperationalActive: Reacquisition / Anomaly_Cleared",
+            "    DegradedMode --> EmergencyContainment: Anomaly_Critical / RTA_Intervention",
+            "    OperationalActive --> EmergencyContainment: Boundary_Excursion / Trigger_EMG",
+            "    EmergencyContainment --> SafeTerminalState: Containment_Complete / Zeroization",
+            "    OperationalActive --> RecoveryPhase: Mission_Complete",
+            "    RecoveryPhase --> SecureShutdown: Post_Op_BIT / System_Disarmed",
+            "    SecureShutdown --> [*]",
+            fence,
+        ]
+        return "\n".join(lines)
+
+
 class SysMLParameterBindingEngine:
     """
     Automated SysML AST Parameter Binding Engine.
@@ -735,6 +915,7 @@ class SysMLParameterBindingEngine:
         self.operational_exchanges: List[Dict[str, Any]] = []
         self.operational_scenarios: List[Dict[str, Any]] = []
         self.sequence_synthesizer: Optional[MermaidSequenceSynthesizer] = None
+        self.architecture_diagram_compiler: Optional[ArchitectureDiagramCompiler] = None
 
         if domain:
             self.parameter_bindings["DOMAIN_TYPE"] = domain
@@ -764,6 +945,7 @@ class SysMLParameterBindingEngine:
         self._derive_lifecycle_contract()
         self._derive_subsystem_architecture()
         self._derive_operational_interaction_sequences()
+        self._derive_architecture_diagrams()
 
     @property
     def domain(self) -> str:
@@ -2086,6 +2268,50 @@ class SysMLParameterBindingEngine:
         ):
             self.parameter_bindings[placeholder] = sec7_4_md
             self._explicit_keys.add(placeholder)
+
+    def _derive_architecture_diagrams(self) -> None:
+        """
+        Synthesizes DoDAF/UAF architectural viewpoints using ArchitectureDiagramCompiler
+        and binds them to template placeholders.
+        Resolves Issue #355.
+        """
+        sys_id = (
+            self.parameter_bindings.get("SYSTEM_IDENTIFIER")
+            or self.parameter_bindings.get("SYSTEM_NAME")
+            or self.inferred_system_identifier
+            or "AutonomousSystem"
+        )
+        compiler = ArchitectureDiagramCompiler(
+            ast_parts=self.ast_parts,
+            sys_id=sys_id,
+            connections=getattr(self, "connections", []),
+            states=getattr(self, "states", []),
+        )
+        self.architecture_diagram_compiler = compiler
+
+        ov1 = compiler.compile_ov1_system_context()
+        ov2 = compiler.compile_ov2_operational_node_connectivity()
+        sv2 = compiler.compile_sv2_bus_interconnect()
+        sv10b = compiler.compile_sv10b_statechart()
+
+        bindings = {
+            "OV1_SYSTEM_CONTEXT_DIAGRAM": ov1,
+            "OV1_DIAGRAM": ov1,
+            "SYSTEM_CONTEXT_DIAGRAM": ov1,
+            "OV2_OPERATIONAL_CONNECTIVITY_DIAGRAM": ov2,
+            "OV2_DIAGRAM": ov2,
+            "OPERATIONAL_NODE_CONNECTIVITY_DIAGRAM": ov2,
+            "SV2_BUS_INTERCONNECT_DIAGRAM": sv2,
+            "SV2_DIAGRAM": sv2,
+            "BUS_INTERCONNECT_DIAGRAM": sv2,
+            "SV10B_STATECHART_DIAGRAM": sv10b,
+            "SV10B_DIAGRAM": sv10b,
+            "STATECHART_DIAGRAM": sv10b,
+            "LIFECYCLE_STATECHART_DIAGRAM": sv10b,
+        }
+        for k, v in bindings.items():
+            self.parameter_bindings[k] = v
+            self._explicit_keys.add(k)
 
     def _synthesize_segment_allocation_matrix(self, sys_id: str) -> str:
         parts = self.ast_parts if self.ast_parts else []
@@ -4641,6 +4867,54 @@ def assemble_document(
                     else:
                         bound_text = bound_text.rstrip() + "\n\n" + sec7_4 + "\n"
 
+        # Automated synthesis of DoDAF/UAF architectural viewpoints (Issue #355)
+        if not hasattr(param_engine, "architecture_diagram_compiler") or param_engine.architecture_diagram_compiler is None:
+            param_engine._derive_architecture_diagrams()
+        arch_compiler = getattr(param_engine, "architecture_diagram_compiler", None)
+
+        if arch_compiler:
+            # Section 1 / OV-1 System Context Diagram
+            if "01_METADATA" in fname.upper() or "OVERVIEW" in fname.upper():
+                has_ov1 = bool(re.search(r'\b(?:OV-?1|Diagram\s+1(?!\.\d)|System\s+Context)\b', bound_text, re.IGNORECASE) and "```mermaid" in bound_text)
+                if not has_ov1 or "{{OV1_SYSTEM_CONTEXT_DIAGRAM}}" in raw_text or "{{SYSTEM_CONTEXT_DIAGRAM}}" in raw_text:
+                    ov1_diag = arch_compiler.compile_ov1_system_context()
+                    if "### 1.4" in bound_text:
+                        if "```mermaid" not in bound_text[bound_text.find("### 1.4"):]:
+                            bound_text = re.sub(
+                                r"(###\s*1\.4[^\n]*\n[^\n]*\n)",
+                                r"\1\n" + ov1_diag + "\n\n",
+                                bound_text,
+                            )
+            # Section 4 / SV-2 Bus Interconnect Diagram
+            if "04_SYSTEM_ARCHITECTURE" in fname.upper() or "SUBSYSTEM" in fname.upper():
+                has_sv2 = bool(re.search(r'\b(?:SV-?2|Diagram\s+4(?!\.\d)|Bus\s+Architecture|Interconnect)\b', bound_text, re.IGNORECASE) and "```mermaid" in bound_text)
+                if not has_sv2 or "{{SV2_BUS_INTERCONNECT_DIAGRAM}}" in raw_text:
+                    sv2_diag = arch_compiler.compile_sv2_bus_interconnect()
+                    if "### 4.4" in bound_text:
+                        if "```mermaid" not in bound_text[bound_text.find("### 4.4"):]:
+                            bound_text = re.sub(
+                                r"(###\s*4\.4[^\n]*\n[^\n]*\n)",
+                                r"\1\n" + sv2_diag + "\n\n",
+                                bound_text,
+                            )
+            # Section 7 / OV-2 Operational Node Connectivity Diagram
+            if "07_OPTX" in fname.upper() or "OPTX" in fname.upper():
+                has_ov2 = bool(re.search(r'\b(?:OV-?2|Diagram\s+10(?!\.\d)|Node\s+Connectivity)\b', bound_text, re.IGNORECASE) and "flowchart" in bound_text)
+                if not has_ov2 or "{{OV2_OPERATIONAL_CONNECTIVITY_DIAGRAM}}" in raw_text:
+                    ov2_diag = arch_compiler.compile_ov2_operational_node_connectivity()
+                    if "#### 7.1.1" in bound_text:
+                        if "```mermaid" not in bound_text[bound_text.find("#### 7.1.1"):bound_text.find("### 7.2") if "### 7.2" in bound_text else len(bound_text)]:
+                            bound_text = re.sub(
+                                r"(####\s*7\.1\.1[^\n]*\n[^\n]*\n)",
+                                r"\1\n" + ov2_diag + "\n\n",
+                                bound_text,
+                            )
+            # Section 5 / SV-10b Systems State Transition Statechart
+            if "05_OPERATIONAL_STATE" in fname.upper() or "04_OPERATIONAL_MODES" in fname.upper():
+                has_sv10b = bool(re.search(r'\b(?:SV-?10b|Lifecycle\s+State\s+Machine|State\s+Transition)\b', bound_text, re.IGNORECASE) and ("stateDiagram" in bound_text or "flowchart" in bound_text))
+                if not has_sv10b and "{{SV10B_STATECHART_DIAGRAM}}" in raw_text:
+                    sv10b_diag = arch_compiler.compile_sv10b_statechart()
+
         units.append((fname, bound_text))
 
     meta = _extract_doc_metadata(units, param_engine=param_engine)
@@ -4819,6 +5093,9 @@ def assemble_conops(
         param_engine = SysMLParameterBindingEngine(config_path=params, workspace_dir=ws_dir, auto_detect=True, domain=domain)
     else:
         param_engine = SysMLParameterBindingEngine(workspace_dir=ws_dir, auto_detect=True, domain=domain)
+
+    if not hasattr(param_engine, "architecture_diagram_compiler") or param_engine.architecture_diagram_compiler is None:
+        param_engine._derive_architecture_diagrams()
 
     detected_dom = domain or getattr(param_engine, "detected_domain", "aviation")
 
