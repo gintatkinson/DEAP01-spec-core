@@ -43,54 +43,30 @@ ConnectionDef = _sysml_ast.ConnectionDef
 
 
 # Universal abstract systems engineering boundary tokens (closed-world AST grounding per Issue #282)
-# Specifically purges customer-specific domain keywords and generalizes to abstract boundaries
+# Specifically purges customer-specific domain keywords and restricts strictly to universal diagram actors
 RECOGNIZED_EXTERNAL_ACTORS = {
-    "operator", "operators", "user", "users", "human", "supervisor", "authority", "authorities",
-    "terminal", "technician", "coordinator", "maintainer",
-    "cloud", "server", "servers", "client", "clients", "database", "storage", "backend", "infrastructure",
-    "external_system", "external system", "external", "externalsystems", "ext", "third_party",
-    "environment", "environmental", "physical_world", "terrain", "space", "atmosphere",
-    "telemetry_channel", "command_link", "c2", "c2_channel", "c2_link", "channel", "channels", "datalink", "network",
-    "gnss", "gps", "constellation", "constellations", "gnss_constellation", "reference", "timing", "positioning", "satellite", "satellites",
-    "power_grid", "grid", "power_source"
+    "user", "operator", "environment", "external_system", "externalsystem", "external system",
 }
 
-# Procedural, workflow, lifecycle, and generic diagram structural tokens
+# Procedural, workflow, lifecycle, and pure diagram structural syntax tokens
 RECOGNIZED_STRUCTURAL_TOKENS = {
     "start", "end", "stop", "init", "initial", "final", "terminate", "exit",
     "decision", "choice", "fork", "join", "merge", "condition", "check",
     "pass", "fail", "yes", "no", "true", "false", "success", "error", "fault",
     "idle", "active", "standby", "armed", "disarmed", "failsafe", "emergency", "shutdown",
     "note", "log", "return", "output", "input", "step", "phase", "stage", "process", "task",
-    "event", "trigger", "action", "state", "subagent", "coordinator", "planner", "executor",
-    "auditor", "verifier", "agent", "caller", "runner", "tool", "prompt", "response",
-    "workflow", "review", "approval", "branch", "commit", "push", "pull", "build", "test",
-    "deploy", "report", "viewmodel", "view_model", "widget", "view", "screen", "page",
-    "component", "button", "dialog", "layout", "app", "application", "service", "repository",
-    "controller", "presenter", "store", "state_notifier", "bloc", "cubit", "provider",
-    "theme", "token", "style", "color", "asset", "handler", "adapter", "factory",
-    "api", "endpoint", "router", "route", "navigation", "cache", "dao", "dto", "entity", "model",
-    "sample", "example", "template", "node", "nodea", "nodeb", "nodec",
-    "classa", "classb", "classc", "itema", "itemb", "parta", "partb", "partc",
-    "subsystem", "subsystems", "subsystema", "subsystemb", "subsystemc",
-    "systemusecases", "systemusecasessubsystem", "usecases", "usecasesubsystem",
-    "pipeline", "phase1", "phase2", "phase3", "phase1a", "phase1b", "ssot", "conops", "stpa", "fmeca", "sysml",
-    "epic", "feature", "story", "stories", "deliverable", "deliverables", "matrix", "sync",
-    "port", "ports", "conn", "connection", "connections",
-    "audit", "audits", "crit", "sug", "nit", "finding", "findings", "codegen", "gate",
-    "segment", "segments", "platform", "platforms", "supersystem", "supersystems", "primary", "support", "operational"
+    "event", "trigger", "action", "state", "startnode", "endnode", "gatedecision", "forknode",
+    "joinnode", "decisionnode",
 }
 
 ACTUATOR_KEYWORDS = (
-    "actuator", "motor", "servo", "esc", "thruster", "valve", "pump",
-    "relay", "heater", "propeller", "rotor", "control_surface", "elevon",
-    "aileron", "rudder", "elevator", "flap", "solenoid"
+    "actuator",
 )
 
 SENSOR_OR_SOURCE_KEYWORDS = (
-    "sensor", "imu", "gps", "gnss", "altimeter", "barometer", "pitot",
-    "camera", "lidar", "radar", "encoder", "gyro", "accelerometer", "magnetometer"
+    "sensor",
 )
+
 
 
 def _normalize_identifier(token: str) -> str:
@@ -538,145 +514,153 @@ class SemanticDiagramASTValidator(IValidator):
         subgraphs: Dict[str, Any],
         is_operational_tier: bool = False,
     ) -> bool:
-        """Check whether a flowchart node or label matches declared AST elements or recognized actors."""
-        raw_label_lower = (label or "").lower()
-        raw_id_lower = (node_id or "").lower()
+        """Check whether a flowchart node or label matches declared AST elements or recognized actors.
 
-        # Check architectural annotations like (performernode: ...), (userrole: ...), etc.
-        # BEFORE parentheses are stripped by identifier normalization
-        if any(ann in raw_label_lower or ann in raw_id_lower for ann in (
-            "(performernode:", "(userrole:", "(operationalrole:", "(stakeholder:", "(authority:",
-            "performernode:", "userrole:", "operationalrole:", "stakeholder:", "authority:",
-            "performernode", "userrole", "operationalrole", "stakeholder", "authority"
-        )):
-            return True
-
-        # Recognized operational performer/actor tokens in raw label/id
-        if any(tok in raw_label_lower or tok in raw_id_lower for tok in (
-            "terminal", "technician", "coordinator", "maintainer", "maintenance", "lead", "commander", "crew", "armorer", "operator"
-        )):
-            return True
+        Closed-World AST Sieve Integrity (Issue #282):
+        Any candidate entity, performer, subsystem, or actor must resolve directly against:
+        - ast['part_norm'] / ast['top_level_part_norm']
+        - ast['port_norm']
+        - ast['action_norm'] / ast['state_norm']
+        - ast['declared_actors']
+        - Universal diagram actors: 'user', 'operator', 'environment', 'external_system'
+        - Or pure structural flowchart syntax elements (StartNode, EndNode, GateDecision, Fork, Join, Note).
+        Ungrounded open-world tokens, suffix bypasses, and structural markers fail closed.
+        """
+        # Strip architectural annotation wrappers (e.g. PerformerNode:, UserRole:) so the underlying entity name is grounded
+        stripped_label = re.sub(r'[\(\[\{]?(?:performernode|userrole|operationalrole|stakeholder|authority|interfaceport):\s*', ' ', label or "", flags=re.I)
+        stripped_id = re.sub(r'[\(\[\{]?(?:performernode|userrole|operationalrole|stakeholder|authority|interfaceport):\s*', ' ', node_id or "", flags=re.I)
 
         id_norm = _normalize_identifier(node_id)
         lbl_norm = _normalize_identifier(label)
+        stripped_lbl_norm = _normalize_identifier(stripped_label)
+        stripped_id_norm = _normalize_identifier(stripped_id)
         title_line = re.split(r'<br\s*/?>|\n', label or "", flags=re.I)[0].strip()
         title_norm = _normalize_identifier(title_line)
 
         if not id_norm and not lbl_norm and not title_norm:
             return True
 
-        # Check subgraphs
+        # Check subgraphs: match only if the subgraph itself is declared in AST or is a recognized actor
         for sg_id, sg in subgraphs.items():
             sg_id_norm = _normalize_identifier(sg_id)
             sg_lbl_norm = _normalize_identifier(getattr(sg, "label", "") or sg_id)
-            if id_norm in (sg_id_norm, sg_lbl_norm) or lbl_norm in (sg_id_norm, sg_lbl_norm) or (title_norm and title_norm in (sg_id_norm, sg_lbl_norm)):
-                return True
-            is_external_sg = (
-                "external" in sg_id_norm or "external" in sg_lbl_norm or
-                "actor" in sg_id_norm or "actor" in sg_lbl_norm or
-                "environment" in sg_id_norm or "environment" in sg_lbl_norm
-            )
-            if is_external_sg:
-                sg_nodes = getattr(sg, "nodes", []) or []
-                if node_id in sg_nodes or any(_normalize_identifier(n) in (id_norm, title_norm) for n in sg_nodes if n):
+            if (sg_id_norm in ast.get("part_norm", set()) or sg_id_norm in ast.get("top_level_part_norm", set()) or
+                sg_lbl_norm in ast.get("part_norm", set()) or sg_lbl_norm in ast.get("top_level_part_norm", set()) or
+                sg_id_norm in RECOGNIZED_EXTERNAL_ACTORS or sg_lbl_norm in RECOGNIZED_EXTERNAL_ACTORS):
+                if id_norm in (sg_id_norm, sg_lbl_norm) or lbl_norm in (sg_id_norm, sg_lbl_norm) or (title_norm and title_norm in (sg_id_norm, sg_lbl_norm)):
                     return True
 
-        # Check exact structural/procedural tokens
-        if id_norm in RECOGNIZED_STRUCTURAL_TOKENS or lbl_norm in RECOGNIZED_STRUCTURAL_TOKENS or (title_norm and title_norm in RECOGNIZED_STRUCTURAL_TOKENS):
+        # Check pure structural flowchart syntax elements (e.g. StartNode, EndNode, GateDecision, Fork, Join, Note)
+        if (id_norm in RECOGNIZED_STRUCTURAL_TOKENS or lbl_norm in RECOGNIZED_STRUCTURAL_TOKENS or
+            (title_norm and title_norm in RECOGNIZED_STRUCTURAL_TOKENS) or
+            (stripped_lbl_norm and stripped_lbl_norm in RECOGNIZED_STRUCTURAL_TOKENS)):
             return True
 
-        # Check procedural workflow / lifecycle / step / WBS / port / connection patterns
-        procedural_prefix = re.compile(r'^(step\d*|phase\d*|p\d+[a-z_]|d[_\-]|pipeline\d*|abort|gate|mtc|lru|port|conn|task\d*|oa\d*|oa[_\-]|fn\d*|fn[_\-]|sortie|turnaround|diagnostics|pbit|ibit|cbit|check|pass|fail|l\d+|r\d+|wp[_\-]|wbs[_\-]|uc[_\-]|port[_\-]|conn[_\-])', re.I)
-        if procedural_prefix.match(node_id.strip()) or procedural_prefix.match(id_norm) or procedural_prefix.match(lbl_norm) or (title_norm and procedural_prefix.match(title_norm)):
+        # Procedural workflow step / lifecycle / WBS prefixes (pure flowchart workflow syntax)
+        procedural_prefix = re.compile(r'^(step\d*|phase\d*|task\d*|p\d+[a-z_]|d[_\-]|wp[_\-]|wbs[_\-]|oa\d*|oa[_\-]|fn\d*|fn[_\-]|gate\d*|abort\d*|decision\d*|branch\d*)', re.I)
+        if (procedural_prefix.match(node_id.strip()) or procedural_prefix.match(id_norm) or
+            procedural_prefix.match(lbl_norm) or (title_norm and procedural_prefix.match(title_norm))):
             return True
 
-        # Check use case, port, and connection prefixes
-        if id_norm.startswith(("uc", "usecase", "port", "conn", "p1_", "p2_", "d_")) or lbl_norm.startswith(("uc", "port", "conn", "p1_", "p2_", "d_")) or (title_norm and title_norm.startswith(("uc", "port", "conn", "p1_", "p2_", "d_"))):
-            return True
+        # Closed-World AST Grounding: Suffix checks must verify that the stem resolves against SysML AST
+        ast_grounding_sets = (
+            ast.get("part_norm", set()),
+            ast.get("top_level_part_norm", set()),
+            ast.get("port_norm", set()),
+            ast.get("action_norm", set()),
+            ast.get("state_norm", set()),
+            ast.get("declared_actors", set()),
+            ast.get("capability_norm", set()),
+            ast.get("item_norm", set()),
+            ast.get("use_case_norm", set()),
+        )
 
-        # Check structural metaclass, architectural, UI, and data model suffixes
-        if any(norm and norm.endswith(sfx) for norm in (id_norm, lbl_norm, title_norm) for sfx in (
-            "subsystem", "def", "action", "constraint", "statechart", "statemachine",
-            "gate", "matrix", "interface", "spec", "model", "operator", "package",
+        candidate_suffixes = (
+            "subsystem", "manager", "service", "handler", "adapter", "factory", "builder",
+            "controller", "helper", "component", "module", "def", "action", "constraint",
+            "statechart", "statemachine", "interface", "spec", "model", "operator", "package",
             "state", "mode", "waypoint", "point", "group", "vertex", "item",
             "tracker", "flow", "panel", "wizard", "harness", "proof", "widget", "view",
-            "controller", "dialog", "window", "viewmodel", "service", "manager",
-            "handler", "adapter", "factory", "builder", "helper", "test", "entity",
-            "dto", "dao", "register", "field", "enum", "type",
-            "finding", "findings", "audit", "audits", "report", "reports", "deliverable", "deliverables", "codegen"
-        )):
+            "dialog", "window", "viewmodel", "test", "entity", "dto", "dao",
+            "register", "field", "enum", "type", "finding", "findings", "audit", "audits",
+            "report", "reports", "deliverable", "deliverables", "codegen"
+        )
+
+        for norm in (id_norm, lbl_norm, title_norm, stripped_lbl_norm, stripped_id_norm):
+            if not norm:
+                continue
+            for sfx in candidate_suffixes:
+                if norm.endswith(sfx) and len(norm) > len(sfx):
+                    stem = norm[:-len(sfx)].rstrip("_")
+                    if stem and len(stem) >= 2:
+                        stem_tokens = _tokenize_name(stem)
+                        # Stem must resolve against declared SysML AST elements
+                        if any(stem in s_set or any(tok in s_set for tok in stem_tokens if len(tok) >= 3) for s_set in ast_grounding_sets):
+                            return True
+
+        # Check universal external actors and declared actors
+        tokens = (
+            _tokenize_name(node_id) | _tokenize_name(label) | _tokenize_name(title_line) |
+            _tokenize_name(stripped_label) | _tokenize_name(stripped_id)
+        )
+        if (id_norm in RECOGNIZED_EXTERNAL_ACTORS or lbl_norm in RECOGNIZED_EXTERNAL_ACTORS or
+            (title_norm and title_norm in RECOGNIZED_EXTERNAL_ACTORS) or
+            (stripped_lbl_norm and stripped_lbl_norm in RECOGNIZED_EXTERNAL_ACTORS)):
+            return True
+        if any(tok in RECOGNIZED_EXTERNAL_ACTORS for tok in tokens if len(tok) >= 3):
+            return True
+        if (id_norm in ast.get("declared_actors", set()) or lbl_norm in ast.get("declared_actors", set()) or
+            (title_norm and title_norm in ast.get("declared_actors", set())) or
+            (stripped_lbl_norm and stripped_lbl_norm in ast.get("declared_actors", set()))):
+            return True
+        if any(tok in ast.get("declared_actors", set()) for tok in tokens if len(tok) >= 2):
             return True
 
-        # Check UAF / Architecture structural annotations and abstract system roles
-        if any(marker in id_norm or marker in lbl_norm or (title_norm and marker in title_norm) for marker in (
-            "userrole", "interfaceport", "performernode", "operationalrole",
-            "stakeholder", "authority", "supersystem", "super_system",
-            "terminal", "technician", "coordinator", "maintainer"
-        )):
-            return True
-
-        # Check external actors and operational entities by exact match, normalized identifier, or token overlap
-        tokens = _tokenize_name(node_id) | _tokenize_name(label) | _tokenize_name(title_line)
-        if id_norm in RECOGNIZED_EXTERNAL_ACTORS or lbl_norm in RECOGNIZED_EXTERNAL_ACTORS or (title_norm and title_norm in RECOGNIZED_EXTERNAL_ACTORS):
-            return True
-        if any(tok in RECOGNIZED_EXTERNAL_ACTORS for tok in tokens if len(tok) >= 2):
-            return True
-        if id_norm in ast["declared_actors"] or lbl_norm in ast["declared_actors"] or (title_norm and title_norm in ast["declared_actors"]):
-            return True
-        if any(tok in ast["declared_actors"] for tok in tokens if len(tok) >= 2):
-            return True
-
-        # Dynamic resolution of external participants against SysML AST part def classifiers and boundary ports
+        # Dynamic resolution of candidate elements against SysML AST part def classifiers and boundary ports
         for tok in tokens:
             if len(tok) >= 3:
-                if tok in ast.get("part_norm", set()) or tok in ast.get("port_norm", set()) or tok in ast.get("top_level_part_norm", set()):
+                if (tok in ast.get("part_norm", set()) or tok in ast.get("port_norm", set()) or
+                    tok in ast.get("top_level_part_norm", set())):
                     return True
 
-        # Check package and system tokens
-        if any(pkg_n in id_norm or pkg_n in lbl_norm or (title_norm and pkg_n in title_norm) for pkg_n in ast.get("package_norm", set()) if len(pkg_n) >= 3):
+        # Check package tokens
+        if any(pkg_n in id_norm or pkg_n in lbl_norm or (title_norm and pkg_n in title_norm)
+               for pkg_n in ast.get("package_norm", set()) if len(pkg_n) >= 3):
             return True
 
         # Check AST parts, top-level parts, ports, actions, capabilities, states, items, use cases
         target_sets = (
-            ast["part_norm"], ast.get("top_level_part_norm", set()), ast["port_norm"], ast["action_norm"],
-            ast["capability_norm"], ast["item_norm"], ast["state_norm"],
-            ast["use_case_norm"]
+            ast.get("part_norm", set()), ast.get("top_level_part_norm", set()),
+            ast.get("port_norm", set()), ast.get("action_norm", set()),
+            ast.get("capability_norm", set()), ast.get("item_norm", set()),
+            ast.get("state_norm", set()), ast.get("use_case_norm", set())
         )
         for t_set in target_sets:
-            if id_norm in t_set or lbl_norm in t_set or (title_norm and title_norm in t_set):
+            if (id_norm in t_set or lbl_norm in t_set or (title_norm and title_norm in t_set) or
+                (stripped_lbl_norm and stripped_lbl_norm in t_set) or
+                (stripped_id_norm and stripped_id_norm in t_set)):
                 return True
             if any(tok in t_set for tok in tokens if len(tok) >= 3):
                 return True
 
         # Check if AST part or port is explicitly contained in node_id or label
-        for p_norm in ast["part_norm"]:
-            if len(p_norm) >= 3 and (p_norm in id_norm or p_norm in lbl_norm or (title_norm and p_norm in title_norm)):
+        for p_norm in ast.get("part_norm", set()):
+            if len(p_norm) >= 3 and (p_norm in id_norm or p_norm in lbl_norm or
+                                     (title_norm and p_norm in title_norm) or
+                                     (stripped_lbl_norm and p_norm in stripped_lbl_norm)):
                 return True
-        for port_norm in ast["port_norm"]:
-            if len(port_norm) >= 3 and (port_norm in id_norm or port_norm in lbl_norm or (title_norm and port_norm in title_norm)):
+        for port_norm in ast.get("port_norm", set()):
+            if len(port_norm) >= 3 and (port_norm in id_norm or port_norm in lbl_norm or
+                                        (title_norm and port_norm in title_norm) or
+                                        (stripped_lbl_norm and port_norm in stripped_lbl_norm)):
                 return True
-        for item_norm in ast["item_norm"]:
-            if len(item_norm) >= 3 and (item_norm in id_norm or item_norm in lbl_norm or (title_norm and item_norm in title_norm)):
-                return True
-
-        # In operational tier (ConOps Level 1B), high-level operational concepts, mission performers,
-        # and segments are accepted without requiring internal child sub-LRU components or micro-pins.
-        if is_operational_tier:
-            if any(marker in id_norm or marker in lbl_norm or (title_norm and marker in title_norm) for marker in (
-                "operational", "mission", "c2", "datalink", "command", "telemetry",
-                "ground", "air", "space", "launch", "recovery", "support", "station",
-                "supervisor", "operator", "controller", "payload", "sensor", "actuator",
-                "external", "environment", "safety", "watchdog", "gse", "gcs", "containment",
-                "terminal", "technician", "coordinator", "maintainer"
-            )):
-                return True
-            if any(tok in (
-                "c2", "gcs", "fcs", "gse", "rf", "gps", "gnss", "nav", "imu", "act",
-                "actuator", "controller", "operator", "station", "platform", "vehicle",
-                "terminal", "technician", "coordinator", "maintainer"
-            ) for tok in tokens):
+        for item_norm in ast.get("item_norm", set()):
+            if len(item_norm) >= 3 and (item_norm in id_norm or item_norm in lbl_norm or
+                                        (title_norm and item_norm in title_norm) or
+                                        (stripped_lbl_norm and item_norm in stripped_lbl_norm)):
                 return True
 
+        # Fail closed: anything not resolved against declared schema AST elements is rejected
         return False
 
     # Alias for external participant and node resolution
