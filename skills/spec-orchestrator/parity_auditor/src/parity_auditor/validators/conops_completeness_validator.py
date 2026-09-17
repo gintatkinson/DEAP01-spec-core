@@ -782,7 +782,7 @@ class ConopsCompletenessValidator(IValidator):
         {"num": 2, "title": "Current Situation & Deficiency Analysis (Predecessors)", "aliases": ["current situation", "deficiency analysis", "predecessor", "predecessors", "deficiencies", "operational motivation", "deficiency analysis & operational motivation"]},
         {"num": 3, "title": "Proposed Capabilities & Trade-Offs (Pugh Decision Matrix)", "aliases": ["proposed capabilities", "trade-off", "trade-offs", "pugh decision matrix", "pugh matrix", "operational justification", "justification"]},
         {"num": 4, "title": "System Operational Architecture & Physical Subsystem Decomposition", "aliases": ["systems architecture", "system operational architecture", "physical subsystem decomposition", "super-system", "subsystem architecture", "system architecture", "physical architecture", "operational architecture"]},
-        {"num": 5, "title": "Operational State Space & SORA 4D Volume Risk Assessment", "aliases": ["operational state space", "sora", "4d volume", "boundary containment", "risk assessment", "ground risk buffer", "grb math", "grb"]},
+        {"num": 5, "title": "Operational State Space, Boundary Containment & Risk Assessment", "aliases": ["operational state space", "operational state space, boundary containment & risk assessment", "operational state space & sora 4d volume risk assessment", "boundary containment", "risk assessment", "sora", "4d volume", "ground risk buffer", "grb math", "grb"]},
         {"num": 6, "title": "OMG UAF Operational Activity Taxonomy", "aliases": ["operational activity taxonomy", "uaf operational activities", "operational activities", "uaf activities", "oa-", "omg uaf"]},
         {"num": 7, "title": "Operational Information Exchange (Op-Tx) Matrix", "aliases": ["operational information exchange", "op-tx matrix", "op-tx table", "information exchange", "op-tx"]},
         {"num": 8, "title": "Operational Environments & MIL-STD-810H", "aliases": ["operational environments", "mil-std-810h", "environmental stress qualification", "physical constraints", "environmental constraints", "environmental envelopes"]},
@@ -1780,7 +1780,7 @@ class ConopsCompletenessValidator(IValidator):
 - [2. Current Situation & Deficiency Analysis (Predecessors)](#2-current-situation--deficiency-analysis-predecessors)
 - [3. Proposed Capabilities & Trade-Offs (Pugh Decision Matrix)](#3-proposed-capabilities--trade-offs-pugh-decision-matrix)
 - [4. System Operational Architecture & Physical Subsystem Decomposition](#4-system-operational-architecture--physical-subsystem-decomposition)
-- [5. Operational State Space & SORA 4D Volume Risk Assessment](#5-operational-state-space--sora-4d-volume-risk-assessment)
+- [5. Operational State Space, Boundary Containment & Risk Assessment](#5-operational-state-space-boundary-containment--risk-assessment)
 - [6. OMG UAF Operational Activity Taxonomy](#6-omg-uaf-operational-activity-taxonomy)
 - [7. Operational Information Exchange (Op-Tx) Matrix](#7-operational-information-exchange-op-tx-matrix)
 - [8. Operational Environments & MIL-STD-810H](#8-operational-environments--mil-std-810h)
@@ -1839,7 +1839,7 @@ $$
 ### 4.5 Level 0 SSOT Model Binding Statement
 {{MODEL_BINDING_STATEMENT}}
 
-## 5. Operational State Space & SORA 4D Volume Risk Assessment
+## 5. Operational State Space, Boundary Containment & Risk Assessment
 
 ### 5.1 Operational Lifecycle Modes across $\Phi_{\mathrm{lifecycle}}$
 {{OPERATIONAL_LIFECYCLE_MODES}}

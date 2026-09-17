@@ -543,7 +543,7 @@ class SysMLParameterBindingEngine:
 
         # Only calculate/populate mass budgets if mass fractions are explicitly provided
         has_fractions = (
-            "MASS_FRACTION_AIRFRAME_PCT" in self.parameter_bindings and
+            ("MASS_FRACTION_AIRFRAME_PCT" in self.parameter_bindings or "MASS_FRACTION_STRUCTURE_PCT" in self.parameter_bindings) and
             "MASS_FRACTION_AVIONICS_PCT" in self.parameter_bindings and
             "MASS_FRACTION_PROPULSION_PCT" in self.parameter_bindings and
             "MASS_FRACTION_ENERGY_PCT" in self.parameter_bindings and
@@ -552,7 +552,8 @@ class SysMLParameterBindingEngine:
 
         if has_fractions:
             try:
-                airframe_pct = float(self.parameter_bindings["MASS_FRACTION_AIRFRAME_PCT"]) / 100.0
+                struct_pct_raw = self.parameter_bindings.get("MASS_FRACTION_STRUCTURE_PCT") or self.parameter_bindings.get("MASS_FRACTION_AIRFRAME_PCT")
+                airframe_pct = float(struct_pct_raw) / 100.0
                 avionics_pct = float(self.parameter_bindings["MASS_FRACTION_AVIONICS_PCT"]) / 100.0
                 propulsion_pct = float(self.parameter_bindings["MASS_FRACTION_PROPULSION_PCT"]) / 100.0
                 energy_pct = float(self.parameter_bindings["MASS_FRACTION_ENERGY_PCT"]) / 100.0
@@ -567,6 +568,8 @@ class SysMLParameterBindingEngine:
                 
                 if "MASS_BUDGET_AIRFRAME_KG" not in self._explicit_keys:
                     self.parameter_bindings["MASS_BUDGET_AIRFRAME_KG"] = str(airframe)
+                if "MASS_BUDGET_STRUCTURE_KG" not in self._explicit_keys:
+                    self.parameter_bindings["MASS_BUDGET_STRUCTURE_KG"] = str(airframe)
                 if "MASS_BUDGET_AVIONICS_KG" not in self._explicit_keys:
                     self.parameter_bindings["MASS_BUDGET_AVIONICS_KG"] = str(avionics)
                 if "MASS_BUDGET_PROPULSION_KG" not in self._explicit_keys:
@@ -2736,12 +2739,19 @@ class SysMLParameterBindingEngine:
             return "Diagnostic telemetry offload, LRU replacement, and BIT verification."
 
         # 4. Mass Fractions & Structural Budgets
-        elif token_upper == "MASS_FRACTION_AIRFRAME_PCT":
+        elif token_upper in ("MASS_FRACTION_AIRFRAME_PCT", "MASS_FRACTION_STRUCTURE_PCT"):
             return "30.0"
-        elif token_upper == "MASS_BUDGET_AIRFRAME_KG":
+        elif token_upper in ("MASS_BUDGET_AIRFRAME_KG", "MASS_BUDGET_STRUCTURE_KG"):
             mtow = self._get_mtow_value()
             return str(round(0.30 * mtow, 2))
-        elif token_upper in ("POWER_NOMINAL_AIRFRAME_W", "POWER_PEAK_AIRFRAME_W", "POWER_NOMINAL_ENERGY_W", "POWER_PEAK_ENERGY_W"):
+        elif token_upper in (
+            "POWER_NOMINAL_AIRFRAME_W",
+            "POWER_PEAK_AIRFRAME_W",
+            "POWER_NOMINAL_STRUCTURE_W",
+            "POWER_PEAK_STRUCTURE_W",
+            "POWER_NOMINAL_ENERGY_W",
+            "POWER_PEAK_ENERGY_W",
+        ):
             return "0.0"
         elif token_upper == "MASS_FRACTION_AVIONICS_PCT":
             return "15.0"

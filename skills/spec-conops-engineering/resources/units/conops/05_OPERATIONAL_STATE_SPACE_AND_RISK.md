@@ -39,8 +39,8 @@ The symbolic derivation for $R_{\mathrm{buffer}}$ accounts for:
 - Margin for state estimator uncertainty and ambient dynamic disturbances: $d_{\mathrm{margin}}$
 - Declared $R_{\mathrm{buffer}}$ satisfies $R_{\mathrm{buffer}} \ge d_{\mathrm{reaction}} + d_{\mathrm{decel}} + d_{\mathrm{margin}}$, providing a mathematically verified containment envelope.
 
-### 5.1.1 Ground Risk Buffer Parametric Wind Sensitivity Analysis
-Under JARUS SORA v2.5 Annex B guidelines, the Ground Risk Buffer ($R_{\mathrm{buffer}}$) must account for worst-case ballistic descent dynamics, aerodynamic wind drift displacement, and lateral glide margins across the operational environmental envelope:
+### 5.1.1 Operational Containment Buffer Parametric Sensitivity Analysis
+Under MIL-STD-882E §4.3 / ISO/IEC/IEEE 15288:2023 §6.4.4 guidelines, the Ground Risk Buffer ($R_{\mathrm{buffer}}$) must account for worst-case ballistic descent dynamics, aerodynamic wind drift displacement, and lateral glide margins across the operational environmental envelope:
 
 $$
 \begin{aligned}
@@ -72,7 +72,7 @@ The parametric wind sensitivity sweep across the declared operational wind envel
    - Maximum characteristic physical dimension: $L_{\mathrm{char}}$.
    - Nominal operational velocity: $v_{\mathrm{nominal}}$.
    - Operational context: Controlled perimeter with adjacent low-occupancy zones.
-   - Intrinsic Risk Class: Mapped to risk class rating per system safety guidelines and JARUS SORA v2.5 Annex B.
+   - Intrinsic Risk Class: Mapped to risk class rating per system safety standards and MIL-STD-882E.
 
 2. **Kinetic Impact Energy Physics Derivations:**
 
@@ -124,7 +124,7 @@ $$
 | Regulatory Energy Threshold | E_threshold | {{E_THRESHOLD_JOULES:34.0}} | J | E_threshold = 34.0 | Regulatory maximum kinetic energy threshold for low ground risk classification |
 
 3. **Kinetic Energy Threshold Compliance ($E_k \le E_{\mathrm{threshold}}$):**
-   - Unmitigated free-fall kinetic energy ($E_{k,\mathrm{unmitigated}} = {{E_K_UNMITIGATED_JOULES:74125.1}}\text{ J}$) exceeds the low-risk kinetic energy threshold ($E_{\mathrm{threshold}} = {{E_THRESHOLD_JOULES:34.0}}\text{ J}$), mandating certified safety mitigations (M1–M3) and autonomous containment mechanisms per JARUS SORA v2.5.
+   - Unmitigated free-fall kinetic energy ($E_{k,\mathrm{unmitigated}} = {{E_K_UNMITIGATED_JOULES:74125.1}}\text{ J}$) exceeds the low-risk kinetic energy threshold ($E_{\mathrm{threshold}} = {{E_THRESHOLD_JOULES:34.0}}\text{ J}$), mandating certified safety mitigations (M1–M3) and autonomous containment mechanisms per system safety standards and MIL-STD-882E.
    - Autonomous emergency {{RECOVERY_DEVICE_TERM:containment}} actuation reduces the terminal descent velocity to $v_{\mathrm{terminal,mitigated}} \le {{V_TERMINAL_MITIGATED_MPS:1.65}}\text{ m/s}$, capping the ground impact kinetic energy to $E_{k,\mathrm{mitigated}} \le {{E_K_MITIGATED_JOULES:34.0}}\text{ J}$, fulfilling the high-assurance energy containment criteria.
 
 ### 5.2.1 Domain-Specific Multi-Physics Failsafe Containment Architectures
@@ -164,19 +164,19 @@ To guarantee robust ground and operational safety across all operating states, t
   3. Tactical Environmental Surveillance: Continuous multi-sensor situational awareness monitoring surrounding state space.
 
 ### 5.4 System Boundary Containment Mitigations (M1–M3)
-In accordance with JARUS SORA v2.5 Annex B (§2.1–§2.3), Ground Risk Class (GRC) mitigations are systematically categorized across strategic isolation (M1), ground impact effects reduction (M2), and emergency response planning (M3):
+In accordance with MIL-STD-882E §4.3 and ISO 15288:2023, Ground Risk Class (GRC) mitigations are systematically categorized across strategic isolation (M1), ground impact effects reduction (M2), and emergency response planning (M3):
 
-| Mitigation Code | SORA Mitigation Category | Technical Implementation Mechanism & Architecture | Assurance Level | Robustness & Integrity Level | GRC Reduction Credit | Public Clause Citation |
+| Mitigation Code | Containment Mitigation Category | Technical Implementation Mechanism & Architecture | Assurance Level | Robustness & Integrity Level | Risk Class Reduction Level | Public Clause Citation |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **M1.A** | Strategic Ground Risk Mitigation | Operational scheduling during verified low-density time windows with passive signage. | Low | Declared protocol with basic operational logbook auditing. | -1 GRC | JARUS SORA v2.5 Annex B §2.1 |
-| **M1.B** | Strategic Ground Risk Mitigation | Physical perimeter isolation, access control checkpoints, and active buffer surveillance. | Medium | Audited perimeter control with active personnel exclusion. | -2 GRC | JARUS SORA v2.5 Annex B §2.1 |
-| **M1.C** | Strategic Ground Risk Mitigation | Enclosed access-controlled operational test range with hard fencing, security interlocks, and 0 non-participants. | High | Third-party audited physical containment with zero non-participant access. | -2 GRC | JARUS SORA v2.5 Annex B §2.1 |
-| **M2.A** | Impact Dynamics Mitigation | Impact-resistant frangible structures and energy-attenuating landing gear geometries. | Low | Empirical impact testing demonstrating controlled energy absorption. | -1 GRC | JARUS SORA v2.5 Annex B §2.2 |
-| **M2.B** | Impact Dynamics Mitigation | Autonomous {{FAILSAFE_DESCENT_SYSTEM:emergency containment system}} actuating in t_deploy <= tau_deploy_max, reducing v_terminal <= {{V_TERMINAL_MITIGATED_MPS:3.0}} m/s. | Medium | Dual-channel sensor trigger with independent backup battery pack. | -1 GRC | JARUS SORA v2.5 Annex B §2.2 |
-| **M2.C** | Impact Dynamics Mitigation | Certified {{FAILSAFE_DESCENT_SYSTEM:emergency containment system}} ({{CONTAINMENT_STANDARD:ISO/IEC 29148 / DO-178C DAL-C}}) ensuring v_terminal <= {{V_TERMINAL_MITIGATED_MPS:1.65}} m/s and E_k_mitigated <= {{E_K_MITIGATED_JOULES:34.0}} J. | High | Fully independent autonomous containment watchdog, ballistic ejection, and certified compliance. | -2 GRC | JARUS SORA v2.5 Annex B §2.2 |
-| **M3.A** | Emergency Response Plan (ERP) | Basic operator emergency checklist detailing notification phone numbers and rally points. | Low | Self-declared operational procedure without rehearsal. | 0 GRC (Prerequisite) | JARUS SORA v2.5 Annex B §2.3 |
-| **M3.B** | Emergency Response Plan (ERP) | Formal ERP coordinated with local emergency response services, defined divert landing sites, and trained personnel. | Medium | Validated ERP with annual multi-agency tabletop drills and direct coordinator link. | -1 GRC | JARUS SORA v2.5 Annex B §2.3 |
-| **M3.C** | Emergency Response Plan (ERP) | Integrated ERP with automated first-responder alerting API, multi-channel satellite emergency beacon (EMG-07), and certified emergency response team. | High | Live drill validated with competent emergency authorities, full mock incident execution, and automated rescue telemetry. | -1 GRC | JARUS SORA v2.5 Annex B §2.3 |
+| **M1.A** | Strategic Ground Risk Mitigation | Operational scheduling during verified low-density time windows with passive signage. | Low | Declared protocol with basic operational logbook auditing. | Level 1 Mitigation | MIL-STD-882E Task 202 |
+| **M1.B** | Strategic Ground Risk Mitigation | Physical perimeter isolation, access control checkpoints, and active buffer surveillance. | Medium | Audited perimeter control with active personnel exclusion. | Level 2 Mitigation | MIL-STD-882E Task 202 |
+| **M1.C** | Strategic Ground Risk Mitigation | Enclosed access-controlled operational test range with hard fencing, security interlocks, and 0 non-participants. | High | Third-party audited physical containment with zero non-participant access. | Level 2 Mitigation | MIL-STD-882E Task 202 |
+| **M2.A** | Impact Dynamics Mitigation | Impact-resistant frangible structures and energy-attenuating landing gear geometries. | Low | Empirical impact testing demonstrating controlled energy absorption. | Level 1 Mitigation | ISO 15288 §6.4.4 |
+| **M2.B** | Impact Dynamics Mitigation | Autonomous {{FAILSAFE_DESCENT_SYSTEM:emergency containment system}} actuating in t_deploy <= tau_deploy_max, reducing v_terminal <= {{V_TERMINAL_MITIGATED_MPS:3.0}} m/s. | Medium | Dual-channel sensor trigger with independent backup battery pack. | Level 1 Mitigation | ISO 15288 §6.4.4 |
+| **M2.C** | Impact Dynamics Mitigation | Certified {{FAILSAFE_DESCENT_SYSTEM:emergency containment system}} ({{CONTAINMENT_STANDARD:ISO/IEC 29148 / DO-178C DAL-C}}) ensuring v_terminal <= {{V_TERMINAL_MITIGATED_MPS:1.65}} m/s and E_k_mitigated <= {{E_K_MITIGATED_JOULES:34.0}} J. | High | Fully independent autonomous containment watchdog, ballistic ejection, and certified compliance. | Level 2 Mitigation | ISO 15288 §6.4.4 |
+| **M3.A** | Emergency Response Plan (ERP) | Basic operator emergency checklist detailing notification phone numbers and rally points. | Low | Self-declared operational procedure without rehearsal. | Level 0 Mitigation (Prerequisite) | ISO 29148 §6.4.2 |
+| **M3.B** | Emergency Response Plan (ERP) | Formal ERP coordinated with local emergency response services, defined divert landing sites, and trained personnel. | Medium | Validated ERP with annual multi-agency tabletop drills and direct coordinator link. | Level 1 Mitigation | ISO 29148 §6.4.2 |
+| **M3.C** | Emergency Response Plan (ERP) | Integrated ERP with automated first-responder alerting API, multi-channel satellite emergency beacon (EMG-07), and certified emergency response team. | High | Live drill validated with competent emergency authorities, full mock incident execution, and automated rescue telemetry. | Level 1 Mitigation | ISO 29148 §6.4.2 |
 
 ### 5.5 Containment Margins & Dynamic Exclusion Buffers
 To guarantee zero-breach containment of the operational state space:

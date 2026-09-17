@@ -42,9 +42,9 @@ The operational system boundary encompasses all physical, logical, communication
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | Ω_state | State Space Domain | Admissible operational state space envelope (Ω_state ⊂ R^n) | Compact subset of R^n (n >= 6) | Dimensionless | {{STATE_SPACE_STANDARD:ISO/IEC/IEEE 29148:2018 §6.4.2}} |
 | X_boundary | State Vector Bounds | Bounding box of admissible vehicle operational states [x_min, x_max]^T | Bounded hyper-rectangle | Mixed SI Units | {{SAFETY_BOUNDS_STANDARD:ASTM F3269-17 §6.2}} |
-| x_min | State Lower Limit | Minimum permissible state vector threshold | {{STATE_VECTOR_MIN_EXPRESSION:[phi_min, lambda_min, h_min, u_min, v_min, w_min]^T}} | {{STATE_VECTOR_MIN_UNITS:rad, rad, m, m/s, m/s, m/s}} | {{STATE_SAFETY_MITIGATION:SORA Annex B M1 Mitigations}} |
-| x_max | State Upper Limit | Maximum permissible state vector threshold | {{STATE_VECTOR_MAX_EXPRESSION:[phi_max, lambda_max, h_max, u_max, v_max, w_max]^T}} | {{STATE_VECTOR_MAX_UNITS:rad, rad, m, m/s, m/s, m/s}} | {{STATE_SAFETY_MITIGATION:SORA Annex B M1 Mitigations}} |
-| R_buffer | Spatial Containment | Verified 1:1 parametric lateral containment safety buffer radius | R_buffer >= 1.0 * Distance_containment | {{CONTAINMENT_BUFFER_UNIT:m}} | {{CONTAINMENT_STANDARD:JARUS SORA v2.5 Step #2}} |
+| x_min | State Lower Limit | Minimum permissible state vector threshold | {{STATE_VECTOR_MIN_EXPRESSION:[phi_min, lambda_min, h_min, u_min, v_min, w_min]^T}} | {{STATE_VECTOR_MIN_UNITS:rad, rad, m, m/s, m/s, m/s}} | {{STATE_SAFETY_MITIGATION:MIL-STD-882E M1 Mitigations}} |
+| x_max | State Upper Limit | Maximum permissible state vector threshold | {{STATE_VECTOR_MAX_EXPRESSION:[phi_max, lambda_max, h_max, u_max, v_max, w_max]^T}} | {{STATE_VECTOR_MAX_UNITS:rad, rad, m, m/s, m/s, m/s}} | {{STATE_SAFETY_MITIGATION:MIL-STD-882E M1 Mitigations}} |
+| R_buffer | Spatial Containment | Verified 1:1 parametric lateral containment safety buffer radius | R_buffer >= 1.0 * Distance_containment | {{CONTAINMENT_BUFFER_UNIT:m}} | {{CONTAINMENT_STANDARD:MIL-STD-882E / ISO 15288}} |
 | Range_max(Link_C2) | C2 Comms Margin | Maximum certified C2 data link operational range | Range_max >= Range_nominal | km | {{C2_STANDARD:RTCA DO-362A §2.2.1}} |
 | tau_containment | Emergency Response | Maximum allowable failsafe containment response time | tau_containment <= 2.0 | s | {{CONTAINMENT_RESPONSE_STANDARD:ASTM F3269-17 §7.1}} |
 
@@ -126,8 +126,8 @@ The system architecture decomposes into six canonical Abstract System Topology (
 
 | Structural Group (AST Partition) | Allocated Subsystems & Components | Mass Fraction (% M_max) | Mass Budget (kg) | Nominal Power Budget (W) | Peak Power Budget (W) |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **{{STRUCTURE_PARTITION_LABEL:Primary Mechanical Structure / Chassis Partition}}** | Chassis primary structure, structural spars, mounting bulkheads, enclosure/gear | {{MASS_FRACTION_AIRFRAME_PCT}}% | {{MASS_BUDGET_AIRFRAME_KG}} | {{POWER_NOMINAL_AIRFRAME_W}} | {{POWER_PEAK_AIRFRAME_W}} |
-| **Avionics & Processing** | Core Real-Time Controller Node, redundant IMU/GNSS, navigation processing unit, C2 transceiver, safety watchdog | {{MASS_FRACTION_AVIONICS_PCT}}% | {{MASS_BUDGET_AVIONICS_KG}} | {{POWER_NOMINAL_AVIONICS_W}} | {{POWER_PEAK_AVIONICS_W}} |
+| **{{STRUCTURE_PARTITION_LABEL:Primary Mechanical Structure / Chassis Partition}}** | Chassis primary structure, structural spars, mounting bulkheads, enclosure/gear | {{MASS_FRACTION_STRUCTURE_PCT:{{MASS_FRACTION_AIRFRAME_PCT}}}}% | {{MASS_BUDGET_STRUCTURE_KG:{{MASS_BUDGET_AIRFRAME_KG}}}} | {{POWER_NOMINAL_AIRFRAME_W}} | {{POWER_PEAK_AIRFRAME_W}} |
+| **Core Computing & Controller Subsystem** | Core Real-Time Controller Node, redundant IMU/GNSS, navigation processing unit, C2 transceiver, safety watchdog | {{MASS_FRACTION_AVIONICS_PCT}}% | {{MASS_BUDGET_AVIONICS_KG}} | {{POWER_NOMINAL_AVIONICS_W}} | {{POWER_PEAK_AVIONICS_W}} |
 | **Propulsion & Power Distribution** | Actuators, electric motors, electronic speed controllers (ESCs), power distribution unit (PDU) | {{MASS_FRACTION_PROPULSION_PCT}}% | {{MASS_BUDGET_PROPULSION_KG}} | {{POWER_NOMINAL_PROPULSION_W}} | {{POWER_PEAK_PROPULSION_W}} |
 | **Energy Storage Subsystem** | Smart battery module / fuel cell stack, Battery Management System (BMS), safety disconnect contactors | {{MASS_FRACTION_ENERGY_PCT}}% | {{MASS_BUDGET_ENERGY_KG}} | {{POWER_NOMINAL_ENERGY_W}} | {{POWER_PEAK_ENERGY_W}} |
 | **Primary Mission Payload** | Multi-modal mission sensor suite, edge neural processing accelerator, payload gimbal, local storage | {{MASS_FRACTION_PAYLOAD_PCT}}% | {{MASS_BUDGET_PAYLOAD_KG}} | {{POWER_NOMINAL_PAYLOAD_W}} | {{POWER_PEAK_PAYLOAD_W}} |
@@ -149,7 +149,7 @@ The cyber-physical vehicle operates under bounding physical, aerodynamic/kinemat
 | **PL-08** | Command & Control (C2) Datalink Range | Range_C2 | >= {{C2_RANGE_MIN_KM}} | {{C2_RANGE_NOMINAL_KM}} | km | Beyond-Line-of-Sight / Line-of-Sight C2 range margin |
 | **PL-09** | Mission Operational Endurance | t_endurance | >= {{ENDURANCE_MIN_MIN}} | {{ENDURANCE_NOMINAL_MIN}} | min | Continuous nominal execution duration |
 | **PL-10** | Environmental Operating Temperature Envelope | T_env | {{TEMP_MIN_DEGC}} to {{TEMP_MAX_DEGC}} | {{TEMP_NOMINAL_DEGC}} | °C | MIL-STD-810H Methods 501.7 / 502.7 climatic envelope |
-| **PL-11** | Maximum Operating Wind / Gust Envelope | v_wind_max | <= {{WIND_LIMIT_MAX_MPS}} | {{WIND_LIMIT_NOMINAL_MPS}} | m/s | SORA ground risk and dynamic stability boundary |
+| **PL-11** | Maximum Operating Wind / Gust Envelope | v_wind_max | <= {{WIND_LIMIT_MAX_MPS}} | {{WIND_LIMIT_NOMINAL_MPS}} | m/s | Dynamic boundary containment and stability limit |
 | **PL-12** | Environmental Ingress Protection Envelope | IP_rating | >= {{INGRESS_PROTECTION_RATING}} | {{INGRESS_PROTECTION_TARGET}} | IP Code | Hermetic enclosure sealing per ISO 20653 / IEC 60529 |
 
 ### 1.4 Abstract UAF Context Diagram

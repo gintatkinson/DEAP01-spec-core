@@ -118,10 +118,10 @@ To guarantee rapid unscheduled field repair capability (`MTC-04`), primary subsy
 | **LRU-04: Actuator / Motor Assembly** | Dynamic Actuator Module | Precision Index Dowel & Bayonet Ring | t_swap <= {{SWAP_TIME_ACTUATOR_MAX_MIN}} min | Tool-less (Positive-Stop Clamp) | Actuator Sweep & Dynamic Response |
 
 1. **Core Guidance Computer Module Replacement ($t_{\text{swap}} \le \tau_{\text{swap\_FC}} = {{SWAP_TIME_FC_MAX_MIN}}\text{ min}$):**
-   - **Step 1 (De-Energize & Access):** Verify system de-energization; rotate quarter-turn captive quick-release avionics bay fasteners to open access hatch.
+   - **Step 1 (De-Energize & Access):** Verify system de-energization; rotate quarter-turn captive quick-release controller enclosure fasteners to open access hatch.
    - **Step 2 (Ejection):** Actuate the zero-insertion-force (ZIF) cam-lock lever to decouple the guidance computer module from the ruggedized backplane connector.
    - **Step 3 (Insertion & Latching):** Slide the replacement guidance computer module into keyed card guide rails; depress ZIF cam-lock lever until fully seated and mechanical retention locks engage.
-   - **Step 4 (Verification):** Close avionics bay hatch; energize system; confirm automated firmware cryptographic hash match and backplane bus discovery in $t \le 60\text{ s}$.
+   - **Step 4 (Verification):** Close controller enclosure hatch; energize system; confirm automated firmware cryptographic hash match and backplane bus discovery in $t \le 60\text{ s}$.
 2. **Battery / Energy Module Replacement ($t_{\text{swap}} \le \tau_{\text{swap\_battery}} = {{SWAP_TIME_BATTERY_MAX_MIN}}\text{ min}$):**
    - **Step 1 (Release):** Depress dual spring-loaded mechanical retention latch tabs on the energy compartment bulkhead.
    - **Step 2 (Extraction):** Slide the depleted module along low-friction guide rails; blind-mate high-current power connector disconnects with arc-suppression.

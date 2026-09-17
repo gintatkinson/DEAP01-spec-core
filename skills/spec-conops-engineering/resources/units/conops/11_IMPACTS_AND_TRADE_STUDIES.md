@@ -120,8 +120,8 @@ $$
 | Edge Accelerator Power Budget | P_edge_tpu | {{EDGE_COMPUTE_POWER_WATTS}} | W | Electrical power allocation for onboard inference coprocessor |
 
 #### 11.4.3 Trade Study 3: Autonomous Failsafe Containment vs Actuator Redundancy (Fix #132)
-- **Objective & Problem Statement:** Determine the optimal safety assurance and containment architecture to achieve certified risk reduction credit (JARUS SORA M2 mitigation / SAE ARP4761 safety objectives) and guarantee that terminal kinetic impact energy is bounded below statutory safety thresholds ($E_k \le E_{\mathrm{threshold}}$) under catastrophic uncommanded actuation, power bus collapse, or structural failure.
-- **Normative Standards Baseline:** INCOSE SEH v5.0 §4.3, ISO/IEC/IEEE 29148:2018 §6.4.2, JARUS SORA v2.5 Annex B (Ground Risk Mitigation M2), MIL-STD-882E §4.3 & Task 202, SAE ARP4761 §3.
+- **Objective & Problem Statement:** Determine the optimal safety assurance and containment architecture to achieve certified risk reduction credit (MIL-STD-882E / ISO 15288 safety objectives) and guarantee that terminal kinetic impact energy is bounded below statutory safety thresholds ($E_k \le E_{\mathrm{threshold}}$) under catastrophic uncommanded actuation, power bus collapse, or structural failure.
+- **Normative Standards Baseline:** INCOSE SEH v5.0 §4.3, ISO/IEC/IEEE 29148:2018 §6.4.2, MIL-STD-882E §4.3 & Task 202, SAE ARP4761 §3.
 - **Options Evaluated:**
   - **Option A (Baseline):** Multi-Channel Control Actuator Redundancy (Dual or triple-redundant control channels; provides single-point actuator fail-operational capability, but cannot arrest unpowered descent, provides zero protection against full high-voltage power rail collapse or major structural failure, and adds significant parasitic mass).
   - **Option B (Selected Architecture):** Integrated Autonomous Failsafe Containment Subsystem with Independent Safety Watchdog and Power Cutoff Interlock (Dedicated independent microcontroller `SafetyWatchdog` with isolated power supply, autonomous deployment trigger $t_{\text{deploy}} \le \tau_{\text{deploy\_max}}$, high-speed actuator power cutoff interlock, and deployable aerodynamic drag / energy dissipation mechanism reducing terminal descent velocity to $v_{\mathrm{safe}}$ and kinetic impact energy to $E_k \le E_{\mathrm{threshold}}$).
@@ -135,7 +135,7 @@ The quantitative Pugh Decision Matrix evaluates safety containment architectures
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | Terminal Kinetic Energy Reduction (E_k <= E_thresh) | C_1 | 0.30 | 1 (Unmitigated Terminal v_term) | 0.30 | 5 (Decelerated to v_safe <= 5 m/s) | 1.50 | 2 (Marginal Impact Absorption) | 0.60 |
 | Catastrophic Bus & Structural Failure Mitigation | C_2 | 0.20 | 1 (Zero Protection on Bus Loss) | 0.20 | 5 (Independent Battery & Watchdog) | 1.00 | 2 (Structural Dissipation Only) | 0.40 |
-| SORA M2 / ARP4761 Certification Credit | C_3 | 0.20 | 2 (Partial Actuator Integrity) | 0.40 | 5 (Full High-Integrity M2 Credit) | 1.00 | 1 (No Standard Regulatory Credit) | 0.20 |
+| System Safety Risk Reduction Credit | C_3 | 0.20 | 2 (Partial Actuator Integrity) | 0.40 | 5 (Full High-Integrity Mitigation Credit) | 1.00 | 1 (No Standard Regulatory Credit) | 0.20 |
 | Mass Envelope Impact & Payload Penalty | C_4 | 0.15 | 2 (High Multi-Actuator Mass) | 0.30 | 4 (Low Subsystem Mass Envelope) | 0.60 | 1 (Heavy Structural Deadweight) | 0.15 |
 | Common-Cause Failure Mode Immunity | C_5 | 0.10 | 2 (Susceptible to Main Bus Failure) | 0.20 | 5 (Isolated Microcontroller & Power) | 0.50 | 4 (Passive Mechanical Simplicity) | 0.40 |
 | Pre-Operation Verification & Inspection Simplicity | C_6 | 0.05 | 3 (Complex Multi-Channel Rig) | 0.15 | 4 (Automated PBIT Continuity Check) | 0.20 | 5 (Visual Inspection Only) | 0.25 |
