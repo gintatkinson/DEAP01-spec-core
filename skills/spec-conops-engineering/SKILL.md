@@ -293,12 +293,17 @@ flowchart TD
             Actuators["Distributed Actuator Core<br/>• PORT_ACT_IN (IN)"]
             Watchdog["Hardware Safety Watchdog<br/>• PORT_WD_IN (IN)<br/>• PORT_WD_TRIG (OUT)"]
         end
+
+        Tier1_Processing ~~~ Tier2_Actuation
     end
 
     subgraph Support_Segment["Launch and Auxiliary Support Segment (IEEE 1362 §5.3)"]
         direction TB
         GSE["Ground Support Equipment<br/>and Staging<br/>• PORT_GSE_PWR (OUT)"]
     end
+
+    Ground_Segment ~~~ Platform_Segment
+    Platform_Segment ~~~ Support_Segment
 
     %% External Interface Connections
     Operator -->|"CONN-01: Operator Command Input"| GCS
@@ -307,7 +312,7 @@ flowchart TD
     RangeSafety -->|"CONN-04: Flight Termination Consent"| GCS
 
     %% Segment Inter-Connects (Item Flows)
-    GCS <-->|"CONN-05: PACE Bidirectional C2 Datalink [PORT_GCS_C2 <-> PORT_FCS_C2]"| FCS
+    GCS -->|"CONN-05: PACE C2 Command Datalink [PORT_GCS_C2 -> PORT_FCS_C2]"| FCS
     NavSensors -->|"CONN-06: Navigation State Estimates [PORT_NAV_DATA -> PORT_FCS_TLM]"| FCS
     FCS -->|"CONN-07: Real-Time Actuator Demand Vector [PORT_FCS_CMD -> PORT_ACT_IN]"| Actuators
     FCS -->|"CONN-08: Heartbeat Pulse and Safety Telemetry [PORT_FCS_CMD -> PORT_WD_IN]"| Watchdog
@@ -369,14 +374,78 @@ $$
 | Emergency Heartbeat Timeout | tau_timeout_Emergency | s | tau_timeout_Emergency > tau_timeout_Contingency | Timeout initiating definitive failsafe sequence extracted from SysML state def |
 | Re-acquisition Hysteresis Window | tau_hysteresis | s | tau_hysteresis > 0 | Continuous stable link duration required before up-tier promotion |
 
-### 4.7 Section 10 Operational Sequence Diagram Template & Safety-Critical Actuation Invariants
+### 4.7 Section 9/10 Operational Sequence Diagram Templates & Deterministic Safety Interlock Invariants (DoDAF OV-6c / ISO 29148 §6.4.2)
 Per [`rules/sysml-ssot-completeness.md`](../../rules/sysml-ssot-completeness.md) §3 and MIL-STD-882E §4.4:
 - **Strict Prohibition of Autonomous High-Consequence Actuation**: Autonomous generation of irreversible physical actuation, high-energy discharge, or safety-critical effector commands without prior human operator authorization/consent is strictly prohibited across all specification tiers. Any sequence diagram attempting uncommanded or unauthorized physical actuation is immediately rejected under rule `factual-grounding-temporal-safety-violation`.
 - **Mandatory Temporal Precedence of Human Consent**:
   In every Mermaid sequence diagram (`sequenceDiagram`) representing high-consequence operations or safety-critical actuation, an explicit Human-in-the-Loop (HITL) operator authorization command / consent token (e.g. `Operator ->> Console: Authorize_Action_Command`, `Console ->> SystemController: Action_Authorized_Consent_Token`) MUST temporally precede any physical interlock disengagement or actuation signal (`SystemController ->> SafetyInterlock: Disengage_Safety_Interlock`, `SystemController ->> PhysicalActuator: Command_Physical_Actuation`).
 - **Abstract Temporal Safety Invariant Rule**: High-consequence or irreversible physical actuation commands require temporal predecessor human operator consent tokens if mandated by system safety requirements.
 
-#### Figure 10.1: Operational Sequence Diagram with Human Authorization & Safety Interlock Disengagement
+#### Figure 9.1: SCN-01 Nominal Lifecycle Flow
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Operator as "Human Operator"
+    participant GCS as "Ground Control Station"
+    participant FCS as "Flight Controller"
+    participant Sensors as "Sensor Suite"
+    participant Actuators as "Actuator Subsystem"
+
+    Note over Operator,Actuators: Phase 1: Pre-Operation Staging & PBIT
+    Operator ->> GCS: Power_On_Initialization
+    GCS ->> FCS: Initiate_PBIT_Command
+    FCS ->> Sensors: Run_Sensor_BIT
+    Sensors -->> FCS: Sensor_Calibration_Pass
+    FCS ->> Actuators: Verify_Actuator_Endstops
+    Actuators -->> FCS: Actuator_Status_Nominal
+    FCS -->> GCS: PBIT_100_Percent_Pass_Telemetry
+    GCS -->> Operator: System_Ready_For_Mission
+
+    Note over Operator,Actuators: Phase 2: Autonomous Sortie & Station Keeping
+    Operator ->> GCS: Authorize_Sortie_Execution
+    GCS ->> FCS: Upload_Mission_Corridor_Plan
+    FCS ->> Actuators: Command_Nominal_Transit
+    Sensors ->> FCS: Stream_Navigation_State
+    FCS -->> GCS: Periodic_Heartbeat_and_Telemetry
+
+    Note over Operator,Actuators: Phase 3: Nominal Egress & Safe Recovery
+    FCS ->> FCS: Evaluate_Bingo_Energy_Condition
+    FCS ->> Actuators: Command_Deceleration_Profile
+    Actuators -->> FCS: Zero_Velocity_Rest_Confirmed
+    FCS ->> Actuators: Isolate_Actuator_Power
+    FCS -->> GCS: Mission_Complete_Secure_Shutdown
+```
+
+#### Figure 9.2: SCN-03 PACE Tiered Failover Hierarchy
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Modem as "PACE Datalink Router"
+    participant Controller as "System Controller"
+    participant Watchdog as "Safety Watchdog"
+    participant Guidance as "Guidance Subsystem"
+
+    Note over Modem,Guidance: Primary Link Degradation & Alternate Failover
+    Modem ->> Controller: Primary_Link_SNR_Below_Threshold
+    Controller ->> Modem: Start_Primary_Loss_Timer
+    Modem ->> Controller: Primary_Timeout_tau_Primary_Exceeded
+    Controller ->> Modem: Activate_Alternate_Encrypted_Network
+    Modem -->> Controller: Alternate_Network_Handshake_Established
+
+    Note over Modem,Guidance: Alternate Loss & Contingency Fallback
+    Modem ->> Controller: Alternate_Network_Unreachable
+    Controller ->> Modem: Fallback_To_Contingency_Narrowband
+    Controller ->> Controller: Throttle_Non_Essential_Payload_Streams
+
+    Note over Modem,Guidance: Complete Link Loss & Deterministic Return
+    Watchdog ->> Controller: Total_Timeout_tau_Contingency_Breached
+    Controller ->> Guidance: Engage_Autonomous_LostLink_Holding
+    Guidance ->> Guidance: Execute_Hold_Duration_tau_hold
+    Guidance ->> Controller: Hold_Expired_Calculate_Return_Corridor
+    Controller ->> Guidance: Execute_Deterministic_Return_Trajectory
+```
+
+#### Figure 9.3: SCN-05 Deterministic High-Consequence Safety Interlock Protocol
 ```mermaid
 sequenceDiagram
     autonumber

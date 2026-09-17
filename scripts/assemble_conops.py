@@ -1640,8 +1640,8 @@ class SysMLParameterBindingEngine:
             '',
             '        subgraph External_Actors["External Operating Environment & Actors (IEEE 1362 §5.1)"]',
             '            direction TB',
-            '            Operator["Human Operator & Mission Supervisor"]',
-            '            Environment["External Environment & Infrastructure"]',
+            '            Operator["Human Operator &<br/>Mission Supervisor"]',
+            '            Environment["External Environment &<br/>Infrastructure Dynamics"]',
             '        end',
             '',
             '        subgraph Platform_Segment["Primary Operational Segment (DoDAF SV-1)"]',
@@ -1651,12 +1651,12 @@ class SysMLParameterBindingEngine:
         part_node_ids: List[Tuple[str, str]] = []
         if parts:
             chunk_size = 3
+            tier_subgraphs = [f"Tier_{i+1}" for i in range(len(parts) // 3 + (1 if len(parts) % 3 else 0))]
             for chunk_idx in range(0, len(parts), chunk_size):
                 chunk = parts[chunk_idx:chunk_idx + chunk_size]
                 tier_num = (chunk_idx // chunk_size) + 1
                 tier_subgraph_name = f"Tier_{tier_num}"
-                tier_label = f"Subsystem Architecture Tier {tier_num}" if len(parts) > 3 else "Core Platform Subsystems"
-                lines.append(f'            subgraph {tier_subgraph_name}["{tier_label}"]')
+                lines.append(f'            subgraph {tier_subgraph_name}')
                 lines.append('                direction TB')
                 for p in chunk:
                     raw_p_name = getattr(p, "name", str(p))
@@ -1678,6 +1678,9 @@ class SysMLParameterBindingEngine:
                     else:
                         lines.append(f'                {p_node_id}["{p_name}"]')
                 lines.append('            end')
+            if len(tier_subgraphs) > 1:
+                for t_idx in range(len(tier_subgraphs) - 1):
+                    lines.append(f"            {tier_subgraphs[t_idx]} ~~~ {tier_subgraphs[t_idx+1]}")
         else:
             lines.append(f'            Platform["{sys_id} Core System"]')
             part_node_ids.append(("Platform", f"{sys_id} Core System"))
@@ -1687,14 +1690,14 @@ class SysMLParameterBindingEngine:
         if part_node_ids:
             primary_node = part_node_ids[0][0]
             lines.append(f'        Operator -->|"CONN-01: Operator Command & Authorization"| {primary_node}')
-            lines.append(f'        Operator <-->|"CONN-02: Bidirectional PACE C2 Datalink"| {primary_node}')
+            lines.append(f'        Operator -->|"CONN-02: Bidirectional PACE C2 Datalink"| {primary_node}')
             lines.append(f'        Environment -.->|"CONN-03: Environmental Dynamics & Disturbance"| {primary_node}')
             if len(part_node_ids) > 1:
                 for idx_p, (other_node, _other_name) in enumerate(part_node_ids[1:], start=4):
-                    lines.append(f'        {primary_node} <-->|"CONN-{idx_p:02d}: Internal Bus & Inter-Subsystem Control"| {other_node}')
+                    lines.append(f'        {primary_node} -->|"CONN-{idx_p:02d}: Internal Bus & Inter-Subsystem Demand"| {other_node}')
         else:
             lines.append('        Operator -->|"CONN-01: Operator Command & Authorization"| Platform_Segment')
-            lines.append('        Operator <-->|"CONN-02: Bidirectional PACE C2 Datalink"| Platform_Segment')
+            lines.append('        Operator -->|"CONN-02: Bidirectional PACE C2 Datalink"| Platform_Segment')
             lines.append('        Environment -.->|"CONN-03: Environmental Dynamics & Disturbance"| Platform_Segment')
         lines.append('    end')
         lines.append('```')

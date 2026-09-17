@@ -376,6 +376,8 @@ def _parse_mermaid_block_elements(
                 sub_id = m_sub.group(1) or m_sub.group(3) or ""
                 sub_label = m_sub.group(2) or sub_id
                 block.subgraphs.append(sub_label.strip('"'))
+                if sub_id and sub_id != sub_label and sub_id not in block.subgraphs:
+                    block.subgraphs.append(sub_id)
 
             # Edges
             for m_edge in edge_pattern.finditer(line):
@@ -566,7 +568,7 @@ def _matches_canonical_diagram(
     elif canon_id == "OV-6c":
         # Scenario Lifeline: sequenceDiagram with scenario in heading or text
         if block.diagram_type == "sequencediagram":
-            if "scenario" in combined_text or "lifeline" in combined_text or "ov-6c" in combined_text or "timeline" in combined_text:
+            if any(kw in combined_text for kw in ("scenario", "lifeline", "ov-6c", "timeline", "interlock", "failover", "lifecycle")):
                 return True
 
     elif canon_id == "SV-10b":
@@ -764,6 +766,25 @@ class ArchitectureViewpointValidator(IValidator):
                             detail={"diagram_id": canon_id, "subgraphs": block.subgraphs}
                         ))
 
+                    bidi_edges = [l.strip() for l in block.non_comment_lines if re.search(r"<-->|<==>", l)]
+                    if bidi_edges:
+                        findings.append(Finding(
+                            RULE_INCOMPLETE_DIAGRAM,
+                            f"{b_loc}: Diagram {canon_id} ({spec['name']}) contains {len(bidi_edges)} bidirectional links ('<-->') triggering Dagre rank collapse onto a single horizontal line (violates Rule E3). Use directed flows ('-->') instead.",
+                            location=b_loc,
+                            detail={"diagram_id": canon_id, "bidi_edges": bidi_edges[:3]}
+                        ))
+                    tier_subgraphs = [sg for sg in block.subgraphs if re.match(r"^Tier_\d+\b", sg, re.I)]
+                    if len(tier_subgraphs) > 1:
+                        has_tier_spacer = any("~~~" in l for l in block.non_comment_lines)
+                        if not has_tier_spacer:
+                            findings.append(Finding(
+                                RULE_INCOMPLETE_DIAGRAM,
+                                f"{b_loc}: Diagram {canon_id} ({spec['name']}) declares {len(tier_subgraphs)} tier subgraphs without vertical rank spacers ('~~~') between tiers (violates Rule E3 max 3-column vertical tier partitioning).",
+                                location=b_loc,
+                                detail={"diagram_id": canon_id, "tier_subgraphs": tier_subgraphs}
+                            ))
+
                 # Diagram 9 (STPA-CONTROL) Closed-Loop Invariant
                 if canon_id == "STPA-CONTROL":
                     if len(block.edges) < 2:
@@ -799,7 +820,7 @@ class ArchitectureViewpointValidator(IValidator):
 
         return findings
 
-    def validate_markdown_content(self, content: str, rel_path: str = "docs/conops/CONOPS.md") -> List[Finding]:
+    def validate_markdown_content(self, content: str, rel_path: str = "docs/conops/CONOPS.md", target_diagrams: Optional[Set[str]] = None) -> List[Finding]:
         """
         Direct content validation helper for unit tests and semantic verification scripts.
         """
@@ -814,6 +835,8 @@ class ArchitectureViewpointValidator(IValidator):
 
         for block in blocks:
             for canon_id in CANONICAL_DIAGRAMS:
+                if target_diagrams is not None and canon_id not in target_diagrams:
+                    continue
                 if _matches_canonical_diagram(canon_id, block):
                     matched_diagrams[canon_id].append(block)
 
@@ -821,6 +844,8 @@ class ArchitectureViewpointValidator(IValidator):
             matched_tables["ICD-N2"].append(tbl)
 
         for canon_id, spec in CANONICAL_DIAGRAMS.items():
+            if target_diagrams is not None and canon_id not in target_diagrams:
+                continue
             d_blocks = matched_diagrams[canon_id]
             t_matches = matched_tables[canon_id]
 
@@ -870,8 +895,28 @@ class ArchitectureViewpointValidator(IValidator):
                         findings.append(Finding(
                             RULE_INCOMPLETE_DIAGRAM,
                             f"{b_loc}: Diagram {canon_id} ({spec['name']}) lacks operational segment subgraphs allocating physical subsystems.",
-                            location=b_loc
+                            location=b_loc,
+                            detail={"diagram_id": canon_id, "subgraphs": block.subgraphs}
                         ))
+
+                    bidi_edges = [l.strip() for l in block.non_comment_lines if re.search(r"<-->|<==>", l)]
+                    if bidi_edges:
+                        findings.append(Finding(
+                            RULE_INCOMPLETE_DIAGRAM,
+                            f"{b_loc}: Diagram {canon_id} ({spec['name']}) contains {len(bidi_edges)} bidirectional links ('<-->') triggering Dagre rank collapse onto a single horizontal line (violates Rule E3). Use directed flows ('-->') instead.",
+                            location=b_loc,
+                            detail={"diagram_id": canon_id, "bidi_edges": bidi_edges[:3]}
+                        ))
+                    tier_subgraphs = [sg for sg in block.subgraphs if re.match(r"^Tier_\d+\b", sg, re.I)]
+                    if len(tier_subgraphs) > 1:
+                        has_tier_spacer = any("~~~" in l for l in block.non_comment_lines)
+                        if not has_tier_spacer:
+                            findings.append(Finding(
+                                RULE_INCOMPLETE_DIAGRAM,
+                                f"{b_loc}: Diagram {canon_id} ({spec['name']}) declares {len(tier_subgraphs)} tier subgraphs without vertical rank spacers ('~~~') between tiers (violates Rule E3 max 3-column vertical tier partitioning).",
+                                location=b_loc,
+                                detail={"diagram_id": canon_id, "tier_subgraphs": tier_subgraphs}
+                            ))
 
                 if canon_id == "STPA-CONTROL":
                     if len(block.edges) < 2:
