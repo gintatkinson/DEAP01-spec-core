@@ -3712,11 +3712,13 @@ flowchart TD
         sc_table_lines.append(f"| **SC-{idx:02d}** | {stmt} | CoreController | UCA-{idx:03d} |")
     sc_table_block = "\n".join(sc_table_lines)
 
-    ctrl_parts = [p for p in parts if getattr(p, "actions", None)]
-    stpa_uca_table = MatrixGenerator.generate_stpa_uca_cartesian(controllers=ctrl_parts if ctrl_parts else None)
-    fmeca_table = MatrixGenerator.generate_fmeca_matrix()
+    target_stpa_path = os.path.join(resolved_out_dir, "safety", "STPA_MATRIX.md")
+    if not os.path.exists(target_stpa_path):
+        ctrl_parts = [p for p in parts if getattr(p, "actions", None)]
+        stpa_uca_table = MatrixGenerator.generate_stpa_uca_cartesian(controllers=ctrl_parts if ctrl_parts else None)
+        fmeca_table = MatrixGenerator.generate_fmeca_matrix()
 
-    stpa_matrix_content = f"""# STPA Safety & Failure Mode Tracking Matrix
+        stpa_matrix_content = f"""# STPA Safety & Failure Mode Tracking Matrix
 
 ## 1. Formal Safety Constraints
 {sc_table_block}
@@ -3727,8 +3729,7 @@ flowchart TD
 ## 3. FMECA Failure Mode Criticality Matrix
 {fmeca_table}
 """
-    generated_files[os.path.join("safety", "STPA_MATRIX.md")] = stpa_matrix_content
-    generated_files["STPA_MATRIX.md"] = stpa_matrix_content
+        generated_files[os.path.join("safety", "STPA_MATRIX.md")] = stpa_matrix_content
 
     # Write files if not dry_run
     if not dry_run:
