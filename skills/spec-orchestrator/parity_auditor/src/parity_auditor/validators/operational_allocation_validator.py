@@ -12,8 +12,10 @@ Enforces:
    O_{orphan} = { \omega \in \Omega_{ops} | \Pi_{alloc}(\omega) = \emptyset } = \emptyset
 4. Theorem 2 (Zero Phantom Tags):
    P_{phantom} = { t \in T_{tags} | t \notin \Omega_{ops} } = \emptyset
-5. Syntax parsing of '/// OperationalAllocation: [OA-XX, PhaseName, ...]' across Markdown and SysML.
-6. Automated synthesis of OP_TO_RES_ALLOCATION_MATRIX.md.
+5. Theorem 3 (Zero Ungrounded Operational Activities):
+   U_{ungrounded} = { \alpha \in A_{ops} | \sigma_{provenance}(\alpha) \notin \Sigma_{valid} } = \emptyset
+6. Syntax parsing of '/// OperationalAllocation: [OA-XX, PhaseName, ...]' across Markdown and SysML.
+7. Automated synthesis of OP_TO_RES_ALLOCATION_MATRIX.md.
 """
 
 import os
@@ -32,6 +34,20 @@ except (ImportError, ValueError):
     from parity_auditor.validators.base import IValidator
     from parity_auditor.core.findings import Finding
     from parity_auditor.core.workspace import WorkspaceRepository
+
+
+RE_PROVENANCE_HEADER = re.compile(
+    r'\b(ssot|ground\s*truth|source|reference|citation|standard|authority|provenance)\b',
+    re.IGNORECASE
+)
+RE_VALID_CITATION = re.compile(
+    r'(?:schema/[A-Za-z0-9_.-]+|\b(?:STANAG|MIL[- ]?STD|DO[- ]?178[A-Z]?|DO[- ]?254[A-Z]?|ARP[- ]?4754[A-Z]?|ARP[- ]?4761[A-Z]?|ISO|IEEE|ASTM|FAA|EASA|SORA|JARUS)\b|\b(?:OEM|ICD|SRS|FHA|PSSA|CONOPS|Flight\s*Manual|Maintenance\s*Manual)\b|[A-Za-z0-9_.-]+\.(?:pdf|docx?|sysml|md))',
+    re.IGNORECASE
+)
+RE_PLACEHOLDER_CITATION = re.compile(
+    r'^(?:tbd|none|n/?a|unknown|unspecified|placeholder|-|\s*)$',
+    re.IGNORECASE
+)
 
 
 def _normalize_oa_id(raw_id: str) -> str:
@@ -120,9 +136,12 @@ class OperationalAllocationValidator(IValidator):
     Asserts:
     - Zero Orphan Activities (Theorem 1: O_orphan = empty)
     - Zero Phantom Tags (Theorem 2: P_phantom = empty)
+    - Zero Ungrounded Operational Activities (Theorem 3: U_ungrounded = empty)
     """
 
-    def extract_conops_universe(self, repo: WorkspaceRepository) -> Tuple[Dict[str, str], Dict[str, str]]:
+    def extract_conops_universe(
+        self, repo: WorkspaceRepository
+    ) -> Tuple[Dict[str, str], Dict[str, str], Dict[str, Tuple[str, str]]]:
         """
         Dynamically extracts operational activities and lifecycle phases from docs/conops/.
 
@@ -130,14 +149,16 @@ class OperationalAllocationValidator(IValidator):
             Tuple of:
             - ops_universe: Dict mapping canonical_id -> display_name
             - ops_locations: Dict mapping canonical_id -> 'rel_path:lineno'
+            - ops_citations: Dict mapping canonical_id -> (citation_str, 'rel_path:lineno')
         """
         workspace_dir = repo.workspace_dir
         conops_dir = os.path.join(workspace_dir, "docs", "conops")
         if not os.path.isdir(conops_dir):
-            return {}, {}
+            return {}, {}, {}
 
         ops_universe: Dict[str, str] = {}
         ops_locations: Dict[str, str] = {}
+        ops_citations: Dict[str, Tuple[str, str]] = {}
 
         conops_files: List[Tuple[str, str]] = []
         for root, _, files in os.walk(conops_dir):
@@ -157,14 +178,20 @@ class OperationalAllocationValidator(IValidator):
             lines = content.splitlines()
             in_phases_section = False
             in_activities_section = False
+            in_table = False
+            provenance_col_idx: Optional[int] = None
 
             for lineno_1idx, line in enumerate(lines, start=1):
                 stripped = line.strip()
                 if not stripped:
+                    in_table = False
+                    provenance_col_idx = None
                     continue
 
                 # Section tracking
                 if stripped.startswith("#"):
+                    in_table = False
+                    provenance_col_idx = None
                     header_lower = stripped.lower()
                     if "phase" in header_lower or "lifecycle" in header_lower or "mode" in header_lower:
                         in_phases_section = True
@@ -179,18 +206,49 @@ class OperationalAllocationValidator(IValidator):
                 # 1. Parse markdown tables with Activity ID or Phase columns
                 if stripped.startswith("|") and stripped.endswith("|"):
                     parts = [p.strip() for p in stripped.split("|")[1:-1]]
+                    # Check if separator row (| :--- | :--- |)
+                    is_separator = all(re.match(r'^:?-+:?$', p) for p in parts if p)
+                    if is_separator:
+                        continue
+
                     if len(parts) >= 2:
                         first_col = parts[0]
                         second_col = parts[1]
                         # Check if first column is an OA or MET identifier: `OA-01`, OA_1, MET-01, etc.
                         m_oa = re.search(r'\b((?:OA|MET|METL)[_-]?\d+[a-zA-Z0-9_-]*)\b', first_col, re.IGNORECASE)
+
+                        # Check if table header row defining columns
+                        has_prov_header = any(RE_PROVENANCE_HEADER.search(p) for p in parts)
+                        is_header_row = (
+                            not m_oa
+                            and (
+                                not in_table
+                                or has_prov_header
+                                or any(h in first_col.lower() for h in ("activity", "phase", "task", "metl", "lifecycle"))
+                            )
+                        )
+                        if is_header_row:
+                            in_table = True
+                            provenance_col_idx = None
+                            for idx, col in enumerate(parts):
+                                if RE_PROVENANCE_HEADER.search(col):
+                                    provenance_col_idx = idx
+                                    break
+                            continue
+
+                        in_table = True
+
                         if m_oa:
                             raw_id = m_oa.group(1)
                             canon = _normalize_oa_id(raw_id)
                             display_name = re.sub(r'[*`_]', '', second_col).strip() or raw_id
                             ops_universe[canon] = display_name
+                            loc = f"{rel_path}:{lineno_1idx}"
                             if canon not in ops_locations:
-                                ops_locations[canon] = f"{rel_path}:{lineno_1idx}"
+                                ops_locations[canon] = loc
+                            if provenance_col_idx is not None and provenance_col_idx < len(parts):
+                                citation_str = parts[provenance_col_idx].strip()
+                                ops_citations[canon] = (citation_str, loc)
                             continue
 
                         # Check if table row defines a phase name
@@ -203,6 +261,9 @@ class OperationalAllocationValidator(IValidator):
                                     if canon not in ops_locations:
                                         ops_locations[canon] = f"{rel_path}:{lineno_1idx}"
                             continue
+                else:
+                    in_table = False
+                    provenance_col_idx = None
 
                 # 2. Parse bullet points / headings:
                 # - **OA-01**: Sensor calibration ...
@@ -246,7 +307,7 @@ class OperationalAllocationValidator(IValidator):
                             if canon not in ops_locations:
                                 ops_locations[canon] = f"{rel_path}:{lineno_1idx}"
 
-        return ops_universe, ops_locations
+        return ops_universe, ops_locations, ops_citations
 
     def extract_allocation_tags(self, repo: WorkspaceRepository) -> Tuple[Dict[str, List[str]], Dict[str, List[str]]]:
         """
@@ -349,8 +410,9 @@ class OperationalAllocationValidator(IValidator):
         Verifies Operational-to-Resource Allocation mathematical theorems:
         - Theorem 1 (Zero Orphan Activities): O_orphan = \Omega_{ops} \setminus T_{tags} = \emptyset
         - Theorem 2 (Zero Phantom Tags): P_phantom = T_{tags} \setminus \Omega_{ops} = \emptyset
+        - Theorem 3 (Zero Ungrounded Operational Activities): U_ungrounded = \emptyset
         """
-        ops_universe, ops_locations = self.extract_conops_universe(repo)
+        ops_universe, ops_locations, ops_citations = self.extract_conops_universe(repo)
         allocated_tags, _ = self.extract_allocation_tags(repo)
 
         # Upstream clean landing zones: if both are empty, pass gracefully
@@ -392,13 +454,38 @@ class OperationalAllocationValidator(IValidator):
                     detail={"phantom_tag": phantom, "location": loc}
                 ))
 
+        # Theorem 3: Zero Ungrounded Operational Activities (strictly enforced)
+        for canon_id in sorted(ops_universe.keys()):
+            if canon_id.startswith("OA-") or canon_id.startswith("MET-") or canon_id.startswith("METL-"):
+                disp_name = ops_universe.get(canon_id, canon_id)
+                loc = ops_locations.get(canon_id, "docs/conops/CONOPS.md")
+                cit_info = ops_citations.get(canon_id)
+                is_unanchored = False
+                if not cit_info:
+                    is_unanchored = True
+                else:
+                    citation_str, cit_loc = cit_info
+                    if cit_loc:
+                        loc = cit_loc
+                    clean_cit = re.sub(r'[*`_\[\]]', '', citation_str).strip()
+                    if not clean_cit or RE_PLACEHOLDER_CITATION.match(clean_cit) or not RE_VALID_CITATION.search(citation_str):
+                        is_unanchored = True
+
+                if is_unanchored:
+                    findings.append(Finding(
+                        "operational-activity-unanchored-provenance",
+                        f"Operational activity '{disp_name}' ({canon_id}) at {loc} lacks valid SSOT ground truth citation (Theorem 3 violation: unanchored operational activity).",
+                        location=loc,
+                        detail={"activity_id": canon_id, "display_name": disp_name, "location": loc}
+                    ))
+
         return findings
 
     def synthesize_allocation_matrix(self, repo: WorkspaceRepository) -> str:
         """
         Generates markdown content for docs/conops/OP_TO_RES_ALLOCATION_MATRIX.md.
         """
-        ops_universe, ops_locations = self.extract_conops_universe(repo)
+        ops_universe, ops_locations, _ = self.extract_conops_universe(repo)
         allocated_tags, _ = self.extract_allocation_tags(repo)
 
         total_ops = len(ops_universe)
@@ -424,6 +511,8 @@ class OperationalAllocationValidator(IValidator):
             "  $$O_{\\text{orphan}} = \\{ \\omega \\in \\Omega_{\\text{ops}} \\mid \\Pi_{\\text{alloc}}(\\omega) = \\emptyset \\} = \\emptyset$$",
             "- **Theorem 2 (Zero Phantom Tags):**",
             "  $$P_{\\text{phantom}} = \\{ t \\in T_{\\text{tags}} \\mid t \\notin \\Omega_{\\text{ops}} \\} = \\emptyset$$",
+            "- **Theorem 3 (Zero Ungrounded Operational Activities):**",
+            "  $$U_{\\text{ungrounded}} = \\{ \\alpha \\in A_{\\text{ops}} \\mid \\sigma_{\\text{provenance}}(\\alpha) \\notin \\Sigma_{\\text{valid}} \\} = \\emptyset$$",
             "",
             "## 2. Operational-to-Resource Traceability Matrix",
             "",

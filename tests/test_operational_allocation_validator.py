@@ -78,11 +78,11 @@ class TestOperationalAllocationValidator(unittest.TestCase):
 - **Phase 3: SecureShutdown**
 
 ## Operational Activities Roster
-| Activity ID | Name | Description |
-| :--- | :--- | :--- |
-| `OA-01` | System Initialization | Perform boot and PBIT tests |
-| `OA-02` | Guidance Loop Execution | Continuous sensor-to-actuator compute |
-| `OA-03` | Controlled Power Down | Safe sequence parking and shutdown |
+| Activity ID | Name | Description | SSOT Ground Truth Source & Citation |
+| :--- | :--- | :--- | :--- |
+| `OA-01` | System Initialization | Perform boot and PBIT tests | `schema/system_architecture.sysml` |
+| `OA-02` | Guidance Loop Execution | Continuous sensor-to-actuator compute | `MIL-STD-882E` |
+| `OA-03` | Controlled Power Down | Safe sequence parking and shutdown | `ISO/IEC/IEEE 29148:2018` |
 """
             with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
                 f.write(conops_md)
@@ -139,10 +139,10 @@ Class GuidanceEngine { ... }
 
             conops_md = """# CONOPS
 ## Operational Activities
-| Activity ID | Name | Description |
-| :--- | :--- | :--- |
-| `OA-01` | Initialization | System boot |
-| `OA-02` | Fault Isolation | Diagnostic isolation |
+| Activity ID | Name | Description | SSOT Ground Truth Source & Citation |
+| :--- | :--- | :--- | :--- |
+| `OA-01` | Initialization | System boot | `schema/system_architecture.sysml` |
+| `OA-02` | Fault Isolation | Diagnostic isolation | `MIL-STD-882E` |
 """
             with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
                 f.write(conops_md)
@@ -172,9 +172,9 @@ Class GuidanceEngine { ... }
 
             conops_md = """# CONOPS
 ## Operational Activities
-| Activity ID | Name | Description |
-| :--- | :--- | :--- |
-| `OA-01` | Initialization | System boot |
+| Activity ID | Name | Description | SSOT Ground Truth Source & Citation |
+| :--- | :--- | :--- | :--- |
+| `OA-01` | Initialization | System boot | `schema/system_architecture.sysml` |
 """
             with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
                 f.write(conops_md)
@@ -204,9 +204,9 @@ Class GuidanceEngine { ... }
 
             conops_md = """# CONOPS
 ## Operational Activities
-| Activity ID | Name | Description |
-| :--- | :--- | :--- |
-| `OA-01` | System Initialization | Boot sequence |
+| Activity ID | Name | Description | SSOT Ground Truth Source & Citation |
+| :--- | :--- | :--- | :--- |
+| `OA-01` | System Initialization | Boot sequence | `schema/system_architecture.sysml` |
 """
             with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
                 f.write(conops_md)
@@ -240,10 +240,10 @@ Class GuidanceEngine { ... }
 - **Phase 3: SecureShutdown**
 
 ## Operational Activities Roster
-| Activity ID | Name | Description |
-| :--- | :--- | :--- |
-| `OA-01` | System Initialization | Boot sequence |
-| `OA-02` | Guidance Loop Execution | Compute |
+| Activity ID | Name | Description | SSOT Ground Truth Source & Citation |
+| :--- | :--- | :--- | :--- |
+| `OA-01` | System Initialization | Boot sequence | `schema/system_architecture.sysml` |
+| `OA-02` | Guidance Loop Execution | Compute | `MIL-STD-882E` |
 """
             with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
                 f.write(conops_md)
@@ -261,9 +261,9 @@ Class GuidanceEngine { ... }
 
             conops_md = """# Concept of Operations (CONOPS)
 ## Operational Activities
-| Activity ID | Name | Description |
-| :--- | :--- | :--- |
-| `OA-01` | System Initialization | Boot sequence |
+| Activity ID | Name | Description | SSOT Ground Truth Source & Citation |
+| :--- | :--- | :--- | :--- |
+| `OA-01` | System Initialization | Boot sequence | `schema/system_architecture.sysml` |
 """
             with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
                 f.write(conops_md)
@@ -283,10 +283,10 @@ Class GuidanceEngine { ... }
 
             conops_md = """# CONOPS
 ## Operational Activities
-| Activity ID | Name | Description |
-| :--- | :--- | :--- |
-| `OA-01` | System Initialization | Boot sequence |
-| `OA-02` | Guidance Compute | Guidance |
+| Activity ID | Name | Description | SSOT Ground Truth Source & Citation |
+| :--- | :--- | :--- | :--- |
+| `OA-01` | System Initialization | Boot sequence | `schema/system_architecture.sysml` |
+| `OA-02` | Guidance Compute | Guidance | `MIL-STD-882E` |
 """
             with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
                 f.write(conops_md)
@@ -316,9 +316,9 @@ Class GuidanceEngine { ... }
 
             conops_md = """# CONOPS
 ## Operational Activities
-| Activity ID | Name | Description |
-| :--- | :--- | :--- |
-| `OA-01` | Initialization | System boot |
+| Activity ID | Name | Description | SSOT Ground Truth Source & Citation |
+| :--- | :--- | :--- | :--- |
+| `OA-01` | Initialization | System boot | `schema/system_architecture.sysml` |
 """
             with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
                 f.write(conops_md)
@@ -357,11 +357,11 @@ Class GuidanceEngine { ... }
 - **Phase 3: SecureShutdown**
 
 ## Operational Activities Roster
-| Activity ID | Name | Description |
-| :--- | :--- | :--- |
-| `OA-01` | System Initialization | Boot sequence |
-| `OA-02` | Guidance Loop Execution | Compute |
-| `OA-03` | Controlled Power Down | Safe shutdown |
+| Activity ID | Name | Description | SSOT Ground Truth Source & Citation |
+| :--- | :--- | :--- | :--- |
+| `OA-01` | System Initialization | Boot sequence | `schema/system_architecture.sysml` |
+| `OA-02` | Guidance Loop Execution | Compute | `MIL-STD-882E` |
+| `OA-03` | Controlled Power Down | Safe shutdown | `DO-178C` |
 """
             with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
                 f.write(conops_md)
@@ -369,10 +369,10 @@ Class GuidanceEngine { ... }
             # MISSION_INTENT defines tactical METL tasks and allocates OA-01 and Startup
             mission_intent_md = """# Tactical Mission Intent
 ## Tactical METL Tasks
-| METL ID | Task Title | Description |
-| :--- | :--- | :--- |
-| `MET-01` | Pre-Flight Checkout | Verify system health |
-| `MET-02` | Autonomous Navigation | Execute waypoint flight |
+| METL ID | Task Title | Description | SSOT Ground Truth Source & Citation |
+| :--- | :--- | :--- | :--- |
+| `MET-01` | Pre-Flight Checkout | Verify system health | `STANAG 4586` |
+| `MET-02` | Autonomous Navigation | Execute waypoint flight | `schema/system_architecture.sysml` |
 
 ## Operational Allocations
 /// OperationalAllocation: [OA-01, Startup]
@@ -407,11 +407,11 @@ Class GuidanceEngine { ... }
 - **Phase 3: SecureShutdown**
 
 ## Operational Activities Roster
-| Activity ID | Name | Description |
-| :--- | :--- | :--- |
-| `OA-01` | System Initialization | Boot sequence |
-| `OA-02` | Guidance Loop Execution | Compute |
-| `OA-03` | Controlled Power Down | Safe shutdown |
+| Activity ID | Name | Description | SSOT Ground Truth Source & Citation |
+| :--- | :--- | :--- | :--- |
+| `OA-01` | System Initialization | Boot sequence | `schema/system_architecture.sysml` |
+| `OA-02` | Guidance Loop Execution | Compute | `MIL-STD-882E` |
+| `OA-03` | Controlled Power Down | Safe shutdown | `DO-178C` |
 """
             with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
                 f.write(conops_md)
@@ -433,6 +433,105 @@ Class GuidanceEngine { ... }
             repo = WorkspaceRepository(workspace_dir=tmpdir)
             validator = OperationalAllocationValidator()
             errors = validator.validate(repo, allow_missing_specs=False)
+            self.assertEqual(errors, [])
+
+    def test_theorem_3_missing_provenance_column_detected(self):
+        """Verify Theorem 3: Table without a provenance column emits operational-activity-unanchored-provenance."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            features_dir = os.path.join(tmpdir, "docs", "features")
+            os.makedirs(conops_dir, exist_ok=True)
+            os.makedirs(features_dir, exist_ok=True)
+
+            conops_md = """# CONOPS
+## Operational Activities
+| Activity ID | Name | Description |
+| :--- | :--- | :--- |
+| `OA-01` | Initialization | System boot |
+"""
+            with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
+                f.write(conops_md)
+
+            feat_md = """# Feature 01
+/// OperationalAllocation: [OA-01]
+"""
+            with open(os.path.join(features_dir, "FEAT_01.md"), "w", encoding="utf-8") as f:
+                f.write(feat_md)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            validator = OperationalAllocationValidator()
+            errors = validator.validate(repo)
+
+            self.assertEqual(len(errors), 1)
+            self.assertEqual(errors[0].rule_id, "operational-activity-unanchored-provenance")
+            self.assertIn("OA-01", str(errors[0]))
+            self.assertIn("Theorem 3 violation: unanchored operational activity", str(errors[0]))
+
+    def test_theorem_3_placeholder_provenance_detected(self):
+        """Verify Theorem 3: TBD, N/A, or placeholder citations emit operational-activity-unanchored-provenance."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            features_dir = os.path.join(tmpdir, "docs", "features")
+            os.makedirs(conops_dir, exist_ok=True)
+            os.makedirs(features_dir, exist_ok=True)
+
+            conops_md = """# CONOPS
+## Operational Activities
+| Activity ID | Name | Description | SSOT Ground Truth Source & Citation |
+| :--- | :--- | :--- | :--- |
+| `OA-01` | Initialization | System boot | TBD |
+| `OA-02` | Guidance Compute | Flight guidance | `N/A` |
+| `OA-03` | Environmental Monitoring | Safety limits | Unspecified |
+"""
+            with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
+                f.write(conops_md)
+
+            feat_md = """# Feature 01
+/// OperationalAllocation: [OA-01, OA-02, OA-03]
+"""
+            with open(os.path.join(features_dir, "FEAT_01.md"), "w", encoding="utf-8") as f:
+                f.write(feat_md)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            validator = OperationalAllocationValidator()
+            errors = validator.validate(repo)
+
+            self.assertEqual(len(errors), 3)
+            for err in errors:
+                self.assertEqual(err.rule_id, "operational-activity-unanchored-provenance")
+                self.assertIn("Theorem 3 violation: unanchored operational activity", str(err))
+
+    def test_theorem_3_valid_provenance_passes(self):
+        """Verify Theorem 3: Valid schema and standard citations pass with zero findings."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            features_dir = os.path.join(tmpdir, "docs", "features")
+            os.makedirs(conops_dir, exist_ok=True)
+            os.makedirs(features_dir, exist_ok=True)
+
+            conops_md = """# CONOPS
+## Operational Activities
+| Activity ID | Name | Description | SSOT Ground Truth Source & Citation |
+| :--- | :--- | :--- | :--- |
+| `OA-01` | Initialization | System boot | `schema/system_architecture.sysml` |
+| `OA-02` | Guidance Compute | Flight guidance | MIL-STD-882E §4.3 |
+| `OA-03` | Telemetry Exchange | PACE links | STANAG 4586 Edition 3 |
+| `OA-04` | Safety Containment | Failsafe state | DO-178C DAL-A |
+| `OA-05` | Requirements Baseline | Requirement specs | ISO/IEC/IEEE 29148:2018 |
+"""
+            with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
+                f.write(conops_md)
+
+            feat_md = """# Feature 01
+/// OperationalAllocation: [OA-01, OA-02, OA-03, OA-04, OA-05]
+"""
+            with open(os.path.join(features_dir, "FEAT_01.md"), "w", encoding="utf-8") as f:
+                f.write(feat_md)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            validator = OperationalAllocationValidator()
+            errors = validator.validate(repo)
+
             self.assertEqual(errors, [])
 
 
