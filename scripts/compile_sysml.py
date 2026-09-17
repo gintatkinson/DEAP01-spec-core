@@ -32,6 +32,7 @@ import re
 import hashlib
 import argparse
 import tempfile
+import datetime
 from typing import Dict, List, Any, Optional, Set, Tuple, Union
 
 # Ensure spec-orchestrator scripts are on sys.path
@@ -3233,6 +3234,7 @@ def forward_sync_sysml_to_specs(
         resolved_out_dir = os.path.abspath(docs_dir if os.path.isabs(docs_dir) else os.path.join(PROJECT_ROOT, docs_dir))
 
     generated_files: Dict[str, str] = {}
+    today_iso = datetime.date.today().isoformat()
 
     # 1. Epics (EPIC-*.md) from CapabilityDef
     capabilities: List[Any] = []
@@ -3284,6 +3286,8 @@ def forward_sync_sysml_to_specs(
 
         epic_content = f"""---
 title: "Epic {idx:02d}: {cap_name}"
+version: "1.0.0"
+date: "{today_iso}"
 type: epic
 subsystem: "{subsys}"
 generation_mode: subagent
@@ -3295,6 +3299,8 @@ generation_mode: subagent
 | Attribute | Specification Detail |
 | :--- | :--- |
 | **Title** | Epic {idx:02d}: {cap_name} |
+| **Version** | 1.0.0 |
+| **Date** | {today_iso} |
 | **Type** | epic |
 | **Subsystem** | {subsys} |
 | **Generation Mode** | subagent |
@@ -3414,6 +3420,8 @@ classDiagram
 
         feat_content = f"""---
 title: "Feature {idx:02d}: {part_name} Architecture & Control"
+version: "1.0.0"
+date: "{today_iso}"
 type: feature
 part: "{part_name}"
 part_def: "{part_name}"
@@ -3426,6 +3434,8 @@ generation_mode: subagent
 | Attribute | Specification Detail |
 | :--- | :--- |
 | **Title** | Feature {idx:02d}: {part_name} |
+| **Version** | 1.0.0 |
+| **Date** | {today_iso} |
 | **Type** | feature |
 | **Part** | {part_name} |
 | **Generation Mode** | subagent |
@@ -3533,6 +3543,8 @@ Formal constraints and invariants enforced by {part_name}.
 
         us_content = f"""---
 title: "User Story {idx:02d}: {inter_name}"
+version: "1.0.0"
+date: "{today_iso}"
 type: user-story
 interaction: "{inter_name}"
 interaction_def: "{inter_name}"
@@ -3548,6 +3560,8 @@ generation_mode: subagent
 | Attribute | Specification Detail |
 | :--- | :--- |
 | **Title** | User Story {idx:02d}: {inter_name} |
+| **Version** | 1.0.0 |
+| **Date** | {today_iso} |
 | **Type** | user-story |
 | **Interaction** | {inter_name} |
 | **Test Case** | {tc_name} |
@@ -3640,6 +3654,8 @@ Scenario: Verify {inter_name} Nominal Flow
 
         uc_content = f"""---
 title: "Use Case {idx:02d}: {uc_name}"
+version: "1.0.0"
+date: "{today_iso}"
 type: use-case
 use_case_def: "{uc_name}"
 use_case: "{uc_name}"
@@ -3657,6 +3673,8 @@ generation_mode: subagent
 | Attribute | Specification Detail |
 | :--- | :--- |
 | **Title** | Use Case {idx:02d}: {uc_name} |
+| **Version** | 1.0.0 |
+| **Date** | {today_iso} |
 | **Type** | use-case |
 | **Subject Part** | `{subject}` |
 | **Actors** | {', '.join(actors_clean)} |
