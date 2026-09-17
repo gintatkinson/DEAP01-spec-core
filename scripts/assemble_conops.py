@@ -4223,6 +4223,31 @@ def assemble_document(
                 f"ConOps Section 4 AST Part Coverage Gate failed: Missing declared AST part def(s): {', '.join(missing_parts)} in Section 4."
             )
 
+    if is_conops:
+        diag_matches = list(re.finditer(r"(?:^|\n)#{3,4}\s+Diagram\s+(\d+(?:\.\d+)?)\s*:\s*(.*?)(?:\n|\Z)", assembled))
+        if diag_matches:
+            major_numbers = []
+            for dm in diag_matches:
+                d_str = dm.group(1)
+                major_num = int(d_str.split(".")[0])
+                if not major_numbers or major_numbers[-1] != major_num:
+                    major_numbers.append(major_num)
+            for idx, num in enumerate(major_numbers):
+                expected = idx + 1
+                if num != expected:
+                    errors.append(
+                        f"ConOps Diagram Sequence Gate failed: Diagram numbers must be strictly monotonic (expected Diagram {expected}, found Diagram {num})."
+                    )
+                    break
+            d1_match = next((m for m in diag_matches if m.group(1) == "1"), None)
+            if d1_match:
+                preceding_text = assembled[:d1_match.start()]
+                sec_match = list(re.finditer(r"(?:^|\n)##\s+(\d+)\.", preceding_text))
+                if not sec_match or sec_match[-1].group(1) != "1":
+                    errors.append(
+                        "ConOps Viewpoint Placement Gate failed: Diagram 1 (OV-1 System Context) must reside in Section 1 (Metadata & Overview / System Overview) per IEEE 1362."
+                    )
+
     return assembled, errors
 
 

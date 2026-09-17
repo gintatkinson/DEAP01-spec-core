@@ -2863,6 +2863,7 @@ def parse_sysml(content: str) -> Dict[str, Any]:
         "attribute_defs": [],
         "port_defs": [],
         "action_defs": [],
+        "control_actions": [],
         "capability_defs": [],
         "operation_defs": [],
         "interaction_defs": [],
@@ -2882,6 +2883,7 @@ def parse_sysml(content: str) -> Dict[str, Any]:
     if SysMLParser is not None:
         try:
             pkg = SysMLParser.parse_text(content)
+            pkg_action_names: List[str] = []
 
             def _extract_from_pkg(p: SysMLPackage):
                 if p.name and p.name not in ast["packages"] and p.name != "SysML_Model":
@@ -2895,6 +2897,8 @@ def parse_sysml(content: str) -> Dict[str, Any]:
                 for ac in p.action_defs:
                     if ac.name not in ast["action_defs"]:
                         ast["action_defs"].append(ac.name)
+                    if ac.name not in pkg_action_names:
+                        pkg_action_names.append(ac.name)
                 for cap in p.capability_defs:
                     if cap.name not in ast["capability_defs"]:
                         ast["capability_defs"].append(cap.name)
@@ -2945,6 +2949,8 @@ def parse_sysml(content: str) -> Dict[str, Any]:
                 for ac in part.actions:
                     if ac.name not in ast["action_defs"]:
                         ast["action_defs"].append(ac.name)
+                    if ac.name not in ast["control_actions"]:
+                        ast["control_actions"].append(ac.name)
                 for op in part.operations:
                     if op.name not in ast["operation_defs"]:
                         ast["operation_defs"].append(op.name)
@@ -2980,7 +2986,11 @@ def parse_sysml(content: str) -> Dict[str, Any]:
                     _extract_from_part(sub_part)
 
             _extract_from_pkg(pkg)
-            ast["operational_activities"] = [oa["name"] for oa in extract_operational_activities(pkg)]
+            op_act_names = set(pkg_action_names)
+            for name in ast["action_defs"]:
+                if re.search(r'\bOA[-_]?\d+', name, re.IGNORECASE):
+                    op_act_names.add(name)
+            ast["operational_activities"] = [name for name in ast["action_defs"] if name in op_act_names]
             ast["operational_exchanges"] = [oe["name"] for oe in extract_operational_exchanges(pkg)]
             ast["operational_scenarios"] = [os["name"] for os in extract_operational_scenarios(pkg)]
             ast["operational_nodes"] = [on["name"] for on in extract_operational_nodes(pkg)]
@@ -3040,6 +3050,7 @@ def parse_sysml(content: str) -> Dict[str, Any]:
             ast["connection_defs"].append(match.group(1))
 
     ast["operational_activities"] = [name for name in ast["action_defs"] if re.search(r'\bOA[-_]?\d+', name, re.IGNORECASE)]
+    ast["control_actions"] = [name for name in ast["action_defs"] if name not in ast["operational_activities"]]
     ast["operational_exchanges"] = [name for name in ast["connection_defs"] if re.search(r'\bOpTx[-_]?\d+', name, re.IGNORECASE)]
     ast["operational_scenarios"] = [name for name in ast["use_case_defs"] if re.search(r'\b(?:SCN|UC)[-_]?\d+', name, re.IGNORECASE)]
     ast["operational_nodes"] = list(ast["part_defs"])

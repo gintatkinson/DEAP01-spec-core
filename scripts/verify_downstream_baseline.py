@@ -1069,7 +1069,11 @@ def check_fmeca_ast_coverage(content: str, model_text: Optional[str] = None) -> 
         if SysMLParser is not None:
             try:
                 pkg_obj = SysMLParser.parse_text(model_text)
-                expected_parts = [p.name for p in pkg_obj.get_all_parts()]
+                ACTOR_PATTERNS = re.compile(r'(?:Crew|Operator|Pilot|Actor|Target|Entity|Environment)$', re.IGNORECASE)
+                expected_parts = [
+                    p.name for p in pkg_obj.get_all_parts()
+                    if not getattr(p, "is_actor", False) and not ACTOR_PATTERNS.search(p.name)
+                ]
                 table_components = set(fmeca_data["components"].keys())
                 missing_parts = []
                 incomplete_parts = []
@@ -1755,7 +1759,12 @@ def validate_safety_matrix_ast(content: str, model_text: Optional[str] = None) -
             errors.append(f"Safety AST violation: Failed to parse SysML v2 model ({exc}).")
             broken = ASTValidationReport(is_conforming=False, syntax_errors=[str(exc)])
             return errors, broken, None
-        expected_actions = sorted({str(name) for name in model_ast.get("action_defs", [])})
+        all_actions = model_ast.get("action_defs", [])
+        op_activities = set(model_ast.get("operational_activities", []))
+        expected_actions = sorted({
+            str(name) for name in all_actions
+            if name not in op_activities and not re.search(r'\bOA[-_]?\d+', str(name), re.IGNORECASE)
+        })
         expected_parts = sorted({str(name) for name in model_ast.get("part_defs", [])})
         sysml_reqs = model_ast.get("requirement_defs", [])
 
