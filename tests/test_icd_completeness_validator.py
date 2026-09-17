@@ -693,7 +693,7 @@ class TestICDCompletenessValidator(unittest.TestCase):
             cli_py = os.path.join(repo_root, "skills", "spec-orchestrator", "parity_auditor", "src", "parity_auditor", "cli.py")
             import subprocess
             res = subprocess.run(
-                [sys.executable, cli_py, "--workspace", tmpdir, "--schema-only"],
+                [sys.executable, cli_py, "--workspace", tmpdir, "--schema-only", "--gate", "icd"],
                 capture_output=True,
                 text=True
             )

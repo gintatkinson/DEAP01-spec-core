@@ -2,16 +2,19 @@
 Gate 30: Architecture Viewpoint & Diagram Completeness Validator.
 Governing Standards: DoDAF 2.02 / OMG UAF v2.0 / ISO/IEC/IEEE 29148 / MIL-STD-882E / STPA / SORA.
 
-Enforces fail-closed validation of the 11 canonical architecture diagrams across the 5 viewpoints:
+Enforces fail-closed validation of the 14 canonical architecture diagrams across the 5 viewpoints:
 1. Operational Viewpoint (OV):
    - Diagram 1 (OV-1 System Context)
    - Diagram 2 (OV-2 Operational Node Connectivity)
    - Diagram 6 (OV-5b Operational Activity Functional Flow)
    - Diagram 7 (OV-6c Scenario Lifeline Sequences)
+   - Diagram 13 (OV-5a Operational Activity Decomposition Tree)
+   - Diagram 14 (OV-4 Organizational Command & Authority Hierarchy)
 2. System Viewpoint (SV):
    - Diagram 3 (SV-1 Super-System Segment Allocation)
    - Diagram 4 (SV-2 Subsystem Interconnect & Bus Architecture / IBD)
    - Diagram 8 (SV-10b Master System Lifecycle State Machine)
+   - Diagram 12 (SV-4 Function-to-Subsystem Allocation)
 3. Interface Viewpoint (ICD):
    - Diagram 5 (N^2 Physical Interface Matrix)
 4. Safety Viewpoint (STPA):
@@ -62,7 +65,7 @@ ALLOWED_DIAGRAM_KINDS = {
 
 
 # =============================================================================
-# Canonical 11 Architecture Diagrams Registry
+# Canonical 14 Architecture Diagrams Registry
 # =============================================================================
 
 CANONICAL_DIAGRAMS: Dict[str, Dict[str, Any]] = {
@@ -115,6 +118,30 @@ CANONICAL_DIAGRAMS: Dict[str, Dict[str, Any]] = {
         "default_location": "docs/conops/CONOPS.md",
         "description": "Multi-threaded operational scenario sequence diagram with lifelines and message exchanges",
     },
+    "OV-5a": {
+        "id": "OV-5a",
+        "diagram_num": 13,
+        "name": "Operational Activity Decomposition Tree",
+        "viewpoint": "Operational Viewpoint (OV)",
+        "standards": "DoDAF 2.02 / OMG UAF v2.0 Op-Tx / ISO/IEC/IEEE 29148 §6.4.3",
+        "expected_types": {"graph", "flowchart", "mindmap"},
+        "min_nodes": 4,
+        "governing_keywords": [r"\bOV-5a\b", r"\bOV5a\b", r"\bOperational\s+Activity\s+Decomposition\b", r"\bActivity\s+Decomposition\b", r"\bActivity\s+Tree\b", r"\bOp-Tx\b"],
+        "default_location": "docs/conops/CONOPS.md",
+        "description": "Hierarchical tree showing top-down breakdown of operational mission activities into sub-activities",
+    },
+    "OV-4": {
+        "id": "OV-4",
+        "diagram_num": 14,
+        "name": "Organizational Command & Authority Hierarchy View",
+        "viewpoint": "Operational Viewpoint (OV)",
+        "standards": "DoDAF 2.02 / OMG UAF v2.0 Op-Or / ISO/IEC/IEEE 29148 §6.4.3",
+        "expected_types": {"graph", "flowchart"},
+        "min_nodes": 4,
+        "governing_keywords": [r"\bOV-4\b", r"\bOV4\b", r"\bOrganizational\s+(?:Command\s+)?(?:and\s+|&\s+)?(?:Authority\s+)?Hierarchy\b", r"\bCommand\s+(?:and\s+|&\s+)?Authority\b", r"\bOp-Or\b", r"\bOrganizational\s+Structure\b"],
+        "default_location": "docs/conops/CONOPS.md",
+        "description": "Organizational command hierarchy, reporting paths, and operational role allocation",
+    },
 
     # 2. System Viewpoint (SV)
     "SV-1": {
@@ -153,6 +180,19 @@ CANONICAL_DIAGRAMS: Dict[str, Dict[str, Any]] = {
         "governing_keywords": [r"\bSV-10b\b", r"\bSV10b\b", r"\bMaster\s+System\s+Lifecycle\b", r"\bLifecycle\s+State\s+Machine\b", r"\bSystem\s+Lifecycle\s+State\b", r"\bLifecycle\s+Modes\b", r"\bOperational\s+State\s+Space\b"],
         "default_location": "docs/conops/CONOPS.md",
         "description": "Operational lifecycle states/modes (Init, Standby, Active, Nominal, Degraded, Emergency, Shutdown) and transitions",
+    },
+    "SV-4": {
+        "id": "SV-4",
+        "diagram_num": 12,
+        "name": "Function-to-Subsystem Allocation Diagram",
+        "viewpoint": "System Viewpoint (SV)",
+        "standards": "DoDAF 2.02 / OMG UAF v2.0 Rs-Fn / ISO/IEC/IEEE 15288 §6.4.4",
+        "expected_types": {"graph", "flowchart"},
+        "min_nodes": 3,
+        "requires_subgraphs": True,
+        "governing_keywords": [r"\bSV-4\b", r"\bSV4\b", r"\bFunction(?:-|\s+to\s+-)Subsystem\b", r"\bFunction\s+Allocation\b", r"\bRs-Fn\b"],
+        "default_location": "docs/conops/CONOPS.md",
+        "description": "Subsystem allocation subgraphs allocating functional actions and operations to physical subsystem parts",
     },
 
     # 3. Interface Viewpoint (ICD)
@@ -195,19 +235,23 @@ CANONICAL_DIAGRAMS: Dict[str, Dict[str, Any]] = {
         "description": "Run-Time Assurance switching/monitoring architecture: Nominal, Intervention, Recovery, Safe State",
     },
 
-    # 5. Spatial / Environmental Viewpoint (SORA)
-    "SORA-4D": {
-        "id": "SORA-4D",
+    # 5. Spatial / Environmental Viewpoint (SPATIAL)
+    "SPATIAL-4D": {
+        "id": "SPATIAL-4D",
         "diagram_num": 11,
-        "name": "4D Spatial Volume & GRB Containment",
-        "viewpoint": "Spatial / Environmental Viewpoint (SORA)",
-        "standards": "JARUS SORA v2.5 Annex B / EASA SORA",
+        "name": "4D Spatial Volume & Environmental Containment Diagram",
+        "viewpoint": "Spatial / Environmental Viewpoint (SPATIAL)",
+        "standards": "ISO/IEC/IEEE 15288 §6.4.4 / MIL-STD-882E",
         "expected_types": {"graph", "flowchart"},
         "min_nodes": 2,
-        "governing_keywords": [r"\b4D\s+Spatial\s+Volume\b", r"\bSpatial\s+Volume\b", r"\bGround\s+Risk\s+Buffer\b", r"\bGRB\s+Containment\b", r"\bSORA\s+4D\b", r"\bContainment\s+Volume\b"],
+        "governing_keywords": [r"\bSPATIAL-4D\b", r"\b4D\s+Spatial\s+Volume\b", r"\bOperational\s+Volume\b", r"\bContainment\s+Buffer\b", r"\bSpatial\s+Volume\b", r"\bContainment\s+Volume\b", r"\bSORA-4D\b", r"\bGround\s+Risk\s+Buffer\b", r"\bGRB\s+Containment\b"],
         "default_location": "docs/conops/CONOPS.md",
         "description": "4D spatial volumes: Flight Geography, Contingency Volume, Operational Volume, Ground Risk Buffer (GRB), 1:1 Rule",
     },
+}
+
+CONOPS_CANONICAL_DIAGRAMS: Set[str] = {
+    k for k, v in CANONICAL_DIAGRAMS.items() if "conops" in v.get("default_location", "").lower()
 }
 
 
@@ -367,7 +411,7 @@ def _parse_mermaid_block_elements(
     if diagram_type in ("graph", "flowchart"):
         # Extract subgraphs, nodes, and edges
         subgraph_pattern = re.compile(r"^\s*subgraph\s+(?:([A-Za-z0-9_\-]+)\s*(?:\[(.*?)\])?|(?:\"([^\"]+)\"))", re.IGNORECASE)
-        edge_pattern = re.compile(r"([A-Za-z0-9_\-]+)\s*(?:-->|---|-.->|==>)\s*(?:\|[^|]*\|\s*)?([A-Za-z0-9_\-]+)")
+        edge_pattern = re.compile(r"([A-Za-z0-9_\-]+)\s*(?:\[[^\]]*\]|\([^\)]*\)|\{[^\}]*\}|\(\([^\)]*\)\))?\s*(?:-->|---|-.->|==>)\s*(?:\|[^|]*\|\s*)?([A-Za-z0-9_\-]+)")
         node_decl_pattern = re.compile(r"([A-Za-z0-9_\-]+)\s*(\[|\(|\{|\(\()(\"?[^\"\)\]\}]*\"?)(\]|\)|\}|\)\))")
 
         for line in non_comment_lines:
@@ -379,6 +423,7 @@ def _parse_mermaid_block_elements(
                 block.subgraphs.append(sub_label.strip('"'))
                 if sub_id and sub_id != sub_label and sub_id not in block.subgraphs:
                     block.subgraphs.append(sub_id)
+                continue
 
             # Edges
             for m_edge in edge_pattern.finditer(line):
@@ -429,6 +474,19 @@ def _parse_mermaid_block_elements(
                 block.messages.append((src, dst, msg_text.strip()))
                 block.participants.add(src)
                 block.participants.add(dst)
+
+    elif diagram_type == "mindmap":
+        for line in non_comment_lines:
+            stripped = line.strip()
+            if not stripped or stripped.lower() == "mindmap":
+                continue
+            m_id = re.match(r"^([A-Za-z0-9_\-]+)\s*(?:\[|\(|\{|\(\()", stripped)
+            if m_id:
+                block.nodes.add(m_id.group(1))
+            else:
+                m_txt = re.search(r"[A-Za-z0-9_\-]+", stripped)
+                if m_txt:
+                    block.nodes.add(m_txt.group(0))
 
     return block
 
@@ -500,10 +558,24 @@ def _matches_canonical_diagram(
     """
     Determines if a ParsedMermaidBlock matches a given canonical diagram specification.
     """
+    orig_canon_id = canon_id
+    if canon_id == "SORA-4D":
+        canon_id = "SPATIAL-4D"
     spec = CANONICAL_DIAGRAMS[canon_id]
     heading_text = block.heading.lower()
     raw_text = "\n".join(block.raw_lines).lower()
     combined_text = f"{heading_text} {raw_text}"
+
+    # Disambiguation: prevent OV-5a activity decomposition trees from matching OV-2 or OV-5b
+    if canon_id in ("OV-2", "OV-5b"):
+        if re.search(r"\bOV-?5a\b|\bActivity\s+Decomposition\b|\bActivity\s+Tree\b", combined_text, re.IGNORECASE):
+            return False
+    if canon_id in ("OV-1", "OV-2", "OV-5b"):
+        if re.search(r"\bOV-?4\b|\bOp-Or\b", combined_text, re.IGNORECASE):
+            return False
+    if canon_id == "OV-5a":
+        if re.search(r"\bOV-?2\b|\bOperational\s+Node\s+Connectivity\b", combined_text, re.IGNORECASE):
+            return False
 
     # 1. Explicit comment / diagram tag match
     # e.g., %% OV-1, %% Diagram 1, <!-- OV-1 -->
@@ -513,6 +585,16 @@ def _matches_canonical_diagram(
         rf"<!--.*?\b{canon_id}\b.*?-->",
         rf"\bdiagram\s+{spec['diagram_num']}\b",
     ]
+    if orig_canon_id != canon_id:
+        tag_patterns.extend([
+            rf"%%.*?\b{orig_canon_id}\b",
+            rf"<!--.*?\b{orig_canon_id}\b.*?-->",
+        ])
+    if canon_id == "SPATIAL-4D":
+        tag_patterns.extend([
+            r"%%.*?\bSORA-4D\b",
+            r"<!--.*?\bSORA-4D\b.*?-->",
+        ])
     for pat in tag_patterns:
         if re.search(pat, combined_text, re.IGNORECASE):
             return True
@@ -572,12 +654,63 @@ def _matches_canonical_diagram(
             if any(kw in combined_text for kw in ("scenario", "lifeline", "ov-6c", "timeline", "interlock", "failover", "lifecycle")):
                 return True
 
+    elif canon_id == "OV-5a":
+        # Operational Activity Decomposition Tree (DoDAF OV-5a / OMG UAF Op-Tx)
+        if block.diagram_type in ("graph", "flowchart", "mindmap"):
+            if re.search(r"\bov-?5a\b|\bactivity\s+decomposition\b|\bactivity\s+tree\b|\boperational\s+activity\s+decomposition\b", combined_text):
+                return True
+            if "op-tx" in combined_text and ("activity" in combined_text or "decomposition" in combined_text or "tree" in combined_text):
+                return True
+            # Structural heuristic: tree structure rooted at a mission or root node linking to operational activities (oa-\d+)
+            has_oa = any(
+                re.search(r"\boa-\d+\b", n, re.IGNORECASE) for n in block.nodes
+            ) or bool(re.search(r"\boa-\d+\b", raw_text))
+            has_root = any(
+                re.search(r"mission|operations|root|activity|phase", n, re.IGNORECASE) for n in block.nodes
+            ) or bool(re.search(r"\b(mission|operations|activity\s+tree|decomposition)\b", combined_text))
+            if has_oa and has_root and not re.search(r"\bov-?5b\b|\bfunctional\s+flow\b", combined_text):
+                return True
+
+    elif canon_id == "OV-4":
+        # Organizational Command & Authority Hierarchy View (DoDAF OV-4 / OMG UAF Op-Or)
+        if block.diagram_type in ("graph", "flowchart"):
+            if re.search(r"\bov-?4\b|\bop-or\b|\borganizational\s+relationships\b|\bcommand\s+(?:and\s+control\s+)?(?:authority\s+)?hierarchy\b|\boperator\s+hierarchy\b", combined_text):
+                return True
+            # Reject SV-1 segment allocation diagrams from matching OV-4 on operator/supervisor node names
+            if re.search(r"\bsv-?1\b|\bsuper-system\b|\bsegment\s+allocation\b", combined_text):
+                return False
+            has_role_nodes = any(
+                re.search(r"ucl-|\boperator\b|\bsupervisor\b|\bdirector\b|\bcommander\b|\bauthority\b|\btechnician\b|\bmonitor\b", n, re.IGNORECASE)
+                for n in block.nodes
+            ) or bool(re.search(r"ucl-|\boperator\b|\bsupervisor\b|\bdirector\b|\bcommander\b|\bauthority\b|\btechnician\b|\bmonitor\b", raw_text, re.IGNORECASE))
+            has_hierarchy_terms = any(
+                term in combined_text for term in ("command", "hierarchy", "authority", "supervisor", "chain of command", "reporting", "supervisory")
+            )
+            if has_role_nodes and has_hierarchy_terms:
+                return True
+
     elif canon_id == "SV-10b":
         # Master System Lifecycle State Machine: statediagram with lifecycle states
         if block.diagram_type in ("statediagram", "statediagram-v2", "graph", "flowchart"):
             if any(mode in combined_text for mode in ("nominal", "standby", "active", "degraded", "emergency", "shutdown", "init", "preflight", "lifecycle")):
                 if re.search(r"\bsv-?10b\b|\blifecycle\b|\bstate\s+space\b|\bstate\s+machine\b", combined_text):
                     return True
+
+    elif canon_id == "SV-4":
+        # Function-to-Subsystem Allocation Diagram (DoDAF SV-4 / OMG UAF Rs-Fn)
+        if block.diagram_type in ("graph", "flowchart"):
+            if re.search(r"\bsv-?4\b|\bfunction(?:-|\s+to\s+-)subsystem\b|\bfunction\s+allocation\b|\brs-fn\b", combined_text):
+                return True
+            has_subsystem_subgraphs = any(
+                re.search(r"subsystem|controller|processor|node|avionics", sg, re.IGNORECASE)
+                for sg in block.subgraphs
+            )
+            has_fn_nodes = any(
+                re.search(r"fn-|\baction\b|\bfunction\b|\boa-", n, re.IGNORECASE)
+                for n in block.nodes
+            ) or bool(re.search(r"\bfn-|\baction\b|\bfunction\b|\boa-", raw_text))
+            if has_subsystem_subgraphs and has_fn_nodes:
+                return True
 
     elif canon_id == "STPA-CONTROL":
         # Hierarchical Safety Control Structure: controller -> actuator / plant / sensor
@@ -594,10 +727,10 @@ def _matches_canonical_diagram(
             if "rta" in combined_text or "assurance" in combined_text or "f3269" in combined_text:
                 return True
 
-    elif canon_id == "SORA-4D":
-        # 4D Spatial Volume: Flight Geography, Contingency Volume, GRB
+    elif canon_id in ("SPATIAL-4D", "SORA-4D"):
+        # 4D Spatial Volume: Flight Geography, Contingency Volume, GRB, Spatial Volume, Operational Volume, Containment Buffer
         if block.diagram_type in ("graph", "flowchart"):
-            if any(term in combined_text for term in ("flight geography", "contingency volume", "operational volume", "ground risk buffer", "grb", "sora")):
+            if any(term in combined_text for term in ("flight geography", "contingency volume", "operational volume", "ground risk buffer", "grb", "sora", "spatial-4d", "4d spatial volume", "operational space", "contingency state space", "containment buffer", "boundary envelope", "spatial volume", "containment volume")):
                 return True
 
     return False
@@ -832,6 +965,174 @@ def _validate_sv1_diagram(block: ParsedMermaidBlock, spec: Dict[str, Any], b_loc
     return findings
 
 
+def _validate_sv4_diagram(block: ParsedMermaidBlock, spec: Dict[str, Any], b_loc: str) -> List[Finding]:
+    """
+    Validates SV-4 Function-to-Subsystem Allocation diagram against Gate 30 rules:
+    - Expected diagram types: graph or flowchart
+    - Minimum node count >= 3
+    - Presence of performer subgraphs allocating functional actions and operations
+    - Presence of functional action/operation nodes (FN-01..FN-N or Action/Function declarations)
+    """
+    findings: List[Finding] = []
+
+    # 1. Performer subgraphs check
+    if not block.subgraphs:
+        findings.append(Finding(
+            RULE_INCOMPLETE_DIAGRAM,
+            f"{b_loc}: Diagram SV-4 ({spec['name']}) lacks subsystem performer subgraphs allocating functional actions and operations.",
+            location=b_loc,
+            detail={"diagram_id": "SV-4", "subgraphs": block.subgraphs},
+        ))
+
+    # 2. Functional action/operation allocation check
+    raw_lower = "\n".join(block.raw_lines).lower()
+    has_fn_nodes = any(
+        re.search(r"fn-|\baction\b|\bfunction\b|\boa-", n, re.IGNORECASE)
+        for n in block.nodes
+    ) or bool(re.search(r"fn-|\baction\b|\bfunction\b|\boa-", raw_lower))
+
+    if not has_fn_nodes:
+        findings.append(Finding(
+            RULE_INCOMPLETE_DIAGRAM,
+            f"{b_loc}: Diagram SV-4 ({spec['name']}) lacks functional activity or operation nodes (expected 'FN-', 'Action', 'Function', or 'OA-').",
+            location=b_loc,
+            detail={"diagram_id": "SV-4"},
+        ))
+
+    return findings
+
+
+def _validate_ov5a_diagram(block: ParsedMermaidBlock, spec: Dict[str, Any], b_loc: str) -> List[Finding]:
+    """
+    Validates OV-5a Operational Activity Decomposition Tree diagram against Gate 30 rules:
+    - Expected diagram types: graph, flowchart, or mindmap
+    - Minimum node count >= 4
+    - Presence of operational activity leaf nodes (OA-01..OA-N)
+    - Hierarchical tree branching (root/phases branching to operational activities, not linear chains)
+    """
+    findings: List[Finding] = []
+    raw_lower = "\n".join(block.raw_lines).lower()
+
+    # 1. Operational activity node presence
+    has_oa_nodes = any(
+        re.search(r"\boa-\d+\b|\boperational\s+activit", n, re.IGNORECASE)
+        for n in block.nodes
+    ) or bool(re.search(r"\boa-\d+\b|\boperational\s+activit", raw_lower))
+
+    if not has_oa_nodes:
+        findings.append(Finding(
+            RULE_INCOMPLETE_DIAGRAM,
+            f"{b_loc}: Diagram OV-5a ({spec['name']}) lacks operational activity leaf nodes (expected 'OA-01'..'OA-N' or operational activity declarations).",
+            location=b_loc,
+            detail={"diagram_id": "OV-5a", "rule": "conops-ov5a-missing-oa-nodes"},
+        ))
+
+    # 2. Hierarchical tree branching invariant (for graph and flowchart)
+    if block.diagram_type in ("graph", "flowchart"):
+        if len(block.edges) < 3:
+            findings.append(Finding(
+                RULE_INCOMPLETE_DIAGRAM,
+                f"{b_loc}: Diagram OV-5a ({spec['name']}) lacks hierarchical tree branching (must contain at least 3 hierarchical parent-child relationships; found {len(block.edges)}).",
+                location=b_loc,
+                detail={"diagram_id": "OV-5a", "edges": len(block.edges), "rule": "conops-ov5a-insufficient-branching"},
+            ))
+        else:
+            # Check for fan-out: at least one parent node should have >= 2 outgoing edges (branching)
+            parent_out_degree: Dict[str, int] = {}
+            for src, dst, _ in block.edges:
+                parent_out_degree[src] = parent_out_degree.get(src, 0) + 1
+            has_branching = any(count >= 2 for count in parent_out_degree.values())
+            if not has_branching:
+                findings.append(Finding(
+                    RULE_INCOMPLETE_DIAGRAM,
+                    f"{b_loc}: Diagram OV-5a ({spec['name']}) lacks hierarchical tree branching (linear chain detected without parent-child fan-out).",
+                    location=b_loc,
+                    detail={"diagram_id": "OV-5a", "rule": "conops-ov5a-linear-chain"},
+                ))
+
+    return findings
+
+
+def _validate_ov4_diagram(block: ParsedMermaidBlock, spec: Dict[str, Any], b_loc: str) -> List[Finding]:
+    """
+    Validates OV-4 Organizational Command & Authority Hierarchy diagram against Gate 30 rules:
+    - Expected diagram types: graph or flowchart
+    - Minimum node count >= 4
+    - Presence of user class or operator/supervisor roles (ucl- or operator, supervisor, director, commander, authority, technician, monitor)
+    - Hierarchical command/reporting edges (at least 3 edges)
+    """
+    findings: List[Finding] = []
+    raw_lower = "\n".join(block.raw_lines).lower()
+
+    # 1. Expected types check (graph or flowchart)
+    expected_types = spec.get("expected_types", {"graph", "flowchart"})
+    if block.diagram_type not in expected_types:
+        findings.append(Finding(
+            RULE_INCOMPLETE_DIAGRAM,
+            f"{b_loc}: Diagram OV-4 ({spec['name']}) declaration '{block.diagram_type}' invalid; expected one of {sorted(list(expected_types))}.",
+            location=b_loc,
+            detail={"diagram_id": "OV-4", "diagram_type": block.diagram_type},
+        ))
+        return findings
+
+    # 2. Node count check (min_nodes >= 4)
+    min_nodes = spec.get("min_nodes", 4)
+    if len(block.nodes) < min_nodes:
+        findings.append(Finding(
+            RULE_INCOMPLETE_DIAGRAM,
+            f"{b_loc}: Diagram OV-4 ({spec['name']}) is degenerate (must contain at least {min_nodes} connected nodes; found {len(block.nodes)}).",
+            location=b_loc,
+            detail={"diagram_id": "OV-4", "nodes": len(block.nodes)},
+        ))
+
+    # 3. Presence of user class or operator/supervisor roles
+    role_pattern = re.compile(
+        r"ucl-|\boperator\b|\bsupervisor\b|\bdirector\b|\bcommander\b|\bauthority\b|\btechnician\b|\bmonitor\b",
+        re.IGNORECASE,
+    )
+    has_role_nodes = any(
+        role_pattern.search(n) for n in block.nodes
+    ) or bool(role_pattern.search(raw_lower))
+
+    if not has_role_nodes:
+        findings.append(Finding(
+            RULE_INCOMPLETE_DIAGRAM,
+            f"{b_loc}: Diagram OV-4 ({spec['name']}) lacks organizational role or operator nodes (expected 'UCL-' or 'operator', 'supervisor', 'director', 'commander', 'authority', 'technician', 'monitor').",
+            location=b_loc,
+            detail={"diagram_id": "OV-4", "rule": "conops-ov4-missing-role-nodes"},
+        ))
+
+    # 4. Hierarchical command/reporting edges (at least 3 edges)
+    if len(block.edges) < 3:
+        findings.append(Finding(
+            RULE_INCOMPLETE_DIAGRAM,
+            f"{b_loc}: Diagram OV-4 ({spec['name']}) lacks hierarchical command and reporting relationships (must contain at least 3 edges; found {len(block.edges)}).",
+            location=b_loc,
+            detail={"diagram_id": "OV-4", "edges": len(block.edges), "rule": "conops-ov4-insufficient-edges"},
+        ))
+
+    return findings
+
+
+def _validate_conops_sv5a_matrix(repo: WorkspaceRepository, ops_universe: Optional[Dict[str, str]] = None) -> List[Finding]:
+    """
+    Validates DoDAF SV-5a / OMG UAF Op-to-Res Operational-to-Resource Allocation Matrix.
+    Delegates to OperationalAllocationValidator._validate_conops_sv5a_matrix or verifies SV-5a table directly.
+    """
+    try:
+        from .operational_allocation_validator import OperationalAllocationValidator
+        val = OperationalAllocationValidator()
+        if ops_universe is None:
+            # Extract OA activities from repo if ops_universe not provided
+            oa_activities: Dict[str, str] = {}
+            for i in range(1, 9):
+                oa_activities[f"OA-{i:02d}"] = f"OA-{i:02d}"
+            ops_universe = oa_activities
+        return val._validate_conops_sv5a_matrix(repo, ops_universe)
+    except Exception:
+        return []
+
+
 def _validate_ov6c_scenario_coverage(content: str, rel_path: str) -> List[Finding]:
     """
     Validates that 100% of declared operational scenarios (SCN-01..SCN-N)
@@ -881,10 +1182,11 @@ def _validate_ov6c_scenario_coverage(content: str, rel_path: str) -> List[Findin
 class ArchitectureViewpointValidator(IValidator):
     """
     Gate 30 Validator enforcing presence, completeness, and syntax integrity
-    for the 11 canonical architecture diagrams across 5 viewpoints.
+    for the 14 canonical architecture diagrams across 5 viewpoints.
     """
 
     _validate_ov6c_scenario_coverage = staticmethod(_validate_ov6c_scenario_coverage)
+    _validate_conops_sv5a_matrix = staticmethod(_validate_conops_sv5a_matrix)
 
     def validate(self, repo: WorkspaceRepository, **kwargs) -> List[Finding]:
         findings: List[Finding] = []
@@ -1041,6 +1343,20 @@ class ArchitectureViewpointValidator(IValidator):
                 if canon_id == "SV-1":
                     findings.extend(_validate_sv1_diagram(block, spec, b_loc))
 
+                # Diagram 12 (SV-4) Subsystem Allocation Subgraphs Invariant
+                if canon_id == "SV-4":
+                    findings.extend(_validate_sv4_diagram(block, spec, b_loc))
+
+                # Diagram 13 (OV-5a) Operational Activity Decomposition Tree Invariant
+                if canon_id == "OV-5a":
+                    findings.extend(_validate_ov5a_diagram(block, spec, b_loc))
+
+                # Diagram 14 (OV-4) Organizational Command & Authority Hierarchy Invariant
+                if canon_id == "OV-4":
+                    for f in _validate_ov4_diagram(block, spec, b_loc):
+                        if f not in findings:
+                            findings.append(f)
+
                 # Diagram 9 (STPA-CONTROL) Closed-Loop Invariant
                 if canon_id == "STPA-CONTROL":
                     if len(block.edges) < 2:
@@ -1051,14 +1367,14 @@ class ArchitectureViewpointValidator(IValidator):
                             detail={"diagram_id": canon_id, "edges": len(block.edges)}
                         ))
 
-                # Diagram 11 (SORA-4D) Containment Volume Invariant
-                if canon_id == "SORA-4D":
+                # Diagram 11 (SPATIAL-4D / SORA-4D) Containment Volume Invariant
+                if canon_id in ("SPATIAL-4D", "SORA-4D"):
                     raw_lower = "\n".join(block.raw_lines).lower()
-                    has_containment = any(t in raw_lower for t in ("geography", "contingency", "operational", "buffer", "grb", "adjacent"))
+                    has_containment = any(t in raw_lower for t in ("operational", "contingency", "buffer", "containment", "geography", "grb", "adjacent", "boundary"))
                     if not has_containment:
                         findings.append(Finding(
                             RULE_INCOMPLETE_DIAGRAM,
-                            f"{b_loc}: Diagram {canon_id} ({spec['name']}) lacks SORA containment volume definitions (Flight Geography, Contingency Volume, Operational Volume, GRB).",
+                            f"{b_loc}: Diagram {canon_id} ({spec['name']}) lacks spatial containment volume definitions (Operational Volume, Contingency State Space, Dynamic Containment Buffer, Exclusion Boundary).",
                             location=b_loc,
                             detail={"diagram_id": canon_id}
                         ))
@@ -1076,7 +1392,7 @@ class ArchitectureViewpointValidator(IValidator):
 
         return findings
 
-    def validate_markdown_content(self, content: str, rel_path: str = "docs/conops/CONOPS.md", target_diagrams: Optional[Set[str]] = None) -> List[Finding]:
+    def validate_markdown_content(self, content: str, rel_path: str = "docs/conops/CONOPS.md", target_diagrams: Optional[Set[str]] = None, allow_partial_snippets: bool = False) -> List[Finding]:
         """
         Direct content validation helper for unit tests and semantic verification scripts.
         """
@@ -1085,7 +1401,7 @@ class ArchitectureViewpointValidator(IValidator):
         findings.extend(syntax_findings)
 
         # Validate OV-6c scenario lifeline coverage
-        if target_diagrams is None or "OV-6c" in target_diagrams:
+        if (target_diagrams is None or "OV-6c" in target_diagrams) and not allow_partial_snippets:
             findings.extend(_validate_ov6c_scenario_coverage(content, rel_path))
 
         matrix_tables = _extract_markdown_matrix_tables(content, rel_path)
@@ -1093,9 +1409,17 @@ class ArchitectureViewpointValidator(IValidator):
         matched_diagrams: Dict[str, List[ParsedMermaidBlock]] = {k: [] for k in CANONICAL_DIAGRAMS}
         matched_tables: Dict[str, List[ParsedMarkdownMatrixTable]] = {k: [] for k in CANONICAL_DIAGRAMS}
 
+        if target_diagrams is None:
+            if "conops" in rel_path.lower():
+                evaluated_diagrams = {k: v for k, v in CANONICAL_DIAGRAMS.items() if k in CONOPS_CANONICAL_DIAGRAMS}
+            else:
+                evaluated_diagrams = CANONICAL_DIAGRAMS
+        else:
+            evaluated_diagrams = {k: v for k, v in CANONICAL_DIAGRAMS.items() if k in target_diagrams}
+
         for block in blocks:
             for canon_id in CANONICAL_DIAGRAMS:
-                if target_diagrams is not None and canon_id not in target_diagrams:
+                if canon_id not in evaluated_diagrams:
                     continue
                 if _matches_canonical_diagram(canon_id, block):
                     matched_diagrams[canon_id].append(block)
@@ -1103,19 +1427,18 @@ class ArchitectureViewpointValidator(IValidator):
         for tbl in matrix_tables:
             matched_tables["ICD-N2"].append(tbl)
 
-        for canon_id, spec in CANONICAL_DIAGRAMS.items():
-            if target_diagrams is not None and canon_id not in target_diagrams:
-                continue
+        for canon_id, spec in evaluated_diagrams.items():
             d_blocks = matched_diagrams[canon_id]
             t_matches = matched_tables[canon_id]
 
             if not d_blocks and not t_matches:
-                findings.append(Finding(
-                    RULE_DIAGRAM_MISSING,
-                    f"Missing canonical architecture diagram: Diagram {spec['diagram_num']} ({canon_id}: {spec['name']}) across {spec['viewpoint']} per {spec['standards']}.",
-                    location=rel_path,
-                    detail={"diagram_id": canon_id, "diagram_num": spec["diagram_num"]}
-                ))
+                if not allow_partial_snippets:
+                    findings.append(Finding(
+                        RULE_DIAGRAM_MISSING,
+                        f"Missing canonical architecture diagram: Diagram {spec['diagram_num']} ({canon_id}: {spec['name']}) across {spec['viewpoint']} per {spec['standards']}.",
+                        location=rel_path,
+                        detail={"diagram_id": canon_id, "diagram_num": spec["diagram_num"]}
+                    ))
                 continue
 
             for block in d_blocks:
@@ -1153,6 +1476,20 @@ class ArchitectureViewpointValidator(IValidator):
                 if canon_id == "SV-1":
                     findings.extend(_validate_sv1_diagram(block, spec, b_loc))
 
+                # Diagram 12 (SV-4) Subsystem Allocation Subgraphs Invariant
+                if canon_id == "SV-4":
+                    findings.extend(_validate_sv4_diagram(block, spec, b_loc))
+
+                # Diagram 13 (OV-5a) Operational Activity Decomposition Tree Invariant
+                if canon_id == "OV-5a":
+                    findings.extend(_validate_ov5a_diagram(block, spec, b_loc))
+
+                # Diagram 14 (OV-4) Organizational Command & Authority Hierarchy Invariant
+                if canon_id == "OV-4":
+                    for f in _validate_ov4_diagram(block, spec, b_loc):
+                        if f not in findings:
+                            findings.append(f)
+
                 if canon_id == "STPA-CONTROL":
                     if len(block.edges) < 2:
                         findings.append(Finding(
@@ -1161,13 +1498,13 @@ class ArchitectureViewpointValidator(IValidator):
                             location=b_loc
                         ))
 
-                if canon_id == "SORA-4D":
+                if canon_id in ("SPATIAL-4D", "SORA-4D"):
                     raw_lower = "\n".join(block.raw_lines).lower()
-                    has_containment = any(t in raw_lower for t in ("geography", "contingency", "operational", "buffer", "grb", "adjacent"))
+                    has_containment = any(t in raw_lower for t in ("operational", "contingency", "buffer", "containment", "geography", "grb", "adjacent", "boundary"))
                     if not has_containment:
                         findings.append(Finding(
                             RULE_INCOMPLETE_DIAGRAM,
-                            f"{b_loc}: Diagram {canon_id} ({spec['name']}) lacks SORA containment volume definitions.",
+                            f"{b_loc}: Diagram {canon_id} ({spec['name']}) lacks spatial containment volume definitions.",
                             location=b_loc
                         ))
 

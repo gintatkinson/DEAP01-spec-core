@@ -11,6 +11,40 @@ In accordance with ISO/IEC/IEEE 29148:2018 §6.4.2, OMG Unified Architecture Fra
 ### 9.1 Scenario SCN-01: Nominal Lifecycle Thread
 Scenario `SCN-01` describes an end-to-end nominal operational mission lifecycle from pre-operation staging through autonomous state trajectory execution, on-station mission processing, precision recovery, and controlled shutdown.
 
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Operator as "System Operator"
+    participant Console as "Supervisory Console"
+    participant Controller as "Core Controller"
+    participant Guidance as "Guidance Subsystem"
+    participant Sensors as "Sensor Suite"
+    participant Watchdog as "Safety Watchdog"
+
+    Operator ->> Console: 1. Power On and Initiate PBIT
+    Console ->> Controller: 2. Command PBIT Verification
+    Controller ->> Sensors: 3. Interrogate Sensor Biases
+    Sensors -->> Controller: 4. Sensor Telemetry Normal
+    Controller ->> Watchdog: 5. Verify Safety Bounds
+    Watchdog -->> Controller: 6. Safety Interlocks Armed
+    Controller -->> Console: 7. PBIT Status PASS
+    Console -->> Operator: 8. System Armed and Ready
+    Operator ->> Console: 9. Depress Execution Switch
+    Console ->> Controller: 10. Command Sortie Execution
+    Controller ->> Guidance: 11. Engage Trajectory Corridor
+    Guidance ->> Sensors: 12. Request State Telemetry
+    Sensors -->> Guidance: 13. State Telemetry Stream
+    Guidance ->> Controller: 14. Corridor Navigation Tracking
+    Controller ->> Sensors: 15. Activate On-Station Processing
+    Sensors -->> Controller: 16. Mission Data Stream
+    Controller ->> Guidance: 17. Execute Return Navigation
+    Guidance ->> Controller: 18. Arrival at Recovery Perimeter
+    Controller ->> Watchdog: 19. Precision Deceleration and Safe Rest
+    Watchdog -->> Controller: 20. Zero Velocity Latched
+    Controller -->> Console: 21. Post-Operation Telemetry Dump
+    Console -->> Operator: 22. Controlled Shutdown Complete
+```
+
 | Step Number | Elapsed Time (T+) | Stimulus / Trigger | Actor / Performer | Action Executed | Telemetry Stream | Decision Gate | Exception Branch | Exit Criterion |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **1** | T0 + Delta_t0 | Operator energizes Operator Station and connects primary energy module | Maintenance Technician / Core Controller / Safety Watchdog | Executes automated Pre-Operation Built-In-Test (PBIT) suite per OA-01; verifies sensor biases, actuator end-stops, cryptographic root of trust, and battery state-of-charge (SoC) | OpTx-01, OpTx-06 (PBIT Status: 100% PASS; Sensor biases <= epsilon_bias_max; SoC >= SoC_launch_min; Bus Voltage nominal; Link SNR >= SNR_min) | Gate GNG-01: PBIT 100% PASS & Pre-Operation Interlocks Verified | If PBIT fails or SoC < SoC_launch_min, abort startup; latch diagnostic fault code and transition to Phase_MaintenanceMode | PBIT verification flag logged; Pre-Operation interlocks green; Root-of-trust validated |
@@ -27,6 +61,32 @@ Scenario `SCN-01` describes an end-to-end nominal operational mission lifecycle 
 ### 9.2 Scenario SCN-02: High-Throughput State Tracking & Target Processing
 Scenario `SCN-02` details the multi-threaded execution when real-time sensor processing detects a high-priority state feature, triggering high-resolution sensor payload tasking, centroid lock, coordinated standoff tracking, and telemetry streaming.
 
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Sensors as "Sensor Suite Array"
+    participant EdgeNode as "Edge Processing Node"
+    participant Actuator as "Payload Actuator"
+    participant Controller as "Core Controller"
+    participant Modem as "PACE Transceiver"
+    actor Operator as "System Operator"
+
+    Sensors ->> EdgeNode: 1. Stream High-Rate Sensor Frames
+    EdgeNode ->> EdgeNode: 2. Execute Neural Feature Extraction
+    EdgeNode ->> Actuator: 3. Command Payload Slew and Centroid Lock
+    Actuator -->> EdgeNode: 4. Gimbal Centroid Lock Confirmed
+    EdgeNode ->> Controller: 5. Transmit Target State Vector
+    Controller ->> Modem: 6. Pipe High-Resolution Telemetry
+    Modem ->> Operator: 7. Deliver Target Telemetry Stream
+    Operator ->> Modem: 8. Authorize Standoff Tracking Pattern
+    Modem ->> Controller: 9. Uplink Standoff Trajectory Command
+    Controller ->> EdgeNode: 10. Confirm Standoff Tracking Active
+    Operator ->> Modem: 11. Command Tracking Termination
+    Modem ->> Controller: 12. Forward Termination Order
+    Controller ->> Actuator: 13. Command Boresight Stow
+    Actuator -->> Controller: 14. Payload Safely Stowed
+```
+
 | Step Number | Elapsed Time (T+) | Stimulus / Trigger | Actor / Performer | Action Executed | Telemetry Stream | Decision Gate | Exception Branch | Exit Criterion |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **1** | T0 + Delta_t1 | Anomaly signature or state feature detected by wide-angle sensor sweep | Sensor Suite Array / Edge Processing Node | Executes real-time edge neural inference model per OA-03; computes confidence score C_detect; extracts state coordinates p_target and bounding geometry | OpTx-04, OpTx-05 (Inference Confidence: C_detect >= C_detect_threshold; Target Coordinates: p_target; Bounding Box: [x, y, z, theta]; Frame Timestamp: t_stamp) | Gate GNG-T1: Detection Confidence C_detect >= C_detect_threshold & Coordinate Validity Verified | If confidence C_detect < C_detect_threshold or false-positive filter triggers, reject candidate detection; resume wide-angle sweep | Feature classification verified; Target Track ID assigned; Internal event emitted via OpTx-05 |
@@ -40,6 +100,31 @@ Scenario `SCN-02` details the multi-threaded execution when real-time sensor pro
 
 ### 9.3 Scenario SCN-03: Degraded C2 Lost-Link & Autonomous Fallback Return
 Scenario `SCN-03` defines the autonomous handling of primary communications failure, execution of PACE failover hierarchy, and fallback to deterministic lost-link return protocols.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Router as "PACE Datalink Router"
+    participant Controller as "Core Controller"
+    participant Watchdog as "Safety Watchdog"
+    participant Failsafe as "Deterministic Failsafe"
+    participant Guidance as "Guidance Subsystem"
+
+    Router ->> Controller: 1. Primary Datalink Heartbeat Timeout
+    Controller ->> Router: 2. Switch to Alternate Network Tunnel
+    Router ->> Controller: 3. Alternate Handshake Failed
+    Controller ->> Router: 4. Engage Contingency Narrowband Channel
+    Router ->> Controller: 5. Complete Signal Loss Declared
+    Controller ->> Watchdog: 6. Report Lost-Link Condition
+    Watchdog ->> Failsafe: 7. Assert EMG-01 Emergency Trigger
+    Failsafe ->> Controller: 8. Latch Lost-Link Fallback Mode
+    Controller ->> Guidance: 9. Initiate Autonomous Holding Pattern
+    Guidance ->> Controller: 10. Holding Pattern Duration Expired
+    Controller ->> Guidance: 11. Compute Clearance Corridor Return
+    Guidance ->> Controller: 12. Execute Autonomous Return Trajectory
+    Controller ->> Watchdog: 13. System at Rest at Primary Recovery Base
+    Watchdog -->> Controller: 14. Lock Failsafe Safe State
+```
 
 | Step Number | Elapsed Time (T+) | Stimulus / Trigger | Actor / Performer | Action Executed | Telemetry Stream | Decision Gate | Exception Branch | Exit Criterion |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -55,6 +140,32 @@ Scenario `SCN-03` defines the autonomous handling of primary communications fail
 ### 9.4 Scenario SCN-04: Dynamic Geofence Boundary Divert
 Scenario `SCN-04` covers the handling of dynamic environmental stress and unexpected keep-out zone insertion exceeding nominal limits, requiring closed-loop Bingo energy calculation and secondary divert execution.
 
+```mermaid
+sequenceDiagram
+    autonumber
+    participant ExtService as "External Data Service"
+    participant Sensors as "Sensor Suite"
+    participant Watchdog as "Safety Watchdog"
+    participant PowerSub as "Power & Resource Subsystem"
+    participant Controller as "Core Controller"
+    actor Operator as "System Operator"
+
+    ExtService ->> Controller: 1. Push Dynamic Exclusion Zone Polygon
+    Sensors ->> Controller: 2. Report Boundary Proximity Warning
+    Controller ->> Watchdog: 3. Evaluate Geofence Margin
+    Watchdog -->> Controller: 4. Proximity Threshold Breached
+    Controller ->> PowerSub: 5. Query Remaining Energy and Bingo Threshold
+    PowerSub -->> Controller: 6. Energy Insufficient for Primary Route
+    Controller ->> Operator: 7. Alert Operator and Propose Secondary Divert
+    Operator ->> Controller: 8. Authenticate Secondary Divert Command
+    Controller ->> Watchdog: 9. Arm EMG-03 Divert Protocol
+    Controller ->> Controller: 10. Execute Turnaway into Divert Corridor
+    Sensors ->> Controller: 11. Confirm Obstacle Clearance in Corridor
+    Controller ->> Controller: 12. Precision Deceleration at Secondary Site
+    Controller ->> Watchdog: 13. System Safe and Contained
+    Watchdog -->> Controller: 14. Safe State Confirmed
+```
+
 | Step Number | Elapsed Time (T+) | Stimulus / Trigger | Actor / Performer | Action Executed | Telemetry Stream | Decision Gate | Exception Branch | Exit Criterion |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **1** | T0 + Delta_t1 | External Data Service pushes dynamic keep-out zone update (OpTx-03) or severe localized environmental disturbance detected | Sensor Suite / External Data Service / Safety Watchdog | Ingests new dynamic geofence exclusion polygon Z_exclusion via OpTx-03 per OA-05; detects that current trajectory intersects newly declared keep-out boundary within distance d_proximity <= d_warning_buffer | OpTx-01, OpTx-03, OpTx-06 (Geofence Warning: ACTIVE; Distance to Keep-Out: d_proximity <= d_warning_buffer; Dynamic Exclusion Polygon: [p_poly1..p_polyN]) | Gate GNG-D1: Dynamic Geofence Warning Threshold d_proximity <= d_warning_buffer Breached | If updated exclusion zone is outside operational trajectory envelope, acknowledge update without altering trajectory plan | Dynamic geofence warning raised; Visual/acoustic alert transmitted to Operator Console; Divert evaluation triggered |
@@ -68,6 +179,34 @@ Scenario `SCN-04` covers the handling of dynamic environmental stress and unexpe
 
 ### 9.5 Scenario SCN-05: Controlled Safety Interlock Action
 Scenario `SCN-05` defines the formal multi-phase verification and execution of a controlled safety interlock and high-consequence action governed by MIL-STD-882E §4.4, {{INTERLOCK_01_TAG:ROE-01}} through {{INTERLOCK_06_TAG:ROE-06}}, multi-modal {{TARGET_VERIFICATION_PHRASE:positive identification}}, dual-consent cryptographic authorization, deterministic terminal execution, and post-action telemetry dump.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor MissionSup as "Mission Supervisor"
+    actor SafetySup as "Safety Supervisor"
+    participant Console as "Supervisory Console"
+    participant Controller as "Core Controller"
+    participant EdgeNode as "Edge Processing Node"
+    participant Watchdog as "Safety Watchdog"
+    participant Actuator as "Payload Actuator"
+
+    Controller ->> EdgeNode: 1. Initiate Positive Target Identification
+    EdgeNode ->> Controller: 2. Verification Confidence Exceeds Threshold
+    Controller ->> Watchdog: 3. Verify Separation to Protected Boundaries
+    Watchdog -->> Controller: 4. Standoff Margin Clear (ROE-05 PASS)
+    Controller ->> Console: 5. Display Verification Data and Request Dual Keys
+    MissionSup ->> Console: 6. Submit Cryptographic Key-A
+    SafetySup ->> Console: 7. Submit Cryptographic Key-B
+    Console ->> Controller: 8. Transmit Dual Consent Tokens (ROE-03)
+    Controller ->> Watchdog: 9. Validate Timestamps and Signatures
+    Watchdog -->> Controller: 10. Dual Consent Validated - System Armed
+    Controller ->> Actuator: 11. Execute Controlled Actuation Command
+    Actuator -->> Controller: 12. Actuation Execution Confirmed
+    Controller ->> Actuator: 13. Isolate Actuator Power (ROE-06)
+    Controller ->> Watchdog: 14. Transition to Safe Egress Corridor
+    Controller ->> Console: 15. Stream Post-Action Cryptographic Telemetry
+```
 
 #### 9.5.1 Safety Interlock State Machine & Deterministic Transitions
 The following Stateflow-compatible Mermaid state machine defines the deterministic phase transitions, guard conditions, and contingency branches governing Scenario `SCN-05`:

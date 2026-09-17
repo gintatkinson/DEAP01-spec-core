@@ -122,24 +122,24 @@ $$
 | Theta = [phi, theta, psi]^T | Attitude Representation | Euler Angles (Roll phi, Pitch theta, Yaw psi) | rad or deg |
 
 ### 1.3.2 Parametric Subsystem Mass/Resource Budget Breakdown Table
-The system architecture decomposes into six canonical Abstract System Topology (AST) structural groups. Mass allocations and power resource budgets are partitioned parametrically to maintain strict mass fraction boundaries summing to 100.0% Maximum Takeoff Weight (MTOW):
+The system architecture decomposes into six canonical Abstract System Topology (AST) structural groups. Mass allocations and power resource budgets are partitioned parametrically to maintain strict mass fraction boundaries summing to 100.0% Maximum Operating Gross Mass (M_max):
 
-| Structural Group (AST Partition) | Allocated Subsystems & Components | Mass Fraction (% MTOW) | Mass Budget (kg) | Nominal Power Budget (W) | Peak Power Budget (W) |
+| Structural Group (AST Partition) | Allocated Subsystems & Components | Mass Fraction (% M_max) | Mass Budget (kg) | Nominal Power Budget (W) | Peak Power Budget (W) |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **{{STRUCTURE_PARTITION_LABEL:Airframe Structure}}** | Fuselage / chassis primary structure, structural spars, mounting bulkheads, enclosure/gear | {{MASS_FRACTION_AIRFRAME_PCT}}% | {{MASS_BUDGET_AIRFRAME_KG}} | {{POWER_NOMINAL_AIRFRAME_W}} | {{POWER_PEAK_AIRFRAME_W}} |
-| **Avionics & Processing** | Flight control computer, redundant IMU/GNSS, air data computer, C2 transceiver, safety watchdog | {{MASS_FRACTION_AVIONICS_PCT}}% | {{MASS_BUDGET_AVIONICS_KG}} | {{POWER_NOMINAL_AVIONICS_W}} | {{POWER_PEAK_AVIONICS_W}} |
+| **{{STRUCTURE_PARTITION_LABEL:Primary Mechanical Structure / Chassis Partition}}** | Chassis primary structure, structural spars, mounting bulkheads, enclosure/gear | {{MASS_FRACTION_AIRFRAME_PCT}}% | {{MASS_BUDGET_AIRFRAME_KG}} | {{POWER_NOMINAL_AIRFRAME_W}} | {{POWER_PEAK_AIRFRAME_W}} |
+| **Avionics & Processing** | Core Real-Time Controller Node, redundant IMU/GNSS, navigation processing unit, C2 transceiver, safety watchdog | {{MASS_FRACTION_AVIONICS_PCT}}% | {{MASS_BUDGET_AVIONICS_KG}} | {{POWER_NOMINAL_AVIONICS_W}} | {{POWER_PEAK_AVIONICS_W}} |
 | **Propulsion & Power Distribution** | Actuators, electric motors, electronic speed controllers (ESCs), power distribution unit (PDU) | {{MASS_FRACTION_PROPULSION_PCT}}% | {{MASS_BUDGET_PROPULSION_KG}} | {{POWER_NOMINAL_PROPULSION_W}} | {{POWER_PEAK_PROPULSION_W}} |
 | **Energy Storage Subsystem** | Smart battery module / fuel cell stack, Battery Management System (BMS), safety disconnect contactors | {{MASS_FRACTION_ENERGY_PCT}}% | {{MASS_BUDGET_ENERGY_KG}} | {{POWER_NOMINAL_ENERGY_W}} | {{POWER_PEAK_ENERGY_W}} |
 | **Primary Mission Payload** | Multi-modal mission sensor suite, edge neural processing accelerator, payload gimbal, local storage | {{MASS_FRACTION_PAYLOAD_PCT}}% | {{MASS_BUDGET_PAYLOAD_KG}} | {{POWER_NOMINAL_PAYLOAD_W}} | {{POWER_PEAK_PAYLOAD_W}} |
-| **Autonomous Failsafe Containment** | Independent safety watchdog, {{FAILSAFE_CONTAINMENT_NAME:ballistic parachute recovery / containment actuator}}, flight termination interlocks | {{MASS_FRACTION_CONTAINMENT_PCT}}% | {{MASS_BUDGET_CONTAINMENT_KG}} | {{POWER_NOMINAL_CONTAINMENT_W}} | {{POWER_PEAK_CONTAINMENT_W}} |
-| **Total System Integration** | **Integrated Cyber-Physical Platform (6 AST Structural Groups)** | **100.0% MTOW** | **{{TOTAL_MTOW_KG}}** | **{{TOTAL_POWER_NOMINAL_W}}** | **{{TOTAL_POWER_PEAK_W}}** |
+| **Autonomous Failsafe Containment** | Independent safety watchdog, {{FAILSAFE_CONTAINMENT_NAME:Autonomous Containment Actuator / Failsafe Interlocks}}, emergency containment interlocks | {{MASS_FRACTION_CONTAINMENT_PCT}}% | {{MASS_BUDGET_CONTAINMENT_KG}} | {{POWER_NOMINAL_CONTAINMENT_W}} | {{POWER_PEAK_CONTAINMENT_W}} |
+| **Total System Integration** | **Integrated Cyber-Physical Platform (6 AST Structural Groups)** | **100.0% M_max** | **{{TOTAL_MTOW_KG}}** | **{{TOTAL_POWER_NOMINAL_W}}** | **{{TOTAL_POWER_PEAK_W}}** |
 
 ### 1.3.3 Master Physical Limits Table
 The cyber-physical vehicle operates under bounding physical, aerodynamic/kinematic, and environmental limits:
 
 | Parameter ID | Bounding Parameter Name | Parametric Symbol | Threshold (Boundary Limit) | Objective (Nominal Target) | Engineering Unit | Normative / Safety Basis |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **PL-01** | Maximum Takeoff Weight (MTOW) | m_MTOW | <= {{MTOW_MAX_KG}} | {{MTOW_NOMINAL_KG}} | kg | Certified maximum structural takeoff mass limit |
+| **PL-01** | Maximum Operating Gross Mass (M_max) | m_max | <= {{MTOW_MAX_KG}} | {{MTOW_NOMINAL_KG}} | kg | Certified maximum structural mass limit |
 | **PL-02** | Maximum Payload Mass Capacity | m_payload_max | >= {{PAYLOAD_MAX_KG}} | {{PAYLOAD_NOMINAL_KG}} | kg | Usable mission payload mass reserve |
 | **PL-03** | Physical Dimensions (Length x Width x Height) | L_x, L_y, L_z | <= {{DIM_MAX_L_M}} x {{DIM_MAX_W_M}} x {{DIM_MAX_H_M}} | {{DIM_NOM_L_M}} x {{DIM_NOM_W_M}} x {{DIM_NOM_H_M}} | m | Spatial transport and operational clearance envelope |
 | **PL-04** | Nominal Cruise Velocity | V_cruise | {{V_CRUISE_MIN_MPS}} - {{V_CRUISE_MAX_MPS}} | {{V_CRUISE_NOMINAL_MPS}} | m/s | Optimum aerodynamic / dynamic transit speed |
@@ -196,7 +196,7 @@ flowchart TB
 
     subgraph ExternalAuthorities["External Authorities &<br/>Regulatory Services"]
         direction TB
-        AirspaceAuthority["Civil Aviation & Airspace<br/>Authority - UTM<br/>(InterfacePort: UTMService)"]
+        RegulatoryAuthority["External Regulatory Authority &<br/>Oversight Service<br/>(InterfacePort: RegulatoryService)"]
         WeatherDataService["Meteorological & Weather Service<br/>(InterfacePort: WeatherService)"]
     end
 
@@ -211,10 +211,10 @@ flowchart TB
     OperatorConsole ---|"9. Cloud Telemetry &<br/>Mission Archiving"| InfrastructureHub
     SystemOperator ---|"10. Supervisory Mission Control"| OperatorConsole
     SafetySupervisor ---|"11. Safety Monitor &<br/>Emergency Veto"| OperatorConsole
-    OperationsCoordinator -->|"12. Flight Plan & Mission Tasking"| SystemOperator
+    OperationsCoordinator -->|"12. Operational Trajectory &<br/>Mission Tasking"| SystemOperator
     MaintenanceTechnician ---|"13. Diagnostic Calibration &<br/>BIT Checkout"| MaintenanceTerminal
     GroundSupportEquipment ---|"14. Power Charging &<br/>GSE Umbilical Link"| CoreController
-    OperatorConsole ---|"15. Dynamic Geo-Zone &<br/>Flight Authorization"| AirspaceAuthority
+    OperatorConsole ---|"15. Dynamic Geo-Zone &<br/>Mission Authorization"| RegulatoryAuthority
 ```
 
 ### 1.5 Normative Standards & Regulatory Baseline
@@ -241,3 +241,25 @@ In accordance with ISO/IEC/IEEE 29148:2018 §5.2.4 and the operational baseline,
 | **UCL-03** | Mission Supervisor (MS) | Supervisor / Player | Executive Authority / Operations Director | Establishes operational rules, authorizes mission execution and abort commands, manages multi-system allocations, and coordinates external interfaces. | Senior Operations Supervisor Qualification & System Safety Management Certification | MIL-STD-882E Task 102 |
 | **UCL-04** | Maintenance Technician (MT) | Support Operator | Maintenance Depot / Quality Assurance Office | Conducts Organizational (O-Level) pre-operation inspections, resource module replacements, structural integrity checks, sensor calibration, and modular LRU swaps. | Certified Maintenance Technician / Field Hardware Specialist | ISO/IEC/IEEE 29148:2018 §5.2.4 |
 | **UCL-05** | Safety Monitor (SM) | Field Support | Local Environment Monitoring Staff | Maintains continuous monitoring of surrounding operational boundaries to detect environmental anomalies and non-cooperative entities within the operational state space. | Certified Safety Observer Training & Operational Communication Protocol Qualification | MIL-STD-882E §4.3 |
+
+#### 1.6.1 DoDAF OV-4 / OMG UAF Op-Or Organizational Command & Authority Hierarchy
+The following diagram defines the organizational command structure, supervisory authority hierarchy, and reporting relationships across the executive, supervisory, operational, and maintenance tiers in accordance with DoDAF 2.02 OV-4, OMG UAF v2.0 Op-Or, and ISO/IEC/IEEE 29148 §6.4.3:
+
+```mermaid
+flowchart TD
+    Director["Executive Authority<br/>(Operations Director)"]
+    Supervisor["Mission Supervisor<br/>(UCL-03)"]
+    Operator["System Operator<br/>(UCL-01)"]
+    PayloadSpec["Payload Specialist<br/>(UCL-02)"]
+    SafetyMon["Safety Monitor<br/>(UCL-05)"]
+    SupportOrg["Support Organization<br/>(Maintenance Depot)"]
+    Technician["Maintenance Technician<br/>(UCL-04)"]
+
+    Director -->|"Operational Directive"| Supervisor
+    Supervisor -->|"Command Authority"| Operator
+    Supervisor -->|"Payload Tasking"| PayloadSpec
+    Supervisor -->|"Safety Coordination"| SafetyMon
+    SupportOrg -->|"Logistics Oversight"| Technician
+    Technician -.->|"Readiness Status"| Supervisor
+    Operator -.->|"Operational Status"| Supervisor
+```

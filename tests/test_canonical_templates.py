@@ -12,11 +12,19 @@ parity_src = os.path.join(repo_root, "skills", "spec-orchestrator", "parity_audi
 if parity_src not in sys.path:
     sys.path.insert(0, parity_src)
 
+from parity_auditor.core.workspace import WorkspaceRepository
+from parity_auditor.validators.architecture_viewpoint_validator import (
+    ArchitectureViewpointValidator,
+)
 from parity_auditor.validators.conops_completeness_validator import (
     ConopsCompletenessValidator,
     MissionIntentCompletenessValidator,
 )
+from parity_auditor.validators.operational_allocation_validator import (
+    OperationalAllocationValidator,
+)
 from scripts.verify_downstream_baseline import check_upstream_template_clean_landing_zones
+from scripts.assemble_conops import assemble_document, assemble_conops
 
 
 UPSTREAM_CLEAN_ALLOWLIST = {".gitkeep", "README.md", "units"}
@@ -88,7 +96,7 @@ CANONICAL_CONOPS_UNIT_FILENAMES = [
     "03_PROPOSED_CAPABILITIES.md",
     "04_SYSTEM_ARCHITECTURE.md",
     "04_USER_CLASSES_AND_STAKEHOLDERS.md",
-    "05_AIRSPACE_AND_SORA_RISK.md",
+    "05_OPERATIONAL_STATE_SPACE_AND_RISK.md",
     "06_UAF_OPERATIONAL_ACTIVITIES.md",
     "07_OPTX_EXCHANGES.md",
     "08_ENVIRONMENTAL_MIL_STD_810H.md",
@@ -212,6 +220,23 @@ class TestCanonicalTemplates(unittest.TestCase):
 
         self.assertEqual(violations, [], f"Forbidden domain nouns found in MISSION_INTENT template: {violations}")
 
+    def test_canonical_units_zero_domain_nouns(self):
+        """Verify that all modular unit files in CANONICAL_CONOPS_UNIT_FILENAMES contain zero forbidden domain nouns."""
+        conops_units_dir = os.path.join(repo_root, "skills", "spec-conops-engineering", "resources", "units", "conops")
+        violations = []
+        for fname in CANONICAL_CONOPS_UNIT_FILENAMES:
+            src = os.path.join(conops_units_dir, fname)
+            self.assertTrue(os.path.isfile(src), f"Missing canonical ConOps unit: {src}")
+            with open(src, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            for pat in FORBIDDEN_DOMAIN_NOUNS:
+                matches = re.findall(pat, content, re.IGNORECASE)
+                if matches:
+                    violations.append(f"{fname}: Found forbidden domain noun '{matches[0]}' matching pattern '{pat}'")
+
+        self.assertEqual(violations, [], f"Forbidden domain nouns found in ConOps units: {violations}")
+
     def test_templates_use_parameter_tokens(self):
         """Verify that both templates use parameter tokens in format {{...}}."""
         self.assertTrue(os.path.isfile(self.conops_src), f"Missing {self.conops_src}")
@@ -310,6 +335,202 @@ class TestCanonicalTemplates(unittest.TestCase):
         """Verify that Check 16 (Upstream Template Clean Landing Zone Gate) passes."""
         # Should not raise SystemExit
         check_upstream_template_clean_landing_zones(repo_root)
+
+    def test_ov5a_diagram_in_conops_unit_passes_gate30(self):
+        """Verify that 06_UAF_OPERATIONAL_ACTIVITIES.md contains a conforming DoDAF OV-5a decomposition tree (refs #348)."""
+        conops_units_dir = os.path.join(repo_root, "skills", "spec-conops-engineering", "resources", "units", "conops")
+        unit_file = os.path.join(conops_units_dir, "06_UAF_OPERATIONAL_ACTIVITIES.md")
+        self.assertTrue(os.path.isfile(unit_file), f"Missing {unit_file}")
+        with open(unit_file, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        self.assertIn("6.1.1 DoDAF OV-5a / UAF Op-Tx Operational Activity Decomposition Tree", content)
+        self.assertIn("MissionOperations", content)
+        for oa_idx in range(1, 9):
+            self.assertIn(f"OA-{oa_idx:02d}", content)
+
+        validator = ArchitectureViewpointValidator()
+        findings = validator.validate_markdown_content(
+            content,
+            "skills/spec-conops-engineering/resources/units/conops/06_UAF_OPERATIONAL_ACTIVITIES.md",
+            target_diagrams={"OV-5a"},
+        )
+        self.assertEqual(findings, [], f"ConOps unit 06 OV-5a failed Gate 30 validation: {findings}")
+
+    def test_conops_unit06_sv5a_matrix_completeness(self):
+        """Verify that 06_UAF_OPERATIONAL_ACTIVITIES.md contains a complete DoDAF SV-5a allocation matrix (refs #347)."""
+        conops_units_dir = os.path.join(repo_root, "skills", "spec-conops-engineering", "resources", "units", "conops")
+        unit_file = os.path.join(conops_units_dir, "06_UAF_OPERATIONAL_ACTIVITIES.md")
+        self.assertTrue(os.path.isfile(unit_file), f"Missing {unit_file}")
+        with open(unit_file, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        section_heading = "### 6.2 DoDAF SV-5a / OMG UAF Op-to-Res Operational-to-Resource Allocation Matrix"
+        self.assertIn(section_heading, content)
+
+        lines = content.splitlines()
+        header_idx = -1
+        for idx, line in enumerate(lines):
+            if section_heading in line:
+                header_idx = idx
+                break
+        self.assertNotEqual(header_idx, -1, f"Heading '{section_heading}' not found in lines")
+
+        # Parse the markdown table lines under Section 6.2
+        table_lines = []
+        for line in lines[header_idx + 1:]:
+            stripped = line.strip()
+            if stripped.startswith("###"):
+                break
+            if stripped.startswith("|") and stripped.endswith("|"):
+                table_lines.append(stripped)
+
+        self.assertGreaterEqual(len(table_lines), 3, "Expected table header, separator, and data rows under Section 6.2")
+
+        header_cols = [c.strip() for c in table_lines[0].split("|")[1:-1]]
+        required_columns = [
+            "Operational Activity ID",
+            "Activity Name",
+            "System Performer Node",
+            "Physical Subsystem / Partition",
+            "Software Function / Partition",
+            "Interface / Bus Binding",
+            "Criticality & Safety Level",
+        ]
+        for col in required_columns:
+            self.assertIn(col, header_cols, f"Missing required column '{col}' in SV-5a table header")
+
+        col_indices = {col: header_cols.index(col) for col in required_columns}
+
+        data_rows = []
+        for row_str in table_lines[2:]:
+            parts = [c.strip() for c in row_str.split("|")[1:-1]]
+            if all(re.match(r"^:?-+:?$", p) for p in parts if p):
+                continue
+            row_dict = {col: parts[col_indices[col]] if col_indices[col] < len(parts) else "" for col in required_columns}
+            if re.search(r"OA-\d+", row_dict["Operational Activity ID"]):
+                data_rows.append(row_dict)
+
+        expected_oas = [f"OA-{i:02d}" for i in range(1, 9)]
+        found_oas = []
+        for row in data_rows:
+            m = re.search(r"\b(OA-\d+)\b", row["Operational Activity ID"])
+            if m:
+                found_oas.append(m.group(1))
+
+        self.assertEqual(sorted(found_oas), expected_oas, f"Expected {expected_oas}, found {sorted(found_oas)}")
+
+        for row_idx, row in enumerate(data_rows, start=1):
+            for col in required_columns:
+                val = row[col].strip()
+                self.assertTrue(val, f"Row {row_idx} ({row.get('Operational Activity ID')}) column '{col}' is empty")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            docs_conops = os.path.join(tmpdir, "docs", "conops")
+            os.makedirs(docs_conops, exist_ok=True)
+            with open(os.path.join(docs_conops, "06_UAF_OPERATIONAL_ACTIVITIES.md"), "w", encoding="utf-8") as f:
+                f.write(content)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            validator = OperationalAllocationValidator()
+            ops_universe = {oa: oa for oa in expected_oas}
+            findings = validator._validate_conops_sv5a_matrix(repo, ops_universe)
+            self.assertEqual(findings, [], f"_validate_conops_sv5a_matrix yielded unexpected findings: {findings}")
+
+    def test_ov4_diagram_in_conops_unit_passes_gate30(self):
+        """Verify that 01_METADATA_AND_OVERVIEW.md contains a conforming DoDAF OV-4 hierarchy (refs #345)."""
+        conops_units_dir = os.path.join(repo_root, "skills", "spec-conops-engineering", "resources", "units", "conops")
+        unit_file = os.path.join(conops_units_dir, "01_METADATA_AND_OVERVIEW.md")
+        self.assertTrue(os.path.isfile(unit_file), f"Missing {unit_file}")
+        with open(unit_file, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        self.assertIn("1.6.1 DoDAF OV-4", content)
+        validator = ArchitectureViewpointValidator()
+        findings = validator.validate_markdown_content(
+            content,
+            "skills/spec-conops-engineering/resources/units/conops/01_METADATA_AND_OVERVIEW.md",
+            target_diagrams={"OV-4"},
+        )
+        self.assertEqual(findings, [], f"ConOps unit 01 OV-4 failed Gate 30 validation: {findings}")
+
+    def test_sv4_diagram_in_conops_unit_passes_gate30(self):
+        """Verify that 04_SYSTEM_ARCHITECTURE.md contains a conforming DoDAF SV-4 diagram (refs #346)."""
+        conops_units_dir = os.path.join(repo_root, "skills", "spec-conops-engineering", "resources", "units", "conops")
+        unit_file = os.path.join(conops_units_dir, "04_SYSTEM_ARCHITECTURE.md")
+        self.assertTrue(os.path.isfile(unit_file), f"Missing {unit_file}")
+        with open(unit_file, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        self.assertIn("4.6 DoDAF SV-4", content)
+        validator = ArchitectureViewpointValidator()
+        findings = validator.validate_markdown_content(
+            content,
+            "skills/spec-conops-engineering/resources/units/conops/04_SYSTEM_ARCHITECTURE.md",
+            target_diagrams={"SV-4"},
+        )
+        self.assertEqual(findings, [], f"ConOps unit 04 SV-4 failed Gate 30 validation: {findings}")
+
+    def test_spatial4d_diagram_in_conops_unit_passes_gate30(self):
+        """Verify that 05_OPERATIONAL_STATE_SPACE_AND_RISK.md contains a conforming SPATIAL-4D diagram (refs #339, #351)."""
+        conops_units_dir = os.path.join(repo_root, "skills", "spec-conops-engineering", "resources", "units", "conops")
+        unit_file = os.path.join(conops_units_dir, "05_OPERATIONAL_STATE_SPACE_AND_RISK.md")
+        self.assertTrue(os.path.isfile(unit_file), f"Missing {unit_file}")
+        with open(unit_file, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        self.assertIn("SPATIAL-4D", content)
+        validator = ArchitectureViewpointValidator()
+        findings = validator.validate_markdown_content(
+            content,
+            "skills/spec-conops-engineering/resources/units/conops/05_OPERATIONAL_STATE_SPACE_AND_RISK.md",
+            target_diagrams={"SPATIAL-4D"},
+        )
+        self.assertEqual(findings, [], f"ConOps unit 05 SPATIAL-4D failed Gate 30 validation: {findings}")
+
+    def test_assembled_canonical_conops_satisfies_all_architecture_viewpoints(self):
+        """Verify assembled ConOps units satisfy all 11 canonical architecture diagrams without blinding (Issue #350)."""
+        conops_units_dir = os.path.join(repo_root, "skills", "spec-conops-engineering", "resources", "units", "conops")
+        conops_content, errors = assemble_document(conops_units_dir)
+        self.assertEqual(errors, [], f"Assembled ConOps had errors: {errors}")
+        validator = ArchitectureViewpointValidator()
+        findings = validator.validate_markdown_content(
+            conops_content, "docs/conops/CONOPS.md", target_diagrams=None
+        )
+        self.assertEqual(findings, [], f"Assembled ConOps failed unblinded Gate 30 validation: {findings}")
+
+    def test_ov5b_diagram_in_conops_unit_passes_gate30(self):
+        """Verify that 06_UAF_OPERATIONAL_ACTIVITIES.md contains a conforming DoDAF OV-5b diagram (refs #349)."""
+        conops_units_dir = os.path.join(repo_root, "skills", "spec-conops-engineering", "resources", "units", "conops")
+        unit_file = os.path.join(conops_units_dir, "06_UAF_OPERATIONAL_ACTIVITIES.md")
+        self.assertTrue(os.path.isfile(unit_file), f"Missing {unit_file}")
+        with open(unit_file, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        self.assertIn("6.1.2 DoDAF OV-5b", content)
+        validator = ArchitectureViewpointValidator()
+        findings = validator.validate_markdown_content(
+            content,
+            "skills/spec-conops-engineering/resources/units/conops/06_UAF_OPERATIONAL_ACTIVITIES.md",
+            target_diagrams={"OV-5b"},
+        )
+        self.assertEqual(findings, [], f"ConOps unit 06 OV-5b failed Gate 30 validation: {findings}")
+
+    def test_ov6c_scenarios_in_conops_unit_passes_gate30(self):
+        """Verify that 09_SCENARIOS_AND_TIMELINES.md contains conforming DoDAF OV-6c scenario sequences (refs #350)."""
+        conops_units_dir = os.path.join(repo_root, "skills", "spec-conops-engineering", "resources", "units", "conops")
+        unit_file = os.path.join(conops_units_dir, "09_SCENARIOS_AND_TIMELINES.md")
+        self.assertTrue(os.path.isfile(unit_file), f"Missing {unit_file}")
+        with open(unit_file, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        validator = ArchitectureViewpointValidator()
+        findings = validator.validate_markdown_content(
+            content,
+            "skills/spec-conops-engineering/resources/units/conops/09_SCENARIOS_AND_TIMELINES.md",
+            target_diagrams={"OV-6c"},
+        )
+        self.assertEqual(findings, [], f"ConOps unit 09 OV-6c failed Gate 30 validation: {findings}")
 
 
 if __name__ == "__main__":

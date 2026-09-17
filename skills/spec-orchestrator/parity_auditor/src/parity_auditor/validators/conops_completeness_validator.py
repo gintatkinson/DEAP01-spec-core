@@ -695,7 +695,7 @@ MANDATORY_CONOPS_TABLE_SCHEMAS: Dict[int, Dict[str, Any]] = {
             ("information_item", ["information_item", "information_element", "item", "info_item", "message"]),
             ("data_rate", ["data_rate", "throughput", "rate", "frequency"]),
             ("max_latency", ["max_latency", "latency", "max_latency_ms", "latency_limit"]),
-            ("criticality", ["criticality", "criticality_level", "dal", "safety_criticality"]),
+            ("criticality", ["criticality", "criticality_level", "dal", "safety_criticality", "integrity_assurance_level", "assurance_level", "integrity"]),
         ],
     },
     10: {

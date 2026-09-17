@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import tempfile
 import unittest
@@ -17,6 +18,29 @@ from parity_auditor.validators.operational_allocation_validator import (
     _normalize_oa_id,
     _parse_allocation_tags,
 )
+
+CANONICAL_CONOPS_UNIT_06 = os.path.join(
+    repo_root,
+    "skills",
+    "spec-conops-engineering",
+    "resources",
+    "units",
+    "conops",
+    "06_UAF_OPERATIONAL_ACTIVITIES.md",
+)
+
+
+def _load_canonical_unit06() -> str:
+    with open(CANONICAL_CONOPS_UNIT_06, "r", encoding="utf-8") as f:
+        return f.read()
+
+
+def _get_canonical_sv5a_section() -> str:
+    content = _load_canonical_unit06()
+    m = re.search(r"(### 6\.2 DoDAF SV-5a.*?)(?=\n#### 6\.2\.1|\n### 6\.3|\Z)", content, re.DOTALL)
+    if m:
+        return "\n" + m.group(1).strip() + "\n"
+    return ""
 
 
 class TestOperationalAllocationValidator(unittest.TestCase):
@@ -83,7 +107,7 @@ class TestOperationalAllocationValidator(unittest.TestCase):
 | `OA-01` | System Initialization | Perform boot and PBIT tests | `schema/system_architecture.sysml` |
 | `OA-02` | Guidance Loop Execution | Continuous sensor-to-actuator compute | `MIL-STD-882E` |
 | `OA-03` | Controlled Power Down | Safe sequence parking and shutdown | `ISO/IEC/IEEE 29148:2018` |
-"""
+""" + _get_canonical_sv5a_section()
             with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
                 f.write(conops_md)
 
@@ -143,7 +167,7 @@ Class GuidanceEngine { ... }
 | :--- | :--- | :--- | :--- |
 | `OA-01` | Initialization | System boot | `schema/system_architecture.sysml` |
 | `OA-02` | Fault Isolation | Diagnostic isolation | `MIL-STD-882E` |
-"""
+""" + _get_canonical_sv5a_section()
             with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
                 f.write(conops_md)
 
@@ -175,7 +199,7 @@ Class GuidanceEngine { ... }
 | Activity ID | Name | Description | SSOT Ground Truth Source & Citation |
 | :--- | :--- | :--- | :--- |
 | `OA-01` | Initialization | System boot | `schema/system_architecture.sysml` |
-"""
+""" + _get_canonical_sv5a_section()
             with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
                 f.write(conops_md)
 
@@ -244,7 +268,7 @@ Class GuidanceEngine { ... }
 | :--- | :--- | :--- | :--- |
 | `OA-01` | System Initialization | Boot sequence | `schema/system_architecture.sysml` |
 | `OA-02` | Guidance Loop Execution | Compute | `MIL-STD-882E` |
-"""
+""" + _get_canonical_sv5a_section()
             with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
                 f.write(conops_md)
 
@@ -264,7 +288,7 @@ Class GuidanceEngine { ... }
 | Activity ID | Name | Description | SSOT Ground Truth Source & Citation |
 | :--- | :--- | :--- | :--- |
 | `OA-01` | System Initialization | Boot sequence | `schema/system_architecture.sysml` |
-"""
+""" + _get_canonical_sv5a_section()
             with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
                 f.write(conops_md)
 
@@ -287,7 +311,7 @@ Class GuidanceEngine { ... }
 | :--- | :--- | :--- | :--- |
 | `OA-01` | System Initialization | Boot sequence | `schema/system_architecture.sysml` |
 | `OA-02` | Guidance Compute | Guidance | `MIL-STD-882E` |
-"""
+""" + _get_canonical_sv5a_section()
             with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
                 f.write(conops_md)
 
@@ -319,7 +343,7 @@ Class GuidanceEngine { ... }
 | Activity ID | Name | Description | SSOT Ground Truth Source & Citation |
 | :--- | :--- | :--- | :--- |
 | `OA-01` | Initialization | System boot | `schema/system_architecture.sysml` |
-"""
+""" + _get_canonical_sv5a_section()
             with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
                 f.write(conops_md)
 
@@ -362,7 +386,7 @@ Class GuidanceEngine { ... }
 | `OA-01` | System Initialization | Boot sequence | `schema/system_architecture.sysml` |
 | `OA-02` | Guidance Loop Execution | Compute | `MIL-STD-882E` |
 | `OA-03` | Controlled Power Down | Safe shutdown | `DO-178C` |
-"""
+""" + _get_canonical_sv5a_section()
             with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
                 f.write(conops_md)
 
@@ -412,7 +436,7 @@ Class GuidanceEngine { ... }
 | `OA-01` | System Initialization | Boot sequence | `schema/system_architecture.sysml` |
 | `OA-02` | Guidance Loop Execution | Compute | `MIL-STD-882E` |
 | `OA-03` | Controlled Power Down | Safe shutdown | `DO-178C` |
-"""
+""" + _get_canonical_sv5a_section()
             with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
                 f.write(conops_md)
 
@@ -448,7 +472,7 @@ Class GuidanceEngine { ... }
 | Activity ID | Name | Description |
 | :--- | :--- | :--- |
 | `OA-01` | Initialization | System boot |
-"""
+""" + _get_canonical_sv5a_section()
             with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
                 f.write(conops_md)
 
@@ -482,7 +506,7 @@ Class GuidanceEngine { ... }
 | `OA-01` | Initialization | System boot | TBD |
 | `OA-02` | Guidance Compute | Flight guidance | `N/A` |
 | `OA-03` | Environmental Monitoring | Safety limits | Unspecified |
-"""
+""" + _get_canonical_sv5a_section()
             with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
                 f.write(conops_md)
 
@@ -518,7 +542,7 @@ Class GuidanceEngine { ... }
 | `OA-03` | Telemetry Exchange | PACE links | STANAG 4586 Edition 3 |
 | `OA-04` | Safety Containment | Failsafe state | DO-178C DAL-A |
 | `OA-05` | Requirements Baseline | Requirement specs | ISO/IEC/IEEE 29148:2018 |
-"""
+""" + _get_canonical_sv5a_section()
             with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
                 f.write(conops_md)
 
@@ -547,7 +571,7 @@ Class GuidanceEngine { ... }
 | Activity ID | Activity Name | Allocated Performer Node & Resource | Operational Description | Traceability & Gate 24 Allocation Tag | SSOT Ground Truth Source & Citation |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | `OA-01` | System Initialization | PrimarySensorSubsystem | Perform boot BIT tests | `/// OperationalAllocation: [OA-01]` | `schema/system_architecture.sysml` |
-"""
+""" + _get_canonical_sv5a_section()
             with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
                 f.write(conops_md)
 
@@ -585,7 +609,7 @@ Class GuidanceEngine { ... }
 | Activity ID | Name | Description | SSOT Ground Truth Source & Citation |
 | :--- | :--- | :--- | :--- |
 | `OA-01` | Initialization | System boot | 12 |
-"""
+""" + _get_canonical_sv5a_section()
             with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
                 f.write(conops_md)
 
@@ -616,7 +640,7 @@ Class GuidanceEngine { ... }
 | :--- | :--- | :--- | :--- |
 | `OA-01` | Boot Sequence | Power on BIT | `schema/system_architecture.sysml` |
 | `OA-02` | Guidance Loop | Real-time control | `schema/system_architecture.sysml` |
-"""
+""" + _get_canonical_sv5a_section()
             with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
                 f.write(conops_md)
 
@@ -640,6 +664,121 @@ Class GuidanceEngine { ... }
 
             # Both OA-01 (via action def name) and OA-02 (via activity def doc tag) should be allocated
             errors = validator.validate(repo, allow_missing_specs=False)
+            self.assertEqual(errors, [])
+
+    def test_sv5a_matrix_conforming_passes(self):
+        """Verify conforming SV-5a matrix mapping 100% of declared OA activities passes."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            features_dir = os.path.join(tmpdir, "docs", "features")
+            os.makedirs(conops_dir, exist_ok=True)
+            os.makedirs(features_dir, exist_ok=True)
+
+            canonical_content = _load_canonical_unit06()
+            with open(os.path.join(conops_dir, "06_UAF_OPERATIONAL_ACTIVITIES.md"), "w", encoding="utf-8") as f:
+                f.write(canonical_content)
+
+            feat_md = """# Feature 01
+/// OperationalAllocation: [OA-01, OA-02, OA-03, OA-04, OA-05, OA-06, OA-07, OA-08]
+"""
+            with open(os.path.join(features_dir, "FEAT_01.md"), "w", encoding="utf-8") as f:
+                f.write(feat_md)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            validator = OperationalAllocationValidator()
+            errors = validator.validate(repo)
+            self.assertEqual(errors, [])
+
+    def test_sv5a_matrix_missing_flagged(self):
+        """Verify missing SV-5a allocation matrix flags operational-allocation-missing-sv5a-matrix."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            features_dir = os.path.join(tmpdir, "docs", "features")
+            os.makedirs(conops_dir, exist_ok=True)
+            os.makedirs(features_dir, exist_ok=True)
+
+            canonical_content = _load_canonical_unit06()
+            # Mutate real content by removing Section 6.2 SV-5a matrix
+            mutated_content = re.sub(
+                r"### 6\.2 DoDAF SV-5a.*?(?=### 6\.3)", "", canonical_content, flags=re.DOTALL
+            )
+
+            target_rel = "docs/conops/06_UAF_OPERATIONAL_ACTIVITIES.md"
+            with open(os.path.join(tmpdir, target_rel), "w", encoding="utf-8") as f:
+                f.write(mutated_content)
+
+            feat_md = """# Feature 01
+/// OperationalAllocation: [OA-01, OA-02, OA-03, OA-04, OA-05, OA-06, OA-07, OA-08]
+"""
+            with open(os.path.join(features_dir, "FEAT_01.md"), "w", encoding="utf-8") as f:
+                f.write(feat_md)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            validator = OperationalAllocationValidator()
+            errors = validator.validate(repo)
+            sv5a_missing_errors = [e for e in errors if e.rule_id == "operational-allocation-missing-sv5a-matrix"]
+            self.assertEqual(len(sv5a_missing_errors), 1)
+            self.assertEqual(
+                sv5a_missing_errors[0].message,
+                f"ConOps baseline at {target_rel} lacks mandatory DoDAF SV-5a / OMG UAF Op-to-Res Operational-to-Resource Allocation Matrix."
+            )
+
+    def test_sv5a_matrix_incomplete_flagged(self):
+        """Verify incomplete SV-5a allocation matrix missing declared OA-* activities flags operational-allocation-sv5a-incomplete."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            features_dir = os.path.join(tmpdir, "docs", "features")
+            os.makedirs(conops_dir, exist_ok=True)
+            os.makedirs(features_dir, exist_ok=True)
+
+            canonical_content = _load_canonical_unit06()
+            # Mutate real content by removing OA-02 from Section 6.2 table and summary
+            lines = canonical_content.splitlines()
+            mutated_lines = []
+            in_sv5a = False
+            for line in lines:
+                if "### 6.2 DoDAF SV-5a" in line:
+                    in_sv5a = True
+                elif in_sv5a and line.startswith("### 6.3"):
+                    in_sv5a = False
+                if in_sv5a and "OA-02" in line:
+                    if line.strip().startswith("|") and "**OA-02**" in line:
+                        continue
+                    elif "OA-02" in line:
+                        line = line.replace("OA-02, ", "").replace(", OA-02", "").replace("OA-02", "")
+                mutated_lines.append(line)
+
+            target_rel = "docs/conops/06_UAF_OPERATIONAL_ACTIVITIES.md"
+            with open(os.path.join(tmpdir, target_rel), "w", encoding="utf-8") as f:
+                f.write("\n".join(mutated_lines))
+
+            feat_md = """# Feature 01
+/// OperationalAllocation: [OA-01, OA-02, OA-03, OA-04, OA-05, OA-06, OA-07, OA-08]
+"""
+            with open(os.path.join(features_dir, "FEAT_01.md"), "w", encoding="utf-8") as f:
+                f.write(feat_md)
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            validator = OperationalAllocationValidator()
+            errors = validator.validate(repo)
+            sv5a_incomplete_errors = [e for e in errors if e.rule_id == "operational-allocation-sv5a-incomplete"]
+            self.assertEqual(len(sv5a_incomplete_errors), 1)
+            self.assertEqual(
+                sv5a_incomplete_errors[0].message,
+                f"DoDAF SV-5a / UAF Op-to-Res Matrix at {target_rel} is incomplete: missing operational activities [OA-02]."
+            )
+
+    def test_sv5a_matrix_clean_upstream_landing_zone_passes(self):
+        """Verify clean upstream landing zone with empty ops_universe passes gracefully with zero findings."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            conops_dir = os.path.join(tmpdir, "docs", "conops")
+            os.makedirs(conops_dir, exist_ok=True)
+            with open(os.path.join(conops_dir, ".gitkeep"), "w", encoding="utf-8") as f:
+                f.write("")
+
+            repo = WorkspaceRepository(workspace_dir=tmpdir)
+            validator = OperationalAllocationValidator()
+            errors = validator.validate(repo)
             self.assertEqual(errors, [])
 
 

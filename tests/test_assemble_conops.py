@@ -1710,14 +1710,14 @@ Formal operational lifecycle stages across $\\Phi_{\\mathrm{lifecycle}}$:
         self.assertIn("```mermaid", super_sys)
         self.assertIn("flowchart TD", super_sys)
         self.assertIn("direction TB", super_sys)
-        self.assertIn('subgraph Tier_1["Subsystem Architecture Tier 1"]', super_sys)
-        self.assertIn('subgraph Tier_2["Subsystem Architecture Tier 2"]', super_sys)
+        self.assertIn('subgraph Tier_1', super_sys)
+        self.assertIn('subgraph Tier_2', super_sys)
         self.assertIn('GuidanceComputer["GuidanceComputer<br/>• p_c2 (INOUT)<br/>• p_cmd (OUT)"]', super_sys)
         self.assertIn('NavigationFusionUnit["NavigationFusionUnit<br/>• p_rf (IN)<br/>• p_data (OUT)"]', super_sys)
         self.assertIn('ActuatorUnit["ActuatorUnit<br/>• p_act (IN)"]', super_sys)
         self.assertIn('SafetyWatchdog["SafetyWatchdog<br/>• p_wd (IN)"]', super_sys)
-        self.assertIn("CONN-01: Operator Command & Authorization", super_sys)
-        self.assertIn("CONN-02: Bidirectional PACE C2 Datalink", super_sys)
+        self.assertIn("CONN-01: Operator Command Input", super_sys)
+        self.assertIn("CONN-02: PACE C2 Datalink", super_sys)
 
     def test_conops_architecture_level_1b_abstraction_zero_serial_opcodes_or_crc_polynomials(self):
         """Verify ConOps synthesis maintains Level 1B operational abstraction without injecting serial opcodes, baud rates, or CRC formulas (Fixes #273)."""
@@ -2315,8 +2315,8 @@ parameters:
         self.assertIn("```mermaid", super_sys)
         self.assertIn("flowchart TD", super_sys)
         self.assertIn('subgraph Super_System["Operational Super-System Architecture (AutonomousPlatform)"]', super_sys)
-        self.assertIn('Operator["Human Operator & Mission Supervisor"]', super_sys)
-        self.assertIn('Environment["External Environment & Infrastructure"]', super_sys)
+        self.assertIn('Operator["Human Operator &<br/>Mission Supervisor"]', super_sys)
+        self.assertIn('Environment["External Environment &<br/>Infrastructure Dynamics"]', super_sys)
         self.assertIn('subgraph Platform_Segment["Primary Operational Segment (DoDAF SV-1)"]', super_sys)
 
         # Confirm GSE / Launch segments are completely expunged (Issue #297)

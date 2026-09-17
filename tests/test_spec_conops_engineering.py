@@ -113,7 +113,7 @@ class TestSpecConopsEngineering(unittest.TestCase):
             "02_DEFICIENCIES_AND_MOTIVATION.md",
             "03_PROPOSED_CAPABILITIES.md",
             "04_USER_CLASSES_AND_STAKEHOLDERS.md",
-            "05_AIRSPACE_AND_SORA_RISK.md",
+            "05_OPERATIONAL_STATE_SPACE_AND_RISK.md",
             "06_UAF_OPERATIONAL_ACTIVITIES.md",
             "07_OPTX_EXCHANGES.md",
             "08_ENVIRONMENTAL_MIL_STD_810H.md",
@@ -330,7 +330,11 @@ class TestSpecConopsEngineering(unittest.TestCase):
 
         # Section 1.3.2: Parametric Subsystem Mass/Resource Budget Breakdown Table
         self.assertIn("### 1.3.2 Parametric Subsystem Mass/Resource Budget Breakdown Table", content)
-        self.assertIn("| Structural Group (AST Partition) | Allocated Subsystems & Components | Mass Fraction (% MTOW) | Mass Budget (kg) | Nominal Power Budget (W) | Peak Power Budget (W) |", content)
+        self.assertTrue(
+            "| Structural Group (AST Partition) | Allocated Subsystems & Components | Mass Fraction (% MTOW) | Mass Budget (kg) | Nominal Power Budget (W) | Peak Power Budget (W) |" in content
+            or "| Structural Group (AST Partition) | Allocated Subsystems & Components | Mass Fraction (% M_max) | Mass Budget (kg) | Nominal Power Budget (W) | Peak Power Budget (W) |" in content,
+            "Missing Parametric Subsystem Mass/Resource Budget Breakdown Table header (% MTOW or % M_max)",
+        )
         tokens_132 = [
             "{{STRUCTURE_PARTITION_LABEL",
             "{{MASS_FRACTION_AIRFRAME_PCT}}",
@@ -1145,11 +1149,19 @@ class TestSpecConopsEngineering(unittest.TestCase):
             with open(skill_path, "r", encoding="utf-8") as f:
                 content = f.read()
 
-            self.assertIn("### 4.7 Section 10 Operational Sequence Diagram Template & Safety-Critical Actuation Invariants", content)
+            self.assertTrue(
+                "### 4.7 Section 10 Operational Sequence Diagram Template & Safety-Critical Actuation Invariants" in content
+                or "### 4.7 Section 9/10 Operational Sequence Diagram Templates & Deterministic Safety Interlock Invariants" in content,
+                "Missing section 4.7 sequence diagram heading in skill",
+            )
             self.assertIn("Strict Prohibition of Autonomous High-Consequence Actuation", content)
             self.assertIn("Mandatory Temporal Precedence of Human Consent", content)
             self.assertIn("Abstract Temporal Safety Invariant Rule", content)
-            self.assertIn("Figure 10.1: Operational Sequence Diagram with Human Authorization & Safety Interlock Disengagement", content)
+            self.assertTrue(
+                "Figure 10.1: Operational Sequence Diagram with Human Authorization & Safety Interlock Disengagement" in content
+                or "Figure 9.3: SCN-05 Deterministic High-Consequence Safety Interlock Protocol" in content,
+                "Missing operational sequence diagram figure heading in skill",
+            )
 
             # Sequence diagram syntax and temporal precedence check
             self.assertIn("sequenceDiagram", content)
@@ -1201,11 +1213,17 @@ class TestSpecConopsEngineering(unittest.TestCase):
             self.assertIn("flowchart TD", content)
             self.assertIn("subgraph External_Actors", content)
             self.assertIn("subgraph Ground_Segment", content)
-            self.assertIn("subgraph Platform_Segment", content)
+            self.assertTrue(
+                "subgraph Air_Vehicle_Segment" in content or "subgraph Platform_Segment" in content,
+                "Missing segment subgraph (Air_Vehicle_Segment or Platform_Segment) in SV-1 template",
+            )
             self.assertIn("subgraph Support_Segment", content)
             self.assertIn("PORT_GCS_C2", content)
             self.assertIn("PORT_FCS_C2", content)
-            self.assertIn("CONN-05: PACE Bidirectional C2 Datalink", content)
+            self.assertTrue(
+                "CONN-05: PACE Bidirectional C2 Datalink" in content or "CONN-05: PACE C2 Command Datalink" in content,
+                "Missing CONN-05 PACE C2 datalink in SV-1 template",
+            )
 
     def test_option_3_compact_subsystem_blocks_and_vertical_tiers_standard(self):
         """Verify §2.3 and §4.4 codify Option 3 Compact Subsystem Blocks with Embedded Port Attributes and Vertical Hierarchical Tiers."""

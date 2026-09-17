@@ -41,15 +41,15 @@ stateDiagram-v2
     Phase_NominalExecution --> Contingency_DeadReckoning : EMG_02_GNSSLoss
     Phase_NominalExecution --> Contingency_ResourceDivert : EMG_03_PowerDepletion
     Phase_NominalExecution --> Contingency_GeofenceContainment : EMG_05_GeofenceBreach
-    Phase_NominalExecution --> Contingency_PrecautionaryLand : EMG_06_StructuralAnomaly
-    Phase_NominalExecution --> Emergency_FlightTermination : EMG_07_AbortCommand
+    Phase_NominalExecution --> Contingency_PrecautionaryContainment : EMG_06_StructuralAnomaly
+    Phase_NominalExecution --> Emergency_AutonomousContainment : EMG_07_AbortCommand
     Degraded_SensorFailsafe --> Contingency_LostLinkReturn : LinkTimeout
-    Contingency_LostLinkReturn --> Phase_SecureShutdown : SafeTouchdown
-    Contingency_DeadReckoning --> Phase_SecureShutdown : SafeTouchdown
-    Contingency_ResourceDivert --> Phase_SecureShutdown : SafeTouchdown
+    Contingency_LostLinkReturn --> Phase_SecureShutdown : SafeTerminalState
+    Contingency_DeadReckoning --> Phase_SecureShutdown : SafeTerminalState
+    Contingency_ResourceDivert --> Phase_SecureShutdown : SafeTerminalState
     Contingency_GeofenceContainment --> Contingency_ResourceDivert : ContainmentHold
-    Contingency_PrecautionaryLand --> Phase_SecureShutdown : Touchdown
-    Emergency_FlightTermination --> Phase_SecureShutdown : ImpactSafe
+    Contingency_PrecautionaryContainment --> Phase_SecureShutdown : SafeTerminalState
+    Emergency_AutonomousContainment --> Phase_SecureShutdown : ImpactSafe
     Phase_SecureShutdown --> [*]
 ```
 
@@ -61,8 +61,8 @@ stateDiagram-v2
 
 ### 12.4 Human-in-the-Loop (HITL) Authority & Override Protocols
 - **Supervisory Authority:** Operator retains positive manual override capability via independent emergency link.
-- **Dual-Consent Authentication:** Critical flight termination (`EMG-07`) requires two-operator verified consent keys.
-- **Interlock Inhibit:** Flight computer rejects manual commands that violate dynamic geofence containment limits.
+- **Dual-Consent Authentication:** Critical emergency containment (`EMG-07`) requires two-operator verified consent keys.
+- **Interlock Inhibit:** Core controller rejects manual commands that violate dynamic geofence containment limits.
 
 ### 12.5 Autonomous Divert & Secondary Recovery Protocols
 - **Primary Recovery:** Designated nominal landing site or recovery zone.

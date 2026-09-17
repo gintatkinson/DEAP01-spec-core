@@ -98,7 +98,7 @@ if ! gh label list $REPO_FLAG 2>/dev/null \
 fi
 
 # Issue #244 -- expand relative markdown links to full blob URLs before creating the issue.
-TMP_EXPANDED_BODY=$(mktemp /tmp/expanded_body_XXXXXX.md)
+TMP_EXPANDED_BODY=$(mktemp /tmp/expanded_body_XXXXXX)
 cleanup() {
     rm -f "$TMP_EXPANDED_BODY"
 }

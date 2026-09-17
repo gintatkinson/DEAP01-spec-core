@@ -31,8 +31,18 @@ UNIT_05_PATH = os.path.join(
     "resources",
     "units",
     "conops",
-    "05_AIRSPACE_AND_SORA_RISK.md",
+    "05_OPERATIONAL_STATE_SPACE_AND_RISK.md",
 )
+if not os.path.isfile(UNIT_05_PATH):
+    UNIT_05_PATH = os.path.join(
+        REPO_ROOT,
+        "skills",
+        "spec-conops-engineering",
+        "resources",
+        "units",
+        "conops",
+        "05_AIRSPACE_AND_SORA_RISK.md",
+    )
 
 
 class TestAirspaceAndSoraRiskUnit(unittest.TestCase):
@@ -136,7 +146,7 @@ class TestAirspaceAndSoraRiskUnit(unittest.TestCase):
 
     def test_katex_and_table_integrity(self):
         """Verify zero KaTeX rendering violations or table structure defects."""
-        findings = check_katex_text(self.content, source="05_AIRSPACE_AND_SORA_RISK.md")
+        findings = check_katex_text(self.content, source=os.path.basename(UNIT_05_PATH))
         self.assertEqual(
             findings,
             [],

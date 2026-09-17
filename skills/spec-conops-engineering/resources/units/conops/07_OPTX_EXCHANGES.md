@@ -7,7 +7,27 @@
 ## 7. Operational Information Exchange (Op-Tx) Matrix
 
 ### 7.1 Inter-Node Communication Architecture
-The Operational Information Exchange (Op-Tx) architecture defines all mission-critical, flight control, telemetry, payload, external coordination, and safety data exchanges between system performer nodes. The architecture is structured to support deterministic internal bus protocols, high-throughput payload fabrics, wireless RF datalink channels, direct broadcast identification, and hardwired failsafe discrete lines in compliance with OMG Unified Architecture Framework (UAF) v2.0 Operational Information Views (Op-Tx) and ISO/IEC/IEEE 29148:2018.
+The Operational Information Exchange (Op-Tx) architecture defines all mission-critical, core real-time control, telemetry, payload, external coordination, and safety data exchanges between system performer nodes. The architecture is structured to support deterministic internal bus protocols, high-throughput payload fabrics, wireless RF datalink channels, direct broadcast identification, and hardwired failsafe discrete lines in compliance with OMG Unified Architecture Framework (UAF) v2.0 Operational Information Views (Op-Tx) and ISO/IEC/IEEE 29148:2018.
+
+#### 7.1.1 DoDAF OV-2 / OMG UAF Op-Tx Operational Node Connectivity
+The following operational node connectivity diagram illustrates the operational performers and information channels across the command, control, observation, and safety nodes:
+
+```mermaid
+%% OV-2: Operational Node Connectivity
+flowchart TD
+    OperatorConsole["Operator Console & C2"]
+    CoreController["Autonomous Core Controller"]
+    SensorSuite["Sensor Suite & Payload"]
+    SafetyWatchdog["Independent Safety Watchdog"]
+    ExternalService["External Weather &<br/>Regulatory Service"]
+
+    OperatorConsole -->|"OpTx-01..04 C2 Demands"| CoreController
+    CoreController -->|"OpTx-05..08 Telemetry & State"| OperatorConsole
+    SensorSuite -->|"OpTx-09 Payload & Perception Stream"| CoreController
+    CoreController -->|"OpTx-10 Actuation Demand"| SafetyWatchdog
+    ExternalService -->|"OpTx-15 Authorization & Weather"| OperatorConsole
+    SafetyWatchdog -.->|"OpTx-11..12 Safety Containment"| CoreController
+```
 
 ### 7.2 Operational Information Exchange (Op-Tx) Matrix Table
 In accordance with OMG UAF v2.0 Operational Information Views (Op-Tx), RTCA DO-178C / DO-254 design assurance levels (DAL), and system data contracts, the operational information exchanges are specified across 16 canonical interaction channels:
@@ -22,14 +42,14 @@ In accordance with OMG UAF v2.0 Operational Information Views (Op-Tx), RTCA DO-1
 | **OpTx-06** | RawPayloadSensorStream | SensorSuite | PayloadSubsystem | High-Bandwidth Multi-Modal Video Frames, Timestamp Metadata, Radiometric Matrices, Raw Spatial Point Clouds | Continuous (Frame Clock Synchronized) | f_stream_rate | Throughput_stream | tau_stream_latency_max | DAL-D | Dedicated DMA Channel & Isolated Subnet VLAN |
 | **OpTx-07** | ProcessedFeatureTelemetry | PayloadSubsystem | CoreController | Extracted State Feature Vectors, Target Bounding Boxes, Optical Odometry Vectors, Environmental Obstacle Disparities | Periodic (Inference Pipeline Execution) | f_feature_rate | Throughput_feature | tau_feature_latency_max | DAL-C | Memory Partition Isolation & Ingress Range Sanitization |
 | **OpTx-08** | ConsolidatedDownlinkTelemetry | PrimaryCommunications | OperatorStation | Consolidated System State Telemetry, 3D Kinematics, Energy SoC, Communications Link SNR, Geofence Margin Status | Periodic (PACE Telemetry Scheduler) | f_downlink_rate | Throughput_downlink | tau_downlink_latency_max | DAL-B | Authenticated Encryption (AES-256-GCM / TLS 1.3) & HMAC-SHA256 |
-| **OpTx-09** | SupervisoryUplinkCommand | OperatorStation | CoreController | Uplink Flight Directives, Dynamic 4D Waypoint Corridors, ROE Arming Keys, Manual Override Mode Vectors | Aperiodic (Operator Command Action) | f_uplink_rate | Throughput_uplink | tau_uplink_latency_max | DAL-A | Dual-Signature Token Authentication & Nonce Replay Protection |
+| **OpTx-09** | SupervisoryUplinkCommand | OperatorStation | CoreController | Uplink Mission Directives, Dynamic 4D Waypoint Corridors, ROE Arming Keys, Manual Override Mode Vectors | Aperiodic (Operator Command Action) | f_uplink_rate | Throughput_uplink | tau_uplink_latency_max | DAL-A | Dual-Signature Token Authentication & Nonce Replay Protection |
 | **OpTx-10** | WatchdogHeartbeatStrobe | CoreController | SafetyWatchdog | Controller Task Alive Token, Execution Deadline Checksum, Task Schedule Monotonic Counter | Periodic (Task Deadline Checkpoint) | f_watchdog_hb_rate | Throughput_watchdog_hb | tau_watchdog_hb_latency_max | DAL-A | Dedicated Hardware Strobe Line & Timing Window Interlock |
 | **OpTx-11** | EmergencyFailsafeTrigger | SafetyWatchdog | ActuatorSubsystem | Hardware Safety Abort Strobe, Power Stage Isolation Command, Safe State Clamping Signal | Event-Driven (EMG-01..EMG-07 Fault Detection) | Event-Driven (f_watchdog_rate) | Throughput_watchdog | tau_watchdog_latency_max | DAL-A | Hardware Interlock & Dual-Switch Isolation Lines |
-| **OpTx-12** | FailsafeSquibActuationLine | SafetyWatchdog | EmergencyContainmentSubsystem | Dual-Channel High-Current Fire Pulse, {{CONTAINMENT_SQUIB_ACTION:Parachute / Pyrotechnic Cutter Ignition Command}} | Event-Driven (EMG-07 / Critical Boundary Breach) | Event-Driven (Single Pulse Strobe) | Discrete Pulse | tau_squib_latency_max | DAL-A | Isolated High-Side/Low-Side Solid-State Switches & Physical Key Interlock |
+| **OpTx-12** | FailsafeSquibActuationLine | SafetyWatchdog | EmergencyContainmentSubsystem | Dual-Channel High-Current Fire Pulse, {{CONTAINMENT_SQUIB_ACTION:Autonomous Containment / Pyrotechnic Cutter Ignition Command}} | Event-Driven (EMG-07 / Critical Boundary Breach) | Event-Driven (Single Pulse Strobe) | Discrete Pulse | tau_squib_latency_max | DAL-A | Isolated High-Side/Low-Side Solid-State Switches & Physical Key Interlock |
 | **OpTx-13** | {{OPTX13_NAME:BroadcastRemoteIDTelemetry}} | {{OPTX13_SOURCE:BroadcastRemoteID}} | ExternalDataService | Statutory Broadcast ID, Serial Number / Session ID, Geodetic Position Coordinates, {{ALTITUDE_TELEMETRY:Altitude}}, Ground Speed, Emergency Status | Periodic (Statutory Broadcast Scheduler) | f_remote_id_rate | Throughput_remote_id | tau_remote_id_latency_max | DAL-C | {{OPTX13_PROTOCOL_DESC:Digitally Signed Public Broadcast (Bluetooth 5.x / Wi-Fi Beacon per ASTM F3411-22a)}} |
 | **OpTx-14** | AirspaceDeconflictionData | ExternalDataService | OperatorStation | Dynamic Geo-Zone Activation/Deactivation, Strategic 4D Corridor Clearances, Adjacent Traffic Conformance Status | Periodic & Event-Driven (UTM Service Updates) | f_utm_rate | Throughput_utm | tau_utm_latency_max | DAL-C | Mutual TLS (mTLS 1.3) & REST/JSON Schema Signature Verification |
 | **OpTx-15** | CompressedPayloadVideoStream | PayloadSubsystem | OperatorStation | H.264/H.265 Encoded Video Stream, KLV Metadata (MISB ST 0601 / STANAG 4609), Real-Time Feature Overlays | Continuous (RTP/RTSP Video Frame Pipeline) | f_video_rate | Throughput_video | tau_video_latency_max | DAL-D | SRTP / AES-CTR Encryption over Wireless PACE Primary/Alternate Tiers |
-| **OpTx-16** | DiagnosticBlackboxLogStream | CoreController | OperatorStation | High-Rate Flight Recorder Time-Series, Sensor Disparity Registers, Exception Stack Traces, BIT Failure Logs | Periodic Buffering & Post-Operation Bulk Transfer | f_log_rate | Throughput_log | tau_log_latency_max | DAL-C | Cryptographic Hashing (SHA-256), Write-Once Flash Partition, Append-Only Non-Volatile Storage |
+| **OpTx-16** | DiagnosticBlackboxLogStream | CoreController | OperatorStation | High-Rate Operational Recorder Time-Series, Sensor Disparity Registers, Exception Stack Traces, BIT Failure Logs | Periodic Buffering & Post-Operation Bulk Transfer | f_log_rate | Throughput_log | tau_log_latency_max | DAL-C | Cryptographic Hashing (SHA-256), Write-Once Flash Partition, Append-Only Non-Volatile Storage |
 
 ### 7.3 Avionic Network Quality of Service (QoS) Stack Allocation
 To guarantee deterministic latency bounds, eliminate message collisions, and enforce strict physical and logical partitioning across all operational interactions, the 16 Op-Tx exchanges are allocated across five distinct avionic physical and logical network tiers:
@@ -56,15 +76,15 @@ $$
 #### 7.3.2 High-Speed Payload Bus (PCIe / Gigabit Ethernet / TSN IEEE 802.1Qbv)
 - **Allocated Exchanges:** `OpTx-06`, `OpTx-15`, and `OpTx-16`.
 - **Protocol Profile & Physical Medium:** IEEE 802.3ab 1000BASE-T Gigabit Ethernet with Time-Sensitive Networking (TSN IEEE 802.1Qbv Scheduled Traffic and IEEE 802.1Qav Credit-Based Shaper) / Peripheral Component Interconnect Express (PCIe Gen3/4 with DMA).
-- **QoS Partitioning & Bandwidth Guarantees:** Physical and logical segregation (dedicated Ethernet PHY and IEEE 802.1Q VLANs) completely isolates high-bandwidth sensor payload data from flight-critical control traffic. High-capacity zero-copy ring buffers and Direct Memory Access (DMA) ensure sustained payload throughput ($\text{Throughput}_{\text{payload\_bus}} \ge 1.0\text{ Gbps}$) without inducing processor starvation or memory bus contention on the Core Controller.
+- **QoS Partitioning & Bandwidth Guarantees:** Physical and logical segregation (dedicated Ethernet PHY and IEEE 802.1Q VLANs) completely isolates high-bandwidth sensor payload data from safety-critical control traffic. High-capacity zero-copy ring buffers and Direct Memory Access (DMA) ensure sustained payload throughput ($\text{Throughput}_{\text{payload\_bus}} \ge 1.0\text{ Gbps}$) without inducing processor starvation or memory bus contention on the Core Controller.
 
 #### 7.3.3 Telemetry Wireless PACE Links (Primary, Alternate, Contingency, Emergency)
 - **Allocated Exchanges:** `OpTx-08`, `OpTx-09`, `OpTx-14`, and `OpTx-15`.
 - **Multi-Tier PACE Communication Stack:**
-  1. **Primary Link (COFDM Point-to-Point / 5.8 GHz ISM):** High-throughput channel carrying consolidated flight telemetry (`OpTx-08`) and real-time compressed video (`OpTx-15`) with nominal bandwidth $\ge 10.0\text{ Mbps}$ and transport latency $\le \tau_{\text{Primary\_max}}$.
+  1. **Primary Link (COFDM Point-to-Point / 5.8 GHz ISM):** High-throughput channel carrying consolidated operational telemetry (`OpTx-08`) and real-time compressed video (`OpTx-15`) with nominal bandwidth $\ge 10.0\text{ Mbps}$ and transport latency $\le \tau_{\text{Primary\_max}}$.
   2. **Alternate Link (Cellular LTE/5G Encrypted VPN / Broadband Satcom):** Secure routed IP tunnel carrying telemetry (`OpTx-08`), UTM coordination updates (`OpTx-14`), and supervisory commands (`OpTx-09`) with bandwidth $\ge 2.0\text{ Mbps}$ and transport latency $\le \tau_{\text{Alternate\_max}}$.
-  3. **Contingency Link (900 MHz FHSS Narrowband Radio):** Robust frequency-hopping datalink dedicated exclusively to essential C2 flight directives (`OpTx-09`) and heartbeat signals (`OpTx-08`) with bandwidth $\ge 115.2\text{ kbps}$ and transport latency $\le \tau_{\text{Contingency\_max}}$.
-  4. **Emergency Link (Satellite Iridium SBD / Low-Frequency Beacon):** Ultra-reliable channel providing global beacon broadcast and dual-consent flight termination confirmations with bandwidth $\ge 2.4\text{ kbps}$ and transport latency $\le \tau_{\text{Emergency\_max}}$.
+  3. **Contingency Link (900 MHz FHSS Narrowband Radio):** Robust frequency-hopping datalink dedicated exclusively to essential C2 mission directives (`OpTx-09`) and heartbeat signals (`OpTx-08`) with bandwidth $\ge 115.2\text{ kbps}$ and transport latency $\le \tau_{\text{Contingency\_max}}$.
+  4. **Emergency Link (Satellite Iridium SBD / Low-Frequency Beacon):** Ultra-reliable channel providing global beacon broadcast and dual-consent emergency containment confirmations with bandwidth $\ge 2.4\text{ kbps}$ and transport latency $\le \tau_{\text{Emergency\_max}}$.
 - **QoS Failover & Security Protection:** Automated link quality monitor evaluating signal-to-noise ratio ($\text{SNR}$), packet loss rate ($\text{PLR}$), and heartbeat timeouts ($t_{\mathrm{loss}} > \tau_{\mathrm{timeout}}$). Failover transitions enforce hysteresis time $\Delta t_{\mathrm{hysteresis}}$ to prevent link flapping. All command channels enforce AES-256-GCM encryption, HMAC-SHA256 authentication, and anti-replay nonce tracking per NIST SP 800-82r3.
 
 #### 7.3.4 {{REMOTE_ID_HEADER:ASTM F3411 Direct Broadcast Remote ID}}

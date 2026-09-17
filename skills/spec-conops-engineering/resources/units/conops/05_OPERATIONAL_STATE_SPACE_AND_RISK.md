@@ -137,8 +137,8 @@ For multi-domain operations across non-aerial and aerial platforms, containment 
    - Closed-loop ballast expulsion reducing descent velocity to zero and returning system safely to surface baseline.
 3. **Space LEO Constellation Containment:**
    - Cold-gas thruster retro-burn perigee lowering for controlled atmospheric demise and passivation (zero residual stored energy / battery disconnect).
-4. **Aerial UAS & eVTOL Failsafe Containment:**
-   - Autonomous flight termination unit (FTU) with {{RECOVERY_DEVICE_TERM:emergency recovery system}} ejection ($t_{\mathrm{deploy}} \le 0.5\text{ s}$) and motor drive power isolation.
+4. **Airborne Autonomous Cyber-Physical System Containment:**
+   - Autonomous containment actuation unit with {{RECOVERY_DEVICE_TERM:emergency recovery system}} ejection ($t_{\mathrm{deploy}} \le 0.5\text{ s}$) and motor drive power isolation.
 
 ---
 
@@ -153,7 +153,7 @@ To guarantee robust ground and operational safety across all operating states, t
 3. **Space & Orbital Containment:**
    - Autonomous orbital de-orbit burn execution using dedicated delta-V propellant reserve ($\Delta v_{\mathrm{deorbit}}$).
    - Passivated reaction wheels (spin-down to zero angular momentum), high-voltage battery discharge passivation, and solar array feathered orientation to eliminate orbital fragmentation risks.
-4. **Aerial & UAS Atmospheric Containment (for platforms with $h_{\mathrm{max}} > 0$):**
+4. **Atmospheric Cyber-Physical System Containment (for platforms with $h_{\mathrm{max}} > 0$):**
    - Independent safety watchdog triggering {{RECOVERY_DEVICE_TERM:emergency containment}} deployment ($v_{\mathrm{terminal,mitigated}} \le {{V_TERMINAL_MITIGATED_MPS:1.65}}\text{ m/s}$, $E_{k,\mathrm{mitigated}} \le {{E_K_MITIGATED_JOULES:34.0}}\text{ J}$).
    - Autonomous motor power bus disconnect preventing uncommanded powered trajectory excursions.
 
@@ -163,7 +163,7 @@ To guarantee robust ground and operational safety across all operating states, t
   2. Electronic Conspicuity & State Telemetry: Continuous broadcast of system position, velocity vector, and operational status at standard periodic rates.
   3. Tactical Environmental Surveillance: Continuous multi-sensor situational awareness monitoring surrounding state space.
 
-### 5.4 SORA Ground Risk Mitigations (M1–M3)
+### 5.4 System Boundary Containment Mitigations (M1–M3)
 In accordance with JARUS SORA v2.5 Annex B (§2.1–§2.3), Ground Risk Class (GRC) mitigations are systematically categorized across strategic isolation (M1), ground impact effects reduction (M2), and emergency response planning (M3):
 
 | Mitigation Code | SORA Mitigation Category | Technical Implementation Mechanism & Architecture | Assurance Level | Robustness & Integrity Level | GRC Reduction Credit | Public Clause Citation |
@@ -173,7 +173,7 @@ In accordance with JARUS SORA v2.5 Annex B (§2.1–§2.3), Ground Risk Class (G
 | **M1.C** | Strategic Ground Risk Mitigation | Enclosed access-controlled operational test range with hard fencing, security interlocks, and 0 non-participants. | High | Third-party audited physical containment with zero non-participant access. | -2 GRC | JARUS SORA v2.5 Annex B §2.1 |
 | **M2.A** | Impact Dynamics Mitigation | Impact-resistant frangible structures and energy-attenuating landing gear geometries. | Low | Empirical impact testing demonstrating controlled energy absorption. | -1 GRC | JARUS SORA v2.5 Annex B §2.2 |
 | **M2.B** | Impact Dynamics Mitigation | Autonomous {{FAILSAFE_DESCENT_SYSTEM:emergency containment system}} actuating in t_deploy <= tau_deploy_max, reducing v_terminal <= {{V_TERMINAL_MITIGATED_MPS:3.0}} m/s. | Medium | Dual-channel sensor trigger with independent backup battery pack. | -1 GRC | JARUS SORA v2.5 Annex B §2.2 |
-| **M2.C** | Impact Dynamics Mitigation | Certified {{FAILSAFE_DESCENT_SYSTEM:emergency containment system}} ({{CONTAINMENT_STANDARD:ISO/IEC 29148 / DO-178C DAL-C}}) ensuring v_terminal <= {{V_TERMINAL_MITIGATED_MPS:1.65}} m/s and E_k_mitigated <= {{E_K_MITIGATED_JOULES:34.0}} J. | High | Fully independent flight termination watchdog, ballistic ejection, and certified compliance. | -2 GRC | JARUS SORA v2.5 Annex B §2.2 |
+| **M2.C** | Impact Dynamics Mitigation | Certified {{FAILSAFE_DESCENT_SYSTEM:emergency containment system}} ({{CONTAINMENT_STANDARD:ISO/IEC 29148 / DO-178C DAL-C}}) ensuring v_terminal <= {{V_TERMINAL_MITIGATED_MPS:1.65}} m/s and E_k_mitigated <= {{E_K_MITIGATED_JOULES:34.0}} J. | High | Fully independent autonomous containment watchdog, ballistic ejection, and certified compliance. | -2 GRC | JARUS SORA v2.5 Annex B §2.2 |
 | **M3.A** | Emergency Response Plan (ERP) | Basic operator emergency checklist detailing notification phone numbers and rally points. | Low | Self-declared operational procedure without rehearsal. | 0 GRC (Prerequisite) | JARUS SORA v2.5 Annex B §2.3 |
 | **M3.B** | Emergency Response Plan (ERP) | Formal ERP coordinated with local emergency response services, defined divert landing sites, and trained personnel. | Medium | Validated ERP with annual multi-agency tabletop drills and direct coordinator link. | -1 GRC | JARUS SORA v2.5 Annex B §2.3 |
 | **M3.C** | Emergency Response Plan (ERP) | Integrated ERP with automated first-responder alerting API, multi-channel satellite emergency beacon (EMG-07), and certified emergency response team. | High | Live drill validated with competent emergency authorities, full mock incident execution, and automated rescue telemetry. | -1 GRC | JARUS SORA v2.5 Annex B §2.3 |
@@ -183,3 +183,22 @@ To guarantee zero-breach containment of the operational state space:
 - **Soft Warning Boundary:** Positioned $d_{\text{warning\_buffer}}$ inboard of the primary operational boundary. Reaching this threshold triggers an automated trajectory correction and visual/acoustic alert on the operator console.
 - **Hard Containment Boundary:** The outer edge of the contingency state space. Crossing this threshold activates trigger `EMG-05`, initiating an immediate autonomous maximum-rate boundary reversal maneuver.
 - **Buffer Retention Margin:** The containment buffer ($R_{\mathrm{buffer}}$) guarantees that in the event of unrecoverable actuation or control loss at maximum boundary speed under worst-case disturbances, all system states remain strictly confined within the declared buffer zone.
+
+#### 5.5.1 DoDAF / ISO 15288 SPATIAL-4D 4D Spatial Volume & Environmental Containment Diagram
+
+The following 4D spatial volume diagram defines the nested containment envelopes, contingency thresholds, and dynamic containment margins governing the operational boundary:
+
+```mermaid
+flowchart TD
+    subgraph OperationalVolume ["Operational Space & Boundary Envelope (DoDAF SPATIAL-4D)"]
+        direction TB
+        NominalState["Nominal Operational Geometry<br/>V_nominal (Velocity <= v_nominal)"]
+        ContingencyState["Contingency State Space<br/>V_contingency (Warning Boundary)"]
+        ContainmentBuffer["Dynamic Containment Buffer<br/>R_buffer = d_reaction +<br/>d_decel + d_margin"]
+        OuterExclusion["External Exclusion Boundary<br/>Non-Participant Environment"]
+
+        NominalState -->|State Excursion / Limit Threshold| ContingencyState
+        ContingencyState -->|EMG-05 Trigger / Deceleration| ContainmentBuffer
+        ContainmentBuffer -.->|Zero-Breach Guarantee| OuterExclusion
+    end
+```

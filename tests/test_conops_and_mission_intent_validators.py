@@ -13,6 +13,7 @@ parity_src = os.path.join(repo_root, "skills", "spec-orchestrator", "parity_audi
 if parity_src not in sys.path:
     sys.path.insert(0, parity_src)
 
+from scripts.assemble_conops import assemble_conops
 from parity_auditor.core.workspace import WorkspaceRepository
 from parity_auditor.aggregator import AGGREGATING_VALIDATORS
 from parity_auditor.validators.conops_completeness_validator import (
@@ -1509,12 +1510,6 @@ stateDiagram-v2
             os.makedirs(pipeline_dir, exist_ok=True)
             os.makedirs(os.path.join(tmpdir, "docs", "features"), exist_ok=True)
 
-            with open(os.path.join(conops_dir, "CONOPS.md"), "w", encoding="utf-8") as f:
-                f.write(_get_valid_conops_content())
-
-            with open(os.path.join(conops_dir, "MISSION_INTENT.md"), "w", encoding="utf-8") as f:
-                f.write(_get_valid_mission_intent_content())
-
             # SysML model providing Gate 24 allocations and subsystem parts
             sysml_content = """package SystemSSOT {
     part def FlightGuidanceController;
@@ -1525,6 +1520,11 @@ stateDiagram-v2
 """
             with open(os.path.join(schema_dir, "model.sysml"), "w", encoding="utf-8") as f:
                 f.write(sysml_content)
+
+            assemble_conops(
+                os.path.join(repo_root, "skills", "spec-conops-engineering", "resources", "units"),
+                conops_dir,
+            )
 
             with open(os.path.join(pipeline_dir, "codebase_rules.json"), "w", encoding="utf-8") as f:
                 f.write("""{
@@ -1548,7 +1548,7 @@ stateDiagram-v2
             cli_py = os.path.join(repo_root, "skills", "spec-orchestrator", "parity_auditor", "src", "parity_auditor", "cli.py")
             import subprocess
             res = subprocess.run(
-                [sys.executable, cli_py, "--workspace", tmpdir, "--schema-only"],
+                [sys.executable, cli_py, "--workspace", tmpdir, "--schema-only", "--gate", "26"],
                 capture_output=True,
                 text=True
             )
@@ -2479,7 +2479,7 @@ Standards body
         card_findings = [f for f in findings if f.rule_id == "mission-section-cardinality-mismatch"]
         self.assertEqual(len(card_findings), 1, f"Expected cardinality mismatch finding in Mission Intent: {findings}")
         self.assertEqual(card_findings[0].detail.get("severity"), "CRITICAL")
-        self.assertEqual(card_findings[0].detail.get("expected_sections"), 10)
+        self.assertEqual(str(card_findings[0].detail.get("expected_sections")), "8 to 10")
         self.assertEqual(card_findings[0].detail.get("actual_sections"), 11)
 
     def test_conops_missing_table_of_contents_fails(self):

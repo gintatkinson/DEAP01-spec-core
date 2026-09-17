@@ -257,8 +257,8 @@ def _normalize_oa_id(raw_id: str) -> str:
     """
     raw = _clean_markdown(raw_id)
     
-    # Strip leading 'Phase N:' or 'Phase N -'
-    m_phase_prefix = re.match(r'^Phase\s*\d*[:\-\s]+\s*(.+)$', raw, re.IGNORECASE)
+    # Strip leading 'Phase N:' or 'Phase N -' or 'Phase_Name'
+    m_phase_prefix = re.match(r'^Phase\s*\d*[:\-\s_]+\s*(.+)$', raw, re.IGNORECASE)
     if m_phase_prefix:
         raw = m_phase_prefix.group(1).strip()
 
@@ -375,6 +375,7 @@ class OperationalAllocationValidator(IValidator):
             lines = content.splitlines()
             in_phases_section = False
             in_activities_section = False
+            in_sv5a_section = False
             in_table = False
             table_col_map: Dict[int, str] = {}
 
@@ -390,15 +391,25 @@ class OperationalAllocationValidator(IValidator):
                     in_table = False
                     table_col_map = {}
                     header_lower = stripped.lower()
-                    if "phase" in header_lower or "lifecycle" in header_lower or "mode" in header_lower:
+                    if re.search(r'(?:SV-5a|Op-to-Res|Operational-to-Resource(?:\s+Traceability)?\s+Allocation\s+Matrix)', stripped, re.IGNORECASE):
+                        in_phases_section = False
+                        in_activities_section = False
+                        in_sv5a_section = True
+                    elif "phase" in header_lower or "lifecycle" in header_lower or "mode" in header_lower:
                         in_phases_section = True
                         in_activities_section = False
+                        in_sv5a_section = False
                     elif "activit" in header_lower or "conops" in header_lower or "operation" in header_lower:
                         in_activities_section = True
                         in_phases_section = False
+                        in_sv5a_section = False
                     else:
                         in_phases_section = False
                         in_activities_section = False
+                        in_sv5a_section = False
+
+                if in_sv5a_section:
+                    continue
 
                 # 1. Parse markdown tables with structured column extraction
                 if stripped.startswith("|") and stripped.endswith("|"):
@@ -464,6 +475,11 @@ class OperationalAllocationValidator(IValidator):
                             if "ssot_source" in row_dict and row_dict["ssot_source"]:
                                 ops_citations[canon] = (row_dict["ssot_source"], loc)
 
+                            if canon in self.extracted_activities:
+                                existing = self.extracted_activities[canon]
+                                for k, v in existing.items():
+                                    if (k not in row_dict or not row_dict[k]) and v:
+                                        row_dict[k] = v
                             self.extracted_activities[canon] = row_dict
                             continue
 
@@ -503,8 +519,8 @@ class OperationalAllocationValidator(IValidator):
                         }
                     continue
 
-                # Parse Phase declarations: - **Phase 1: Startup** or ### Phase 1: Startup
-                phase_match = re.search(r'\bPhase\s*\d*[:\-\s]+\s*([a-zA-Z0-9_-]+)', stripped, re.IGNORECASE)
+                # Parse Phase declarations: - **Phase 1: Startup** or ### Phase 1: Startup or Phase_Startup
+                phase_match = re.search(r'\bPhase\s*\d*[:\-\s_]+\s*([a-zA-Z0-9_-]+)', stripped, re.IGNORECASE)
                 if phase_match:
                     phase_name = phase_match.group(1).strip()
                     phase_name = _clean_markdown(phase_name)
@@ -814,7 +830,163 @@ class OperationalAllocationValidator(IValidator):
                         detail={"activity_id": canon_id, "display_name": disp_name, "location": loc}
                     ))
 
+        # DoDAF SV-5a / OMG UAF Op-to-Res Allocation Matrix Validation (Issue #347)
+        findings.extend(self._validate_conops_sv5a_matrix(repo, ops_universe))
+
         return findings
+
+    def _validate_conops_sv5a_matrix(
+        self, repo: WorkspaceRepository, ops_universe: Dict[str, str]
+    ) -> List[Finding]:
+        r"""
+        Validates DoDAF SV-5a / OMG UAF Op-to-Res Operational-to-Resource Allocation Matrix.
+
+        Checks:
+        1. Graceful pass when ops_universe is empty or lacks OA-* activities.
+        2. Inspects markdown documentation under docs/conops/ (checking CONOPS.md,
+           units/conops/06_UAF_OPERATIONAL_ACTIVITIES.md, 06_UAF_OPERATIONAL_ACTIVITIES.md,
+           or any .md file in docs/conops/).
+        3. If header matching r'(?:SV-5a|Op-to-Res|Operational-to-Resource(?:\s+Traceability)?\s+Allocation\s+Matrix)'
+           is absent, emits 'operational-allocation-missing-sv5a-matrix'.
+        4. If header is present, parses markdown table rows under that section and verifies
+           that 100% of declared OA-* activities in ops_universe are mapped in the SV-5a table.
+           If any declared OA-* activity is missing, emits 'operational-allocation-sv5a-incomplete'.
+        """
+        oa_activities = sorted([k for k in ops_universe.keys() if k.startswith("OA-")])
+        if not oa_activities:
+            return []
+
+        workspace_dir = repo.workspace_dir
+        conops_dir = os.path.join(workspace_dir, "docs", "conops")
+        if not os.path.isdir(conops_dir):
+            return []
+
+        candidate_rel_paths = [
+            os.path.join("docs", "conops", "CONOPS.md"),
+            os.path.join("docs", "conops", "units", "conops", "06_UAF_OPERATIONAL_ACTIVITIES.md"),
+            os.path.join("docs", "conops", "06_UAF_OPERATIONAL_ACTIVITIES.md"),
+        ]
+
+        target_full_path: Optional[str] = None
+        target_rel_loc: Optional[str] = None
+
+        for c_rel in candidate_rel_paths:
+            full_p = os.path.join(workspace_dir, c_rel)
+            if os.path.isfile(full_p):
+                target_full_path = full_p
+                target_rel_loc = c_rel.replace("\\", "/")
+                break
+
+        if target_full_path is None:
+            for root, _, files in os.walk(conops_dir):
+                for f in sorted(files):
+                    if f.endswith(".md") and f != "README.md":
+                        full_p = os.path.join(root, f)
+                        target_full_path = full_p
+                        target_rel_loc = os.path.relpath(full_p, workspace_dir).replace("\\", "/")
+                        break
+                if target_full_path:
+                    break
+
+        if target_full_path is None or target_rel_loc is None:
+            target_rel_loc = "docs/conops/CONOPS.md"
+            return [Finding(
+                rule_id="operational-allocation-missing-sv5a-matrix",
+                message=f"ConOps baseline at {target_rel_loc} lacks mandatory DoDAF SV-5a / OMG UAF Op-to-Res Operational-to-Resource Allocation Matrix.",
+                location=target_rel_loc,
+                detail={"rel_loc": target_rel_loc}
+            )]
+
+        try:
+            with open(target_full_path, "r", encoding="utf-8", errors="ignore") as f:
+                content = f.read()
+        except Exception:
+            return [Finding(
+                rule_id="operational-allocation-missing-sv5a-matrix",
+                message=f"ConOps baseline at {target_rel_loc} lacks mandatory DoDAF SV-5a / OMG UAF Op-to-Res Operational-to-Resource Allocation Matrix.",
+                location=target_rel_loc,
+                detail={"rel_loc": target_rel_loc}
+            )]
+
+        header_pattern = re.compile(
+            r'(?:SV-5a|Op-to-Res|Operational-to-Resource(?:\s+Traceability)?\s+Allocation\s+Matrix)',
+            re.IGNORECASE
+        )
+
+        lines = content.splitlines()
+        header_idx = -1
+        header_line = ""
+        for idx, line in enumerate(lines):
+            stripped = line.strip()
+            if stripped.startswith("#") and header_pattern.search(stripped):
+                header_idx = idx
+                header_line = stripped
+                break
+
+        if header_idx == -1:
+            return [Finding(
+                rule_id="operational-allocation-missing-sv5a-matrix",
+                message=f"ConOps baseline at {target_rel_loc} lacks mandatory DoDAF SV-5a / OMG UAF Op-to-Res Operational-to-Resource Allocation Matrix.",
+                location=target_rel_loc,
+                detail={"rel_loc": target_rel_loc}
+            )]
+
+        m_head = re.match(r'^(#{1,6})\s+', header_line)
+        header_level = len(m_head.group(1)) if m_head else 0
+
+        section_lines = []
+        for line in lines[header_idx + 1:]:
+            stripped = line.strip()
+            if stripped.startswith('#'):
+                m_next = re.match(r'^(#{1,6})\s+(.*)$', stripped)
+                if m_next:
+                    next_level = len(m_next.group(1))
+                    next_title = m_next.group(2).strip()
+                    if header_level > 0:
+                        if next_level < header_level:
+                            break
+                        if next_level == header_level:
+                            m_sec = re.match(r'^(\d+(\.\d+)*)', next_title)
+                            m_orig = re.match(r'^(?:#+\s*)?(\d+(\.\d+)*)', header_line.lstrip('#').strip())
+                            if m_sec and m_orig and m_sec.group(1).startswith(m_orig.group(1) + "."):
+                                pass
+                            else:
+                                break
+                    elif next_level <= 2:
+                        break
+            section_lines.append(line)
+
+        table_mapped_activities: Set[str] = set()
+        for line in section_lines:
+            stripped = line.strip()
+            if stripped.startswith('|') and stripped.endswith('|'):
+                parts = [p.strip() for p in stripped.split('|')[1:-1]]
+                if all(re.match(r'^:?-+:?$', p) for p in parts if p):
+                    continue
+                if any(h in parts[0].lower() for h in ("activity id", "operational activity id", "activity", "oa id", "id")):
+                    continue
+                row_oas = re.findall(r'\b((?:OA)[_-]?\d+[a-zA-Z0-9_-]*)\b', stripped, re.IGNORECASE)
+                for raw_oa in row_oas:
+                    norm_oa = _normalize_oa_id(raw_oa)
+                    if norm_oa:
+                        table_mapped_activities.add(norm_oa)
+
+        missing = sorted([oa for oa in oa_activities if oa not in table_mapped_activities])
+        if missing:
+            missing_list = ", ".join(missing)
+            return [Finding(
+                rule_id="operational-allocation-sv5a-incomplete",
+                message=f"DoDAF SV-5a / UAF Op-to-Res Matrix at {target_rel_loc} is incomplete: missing operational activities [{missing_list}].",
+                location=target_rel_loc,
+                detail={
+                    "rel_loc": target_rel_loc,
+                    "missing_activities": missing,
+                    "declared_activities": oa_activities,
+                    "mapped_activities": sorted(table_mapped_activities),
+                }
+            )]
+
+        return []
 
     def synthesize_allocation_matrix(self, repo: WorkspaceRepository) -> str:
         """

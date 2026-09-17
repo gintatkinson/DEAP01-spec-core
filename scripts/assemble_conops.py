@@ -87,7 +87,6 @@ CANONICAL_CONOPS_UNITS: List[str] = [
     "04_SYSTEM_ARCHITECTURE.md",
     "04_USER_CLASSES_AND_STAKEHOLDERS.md",
     "05_OPERATIONAL_STATE_SPACE_AND_RISK.md",
-    "05_AIRSPACE_AND_SORA_RISK.md",
     "06_UAF_OPERATIONAL_ACTIVITIES.md",
     "07_OPTX_EXCHANGES.md",
     "08_ENVIRONMENTAL_OPERATING_LIMITS.md",
@@ -1143,7 +1142,7 @@ class SysMLParameterBindingEngine:
             if "CONTAINMENT_RESPONSE_STANDARD" not in self._explicit_keys:
                 self.parameter_bindings["CONTAINMENT_RESPONSE_STANDARD"] = "IEC 61508 SIL 3 Part 3 §7.4"
         else:
-            self.parameter_bindings["STRUCTURE_PARTITION_LABEL"] = "Primary Mechanical Structure / Airframe"
+            self.parameter_bindings["STRUCTURE_PARTITION_LABEL"] = "Primary Mechanical Structure / Physical Chassis"
             self.parameter_bindings["FAILSAFE_CONTAINMENT_NAME"] = "autonomous failsafe containment mechanism"
             self.parameter_bindings["ALTITUDE_UNIT"] = "m"
             if "V_STALL_MAX_MPS" not in self.parameter_bindings:
@@ -1646,7 +1645,7 @@ class SysMLParameterBindingEngine:
             rows = [
                 "| `CoreController` | Primary Operational Segment | IEEE 1362 §5.3 | Autonomous Guidance & Control |",
                 "| `TelemetryTerminal` | Command & Control Segment | DoDAF SV-1 | Encrypted PACE Communications |",
-                "| `GroundSupportUnit` | Auxiliary Support Segment | IEEE 1362 §5.3 | Pre-Flight Power & Diagnostics |",
+                "| `GroundSupportUnit` | Auxiliary Support Segment | IEEE 1362 §5.3 | Pre-Operational Power & Diagnostics |",
             ]
         header = "| Subsystem Part | Operational Segment | Allocation Authority | Functional Role |\n| :--- | :--- | :--- | :--- |"
         return header + "\n" + "\n".join(rows)
@@ -1914,7 +1913,7 @@ class SysMLParameterBindingEngine:
 
             if lifecycle_type == LifecycleType.EXPENDABLE_KINETIC_EFFECTOR:
                 lines.append(f"- **Phase_Startup:** Executes automated power-on Built-In-Test (PBIT), sensor bias baseline verification, and arming handshake.")
-                lines.append(f"- **Phase_NominalExecution:** Performs continuous closed-loop guidance/flight processing, deterministic telemetry streaming, and nominal mission tasks.")
+                lines.append(f"- **Phase_NominalExecution:** Performs continuous closed-loop guidance/control processing, deterministic telemetry streaming, and nominal mission tasks.")
                 lines.append(f"- **Phase_DegradedMode:** Enforces degraded operating limits, switches to redundant channels upon signal loss, and suppresses non-critical loads.")
                 lines.append(f"- **Phase_ContingencyFailsafe:** Executes deterministic failsafe containment action within bounded response latency (safe containment ditching / zeroization).")
                 lines.append(f"- **Phase_TerminalEngagement:** Executes high-rate terminal state estimation, target intercept guidance, and kinetic impact zeroization.")
@@ -2933,7 +2932,7 @@ class SysMLParameterBindingEngine:
         elif token_upper in ("SECTION_8_OPTX", "OPTX_TABLE", "OPTX_EXCHANGES_TABLE"):
             return "Operational information exchanges are formally specified in the 16-channel Op-Tx Matrix (Section 7)."
         elif token_upper == "SCENARIO_NOMINAL_THREAD":
-            return "Autonomous pre-flight BIT, launch, corridor survey, and precision recovery."
+            return "Autonomous pre-operational BIT, departure, corridor survey, and precision recovery."
         elif token_upper == "SCENARIO_DEGRADED_THREAD":
             return "Primary GNSS loss triggers optical odometry navigation fallback."
         elif token_upper == "SCENARIO_CONTINGENCY_THREAD":
@@ -2943,7 +2942,7 @@ class SysMLParameterBindingEngine:
         elif token_upper == "EMG_DETECTION_MECHANISM":
             return "Heartbeat loss > 5.0 s"
         elif token_upper == "EMG_CONTAINMENT_ACTION":
-            return "Execute autonomous lost-link loiter / return"
+            return "Execute autonomous lost-link hold / return"
         elif token_upper == "EMG_FAILSAFE_STATE":
             return "Contingency_LostLinkReturn"
         elif token_upper == "EMG_MAX_RESPONSE_TIME":
@@ -3262,11 +3261,11 @@ class SysMLParameterBindingEngine:
 
         # 9. Maintenance SLAs & Ground Support
         elif token_upper == "O_LEVEL_MAINTENANCE_DESCRIPTION":
-            return "Pre-flight visual inspection, modular battery swap, Built-In-Test verification."
+            return "Pre-operational visual inspection, modular battery swap, Built-In-Test verification."
         elif token_upper == "I_LEVEL_MAINTENANCE_DESCRIPTION":
             return "Actuator servo calibration, sensor recalibration, modular LRU swap."
         elif token_upper == "D_LEVEL_MAINTENANCE_DESCRIPTION":
-            return "Airframe structural overhaul, composite NDI inspection, flight computer recertification."
+            return "Chassis structural overhaul, composite NDI inspection, core real-time controller recertification."
         elif token_upper == "SWAP_TIME_BATTERY_MAX_MIN":
             return "5.0"
         elif token_upper == "SWAP_TIME_PAYLOAD_MAX_MIN":
@@ -3356,9 +3355,9 @@ class SysMLParameterBindingEngine:
         elif token_upper == "THR_PWR_DESCRIPTION":
             return "Battery cell over-temperature or main bus short"
         elif token_upper == "THR_ENV_VECTOR":
-            return "Severe Gust Turbulence / In-Flight Icing"
+            return "Severe Environmental Disturbance / Dynamic Surface Icing"
         elif token_upper == "THR_ENV_DESCRIPTION":
-            return "Atmospheric icing on air data sensors and surfaces"
+            return "Environmental icing on external sensors and surfaces"
         elif token_upper == "THR_EW_VECTOR":
             return "GNSS Denial / Jamming / Spoofing"
         elif token_upper == "THR_EW_DESCRIPTION":
@@ -4040,6 +4039,9 @@ def assemble_document(
             whitelist_set.add("04_SYSTEM_ARCHITECTURE.md")
             whitelist_set.add("04_USER_CLASSES_AND_STAKEHOLDERS.md")
             whitelist_set.add("04_SYSTEM_CAPABILITIES_AND_FUNCTIONS.md")
+        if "05_OPERATIONAL_STATE_SPACE_AND_RISK.md" in whitelist_set or "05_AIRSPACE_AND_SORA_RISK.md" in whitelist_set:
+            whitelist_set.add("05_OPERATIONAL_STATE_SPACE_AND_RISK.md")
+            whitelist_set.add("05_AIRSPACE_AND_SORA_RISK.md")
         if any(x in whitelist_set for x in ("06_SAFETY_INTERLOCKS.md", "06_ROE_SAFETY_INTERLOCKS.md", "06_RULES_OF_ENGAGEMENT.md")):
             whitelist_set.add("06_SAFETY_INTERLOCKS.md")
             whitelist_set.add("06_ROE_SAFETY_INTERLOCKS.md")
@@ -4058,6 +4060,13 @@ def assemble_document(
                         filenames.append("04_USER_CLASSES_AND_STAKEHOLDERS.md")
                     elif "04_SYSTEM_CAPABILITIES_AND_FUNCTIONS.md" in all_md_files:
                         filenames.append("04_SYSTEM_CAPABILITIES_AND_FUNCTIONS.md")
+            elif f in ("05_OPERATIONAL_STATE_SPACE_AND_RISK.md", "05_AIRSPACE_AND_SORA_RISK.md"):
+                unit5_handled = any(x in filenames for x in ("05_OPERATIONAL_STATE_SPACE_AND_RISK.md", "05_AIRSPACE_AND_SORA_RISK.md"))
+                if not unit5_handled:
+                    if "05_OPERATIONAL_STATE_SPACE_AND_RISK.md" in all_md_files:
+                        filenames.append("05_OPERATIONAL_STATE_SPACE_AND_RISK.md")
+                    elif "05_AIRSPACE_AND_SORA_RISK.md" in all_md_files:
+                        filenames.append("05_AIRSPACE_AND_SORA_RISK.md")
             elif f in ("06_SAFETY_INTERLOCKS.md", "06_ROE_SAFETY_INTERLOCKS.md", "06_RULES_OF_ENGAGEMENT.md"):
                 unit6_handled = any(x in filenames for x in ("06_SAFETY_INTERLOCKS.md", "06_ROE_SAFETY_INTERLOCKS.md", "06_RULES_OF_ENGAGEMENT.md"))
                 if not unit6_handled:

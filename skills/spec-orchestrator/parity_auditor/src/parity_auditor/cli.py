@@ -789,6 +789,59 @@ def _main_impl():
     epics_dir = os.path.join(repo.workspace_dir, epics_dir_rel) if epics_dir_rel else None
         
     has_failed = False
+
+    def _gate_matches(gate_names: List[str]) -> bool:
+        if not getattr(args, 'gate', None):
+            return True
+        clean = str(args.gate).strip().lower()
+        norm = re.sub(r'^gate[\s_-]*', '', clean)
+        for name in gate_names:
+            norm_name = re.sub(r'^gate[\s_-]*', '', name.strip().lower())
+            if clean == name.lower() or norm == norm_name or norm == name.lower() or clean == norm_name:
+                return True
+        return False
+
+    uml_errors = []
+    behavioral_errors = []
+    codebase_errors = []
+    doc_errors = []
+    dependency_errors = []
+    sync_errors = []
+    schema_mapping_errors = []
+    profile_scoping_errors = []
+    test_completeness_errors = []
+    cardinality_errors = []
+    spec_filename_errors = []
+    spec_title_errors = []
+    source_ref_errors = []
+    link_errors = []
+    mermaid_syntax_errors = []
+    katex_errors = []
+    logical_ui_errors = []
+    docstring_errors = []
+    profile_compliance_errors = []
+    package_allocation_errors = []
+    feature_op_errors = []
+    interaction_errors = []
+    safety_constraint_errors = []
+    acceptance_test_errors = []
+    missing_spec_errors = []
+    concept_provenance_errors = []
+    safety_trace_errors = []
+    doc_metadata_errors = []
+    icd_completeness_errors = []
+    operational_allocation_errors = []
+    standards_measurement_errors = []
+    conops_errors = []
+    mission_intent_errors = []
+    research_inventory_errors = []
+    coverage_digest_errors = []
+    obligation_witness_errors = []
+    semantic_diagram_errors = []
+    semantic_prose_errors = []
+    factual_grounding_errors = []
+    architecture_viewpoint_errors = []
+
     # Upstream compiler repository mode: this workspace is the upstream
     # Specification Core Compiler (sentinel: .pipeline/upstream), whose landing
     # zones are clean and which has no client app codebases BY DESIGN. See the
@@ -1168,491 +1221,522 @@ def _main_impl():
             elif all_definitions:
                 print("Success: 100% spec-only model coverage verified across all specification files.")
 
-    print("\n=== UML Diagrams Compliance Audit ===")
-    uml_errors = []
-    if not features and not epic_files:
-        print("Note: No feature or epic specifications found. Skipping UML Diagrams Compliance Audit.")
-    else:
-        uml_errors = _scope_findings(uml_validator.validate(repo, global_classes=global_classes, epics_dir=epics_dir), getattr(args, 'only', None))
-        
-    if uml_errors:
-        print("[!] UML Compliance Violations Identified:")
-        for err in uml_errors:
-            print(f"  - {err}")
-        has_failed = True
-    else:
-        if features or epic_files:
-            print("Success: All specification files are fully UML-compliant (no ERDs or invalid syntax found).")
+    if _gate_matches(["uml"]):
+        print("\n=== UML Diagrams Compliance Audit ===")
+        if not features and not epic_files:
+            print("Note: No feature or epic specifications found. Skipping UML Diagrams Compliance Audit.")
+        else:
+            uml_errors = _scope_findings(uml_validator.validate(repo, global_classes=global_classes, epics_dir=epics_dir), getattr(args, 'only', None))
             
-    if coverage_gaps:
+        if uml_errors:
+            print("[!] UML Compliance Violations Identified:")
+            for err in uml_errors:
+                print(f"  - {err}")
+            has_failed = True
+        else:
+            if features or epic_files:
+                print("Success: All specification files are fully UML-compliant (no ERDs or invalid syntax found).")
+
+    if coverage_gaps and _gate_matches(["coverage", "model_coverage", "parity"]):
         print("\n[!] Codebase Coverage Gaps Identified:")
         for gap in sorted(coverage_gaps):
             print(f"  - {gap}")
         print("\nError: 100% model coverage validation failed.")
         has_failed = True
-    else:
-        if not skip_coverage_checks and (features or epic_files):
-            print("\nSuccess: 100% model coverage verified across all specification files.")
+    elif not coverage_gaps and not skip_coverage_checks and (features or epic_files) and _gate_matches(["coverage", "model_coverage", "parity"]):
+        print("\nSuccess: 100% model coverage verified across all specification files.")
+
+    if _gate_matches(["behavioral"]):
+        print("\n=== Behavioral Coverage Triggers Audit ===")
+        behavioral_validator = BehavioralValidator()
+        if not features and not epic_files:
+            print("Note: No feature or epic specifications found. Skipping Behavioral Coverage Triggers Audit.")
+        else:
+            behavioral_errors = _scope_findings(behavioral_validator.validate(repo, schema_dir=schema_dir, modules=modules), getattr(args, 'only', None))
             
-    print("\n=== Behavioral Coverage Triggers Audit ===")
-    behavioral_validator = BehavioralValidator()
-    behavioral_errors = []
-    if not features and not epic_files:
-        print("Note: No feature or epic specifications found. Skipping Behavioral Coverage Triggers Audit.")
-    else:
-        behavioral_errors = _scope_findings(behavioral_validator.validate(repo, schema_dir=schema_dir, modules=modules), getattr(args, 'only', None))
-        
-    if behavioral_errors:
-        print("[!] Behavioral Coverage Violations Identified:")
-        for err in behavioral_errors:
-            print(f"  - {err}")
-        has_failed = True
-    else:
-        print("Success: All behavioral coverage triggers passed.")
-        
-    if args.spec_only:
-        print("Note: Running in spec-only mode. Skipping Codebase AST / Compliance Audit.")
-        codebase_errors = []
-    else:
-        print("\n=== Codebase AST / Compliance Audit ===")
-        codebase_validator = CodebaseValidator()
-        codebase_errors = _scope_findings(codebase_validator.validate(repo), getattr(args, 'only', None))
-    
-    if codebase_errors:
-        print("[!] Codebase Compliance Violations Identified:")
-        for err in codebase_errors:
-            print(f"  - {err}")
-        has_failed = True
-    else:
-        print("Success: Codebase compliance checks passed.")
-        
-    print("\n=== Documentation Consistency Audit ===")
-    docs_validator = DocsValidator()
-    doc_errors = _scope_findings(docs_validator.validate(repo), getattr(args, 'only', None))
-    
-    if doc_errors:
-        print("[!] Documentation Consistency Violations Identified:")
-        for err in doc_errors:
-            print(f"  - {err}")
-        has_failed = True
-    else:
-        print("Success: Documentation consistency checks passed.")
-        
-    print("\n=== Schema Dependency Validation ===")
-    dependency_validator = DependencyValidator()
-    dependency_errors = _scope_findings(dependency_validator.validate(repo, schema_dir=schema_dir), getattr(args, 'only', None))
-    
-    if dependency_errors:
-        print("[!] Schema Dependency Violations Identified:")
-        for err in dependency_errors:
-            print(f"  - {err}")
-        has_failed = True
-    else:
-        print("Success: Schema dependency checks passed.")
-        
-    print("\n=== Out-of-Sync Backlog Validation ===")
-    sync_validator = SyncValidator()
-    sync_errors = _scope_findings(sync_validator.validate(repo), getattr(args, 'only', None))
-    
-    if sync_errors:
-        print("[!] Out-of-Sync Backlog Violations Identified:")
-        for err in sync_errors:
-            print(f"  - {err}")
-        has_failed = True
-    else:
-        print("Success: Out-of-Sync Backlog checks passed.")
-        
-    print("\n=== Schema Mapping Validation ===")
-    if args.spec_only:
-        print("Note: Running in spec-only mode. Skipping Schema Mapping Validation.")
-        schema_mapping_errors = []
-    else:
-        schema_mapping_validator = SchemaMappingValidator()
-        schema_mapping_errors = _scope_findings(schema_mapping_validator.validate(repo), getattr(args, 'only', None))
-        if schema_mapping_errors:
-            print("[!] Schema Mapping Violations Identified:")
-            for err in schema_mapping_errors:
+        if behavioral_errors:
+            print("[!] Behavioral Coverage Violations Identified:")
+            for err in behavioral_errors:
                 print(f"  - {err}")
             has_failed = True
         else:
-            print("Success: Schema mapping checks passed.")
+            print("Success: All behavioral coverage triggers passed.")
 
-    print("\n=== Profile Scoping Validation ===")
-    if args.spec_only:
-        print("Note: Running in spec-only mode. Skipping Profile Scoping Validation.")
-        profile_scoping_errors = []
-    else:
-        profile_scoping_validator = ProfileScopingValidator()
-        profile_scoping_errors = _scope_findings(profile_scoping_validator.validate(repo), getattr(args, 'only', None))
-        if profile_scoping_errors:
-            print("[!] Profile Scoping Violations Identified:")
-            for err in profile_scoping_errors:
-                print(f"  - {err}")
-            has_failed = True
+    if _gate_matches(["codebase"]):
+        if args.spec_only:
+            print("Note: Running in spec-only mode. Skipping Codebase AST / Compliance Audit.")
         else:
-            print("Success: Profile scoping checks passed.")
-
-    print("\n=== Test Completeness Validation ===")
-    if args.spec_only:
-        print("Note: Running in spec-only mode. Skipping Test Completeness Validation.")
-        test_completeness_errors = []
-    else:
-        test_completeness_validator = TestCompletenessValidator()
-        test_completeness_errors = _scope_findings(test_completeness_validator.validate(repo), getattr(args, 'only', None))
-        if test_completeness_errors:
-            print("[!] Test Completeness Violations Identified:")
-            for err in test_completeness_errors:
-                print(f"  - {err}")
-            has_failed = True
-        else:
-            print("Success: Test completeness checks passed.")
+            print("\n=== Codebase AST / Compliance Audit ===")
+            codebase_validator = CodebaseValidator()
+            codebase_errors = _scope_findings(codebase_validator.validate(repo), getattr(args, 'only', None))
         
-    print("\n=== Schema Cardinality Validation ===")
-    cardinality_validator = SchemaCardinalityValidator()
-    cardinality_errors = _scope_findings(cardinality_validator.validate(repo, is_sysml=args.sysml), getattr(args, 'only', None))
-    if cardinality_errors:
-        print("[!] Schema Cardinality Violations Identified:")
-        for err in cardinality_errors:
-            print(f"  - {err}")
-        has_failed = True
-    else:
-        print("Success: 1:1 container-to-file cardinality verified.")
+        if codebase_errors:
+            print("[!] Codebase Compliance Violations Identified:")
+            for err in codebase_errors:
+                print(f"  - {err}")
+            has_failed = True
+        else:
+            print("Success: Codebase compliance checks passed.")
 
-    print("\n=== Spec Filename Validation ===")
-    spec_filename_validator = SpecFilenameValidator()
-    spec_filename_errors = _scope_findings(spec_filename_validator.validate(repo), getattr(args, 'only', None))
-    if spec_filename_errors:
-        print("[!] Spec Filename Violations Identified:")
-        for err in spec_filename_errors:
-            print(f"  - {err}")
-        has_failed = True
-    else:
-        print("Success: Spec filename convention verified.")
+    if _gate_matches(["doc", "docs", "documentation"]):
+        print("\n=== Documentation Consistency Audit ===")
+        docs_validator = DocsValidator()
+        doc_errors = _scope_findings(docs_validator.validate(repo), getattr(args, 'only', None))
+        if doc_errors:
+            print("[!] Documentation Consistency Violations Identified:")
+            for err in doc_errors:
+                print(f"  - {err}")
+            has_failed = True
+        else:
+            print("Success: Documentation consistency checks passed.")
 
-    print("\n=== Spec Title Uniqueness Validation ===")
-    spec_title_validator = SpecTitleUniquenessValidator()
-    spec_title_errors = _scope_findings(spec_title_validator.validate(repo), getattr(args, 'only', None))
-    if spec_title_errors:
-        print("[!] Spec Title Uniqueness Violations Identified:")
-        for err in spec_title_errors:
-            print(f"  - {err}")
-        has_failed = True
-    else:
-        print("Success: Specification titles are unique within each spec type.")
+    if _gate_matches(["dependency", "schema_dependency"]):
+        print("\n=== Schema Dependency Validation ===")
+        dependency_validator = DependencyValidator()
+        dependency_errors = _scope_findings(dependency_validator.validate(repo, schema_dir=schema_dir), getattr(args, 'only', None))
+        if dependency_errors:
+            print("[!] Schema Dependency Violations Identified:")
+            for err in dependency_errors:
+                print(f"  - {err}")
+            has_failed = True
+        else:
+            print("Success: Schema dependency checks passed.")
 
-    print("\n=== Source Reference Integrity Validation ===")
-    source_ref_validator = SourceReferenceValidator()
-    source_ref_errors = _scope_findings(source_ref_validator.validate(repo), getattr(args, 'only', None))
-    if source_ref_errors:
-        print("[!] Source Reference Violations Identified:")
-        for err in source_ref_errors:
-            print(f"  - {err}")
-        has_failed = True
-    else:
-        print("Success: Source References carry authoritative locators.")
+    if _gate_matches(["sync", "backlog_sync"]):
+        print("\n=== Out-of-Sync Backlog Validation ===")
+        sync_validator = SyncValidator()
+        sync_errors = _scope_findings(sync_validator.validate(repo), getattr(args, 'only', None))
+        if sync_errors:
+            print("[!] Out-of-Sync Backlog Violations Identified:")
+            for err in sync_errors:
+                print(f"  - {err}")
+            has_failed = True
+        else:
+            print("Success: Out-of-Sync Backlog checks passed.")
 
-    print("\n=== Markdown Link Integrity Validation ===")
-    link_validator = LinkValidator()
-    link_errors = _scope_findings(link_validator.validate(repo), getattr(args, 'only', None))
-    if link_errors:
-        print("[!] Markdown Link Violations Identified:")
-        for err in link_errors:
-            print(f"  - {err}")
-        has_failed = True
-    else:
-        print("Success: All markdown cross-references are valid.")
+    if _gate_matches(["mapping", "schema_mapping"]):
+        print("\n=== Schema Mapping Validation ===")
+        if args.spec_only:
+            print("Note: Running in spec-only mode. Skipping Schema Mapping Validation.")
+        else:
+            schema_mapping_validator = SchemaMappingValidator()
+            schema_mapping_errors = _scope_findings(schema_mapping_validator.validate(repo), getattr(args, 'only', None))
+            if schema_mapping_errors:
+                print("[!] Schema Mapping Violations Identified:")
+                for err in schema_mapping_errors:
+                    print(f"  - {err}")
+                has_failed = True
+            else:
+                print("Success: Schema mapping checks passed.")
 
-    print("\n=== Mermaid Syntax Validation ===")
-    mermaid_syntax_validator = MermaidSyntaxValidator()
-    mermaid_syntax_errors = _scope_findings(mermaid_syntax_validator.validate(repo), getattr(args, 'only', None))
-    if mermaid_syntax_errors:
-        print("[!] Mermaid Syntax Violations Identified:")
-        for err in mermaid_syntax_errors:
-            print(f"  - {err}")
-        has_failed = True
-    else:
-        print("Success: Mermaid syntax rules verified.")
+    if _gate_matches(["scoping", "profile_scoping"]):
+        print("\n=== Profile Scoping Validation ===")
+        if args.spec_only:
+            print("Note: Running in spec-only mode. Skipping Profile Scoping Validation.")
+        else:
+            profile_scoping_validator = ProfileScopingValidator()
+            profile_scoping_errors = _scope_findings(profile_scoping_validator.validate(repo), getattr(args, 'only', None))
+            if profile_scoping_errors:
+                print("[!] Profile Scoping Violations Identified:")
+                for err in profile_scoping_errors:
+                    print(f"  - {err}")
+                has_failed = True
+            else:
+                print("Success: Profile scoping checks passed.")
 
-    print("\n=== KaTeX Mathematical Rendering Integrity Validation ===")
-    katex_validator = KatexValidator()
-    katex_errors = _scope_findings(katex_validator.validate(repo), getattr(args, 'only', None))
-    if katex_errors:
-        print("[!] KaTeX Integrity Violations Identified:")
-        for err in katex_errors:
-            print(f"  - {err}")
-        has_failed = True
-    else:
-        print("Success: KaTeX math syntax and AST integrity verified.")
+    if _gate_matches(["tests", "test_completeness"]):
+        print("\n=== Test Completeness Validation ===")
+        if args.spec_only:
+            print("Note: Running in spec-only mode. Skipping Test Completeness Validation.")
+        else:
+            test_completeness_validator = TestCompletenessValidator()
+            test_completeness_errors = _scope_findings(test_completeness_validator.validate(repo), getattr(args, 'only', None))
+            if test_completeness_errors:
+                print("[!] Test Completeness Violations Identified:")
+                for err in test_completeness_errors:
+                    print(f"  - {err}")
+                has_failed = True
+            else:
+                print("Success: Test completeness checks passed.")
 
-    print("\n=== Logical UI Validation ===")
-    logical_ui_validator = LogicalUiValidator()
-    logical_ui_errors = _scope_findings(logical_ui_validator.validate(repo, features_dir=features_dir), getattr(args, 'only', None))
-    if logical_ui_errors:
-        print("[!] Logical UI Violations Identified:")
-        for err in logical_ui_errors:
-            print(f"  - {err}")
-        has_failed = True
-    else:
-        print("Success: Logical UI checks passed.")
+    if _gate_matches(["cardinality", "schema_cardinality"]):
+        print("\n=== Schema Cardinality Validation ===")
+        cardinality_validator = SchemaCardinalityValidator()
+        cardinality_errors = _scope_findings(cardinality_validator.validate(repo, is_sysml=args.sysml), getattr(args, 'only', None))
+        if cardinality_errors:
+            print("[!] Schema Cardinality Violations Identified:")
+            for err in cardinality_errors:
+                print(f"  - {err}")
+            has_failed = True
+        else:
+            print("Success: 1:1 container-to-file cardinality verified.")
 
-    print("\n=== Public Member Docstring Validation ===")
-    docstring_validator = DocstringValidator()
-    docstring_errors = _scope_findings(docstring_validator.validate(repo), getattr(args, 'only', None))
-    if docstring_errors:
-        print("[!] Public Member Docstring Violations Identified:")
-        for err in docstring_errors:
-            print(f"  - {err}")
-        has_failed = True
-    else:
-        print("Success: Public member docstrings verified.")
+    if _gate_matches(["filename", "spec_filename"]):
+        print("\n=== Spec Filename Validation ===")
+        spec_filename_validator = SpecFilenameValidator()
+        spec_filename_errors = _scope_findings(spec_filename_validator.validate(repo), getattr(args, 'only', None))
+        if spec_filename_errors:
+            print("[!] Spec Filename Violations Identified:")
+            for err in spec_filename_errors:
+                print(f"  - {err}")
+            has_failed = True
+        else:
+            print("Success: Spec filename convention verified.")
 
-    print("\n=== Profile Compliance Validation ===")
-    profile_compliance_validator = ProfileComplianceValidator()
-    profile_compliance_errors = _scope_findings(profile_compliance_validator.validate(repo), getattr(args, 'only', None))
-    if profile_compliance_errors:
-        print("[!] Profile Compliance Violations Identified:")
-        for err in profile_compliance_errors:
-            print(f"  - {err}")
-        has_failed = True
-    else:
-        print("Success: Profile compliance checks passed.")
+    if _gate_matches(["title", "spec_title"]):
+        print("\n=== Spec Title Uniqueness Validation ===")
+        spec_title_validator = SpecTitleUniquenessValidator()
+        spec_title_errors = _scope_findings(spec_title_validator.validate(repo), getattr(args, 'only', None))
+        if spec_title_errors:
+            print("[!] Spec Title Uniqueness Violations Identified:")
+            for err in spec_title_errors:
+                print(f"  - {err}")
+            has_failed = True
+        else:
+            print("Success: Specification titles are unique within each spec type.")
 
-    print("\n=== Package Structure & Subsystem Allocation Audit ===")
-    package_allocation_errors = _scope_findings(cardinality_validator.validate_package_structure_and_subsystem_allocation(repo), getattr(args, 'only', None))
-    if package_allocation_errors:
-        print("[!] Package Structure & Subsystem Allocation Violations Identified:")
-        for err in package_allocation_errors:
-            print(f"  - {err}")
-        has_failed = True
-    else:
-        print("Success: Package structure and subsystem capability allocations verified.")
+    if _gate_matches(["source_ref", "source_reference"]):
+        print("\n=== Source Reference Integrity Validation ===")
+        source_ref_validator = SourceReferenceValidator()
+        source_ref_errors = _scope_findings(source_ref_validator.validate(repo), getattr(args, 'only', None))
+        if source_ref_errors:
+            print("[!] Source Reference Violations Identified:")
+            for err in source_ref_errors:
+                print(f"  - {err}")
+            has_failed = True
+        else:
+            print("Success: Source References carry authoritative locators.")
 
-    print("\n=== Feature Operation & Schema Constraint Coverage ===")
-    feature_op_errors = _scope_findings(cardinality_validator.validate_feature_operation_and_constraint_coverage(repo), getattr(args, 'only', None))
-    if feature_op_errors:
-        print("[!] Feature Operation & Schema Constraint Violations Identified:")
-        for err in feature_op_errors:
-            print(f"  - {err}")
-        has_failed = True
-    else:
-        print("Success: Feature operation and schema constraint coverage verified.")
+    if _gate_matches(["link", "markdown_link"]):
+        print("\n=== Markdown Link Integrity Validation ===")
+        link_validator = LinkValidator()
+        link_errors = _scope_findings(link_validator.validate(repo), getattr(args, 'only', None))
+        if link_errors:
+            print("[!] Markdown Link Violations Identified:")
+            for err in link_errors:
+                print(f"  - {err}")
+            has_failed = True
+        else:
+            print("Success: All markdown cross-references are valid.")
 
-    print("\n=== User Story Interaction & Sequence Lifeline Audit ===")
-    interaction_errors = _scope_findings(uml_validator.validate_user_story_interactions_and_lifelines(repo, global_classes=global_classes), getattr(args, 'only', None))
-    if interaction_errors:
-        print("[!] User Story Interaction & Sequence Lifeline Violations Identified:")
-        for err in interaction_errors:
-            print(f"  - {err}")
-        has_failed = True
-    else:
-        print("Success: User Story interaction sequences and lifelines verified.")
+    if _gate_matches(["mermaid", "mermaid_syntax"]):
+        print("\n=== Mermaid Syntax Validation ===")
+        mermaid_syntax_validator = MermaidSyntaxValidator()
+        mermaid_syntax_errors = _scope_findings(mermaid_syntax_validator.validate(repo), getattr(args, 'only', None))
+        if mermaid_syntax_errors:
+            print("[!] Mermaid Syntax Violations Identified:")
+            for err in mermaid_syntax_errors:
+                print(f"  - {err}")
+            has_failed = True
+        else:
+            print("Success: Mermaid syntax rules verified.")
 
-    print("\n=== Safety Invariant & RTA Constraint Assertion Audit ===")
-    safety_constraint_errors = _scope_findings(uml_validator.validate_safety_invariants_and_rta_constraints(repo), getattr(args, 'only', None))
-    if safety_constraint_errors:
-        print("[!] Safety Invariant & RTA Constraint Assertion Violations Identified:")
-        for err in safety_constraint_errors:
-            print(f"  - {err}")
-        has_failed = True
-    else:
-        print("Success: Safety invariants and RTA constraint assertions verified.")
+    if _gate_matches(["katex", "math"]):
+        print("\n=== KaTeX Mathematical Rendering Integrity Validation ===")
+        katex_validator = KatexValidator()
+        katex_errors = _scope_findings(katex_validator.validate(repo), getattr(args, 'only', None))
+        if katex_errors:
+            print("[!] KaTeX Integrity Violations Identified:")
+            for err in katex_errors:
+                print(f"  - {err}")
+            has_failed = True
+        else:
+            print("Success: KaTeX math syntax and AST integrity verified.")
 
-    print("\n=== Acceptance Criteria Test Case & Verification Binding Audit ===")
-    acceptance_test_errors = _scope_findings(uml_validator.validate_acceptance_criteria_and_test_cases(repo), getattr(args, 'only', None))
-    if acceptance_test_errors:
-        print("[!] Acceptance Criteria Test Case & Verification Binding Violations Identified:")
-        for err in acceptance_test_errors:
-            print(f"  - {err}")
-        has_failed = True
-    else:
-        print("Success: Acceptance criteria test cases and verification bindings verified.")
+    if _gate_matches(["logical_ui", "lui"]):
+        print("\n=== Logical UI Validation ===")
+        logical_ui_validator = LogicalUiValidator()
+        logical_ui_errors = _scope_findings(logical_ui_validator.validate(repo, features_dir=features_dir), getattr(args, 'only', None))
+        if logical_ui_errors:
+            print("[!] Logical UI Violations Identified:")
+            for err in logical_ui_errors:
+                print(f"  - {err}")
+            has_failed = True
+        else:
+            print("Success: Logical UI checks passed.")
 
-    print("\n=== Concept Provenance & Parametric SSOT Audit ===")
-    concept_provenance_validator = ConceptProvenanceValidator()
-    concept_provenance_errors = _scope_findings(concept_provenance_validator.validate(repo), getattr(args, 'only', None))
-    if concept_provenance_errors:
-        print("[!] Concept Provenance Violations Identified:")
-        for err in concept_provenance_errors:
-            print(f"  - {err}")
-        has_failed = True
-    else:
-        print("Success: Concept provenance and parametric assertions verified.")
+    if _gate_matches(["docstring", "docstrings"]):
+        print("\n=== Public Member Docstring Validation ===")
+        docstring_validator = DocstringValidator()
+        docstring_errors = _scope_findings(docstring_validator.validate(repo), getattr(args, 'only', None))
+        if docstring_errors:
+            print("[!] Public Member Docstring Violations Identified:")
+            for err in docstring_errors:
+                print(f"  - {err}")
+            has_failed = True
+        else:
+            print("Success: Public member docstrings verified.")
 
-    print("\n=== Safety Traceability & Set-Equality Audit ===")
-    safety_trace_validator = SafetyTraceValidator()
-    safety_trace_errors = _scope_findings(safety_trace_validator.validate(repo), getattr(args, 'only', None))
-    if safety_trace_errors:
-        print("[!] Safety Traceability Violations Identified:")
-        for err in safety_trace_errors:
-            print(f"  - {err}")
-        has_failed = True
-    else:
-        print("Success: Safety traceability set-equality verified.")
+    if _gate_matches(["profile", "profile_compliance"]):
+        print("\n=== Profile Compliance Validation ===")
+        profile_compliance_validator = ProfileComplianceValidator()
+        profile_compliance_errors = _scope_findings(profile_compliance_validator.validate(repo), getattr(args, 'only', None))
+        if profile_compliance_errors:
+            print("[!] Profile Compliance Violations Identified:")
+            for err in profile_compliance_errors:
+                print(f"  - {err}")
+            has_failed = True
+        else:
+            print("Success: Profile compliance checks passed.")
 
-    print("\n=== Document Metadata & Frontmatter Audit ===")
-    doc_metadata_validator = DocMetadataValidator()
-    doc_metadata_errors = _scope_findings(doc_metadata_validator.validate(repo), getattr(args, 'only', None))
-    if doc_metadata_errors:
-        print("[!] Document Metadata Violations Identified:")
-        for err in doc_metadata_errors:
-            print(f"  - {err}")
-        has_failed = True
-    else:
-        print("Success: Document metadata tables and frontmatter valid across all markdown documents.")
+    if _gate_matches(["package", "package_structure", "subsystem_allocation"]):
+        print("\n=== Package Structure & Subsystem Allocation Audit ===")
+        package_allocation_errors = _scope_findings(cardinality_validator.validate_package_structure_and_subsystem_allocation(repo), getattr(args, 'only', None))
+        if package_allocation_errors:
+            print("[!] Package Structure & Subsystem Allocation Violations Identified:")
+            for err in package_allocation_errors:
+                print(f"  - {err}")
+            has_failed = True
+        else:
+            print("Success: Package structure and subsystem capability allocations verified.")
 
-    print("\n=== ICD Completeness & Signal Flow Parity Audit ===")
-    icd_completeness_validator = ICDCompletenessValidator()
-    icd_completeness_errors = _scope_findings(icd_completeness_validator.validate(repo, schemas_dir=schema_dir), getattr(args, 'only', None))
-    if icd_completeness_errors:
-        print("[!] ICD Completeness Violations Identified:")
-        for err in icd_completeness_errors:
-            print(f"  - {err}")
-        has_failed = True
-    else:
-        print("Success: Level 1C ICD port connectivity, N² matrix, and signal dictionary verified.")
+    if _gate_matches(["feature_operation", "operations"]):
+        print("\n=== Feature Operation & Schema Constraint Coverage ===")
+        feature_op_errors = _scope_findings(cardinality_validator.validate_feature_operation_and_constraint_coverage(repo), getattr(args, 'only', None))
+        if feature_op_errors:
+            print("[!] Feature Operation Coverage Violations Identified:")
+            for err in feature_op_errors:
+                print(f"  - {err}")
+            has_failed = True
+        else:
+            print("Success: Feature operation and schema constraint coverage verified.")
 
-    print("\n=== Operational-to-Resource Allocation Audit (Gate 24) ===")
-    operational_allocation_validator = OperationalAllocationValidator()
-    operational_allocation_errors = _scope_findings(operational_allocation_validator.validate(repo, allow_missing_specs=getattr(args, 'allow_missing_specs', True)), getattr(args, 'only', None))
-    if operational_allocation_errors:
-        print("[!] Operational-to-Resource Allocation Violations Identified:")
-        for err in operational_allocation_errors:
-            print(f"  - {err}")
-        has_failed = True
-    else:
-        print("Success: Operational-to-Resource Allocation (Theorem 1 and Theorem 2) verified.")
+    if _gate_matches(["user_story", "interaction"]):
+        print("\n=== User Story Interaction & Sequence Lifeline Audit ===")
+        interaction_errors = _scope_findings(uml_validator.validate_user_story_interactions_and_lifelines(repo, global_classes=global_classes), getattr(args, 'only', None))
+        if interaction_errors:
+            print("[!] User Story Interaction Violations Identified:")
+            for err in interaction_errors:
+                print(f"  - {err}")
+            has_failed = True
+        else:
+            print("Success: User Story interaction sequences and lifelines verified.")
 
-    print("\n=== Standards & SI 7D Parameter Metrology Audit (Gate 25) ===")
-    standards_measurement_validator = StandardsAndMeasurementValidator()
-    standards_measurement_errors = _scope_findings(standards_measurement_validator.validate(repo), getattr(args, 'only', None))
-    if standards_measurement_errors:
-        print("[!] Standards & Parameter Metrology Violations Identified:")
-        for err in standards_measurement_errors:
-            print(f"  - {err}")
-        has_failed = True
-    else:
-        print("Success: Standards taxonomy lattice and SI 7D parameter metrology verified.")
+    if _gate_matches(["safety_invariant", "rta"]):
+        print("\n=== Safety Invariant & RTA Constraint Assertion Audit ===")
+        safety_constraint_errors = _scope_findings(uml_validator.validate_safety_invariants_and_rta_constraints(repo), getattr(args, 'only', None))
+        if safety_constraint_errors:
+            print("[!] Safety Invariant Violations Identified:")
+            for err in safety_constraint_errors:
+                print(f"  - {err}")
+            has_failed = True
+        else:
+            print("Success: Safety invariants and RTA constraint assertions verified.")
 
-    print("\n=== ConOps & Mission Intent Completeness Audit (Gate 26) ===")
-    conops_validator = ConopsCompletenessValidator()
-    conops_errors = _scope_findings(conops_validator.validate(repo), getattr(args, 'only', None))
-    if conops_errors:
-        print("[!] ConOps Completeness Violations Identified:")
-        for err in conops_errors:
-            print(f"  - {err}")
-        has_failed = True
-    else:
-        print("Success: 12-Section ConOps completeness and SORA GRB / Emergency determinism verified.")
+    if _gate_matches(["acceptance_test", "verification_binding"]):
+        print("\n=== Acceptance Criteria Test Case & Verification Binding Audit ===")
+        acceptance_test_errors = _scope_findings(uml_validator.validate_acceptance_criteria_and_test_cases(repo), getattr(args, 'only', None))
+        if acceptance_test_errors:
+            print("[!] Acceptance Criteria Test Case Violations Identified:")
+            for err in acceptance_test_errors:
+                print(f"  - {err}")
+            has_failed = True
+        else:
+            print("Success: Acceptance criteria test cases and verification bindings verified.")
 
-    mission_intent_validator = MissionIntentCompletenessValidator()
-    mission_intent_errors = _scope_findings(mission_intent_validator.validate(repo), getattr(args, 'only', None))
-    if mission_intent_errors:
-        print("[!] Mission Intent Completeness Violations Identified:")
-        for err in mission_intent_errors:
-            print(f"  - {err}")
-        has_failed = True
-    else:
-        print("Success: 10-Section Mission Intent completeness and Bingo Energy math verified.")
+    if _gate_matches(["concept_provenance", "provenance"]):
+        print("\n=== Concept Provenance & Parametric SSOT Audit ===")
+        concept_provenance_validator = ConceptProvenanceValidator()
+        concept_provenance_errors = _scope_findings(concept_provenance_validator.validate(repo), getattr(args, 'only', None))
+        if concept_provenance_errors:
+            print("[!] Concept Provenance Violations Identified:")
+            for err in concept_provenance_errors:
+                print(f"  - {err}")
+            has_failed = True
+        else:
+            print("Success: Concept provenance and parametric assertions verified.")
 
-    print("\n=== Cited Research Inventory & Declared-Total Population Register Audit (Gate 27) ===")
-    research_inventory_validator = ResearchInventoryValidator()
-    research_inventory_errors = _scope_findings(research_inventory_validator.validate(repo), getattr(args, 'only', None))
-    if research_inventory_errors:
-        print("[!] Cited Research Inventory Violations Identified:")
-        for err in research_inventory_errors:
-            print(f"  - {err}")
-        has_failed = True
-    else:
-        print("Success: Cited research inventory schema and declared-total population register verified.")
+    if _gate_matches(["safety_trace", "safety_traceability"]):
+        print("\n=== Safety Traceability & Set-Equality Audit ===")
+        safety_trace_validator = SafetyTraceValidator()
+        safety_trace_errors = _scope_findings(safety_trace_validator.validate(repo), getattr(args, 'only', None))
+        if safety_trace_errors:
+            print("[!] Safety Traceability Violations Identified:")
+            for err in safety_trace_errors:
+                print(f"  - {err}")
+            has_failed = True
+        else:
+            print("Success: Safety traceability set-equality verified.")
 
-    print("\n=== Coverage-Digest Population Audit (Gate 28) ===")
-    coverage_digest_validator = CoverageDigestValidator()
-    coverage_digest_errors = _scope_findings(
-        coverage_digest_validator.validate(repo, allow_missing_specs=getattr(args, 'allow_missing_specs', True)),
-        getattr(args, 'only', None)
-    )
-    if coverage_digest_errors:
-        print("[!] Coverage Digest Violations Identified:")
-        for err in coverage_digest_errors:
-            print(f"  - {err}")
-        has_failed = True
-    else:
-        print("Success: Coverage digest population metrics and realized obligations verified.")
+    if _gate_matches(["metadata", "doc_metadata"]):
+        print("\n=== Document Metadata & Frontmatter Audit ===")
+        doc_metadata_validator = DocMetadataValidator()
+        doc_metadata_errors = _scope_findings(doc_metadata_validator.validate(repo), getattr(args, 'only', None))
+        if doc_metadata_errors:
+            print("[!] Document Metadata Violations Identified:")
+            for err in doc_metadata_errors:
+                print(f"  - {err}")
+            has_failed = True
+        else:
+            print("Success: Document metadata tables and frontmatter valid across all markdown documents.")
 
-    print("\n=== Obligation-Witness Registry Audit (Gate 29) ===")
-    obligation_witness_validator = ObligationWitnessValidator()
-    obligation_witness_errors = _scope_findings(
-        obligation_witness_validator.validate(
-            repo,
-            allow_missing_specs=getattr(args, 'allow_missing_specs', True),
-            spec_only=getattr(args, 'spec_only', False),
-        ),
-        getattr(args, 'only', None)
-    )
-    if obligation_witness_errors:
-        print("[!] Obligation Witness Registry Violations Identified:")
-        for err in obligation_witness_errors:
-            print(f"  - {err}")
-        has_failed = True
-    else:
-        print("Success: Multi-dimensional obligation witness registry verified.")
+    if _gate_matches(["icd", "1c", "level 1c", "interfaces"]):
+        print("\n=== ICD Completeness & Signal Flow Parity Audit ===")
+        icd_completeness_validator = ICDCompletenessValidator()
+        icd_completeness_errors = _scope_findings(icd_completeness_validator.validate(repo, schemas_dir=schema_dir), getattr(args, 'only', None))
+        if icd_completeness_errors:
+            print("[!] ICD Completeness Violations Identified:")
+            for err in icd_completeness_errors:
+                print(f"  - {err}")
+            has_failed = True
+        else:
+            print("Success: Level 1C ICD port connectivity, N² matrix, and signal dictionary verified.")
 
-    print("\n=== Semantic Diagram-to-AST Topology Parity Audit (Gate 21) ===")
-    semantic_diagram_validator = SemanticDiagramASTValidator()
-    semantic_diagram_errors = _scope_findings(
-        semantic_diagram_validator.validate(repo, schemas_dir=schema_dir),
-        getattr(args, 'only', None)
-    )
-    if semantic_diagram_errors:
-        print("[!] Semantic Diagram-to-AST Topology Parity Violations Identified:")
-        for err in semantic_diagram_errors:
-            print(f"  - {err}")
-        has_failed = True
-    else:
-        print("Success: Semantic diagram nodes, signal flows, and actuator grounding verified against SysML AST.")
+    if _gate_matches(["24", "operational_allocation", "op_to_res"]):
+        print("\n=== Operational-to-Resource Allocation Audit (Gate 24) ===")
+        operational_allocation_validator = OperationalAllocationValidator()
+        operational_allocation_errors = _scope_findings(operational_allocation_validator.validate(repo, allow_missing_specs=getattr(args, 'allow_missing_specs', True)), getattr(args, 'only', None))
+        if operational_allocation_errors:
+            print("[!] Operational-to-Resource Allocation Violations Identified:")
+            for err in operational_allocation_errors:
+                print(f"  - {err}")
+            has_failed = True
+        else:
+            print("Success: Operational-to-Resource Allocation (Theorem 1 and Theorem 2) verified.")
 
-    print("\n=== Physical Invariant Semantic Prose Audit (Gate 22) ===")
-    semantic_prose_validator = SemanticProseInvariantValidator()
-    semantic_prose_errors = _scope_findings(
-        semantic_prose_validator.validate(repo, schemas_dir=schema_dir),
-        getattr(args, 'only', None)
-    )
-    if semantic_prose_errors:
-        print("[!] Physical Invariant Semantic Prose Violations Identified:")
-        for err in semantic_prose_errors:
-            print(f"  - {err}")
-        has_failed = True
-    else:
-        print("Success: Physical negative invariants verified against natural language specification prose.")
+    if _gate_matches(["25", "standards", "metrology"]):
+        print("\n=== Standards & SI 7D Parameter Metrology Audit (Gate 25) ===")
+        standards_measurement_validator = StandardsAndMeasurementValidator()
+        standards_measurement_errors = _scope_findings(standards_measurement_validator.validate(repo), getattr(args, 'only', None))
+        if standards_measurement_errors:
+            print("[!] Standards & Parameter Metrology Violations Identified:")
+            for err in standards_measurement_errors:
+                print(f"  - {err}")
+            has_failed = True
+        else:
+            print("Success: Standards taxonomy lattice and SI 7D parameter metrology verified.")
 
-    print("\n=== Factual Grounding & Parametric SSOT Audit (Gate 23) ===")
-    factual_grounding_validator = FactualGroundingValidator()
-    factual_grounding_errors = _scope_findings(
-        factual_grounding_validator.validate(repo, schemas_dir=schema_dir),
-        getattr(args, 'only', None)
-    )
-    if factual_grounding_errors:
-        print("[!] Factual Grounding & Parametric SSOT Violations Identified:")
-        for err in factual_grounding_errors:
-            print(f"  - {err}")
-        has_failed = True
-    print("\n=== Architecture Viewpoint & Diagram Completeness Audit (Gate 30) ===")
-    architecture_viewpoint_validator = ArchitectureViewpointValidator()
-    architecture_viewpoint_errors = _scope_findings(
-        architecture_viewpoint_validator.validate(
-            repo,
-            allow_missing_specs=getattr(args, 'allow_missing_specs', True),
-            spec_only=getattr(args, 'spec_only', False),
-        ),
-        getattr(args, 'only', None)
-    )
-    if architecture_viewpoint_errors:
-        print("[!] Architecture Viewpoint & Diagram Completeness Violations Identified:")
-        for err in architecture_viewpoint_errors:
-            print(f"  - {err}")
-        has_failed = True
-    else:
-        print("Success: 11 canonical architecture viewpoint diagrams verified across 5 viewpoints.")
+    if _gate_matches(["26", "conops", "mission_intent"]):
+        print("\n=== ConOps & Mission Intent Completeness Audit (Gate 26) ===")
+        conops_validator = ConopsCompletenessValidator()
+        conops_errors = _scope_findings(conops_validator.validate(repo), getattr(args, 'only', None))
+        if conops_errors:
+            print("[!] ConOps Completeness Violations Identified:")
+            for err in conops_errors:
+                print(f"  - {err}")
+            has_failed = True
+        else:
+            print("Success: 12-Section ConOps completeness and SORA GRB / Emergency determinism verified.")
+
+        mission_intent_validator = MissionIntentCompletenessValidator()
+        mission_intent_errors = _scope_findings(mission_intent_validator.validate(repo), getattr(args, 'only', None))
+        if mission_intent_errors:
+            print("[!] Mission Intent Completeness Violations Identified:")
+            for err in mission_intent_errors:
+                print(f"  - {err}")
+            has_failed = True
+        else:
+            print("Success: 10-Section Mission Intent completeness and Bingo Energy math verified.")
+
+    if _gate_matches(["27", "research_inventory", "inventory"]):
+        print("\n=== Cited Research Inventory & Declared-Total Population Register Audit (Gate 27) ===")
+        research_inventory_validator = ResearchInventoryValidator()
+        research_inventory_errors = _scope_findings(research_inventory_validator.validate(repo), getattr(args, 'only', None))
+        if research_inventory_errors:
+            print("[!] Cited Research Inventory Violations Identified:")
+            for err in research_inventory_errors:
+                print(f"  - {err}")
+            has_failed = True
+        else:
+            print("Success: Cited research inventory schema and declared-total population register verified.")
+
+    if _gate_matches(["28", "coverage_digest", "digest"]):
+        print("\n=== Coverage-Digest Population Audit (Gate 28) ===")
+        coverage_digest_validator = CoverageDigestValidator()
+        coverage_digest_errors = _scope_findings(
+            coverage_digest_validator.validate(repo, allow_missing_specs=getattr(args, 'allow_missing_specs', True)),
+            getattr(args, 'only', None)
+        )
+        if coverage_digest_errors:
+            print("[!] Coverage Digest Violations Identified:")
+            for err in coverage_digest_errors:
+                print(f"  - {err}")
+            has_failed = True
+        else:
+            print("Success: Coverage digest population metrics and realized obligations verified.")
+
+    if _gate_matches(["29", "obligation_witness", "witness"]):
+        print("\n=== Obligation-Witness Registry Audit (Gate 29) ===")
+        obligation_witness_validator = ObligationWitnessValidator()
+        obligation_witness_errors = _scope_findings(
+            obligation_witness_validator.validate(
+                repo,
+                allow_missing_specs=getattr(args, 'allow_missing_specs', True),
+                spec_only=getattr(args, 'spec_only', False),
+            ),
+            getattr(args, 'only', None)
+        )
+        if obligation_witness_errors:
+            print("[!] Obligation Witness Registry Violations Identified:")
+            for err in obligation_witness_errors:
+                print(f"  - {err}")
+            has_failed = True
+        else:
+            print("Success: Multi-dimensional obligation witness registry verified.")
+
+    if _gate_matches(["21", "semantic_diagram", "topology"]):
+        print("\n=== Semantic Diagram-to-AST Topology Parity Audit (Gate 21) ===")
+        semantic_diagram_validator = SemanticDiagramASTValidator()
+        semantic_diagram_errors = _scope_findings(
+            semantic_diagram_validator.validate(repo, schemas_dir=schema_dir),
+            getattr(args, 'only', None)
+        )
+        if semantic_diagram_errors:
+            print("[!] Semantic Diagram-to-AST Topology Parity Violations Identified:")
+            for err in semantic_diagram_errors:
+                print(f"  - {err}")
+            has_failed = True
+        else:
+            print("Success: Semantic diagram nodes, signal flows, and actuator grounding verified against SysML AST.")
+
+    if _gate_matches(["22", "semantic_prose", "physical_invariant"]):
+        print("\n=== Physical Invariant Semantic Prose Audit (Gate 22) ===")
+        semantic_prose_validator = SemanticProseInvariantValidator()
+        semantic_prose_errors = _scope_findings(
+            semantic_prose_validator.validate(repo, schemas_dir=schema_dir),
+            getattr(args, 'only', None)
+        )
+        if semantic_prose_errors:
+            print("[!] Physical Invariant Semantic Prose Violations Identified:")
+            for err in semantic_prose_errors:
+                print(f"  - {err}")
+            has_failed = True
+        else:
+            print("Success: Physical negative invariants verified against natural language specification prose.")
+
+    if _gate_matches(["23", "factual_grounding", "ssot"]):
+        print("\n=== Factual Grounding & Parametric SSOT Audit (Gate 23) ===")
+        factual_grounding_validator = FactualGroundingValidator()
+        factual_grounding_errors = _scope_findings(
+            factual_grounding_validator.validate(repo, schemas_dir=schema_dir),
+            getattr(args, 'only', None)
+        )
+        if factual_grounding_errors:
+            print("[!] Factual Grounding & Parametric SSOT Violations Identified:")
+            for err in factual_grounding_errors:
+                print(f"  - {err}")
+            has_failed = True
+        else:
+            print("Success: Factual grounding and parametric SSOT verified.")
+
+    if _gate_matches(["30", "architecture_viewpoint", "architecture"]):
+        print("\n=== Architecture Viewpoint & Diagram Completeness Audit (Gate 30) ===")
+        architecture_viewpoint_validator = ArchitectureViewpointValidator()
+        architecture_viewpoint_errors = _scope_findings(
+            architecture_viewpoint_validator.validate(
+                repo,
+                allow_missing_specs=getattr(args, 'allow_missing_specs', True),
+                spec_only=getattr(args, 'spec_only', False),
+            ),
+            getattr(args, 'only', None)
+        )
+        if architecture_viewpoint_errors:
+            print("[!] Architecture Viewpoint & Diagram Completeness Violations Identified:")
+            for err in architecture_viewpoint_errors:
+                print(f"  - {err}")
+            has_failed = True
+        else:
+            print("Success: 11 canonical architecture viewpoint diagrams verified across 5 viewpoints.")
 
     if has_failed:
         all_errors = (uml_errors or []) + (behavioral_errors or []) + (codebase_errors or []) + (doc_errors or []) + (dependency_errors or []) + (sync_errors or []) + (schema_mapping_errors or []) + (profile_scoping_errors or []) + (test_completeness_errors or []) + (cardinality_errors or []) + (spec_filename_errors or []) + (spec_title_errors or []) + (mermaid_syntax_errors or []) + (katex_errors or []) + (logical_ui_errors or []) + (docstring_errors or []) + (profile_compliance_errors or []) + (package_allocation_errors or []) + (feature_op_errors or []) + (interaction_errors or []) + (safety_constraint_errors or []) + (acceptance_test_errors or []) + (missing_spec_errors or []) + (source_ref_errors or []) + (link_errors or []) + (concept_provenance_errors or []) + (safety_trace_errors or []) + (doc_metadata_errors or []) + (icd_completeness_errors or []) + (operational_allocation_errors or []) + (standards_measurement_errors or []) + (conops_errors or []) + (mission_intent_errors or []) + (research_inventory_errors or []) + (coverage_digest_errors or []) + (obligation_witness_errors or []) + (semantic_diagram_errors or []) + (semantic_prose_errors or []) + (factual_grounding_errors or []) + (architecture_viewpoint_errors or [])

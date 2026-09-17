@@ -55,6 +55,11 @@ class Finding(str):
         obj.detail = dict(detail or {})
         return obj
 
+    @property
+    def message(self) -> str:
+        """The finding message string."""
+        return str(self)
+
     def signature(self) -> str:
         """Downstream-independent identity, used to group across workspaces.
 
