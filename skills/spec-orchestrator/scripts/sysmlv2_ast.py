@@ -145,6 +145,42 @@ class ActionDef:
     doc: str = ""
     in_params: List[AttributeDef] = field(default_factory=list)
     out_params: List[AttributeDef] = field(default_factory=list)
+    parameters: List[AttributeDef] = field(default_factory=list)
+    performer: str = ""
+    performer_part: str = ""
+    allocation: str = ""
+    attributes: Dict[str, Any] = field(default_factory=dict)
+    attribute_defs: List[AttributeDef] = field(default_factory=list)
+    steps: List[str] = field(default_factory=list)
+    is_def: bool = True
+
+    def __post_init__(self):
+        if self.performer and not self.performer_part:
+            self.performer_part = self.performer
+        elif self.performer_part and not self.performer:
+            self.performer = self.performer_part
+        if self.allocation and not self.performer:
+            self.performer = self.allocation
+            self.performer_part = self.allocation
+        elif self.performer and not self.allocation:
+            self.allocation = self.performer
+        if not self.parameters and (self.in_params or self.out_params):
+            self.parameters = list(self.in_params or []) + list(self.out_params or [])
+        elif self.parameters and not self.in_params and not self.out_params:
+            for p in self.parameters:
+                d = getattr(p, "default_value", None) or ""
+                if str(d).lower() == "out":
+                    self.out_params.append(p)
+                else:
+                    self.in_params.append(p)
+
+    @property
+    def inputs(self) -> List[AttributeDef]:
+        return self.in_params
+
+    @property
+    def outputs(self) -> List[AttributeDef]:
+        return self.out_params
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -152,6 +188,14 @@ class ActionDef:
             "doc": self.doc,
             "in_params": [p.to_dict() for p in (self.in_params or [])],
             "out_params": [p.to_dict() for p in (self.out_params or [])],
+            "parameters": [p.to_dict() for p in (self.parameters or [])],
+            "inputs": [p.to_dict() for p in (self.in_params or [])],
+            "outputs": [p.to_dict() for p in (self.out_params or [])],
+            "performer": self.performer or self.performer_part,
+            "performer_part": self.performer_part or self.performer,
+            "allocation": self.allocation or self.performer,
+            "attributes": dict(self.attributes or {}),
+            "steps": list(self.steps or []),
         }
 
     def to_sysml(self, indent: int = 4) -> str:
@@ -162,8 +206,30 @@ class ActionDef:
             all_params.append(f"in {p.name} : {p.type_name}")
         for p in (self.out_params or []):
             all_params.append(f"out {p.name} : {p.type_name}")
+        for p in (self.parameters or []):
+            if p not in (self.in_params or []) and p not in (self.out_params or []):
+                all_params.append(f"{p.name} : {p.type_name}")
         params_str = f"({', '.join(all_params)})" if all_params else ""
-        return f"{doc_str}{pad}action {self.name}{params_str};"
+        kw = "action def" if self.is_def else "action"
+        has_body = bool(self.performer or self.attributes or self.attribute_defs or self.steps)
+        if has_body:
+            lines = [f"{doc_str}{pad}{kw} {self.name}{params_str} {{"]
+            perf = self.performer or self.performer_part
+            if perf:
+                lines.append(f"{pad}    perform {perf};")
+            for k, v in (self.attributes or {}).items():
+                if k not in ("performer", "performer_part", "allocation"):
+                    if isinstance(v, (int, float)):
+                        lines.append(f"{pad}    attribute {k} = {v};")
+                    else:
+                        lines.append(f"{pad}    attribute {k} = \"{v}\";")
+            for a in (self.attribute_defs or []):
+                lines.append(a.to_sysml(indent + 4))
+            for s in (self.steps or []):
+                lines.append(f"{pad}    step {s};")
+            lines.append(f"{pad}}}")
+            return "\n".join(lines)
+        return f"{doc_str}{pad}{kw} {self.name}{params_str};"
 
 
 @dataclass
@@ -440,9 +506,21 @@ class UseCaseDef:
     doc: str = ""
     subject: str = ""
     actor: str = ""
+    actors: List[str] = field(default_factory=list)
     objective: str = ""
     includes: List[str] = field(default_factory=list)
     extends: List[str] = field(default_factory=list)
+    steps: List[str] = field(default_factory=list)
+    preconditions: List[str] = field(default_factory=list)
+    postconditions: List[str] = field(default_factory=list)
+    attributes: Dict[str, Any] = field(default_factory=dict)
+    attribute_defs: List[AttributeDef] = field(default_factory=list)
+
+    def __post_init__(self):
+        if self.actor and self.actor not in self.actors:
+            self.actors.append(self.actor)
+        elif self.actors and not self.actor:
+            self.actor = self.actors[0]
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -450,9 +528,15 @@ class UseCaseDef:
             "doc": self.doc,
             "subject": self.subject,
             "actor": self.actor,
+            "actors": list(self.actors or ([self.actor] if self.actor else [])),
             "objective": self.objective,
             "includes": list(self.includes or []),
             "extends": list(self.extends or []),
+            "steps": list(self.steps or []),
+            "sequence_steps": list(self.steps or []),
+            "preconditions": list(self.preconditions or []),
+            "postconditions": list(self.postconditions or []),
+            "attributes": dict(self.attributes or {}),
         }
 
     def to_sysml(self, indent: int = 4) -> str:
@@ -463,14 +547,28 @@ class UseCaseDef:
         lines.append(f"{pad}use case def {self.name} {{")
         if self.subject:
             lines.append(f"{pad}    subject {self.subject};")
-        if self.actor:
-            lines.append(f"{pad}    actor {self.actor};")
+        for act in (self.actors or ([self.actor] if self.actor else [])):
+            lines.append(f"{pad}    actor {act};")
         if self.objective:
             lines.append(f"{pad}    objective \"{self.objective}\";")
+        for pre in (self.preconditions or []):
+            lines.append(f"{pad}    precondition {pre};")
+        for step in (self.steps or []):
+            lines.append(f"{pad}    step {step};")
+        for post in (self.postconditions or []):
+            lines.append(f"{pad}    postcondition {post};")
         for inc in (self.includes or []):
             lines.append(f"{pad}    include {inc};")
         for ext in (self.extends or []):
             lines.append(f"{pad}    extend {ext};")
+        for k, v in (self.attributes or {}).items():
+            if isinstance(v, (int, float)):
+                lines.append(f"{pad}    attribute {k} = {v};")
+            else:
+                lines.append(f"{pad}    attribute {k} = \"{v}\";")
+        for attr in (self.attribute_defs or []):
+            if attr.name not in self.attributes:
+                lines.append(attr.to_sysml(indent + 4))
         lines.append(f"{pad}}}")
         return "\n".join(lines)
 
@@ -598,12 +696,19 @@ class ConnectionDef:
     latency_ms: Optional[float] = None
     attributes: Dict[str, Any] = field(default_factory=dict)
     attribute_defs: List[AttributeDef] = field(default_factory=list)
+    item_payload: str = ""
+    flow_properties: Dict[str, Any] = field(default_factory=dict)
+    is_flow: bool = False
 
     def __post_init__(self):
         if not self.source_part and self.source_port and "." in self.source_port:
             self.source_part = self.source_port.split(".", 1)[0]
         if not self.target_part and self.target_port and "." in self.target_port:
             self.target_part = self.target_port.split(".", 1)[0]
+        if self.item_payload and not self.item_flow_ref:
+            self.item_flow_ref = self.item_payload
+        elif self.item_flow_ref and not self.item_payload:
+            self.item_payload = self.item_flow_ref
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -615,8 +720,11 @@ class ConnectionDef:
             "doc": self.doc,
             "severity": self.severity,
             "item_flow_ref": self.item_flow_ref,
+            "item_payload": self.item_payload or self.item_flow_ref,
             "protocol": self.protocol,
             "latency_ms": self.latency_ms,
+            "flow_properties": dict(self.flow_properties or {}),
+            "is_flow": self.is_flow,
             "attributes": dict(self.attributes or {}),
         }
 
@@ -625,19 +733,30 @@ class ConnectionDef:
         lines = []
         if self.doc:
             lines.append(f"{pad}doc /* {self.doc} */")
-        lines.append(f"{pad}connection def {self.name} {{")
+        kw = "flow def" if self.is_flow else "connection def"
+        lines.append(f"{pad}{kw} {self.name} {{")
         if self.source_port and self.target_port:
-            lines.append(f"{pad}    connect {self.source_port} to {self.target_port};")
+            if self.is_flow:
+                lines.append(f"{pad}    flow from {self.source_port} to {self.target_port};")
+            else:
+                lines.append(f"{pad}    connect {self.source_port} to {self.target_port};")
         if self.severity != 1:
             lines.append(f"{pad}    attribute severity : Integer = {self.severity};")
         if self.protocol and not any(a.name == "protocol" for a in (self.attribute_defs or [])):
             lines.append(f"{pad}    attribute protocol : String = \"{self.protocol}\";")
         if self.latency_ms is not None and not any(a.name in ("latency_ms", "latency") for a in (self.attribute_defs or [])):
             lines.append(f"{pad}    attribute latency_ms : Real = {self.latency_ms};")
-        if self.item_flow_ref and not any(a.name in ("item_flow_ref", "item_flow") for a in (self.attribute_defs or [])):
-            lines.append(f"{pad}    attribute item_flow_ref : String = \"{self.item_flow_ref}\";")
+        payload = self.item_flow_ref or self.item_payload
+        if payload and not any(a.name in ("item_flow_ref", "item_flow", "item_payload", "payload") for a in (self.attribute_defs or [])):
+            lines.append(f"{pad}    attribute item_flow_ref : String = \"{payload}\";")
+        for k, v in (self.flow_properties or {}).items():
+            if k not in ("protocol", "latency_ms", "latency", "item_flow_ref", "item_flow", "item_payload", "payload"):
+                if isinstance(v, (int, float)):
+                    lines.append(f"{pad}    attribute {k} = {v};")
+                else:
+                    lines.append(f"{pad}    attribute {k} = \"{v}\";")
         for attr in (self.attribute_defs or []):
-            if attr.name not in ("source_port", "target_port", "severity", "protocol", "latency_ms", "latency", "item_flow_ref", "item_flow"):
+            if attr.name not in ("source_port", "target_port", "severity", "protocol", "latency_ms", "latency", "item_flow_ref", "item_flow", "item_payload", "payload") and attr.name not in (self.flow_properties or {}):
                 lines.append(attr.to_sysml(indent + 4))
         lines.append(f"{pad}}}")
         return "\n".join(lines)
@@ -1030,6 +1149,60 @@ class SysMLPackage:
             states.extend(sub.get_all_states())
         return states
 
+    def get_all_actions(self) -> List[ActionDef]:
+        """Returns all ActionDefs declared at package and part levels."""
+        actions = list(self.action_defs or [])
+        for p in self.get_all_parts():
+            actions.extend(p.actions or [])
+        for sub in (self.sub_packages or []):
+            actions.extend(sub.get_all_actions())
+        return actions
+
+    def get_all_use_cases(self) -> List[UseCaseDef]:
+        """Returns all UseCaseDefs declared at package and part levels."""
+        ucs = list(self.use_case_defs or [])
+        for p in self.get_all_parts():
+            ucs.extend(p.use_cases or [])
+        for sub in (self.sub_packages or []):
+            ucs.extend(sub.get_all_use_cases())
+        return ucs
+
+    def get_all_constraints(self) -> List[SysMLConstraintDef]:
+        """Returns all SysMLConstraintDefs declared at package and part levels."""
+        cons = list(self.constraint_defs or [])
+        for p in self.get_all_parts():
+            cons.extend(p.constraints or [])
+        for sub in (self.sub_packages or []):
+            cons.extend(sub.get_all_constraints())
+        return cons
+
+    def get_all_requirements(self) -> List[RequirementDef]:
+        """Returns all RequirementDefs declared at package and part levels."""
+        reqs = list(self.requirement_defs or [])
+        for p in self.get_all_parts():
+            reqs.extend(p.requirements or [])
+        for sub in (self.sub_packages or []):
+            reqs.extend(sub.get_all_requirements())
+        return reqs
+
+    def get_all_capabilities(self) -> List[SysMLCapabilityDef]:
+        """Returns all SysMLCapabilityDefs declared at package and part levels."""
+        caps = list(self.capability_defs or [])
+        for p in self.get_all_parts():
+            caps.extend(p.capabilities or [])
+        for sub in (self.sub_packages or []):
+            caps.extend(sub.get_all_capabilities())
+        return caps
+
+    def get_all_ports(self) -> List[PortDef]:
+        """Returns all PortDefs declared at package and part levels."""
+        ports = list(self.port_defs or [])
+        for p in self.get_all_parts():
+            ports.extend(p.ports or [])
+        for sub in (self.sub_packages or []):
+            ports.extend(sub.get_all_ports())
+        return ports
+
     def get_connection_graph(self) -> Dict[str, List[str]]:
         """
         Builds port-to-port and part-to-part adjacency graph from all connection definitions.
@@ -1392,7 +1565,7 @@ class SysMLParser:
                     else:
                         container.interactions.append(i_obj)
 
-                elif re.search(r'\b(?:assert\s+constraint|constraint\s+def|constraint)\s+([a-zA-Z0-9_]+)', header):
+                elif re.search(r'\b(?:assert\s+constraint|constraint\s+def|constraint)\b', header):
                     con_obj = self._parse_constraint_block(d)
                     if isinstance(container, SysMLPackage):
                         container.constraint_defs.append(con_obj)
@@ -1419,7 +1592,7 @@ class SysMLParser:
                         container.sub_packages.append(sub_pkg)
 
                 elif re.search(r'\baction\s+(?:def\s+)?([a-zA-Z0-9_]+)', header):
-                    act_obj = self._parse_action_decl(header, doc)
+                    act_obj = self._parse_action_block(d, parent_name=container.name if isinstance(container, PartDef) else "")
                     if isinstance(container, SysMLPackage):
                         container.action_defs.append(act_obj)
                     else:
@@ -1476,7 +1649,7 @@ class SysMLParser:
                     else:
                         container.risks.append(r_obj)
 
-                elif re.search(r'\bconnection\s+(?:def\s+)?([a-zA-Z0-9_]+)', header):
+                elif re.search(r'\b(?:connection|flow|item\s+flow|interface)\s+(?:def\s+)?([a-zA-Z0-9_]+)', header):
                     conn_obj = self._parse_connection_block(d)
                     if isinstance(container, SysMLPackage):
                         container.connection_defs.append(conn_obj)
@@ -1503,7 +1676,7 @@ class SysMLParser:
                     else:
                         container.parts.append(p_obj)
 
-                elif re.search(r'\b(?:assert\s+constraint|constraint\s+def|constraint)\s+([a-zA-Z0-9_]+)', stmt):
+                elif re.search(r'\b(?:assert\s+constraint|constraint\s+def|constraint)\b', stmt):
                     con_obj = self._parse_constraint_stmt(stmt, doc)
                     if isinstance(container, SysMLPackage):
                         container.constraint_defs.append(con_obj)
@@ -1550,7 +1723,7 @@ class SysMLParser:
                         container.operations.append(op_obj)
 
                 elif re.search(r'\baction\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt):
-                    act_obj = self._parse_action_decl(stmt, doc)
+                    act_obj = self._parse_action_decl(stmt, doc, parent_name=container.name if isinstance(container, PartDef) else "")
                     if isinstance(container, SysMLPackage):
                         container.action_defs.append(act_obj)
                     else:
@@ -1602,12 +1775,19 @@ class SysMLParser:
                     else:
                         container.risks.append(r_obj)
 
-                elif re.search(r'\bconnection\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt):
+                elif re.search(r'\b(?:connection|flow|item\s+flow|interface)\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt):
                     conn_obj = self._parse_connection_stmt(stmt, doc)
                     if isinstance(container, SysMLPackage):
                         container.connection_defs.append(conn_obj)
                     else:
                         container.connections.append(conn_obj)
+
+                elif re.search(r'\buse\s+case\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt):
+                    uc_obj = self._parse_use_case_stmt(stmt, doc)
+                    if isinstance(container, SysMLPackage):
+                        container.use_case_defs.append(uc_obj)
+                    else:
+                        container.use_cases.append(uc_obj)
 
                 elif re.search(r'\bconnect\b|\b(?:item\s+)?flow\s+from\b', stmt):
                     conn_obj = self._parse_connect_stmt(stmt, doc)
@@ -1726,8 +1906,11 @@ class SysMLParser:
     def _parse_constraint_block(self, decl: Dict[str, Any]) -> SysMLConstraintDef:
         header = decl["header"]
         is_assertion = bool(re.search(r'\bassert\s+constraint\b', header))
-        m = re.search(r'\b(?:assert\s+constraint|constraint\s+def|constraint)\s+([a-zA-Z0-9_]+)', header)
-        name = m.group(1) if m else "Constraint"
+        m = re.search(r'\b(?:assert\s+constraint|constraint\s+def|constraint)(?:\s+([a-zA-Z0-9_]+))?', header)
+        name = m.group(1) if m and m.group(1) else ""
+        if not name:
+            self._constraint_counter = getattr(self, "_constraint_counter", 0) + 1
+            name = f"Constraint_{self._constraint_counter}"
         doc = decl.get("doc", "")
 
         # Extract parameters if present in header, e.g. (in x: Type)
@@ -1764,8 +1947,11 @@ class SysMLParser:
 
     def _parse_constraint_stmt(self, stmt: str, doc: str = "") -> SysMLConstraintDef:
         is_assertion = bool(re.search(r'\bassert\s+constraint\b', stmt))
-        m = re.search(r'\b(?:assert\s+constraint|constraint\s+def|constraint)\s+([a-zA-Z0-9_]+)', stmt)
-        name = m.group(1) if m else "Constraint"
+        m = re.search(r'\b(?:assert\s+constraint|constraint\s+def|constraint)(?:\s+([a-zA-Z0-9_]+))?', stmt)
+        name = m.group(1) if m and m.group(1) else ""
+        if not name:
+            self._constraint_counter = getattr(self, "_constraint_counter", 0) + 1
+            name = f"Constraint_{self._constraint_counter}"
 
         params = []
         p_match = re.search(r'\(([^)]*)\)', stmt)
@@ -1778,6 +1964,9 @@ class SysMLParser:
             expression = stmt.split(':', 1)[1].strip()
         elif '=' in stmt:
             expression = stmt.split('=', 1)[1].strip()
+        else:
+            clean = re.sub(r'^\s*(?:assert\s+constraint|constraint\s+def|constraint)(?:\s+[a-zA-Z0-9_]+)?\s*', '', stmt).strip()
+            expression = clean
 
         return SysMLConstraintDef(
             name=name,
@@ -1831,11 +2020,17 @@ class SysMLParser:
             doc=doc
         )
 
-    def _parse_action_decl(self, text: str, doc: str = "") -> ActionDef:
+    def _parse_action_decl(self, text: str, doc: str = "", parent_name: str = "") -> ActionDef:
         m = re.search(r'\baction\s+(?:def\s+)?([a-zA-Z0-9_]+)', text)
         name = m.group(1) if m else "Action"
-        in_params = []
-        out_params = []
+        is_def = bool(re.search(r'\baction\s+def\b', text))
+        in_params: List[AttributeDef] = []
+        out_params: List[AttributeDef] = []
+        parameters: List[AttributeDef] = []
+        performer = parent_name
+        performer_part = parent_name
+        allocation = parent_name
+        attributes: Dict[str, Any] = {}
 
         p_match = re.search(r'\(([^)]*)\)', text)
         if p_match and p_match.group(1).strip():
@@ -1850,7 +2045,8 @@ class SysMLParser:
                     p_type = p_parts[2] if len(p_parts) > 2 else "String"
                     if len(p_parts) >= 4 and p_parts[2] == ':':
                         p_type = p_parts[3]
-                    attr = AttributeDef(name=p_name, type_name=p_type)
+                    attr = AttributeDef(name=p_name, type_name=p_type, default_value=direction)
+                    parameters.append(attr)
                     if direction == 'out':
                         out_params.append(attr)
                     else:
@@ -1860,9 +2056,135 @@ class SysMLParser:
                     p_type = p_parts[1]
                     if len(p_parts) >= 3 and p_parts[1] == ':':
                         p_type = p_parts[2]
-                    in_params.append(AttributeDef(name=p_name, type_name=p_type))
+                    attr = AttributeDef(name=p_name, type_name=p_type, default_value="in")
+                    in_params.append(attr)
+                    parameters.append(attr)
 
-        return ActionDef(name=name, doc=doc, in_params=in_params, out_params=out_params)
+        comb = text + " " + doc
+        m_perf = re.search(r'\[\s*(?:performer|performed_by|allocation|allocated_to)\s*[:=]\s*([a-zA-Z0-9_]+)\s*\]', comb, re.IGNORECASE)
+        if not m_perf:
+            m_perf = re.search(r'\b(?:performer|performed_by|allocated_to)\s*[:=]\s*["\']?([a-zA-Z0-9_]+)["\']?', comb, re.IGNORECASE)
+        if m_perf:
+            performer = m_perf.group(1)
+            performer_part = performer
+            allocation = performer
+
+        return ActionDef(
+            name=name,
+            doc=doc,
+            in_params=in_params,
+            out_params=out_params,
+            parameters=parameters,
+            performer=performer,
+            performer_part=performer_part,
+            allocation=allocation,
+            attributes=attributes,
+            is_def=is_def,
+        )
+
+    def _parse_action_block(self, decl: Dict[str, Any], parent_name: str = "") -> ActionDef:
+        header = decl["header"]
+        doc = decl.get("doc", "")
+        raw_body = decl.get("body", "")
+        if not doc:
+            doc_m = re.search(r'(?:^\s*doc\s*/\*|\s*/\*)(.*?)\*/', raw_body, re.DOTALL)
+            if doc_m:
+                extracted = doc_m.group(1).strip()
+                if extracted.startswith("doc"):
+                    extracted = extracted[3:].strip()
+                doc = extracted
+
+        base = self._parse_action_decl(header, doc, parent_name=parent_name)
+        name = base.name
+        is_def = bool(re.search(r'\baction\s+def\b', header)) or base.is_def
+        in_params = list(base.in_params)
+        out_params = list(base.out_params)
+        parameters = list(base.parameters)
+        performer = base.performer or parent_name
+        performer_part = base.performer_part or parent_name
+        allocation = base.allocation or performer
+        attributes: Dict[str, Any] = dict(base.attributes)
+        attribute_defs: List[AttributeDef] = []
+        steps: List[str] = []
+
+        body_decls = self._scan_declarations(raw_body)
+        for d in body_decls:
+            if d["type"] == "statement":
+                stmt = d["statement"]
+                s_doc = d.get("doc", "")
+                m_in = re.search(r'\bin\s+([a-zA-Z0-9_]+)\s*:\s*([a-zA-Z0-9_<>:]+)', stmt)
+                if m_in:
+                    p = AttributeDef(name=m_in.group(1), type_name=m_in.group(2).strip(), doc=s_doc, default_value="in")
+                    in_params.append(p)
+                    parameters.append(p)
+                    continue
+                m_out = re.search(r'\bout\s+([a-zA-Z0-9_]+)\s*:\s*([a-zA-Z0-9_<>:]+)', stmt)
+                if m_out:
+                    p = AttributeDef(name=m_out.group(1), type_name=m_out.group(2).strip(), doc=s_doc, default_value="out")
+                    out_params.append(p)
+                    parameters.append(p)
+                    continue
+                m_perf = re.search(r'\b(?:perform|performer|allocated_to|performer_part)\s*[:=]?\s*["\']?([a-zA-Z0-9_:]+)["\']?', stmt, re.IGNORECASE)
+                if m_perf:
+                    perf_val = m_perf.group(1).split("::")[-1]
+                    performer = perf_val
+                    performer_part = perf_val
+                    allocation = perf_val
+                    continue
+                m_alloc = re.search(r'\ballocate\s+(?:(?:this|action)\s+)?to\s+([a-zA-Z0-9_:]+)', stmt, re.IGNORECASE)
+                if m_alloc:
+                    alloc_val = m_alloc.group(1).split("::")[-1]
+                    performer = alloc_val
+                    performer_part = alloc_val
+                    allocation = alloc_val
+                    continue
+                m_step = re.search(r'\b(?:step|first|then)\s+([a-zA-Z0-9_]+)', stmt)
+                if m_step:
+                    steps.append(m_step.group(1))
+                    continue
+                if re.search(r'\battribute\s+', stmt):
+                    attr = self._parse_attribute_stmt(stmt, s_doc)
+                    attribute_defs.append(attr)
+                    val = attr.default_value if attr.default_value is not None else attr.type_name
+                    attributes[attr.name] = val
+                    if attr.name in ("performer", "performer_part", "allocation", "performer_node") and attr.default_value:
+                        val_str = str(attr.default_value).strip('"\'; ')
+                        performer = val_str
+                        performer_part = val_str
+                        allocation = val_str
+                    continue
+            elif d["type"] == "block":
+                b_header = d["header"]
+                m_act = re.search(r'\b(?:step|action)\s+([a-zA-Z0-9_]+)', b_header)
+                if m_act:
+                    steps.append(m_act.group(1))
+
+        if not performer or performer == parent_name:
+            comb = doc + " " + raw_body
+            m_perf_doc = re.search(r'\[\s*(?:performer|performed_by|allocation|allocated_to)\s*[:=]\s*([a-zA-Z0-9_]+)\s*\]', comb, re.IGNORECASE)
+            if not m_perf_doc:
+                m_perf_doc = re.search(r'@(?:performer|allocation)\s*\(\s*([a-zA-Z0-9_]+)\s*\)', comb, re.IGNORECASE)
+            if not m_perf_doc:
+                m_perf_doc = re.search(r'\b(?:performer|performed_by|allocated_to)\s*[:=]\s*["\']?([a-zA-Z0-9_]+)["\']?', comb, re.IGNORECASE)
+            if m_perf_doc:
+                performer = m_perf_doc.group(1)
+                performer_part = performer
+                allocation = performer
+
+        return ActionDef(
+            name=name,
+            doc=doc,
+            in_params=in_params,
+            out_params=out_params,
+            parameters=parameters,
+            performer=performer,
+            performer_part=performer_part,
+            allocation=allocation,
+            attributes=attributes,
+            attribute_defs=attribute_defs,
+            steps=steps,
+            is_def=is_def,
+        )
 
     def _parse_operation_decl(self, text: str, doc: str = "") -> SysMLOperationDef:
         m = re.search(r'\b(?:operation|feature)\s+(?:def\s+)?([a-zA-Z0-9_]+)', text)
@@ -2174,22 +2496,42 @@ class SysMLParser:
         m = re.search(r'\buse\s+case\s+(?:def\s+)?([a-zA-Z0-9_]+)', header)
         name = m.group(1) if m else "UseCase"
         doc = decl.get("doc", "")
+        raw_body = decl.get("body", "")
+        if not doc:
+            doc_m = re.search(r'(?:^\s*doc\s*/\*|\s*/\*)(.*?)\*/', raw_body, re.DOTALL)
+            if doc_m:
+                extracted = doc_m.group(1).strip()
+                if extracted.startswith("doc"):
+                    extracted = extracted[3:].strip()
+                doc = extracted
+
         subject = ""
         actor = ""
+        actors: List[str] = []
         objective = doc
-        includes = []
-        extends = []
+        includes: List[str] = []
+        extends: List[str] = []
+        steps: List[str] = []
+        preconditions: List[str] = []
+        postconditions: List[str] = []
+        attributes: Dict[str, Any] = {}
+        attribute_defs: List[AttributeDef] = []
 
-        body_decls = self._scan_declarations(decl["body"])
+        body_decls = self._scan_declarations(raw_body)
         for d in body_decls:
             if d["type"] == "statement":
                 stmt = d["statement"]
+                stmt_doc = d.get("doc", "")
                 subj_m = re.search(r'\bsubject\s+([a-zA-Z0-9_]+)', stmt)
                 if subj_m:
                     subject = subj_m.group(1)
                 act_m = re.search(r'\bactor\s+([a-zA-Z0-9_]+)', stmt)
                 if act_m:
-                    actor = act_m.group(1)
+                    act_name = act_m.group(1)
+                    if act_name not in actors:
+                        actors.append(act_name)
+                    if not actor:
+                        actor = act_name
                 obj_m = re.search(r'\bobjective\s*[:=]?\s*["\']?([^"\']+)["\']?', stmt)
                 if obj_m:
                     objective = obj_m.group(1).strip()
@@ -2199,15 +2541,66 @@ class SysMLParser:
                 ext_m = re.search(r'\bextend\s+([a-zA-Z0-9_]+)', stmt)
                 if ext_m:
                     extends.append(ext_m.group(1))
+                step_m = re.search(r'\b(?:step|first|then)\s+([a-zA-Z0-9_]+|["][^"]+["]|[^;]+)', stmt)
+                if step_m:
+                    step_val = step_m.group(1).strip().strip('"')
+                    steps.append(step_val)
+                pre_m = re.search(r'\bprecondition\s*[:=]?\s*([^;]+)', stmt)
+                if pre_m:
+                    preconditions.append(pre_m.group(1).strip().strip('"'))
+                post_m = re.search(r'\bpostcondition\s*[:=]?\s*([^;]+)', stmt)
+                if post_m:
+                    postconditions.append(post_m.group(1).strip().strip('"'))
+                if re.search(r'\battribute\s+', stmt):
+                    attr = self._parse_attribute_stmt(stmt, stmt_doc)
+                    attribute_defs.append(attr)
+                    val = attr.default_value if attr.default_value is not None else attr.type_name
+                    attributes[attr.name] = val
+            elif d["type"] == "block":
+                b_header = d["header"]
+                b_step_m = re.search(r'\b(?:step|action)\s+([a-zA-Z0-9_]+)', b_header)
+                if b_step_m:
+                    steps.append(b_step_m.group(1))
+
+        if actor and actor not in actors:
+            actors.insert(0, actor)
+        elif actors and not actor:
+            actor = actors[0]
 
         return UseCaseDef(
             name=name,
             doc=doc,
             subject=subject,
             actor=actor,
+            actors=actors,
             objective=objective,
             includes=includes,
-            extends=extends
+            extends=extends,
+            steps=steps,
+            preconditions=preconditions,
+            postconditions=postconditions,
+            attributes=attributes,
+            attribute_defs=attribute_defs,
+        )
+
+    def _parse_use_case_stmt(self, stmt: str, doc: str = "") -> UseCaseDef:
+        m = re.search(r'\buse\s+case\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt)
+        name = m.group(1) if m else "UseCase"
+        actor = ""
+        actors: List[str] = []
+        act_m = re.search(r'\bactor\s+([a-zA-Z0-9_]+)', stmt)
+        if act_m:
+            actor = act_m.group(1)
+            actors.append(actor)
+        subj_m = re.search(r'\bsubject\s+([a-zA-Z0-9_]+)', stmt)
+        subject = subj_m.group(1) if subj_m else ""
+        return UseCaseDef(
+            name=name,
+            doc=doc,
+            subject=subject,
+            actor=actor,
+            actors=actors,
+            objective=doc,
         )
 
     def _parse_item_block(self, decl: Dict[str, Any]) -> ItemDef:
@@ -2451,16 +2844,19 @@ class SysMLParser:
 
     def _parse_connection_block(self, decl: Dict[str, Any]) -> ConnectionDef:
         header = decl["header"]
-        m = re.search(r'\bconnection\s+(?:def\s+)?([a-zA-Z0-9_]+)', header)
+        is_flow = bool(re.search(r'\b(?:flow|item\s+flow)\b', header))
+        m = re.search(r'\b(?:connection|flow|item\s+flow|interface)\s+(?:def\s+)?([a-zA-Z0-9_]+)', header)
         name = m.group(1) if m else "Connection"
         doc = decl.get("doc", "")
 
         source_port = ""
         target_port = ""
+        item_payload = ""
         attributes: Dict[str, Any] = {}
         attribute_defs: List[AttributeDef] = []
+        flow_properties: Dict[str, Any] = {}
 
-        m_to = re.search(r'\bconnect\s+([a-zA-Z0-9_\.]+)\s+to\s+([a-zA-Z0-9_\.]+)', header)
+        m_to = re.search(r'\b(?:connect|flow\s+from)\s+([a-zA-Z0-9_\.]+)\s+to\s+([a-zA-Z0-9_\.]+)', header)
         if m_to:
             source_port = m_to.group(1)
             target_port = m_to.group(2)
@@ -2470,13 +2866,17 @@ class SysMLParser:
             if d["type"] == "statement":
                 stmt = d["statement"]
                 stmt_doc = d.get("doc", "")
-                if re.search(r'\bconnect\b', stmt):
+                if re.search(r'\b(?:connect|flow\s+from)\b', stmt):
                     sub_conn = self._parse_connect_stmt(stmt, stmt_doc)
                     if sub_conn:
                         if not source_port:
                             source_port = sub_conn.source_port
                         if not target_port:
                             target_port = sub_conn.target_port
+                        if sub_conn.is_flow:
+                            is_flow = True
+                        if sub_conn.item_payload and not item_payload:
+                            item_payload = sub_conn.item_payload
                 elif re.search(r'\battribute\s+', stmt):
                     attr = self._parse_attribute_stmt(stmt, stmt_doc)
                     attribute_defs.append(attr)
@@ -2486,6 +2886,8 @@ class SysMLParser:
                         source_port = attr.default_value.strip('"\'; ')
                     elif attr.name in ("target_port", "target", "to", "dst", "end2") and attr.default_value:
                         target_port = attr.default_value.strip('"\'; ')
+                    elif attr.name in ("item_payload", "payload", "item_flow_ref", "item_flow") and attr.default_value:
+                        item_payload = attr.default_value.strip('"\'; ')
                 elif re.search(r'\b(?:source|from|end1|source_port)\s*[:=]\s*["\']?([^"\';\s]+)', stmt):
                     m_src = re.search(r'\b(?:source|from|end1|source_port)\s*[:=]\s*["\']?([^"\';\s]+)', stmt)
                     if m_src:
@@ -2501,6 +2903,10 @@ class SysMLParser:
                             source_port = m_end.group(1)
                         elif not target_port:
                             target_port = m_end.group(1)
+                elif re.search(r'\b(?:item|payload|item_payload)\s*[:=]?\s*["\']?([a-zA-Z0-9_]+)["\']?', stmt):
+                    m_p = re.search(r'\b(?:item|payload|item_payload)\s*[:=]?\s*["\']?([a-zA-Z0-9_]+)["\']?', stmt)
+                    if m_p and not item_payload:
+                        item_payload = m_p.group(1).strip()
 
         severity = self._extract_severity(decl["body"], doc, default=1)
         if "severity" in attributes:
@@ -2561,8 +2967,19 @@ class SysMLParser:
                 m_flow = re.search(r'\bflow\s+(?!from\b|to\b|of\b)([a-zA-Z0-9_]+)', combined_text)
             item_flow_ref = m_flow.group(1).strip('"\';\\]\\[ ') if m_flow else ""
 
+        if not item_payload:
+            item_payload = item_flow_ref
+
         source_part = str(attributes.get("source_part", ""))
         target_part = str(attributes.get("target_part", ""))
+        if not source_part and source_port:
+            source_part = source_port.split('.', 1)[0] if '.' in source_port else source_port
+        if not target_part and target_port:
+            target_part = target_port.split('.', 1)[0] if '.' in target_port else target_port
+
+        for k, v in attributes.items():
+            if k not in ("source_port", "target_port", "source_part", "target_part", "severity", "protocol", "latency_ms", "latency", "item_flow_ref", "item_flow", "item_payload", "payload"):
+                flow_properties[k] = v
 
         return ConnectionDef(
             name=name,
@@ -2572,22 +2989,28 @@ class SysMLParser:
             severity=severity,
             source_part=source_part,
             target_part=target_part,
-            item_flow_ref=item_flow_ref,
+            item_flow_ref=item_flow_ref or item_payload,
             protocol=protocol,
             latency_ms=latency_ms,
             attributes=attributes,
             attribute_defs=attribute_defs,
+            item_payload=item_payload or item_flow_ref,
+            flow_properties=flow_properties,
+            is_flow=is_flow,
         )
 
     def _parse_connection_stmt(self, stmt: str, doc: str = "") -> ConnectionDef:
-        m = re.search(r'\bconnection\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt)
+        is_flow = bool(re.search(r'\b(?:flow|item\s+flow)\b', stmt))
+        m = re.search(r'\b(?:connection|flow|item\s+flow|interface)\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt)
         name = m.group(1) if m else "Connection"
         severity = self._extract_severity(stmt, doc, default=1)
         source_port = ""
         target_port = ""
+        item_payload = ""
         attributes: Dict[str, Any] = {"severity": severity}
+        flow_properties: Dict[str, Any] = {}
 
-        m_to = re.search(r'\bconnect\s+([a-zA-Z0-9_\.]+)\s+to\s+([a-zA-Z0-9_\.]+)', stmt)
+        m_to = re.search(r'\b(?:connect|flow\s+from)\s+([a-zA-Z0-9_\.]+)\s+to\s+([a-zA-Z0-9_\.]+)', stmt)
         if m_to:
             source_port = m_to.group(1)
             target_port = m_to.group(2)
@@ -2617,16 +3040,30 @@ class SysMLParser:
             m_flow = re.search(r'\bflow\s+(?!from\b|to\b|of\b)([a-zA-Z0-9_]+)', stmt)
         item_flow_ref = m_flow.group(1).strip('"\';\\]\\[ ') if m_flow else ""
 
+        m_pay = re.search(r'\b(?:item_payload|payload)\s*[:=]?\s*["\']?([a-zA-Z0-9_]+)["\']?', stmt + " " + doc, re.IGNORECASE)
+        if m_pay:
+            item_payload = m_pay.group(1).strip()
+        elif item_flow_ref:
+            item_payload = item_flow_ref
+
+        source_part = source_port.split('.', 1)[0] if '.' in source_port else source_port
+        target_part = target_port.split('.', 1)[0] if '.' in target_port else target_port
+
         return ConnectionDef(
             name=name,
             source_port=source_port,
             target_port=target_port,
             doc=doc,
             severity=severity,
-            item_flow_ref=item_flow_ref,
+            source_part=source_part,
+            target_part=target_part,
+            item_flow_ref=item_flow_ref or item_payload,
             protocol=protocol,
             latency_ms=latency_ms,
             attributes=attributes,
+            item_payload=item_payload or item_flow_ref,
+            flow_properties=flow_properties,
+            is_flow=is_flow,
         )
 
     def _parse_connect_stmt(self, stmt: str, doc: str = "") -> Optional[ConnectionDef]:
@@ -2637,6 +3074,7 @@ class SysMLParser:
 
         source_port = ""
         target_port = ""
+        is_flow = bool(re.search(r'\b(?:item\s+)?flow\b', stmt))
 
         m_to = re.search(r'\bconnect\s+([a-zA-Z0-9_\.]+)\s+to\s+([a-zA-Z0-9_\.]+)', stmt)
         if m_to:
@@ -2647,6 +3085,7 @@ class SysMLParser:
             if m_flow_from:
                 source_port = m_flow_from.group(1)
                 target_port = m_flow_from.group(2)
+                is_flow = True
             else:
                 m_arrow = re.search(r'\bconnect\s+([a-zA-Z0-9_\.]+)\s*->\s*([a-zA-Z0-9_\.]+)', stmt)
                 if m_arrow:
@@ -2673,6 +3112,7 @@ class SysMLParser:
 
         severity = self._extract_severity(stmt, doc, default=1)
         attributes: Dict[str, Any] = {"severity": severity}
+        flow_properties: Dict[str, Any] = {}
         if source_port:
             attributes["source_port"] = source_port
         if target_port:
@@ -2691,14 +3131,25 @@ class SysMLParser:
             m_flow = re.search(r'\bflow\s+(?!from\b|to\b|of\b)([a-zA-Z0-9_]+)', stmt)
         item_flow_ref = m_flow.group(1).strip('"\';\\]\\[ ') if m_flow else ""
 
+        m_pay = re.search(r'\b(?:item_payload|payload)\s*[:=]?\s*["\']?([a-zA-Z0-9_]+)["\']?', stmt + " " + doc, re.IGNORECASE)
+        item_payload = m_pay.group(1).strip() if m_pay else (item_flow_ref or "")
+
+        source_part = source_port.split('.', 1)[0] if '.' in source_port else source_port
+        target_part = target_port.split('.', 1)[0] if '.' in target_port else target_port
+
         return ConnectionDef(
             name=name,
             source_port=source_port,
             target_port=target_port,
             doc=doc,
             severity=severity,
-            item_flow_ref=item_flow_ref,
+            source_part=source_part,
+            target_part=target_part,
+            item_flow_ref=item_flow_ref or item_payload,
             protocol=protocol,
             latency_ms=latency_ms,
             attributes=attributes,
+            item_payload=item_payload or item_flow_ref,
+            flow_properties=flow_properties,
+            is_flow=is_flow,
         )

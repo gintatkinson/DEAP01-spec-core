@@ -62,6 +62,10 @@ try:
         StateDef,
         UseCaseDef,
         ItemDef,
+        ConnectionDef,
+        HazardDef,
+        RiskDef,
+        ItemFlowDef,
     )
 except ImportError:
     SysMLParser = None
@@ -80,6 +84,10 @@ except ImportError:
     StateDef = None
     UseCaseDef = None
     ItemDef = None
+    ConnectionDef = None
+    HazardDef = None
+    RiskDef = None
+    ItemFlowDef = None
 
 
 def parse_stpa_ucas(content: str) -> List[Dict[str, Any]]:
@@ -2055,6 +2063,78 @@ def _merge_requirement_into_package(pkg: Any, new_req: Any) -> None:
                     existing.verified_by.append(v)
 
 
+def _merge_action_into_package(pkg: Any, new_act: Any) -> None:
+    """Merges an ActionDef into the SysMLPackage, updating matching actions in-place or adding a new action."""
+    act_name = getattr(new_act, "name", "") if not isinstance(new_act, dict) else new_act.get("name", "")
+    if not act_name:
+        return
+
+    def _find_act(p: Any) -> Optional[Any]:
+        for act in (getattr(p, "action_defs", []) or []):
+            if (getattr(act, "name", "") if not isinstance(act, dict) else act.get("name", "")) == act_name:
+                return act
+        for part in (getattr(p, "part_defs", []) or []):
+            for act in (getattr(part, "actions", []) or []):
+                if (getattr(act, "name", "") if not isinstance(act, dict) else act.get("name", "")) == act_name:
+                    return act
+        for sub_pkg in (getattr(p, "sub_packages", []) or []):
+            found = _find_act(sub_pkg)
+            if found:
+                return found
+        return None
+
+    existing = _find_act(pkg)
+    if existing:
+        new_doc = getattr(new_act, "doc", "") if not isinstance(new_act, dict) else new_act.get("doc", "")
+        if hasattr(existing, "doc") and not existing.doc and new_doc:
+            existing.doc = new_doc
+        elif isinstance(existing, dict) and not existing.get("doc") and new_doc:
+            existing["doc"] = new_doc
+    else:
+        if hasattr(pkg, "action_defs"):
+            if pkg.action_defs is None:
+                pkg.action_defs = []
+            pkg.action_defs.append(new_act)
+        elif isinstance(pkg, dict):
+            pkg.setdefault("action_defs", []).append(new_act)
+
+
+def _merge_connection_into_package(pkg: Any, new_conn: Any) -> None:
+    """Merges a ConnectionDef into the SysMLPackage, updating matching connections in-place or adding a new connection."""
+    conn_name = getattr(new_conn, "name", "") if not isinstance(new_conn, dict) else new_conn.get("name", "")
+    if not conn_name:
+        return
+
+    def _find_conn(p: Any) -> Optional[Any]:
+        for conn in (getattr(p, "connection_defs", []) or []):
+            if (getattr(conn, "name", "") if not isinstance(conn, dict) else conn.get("name", "")) == conn_name:
+                return conn
+        for part in (getattr(p, "part_defs", []) or []):
+            for conn in (getattr(part, "connections", []) or []):
+                if (getattr(conn, "name", "") if not isinstance(conn, dict) else conn.get("name", "")) == conn_name:
+                    return conn
+        for sub_pkg in (getattr(p, "sub_packages", []) or []):
+            found = _find_conn(sub_pkg)
+            if found:
+                return found
+        return None
+
+    existing = _find_conn(pkg)
+    if existing:
+        new_doc = getattr(new_conn, "doc", "") if not isinstance(new_conn, dict) else new_conn.get("doc", "")
+        if hasattr(existing, "doc") and not existing.doc and new_doc:
+            existing.doc = new_doc
+        elif isinstance(existing, dict) and not existing.get("doc") and new_doc:
+            existing["doc"] = new_doc
+    else:
+        if hasattr(pkg, "connection_defs"):
+            if pkg.connection_defs is None:
+                pkg.connection_defs = []
+            pkg.connection_defs.append(new_conn)
+        elif isinstance(pkg, dict):
+            pkg.setdefault("connection_defs", []).append(new_conn)
+
+
 def _merge_subpackage_into_package(pkg: Any, new_subpkg: Any) -> None:
     """
     Recursively and non-destructively merges subpackages, child parts, capabilities,
@@ -2137,10 +2217,418 @@ def _merge_subpackage_into_package(pkg: Any, new_subpkg: Any) -> None:
     for tc in (new_tcs or []):
         _merge_test_case_into_package(target_pkg, tc)
 
+    # Merge actions
+    new_actions = getattr(new_subpkg, "action_defs", []) if not isinstance(new_subpkg, dict) else new_subpkg.get("action_defs", [])
+    for act in (new_actions or []):
+        _merge_action_into_package(target_pkg, act)
+
+    # Merge connections
+    new_conns = getattr(new_subpkg, "connection_defs", []) if not isinstance(new_subpkg, dict) else new_subpkg.get("connection_defs", [])
+    for conn in (new_conns or []):
+        _merge_connection_into_package(target_pkg, conn)
+
     # Recursively merge nested subpackages
     nested_subpkgs = getattr(new_subpkg, "sub_packages", []) if not isinstance(new_subpkg, dict) else new_subpkg.get("packages", [])
     for nested in (nested_subpkgs or []):
         _merge_subpackage_into_package(target_pkg, nested)
+
+
+# ==============================================================================
+# OPERATIONAL ARCHITECTURE CONSTRUCT EXTRACTORS (OA, OpTx, SCN, Nodes)
+# ==============================================================================
+
+def extract_operational_activities(ast: Any) -> List[Dict[str, Any]]:
+    """
+    Extracts operational activities (OA-01..OA-N) from SysML v2 AST package or model dict.
+    Returns structured list of dictionaries with activity ID, name, doc, performer allocation,
+    inputs, outputs, parameters, steps, and attributes.
+    """
+    activities: List[Dict[str, Any]] = []
+    if ast is None:
+        return activities
+
+    raw_actions: List[Any] = []
+    if hasattr(ast, "get_all_actions"):
+        raw_actions = ast.get_all_actions()
+    elif hasattr(ast, "action_defs"):
+        raw_actions = list(ast.action_defs or [])
+        for p in getattr(ast, "part_defs", []) or []:
+            raw_actions.extend(getattr(p, "actions", []) or [])
+    elif isinstance(ast, dict):
+        raw_actions = list(ast.get("action_defs", []) or [])
+
+    seen_names: Set[str] = set()
+    idx = 1
+    for act in raw_actions:
+        if isinstance(act, str):
+            name = act
+            doc = ""
+            performer = ""
+            inputs = []
+            outputs = []
+            parameters = []
+            steps = []
+            attributes = {}
+        elif isinstance(act, dict):
+            name = str(act.get("name", ""))
+            doc = str(act.get("doc", "") or act.get("description", ""))
+            performer = str(act.get("performer", "") or act.get("performer_part", "") or act.get("allocation", ""))
+            inputs = list(act.get("inputs", []) or act.get("in_params", []))
+            outputs = list(act.get("outputs", []) or act.get("out_params", []))
+            parameters = list(act.get("parameters", []) or [])
+            steps = list(act.get("steps", []) or [])
+            attributes = dict(act.get("attributes", {}) or {})
+        else:
+            name = getattr(act, "name", "")
+            doc = getattr(act, "doc", "")
+            performer = getattr(act, "performer", "") or getattr(act, "performer_part", "") or getattr(act, "allocation", "")
+            if not performer:
+                attrs = getattr(act, "attributes", {}) or {}
+                performer = str(attrs.get("performer", "") or attrs.get("performer_node", "") or attrs.get("allocation", ""))
+            inputs = [p.to_dict() if hasattr(p, "to_dict") else {"name": getattr(p, "name", str(p)), "type_name": getattr(p, "type_name", "String")} for p in (getattr(act, "in_params", []) or getattr(act, "inputs", []) or [])]
+            outputs = [p.to_dict() if hasattr(p, "to_dict") else {"name": getattr(p, "name", str(p)), "type_name": getattr(p, "type_name", "String")} for p in (getattr(act, "out_params", []) or getattr(act, "outputs", []) or [])]
+            parameters = [p.to_dict() if hasattr(p, "to_dict") else {"name": getattr(p, "name", str(p)), "type_name": getattr(p, "type_name", "String")} for p in (getattr(act, "parameters", []) or [])]
+            steps = list(getattr(act, "steps", []) or [])
+            attributes = dict(getattr(act, "attributes", {}) or {})
+
+        if not name or name in seen_names:
+            continue
+        seen_names.add(name)
+
+        oa_match = re.search(r'OA[-_]?(\d+)', name, re.IGNORECASE)
+        if oa_match:
+            oa_id = f"OA-{int(oa_match.group(1)):02d}"
+        else:
+            oa_id = f"OA-{idx:02d}"
+
+        activities.append({
+            "id": oa_id,
+            "name": name,
+            "doc": doc,
+            "description": doc,
+            "performer": performer,
+            "performer_part": performer,
+            "allocation": performer,
+            "inputs": inputs,
+            "outputs": outputs,
+            "parameters": parameters,
+            "steps": steps,
+            "attributes": attributes,
+        })
+        idx += 1
+
+    return activities
+
+
+def extract_operational_exchanges(ast: Any) -> List[Dict[str, Any]]:
+    """
+    Extracts operational information exchanges (OpTx-01..OpTx-N) from SysML v2 AST.
+    Captures endpoints (source port, target port, performer parts), item payload,
+    protocol, latency, and flow properties.
+    """
+    exchanges: List[Dict[str, Any]] = []
+    if ast is None:
+        return exchanges
+
+    raw_conns: List[Any] = []
+    if hasattr(ast, "get_all_connections"):
+        raw_conns = ast.get_all_connections()
+    elif hasattr(ast, "connection_defs"):
+        raw_conns = list(ast.connection_defs or [])
+        for p in getattr(ast, "part_defs", []) or []:
+            raw_conns.extend(getattr(p, "connections", []) or [])
+    elif isinstance(ast, dict):
+        raw_conns = list(ast.get("connection_defs", []) or [])
+
+    seen_names: Set[str] = set()
+    idx = 1
+    for conn in raw_conns:
+        if isinstance(conn, str):
+            name = conn
+            doc = ""
+            src_port = ""
+            tgt_port = ""
+            src_part = ""
+            tgt_part = ""
+            payload = ""
+            protocol = ""
+            latency_ms = None
+            severity = 1
+            flow_props = {}
+            is_flow = False
+            attributes = {}
+        elif isinstance(conn, dict):
+            name = str(conn.get("name", ""))
+            doc = str(conn.get("doc", "") or conn.get("description", ""))
+            src_port = str(conn.get("source_port", ""))
+            tgt_port = str(conn.get("target_port", ""))
+            src_part = str(conn.get("source_part", ""))
+            tgt_part = str(conn.get("target_part", ""))
+            payload = str(conn.get("item_payload", "") or conn.get("item_flow_ref", ""))
+            protocol = str(conn.get("protocol", ""))
+            latency_ms = conn.get("latency_ms")
+            severity = int(conn.get("severity", 1))
+            flow_props = dict(conn.get("flow_properties", {}) or {})
+            is_flow = bool(conn.get("is_flow", False))
+            attributes = dict(conn.get("attributes", {}) or {})
+        else:
+            name = getattr(conn, "name", "")
+            doc = getattr(conn, "doc", "")
+            src_port = getattr(conn, "source_port", "")
+            tgt_port = getattr(conn, "target_port", "")
+            src_part = getattr(conn, "source_part", "")
+            tgt_part = getattr(conn, "target_part", "")
+            payload = getattr(conn, "item_payload", "") or getattr(conn, "item_flow_ref", "")
+            protocol = getattr(conn, "protocol", "")
+            latency_ms = getattr(conn, "latency_ms", None)
+            severity = getattr(conn, "severity", 1)
+            flow_props = dict(getattr(conn, "flow_properties", {}) or {})
+            is_flow = getattr(conn, "is_flow", False)
+            attributes = dict(getattr(conn, "attributes", {}) or {})
+
+        if not name or name in seen_names:
+            continue
+        seen_names.add(name)
+
+        if not src_part and src_port and "." in src_port:
+            src_part = src_port.split(".", 1)[0]
+        if not tgt_part and tgt_port and "." in tgt_port:
+            tgt_part = tgt_port.split(".", 1)[0]
+
+        optx_match = re.search(r'OpTx[-_]?(\d+)', name, re.IGNORECASE)
+        if optx_match:
+            optx_id = f"OpTx-{int(optx_match.group(1)):02d}"
+        else:
+            optx_id = f"OpTx-{idx:02d}"
+
+        exchanges.append({
+            "id": optx_id,
+            "name": name,
+            "doc": doc,
+            "description": doc,
+            "source_port": src_port,
+            "target_port": tgt_port,
+            "source_part": src_part,
+            "source_performer": src_part,
+            "target_part": tgt_part,
+            "target_performer": tgt_part,
+            "item_payload": payload,
+            "item_flow_ref": payload,
+            "protocol": protocol,
+            "latency_ms": latency_ms,
+            "severity": severity,
+            "flow_properties": flow_props,
+            "is_flow": is_flow,
+            "attributes": attributes,
+        })
+        idx += 1
+
+    return exchanges
+
+
+def extract_operational_scenarios(ast: Any) -> List[Dict[str, Any]]:
+    """
+    Extracts operational scenarios (SCN-01..SCN-N) from SysML v2 AST use case definitions.
+    Captures actors, sequence steps, preconditions, postconditions, and inclusions/extensions.
+    """
+    scenarios: List[Dict[str, Any]] = []
+    if ast is None:
+        return scenarios
+
+    raw_ucs: List[Any] = []
+    if hasattr(ast, "get_all_use_cases"):
+        raw_ucs = ast.get_all_use_cases()
+    elif hasattr(ast, "use_case_defs"):
+        raw_ucs = list(ast.use_case_defs or [])
+        for p in getattr(ast, "part_defs", []) or []:
+            raw_ucs.extend(getattr(p, "use_cases", []) or [])
+    elif isinstance(ast, dict):
+        raw_ucs = list(ast.get("use_case_defs", []) or [])
+
+    seen_names: Set[str] = set()
+    idx = 1
+    for uc in raw_ucs:
+        if isinstance(uc, str):
+            name = uc
+            doc = ""
+            subject = ""
+            actor = ""
+            actors = []
+            objective = ""
+            steps = []
+            preconditions = []
+            postconditions = []
+            includes = []
+            extends = []
+            attributes = {}
+        elif isinstance(uc, dict):
+            name = str(uc.get("name", ""))
+            doc = str(uc.get("doc", "") or uc.get("description", ""))
+            subject = str(uc.get("subject", ""))
+            actor = str(uc.get("actor", ""))
+            actors = list(uc.get("actors", []) or ([actor] if actor else []))
+            objective = str(uc.get("objective", "") or doc)
+            steps = list(uc.get("steps", []) or uc.get("sequence_steps", []))
+            preconditions = list(uc.get("preconditions", []) or [])
+            postconditions = list(uc.get("postconditions", []) or [])
+            includes = list(uc.get("includes", []) or [])
+            extends = list(uc.get("extends", []) or [])
+            attributes = dict(uc.get("attributes", {}) or {})
+        else:
+            name = getattr(uc, "name", "")
+            doc = getattr(uc, "doc", "")
+            subject = getattr(uc, "subject", "")
+            actor = getattr(uc, "actor", "")
+            actors = list(getattr(uc, "actors", []) or ([actor] if actor else []))
+            objective = getattr(uc, "objective", "") or doc
+            steps = list(getattr(uc, "steps", []) or [])
+            preconditions = list(getattr(uc, "preconditions", []) or [])
+            postconditions = list(getattr(uc, "postconditions", []) or [])
+            includes = list(getattr(uc, "includes", []) or [])
+            extends = list(getattr(uc, "extends", []) or [])
+            attributes = dict(getattr(uc, "attributes", {}) or {})
+
+        if not name or name in seen_names:
+            continue
+        seen_names.add(name)
+
+        scn_match = re.search(r'SCN[-_]?(\d+)', name, re.IGNORECASE)
+        if scn_match:
+            scn_id = f"SCN-{int(scn_match.group(1)):02d}"
+        else:
+            scn_id = f"SCN-{idx:02d}"
+
+        scenarios.append({
+            "id": scn_id,
+            "name": name,
+            "doc": doc,
+            "objective": objective or doc,
+            "description": objective or doc,
+            "subject": subject,
+            "actor": actor,
+            "actors": actors,
+            "steps": steps,
+            "sequence_steps": steps,
+            "preconditions": preconditions,
+            "postconditions": postconditions,
+            "includes": includes,
+            "extends": extends,
+            "attributes": attributes,
+        })
+        idx += 1
+
+    return scenarios
+
+
+def extract_operational_nodes(ast: Any) -> List[Dict[str, Any]]:
+    """
+    Extracts external operational performers/nodes participating in activities,
+    exchanges, or scenarios from SysML v2 AST.
+    """
+    nodes: List[Dict[str, Any]] = []
+    if ast is None:
+        return nodes
+
+    node_map: Dict[str, Dict[str, Any]] = {}
+
+    # 1. Harvest parts from AST
+    if hasattr(ast, "get_all_parts"):
+        for p in ast.get_all_parts():
+            p_name = getattr(p, "name", "")
+            if p_name:
+                node_map[p_name] = {
+                    "name": p_name,
+                    "type": "Part",
+                    "doc": getattr(p, "doc", ""),
+                    "allocated_activities": [getattr(a, "name", "") for a in (getattr(p, "actions", []) or [])],
+                    "connected_nodes": [],
+                }
+    elif hasattr(ast, "part_defs"):
+        for p in (getattr(ast, "part_defs", []) or []):
+            p_name = getattr(p, "name", "")
+            if p_name:
+                node_map[p_name] = {
+                    "name": p_name,
+                    "type": "Part",
+                    "doc": getattr(p, "doc", ""),
+                    "allocated_activities": [getattr(a, "name", "") for a in (getattr(p, "actions", []) or [])],
+                    "connected_nodes": [],
+                }
+    elif isinstance(ast, dict):
+        for p_name in (ast.get("part_defs", []) or []):
+            if isinstance(p_name, str):
+                node_map[p_name] = {"name": p_name, "type": "Part", "doc": "", "allocated_activities": [], "connected_nodes": []}
+            elif isinstance(p_name, dict):
+                n = p_name.get("name", "")
+                if n:
+                    node_map[n] = {"name": n, "type": "Part", "doc": p_name.get("doc", ""), "allocated_activities": [], "connected_nodes": []}
+
+    # 2. Add performers from operational activities
+    activities = extract_operational_activities(ast)
+    for act in activities:
+        perf = act.get("performer") or act.get("performer_part")
+        if perf:
+            if perf not in node_map:
+                node_map[perf] = {
+                    "name": perf,
+                    "type": "Actor",
+                    "doc": f"Operational performer for {act.get('name')}",
+                    "allocated_activities": [],
+                    "connected_nodes": [],
+                }
+            if act["name"] not in node_map[perf]["allocated_activities"]:
+                node_map[perf]["allocated_activities"].append(act["name"])
+
+    # 3. Add performers / connected nodes from operational exchanges
+    exchanges = extract_operational_exchanges(ast)
+    for ex in exchanges:
+        src = ex.get("source_part") or ex.get("source_performer")
+        tgt = ex.get("target_part") or ex.get("target_performer")
+        if src:
+            if src not in node_map:
+                node_map[src] = {"name": src, "type": "Node", "doc": "", "allocated_activities": [], "connected_nodes": []}
+            if tgt and tgt not in node_map[src]["connected_nodes"]:
+                node_map[src]["connected_nodes"].append(tgt)
+        if tgt:
+            if tgt not in node_map:
+                node_map[tgt] = {"name": tgt, "type": "Node", "doc": "", "allocated_activities": [], "connected_nodes": []}
+            if src and src not in node_map[tgt]["connected_nodes"]:
+                node_map[tgt]["connected_nodes"].append(src)
+
+    # 4. Add actors from scenarios
+    scenarios = extract_operational_scenarios(ast)
+    for scn in scenarios:
+        for act in scn.get("actors", []):
+            if act and act not in node_map:
+                node_map[act] = {
+                    "name": act,
+                    "type": "Actor",
+                    "doc": f"Actor participating in {scn.get('name')}",
+                    "allocated_activities": [],
+                    "connected_nodes": [],
+                }
+
+    idx = 1
+    for name in sorted(node_map.keys()):
+        info = node_map[name]
+        nodes.append({
+            "id": f"Node-{idx:02d}",
+            "name": info["name"],
+            "type": info.get("type", "Node"),
+            "doc": info.get("doc", ""),
+            "allocated_activities": sorted(info.get("allocated_activities", [])),
+            "connected_nodes": sorted(info.get("connected_nodes", [])),
+        })
+        idx += 1
+
+    return nodes
+
+
+# Aliases for specification generator compatibility
+extract_operational_activities_from_ast = extract_operational_activities
+extract_operational_exchanges_from_ast = extract_operational_exchanges
+extract_operational_scenarios_from_ast = extract_operational_scenarios
+extract_operational_nodes_from_ast = extract_operational_nodes
 
 
 
@@ -2348,7 +2836,11 @@ def reverse_sync_specs_to_sysml(
         "sha256": sha256_hash,
         "total_lines": total_lines,
         "node_counts": node_counts,
-        "schema_nodes": schema_nodes
+        "schema_nodes": schema_nodes,
+        "operational_activities": extract_operational_activities(pkg),
+        "operational_exchanges": extract_operational_exchanges(pkg),
+        "operational_scenarios": extract_operational_scenarios(pkg),
+        "operational_nodes": extract_operational_nodes(pkg),
     }
 
     # Write digest JSON with atomic write semantics
@@ -2360,12 +2852,12 @@ def reverse_sync_specs_to_sysml(
     return pkg, digest_data
 
 
-def parse_sysml(content: str) -> Dict[str, List[str]]:
+def parse_sysml(content: str) -> Dict[str, Any]:
     """
     Parses SysML v2 textual model content and returns a dictionary of extracted
     AST node names across all 6 core constructs and architectural elements.
     """
-    ast: Dict[str, List[str]] = {
+    ast: Dict[str, Any] = {
         "packages": [],
         "part_defs": [],
         "attribute_defs": [],
@@ -2379,7 +2871,12 @@ def parse_sysml(content: str) -> Dict[str, List[str]]:
         "requirement_defs": [],
         "state_defs": [],
         "use_case_defs": [],
-        "item_defs": []
+        "item_defs": [],
+        "connection_defs": [],
+        "operational_activities": [],
+        "operational_exchanges": [],
+        "operational_scenarios": [],
+        "operational_nodes": []
     }
 
     if SysMLParser is not None:
@@ -2425,6 +2922,10 @@ def parse_sysml(content: str) -> Dict[str, List[str]]:
                 for itm in p.item_defs:
                     if itm.name not in ast["item_defs"]:
                         ast["item_defs"].append(itm.name)
+                for conn in (getattr(p, "connection_defs", []) or []):
+                    c_name = getattr(conn, "name", "")
+                    if c_name and c_name not in ast["connection_defs"]:
+                        ast["connection_defs"].append(c_name)
 
                 for part in p.part_defs:
                     _extract_from_part(part)
@@ -2471,10 +2972,18 @@ def parse_sysml(content: str) -> Dict[str, List[str]]:
                 for itm in part.item_defs:
                     if itm.name not in ast["item_defs"]:
                         ast["item_defs"].append(itm.name)
+                for conn in (getattr(part, "connections", []) or []):
+                    c_name = getattr(conn, "name", "")
+                    if c_name and c_name not in ast["connection_defs"]:
+                        ast["connection_defs"].append(c_name)
                 for sub_part in part.parts:
                     _extract_from_part(sub_part)
 
             _extract_from_pkg(pkg)
+            ast["operational_activities"] = [oa["name"] for oa in extract_operational_activities(pkg)]
+            ast["operational_exchanges"] = [oe["name"] for oe in extract_operational_exchanges(pkg)]
+            ast["operational_scenarios"] = [os["name"] for os in extract_operational_scenarios(pkg)]
+            ast["operational_nodes"] = [on["name"] for on in extract_operational_nodes(pkg)]
             return ast
         except Exception:
             pass
@@ -2526,6 +3035,14 @@ def parse_sysml(content: str) -> Dict[str, List[str]]:
     for match in re.finditer(r'\bitem\s+(?:def\s+)?([a-zA-Z0-9_]+)', content):
         if match.group(1) not in ast["item_defs"]:
             ast["item_defs"].append(match.group(1))
+    for match in re.finditer(r'\b(?:connection|flow|item\s+flow|interface)\s+(?:def\s+)?([a-zA-Z0-9_]+)', content):
+        if match.group(1) not in ast["connection_defs"]:
+            ast["connection_defs"].append(match.group(1))
+
+    ast["operational_activities"] = [name for name in ast["action_defs"] if re.search(r'\bOA[-_]?\d+', name, re.IGNORECASE)]
+    ast["operational_exchanges"] = [name for name in ast["connection_defs"] if re.search(r'\bOpTx[-_]?\d+', name, re.IGNORECASE)]
+    ast["operational_scenarios"] = [name for name in ast["use_case_defs"] if re.search(r'\b(?:SCN|UC)[-_]?\d+', name, re.IGNORECASE)]
+    ast["operational_nodes"] = list(ast["part_defs"])
 
     return ast
 
@@ -2592,7 +3109,11 @@ def enforce_pipeline0_compilation_gate(schema_path: Optional[str] = None, output
             "sha256": sha256_hash,
             "total_lines": total_lines,
             "node_counts": node_counts,
-            "schema_nodes": schema_nodes
+            "schema_nodes": schema_nodes,
+            "operational_activities": extract_operational_activities(pkg),
+            "operational_exchanges": extract_operational_exchanges(pkg),
+            "operational_scenarios": extract_operational_scenarios(pkg),
+            "operational_nodes": extract_operational_nodes(pkg),
         }
         _atomic_write_json(digest_path, digest_data)
         
