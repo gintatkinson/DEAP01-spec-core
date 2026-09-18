@@ -3177,7 +3177,6 @@ def forward_sync_sysml_to_specs(
     Single Source of Truth (.pipeline/schema.sysml) into canonical markdown specifications.
 
     Generates:
-    - Epics (EPIC-*.md) from CapabilityDef
     - Features (FEAT-*.md) from PartDef & ActionDef
     - User Stories (US-*.md) from SysMLInteractionDef & SysMLTestCaseDef
     - Use Cases (UC-*.md) from UseCaseDef
@@ -3235,93 +3234,6 @@ def forward_sync_sysml_to_specs(
 
     generated_files: Dict[str, str] = {}
     today_iso = datetime.date.today().isoformat()
-
-    # 1. Epics (EPIC-*.md) from CapabilityDef
-    capabilities: List[Any] = []
-    if hasattr(pkg, "get_all_capabilities"):
-        capabilities = pkg.get_all_capabilities()
-    elif hasattr(pkg, "capability_defs"):
-        capabilities = list(pkg.capability_defs or [])
-    elif isinstance(pkg, dict):
-        capabilities = list(pkg.get("capability_defs", []) or [])
-
-    if not capabilities:
-        all_parts = pkg.get_all_parts() if hasattr(pkg, "get_all_parts") else (getattr(pkg, "part_defs", []) or [])
-        for p in all_parts:
-            p_name = getattr(p, "name", str(p))
-            if p_name:
-                desc = f"Autonomous operational capability management for {p_name} subsystem"
-                if SysMLCapabilityDef:
-                    capabilities.append(SysMLCapabilityDef(
-                        name=f"{p_name}Capability",
-                        subsystem=p_name,
-                        description=desc,
-                        doc=desc,
-                    ))
-                else:
-                    capabilities.append({
-                        "name": f"{p_name}Capability",
-                        "subsystem": p_name,
-                        "description": desc,
-                        "doc": desc,
-                    })
-
-    for idx, cap in enumerate(capabilities, start=1):
-        cap_name = getattr(cap, "name", "") if hasattr(cap, "name") else cap.get("name", f"Capability_{idx}")
-        cap_name = _sanitize_id(cap_name)
-        subsys = (
-            getattr(cap, "subsystem", "")
-            or getattr(cap, "parent_package", "")
-            or getattr(cap, "package_ref", "")
-            or (cap.get("subsystem", "") if isinstance(cap, dict) else "")
-            or "CoreController"
-        )
-        subsys = _sanitize_id(subsys)
-        doc = (
-            getattr(cap, "doc", "")
-            or getattr(cap, "description", "")
-            or (cap.get("description", "") if isinstance(cap, dict) else "")
-            or f"System capability specification for {cap_name}"
-        )
-
-        epic_content = f"""---
-title: "Epic {idx:02d}: {cap_name}"
-version: "1.0.0"
-date: "{today_iso}"
-type: epic
-subsystem: "{subsys}"
-generation_mode: subagent
----
-
-# Epic {idx:02d}: {cap_name}
-
-## Metadata
-| Attribute | Specification Detail |
-| :--- | :--- |
-| **Title** | Epic {idx:02d}: {cap_name} |
-| **Version** | 1.0.0 |
-| **Date** | {today_iso} |
-| **Type** | epic |
-| **Subsystem** | {subsys} |
-| **Generation Mode** | subagent |
-
-## Subsystem Capability Allocations
-
-| Capability | Subsystem | Description |
-| :--- | :--- | :--- |
-| **{cap_name}** | {subsys} | {doc} |
-
-## Architectural Context
-
-```mermaid
-classDiagram
-    class {subsys} {{
-        +perform{cap_name}()
-    }}
-```
-"""
-        rel_path = os.path.join("epics", f"EPIC-{idx:02d}-{cap_name}.md")
-        generated_files[rel_path] = epic_content
 
     # 2. Features (FEAT-*.md) from PartDef & ActionDef
     parts: List[Any] = []
