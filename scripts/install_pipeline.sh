@@ -10,6 +10,8 @@ GITHUB_ORG=""
 JIRA_URL="https://your-domain.atlassian.net"
 JIRA_PROJECT=""
 JIRA_EMAIL=""
+DOMAIN_URL=""
+DOMAIN_NAME=""
 
 show_help() {
   cat << 'EOF'
@@ -33,6 +35,8 @@ Options:
       --jira-url URL         Jira instance base URL (default: 'https://your-domain.atlassian.net')
       --jira-project PROJECT Jira project key code (e.g. 'UAS')
       --jira-email EMAIL     Jira account email address (for Jira Cloud Basic Auth)
+      --domain-url URL       Explicit remote URL for upstream domain template repository
+      --domain-name NAME     Domain template or project name (e.g. 'DEAP-uas-infrastructure-safety')
   -h, --help                 Display this help documentation and exit
 
 Examples:
@@ -135,6 +139,30 @@ while [[ $# -gt 0 ]]; do
       ;;
     --jira-email=*)
       JIRA_EMAIL="${1#*=}"
+      shift
+      ;;
+    --domain-url)
+      if [[ -z "$2" || "$2" == -* ]]; then
+        echo "Error: --domain-url requires a URL argument." >&2
+        exit 1
+      fi
+      DOMAIN_URL="$2"
+      shift 2
+      ;;
+    --domain-url=*)
+      DOMAIN_URL="${1#*=}"
+      shift
+      ;;
+    --domain-name)
+      if [[ -z "$2" || "$2" == -* ]]; then
+        echo "Error: --domain-name requires a name argument." >&2
+        exit 1
+      fi
+      DOMAIN_NAME="$2"
+      shift 2
+      ;;
+    --domain-name=*)
+      DOMAIN_NAME="${1#*=}"
       shift
       ;;
     -*)
@@ -497,8 +525,13 @@ if [ ! -f "$TARGET_DIR/README.md" ] || \
   DOMAIN_TECH_PROFILE=""
   DOMAIN_REGULATORY=""
 
+  # 0. Check explicit CLI --domain-name parameter
+  if [ -n "$DOMAIN_NAME" ]; then
+    DOMAIN_PROJECT_NAME="$DOMAIN_NAME"
+  fi
+
   # 1. Check existing README.md before overwriting (e.g. GitLab initial commit: "# <project_name>\n\nGetting started with GitLab...")
-  if [ -f "$TARGET_DIR/README.md" ]; then
+  if [ -z "$DOMAIN_PROJECT_NAME" ] && [ -f "$TARGET_DIR/README.md" ]; then
     CANDIDATE_TITLE=$(grep -E '^# ' "$TARGET_DIR/README.md" | head -n 1 | sed 's/^# *//' | tr -d '\r\n')
     if ! echo "$CANDIDATE_TITLE" | grep -qE "Getting started with GitLab|Downstream Cyber-Physical Infrastructure Safety Project|Downstream Safety-Critical Engineering Project"; then
       DOMAIN_PROJECT_NAME="$CANDIDATE_TITLE"
@@ -609,7 +642,9 @@ if [ ! -f "$TARGET_DIR/README.md" ] || \
 
   # Resolve domain repository git remote URL for customer onboarding instructions
   DOMAIN_REMOTE_URL=""
-  if [ -n "$REMOTE_URL" ] && ! echo "$REMOTE_URL" | grep -q "DEAP01-spec-core"; then
+  if [ -n "$DOMAIN_URL" ]; then
+    DOMAIN_REMOTE_URL="$DOMAIN_URL"
+  elif [ -n "$REMOTE_URL" ] && ! echo "$REMOTE_URL" | grep -q "DEAP01-spec-core"; then
     DOMAIN_REMOTE_URL="$REMOTE_URL"
   elif [ -n "$DETECTED_SERVER_URL" ] && [ -n "$DETECTED_NAMESPACE" ] && [ -n "$DETECTED_PROJECT" ] && [ "$DETECTED_PROJECT" != "DEAP01-spec-core" ]; then
     DOMAIN_REMOTE_URL="${DETECTED_SERVER_URL}/${DETECTED_NAMESPACE}/${DETECTED_PROJECT}.git"
@@ -625,11 +660,7 @@ if [ ! -f "$TARGET_DIR/README.md" ] || \
 
   if [ -z "$DOMAIN_REMOTE_URL" ]; then
     CLEAN_NAME=$(echo "${DOMAIN_PROJECT_NAME:-downstream-project}" | tr ' ' '-')
-    if [ "$PROVIDER" = "gitlab" ]; then
-      DOMAIN_REMOTE_URL="${GITLAB_URL:-https://gitlab.com}/${GITLAB_GROUP:-your-group}/${CLEAN_NAME}.git"
-    else
-      DOMAIN_REMOTE_URL="https://github.com/${GITHUB_ORG:-your-org}/${CLEAN_NAME}.git"
-    fi
+    DOMAIN_REMOTE_URL="https://github.com/${GITHUB_ORG:-gintatkinson}/${CLEAN_NAME}.git"
   fi
 
   chmod u+w "$TARGET_DIR/README.md" 2>/dev/null || true

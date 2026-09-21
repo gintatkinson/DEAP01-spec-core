@@ -182,7 +182,7 @@ def validate_defect_body(
 STOPWORDS = {
     "the", "a", "an", "and", "or", "for", "with", "from", "that", "this", "in", "on", "at",
     "by", "to", "of", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had",
-    "do", "does", "did", "audit", "bug", "defect", "issue", "file", "error", "fails", "failed",
+    "do", "does", "did", "audit", "bug", "defect", "issue", "tooling", "file", "error", "fails", "failed",
     "failing", "missing", "pillar", "critical", "important", "suggestion", "nitpick", "src",
     "scripts", "tests", "validators", "validator", "validation", "gate", "core", "parity_auditor"
 }
