@@ -172,31 +172,49 @@ The platform requires **Python 3.12+**, the configured tracker CLI (or native RE
 
 Run the turnkey automated installer script directly from your project root directory targeting your preferred VCS / issue tracker provider:
 
-#### Option 1: GitHub Installation
+#### Turnkey Installation (Zero Arguments -- Out-of-the-Box Auto-Detection)
+Run directly inside an initialized downstream repository (such as `uav-010`):
 ```bash
-# Turnkey install for GitHub-backed downstream repositories
-bash scripts/install_pipeline.sh <target_dir> -p github
+# Auto-detects target directory ('.'), git remote, platform, and group/org
+bash scripts/install_pipeline.sh
 ```
 
-#### Option 2: GitLab Installation (SaaS, Self-Hosted, or Air-Gapped)
+Or when bootstrapping from a sibling checkout of `DEAP01-spec-core`:
 ```bash
-# Turnkey install for GitLab-backed downstream repositories
-bash scripts/install_pipeline.sh <target_dir> -p gitlab --gitlab-group <group>
+# Install from sibling spec core compiler into current project root ('.')
+bash ../DEAP01-spec-core/scripts/install_pipeline.sh .
+```
+
+#### Provider Options (Zero-Edit Copy-Paste)
+
+##### Option 1: GitHub Installation
+```bash
+# Turnkey install for GitHub-backed downstream repositories (target defaults to '.')
+bash scripts/install_pipeline.sh -p github
+```
+
+##### Option 2: GitLab Installation (SaaS, Self-Hosted, or Air-Gapped)
+```bash
+# Turnkey install for GitLab-backed downstream repositories (auto-detects group from git remote)
+bash scripts/install_pipeline.sh -p gitlab
 
 # For custom self-hosted or air-gapped GitLab instances:
-bash scripts/install_pipeline.sh <target_dir> -p gitlab --gitlab-url https://gitlab.internal.defense.gov --gitlab-group <group>
+bash scripts/install_pipeline.sh -p gitlab --gitlab-url https://gitlab.internal.defense.gov
 ```
 
 #### Single-Command Remote Bootstrap (from Upstream Compiler)
 ```bash
+# Turnkey Remote Bootstrap (auto-detects platform and group from git remote in current directory)
+git clone https://github.com/gintatkinson/DEAP01-spec-core.git /tmp/deap_installer && bash /tmp/deap_installer/scripts/install_pipeline.sh . && rm -rf /tmp/deap_installer
+
 # GitHub Remote Bootstrap
 git clone https://github.com/gintatkinson/DEAP01-spec-core.git /tmp/deap_installer && bash /tmp/deap_installer/scripts/install_pipeline.sh . -p github && rm -rf /tmp/deap_installer
 
-# GitLab SaaS Remote Bootstrap
-git clone https://github.com/gintatkinson/DEAP01-spec-core.git /tmp/deap_installer && bash /tmp/deap_installer/scripts/install_pipeline.sh . -p gitlab --gitlab-group <group> && rm -rf /tmp/deap_installer
+# GitLab SaaS Remote Bootstrap (auto-detects group from git remote)
+git clone https://github.com/gintatkinson/DEAP01-spec-core.git /tmp/deap_installer && bash /tmp/deap_installer/scripts/install_pipeline.sh . -p gitlab && rm -rf /tmp/deap_installer
 
 # GitLab Self-Hosted / Air-Gapped Remote Bootstrap
-git clone https://github.com/gintatkinson/DEAP01-spec-core.git /tmp/deap_installer && bash /tmp/deap_installer/scripts/install_pipeline.sh . -p gitlab --gitlab-url https://gitlab.internal.defense.gov --gitlab-group <group> && rm -rf /tmp/deap_installer
+git clone https://github.com/gintatkinson/DEAP01-spec-core.git /tmp/deap_installer && bash /tmp/deap_installer/scripts/install_pipeline.sh . -p gitlab --gitlab-url https://gitlab.internal.defense.gov && rm -rf /tmp/deap_installer
 ```
 
 ### Supported Cyber-Physical Domain Exemplars (Pure Schema-Driven)
@@ -484,7 +502,7 @@ The platform includes a deterministic Work Breakdown Structure (WBS) & Enterpris
 - **Purpose**: Synthesizes MIL-STD-881E Work Breakdown Structures (WBS), 7-column end-to-end traceability matrix, multi-platform CSV export (Jira, Monday.com, MS Project), and hierarchical JSON AST from SysML AST, ConOps, Safety matrices, and Agile Backlog items.
 - **CLI Usage**:
   ```bash
-  python3 scripts/generate_wbs_suite.py [--workspace <path>] [--output-dir <path>]
+  python3 scripts/generate_wbs_suite.py [--workspace PATH] [--output-dir PATH]
   ```
 - **Synthesized Deliverables**:
   1. `docs/management/WBS_DELIVERABLES_SUITE.md`: Authoritative markdown specification suite with CommonMark metadata table and 7-column end-to-end traceability matrix.
@@ -929,7 +947,7 @@ Execute backlog reconciliation and model parity verification across your target 
 
 #### 9.3.2 Option B: GitLab Self-Managed / SCIF Air-Gapped Reconciliation
 ```bash
-./scripts/reconcile_backlog.py --provider gitlab --gitlab-url https://gitlab.internal.defense.gov --project <group>/<project>
+./scripts/reconcile_backlog.py --provider gitlab --gitlab-url https://gitlab.internal.defense.gov --project uas-safety/uav-010
 ```
 
 #### 9.3.3 Option C: GitHub Issues Reconciliation

@@ -6,6 +6,7 @@ TARGET_DIR=""
 PROVIDER="auto"
 GITLAB_URL="https://gitlab.com"
 GITLAB_GROUP=""
+GITHUB_ORG=""
 JIRA_URL="https://your-domain.atlassian.net"
 JIRA_PROJECT=""
 JIRA_EMAIL=""
@@ -25,18 +26,23 @@ Arguments:
 Options:
   -p, --provider PROVIDER    Target issue tracker and CI/CD provider: 'github', 'gitlab', 'jira', or 'auto' (default: 'auto')
   -t, --tracker TRACKER      Alias for --provider: 'github', 'gitlab', 'jira', or 'auto'
+      --platform PLATFORM    Alias for --provider: 'github', 'gitlab', 'jira', or 'auto'
       --gitlab-url URL       GitLab instance base URL (default: 'https://gitlab.com')
-      --gitlab-group GROUP   GitLab namespace/group path (e.g. 'uas-safety')
+      --gitlab-group GROUP   GitLab namespace/group path (e.g. 'uas-safety', auto-detected from git remote if omitted)
+      --github-org ORG       GitHub organization/user (auto-detected from git remote if omitted)
       --jira-url URL         Jira instance base URL (default: 'https://your-domain.atlassian.net')
       --jira-project PROJECT Jira project key code (e.g. 'UAS')
       --jira-email EMAIL     Jira account email address (for Jira Cloud Basic Auth)
   -h, --help                 Display this help documentation and exit
 
 Examples:
+  ./scripts/install_pipeline.sh
+  ./scripts/install_pipeline.sh .
   ./scripts/install_pipeline.sh /path/to/downstream-project
-  ./scripts/install_pipeline.sh --provider gitlab --gitlab-url https://gitlab.internal.defense.gov /path/to/project
-  ./scripts/install_pipeline.sh --tracker jira --jira-url https://my-org.atlassian.net --jira-project PROJ /path/to/project
-  ./scripts/install_pipeline.sh --provider github .
+  ./scripts/install_pipeline.sh --platform gitlab
+  ./scripts/install_pipeline.sh --provider gitlab --gitlab-url https://gitlab.internal.defense.gov
+  ./scripts/install_pipeline.sh --tracker jira --jira-url https://my-org.atlassian.net --jira-project PROJ
+  ./scripts/install_pipeline.sh --provider github
 EOF
 }
 
@@ -47,7 +53,7 @@ while [[ $# -gt 0 ]]; do
       show_help
       exit 0
       ;;
-    -p|--provider|-t|--tracker)
+    -p|--provider|-t|--tracker|--platform)
       if [[ -z "$2" || "$2" == -* ]]; then
         echo "Error: $1 requires an argument ('github', 'gitlab', 'jira', or 'auto')." >&2
         exit 1
@@ -55,7 +61,7 @@ while [[ $# -gt 0 ]]; do
       PROVIDER="$2"
       shift 2
       ;;
-    --provider=*|--tracker=*)
+    --provider=*|--tracker=*|--platform=*)
       PROVIDER="${1#*=}"
       shift
       ;;
@@ -81,6 +87,18 @@ while [[ $# -gt 0 ]]; do
       ;;
     --gitlab-group=*)
       GITLAB_GROUP="${1#*=}"
+      shift
+      ;;
+    --github-org)
+      if [[ -z "$2" || "$2" == -* ]]; then
+        echo "Error: --github-org requires an organization/user argument." >&2
+        exit 1
+      fi
+      GITHUB_ORG="$2"
+      shift 2
+      ;;
+    --github-org=*)
+      GITHUB_ORG="${1#*=}"
       shift
       ;;
     --jira-url)
@@ -139,20 +157,100 @@ done
 
 TARGET_DIR="${TARGET_DIR:-.}"
 
-if [[ "$PROVIDER" != "auto" && "$PROVIDER" != "github" && "$PROVIDER" != "gitlab" && "$PROVIDER" != "jira" ]]; then
-  echo "Error: Invalid provider '$PROVIDER'. Must be one of 'github', 'gitlab', 'jira', or 'auto'." >&2
-  exit 1
-fi
-
 mkdir -p "$TARGET_DIR"
 TARGET_DIR="$(cd -P "$TARGET_DIR" 2>/dev/null && pwd -P || echo "$TARGET_DIR")"
 
 if [ "$TARGET_DIR" = "$INSTALLER_ROOT" ]; then
   if [ -e "$INSTALLER_ROOT/.pipeline/upstream" ]; then
     echo "REFUSING: target is the pipeline repository itself, not a downstream project." >&2
-  else
-    echo "REFUSING: target directory is identical to installer root ($INSTALLER_ROOT)." >&2
+    exit 1
   fi
+  echo "Operating in-place on initialized downstream repository: $TARGET_DIR"
+fi
+
+# Auto-detect platform and namespace/group from git remote in TARGET_DIR if omitted or auto
+REMOTE_URL=$(git -C "$TARGET_DIR" remote get-url origin 2>/dev/null || git -C "$TARGET_DIR" config --get remote.origin.url 2>/dev/null || true)
+
+if [ -n "$REMOTE_URL" ]; then
+  DETECTED_INFO=$(python3 -c "
+import re, urllib.parse, sys
+
+url = '''$REMOTE_URL'''.strip()
+if url.endswith('.git'):
+    url = url[:-4]
+
+if '://' in url:
+    parsed = urllib.parse.urlsplit(url)
+    netloc = parsed.netloc
+    host = netloc.split('@')[-1].split(':')[0]
+    scheme = parsed.scheme if parsed.scheme in ('http', 'https') else 'https'
+    server_url = f'{scheme}://{host}'
+    path = parsed.path.strip('/')
+else:
+    match = re.match(r'^(?:[^@]+@)?([^:/]+):?(?:\d+)?(?:/|:)?(.*)$', url)
+    if match:
+        host = match.group(1)
+        path = match.group(2).strip('/')
+        server_url = f'https://{host}'
+    else:
+        host = ''
+        path = url.strip('/')
+        server_url = ''
+
+parts = [p for p in path.split('/') if p]
+project = parts[-1] if parts else ''
+namespace = '/'.join(parts[:-1]) if len(parts) > 1 else ''
+
+platform = 'unknown'
+if 'gitlab' in host.lower() or 'gitlab' in url.lower():
+    platform = 'gitlab'
+elif 'github' in host.lower() or 'github' in url.lower():
+    platform = 'github'
+
+print(f'{platform}\t{server_url}\t{namespace}\t{project}')
+" 2>/dev/null || true)
+
+  if [ -n "$DETECTED_INFO" ]; then
+    DETECTED_PLATFORM=$(echo "$DETECTED_INFO" | cut -f1)
+    DETECTED_SERVER_URL=$(echo "$DETECTED_INFO" | cut -f2)
+    DETECTED_NAMESPACE=$(echo "$DETECTED_INFO" | cut -f3)
+    DETECTED_PROJECT=$(echo "$DETECTED_INFO" | cut -f4)
+
+    # Auto-detect provider/platform if not specified or set to auto
+    if [ "$PROVIDER" = "auto" ] && [ "$DETECTED_PLATFORM" != "unknown" ]; then
+      PROVIDER="$DETECTED_PLATFORM"
+      echo "Auto-detected platform '$PROVIDER' from git remote: $REMOTE_URL"
+    fi
+
+    # Auto-detect group/namespace if platform is gitlab
+    if [ "$PROVIDER" = "gitlab" ]; then
+      if [ -z "$GITLAB_GROUP" ] && [ -n "$DETECTED_NAMESPACE" ]; then
+        GITLAB_GROUP="$DETECTED_NAMESPACE"
+        echo "Auto-detected GitLab group '$GITLAB_GROUP' from git remote"
+      fi
+      if [ "$GITLAB_URL" = "https://gitlab.com" ] && [ -n "$DETECTED_SERVER_URL" ] && [ "$DETECTED_SERVER_URL" != "https://gitlab.com" ]; then
+        GITLAB_URL="$DETECTED_SERVER_URL"
+        echo "Auto-detected GitLab server URL '$GITLAB_URL' from git remote"
+      fi
+    fi
+
+    # Auto-detect org/namespace if platform is github
+    if [ "$PROVIDER" = "github" ]; then
+      if [ -z "$GITHUB_ORG" ] && [ -n "$DETECTED_NAMESPACE" ]; then
+        GITHUB_ORG="$DETECTED_NAMESPACE"
+        echo "Auto-detected GitHub organization '$GITHUB_ORG' from git remote"
+      fi
+    fi
+  fi
+fi
+
+# If provider is still 'auto' (e.g. no git remote or unknown host), default to 'github'
+if [ "$PROVIDER" = "auto" ]; then
+  PROVIDER="github"
+fi
+
+if [[ "$PROVIDER" != "github" && "$PROVIDER" != "gitlab" && "$PROVIDER" != "jira" ]]; then
+  echo "Error: Invalid provider '$PROVIDER'. Must be one of 'github', 'gitlab', 'jira', or 'auto'." >&2
   exit 1
 fi
 
@@ -166,56 +264,64 @@ if [ -f "$TARGET_DIR/.pipeline/profile_config.json" ]; then
   PRESERVED_PROFILE_CONFIG=$(cat "$TARGET_DIR/.pipeline/profile_config.json")
 fi
 
-rm -rf "$TARGET_DIR/skills" "$TARGET_DIR/rules" "$TARGET_DIR/.pipeline" "$TARGET_DIR/.agents" "$TARGET_DIR/scripts"
-cp -RP "$INSTALLER_ROOT/skills" "$TARGET_DIR/"
-cp -RP "$INSTALLER_ROOT/rules" "$TARGET_DIR/"
-cp -RP "$INSTALLER_ROOT/.pipeline" "$TARGET_DIR/"
-rm -rf "$TARGET_DIR/.pipeline/upstream"
-rm -rf "$TARGET_DIR/.pipeline/diagnostics"
+if [ "$TARGET_DIR" != "$INSTALLER_ROOT" ]; then
+  rm -rf "$TARGET_DIR/skills" "$TARGET_DIR/rules" "$TARGET_DIR/.pipeline" "$TARGET_DIR/.agents" "$TARGET_DIR/scripts"
+  cp -RP "$INSTALLER_ROOT/skills" "$TARGET_DIR/"
+  cp -RP "$INSTALLER_ROOT/rules" "$TARGET_DIR/"
+  cp -RP "$INSTALLER_ROOT/.pipeline" "$TARGET_DIR/"
+  rm -rf "$TARGET_DIR/.pipeline/upstream"
+  rm -rf "$TARGET_DIR/.pipeline/diagnostics"
 
-if [ -n "$PRESERVED_METADATA" ]; then
-  echo "$PRESERVED_METADATA" > "$TARGET_DIR/.pipeline/project_metadata.json"
-fi
-if [ -n "$PRESERVED_PROFILE_CONFIG" ]; then
-  echo "$PRESERVED_PROFILE_CONFIG" > "$TARGET_DIR/.pipeline/profile_config.json"
-fi
-cp -RP "$INSTALLER_ROOT/.agents" "$TARGET_DIR/"
-cp -RP "$INSTALLER_ROOT/scripts" "$TARGET_DIR/"
-if [ ! -e "$TARGET_DIR/schema" ]; then
-  if [ -d "$INSTALLER_ROOT/schema" ]; then
-    cp -RP "$INSTALLER_ROOT/schema" "$TARGET_DIR/"
-  else
-    mkdir -p "$TARGET_DIR/schema"
+  if [ -n "$PRESERVED_METADATA" ]; then
+    echo "$PRESERVED_METADATA" > "$TARGET_DIR/.pipeline/project_metadata.json"
   fi
-fi
-cp -P "$INSTALLER_ROOT/requirements.txt" "$TARGET_DIR/" 2>/dev/null || true
-cp -P "$INSTALLER_ROOT/pyproject.toml" "$TARGET_DIR/" 2>/dev/null || true
-if [ -f "$TARGET_DIR/.gitignore" ]; then
-  cat "$INSTALLER_ROOT/.gitignore" >> "$TARGET_DIR/.gitignore"
-  # Deduplicate lines in .gitignore
-  sort -u "$TARGET_DIR/.gitignore" -o "$TARGET_DIR/.gitignore"
-elif [ -f "$INSTALLER_ROOT/.gitignore" ]; then
-  cp "$INSTALLER_ROOT/.gitignore" "$TARGET_DIR/"
+  if [ -n "$PRESERVED_PROFILE_CONFIG" ]; then
+    echo "$PRESERVED_PROFILE_CONFIG" > "$TARGET_DIR/.pipeline/profile_config.json"
+  fi
+  cp -RP "$INSTALLER_ROOT/.agents" "$TARGET_DIR/"
+  cp -RP "$INSTALLER_ROOT/scripts" "$TARGET_DIR/"
+  if [ ! -e "$TARGET_DIR/schema" ]; then
+    if [ -d "$INSTALLER_ROOT/schema" ]; then
+      cp -RP "$INSTALLER_ROOT/schema" "$TARGET_DIR/"
+    else
+      mkdir -p "$TARGET_DIR/schema"
+    fi
+  fi
+  cp -P "$INSTALLER_ROOT/requirements.txt" "$TARGET_DIR/" 2>/dev/null || true
+  cp -P "$INSTALLER_ROOT/pyproject.toml" "$TARGET_DIR/" 2>/dev/null || true
+  if [ -f "$TARGET_DIR/.gitignore" ]; then
+    cat "$INSTALLER_ROOT/.gitignore" >> "$TARGET_DIR/.gitignore"
+    # Deduplicate lines in .gitignore
+    sort -u "$TARGET_DIR/.gitignore" -o "$TARGET_DIR/.gitignore"
+  elif [ -f "$INSTALLER_ROOT/.gitignore" ]; then
+    cp "$INSTALLER_ROOT/.gitignore" "$TARGET_DIR/"
+  fi
+  mkdir -p "$TARGET_DIR/tests"
+  cp -RP "$INSTALLER_ROOT/tests/fixtures" "$TARGET_DIR/tests/" 2>/dev/null || true
+else
+  # Running in-place in an initialized downstream project
+  rm -rf "$TARGET_DIR/.pipeline/upstream"
 fi
 
 if [ ! -e "$TARGET_DIR/schema" ]; then
   mkdir -p "$TARGET_DIR/schema"
 fi
 mkdir -p "$TARGET_DIR/tests"
-cp -RP "$INSTALLER_ROOT/tests/fixtures" "$TARGET_DIR/tests/" 2>/dev/null || true
 mkdir -p "$TARGET_DIR/docs" "$TARGET_DIR/docs/conops" "$TARGET_DIR/docs/conops/units/conops" "$TARGET_DIR/docs/conops/units/mission_intent" "$TARGET_DIR/docs/interfaces" "$TARGET_DIR/docs/safety" "$TARGET_DIR/docs/architecture/blueprints" "$TARGET_DIR/docs/epics" "$TARGET_DIR/docs/features" "$TARGET_DIR/docs/user-stories" "$TARGET_DIR/docs/use-cases" "$TARGET_DIR/docs/management"
 touch "$TARGET_DIR/docs/management/.gitkeep"
-if [ -f "$INSTALLER_ROOT/docs/conops/README.md" ]; then
-  cp -P "$INSTALLER_ROOT/docs/conops/README.md" "$TARGET_DIR/docs/conops/"
-fi
-if [ -f "$INSTALLER_ROOT/docs/safety/README.md" ]; then
-  cp -P "$INSTALLER_ROOT/docs/safety/README.md" "$TARGET_DIR/docs/safety/"
-fi
-if [ -f "$INSTALLER_ROOT/docs/OPERATOR_PROMPT_CATALOG.md" ]; then
-  cp -P "$INSTALLER_ROOT/docs/OPERATOR_PROMPT_CATALOG.md" "$TARGET_DIR/docs/"
-fi
-if [ -f "$INSTALLER_ROOT/docs/JIRA_INTEGRATION_GUIDE.md" ]; then
-  cp -P "$INSTALLER_ROOT/docs/JIRA_INTEGRATION_GUIDE.md" "$TARGET_DIR/docs/"
+if [ "$TARGET_DIR" != "$INSTALLER_ROOT" ]; then
+  if [ -f "$INSTALLER_ROOT/docs/conops/README.md" ]; then
+    cp -P "$INSTALLER_ROOT/docs/conops/README.md" "$TARGET_DIR/docs/conops/"
+  fi
+  if [ -f "$INSTALLER_ROOT/docs/safety/README.md" ]; then
+    cp -P "$INSTALLER_ROOT/docs/safety/README.md" "$TARGET_DIR/docs/safety/"
+  fi
+  if [ -f "$INSTALLER_ROOT/docs/OPERATOR_PROMPT_CATALOG.md" ]; then
+    cp -P "$INSTALLER_ROOT/docs/OPERATOR_PROMPT_CATALOG.md" "$TARGET_DIR/docs/"
+  fi
+  if [ -f "$INSTALLER_ROOT/docs/JIRA_INTEGRATION_GUIDE.md" ]; then
+    cp -P "$INSTALLER_ROOT/docs/JIRA_INTEGRATION_GUIDE.md" "$TARGET_DIR/docs/"
+  fi
 fi
 mkdir -p "$TARGET_DIR/.pipeline/contracts" "$TARGET_DIR/.pipeline/domain_specs" "$TARGET_DIR/.pipeline/profiles"
 chmod +x "$TARGET_DIR"/scripts/*.sh "$TARGET_DIR"/scripts/*.py 2>/dev/null || true
@@ -313,6 +419,8 @@ with open(path, 'r', encoding='utf-8') as f:
 if 'tracker_rules' not in data:
     data['tracker_rules'] = {}
 data['tracker_rules']['provider'] = 'github'
+if '$GITHUB_ORG':
+    data['tracker_rules']['owner'] = '$GITHUB_ORG'
 with open(path, 'w', encoding='utf-8') as f:
     json.dump(data, f, indent=2)
 " 2>/dev/null || true
@@ -846,7 +954,7 @@ Execute backlog reconciliation and model parity verification across your target 
 
 #### 4.4.2 Option B: GitLab Self-Managed / SCIF Air-Gapped Reconciliation
 ```bash
-./scripts/reconcile_backlog.py --provider gitlab --gitlab-url https://gitlab.internal.defense.gov --project <group>/<project>
+./scripts/reconcile_backlog.py --provider gitlab --gitlab-url https://gitlab.internal.defense.gov --project uas-safety/uav-010
 ```
 
 #### 4.4.3 Option C: GitHub Issues Reconciliation
