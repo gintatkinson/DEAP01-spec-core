@@ -12,6 +12,7 @@ JIRA_PROJECT=""
 JIRA_EMAIL=""
 DOMAIN_URL=""
 DOMAIN_NAME=""
+CLI_ROLE=""
 
 show_help() {
   cat << 'EOF'
@@ -26,6 +27,7 @@ Arguments:
   TARGET_DIR                 Target project directory (default: current directory '.')
 
 Options:
+  -r, --role ROLE            Target repository role: 'domain-template' or 'customer-project' (auto-detected if omitted)
   -p, --provider PROVIDER    Target issue tracker and CI/CD provider: 'github', 'gitlab', 'jira', or 'auto' (default: 'auto')
   -t, --tracker TRACKER      Alias for --provider: 'github', 'gitlab', 'jira', or 'auto'
       --platform PLATFORM    Alias for --provider: 'github', 'gitlab', 'jira', or 'auto'
@@ -43,6 +45,8 @@ Examples:
   ./scripts/install_pipeline.sh
   ./scripts/install_pipeline.sh .
   ./scripts/install_pipeline.sh /path/to/downstream-project
+  ./scripts/install_pipeline.sh --role domain-template
+  ./scripts/install_pipeline.sh --role customer-project
   ./scripts/install_pipeline.sh --platform gitlab
   ./scripts/install_pipeline.sh --provider gitlab --gitlab-url https://gitlab.internal.defense.gov
   ./scripts/install_pipeline.sh --tracker jira --jira-url https://my-org.atlassian.net --jira-project PROJ
@@ -56,6 +60,22 @@ while [[ $# -gt 0 ]]; do
     -h|--help)
       show_help
       exit 0
+      ;;
+    -r|--role)
+      if [[ -z "$2" || "$2" == -* ]]; then
+        echo "Error: $1 requires a role argument ('domain-template' or 'customer-project')." >&2
+        exit 1
+      fi
+      CLI_ROLE="$2"
+      shift 2
+      ;;
+    --role=*)
+      CLI_ROLE="${1#*=}"
+      shift
+      ;;
+    -r=*)
+      CLI_ROLE="${1#*=}"
+      shift
       ;;
     -p|--provider|-t|--tracker|--platform)
       if [[ -z "$2" || "$2" == -* ]]; then
@@ -188,6 +208,23 @@ TARGET_DIR="${TARGET_DIR:-.}"
 mkdir -p "$TARGET_DIR"
 chmod u+w "$TARGET_DIR" 2>/dev/null || true
 TARGET_DIR="$(cd -P "$TARGET_DIR" 2>/dev/null && pwd -P || echo "$TARGET_DIR")"
+DIR_BASE="$(basename "$TARGET_DIR")"
+
+TARGET_ROLE=""
+if [ -n "$CLI_ROLE" ]; then
+  case "$(echo "$CLI_ROLE" | tr '[:upper:]' '[:lower:]' | tr '-' '_')" in
+    domain_template|domain|domain_distribution_template)
+      TARGET_ROLE="DOMAIN_DISTRIBUTION_TEMPLATE"
+      ;;
+    customer_project|customer|downstream_customer_project|downstream_application_workspace|workspace)
+      TARGET_ROLE="DOWNSTREAM_CUSTOMER_PROJECT"
+      ;;
+    *)
+      echo "Error: Invalid --role '$CLI_ROLE'. Valid values: 'domain-template', 'customer-project', 'DOMAIN_DISTRIBUTION_TEMPLATE', 'DOWNSTREAM_CUSTOMER_PROJECT'." >&2
+      exit 1
+      ;;
+  esac
+fi
 
 if [ "$TARGET_DIR" = "$INSTALLER_ROOT" ]; then
   if [ -e "$INSTALLER_ROOT/.pipeline/upstream" ]; then
@@ -282,6 +319,30 @@ if [[ "$PROVIDER" != "github" && "$PROVIDER" != "gitlab" && "$PROVIDER" != "jira
   echo "Error: Invalid provider '$PROVIDER'. Must be one of 'github', 'gitlab', 'jira', or 'auto'." >&2
   exit 1
 fi
+
+# Determine TARGET_ROLE if not explicitly specified via --role
+if [ -z "$TARGET_ROLE" ]; then
+  if [[ "$DIR_BASE" == DEAP-* ]] || \
+     [[ "$REMOTE_URL" == *DEAP-* ]] || \
+     [[ "$DETECTED_PROJECT" == DEAP-* ]] || \
+     [[ "$DOMAIN_NAME" == DEAP-* ]] || \
+     [ -n "$DOMAIN_URL" ]; then
+    TARGET_ROLE="DOMAIN_DISTRIBUTION_TEMPLATE"
+  elif [[ "$DIR_BASE" == uav-* ]] || [[ "$DETECTED_PROJECT" == uav-* ]]; then
+    TARGET_ROLE="DOWNSTREAM_CUSTOMER_PROJECT"
+  elif [ -f "$TARGET_DIR/.pipeline/lineage.json" ]; then
+    META_ROLE=$(python3 -c "import json; data=json.load(open('$TARGET_DIR/.pipeline/lineage.json')); print(data.get('role') or data.get('classification') or '')" 2>/dev/null || true)
+    if [ "$META_ROLE" = "DOMAIN_DISTRIBUTION_TEMPLATE" ] || [ "$META_ROLE" = "DOWNSTREAM_CUSTOMER_PROJECT" ]; then
+      TARGET_ROLE="$META_ROLE"
+    else
+      TARGET_ROLE="DOWNSTREAM_CUSTOMER_PROJECT"
+    fi
+  else
+    TARGET_ROLE="DOWNSTREAM_CUSTOMER_PROJECT"
+  fi
+fi
+
+echo "Target repository role: $TARGET_ROLE"
 
 # Preserve any existing downstream project metadata or configuration
 PRESERVED_METADATA=""
@@ -513,11 +574,29 @@ chmod u+w "$TARGET_DIR/AGENTS.md" "$TARGET_DIR/.agents/AGENTS.md" "$TARGET_DIR/C
 python3 "$INSTALLER_ROOT/scripts/scaffold_downstream_agents.py" "$INSTALLER_ROOT" "$TARGET_DIR"
 
 
-# Scaffold downstream root README.md if missing, boilerplate, or missing operator prompt catalog
-if [ ! -f "$TARGET_DIR/README.md" ] || \
-   grep -qE "Getting started with GitLab|To make it easy for you to get started" "$TARGET_DIR/README.md" || \
-   ! grep -qE "Multi-Pipeline Operator Prompt Catalog|Operator Prompt Catalog" "$TARGET_DIR/README.md" || \
-   ! grep -qE "Customer Project Onboarding|\.tmp-pipeline" "$TARGET_DIR/README.md"; then
+# Determine whether downstream root README.md needs scaffolding
+SHOULD_SCAFFOLD_README=false
+
+if [ ! -f "$TARGET_DIR/README.md" ]; then
+  SHOULD_SCAFFOLD_README=true
+elif grep -qE "Getting started with GitLab|To make it easy for you to get started" "$TARGET_DIR/README.md"; then
+  SHOULD_SCAFFOLD_README=true
+elif ! grep -qE "Multi-Pipeline Operator Prompt Catalog|Operator Prompt Catalog" "$TARGET_DIR/README.md"; then
+  SHOULD_SCAFFOLD_README=true
+elif [ "$TARGET_ROLE" = "DOMAIN_DISTRIBUTION_TEMPLATE" ]; then
+  if ! grep -qE "Customer Project Onboarding|\.tmp-pipeline" "$TARGET_DIR/README.md" || \
+     ! grep -qE "DOMAIN_DISTRIBUTION_TEMPLATE" "$TARGET_DIR/README.md"; then
+    SHOULD_SCAFFOLD_README=true
+  fi
+elif [ "$TARGET_ROLE" = "DOWNSTREAM_CUSTOMER_PROJECT" ]; then
+  if grep -qE "git clone.*\.tmp-pipeline" "$TARGET_DIR/README.md" || \
+     ! grep -qE "DOWNSTREAM_CUSTOMER_PROJECT" "$TARGET_DIR/README.md" || \
+     ! grep -qE "Project Lifecycle & Tooling Maintenance" "$TARGET_DIR/README.md"; then
+    SHOULD_SCAFFOLD_README=true
+  fi
+fi
+
+if [ "$SHOULD_SCAFFOLD_README" = true ]; then
 
   # Extract domain project metadata from existing project artifacts
   DOMAIN_PROJECT_NAME=""
@@ -664,10 +743,11 @@ if [ ! -f "$TARGET_DIR/README.md" ] || \
   fi
 
   chmod u+w "$TARGET_DIR/README.md" 2>/dev/null || true
-  cat << EOF > "$TARGET_DIR/README.md"
+  if [ "$TARGET_ROLE" = "DOMAIN_DISTRIBUTION_TEMPLATE" ]; then
+    cat << EOF > "$TARGET_DIR/README.md"
 $README_TITLE
 
-> **Repository Role:** \`DOWNSTREAM_APPLICATION_WORKSPACE\`  
+> **Repository Role:** \`DOMAIN_DISTRIBUTION_TEMPLATE\`  
 > **Primary Technology Profiles:** $DOMAIN_TECH_PROFILE  
 > **Target Regulatory Frameworks:** $DOMAIN_REGULATORY  
 
@@ -677,7 +757,11 @@ $README_TITLE
 
 $DOMAIN_PROJECT_DESC
 
-### 1.1 Primary Commercial Toolchain Integration Context
+### 1.1 Clean Landing Zone Invariant
+
+As a **Tier 1 Domain Distribution Template**, this repository maintains pristine, clean landing zones in \`schema/\`, \`docs/epics/\`, \`docs/features/\`, \`docs/user-stories/\`, and \`docs/use-cases/\` with only \`.gitkeep\` files (or domain-wide baseline SysML v2 schemas). Concrete customer project specifications, flight code, ROS2 nodes, and proprietary implementation artifacts belong exclusively in downstream customer application workspaces and must NOT be committed here.
+
+### 1.2 Primary Commercial Toolchain Integration Context
 
 This platform explicitly declares **MATLAB / Simulink / Stateflow / Embedded Coder** as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
 
@@ -707,14 +791,95 @@ git clone ${DOMAIN_REMOTE_URL} ./.tmp-pipeline && bash ./.tmp-pipeline/scripts/i
 
 This single self-contained command operates strictly inside the customer project directory with zero sibling path dependencies.
 
-To update the pipeline and governance rules inside an existing project workspace at any time, run:
+To update the pipeline and governance rules inside this domain distribution template at any time, run:
 
 \`\`\`bash
-# Update existing customer application workspace
+# Update domain distribution template tooling in-place
 bash scripts/install_pipeline.sh .
 \`\`\`
 
 ### 3.2 Mandatory Agent Initialization Sequence
+
+Immediately following installation, any AI agent (Antigravity, Claude Code, Gemini CLI, Cursor) initializing in this repository MUST execute the following sequence before accepting user directives or executing task implementations:
+
+0. **Detect Repository Role & Scope**:
+   - Inspect whether \`.pipeline/upstream/\` exists on disk.
+   - If absent and repository name starts with \`DEAP-\` -> **Domain Distribution Template Mode**: Clean landing zones must be maintained.
+1. **Read Governance Constitution**: Execute \`view_file\` on \`.pipeline/constitution.md\` to ingest the platform-independent functional governance layer and zero-mocking persistence mandates.
+2. **Load Project Skills**: Execute \`view_file\` on \`skills/feature-driven-implementation/SKILL.md\` (and any active skills under \`skills/\` or \`.agents/skills/\`) to initialize feature-driven implementation protocols and review gates.
+3. **Load Governance Rules**: Ingest \`AGENTS.md\` and \`rules/\` to enforce project-scoped agentic rules, context-isolated subagent dispatch loops, and role boundary locks.
+4. **Load Platform Profile**: Read the target platform execution profile (\`.pipeline/profiles/flutter.md\`, \`.pipeline/profiles/react.md\`, \`.pipeline/profiles/ros2_cpp.md\`, or \`.pipeline/profiles/px4_module.md\`) to establish platform-specific build, test, and lifecycle constraints.
+5. **Bootstrap Tracker Labels & Verify Baseline**: Verify that repository issue tracker labels and baseline conformance pass by running \`python3 scripts/verify_downstream_baseline.py --no-domain\`.
+
+---
+
+EOF
+  else
+    cat << EOF > "$TARGET_DIR/README.md"
+$README_TITLE
+
+> **Repository Role:** \`DOWNSTREAM_CUSTOMER_PROJECT\`  
+> **Primary Technology Profiles:** $DOMAIN_TECH_PROFILE  
+> **Target Regulatory Frameworks:** $DOMAIN_REGULATORY  
+
+---
+
+## 1. System Overview
+
+$DOMAIN_PROJECT_DESC
+
+### 1.1 Customer Application Workspace Scope
+
+As a **Tier 2 Customer Application Workspace**, this repository is authorized for concrete engineering delivery, proprietary application code, ROS2 lifecycle nodes, PX4 flight modules, hardware-in-the-loop tests, and verified Agile backlog implementations.
+
+### 1.2 Primary Commercial Toolchain Integration Context
+
+This platform explicitly declares **MATLAB / Simulink / Stateflow / Embedded Coder** as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
+
+---
+
+## 2. Pipeline Structure & Governance
+
+- \`.agents/\` & \`AGENTS.md\`: Agent behavior rules, role boundaries, and subagent dispatch protocols.
+- \`CLAUDE.md\`: Claude Code guidelines and verification gates.
+- \`.pipeline/\`: Constitution (\`constitution.md\`), domain specifications, and execution profiles (\`profiles/ros2_cpp.md\`, \`profiles/px4_module.md\`).
+- \`rules/\` & \`skills/\`: Platform engineering rules and agent workflow skills (including SysML v2 SSOT completeness in \`rules/sysml-ssot-completeness.md\`).
+- \`schema/\`: Contract definitions and SysML v2 schemas.
+- \`tests/\`: Automated baseline verification and safety compliance tests.
+
+---
+
+## 3. Project Lifecycle & Tooling Maintenance
+
+### 3.1 Downstream Baseline Verification & Ingestion Workflows
+
+To verify that all repository issue tracker labels, baseline contracts, and safety fixtures pass downstream conformance gates, run:
+
+\`\`\`bash
+# Run baseline conformance verification
+python3 scripts/verify_downstream_baseline.py --no-domain
+\`\`\`
+
+For customer projects starting with unstructured OEM technical documentation, PDF flight manuals, or Bill of Materials (BOM) specifications, execute Level 0 OEM Ground Truth Ingestion (Step 0.0):
+
+\`\`\`bash
+# Run Level 0 OEM Ground Truth ingestion
+python3 skills/spec-orchestrator/scripts/sysmlv2_ingest.py --schema "schema/extracted/" --format markdown --out "schema/model.sysml"
+
+# Verify model compilation gate
+python3 scripts/compile_sysml.py --compile
+\`\`\`
+
+### 3.2 In-Place Pipeline Tooling Update
+
+To update local pipeline tooling, governance rules, and verification scripts in-place at any time without re-onboarding:
+
+\`\`\`bash
+# Update local pipeline tooling in-place
+bash scripts/install_pipeline.sh .
+\`\`\`
+
+### 3.3 Mandatory Agent Initialization Sequence
 
 Immediately following installation, any AI agent (Antigravity, Claude Code, Gemini CLI, Cursor) initializing in this repository MUST execute the following sequence before accepting user directives or executing task implementations:
 
@@ -730,6 +895,7 @@ Immediately following installation, any AI agent (Antigravity, Claude Code, Gemi
 ---
 
 EOF
+  fi
 
   cat << 'EOF' >> "$TARGET_DIR/README.md"
 ## 4. Multi-Pipeline Operator Prompt Catalog & Autonomous Execution Workflows
