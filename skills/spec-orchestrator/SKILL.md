@@ -79,7 +79,8 @@ Before beginning orchestration, verify you have:
 
 To prevent context drift, contamination, and confirmation bias, **every individual specification item (Epic, Feature, User Story, and Use Case) MUST be processed by a new, fresh subagent with an isolated context.**
 
-- **Mandatory Subagent Dispatch for Specification Phases**: The Master Orchestrator (Coordinator) MUST dispatch Phase Worker subagents (TypeName: `self`) for Phase 0.5, Phase 0.75, Phase 1, Phase 1.5, Phase 2, and Phase 3:
+- **Mandatory Subagent Dispatch for Specification Phases**: The Master Orchestrator (Coordinator) MUST dispatch Phase Worker subagents (TypeName: `self`) for Step 0.0 (when starting from unstructured customer documentation), Phase 0.5, Phase 0.75, Phase 1, Phase 1.5, Phase 2, and Phase 3:
+  * Step 0.0: `OEM Ingestion & Model Synthesizer (Worker 00)`
   * Phase 0.5: `Normative Research Worker`
   * Phase 0.75: `ConOps & Mission Intent Tree Worker (Worker ConOps)`
   * Phase 1: `Structural Spec Worker`
@@ -146,6 +147,7 @@ Phases NOT marked `[P]` are strictly sequential -- the validation gate of phase 
 sequenceDiagram
     autonumber
     participant Coord as "Master Orchestrator (Coordinator)"
+    participant W_00 as "Step 0.0: OEM Ingestion Worker (Worker 00)"
     participant Comp as "Step 0: SysML Compilation Gate"
     participant SSOT as "SysML v2 SSOT"
     participant W_R as "Phase 0.5: Normative Research Worker"
@@ -157,6 +159,8 @@ sequenceDiagram
     participant W_D as "Phase 4: Reconciliation & Verification"
 
     Note over Coord,SSOT: Phase 0 - Pre-Flight / Pre-computation
+    Coord->>W_00: Step 0.0: Ingest OEM Prose/PDF/BOM (sysmlv2_ingest.py --format markdown)
+    W_00->>SSOT: Extracts schema/extracted/ tables & synthesizes schema/model.sysml (Check 23)
     Coord->>Comp: Step 0: Execute compile_sysml.py --compile on schema/
     Comp->>SSOT: Establishes .pipeline/schema.sysml & schema-digest.json
 
@@ -202,14 +206,15 @@ sequenceDiagram
 ```
 
 ## Phase 0: Pre-Flight / Pre-computation
-1. **Step 0 SysML Compilation Gate**: Compile input models using `python3 scripts/compile_sysml.py --compile` to produce canonical `.pipeline/schema.sysml` and `.pipeline/schema-digest.json`. This generates formal AST nodes (`package`, `part def`, `item def`, `action def`, `state def`, `port def`, `requirement def`, and `use case def`) establishing the 100% Single Source of Truth for Phases 1–3 per `rules/sysml-ssot-completeness.md`.
-2. **YANG Compilation (conditional)**: If `.yang` files are present in the schema directory, run the YANG-to-LUI compiler to generate the UI layout:
+1. **Step 0.0 Level 0 OEM Ground Truth Ingestion (Worker 00)**: For customer projects starting from unstructured OEM prose manuals, PDF documentation, markdown tables, or Bill of Materials (BOM) specifications, Worker 00 provides the sanctioned, deterministic entrypoint authorized under Check 23 (Factual Grounding & Numeric Provenance Gate). The worker ingests unstructured and semi-structured documentation located in `schema/` and `schema/extracted/`, extracting physical parameters, component hierarchies, mass and power budgets, and interface boundaries into machine-readable Markdown tables in `schema/extracted/`. The worker then synthesizes the initial canonical SysML v2 textual model in `schema/model.sysml` (or invokes `python3 skills/spec-orchestrator/scripts/sysmlv2_ingest.py --schema "schema/extracted/" --format markdown --out "schema/model.sysml"`). Completing Step 0.0 is the required precursor to running the Step 0 SysML Compilation Gate (`compile_sysml.py --compile`).
+2. **Step 0 SysML Compilation Gate**: Compile input models using `python3 scripts/compile_sysml.py --compile` to produce canonical `.pipeline/schema.sysml` and `.pipeline/schema-digest.json`. This generates formal AST nodes (`package`, `part def`, `item def`, `action def`, `state def`, `port def`, `requirement def`, and `use case def`) establishing the 100% Single Source of Truth for Phases 1–3 per `rules/sysml-ssot-completeness.md`.
+3. **YANG Compilation (conditional)**: If `.yang` files are present in the schema directory, run the YANG-to-LUI compiler to generate the UI layout:
    ```bash
    python3 scripts/compile_yang.py --input schema/model.yang --output app_flutter/assets/logical-layout.json
    ```
    The compiler extracts hierarchy from `container`/`list` nesting, attributes from `leaf` definitions with type/range/enum constraints, and merges them into `logical-layout.json`. Detailed mapping reference is in `docs/operations/yang-compiler-guide.md`.
 
-3. **Layout Manifest Constraints**: `logical-layout.json` is the authority every Feature's Logical UI bindings resolve against, so the manifest itself is validated before the bindings that cite it. Enforced offline by `parity_auditor/validators/logical_ui_validator.py`; stated here rather than in a worker skill because the manifest is produced in this phase and no worker owns it. All three were enforced and documented nowhere before issue #304.
+4. **Layout Manifest Constraints**: `logical-layout.json` is the authority every Feature's Logical UI bindings resolve against, so the manifest itself is validated before the bindings that cite it. Enforced offline by `parity_auditor/validators/logical_ui_validator.py`; stated here rather than in a worker skill because the manifest is produced in this phase and no worker owns it. All three were enforced and documented nowhere before issue #304.
    - **Layout Manifest Must Exist**: the manifest MUST be present at `.pipeline/logical-ui/logical-layout.json` or, failing that, at `<flutter_dir>/assets/logical-layout.json`. Absent, every binding in every Feature is unresolvable, so the run reports the missing manifest once instead of reporting each Feature as invalid.
    - **Layout Manifest Must Parse**: the manifest MUST be well-formed JSON. A manifest that does not parse is reported as such, not treated as an empty layout -- an empty layout would report every binding as naming a component that is not instantiated, which points at the Features instead of at the file that is actually broken.
    - **Tabbed Containers Accept Only Tabular Children**: a `TabbedContainer` node MUST declare a `children` list, and every child MUST be a `TableView`, `PropertyGrid` or `DensityTable`. Tabs present a set of comparable records; a non-tabular child in a tab strip has no meaningful rendering.

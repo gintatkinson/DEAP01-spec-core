@@ -158,6 +158,7 @@ done
 TARGET_DIR="${TARGET_DIR:-.}"
 
 mkdir -p "$TARGET_DIR"
+chmod u+w "$TARGET_DIR" 2>/dev/null || true
 TARGET_DIR="$(cd -P "$TARGET_DIR" 2>/dev/null && pwd -P || echo "$TARGET_DIR")"
 
 if [ "$TARGET_DIR" = "$INSTALLER_ROOT" ]; then
@@ -265,41 +266,46 @@ if [ -f "$TARGET_DIR/.pipeline/profile_config.json" ]; then
 fi
 
 if [ "$TARGET_DIR" != "$INSTALLER_ROOT" ]; then
+  chmod -R u+w "$TARGET_DIR/skills" "$TARGET_DIR/rules" "$TARGET_DIR/.pipeline" "$TARGET_DIR/.agents" "$TARGET_DIR/scripts" 2>/dev/null || true
   rm -rf "$TARGET_DIR/skills" "$TARGET_DIR/rules" "$TARGET_DIR/.pipeline" "$TARGET_DIR/.agents" "$TARGET_DIR/scripts"
-  cp -RP "$INSTALLER_ROOT/skills" "$TARGET_DIR/"
-  cp -RP "$INSTALLER_ROOT/rules" "$TARGET_DIR/"
-  cp -RP "$INSTALLER_ROOT/.pipeline" "$TARGET_DIR/"
+  cp -RPf "$INSTALLER_ROOT/skills" "$TARGET_DIR/"
+  cp -RPf "$INSTALLER_ROOT/rules" "$TARGET_DIR/"
+  cp -RPf "$INSTALLER_ROOT/.pipeline" "$TARGET_DIR/"
   rm -rf "$TARGET_DIR/.pipeline/upstream"
   rm -rf "$TARGET_DIR/.pipeline/diagnostics"
 
   if [ -n "$PRESERVED_METADATA" ]; then
+    chmod u+w "$TARGET_DIR/.pipeline/project_metadata.json" 2>/dev/null || true
     echo "$PRESERVED_METADATA" > "$TARGET_DIR/.pipeline/project_metadata.json"
   fi
   if [ -n "$PRESERVED_PROFILE_CONFIG" ]; then
+    chmod u+w "$TARGET_DIR/.pipeline/profile_config.json" 2>/dev/null || true
     echo "$PRESERVED_PROFILE_CONFIG" > "$TARGET_DIR/.pipeline/profile_config.json"
   fi
-  cp -RP "$INSTALLER_ROOT/.agents" "$TARGET_DIR/"
-  cp -RP "$INSTALLER_ROOT/scripts" "$TARGET_DIR/"
-  if [ ! -e "$TARGET_DIR/schema" ]; then
-    if [ -d "$INSTALLER_ROOT/schema" ]; then
-      cp -RP "$INSTALLER_ROOT/schema" "$TARGET_DIR/"
-    else
-      mkdir -p "$TARGET_DIR/schema"
-    fi
+  cp -RPf "$INSTALLER_ROOT/.agents" "$TARGET_DIR/"
+  cp -RPf "$INSTALLER_ROOT/scripts" "$TARGET_DIR/"
+  mkdir -p "$TARGET_DIR/schema"
+  chmod -R u+w "$TARGET_DIR/schema" 2>/dev/null || true
+  if [ -d "$INSTALLER_ROOT/schema" ]; then
+    cp -RPf "$INSTALLER_ROOT/schema/." "$TARGET_DIR/schema/"
   fi
-  cp -P "$INSTALLER_ROOT/requirements.txt" "$TARGET_DIR/" 2>/dev/null || true
-  cp -P "$INSTALLER_ROOT/pyproject.toml" "$TARGET_DIR/" 2>/dev/null || true
+  chmod u+w "$TARGET_DIR/requirements.txt" "$TARGET_DIR/pyproject.toml" 2>/dev/null || true
+  cp -Pf "$INSTALLER_ROOT/requirements.txt" "$TARGET_DIR/" 2>/dev/null || true
+  cp -Pf "$INSTALLER_ROOT/pyproject.toml" "$TARGET_DIR/" 2>/dev/null || true
+  chmod u+w "$TARGET_DIR/.gitignore" 2>/dev/null || true
   if [ -f "$TARGET_DIR/.gitignore" ]; then
     cat "$INSTALLER_ROOT/.gitignore" >> "$TARGET_DIR/.gitignore"
     # Deduplicate lines in .gitignore
     sort -u "$TARGET_DIR/.gitignore" -o "$TARGET_DIR/.gitignore"
   elif [ -f "$INSTALLER_ROOT/.gitignore" ]; then
-    cp "$INSTALLER_ROOT/.gitignore" "$TARGET_DIR/"
+    cp -Pf "$INSTALLER_ROOT/.gitignore" "$TARGET_DIR/"
   fi
   mkdir -p "$TARGET_DIR/tests"
-  cp -RP "$INSTALLER_ROOT/tests/fixtures" "$TARGET_DIR/tests/" 2>/dev/null || true
+  chmod -R u+w "$TARGET_DIR/tests" 2>/dev/null || true
+  cp -RPf "$INSTALLER_ROOT/tests/fixtures" "$TARGET_DIR/tests/" 2>/dev/null || true
 else
   # Running in-place in an initialized downstream project
+  chmod -R u+w "$TARGET_DIR/.pipeline" 2>/dev/null || true
   rm -rf "$TARGET_DIR/.pipeline/upstream"
 fi
 
@@ -308,37 +314,41 @@ if [ ! -e "$TARGET_DIR/schema" ]; then
 fi
 mkdir -p "$TARGET_DIR/tests"
 mkdir -p "$TARGET_DIR/docs" "$TARGET_DIR/docs/conops" "$TARGET_DIR/docs/conops/units/conops" "$TARGET_DIR/docs/conops/units/mission_intent" "$TARGET_DIR/docs/interfaces" "$TARGET_DIR/docs/safety" "$TARGET_DIR/docs/architecture/blueprints" "$TARGET_DIR/docs/epics" "$TARGET_DIR/docs/features" "$TARGET_DIR/docs/user-stories" "$TARGET_DIR/docs/use-cases" "$TARGET_DIR/docs/management"
+chmod -R u+w "$TARGET_DIR/docs" 2>/dev/null || true
 touch "$TARGET_DIR/docs/management/.gitkeep"
 if [ "$TARGET_DIR" != "$INSTALLER_ROOT" ]; then
   if [ -f "$INSTALLER_ROOT/docs/conops/README.md" ]; then
-    cp -P "$INSTALLER_ROOT/docs/conops/README.md" "$TARGET_DIR/docs/conops/"
+    cp -Pf "$INSTALLER_ROOT/docs/conops/README.md" "$TARGET_DIR/docs/conops/"
   fi
   if [ -f "$INSTALLER_ROOT/docs/safety/README.md" ]; then
-    cp -P "$INSTALLER_ROOT/docs/safety/README.md" "$TARGET_DIR/docs/safety/"
+    cp -Pf "$INSTALLER_ROOT/docs/safety/README.md" "$TARGET_DIR/docs/safety/"
   fi
   if [ -f "$INSTALLER_ROOT/docs/OPERATOR_PROMPT_CATALOG.md" ]; then
-    cp -P "$INSTALLER_ROOT/docs/OPERATOR_PROMPT_CATALOG.md" "$TARGET_DIR/docs/"
+    cp -Pf "$INSTALLER_ROOT/docs/OPERATOR_PROMPT_CATALOG.md" "$TARGET_DIR/docs/"
   fi
   if [ -f "$INSTALLER_ROOT/docs/JIRA_INTEGRATION_GUIDE.md" ]; then
-    cp -P "$INSTALLER_ROOT/docs/JIRA_INTEGRATION_GUIDE.md" "$TARGET_DIR/docs/"
+    cp -Pf "$INSTALLER_ROOT/docs/JIRA_INTEGRATION_GUIDE.md" "$TARGET_DIR/docs/"
   fi
 fi
 mkdir -p "$TARGET_DIR/.pipeline/contracts" "$TARGET_DIR/.pipeline/domain_specs" "$TARGET_DIR/.pipeline/profiles"
+chmod -R u+w "$TARGET_DIR/.pipeline" 2>/dev/null || true
 chmod +x "$TARGET_DIR"/scripts/*.sh "$TARGET_DIR"/scripts/*.py 2>/dev/null || true
 
 # Apply provider configurations if specified
 if [ "$PROVIDER" = "gitlab" ] || [ -n "$GITLAB_GROUP" ] || [ "$GITLAB_URL" != "https://gitlab.com" ]; then
+  chmod u+w "$TARGET_DIR/.gitlab-ci.yml" 2>/dev/null || true
   if [ -f "$INSTALLER_ROOT/.pipeline/templates/.gitlab-ci.yml" ]; then
-    cp -P "$INSTALLER_ROOT/.pipeline/templates/.gitlab-ci.yml" "$TARGET_DIR/.gitlab-ci.yml"
+    cp -Pf "$INSTALLER_ROOT/.pipeline/templates/.gitlab-ci.yml" "$TARGET_DIR/.gitlab-ci.yml"
   elif [ -f "$INSTALLER_ROOT/.pipeline/.gitlab-ci.yml" ]; then
-    cp -P "$INSTALLER_ROOT/.pipeline/.gitlab-ci.yml" "$TARGET_DIR/.gitlab-ci.yml"
+    cp -Pf "$INSTALLER_ROOT/.pipeline/.gitlab-ci.yml" "$TARGET_DIR/.gitlab-ci.yml"
   elif [ -f "$TARGET_DIR/.pipeline/templates/.gitlab-ci.yml" ]; then
-    cp -P "$TARGET_DIR/.pipeline/templates/.gitlab-ci.yml" "$TARGET_DIR/.gitlab-ci.yml"
+    cp -Pf "$TARGET_DIR/.pipeline/templates/.gitlab-ci.yml" "$TARGET_DIR/.gitlab-ci.yml"
   elif [ -f "$TARGET_DIR/.pipeline/.gitlab-ci.yml" ]; then
-    cp -P "$TARGET_DIR/.pipeline/.gitlab-ci.yml" "$TARGET_DIR/.gitlab-ci.yml"
+    cp -Pf "$TARGET_DIR/.pipeline/.gitlab-ci.yml" "$TARGET_DIR/.gitlab-ci.yml"
   fi
   for rules_file in "$TARGET_DIR/.pipeline/logical-ui/codebase_rules.json" "$TARGET_DIR/codebase_rules.json"; do
     if [ -f "$rules_file" ]; then
+      chmod u+w "$rules_file" 2>/dev/null || true
       python3 -c "
 import json, sys
 path = '$rules_file'
@@ -411,6 +421,7 @@ with open(path, 'w', encoding='utf-8') as f:
 elif [ "$PROVIDER" = "github" ]; then
   for rules_file in "$TARGET_DIR/.pipeline/logical-ui/codebase_rules.json" "$TARGET_DIR/codebase_rules.json"; do
     if [ -f "$rules_file" ]; then
+      chmod u+w "$rules_file" 2>/dev/null || true
       python3 -c "
 import json, sys
 path = '$rules_file'
@@ -429,6 +440,7 @@ with open(path, 'w', encoding='utf-8') as f:
 fi
 
 # Generate .env.template in target workspace
+chmod u+w "$TARGET_DIR/.env.template" 2>/dev/null || true
 cat << 'EOF' > "$TARGET_DIR/.env.template"
 # Digital Engineering Agent Platform (DEAP) Environment Variables Template
 # Copy this file to .env or export variables in your shell / CI/CD environment.
@@ -469,13 +481,15 @@ EOF
 
 # Transform and scaffold downstream .agents/AGENTS.md and root AGENTS.md with full governance armor
 mkdir -p "$TARGET_DIR/.agents"
+chmod u+w "$TARGET_DIR/AGENTS.md" "$TARGET_DIR/.agents/AGENTS.md" "$TARGET_DIR/CLAUDE.md" "$TARGET_DIR/README.md" 2>/dev/null || true
 python3 "$INSTALLER_ROOT/scripts/scaffold_downstream_agents.py" "$INSTALLER_ROOT" "$TARGET_DIR"
 
 
 # Scaffold downstream root README.md if missing, boilerplate, or missing operator prompt catalog
 if [ ! -f "$TARGET_DIR/README.md" ] || \
    grep -qE "Getting started with GitLab|To make it easy for you to get started" "$TARGET_DIR/README.md" || \
-   ! grep -qE "Multi-Pipeline Operator Prompt Catalog|Operator Prompt Catalog" "$TARGET_DIR/README.md"; then
+   ! grep -qE "Multi-Pipeline Operator Prompt Catalog|Operator Prompt Catalog" "$TARGET_DIR/README.md" || \
+   ! grep -qE "Customer Project Onboarding|\.tmp-pipeline" "$TARGET_DIR/README.md"; then
 
   # Extract domain project metadata from existing project artifacts
   DOMAIN_PROJECT_NAME=""
@@ -593,6 +607,32 @@ if [ ! -f "$TARGET_DIR/README.md" ] || \
     README_TITLE="# ${DOMAIN_PROJECT_NAME} -- Downstream Cyber-Physical Infrastructure Safety Project"
   fi
 
+  # Resolve domain repository git remote URL for customer onboarding instructions
+  DOMAIN_REMOTE_URL=""
+  if [ -n "$REMOTE_URL" ] && ! echo "$REMOTE_URL" | grep -q "DEAP01-spec-core"; then
+    DOMAIN_REMOTE_URL="$REMOTE_URL"
+  elif [ -n "$DETECTED_SERVER_URL" ] && [ -n "$DETECTED_NAMESPACE" ] && [ -n "$DETECTED_PROJECT" ] && [ "$DETECTED_PROJECT" != "DEAP01-spec-core" ]; then
+    DOMAIN_REMOTE_URL="${DETECTED_SERVER_URL}/${DETECTED_NAMESPACE}/${DETECTED_PROJECT}.git"
+  elif [ -n "$DETECTED_SERVER_URL" ] && [ -n "$DETECTED_NAMESPACE" ] && [ -n "$DOMAIN_PROJECT_NAME" ] && [ "$DOMAIN_PROJECT_NAME" != "Downstream Cyber-Physical Infrastructure Safety Project" ]; then
+    CLEAN_NAME=$(echo "$DOMAIN_PROJECT_NAME" | tr ' ' '-')
+    DOMAIN_REMOTE_URL="${DETECTED_SERVER_URL}/${DETECTED_NAMESPACE}/${CLEAN_NAME}.git"
+  elif [ ! -e "$INSTALLER_ROOT/.pipeline/upstream" ]; then
+    INSTALLER_REMOTE=$(git -C "$INSTALLER_ROOT" remote get-url origin 2>/dev/null || git -C "$INSTALLER_ROOT" config --get remote.origin.url 2>/dev/null || true)
+    if [ -n "$INSTALLER_REMOTE" ] && ! echo "$INSTALLER_REMOTE" | grep -q "DEAP01-spec-core"; then
+      DOMAIN_REMOTE_URL="$INSTALLER_REMOTE"
+    fi
+  fi
+
+  if [ -z "$DOMAIN_REMOTE_URL" ]; then
+    CLEAN_NAME=$(echo "${DOMAIN_PROJECT_NAME:-downstream-project}" | tr ' ' '-')
+    if [ "$PROVIDER" = "gitlab" ]; then
+      DOMAIN_REMOTE_URL="${GITLAB_URL:-https://gitlab.com}/${GITLAB_GROUP:-your-group}/${CLEAN_NAME}.git"
+    else
+      DOMAIN_REMOTE_URL="https://github.com/${GITHUB_ORG:-your-org}/${CLEAN_NAME}.git"
+    fi
+  fi
+
+  chmod u+w "$TARGET_DIR/README.md" 2>/dev/null || true
   cat << EOF > "$TARGET_DIR/README.md"
 $README_TITLE
 
@@ -623,7 +663,27 @@ This platform explicitly declares **MATLAB / Simulink / Stateflow / Embedded Cod
 
 ---
 
-## 3. Mandatory Agent Initialization Sequence
+## 3. Customer Project Onboarding & Agent Initialization Sequence
+
+### 3.1 Turnkey Customer Project Onboarding
+
+To install this domain pipeline and its engineering baseline into an end-user customer application workspace, run the following turnkey command from your customer project root directory:
+
+\`\`\`bash
+# Onboard customer application workspace
+git clone ${DOMAIN_REMOTE_URL} ./.tmp-pipeline && bash ./.tmp-pipeline/scripts/install_pipeline.sh . && rm -rf ./.tmp-pipeline
+\`\`\`
+
+This single self-contained command operates strictly inside the customer project directory with zero sibling path dependencies.
+
+To update the pipeline and governance rules inside an existing project workspace at any time, run:
+
+\`\`\`bash
+# Update existing customer application workspace
+bash scripts/install_pipeline.sh .
+\`\`\`
+
+### 3.2 Mandatory Agent Initialization Sequence
 
 Immediately following installation, any AI agent (Antigravity, Claude Code, Gemini CLI, Cursor) initializing in this repository MUST execute the following sequence before accepting user directives or executing task implementations:
 
@@ -649,7 +709,7 @@ This catalog contains the complete, unabridged, copy-pasteable operator prompt s
 
 ```mermaid
 flowchart LR
-    Step0["Step 0: SysML Model Ingestion & Compilation Gate (python3 scripts/compile_sysml.py --compile)"]
+    Step00["Step 0.0: Level 0 OEM Ground Truth Ingestion (sysmlv2_ingest.py)"] --> Step0["Step 0: SysML Model Ingestion & Compilation Gate (python3 scripts/compile_sysml.py --compile)"]
     Step0 -->|"Compiled AST"| Worker_0A["Worker 0A: CONOPS Synthesizer"]
     Worker_0A -->|"docs/conops/CONOPS.md"| Worker_0B["Worker 0B: STPA / FMECA Assurer"]
     Worker_0B -->|"docs/safety/STPA_MATRIX.md"| Step3["Step 3: Level 1C ICD Extraction & Level 2 Specifications"]
@@ -658,6 +718,50 @@ flowchart LR
 ### 4.2 Pipeline 0 Execution Prompts
 
 Execute the following prompts in sequence using context-isolated subagents to transform unstructured intent, operational scenarios, and interface schemas into formal CONOPS, STPA hazard matrices, and SysML v2 AST models:
+
+#### 4.2.0 Worker 00: OEM Prose / BOM Ingestion & Model Synthesis Prompt (Step 0.0)
+
+**Step 0.0 Entrypoint for Unstructured / Prose Customer Documentation:**
+For customer projects starting with unstructured OEM prose manuals, PDF documentation, markdown tables, or Bill of Materials (BOM) specifications, Worker 00 provides the sanctioned, deterministic entrypoint. Extracting OEM Bill of Materials (BOM) and physical parameters into `schema/extracted/` and synthesizing canonical SysML v2 textual models in `schema/model.sysml` (or `.pipeline/schema.sysml`) is fully authorized under Check 23 (Factual Grounding & Numeric Provenance Gate) and serves as the mandatory precursor to executing the Step 0 compilation gate (`python3 scripts/compile_sysml.py --compile`).
+
+```text
+Execute `view_file` on `skills/spec-orchestrator/SKILL.md` as your very first step before taking any action.
+
+Repository Classification: UPSTREAM_SPEC_CORE_COMPILER (or DOWNSTREAM_CUSTOMER_PROJECT depending on execution context)
+
+Role: Worker 00 -- OEM Prose / BOM Ingestion & Model Synthesizer (Step 0.0)
+
+Primary Commercial Toolchain Integration Context:
+This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
+
+Directive:
+Execute Level 0 OEM Ground Truth Ingestion and initial SysML v2 textual model synthesis for customer projects starting from unstructured OEM prose manuals, PDF documentation, markdown tables, or Bill of Materials (BOM) specifications:
+
+1. Unstructured & Semi-Structured Ingestion Scope:
+   - Ingest raw OEM technical documentation, flight/operating manuals, ICD tables, and BOM markdown tables located in `schema/` and `schema/extracted/`.
+   - Authorized Under Check 23: Extract physical parameters, component hierarchies, mass/power budgets, port/pin interfaces, and operational envelopes into machine-readable Markdown tables in `schema/extracted/` (e.g., `schema/extracted/oem_bom.md`, `schema/extracted/interface_table.md`, `schema/extracted/parametric_limits.md`).
+
+2. Canonical SysML v2 Model Synthesis:
+   - Execute the Level 0 ingestion translator:
+     python3 skills/spec-orchestrator/scripts/sysmlv2_ingest.py --schema "schema/extracted/" --format markdown --out "schema/model.sysml"
+   - Alternatively, synthesize a formal SysML v2 textual model `schema/model.sysml` directly, defining:
+     * Root `package` matching the target cyber-physical system.
+     * All component definitions as canonical `part def` elements with typed attributes (mass, power, dimensions, channel count, part numbers).
+     * Directional communication and electrical interface boundaries as `port def` elements (`in`, `out`, `inout`).
+     * Physical, environmental, and operational constraints as `constraint def` / `assert constraint` blocks.
+     * State machine structures and operational lifecycle phases as `state def` elements.
+
+3. Compilation Gate Precursor Verification:
+   - Verify that the generated `schema/model.sysml` passes the Step 0 SysML Compilation Gate:
+     python3 scripts/compile_sysml.py --compile
+   - Ensure `.pipeline/schema.sysml` and `.pipeline/schema-digest.json` are successfully generated without compilation errors.
+   - Verify Check 23 compliance (Factual Grounding & Numeric Provenance Gate): all physical parameters and component counts in `schema/model.sysml` strictly match the Level 0 OEM ground truth in `schema/extracted/`.
+
+Defect Filing Directive:
+If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `python3 scripts/file_defect.py`. Issue auto-closing keywords or issue close commands are strictly forbidden.
+
+PROCEED
+```
 
 #### 4.2.1 Worker 0A: CONOPS & Operational Scenario Synthesis Prompt
 

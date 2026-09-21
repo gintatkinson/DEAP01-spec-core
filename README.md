@@ -14,20 +14,56 @@
 
 The **Digital Engineering Agent Platform Core Specification Compiler (`DEAP01-spec-core`)** is the upstream abstract systems engineering compiler and multi-agent verification framework for DEAP. It provides deterministic translation, model-based validation, bidirectional synchronization, and quality gate enforcement bridging formal engineering models (SysML v2, YANG, IDL, ARXML, OpenAPI, Protobuf) with downstream Agile specification backlogs and autonomous code generation.
 
-Operating purely on Abstract Syntax Tree (AST) tokens without hardcoding domain concepts, `DEAP01-spec-core` serves as the upstream parent compiler (`UPSTREAM_SPEC_CORE_COMPILER`) from which domain-specific distribution templates across 6 canonical cyber-physical sectors (Aerospace & Defense, Medical & Healthcare, Space & Satellites, Industrial Robotics, Subsea & Maritime, Rail & Transportation) and downstream customer projects are derived via `scripts/install_pipeline.sh` or Direct Copy.
+Operating purely on Abstract Syntax Tree (AST) tokens without hardcoding domain concepts, `DEAP01-spec-core` serves as the upstream parent compiler (`UPSTREAM_SPEC_CORE_COMPILER`) from which Tier 1 domain-specific distribution templates across 6 canonical cyber-physical sectors (Aerospace & Defense, Medical & Healthcare, Space & Satellites, Industrial Robotics, Subsea & Maritime, Rail & Transportation) are maintained, and from which Tier 2 downstream customer application workspaces (`uav-*`) are ultimately onboarded via `scripts/install_pipeline.sh` or Direct Copy.
 
-### 1.2 Upstream Compiler vs. Downstream Application Workspace Boundary
+### 1.2 Two-Tier Architecture Boundary: Upstream Compiler vs. Domain Templates vs. Customer Workspaces
 
-The DEAP framework strictly delineates the boundary between the upstream specification compiler and downstream application workspaces:
+The DEAP framework strictly enforces a clean two-tier architecture separating upstream compiler tooling propagation from downstream customer onboarding:
+
+```text
++-----------------------------------------------------------------------------------+
+| Tier 1: Upstream Specification Core Compiler                                      |
+| Repository: DEAP01-spec-core (Role: UPSTREAM_SPEC_CORE_COMPILER)                  |
+| Sentinel: .pipeline/upstream/ present | Pure Schema-Driven Abstract Compiler       |
++-----------------------------------------------------------------------------------+
+                                         |
+                                         |  Tier 1 Compiler Propagation (Maintainers)
+                                         |  scripts/install_pipeline.sh
+                                         v
++-----------------------------------------------------------------------------------+
+| Tier 1: Domain Distribution Templates (Canonical Cyber-Physical Sectors)         |
+| Repositories: DEAP-* (e.g. DEAP-uas-infrastructure-safety)                        |
+| Role: DOMAIN_DISTRIBUTION_TEMPLATE | Sentinel: .pipeline/upstream/ removed        |
+| Content: Domain SysML v2 schemas (schema/), sector blueprints, domain profiles    |
+| Landing zones (docs/epics/, docs/features/, etc.) remain clean (.gitkeep)         |
++-----------------------------------------------------------------------------------+
+                                         |
+                                         |  Tier 2 Customer Onboarding (End-Users)
+                                         |  Self-contained bootstrap via Domain URL
+                                         v
++-----------------------------------------------------------------------------------+
+| Tier 2: Customer Application Workspaces                                           |
+| Repositories: uav-* (e.g. uav-tactical-mission, customer flight projects)         |
+| Role: DOWNSTREAM_APPLICATION_WORKSPACE / DOWNSTREAM_CUSTOMER_PROJECT             |
+| Content: Concrete proprietary flight code, ROS2 nodes, PX4 modules, SIL/HIL tests |
++-----------------------------------------------------------------------------------+
+```
+
+#### Tier 1: Upstream Compiler to Domain Distribution Templates
 - **Upstream Spec Core Compiler (`DEAP01-spec-core`):** Abstract, domain-agnostic specification compiler and multi-agent verification platform. Operates with the sentinel `.pipeline/upstream/` directory present. All upstream landing zones (`docs/conops/`, `docs/safety/`, `docs/epics/`, `docs/features/`, `docs/user-stories/`, `docs/use-cases/`, `schema/`) remain pristine with zero concrete domain specifications or domain-specific `.sysml` files.
 - **Pure Schema-Driven Compiler Invariant:** `DEAP01-spec-core` is an abstract Model-Based Systems Engineering (MBSE) compiler; all domain semantics, safety statecharts, and specifications derive deterministically from user-provided schemas in `schema/`.
-- **Downstream Application Workspaces (Multi-Domain Cyber-Physical Exemplars):** Concrete domain application repositories derived from `DEAP01-spec-core`. Turnkey installation or manual setup removes `.pipeline/upstream/`, transitioning the project into `DOWNSTREAM_CUSTOMER_PROJECT` mode to enable concrete domain statecharts, safety-critical controllers, middleware bindings, and domain test suites across 6 canonical domains:
+- **Tier 1 Domain Distribution Templates (`DEAP-*`):** Canonical sector repositories derived from `DEAP01-spec-core` by compiler maintainers. Tooling propagation removes `.pipeline/upstream/`, enabling domain-specific SysML v2 models, schemas in `schema/`, and sector architecture blueprints across 6 canonical domains:
   1. **Aerospace & Defense:** `DEAP-uas-infrastructure-safety` (SORA, ASTM F3269, DO-365B)
   2. **Medical & Healthcare:** `DEAP-surgical-robotics-console` (IEC 62304 Class C, ISO 14971, FDA Class III)
   3. **Space & Satellites:** `DEAP-space-cubesat-constellation` (ECSS-E-ST-40C, NASA-STD-8739.8)
   4. **Industrial Robotics:** `DEAP-industrial-warehouse-agv` (ISO 3691-4, IEC 61508, VDA 5050)
   5. **Subsea & Maritime:** `DEAP-subsea-oceanographic-auv` (DNV-GL-ST-E403, IMO MASS)
   6. **Rail & Transportation:** `DEAP-rail-autonomous-locomotive` (EN 50126, EN 50128 SIL 4)
+  In Tier 1 domain templates, specification landing zones (`docs/epics/`, `docs/features/`, `docs/user-stories/`, `docs/use-cases/`) remain clean landing zones with `.gitkeep` files until projected for a concrete implementation.
+
+#### Tier 2: Domain Distribution Templates to Customer Application Workspaces
+- **Customer Application Workspaces (`uav-*`, `DOWNSTREAM_APPLICATION_WORKSPACE` / `DOWNSTREAM_CUSTOMER_PROJECT`):** Concrete engineering repositories where end-user engineering teams build proprietary software, ROS2 nodes, PX4 flight modules, and hardware-in-the-loop tests.
+- **Clean Customer Boundary Mandate:** Customer projects onboard strictly from their relevant **Domain Distribution Template** (`DEAP-*`), NOT from the upstream compiler (`DEAP01-spec-core`). Onboarding from the domain template guarantees that all domain-specific SysML v2 schemas, safety contracts, and profile rules are seeded directly into the customer workspace in a single self-contained command with zero external sibling path dependencies.
 - **Illustrative Schema Payloads:** Any concrete flight controller, robotic surgical console, satellite bus, AGV guidance, subsea vehicle, rail locomotive controller, STPA hazard analysis, or domain safety examples presented throughout this README and documentation are strictly **illustrative schema payloads** demonstrating compiler ingestion, AST synthesis, projection, and verification capabilities.
 
 ---
@@ -113,9 +149,9 @@ DEAP01-spec-core/
 └── README.md                      # Upstream compiler master specification & usage guide
 ```
 
-#### Downstream Customer Project Workspace (Multi-Domain Cyber-Physical Exemplar):
+#### Tier 1: Domain Distribution Template Repository (e.g. DEAP-uas-infrastructure-safety):
 ```
-downstream-workspace/ (e.g. DEAP-uas-infrastructure-safety, DEAP-surgical-robotics-console, ...)
+domain-distribution-template/ (e.g. DEAP-uas-infrastructure-safety, DEAP-surgical-robotics-console, ...)
 ├── .agents/
 │   ├── AGENTS.md                  # Project-scoped agentic governance rules & delegation gates
 │   └── skills -> ../skills        # Project skills symlink
@@ -125,18 +161,20 @@ downstream-workspace/ (e.g. DEAP-uas-infrastructure-safety, DEAP-surgical-roboti
 │       ├── ros2_cpp.md            # ROS2 C++ Real-Time Nodes platform execution profile
 │       └── px4_module.md          # PX4 Autopilot / Embedded platform execution profile
 ├── docs/
-│   ├── conops/                    # Customer mission intent & Concept of Operations landing zone
+│   ├── conops/                    # Domain mission intent & Concept of Operations landing zone
 │   ├── safety/                    # STPA hazard analysis, FMECA & domain safety landing zone
 │   ├── management/                # Level 4 WBS & Enterprise Realization deliverables (.md, .csv, .json)
 │   └── architecture/
 │       └── blueprints/            # Canonical architecture specifications & multi-provider blueprints
 ├── schema/                        # Domain-specific structural schemas & SysML v2 models
-├── tests/                         # Application tests & domain safety compliance test suite
+├── tests/                         # Domain compliance test suite & verification harness
 ├── pyproject.toml                 # Pytest & verification configuration
-└── README.md                      # Downstream project master specification & usage guide
+└── README.md                      # Domain template master specification & usage guide
 ```
 
-Supported Downstream Domain Exemplars (Pure Schema-Driven):
+Tier 2 Customer Application Workspaces (`uav-*`) inherit this layout from the domain distribution template, populating `docs/epics/`, `docs/features/`, and application source directories (`app_flutter/`, `web_react/`, `ros2/`, `px4/`).
+
+Supported Tier 1 Domain Distribution Templates (Pure Schema-Driven):
 1. **Aerospace & Defense:** `DEAP-uas-infrastructure-safety` (SORA, ASTM F3269, DO-365B)
 2. **Medical & Healthcare:** `DEAP-surgical-robotics-console` (IEC 62304 Class C, ISO 14971, FDA Class III)
 3. **Space & Satellites:** `DEAP-space-cubesat-constellation` (ECSS-E-ST-40C, NASA-STD-8739.8)
@@ -168,52 +206,76 @@ The platform requires **Python 3.12+**, the configured tracker CLI (or native RE
   pip install -r requirements.txt
   ```
 
-### 5.2 Onboarding Quick-Start Guide (Turnkey Multi-Provider Installer)
+### 5.2 Tier 1: Compiler Maintainer Propagation Guide (Upstream Compiler -> Domain Templates)
 
-Run the turnkey automated installer script to install the safety-critical engineering pipeline into your downstream project. The installer automatically detects your git remote, issue tracker provider (GitHub or GitLab), and organization or group.
+This workflow is for **DEAP platform maintainers** propagating compiler tooling, governance rules, and verification scripts from `DEAP01-spec-core` to the canonical domain distribution template repositories (`DEAP-*`).
 
-#### Primary Installation (from Sibling Checkout)
+#### Sibling Propagation (Local Checkout)
 
-When initializing a new downstream repository alongside a local `DEAP01-spec-core` checkout, run the installer from the root of your downstream repository:
+When maintaining a local domain template checkout alongside `DEAP01-spec-core`, run the installer from the root of the target domain template repository:
 
 ```bash
+# Run from the root of the target domain distribution template
 bash ../DEAP01-spec-core/scripts/install_pipeline.sh
 ```
 
-#### Updating an Existing Project
+#### Remote Propagation (CI or Standalone Maintainer Workstation)
 
-Inside an already-installed downstream repository, update the pipeline and governance rules at any time by running:
+To synchronize a domain distribution template directly from the upstream compiler repository:
+
+```bash
+# Run from the root of the target domain distribution template
+git clone "https://github.com/gintatkinson/DEAP01-spec-core.git" ./.tmp-pipeline && bash ./.tmp-pipeline/scripts/install_pipeline.sh . && rm -rf ./.tmp-pipeline
+```
+
+#### In-Place Governance & Script Updates
+
+Inside an already-installed domain template repository, update the pipeline and governance rules at any time by running:
 
 ```bash
 bash scripts/install_pipeline.sh
 ```
 
-#### Remote Bootstrap (Zero Local Checkout)
+---
 
-For machines or CI environments without a pre-existing local `DEAP01-spec-core` checkout, run the single-command bootstrap from your downstream project root:
+### 5.3 Tier 2: Customer Project Onboarding Guide (Domain Template -> Customer Workspace)
+
+This workflow is for **downstream application engineers and customer teams** creating or scaffolding a concrete project workspace (e.g. `uav-tactical-mission`).
+
+> **Critical Architecture Rule:** Customer projects MUST onboard from the corresponding **Domain Distribution Template** (`DEAP-*`), NOT from `DEAP01-spec-core`. Onboarding from the domain template seeds your project with the required domain SysML v2 schemas, safety models, and platform profiles.
+
+#### Single-Command Self-Contained Customer Onboarding
+
+Execute this command directly inside your new customer project root directory. It runs completely self-contained with zero external sibling path dependencies:
 
 ```bash
-git clone https://github.com/gintatkinson/DEAP01-spec-core.git /tmp/deap_installer && bash /tmp/deap_installer/scripts/install_pipeline.sh . && rm -rf /tmp/deap_installer
+# Set your domain template repository remote URL
+DOMAIN_REMOTE_URL="https://github.com/gintatkinson/DEAP-uas-infrastructure-safety.git"
+
+# Clone installer into temporary directory, run setup, and clean up
+git clone "$DOMAIN_REMOTE_URL" ./.tmp-pipeline && bash ./.tmp-pipeline/scripts/install_pipeline.sh . && rm -rf ./.tmp-pipeline
 ```
 
+Or as a single copy-pasteable command:
 
-### Supported Cyber-Physical Domain Exemplars (Pure Schema-Driven)
-The upstream compiler compiles AST models across six canonical domains based purely on input schemas:
-1. **Aerospace & Defense:** `DEAP-uas-infrastructure-safety` (SORA, ASTM F3269, DO-365B)
-2. **Medical & Healthcare:** `DEAP-surgical-robotics-console` (IEC 62304 Class C, ISO 14971, FDA Class III)
-3. **Space & Satellites:** `DEAP-space-cubesat-constellation` (ECSS-E-ST-40C, NASA-STD-8739.8)
-4. **Industrial Robotics:** `DEAP-industrial-warehouse-agv` (ISO 3691-4, IEC 61508, VDA 5050)
-5. **Subsea & Maritime:** `DEAP-subsea-oceanographic-auv` (DNV-GL-ST-E403, IMO MASS)
-6. **Rail & Transportation:** `DEAP-rail-autonomous-locomotive` (EN 50126, EN 50128 SIL 4)
+```bash
+git clone "https://github.com/gintatkinson/DEAP-uas-infrastructure-safety.git" ./.tmp-pipeline && bash ./.tmp-pipeline/scripts/install_pipeline.sh . && rm -rf ./.tmp-pipeline
+```
+
+Upon completion, your customer repository is fully configured:
+1. `.pipeline/upstream/` is removed, activating `DOWNSTREAM_CUSTOMER_PROJECT` mode.
+2. Canonical domain SysML v2 schemas and models from `DEAP-*` are copied into `schema/`.
+3. Agent governance files (`.agents/AGENTS.md`, `AGENTS.md`, `CLAUDE.md`) are established.
+4. Git hooks and baseline verification suites are installed.
 
 > **Note**: `install_pipeline.sh` automatically copies `skills`, `rules`, `schema`, `.pipeline`, `.agents`, and `scripts`, updates `.gitignore`, and sets up git hooks directly into your project root in a single automated turnkey step.
 
-### 5.3 Direct Copy / Manual Setup
+### 5.4 Direct Copy / Manual Setup
 
 Alternatively, copy the pipeline directories and templates from the canonical upstream compiler into your project repository manually:
 
 ```bash
-git clone https://github.com/gintatkinson/DEAP01-spec-core.git ./.tmp-pipeline
+git clone "https://github.com/gintatkinson/DEAP01-spec-core.git" ./.tmp-pipeline
 rm -rf ./skills ./rules ./.pipeline ./.agents ./scripts ./tests
 cp -RP ./.tmp-pipeline/skills ./
 cp -RP ./.tmp-pipeline/rules ./
@@ -282,7 +344,7 @@ mkdir -p ./docs/conops ./docs/safety ./docs/management ./docs/architecture/bluep
 # Verify pipeline directories, agent configuration, and skills
 test -d ./.pipeline && test -d ./skills && test -d ./.agents/skills && echo "Pipeline directories (.pipeline, skills, .agents/skills) verified successfully."
 
-# Configure for GitLab (if applicable)
+# Configure for GitLab if applicable
 python3 -c "
 import json, os
 p = '.pipeline/codebase_rules.json' if os.path.exists('.pipeline') else 'codebase_rules.json'
@@ -298,7 +360,7 @@ python3 scripts/setup_git_hooks.py --install
 python3 skills/spec-orchestrator/scripts/bootstrap_tracker_labels.py
 ```
 
-### 5.4 Setup for Google Antigravity / Gemini CLI
+### 5.5 Setup for Google Antigravity / Gemini CLI
 
 After copying the pipeline, configure Gemini / Antigravity to load the skills and rules:
 
@@ -318,7 +380,7 @@ After copying the pipeline, configure Gemini / Antigravity to load the skills an
    4. **Load Platform Profile**: Read the target platform execution profile (`.pipeline/profiles/flutter.md`, `.pipeline/profiles/react.md`, `.pipeline/profiles/ros2_cpp.md`, or `.pipeline/profiles/px4_module.md`) to establish platform-specific build, test, and lifecycle constraints.
    5. **Bootstrap Tracker Labels**: Verify that repository issue tracker labels are synchronized and operational by running `python3 skills/spec-orchestrator/scripts/bootstrap_tracker_labels.py --dry-run` or verifying label bootstrapping status.
 
-### 5.5 AGENTS.md Setup
+### 5.6 AGENTS.md Setup
 
 When installing via `scripts/install_pipeline.sh`, the installer automatically configures both `.agents/AGENTS.md` and `AGENTS.md` for downstream customer projects (`DOWNSTREAM_CUSTOMER_PROJECT`). If performing manual setup, ensure `.agents/AGENTS.md` and `AGENTS.md` exist in your project root to instruct initializing AI agents:
 
@@ -338,18 +400,18 @@ This project uses the Digital Engineering Agent Platform (DEAP).
 - Profiles: read the target platform profile in `.pipeline/profiles/` (e.g. `ros2_cpp.md`, `px4_module.md`, etc.) before implementing features
 ```
 
-### 5.6 Setup for Claude Code
+### 5.7 Setup for Claude Code
 
 ```bash
 # Add to CLAUDE.md:
 echo "Read all SKILL.md files in skills/ and .agents/skills/ and all rule files in rules/ before starting any task." >> CLAUDE.md
 ```
 
-### 5.7 Setup for Cursor / Windsurf / Cascade
+### 5.8 Setup for Cursor / Windsurf / Cascade
 
 Create `.cursor/rules/pipeline.mdc` or `.windsurf/rules/pipeline.md` referencing `.agents/skills/`, `skills/`, `.agents/AGENTS.md`, and `.pipeline/`.
 
-### 5.8 Downstream Baseline Verification Gate
+### 5.9 Downstream Baseline Verification Gate
 
 The verification gate acts as a post-installation and post-implementation compliance check:
 
@@ -358,7 +420,7 @@ python3 -m pytest tests/
 python3 scripts/verify_downstream_baseline.py --no-domain
 ```
 
-### 5.9 Supported Runtimes Table
+### 5.10 Supported Runtimes Table
 
 | Runtime | Subagent Dispatch | Two-Stage Review |
 |---|---|---|
@@ -395,7 +457,7 @@ The DEAP platform features a unified, zero-dependency **Tracker Abstraction Arch
 The backlog reconciliation engine synchronizes markdown specifications (`docs/epics/`, `docs/features/`, `docs/user-stories/`, `docs/use-cases/`) with remote issue trackers:
 
 ```bash
-# Reconcile against GitHub Issues (default)
+# Reconcile against GitHub Issues - default
 python3 scripts/reconcile_backlog.py --provider github
 
 # Reconcile against GitLab Issues
@@ -404,7 +466,7 @@ python3 scripts/reconcile_backlog.py --provider gitlab
 # Reconcile against Self-Hosted / Air-Gapped GitLab Instance
 python3 scripts/reconcile_backlog.py --provider gitlab --gitlab-url https://gitlab.internal.defense.gov
 
-# Perform Offline Reconciliation (No remote mutation)
+# Perform Offline Reconciliation - No remote mutation
 python3 scripts/reconcile_backlog.py --provider gitlab --offline
 ```
 
@@ -550,7 +612,8 @@ To execute Pipeline 0 via context-isolated subagents in your AI agent environmen
 
 ```mermaid
 flowchart TD
-    Step0["Step 0: SysML Model Ingestion & Compilation Gate (python3 scripts/compile_sysml.py --compile)"] --> Step1["Step 1: Ingest Mission Profile & Synthesize CONOPS (Worker 0A)"]
+    Step00["Step 0.0: Level 0 OEM Ground Truth Ingestion (sysmlv2_ingest.py)"] --> Step0["Step 0: SysML Model Ingestion & Compilation Gate (python3 scripts/compile_sysml.py --compile)"]
+    Step0 --> Step1["Step 1: Ingest Mission Profile & Synthesize CONOPS (Worker 0A)"]
     Step1 --> Step2["Step 2: Execute STPA & FMECA Assessment (Worker 0B)"]
     Step2 --> Step3["Step 3: SysML v2 Architectural & Safety Model Author (Worker 0C)"]
     Step3 --> Step4["Step 4: Interface Specification Worker -- Logical ICD & Master Signal Dictionary (Worker 0D)"]
@@ -632,6 +695,50 @@ This catalog contains the complete, unabridged, copy-pasteable operator prompt s
 ### 9.1 Pipeline 0 Prompts (Pre-Spec Safety & Model Formulation)
 
 Execute the following prompts in sequence to transform unstructured intent, operational scenarios, and interface schemas into formal CONOPS, STPA hazard matrices, and SysML v2 AST models:
+
+#### 9.1.0 Worker 00: OEM Prose / BOM Ingestion & Model Synthesis Prompt (Step 0.0)
+
+**Step 0.0 Entrypoint for Unstructured / Prose Customer Documentation:**
+For customer projects starting with unstructured OEM prose manuals, PDF documentation, markdown tables, or Bill of Materials (BOM) specifications, Worker 00 provides the sanctioned, deterministic entrypoint. Extracting OEM Bill of Materials (BOM) and physical parameters into `schema/extracted/` and synthesizing canonical SysML v2 textual models in `schema/model.sysml` (or `.pipeline/schema.sysml`) is fully authorized under Check 23 (Factual Grounding & Numeric Provenance Gate) and serves as the mandatory precursor to executing the Step 0 compilation gate (`python3 scripts/compile_sysml.py --compile`).
+
+```text
+Execute `view_file` on `skills/spec-orchestrator/SKILL.md` as your very first step before taking any action.
+
+Repository Classification: UPSTREAM_SPEC_CORE_COMPILER (or DOWNSTREAM_CUSTOMER_PROJECT depending on execution context)
+
+Role: Worker 00 -- OEM Prose / BOM Ingestion & Model Synthesizer (Step 0.0)
+
+Primary Commercial Toolchain Integration Context:
+This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
+
+Directive:
+Execute Level 0 OEM Ground Truth Ingestion and initial SysML v2 textual model synthesis for customer projects starting from unstructured OEM prose manuals, PDF documentation, markdown tables, or Bill of Materials (BOM) specifications:
+
+1. Unstructured & Semi-Structured Ingestion Scope:
+   - Ingest raw OEM technical documentation, flight/operating manuals, ICD tables, and BOM markdown tables located in `schema/` and `schema/extracted/`.
+   - Authorized Under Check 23: Extract physical parameters, component hierarchies, mass/power budgets, port/pin interfaces, and operational envelopes into machine-readable Markdown tables in `schema/extracted/` (e.g., `schema/extracted/oem_bom.md`, `schema/extracted/interface_table.md`, `schema/extracted/parametric_limits.md`).
+
+2. Canonical SysML v2 Model Synthesis:
+   - Execute the Level 0 ingestion translator:
+     python3 skills/spec-orchestrator/scripts/sysmlv2_ingest.py --schema "schema/extracted/" --format markdown --out "schema/model.sysml"
+   - Alternatively, synthesize a formal SysML v2 textual model `schema/model.sysml` directly, defining:
+     * Root `package` matching the target cyber-physical system.
+     * All component definitions as canonical `part def` elements with typed attributes (mass, power, dimensions, channel count, part numbers).
+     * Directional communication and electrical interface boundaries as `port def` elements (`in`, `out`, `inout`).
+     * Physical, environmental, and operational constraints as `constraint def` / `assert constraint` blocks.
+     * State machine structures and operational lifecycle phases as `state def` elements.
+
+3. Compilation Gate Precursor Verification:
+   - Verify that the generated `schema/model.sysml` passes the Step 0 SysML Compilation Gate:
+     python3 scripts/compile_sysml.py --compile
+   - Ensure `.pipeline/schema.sysml` and `.pipeline/schema-digest.json` are successfully generated without compilation errors.
+   - Verify Check 23 compliance (Factual Grounding & Numeric Provenance Gate): all physical parameters and component counts in `schema/model.sysml` strictly match the Level 0 OEM ground truth in `schema/extracted/`.
+
+Defect Filing Directive:
+If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `python3 scripts/file_defect.py`. Issue auto-closing keywords or issue close commands are strictly forbidden.
+
+PROCEED
+```
 
 #### 9.1.1 Worker 0A: CONOPS & Operational Scenario Synthesis Prompt
 

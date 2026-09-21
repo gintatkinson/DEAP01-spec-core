@@ -4077,12 +4077,23 @@ def parse_sysml(content: str) -> Dict[str, Any]:
 # Alias for backwards compatibility
 extract_sysml_ast = parse_sysml
 
+SCHEMA_REMEDIATION_MESSAGE = (
+    "Error: No .sysml schema file found in schema/.\n"
+    "If starting from unstructured OEM prose manuals, PDF documentation, or BOM markdown tables:\n"
+    "  1. Place your OEM documentation or extract tables into schema/ or schema/extracted/.\n"
+    "  2. Execute Step 0.0 Level 0 OEM Ground Truth Ingestion:\n"
+    "     python3 skills/spec-orchestrator/scripts/sysmlv2_ingest.py --schema <path_to_markdown> --format markdown --out schema/model.sysml\n"
+    "  3. Re-run compile_sysml.py --compile to satisfy the compilation gate."
+)
+
 
 def enforce_pipeline0_compilation_gate(schema_path: Optional[str] = None, output_path: str = ".pipeline/schema.sysml", digest_path: str = ".pipeline/schema-digest.json") -> int:
     """
     Implements pipeline 0 compilation gate.
     If schema_path is None, search for a .sysml file in schema/.
     If schema file does not exist, fail closed (print descriptive error to stderr and return 1).
+    When no .sysml file is found in schema/ (or default path), prints clear remediation guidance
+    directing the user/agent to Step 0.0 Level 0 OEM Ground Truth Ingestion and returns 1.
     Parse the file using SysMLParser.parse_file(schema_path).
     If parsing fails, returns None, or the package has 0 structural elements (parts, constraints, ports, etc.), fail closed (print descriptive error to stderr and return 1).
     Serialize the package AST via pkg.to_sysml() and write atomically to output_path using _atomic_write_file.
@@ -4092,13 +4103,21 @@ def enforce_pipeline0_compilation_gate(schema_path: Optional[str] = None, output
     import glob
     if schema_path is None:
         schema_files = glob.glob("schema/*.sysml")
+        if not schema_files and os.path.isdir(os.path.join(PROJECT_ROOT, "schema")):
+            schema_files = glob.glob(os.path.join(PROJECT_ROOT, "schema", "*.sysml"))
         if not schema_files:
-            print("Error: No schema file provided and none found in schema/", file=sys.stderr)
+            print(SCHEMA_REMEDIATION_MESSAGE, file=sys.stderr)
             return 1
         schema_path = schema_files[0]
         
     if not os.path.exists(schema_path):
-        print(f"Error: Schema file does not exist: {schema_path}", file=sys.stderr)
+        schema_files = glob.glob("schema/*.sysml")
+        if not schema_files and os.path.isdir(os.path.join(PROJECT_ROOT, "schema")):
+            schema_files = glob.glob(os.path.join(PROJECT_ROOT, "schema", "*.sysml"))
+        if not schema_files:
+            print(SCHEMA_REMEDIATION_MESSAGE, file=sys.stderr)
+        else:
+            print(f"Error: Schema file does not exist: {schema_path}", file=sys.stderr)
         return 1
         
     if SysMLParser is None:
@@ -4192,13 +4211,24 @@ def main():
         ))
 
     if args.reverse_sync:
-        reverse_sync_specs_to_sysml(
-            docs_dir=args.docs_dir,
-            schema_path=args.schema_path,
-            output_path=args.output_path,
-            digest_path=args.digest_path,
-            allow_schema_overwrite=args.allow_schema_overwrite,
-        )
+        try:
+            reverse_sync_specs_to_sysml(
+                docs_dir=args.docs_dir,
+                schema_path=args.schema_path,
+                output_path=args.output_path,
+                digest_path=args.digest_path,
+                allow_schema_overwrite=args.allow_schema_overwrite,
+            )
+        except FileNotFoundError as exc:
+            import glob
+            schema_files = glob.glob("schema/*.sysml")
+            if not schema_files and os.path.isdir(os.path.join(PROJECT_ROOT, "schema")):
+                schema_files = glob.glob(os.path.join(PROJECT_ROOT, "schema", "*.sysml"))
+            if not schema_files:
+                print(SCHEMA_REMEDIATION_MESSAGE, file=sys.stderr)
+            else:
+                print(f"Error: {exc}", file=sys.stderr)
+            sys.exit(1)
         return
 
     if args.forward_sync:
@@ -4208,13 +4238,31 @@ def main():
             if os.path.exists(default_ssot):
                 schema_target = default_ssot
             else:
+                import glob
+                schema_files = glob.glob("schema/*.sysml")
+                if not schema_files and os.path.isdir(os.path.join(PROJECT_ROOT, "schema")):
+                    schema_files = glob.glob(os.path.join(PROJECT_ROOT, "schema", "*.sysml"))
+                if not schema_files:
+                    print(SCHEMA_REMEDIATION_MESSAGE, file=sys.stderr)
+                    sys.exit(1)
                 parser.error("--forward-sync requires --schema <file.sysml> or a positional .sysml file")
-        forward_sync_sysml_to_specs(
-            schema_path=schema_target,
-            docs_dir=args.docs_dir,
-            out_dir=args.out_dir,
-            dry_run=args.dry_run,
-        )
+        try:
+            forward_sync_sysml_to_specs(
+                schema_path=schema_target,
+                docs_dir=args.docs_dir,
+                out_dir=args.out_dir,
+                dry_run=args.dry_run,
+            )
+        except FileNotFoundError as exc:
+            import glob
+            schema_files = glob.glob("schema/*.sysml")
+            if not schema_files and os.path.isdir(os.path.join(PROJECT_ROOT, "schema")):
+                schema_files = glob.glob(os.path.join(PROJECT_ROOT, "schema", "*.sysml"))
+            if not schema_files:
+                print(SCHEMA_REMEDIATION_MESSAGE, file=sys.stderr)
+            else:
+                print(f"Error: {exc}", file=sys.stderr)
+            sys.exit(1)
         return
 
     target_file = args.file
@@ -4223,7 +4271,14 @@ def main():
         sys.exit(1)
 
     if not os.path.exists(target_file):
-        print(f"Error: File not found: {target_file}")
+        import glob
+        schema_files = glob.glob("schema/*.sysml")
+        if not schema_files and os.path.isdir(os.path.join(PROJECT_ROOT, "schema")):
+            schema_files = glob.glob(os.path.join(PROJECT_ROOT, "schema", "*.sysml"))
+        if not schema_files and (target_file.startswith("schema/") or target_file.endswith(".sysml")):
+            print(SCHEMA_REMEDIATION_MESSAGE, file=sys.stderr)
+        else:
+            print(f"Error: File not found: {target_file}", file=sys.stderr)
         sys.exit(1)
 
     with open(target_file, 'r', encoding='utf-8') as f:
@@ -4981,7 +5036,14 @@ def transpile_stpa(schema_path: str, out_dir: str, fmeca_scoring_config: Optiona
         print("Error: SysMLParser is not available for STPA transpilation.", file=sys.stderr)
         return 1
     if not os.path.exists(schema_path):
-        print(f"Error: Schema file not found: {schema_path}", file=sys.stderr)
+        import glob
+        schema_files = glob.glob("schema/*.sysml")
+        if not schema_files and os.path.isdir(os.path.join(PROJECT_ROOT, "schema")):
+            schema_files = glob.glob(os.path.join(PROJECT_ROOT, "schema", "*.sysml"))
+        if not schema_files and (schema_path.startswith("schema/") or schema_path.endswith(".sysml")):
+            print(SCHEMA_REMEDIATION_MESSAGE, file=sys.stderr)
+        else:
+            print(f"Error: Schema file not found: {schema_path}", file=sys.stderr)
         return 1
 
     try:

@@ -1793,10 +1793,13 @@ class FactualGroundingValidator(IValidator):
 
     def _is_excluded_spec_file(self, rel_path: str, filename: str) -> bool:
         """
-        Excludes retrospective defect reports and audit summary files from normative specification evaluation:
-        1. Any file located under docs/reports/defects/
-        2. Any file matching *AUDIT.md or *audit*.md
+        Excludes retrospective defect reports, audit summary files, and non-specification developer guides/catalogs:
+        1. Non-specification developer guides and prompt catalogs (OPERATOR_PROMPT_CATALOG.md, JIRA_INTEGRATION_GUIDE.md, README.md)
+        2. Any file located under docs/reports/defects/
+        3. Any file matching *AUDIT.md or *audit*.md
         """
+        if filename in ("OPERATOR_PROMPT_CATALOG.md", "JIRA_INTEGRATION_GUIDE.md", "README.md"):
+            return True
         norm_rel = rel_path.replace("\\", "/")
         if norm_rel.startswith("docs/reports/defects/") or "/reports/defects/" in f"/{norm_rel}":
             return True

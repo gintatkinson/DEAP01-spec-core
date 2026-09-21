@@ -93,10 +93,24 @@ def scaffold_downstream_agents(installer_root: str, target_dir: str) -> None:
         )
 
     target_dot_agents_dir = os.path.join(target_dir, ".agents")
+    if os.path.exists(target_dot_agents_dir):
+        try:
+            os.chmod(target_dot_agents_dir, 0o755)
+        except OSError:
+            pass
     os.makedirs(target_dot_agents_dir, exist_ok=True)
 
     dot_agents_path = os.path.join(target_dot_agents_dir, "AGENTS.md")
     root_agents_path = os.path.join(target_dir, "AGENTS.md")
+    claude_path = os.path.join(target_dir, "CLAUDE.md")
+    readme_path = os.path.join(target_dir, "README.md")
+
+    for target_path in [dot_agents_path, root_agents_path, claude_path, readme_path]:
+        if os.path.exists(target_path):
+            try:
+                os.chmod(target_path, 0o644)
+            except OSError:
+                pass
 
     with open(dot_agents_path, "w", encoding="utf-8") as f:
         f.write(transformed)
@@ -104,12 +118,10 @@ def scaffold_downstream_agents(installer_root: str, target_dir: str) -> None:
     with open(root_agents_path, "w", encoding="utf-8") as f:
         f.write(transformed)
 
-    claude_path = os.path.join(target_dir, "CLAUDE.md")
     if not os.path.exists(claude_path):
         with open(claude_path, "w", encoding="utf-8") as f:
             f.write(DEFAULT_CLAUDE)
 
-    readme_path = os.path.join(target_dir, "README.md")
     if not os.path.exists(readme_path):
         with open(readme_path, "w", encoding="utf-8") as f:
             f.write(DEFAULT_README)

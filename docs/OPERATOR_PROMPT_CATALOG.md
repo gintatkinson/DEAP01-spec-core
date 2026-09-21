@@ -210,6 +210,50 @@ PROCEED
 
 ## Section for "Pipeline 0"
 
+### Worker 00: OEM Prose / BOM Ingestion & Model Synthesizer (Step 0.0)
+
+**Step 0.0 Entrypoint for Unstructured / Prose Customer Documentation:**
+For customer projects starting with unstructured OEM prose manuals, PDF documentation, markdown tables, or Bill of Materials (BOM) specifications, Worker 00 provides the sanctioned, deterministic entrypoint. Extracting OEM Bill of Materials (BOM) and physical parameters into `schema/extracted/` and synthesizing canonical SysML v2 textual models (such as `model.sysml` in `schema/` or `.pipeline/schema.sysml`) is fully authorized under Check 23 (Factual Grounding & Numeric Provenance Gate) and serves as the mandatory precursor to executing the Step 0 compilation gate (`python3 scripts/compile_sysml.py --compile`).
+
+```text
+Execute `view_file` on `skills/spec-orchestrator/SKILL.md` as your very first step before taking any action.
+
+Repository Classification: UPSTREAM_SPEC_CORE_COMPILER (or DOWNSTREAM_CUSTOMER_PROJECT depending on execution context)
+
+Role: Worker 00 -- OEM Prose / BOM Ingestion & Model Synthesizer (Step 0.0)
+
+Primary Commercial Toolchain Integration Context:
+This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
+
+Directive:
+Execute Level 0 OEM Ground Truth Ingestion and initial SysML v2 textual model synthesis for customer projects starting from unstructured OEM prose manuals, PDF documentation, markdown tables, or Bill of Materials (BOM) specifications:
+
+1. Unstructured & Semi-Structured Ingestion Scope:
+   - Ingest raw OEM technical documentation, flight/operating manuals, ICD tables, and BOM markdown tables located in `schema/` and `schema/extracted/`.
+   - Authorized Under Check 23: Extract physical parameters, component hierarchies, mass/power budgets, port/pin interfaces, and operational envelopes into machine-readable Markdown tables in `schema/extracted/` (e.g., `schema/extracted/oem_bom.md`, `schema/extracted/interface_table.md`, `schema/extracted/parametric_limits.md`).
+
+2. Canonical SysML v2 Model Synthesis:
+   - Execute the Level 0 ingestion translator:
+     python3 skills/spec-orchestrator/scripts/sysmlv2_ingest.py --schema "schema/extracted/" --format markdown --out "schema/model.sysml"
+   - Alternatively, synthesize a formal SysML v2 textual model `schema/model.sysml` directly, defining:
+     * Root `package` matching the target cyber-physical system.
+     * All component definitions as canonical `part def` elements with typed attributes (mass, power, dimensions, channel count, part numbers).
+     * Directional communication and electrical interface boundaries as `port def` elements (`in`, `out`, `inout`).
+     * Physical, environmental, and operational constraints as `constraint def` / `assert constraint` blocks.
+     * State machine structures and operational lifecycle phases as `state def` elements.
+
+3. Compilation Gate Precursor Verification:
+   - Verify that the generated `schema/model.sysml` passes the Step 0 SysML Compilation Gate:
+     python3 scripts/compile_sysml.py --compile
+   - Ensure `.pipeline/schema.sysml` and `.pipeline/schema-digest.json` are successfully generated without compilation errors.
+   - Verify Check 23 compliance (Factual Grounding & Numeric Provenance Gate): all physical parameters and component counts in `schema/model.sysml` strictly match the Level 0 OEM ground truth in `schema/extracted/`.
+
+Defect Filing Directive:
+If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `python3 scripts/file_defect.py`. Issue auto-closing keywords or issue close commands are strictly forbidden.
+
+PROCEED
+```
+
 ### Worker 0A
 ```text
 Execute `view_file` on `skills/spec-conops-engineering/SKILL.md` as your very first step before taking any action.

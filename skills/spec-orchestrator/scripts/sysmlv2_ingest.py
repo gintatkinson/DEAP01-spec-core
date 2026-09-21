@@ -29,6 +29,7 @@ try:
     from translators.autosar_translator import AUTOSARTranslator
     from translators.protobuf_translator import ProtobufTranslator
     from translators.openapi_translator import OpenAPITranslator
+    from translators.markdown_translator import MarkdownTranslator
 except ImportError:
     from skills.spec_orchestrator.scripts.sysmlv2_ast import (
         SysMLPackage, SysMLParser, SysMLConstraintDef, PartDef
@@ -37,9 +38,10 @@ except ImportError:
     from skills.spec_orchestrator.scripts.translators.autosar_translator import AUTOSARTranslator
     from skills.spec_orchestrator.scripts.translators.protobuf_translator import ProtobufTranslator
     from skills.spec_orchestrator.scripts.translators.openapi_translator import OpenAPITranslator
+    from skills.spec_orchestrator.scripts.translators.markdown_translator import MarkdownTranslator
 
 
-RAW_EXTENSIONS = {".md", ".pdf", ".txt", ".doc", ".docx"}
+RAW_EXTENSIONS = {".pdf", ".txt", ".doc", ".docx"}
 
 def detect_format(schema_path: str, content: str) -> str:
     """
@@ -48,6 +50,11 @@ def detect_format(schema_path: str, content: str) -> str:
     /// Realises: [SpecName/detect_format]
     """
     ext = os.path.splitext(schema_path)[1].lower()
+
+    # 1. Direct Markdown detection via extension or table structures
+    if ext == ".md" or re.search(r'\|\s*(?:Component|Part|BOM|Port|Signal|Parameter|Interface|Property|Attribute)\s*\|', content, re.IGNORECASE) or re.search(r'\|[^\n]+\|\s*\n\s*\|[\s:\-]+\|', content):
+        return "markdown"
+
     if ext in RAW_EXTENSIONS:
         return "raw"
     if ext == ".sysml":
@@ -61,7 +68,7 @@ def detect_format(schema_path: str, content: str) -> str:
     elif ext in (".json", ".yaml", ".yml"):
         return "openapi"
 
-    # Content-based detection
+    # Content-based detection for remaining formats
     if "part def " in content or "package " in content or "capability def " in content or "requirement def " in content:
         return "sysml"
     elif "module " in content or "interface " in content or "struct " in content:
@@ -74,7 +81,7 @@ def detect_format(schema_path: str, content: str) -> str:
         return "openapi"
 
     raise ValueError(
-        f"Unsupported schema format for '{schema_path}'. Supported formats: .sysml, .idl, .arxml/.xml, .proto, .json/.yaml/.yml."
+        f"Unsupported schema format for '{schema_path}'. Supported formats: .sysml, .idl, .arxml/.xml, .proto, .json/.yaml/.yml, markdown (.md)."
     )
 
 
@@ -175,8 +182,53 @@ def filter_ast_to_target_scope(
     return pkg
 
 
+def discover_schema_targets(path: Optional[str] = None) -> Tuple[str, List[str]]:
+    """
+    Discovers schema files or directories.
+    Supports auto-discovery in schema/ and schema/extracted/.
+    """
+    import glob
+    if path and os.path.isfile(path):
+        return "file", [path]
+
+    search_dir = path if (path and os.path.isdir(path)) else "schema"
+    if not os.path.exists(search_dir):
+        return "unknown", []
+
+    # 1. Check for native .sysml models
+    sysml_files = sorted(glob.glob(os.path.join(search_dir, "*.sysml")))
+    if sysml_files:
+        return "sysml", sysml_files
+
+    # 2. Check for extracted markdown specifications in schema/extracted/*.md
+    extracted_dir = os.path.join(search_dir, "extracted") if not search_dir.endswith("extracted") else search_dir
+    if os.path.exists(extracted_dir):
+        extracted_md = sorted([
+            f for f in glob.glob(os.path.join(extracted_dir, "*.md"))
+            if os.path.basename(f) != "README.md"
+        ])
+        if extracted_md:
+            return "markdown", extracted_md
+
+    # 3. Check for markdown files in schema/*.md
+    root_md = sorted([
+        f for f in glob.glob(os.path.join(search_dir, "*.md"))
+        if os.path.basename(f) != "README.md"
+    ])
+    if root_md:
+        return "markdown", root_md
+
+    # 4. Check for other schema types (IDL, ARXML, Protobuf, OpenAPI)
+    for ext_pat, fmt in [("*.idl", "idl"), ("*.arxml", "autosar"), ("*.xml", "autosar"), ("*.proto", "protobuf"), ("*.yaml", "openapi"), ("*.json", "openapi")]:
+        other_files = sorted(glob.glob(os.path.join(search_dir, ext_pat)))
+        if other_files:
+            return fmt, other_files
+
+    return "unknown", []
+
+
 def ingest_schema(
-    schema_path: str,
+    schema_path: Optional[str] = None,
     format_type: str = "auto",
     output_path: str = ".pipeline/schema.sysml",
     digest_path: str = ".pipeline/schema-digest.json",
@@ -189,6 +241,57 @@ def ingest_schema(
     
     /// Realises: [SpecName/ingest_schema]
     """
+    # Auto-discovery if schema_path is None or points to a directory
+    if schema_path is None or os.path.isdir(schema_path):
+        disc_fmt, disc_files = discover_schema_targets(schema_path)
+        if not disc_files:
+            target_desc = schema_path if schema_path else "schema/ or schema/extracted/"
+            raise FileNotFoundError(f"No supported schema files found in {target_desc}")
+
+        if disc_fmt == "markdown" and (len(disc_files) > 1 or os.path.isdir(schema_path or "")):
+            # Multi-file or directory markdown translation
+            hasher = hashlib.sha256()
+            total_lines = 0
+            for fpath in disc_files:
+                with open(fpath, "rb") as f:
+                    b = f.read()
+                    hasher.update(b)
+                    total_lines += len(b.decode("utf-8", errors="replace").splitlines())
+            sha256_hash = hasher.hexdigest()
+
+            def_name = os.path.basename(schema_path.rstrip(os.sep)) if (schema_path and os.path.isdir(schema_path)) else "OEM_System_Model"
+            translator = MarkdownTranslator()
+            pkg = translator.translate_files(disc_files, default_name=def_name)
+
+            pkg = filter_ast_to_target_scope(
+                pkg,
+                allowed_parts=allowed_parts,
+                negative_invariants=negative_invariants,
+            )
+
+            sysml_text = pkg.to_sysml()
+            os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+            with open(output_path, "w", encoding="utf-8") as f:
+                f.write(sysml_text)
+
+            node_counts = pkg.node_counts()
+            schema_nodes = pkg.get_all_node_names()
+            digest_data = {
+                "sha256": sha256_hash,
+                "total_lines": total_lines,
+                "node_counts": node_counts,
+                "schema_nodes": schema_nodes
+            }
+            os.makedirs(os.path.dirname(os.path.abspath(digest_path)), exist_ok=True)
+            with open(digest_path, "w", encoding="utf-8") as f:
+                json.dump(digest_data, f, indent=2)
+
+            print(f"[SysML v2 Ingestion] Successfully ingested {len(disc_files)} markdown files from {schema_path or 'schema/'} -> {output_path}")
+            print(f"[SysML v2 Ingestion] Schema digest generated at {digest_path}")
+            return pkg, digest_data
+        else:
+            schema_path = disc_files[0]
+
     if not os.path.exists(schema_path):
         raise FileNotFoundError(f"Schema file not found: {schema_path}")
 
@@ -221,9 +324,12 @@ def ingest_schema(
     elif fmt in ("openapi", "json", "yaml"):
         translator = OpenAPITranslator()
         pkg = translator.translate(content_text, default_name=file_basename)
+    elif fmt in ("markdown", "md", "bom"):
+        translator = MarkdownTranslator()
+        pkg = translator.translate(content_text, default_name=file_basename)
     else:
         raise ValueError(
-            f"Unsupported schema format '{format_type}' for '{schema_path}'. Supported formats: .sysml, .idl, .arxml/.xml, .proto, .json/.yaml/.yml."
+            f"Unsupported schema format '{format_type}' for '{schema_path}'. Supported formats: .sysml, .idl, .arxml/.xml, .proto, .json/.yaml/.yml, markdown."
         )
 
     # Apply AST-scoped structural filtering and negative invariant projection
@@ -265,8 +371,8 @@ def ingest_schema(
 def main():
     parser = argparse.ArgumentParser(description="SysML v2 Universal Ingestion Engine CLI")
     parser.add_argument("schema_pos", nargs="?", default=None, help="Path to input schema file (positional)")
-    parser.add_argument("--schema", required=False, default=None, help="Path to input schema file")
-    parser.add_argument("--format", default="auto", help="Schema format (sysml, idl, autosar, protobuf, openapi, auto)")
+    parser.add_argument("--schema", required=False, default=None, help="Path to input schema file or directory")
+    parser.add_argument("--format", default="auto", help="Schema format (sysml, idl, autosar, protobuf, openapi, markdown, auto)")
     parser.add_argument("--out", default=".pipeline/schema.sysml", help="Path to output .sysml file")
     parser.add_argument("--digest", default=".pipeline/schema-digest.json", help="Path to output digest JSON")
     parser.add_argument("--allowed-parts", nargs="*", default=None, help="List of allowed part def names to filter AST")
@@ -275,7 +381,11 @@ def main():
 
     schema_path = args.schema or args.schema_pos
     if not schema_path:
-        parser.error("Must specify a schema file via positional argument or --schema")
+        disc_fmt, disc_files = discover_schema_targets(None)
+        if disc_files:
+            schema_path = disc_files[0] if len(disc_files) == 1 else "schema"
+        else:
+            parser.error("Must specify a schema file via positional argument or --schema, or place schemas in schema/ or schema/extracted/")
 
     ingest_schema(
         schema_path=schema_path,
