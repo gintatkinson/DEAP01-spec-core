@@ -170,52 +170,32 @@ The platform requires **Python 3.12+**, the configured tracker CLI (or native RE
 
 ### 5.2 Onboarding Quick-Start Guide (Turnkey Multi-Provider Installer)
 
-Run the turnkey automated installer script directly from your project root directory targeting your preferred VCS / issue tracker provider:
+Run the turnkey automated installer script to install the safety-critical engineering pipeline into your downstream project. The installer automatically detects your git remote, issue tracker provider (GitHub or GitLab), and organization or group.
 
-#### Turnkey Installation (Zero Arguments -- Out-of-the-Box Auto-Detection)
-Run directly inside an initialized downstream repository (such as `uav-010`):
+#### Primary Installation (from Sibling Checkout)
+
+When initializing a new downstream repository alongside a local `DEAP01-spec-core` checkout, run the installer from the root of your downstream repository:
+
 ```bash
-# Auto-detects target directory ('.'), git remote, platform, and group/org
+bash ../DEAP01-spec-core/scripts/install_pipeline.sh
+```
+
+#### Updating an Existing Project
+
+Inside an already-installed downstream repository, update the pipeline and governance rules at any time by running:
+
+```bash
 bash scripts/install_pipeline.sh
 ```
 
-Or when bootstrapping from a sibling checkout of `DEAP01-spec-core`:
+#### Remote Bootstrap (Zero Local Checkout)
+
+For machines or CI environments without a pre-existing local `DEAP01-spec-core` checkout, run the single-command bootstrap from your downstream project root:
+
 ```bash
-# Install from sibling spec core compiler into current project root ('.')
-bash ../DEAP01-spec-core/scripts/install_pipeline.sh .
-```
-
-#### Provider Options (Zero-Edit Copy-Paste)
-
-##### Option 1: GitHub Installation
-```bash
-# Turnkey install for GitHub-backed downstream repositories (target defaults to '.')
-bash scripts/install_pipeline.sh -p github
-```
-
-##### Option 2: GitLab Installation (SaaS, Self-Hosted, or Air-Gapped)
-```bash
-# Turnkey install for GitLab-backed downstream repositories (auto-detects group from git remote)
-bash scripts/install_pipeline.sh -p gitlab
-
-# For custom self-hosted or air-gapped GitLab instances:
-bash scripts/install_pipeline.sh -p gitlab --gitlab-url https://gitlab.internal.defense.gov
-```
-
-#### Single-Command Remote Bootstrap (from Upstream Compiler)
-```bash
-# Turnkey Remote Bootstrap (auto-detects platform and group from git remote in current directory)
 git clone https://github.com/gintatkinson/DEAP01-spec-core.git /tmp/deap_installer && bash /tmp/deap_installer/scripts/install_pipeline.sh . && rm -rf /tmp/deap_installer
-
-# GitHub Remote Bootstrap
-git clone https://github.com/gintatkinson/DEAP01-spec-core.git /tmp/deap_installer && bash /tmp/deap_installer/scripts/install_pipeline.sh . -p github && rm -rf /tmp/deap_installer
-
-# GitLab SaaS Remote Bootstrap (auto-detects group from git remote)
-git clone https://github.com/gintatkinson/DEAP01-spec-core.git /tmp/deap_installer && bash /tmp/deap_installer/scripts/install_pipeline.sh . -p gitlab && rm -rf /tmp/deap_installer
-
-# GitLab Self-Hosted / Air-Gapped Remote Bootstrap
-git clone https://github.com/gintatkinson/DEAP01-spec-core.git /tmp/deap_installer && bash /tmp/deap_installer/scripts/install_pipeline.sh . -p gitlab --gitlab-url https://gitlab.internal.defense.gov && rm -rf /tmp/deap_installer
 ```
+
 
 ### Supported Cyber-Physical Domain Exemplars (Pure Schema-Driven)
 The upstream compiler compiles AST models across six canonical domains based purely on input schemas:
