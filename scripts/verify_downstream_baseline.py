@@ -3125,6 +3125,22 @@ def check_conops_and_mission_intent_completeness(repo_root=None):
     if repo_root is None:
         repo_root = os.getcwd()
 
+    upstream_marker = os.path.join(repo_root, ".pipeline", "upstream")
+    conops_dir = os.path.join(repo_root, "docs", "conops")
+    if not os.path.isdir(upstream_marker):
+        if not os.path.isdir(conops_dir):
+            print("Success: Check 26 verified (Downstream repository detected -- docs/conops/ directory not present).")
+            return
+        conops_files = []
+        for root, dirs, files in os.walk(conops_dir):
+            dirs[:] = [d for d in dirs if d not in EXCLUDED_DIRS and d not in ("defects", "audits", "decisions")]
+            for f in files:
+                if f.endswith(".md") and f != "README.md" and "TEMPLATE" not in f.upper():
+                    conops_files.append(os.path.join(root, f))
+        if not conops_files:
+            print("Success: Check 26 verified (Downstream repository detected -- ConOps & Mission Intent pending or clean).")
+            return
+
     conops_cls, mission_cls, repo_cls = _load_conops_and_mission_intent_validators()
     if conops_cls is None or mission_cls is None or repo_cls is None:
         print("ERROR: Check 26 failed: Conops/MissionIntent validators unavailable.", file=sys.stderr)
