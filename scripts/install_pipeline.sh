@@ -322,14 +322,13 @@ fi
 
 # Determine TARGET_ROLE if not explicitly specified via --role
 if [ -z "$TARGET_ROLE" ]; then
-  if [[ "$DIR_BASE" == DEAP-* ]] || \
-     [[ "$REMOTE_URL" == *DEAP-* ]] || \
-     [[ "$DETECTED_PROJECT" == DEAP-* ]] || \
-     [[ "$DOMAIN_NAME" == DEAP-* ]] || \
-     [ -n "$DOMAIN_URL" ]; then
-    TARGET_ROLE="DOMAIN_DISTRIBUTION_TEMPLATE"
-  elif [[ "$DIR_BASE" == uav-* ]] || [[ "$DETECTED_PROJECT" == uav-* ]]; then
+  if [[ "$DIR_BASE" == uav-* ]] || [[ "$DETECTED_PROJECT" == uav-* ]]; then
     TARGET_ROLE="DOWNSTREAM_CUSTOMER_PROJECT"
+  elif [[ "$DIR_BASE" == DEAP-* ]] || \
+       [[ "$REMOTE_URL" == *DEAP-* ]] || \
+       [[ "$DETECTED_PROJECT" == DEAP-* ]] || \
+       [[ "$DOMAIN_NAME" == DEAP-* ]]; then
+    TARGET_ROLE="DOMAIN_DISTRIBUTION_TEMPLATE"
   elif [ -f "$TARGET_DIR/.pipeline/lineage.json" ]; then
     META_ROLE=$(python3 -c "import json; data=json.load(open('$TARGET_DIR/.pipeline/lineage.json')); print(data.get('role') or data.get('classification') or '')" 2>/dev/null || true)
     if [ "$META_ROLE" = "DOMAIN_DISTRIBUTION_TEMPLATE" ] || [ "$META_ROLE" = "DOWNSTREAM_CUSTOMER_PROJECT" ]; then

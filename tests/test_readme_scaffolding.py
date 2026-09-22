@@ -403,6 +403,33 @@ class TestCustomerWorkspaceScaffolding(unittest.TestCase):
             self.assertIn("python3 skills/spec-orchestrator/scripts/sysmlv2_ingest.py", content)
             self.assertIn("bash scripts/install_pipeline.sh .", content)
 
+    def test_customer_workspace_scaffolding_auto_detection_with_domain_url(self):
+        """Runs install_pipeline.sh on uav-* with --domain-url and asserts DOWNSTREAM_CUSTOMER_PROJECT with no circular clone."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            cust_dir = os.path.join(temp_dir, "uav-011")
+            os.makedirs(cust_dir)
+
+            proc = self._run_installer(
+                cust_dir,
+                "--domain-url", "https://github.com/gintatkinson/DEAP-uas-infrastructure-safety.git"
+            )
+            self.assertEqual(proc.returncode, 0, f"Installer failed. stderr: {proc.stderr}")
+            self.assertIn("Target repository role: DOWNSTREAM_CUSTOMER_PROJECT", proc.stdout)
+
+            readme_path = os.path.join(cust_dir, "README.md")
+            self.assertTrue(os.path.isfile(readme_path), "README.md was not generated")
+            with open(readme_path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            self.assertIn("> **Repository Role:** `DOWNSTREAM_CUSTOMER_PROJECT`", content)
+            self.assertIsNone(
+                re.search(r'git clone.*\.tmp-pipeline', content),
+                "Found forbidden circular clone command in customer workspace README"
+            )
+            self.assertIn("python3 scripts/verify_downstream_baseline.py --no-domain", content)
+            self.assertIn("python3 skills/spec-orchestrator/scripts/sysmlv2_ingest.py", content)
+            self.assertIn("bash scripts/install_pipeline.sh .", content)
+
     def test_customer_workspace_scaffolding_no_circular_clone(self):
         """Verifies that no circular clone command exists in customer workspace README."""
         with tempfile.TemporaryDirectory() as temp_dir:
