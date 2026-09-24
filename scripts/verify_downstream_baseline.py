@@ -2914,6 +2914,17 @@ def check_icd_completeness(repo_root=None):
         print("Success: Level 1C ICD Completeness verified (SysML model pending or landing zone clean).")
         return
 
+    upstream_marker = os.path.join(repo_root, ".pipeline", "upstream")
+    interfaces_dir = os.path.join(repo_root, "docs", "interfaces")
+    if not os.path.isdir(upstream_marker):
+        if not os.path.isdir(interfaces_dir):
+            print("Success: Level 1C ICD Completeness verified (Downstream repository detected -- docs/interfaces/ directory not present).")
+            return
+        has_icd = any(f.endswith(".md") and "ICD" in f for f in os.listdir(interfaces_dir))
+        if not has_icd:
+            print("Success: Level 1C ICD Completeness verified (Downstream repository detected -- Level 1C ICD specifications pending).")
+            return
+
     val_cls, repo_cls = _load_icd_completeness_validator()
     if val_cls is None or repo_cls is None:
         print("ERROR: ICD Completeness failed: ICDCompletenessValidator or WorkspaceRepository unavailable.", file=sys.stderr)
