@@ -757,6 +757,96 @@ class TestActiveGovernanceRuleBundlingAndPromptCatalog(unittest.TestCase):
 
             self.assertEqual(content_first, content_second, "In-place execution must produce identical rule bundle")
 
+    def test_readme_upgrade_detection_missing_active_rules_bundle(self):
+        """Verifies in-place upgrade re-scaffolds README when ACTIVE_RULES_BUNDLE.md is missing."""
+        for role, dir_name in [("domain-template", "DEAP-uas-test"), ("customer-project", "uav-test")]:
+            with self.subTest(role=role):
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    proj_dir = os.path.join(temp_dir, dir_name)
+                    os.makedirs(proj_dir)
+                    role_tag = "DOMAIN_DISTRIBUTION_TEMPLATE" if role == "domain-template" else "DOWNSTREAM_CUSTOMER_PROJECT"
+                    extra_header = "Customer Project Onboarding" if role == "domain-template" else "Project Lifecycle & Tooling Maintenance"
+                    # Seed legacy README with catalog but without ACTIVE_RULES_BUNDLE.md
+                    legacy_readme = (
+                        f"# {dir_name} -- Downstream Cyber-Physical Infrastructure Safety Project\n\n"
+                        f"> **Repository Role:** `{role_tag}`\n\n"
+                        f"## 1. System Overview\n\nOverview\n\n"
+                        f"## 2. Pipeline Structure & Governance\n\n- `rules/`\n\n"
+                        f"## 3. {extra_header}\n\nInfo\n\n"
+                        f"## 4. Multi-Pipeline Operator Prompt Catalog & Autonomous Execution Workflows\n\nPrompts\n"
+                    )
+                    readme_path = os.path.join(proj_dir, "README.md")
+                    with open(readme_path, "w", encoding="utf-8") as f:
+                        f.write(legacy_readme)
+
+                    proc = self._run_installer(proj_dir, "--role", role)
+                    self.assertEqual(proc.returncode, 0, f"Installer failed for {role}. stderr: {proc.stderr}")
+
+                    with open(readme_path, "r", encoding="utf-8") as f:
+                        upgraded = f.read()
+
+                    self.assertIn("ACTIVE_RULES_BUNDLE.md", upgraded, f"README for {role} was not upgraded to include ACTIVE_RULES_BUNDLE.md")
+
+    def test_readme_upgrade_detection_legacy_dual_track_rule(self):
+        """Verifies in-place upgrade re-scaffolds README when legacy rules/dual-track-mbd-verification.md is present."""
+        for role, dir_name in [("domain-template", "DEAP-uas-test"), ("customer-project", "uav-test")]:
+            with self.subTest(role=role):
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    proj_dir = os.path.join(temp_dir, dir_name)
+                    os.makedirs(proj_dir)
+                    role_tag = "DOMAIN_DISTRIBUTION_TEMPLATE" if role == "domain-template" else "DOWNSTREAM_CUSTOMER_PROJECT"
+                    extra_header = "Customer Project Onboarding" if role == "domain-template" else "Project Lifecycle & Tooling Maintenance"
+                    # Seed README that has ACTIVE_RULES_BUNDLE.md but also legacy isolated rule citation
+                    legacy_readme = (
+                        f"# {dir_name} -- Downstream Cyber-Physical Infrastructure Safety Project\n\n"
+                        f"> **Repository Role:** `{role_tag}`\n\n"
+                        f"## 1. System Overview\n\nOverview\n\n"
+                        f"## 2. Pipeline Structure & Governance\n\n- `.pipeline/`: ACTIVE_RULES_BUNDLE.md\n\n"
+                        f"## 3. {extra_header}\n\nInfo\n\n"
+                        f"## 4. Multi-Pipeline Operator Prompt Catalog & Autonomous Execution Workflows\n\n"
+                        f"Legacy prompt referencing rules/dual-track-mbd-verification.md\n"
+                    )
+                    readme_path = os.path.join(proj_dir, "README.md")
+                    with open(readme_path, "w", encoding="utf-8") as f:
+                        f.write(legacy_readme)
+
+                    proc = self._run_installer(proj_dir, "--role", role)
+                    self.assertEqual(proc.returncode, 0, f"Installer failed for {role}. stderr: {proc.stderr}")
+
+                    with open(readme_path, "r", encoding="utf-8") as f:
+                        upgraded = f.read()
+
+                    self.assertNotIn("rules/dual-track-mbd-verification.md", upgraded, f"Legacy rule reference not purged from {role} README")
+                    self.assertIn("ACTIVE_RULES_BUNDLE.md", upgraded)
+
+    def test_customer_readme_title_deduplication(self):
+        """Verifies that installer strips duplicate -- Downstream Cyber-Physical Infrastructure Safety Project suffix."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            proj_dir = os.path.join(temp_dir, "uav-011")
+            os.makedirs(proj_dir)
+
+            # Seed README with duplicated title
+            duplicated_title = "# uav-011 -- Downstream Cyber-Physical Infrastructure Safety Project -- Downstream Cyber-Physical Infrastructure Safety Project\n\n"
+            body = (
+                "> **Repository Role:** `DOWNSTREAM_CUSTOMER_PROJECT`\n\n"
+                "## 1. System Overview\n\nOverview\n\n"
+                "## 2. Pipeline Structure & Governance\n\n- `.pipeline/`: ACTIVE_RULES_BUNDLE.md\n\n"
+                "## 3. Project Lifecycle & Tooling Maintenance\n\nInfo\n\n"
+                "## 4. Multi-Pipeline Operator Prompt Catalog & Autonomous Execution Workflows\n\nPrompts\n"
+            )
+            readme_path = os.path.join(proj_dir, "README.md")
+            with open(readme_path, "w", encoding="utf-8") as f:
+                f.write(duplicated_title + body)
+
+            proc = self._run_installer(proj_dir, "--role", "customer-project")
+            self.assertEqual(proc.returncode, 0, f"Installer failed. stderr: {proc.stderr}")
+
+            with open(readme_path, "r", encoding="utf-8") as f:
+                first_line = f.readline().strip()
+
+            expected_title = "# uav-011 -- Downstream Cyber-Physical Infrastructure Safety Project"
+            self.assertEqual(first_line, expected_title, f"Title was not deduplicated. Got: {first_line}")
+
 
 if __name__ == "__main__":
     unittest.main()

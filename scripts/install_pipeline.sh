@@ -635,13 +635,19 @@ elif ! grep -qE "Multi-Pipeline Operator Prompt Catalog|Operator Prompt Catalog"
   SHOULD_SCAFFOLD_README=true
 elif [ "$TARGET_ROLE" = "DOMAIN_DISTRIBUTION_TEMPLATE" ]; then
   if ! grep -qE "Customer Project Onboarding|\.tmp-pipeline" "$TARGET_DIR/README.md" || \
-     ! grep -qE "DOMAIN_DISTRIBUTION_TEMPLATE" "$TARGET_DIR/README.md"; then
+     ! grep -qE "DOMAIN_DISTRIBUTION_TEMPLATE" "$TARGET_DIR/README.md" || \
+     ! grep -q "ACTIVE_RULES_BUNDLE.md" "$TARGET_DIR/README.md" || \
+     grep -q "rules/dual-track-mbd-verification.md" "$TARGET_DIR/README.md" || \
+     grep -qE " -- Downstream.* -- Downstream" "$TARGET_DIR/README.md"; then
     SHOULD_SCAFFOLD_README=true
   fi
 elif [ "$TARGET_ROLE" = "DOWNSTREAM_CUSTOMER_PROJECT" ]; then
   if grep -qE "git clone.*\.tmp-pipeline" "$TARGET_DIR/README.md" || \
      ! grep -qE "DOWNSTREAM_CUSTOMER_PROJECT" "$TARGET_DIR/README.md" || \
-     ! grep -qE "Project Lifecycle & Tooling Maintenance" "$TARGET_DIR/README.md"; then
+     ! grep -qE "Project Lifecycle & Tooling Maintenance" "$TARGET_DIR/README.md" || \
+     ! grep -q "ACTIVE_RULES_BUNDLE.md" "$TARGET_DIR/README.md" || \
+     grep -q "rules/dual-track-mbd-verification.md" "$TARGET_DIR/README.md" || \
+     grep -qE " -- Downstream.* -- Downstream" "$TARGET_DIR/README.md"; then
     SHOULD_SCAFFOLD_README=true
   fi
 fi
@@ -662,8 +668,9 @@ if [ "$SHOULD_SCAFFOLD_README" = true ]; then
   # 1. Check existing README.md before overwriting (e.g. GitLab initial commit: "# <project_name>\n\nGetting started with GitLab...")
   if [ -z "$DOMAIN_PROJECT_NAME" ] && [ -f "$TARGET_DIR/README.md" ]; then
     CANDIDATE_TITLE=$(grep -E '^# ' "$TARGET_DIR/README.md" | head -n 1 | sed 's/^# *//' | tr -d '\r\n')
-    if ! echo "$CANDIDATE_TITLE" | grep -qE "Getting started with GitLab|Downstream Cyber-Physical Infrastructure Safety Project|Downstream Safety-Critical Engineering Project"; then
-      DOMAIN_PROJECT_NAME="$CANDIDATE_TITLE"
+    CLEAN_CANDIDATE=$(echo "$CANDIDATE_TITLE" | sed -E 's/( -- Downstream Cyber-Physical Infrastructure Safety Project)+$//; s/( -- Downstream Safety-Critical Engineering Project)+$//')
+    if ! echo "$CLEAN_CANDIDATE" | grep -qE "Getting started with GitLab|Downstream Cyber-Physical Infrastructure Safety Project|Downstream Safety-Critical Engineering Project" && [ -n "$CLEAN_CANDIDATE" ]; then
+      DOMAIN_PROJECT_NAME="$CLEAN_CANDIDATE"
     fi
   fi
 
@@ -763,7 +770,10 @@ if [ "$SHOULD_SCAFFOLD_README" = true ]; then
     DOMAIN_REGULATORY="\`JARUS SORA v2.5 (SAIL I–VI)\` | \`ASTM F3269-17 RTA\` | \`ASTM F3411-22a Remote ID\` | \`RTCA DO-365B DAA\`"
   fi
 
-  if [ "$DOMAIN_PROJECT_NAME" = "Downstream Cyber-Physical Infrastructure Safety Project" ]; then
+  # Strip any redundant trailing suffix from DOMAIN_PROJECT_NAME to avoid duplicate title suffixes
+  DOMAIN_PROJECT_NAME=$(echo "$DOMAIN_PROJECT_NAME" | sed -E 's/( -- Downstream Cyber-Physical Infrastructure Safety Project)+$//; s/( -- Downstream Safety-Critical Engineering Project)+$//')
+
+  if [ "$DOMAIN_PROJECT_NAME" = "Downstream Cyber-Physical Infrastructure Safety Project" ] || [ -z "$DOMAIN_PROJECT_NAME" ]; then
     README_TITLE="# Downstream Cyber-Physical Infrastructure Safety Project"
   else
     README_TITLE="# ${DOMAIN_PROJECT_NAME} -- Downstream Cyber-Physical Infrastructure Safety Project"
