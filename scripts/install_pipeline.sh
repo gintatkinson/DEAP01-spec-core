@@ -422,6 +422,57 @@ mkdir -p "$TARGET_DIR/.pipeline/contracts" "$TARGET_DIR/.pipeline/domain_specs" 
 chmod -R u+w "$TARGET_DIR/.pipeline" 2>/dev/null || true
 chmod +x "$TARGET_DIR"/scripts/*.sh "$TARGET_DIR"/scripts/*.py 2>/dev/null || true
 
+# Compile consolidated active governance rules manifest into .pipeline/ACTIVE_RULES_BUNDLE.md
+echo "Compiling active governance rules into .pipeline/ACTIVE_RULES_BUNDLE.md..."
+BUNDLE_FILE="$TARGET_DIR/.pipeline/ACTIVE_RULES_BUNDLE.md"
+mkdir -p "$TARGET_DIR/.pipeline"
+chmod u+w "$BUNDLE_FILE" 2>/dev/null || true
+
+cat << 'EOF' > "$BUNDLE_FILE"
+# ACTIVE RULES BUNDLE — Consolidated Governance Manifest
+
+> **Notice:** This consolidated governance manifest is compiled automatically at installation time by `scripts/install_pipeline.sh`.
+> It aggregates 100% of the active governance rules from `rules/` into a single, unified source of truth.
+> Autonomous agents (Antigravity, Claude Code, Gemini CLI, Cursor) MUST execute `view_file` on this file to ingest the full suite of active governance rules in a single read before executing any implementation or orchestration tasks.
+
+## Table of Contents
+
+EOF
+
+RULES_SRC="$INSTALLER_ROOT/rules"
+if [ ! -d "$RULES_SRC" ] && [ -d "$TARGET_DIR/rules" ]; then
+  RULES_SRC="$TARGET_DIR/rules"
+fi
+
+for rule_file in "$RULES_SRC"/*.md; do
+  [ -f "$rule_file" ] || continue
+  rule_base=$(basename "$rule_file")
+  rule_slug=$(echo "$rule_base" | tr '[:upper:]' '[:lower:]' | sed -e 's/[^a-z0-9]/-/g' -e 's/--*/-/g' -e 's/^-//' -e 's/-$//')
+  echo "- [${rule_base}](#rule-${rule_slug})" >> "$BUNDLE_FILE"
+done
+
+echo "" >> "$BUNDLE_FILE"
+echo "---" >> "$BUNDLE_FILE"
+echo "" >> "$BUNDLE_FILE"
+
+for rule_file in "$RULES_SRC"/*.md; do
+  [ -f "$rule_file" ] || continue
+  rule_base=$(basename "$rule_file")
+  rule_slug=$(echo "$rule_base" | tr '[:upper:]' '[:lower:]' | sed -e 's/[^a-z0-9]/-/g' -e 's/--*/-/g' -e 's/^-//' -e 's/-$//')
+  rule_stem="${rule_base%.md}"
+  rule_stem_slug=$(echo "$rule_stem" | tr '[:upper:]' '[:lower:]' | sed -e 's/[^a-z0-9]/-/g' -e 's/--*/-/g' -e 's/^-//' -e 's/-$//')
+  echo "<a id=\"${rule_slug}\"></a>" >> "$BUNDLE_FILE"
+  echo "<a id=\"rule-${rule_slug}\"></a>" >> "$BUNDLE_FILE"
+  echo "<a id=\"${rule_stem_slug}\"></a>" >> "$BUNDLE_FILE"
+  echo "<a id=\"rule-${rule_stem_slug}\"></a>" >> "$BUNDLE_FILE"
+  echo "## Rule: ${rule_base}" >> "$BUNDLE_FILE"
+  echo "" >> "$BUNDLE_FILE"
+  cat "$rule_file" >> "$BUNDLE_FILE"
+  echo "" >> "$BUNDLE_FILE"
+  echo "---" >> "$BUNDLE_FILE"
+  echo "" >> "$BUNDLE_FILE"
+done
+
 # Apply provider configurations if specified
 if [ "$PROVIDER" = "gitlab" ] || [ -n "$GITLAB_GROUP" ] || [ "$GITLAB_URL" != "https://gitlab.com" ]; then
   chmod u+w "$TARGET_DIR/.gitlab-ci.yml" 2>/dev/null || true
@@ -770,8 +821,8 @@ This platform explicitly declares **MATLAB / Simulink / Stateflow / Embedded Cod
 
 - \`.agents/\` & \`AGENTS.md\`: Agent behavior rules, role boundaries, and subagent dispatch protocols.
 - \`CLAUDE.md\`: Claude Code guidelines and verification gates.
-- \`.pipeline/\`: Constitution (\`constitution.md\`), domain specifications, and execution profiles (\`profiles/ros2_cpp.md\`, \`profiles/px4_module.md\`).
-- \`rules/\` & \`skills/\`: Platform engineering rules and agent workflow skills (including SysML v2 SSOT completeness in \`rules/sysml-ssot-completeness.md\`).
+- \`.pipeline/\`: Constitution (\`constitution.md\`), active governance rules bundle (\`ACTIVE_RULES_BUNDLE.md\`), domain specifications, and execution profiles (\`profiles/ros2_cpp.md\`, \`profiles/px4_module.md\`).
+- \`rules/\` & \`skills/\`: Platform engineering rules and agent workflow skills.
 - \`schema/\`: Contract definitions and SysML v2 schemas.
 - \`tests/\`: Automated baseline verification and safety compliance tests.
 
@@ -806,7 +857,7 @@ Immediately following installation, any AI agent (Antigravity, Claude Code, Gemi
    - If absent and repository name starts with \`DEAP-\` -> **Domain Distribution Template Mode**: Clean landing zones must be maintained.
 1. **Read Governance Constitution**: Execute \`view_file\` on \`.pipeline/constitution.md\` to ingest the platform-independent functional governance layer and zero-mocking persistence mandates.
 2. **Load Project Skills**: Execute \`view_file\` on \`skills/feature-driven-implementation/SKILL.md\` (and any active skills under \`skills/\` or \`.agents/skills/\`) to initialize feature-driven implementation protocols and review gates.
-3. **Load Governance Rules**: Ingest \`AGENTS.md\` and \`rules/\` to enforce project-scoped agentic rules, context-isolated subagent dispatch loops, and role boundary locks.
+3. **Load Governance Rules**: Execute \`view_file\` on \`.pipeline/ACTIVE_RULES_BUNDLE.md\` to ingest the complete, consolidated suite of active governance rules in a single read (covering dual-track MBD, SysML SSOT completeness, role boundary locks, and TDD mandates).
 4. **Load Platform Profile**: Read the target platform execution profile (\`.pipeline/profiles/flutter.md\`, \`.pipeline/profiles/react.md\`, \`.pipeline/profiles/ros2_cpp.md\`, or \`.pipeline/profiles/px4_module.md\`) to establish platform-specific build, test, and lifecycle constraints.
 5. **Bootstrap Tracker Labels & Verify Baseline**: Verify that repository issue tracker labels and baseline conformance pass by running \`python3 scripts/verify_downstream_baseline.py --no-domain\`.
 
@@ -841,8 +892,8 @@ This platform explicitly declares **MATLAB / Simulink / Stateflow / Embedded Cod
 
 - \`.agents/\` & \`AGENTS.md\`: Agent behavior rules, role boundaries, and subagent dispatch protocols.
 - \`CLAUDE.md\`: Claude Code guidelines and verification gates.
-- \`.pipeline/\`: Constitution (\`constitution.md\`), domain specifications, and execution profiles (\`profiles/ros2_cpp.md\`, \`profiles/px4_module.md\`).
-- \`rules/\` & \`skills/\`: Platform engineering rules and agent workflow skills (including SysML v2 SSOT completeness in \`rules/sysml-ssot-completeness.md\`).
+- \`.pipeline/\`: Constitution (\`constitution.md\`), active governance rules bundle (\`ACTIVE_RULES_BUNDLE.md\`), domain specifications, and execution profiles (\`profiles/ros2_cpp.md\`, \`profiles/px4_module.md\`).
+- \`rules/\` & \`skills/\`: Platform engineering rules and agent workflow skills.
 - \`schema/\`: Contract definitions and SysML v2 schemas.
 - \`tests/\`: Automated baseline verification and safety compliance tests.
 
@@ -887,7 +938,7 @@ Immediately following installation, any AI agent (Antigravity, Claude Code, Gemi
    - If absent -> **Downstream Customer Project Mode**: Authorized for customer feature implementation and domain codebase delivery.
 1. **Read Governance Constitution**: Execute \`view_file\` on \`.pipeline/constitution.md\` to ingest the platform-independent functional governance layer and zero-mocking persistence mandates.
 2. **Load Project Skills**: Execute \`view_file\` on \`skills/feature-driven-implementation/SKILL.md\` (and any active skills under \`skills/\` or \`.agents/skills/\`) to initialize feature-driven implementation protocols and review gates.
-3. **Load Governance Rules**: Ingest \`AGENTS.md\` and \`rules/\` to enforce project-scoped agentic rules, context-isolated subagent dispatch loops, and role boundary locks.
+3. **Load Governance Rules**: Execute \`view_file\` on \`.pipeline/ACTIVE_RULES_BUNDLE.md\` to ingest the complete, consolidated suite of active governance rules in a single read (covering dual-track MBD, SysML SSOT completeness, role boundary locks, and TDD mandates).
 4. **Load Platform Profile**: Read the target platform execution profile (\`.pipeline/profiles/flutter.md\`, \`.pipeline/profiles/react.md\`, \`.pipeline/profiles/ros2_cpp.md\`, or \`.pipeline/profiles/px4_module.md\`) to establish platform-specific build, test, and lifecycle constraints.
 5. **Bootstrap Tracker Labels & Verify Baseline**: Verify that repository issue tracker labels and baseline conformance pass by running \`python3 scripts/verify_downstream_baseline.py --no-domain\`.
 
@@ -1291,7 +1342,7 @@ Primary Commercial Toolchain Integration Context:
 This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
 
 Governance Preamble & Execution Directive:
-Adopt the feature-driven-implementation skill by reading `.pipeline/constitution.md` and the target platform profile (`.pipeline/profiles/<target-platform>.md`, e.g. `ros2_cpp.md`, `px4_module.md`, or `flutter.md`).
+Adopt the feature-driven-implementation skill by reading `.pipeline/constitution.md`, `.pipeline/ACTIVE_RULES_BUNDLE.md`, and the target platform profile (`.pipeline/profiles/<target-platform>.md`, e.g. `ros2_cpp.md`, `px4_module.md`, or `flutter.md`).
 
 Implement prioritized Feature [Issue Number, e.g. #1] adhering strictly to the 3-Layer Definition of Done (DoD):
 1. Layer 1: Domain Model / Safety Statechart -- Platform-independent domain entities, transition guards, mathematical invariants, and safety statecharts.
@@ -1323,7 +1374,7 @@ Primary Commercial Toolchain Integration Context:
 This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
 
 Governance Preamble & Execution Directive:
-Adopt the feature-driven-implementation skill by reading `.pipeline/constitution.md`, `rules/dual-track-mbd-verification.md`, and `docs/architecture/blueprints/SYSML_SSOT_BIDIRECTIONAL_SYNCHRONIZATION_ARCHITECTURE.md`.
+Adopt the feature-driven-implementation skill by reading `.pipeline/constitution.md`, `.pipeline/ACTIVE_RULES_BUNDLE.md`, and `docs/architecture/blueprints/SYSML_SSOT_BIDIRECTIONAL_SYNCHRONIZATION_ARCHITECTURE.md`.
 
 Execute Two-Path (Dual-Track) Model-Based Design (MBD) simulation synthesis and digital twin verification for Feature [Issue Number, e.g. #1]:
 

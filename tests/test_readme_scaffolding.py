@@ -31,6 +31,11 @@ Covers verification of:
    - Validates each with 'bash -n' via subprocess.
    - Verifies zero unescaped parentheses in '#' comments inside bash fences.
    - Verifies zero unquoted angle brackets ('<...>') in executable bash commands.
+5. TestActiveGovernanceRuleBundlingAndPromptCatalog:
+   - Verifies that install_pipeline.sh compiles .pipeline/ACTIVE_RULES_BUNDLE.md across all tiers.
+   - Verifies 100% rule inclusion and valid TOC.
+   - Verifies operator prompt catalogs and README initialization mandate reading ACTIVE_RULES_BUNDLE.md.
+   - Verifies zero prompt templates reference isolated rule subsets or bare rules/ directory reads.
 
 Primary Commercial Toolchain Integration Context:
   MATLAB / Simulink / Stateflow / Embedded Coder (Model-Based Design, Control Law Synthesis,
@@ -593,6 +598,164 @@ class TestShellCodeFenceHygiene(unittest.TestCase):
                 content = f.read()
 
             self._assert_fence_hygiene(content, "scaffolded Customer Workspace README.md")
+
+
+class TestActiveGovernanceRuleBundlingAndPromptCatalog(unittest.TestCase):
+    """
+    Verifies that install_pipeline.sh automatically compiles active governance rules
+    into .pipeline/ACTIVE_RULES_BUNDLE.md across all tiers, and enforces that generated
+    README operator prompts and prompt catalogs mandate reading the consolidated bundle
+    without pointing to isolated rule subsets or bare rules/ directory reads (Issue #368).
+    """
+
+    def setUp(self):
+        self.assertTrue(os.path.isfile(INSTALL_SCRIPT), f"Installer not found at {INSTALL_SCRIPT}")
+        self.assertTrue(os.access(INSTALL_SCRIPT, os.X_OK), f"Installer is not executable: {INSTALL_SCRIPT}")
+        self.rules_dir = os.path.join(PROJECT_ROOT, "rules")
+        self.rule_files = sorted([f for f in os.listdir(self.rules_dir) if f.endswith(".md")])
+        self.assertGreater(len(self.rule_files), 0, "No markdown rule files found in rules/")
+
+    def _run_installer(self, *args, cwd=None):
+        cmd = ["bash", INSTALL_SCRIPT] + list(args)
+        return subprocess.run(
+            cmd,
+            cwd=cwd or PROJECT_ROOT,
+            capture_output=True,
+            text=True
+        )
+
+    def _verify_bundle_completeness(self, bundle_path: str):
+        """Helper to assert that ACTIVE_RULES_BUNDLE.md exists, has valid TOC, and includes 100% of all rules."""
+        self.assertTrue(os.path.isfile(bundle_path), f"Bundle not found at {bundle_path}")
+        with open(bundle_path, "r", encoding="utf-8") as f:
+            bundle_content = f.read()
+
+        # 1. Header and Notice block
+        self.assertIn("# ACTIVE RULES BUNDLE — Consolidated Governance Manifest", bundle_content)
+        self.assertIn("scripts/install_pipeline.sh", bundle_content)
+        self.assertIn("## Table of Contents", bundle_content)
+
+        # 2. Table of Contents entries
+        for rule_file in self.rule_files:
+            rule_slug = re.sub(r'^-|-$', '', re.sub(r'-+', '-', re.sub(r'[^a-z0-9]', '-', rule_file.lower())))
+            toc_entry = f"[{rule_file}](#rule-{rule_slug})"
+            self.assertIn(toc_entry, bundle_content, f"Missing TOC entry '{toc_entry}' in bundle")
+
+        # 3. Rule anchors and 100% unabridged rule content
+        for rule_file in self.rule_files:
+            rule_slug = re.sub(r'^-|-$', '', re.sub(r'-+', '-', re.sub(r'[^a-z0-9]', '-', rule_file.lower())))
+            self.assertIn(f'<a id="rule-{rule_slug}"></a>', bundle_content)
+            self.assertIn(f"## Rule: {rule_file}", bundle_content)
+
+            rule_src_path = os.path.join(self.rules_dir, rule_file)
+            with open(rule_src_path, "r", encoding="utf-8") as rf:
+                rule_text = rf.read()
+            self.assertIn(
+                rule_text,
+                bundle_content,
+                f"Rule {rule_file} content is not completely included in ACTIVE_RULES_BUNDLE.md"
+            )
+
+        # 4. Delimiters
+        self.assertIn("\n---\n", bundle_content)
+
+    def test_domain_template_rule_bundle_generation(self):
+        """Verifies that install_pipeline.sh creates .pipeline/ACTIVE_RULES_BUNDLE.md in domain templates."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            proc = self._run_installer(temp_dir, "--role", "domain-template")
+            self.assertEqual(proc.returncode, 0, f"Installer failed. stderr: {proc.stderr}")
+            bundle_path = os.path.join(temp_dir, ".pipeline", "ACTIVE_RULES_BUNDLE.md")
+            self._verify_bundle_completeness(bundle_path)
+
+    def test_customer_workspace_rule_bundle_generation(self):
+        """Verifies that install_pipeline.sh creates .pipeline/ACTIVE_RULES_BUNDLE.md in customer workspaces."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            proc = self._run_installer(temp_dir, "--role", "customer-project")
+            self.assertEqual(proc.returncode, 0, f"Installer failed. stderr: {proc.stderr}")
+            bundle_path = os.path.join(temp_dir, ".pipeline", "ACTIVE_RULES_BUNDLE.md")
+            self._verify_bundle_completeness(bundle_path)
+
+    def test_domain_template_readme_mandates_active_rules_bundle(self):
+        """Verifies that Domain Template README Section 3.2 Step 3 explicitly mandates reading ACTIVE_RULES_BUNDLE.md."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            proc = self._run_installer(temp_dir, "--role", "domain-template")
+            self.assertEqual(proc.returncode, 0, f"Installer failed. stderr: {proc.stderr}")
+            readme_path = os.path.join(temp_dir, "README.md")
+            with open(readme_path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            expected_step = (
+                "3. **Load Governance Rules**: Execute `view_file` on `.pipeline/ACTIVE_RULES_BUNDLE.md` "
+                "to ingest the complete, consolidated suite of active governance rules in a single read "
+                "(covering dual-track MBD, SysML SSOT completeness, role boundary locks, and TDD mandates)."
+            )
+            self.assertIn(expected_step, content)
+            self.assertNotIn("Ingest `AGENTS.md` and `rules/`", content)
+
+    def test_customer_workspace_readme_mandates_active_rules_bundle(self):
+        """Verifies that Customer Workspace README Section 3.3 Step 3 explicitly mandates reading ACTIVE_RULES_BUNDLE.md."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            proc = self._run_installer(temp_dir, "--role", "customer-project")
+            self.assertEqual(proc.returncode, 0, f"Installer failed. stderr: {proc.stderr}")
+            readme_path = os.path.join(temp_dir, "README.md")
+            with open(readme_path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            expected_step = (
+                "3. **Load Governance Rules**: Execute `view_file` on `.pipeline/ACTIVE_RULES_BUNDLE.md` "
+                "to ingest the complete, consolidated suite of active governance rules in a single read "
+                "(covering dual-track MBD, SysML SSOT completeness, role boundary locks, and TDD mandates)."
+            )
+            self.assertIn(expected_step, content)
+            self.assertNotIn("Ingest `AGENTS.md` and `rules/`", content)
+
+    def test_readme_prompt_templates_no_isolated_rule_subsets(self):
+        """Verifies that no prompt templates in generated READMEs point to isolated rule subsets or bare rules/ directory reads."""
+        for role in ["domain-template", "customer-project"]:
+            with self.subTest(role=role):
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    proc = self._run_installer(temp_dir, "--role", role)
+                    self.assertEqual(proc.returncode, 0, f"Installer failed for {role}. stderr: {proc.stderr}")
+                    readme_path = os.path.join(temp_dir, "README.md")
+                    with open(readme_path, "r", encoding="utf-8") as f:
+                        content = f.read()
+
+                    # Extract Section 4 (Operator Prompt Catalog)
+                    sec4_match = re.search(r'## 4\..*?(?=## 5\.|\Z)', content, re.DOTALL)
+                    self.assertIsNotNone(sec4_match, f"Section 4 not found in {role} README")
+                    sec4_text = sec4_match.group(0)
+
+                    # Assert no prompt template points to isolated rule files like rules/dual-track-mbd-verification.md
+                    self.assertNotIn("rules/dual-track-mbd-verification.md", sec4_text)
+                    self.assertNotIn("rules/sysml-ssot-completeness.md", sec4_text)
+
+                    # Assert no prompt template instructs reading bare rules/ directory
+                    self.assertNotIn("`rules/`", sec4_text)
+                    self.assertNotIn("rules/*.md", sec4_text)
+
+                    # Assert prompt templates reference ACTIVE_RULES_BUNDLE.md in governance preambles
+                    self.assertIn(".pipeline/ACTIVE_RULES_BUNDLE.md", sec4_text)
+
+    def test_active_rules_bundle_in_place_idempotence(self):
+        """Verifies that running install_pipeline.sh in-place preserves and updates ACTIVE_RULES_BUNDLE.md identically."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            cust_dir = os.path.join(temp_dir, "uav-011")
+            os.makedirs(cust_dir)
+
+            proc1 = self._run_installer(cust_dir, "--role", "customer-project")
+            self.assertEqual(proc1.returncode, 0, f"First install failed. stderr: {proc1.stderr}")
+
+            bundle_path = os.path.join(cust_dir, ".pipeline", "ACTIVE_RULES_BUNDLE.md")
+            with open(bundle_path, "r", encoding="utf-8") as f:
+                content_first = f.read()
+
+            proc2 = self._run_installer(".", cwd=cust_dir)
+            self.assertEqual(proc2.returncode, 0, f"In-place install failed. stderr: {proc2.stderr}")
+
+            with open(bundle_path, "r", encoding="utf-8") as f:
+                content_second = f.read()
+
+            self.assertEqual(content_first, content_second, "In-place execution must produce identical rule bundle")
 
 
 if __name__ == "__main__":
