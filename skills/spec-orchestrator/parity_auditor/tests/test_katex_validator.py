@@ -299,3 +299,16 @@ $$
         assert "table-column-count-mismatch" in rule_ids
         assert "katex-forbidden-math-in-table" in rule_ids
         assert all(isinstance(f, Finding) for f in findings)
+
+
+def test_inline_code_backtick_double_dollar_ignored():
+    """Verify that `$$` inside inline code spans is ignored and does not trigger false unclosed display math."""
+    text = r"""
+# KaTeX Guidelines
+
+- Multi-line aligned equations MUST be enclosed in `\begin{aligned} ... \end{aligned}` within `$$` delimiters on dedicated lines.
+- Inline math expressions MUST be enclosed in single `$ ... $` delimiters.
+"""
+    findings = check_katex_text(text, source="guidelines.md")
+    assert len(findings) == 0
+

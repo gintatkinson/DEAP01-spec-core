@@ -404,7 +404,10 @@ fi
 mkdir -p "$TARGET_DIR/tests"
 mkdir -p "$TARGET_DIR/docs" "$TARGET_DIR/docs/conops" "$TARGET_DIR/docs/conops/units/conops" "$TARGET_DIR/docs/conops/units/mission_intent" "$TARGET_DIR/docs/interfaces" "$TARGET_DIR/docs/safety" "$TARGET_DIR/docs/architecture/blueprints" "$TARGET_DIR/docs/epics" "$TARGET_DIR/docs/features" "$TARGET_DIR/docs/user-stories" "$TARGET_DIR/docs/use-cases" "$TARGET_DIR/docs/management"
 chmod -R u+w "$TARGET_DIR/docs" 2>/dev/null || true
-touch "$TARGET_DIR/docs/management/.gitkeep"
+touch "$TARGET_DIR/docs/management/.gitkeep" "$TARGET_DIR/docs/epics/.gitkeep" "$TARGET_DIR/docs/features/.gitkeep" "$TARGET_DIR/docs/user-stories/.gitkeep" "$TARGET_DIR/docs/use-cases/.gitkeep" "$TARGET_DIR/schema/.gitkeep" "$TARGET_DIR/docs/conops/.gitkeep" "$TARGET_DIR/docs/safety/.gitkeep"
+if [ "$TARGET_ROLE" = "DOMAIN_DISTRIBUTION_TEMPLATE" ]; then
+  rm -f "$TARGET_DIR/schema/README.md" "$TARGET_DIR/docs/conops/README.md" "$TARGET_DIR/docs/safety/README.md"
+fi
 if [ "$TARGET_DIR" != "$INSTALLER_ROOT" ]; then
   if [ -f "$INSTALLER_ROOT/docs/conops/README.md" ]; then
     cp -Pf "$INSTALLER_ROOT/docs/conops/README.md" "$TARGET_DIR/docs/conops/"

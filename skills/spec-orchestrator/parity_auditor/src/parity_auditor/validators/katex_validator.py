@@ -286,8 +286,9 @@ def check_katex_text(text: str, source: str = "<input>") -> List[Finding]:
             continue
 
         # Display math $$ handling
-        if not in_table and "$$" in line:
-            parts = line.split("$$")
+        line_clean = re.sub(r"`[^`]*`", "", line)
+        if not in_table and ("$$" in line if in_display_math else "$$" in line_clean):
+            parts = (line if in_display_math else line_clean).split("$$")
             if len(parts) >= 3 and not in_display_math:
                 # Single-line display math block: $$ content $$
                 block_content = parts[1]
@@ -296,7 +297,7 @@ def check_katex_text(text: str, source: str = "<input>") -> List[Finding]:
             elif not in_display_math:
                 in_display_math = True
                 display_start_lineno = lineno
-                after = line.split("$$", 1)[1]
+                after = line_clean.split("$$", 1)[1]
                 display_lines = [(lineno, after)]
                 continue
             else:

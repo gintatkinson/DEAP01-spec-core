@@ -1222,21 +1222,22 @@ class ArchitectureViewpointValidator(IValidator):
         if os.path.isfile(root_conops):
             spec_files.append(root_conops)
 
+        active_spec_files = [
+            sf for sf in spec_files
+            if not os.path.basename(sf).lower() in ("readme.md", ".gitkeep")
+            and "template" not in os.path.basename(sf).lower()
+            and "blueprints" not in sf.lower()
+            and "docs/architecture" not in sf.replace("\\", "/")
+        ]
+
         # Upstream Clean Landing Zone Invariant:
         # In upstream template repos, if landing zones are clean (.gitkeep/README.md), exit 0.
         if is_upstream:
-            active_spec_files = [
-                sf for sf in spec_files
-                if not os.path.basename(sf).lower() in ("readme.md", ".gitkeep")
-                and "template" not in os.path.basename(sf).lower()
-                and "blueprints" not in sf.lower()
-                and "docs/architecture" not in sf.replace("\\", "/")
-            ]
             if not active_spec_files:
                 return []
 
         # If downstream and no specification documents found
-        if not spec_files:
+        if not active_spec_files:
             if allow_missing_specs:
                 return []
             return [Finding(
@@ -1250,7 +1251,7 @@ class ArchitectureViewpointValidator(IValidator):
         all_blocks: List[ParsedMermaidBlock] = []
         all_matrix_tables: List[ParsedMarkdownMatrixTable] = []
 
-        for fpath in spec_files:
+        for fpath in active_spec_files:
             rel_path = os.path.relpath(fpath, workspace_dir)
             try:
                 with open(fpath, "r", encoding="utf-8", errors="ignore") as f:
