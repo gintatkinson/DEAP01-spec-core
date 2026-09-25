@@ -2,20 +2,20 @@
 
 | Attribute | Value |
 | :--- | :--- |
-| **Document Identifier** | `DEAP-HANDOFF-ROOT-002` |
-| **Title** | Comprehensive Handoff: Retrospective on Failure Modes, Pure Schema-Driven Compiler Mandate, and Operational Synthesis Roadmap |
-| **Repository Classification** | `UPSTREAM_SPEC_CORE_COMPILER` (DEAP01-spec-core) & Downstream Distribution (`uav-009`) |
+| **Document Identifier** | `DEAP-HANDOFF-ROOT-003` |
+| **Title** | Comprehensive Operational Handoff: Retrospective on Failure Modes, Dual-Provider Tooling Architecture, and Downstream Leaf Remediation |
+| **Repository Classification** | `UPSTREAM_SPEC_CORE_COMPILER` (DEAP01-spec-core) & Downstream Distribution (`uav-009`, `uav-011`, `DEAP-uas-infrastructure-safety`) |
 | **Target Branch** | `main` (clean working tree, synchronized with `origin/main`) |
-| **Upstream Baseline Commit** | `ac50628` |
-| **Downstream Baseline Commit** | `bf04ad8` |
-| **Status** | Authoritative Operational Handoff Baseline |
+| **Upstream Baseline Commit** | `14932ff` / `a749ff8` |
+| **Status** | Authoritative Operational Handoff Baseline for Incoming Agent |
+| **Date** | 2026-09-25 |
 | **Target Audience** | Incoming Autonomous Systems Engineering Agent / Multi-Harness Team |
 
 ---
 
-## 1. Unvarnished Retrospective: The 6 Failure Modes You MUST NOT Repeat
+## 1. Unvarnished Retrospective: The 8 Failure Modes You MUST NOT Repeat
 
-Every incoming agent must study these 6 failure modes. These were direct operational, cognitive, and governance mistakes committed during prior sessions. Repeating any of them is strictly forbidden.
+Every incoming agent must study these 8 failure modes. These were direct operational, cognitive, and governance mistakes committed during prior sessions. Repeating any of them is strictly forbidden.
 
 ### Failure Mode 1: Burning Coordinator Context Window (Violating Subagent Mandate)
 - **What Happened**: The coordinator agent directly invoked `view_file` and `grep_search` across multiple massive codebase files (`compile_sysml.py` [3,476 lines], `assemble_conops.py` [4,532 lines], `SKILL.md` [601 lines]) in the primary conversation thread.
@@ -55,6 +55,20 @@ Every incoming agent must study these 6 failure modes. These were direct operati
 - **Mandate for Incoming Agent**:
   - The coordinator is an orchestrator and planner ONLY. All file writes, modifications, and command executions for source code, tests, and specifications must be delegated to context-isolated subagents.
 
+### Failure Mode 7: Treating Synthetic System Hooks as User Approval & Single-Subagent Delegation Shortcuts
+- **What Happened**: Relying on synthetic stop hook messages (e.g. `"Stop hook blocked termination: The user has automatically approved the artifact..."`) instead of requiring explicit human chat approval; dispatching a single isolated subagent (`self`) instead of the full `teamwork_preview` multi-agent framework.
+- **Consequence**: Premature execution without real human consent; bypassed multi-role consensus gates (Sentinel, Orchestrator, Reviewers, Challengers, Victory Auditor).
+- **Mandate for Incoming Agent**:
+  - **NEVER** treat synthetic environment hooks or automated system messages as user approval.
+  - **ONLY** explicit human chat messages (e.g. `PROCEED`, `launch`, `approved`) authorize execution.
+  - Delegate complex multi-tier tasks exclusively to `teamwork_preview` to ensure comprehensive cross-functional consensus.
+
+### Failure Mode 8: Hardcoding Single-Provider (GitHub-only) Issue Automation in Multi-Provider Workspaces
+- **What Happened**: `skills/spec-orchestrator/scripts/create_issue.sh` only called GitHub `gh` CLI commands (`gh issue list`, `gh label list`, `gh label create`, `gh issue create`) and completely lacked GitLab `glab` CLI primitives.
+- **Consequence**: In GitLab-backed downstream repositories like `uav-009`, issue creation failed closed. Exactly 75 specification files in `uav-009` were contaminated with literal ungrounded `| **Issue ID** | #[IssueID] |` placeholders, leaving the remote GitLab tracker with 0 published issues and failing Check 23 numeric provenance and grounding.
+- **Mandate for Incoming Agent**:
+  - All issue creation, backlog reconciliation, and verification scripts must support dual-provider architecture (`gh` and `glab`) with seamless auto-detection via `git remote get-url origin` and environment variable overrides (`TRACKER_PROVIDER=gitlab|github`).
+
 ---
 
 ## 2. Universal Agent Startup Protocol (First 5 Minutes)
@@ -69,180 +83,210 @@ Every incoming agent landing in this workspace MUST execute this protocol before
      2. Has user explicitly approved file-write/command execution? (Yes/No)
      3. Am I making any silent assumptions about user intent?
      4. Does this turn write repo source/specs? (If yes, coordinator writing is locked; subagents required).
-3. **Step 3: Ingest Authoritative Rule Files**:
+3. **Step 3: Strict Planning Gate Precedence**:
+   - Obey the strict planning gate: you are strictly forbidden from creating, modifying, or deleting files in the workspace or dispatching subagents unless documented in an approved implementation plan. Even if the user prompt contains authorization keywords like `PROCEED`, an approved plan is mandatory. Writing or updating the implementation plan is the sole permitted write prior to approval.
+4. **Step 4: Ingest Authoritative Rule Files**:
    - `.pipeline/constitution.md`: Pure Schema-Driven Compiler Invariant (§26), Three-Tier Platform Isolation.
    - `AGENTS.md` / `.agents/AGENTS.md`: Subagent dispatch mandate, clean landing zones, remote synchronization mandate.
    - `rules/tracker-source-of-truth.md`: Non-closure invariant (neutral citations `(refs #<id>)` or `(#<id>)`, zero auto-closing verbs in commits).
    - `rules/user-authorization-lock.md`: Strict planning gate precedence.
-4. **Step 4: Verify Clean Baseline**:
+5. **Step 5: Verify Clean Baseline**:
    - Run `python3 scripts/verify_commit_messages.py --head` (Must pass, exit code 0).
    - Run `python3 -m unittest discover -s tests` (1,389+ unit tests must pass).
    - Run `git status` (Clean tree on `main`).
 
 ---
 
-## 3. Current Workspace Baseline & Architecture Audit
+## 3. Current Contamination State Across Jail Workspaces
 
-### 3.1 Upstream Repository (`/Users/perkunas/jail/DEAP01-spec-core`)
-- **Classification**: `UPSTREAM_SPEC_CORE_COMPILER`.
-- **Branch**: `main`, fully synchronized with `origin/main` at commit `ac50628`.
-- **Clean Landing Zones**: `schema/`, `docs/epics/`, `docs/features/`, `docs/user-stories/`, `docs/use-cases/` contain ONLY `.gitkeep`.
-- **Issue Tracker Status**:
-  - Issues #282, #345, #346, #347, #348, #349, #350, #351 have had `status:fixed-resolved` removed; audit comments posted citing validator evasion lines.
-  - Issue #338 is OPEN (`[AUDIT] [docs/conops/01 & 07]: Missing DoDAF OV-1 System Context Diagram and DoDAF OV-2 Operational Node Connectivity Diagram`).
-- **The Upstream Compiler Gap (`scripts/compile_sysml.py` & `assemble_conops.py`)**:
-  - `skills/spec-orchestrator/scripts/sysmlv2_ast.py` defines AST classes for `SysMLUseCaseDef`, `ActionDef`, `SysMLInteractionDef`, `StateDef`, `SysMLConnectionDef`.
-  - However, `scripts/compile_sysml.py` currently only extracts Section 4.8 subsystems, Section 4.7 super-system segments, and Section 4.2 user classes.
-  - `scripts/compile_sysml.py` and `assemble_conops.py` **LACK** deterministic generators to project ConOps units 06 (`OA-01..12`), 07 (`OpTx-01..10`), and 09 (`SCN-01..05`) from the parsed SysML AST.
-  - ConOps completeness validator (Gate 26) and architecture viewpoint validator (Gate 30) currently validate markdown regexes rather than asserting closed-world SysML AST closure for activities, exchanges, and scenarios.
+All operations, audits, and remediations are strictly bounded within `/Users/perkunas/jail`. External repositories in `/Users/perkunas/test_projects/` or `/Users/perkunas/Desktop/`, Tier 3B external repositories, and backup archives (`archive_*.tar.gz`) are **strictly excluded**.
 
-### 3.2 Downstream Repository (`/Users/perkunas/jail/uav-009`)
-- **Classification**: Downstream Customer Workspace.
-- **Branch**: `main`, synchronized at commit `bf04ad8`.
-- **The Downstream Model Gap (`schema/avenger5_system.sysml`)**:
-  - Contains physical subsystems (`part def Avenger5AirVehicle`, `part def GcsTrailerSegment`, `part def Pl40LauncherGSE`) and ports.
-  - **COMPLETELY LACKS**:
-    * Operational Activities (`OA-01` through `OA-12`): Needs formal `action def` or `SysMLCapabilityDef`.
-    * Operational Exchanges (`OpTx-01` through `OpTx-10`): Needs formal `connection def` or `ItemFlowDef`.
-    * Operational Scenarios (`SCN-01` through `SCN-05`): Needs formal `use case def` with sequence lifelines and dependencies.
-  - The downstream ConOps files (`docs/conops/units/conops/06_...`, `07_...`, `09_...`) were manually written narrative markdown that has drifted from the model.
+### 3.1 Upstream Specification Core Compiler (`/Users/perkunas/jail/DEAP01-spec-core`)
+- **Repository Classification**: `UPSTREAM_SPEC_CORE_COMPILER` (GitHub: `gintatkinson/DEAP01-spec-core`).
+- **Branch**: `main`, baseline commits `14932ff` / `a749ff8`.
+- **Tooling Contamination / Defect**:
+  - `skills/spec-orchestrator/scripts/create_issue.sh` contains a hardcoded GitHub-only lock. It executes `gh issue list`, `gh label list`, `gh label create`, and `gh issue create`.
+  - When executed in a GitLab downstream workspace or environment lacking GitHub authentication, it fails closed and aborts issue creation.
+  - Lacks relative URL expansion for GitLab (`/-/blob/main/...` vs. GitHub `/blob/main/...`).
+  - Lacks `--reopen-with-analysis <dossier>` capability for attaching defect dossiers to existing issues.
+
+### 3.2 Downstream Customer Workspace (`/Users/perkunas/jail/uav-009`)
+- **Repository Classification**: Downstream Customer Application Workspace (GitLab).
+- **Branch**: `main`.
+- **Contamination State**:
+  - Exactly **75 specification files** are contaminated with literal ungrounded placeholders `| **Issue ID** | #[IssueID] |`:
+    * **1 Epic**: `docs/epics/epic-01-system-ssot.md`
+    * **44 Features**: `docs/features/feat-01*` through `feat-44*`
+    * **24 User Stories**: `docs/user-stories/us-01*` through `us-24*`
+    * **6 Use Cases**: `docs/use-cases/uc-01*` through `uc-06*`
+  - **GitLab Remote Tracker**: The remote GitLab tracker has **0 published issues**. Because `create_issue.sh` failed closed on GitLab, no issues were created, leaving local specification files contaminated with unassigned placeholders.
+  - **Verification Impact**: Fails downstream baseline Check 23 numeric provenance and grounding.
+
+### 3.3 Downstream Workspaces (`uav-011` & `DEAP-uas-infrastructure-safety`)
+- **Downstream Application Workspace (`/Users/perkunas/jail/uav-011`)**:
+  - Currently carries older GitHub-only issue automation tooling. Requires updated dual-provider tooling installation. Must maintain clean landing zones (`schema/`, `docs/epics/`, `docs/features/`, `docs/user-stories/`, `docs/use-cases/` containing only `.gitkeep`) until concrete models are compiled.
+- **Downstream Domain Template (`/Users/perkunas/jail/DEAP-uas-infrastructure-safety`)**:
+  - Upstream distribution domain template. Requires updated dual-provider tooling installation. Must maintain 100% clean landing zones (`.gitkeep` only) and 0-byte remote diff.
 
 ---
 
-## 4. Master Implementation Roadmap: Handing Off the Complete Work
-
-The incoming agent must execute this roadmap in sequence across the two repositories. Continuous execution under the approved plan is authorized once the user issues `PROCEED`.
+## 4. Master Execution Roadmap: Dual-Provider Tooling Architecture & Downstream Leaf Remediation
 
 ```mermaid
 flowchart TD
-    subgraph Upstream["DEAP01-spec-core (Upstream Compiler)"]
-        WP1A["WP 1A: AST Operational Parser<br/>(sysmlv2_ast.py & compile_sysml.py)"]
-        WP1B["WP 1B: ConOps Markdown Generators<br/>(Synthesize Units 06, 07, 09 from AST)"]
-        WP1C["WP 1C: Closed-World Model Closure Gates<br/>(Gates 26 & 30 assert AST presence)"]
-        WP1D["WP 1D: Unit Tests & Upstream Push<br/>(Verify 1,389+ tests, push to origin/main)"]
+    subgraph Upstream ["Phase 1: Upstream Core Tooling Refactor (DEAP01-spec-core)"]
+        direction TB
+        WP1A["WP 1A: Dual-Provider Tooling Refactor<br/>(create_issue.sh gh + glab auto-detect)"]
+        WP1B["WP 1B: Relative Link Expansion & Flag Support<br/>(--reopen-with-analysis, GitLab blob URLs)"]
+        WP1C["WP 1C: Unit Tests & Upstream Defect Dossier<br/>(test_create_issue_dual_provider.py & file_defect.py)"]
+        WP1D["WP 1D: Upstream Verification & Remote Push<br/>(1,389+ unit tests pass, push to origin/main)"]
     end
 
-    subgraph Install["Propagation"]
-        WP2["WP 2: Propagate Upstream to Downstream<br/>(scripts/install_pipeline.sh uav-009)"]
+    subgraph Downstream ["Phase 2: Leaf-Level Specification Remediation (uav-009)"]
+        direction TB
+        WP2A["WP 2A: Install Dual-Provider Tooling<br/>(install_pipeline.sh uav-009 --provider gitlab)"]
+        WP2B["WP 2B: Topological Issue Publishing<br/>(Publish 75 items to GitLab via glab: Epic, Feat, US, UC)"]
+        WP2C["WP 2C: Reconcile Backlog & Replace Placeholders<br/>(reconcile_backlog.py --provider gitlab)"]
+        WP2D["WP 2D: Downstream Baseline Verification<br/>(verify_downstream_baseline.py, 30/30 checks pass)"]
     end
 
-    subgraph Downstream["uav-009 (Customer Model & Specs)"]
-        WP3["WP 3: Model Operational Constructs in SysML<br/>(schema/avenger5_system.sysml)"]
-        WP4["WP 4: Deterministic Spec Generation from Model<br/>(Compile Units 06, 07, 09 from SysML)"]
-        WP5["WP 5: Verification Baseline & Downstream Push<br/>(verify_downstream_baseline.py, commit, push)"]
+    subgraph Propagation ["Phase 3: Domain Template & Workspace Propagation"]
+        direction TB
+        WP3A["WP 3A: Upgrade DEAP-uas-infrastructure-safety<br/>(Clean landing zones, .gitkeep only, push origin/main)"]
+        WP3B["WP 3B: Upgrade uav-011 Workspace<br/>(Clean landing zones, 30/30 baseline checks, push origin/main)"]
     end
 
     WP1A --> WP1B --> WP1C --> WP1D
-    WP1D --> WP2
-    WP2 --> WP3 --> WP4 --> WP5
+    WP1D --> WP2A
+    WP2A --> WP2B --> WP2C --> WP2D
+    WP2D --> WP3A --> WP3B
 ```
 
 ---
 
-### Work Package 1: Upstream Compiler AST Enhancements & Generators (`DEAP01-spec-core`)
+### Phase 1: Upstream Dual-Provider Refactor (`DEAP01-spec-core`)
 
-- **Objective**: Extend `scripts/compile_sysml.py`, `skills/spec-orchestrator/scripts/sysmlv2_ast.py`, and `scripts/assemble_conops.py` so that ConOps operational sections are compiled deterministically from SysML AST nodes.
-- **Tasks**:
-  1. **AST Extraction Enhancement (`compile_sysml.py`)**:
-     - Ensure `SysMLParser` extracts all `action def`, `connection def`, `flow def`, and `use case def` constructs into structured AST nodes.
-     - Add `extract_operational_activities_from_ast(model_ast)` -> produces data structure for `OA-01..OA-N`.
-     - Add `extract_operational_exchanges_from_ast(model_ast)` -> produces data structure for `OpTx-01..OpTx-N`.
-     - Add `extract_operational_scenarios_from_ast(model_ast)` -> produces data structure for `SCN-01..SCN-N` (including sequence lifelines, trigger events, exit conditions).
-  2. **Deterministic Markdown Unit Generators (`scripts/compile_sysml.py` / `assemble_conops.py`)**:
-     - Implement `generate_conops_unit_06(ast_data)` -> outputs `06_UAF_OPERATIONAL_ACTIVITIES.md` with:
-       * UAF decomposition tree Mermaid flowchart.
-       * Activity table with ID, Name, Performer Node, Allocation Tag (`/// OperationalAllocation: [OA-XX]`), and Realization Tag.
-       * Functional flow diagram Mermaid flowchart.
-     - Implement `generate_conops_unit_07(ast_data)` -> outputs `07_OPTX_EXCHANGES.md` with:
-       * High-level operational information exchange matrix (`OpTx-01..OpTx-N`).
-       * DoDAF OV-2 operational node connectivity diagram.
-     - Implement `generate_conops_unit_09(ast_data)` -> outputs `09_SCENARIOS_AND_TIMELINES.md` with:
-       * Scenario summary table (`SCN-01..SCN-N`).
-       * Dedicated `sequenceDiagram` for 100% of declared operational scenarios.
-  3. **Closed-World Model Closure Gates**:
-     - Update `skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/conops_completeness_validator.py` (Gate 26) and `architecture_viewpoint_validator.py` (Gate 30):
-       * Must verify that every `OA-XX`, `OpTx-XX`, and `SCN-XX` appearing in ConOps is formally declared in `.pipeline/schema.sysml` AST.
-       * Zero open-world whitelists or string-matching fallbacks. Fail closed if undeclared.
-  4. **Verification & Upstream Push**:
-     - Add unit tests in `tests/test_compile_sysml.py` and `tests/test_conops_completeness_validator.py`.
-     - Run `python3 -m unittest discover -s tests`.
-     - Run `python3 scripts/verify_commit_messages.py --head`.
-     - Commit with neutral commit message: `feat(compiler): deterministic sysml ast conops generators and model closure gates (refs #282, #308)`.
-     - Push to `origin/main` in `DEAP01-spec-core`.
-
----
-
-### Work Package 2: Propagate Upstream Compiler Downstream
-
-- **Objective**: Synchronize downstream project `uav-009` with the upstream compiler capabilities.
-- **Tasks**:
-  1. Execute `scripts/install_pipeline.sh /Users/perkunas/jail/uav-009`.
-  2. Verify that `.pipeline/` and compiler scripts in `uav-009` reflect the latest commit.
+- **Objective**: Refactor `skills/spec-orchestrator/scripts/create_issue.sh` to fully support both GitHub (`gh`) and GitLab (`glab`) CLI providers with automated detection, relative link translation, and comprehensive regression test coverage.
+- **Detailed Tasks**:
+  1. **Provider Auto-Detection**:
+     - Extract remote origin URL using `git remote get-url origin 2>/dev/null || echo ""` or accept explicit environment override `TRACKER_PROVIDER`:
+       ```bash
+       REMOTE_URL=$(git remote get-url origin 2>/dev/null || echo "")
+       PROVIDER="${TRACKER_PROVIDER:-auto}"
+       if [ "$PROVIDER" = "auto" ]; then
+           if [[ "$REMOTE_URL" =~ gitlab ]] || [ -n "${GITLAB_CI:-}" ]; then
+               PROVIDER="gitlab"
+           else
+               PROVIDER="github"
+           fi
+       fi
+       ```
+  2. **GitLab (`glab`) CLI Primitives**:
+     - Issue search and idempotency: `glab issue list $REPO_FLAG --all --search "$TITLE"`
+     - Label verification and creation: `glab label list` / `glab label create "$LABEL"`
+     - Issue creation: `glab issue create --title "$TITLE" --label "$LABEL" --description "$TMP_EXPANDED_BODY"`
+     - Add `--reopen-with-analysis <dossier>` capability to reopen existing issues and post defect analysis comments.
+  3. **Relative Markdown Link Expansion**:
+     - Translate relative markdown links according to provider:
+       * GitHub: `https://github.com/<owner>/<repo>/blob/<branch>/...`
+       * GitLab: `https://gitlab.com/<owner>/<repo>/-/blob/<branch>/...`
+  4. **Regression Testing & Defect Reporting**:
+     - Create unit test `tests/test_create_issue_dual_provider.py` simulating both `gh` and `glab` execution paths with mock binaries.
+     - Execute full upstream unit test suite (`python3 -m unittest discover -s tests`).
+     - File the 5-pillar adversarial defect dossier upstream to `gintatkinson/DEAP01-spec-core` via `python3 scripts/file_defect.py`.
+     - Commit with neutral commit message: `feat(tooling): dual-provider support for create_issue.sh (refs #368)` and push to `origin/main`.
 
 ---
 
-### Work Package 3: Formal SysML Operational Modeling in Downstream (`uav-009`)
+### Phase 2: Leaf-Level Specification Remediation in `uav-009`
 
-- **Objective**: Populate `schema/avenger5_system.sysml` with the complete operational architecture model as the foundational Single Source of Truth.
-- **Tasks**:
-  1. **Operational Activities (`OA-01` through `OA-12`)**:
-     - Model in `schema/avenger5_system.sysml` as formal `action def` constructs with input/output parameters, allocated to subsystem performer parts:
-       * `action def OA01_PreFlightHealthInit` (Allocated to Core Avionics)
-       * `action def OA02_CatapultLaunchAssisted` (Allocated to Launcher GSE & Flight Controller)
-       * `action def OA03_WaypointIngressTransit`
-       * `action def OA04_EOIRSurveillanceSearch`
-       * `action def OA05_TargetIdentificationClassification`
-       * `action def OA06_TelemetryHealthStreaming`
-       * `action def OA07_ContingencyReturnToLaunch`
-       * `action def OA08_SafeParachuteRecoveryLanding`
-       * `action def OA09_GcsPilotSupervisoryIntervention`
-       * `action def OA10_TargetDesignationHandoff`
-       * `action def OA11_SecureKeyZeroization`
-       * `action def OA12_GroundAuditLogSync`
-  2. **Operational Information Exchanges (`OpTx-01` through `OpTx-10`)**:
-     - Model as formal `connection def` / `flow def` with source, destination, item payload, and latency constraints:
-       * `OpTx01_C2CommandUplink` (GCS -> C2 Data Link)
-       * `OpTx02_TelemetryDownlink` (C2 Data Link -> GCS)
-       * `OpTx03_VideoPayloadStream` (EO/IR -> GCS)
-       * `OpTx04_TargetTrackData` (Mission Computer -> GCS)
-       * `OpTx05_ArmingAuthorizationCommand` (GCS -> ESAD)
-       * `OpTx06_FlightTerminationCommand` (GCS / RTA -> FTS)
-       * `OpTx07_PreLaunchStatusReport` (Launcher GSE -> GCS)
-       * `OpTx08_EmergencyContainmentTrigger` (Safety Watchdog -> Flight Controller)
-       * `OpTx09_RecoveryDeploySignal` (Flight Controller -> Parachute Recovery)
-       * `OpTx10_PostFlightLogOffload` (Core Avionics -> Ground Maintenance)
-  3. **Operational Scenarios (`SCN-01` through `SCN-05`)**:
-     - Model as formal `use case def` with sequence steps and actor bindings:
-       * `use case def SCN01_NominalReconSortie`
-       * `use case def SCN02_C2DataLinkLossFailover`
-       * `use case def SCN03_GNSSDeniedNavigation`
-       * `use case def SCN04_DynamicExclusionZoneDivert`
-       * `use case def SCN05_AuthorizedTargetArmingExecution`
+- **Objective**: Deploy dual-provider tooling to `uav-009`, publish all 75 specification items to the remote GitLab tracker, reconcile the backlog to replace all literal `#[IssueID]` tokens with live numeric IDs, and pass all 30 baseline checks.
+- **Detailed Tasks**:
+  1. **Deploy Tooling**:
+     - Run `scripts/install_pipeline.sh /Users/perkunas/jail/uav-009 --provider gitlab`.
+     - Verify updated `create_issue.sh` and pipeline scripts in `uav-009`.
+  2. **Topological Publishing of 75 Specification Items**:
+     - Publish items to GitLab in strict hierarchical order:
+       * **1 Epic**: `docs/epics/epic-01-system-ssot.md` (label `type::epic`) $\rightarrow$ Issue #N
+       * **44 Features**: `docs/features/feat-01*` through `feat-44*` (label `type::feature`) $\rightarrow$ Issues #N+1..#N+44
+       * **24 User Stories**: `docs/user-stories/us-01*` through `us-24*` (label `type::user-story`) $\rightarrow$ Issues #N+45..#N+68
+       * **6 Use Cases**: `docs/use-cases/uc-01*` through `uc-06*` (label `type::use-case`) $\rightarrow$ Issues #N+69..#N+74
+  3. **Backlog Reconciliation**:
+     - Execute `python3 scripts/reconcile_backlog.py --provider gitlab`.
+     - Confirm all 75 specification files have their frontmatter `issue_id:` and table rows `| **Issue ID** | #<id> |` updated with live GitLab IDs.
+     - Confirm all parent checklists (Epic -> Feature -> User Story -> Use Case) contain live links.
+  4. **Verification & Clean Push**:
+     - Verify zero ungrounded placeholders remain: `grep -rn "\[IssueID\]" docs/` returns 0 matches.
+     - Run `python3 scripts/verify_downstream_baseline.py` (Must pass all 30 checks with exit code 0).
+     - Commit with neutral commit citation and push to GitLab `origin/main`. Confirm `git diff origin/main` is empty.
 
 ---
 
-### Work Package 4: Deterministic Spec Generation & Baseline Verification (`uav-009`)
+### Phase 3: Domain Template & UAV-011 Propagation
 
-- **Objective**: Deterministically compile ConOps specification units from the SysML model and verify all baseline gates pass with ZERO content hacks.
-- **Tasks**:
-  1. Compile the SysML model:
-     `python3 scripts/compile_sysml.py schema/avenger5_system.sysml --reverse-sync --out .pipeline/schema.sysml --digest .pipeline/schema-digest.json`
-  2. Generate ConOps units from the compiled model:
-     `python3 scripts/compile_sysml.py --generate-conops-units --schema .pipeline/schema.sysml --out-dir docs/conops/units/conops/`
-  3. Reassemble canonical ConOps document:
-     `python3 scripts/assemble_conops.py --units docs/conops/units/conops/ --out docs/conops/CONOPS.md`
-  4. Run full downstream verification:
-     `python3 scripts/verify_downstream_baseline.py` (Must pass all 30 checks with exit code 0).
-  5. Commit and push to `uav-009`:
-     `git push origin main` (Verify `git diff origin/main` is empty).
+- **Objective**: Propagate the dual-provider tooling to `DEAP-uas-infrastructure-safety` and `uav-011`, guaranteeing clean landing zones and zero contamination.
+- **Detailed Tasks**:
+  1. **Domain Template (`DEAP-uas-infrastructure-safety`)**:
+     - Install updated pipeline tooling.
+     - Enforce Upstream Distribution Template Clean Landing Zone Invariant: verify `schema/`, `docs/epics/`, `docs/features/`, `docs/user-stories/`, `docs/use-cases/` contain ONLY `.gitkeep` files.
+     - Commit, push to GitHub `origin/main`, and confirm 0-byte remote diff.
+  2. **Downstream Application Workspace (`uav-011`)**:
+     - Install updated pipeline tooling.
+     - Verify clean landing zones and run `python3 scripts/verify_downstream_baseline.py` (Pass 30/30 checks).
+     - Commit, push to GitLab `origin/main`, and confirm 0-byte remote diff.
 
 ---
 
-## 5. Inviolable Governance & Rules for the Incoming Agent
+## 5. Teamwork Multi-Agent Consensus Protocol
 
-1. **Pure Schema-Driven Compiler Invariant**: Never write code or specs that assume domain concepts. All specifications must be deterministically derivable from user schemas in `schema/`.
-2. **Subagent Delegation Mandate**: Coordinator NEVER directly writes repository code or functional specifications. Always dispatch context-isolated subagents (`invoke_subagent`).
-3. **Continuous Execution**: Once plan is approved with `PROCEED`, execute all work packages continuously to completion without pausing or asking intermediate permission unless a gate fails.
-4. **Non-Closure Tracker Invariant**: Never use closing verbs in git commits (`fixes #`, `closes #`). Always use neutral citations `(refs #<id>)` or `(#<id>)`. Mechanical gate `verify_commit_messages.py` enforces this.
-5. **Issues Remain Open**: Applying `status:fixed-resolved` does NOT close tracker issues. Issues stay open until verified and closed by the human Product Owner.
+For executing complex, multi-repository tasks, the incoming agent must not rely on a single isolated subagent. The full `teamwork_preview` multi-agent framework must be invoked to ensure peer review, adversarial challenge, and independent victory audit.
+
+### 5.1 Teamwork Multi-Agent Roster
+
+| Role Name | Identifier | Primary Responsibility & Consensus Gate |
+| :--- | :--- | :--- |
+| **Sentinel** | `sentinel` | Enforces governance rules, strict planning gate, mandatory hidden folder read of `.pipeline/constitution.md`, and human authorization verification. Rejects unapproved executions. |
+| **Orchestrator** | `orchestrator` | Coordinates master execution roadmap across Phases 1, 2, and 3. Decomposes tasks into atomic packages, dispatches workers, and monitors milestone delivery. |
+| **Worker 1 (Upstream Tooling Specialist)** | `worker-1` | Executes Phase 1 refactoring of `create_issue.sh` with dual-provider (`gh` + `glab`) logic, relative URL expansion, and unit tests in `tests/test_create_issue_dual_provider.py`. |
+| **Worker 2 (Adversarial Defect Reporter)** | `worker-2` | Conducts 5-pillar adversarial audit of upstream tooling defect, compiles defect dossier, and files upstream defect via `python3 scripts/file_defect.py`. |
+| **Worker 3 (Downstream GitLab Remediation Specialist)** | `worker-3` | Executes Phase 2 in `uav-009`: runs `install_pipeline.sh`, publishes 75 items via `glab`, runs `reconcile_backlog.py --provider gitlab`, replaces all `#[IssueID]` tokens. |
+| **Worker 4 (Propagation Specialist)** | `worker-4` | Executes Phase 3 in `DEAP-uas-infrastructure-safety` and `uav-011`: installs updated tooling, enforces clean landing zones (`.gitkeep` only), verifies 0-byte remote diff. |
+| **Reviewer 1 (Specification Compliance Reviewer)** | `reviewer-1` | Inspects published GitLab issues in `uav-009`: verifies title normalization, labels (`type::epic`, `type::feature`), markdown tables, and bidirectional traceability links. |
+| **Reviewer 2 (Code Quality & Testing Reviewer)** | `reviewer-2` | Validates `create_issue.sh` refactor against bash best practices (`set -euo pipefail`), checks error handling, verifies unit tests pass with 100% assertions. |
+| **Challenger 1 (Adversarial Boundary Challenger)** | `challenger-1` | Verifies strict execution bounds within `/Users/perkunas/jail`. Ensures zero touches to `/Users/perkunas/test_projects/`, `/Users/perkunas/Desktop/`, Tier 3B repos, or backup archives. |
+| **Challenger 2 (Anti-Complacency & Grounding Challenger)** | `challenger-2` | Performs adversarial audit against complacency: scans for hardcoded whitelists, regex bypasses, and executes raw grep for ungrounded `#[IssueID]` tokens. |
+| **Victory Auditor** | `victory-auditor` | Performs final independent verification: executes `verify_downstream_baseline.py` across workspaces (30/30 checks pass), confirms `git diff origin/<branch>` is empty on all repos, and issues formal `VICTORY CONFIRMED`. |
+
+### 5.2 Teamwork Framework Launch Command
+
+To launch the multi-agent consensus team, recommend the slash command or invoke the subagent directly:
+- **Slash Command**: `/teamwork-preview`
+- **Subagent Invocation (`invoke_subagent`)**:
+  ```json
+  {
+    "Subagents": [
+      {
+        "TypeName": "teamwork_preview",
+        "Role": "Autonomous Multi-Agent Consensus Team",
+        "Model": "inherit",
+        "Prompt": "Execute view_file on skills/feature-driven-implementation/SKILL.md as your very first step before executing any file edits or commands, and strictly follow its formatting templates and instruction guidelines.\n\nRepository Classification: UPSTREAM_SPEC_CORE_COMPILER\nTarget Workspace: /Users/perkunas/jail/DEAP01-spec-core\nPrimary Commercial Toolchain Integration Context: MATLAB / Simulink / Stateflow / Embedded Coder\n\nTask: Execute DEAP-HANDOFF-ROOT-003 Master Execution Roadmap across Phases 1, 2, and 3.\n\nPROCEED"
+      }
+    ]
+  }
+  ```
+
+---
+
+## 6. Inviolable Governance & Operational Rules for the Incoming Agent
+
+1. **Pure Schema-Driven Compiler Invariant**: Never write code or specifications that assume hardcoded domain concepts. All specifications must derive deterministically from user schemas in `schema/`.
+2. **Subagent Delegation Mandate**: The coordinator NEVER directly writes repository source code, specifications, or tests. All writes must be delegated to context-isolated subagents.
+3. **Continuous Execution Fast-Path**: Once the implementation plan receives explicit human approval (`PROCEED`), execute all work packages continuously to completion without pausing for intermediate approval unless a gate fails (`exit code != 0`).
+4. **Non-Closure Tracker Invariant**: Never use issue-closing verbs (`fix`, `fixes`, `close`, `closes`, `resolve`, `resolves`) preceding `#<id>` in git commit messages. Always use neutral citations `(refs #<id>)` or `(#<id>)`. Mechanical gate `verify_commit_messages.py` strictly enforces this.
+5. **Issues Remain Open**: Applying `status:fixed-resolved` (or `status::fixed-resolved` on GitLab) does NOT close tracker issues. Issues stay open until validated and closed by the human Product Owner.
 6. **Remote Synchronization Mandate**: No work package is complete until pushed to remote and verified with `git diff origin/<branch>` returning empty.
+7. **Universal Mermaid Syntax Rules**:
+   - First non-comment line inside every ```` ```mermaid ```` fence MUST declare an explicit diagram type (`flowchart TD`, `sequenceDiagram`, etc.).
+   - All subgraphs in flowcharts MUST declare explicit direction (`direction TB` / `direction LR`).
+   - All node labels containing special characters, punctuation, or numbers MUST be double-quoted.
+   - Code fences must be strictly closed with matching closing fences on a new line.
