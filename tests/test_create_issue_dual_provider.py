@@ -21,6 +21,7 @@ Primary Commercial Toolchain Integration Context:
 
 import json
 import os
+import shutil
 import stat
 import subprocess
 import tempfile
@@ -180,10 +181,40 @@ if len(args) >= 2 and args[0] == "issue" and args[1] == "list":
 if len(args) >= 2 and args[0] == "label" and args[1] == "list":
     if os.environ.get("MOCK_GLAB_MISSING_LABEL"):
         sys.exit(0)
-    print("feature\\t#0366d6\\tfeature specification")
+    print("12345\\tfeature\\tfeature specification\\t#0366d6")
     sys.exit(0)
 
 if len(args) >= 2 and args[0] == "label" and args[1] == "create":
+    subargs = args[2:]
+    has_name = False
+    i = 0
+    while i < len(subargs):
+        arg = subargs[i]
+        if arg == "--name":
+            has_name = True
+            if i + 1 < len(subargs) and not subargs[i + 1].startswith("-"):
+                i += 2
+            else:
+                i += 1
+        elif arg.startswith("--name="):
+            has_name = True
+            i += 1
+        elif arg.startswith("--"):
+            if arg in ("--color", "--description", "--repo") and i + 1 < len(subargs) and not subargs[i + 1].startswith("-"):
+                i += 2
+            else:
+                i += 1
+        elif arg.startswith("-"):
+            if arg in ("-R", "-c", "-d") and i + 1 < len(subargs) and not subargs[i + 1].startswith("-"):
+                i += 2
+            else:
+                i += 1
+        else:
+            sys.stderr.write("FATAL: unexpected positional argument '" + arg + "' passed to glab label create; --name is required\\n")
+            sys.exit(1)
+    if not has_name:
+        sys.stderr.write("FATAL: glab label create requires --name flag\\n")
+        sys.exit(1)
     sys.exit(0)
 
 if len(args) >= 2 and args[0] == "issue" and args[1] == "create":
@@ -539,7 +570,9 @@ sys.exit(0)
         glab_calls = self._get_glab_calls()
         create_label_calls = [c for c in glab_calls if c[:2] == ["label", "create"]]
         self.assertEqual(len(create_label_calls), 1, "glab label create must be called")
-        self.assertIn("feature", create_label_calls[0])
+        self.assertIn("--name", create_label_calls[0])
+        name_idx = create_label_calls[0].index("--name")
+        self.assertEqual(create_label_calls[0][name_idx + 1], "feature")
         self.assertIn("--color", create_label_calls[0])
         color_idx = create_label_calls[0].index("--color")
         self.assertEqual(create_label_calls[0][color_idx + 1], "#0366d6")
@@ -589,6 +622,94 @@ sys.exit(0)
         res = self._run_create_issue([non_existent, "feature", self.feature_title])
         self.assertNotEqual(res.returncode, 0)
         self.assertIn("FATAL: Body file not found", res.stderr)
+
+    # -------------------------------------------------------------------------
+    # 8. Provider Validation and CLI Tool Existence Checks
+    # -------------------------------------------------------------------------
+
+    def test_unsupported_provider_flag_fails(self):
+        """Verifies --provider with invalid name exits with code 1 and emits FATAL error."""
+        res = self._run_create_issue([
+            "--provider", "invalid",
+            self.feature_file,
+            "feature",
+            self.feature_title,
+        ])
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("FATAL: Unsupported provider 'invalid'. Must be 'github' or 'gitlab'.", res.stderr)
+
+    def test_unsupported_provider_env_var_fails(self):
+        """Verifies TRACKER_PROVIDER with invalid name exits with code 1 and emits FATAL error."""
+        res = self._run_create_issue(
+            [self.feature_file, "feature", self.feature_title],
+            extra_env={"TRACKER_PROVIDER": "bitbucket"},
+        )
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("FATAL: Unsupported provider 'bitbucket'. Must be 'github' or 'gitlab'.", res.stderr)
+
+    def test_missing_glab_binary_in_path_fails(self):
+        """Verifies missing glab CLI binary in PATH exits with code 1 and emits FATAL error."""
+        isolated_bin = tempfile.mkdtemp(prefix="test_missing_glab_")
+        self.addCleanup(lambda: shutil.rmtree(isolated_bin, ignore_errors=True))
+        for tool in ["dirname", "tr", "bash", "sh"]:
+            found = shutil.which(tool)
+            if found:
+                os.symlink(found, os.path.join(isolated_bin, tool))
+
+        res = self._run_create_issue(
+            ["--provider", "gitlab", self.feature_file, "feature", self.feature_title],
+            extra_env={"PATH": isolated_bin},
+        )
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("FATAL: 'glab' CLI not found in PATH for provider 'gitlab'.", res.stderr)
+
+    def test_missing_gh_binary_in_path_fails(self):
+        """Verifies missing gh CLI binary in PATH exits with code 1 and emits FATAL error."""
+        isolated_bin = tempfile.mkdtemp(prefix="test_missing_gh_")
+        self.addCleanup(lambda: shutil.rmtree(isolated_bin, ignore_errors=True))
+        for tool in ["dirname", "tr", "bash", "sh"]:
+            found = shutil.which(tool)
+            if found:
+                os.symlink(found, os.path.join(isolated_bin, tool))
+
+        res = self._run_create_issue(
+            ["--provider", "github", self.feature_file, "feature", self.feature_title],
+            extra_env={"PATH": isolated_bin},
+        )
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("FATAL: 'gh' CLI not found in PATH for provider 'github'.", res.stderr)
+
+    def test_mock_glab_label_create_rejects_positional_arg(self):
+        """Verifies mock_glab rejects positional argument for label create."""
+        res = subprocess.run(
+            [os.path.join(self.bin_dir, "glab"), "label", "create", "feature", "--color", "#0366d6"],
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(res.returncode, 0)
+        self.assertIn("unexpected positional argument", res.stderr)
+
+    def test_mock_glab_label_create_requires_name_flag(self):
+        """Verifies mock_glab rejects invocation without --name flag."""
+        res = subprocess.run(
+            [os.path.join(self.bin_dir, "glab"), "label", "create", "--color", "#0366d6"],
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(res.returncode, 0)
+        self.assertIn("requires --name", res.stderr)
+
+    def test_gitlab_label_list_table_parsing(self):
+        """Verifies glab label list table format ID\\tName\\tDescription\\tColor is parsed correctly without recreating."""
+        self._init_git_repo("git@gitlab.com:aerospace/uav-009-flight-control.git")
+        res = self._run_create_issue(
+            [self.feature_file, "feature", self.feature_title],
+        )
+        self.assertEqual(res.returncode, 0, f"Script failed: {res.stderr}\n{res.stdout}")
+        self.assertNotIn("Label 'feature' not found. Creating...", res.stdout)
+        glab_calls = self._get_glab_calls()
+        create_label_calls = [c for c in glab_calls if c[:2] == ["label", "create"]]
+        self.assertEqual(len(create_label_calls), 0, "glab label create should not be called when label exists")
 
 
 if __name__ == "__main__":

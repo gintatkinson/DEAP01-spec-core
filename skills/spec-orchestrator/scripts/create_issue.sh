@@ -91,6 +91,23 @@ else
     PROVIDER=$(echo "$PROVIDER" | tr '[:upper:]' '[:lower:]')
 fi
 
+if [ "$PROVIDER" != "github" ] && [ "$PROVIDER" != "gitlab" ]; then
+    echo "FATAL: Unsupported provider '$PROVIDER'. Must be 'github' or 'gitlab'." >&2
+    exit 1
+fi
+
+if [ "$PROVIDER" = "gitlab" ]; then
+    if ! command -v glab >/dev/null 2>&1; then
+        echo "FATAL: 'glab' CLI not found in PATH for provider 'gitlab'." >&2
+        exit 1
+    fi
+else
+    if ! command -v gh >/dev/null 2>&1; then
+        echo "FATAL: 'gh' CLI not found in PATH for provider 'github'." >&2
+        exit 1
+    fi
+fi
+
 normalize_spec_slug() {
     # Standardized slugification that preserves stop words
     # Usage: slug=$(normalize_spec_slug "us-29-fiber-cable-and-strand-inventory")
@@ -179,9 +196,9 @@ fi
 # Label check and creation
 if [ "$PROVIDER" = "gitlab" ]; then
     if ! glab label list $REPO_FLAG 2>/dev/null \
-        | awk -v l="$LABEL" '($1 == l || $0 ~ ("^" l "([[:space:]]|$)")) { found = 1 } END { exit !found }'; then
+        | awk -F'\t' -v l="$LABEL" '$2 == l || $1 == l { found = 1 } END { exit !found }'; then
         echo "[GATE] Label '$LABEL' not found. Creating..."
-        glab label create "$LABEL" $REPO_FLAG --color "#0366d6" --description "${LABEL} specification"
+        glab label create --name "$LABEL" $REPO_FLAG --color "#0366d6" --description "${LABEL} specification"
     fi
 else
     # Issue #332 -- the label precondition used `grep -Fq "$LABEL"`, a substring match, so an
