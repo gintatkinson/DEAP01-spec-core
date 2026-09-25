@@ -183,7 +183,7 @@ class WorkspaceRepository:
             return []
         md_files = []
         for root, dirs, files in os.walk(directory):
-            dirs[:] = [d for d in dirs if not d.startswith(".") and d not in (".git", "node_modules", ".dart_tool", "build")]
+            dirs[:] = [d for d in dirs if not d.startswith(".") and d not in (".git", "node_modules", ".dart_tool", "build", "units")]
             for f in sorted(files):
                 if f.endswith(".md") and not f.startswith("."):
                     md_files.append(os.path.join(root, f))

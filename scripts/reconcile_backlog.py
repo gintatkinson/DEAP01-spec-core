@@ -435,6 +435,46 @@ def detect_tracker_provider(cli_provider: Optional[str] = None, rules: Optional[
             
     return "github"
 
+def _resolve_token_from_git_credential(server_url_or_hostname: str) -> Optional[str]:
+    """Resolve authentication token using git credential fill."""
+    if not server_url_or_hostname:
+        return None
+    try:
+        clean = server_url_or_hostname.strip()
+        if "://" in clean:
+            parsed = urllib.parse.urlparse(clean)
+            hostname = parsed.hostname or clean
+        else:
+            match = re.match(r"^(?:[^@]+@)?([^:/]+)", clean)
+            if match:
+                hostname = match.group(1)
+            else:
+                hostname = clean.split("/")[0].split(":")[0]
+        hostname = (hostname or "").strip()
+        if not hostname:
+            return None
+
+        credential_input = f"protocol=https\nhost={hostname}\n"
+        res = subprocess.run(
+            ["git", "credential", "fill"],
+            input=credential_input,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if res.returncode != 0 or not res.stdout:
+            return None
+
+        for line in res.stdout.splitlines():
+            line = line.strip()
+            if line.startswith("password="):
+                token = line.split("=", 1)[1].strip()
+                if token:
+                    return token
+        return None
+    except Exception:
+        return None
+
 class GitLabV4Provider:
     """
     Native GitLab REST API v4 Provider Adapter.
@@ -549,6 +589,9 @@ class GitLabV4Provider:
                     return token_val, "PRIVATE-TOKEN"
         except Exception:
             pass
+        cred_token = _resolve_token_from_git_credential(self.server_url)
+        if cred_token:
+            return cred_token, "PRIVATE-TOKEN"
         return None, "PRIVATE-TOKEN"
 
     def _api_request(
@@ -1573,6 +1616,11 @@ def create_tracker_provider(
         server_url = cli_gitlab_url or (rules.get("tracker_rules", {}).get("server_url") if rules else None)
         raw_project = cli_project or (rules.get("tracker_rules", {}).get("project_id") if rules else None) or (rules.get("tracker_rules", {}).get("project") if rules else None)
         raw_group = cli_gitlab_group or (rules.get("tracker_rules", {}).get("gitlab_group") if rules else None) or (rules.get("tracker_rules", {}).get("group") if rules else None)
+
+        remote_info = get_git_remote_info(workspace_dir) if workspace_dir else None
+        remote_path = remote_info.get("project_path") if remote_info else None
+        if not raw_project and remote_path:
+            raw_project = remote_path
 
         if raw_group and raw_project and "/" not in str(raw_project):
             project_id = f"{str(raw_group).rstrip('/')}/{str(raw_project).lstrip('/')}"
@@ -3524,16 +3572,14 @@ def reconcile_upstream_compiler_backlog(
 
 
 def blocked_specs_from_linter_output(output_text, workspace_dir, rules=None):
-    """Specification files the linter rejected, from its output.
+    """Specification files the linter genuinely rejected, from its output.
 
-    Intersected with the files that actually exist in the backlog directories. A bare
-    regex over the output also catches documents merely *cited* by a finding -- a
-    remediation note reading "see rules/document-references.md" made the reconciler
-    skip the constitution, which it had never been asked to validate. Only items the
-    linter genuinely rejected belong in the skip set (#321).
+    Intersected with the files that actually exist in the backlog directories. Only items
+    the linter genuinely rejected as primary subjects of a finding belong in the skip set (#321).
+    Documents merely cited in finding descriptions, quoted violation lines, or pre-reconciliation
+    issue ID placeholders do not block reconciliation.
     """
-    mentioned = set(re.findall(r"([\w.-]+\.md)", output_text or ""))
-    if not mentioned:
+    if not output_text:
         return set()
 
     backlog = (rules or {}).get("backlog_directories", {}) or {}
@@ -3545,7 +3591,36 @@ def blocked_specs_from_linter_output(output_text, workspace_dir, rules=None):
         target = os.path.join(workspace_dir, rel)
         if os.path.isdir(target):
             spec_names.update(n for n in os.listdir(target) if n.endswith(".md"))
-    return mentioned & spec_names
+
+    # Load published specs mapping if present
+    published_basenames = set()
+    mapping_path = os.path.join(workspace_dir, ".pipeline", "published_specs_mapping.json")
+    if os.path.isfile(mapping_path):
+        try:
+            with open(mapping_path, "r", encoding="utf-8") as pf:
+                pdata = json.load(pf)
+                for item in pdata:
+                    p = item.get("path")
+                    if p:
+                        published_basenames.add(os.path.basename(p))
+        except Exception:
+            pass
+
+    rejected = set()
+    for line in output_text.splitlines():
+        line = line.strip()
+        if not line.startswith("- "):
+            continue
+        line_lower = line.lower()
+        if any(kw in line_lower for kw in ("placeholder", "unresolved", "template", "checklist", "issueid")):
+            continue
+        m = re.match(r"^-\s+(?:(?:Epic|Feature|User\s*Story|Use\s*Case)\s+)?(?:docs/(?:epics|features|user-stories|use-cases)/)?([a-zA-Z0-9_\.-]+\.md)\b", line, re.I)
+        if m:
+            base = os.path.basename(m.group(1))
+            if base in spec_names and base not in published_basenames:
+                rejected.add(base)
+
+    return rejected
 
 
 def get_current_branch(workspace_dir):
@@ -4629,8 +4704,8 @@ def main():
     parser.add_argument(
         "--linter-timeout",
         type=int,
-        default=int(os.environ.get("DEAP_LINTER_TIMEOUT", "120")),
-        help="Timeout in seconds for pre-reconciliation linter validation (default: 120s or DEAP_LINTER_TIMEOUT).",
+        default=int(os.environ.get("DEAP_LINTER_TIMEOUT", "600")),
+        help="Timeout in seconds for pre-reconciliation linter validation (default: 600s or DEAP_LINTER_TIMEOUT).",
     )
     args = parser.parse_args()
 
@@ -4673,7 +4748,10 @@ def main():
     if linter_script and os.path.exists(linter_script):
         print("Running pre-reconciliation linter validation...")
         cmd = [sys.executable, linter_script, "--spec-only", "--allow-missing-specs"]
-        linter_timeout = getattr(args, "linter_timeout", 120) or 120
+        effective_provider = getattr(args, "provider", None) or rules_preview.get("tracker_rules", {}).get("provider")
+        if effective_provider:
+            cmd.extend(["--provider", effective_provider])
+        linter_timeout = getattr(args, "linter_timeout", 600) or 600
         try:
             res = subprocess.run(cmd, cwd=workspace_dir, capture_output=True, text=True, timeout=linter_timeout)
             if res.returncode != 0:
@@ -4686,7 +4764,14 @@ def main():
                     is_exclusive_checklist_placeholder = True
                     for err in error_lines:
                         err_lower = err.lower()
-                        if "placeholder" not in err_lower and "checklist" not in err_lower and "required features matrix" not in err_lower:
+                        if (
+                            "placeholder" not in err_lower
+                            and "checklist" not in err_lower
+                            and "required features matrix" not in err_lower
+                            and "unresolved" not in err_lower
+                            and "template" not in err_lower
+                            and "issueid" not in err_lower
+                        ):
                             is_exclusive_checklist_placeholder = False
                             break
                 

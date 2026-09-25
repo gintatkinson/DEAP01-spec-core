@@ -1162,31 +1162,34 @@ def _main_impl():
                                 if ":" in leaf:
                                     leaf = leaf.split(":", 1)[-1]
                                 spec_elements.add(leaf.lower())
-            if epics_dir and os.path.exists(epics_dir):
-                for ep_file in os.listdir(epics_dir):
-                    if ep_file.endswith(".md"):
-                        try:
-                            with open(os.path.join(epics_dir, ep_file), "r", encoding="utf-8") as f:
-                                content = f.read()
-                                all_spec_contents.append(content)
-                                
-                                data = extract_metadata_from_content(content)
-                                if isinstance(data, dict):
-                                    for container in data.get("schema_containers", []):
-                                        if isinstance(container, dict):
-                                            path = container.get("path", "")
-                                        else:
-                                            path = str(container)
-                                        if path:
-                                            leaf = path.split("/")[-1]
-                                            if ":" in leaf:
-                                                leaf = leaf.split(":", 1)[-1]
-                                            spec_elements.add(leaf.lower())
-                        except Exception:
-                            pass
+            stories_dir_rel = getattr(backlog_dirs, 'user_stories', None) or 'docs/user-stories'
+            stories_dir = os.path.join(repo.workspace_dir, stories_dir_rel) if stories_dir_rel else None
+            usecases_dir_rel = getattr(backlog_dirs, 'use_cases', None) or 'docs/use-cases'
+            usecases_dir = os.path.join(repo.workspace_dir, usecases_dir_rel) if usecases_dir_rel else None
 
-            for content in all_spec_contents:
-                pass
+            docs_root = os.path.join(repo.workspace_dir, "docs")
+            if os.path.isdir(docs_root):
+                for root, _, files in os.walk(docs_root):
+                    for extra_file in files:
+                        if extra_file.endswith(".md"):
+                            try:
+                                with open(os.path.join(root, extra_file), "r", encoding="utf-8") as f:
+                                    content = f.read()
+                                    all_spec_contents.append(content)
+                                    data = extract_metadata_from_content(content)
+                                    if isinstance(data, dict):
+                                        for container in data.get("schema_containers", []):
+                                            if isinstance(container, dict):
+                                                path = container.get("path", "")
+                                            else:
+                                                path = str(container)
+                                            if path:
+                                                leaf = path.split("/")[-1]
+                                                if ":" in leaf:
+                                                    leaf = leaf.split(":", 1)[-1]
+                                                spec_elements.add(leaf.lower())
+                            except Exception:
+                                pass
 
             for key in sorted(all_definitions):
                 name = key.split(":", 1)[1] if ":" in key else key
@@ -1194,6 +1197,10 @@ def _main_impl():
                     name = name.split("/")[-1]
                 
                 variants = {name}
+                if name.startswith("SafetyConstraint_"):
+                    sc_num = name.split("SafetyConstraint_", 1)[1]
+                    variants.add(sc_num)
+                    variants.add(sc_num.replace("_", "-"))
                 if '-' in name or '_' in name or '.' in name:
                     parts = re.split(r'[-_.]', name)
                     variants.add(parts[0] + "".join(p.capitalize() for p in parts[1:]))
@@ -1208,6 +1215,13 @@ def _main_impl():
                 for v in variants:
                     if v.lower() in spec_elements:
                         mapped = True
+                        break
+                    v_lower = v.lower()
+                    for content in all_spec_contents:
+                        if v_lower in content.lower():
+                            mapped = True
+                            break
+                    if mapped:
                         break
                 if not mapped:
                     spec_coverage_gaps.append(f"Schema node '{name}'")

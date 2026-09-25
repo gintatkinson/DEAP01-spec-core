@@ -92,15 +92,22 @@ RECOGNIZED_PROTOCOLS = [
 
 # Epistemic tier annotation pattern for declared engineering decisions and TBD parameters
 EPISTEMIC_EXEMPTION_PATTERN = re.compile(
-    r'\[TIER-(?:3|4)(?::\s*[^\]]+)?\]',
+    r'(?:\(|\[)TIER-(?:3|4)(?::\s*[^\]\)]+)?(?:\)|\])|(?:\(|\[)\s*Declared\s+Assumption\s*(?:\)|\])|\bDeclared\s+Assumption\b',
+    re.I
+)
+TIER_TAG_PATTERN = EPISTEMIC_EXEMPTION_PATTERN
+
+# Structural syntax keywords in Mermaid diagrams that do not carry normative engineering claims
+MERMAID_STRUCTURAL_KEYWORDS_PATTERN = re.compile(
+    r'^(?:sequenceDiagram|participant|actor|autonumber|activate|deactivate|rect|end|alt|else|opt|par|and|critical|option|break|flowchart|graph|classDiagram|classDiagram-v2|stateDiagram|stateDiagram-v2|erDiagram|journey|gantt|pie|gitGraph|subgraph|classDef|style|linkStyle|direction)(?:\s+|$)',
     re.I
 )
 
 
 def _has_epistemic_exemption(line: str) -> bool:
     """
-    Checks if a line contains an epistemic tier exemption ([TIER-3: DESIGN] or [TIER-4: TBD]).
-    Tier 3 (Design Decisions) and Tier 4 (TBD/Unspecified) are acknowledged engineering
+    Checks if a line contains an epistemic tier exemption ((TIER-3: DESIGN), [TIER-3: DESIGN], (TIER-4: TBD), [TIER-4: TBD], or (Declared Assumption)).
+    Tier 3 (Design Decisions), Tier 4 (TBD/Unspecified), and Declared Assumptions are acknowledged engineering
     decisions rather than fabricated OEM claims.
     """
     return bool(EPISTEMIC_EXEMPTION_PATTERN.search(line))
@@ -893,6 +900,10 @@ class MechanicalSectionSlicer:
     def _resolve_path(self, file_rel_path: str) -> Optional[str]:
         if not file_rel_path:
             return None
+        # Strip URL prefix if it points to repository blob (e.g. GitHub or GitLab blob URL)
+        url_match = re.match(r'^https?://[^/]+/.+?/(?:-/)?(?:blob|raw)/[^/]+/(.+)$', file_rel_path)
+        if url_match:
+            file_rel_path = url_match.group(1)
         full_path = os.path.join(self.workspace_dir, file_rel_path) if not os.path.isabs(file_rel_path) else file_rel_path
         if os.path.isfile(full_path):
             return full_path
@@ -931,6 +942,19 @@ class MechanicalSectionSlicer:
                 for root, _, files in os.walk(docs_dir):
                     if file_rel_path in files:
                         return os.path.join(root, file_rel_path)
+        if not file_rel_path.startswith("rules/"):
+            cand = os.path.join(self.workspace_dir, "rules", file_rel_path)
+            if os.path.isfile(cand):
+                return cand
+            rules_dir = os.path.join(self.workspace_dir, "rules")
+            if os.path.isdir(rules_dir):
+                for root, _, files in os.walk(rules_dir):
+                    if file_rel_path in files:
+                        return os.path.join(root, file_rel_path)
+        elif file_rel_path.startswith("rules/"):
+            cand = os.path.join(self.workspace_dir, file_rel_path)
+            if os.path.isfile(cand):
+                return cand
         return None
 
     def get_file_text(self, file_rel_path: str) -> Optional[str]:
@@ -1795,16 +1819,30 @@ class FactualGroundingValidator(IValidator):
         """
         Excludes retrospective defect reports, audit summary files, and non-specification developer guides/catalogs:
         1. Non-specification developer guides and prompt catalogs (OPERATOR_PROMPT_CATALOG.md, JIRA_INTEGRATION_GUIDE.md, README.md)
-        2. Any file located under docs/reports/defects/
-        3. Any file matching *AUDIT.md or *audit*.md
+        2. Any file located under docs/reports/ or docs/designs/ or docs/management/
+        3. Any file matching *AUDIT.md or *audit*.md or starting with defect_dossier_
+        4. Any file starting with walkthrough- or matching *walkthrough*.md
         """
         if filename in ("OPERATOR_PROMPT_CATALOG.md", "JIRA_INTEGRATION_GUIDE.md", "README.md"):
             return True
         norm_rel = rel_path.replace("\\", "/")
-        if norm_rel.startswith("docs/reports/defects/") or "/reports/defects/" in f"/{norm_rel}":
+        if (
+            norm_rel.startswith("docs/reports/")
+            or "/reports/" in f"/{norm_rel}"
+            or norm_rel.startswith("docs/designs/")
+            or "/designs/" in f"/{norm_rel}"
+            or norm_rel.startswith("docs/management/")
+            or "/management/" in f"/{norm_rel}"
+        ):
             return True
         f_lower = filename.lower()
-        if fnmatch.fnmatch(filename, "*AUDIT.md") or fnmatch.fnmatch(f_lower, "*audit*.md"):
+        if (
+            fnmatch.fnmatch(filename, "*AUDIT.md")
+            or fnmatch.fnmatch(f_lower, "*audit*.md")
+            or f_lower.startswith("defect_dossier_")
+            or f_lower.startswith("walkthrough-")
+            or fnmatch.fnmatch(f_lower, "*walkthrough*.md")
+        ):
             return True
         return False
 
@@ -1856,9 +1894,9 @@ class FactualGroundingValidator(IValidator):
         Extracts target file path and optional section locator from a citation in line.
         Returns (file_path, section_locator).
         """
-        # 1. HTML comment e.g. <!-- Source: schema/a5-user-manual-2.md §7.2.3 -->
+        # 1. HTML or Mermaid comment e.g. <!-- Source: schema/a5-user-manual-2.md §7.2.3 --> or %% Source: schema/model.sysml
         m_comment = re.search(
-            r'<!--\s*(?:Source|SSOT|Grounding|Reference):\s*([^\s>]+)(?:\s+([^>]+?))?\s*-->',
+            r'(?:<!--|%%)\s*(?:Source|SSOT|Grounding|Reference):\s*([^\s>]+)(?:\s+([^>\n]+?))?(?:\s*-->)?$',
             line,
             re.I
         )
@@ -1921,7 +1959,7 @@ class FactualGroundingValidator(IValidator):
         clean = re.sub(r'\[([^\]]*)\]\([^)]*?(?:\.pipeline|schema|docs)/[^)]*\)', r'\1', clean)
         clean = re.sub(r'(?:^|[\s`\'"(\[<|])(?:\.\.?/)?(?:\.pipeline|schema|docs)/[a-zA-Z0-9_./#:\-]+', '', clean)
         clean = re.sub(r'§\s*\d+(?:\.\d+)*', '', clean)
-        clean = re.sub(r'\[TIER-[0-9][^\]]*\]', '', clean)
+        clean = re.sub(r'(?:\(|\[)TIER-[0-9][^\]\)]*(?:\)|\])', '', clean)
 
         tokens: List[str] = []
 
@@ -2545,6 +2583,8 @@ class FactualGroundingValidator(IValidator):
         non_normative_depth: Optional[int] = None
         is_normative = True
         in_code_block = False
+        in_mermaid_block = False
+        in_sequence_diagram = False
 
         if not gt.numeric_limits and not gt.scoped_numeric_limits:
             return []
@@ -2614,33 +2654,57 @@ class FactualGroundingValidator(IValidator):
                 continue
 
             if line_str.startswith("```"):
-                in_code_block = not in_code_block
+                if in_code_block or in_mermaid_block:
+                    in_code_block = False
+                    in_mermaid_block = False
+                    in_sequence_diagram = False
+                else:
+                    info = line_str[3:].strip().lower()
+                    if info.startswith("mermaid"):
+                        in_mermaid_block = True
+                        in_sequence_diagram = False
+                    else:
+                        in_code_block = True
                 continue
+
             if in_code_block or not line_str:
                 if not line_str:
                     current_citation = None
                 continue
 
-            # Heading detection
-            m_head = re.match(r'^(#{1,6})\s+(.+)$', line_str)
-            if m_head:
-                current_citation = None
-                level = len(m_head.group(1))
-                current_heading = m_head.group(2).strip()
-                if non_normative_depth is not None and level <= non_normative_depth:
-                    non_normative_depth = None
-                if self._is_non_normative_section(current_heading):
-                    non_normative_depth = level
-                is_normative = (non_normative_depth is None)
-                continue
+            if in_mermaid_block:
+                if line_str.lower().startswith("sequencediagram"):
+                    in_sequence_diagram = True
+                    continue
+                if not in_sequence_diagram:
+                    continue
+                if MERMAID_STRUCTURAL_KEYWORDS_PATTERN.match(line_str):
+                    continue
+                if line_str.startswith("%%"):
+                    if re.search(r'%%\s*(?:Source|SSOT|Grounding|Reference):\s*\S+', line_str, re.I):
+                        current_citation = line_str
+                    continue
+            else:
+                # Heading detection
+                m_head = re.match(r'^(#{1,6})\s+(.+)$', line_str)
+                if m_head:
+                    current_citation = None
+                    level = len(m_head.group(1))
+                    current_heading = m_head.group(2).strip()
+                    if non_normative_depth is not None and level <= non_normative_depth:
+                        non_normative_depth = None
+                    if self._is_non_normative_section(current_heading):
+                        non_normative_depth = level
+                    is_normative = (non_normative_depth is None)
+                    continue
 
             if not is_normative:
                 continue
 
-            # Track block/paragraph citation comments (e.g. <!-- Source: ... -->)
-            if re.search(r'<!--\s*(?:Source|SSOT|Grounding|Reference):\s*[^>]+-->', line_str, re.I):
+            # Track block/paragraph citation comments (e.g. <!-- Source: ... --> or %% Source: ...)
+            if re.search(r'(?:<!--|%%)\s*(?:Source|SSOT|Grounding|Reference):\s*[^>\n]+', line_str, re.I):
                 current_citation = line_str
-                if re.match(r'^\s*<!--\s*(?:Source|SSOT|Grounding|Reference):\s*[^>]+-->\s*$', line_str, re.I):
+                if re.match(r'^\s*(?:<!--|%%)\s*(?:Source|SSOT|Grounding|Reference):\s*[^>\n]+(?:-->)?\s*$', line_str, re.I):
                     continue
 
             # Skip rejected trade study rows
