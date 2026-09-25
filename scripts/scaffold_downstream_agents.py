@@ -26,7 +26,7 @@ DEFAULT_CLAUDE = """# Claude Code Project Guidelines
 This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
 
 ## Workflow & Quality Gates
-- Follow all pipeline rules in `rules/` and skills in `skills/` and `.agents/skills/`.
+- Follow all pipeline rules by executing `view_file` on `.pipeline/ACTIVE_RULES_BUNDLE.md`, and skills in `skills/` and `.agents/skills/`.
 - Strict Planning Gate: Do not execute unauthorized modifications without an approved implementation plan.
 - Execute baseline verification: `pytest tests/test_baseline.py` and `python3 scripts/verify_downstream_baseline.py --no-domain`.
 """
@@ -52,7 +52,7 @@ This platform explicitly declares **MATLAB / Simulink / Stateflow / Embedded Cod
 
 - `.agents/` & `AGENTS.md`: Agent behavior rules, role boundaries, and subagent dispatch protocols.
 - `CLAUDE.md`: Claude Code guidelines and verification gates.
-- `.pipeline/`: Constitution (`constitution.md`), domain specifications, and execution profiles.
+- `.pipeline/`: Constitution (`constitution.md`), active governance rules bundle (`ACTIVE_RULES_BUNDLE.md`), domain specifications, and execution profiles.
 - `rules/` & `skills/`: Platform engineering rules and agent workflow skills.
 - `schema/`: Contract definitions and SysML v2 schemas.
 - `tests/`: Automated baseline verification and safety compliance tests.

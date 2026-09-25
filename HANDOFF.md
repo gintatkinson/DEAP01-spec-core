@@ -2,11 +2,11 @@
 
 | Attribute | Value |
 | :--- | :--- |
-| **Document Identifier** | `DEAP-HANDOFF-ROOT-003` |
+| **Document Identifier** | `DEAP-HANDOFF-ROOT-004` |
 | **Title** | Comprehensive Operational Handoff: Retrospective on Failure Modes, Dual-Provider Tooling Architecture, and Downstream Leaf Remediation |
 | **Repository Classification** | `UPSTREAM_SPEC_CORE_COMPILER` (DEAP01-spec-core) & Downstream Distribution (`uav-009`, `uav-011`, `DEAP-uas-infrastructure-safety`) |
 | **Target Branch** | `main` (clean working tree, synchronized with `origin/main`) |
-| **Upstream Baseline Commit** | `14932ff` / `a749ff8` |
+| **Upstream Baseline Commit** | `ce82ef4` |
 | **Status** | Authoritative Operational Handoff Baseline for Incoming Agent |
 | **Date** | 2026-09-25 |
 | **Target Audience** | Incoming Autonomous Systems Engineering Agent / Multi-Harness Team |
@@ -127,6 +127,25 @@ All operations, audits, and remediations are strictly bounded within `/Users/per
   - Currently carries older GitHub-only issue automation tooling. Requires updated dual-provider tooling installation. Must maintain clean landing zones (`schema/`, `docs/epics/`, `docs/features/`, `docs/user-stories/`, `docs/use-cases/` containing only `.gitkeep`) until concrete models are compiled.
 - **Downstream Domain Template (`/Users/perkunas/jail/DEAP-uas-infrastructure-safety`)**:
   - Upstream distribution domain template. Requires updated dual-provider tooling installation. Must maintain 100% clean landing zones (`.gitkeep` only) and 0-byte remote diff.
+
+### 3.4 Formal Audit Findings & Defect Registrations (Milestone 2)
+
+During Milestone 2, three formal adversarial audits were conducted under `skills/adversarial-code-auditor/SKILL.md` and registered on the respective upstream and downstream issue trackers:
+
+1. **GitHub Issue #369**: Governance Ingestion Defect in `README.md` and `docs/OPERATOR_PROMPT_CATALOG.md`.
+   - **Finding**: Setup documentation, initialization sequences, and operator prompt templates directed agents to read bare directories (`rules/`, `skills/`) or isolated rule files (`rules/dual-track-mbd-verification.md`) rather than mandating execution of `view_file` directly on `.pipeline/ACTIVE_RULES_BUNDLE.md`.
+   - **Resolution Status**: Remediated in Milestone 3 Step 1 (`README.md`, `docs/OPERATOR_PROMPT_CATALOG.md`, and `scripts/scaffold_downstream_agents.py` updated to mandate `.pipeline/ACTIVE_RULES_BUNDLE.md`).
+2. **GitHub Issue #370**: Single-Provider Tooling Defect in `skills/spec-orchestrator/scripts/create_issue.sh`.
+   - **Finding**: Issue creation script hardcoded GitHub `gh` CLI commands without fallback or adaptation for GitLab `glab` CLI primitives, failing closed in GitLab-backed workspaces.
+   - **Resolution Status**: Dual-provider reproducer test suite scaffolded in `tests/test_create_issue_dual_provider.py`; implementation scheduled for Milestone 3 Step 2.
+3. **GitLab Work Item #9**: 75 Ungrounded Specifications in `uav-009`.
+   - **Finding**: Downstream customer workspace `/Users/perkunas/jail/uav-009` contains 75 specification files with literal `| **Issue ID** | #[IssueID] |` placeholders and 0 published issues on the remote tracker due to `create_issue.sh` failure.
+   - **Resolution Status**: Scheduled for leaf-level topological issue publishing and backlog reconciliation in Milestone 3 Step 3.
+
+### 3.5 Status of Prior Resolved Issues
+- **GitHub Issue #363** (*Domain Template Customer Onboarding Ingestion Command Defect*):
+  - **Resolution**: Fully resolved via commit `ce82ef4` (`fix(pipeline): synthesize domain template onboarding command when domain-url is passed (refs #363)`).
+  - **Mechanism**: Updated role detection in `scripts/install_pipeline.sh:324-342` to recognize `--domain-url` and `--domain-name`, ensuring `DOMAIN_DISTRIBUTION_TEMPLATE` classification and deterministic synthesis of customer onboarding clone commands in `README.md`. All 9/9 tests pass in `tests/test_domain_url_synthesis.py`.
 
 ---
 
@@ -269,7 +288,7 @@ To launch the multi-agent consensus team, recommend the slash command or invoke 
         "TypeName": "teamwork_preview",
         "Role": "Autonomous Multi-Agent Consensus Team",
         "Model": "inherit",
-        "Prompt": "Execute view_file on skills/feature-driven-implementation/SKILL.md as your very first step before executing any file edits or commands, and strictly follow its formatting templates and instruction guidelines.\n\nRepository Classification: UPSTREAM_SPEC_CORE_COMPILER\nTarget Workspace: /Users/perkunas/jail/DEAP01-spec-core\nPrimary Commercial Toolchain Integration Context: MATLAB / Simulink / Stateflow / Embedded Coder\n\nTask: Execute DEAP-HANDOFF-ROOT-003 Master Execution Roadmap across Phases 1, 2, and 3.\n\nPROCEED"
+        "Prompt": "Execute view_file on skills/feature-driven-implementation/SKILL.md as your very first step before executing any file edits or commands, and strictly follow its formatting templates and instruction guidelines.\n\nRepository Classification: UPSTREAM_SPEC_CORE_COMPILER\nTarget Workspace: /Users/perkunas/jail/DEAP01-spec-core\nPrimary Commercial Toolchain Integration Context: MATLAB / Simulink / Stateflow / Embedded Coder\n\nTask: Execute DEAP-HANDOFF-ROOT-004 Master Execution Roadmap across Phases 1, 2, and 3.\n\nPROCEED"
       }
     ]
   }
