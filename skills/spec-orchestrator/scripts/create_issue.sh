@@ -3,21 +3,92 @@
 # Usage: ./create_issue.sh <body-file> <label> <title> <repo>
 set -euo pipefail
 
-if [ "$#" -lt 3 ]; then
+CLI_PROVIDER=""
+REOPEN_ANALYSIS_FILE=""
+REPO=""
+POSITIONAL_ARGS=()
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --provider)
+            if [ $# -lt 2 ]; then
+                echo "FATAL: --provider requires an argument" >&2
+                exit 1
+            fi
+            CLI_PROVIDER="$2"
+            shift 2
+            ;;
+        --provider=*)
+            CLI_PROVIDER="${1#*=}"
+            shift
+            ;;
+        --reopen-with-analysis)
+            if [ $# -lt 2 ]; then
+                echo "FATAL: --reopen-with-analysis requires an argument" >&2
+                exit 1
+            fi
+            REOPEN_ANALYSIS_FILE="$2"
+            shift 2
+            ;;
+        --reopen-with-analysis=*)
+            REOPEN_ANALYSIS_FILE="${1#*=}"
+            shift
+            ;;
+        --repo)
+            if [ $# -lt 2 ]; then
+                echo "FATAL: --repo requires an argument" >&2
+                exit 1
+            fi
+            REPO="$2"
+            shift 2
+            ;;
+        --repo=*)
+            REPO="${1#*=}"
+            shift
+            ;;
+        *)
+            POSITIONAL_ARGS+=("$1")
+            shift
+            ;;
+    esac
+done
+
+if [ "${#POSITIONAL_ARGS[@]}" -lt 3 ]; then
     echo "Usage: $0 <body-file> <label> <title> [repo]" >&2
     exit 1
 fi
 
-LOCAL_FILE="$1"
-LABEL="$2"
-TITLE="$3"
-REPO="${4:-}"
+LOCAL_FILE="${POSITIONAL_ARGS[0]}"
+LABEL="${POSITIONAL_ARGS[1]}"
+TITLE="${POSITIONAL_ARGS[2]}"
+if [ -z "$REPO" ] && [ "${#POSITIONAL_ARGS[@]}" -ge 4 ]; then
+    REPO="${POSITIONAL_ARGS[3]}"
+fi
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LINTER="$SCRIPT_DIR/verify_model_coverage.py"
 
 if [ ! -f "$LOCAL_FILE" ]; then
     echo "FATAL: Body file not found: $LOCAL_FILE" >&2
     exit 1
+fi
+
+if [ -n "$REOPEN_ANALYSIS_FILE" ] && [ ! -f "$REOPEN_ANALYSIS_FILE" ]; then
+    echo "FATAL: Reopen analysis file not found: $REOPEN_ANALYSIS_FILE" >&2
+    exit 1
+fi
+
+# Provider Auto-Detection:
+# Check --provider <github|gitlab> CLI flag, or TRACKER_PROVIDER env var, or inspect git remote URL
+PROVIDER="${CLI_PROVIDER:-${TRACKER_PROVIDER:-}}"
+if [ -z "$PROVIDER" ] || [ "$PROVIDER" = "auto" ]; then
+    REMOTE_URL=$(git remote get-url origin 2>/dev/null || git config --get remote.origin.url 2>/dev/null || true)
+    if [[ "$REMOTE_URL" =~ gitlab ]] || [ -n "${GITLAB_CI:-}" ]; then
+        PROVIDER="gitlab"
+    else
+        PROVIDER="github"
+    fi
+else
+    PROVIDER=$(echo "$PROVIDER" | tr '[:upper:]' '[:lower:]')
 fi
 
 normalize_spec_slug() {
@@ -64,8 +135,8 @@ fi
 # but only findings naming this specification are reported. That is what makes
 # strictness affordable: the permissive --allow-missing-specs flag is gone, and an
 # unrelated work-in-progress draft no longer blocks this filing.
-echo "[GATE] Running linter: $LINTER --spec-only --only $(basename "$LOCAL_FILE")"
-if ! python3 "$LINTER" --spec-only --only "$(basename "$LOCAL_FILE")"; then
+echo "[GATE] Running linter: $LINTER --spec-only --only $(basename "$LOCAL_FILE") --provider $PROVIDER"
+if ! python3 "$LINTER" --spec-only --only "$(basename "$LOCAL_FILE")" --provider "$PROVIDER"; then
     echo "FATAL: Linter failed. Fix all specification violations before filing issues." >&2
     exit 1
 fi
@@ -76,25 +147,51 @@ if [ -n "$REPO" ]; then
     REPO_FLAG="--repo $REPO"
 fi
 
-# Issue #332 -- idempotency. Re-running filed a second issue with the same title. Since
-# #314/#316 the reconciler resolves specs by canonical issue_id, but a duplicate still
-# pollutes the tracker and re-triggers downstream automation, so the cheapest place to
-# stop it is before creation. Exact match on the title column, not a substring:
-# `gh issue list` emits TSV as number<TAB>title<TAB>labels<TAB>state.
-EXISTING=$(gh issue list --state all --search "in:title \"$TITLE\"" $REPO_FLAG 2>/dev/null \
-    | awk -F'\t' -v t="$TITLE" '$2 == t { print $1; exit }')
-if [ -n "$EXISTING" ]; then
-    echo "[IDEMPOTENT] Issue #$EXISTING already carries the title '$TITLE'. Not filing a duplicate."
-    exit 0
+# Duplicate search and idempotency
+if [ "$PROVIDER" = "gitlab" ]; then
+    EXISTING=$(glab issue list $REPO_FLAG --all --search "$TITLE" 2>/dev/null \
+        | awk -F'\t' -v t="$TITLE" '$2 == t { print $1; exit }')
+else
+    # Issue #332 -- idempotency. Exact match on the title column, not a substring:
+    # `gh issue list` emits TSV as number<TAB>title<TAB>labels<TAB>state.
+    EXISTING=$(gh issue list --state all --search "in:title \"$TITLE\"" $REPO_FLAG 2>/dev/null \
+        | awk -F'\t' -v t="$TITLE" '$2 == t { print $1; exit }')
 fi
 
-# Issue #332 -- the label precondition used `grep -Fq "$LABEL"`, a substring match, so an
-# existing `feature-request` satisfied the check for `feature` and the real label was
-# never created. Exact match on the name column instead.
-if ! gh label list $REPO_FLAG 2>/dev/null \
-    | awk -F'\t' -v l="$LABEL" '$1 == l { found = 1 } END { exit !found }'; then
-    echo "[GATE] Label '$LABEL' not found. Creating..."
-    gh label create "$LABEL" $REPO_FLAG --color "0366d6" --description "${LABEL} specification"
+if [ -n "$EXISTING" ]; then
+    EXISTING="${EXISTING#\#}"
+    if [ -n "$REOPEN_ANALYSIS_FILE" ]; then
+        echo "[REOPEN] Issue #$EXISTING already exists. Reopening with analysis from $REOPEN_ANALYSIS_FILE..."
+        if [ "$PROVIDER" = "gitlab" ]; then
+            glab issue reopen "$EXISTING" $REPO_FLAG
+            glab issue note "$EXISTING" $REPO_FLAG --message "$(< "$REOPEN_ANALYSIS_FILE")"
+        else
+            gh issue reopen "$EXISTING" $REPO_FLAG
+            gh issue comment "$EXISTING" $REPO_FLAG --body "$(< "$REOPEN_ANALYSIS_FILE")"
+        fi
+        exit 0
+    else
+        echo "[IDEMPOTENT] Issue #$EXISTING already carries the title '$TITLE'. Not filing a duplicate."
+        exit 0
+    fi
+fi
+
+# Label check and creation
+if [ "$PROVIDER" = "gitlab" ]; then
+    if ! glab label list $REPO_FLAG 2>/dev/null \
+        | awk -v l="$LABEL" '($1 == l || $0 ~ ("^" l "([[:space:]]|$)")) { found = 1 } END { exit !found }'; then
+        echo "[GATE] Label '$LABEL' not found. Creating..."
+        glab label create "$LABEL" $REPO_FLAG --color "#0366d6" --description "${LABEL} specification"
+    fi
+else
+    # Issue #332 -- the label precondition used `grep -Fq "$LABEL"`, a substring match, so an
+    # existing `feature-request` satisfied the check for `feature` and the real label was
+    # never created. Exact match on the name column instead.
+    if ! gh label list $REPO_FLAG 2>/dev/null \
+        | awk -F'\t' -v l="$LABEL" '$1 == l { found = 1 } END { exit !found }'; then
+        echo "[GATE] Label '$LABEL' not found. Creating..."
+        gh label create "$LABEL" $REPO_FLAG --color "0366d6" --description "${LABEL} specification"
+    fi
 fi
 
 # Issue #244 -- expand relative markdown links to full blob URLs before creating the issue.
@@ -104,13 +201,14 @@ cleanup() {
 }
 trap cleanup EXIT
 
-python3 - "$LOCAL_FILE" "$TMP_EXPANDED_BODY" "$REPO" "$SCRIPT_DIR" <<'PYEOF'
+python3 - "$LOCAL_FILE" "$TMP_EXPANDED_BODY" "$REPO" "$SCRIPT_DIR" "$PROVIDER" <<'PYEOF'
 import sys, os
 
 local_file = sys.argv[1]
 tmp_out = sys.argv[2]
 repo = sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] else None
 script_dir = sys.argv[4] if len(sys.argv) > 4 and sys.argv[4] else ""
+provider = sys.argv[5] if len(sys.argv) > 5 and sys.argv[5] else ""
 
 # Ensure scripts directories are on sys.path
 for path in [
@@ -126,10 +224,16 @@ try:
     from reconcile_backlog import expand_relative_links_for_tracker, load_codebase_rules, find_workspace_dir
     workspace_dir = find_workspace_dir(os.path.dirname(os.path.abspath(local_file))) or find_workspace_dir(os.getcwd())
     rules = load_codebase_rules(workspace_dir) if workspace_dir else {}
+    if not rules:
+        rules = {}
     if repo:
-        if not rules:
-            rules = {}
         rules.setdefault("meta", {})["upstream_repository"] = repo
+        rules.setdefault("tracker_rules", {})["project_id"] = repo
+        rules.setdefault("tracker_rules", {})["project_key"] = repo
+
+    if provider:
+        rules.setdefault("tracker_rules", {})["provider"] = provider
+        os.environ["TRACKER_PROVIDER"] = provider
 
     with open(local_file, "r", encoding="utf-8") as f:
         content = f.read()
@@ -142,9 +246,13 @@ except Exception:
     shutil.copyfile(local_file, tmp_out)
 PYEOF
 
-if [ -n "$REPO" ]; then
-    gh issue create --repo "$REPO" --title "$TITLE" --label "$LABEL" --body-file "$TMP_EXPANDED_BODY"
+if [ "$PROVIDER" = "gitlab" ]; then
+    glab issue create $REPO_FLAG --title "$TITLE" --label "$LABEL" --description "$(< "$TMP_EXPANDED_BODY")"
 else
-    gh issue create --title "$TITLE" --label "$LABEL" --body-file "$TMP_EXPANDED_BODY"
+    if [ -n "$REPO" ]; then
+        gh issue create --repo "$REPO" --title "$TITLE" --label "$LABEL" --body-file "$TMP_EXPANDED_BODY"
+    else
+        gh issue create --title "$TITLE" --label "$LABEL" --body-file "$TMP_EXPANDED_BODY"
+    fi
 fi
 
