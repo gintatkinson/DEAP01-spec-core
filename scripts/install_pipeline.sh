@@ -27,6 +27,7 @@ Arguments:
   TARGET_DIR                 Target project directory (default: current directory '.')
 
 Options:
+      --target TARGET_DIR    Target project directory (equivalent to positional argument)
   -r, --role ROLE            Target repository role: 'domain-template' or 'customer-project' (auto-detected if omitted)
   -p, --provider PROVIDER    Target issue tracker and CI/CD provider: 'github', 'gitlab', 'jira', or 'auto' (default: 'auto')
   -t, --tracker TRACKER      Alias for --provider: 'github', 'gitlab', 'jira', or 'auto'
@@ -60,6 +61,18 @@ while [[ $# -gt 0 ]]; do
     -h|--help)
       show_help
       exit 0
+      ;;
+    --target)
+      if [[ -z "$2" || "$2" == -* ]]; then
+        echo "Error: --target requires a target directory argument." >&2
+        exit 1
+      fi
+      TARGET_DIR="$2"
+      shift 2
+      ;;
+    --target=*)
+      TARGET_DIR="${1#*=}"
+      shift
       ;;
     -r|--role)
       if [[ -z "$2" || "$2" == -* ]]; then
@@ -347,11 +360,23 @@ echo "Target repository role: $TARGET_ROLE"
 # Preserve any existing downstream project metadata or configuration
 PRESERVED_METADATA=""
 PRESERVED_PROFILE_CONFIG=""
+PRESERVED_SCHEMA_SYSML=""
+PRESERVED_SCHEMA_DIGEST=""
+PRESERVED_LINEAGE=""
 if [ -f "$TARGET_DIR/.pipeline/project_metadata.json" ]; then
   PRESERVED_METADATA=$(cat "$TARGET_DIR/.pipeline/project_metadata.json")
 fi
 if [ -f "$TARGET_DIR/.pipeline/profile_config.json" ]; then
   PRESERVED_PROFILE_CONFIG=$(cat "$TARGET_DIR/.pipeline/profile_config.json")
+fi
+if [ -f "$TARGET_DIR/.pipeline/schema.sysml" ]; then
+  PRESERVED_SCHEMA_SYSML=$(cat "$TARGET_DIR/.pipeline/schema.sysml")
+fi
+if [ -f "$TARGET_DIR/.pipeline/schema-digest.json" ]; then
+  PRESERVED_SCHEMA_DIGEST=$(cat "$TARGET_DIR/.pipeline/schema-digest.json")
+fi
+if [ -f "$TARGET_DIR/.pipeline/lineage.json" ]; then
+  PRESERVED_LINEAGE=$(cat "$TARGET_DIR/.pipeline/lineage.json")
 fi
 
 if [ "$TARGET_DIR" != "$INSTALLER_ROOT" ]; then
@@ -370,6 +395,18 @@ if [ "$TARGET_DIR" != "$INSTALLER_ROOT" ]; then
   if [ -n "$PRESERVED_PROFILE_CONFIG" ]; then
     chmod u+w "$TARGET_DIR/.pipeline/profile_config.json" 2>/dev/null || true
     echo "$PRESERVED_PROFILE_CONFIG" > "$TARGET_DIR/.pipeline/profile_config.json"
+  fi
+  if [ -n "$PRESERVED_SCHEMA_SYSML" ]; then
+    chmod u+w "$TARGET_DIR/.pipeline/schema.sysml" 2>/dev/null || true
+    echo "$PRESERVED_SCHEMA_SYSML" > "$TARGET_DIR/.pipeline/schema.sysml"
+  fi
+  if [ -n "$PRESERVED_SCHEMA_DIGEST" ]; then
+    chmod u+w "$TARGET_DIR/.pipeline/schema-digest.json" 2>/dev/null || true
+    echo "$PRESERVED_SCHEMA_DIGEST" > "$TARGET_DIR/.pipeline/schema-digest.json"
+  fi
+  if [ -n "$PRESERVED_LINEAGE" ]; then
+    chmod u+w "$TARGET_DIR/.pipeline/lineage.json" 2>/dev/null || true
+    echo "$PRESERVED_LINEAGE" > "$TARGET_DIR/.pipeline/lineage.json"
   fi
   cp -RPf "$INSTALLER_ROOT/.agents" "$TARGET_DIR/"
   cp -RPf "$INSTALLER_ROOT/scripts" "$TARGET_DIR/"
@@ -402,10 +439,27 @@ if [ ! -e "$TARGET_DIR/schema" ]; then
   mkdir -p "$TARGET_DIR/schema"
 fi
 mkdir -p "$TARGET_DIR/tests"
-mkdir -p "$TARGET_DIR/docs" "$TARGET_DIR/docs/conops" "$TARGET_DIR/docs/conops/units/conops" "$TARGET_DIR/docs/conops/units/mission_intent" "$TARGET_DIR/docs/interfaces" "$TARGET_DIR/docs/safety" "$TARGET_DIR/docs/architecture/blueprints" "$TARGET_DIR/docs/epics" "$TARGET_DIR/docs/features" "$TARGET_DIR/docs/user-stories" "$TARGET_DIR/docs/use-cases" "$TARGET_DIR/docs/management"
+mkdir -p "$TARGET_DIR/docs"
 chmod -R u+w "$TARGET_DIR/docs" 2>/dev/null || true
-touch "$TARGET_DIR/docs/management/.gitkeep" "$TARGET_DIR/docs/epics/.gitkeep" "$TARGET_DIR/docs/features/.gitkeep" "$TARGET_DIR/docs/user-stories/.gitkeep" "$TARGET_DIR/docs/use-cases/.gitkeep" "$TARGET_DIR/schema/.gitkeep" "$TARGET_DIR/docs/conops/.gitkeep" "$TARGET_DIR/docs/safety/.gitkeep"
 if [ "$TARGET_ROLE" = "DOMAIN_DISTRIBUTION_TEMPLATE" ]; then
+  mkdir -p "$TARGET_DIR/docs/conops" "$TARGET_DIR/docs/conops/units/conops" "$TARGET_DIR/docs/conops/units/mission_intent" "$TARGET_DIR/docs/interfaces" "$TARGET_DIR/docs/safety" "$TARGET_DIR/docs/architecture/blueprints" "$TARGET_DIR/docs/epics" "$TARGET_DIR/docs/features" "$TARGET_DIR/docs/user-stories" "$TARGET_DIR/docs/use-cases" "$TARGET_DIR/docs/management"
+  for keep_dir in "$TARGET_DIR/docs/management" "$TARGET_DIR/docs/epics" "$TARGET_DIR/docs/features" "$TARGET_DIR/docs/user-stories" "$TARGET_DIR/docs/use-cases" "$TARGET_DIR/schema" "$TARGET_DIR/docs/conops" "$TARGET_DIR/docs/safety"; do
+    HAS_CONCRETE_SPECS=0
+    if [ -d "$keep_dir" ]; then
+      for f in "$keep_dir"/*; do
+        if [ -f "$f" ]; then
+          fname=$(basename "$f")
+          if [ "$fname" != ".gitkeep" ] && [ "$fname" != "README.md" ] && [ "$fname" != ".DS_Store" ]; then
+            HAS_CONCRETE_SPECS=1
+            break
+          fi
+        fi
+      done
+    fi
+    if [ "$HAS_CONCRETE_SPECS" -eq 0 ]; then
+      touch "$keep_dir/.gitkeep"
+    fi
+  done
   rm -f "$TARGET_DIR/schema/README.md" "$TARGET_DIR/docs/conops/README.md" "$TARGET_DIR/docs/safety/README.md"
 fi
 if [ "$TARGET_DIR" != "$INSTALLER_ROOT" ]; then
