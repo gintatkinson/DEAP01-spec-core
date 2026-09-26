@@ -3,11 +3,11 @@
 | Attribute | Value |
 | :--- | :--- |
 | **Document Identifier** | `DEAP-HANDOFF-ROOT-006` |
-| **Title** | Authoritative Operational Handoff: Retrospective on 13 Failure Modes, Full-Fleet Parity Baseline, Feat-02 Flight Control Laws MBD Roadmap, and Multi-Agent Teamwork Protocol |
-| **Repository Classification** | `UPSTREAM_SPEC_CORE_COMPILER` (DEAP01-spec-core) & Downstream Distribution (`uav-009`, `uav-011`, `DEAP-uas-infrastructure-safety`) |
+| **Title** | Authoritative Operational Handoff: Retrospective on 13 Failure Modes, Full-Fleet Parity Baseline, Upstream Specification Compiler Roadmap, and Abstract Pipeline Multi-Agent Protocol |
+| **Repository Classification** | `UPSTREAM_SPEC_CORE_COMPILER` (DEAP01-spec-core) |
 | **Target Branch** | `main` (clean working tree, synchronized with `origin/main`) |
-| **Upstream Baseline Commit** | `dd7638c` |
-| **Customer Baseline Commit** | `uav-009 faff825 / uav-011 c2826b9` |
+| **Upstream Baseline Commit** | `dd7638c` / `6188e52` |
+| **Customer Baseline Commit** | `uav-009 faff825` / `uav-011 c2826b9` |
 | **Status** | Authoritative Operational Handoff Baseline for Incoming Agent |
 | **Date** | 2026-09-26 |
 | **Target Audience** | Incoming Autonomous Systems Engineering Agent / Multi-Harness Team |
@@ -27,10 +27,10 @@ Every incoming agent must study these 13 failure modes. These were direct operat
 
 ### Failure Mode 2: Hacking Downstream Content Files (Violating Pure Schema-Driven Compiler Invariant)
 - **What Happened**: When ConOps validators failed or when operational sections were missing, content was hand-edited or patched directly into downstream markdown files (`docs/conops/units/conops/04_SYSTEM_ARCHITECTURE.md`, `06_UAF_...`, `07_OPTX_...`, `09_SCENARIOS_...`). 
-- **Consequence**: The specification became completely detached from the SysML model. Scenarios (`SCN-01..SCN-05`), operational activities (`OA-01..OA-12`), and operational exchanges (`OpTx-01..OpTx-10`) existed only as narrative prose tables in markdown and were **completely absent from `schema/avenger5_system.sysml`**.
+- **Consequence**: The specification became completely detached from the SysML model. Scenarios (`SCN-01..SCN-05`), operational activities (`OA-01..OA-12`), and operational exchanges (`OpTx-01..OpTx-10`) existed only as narrative prose tables in markdown and were **completely absent from the customer SysML schema (`schema/*.sysml`)**.
 - **Mandate for Incoming Agent**:
   - **ABSOLUTE PROHIBITION**: You are strictly forbidden from hand-editing or patching downstream content files in `docs/conops/units/conops/` to satisfy tests or validators.
-  - **100% OF SPECIFICATIONS MUST BE COMPILED DETERMINISTICALLY FROM THE SYSML MODEL**. If an operational activity, scenario, or exchange is missing or invalid, it must be modeled in `schema/avenger5_system.sysml` and generated via the compiler.
+  - **100% OF SPECIFICATIONS MUST BE COMPILED DETERMINISTICALLY FROM THE SYSML MODEL**. If an operational activity, scenario, or exchange is missing or invalid, it must be modeled in the customer SysML schema (`schema/*.sysml`) and generated via the compiler.
 
 ### Failure Mode 3: Inverting MBSE (Writing Narrative Prose Before SysML Exists)
 - **What Happened**: The pipeline allowed ConOps units (Units 06, 07, 09) to be authored as narrative prose before the SysML model constructs (`action def`, `connection def`, `use case def`) existed. SysML was treated as a secondary reverse-sync target rather than Step 0 (the Single Source of Truth).
@@ -80,7 +80,7 @@ Every incoming agent must study these 13 failure modes. These were direct operat
 
 ### Failure Mode 10: Regex & Substring Heuristics vs. AST / Schema Validation (Anti-Regex Invariant)
 - **What Happened**: Validators and linters relied on negative-string regex heuristics (e.g. `_has_epistemic_exemption` matching `[TIER-3]` or `(Declared Assumption)` tokens, or whitelisting specific domain substrings) rather than validating closed-world model closure against the authoritative Level 0 SysML v2 AST or compiled schema dictionary.
-- **Consequence**: Created perverse incentives to append cosmetic exemption tags or strip tokens to bypass CI gates without genuine model provenance. Allowed ~251 ungrounded stopgap parameters (masses, voltages, loop rates) to slip into the specification baseline, corrupting downstream Model-Based Design (MBD) and safety certification envelopes.
+- **Consequence**: Created perverse incentives to append cosmetic exemption tags or strip tokens to bypass CI gates without genuine model provenance. Allowed ungrounded stopgap parameters (such as ungrounded numerical values, masses, loop rates) to slip into the specification baseline, corrupting downstream Model-Based Design (MBD) and safety certification envelopes.
 - **Mandate for Incoming Agent**:
   - **ABSOLUTE PROHIBITION ON REGEX / SUBSTRING VALIDATION OF MODEL CLOSURE**: Never use regex, token presence, or negative-string pattern matches to validate architecture, interfaces, or semantic provenance.
   - **POSITIVE AST GROUNDING**: All parameters, signals, and architectural entities must be positively validated against the SysML v2 AST Single Source of Truth or a compiled, closed-world typed parameter dictionary.
@@ -99,12 +99,13 @@ Every incoming agent must study these 13 failure modes. These were direct operat
   - **NEVER** collapse multi-tier or complex engineering implementations into a single self-auditing subagent.
   - **MANDATORY TEAMWORK ROSTER**: Maintain strict role separation: Sentinel (governance & bounds), Orchestrator (coordination), specialized Workers (implementation), independent Reviewers (compliance & numerical quality), adversarial Challengers (anti-regex & boundary checks), and Victory Auditor (independent gate confirmation).
 
-### Failure Mode 13: Coordinator Context Bloat via Verbose Terminal Diagnostics & Redundant Test Runs
-- **What Happened**: The coordinator agent executed long, verbose CLI commands, repeated full-suite test runs, and dumped massive diagnostic outputs directly into the primary conversation context while troubleshooting issues.
-- **Consequence**: Premature context window exhaustion, degradation of reasoning capabilities, and conversational compaction friction.
+### Failure Mode 13: Coordinator Context Bloat via Verbose Terminal Diagnostics, Repeated Test Runs, and Blurring Upstream/Downstream Boundaries
+- **What Happened**: The coordinator agent executed long, verbose CLI commands, repeated full-suite test runs, and dumped massive diagnostic outputs directly into the primary conversation context while troubleshooting issues. Concurrently, the coordinator blurred the repository boundary by treating the upstream specification compiler repository as an execution ground for downstream customer application roadmaps, domain models, and vehicle-specific simulations.
+- **Consequence**: Premature context window exhaustion, severe reasoning degradation, conversational compaction friction, confusion over repository role classification, and leakage of concrete customer concepts into the upstream compiler codebase.
 - **Mandate for Incoming Agent**:
-  - **COORDINATOR CONTEXT HYGIENE**: The coordinator must never dump verbose terminal logs or execute repeated monolithic test suites in the primary thread.
-  - **DELEGATE DIAGNOSTICS**: All deep diagnostic runs, verbose compiler traces, and code reading must be executed by context-isolated subagents that report back curated, high-density summaries and exit statuses.
+  - **COORDINATOR CONTEXT HYGIENE**: The coordinator must never dump verbose terminal logs, raw CLI outputs, or execute repeated monolithic test suites in the primary thread.
+  - **DELEGATE DIAGNOSTICS**: All deep diagnostic runs, verbose compiler traces, test runs, and code reading must be executed by context-isolated subagents that report back curated, high-density summaries and exit statuses.
+  - **STRICT REPOSITORY BOUNDARY ENFORCEMENT**: Never conflate the upstream specification compiler with downstream customer application workspaces. Upstream delivers compiler tooling, linters, and clean templates; customer application engineering runs strictly within customer repositories.
 
 ---
 
@@ -116,24 +117,25 @@ All repositories across `/Users/perkunas/jail` have been audited, synchronized, 
 
 | Workspace / Repository | Classification | Tracker Provider | Local Baseline Commit | Remote Tracking Branch | Remote Status / Diff | Baseline Gate Status |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `/Users/perkunas/jail/DEAP01-spec-core` | `UPSTREAM_SPEC_CORE_COMPILER` | GitHub (`gh`) | `dd7638c` | `origin/main` | Clean (0 bytes diff) | Checks 10-30 PASS (`--no-domain`) |
+| `/Users/perkunas/jail/DEAP01-spec-core` | `UPSTREAM_SPEC_CORE_COMPILER` | GitHub (`gh`) | `dd7638c` / `6188e52` | `origin/main` | Clean (0 bytes diff) | Clean Baseline |
 | `/Users/perkunas/jail/uav-009` | Downstream Customer Application | GitLab (`glab`) | `faff825` | `origin/main` | Clean (0 bytes diff) | All 30/30 Checks PASS |
-| `/Users/perkunas/jail/uav-011` | Downstream Application Workspace | GitLab (`glab`) | `c2826b9` | `origin/main` | Clean (0 bytes diff) | All 30/30 Checks PASS |
+| `/Users/perkunas/jail/uav-011` | Downstream Application Workspace | GitLab (`glab`) | `c2826b9` | `origin/main` | Clean (0 bytes diff) | Clean Landing Zones (`.gitkeep` only) |
 | `DEAP-uas-infrastructure-safety` | `DOMAIN_DISTRIBUTION_TEMPLATE` | GitHub (`gh`) | Synchronized | `origin/main` | Clean (0 bytes diff) | Clean Landing Zones (`.gitkeep` only) |
 
 ### 2.2 Detailed Fleet Parity & Architecture Baseline
 
 1. **Upstream Specification Core Compiler (`DEAP01-spec-core`)**:
-   - Baseline Commit: `dd7638c` (`fix(installer): preserve customer project compiled schemas and ASTs during pipeline upgrade (refs #371)`).
+   - Baseline Commits: `dd7638c` / `6188e52`.
    - Tooling Upgrade: Full dual-provider architecture in `skills/spec-orchestrator/scripts/create_issue.sh` and `scripts/reconcile_backlog.py` supporting both GitHub (`gh`) and GitLab (`glab`) CLI engines.
    - Installer Hardening: `scripts/install_pipeline.sh` automatically detects existing customer schema definitions, compiled ASTs, and localized report directories, preserving them during framework synchronization without clobbering.
-   - Comprehensive Testing: Full mock dual-provider test suite verified in `tests/test_create_issue_dual_provider.py`.
+   - CommonMark AST Validation: Rigorous transition from regex / substring heuristics to CommonMark and SysML v2 AST parsers.
+   - Clean Landing Zone Mandate: Enforces abstract compiler decoupling from concrete customer domains.
 
 2. **Downstream Customer Application Workspace (`uav-009`)**:
    - Baseline Commit: `faff825` (`docs(audit): preserve adversarial defect dossiers (refs #371)`).
    - Tracker Resolution: All 75 specification items published to the remote GitLab tracker (`https://gitlab.com/gintatkinson/uav-009.git`):
      * **1 Epic**: `docs/epics/epic-01-system-ssot.md` (Issue #10)
-     * **44 Features**: `docs/features/feat-01*` through `feat-44*` (Issues #11 through #54; Feat-02 Flight Controller is Issue #12)
+     * **44 Features**: `docs/features/feat-01*` through `feat-44*` (Issues #11 through #54)
      * **24 User Stories**: `docs/user-stories/us-01*` through `us-24*` (Issues #55 through #78)
      * **6 Use Cases**: `docs/use-cases/uc-01*` through `uc-06*` (Issues #79 through #84)
    - Zero Contamination: All literal `#[IssueID]` tokens replaced with live numeric GitLab IDs across all frontmatter and Markdown tables.
@@ -183,114 +185,85 @@ flowchart TD
    - `rules/dual-track-mbd-verification.md`: Track A (Simulink) and Track B (Python Twin) deliverables.
 5. **Step 5: Verify Clean Baseline**:
    - Run `python3 scripts/verify_commit_messages.py --head` (Must pass, exit code 0).
-   - Run `python3 scripts/verify_downstream_baseline.py --no-domain` (Pass all checks, exit code 0).
    - Run `git status` (Clean tree on `main`, 0 bytes diff against `origin/main`).
 
 ---
 
-## 4. Feat-02 Flight Control Laws MBD Roadmap for `uav-009`
+## 4. Upstream Specification Compiler Roadmap & Architecture Deliverables
 
-Feature Feat-02 (`docs/features/feat-02-flight-controller.md`, GitLab Issue #12) is the operational guidance, navigation, and control (GNC) backbone of the autonomous air vehicle. Implementing Feat-02 requires rigorous Model-Based Design (MBD), dual-track mathematical equivalence, and safety assurance under ASTM F3269-17 / DO-178C.
+DEAP01-spec-core is the upstream Model-Based Systems Engineering (MBSE) specification compiler and verification framework. It systematically transforms abstract SysML v2 schemas and normative domain standards into complete, formally verified, tracker-grounded Agile backlogs (Epics, Features, User Stories, and Use Cases).
+
+### 4.1 Upstream Compiler Core Invariants & Boundaries
+
+1. **Pure Schema-Driven Compiler Invariant**:
+   - The upstream compiler contains ZERO hardcoded domain concepts. It does not model aircraft, automobiles, medical devices, satellites, or any concrete physical systems.
+   - All specification generation is strictly and deterministically derived from AST nodes (`package`, `part def`, `item def`, `action def`, `state def`, `port def`, `requirement def`, `use case def`) present in user-provided schemas in `schema/`.
+2. **Upstream Distribution Template Clean Landing Zone Invariant**:
+   - In upstream distribution template repositories (`DEAP-*`), the directories `schema/`, `docs/epics/`, `docs/features/`, `docs/user-stories/`, and `docs/use-cases/` must remain clean landing zones with ONLY `.gitkeep` files.
+   - Committing concrete customer models, downstream specifications, or application source code to upstream templates is strictly forbidden.
+3. **Downstream Application Workspace Boundary**:
+   - Concrete engineering roadmaps (such as vehicle guidance, navigation, flight control laws, sensor models, or domain-specific Model-Based Design simulations) belong exclusively in downstream customer workspaces (e.g., `uav-009`).
+   - Customer workspaces are provisioned and upgraded via `scripts/install_pipeline.sh`.
+
+### 4.2 Key Upstream Compiler Deliverables
 
 ```mermaid
 flowchart TD
-    subgraph Feat02_Roadmap ["Feat-02 Flight Control Laws MBD Implementation Roadmap"]
+    subgraph Compiler_Deliverables ["DEAP Upstream Specification Core Compiler Deliverables"]
         direction TB
-        S1["Stage 1: Level 0 Parameter Grounding & SSOT Alignment<br/>(Extract mass, airspeed, inertia bounds from schema/avenger5_system.sysml)"]
-        S2["Stage 2A: Native MATLAB / Simulink Synthesis (Track A)<br/>(build_feat_02_flight_controller_model.m, FixedStepDiscrete 250 Hz, RTA Stateflow)"]
-        S2B["Stage 2B: Headless CI Python Twin Engine (Track B)<br/>(feat_02_flight_controller_domain.py & engine.py, 250 Hz loop, zero-license CI)"]
-        S3["Stage 3: Numerical Equivalence & CI Harness<br/>(test_feat_02_flight_controller_simulation.py, tolerance <= 10^-6, results report)"]
-        S4["Stage 4: Evolved 3-Layer LUMI Definition of Done<br/>(Domain State, RTA Safety Net Statechart, Actuator & GCS M2M Binding)"]
-        S5["Stage 5: Backlog Reconciliation & Issue Transition<br/>(Cumulative walkthrough docs/designs/feat-12-solution.md, status::fixed-resolved)"]
+        D1["Installer Hardening & Non-Clobbering Upgrade<br/>(scripts/install_pipeline.sh: Preserves Customer Schemas & ASTs)"]
+        D2["Dual-Provider Architecture Engine<br/>(create_issue.sh & reconcile_backlog.py: gh + glab Support)"]
+        D3["CommonMark & SysML v2 AST Validation Engine<br/>(Anti-Regex Invariant: Semantic Parity Gates 01-30)"]
+        D4["Upstream Clean Landing Zone Enforcement<br/>(verify_downstream_baseline.py: .gitkeep Landing Zones)"]
+        D5["Closed-Loop Model Parity & Reverse-Sync<br/>(compile_sysml.py --reverse-sync: 100% SSOT Bidirectional Sync)"]
 
-        S1 --> S2
-        S1 --> S2B
-        S2 --> S3
-        S2B --> S3
-        S3 --> S4 --> S5
+        D1 --> D2 --> D3 --> D4 --> D5
     end
 ```
 
-### 4.1 Feature Architectural Scope & Specification Grounding
+#### 1. Installer Hardening & Customer Data Preservation (`scripts/install_pipeline.sh`)
+- **Preservation of Customer Artifacts**: The installer automatically detects existing customer schema definitions (`schema/*.sysml`, `schema/extracted/`), compiled ASTs (`.pipeline/schema.sysml`, `.pipeline/schema-digest.json`), localized defect dossiers, and customer reports during pipeline synchronization. It upgrades pipeline framework assets without wiping or clobbering customer models.
+- **Robust Role Detection**: Distinguishes between `UPSTREAM_SPEC_CORE_COMPILER`, `DOMAIN_DISTRIBUTION_TEMPLATE`, and `DOWNSTREAM_CUSTOMER_PROJECT`, synthesizing appropriate README onboarding instructions and governance links.
 
-- **Target Workspace**: `/Users/perkunas/jail/uav-009`
-- **Specification Source**: `docs/features/feat-02-flight-controller.md` (GitLab Issue #12)
-- **Parent Epic**: `docs/epics/epic-01-system-ssot.md` (GitLab Issue #10)
-- **SSOT Schema Container**: `System_SSOT:System_SSOT/FlightController` in `schema/avenger5_system.sysml`
-- **Core Mission Capabilities**:
-  1. `NavigateWaypointSequence(in mission : CommandPacket, out status : HealthStatus)`: Autonomous 3D trajectory tracking and waypoint sequencing.
-  2. `CommandFlightMode(in cmd : CommandPacket, out ack : HealthStatus)`: Deterministic statechart transitions between Manual, Altitude Hold, Auto Mission, Return-to-Launch (RTL), and Emergency Land modes.
-  3. `ExecuteEngagement(in track : SensorTrack, out outcome : HealthStatus)`: Coordinated target pursuit and precision loiter.
-  4. `RunTimeAssuranceMonitoring`: ASTM F3269-17 runtime assurance safety filter preventing flight envelope violations (airspeed exceedance, stall angle of attack, geofence breaches).
+#### 2. Dual-Provider Issue Automation & Tracker Synchronization
+- **Universal Provider Support**: Both GitHub (`gh`) and GitLab (`glab`) CLI engines are first-class citizens across `skills/spec-orchestrator/scripts/create_issue.sh` and `scripts/reconcile_backlog.py`.
+- **Automatic Provider Detection**: Automatically resolves tracker provider via `git remote get-url origin` or `TRACKER_PROVIDER` / `CI_SERVER_URL` environment variables.
+- **GitLab Markdown Compatibility**: Rewrites GitHub-style markdown blob links (`/blob/main/`) to GitLab syntax (`/-/blob/main/`) automatically during issue publication.
+- **Commit Non-Closure Enforcement**: Mandates neutral citations `(refs #<id>)` and `(#<id>)` to prevent server-side premature auto-closure across both GitHub and GitLab.
 
-### 4.2 Detailed Implementation Work Breakdown
+#### 3. CommonMark & SysML v2 AST Validation Engine (Anti-Regex Invariant)
+- **Positive Model Closure**: Replaces brittle regex substring matching with rigorous CommonMark AST and SysML v2 AST parsing.
+- **Elimination of Whitelist Bypasses**: Validates architectural entities, port interfaces, and signal dictionaries against the formal AST Single Source of Truth rather than open-world string exemptions.
+- **Universal Mermaid Syntax Validation**: Enforces Check 7 syntax gates across all diagrams (explicit diagram headers, quoted node labels, closed code fences).
 
-#### Stage 1: Level 0 Parameter Grounding & Parameter Dictionary Compilation
-- Extract ground-truth physical quantities from `schema/avenger5_system.sysml` and OEM technical specs:
-  * Maximum Takeoff Weight (MTOW): $17.0\text{ kg}$
-  * Nominal Cruise Speed: $31.0\text{ m/s}$
-  * Maximum Operating Airspeed ($V_{ne}$): $45.0\text{ m/s}$
-  * Stall Speed ($V_s$): $18.0\text{ m/s}$
-  * Discrete Control Loop Rate: $250\text{ Hz}$ ($\Delta t = 0.004\text{ s}$)
-- Construct authoritative parameter file: `models/matlab/feat_02_flight_controller_params.m` and Simulink Data Dictionary: `models/matlab/feat_02_flight_controller_data.sldd`.
-
-#### Stage 2: Dual-Track MBD Deliverables (`rules/dual-track-mbd-verification.md`)
-- **Track A (Native MATLAB / Simulink / Stateflow Synthesis)**:
-  * Programmatic synthesis script: `models/scripts/build_feat_02_flight_controller_model.m`.
-  * Discrete solver configuration: `FixedStepDiscrete` with step size $0.004\text{ s}$.
-  * Flight Control Laws: Cascaded PID / Total Energy Control System (TECS) architecture.
-  * Safety Statechart: Stateflow chart modeling `RtaSafetyNetStatechart` with ASTM F3269-17 switching logic (Primary Complex Guidance vs. Certified Recovery Failsafe).
-  * Production code generation context: MathWorks Embedded Coder targeting DO-178C DAL-B C and SPARK Ada.
-- **Track B (Headless CI Digital Twin Engine)**:
-  * Pure Python discrete-time execution domain: `models/python/feat_02_flight_controller_domain.py` and simulation engine: `models/python/feat_02_flight_controller_engine.py`.
-  * Executes identical 250 Hz discrete step ($\Delta t = 0.004\text{ s}$) with matching 6-DOF rigid-body dynamics, quaternion integration, and aerodynamic coefficient lookup tables.
-  * Zero license blocker: Runs in license-free headless CI environments.
-
-#### Stage 3: Numerical Equivalence Verification Gate
-- Automated simulation test harness: `tests/test_feat_02_flight_controller_simulation.py`.
-- Evaluates 4 distinct test scenarios:
-  1. Nominal waypoint navigation and coordinated turns.
-  2. Severe wind gust disturbance rejection.
-  3. Dynamic airspeed limit violation triggering ASTM F3269-17 RTA safety takeover.
-  4. Uplink telemetry loss triggering automatic Return-to-Launch (RTL).
-- Tolerance Gate: Numerical trajectory delta across attitude angles ($\phi, \theta, \psi$), angular rates ($p, q, r$), and velocity vectors ($u, v, w$) must not exceed $\le 10^{-6}$.
-- Publish formal results report: `docs/reports/simulink_results/FEAT_02_simulation_results.md`.
-
-#### Stage 4: Evolved 3-Layer LUMI Definition of Done
-- **Layer 1: Domain State & Signal Model**: Telemetry state vector (position, quaternion attitude, body rates, indicated airspeed, battery voltage, health flags) in `models/python/feat_02_flight_controller_domain.py`.
-- **Layer 2: Logic & Safety State Management**: `RunTimeAssuranceMonitoring` safety net statechart, flight mode arbiter, and geofence boundary enforcement in `models/python/feat_02_flight_controller_engine.py`.
-- **Layer 3: Display & Actuator Interface Binding**: Autopilot actuator output packet generation (aileron, elevator, rudder, throttle PWM commands), Ground Control Station (GCS) telemetry stream, `/system/flight-controller` M2M interface binding, and BDD User Story widget/interface test in `tests/test_feat_02_flight_controller_interface.py`.
-
-#### Stage 5: Backlog Reconciliation & Issue Transition
-- Compile cumulative solution walkthrough: `docs/designs/feat-12-solution.md`.
-- Execute tracker reconciliation: `python3 scripts/reconcile_backlog.py --provider gitlab`.
-- Apply GitLab label `status::fixed-resolved` to Issue #12 with link to verified solution walkthrough.
-- Update parent Epic checklist in `docs/epics/epic-01-system-ssot.md` (Issue #10).
+#### 4. Clean Landing Zone Enforcement & Domain Decoupling
+- **Landing Zone Verification**: All template distributions enforce clean landing zones containing only `.gitkeep` files in `schema/` and `docs/`.
+- **Platform Profile Separation**: Platform-specific implementation profiles (`.pipeline/profiles/`) decouple abstract specifications from concrete codebases (`app_flutter/`, `web_react/`, `embedded_c/`).
 
 ---
 
-## 5. Teamwork Framework Launch Command & Multi-Agent Protocol
+## 5. Abstract Pipeline Multi-Agent Protocol & Teamwork Orchestration
 
-To implement Feat-02 in `uav-009`, the incoming coordinator must not attempt single-worker execution. The complete `teamwork_preview` multi-agent framework must be launched to maintain rigorous division of responsibilities, independent verification, and adversarial checks.
+To maintain context hygiene, avoid token exhaustion, and enforce independent adversarial verification, all compiler enhancements and abstract specification workflows must be executed using context-isolated subagents.
 
-### 5.1 Teamwork Multi-Agent Roster for Feat-02
+### 5.1 Teamwork Multi-Agent Roster for Upstream Specification Compiler
 
 | Role Name | Identifier | Responsibility & Gate |
 | :--- | :--- | :--- |
-| **Sentinel** | `sentinel` | Enforces governance rules, strict planning gate, mandatory hidden folder read of `.pipeline/constitution.md`, and human authorization verification. Halts unapproved edits. |
-| **Orchestrator** | `orchestrator` | Decomposes Feat-02 into Stages 1-5. Coordinates dispatch loops, tracks milestones, and manages cross-worker artifacts. |
-| **Worker 1 (Simulink MBD Specialist)** | `worker-simulink` | Authors Track A MATLAB/Simulink programmatic synthesis scripts (`build_feat_02_flight_controller_model.m`, `.sldd`, `.params.m`) under DO-178C guidelines. |
-| **Worker 2 (Python Digital Twin Specialist)** | `worker-pytwin` | Authors Track B pure Python discrete-time simulation engine (`feat_02_flight_controller_domain.py` & `engine.py`) at 250 Hz loop rate. |
-| **Worker 3 (LUMI & Interface Specialist)** | `worker-lumi` | Implements Layer 3 actuator command feeds, GCS telemetry binding, `/system/flight-controller` API, and BDD interface tests. |
-| **Reviewer 1 (Specification Compliance Reviewer)** | `reviewer-spec` | Audits deliverables against `docs/features/feat-02-flight-controller.md`, ASTM F3269-17, and SysML AST in `schema/avenger5_system.sysml`. |
-| **Reviewer 2 (Numerical Equivalence Reviewer)** | `reviewer-qa` | Verifies $\le 10^{-6}$ numerical tolerance between Simulink and Python twin, runs test harnesses, and reviews simulation report. |
-| **Challenger 1 (Adversarial Boundary Challenger)** | `challenger-bounds` | Enforces workspace boundaries: verifies zero touches to parent directories, external workspaces, or upstream compiler source. Enforces customer workspace preservation (zero clobbering). |
-| **Challenger 2 (Anti-Regex & Grounding Challenger)** | `challenger-grounding` | Scans all generated code and specs for regex shortcuts, heuristic exemptions, or ungrounded parameters. Validates positive AST provenance. |
-| **Victory Auditor** | `victory-auditor` | Independently verifies that all CI test harnesses pass (exit code 0), confirms `git diff origin/main` is empty, and issues formal `VICTORY CONFIRMED`. |
+| **Governance Sentinel** | `sentinel` | Enforces repository classification (`UPSTREAM_SPEC_CORE_COMPILER`), strict planning gate, mandatory hidden folder read of `.pipeline/constitution.md`, and human authorization verification. Halts unapproved edits. |
+| **Master Orchestrator** | `orchestrator` | Coordinates multi-agent dispatches, phase sequencing, tracking milestones, and managing cross-worker artifacts. |
+| **Compiler & AST Specialist** | `worker-compiler` | Maintains and hardens SysML v2 AST compilation, reverse-sync (`compile_sysml.py`), CommonMark AST validators, and schema parsers. |
+| **Tooling & Multi-Provider Specialist** | `worker-tooling` | Maintains dual-provider scripts (`create_issue.sh`, `reconcile_backlog.py`), installer logic (`install_pipeline.sh`), and platform profiles. |
+| **Specification Orchestration Worker** | `worker-spec` | Drives abstract schema-derived specification generation (Phases 1-3) using item-level context-isolated subagent dispatch loops. |
+| **Reviewer 1 (Compiler & Schema Conformance)** | `reviewer-compiler` | Validates Pure Schema-Driven Compiler Invariant, clean landing zones, zero hardcoded domain tokens, and 100% schema AST coverage. |
+| **Reviewer 2 (Code Hygiene & Quality Reviewer)** | `reviewer-hygiene` | Verifies code style, unit test passes, neutral citations `(refs #<id>)`, and non-closure invariants. |
+| **Challenger 1 (Boundary & Isolation Challenger)** | `challenger-boundary` | Verifies zero leakage of customer concepts into upstream compiler; enforces upstream vs. downstream repository boundaries; verifies customer workspace preservation (zero clobbering). |
+| **Challenger 2 (Anti-Regex & AST Provenance Challenger)** | `challenger-grounding` | Scans all generated code and specifications for regex shortcuts, heuristic exemptions, or ungrounded parameters. Validates positive AST provenance. |
+| **Victory Auditor** | `victory-auditor` | Independently verifies that all verification gates pass (exit code 0), confirms `git diff origin/main` is empty, and issues formal `VICTORY CONFIRMED`. |
 
-### 5.2 Teamwork Framework Launch Command
+### 5.2 Abstract Teamwork Launch Command for Upstream Spec Core
 
-To launch the multi-agent consensus team for Feat-02, invoke the subagent dispatch block:
+To launch the multi-agent consensus team for upstream specification core compiler maintenance or abstract specification engineering, invoke the subagent dispatch block:
 
 ```json
 {
@@ -299,11 +272,19 @@ To launch the multi-agent consensus team for Feat-02, invoke the subagent dispat
       "TypeName": "teamwork_preview",
       "Role": "Autonomous Multi-Agent Consensus Team",
       "Model": "inherit",
-      "Prompt": "Execute view_file on skills/feature-driven-implementation/SKILL.md as your very first step before executing any file edits or commands, and strictly follow its formatting templates and instruction guidelines.\n\nRepository Classification: DOWNSTREAM_CUSTOMER_APPLICATION\nTarget Workspace: /Users/perkunas/jail/uav-009\nPrimary Commercial Toolchain Integration Context: MATLAB / Simulink / Stateflow / Embedded Coder\n\nTask: Execute DEAP-HANDOFF-ROOT-006 Section 4 Roadmap for Feat-02 Flight Controller (GitLab Issue #12) across Stages 1 through 5, including Track A Simulink synthesis, Track B Python digital twin (250 Hz), ASTM F3269-17 RTA safety net, and numerical equivalence verification harness (<= 10^-6).\n\nPROCEED"
+      "Prompt": "Execute view_file on skills/spec-orchestrator/SKILL.md as your very first step before executing any file edits or commands, and strictly follow its formatting templates and instruction guidelines.\n\nRepository Classification: UPSTREAM_SPEC_CORE_COMPILER\nTarget Workspace: /Users/perkunas/jail/DEAP01-spec-core\nPrimary Role: Abstract MBSE Specification Compiler & Tooling Maintenance\n\nTask: Maintain and verify upstream specification compiler tooling, ensure installer hardening with customer preservation, maintain dual-provider tracker engines (gh/glab), and enforce clean landing zones across distribution templates.\n\nPROCEED"
     }
   ]
 }
 ```
+
+### 5.3 Operational Direction for Downstream Customer Application Work
+
+- **Boundary Separation**: Incoming agents are explicitly instructed that downstream application development (such as vehicle guidance, navigation, flight control laws, sensor models, or hardware-in-the-loop simulation) **MUST NOT** be executed in this upstream compiler repository (`DEAP01-spec-core`).
+- **Downstream Execution Protocol**:
+  1. Navigate to the designated customer workspace (e.g. `/Users/perkunas/jail/uav-009`).
+  2. Verify downstream pipeline installation via `python3 scripts/verify_downstream_baseline.py`.
+  3. Execute feature-driven implementation and simulation using `skills/feature-driven-implementation/SKILL.md` within the customer workspace.
 
 ---
 
@@ -316,7 +297,7 @@ To launch the multi-agent consensus team for Feat-02, invoke the subagent dispat
 5. **Issues Remain Open**: Applying `status:fixed-resolved` (or `status::fixed-resolved` on GitLab) does NOT close tracker issues. Issues stay open until validated and closed by the human Product Owner.
 6. **Remote Synchronization Mandate**: No work package is complete until pushed to remote and verified with `git diff origin/<branch>` returning empty.
 7. **Clean Landing Zone Invariant**: Upstream distribution templates (`DEAP-uas-infrastructure-safety`) must maintain 100% clean landing zones (`schema/`, `docs/epics/`, `docs/features/`, `docs/user-stories/`, `docs/use-cases/` contain ONLY `.gitkeep` files).
-8. **Dual-Track MBD Deliverables Mandate**: All control and flight guidance features must provide both Track A (programmatic Simulink `.m`/`.sldd`) and Track B (headless Python twin `.py`) with zero-license CI test harnesses and $\le 10^{-6}$ numerical equivalence.
+8. **Dual-Track MBD Verification Invariant**: In downstream control and guidance implementations, all features must provide dual-track deliverables—Track A (programmatic Simulink `.m`/`.sldd`) and Track B (headless Python twin `.py`)—with zero-license CI test harnesses and $\le 10^{-6}$ numerical equivalence per `rules/dual-track-mbd-verification.md`. The upstream compiler provides the abstract verification framework supporting both tracks.
 9. **Universal Mermaid Syntax Rules**:
    - First non-comment line inside every ```` ```mermaid ```` fence MUST declare an explicit diagram type (`flowchart TD`, `sequenceDiagram`, etc.).
    - All subgraphs in flowcharts MUST declare explicit direction (`direction TB` / `direction LR`).
@@ -325,4 +306,4 @@ To launch the multi-agent consensus team for Feat-02, invoke the subagent dispat
 10. **Anti-Regex & AST Provenance Invariant**: Never use negative-string regex heuristics or substring bypasses to validate model closure, provenance, or architecture. All parameters, signals, and architectural entities must be positively validated against the SysML v2 AST Single Source of Truth or a compiled, closed-world typed parameter dictionary.
 11. **Customer Workspace Preservation Invariant**: Upstream tools and installers must never clobber, overwrite, or delete downstream customer schemas, ASTs, or defect reports. All tool upgrades must respect downstream customer boundaries.
 12. **Multi-Agent Consensus Integrity**: Complex engineering tasks must never be collapsed into single self-auditing subagents. Strict separation of roles across Sentinel, Orchestrator, Workers, Reviewers, Challengers, and Victory Auditor must be maintained.
-13. **Coordinator Context Hygiene Mandate**: The coordinator must never dump verbose terminal logs or execute repeated monolithic test suites in the primary conversation thread. Investigative execution and diagnostic runs must be delegated to context-isolated subagents.
+13. **Coordinator Context Hygiene & Boundary Preservation Mandate**: The coordinator must never dump verbose terminal logs, raw CLI outputs, or execute repeated monolithic test suites in the primary conversation thread. Investigative execution and diagnostic runs must be delegated to context-isolated subagents. Concurrently, the coordinator must strictly preserve the boundary between the upstream compiler and downstream customer workspaces.

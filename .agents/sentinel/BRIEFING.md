@@ -12,6 +12,9 @@ Orchestrate multi-stage team (Adversarial Auditor, Upstream Issue Filing, Implem
 - Cron 2 (Liveness Check): active (task-30)
 - Orchestrator (Active): 761cfc49-ac4f-42a5-9c57-113db68ccf54
 - Victory Auditor (Active): to be spawned on victory claim
+- Orchestrator 7 (Active): b3a4587d-40a1-4640-a348-7a50b5b43323
+- Cron 1 (Active): active (task-36)
+- Cron 2 (Active): active (task-38)
 
 ## 🔒 Key Constraints
 - No technical decisions — relay only
@@ -20,16 +23,16 @@ Orchestrate multi-stage team (Adversarial Auditor, Upstream Issue Filing, Implem
 - Keep context ultra-light
 
 ## User Context
-- **Last user request**: Adversarial audit on downstream onboarding & rule-ingestion pipeline, file upstream defect issue to gintatkinson/DEAP01-spec-core, and implement/verify deterministic fix with .pipeline/ACTIVE_RULES_BUNDLE.md and regression tests.
+- **Last user request**: Author authoritative operational handoff DEAP-HANDOFF-ROOT-006 in HANDOFF.md, strictly maintaining the upstream specification compiler boundary and purging all hardcoded downstream customer concepts.
 - **Pending clarifications**: none
 - **Delivered results**:
-  - [Previous run]: Overhauled installation instructions & README templates across all three repository tiers.
-  - [Current run]: Orchestrator spawned (761cfc49-ac4f-42a5-9c57-113db68ccf54).
+  - [orchestrator_6 run]: Completed rule bundling and onboarding remediation.
+  - [orchestrator_7 run]: Spawned orchestrator (b3a4587d-40a1-4640-a348-7a50b5b43323).
 
 ## Project Status
 - **Phase**: in progress
 - **Routing Decision**: General -> teamwork_preview_orchestrator
-- **Active Orchestrator**: 761cfc49-ac4f-42a5-9c57-113db68ccf54
+- **Active Orchestrator**: b3a4587d-40a1-4640-a348-7a50b5b43323
 - **Active Auditor**: TBD
 
 ## Victory Audit Status
@@ -39,5 +42,5 @@ Orchestrate multi-stage team (Adversarial Auditor, Upstream Issue Filing, Implem
 
 ## Artifact Index
 - /Users/perkunas/jail/DEAP01-spec-core/.agents/ORIGINAL_REQUEST.md — Verbatim user request
-- /Users/perkunas/jail/DEAP01-spec-core/.agents/orchestrator_6/DISPATCH.md — Task assignment
+- /Users/perkunas/jail/DEAP01-spec-core/.agents/orchestrator_7/DISPATCH.md — Task assignment
 - /Users/perkunas/jail/DEAP01-spec-core/.agents/sentinel/BRIEFING.md — Sentinel briefing
