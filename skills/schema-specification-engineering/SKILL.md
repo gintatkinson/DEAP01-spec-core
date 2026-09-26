@@ -29,6 +29,30 @@ In accordance with [`rules/sysml-ssot-completeness.md`](rules/sysml-ssot-complet
 - After modifying or publishing any GitHub issue or document, the agent MUST run `gh issue view <ID>` or `gh api` to fetch the live published payload and inspect links, Mermaid headers, and syntax.
 - **Optimism bias is prohibited**: agents must cite empirical output of live payload inspection before declaring completion.
 
+## Closed-World AST Parameter Projection & Anti-Hallucination Mandate (Issue #377)
+
+Under completion pressure, generative LLMs are prone to inventing domain metrics, arbitrary execution rates (e.g. "400 Hz inner loop", "100 Hz attitude update"), physical quantities (e.g. "12g catapult limit", "25 kg mass"), or electrical limits in narrative specification text when not explicitly constrained.
+
+To eliminate hallucinated metrics and uphold the **Pure Schema-Driven Compiler Invariant** (`AGENTS.md`) and **Positive AST Provenance Mandate**:
+
+1. **Mandatory Typed Parameter Dictionary AST Projection**:
+   - The coordinator MUST deterministically extract and project a closed-world **Typed Parameter Dictionary AST** from the parsed SysML v2 model (`.pipeline/schema.sysml` or `schema/*.sysml`) prior to subagent dispatch.
+   - The projection MUST include:
+     * Full parameter names and owning component / subsystem qualifiers.
+     * Programmatic data types (`Real`, `Integer`, `String`, `Boolean`).
+     * Physical dimensional engineering units (per ISO/IEC 80000).
+     * Numerical bounds (`upper`, `lower`, `nominal`, or `exact`).
+     * Default values and constraint expressions.
+     * Declared communication and electrical protocols.
+2. **Subagent Prompt Payload Injection**:
+   - Every subagent dispatch prompt (Epics, Features, User Stories, Use Cases) MUST receive this formatted parameter dictionary table in its prompt payload.
+   - Generative subagents are strictly constrained to this closed-world parameter reference.
+   - Subagents are strictly forbidden from inventing, estimating, or fabricating undocumented numeric metrics, frequencies, timeouts, or physical tolerances.
+3. **Positive AST Provenance Enforcement**:
+   - Every numeric claim, physical limit, frequency, and protocol in generated specifications MUST resolve with positive closed-world AST provenance against this projected parameter dictionary.
+   - Any physical parameter not present in the projected dictionary MUST carry an explicit, verified SSOT citation (`<!-- Source: schema/... §locator -->` or `%% Source: ...`).
+   - Line-level negative regex exemption tags (such as `[TIER-3]`, `(TIER-3)`, `[TIER-4]`, or `(Declared Assumption)`) are deprecated and eliminated (#378, #376). Adding dummy exemption tags to ungrounded claims is strictly prohibited and fails closed at the linter gate.
+
 ## Step 1: Forensic Audit & Module Decomposition
 
 > [!IMPORTANT]
@@ -52,7 +76,7 @@ In accordance with [`rules/sysml-ssot-completeness.md`](rules/sysml-ssot-complet
    - If a functional module is massive (leaf count > 40 or depth > 3), partition the schema graph by major top-level subtrees. Create **1 Epic per partition** representing a logical Bounded Context / Subsystem.
 4. **Dispatch Epic Subagents:** For each identified Bounded Context/Subsystem Epic:
    - Invoke a **new, fresh subagent with an isolated context**.
-   - Pass only the specific schema nodes/attributes for this subsystem, the **Mandatory AST Manifest Slice** (`package`, `part def` components, and `capability def` declarations from `.pipeline/schema.sysml`), and the Epic template.
+   - Pass only the specific schema nodes/attributes for this subsystem, the **Mandatory AST Manifest Slice** (`package`, `part def` components, and `capability def` declarations from `.pipeline/schema.sysml`), the **Mandatory Typed Parameter Dictionary AST Projection** (closed-world reference of all valid schema attributes, parameter types, engineering units, default values, numerical bounds, and constraint definitions extracted deterministically from `.pipeline/schema.sysml` to eliminate hallucinated metrics), and the Epic template.
    - The subagent drafts the Epic markdown file (e.g., `docs/epics/epic-01-name.md`) containing:
      - Formal **Subsystem Capability Allocations** mapping every `capability def` block declared within the architectural `package` to the Epic's subsystem.
      - An overarching **System-Level UML Class Diagram** illustrating the subsystem's classes and their relationships.
@@ -76,7 +100,7 @@ For each Bounded Context, partition its subtree into cohesive functional feature
    - **Operational Statements**: Group RPCs, actions, and notifications directly into the Feature containing the target entity they operate on. For top-level `rpc` and `notification` statements without a target entity, extract them into API/M2M Feature files mapped to the module's System Component.
    - **Schema Import Prerequisite Links**: When a schema module `import`s another module that is itself specified in this workspace, the importing Epic MUST carry a `Parent Epic` markdown link to the Epic that specifies the imported module, and every imported module MUST have at least one Epic or Feature specifying it. An import is a hard prerequisite -- the importing specification cannot be implemented before the imported one exists -- and an unlinked import leaves that ordering constraint recorded nowhere. Enforced by `dependency_validator`.
    - **Container Traceability**: Every Feature MUST declare exactly one schema container in its metadata table `Schema Containers` attribute using the fully-qualified schema container path format: `<module-prefix>:<root-container>/[parent-containers]/[choice/case-wrappers]/<target-node>` (e.g., `ietf-geo-location:geo-location/reference-frame/geodetic-system` or `ietf-geo-location:geo-location/location/ellipsoid`). All intermediate parent containers and choice/case wrapper nodes MUST be preserved in the path. Multi-container Features are forbidden -- subagents must split consolidated containers into separate Feature files before the linter gate.
-2. **Dispatch Feature Subagent:** For each identified feature group, invoke a **new, fresh subagent with an isolated context** to draft the feature specification. Pass the schema nodes, the **Mandatory AST Manifest Slice** (the exact AST package and `part def` / `item def` definition with all owned properties, ports, operations, and constraints from `.pipeline/schema.sysml`), AND the Bounded Context's Epic identity (local file prefix and/or pre-assigned tracker Issue ID if available). The subagent must have no visibility into other features.
+2. **Dispatch Feature Subagent:** For each identified feature group, invoke a **new, fresh subagent with an isolated context** to draft the feature specification. Pass the schema nodes, the **Mandatory AST Manifest Slice** (the exact AST package and `part def` / `item def` definition with all owned properties, ports, operations, and constraints from `.pipeline/schema.sysml`), the **Mandatory Typed Parameter Dictionary AST Projection** (closed-world reference of all valid schema attributes, parameter types, engineering units, default values, numerical bounds, and constraint definitions extracted deterministically from `.pipeline/schema.sysml` to eliminate hallucinated metrics), AND the Bounded Context's Epic identity (local file prefix and/or pre-assigned tracker Issue ID if available). The subagent must have no visibility into other features. Subagents are strictly constrained to positive closed-world AST provenance.
 3. **Execution within Subagent Context:**
    - **Compliance Table Mandate:** Before writing the file, you MUST output a structured compliance table checking for standard UML primitives, return multiplicities, no curly braces in Mermaid, and no isolated classes.
    - **Platform Independence:** Feature specifications MUST be purely functional and platform-independent. Describe *what* the system must do (data to store, validations to enforce, information to display) -- never *how* (no framework-specific components, no platform-specific patterns).

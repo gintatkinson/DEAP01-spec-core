@@ -311,6 +311,7 @@ After initializing or updating the pipeline tooling, configure Gemini / Antigrav
    3. **Load Governance Rules**: Execute `view_file` on `.pipeline/ACTIVE_RULES_BUNDLE.md` to ingest the complete, consolidated suite of active governance rules in a single read (covering dual-track MBD, SysML SSOT completeness, role boundary locks, and TDD mandates). Ingest `AGENTS.md` (or `.agents/AGENTS.md`) to enforce project-scoped agentic rules, context-isolated subagent dispatch loops, and role boundary locks.
    4. **Load Platform Profile**: Read the target platform execution profile (`.pipeline/profiles/flutter.md`, `.pipeline/profiles/react.md`, `.pipeline/profiles/ros2_cpp.md`, or `.pipeline/profiles/px4_module.md`) to establish platform-specific build, test, and lifecycle constraints.
    5. **Bootstrap Tracker Labels**: Verify that repository issue tracker labels are synchronized and operational by running `python3 skills/spec-orchestrator/scripts/bootstrap_tracker_labels.py --dry-run` or verifying label bootstrapping status.
+   6. **Transition to Operator Prompt Catalog**: Navigate to [Section 9 (Multi-Pipeline Operator Prompt Catalog & Autonomous Execution Workflows)](#9-multi-pipeline-operator-prompt-catalog-autonomous-execution-workflows) to select and execute the canonical agent prompts for Pipeline 0 (Pre-Spec Safety & Model Formulation), Pipeline 1 (Agile Specification Backlog Projection), or Pipeline 2 (Autonomous Feature Implementation & Simulation Driver).
 
 ### 5.6 AGENTS.md Governance Configuration
 

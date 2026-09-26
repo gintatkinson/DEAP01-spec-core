@@ -246,3 +246,57 @@ Task: Author authoritative operational handoff DEAP-HANDOFF-ROOT-006 in HANDOFF.
 - [ ] git diff origin/main is 0 bytes on DEAP01-spec-core.
 
 PROCEED
+
+## 2026-09-26T19:37:44Z
+
+Execute view_file on skills/spec-orchestrator/SKILL.md as your very first step before executing any file edits or commands, and strictly follow its formatting templates and instruction guidelines.
+
+Repository Classification: UPSTREAM_SPEC_CORE_COMPILER
+Target Workspace: /Users/perkunas/jail/DEAP01-spec-core
+Primary Role: Abstract MBSE Specification Compiler & Tooling Maintenance
+Primary Commercial Toolchain Integration Context: MATLAB / Simulink / Stateflow / Embedded Coder
+
+Execute a phased audit, triage, and comprehensive resolution of all 17 open and unfixed defect issues in DEAP01-spec-core across AST factual grounding, dual-provider tooling, baseline validator masking, and test mock elimination.
+
+Working directory: /Users/perkunas/jail/DEAP01-spec-core
+Integrity mode: development
+
+## Requirements
+
+### R1. Comprehensive Triage & Evidence Audit (Phase 1)
+Audit all 17 open issues (#378, #377, #376, #375, #374, #373, #372, #368, #366, #365, #364, #363, #362, #361, #360, #349, #286) against the current codebase state and recent git commit log (d0e1bf0 down to dd7638c):
+- Identify which issues have already been remediated by recent commits (e.g. #368 consolidated rules bundle, #363 template URLs, #373 duplicate checks).
+- For each verified remediated issue, post an empirical verification evidence comment via gh issue comment and transition the issue label to status:fixed-resolved (retaining issue open status per tracker non-closure invariant).
+- Formally catalog the remaining active defects into thematic clusters for Phase 2 execution.
+
+### R2. Positive AST Provenance & Anti-Regex Hardening (Phase 2 - Cluster A)
+Remediate grounding evasion defects (#378, #377, #376, #364):
+- Replace negative-string regex heuristics and exemption tag bypasses in factual_grounding_validator.py with positive closed-world AST provenance validation against the SysML v2 AST and typed parameter dictionaries.
+- Ensure Mermaid sequence diagrams and code fences do not bypass numeric grounding.
+
+### R3. Dual-Provider Tooling & Installer Hardening (Phase 2 - Cluster B)
+Remediate tooling automation defects (#374, #373, #372, #363):
+- Fix skills/spec-orchestrator/scripts/create_issue.sh to prevent ARG_MAX buffer overflow by supporting body file payloads (--body-file), and ensure duplicate issue detection indexes the title column correctly.
+- Ensure scripts/install_pipeline.sh correctly resolves domain template repository URLs between GitHub and GitLab without synthesizing non-existent routes.
+
+### R4. Baseline Gate Masking & SSOT Parity (Phase 2 - Cluster C)
+Remediate validator masking and Green Test Trap defects (#375, #366, #365, #362, #361):
+- Fix scripts/verify_downstream_baseline.py Checks 17, 20, 23 and architecture_viewpoint_validator.py Gate 30 so that missing architecture models or specifications fail closed rather than silently returning exit code 0 when allow_missing_specs=False.
+- Implement dual-schema SSOT parity verification and update README.md documentation harnesses.
+
+### R5. Synthetic Mock Elimination in Safety & Parity Tests (Phase 2 - Cluster D)
+Remediate mock violations (#360, #349, #286):
+- Replace synthetic in-memory string mocks in safety validation and diagram parity tests with genuine schema/AST structures from test fixtures, enforcing closed-world model verification and eliminating citation fraud.
+
+## Acceptance Criteria
+
+### Automated Gate Verification
+- [ ] Phase 1 Triage Report completed with empirical evidence for all 17 issues.
+- [ ] All remediated issues have verification evidence posted and carry status:fixed-resolved.
+- [ ] Remaining active defects have verified automated unit/integration tests in tests/.
+- [ ] pytest tests/ runs with 100% pass rate (0 failures, 0 regressions).
+- [ ] python3 scripts/verify_downstream_baseline.py passes all baseline checks with exit code 0.
+- [ ] python3 scripts/verify_commit_messages.py --head passes with neutral citations (refs #<id>) and zero auto-closing verbs.
+- [ ] Clean working tree with git diff origin/main returning 0 bytes after remote push.
+
+PROCEED

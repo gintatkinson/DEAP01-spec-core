@@ -1889,15 +1889,16 @@ def extract_epics_from_markdown(content: str, filename: str = "") -> List[Any]:
     subsystem = fm.get("package") or fm.get("subsystem") or ""
 
     row_pattern = re.compile(
-        r'\|\s*(?:\*\*)?([A-Za-z0-9_]+)(?:\*\*)?\s*\|'
+        r'^\s*\|\s*(?:\*\*)?([A-Za-z0-9_]+)(?:\*\*)?\s*\|'
         r'\s*([^|\r\n]+)\s*\|'
-        r'\s*([^|\r\n]+)\s*\|'
+        r'\s*([^|\r\n]+)\s*\|',
+        re.MULTILINE
     )
     for match in row_pattern.finditer(body):
         cap_name = match.group(1).strip()
         pkg_name = match.group(2).strip()
         desc = match.group(3).strip()
-        if cap_name.lower() in ("capability", "capability name", "name", "description"):
+        if cap_name.lower() in ("capability", "capability name", "name", "description", "attribute", "title"):
             continue
         if not any(getattr(c, "name", "") == cap_name for c in capabilities):
             if SysMLCapabilityDef:
@@ -3166,17 +3167,61 @@ def _atomic_write_json(filepath: str, data: Any, indent: int = 2) -> None:
     os.replace(temp_name, abs_path)
 
 
+def is_phase0_verified(project_root: Optional[str] = None, schema_path: Optional[str] = None) -> bool:
+    """
+    Checks if Phase 0 SysML compilation gate has been executed and verified:
+    1. .pipeline/schema.sysml exists.
+    2. .pipeline/schema-digest.json exists and is valid JSON.
+    3. The SHA-256 in schema-digest.json matches the cryptographic hash of .pipeline/schema.sysml.
+    4. Structural elements and total lines are non-zero.
+    """
+    root = os.path.abspath(project_root) if project_root else PROJECT_ROOT
+    pipeline_schema = os.path.join(root, ".pipeline", "schema.sysml")
+    digest_path = os.path.join(root, ".pipeline", "schema-digest.json")
+
+    if not os.path.isfile(pipeline_schema) or not os.path.isfile(digest_path):
+        return False
+
+    try:
+        with open(pipeline_schema, "rb") as f:
+            content_bytes = f.read()
+        if not content_bytes.strip():
+            return False
+        computed_sha = hashlib.sha256(content_bytes).hexdigest()
+
+        with open(digest_path, "r", encoding="utf-8") as f:
+            digest = json.load(f)
+
+        if digest.get("sha256") != computed_sha:
+            return False
+
+        if digest.get("total_lines", 0) <= 0:
+            return False
+
+        node_counts = digest.get("node_counts", {})
+        total_nodes = sum(node_counts.values()) if isinstance(node_counts, dict) else 0
+        if total_nodes == 0 and not digest.get("schema_nodes"):
+            return False
+
+        return True
+    except Exception:
+        return False
+
+
 def forward_sync_sysml_to_specs(
     schema_path: Optional[str] = None,
     docs_dir: str = "docs",
     out_dir: Optional[str] = None,
     dry_run: bool = False,
+    force: bool = False,
+    project_root: Optional[str] = None,
 ) -> Dict[str, str]:
     """
     Executes Closed-Loop Forward Synchronization from the SysML v2 AST
     Single Source of Truth (.pipeline/schema.sysml) into canonical markdown specifications.
 
     Generates:
+    - Epics (EPIC-*.md) from CapabilityDef
     - Features (FEAT-*.md) from PartDef & ActionDef
     - User Stories (US-*.md) from SysMLInteractionDef & SysMLTestCaseDef
     - Use Cases (UC-*.md) from UseCaseDef
@@ -3187,12 +3232,16 @@ def forward_sync_sysml_to_specs(
         docs_dir: Default destination markdown directory for downstream workspaces (default: docs).
         out_dir: Optional explicit output directory. Mandatory in upstream templates when not in dry_run.
         dry_run: If True, simulates generation without writing files to disk.
+        force: If True, bypasses Phase Gate Guard on downstream landing zones.
+        project_root: Optional root directory override.
 
     Returns:
         Dict[str, str] mapping relative file paths to their generated markdown content.
     """
+    root = os.path.abspath(project_root) if project_root else PROJECT_ROOT
+
     if not schema_path:
-        default_schema = os.path.join(PROJECT_ROOT, ".pipeline", "schema.sysml")
+        default_schema = os.path.join(root, ".pipeline", "schema.sysml")
         if os.path.exists(default_schema):
             schema_path = default_schema
         else:
@@ -3216,24 +3265,141 @@ def forward_sync_sysml_to_specs(
     if pkg is None:
         raise RuntimeError(f"Failed to parse base schema '{schema_path}': parser returned None.")
 
-    is_upstream = os.path.isdir(os.path.join(PROJECT_ROOT, ".pipeline", "upstream"))
+    is_upstream = os.path.isdir(os.path.join(root, ".pipeline", "upstream"))
 
     if out_dir:
         resolved_out_dir = os.path.abspath(out_dir)
         print(f"[SysML v2 Forward-Sync] Routing output to explicit directory: '{resolved_out_dir}'")
     elif is_upstream:
         if dry_run:
-            resolved_out_dir = os.path.abspath(docs_dir if os.path.isabs(docs_dir) else os.path.join(PROJECT_ROOT, docs_dir))
+            resolved_out_dir = os.path.abspath(docs_dir if os.path.isabs(docs_dir) else os.path.join(root, docs_dir))
+        elif force:
+            resolved_out_dir = os.path.abspath(docs_dir if os.path.isabs(docs_dir) else os.path.join(root, docs_dir))
         else:
             raise RuntimeError(
                 "In upstream repository, --forward-sync must write to an explicit --out-dir (e.g. build/generated_specs/) "
                 "or use --dry-run to protect clean landing zones (docs/epics/, docs/features/, docs/user-stories/, docs/use-cases/)."
             )
     else:
-        resolved_out_dir = os.path.abspath(docs_dir if os.path.isabs(docs_dir) else os.path.join(PROJECT_ROOT, docs_dir))
+        resolved_out_dir = os.path.abspath(docs_dir if os.path.isabs(docs_dir) else os.path.join(root, docs_dir))
+
+    # Phase Gate Guard (Issue #360):
+    # Ensure forward sync does not overwrite downstream landing zones
+    # (docs/features/, docs/use-cases/, docs/user-stories/, docs/epics/)
+    # unless --force is explicitly passed or Phase 0 is verified.
+    if not dry_run:
+        landing_zone_names = ("features", "use-cases", "user-stories", "epics")
+        is_targeting_landing_zones = False
+        norm_resolved = os.path.normpath(resolved_out_dir)
+        norm_docs = os.path.normpath(os.path.join(root, "docs"))
+
+        if norm_resolved == norm_docs or norm_resolved.startswith(norm_docs + os.sep):
+            is_targeting_landing_zones = True
+        else:
+            for lz in landing_zone_names:
+                if os.path.basename(norm_resolved) == lz or os.path.isdir(os.path.join(norm_resolved, lz)):
+                    is_targeting_landing_zones = True
+                    break
+
+        if is_targeting_landing_zones and not force:
+            if not is_phase0_verified(project_root=root, schema_path=schema_path):
+                raise RuntimeError(
+                    "Phase Gate Guard: Phase 0 compilation is not verified (.pipeline/schema.sysml and "
+                    ".pipeline/schema-digest.json missing or digest mismatch). "
+                    "Cannot overwrite downstream landing zones (docs/features/, docs/use-cases/, "
+                    "docs/user-stories/, docs/epics/) unless --force is explicitly passed or Phase 0 is verified."
+                )
 
     generated_files: Dict[str, str] = {}
     today_iso = datetime.date.today().isoformat()
+
+    # 1. Epics (EPIC-*.md) from CapabilityDef (SysMLCapabilityDef)
+    capabilities: List[Any] = []
+    if hasattr(pkg, "get_all_capabilities"):
+        capabilities = pkg.get_all_capabilities()
+    elif hasattr(pkg, "capability_defs"):
+        capabilities = list(pkg.capability_defs or [])
+    elif isinstance(pkg, dict):
+        capabilities = list(pkg.get("capability_defs", []) or [])
+
+    if not capabilities:
+        all_parts = pkg.get_all_parts() if hasattr(pkg, "get_all_parts") else (getattr(pkg, "part_defs", []) or [])
+        for p in all_parts:
+            p_name = getattr(p, "name", str(p)) if hasattr(p, "name") else (p.get("name", "") if isinstance(p, dict) else str(p))
+            p_name = _sanitize_id(p_name)
+            if p_name:
+                desc = f"Autonomous operational capability management for {p_name} subsystem"
+                if SysMLCapabilityDef:
+                    capabilities.append(SysMLCapabilityDef(
+                        name=f"{p_name}Capability",
+                        subsystem=p_name,
+                        description=desc,
+                        doc=desc,
+                    ))
+                else:
+                    capabilities.append({
+                        "name": f"{p_name}Capability",
+                        "subsystem": p_name,
+                        "description": desc,
+                        "doc": desc,
+                    })
+
+    for idx, cap in enumerate(capabilities, start=1):
+        cap_name = getattr(cap, "name", "") if hasattr(cap, "name") else cap.get("name", f"Capability_{idx}")
+        cap_name = _sanitize_id(cap_name)
+        subsys = (
+            getattr(cap, "subsystem", "")
+            or getattr(cap, "parent_package", "")
+            or getattr(cap, "package_ref", "")
+            or (cap.get("subsystem", "") if isinstance(cap, dict) else "")
+            or "CoreController"
+        )
+        subsys = _sanitize_id(subsys)
+        doc = (
+            getattr(cap, "doc", "")
+            or getattr(cap, "description", "")
+            or (cap.get("description", "") if isinstance(cap, dict) else "")
+            or f"System capability specification for {cap_name}"
+        )
+
+        epic_content = f"""---
+title: "Epic {idx:02d}: {cap_name}"
+version: "1.0.0"
+date: "{today_iso}"
+type: epic
+subsystem: "{subsys}"
+generation_mode: subagent
+---
+
+# Epic {idx:02d}: {cap_name}
+
+## Metadata
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Title** | Epic {idx:02d}: {cap_name} |
+| **Version** | 1.0.0 |
+| **Date** | {today_iso} |
+| **Type** | epic |
+| **Subsystem** | {subsys} |
+| **Generation Mode** | subagent |
+
+## Subsystem Capability Allocations
+
+| Capability | Subsystem | Description |
+| :--- | :--- | :--- |
+| **{cap_name}** | {subsys} | {doc} |
+
+## Architectural Context
+
+```mermaid
+classDiagram
+    class {subsys} {{
+        +perform{cap_name}()
+    }}
+```
+"""
+        rel_path = os.path.join("epics", f"EPIC-{idx:02d}-{cap_name}.md")
+        generated_files[rel_path] = epic_content
 
     # 2. Features (FEAT-*.md) from PartDef & ActionDef
     parts: List[Any] = []
@@ -4179,6 +4345,7 @@ def main():
     parser.add_argument("--compile", action="store_true", help="Execute Pipeline 0 compilation gate")
     parser.add_argument("--reverse-sync", action="store_true", help="Execute closed-loop reverse synchronization from markdown specs to SysML v2 SSOT")
     parser.add_argument("--forward-sync", action="store_true", help="Execute closed-loop forward synchronization from SysML v2 SSOT to markdown specs")
+    parser.add_argument("--force", action="store_true", default=False, help="Force forward synchronization, bypassing phase gate guard on downstream landing zones")
     parser.add_argument("--dry-run", action="store_true", default=False, help="Simulate forward synchronization without writing files to disk")
     parser.add_argument("--docs", "--docs-dir", dest="docs_dir", default="docs", help="Path to markdown specifications directory (default: docs)")
     parser.add_argument("--schema", "--schema-path", dest="schema_path", default=None, help="Path to base/input schema file (e.g. schema/DEAP_MODEL.sysml)")
@@ -4252,13 +4419,14 @@ def main():
                 docs_dir=args.docs_dir,
                 out_dir=args.out_dir,
                 dry_run=args.dry_run,
+                force=args.force,
             )
-        except FileNotFoundError as exc:
+        except (FileNotFoundError, RuntimeError) as exc:
             import glob
             schema_files = glob.glob("schema/*.sysml")
             if not schema_files and os.path.isdir(os.path.join(PROJECT_ROOT, "schema")):
                 schema_files = glob.glob(os.path.join(PROJECT_ROOT, "schema", "*.sysml"))
-            if not schema_files:
+            if not schema_files and isinstance(exc, FileNotFoundError):
                 print(SCHEMA_REMEDIATION_MESSAGE, file=sys.stderr)
             else:
                 print(f"Error: {exc}", file=sys.stderr)

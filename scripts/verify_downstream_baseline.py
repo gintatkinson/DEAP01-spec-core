@@ -180,6 +180,8 @@ def load_mandated_classes(destination):
 def main():
     parser = argparse.ArgumentParser(description="Verify a downstream project's baseline conformance.")
     parser.add_argument("--no-domain", action="store_true", help="Skip checking the domain model")
+    parser.add_argument("--strict", action="store_true", help="Fail closed on missing specification models or directories")
+    parser.add_argument("--allow-missing-specs", action="store_true", default=False, help="Explicitly allow missing specifications")
     parser.add_argument("--target", help="Target project directory", default=None)
     parser.add_argument("--output", help="Output JSON report file path", default=None)
     parser.add_argument("destination", nargs="?", default=".", help="Path to the downstream project directory (defaults to current directory)")
@@ -2035,7 +2037,7 @@ def _validate_safety_matrix_pillars(
 
     return errors
 
-def check_safety_integrity_and_sora_completeness(repo_root):
+def check_safety_integrity_and_sora_completeness(repo_root=None, allow_missing_specs=False, strict=False):
     """Check 17: Safety Integrity Quality Gate and SORA OSO-01..24 Completeness Verification.
 
     Validates:
@@ -2052,10 +2054,14 @@ def check_safety_integrity_and_sora_completeness(repo_root):
        - ASTM F3269-17 Run-Time Assurance (RTA) architecture
        - MATLAB / Simulink / Stateflow model integration baseline hooks.
     """
+    if repo_root is None:
+        repo_root = os.getcwd()
     upstream_marker = os.path.join(repo_root, ".pipeline", "upstream")
     safety_dir = os.path.join(repo_root, "docs", "safety")
 
-    if os.path.isdir(upstream_marker):
+    is_upstream = os.path.isdir(upstream_marker) or os.path.isfile(upstream_marker) or (os.environ.get("DEAP_REPOSITORY_TYPE") == "UPSTREAM_SPEC_CORE_COMPILER")
+
+    if is_upstream:
         if os.path.isdir(safety_dir):
             allowed_files = {".gitkeep", "README.md"}
             violations = []
@@ -2072,7 +2078,13 @@ def check_safety_integrity_and_sora_completeness(repo_root):
         return
 
     # Downstream repository validation
+    is_strict = strict or (os.environ.get("DEAP_STRICT_BASELINE", "").lower() in ("1", "true", "yes"))
+    effective_allow_missing = allow_missing_specs and not is_strict
+
     if not os.path.isdir(safety_dir):
+        if not effective_allow_missing:
+            print("ERROR: Check 17 failed: Safety specification directory 'docs/safety/' is missing.", file=sys.stderr)
+            sys.exit(1)
         print("Success: Check 17 verified (Downstream repository detected -- docs/safety/ directory not present).")
         return
 
@@ -2084,6 +2096,9 @@ def check_safety_integrity_and_sora_completeness(repo_root):
                 safety_files.append(os.path.join(root, f))
 
     if not safety_files:
+        if not effective_allow_missing:
+            print("ERROR: Check 17 failed: No safety specifications found in 'docs/safety/'.", file=sys.stderr)
+            sys.exit(1)
         print("Success: Check 17 verified (Downstream repository detected -- safety specifications pending or clean).")
         return
 
@@ -2479,7 +2494,7 @@ def check_domain_agnostic_ast_cleanliness(repo_root):
 
     print("Success: Check 19 verified (Domain-Agnostic AST Cleanliness & Closed-Grammar Metamodel Gate passed -- pure dynamic schema AST architecture verified).")
 
-def _check_wbs_suite_integrity(repo_root):
+def _check_wbs_suite_integrity(repo_root=None, allow_missing_specs=False, strict=False):
     """Check 20: WBS & Enterprise Deliverables Suite Validation.
 
     Verify that when docs/management/WBS_DELIVERABLES_SUITE.md exists:
@@ -2489,8 +2504,18 @@ def _check_wbs_suite_integrity(repo_root):
     - All intra-document markdown hyperlinks in WBS_DELIVERABLES_SUITE.md resolve to existing files on disk
     - Zero Unicode em dashes (\\u2014) exist in any management deliverable.
     """
+    if repo_root is None:
+        repo_root = os.getcwd()
+    upstream_marker = os.path.join(repo_root, ".pipeline", "upstream")
+    is_upstream = os.path.isdir(upstream_marker) or os.path.isfile(upstream_marker) or (os.environ.get("DEAP_REPOSITORY_TYPE") == "UPSTREAM_SPEC_CORE_COMPILER")
+
     wbs_md = os.path.join(repo_root, "docs", "management", "WBS_DELIVERABLES_SUITE.md")
     if not os.path.isfile(wbs_md):
+        is_strict = strict or (os.environ.get("DEAP_STRICT_BASELINE", "").lower() in ("1", "true", "yes"))
+        effective_allow_missing = allow_missing_specs and not is_strict
+        if not is_upstream and not effective_allow_missing:
+            print("ERROR: Check 20 failed: WBS & Enterprise Deliverables Suite ('docs/management/WBS_DELIVERABLES_SUITE.md') is missing in downstream customer mode.", file=sys.stderr)
+            sys.exit(1)
         print("Success: Check 20 verified (WBS & Enterprise Deliverables Suite pending or not present).")
         return
 
@@ -2838,7 +2863,7 @@ def _load_factual_grounding_validator():
         sys.exit(1)
 
 
-def check_factual_grounding(repo_root=None):
+def check_factual_grounding(repo_root=None, allow_missing_specs=False, strict=False):
     """Check 23: Factual Grounding & Numeric Provenance Gate.
 
     Verify that structural descriptors, control surface counts, numeric limits,
@@ -2848,10 +2873,18 @@ def check_factual_grounding(repo_root=None):
     if repo_root is None:
         repo_root = os.getcwd()
 
+    upstream_marker = os.path.join(repo_root, ".pipeline", "upstream")
+    is_upstream = os.path.isdir(upstream_marker) or os.path.isfile(upstream_marker) or (os.environ.get("DEAP_REPOSITORY_TYPE") == "UPSTREAM_SPEC_CORE_COMPILER")
+
     model_text = _discover_sysml_model_text(repo_root)
     schema_dir = os.path.join(repo_root, "schema")
     has_extracted = os.path.isdir(os.path.join(schema_dir, "extracted")) if os.path.isdir(schema_dir) else False
     if (not model_text or not model_text.strip()) and not has_extracted:
+        is_strict = strict or (os.environ.get("DEAP_STRICT_BASELINE", "").lower() in ("1", "true", "yes"))
+        effective_allow_missing = allow_missing_specs and not is_strict
+        if not is_upstream and not effective_allow_missing:
+            print("ERROR: Check 23 failed: SysML model or schema ground truth is missing in downstream customer mode.", file=sys.stderr)
+            sys.exit(1)
         print("Success: Check 23 verified (SysML model pending or landing zone clean).")
         return
 
@@ -3429,7 +3462,7 @@ def check_architecture_viewpoint_diagrams(repo_root=None):
     repo = repo_cls(workspace_dir=repo_root)
     validator = val_cls()
     try:
-        findings = validator.validate(repo, allow_missing_specs=True, spec_only=True)
+        findings = validator.validate(repo, allow_missing_specs=False, spec_only=True)
     except Exception as e:
         print(f"ERROR: Check 30 execution failed: {e}", file=sys.stderr)
         sys.exit(1)
@@ -3445,6 +3478,103 @@ def check_architecture_viewpoint_diagrams(repo_root=None):
 
 check_architecture_viewpoint = check_architecture_viewpoint_diagrams
 check_architecture_viewpoint_gate = check_architecture_viewpoint_diagrams
+
+
+def check_dual_schema_ssot_parity(repo_root=None):
+    """Check 31: Dual-Schema SSOT Parity Gate (Gate 31).
+
+    If both schema/*.sysml and .pipeline/schema.sysml exist in the workspace,
+    verify that they are identical in AST definitions:
+      - part def
+      - port def
+      - action def
+      - item def
+    preventing silent model drift between schema directories.
+    """
+    if repo_root is None:
+        repo_root = os.getcwd()
+
+    schema_dir = os.path.join(repo_root, "schema")
+    pipeline_schema = os.path.join(repo_root, ".pipeline", "schema.sysml")
+
+    schema_sysml_files = []
+    if os.path.isdir(schema_dir):
+        for name in sorted(os.listdir(schema_dir)):
+            if name.endswith(".sysml") and not name.startswith("."):
+                fpath = os.path.join(schema_dir, name)
+                if os.path.isfile(fpath) and os.path.getsize(fpath) > 0:
+                    schema_sysml_files.append(fpath)
+
+    has_pipeline_schema = os.path.isfile(pipeline_schema) and os.path.getsize(pipeline_schema) > 0
+    has_schema_files = len(schema_sysml_files) > 0
+
+    if not (has_schema_files and has_pipeline_schema):
+        print("Success: Check 31 verified (Dual-schema SSOT parity gate passed -- single schema or landing zone clean).")
+        return
+
+    schema_dir_content = ""
+    for fpath in schema_sysml_files:
+        try:
+            with open(fpath, "r", encoding="utf-8") as f:
+                schema_dir_content += f.read() + "\n\n"
+        except Exception as e:
+            print(f"ERROR: Check 31 failed: Unable to read {fpath}: {e}", file=sys.stderr)
+            sys.exit(1)
+
+    try:
+        with open(pipeline_schema, "r", encoding="utf-8") as f:
+            pipeline_schema_content = f.read()
+    except Exception as e:
+        print(f"ERROR: Check 31 failed: Unable to read {pipeline_schema}: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    parse_func = _load_sysml_parser()
+    if parse_func is None:
+        print("ERROR: Check 31 failed: SysML parser unavailable.", file=sys.stderr)
+        sys.exit(1)
+
+    ast_schema_dir = parse_func(schema_dir_content)
+    ast_pipeline = parse_func(pipeline_schema_content)
+
+    constructs_to_compare = [
+        ("part def", "part_defs", r'\bpart\s+(?:def\s+)?([a-zA-Z0-9_]+)'),
+        ("port def", "port_defs", r'\b(?:in|out|inout)?\s*port\s+(?:def\s+)?([a-zA-Z0-9_]+)'),
+        ("action def", "action_defs", r'\baction\s+(?:def\s+)?([a-zA-Z0-9_]+)'),
+        ("item def", "item_defs", r'\bitem\s+(?:def\s+)?([a-zA-Z0-9_]+)'),
+    ]
+
+    mismatches = []
+    for construct_label, ast_key, pattern in constructs_to_compare:
+        set_dir = set(ast_schema_dir.get(ast_key, []))
+        if pattern:
+            set_dir.update(re.findall(pattern, schema_dir_content))
+        set_pipe = set(ast_pipeline.get(ast_key, []))
+        if pattern:
+            set_pipe.update(re.findall(pattern, pipeline_schema_content))
+
+        missing_in_pipeline = set_dir - set_pipe
+        missing_in_schema_dir = set_pipe - set_dir
+
+        if missing_in_pipeline:
+            mismatches.append(
+                f"{construct_label} defined in schema/*.sysml but missing in .pipeline/schema.sysml: {sorted(missing_in_pipeline)}"
+            )
+        if missing_in_schema_dir:
+            mismatches.append(
+                f"{construct_label} defined in .pipeline/schema.sysml but missing in schema/*.sysml: {sorted(missing_in_schema_dir)}"
+            )
+
+    if mismatches:
+        print("ERROR: Check 31 failed (Dual-Schema SSOT Parity violations found -- schema drift detected):", file=sys.stderr)
+        for m in mismatches:
+            print(f"  - {m}", file=sys.stderr)
+        sys.exit(1)
+
+    print("Success: Check 31 verified (Dual-Schema SSOT Parity Gate passed -- schema/*.sysml and .pipeline/schema.sysml AST definitions are identical).")
+
+
+check_dual_schema_parity = check_dual_schema_ssot_parity
+check_dual_schema_ssot_parity_gate = check_dual_schema_ssot_parity
 
 
 def check_mermaid_syntax(repo_root=None):
@@ -3482,8 +3612,8 @@ def check_mermaid_syntax(repo_root=None):
     print("Success: Mermaid syntax verified across all markdown files.")
 
 
-def run_all_checks(repo_root=None):
-    """Run all baseline checks (Checks 10 through 30)."""
+def run_all_checks(repo_root=None, allow_missing_specs=False, strict=False):
+    """Run all baseline checks (Checks 10 through 31)."""
     if repo_root is None:
         repo_root = os.getcwd()
     check_gitignore_exists(repo_root)
@@ -3494,14 +3624,14 @@ def run_all_checks(repo_root=None):
     check_downstream_instructions_exist(repo_root)
     check_reconcile_backlog_tooling_exists(repo_root)
     check_upstream_template_clean_landing_zones(repo_root)
-    check_safety_integrity_and_sora_completeness(repo_root)
+    check_safety_integrity_and_sora_completeness(repo_root, allow_missing_specs=allow_missing_specs, strict=strict)
     verify_upstream_blueprint_domain_cleanliness(repo_root)
     check_domain_agnostic_ast_cleanliness(repo_root)
-    check_wbs_suite_integrity(repo_root)
-    # Mandatory Gates 21 through 30
+    check_wbs_suite_integrity(repo_root, allow_missing_specs=allow_missing_specs, strict=strict)
+    # Mandatory Gates 21 through 31
     check_semantic_diagram_ast_parity(repo_root)
     check_semantic_prose_invariants(repo_root)
-    check_factual_grounding(repo_root)
+    check_factual_grounding(repo_root, allow_missing_specs=allow_missing_specs, strict=strict)
     check_icd_completeness(repo_root)
     check_operational_allocation(repo_root)
     check_standards_measurement(repo_root)
@@ -3512,10 +3642,13 @@ def run_all_checks(repo_root=None):
     check_coverage_digest(repo_root)
     check_obligation_witness(repo_root)
     check_architecture_viewpoint_diagrams(repo_root)
+    check_dual_schema_ssot_parity(repo_root)
 
 def _run_verification(args, dest, repo_root, is_flutter, is_react):
-    # Run Checks 10 through 25
-    run_all_checks(repo_root)
+    # Run Checks 10 through 31
+    allow_missing = getattr(args, "allow_missing_specs", False)
+    strict = getattr(args, "strict", False)
+    run_all_checks(repo_root, allow_missing_specs=allow_missing, strict=strict)
 
     if is_flutter:
         print(f"Verifying conformance for platform 'flutter' at '{dest}'...")

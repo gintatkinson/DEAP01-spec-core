@@ -33,6 +33,7 @@ import fnmatch
 import os
 import re
 import sys
+import warnings
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set, Tuple, Any, Sequence, Union
 
@@ -90,7 +91,7 @@ RECOGNIZED_PROTOCOLS = [
     "PWM", "PPM",
 ]
 
-# Epistemic tier annotation pattern for declared engineering decisions and TBD parameters
+# Deprecated epistemic tier annotation pattern - retained for backwards-compatibility reference (#378, #376)
 EPISTEMIC_EXEMPTION_PATTERN = re.compile(
     r'(?:\(|\[)TIER-(?:3|4)(?::\s*[^\]\)]+)?(?:\)|\])|(?:\(|\[)\s*Declared\s+Assumption\s*(?:\)|\])|\bDeclared\s+Assumption\b',
     re.I
@@ -106,11 +107,17 @@ MERMAID_STRUCTURAL_KEYWORDS_PATTERN = re.compile(
 
 def _has_epistemic_exemption(line: str) -> bool:
     """
-    Checks if a line contains an epistemic tier exemption ((TIER-3: DESIGN), [TIER-3: DESIGN], (TIER-4: TBD), [TIER-4: TBD], or (Declared Assumption)).
-    Tier 3 (Design Decisions), Tier 4 (TBD/Unspecified), and Declared Assumptions are acknowledged engineering
-    decisions rather than fabricated OEM claims.
+    DEPRECATED (#378, #376): Negative regex-based epistemic exemptions have been eliminated.
+    All claims must have positive closed-world AST provenance against SysML v2 schemas.
+    Always returns False to prevent gate evasion.
     """
-    return bool(EPISTEMIC_EXEMPTION_PATTERN.search(line))
+    warnings.warn(
+        "_has_epistemic_exemption is deprecated and eliminated (#378, #376). "
+        "Positive closed-world AST provenance is enforced.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return False
 
 
 # Physical arming/firing target entity tokens in sequence diagrams
@@ -883,6 +890,108 @@ class SchemaGroundTruth:
     declared_parts: Set[str] = field(default_factory=set)
     declared_frequencies: Set[str] = field(default_factory=set)
 
+    def to_typed_parameter_dictionary(self) -> Dict[str, Any]:
+        """
+        Projects a closed-world typed parameter dictionary AST from the parsed schema.
+        Provides subagents with an explicit reference of all valid schema attributes,
+        types, units, bounds, and values (Issue #377).
+        """
+        params: Dict[str, Dict[str, Any]] = {}
+
+        # 1. Scoped numeric limits
+        for sl in self.scoped_numeric_limits:
+            params[sl.key] = {
+                "name": sl.key,
+                "owner": sl.owner,
+                "type": "Number",
+                "value": sl.limit_val,
+                "unit": sl.unit,
+                "bound_type": sl.bound_type,
+            }
+
+        # 2. General numeric limits not yet in params
+        for k, (limit_val, unit) in self.numeric_limits.items():
+            if k not in params:
+                params[k] = {
+                    "name": k,
+                    "owner": None,
+                    "type": "Number",
+                    "value": limit_val,
+                    "unit": unit,
+                    "bound_type": self.numeric_bound_types.get(k, "upper"),
+                }
+
+        # 3. Structural integer counts and configurations
+        for k, v in self.structural_attributes.items():
+            if k not in params:
+                val_type = "Integer" if isinstance(v, int) else "String"
+                params[k] = {
+                    "name": k,
+                    "owner": None,
+                    "type": val_type,
+                    "value": v,
+                    "unit": "",
+                    "bound_type": "exact",
+                }
+
+        # 4. General attributes
+        for k, v in self.attributes.items():
+            if k not in params:
+                params[k] = {
+                    "name": k,
+                    "owner": None,
+                    "type": "String",
+                    "value": v,
+                    "unit": "",
+                    "bound_type": "nominal",
+                }
+
+        return {
+            "parameters": params,
+            "structural_attributes": dict(self.structural_attributes),
+            "numeric_limits": {
+                k: {"limit": v[0], "unit": v[1], "bound_type": self.numeric_bound_types.get(k, "upper")}
+                for k, v in self.numeric_limits.items()
+            },
+            "declared_protocols": sorted(list(self.declared_protocols)),
+            "declared_parts": sorted(list(self.declared_parts)),
+            "declared_frequencies": sorted(list(self.declared_frequencies)),
+            "declared_ast_nodes": sorted(list(self.declared_ast_nodes)),
+            "source_files": list(self.source_files),
+        }
+
+    def format_typed_parameter_dictionary_markdown(self) -> str:
+        """
+        Renders the typed parameter dictionary AST as a markdown table suitable
+        for injection into generative subagent prompts (Issue #377).
+        """
+        dict_data = self.to_typed_parameter_dictionary()
+        params = dict_data.get("parameters", {})
+        if not params:
+            return "<!-- No formal parameters declared in schema AST -->\n"
+
+        lines = [
+            "### Closed-World AST Typed Parameter Dictionary Reference",
+            "All physical quantities, numerical limits, tolerances, and configurations in this specification",
+            "MUST resolve to an entry in this parameter dictionary or carry a verified SSOT citation (`<!-- Source: schema/... -->`).",
+            "",
+            "| Parameter | Type | Value / Limit | Unit | Component Owner | Bound Type |",
+            "| :--- | :--- | :--- | :--- | :--- | :--- |",
+        ]
+        for name, p in sorted(params.items()):
+            val_str = str(p.get("value", ""))
+            unit_str = p.get("unit", "") or "-"
+            owner_str = p.get("owner", "") or "Package"
+            bound_str = p.get("bound_type", "") or "exact"
+            type_str = p.get("type", "") or "Attribute"
+            lines.append(f"| `{name}` | `{type_str}` | `{val_str}` | `{unit_str}` | `{owner_str}` | `{bound_str}` |")
+
+        if self.declared_protocols:
+            lines.append("")
+            lines.append(f"**Declared Protocols**: {', '.join(sorted(self.declared_protocols))}")
+
+        return "\n".join(lines) + "\n"
+
 
 GroundTruth = SchemaGroundTruth
 
@@ -1266,6 +1375,31 @@ class FactualGroundingValidator(IValidator):
         findings.extend(self._citation_fraud_findings)
 
         return findings
+
+    def extract_typed_parameter_dictionary(
+        self,
+        repo: WorkspaceRepository,
+        schemas_dir: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Extracts and projects a closed-world typed parameter dictionary AST from the parsed schema.
+        Provides subagents with an explicit reference of all valid schema attributes,
+        types, units, bounds, and values (Issue #377).
+        """
+        gt = self._extract_ground_truth(repo, schemas_dir=schemas_dir)
+        return gt.to_typed_parameter_dictionary()
+
+    def format_typed_parameter_dictionary_markdown(
+        self,
+        repo: WorkspaceRepository,
+        schemas_dir: Optional[str] = None
+    ) -> str:
+        """
+        Renders the typed parameter dictionary AST as a markdown table suitable
+        for injection into generative subagent prompts (Issue #377).
+        """
+        gt = self._extract_ground_truth(repo, schemas_dir=schemas_dir)
+        return gt.format_typed_parameter_dictionary_markdown()
 
     def _extract_ground_truth(
         self,
@@ -2431,10 +2565,7 @@ class FactualGroundingValidator(IValidator):
             if re.search(r'\b(?:rejected|discarded|eliminated|not\s+selected|cons|fail)\b', line_str, re.I):
                 continue
 
-            # Skip lines with epistemic exemptions ([TIER-3: DESIGN], [TIER-4: TBD])
-            if _has_epistemic_exemption(line_str):
-                continue
-
+            # Eliminated epistemic exemption bypass (#378, #376): all structural claims require positive AST provenance
             line_str = _normalize_katex_math_expressions(line_str)
 
             # Check if line has explicit SSOT citation (inline or block)
@@ -2667,25 +2798,29 @@ class FactualGroundingValidator(IValidator):
                         in_code_block = True
                 continue
 
-            if in_code_block or not line_str:
-                if not line_str:
-                    current_citation = None
+            if not line_str:
+                current_citation = None
                 continue
 
             if in_mermaid_block:
-                if line_str.lower().startswith("sequencediagram"):
-                    in_sequence_diagram = True
-                    continue
-                if not in_sequence_diagram:
-                    continue
-                if MERMAID_STRUCTURAL_KEYWORDS_PATTERN.match(line_str):
-                    continue
+                # Track citation in Mermaid comments (%% Source: ...)
                 if line_str.startswith("%%"):
-                    if re.search(r'%%\s*(?:Source|SSOT|Grounding|Reference):\s*\S+', line_str, re.I):
+                    if re.search(r'%%\s*(?:Source|SSOT|Grounding|Reference):\s*[^>\n]+', line_str, re.I):
                         current_citation = line_str
                     continue
+                # Skip pure diagram type declarations and structural layout directives
+                if re.match(r'^(?:sequenceDiagram|classDiagram(?:-v2)?|stateDiagram(?:-v2)?|flowchart|graph|erDiagram|journey|gantt|pie|gitGraph)(?:\s+.*)?$', line_str, re.I):
+                    continue
+                if re.match(r'^(?:autonumber|activate|deactivate|direction\s+(?:TB|TD|BT|RL|LR)|classDef\s+\S+|linkStyle\s+\d+|end)$', line_str, re.I):
+                    continue
+            elif in_code_block:
+                # Track citation in code block comments (# Source: ..., // Source: ..., <!-- Source: ...)
+                if re.search(r'(?:<!--|#|//|/\*)\s*(?:Source|SSOT|Grounding|Reference):\s*[^>\n*]+', line_str, re.I):
+                    current_citation = line_str
+                    if re.match(r'^\s*(?:<!--|#|//|/\*|\*)\s*(?:Source|SSOT|Grounding|Reference):\s*[^>\n*]+(?:-->|\*/)?\s*$', line_str, re.I):
+                        continue
             else:
-                # Heading detection
+                # Heading detection (outside code blocks and Mermaid diagrams)
                 m_head = re.match(r'^(#{1,6})\s+(.+)$', line_str)
                 if m_head:
                     current_citation = None
@@ -2701,10 +2836,10 @@ class FactualGroundingValidator(IValidator):
             if not is_normative:
                 continue
 
-            # Track block/paragraph citation comments (e.g. <!-- Source: ... --> or %% Source: ...)
-            if re.search(r'(?:<!--|%%)\s*(?:Source|SSOT|Grounding|Reference):\s*[^>\n]+', line_str, re.I):
+            # Track block/paragraph citation comments (e.g. <!-- Source: ... --> or %% Source: ... or // Source: ...)
+            if re.search(r'(?:<!--|%%|//|#)\s*(?:Source|SSOT|Grounding|Reference):\s*[^>\n]+', line_str, re.I):
                 current_citation = line_str
-                if re.match(r'^\s*(?:<!--|%%)\s*(?:Source|SSOT|Grounding|Reference):\s*[^>\n]+(?:-->)?\s*$', line_str, re.I):
+                if re.match(r'^\s*(?:<!--|%%|//|#)\s*(?:Source|SSOT|Grounding|Reference):\s*[^>\n]+(?:-->)?\s*$', line_str, re.I):
                     continue
 
             # Skip rejected trade study rows
@@ -2715,10 +2850,7 @@ class FactualGroundingValidator(IValidator):
             if re.search(r'\bpending\s+arbitration\b', line_str, re.I):
                 continue
 
-            # Skip lines with epistemic exemptions ([TIER-3: DESIGN], [TIER-4: TBD])
-            if _has_epistemic_exemption(line_str):
-                continue
-
+            # Eliminated epistemic exemption bypass (#378, #376): all numeric quantities require positive AST provenance
             line_str = _normalize_katex_math_expressions(line_str)
 
             # Check if line has explicit SSOT citation (inline or block)
@@ -3134,6 +3266,7 @@ class FactualGroundingValidator(IValidator):
         non_normative_depth: Optional[int] = None
         is_normative = True
         in_code_block = False
+        in_mermaid_block = False
         in_frontmatter = False
 
         current_citation: Optional[str] = None
@@ -3150,43 +3283,66 @@ class FactualGroundingValidator(IValidator):
                 continue
 
             if line_str.startswith("```"):
-                in_code_block = not in_code_block
-                continue
-            if in_code_block or not line_str:
-                if not line_str:
-                    current_citation = None
+                if in_code_block or in_mermaid_block:
+                    in_code_block = False
+                    in_mermaid_block = False
+                else:
+                    info = line_str[3:].strip().lower()
+                    if info.startswith("mermaid"):
+                        in_mermaid_block = True
+                    else:
+                        in_code_block = True
                 continue
 
-            # Heading detection
-            m_head = re.match(r'^(#{1,6})\s+(.+)$', line_str)
-            if m_head:
+            if not line_str:
                 current_citation = None
-                level = len(m_head.group(1))
-                current_heading = m_head.group(2).strip()
-                if non_normative_depth is not None and level <= non_normative_depth:
-                    non_normative_depth = None
-                if self._is_non_normative_section(current_heading):
-                    non_normative_depth = level
-                is_normative = (non_normative_depth is None)
                 continue
+
+            if in_mermaid_block:
+                # Track citation in Mermaid comments (%% Source: ...)
+                if line_str.startswith("%%"):
+                    if re.search(r'%%\s*(?:Source|SSOT|Grounding|Reference):\s*[^>\n]+', line_str, re.I):
+                        current_citation = line_str
+                    continue
+                # Skip pure diagram type declarations and structural layout directives
+                if re.match(r'^(?:sequenceDiagram|classDiagram(?:-v2)?|stateDiagram(?:-v2)?|flowchart|graph|erDiagram|journey|gantt|pie|gitGraph)(?:\s+.*)?$', line_str, re.I):
+                    continue
+                if re.match(r'^(?:autonumber|activate|deactivate|direction\s+(?:TB|TD|BT|RL|LR)|classDef\s+\S+|linkStyle\s+\d+|end)$', line_str, re.I):
+                    continue
+            elif in_code_block:
+                # Track citation in code block comments (# Source: ..., // Source: ..., <!-- Source: ...)
+                if re.search(r'(?:<!--|#|//|/\*)\s*(?:Source|SSOT|Grounding|Reference):\s*[^>\n*]+', line_str, re.I):
+                    current_citation = line_str
+                    if re.match(r'^\s*(?:<!--|#|//|/\*|\*)\s*(?:Source|SSOT|Grounding|Reference):\s*[^>\n*]+(?:-->|\*/)?\s*$', line_str, re.I):
+                        continue
+            else:
+                # Heading detection (outside code blocks and Mermaid diagrams)
+                m_head = re.match(r'^(#{1,6})\s+(.+)$', line_str)
+                if m_head:
+                    current_citation = None
+                    level = len(m_head.group(1))
+                    current_heading = m_head.group(2).strip()
+                    if non_normative_depth is not None and level <= non_normative_depth:
+                        non_normative_depth = None
+                    if self._is_non_normative_section(current_heading):
+                        non_normative_depth = level
+                    is_normative = (non_normative_depth is None)
+                    continue
 
             if not is_normative:
                 continue
 
-            # Track block/paragraph citation comments (e.g. <!-- Source: ... -->)
-            if re.search(r'<!--\s*(?:Source|SSOT|Grounding|Reference):\s*[^>]+-->', line_str, re.I):
+            # Track block/paragraph citation comments (e.g. <!-- Source: ... --> or %% Source: ... or // Source: ...)
+            if re.search(r'(?:<!--|%%|//|#)\s*(?:Source|SSOT|Grounding|Reference):\s*[^>\n]+', line_str, re.I):
                 current_citation = line_str
-                if re.match(r'^\s*<!--\s*(?:Source|SSOT|Grounding|Reference):\s*[^>]+-->\s*$', line_str, re.I):
+                if re.match(r'^\s*(?:<!--|%%|//|#)\s*(?:Source|SSOT|Grounding|Reference):\s*[^>\n]+(?:-->)?\s*$', line_str, re.I):
                     continue
 
             # Skip rejected trade study rows or evaluation options
             if re.search(r'\b(?:rejected|discarded|eliminated|not\s+selected|candidate\s+option|option\s+[a-z0-9]|alternative)\b', line_str, re.I):
                 continue
 
-            # Skip lines with epistemic exemptions ([TIER-3: DESIGN], [TIER-4: TBD])
-            if _has_epistemic_exemption(line_str):
-                continue
-
+            # Eliminated epistemic exemption bypass (#378, #376): all protocol claims require positive AST provenance
             line_str = _normalize_katex_math_expressions(line_str)
 
             # Check if line has explicit SSOT citation (inline or block)
