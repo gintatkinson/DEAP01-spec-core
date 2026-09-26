@@ -1319,7 +1319,7 @@ def _main_impl():
     if _gate_matches(["sync", "backlog_sync"]):
         print("\n=== Out-of-Sync Backlog Validation ===")
         sync_validator = SyncValidator()
-        sync_errors = _scope_findings(sync_validator.validate(repo), getattr(args, 'only', None))
+        sync_errors = _scope_findings(sync_validator.validate(repo, provider=args.provider), getattr(args, 'only', None))
         if sync_errors:
             print("[!] Out-of-Sync Backlog Violations Identified:")
             for err in sync_errors:

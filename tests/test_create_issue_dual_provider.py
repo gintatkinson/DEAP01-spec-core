@@ -115,12 +115,18 @@ with open(log_file, "w") as f:
 
 args = sys.argv[1:]
 if len(args) >= 2 and args[0] == "issue" and args[1] == "list":
+    if os.environ.get("MOCK_GH_AUTH_FAILURE"):
+        sys.stderr.write("error: authentication token missing or expired\\n")
+        sys.exit(1)
     existing = os.environ.get("MOCK_GH_EXISTING")
     if existing:
         print(existing)
     sys.exit(0)
 
 if len(args) >= 2 and args[0] == "label" and args[1] == "list":
+    if os.environ.get("MOCK_GH_AUTH_FAILURE"):
+        sys.stderr.write("error: authentication token missing or expired\\n")
+        sys.exit(1)
     if os.environ.get("MOCK_GH_MISSING_LABEL"):
         sys.exit(0)
     print("feature\\t0366d6\\tfeature specification")
@@ -170,6 +176,9 @@ with open(log_file, "w") as f:
 
 args = sys.argv[1:]
 if len(args) >= 2 and args[0] == "issue" and args[1] == "list":
+    if os.environ.get("MOCK_GLAB_AUTH_FAILURE"):
+        sys.stderr.write("error: unauthenticated - please run glab auth login\\n")
+        sys.exit(1)
     if "--output" in args and "json" in args:
         print("[]")
         sys.exit(0)
@@ -179,6 +188,9 @@ if len(args) >= 2 and args[0] == "issue" and args[1] == "list":
     sys.exit(0)
 
 if len(args) >= 2 and args[0] == "label" and args[1] == "list":
+    if os.environ.get("MOCK_GLAB_AUTH_FAILURE"):
+        sys.stderr.write("error: unauthenticated - please run glab auth login\\n")
+        sys.exit(1)
     if os.environ.get("MOCK_GLAB_MISSING_LABEL"):
         sys.exit(0)
     print("12345\\tfeature\\tfeature specification\\t#0366d6")
@@ -220,7 +232,11 @@ if len(args) >= 2 and args[0] == "label" and args[1] == "create":
 if len(args) >= 2 and args[0] == "issue" and args[1] == "create":
     body_capture = r"{self.glab_body_file}"
     for i, a in enumerate(args):
-        if a == "--description" and i + 1 < len(args):
+        if a == "--description-file" and i + 1 < len(args):
+            if os.path.exists(args[i+1]):
+                with open(args[i+1], "r", encoding="utf-8") as src, open(body_capture, "w", encoding="utf-8") as dst:
+                    dst.write(src.read())
+        elif a == "--description" and i + 1 < len(args):
             with open(body_capture, "w", encoding="utf-8") as dst:
                 dst.write(args[i+1])
     print("https://gitlab.com/aerospace/uav-009-flight-control/-/issues/101")
@@ -298,6 +314,8 @@ sys.exit(0)
         self.assertIn("issue", subcommands)
         create_calls = [c for c in glab_calls if c[:2] == ["issue", "create"]]
         self.assertEqual(len(create_calls), 1, "glab issue create should have been called once")
+        self.assertIn("--description-file", create_calls[0], "glab issue create must use --description-file flag")
+        self.assertNotIn("--description", create_calls[0], "glab issue create must not use inline --description flag")
 
     def test_remote_auto_detection_github(self):
         """Verifies github remote URL triggers github provider and executes gh CLI."""
@@ -416,9 +434,10 @@ sys.exit(0)
     def test_github_idempotency_avoids_duplicate(self):
         """Verifies existing issue with identical title in GitHub results in [IDEMPOTENT] exit 0 and no create call."""
         self._init_git_repo("git@github.com:aerospace/uav-009-flight-control.git")
+        # In `gh issue list`, column 1 is Number, column 2 is State, column 3 is Title, column 4 is Labels
         res = self._run_create_issue(
             [self.feature_file, "feature", self.feature_title],
-            extra_env={"MOCK_GH_EXISTING": f"101\t{self.feature_title}\tfeature\topen"},
+            extra_env={"MOCK_GH_EXISTING": f"101\tOPEN\t{self.feature_title}\tfeature"},
         )
         self.assertEqual(res.returncode, 0, f"Script failed: {res.stderr}")
         self.assertIn("[IDEMPOTENT]", res.stdout)
@@ -483,7 +502,7 @@ sys.exit(0)
                 "feature",
                 self.feature_title,
             ],
-            extra_env={"MOCK_GH_EXISTING": f"101\t{self.feature_title}\tfeature\tclosed"},
+            extra_env={"MOCK_GH_EXISTING": f"101\tCLOSED\t{self.feature_title}\tfeature"},
         )
         self.assertEqual(res.returncode, 0, f"Script failed: {res.stderr}\n{res.stdout}")
         self.assertIn("[REOPEN]", res.stdout)
@@ -710,6 +729,77 @@ sys.exit(0)
         glab_calls = self._get_glab_calls()
         create_label_calls = [c for c in glab_calls if c[:2] == ["label", "create"]]
         self.assertEqual(len(create_label_calls), 0, "glab label create should not be called when label exists")
+
+    # -------------------------------------------------------------------------
+    # 9. Column 3 Matching, ENVIRON["TITLE"], --description-file, and Auth Diagnostics
+    # -------------------------------------------------------------------------
+
+    def test_github_issue_detection_column_2_open_column_3_title(self):
+        """Verifies detection of GitHub issues where column 2 is OPEN and column 3 is Title."""
+        self._init_git_repo("git@github.com:aerospace/uav-009-flight-control.git")
+        # Column 1: Number, Column 2: State (OPEN), Column 3: Title, Column 4: Labels
+        res = self._run_create_issue(
+            [self.feature_file, "feature", self.feature_title],
+            extra_env={"MOCK_GH_EXISTING": f"202\tOPEN\t{self.feature_title}\tfeature"},
+        )
+        self.assertEqual(res.returncode, 0, f"Script failed: {res.stderr}")
+        self.assertIn("[IDEMPOTENT]", res.stdout)
+        self.assertIn(f"Issue #202 already carries the title '{self.feature_title}'", res.stdout)
+
+        gh_calls = self._get_gh_calls()
+        create_calls = [c for c in gh_calls if c[:2] == ["issue", "create"]]
+        self.assertEqual(len(create_calls), 0, "gh issue create must NOT be called when issue is matched in column 3")
+
+    def test_github_column_2_title_is_not_matched_as_column_3(self):
+        """Verifies that if title is in column 2 and column 3 is state, column 3 matching does not falsely match."""
+        self._init_git_repo("git@github.com:aerospace/uav-009-flight-control.git")
+        # Legacy/wrong format: Column 1: Number, Column 2: Title, Column 3: State (OPEN)
+        res = self._run_create_issue(
+            [self.feature_file, "feature", self.feature_title],
+            extra_env={"MOCK_GH_EXISTING": f"202\t{self.feature_title}\tOPEN\tfeature"},
+        )
+        self.assertEqual(res.returncode, 0, f"Script failed: {res.stderr}")
+        # Since column 3 is "OPEN" which != self.feature_title, it should not be idempotent
+        gh_calls = self._get_gh_calls()
+        create_calls = [c for c in gh_calls if c[:2] == ["issue", "create"]]
+        self.assertEqual(len(create_calls), 1, "gh issue create should be called when column 3 does not match title")
+
+    def test_create_issue_script_contract_assertions(self):
+        """Asserts script code contracts: column 3 matching for GitHub, ENVIRON['TITLE'], and --description-file."""
+        with open(CREATE_ISSUE_SCRIPT, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        self.assertIn('export TITLE', content, "create_issue.sh must export TITLE")
+        self.assertIn('$3 == ENVIRON["TITLE"]', content, "GitHub duplicate check must match column 3 against ENVIRON['TITLE']")
+        self.assertIn('$2 == ENVIRON["TITLE"]', content, "GitLab duplicate check must match column 2 against ENVIRON['TITLE']")
+        self.assertIn('--description-file "$TMP_EXPANDED_BODY"', content, "GitLab issue creation must use --description-file")
+        self.assertIn('ESCAPED_TITLE="${TITLE//\\"/\\\\\\"}"', content, "GitHub title search must escape double quotes")
+
+    def test_unauthenticated_gh_cli_diagnostic(self):
+        """Verifies unauthenticated gh CLI errors provide clear stderr diagnostics rather than terminating silently."""
+        self._init_git_repo("git@github.com:aerospace/uav-009-flight-control.git")
+        res = self._run_create_issue(
+            [self.feature_file, "feature", self.feature_title],
+            extra_env={"MOCK_GH_AUTH_FAILURE": "1"},
+        )
+        self.assertNotEqual(res.returncode, 0, "Script must fail non-zero when gh CLI is unauthenticated")
+        self.assertTrue(
+            "Check GitHub CLI authentication" in res.stderr or "authentication token missing or expired" in res.stderr,
+            f"Expected auth diagnostic on stderr, got: {res.stderr}"
+        )
+
+    def test_unauthenticated_glab_cli_diagnostic(self):
+        """Verifies unauthenticated glab CLI errors provide clear stderr diagnostics rather than terminating silently."""
+        self._init_git_repo("git@gitlab.com:aerospace/uav-009-flight-control.git")
+        res = self._run_create_issue(
+            [self.feature_file, "feature", self.feature_title],
+            extra_env={"MOCK_GLAB_AUTH_FAILURE": "1"},
+        )
+        self.assertNotEqual(res.returncode, 0, "Script must fail non-zero when glab CLI is unauthenticated")
+        self.assertTrue(
+            "Check GitLab CLI authentication" in res.stderr or "unauthenticated - please run glab auth login" in res.stderr,
+            f"Expected auth diagnostic on stderr, got: {res.stderr}"
+        )
 
 
 if __name__ == "__main__":

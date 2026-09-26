@@ -61,6 +61,7 @@ fi
 LOCAL_FILE="${POSITIONAL_ARGS[0]}"
 LABEL="${POSITIONAL_ARGS[1]}"
 TITLE="${POSITIONAL_ARGS[2]}"
+export TITLE
 if [ -z "$REPO" ] && [ "${#POSITIONAL_ARGS[@]}" -ge 4 ]; then
     REPO="${POSITIONAL_ARGS[3]}"
 fi
@@ -166,13 +167,32 @@ fi
 
 # Duplicate search and idempotency
 if [ "$PROVIDER" = "gitlab" ]; then
-    EXISTING=$(glab issue list $REPO_FLAG --all --search "$TITLE" 2>/dev/null \
-        | awk -F'\t' -v t="$TITLE" '$2 == t { print $1; exit }')
+    GLAB_LIST_ERR=$(mktemp)
+    if ! GLAB_LIST_OUT=$(glab issue list $REPO_FLAG --all --search "$TITLE" 2>"$GLAB_LIST_ERR"); then
+        echo "FATAL: 'glab issue list' failed. Check GitLab CLI authentication and access permissions." >&2
+        if [ -s "$GLAB_LIST_ERR" ]; then
+            cat "$GLAB_LIST_ERR" >&2
+        fi
+        rm -f "$GLAB_LIST_ERR"
+        exit 1
+    fi
+    rm -f "$GLAB_LIST_ERR"
+    EXISTING=$(printf '%s\n' "$GLAB_LIST_OUT" | awk -F'\t' '$2 == ENVIRON["TITLE"] { print $1; exit }')
 else
     # Issue #332 -- idempotency. Exact match on the title column, not a substring:
-    # `gh issue list` emits TSV as number<TAB>title<TAB>labels<TAB>state.
-    EXISTING=$(gh issue list --state all --search "in:title \"$TITLE\"" $REPO_FLAG 2>/dev/null \
-        | awk -F'\t' -v t="$TITLE" '$2 == t { print $1; exit }')
+    # `gh issue list` emits TSV as number<TAB>state<TAB>title<TAB>labels<TAB>updated.
+    ESCAPED_TITLE="${TITLE//\"/\\\"}"
+    GH_LIST_ERR=$(mktemp)
+    if ! GH_LIST_OUT=$(gh issue list --state all --search "in:title \"$ESCAPED_TITLE\"" $REPO_FLAG 2>"$GH_LIST_ERR"); then
+        echo "FATAL: 'gh issue list' failed. Check GitHub CLI authentication and access permissions." >&2
+        if [ -s "$GH_LIST_ERR" ]; then
+            cat "$GH_LIST_ERR" >&2
+        fi
+        rm -f "$GH_LIST_ERR"
+        exit 1
+    fi
+    rm -f "$GH_LIST_ERR"
+    EXISTING=$(printf '%s\n' "$GH_LIST_OUT" | awk -F'\t' '$3 == ENVIRON["TITLE"] { print $1; exit }')
 fi
 
 if [ -n "$EXISTING" ]; then
@@ -195,8 +215,17 @@ fi
 
 # Label check and creation
 if [ "$PROVIDER" = "gitlab" ]; then
-    if ! glab label list $REPO_FLAG 2>/dev/null \
-        | awk -F'\t' -v l="$LABEL" '$2 == l || $1 == l { found = 1 } END { exit !found }'; then
+    GLAB_LABEL_ERR=$(mktemp)
+    if ! GLAB_LABEL_OUT=$(glab label list $REPO_FLAG 2>"$GLAB_LABEL_ERR"); then
+        echo "FATAL: 'glab label list' failed. Check GitLab CLI authentication and access permissions." >&2
+        if [ -s "$GLAB_LABEL_ERR" ]; then
+            cat "$GLAB_LABEL_ERR" >&2
+        fi
+        rm -f "$GLAB_LABEL_ERR"
+        exit 1
+    fi
+    rm -f "$GLAB_LABEL_ERR"
+    if ! printf '%s\n' "$GLAB_LABEL_OUT" | awk -F'\t' -v l="$LABEL" '$2 == l || $1 == l { found = 1 } END { exit !found }'; then
         echo "[GATE] Label '$LABEL' not found. Creating..."
         glab label create --name "$LABEL" $REPO_FLAG --color "#0366d6" --description "${LABEL} specification"
     fi
@@ -204,8 +233,17 @@ else
     # Issue #332 -- the label precondition used `grep -Fq "$LABEL"`, a substring match, so an
     # existing `feature-request` satisfied the check for `feature` and the real label was
     # never created. Exact match on the name column instead.
-    if ! gh label list $REPO_FLAG 2>/dev/null \
-        | awk -F'\t' -v l="$LABEL" '$1 == l { found = 1 } END { exit !found }'; then
+    GH_LABEL_ERR=$(mktemp)
+    if ! GH_LABEL_OUT=$(gh label list $REPO_FLAG 2>"$GH_LABEL_ERR"); then
+        echo "FATAL: 'gh label list' failed. Check GitHub CLI authentication and access permissions." >&2
+        if [ -s "$GH_LABEL_ERR" ]; then
+            cat "$GH_LABEL_ERR" >&2
+        fi
+        rm -f "$GH_LABEL_ERR"
+        exit 1
+    fi
+    rm -f "$GH_LABEL_ERR"
+    if ! printf '%s\n' "$GH_LABEL_OUT" | awk -F'\t' -v l="$LABEL" '$1 == l { found = 1 } END { exit !found }'; then
         echo "[GATE] Label '$LABEL' not found. Creating..."
         gh label create "$LABEL" $REPO_FLAG --color "0366d6" --description "${LABEL} specification"
     fi
@@ -264,12 +302,8 @@ except Exception:
 PYEOF
 
 if [ "$PROVIDER" = "gitlab" ]; then
-    glab issue create $REPO_FLAG --title "$TITLE" --label "$LABEL" --description "$(< "$TMP_EXPANDED_BODY")"
+    glab issue create $REPO_FLAG --title "$TITLE" --label "$LABEL" --description-file "$TMP_EXPANDED_BODY"
 else
-    if [ -n "$REPO" ]; then
-        gh issue create --repo "$REPO" --title "$TITLE" --label "$LABEL" --body-file "$TMP_EXPANDED_BODY"
-    else
-        gh issue create --title "$TITLE" --label "$LABEL" --body-file "$TMP_EXPANDED_BODY"
-    fi
+    gh issue create $REPO_FLAG --title "$TITLE" --label "$LABEL" --body-file "$TMP_EXPANDED_BODY"
 fi
 
