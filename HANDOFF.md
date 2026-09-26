@@ -2,20 +2,21 @@
 
 | Attribute | Value |
 | :--- | :--- |
-| **Document Identifier** | `DEAP-HANDOFF-ROOT-004` |
-| **Title** | Comprehensive Operational Handoff: Retrospective on Failure Modes, Dual-Provider Tooling Architecture, and Downstream Leaf Remediation |
+| **Document Identifier** | `DEAP-HANDOFF-ROOT-005` |
+| **Title** | Authoritative Operational Handoff: Retrospective on 9 Failure Modes, UAV-009 Parity, Full-Fleet Synchronization, and Next-Phase Implementation Roadmap |
 | **Repository Classification** | `UPSTREAM_SPEC_CORE_COMPILER` (DEAP01-spec-core) & Downstream Distribution (`uav-009`, `uav-011`, `DEAP-uas-infrastructure-safety`) |
 | **Target Branch** | `main` (clean working tree, synchronized with `origin/main`) |
-| **Upstream Baseline Commit** | `ce82ef4` |
+| **Upstream Baseline Commit** | `f7f9c31` |
+| **Customer Baseline Commit** | `uav-009 00d9bbd / uav-011 b6b8b80` |
 | **Status** | Authoritative Operational Handoff Baseline for Incoming Agent |
-| **Date** | 2026-09-25 |
+| **Date** | 2026-09-26 |
 | **Target Audience** | Incoming Autonomous Systems Engineering Agent / Multi-Harness Team |
 
 ---
 
-## 1. Unvarnished Retrospective: The 8 Failure Modes You MUST NOT Repeat
+## 1. Unvarnished Retrospective: The 9 Failure Modes You MUST NOT Repeat
 
-Every incoming agent must study these 8 failure modes. These were direct operational, cognitive, and governance mistakes committed during prior sessions. Repeating any of them is strictly forbidden.
+Every incoming agent must study these 9 failure modes. These were direct operational, cognitive, and governance mistakes committed during prior sessions. Repeating any of them is strictly forbidden.
 
 ### Failure Mode 1: Burning Coordinator Context Window (Violating Subagent Mandate)
 - **What Happened**: The coordinator agent directly invoked `view_file` and `grep_search` across multiple massive codebase files (`compile_sysml.py` [3,476 lines], `assemble_conops.py` [4,532 lines], `SKILL.md` [601 lines]) in the primary conversation thread.
@@ -69,11 +70,72 @@ Every incoming agent must study these 8 failure modes. These were direct operati
 - **Mandate for Incoming Agent**:
   - All issue creation, backlog reconciliation, and verification scripts must support dual-provider architecture (`gh` and `glab`) with seamless auto-detection via `git remote get-url origin` and environment variable overrides (`TRACKER_PROVIDER=gitlab|github`).
 
+### Failure Mode 9: Omitting Critical Active Customer Workspaces During Fleet Propagation
+- **What Happened**: During pipeline tooling rollout and domain template updates, propagation was performed on domain distribution templates and standard secondary workspaces (such as `uav-011`), but omitted active customer workspaces like `uav-009`. Assumptions were made that downstream workspaces were in parity based solely on local spec baseline tests or test repository runs, without verifying all active customer workspaces across the taxonomy.
+- **Consequence**: `uav-009` remained contaminated with 75 ungrounded `#[IssueID]` placeholders and 0 remote tracker issues while upstream tooling assumed fleet-wide completion. Drift was only detected when leaf-level audits were performed directly inside `uav-009`.
+- **Mandate for Incoming Agent**:
+  - **NEVER** assume fleet parity based solely on local spec baseline tests or partial workspace runs.
+  - **ALWAYS** execute physical directory diffs and automated baseline audits across the entire taxonomy (`DEAP01-spec-core`, domain templates, and all active customer workspaces such as `uav-009` and `uav-011`).
+  - Every fleet propagation work package must enumerate and verify each workspace individually with explicit 0-byte remote diff confirmation before declaring completion.
+
 ---
 
-## 2. Universal Agent Startup Protocol (First 5 Minutes)
+## 2. Verified Fleet Baseline State & Remote Commit Matrix
+
+All repositories across `/Users/perkunas/jail` have been audited, synchronized, and verified at **0-byte remote diff** against their respective upstream and remote tracking branches.
+
+### 2.1 Remote Commit & Parity Matrix
+
+| Workspace / Repository | Classification | Tracker Provider | Local Baseline Commit | Remote Tracking Branch | Remote Status / Diff | Baseline Gate Status |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `/Users/perkunas/jail/DEAP01-spec-core` | `UPSTREAM_SPEC_CORE_COMPILER` | GitHub (`gh`) | `f7f9c31` | `origin/main` | Clean (0 bytes diff) | Checks 10-30 PASS (`--no-domain`) |
+| `/Users/perkunas/jail/uav-009` | Downstream Customer Application | GitLab (`glab`) | `00d9bbd` | `origin/main` | Clean (0 bytes diff) | All 30/30 Checks PASS |
+| `/Users/perkunas/jail/uav-011` | Downstream Application Workspace | GitLab (`glab`) | `b6b8b80` | `origin/main` | Clean (0 bytes diff) | All 30/30 Checks PASS |
+| `DEAP-uas-infrastructure-safety` | `DOMAIN_DISTRIBUTION_TEMPLATE` | GitHub (`gh`) | Synchronized | `origin/main` | Clean (0 bytes diff) | Clean Landing Zones (`.gitkeep` only) |
+
+### 2.2 Detailed Remediation & Fleet Parity Status
+
+1. **Upstream Specification Core Compiler (`DEAP01-spec-core`)**:
+   - Baseline Commit: `f7f9c31` (`fix(tooling): remediate glab label syntax, provider validation, and CLI checks in create_issue.sh (refs #370)`).
+   - Tooling Upgrade: Full dual-provider architecture in `skills/spec-orchestrator/scripts/create_issue.sh` and `scripts/reconcile_backlog.py` supporting both GitHub (`gh`) and GitLab (`glab`) CLI engines.
+   - Link Translation: Implemented automated relative markdown link translation for GitLab (`/-/blob/<branch>/...`) and GitHub (`/blob/<branch>/...`).
+   - Feature Additions: Added `--reopen-with-analysis <dossier>` for attaching defect dossiers and reopening existing issues on both providers.
+   - Comprehensive Testing: Full mock dual-provider test suite verified in `tests/test_create_issue_dual_provider.py`.
+
+2. **Downstream Customer Application Workspace (`uav-009`)**:
+   - Baseline Commit: `00d9bbd` (`chore(pipeline): propagate verified installer and dual-provider tooling (refs #370)`), tagged with `restoration-point`.
+   - Tracker Resolution: All 75 specification items published to the remote GitLab tracker (`https://gitlab.com/gintatkinson/uav-009.git`):
+     * **1 Epic**: `docs/epics/epic-01-system-ssot.md`
+     * **44 Features**: `docs/features/feat-01*` through `feat-44*`
+     * **24 User Stories**: `docs/user-stories/us-01*` through `us-24*`
+     * **6 Use Cases**: `docs/use-cases/uc-01*` through `uc-06*`
+   - Zero Contamination: All literal `#[IssueID]` tokens replaced with live numeric GitLab IDs across all frontmatter and Markdown tables. Raw grep for `\[IssueID\]` returns 0 occurrences.
+   - Conformance: All 30 baseline checks pass with exit code 0 under `verify_downstream_baseline.py`.
+
+3. **Downstream Application Workspace (`uav-011`)**:
+   - Baseline Commit: `b6b8b80` (`chore(pipeline): propagate verified installer and dual-provider tooling (refs #370)`), tagged with `restoration-point`.
+   - Landing Zones: Enforced 100% clean landing zones (`schema/`, `docs/epics/`, `docs/features/`, `docs/user-stories/`, `docs/use-cases/` contain only `.gitkeep`).
+   - Conformance: All 30 baseline checks pass with exit code 0.
+
+4. **Domain Distribution Templates (`DEAP-uas-infrastructure-safety`)**:
+   - Upstream Distribution Template Clean Landing Zone Invariant verified. Zero domain models, zero concrete specs, zero phantom realizations.
+
+---
+
+## 3. Universal Agent Startup Protocol (First 5 Minutes in New Chat)
 
 Every incoming agent landing in this workspace MUST execute this protocol before taking any other action:
+
+```mermaid
+flowchart TD
+    Step1["Step 1: Hidden Folder Direct-Path Read<br/>(Execute view_file on .pipeline/constitution.md)"]
+    Step2["Step 2: 4-Point Karpathy & Pipeline Compliance Check<br/>(Evaluate intent, approval, assumptions, writing lock in thought)"]
+    Step3["Step 3: Strict Planning Gate Precedence<br/>(Zero edits without approved implementation_plan.md)"]
+    Step4["Step 4: Ingest Authoritative Rule Files<br/>(Read ACTIVE_RULES_BUNDLE.md, AGENTS.md, rules/)"]
+    Step5["Step 5: Verify Clean Baseline<br/>(Run commit check, unit tests, verify_downstream_baseline.py)"]
+
+    Step1 --> Step2 --> Step3 --> Step4 --> Step5
+```
 
 1. **Step 1: Mandatory Hidden Folder Direct-Path Read (CRITICAL FIRST STEP)**:
    - Execute `view_file` on `.pipeline/constitution.md` directly. Glob and ripgrep queries skip hidden directories; assuming `.pipeline/` is missing causes instant failure.
@@ -84,179 +146,114 @@ Every incoming agent landing in this workspace MUST execute this protocol before
      3. Am I making any silent assumptions about user intent?
      4. Does this turn write repo source/specs? (If yes, coordinator writing is locked; subagents required).
 3. **Step 3: Strict Planning Gate Precedence**:
-   - Obey the strict planning gate: you are strictly forbidden from creating, modifying, or deleting files in the workspace or dispatching subagents unless documented in an approved implementation plan. Even if the user prompt contains authorization keywords like `PROCEED`, an approved plan is mandatory. Writing or updating the implementation plan is the sole permitted write prior to approval.
+   - Obey the strict planning gate (`rules/user-authorization-lock.md`): you are strictly forbidden from creating, modifying, or deleting files in the workspace or dispatching subagents unless documented in an approved implementation plan. Even if the user prompt contains authorization keywords like `PROCEED`, an approved plan is mandatory. Writing or updating the implementation plan is the sole permitted write prior to approval.
 4. **Step 4: Ingest Authoritative Rule Files**:
    - `.pipeline/constitution.md`: Pure Schema-Driven Compiler Invariant (§26), Three-Tier Platform Isolation.
+   - `.pipeline/ACTIVE_RULES_BUNDLE.md`: Consolidated active governance bundle.
    - `AGENTS.md` / `.agents/AGENTS.md`: Subagent dispatch mandate, clean landing zones, remote synchronization mandate.
    - `rules/tracker-source-of-truth.md`: Non-closure invariant (neutral citations `(refs #<id>)` or `(#<id>)`, zero auto-closing verbs in commits).
    - `rules/user-authorization-lock.md`: Strict planning gate precedence.
+   - `rules/dual-track-mbd-verification.md`: Track A (Simulink) and Track B (Python Twin) deliverables.
 5. **Step 5: Verify Clean Baseline**:
    - Run `python3 scripts/verify_commit_messages.py --head` (Must pass, exit code 0).
-   - Run `python3 -m unittest discover -s tests` (1,389+ unit tests must pass).
-   - Run `git status` (Clean tree on `main`).
+   - Run `python3 scripts/verify_downstream_baseline.py --no-domain` (Pass all checks, exit code 0).
+   - Run `git status` (Clean tree on `main`, 0 bytes diff against `origin/main`).
 
 ---
 
-## 3. Current Contamination State Across Jail Workspaces
-
-All operations, audits, and remediations are strictly bounded within `/Users/perkunas/jail`. External repositories in `/Users/perkunas/test_projects/` or `/Users/perkunas/Desktop/`, Tier 3B external repositories, and backup archives (`archive_*.tar.gz`) are **strictly excluded**.
-
-### 3.1 Upstream Specification Core Compiler (`/Users/perkunas/jail/DEAP01-spec-core`)
-- **Repository Classification**: `UPSTREAM_SPEC_CORE_COMPILER` (GitHub: `gintatkinson/DEAP01-spec-core`).
-- **Branch**: `main`, baseline commits `14932ff` / `a749ff8`.
-- **Tooling Contamination / Defect**:
-  - `skills/spec-orchestrator/scripts/create_issue.sh` contains a hardcoded GitHub-only lock. It executes `gh issue list`, `gh label list`, `gh label create`, and `gh issue create`.
-  - When executed in a GitLab downstream workspace or environment lacking GitHub authentication, it fails closed and aborts issue creation.
-  - Lacks relative URL expansion for GitLab (`/-/blob/main/...` vs. GitHub `/blob/main/...`).
-  - Lacks `--reopen-with-analysis <dossier>` capability for attaching defect dossiers to existing issues.
-
-### 3.2 Downstream Customer Workspace (`/Users/perkunas/jail/uav-009`)
-- **Repository Classification**: Downstream Customer Application Workspace (GitLab).
-- **Branch**: `main`.
-- **Contamination State**:
-  - Exactly **75 specification files** are contaminated with literal ungrounded placeholders `| **Issue ID** | #[IssueID] |`:
-    * **1 Epic**: `docs/epics/epic-01-system-ssot.md`
-    * **44 Features**: `docs/features/feat-01*` through `feat-44*`
-    * **24 User Stories**: `docs/user-stories/us-01*` through `us-24*`
-    * **6 Use Cases**: `docs/use-cases/uc-01*` through `uc-06*`
-  - **GitLab Remote Tracker**: The remote GitLab tracker has **0 published issues**. Because `create_issue.sh` failed closed on GitLab, no issues were created, leaving local specification files contaminated with unassigned placeholders.
-  - **Verification Impact**: Fails downstream baseline Check 23 numeric provenance and grounding.
-
-### 3.3 Downstream Workspaces (`uav-011` & `DEAP-uas-infrastructure-safety`)
-- **Downstream Application Workspace (`/Users/perkunas/jail/uav-011`)**:
-  - Currently carries older GitHub-only issue automation tooling. Requires updated dual-provider tooling installation. Must maintain clean landing zones (`schema/`, `docs/epics/`, `docs/features/`, `docs/user-stories/`, `docs/use-cases/` containing only `.gitkeep`) until concrete models are compiled.
-- **Downstream Domain Template (`/Users/perkunas/jail/DEAP-uas-infrastructure-safety`)**:
-  - Upstream distribution domain template. Requires updated dual-provider tooling installation. Must maintain 100% clean landing zones (`.gitkeep` only) and 0-byte remote diff.
-
-### 3.4 Formal Audit Findings & Defect Registrations (Milestone 2)
-
-During Milestone 2, three formal adversarial audits were conducted under `skills/adversarial-code-auditor/SKILL.md` and registered on the respective upstream and downstream issue trackers:
-
-1. **GitHub Issue #369**: Governance Ingestion Defect in `README.md` and `docs/OPERATOR_PROMPT_CATALOG.md`.
-   - **Finding**: Setup documentation, initialization sequences, and operator prompt templates directed agents to read bare directories (`rules/`, `skills/`) or isolated rule files (`rules/dual-track-mbd-verification.md`) rather than mandating execution of `view_file` directly on `.pipeline/ACTIVE_RULES_BUNDLE.md`.
-   - **Resolution Status**: Remediated in Milestone 3 Step 1 (`README.md`, `docs/OPERATOR_PROMPT_CATALOG.md`, and `scripts/scaffold_downstream_agents.py` updated to mandate `.pipeline/ACTIVE_RULES_BUNDLE.md`).
-2. **GitHub Issue #370**: Single-Provider Tooling Defect in `skills/spec-orchestrator/scripts/create_issue.sh`.
-   - **Finding**: Issue creation script hardcoded GitHub `gh` CLI commands without fallback or adaptation for GitLab `glab` CLI primitives, failing closed in GitLab-backed workspaces.
-   - **Resolution Status**: Dual-provider reproducer test suite scaffolded in `tests/test_create_issue_dual_provider.py`; implementation scheduled for Milestone 3 Step 2.
-3. **GitLab Work Item #9**: 75 Ungrounded Specifications in `uav-009`.
-   - **Finding**: Downstream customer workspace `/Users/perkunas/jail/uav-009` contains 75 specification files with literal `| **Issue ID** | #[IssueID] |` placeholders and 0 published issues on the remote tracker due to `create_issue.sh` failure.
-   - **Resolution Status**: Scheduled for leaf-level topological issue publishing and backlog reconciliation in Milestone 3 Step 3.
-
-### 3.5 Status of Prior Resolved Issues
-- **GitHub Issue #363** (*Domain Template Customer Onboarding Ingestion Command Defect*):
-  - **Resolution**: Fully resolved via commit `ce82ef4` (`fix(pipeline): synthesize domain template onboarding command when domain-url is passed (refs #363)`).
-  - **Mechanism**: Updated role detection in `scripts/install_pipeline.sh:324-342` to recognize `--domain-url` and `--domain-name`, ensuring `DOMAIN_DISTRIBUTION_TEMPLATE` classification and deterministic synthesis of customer onboarding clone commands in `README.md`. All 9/9 tests pass in `tests/test_domain_url_synthesis.py`.
-
----
-
-## 4. Master Execution Roadmap: Dual-Provider Tooling Architecture & Downstream Leaf Remediation
+## 4. Authoritative Next-Phase Implementation Roadmap for Incoming Team
 
 ```mermaid
 flowchart TD
-    subgraph Upstream ["Phase 1: Upstream Core Tooling Refactor (DEAP01-spec-core)"]
+    subgraph Track1 ["Track 1: Upstream Tracker Housekeeping (DEAP01-spec-core)"]
         direction TB
-        WP1A["WP 1A: Dual-Provider Tooling Refactor<br/>(create_issue.sh gh + glab auto-detect)"]
-        WP1B["WP 1B: Relative Link Expansion & Flag Support<br/>(--reopen-with-analysis, GitLab blob URLs)"]
-        WP1C["WP 1C: Unit Tests & Upstream Defect Dossier<br/>(test_create_issue_dual_provider.py & file_defect.py)"]
-        WP1D["WP 1D: Upstream Verification & Remote Push<br/>(1,389+ unit tests pass, push to origin/main)"]
+        T1A["Step 1.1: Verify Resolved Baseline Commits<br/>(Issue #369: commit 2be1a45, Issue #370: commit f7f9c31)"]
+        T1B["Step 1.2: Transition Tracker Status to Fixed/Resolved<br/>(Apply status:fixed-resolved label with solution evidence)"]
+        T1C["Step 1.3: Upstream Regression Verification<br/>(verify_downstream_baseline.py --no-domain passes)"]
+        T1A --> T1B --> T1C
     end
 
-    subgraph Downstream ["Phase 2: Leaf-Level Specification Remediation (uav-009)"]
+    subgraph Track2 ["Track 2: Downstream Pipeline 1 Finalization (uav-009)"]
         direction TB
-        WP2A["WP 2A: Install Dual-Provider Tooling<br/>(install_pipeline.sh uav-009 --provider gitlab)"]
-        WP2B["WP 2B: Topological Issue Publishing<br/>(Publish 75 items to GitLab via glab: Epic, Feat, US, UC)"]
-        WP2C["WP 2C: Reconcile Backlog & Replace Placeholders<br/>(reconcile_backlog.py --provider gitlab)"]
-        WP2D["WP 2D: Downstream Baseline Verification<br/>(verify_downstream_baseline.py, 30/30 checks pass)"]
+        T2A["Worker 1D: WBS & Enterprise Deliverables Suite<br/>(spec-wbs-engineering & generate_wbs_suite.py)"]
+        T2B["Gate 20 Conformance Verification<br/>(WBS packages, milestones, cost/schedule allocations)"]
+        T2C["Factual Grounding Audit<br/>(Verify 75 specifications & WBS against SysML SSOT)"]
+        T2D["Pipeline 1 Baseline Freeze & Restoration Tag<br/>(Tag pipeline1-finalized, push to origin/main)"]
+        T2A --> T2B --> T2C --> T2D
     end
 
-    subgraph Propagation ["Phase 3: Domain Template & Workspace Propagation"]
+    subgraph Track3 ["Track 3: Pipeline 2 Feature-Driven Implementation (uav-009)"]
         direction TB
-        WP3A["WP 3A: Upgrade DEAP-uas-infrastructure-safety<br/>(Clean landing zones, .gitkeep only, push origin/main)"]
-        WP3B["WP 3B: Upgrade uav-011 Workspace<br/>(Clean landing zones, 30/30 baseline checks, push origin/main)"]
+        T3A["Feature Prioritization & Backlog Ingestion<br/>(Adopt feature-driven-implementation skill)"]
+        T3B["Subagent TDD Vertical Slice Loop<br/>(RED-GREEN-REFACTOR per micro-task)"]
+        T3C["Dual-Track MBD Deliverables<br/>(Track A: Simulink Synthesis, Track B: Python Twin)"]
+        T3D["Cumulative Solution Walkthrough & Epic Closure<br/>(feat-NN-solution.md, status:fixed-resolved)"]
+        T3A --> T3B --> T3C --> T3D
     end
 
-    WP1A --> WP1B --> WP1C --> WP1D
-    WP1D --> WP2A
-    WP2A --> WP2B --> WP2C --> WP2D
-    WP2D --> WP3A --> WP3B
+    T1C --> T2A
+    T2D --> T3A
 ```
 
----
+### Track 1: Upstream Tracker Housekeeping (`DEAP01-spec-core`)
 
-### Phase 1: Upstream Dual-Provider Refactor (`DEAP01-spec-core`)
-
-- **Objective**: Refactor `skills/spec-orchestrator/scripts/create_issue.sh` to fully support both GitHub (`gh`) and GitLab (`glab`) CLI providers with automated detection, relative link translation, and comprehensive regression test coverage.
+- **Objective**: Formally transition remediated upstream issues #369 and #370 on GitHub to `status:fixed-resolved` with complete empirical evidence comments and committed test suites.
 - **Detailed Tasks**:
-  1. **Provider Auto-Detection**:
-     - Extract remote origin URL using `git remote get-url origin 2>/dev/null || echo ""` or accept explicit environment override `TRACKER_PROVIDER`:
-       ```bash
-       REMOTE_URL=$(git remote get-url origin 2>/dev/null || echo "")
-       PROVIDER="${TRACKER_PROVIDER:-auto}"
-       if [ "$PROVIDER" = "auto" ]; then
-           if [[ "$REMOTE_URL" =~ gitlab ]] || [ -n "${GITLAB_CI:-}" ]; then
-               PROVIDER="gitlab"
-           else
-               PROVIDER="github"
-           fi
-       fi
-       ```
-  2. **GitLab (`glab`) CLI Primitives**:
-     - Issue search and idempotency: `glab issue list $REPO_FLAG --all --search "$TITLE"`
-     - Label verification and creation: `glab label list` / `glab label create "$LABEL"`
-     - Issue creation: `glab issue create --title "$TITLE" --label "$LABEL" --description "$TMP_EXPANDED_BODY"`
-     - Add `--reopen-with-analysis <dossier>` capability to reopen existing issues and post defect analysis comments.
-  3. **Relative Markdown Link Expansion**:
-     - Translate relative markdown links according to provider:
-       * GitHub: `https://github.com/<owner>/<repo>/blob/<branch>/...`
-       * GitLab: `https://gitlab.com/<owner>/<repo>/-/blob/<branch>/...`
-  4. **Regression Testing & Defect Reporting**:
-     - Create unit test `tests/test_create_issue_dual_provider.py` simulating both `gh` and `glab` execution paths with mock binaries.
-     - Execute full upstream unit test suite (`python3 -m unittest discover -s tests`).
-     - File the 5-pillar adversarial defect dossier upstream to `gintatkinson/DEAP01-spec-core` via `python3 scripts/file_defect.py`.
-     - Commit with neutral commit message: `feat(tooling): dual-provider support for create_issue.sh (refs #368)` and push to `origin/main`.
+  1. **GitHub Issue #369 (Governance Ingestion Defect)**:
+     - **Verification**: Confirm `ACTIVE_RULES_BUNDLE.md` bundling in commit `2be1a45` (`docs(governance): mandate ACTIVE_RULES_BUNDLE.md across prompt catalogs and bump HANDOFF.md to ROOT-004 (refs #369)`).
+     - **Action**: Apply label `status:fixed-resolved`. Post comment referencing commit `2be1a45` and verifying that all agent initialization prompts mandate reading `.pipeline/ACTIVE_RULES_BUNDLE.md`.
+     - **Non-Closure Invariant**: Leave issue open for PO validation (`.pipeline/constitution.md:161`).
+  2. **GitHub Issue #370 (Dual-Provider Tooling Defect)**:
+     - **Verification**: Confirm dual-provider refactoring in `skills/spec-orchestrator/scripts/create_issue.sh` and `scripts/reconcile_backlog.py` across commits `d356aa3`, `8d21928`, `b09431b`, and `f7f9c31`.
+     - **Action**: Apply label `status:fixed-resolved`. Post comment citing unit test results from `tests/test_create_issue_dual_provider.py` and successful live deployment to `uav-009`.
+     - **Non-Closure Invariant**: Leave issue open for PO validation.
 
 ---
 
-### Phase 2: Leaf-Level Specification Remediation in `uav-009`
+### Track 2: Downstream Pipeline 1 Finalization in `uav-009`
 
-- **Objective**: Deploy dual-provider tooling to `uav-009`, publish all 75 specification items to the remote GitLab tracker, reconcile the backlog to replace all literal `#[IssueID]` tokens with live numeric IDs, and pass all 30 baseline checks.
+- **Objective**: Execute Worker 1D WBS suite generation, satisfy Check 20, conduct an adversarial factual grounding audit across all 75 specifications, and achieve final Pipeline 1 baseline freeze.
 - **Detailed Tasks**:
-  1. **Deploy Tooling**:
-     - Run `scripts/install_pipeline.sh /Users/perkunas/jail/uav-009 --provider gitlab`.
-     - Verify updated `create_issue.sh` and pipeline scripts in `uav-009`.
-  2. **Topological Publishing of 75 Specification Items**:
-     - Publish items to GitLab in strict hierarchical order:
-       * **1 Epic**: `docs/epics/epic-01-system-ssot.md` (label `type::epic`) $\rightarrow$ Issue #N
-       * **44 Features**: `docs/features/feat-01*` through `feat-44*` (label `type::feature`) $\rightarrow$ Issues #N+1..#N+44
-       * **24 User Stories**: `docs/user-stories/us-01*` through `us-24*` (label `type::user-story`) $\rightarrow$ Issues #N+45..#N+68
-       * **6 Use Cases**: `docs/use-cases/uc-01*` through `uc-06*` (label `type::use-case`) $\rightarrow$ Issues #N+69..#N+74
-  3. **Backlog Reconciliation**:
-     - Execute `python3 scripts/reconcile_backlog.py --provider gitlab`.
-     - Confirm all 75 specification files have their frontmatter `issue_id:` and table rows `| **Issue ID** | #<id> |` updated with live GitLab IDs.
-     - Confirm all parent checklists (Epic -> Feature -> User Story -> Use Case) contain live links.
-  4. **Verification & Clean Push**:
-     - Verify zero ungrounded placeholders remain: `grep -rn "\[IssueID\]" docs/` returns 0 matches.
-     - Run `python3 scripts/verify_downstream_baseline.py` (Must pass all 30 checks with exit code 0).
-     - Commit with neutral commit citation and push to GitLab `origin/main`. Confirm `git diff origin/main` is empty.
+  1. **Worker 1D: WBS & Enterprise Deliverables Suite Generation**:
+     - Adopt `skills/spec-wbs-engineering/SKILL.md`.
+     - Execute `python3 scripts/generate_wbs_suite.py` to synthesize the complete Work Breakdown Structure (WBS), cost allocations, schedule milestones, and work package dictionary from the SysML SSOT.
+     - Verify Check 20 (`WBS & Enterprise Deliverables Gate`) passes under `verify_downstream_baseline.py`.
+  2. **Adversarial Factual Grounding Audit**:
+     - Execute `skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/factual_grounding_validator.py`.
+     - Verify 100% closed-world model closure: confirm that every operational activity, exchange, scenario, and signal cited in `docs/` corresponds to a formal construct in `schema/`.
+     - Guarantee zero ungrounded tokens, zero heuristic substring bypasses, and zero static whitelists.
+  3. **Pipeline 1 Baseline Freeze & Clean Push**:
+     - Run `python3 scripts/verify_downstream_baseline.py` in `uav-009` (Pass all 30 checks).
+     - Commit with neutral citation: `feat(pipeline1): finalize WBS suite and factual grounding baseline (refs #9)`.
+     - Tag baseline: `git tag -f pipeline1-finalized`.
+     - Push to GitLab `origin/main` and verify `git diff origin/main` is 0 bytes.
 
 ---
 
-### Phase 3: Domain Template & UAV-011 Propagation
+### Track 3: Pipeline 2 Feature-Driven Implementation in `uav-009`
 
-- **Objective**: Propagate the dual-provider tooling to `DEAP-uas-infrastructure-safety` and `uav-011`, guaranteeing clean landing zones and zero contamination.
-- **Detailed Tasks**:
-  1. **Domain Template (`DEAP-uas-infrastructure-safety`)**:
-     - Install updated pipeline tooling.
-     - Enforce Upstream Distribution Template Clean Landing Zone Invariant: verify `schema/`, `docs/epics/`, `docs/features/`, `docs/user-stories/`, `docs/use-cases/` contain ONLY `.gitkeep` files.
-     - Commit, push to GitHub `origin/main`, and confirm 0-byte remote diff.
-  2. **Downstream Application Workspace (`uav-011`)**:
-     - Install updated pipeline tooling.
-     - Verify clean landing zones and run `python3 scripts/verify_downstream_baseline.py` (Pass 30/30 checks).
-     - Commit, push to GitLab `origin/main`, and confirm 0-byte remote diff.
+- **Objective**: Execute serial, subagent-driven, TDD-disciplined implementation of prioritized Agile features from the GitLab backlog (Feat 01 through Feat 44).
+- **Core Methodology (`skills/feature-driven-implementation/SKILL.md`)**:
+  1. **Serial Feature Execution**: Implement strictly one feature at a time. Feature N+1 cannot begin until Feature N is verified, committed, documented, and marked `status:fixed-resolved`.
+  2. **Subagent TDD Dispatch Loop**:
+     - **RED**: Write failing unit tests for Happy Path and all alternate/exception flows declared in specs before writing code.
+     - **GREEN**: Write minimal code to pass all tests.
+     - **REFACTOR**: Clean code while keeping tests green.
+     - Two-stage review gates: Stage 1 Spec Compliance Review, Stage 2 Code Quality Review.
+  3. **Dual-Track MBD Deliverables (`rules/dual-track-mbd-verification.md`)**:
+     - **Track A (Native MATLAB / Simulink Synthesis)**: Programmatic model construction script (`models/scripts/build_<feature_slug>_model.m`), physical parameter dictionary (`models/matlab/<feature_slug>_params.m`), and Simulink Data Dictionary (`models/matlab/<feature_slug>_data.sldd`) configured for deterministic discrete solvers (`FixedStepDiscrete`) and Embedded Coder DO-178C C / SPARK Ada code synthesis.
+     - **Track B (Headless CI Digital Twin Engine)**: Standalone, license-free discrete-time execution engine (`models/python/<feature_slug>_domain.py` and `models/python/<feature_slug>_engine.py`) executing at the exact same discrete loop rate ($dt$, e.g. 250 Hz / 0.004 s) with identical transition guards, polynomial transfer curves, and 6-DOF vehicle kinematics.
+     - **Zero License Blocker Invariant**: 100% automated CI regression test harness (`tests/test_<feature_slug>_simulation.py`) executing offline without requiring MathWorks licenses.
+     - **Mathematical & Discrete Equivalence Mandate**: Numerical tolerance verification ($\le 10^{-6}$) and formal simulation results report (`docs/reports/simulink_results/<FEATURE-ID>_simulation_results.md`).
+  4. **Traceability & Epic Closure**:
+     - Author cumulative solution walkthrough at `docs/designs/feat-<Issue_Number>-solution.md`.
+     - Reconcile backlog (`python3 scripts/reconcile_backlog.py --provider gitlab`).
+     - Mark feature issue `status:fixed-resolved` with solution walkthrough link.
+     - Update parent Epic checklist. When all features are resolved, update Epic issue body and mark Epic `status:fixed-resolved`.
 
 ---
 
-## 5. Teamwork Multi-Agent Consensus Protocol
+## 5. Teamwork Framework Launch Command & Multi-Agent Protocol
 
 For executing complex, multi-repository tasks, the incoming agent must not rely on a single isolated subagent. The full `teamwork_preview` multi-agent framework must be invoked to ensure peer review, adversarial challenge, and independent victory audit.
 
@@ -265,20 +262,20 @@ For executing complex, multi-repository tasks, the incoming agent must not rely 
 | Role Name | Identifier | Primary Responsibility & Consensus Gate |
 | :--- | :--- | :--- |
 | **Sentinel** | `sentinel` | Enforces governance rules, strict planning gate, mandatory hidden folder read of `.pipeline/constitution.md`, and human authorization verification. Rejects unapproved executions. |
-| **Orchestrator** | `orchestrator` | Coordinates master execution roadmap across Phases 1, 2, and 3. Decomposes tasks into atomic packages, dispatches workers, and monitors milestone delivery. |
-| **Worker 1 (Upstream Tooling Specialist)** | `worker-1` | Executes Phase 1 refactoring of `create_issue.sh` with dual-provider (`gh` + `glab`) logic, relative URL expansion, and unit tests in `tests/test_create_issue_dual_provider.py`. |
-| **Worker 2 (Adversarial Defect Reporter)** | `worker-2` | Conducts 5-pillar adversarial audit of upstream tooling defect, compiles defect dossier, and files upstream defect via `python3 scripts/file_defect.py`. |
-| **Worker 3 (Downstream GitLab Remediation Specialist)** | `worker-3` | Executes Phase 2 in `uav-009`: runs `install_pipeline.sh`, publishes 75 items via `glab`, runs `reconcile_backlog.py --provider gitlab`, replaces all `#[IssueID]` tokens. |
-| **Worker 4 (Propagation Specialist)** | `worker-4` | Executes Phase 3 in `DEAP-uas-infrastructure-safety` and `uav-011`: installs updated tooling, enforces clean landing zones (`.gitkeep` only), verifies 0-byte remote diff. |
-| **Reviewer 1 (Specification Compliance Reviewer)** | `reviewer-1` | Inspects published GitLab issues in `uav-009`: verifies title normalization, labels (`type::epic`, `type::feature`), markdown tables, and bidirectional traceability links. |
-| **Reviewer 2 (Code Quality & Testing Reviewer)** | `reviewer-2` | Validates `create_issue.sh` refactor against bash best practices (`set -euo pipefail`), checks error handling, verifies unit tests pass with 100% assertions. |
+| **Orchestrator** | `orchestrator` | Coordinates master execution roadmap across Tracks 1, 2, and 3. Decomposes tasks into atomic packages, dispatches workers, and monitors milestone delivery. |
+| **Worker 1 (Upstream Tracker Specialist)** | `worker-1` | Executes Track 1 upstream tracker housekeeping: transitions issues #369 and #370 to `status:fixed-resolved` on GitHub with evidence payloads. |
+| **Worker 2 (Downstream WBS Specialist)** | `worker-2` | Executes Track 2 in `uav-009`: generates WBS & Enterprise Deliverables Suite via `spec-wbs-engineering` and satisfies Check 20. |
+| **Worker 3 (Factual Grounding Auditor)** | `worker-3` | Conducts closed-world factual grounding audit in `uav-009`, verifying all 75 specifications against SysML SSOT AST. |
+| **Worker 4 (Dual-Track MBD Implementer)** | `worker-4` | Executes Track 3 feature implementations: generates Track A Simulink scripts and Track B Python digital twin engines. |
+| **Reviewer 1 (Specification Compliance Reviewer)** | `reviewer-1` | Validates feature implementations against SysML AST, ICD requirements, and platform profile definitions of done. |
+| **Reviewer 2 (Code Quality & Numerical Reviewer)** | `reviewer-2` | Validates code standards, typing, docstrings, and numerical equivalence between Simulink and Python twin ($\le 10^{-6}$). |
 | **Challenger 1 (Adversarial Boundary Challenger)** | `challenger-1` | Verifies strict execution bounds within `/Users/perkunas/jail`. Ensures zero touches to `/Users/perkunas/test_projects/`, `/Users/perkunas/Desktop/`, Tier 3B repos, or backup archives. |
-| **Challenger 2 (Anti-Complacency & Grounding Challenger)** | `challenger-2` | Performs adversarial audit against complacency: scans for hardcoded whitelists, regex bypasses, and executes raw grep for ungrounded `#[IssueID]` tokens. |
-| **Victory Auditor** | `victory-auditor` | Performs final independent verification: executes `verify_downstream_baseline.py` across workspaces (30/30 checks pass), confirms `git diff origin/<branch>` is empty on all repos, and issues formal `VICTORY CONFIRMED`. |
+| **Challenger 2 (Anti-Complacency & Grounding Challenger)** | `challenger-2` | Scans for hardcoded whitelists, regex bypasses, and ungrounded placeholders across all specifications. |
+| **Victory Auditor** | `victory-auditor` | Performs final independent verification: executes `verify_downstream_baseline.py` across workspaces (all checks pass), confirms `git diff origin/<branch>` is empty on all repos, and issues formal `VICTORY CONFIRMED`. |
 
 ### 5.2 Teamwork Framework Launch Command
 
-To launch the multi-agent consensus team, recommend the slash command or invoke the subagent directly:
+To launch the multi-agent consensus team, execute the slash command or invoke the subagent directly:
 - **Slash Command**: `/teamwork-preview`
 - **Subagent Invocation (`invoke_subagent`)**:
   ```json
@@ -288,7 +285,7 @@ To launch the multi-agent consensus team, recommend the slash command or invoke 
         "TypeName": "teamwork_preview",
         "Role": "Autonomous Multi-Agent Consensus Team",
         "Model": "inherit",
-        "Prompt": "Execute view_file on skills/feature-driven-implementation/SKILL.md as your very first step before executing any file edits or commands, and strictly follow its formatting templates and instruction guidelines.\n\nRepository Classification: UPSTREAM_SPEC_CORE_COMPILER\nTarget Workspace: /Users/perkunas/jail/DEAP01-spec-core\nPrimary Commercial Toolchain Integration Context: MATLAB / Simulink / Stateflow / Embedded Coder\n\nTask: Execute DEAP-HANDOFF-ROOT-004 Master Execution Roadmap across Phases 1, 2, and 3.\n\nPROCEED"
+        "Prompt": "Execute view_file on skills/feature-driven-implementation/SKILL.md as your very first step before executing any file edits or commands, and strictly follow its formatting templates and instruction guidelines.\n\nRepository Classification: UPSTREAM_SPEC_CORE_COMPILER\nTarget Workspace: /Users/perkunas/jail/DEAP01-spec-core\nPrimary Commercial Toolchain Integration Context: MATLAB / Simulink / Stateflow / Embedded Coder\n\nTask: Execute DEAP-HANDOFF-ROOT-005 Next-Phase Implementation Roadmap across Tracks 1, 2, and 3.\n\nPROCEED"
       }
     ]
   }
@@ -304,7 +301,9 @@ To launch the multi-agent consensus team, recommend the slash command or invoke 
 4. **Non-Closure Tracker Invariant**: Never use issue-closing verbs (`fix`, `fixes`, `close`, `closes`, `resolve`, `resolves`) preceding `#<id>` in git commit messages. Always use neutral citations `(refs #<id>)` or `(#<id>)`. Mechanical gate `verify_commit_messages.py` strictly enforces this.
 5. **Issues Remain Open**: Applying `status:fixed-resolved` (or `status::fixed-resolved` on GitLab) does NOT close tracker issues. Issues stay open until validated and closed by the human Product Owner.
 6. **Remote Synchronization Mandate**: No work package is complete until pushed to remote and verified with `git diff origin/<branch>` returning empty.
-7. **Universal Mermaid Syntax Rules**:
+7. **Clean Landing Zone Invariant**: Domain distribution templates (`DEAP-uas-infrastructure-safety`) must maintain 100% clean landing zones (`schema/`, `docs/epics/`, `docs/features/`, `docs/user-stories/`, `docs/use-cases/` contain ONLY `.gitkeep` files).
+8. **Dual-Track MBD Deliverables Mandate**: All control and flight guidance features must provide both Track A (programmatic Simulink `.m`/`.sldd`) and Track B (headless Python twin `.py`) with zero-license CI test harnesses and $\le 10^{-6}$ numerical equivalence.
+9. **Universal Mermaid Syntax Rules**:
    - First non-comment line inside every ```` ```mermaid ```` fence MUST declare an explicit diagram type (`flowchart TD`, `sequenceDiagram`, etc.).
    - All subgraphs in flowcharts MUST declare explicit direction (`direction TB` / `direction LR`).
    - All node labels containing special characters, punctuation, or numbers MUST be double-quoted.
