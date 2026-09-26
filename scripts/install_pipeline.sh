@@ -641,6 +641,7 @@ elif [ "$TARGET_ROLE" = "DOMAIN_DISTRIBUTION_TEMPLATE" ]; then
   if ! grep -qE "Customer Project Onboarding|\.tmp-pipeline" "$TARGET_DIR/README.md" || \
      ! grep -qE "DOMAIN_DISTRIBUTION_TEMPLATE" "$TARGET_DIR/README.md" || \
      ! grep -q "ACTIVE_RULES_BUNDLE.md" "$TARGET_DIR/README.md" || \
+     ! grep -q "Worker 2A.1" "$TARGET_DIR/README.md" || \
      grep -q "rules/dual-track-mbd-verification.md" "$TARGET_DIR/README.md" || \
      grep -qE " -- Downstream.* -- Downstream" "$TARGET_DIR/README.md"; then
     SHOULD_SCAFFOLD_README=true
@@ -650,6 +651,7 @@ elif [ "$TARGET_ROLE" = "DOWNSTREAM_CUSTOMER_PROJECT" ]; then
      ! grep -qE "DOWNSTREAM_CUSTOMER_PROJECT" "$TARGET_DIR/README.md" || \
      ! grep -qE "Project Lifecycle & Tooling Maintenance" "$TARGET_DIR/README.md" || \
      ! grep -q "ACTIVE_RULES_BUNDLE.md" "$TARGET_DIR/README.md" || \
+     ! grep -q "Worker 2A.1" "$TARGET_DIR/README.md" || \
      grep -q "rules/dual-track-mbd-verification.md" "$TARGET_DIR/README.md" || \
      grep -qE " -- Downstream.* -- Downstream" "$TARGET_DIR/README.md"; then
     SHOULD_SCAFFOLD_README=true
@@ -969,11 +971,34 @@ This catalog contains the complete, unabridged, copy-pasteable operator prompt s
 ### 4.1 Master-Worker Subagent Topology
 
 ```mermaid
-flowchart LR
-    Step00["Step 0.0: Level 0 OEM Ground Truth Ingestion (sysmlv2_ingest.py)"] --> Step0["Step 0: SysML Model Ingestion & Compilation Gate (python3 scripts/compile_sysml.py --compile)"]
-    Step0 -->|"Compiled AST"| Worker_0A["Worker 0A: CONOPS Synthesizer"]
-    Worker_0A -->|"docs/conops/CONOPS.md"| Worker_0B["Worker 0B: STPA / FMECA Assurer"]
-    Worker_0B -->|"docs/safety/STPA_MATRIX.md"| Step3["Step 3: Level 1C ICD Extraction & Level 2 Specifications"]
+flowchart TD
+    subgraph P0["Pipeline 0: Pre-Spec Safety Engineering & Model Formulation"]
+        Step00["Step 0.0: Level 0 OEM Ground Truth Ingestion (sysmlv2_ingest.py)"] --> Step0["Step 0: SysML Model Ingestion & Compilation Gate (python3 scripts/compile_sysml.py --compile)"]
+        Step0 -->|"Compiled AST"| W0A["Worker 0A: CONOPS Synthesizer"]
+        W0A -->|"docs/conops/CONOPS.md"| W0B["Worker 0B: STPA / FMECA Assurer"]
+        W0B -->|"docs/safety/STPA_MATRIX.md"| W0C["Worker 0C: SysML Model Author"]
+        W0C -->|"schema/DEAP_MODEL.sysml"| W0D["Worker 0D: Interface Specification Worker (Logical ICD & Master Signal Dictionary)"]
+    end
+
+    subgraph P1["Pipeline 1: Agile Specification Backlog Projection"]
+        W0D -->|"pipeline0_handoff_contract.json"| W1A["Worker 1A: Structural Spec Worker (Epics & Features)"]
+        W1A -->|"docs/epics/ & docs/features/"| W1B["Worker 1B: Behavioral Spec Worker (User Stories & Statecharts)"]
+        W1B -->|"docs/user-stories/"| W1C["Worker 1C: Operational Spec Worker (Use Cases & Realization)"]
+        W1C -->|"docs/use-cases/"| W1D["Worker 1D: WBS & Work Package Decomposition Spec Worker"]
+        W1D -->|"docs/management/WBS_DELIVERABLES_SUITE.md"| Reconcile["Grounding Auditor & Backlog Reconciliation Gate"]
+    end
+
+    subgraph P2["Pipeline 2: Autonomous Feature Implementation & Simulation"]
+        Reconcile --> Backlog["Prioritized Backlog Feature"]
+        Backlog --> W2A1["Worker 2A.1: Flutter Feature Implementer (app_flutter/)"]
+        Backlog --> W2A2["Worker 2A.2: ROS2 / PX4 Real-Time Control Implementer"]
+        Backlog --> W2B["Worker 2B: Dual-Track Simulation Driver (Simulink & Python Twin)"]
+        W2A1 & W2A2 & W2B --> Rev1["Stage 1: Spec Compliance Review (Reviewer 1)"]
+        Rev1 --> Rev2["Stage 2: Code Quality & Numerical Review (Reviewer 2)"]
+        Rev2 --> Chall["Adversarial Challenge Gate (Challengers 1 & 2)"]
+        Chall --> Victory["Independent Victory Auditor (Victory Auditor)"]
+        Victory -->|"VICTORY CONFIRMED"| Release["Backlog Reconciliation & Status Transition"]
+    end
 ```
 
 ### 4.2 Pipeline 0 Execution Prompts
@@ -1343,39 +1368,93 @@ python3 scripts/compile_sysml.py --reverse-sync
 
 Execute the following prompts to drive feature implementation and two-path (dual-track) simulation verification through context-isolated TDD micro-tasks:
 
-#### 4.5.1 Worker 2A / Synthesis Driver: Feature-Driven Implementation Prompt
+#### 4.5.1 Worker 2A.1 / Synthesis Driver: Flutter Feature Implementation Prompt
 
 ```text
 Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` as your very first step before taking any action.
 
 Repository Classification: DOWNSTREAM_CUSTOMER_PROJECT (or UPSTREAM_SPEC_CORE_COMPILER depending on execution context)
 
-Role: Worker 2A -- Feature-Driven Implementation & Synthesis Driver
+Role: Worker 2A.1 -- Flutter Feature-Driven Implementation Specialist
 
 Primary Commercial Toolchain Integration Context:
 This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
 
-Governance Preamble & Execution Directive:
-Adopt the feature-driven-implementation skill by reading `.pipeline/constitution.md`, `.pipeline/ACTIVE_RULES_BUNDLE.md`, and the target platform profile (`.pipeline/profiles/<target-platform>.md`, e.g. `ros2_cpp.md`, `px4_module.md`, or `flutter.md`).
+Target Directory & Confinement Invariant:
+All source code, assets, configurations, and tests MUST reside exclusively under `app_flutter/`. Writing source code or configuration files at repository root is strictly prohibited.
 
-Implement prioritized Feature [Issue Number, e.g. #1] adhering strictly to the 3-Layer Definition of Done (DoD):
-1. Layer 1: Domain Model / Safety Statechart -- Platform-independent domain entities, transition guards, mathematical invariants, and safety statecharts.
-2. Layer 2: Safety Statechart / ViewModel -- State management, event handling, lifecycle hooks, and reactive telemetry bindings.
-3. Layer 3: Interface Binding / Middleware & BDD Tests -- Platform interface bindings (ROS2 lifecycle nodes, PX4 uORB modules, or Flutter widgets) verified via automated BDD integration tests against live emulators / simulation harnesses.
+Architecture Pattern:
+MVVM (Model-View-ViewModel) layered architecture. Views are stateless widgets consuming ViewModels via dependency injection. ViewModels manage domain state and event streams. Domain entities are decoupled from presentation. All persistence transactions must interact exclusively with abstract repositories resolved dynamically at bootstrap.
 
-Execution Standards:
-- Execute TDD RED-GREEN-REFACTOR cycles using context-isolated subagents for each 2-5 minute micro-task.
-- Dual-Track MBD Verification: Enforce Track A (Native MATLAB / Simulink / Stateflow synthesis) and Track B (Headless CI Digital Twin Engine) with numerical tolerance verification (error <= 10^-6) and zero license blockers.
-- Zero-Mocking Live Persistence Mandate: Validate all transactions against live databases / emulators.
-- Closed-Loop Payload Verification: Deliver cumulative solution walkthrough (`docs/designs/feat-<ID>-solution.md`), verify live published payload, comment on issue with walkthrough link, and apply `status:fixed-resolved` (GitHub) or `status::fixed-resolved` (GitLab). Leave issue open for Product Owner review.
+The 15 Mandatory Domain Engineering Standards:
+1. Result<T> Over Exceptions: All fallible domain operations and repository methods MUST return explicit Result<T> signatures (Success<T> or Failure<T>) rather than throwing untyped runtime exceptions.
+2. Sealed Class Hierarchies: Domain states, algebraic data types, events, and error hierarchies MUST use sealed class hierarchies (`sealed class`) to enforce exhaustive pattern matching.
+3. Named Constructors with Validation: Complex domain entities MUST declare private or named constructors performing assertion and validation logic to guarantee invalid objects cannot be instantiated.
+4. Typed Errors per Domain: Every domain module MUST define explicit, strongly-typed error classes extending a sealed domain error base (`DomainError`) rather than returning raw error strings or untyped exceptions.
+5. @immutable Annotation Mandatory: Every domain class, entity, value object, event, and state container MUST be annotated with `@immutable` to enforce compile-time immutability.
+6. Interface Segregation: Domain interfaces and repository contracts MUST be narrow, lean, and highly cohesive so clients do not depend on unused methods.
+7. Zero dynamic: The use of `dynamic` or untyped `Object?` in domain signatures, interfaces, properties, or variables is strictly prohibited. All data flows must be strongly typed.
+8. BDD Test Naming: Unit and integration test names for domain logic MUST use explicit BDD behavior-driven naming patterns (`given_when_then` or `should [behavior] when [condition]`).
+9. UML Traceability Tags Mandatory: Every public domain class, interface, mixin, extension, or typedef header MUST include a DartDoc traceability tag (`/// Realises: [SpecName/ClassName]`) referencing its underlying specification or UML classifier.
+10. Public Member Docstrings Mandatory: Full DartDoc comments (`///`) are mandatory for every public class, interface, method, function, constructor, getter, and property in the domain layer.
+11. const Constructors: Immutable domain classes and value objects with final fields MUST declare const constructors to support compile-time constant canonicalization.
+12. Value Equality: All domain value objects and entities MUST override `operator ==` and `hashCode` (or extend Equatable) to guarantee value-based equality.
+13. Typedefs for Callbacks: Callback functions, listener signatures, and event handlers MUST be declared as explicit typedef aliases rather than raw inline function types.
+14. Private Constructors with Public Factories: Domain entities requiring construction validation MUST restrict direct instantiation via private constructors (`._()`) and expose public factory constructors.
+15. Separation of Serialization: Domain models MUST remain completely decoupled from JSON, database, or network serialization logic (`fromJson`/`toJson`). Serialization logic MUST reside strictly in separate DTOs or data layer adapters.
 
-Defect Filing Directive:
-If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `python3 scripts/file_defect.py`. Issue auto-closing keywords or issue close commands are strictly forbidden.
+Execution Standards & Governance Mandates:
+- Adopt the feature-driven-implementation skill by reading `.pipeline/constitution.md`, `.pipeline/ACTIVE_RULES_BUNDLE.md`, and `.pipeline/profiles/flutter.md`.
+- Section 1.9 Zero-Mocking Live Persistence Mandate: All client-side application targets MUST connect to a live persistent database, emulator, or local register map at runtime; in-memory mocks are strictly prohibited.
+- 3-Layer Definition of Done (DoD):
+  1. Layer 1: Domain State & Signal Model -- Strongly-typed domain models, value objects, and repository interfaces.
+  2. Layer 2: Logic & Safety State Management -- ViewModels, statecharts, reactive bindings, and event streams.
+  3. Layer 3: Display & Actuator Interface Binding -- High-density Flutter widgets, container queries, and BDD User Story Widget tests.
+- TDD RED-GREEN-REFACTOR cycle: Write failing test first, verify failure, write minimal passing code, verify pass, refactor.
+
+Verification Commands:
+cd app_flutter && flutter analyze && flutter test
+
+---GOVERNANCE-END---
+
+Implement prioritized Feature [Issue Number, e.g. #1] adhering strictly to the above standards.
 
 PROCEED
 ```
 
-#### 4.5.2 Worker 2B / Simulation Driver: Two-Path (Dual-Track) Simulation & Digital Twin Verification Prompt
+#### 4.5.2 Worker 2A.2 / Synthesis Driver: ROS2 / PX4 Feature Implementation Prompt
+
+```text
+Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` as your very first step before taking any action.
+
+Repository Classification: DOWNSTREAM_CUSTOMER_PROJECT (or UPSTREAM_SPEC_CORE_COMPILER depending on execution context)
+
+Role: Worker 2A.2 -- Real-Time Robotics & Autopilot Implementation Specialist
+
+Primary Commercial Toolchain Integration Context:
+This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
+
+Platform Profiles & Target Standards:
+Follow `.pipeline/profiles/ros2_cpp.md` (ROS 2 Humble/Iron/Jazzy, `rclcpp_lifecycle::LifecycleNode`, zero dynamic allocations in real-time loops via `rttest`, hardened QoS `RELIABILITY_RELIABLE`) and `.pipeline/profiles/px4_module.md` (PX4 Autopilot Firmware, `ModuleBase<T>`, uORB pub/sub messaging, ASTM F3269-17 Run-Time Assurance monitors). Hardware-in-the-loop (HIL) tests must validate real-time execution bounds, sensor jitter tolerances, and fail-safe actuation responses against simulated PX4 hardware targets.
+
+Execution Standards & Governance Mandates:
+- Adopt the feature-driven-implementation skill by reading `.pipeline/constitution.md`, `.pipeline/ACTIVE_RULES_BUNDLE.md`, and the target platform profile.
+- Architecture Pattern: Real-time ROS2 lifecycle nodes and PX4 uORB modules with deterministic execution semantics.
+- 3-Layer Definition of Done: Domain State Model, Lifecycle State Machine & Safety Monitor, Middleware Binding (uORB / ROS2 Topic) with automated unit, integration, and hardware-in-the-loop tests.
+- TDD RED-GREEN-REFACTOR cycle with context-isolated micro-tasks.
+
+Verification Commands:
+colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
+colcon test --event-handlers console_direct+
+
+---GOVERNANCE-END---
+
+Implement prioritized Feature [Issue Number, e.g. #1] adhering strictly to the above standards.
+
+PROCEED
+```
+
+#### 4.5.3 Worker 2B / Simulation Driver: Two-Path (Dual-Track) Simulation & Digital Twin Verification Prompt
 
 ```text
 Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` as your very first step before taking any action.
@@ -1411,7 +1490,7 @@ If any compiler fault, schema inconsistency, or invariant violation is discovere
 PROCEED
 ```
 
-#### 4.5.3 Two-Path MBD Artifact & Deliverable Hierarchy
+#### 4.5.4 Two-Path MBD Artifact & Deliverable Hierarchy
 
 Every feature containing control laws, operating dynamics, physical plant estimators, or safety state machines delivers the canonical two-path MBD artifact suite:
 

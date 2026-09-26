@@ -46,11 +46,14 @@ Pure Schema-Driven Compiler Invariant:
   outside the workspace repository and leave zero residual state.
 """
 
+from __future__ import annotations
+
 import os
 import re
 import subprocess
 import sys
 import tempfile
+from typing import Union, Optional, List
 import unittest
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -69,9 +72,137 @@ def github_slugify(heading: str) -> str:
     return s
 
 
+class MarkdownASTNode:
+    """Represents a node in the Markdown structural AST."""
+    def __init__(
+        self,
+        node_type: str,
+        title: str = "",
+        level: int = 0,
+        content: str = "",
+        info: str = "",
+        tag: str = ""
+    ):
+        self.node_type = node_type  # 'root', 'section', 'fence', 'text'
+        self.title = title
+        self.level = level
+        self.content = content
+        self.info = info  # language/info string for code fences (e.g. 'bash', 'mermaid')
+        self.tag = tag    # HTML/AST tag name (e.g. 'h1', 'h2')
+        self.children: list['MarkdownASTNode'] = []
+        self.parent: MarkdownASTNode | None = None
+
+    def add_child(self, child: 'MarkdownASTNode'):
+        child.parent = self
+        self.children.append(child)
+
+    def find_sections(self, pattern: str | re.Pattern) -> list['MarkdownASTNode']:
+        """Recursively find section nodes whose title matches pattern."""
+        results = []
+        if self.node_type == 'section':
+            if isinstance(pattern, re.Pattern):
+                if pattern.search(self.title):
+                    results.append(self)
+            else:
+                if pattern.lower() in self.title.lower():
+                    results.append(self)
+        for child in self.children:
+            results.extend(child.find_sections(pattern))
+        return results
+
+    def find_fences(self, info_tag: str | None = None) -> list['MarkdownASTNode']:
+        """Recursively find code fence nodes, optionally filtered by language tag."""
+        results = []
+        if self.node_type == 'fence':
+            if info_tag is None:
+                results.append(self)
+            elif info_tag in ('bash', 'sh'):
+                if self.info in ('bash', 'sh'):
+                    results.append(self)
+            elif self.info == info_tag:
+                results.append(self)
+        for child in self.children:
+            results.extend(child.find_fences(info_tag))
+        return results
+
+    def get_all_text(self) -> str:
+        """Return all text content within this subtree."""
+        parts = [self.title, self.content]
+        for child in self.children:
+            parts.append(child.get_all_text())
+        return "\n".join(p for p in parts if p)
+
+
+def parse_markdown_ast(text: str) -> MarkdownASTNode:
+    """
+    Parse markdown text into a structural CommonMark AST hierarchy.
+    Uses markdown_it when available, with a resilient CommonMark AST fallback.
+    """
+    try:
+        import markdown_it
+        md = markdown_it.MarkdownIt()
+        tokens = md.parse(text)
+        root = MarkdownASTNode('root', level=0)
+        stack = [root]
+        i = 0
+        while i < len(tokens):
+            tok = tokens[i]
+            if tok.type == 'heading_open':
+                level = int(tok.tag[1:])
+                title = tokens[i + 1].content if i + 1 < len(tokens) and tokens[i + 1].type == 'inline' else ''
+                sec = MarkdownASTNode('section', title=title, level=level, tag=tok.tag)
+                while len(stack) > 1 and stack[-1].level >= level:
+                    stack.pop()
+                stack[-1].add_child(sec)
+                stack.append(sec)
+                i += 2
+            elif tok.type == 'fence':
+                fence_node = MarkdownASTNode('fence', content=tok.content, info=tok.info.strip())
+                stack[-1].add_child(fence_node)
+            elif tok.type == 'inline':
+                stack[-1].add_child(MarkdownASTNode('text', content=tok.content))
+            i += 1
+        return root
+    except ImportError:
+        root = MarkdownASTNode('root', level=0)
+        stack = [root]
+        lines = text.splitlines()
+        idx = 0
+        in_fence = False
+        fence_info = ""
+        fence_lines = []
+        while idx < len(lines):
+            line = lines[idx]
+            if not in_fence and line.startswith("```"):
+                in_fence = True
+                fence_info = line[3:].strip()
+                fence_lines = []
+            elif in_fence and line.startswith("```"):
+                in_fence = False
+                fence_node = MarkdownASTNode('fence', content="\n".join(fence_lines) + "\n", info=fence_info)
+                stack[-1].add_child(fence_node)
+            elif in_fence:
+                fence_lines.append(line)
+            else:
+                m = re.match(r'^(#{1,6})\s+(.+)$', line.strip())
+                if m:
+                    level = len(m.group(1))
+                    title = m.group(2).strip()
+                    sec = MarkdownASTNode('section', title=title, level=level, tag=f'h{level}')
+                    while len(stack) > 1 and stack[-1].level >= level:
+                        stack.pop()
+                    stack[-1].add_child(sec)
+                    stack.append(sec)
+                elif line.strip():
+                    stack[-1].add_child(MarkdownASTNode('text', content=line))
+            idx += 1
+        return root
+
+
 def extract_bash_code_fences(markdown_text: str) -> list[str]:
-    """Extract all bash and sh code fence bodies from markdown text."""
-    return re.findall(r'```(?:bash|sh)\s*\n(.*?)```', markdown_text, re.DOTALL)
+    """Extract all bash and sh code fence bodies from markdown text using CommonMark AST."""
+    ast = parse_markdown_ast(markdown_text)
+    return [f.content for f in ast.find_fences("bash")]
 
 
 def find_unescaped_parentheses_in_comments(fence: str) -> list[tuple[int, str]]:
@@ -160,13 +291,15 @@ class TestUpstreamCompilerReadme(unittest.TestCase):
 
     def test_upstream_readme_no_domain_clone_commands(self):
         """Verifies 0 matches for hardcoded domain clone commands in Section 5 installation instructions."""
-        # Extract Section 5
-        sec5_match = re.search(r'## 5\..*?(?=## 6\.|\Z)', self.content, re.DOTALL)
-        self.assertIsNotNone(sec5_match, "Section 5 not found in README.md")
-        sec5_text = sec5_match.group(0)
+        # Extract Section 5 via CommonMark AST
+        ast = parse_markdown_ast(self.content)
+        sec5_nodes = ast.find_sections("5. Installation & Developer Quick-Start Guide")
+        self.assertTrue(len(sec5_nodes) > 0, "Section 5 not found in README.md AST")
+        sec5_node = sec5_nodes[0]
+        sec5_text = sec5_node.get_all_text()
 
         # Assert no executable git clone command targets DEAP-uas-infrastructure-safety or other domains
-        sec5_fences = extract_bash_code_fences(sec5_text)
+        sec5_fences = [f.content for f in sec5_node.find_fences("bash")]
         for fence in sec5_fences:
             for line in fence.splitlines():
                 if "git clone" in line:
@@ -518,6 +651,105 @@ class TestCustomerWorkspaceScaffolding(unittest.TestCase):
             self.assertIn("python3 skills/spec-orchestrator/scripts/sysmlv2_ingest.py", upgraded_content)
             self.assertIn("bash scripts/install_pipeline.sh .", upgraded_content)
 
+    def test_customer_workspace_scaffolding_ast_section_4_1_topology(self):
+        """Asserts Section 4.1 Master-Worker Subagent Topology contains Pipeline 1 and Pipeline 2 via CommonMark AST."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            proc = self._run_installer(temp_dir, "--role", "customer-project")
+            self.assertEqual(proc.returncode, 0, f"Installer failed. stderr: {proc.stderr}")
+
+            readme_path = os.path.join(temp_dir, "README.md")
+            with open(readme_path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            ast = parse_markdown_ast(content)
+            sec_4_1_nodes = ast.find_sections("4.1 Master-Worker Subagent Topology")
+            self.assertTrue(
+                len(sec_4_1_nodes) > 0,
+                "Section '4.1 Master-Worker Subagent Topology' not found in customer README AST"
+            )
+
+            mermaid_fences = sec_4_1_nodes[0].find_fences("mermaid")
+            self.assertTrue(
+                len(mermaid_fences) > 0,
+                "Section 4.1 must contain a Mermaid code block"
+            )
+            mermaid_body = mermaid_fences[0].content
+            self.assertIn("Pipeline 0", mermaid_body)
+            self.assertIn("Pipeline 1", mermaid_body)
+            self.assertIn("Pipeline 2", mermaid_body)
+
+    def test_customer_workspace_scaffolding_ast_section_4_5_autonomous_prompts(self):
+        """Asserts Section 4.5 Pipeline 2 Autonomous Feature Implementation Prompts exists via CommonMark AST."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            proc = self._run_installer(temp_dir, "--role", "customer-project")
+            self.assertEqual(proc.returncode, 0, f"Installer failed. stderr: {proc.stderr}")
+
+            readme_path = os.path.join(temp_dir, "README.md")
+            with open(readme_path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            ast = parse_markdown_ast(content)
+            sec_4_5_nodes = ast.find_sections("4.5 Pipeline 2 Autonomous Feature Implementation Prompts")
+            self.assertTrue(
+                len(sec_4_5_nodes) > 0,
+                "Section '4.5 Pipeline 2 Autonomous Feature Implementation Prompts' not found in customer README AST"
+            )
+
+    def test_customer_workspace_scaffolding_ast_worker_2a1_flutter_prompt(self):
+        """Asserts Worker 2A.1 Flutter Feature Implementation Prompt exists with app_flutter/ and flutter analyze."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            proc = self._run_installer(temp_dir, "--role", "customer-project")
+            self.assertEqual(proc.returncode, 0, f"Installer failed. stderr: {proc.stderr}")
+
+            readme_path = os.path.join(temp_dir, "README.md")
+            with open(readme_path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            ast = parse_markdown_ast(content)
+            sec_nodes = ast.find_sections("Worker 2A.1 / Synthesis Driver: Flutter Feature Implementation Prompt")
+            self.assertTrue(
+                len(sec_nodes) > 0,
+                "Section 'Worker 2A.1 / Synthesis Driver: Flutter Feature Implementation Prompt' not found in AST"
+            )
+
+            fences = sec_nodes[0].find_fences()
+            self.assertTrue(len(fences) > 0, "Worker 2A.1 section must contain a code block")
+            fence_content = fences[0].content
+
+            # Explicit code blocks containing app_flutter/ and flutter analyze
+            self.assertIn("app_flutter/", fence_content)
+            self.assertIn("flutter analyze", fence_content)
+            self.assertIn("flutter test", fence_content)
+            self.assertIn("MVVM", fence_content)
+            self.assertIn("The 15 Mandatory Domain Engineering Standards", fence_content)
+            self.assertIn("---GOVERNANCE-END---", fence_content)
+
+    def test_customer_workspace_scaffolding_ast_worker_2a2_ros2_px4_prompt(self):
+        """Asserts Worker 2A.2 ROS2 / PX4 Feature Implementation Prompt exists with lifecycle nodes and uORB."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            proc = self._run_installer(temp_dir, "--role", "customer-project")
+            self.assertEqual(proc.returncode, 0, f"Installer failed. stderr: {proc.stderr}")
+
+            readme_path = os.path.join(temp_dir, "README.md")
+            with open(readme_path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            ast = parse_markdown_ast(content)
+            sec_nodes = ast.find_sections("Worker 2A.2 / Synthesis Driver: ROS2 / PX4 Feature Implementation Prompt")
+            self.assertTrue(
+                len(sec_nodes) > 0,
+                "Section 'Worker 2A.2 / Synthesis Driver: ROS2 / PX4 Feature Implementation Prompt' not found in AST"
+            )
+
+            fences = sec_nodes[0].find_fences()
+            self.assertTrue(len(fences) > 0, "Worker 2A.2 section must contain a code block")
+            fence_content = fences[0].content
+
+            self.assertIn("LifecycleNode", fence_content)
+            self.assertIn("uORB", fence_content)
+            self.assertIn("hardware-in-the-loop", fence_content)
+            self.assertIn("---GOVERNANCE-END---", fence_content)
+
 
 class TestShellCodeFenceHygiene(unittest.TestCase):
     """Verifies bash/sh syntax validity and hygiene across upstream README and scaffolded templates."""
@@ -720,10 +952,11 @@ class TestActiveGovernanceRuleBundlingAndPromptCatalog(unittest.TestCase):
                     with open(readme_path, "r", encoding="utf-8") as f:
                         content = f.read()
 
-                    # Extract Section 4 (Operator Prompt Catalog)
-                    sec4_match = re.search(r'## 4\..*?(?=## 5\.|\Z)', content, re.DOTALL)
-                    self.assertIsNotNone(sec4_match, f"Section 4 not found in {role} README")
-                    sec4_text = sec4_match.group(0)
+                    # Extract Section 4 (Operator Prompt Catalog) via CommonMark AST
+                    ast = parse_markdown_ast(content)
+                    sec4_nodes = ast.find_sections("4. Multi-Pipeline Operator Prompt Catalog")
+                    self.assertTrue(len(sec4_nodes) > 0, f"Section 4 not found in {role} README AST")
+                    sec4_text = sec4_nodes[0].get_all_text()
 
                     # Assert no prompt template points to isolated rule files like rules/dual-track-mbd-verification.md
                     self.assertNotIn("rules/dual-track-mbd-verification.md", sec4_text)
