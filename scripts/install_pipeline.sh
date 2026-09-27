@@ -491,7 +491,7 @@ cat << 'EOF' > "$BUNDLE_FILE"
 
 > **Notice:** This consolidated governance manifest is compiled automatically at installation time by `scripts/install_pipeline.sh`.
 > It aggregates 100% of the active governance rules from `rules/` into a single, unified source of truth.
-> Autonomous agents (Antigravity, Claude Code, Gemini CLI, Cursor) MUST execute `view_file` on this file to ingest the full suite of active governance rules in a single read before executing any implementation or orchestration tasks.
+> Autonomous agents (Antigravity, Claude Code, Cursor) MUST execute `view_file` on this file to ingest the full suite of active governance rules in a single read before executing any implementation or orchestration tasks.
 
 ## Table of Contents
 
@@ -879,7 +879,7 @@ $DOMAIN_PROJECT_DESC
 
 ### 1.1 Clean Landing Zone Invariant
 
-As a **Tier 1 Domain Distribution Template**, this repository maintains pristine, clean landing zones in \`schema/\`, \`docs/epics/\`, \`docs/features/\`, \`docs/user-stories/\`, and \`docs/use-cases/\` with only \`.gitkeep\` files (or domain-wide baseline SysML v2 schemas). Concrete customer project specifications, flight code, ROS2 nodes, and proprietary implementation artifacts belong exclusively in downstream customer application workspaces and must NOT be committed here.
+As a **Tier 2 Domain Distribution Template**, this repository maintains pristine, clean landing zones in \`schema/\`, \`docs/epics/\`, \`docs/features/\`, \`docs/user-stories/\`, and \`docs/use-cases/\` with only \`.gitkeep\` files (or domain-wide baseline SysML v2 schemas). Concrete customer project specifications, flight code, ROS2 nodes, and proprietary implementation artifacts belong exclusively in downstream customer application workspaces and must NOT be committed here.
 
 ### 1.2 Primary Commercial Toolchain Integration Context
 
@@ -920,10 +920,9 @@ bash scripts/install_pipeline.sh .
 
 ### 3.2 Mandatory Agent Initialization Sequence
 
-Immediately following installation, any AI agent (Antigravity, Claude Code, Gemini CLI, Cursor) initializing in this repository MUST execute the following sequence before accepting user directives or executing task implementations:
+Immediately following installation, any AI agent (Antigravity, Claude Code, Cursor) initializing in this repository MUST execute the following sequence before accepting user directives or executing task implementations:
 
-0. **Detect Repository Role & Scope**:
-   - Inspect whether \`.pipeline/upstream/\` exists on disk.
+0. **Detect Repository Role & Scope (Direct-Path Read)**: Inspect whether \`.pipeline/upstream/\` exists on disk via direct-path read (\`list_dir\` or \`view_file\`). Do not rely on glob or search tools that ignore hidden dot-directories.
    - If absent and repository name starts with \`DEAP-\` -> **Domain Distribution Template Mode**: Clean landing zones must be maintained.
 1. **Read Governance Constitution**: Execute \`view_file\` on \`.pipeline/constitution.md\` to ingest the platform-independent functional governance layer and zero-mocking persistence mandates.
 2. **Load Project Skills**: Execute \`view_file\` on \`skills/feature-driven-implementation/SKILL.md\` (and any active skills under \`skills/\` or \`.agents/skills/\`) to initialize feature-driven implementation protocols and review gates.
@@ -950,7 +949,7 @@ $DOMAIN_PROJECT_DESC
 
 ### 1.1 Customer Application Workspace Scope
 
-As a **Tier 2 Customer Application Workspace**, this repository is authorized for concrete engineering delivery, proprietary application code, ROS2 lifecycle nodes, PX4 flight modules, hardware-in-the-loop tests, and verified Agile backlog implementations.
+As a **Tier 3 Customer Application Workspace**, this repository is authorized for concrete engineering delivery, proprietary application code, ROS2 lifecycle nodes, PX4 flight modules, hardware-in-the-loop tests, and verified Agile backlog implementations.
 
 ### 1.2 Primary Commercial Toolchain Integration Context
 
@@ -1001,10 +1000,9 @@ bash scripts/install_pipeline.sh .
 
 ### 3.3 Mandatory Agent Initialization Sequence
 
-Immediately following installation, any AI agent (Antigravity, Claude Code, Gemini CLI, Cursor) initializing in this repository MUST execute the following sequence before accepting user directives or executing task implementations:
+Immediately following installation, any AI agent (Antigravity, Claude Code, Cursor) initializing in this repository MUST execute the following sequence before accepting user directives or executing task implementations:
 
-0. **Detect Repository Role & Scope**:
-   - Inspect whether \`.pipeline/upstream/\` exists on disk.
+0. **Detect Repository Role & Scope (Direct-Path Read)**: Inspect whether \`.pipeline/upstream/\` exists on disk via direct-path read (\`list_dir\` or \`view_file\`). Do not rely on glob or search tools that ignore hidden dot-directories.
    - If absent -> **Downstream Customer Project Mode**: Authorized for customer feature implementation and domain codebase delivery.
 1. **Read Governance Constitution**: Execute \`view_file\` on \`.pipeline/constitution.md\` to ingest the platform-independent functional governance layer and zero-mocking persistence mandates.
 2. **Load Project Skills**: Execute \`view_file\` on \`skills/feature-driven-implementation/SKILL.md\` (and any active skills under \`skills/\` or \`.agents/skills/\`) to initialize feature-driven implementation protocols and review gates.
@@ -1020,7 +1018,7 @@ EOF
   cat << 'EOF' >> "$TARGET_DIR/README.md"
 ## 4. Multi-Pipeline Operator Prompt Catalog & Autonomous Execution Workflows
 
-This catalog contains the complete, unabridged, copy-pasteable operator prompt suite for executing all stages of the Digital Engineering Agent Platform (DEAP) lifecycle across context-isolated subagents in Antigravity, Claude Code, Gemini CLI, Cursor, and Cascade.
+This catalog contains the complete, unabridged operator prompt suite for executing all stages of the Digital Engineering Agent Platform (DEAP) lifecycle across context-isolated subagents in Antigravity, Claude Code, and Cursor.
 
 ### 4.1 Master-Worker Subagent Topology
 
@@ -1427,7 +1425,7 @@ Execute the following prompts to drive feature implementation and two-path (dual
 ```text
 Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` as your very first step before taking any action.
 
-Repository Classification: DOWNSTREAM_CUSTOMER_PROJECT (or UPSTREAM_SPEC_CORE_COMPILER depending on execution context)
+Repository Classification: DOWNSTREAM_CUSTOMER_PROJECT
 
 Role: Worker 2A.1 -- Flutter Feature-Driven Implementation Specialist
 
@@ -1481,7 +1479,7 @@ PROCEED
 ```text
 Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` as your very first step before taking any action.
 
-Repository Classification: DOWNSTREAM_CUSTOMER_PROJECT (or UPSTREAM_SPEC_CORE_COMPILER depending on execution context)
+Repository Classification: DOWNSTREAM_CUSTOMER_PROJECT
 
 Role: Worker 2A.2 -- Real-Time Robotics & Autopilot Implementation Specialist
 
@@ -1513,7 +1511,7 @@ PROCEED
 ```text
 Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` as your very first step before taking any action.
 
-Repository Classification: DOWNSTREAM_CUSTOMER_PROJECT (or UPSTREAM_SPEC_CORE_COMPILER depending on execution context)
+Repository Classification: DOWNSTREAM_CUSTOMER_PROJECT
 
 Role: Worker 2B -- Two-Path (Dual-Track) Simulation & Digital Twin Verification Driver
 
