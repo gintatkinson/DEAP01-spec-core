@@ -1,0 +1,52 @@
+ERROR: Check 21 failed (Semantic Diagram-to-AST Topology Parity Gate violations found):
+  - docs/reports/DEFECT_INTERRELATIONSHIP_AND_DEDUPLICATION_MATRIX.md:740: Topological drift: Undeclared phantom node 'RC01' ('GH-378 (RC-01)<br/>Negative-String Heuristic Trap') in diagram is not present in SysML AST or external actor roster.
+  - docs/reports/DEFECT_INTERRELATIONSHIP_AND_DEDUPLICATION_MATRIX.md:740: Topological drift: Undeclared phantom node 'RC02' ('GH-377 (RC-02)<br/>Unconstrained LLM Spec Tooling') in diagram is not present in SysML AST or external actor roster.
+  - docs/reports/DEFECT_INTERRELATIONSHIP_AND_DEDUPLICATION_MATRIX.md:740: Topological drift: Undeclared phantom node 'RC03' ('GL-94 (RC-03)<br/>Missing P0-P1 Epistemic Gate') in diagram is not present in SysML AST or external actor roster.
+  - docs/reports/DEFECT_INTERRELATIONSHIP_AND_DEDUPLICATION_MATRIX.md:740: Topological drift: Undeclared phantom node 'RC04' ('GL-95 (RC-04)<br/>~251 Ungrounded Stopgap Params') in diagram is not present in SysML AST or external actor roster.
+  - docs/reports/DEFECT_INTERRELATIONSHIP_AND_DEDUPLICATION_MATRIX.md:740: Topological drift: Undeclared phantom node 'T1' ('GH-370 and GL-85<br/>Dual-Provider CLI') in diagram is not present in SysML AST or external actor roster.
+  - docs/reports/DEFECT_INTERRELATIONSHIP_AND_DEDUPLICATION_MATRIX.md:740: Topological drift: Undeclared phantom node 'T2' ('GH-372<br/>Multi-Repo Rollout Gates') in diagram is not present in SysML AST or external actor roster.
+  - docs/reports/DEFECT_INTERRELATIONSHIP_AND_DEDUPLICATION_MATRIX.md:740: Topological drift: Undeclared phantom node 'T3' ('GH-373<br/>TSV Column 3 Idempotency') in diagram is not present in SysML AST or external actor roster.
+  - docs/reports/DEFECT_INTERRELATIONSHIP_AND_DEDUPLICATION_MATRIX.md:740: Topological drift: Undeclared phantom node 'T4' ('GH-374<br/>ARG MAX Description File') in diagram is not present in SysML AST or external actor roster.
+  - docs/reports/DEFECT_INTERRELATIONSHIP_AND_DEDUPLICATION_MATRIX.md:740: Topological drift: Undeclared phantom node 'T5' ('GH-375<br/>Checks 17-20-23 Green Trap') in diagram is not present in SysML AST or external actor roster.
+  - docs/reports/DEFECT_INTERRELATIONSHIP_AND_DEDUPLICATION_MATRIX.md:740: Topological drift: Undeclared phantom node 'T6' ('GH-376<br/>Delimiter Regex Blind Spot') in diagram is not present in SysML AST or external actor roster.
+  - docs/reports/DEFECT_INTERRELATIONSHIP_AND_DEDUPLICATION_MATRIX.md:740: Topological drift: Undeclared phantom node 'S1' ('GL-87: 18 Subsystem Masses') in diagram is not present in SysML AST or external actor roster.
+  - docs/reports/DEFECT_INTERRELATIONSHIP_AND_DEDUPLICATION_MATRIX.md:740: Topological drift: Undeclared phantom node 'S2' ('GL-88: GSE Masses PL-40') in diagram is not present in SysML AST or external actor roster.
+  - docs/reports/DEFECT_INTERRELATIONSHIP_AND_DEDUPLICATION_MATRIX.md:740: Topological drift: Undeclared phantom node 'S3' ('GL-89: Motor ESC Servo Power') in diagram is not present in SysML AST or external actor roster.
+  - docs/reports/DEFECT_INTERRELATIONSHIP_AND_DEDUPLICATION_MATRIX.md:740: Topological drift: Undeclared phantom node 'S4' ('GL-90: Sequence Diagram Rates') in diagram is not present in SysML AST or external actor roster.
+  - docs/reports/DEFECT_INTERRELATIONSHIP_AND_DEDUPLICATION_MATRIX.md:740: Topological drift: Undeclared phantom node 'S5' ('GL-91: Expunge 8 Raw Tags') in diagram is not present in SysML AST or external actor roster.
+  - docs/reports/DEFECT_INTERRELATIONSHIP_AND_DEDUPLICATION_MATRIX.md:740: Topological drift: Undeclared phantom node 'S6' ('GL-92: 7 DoDAF Diagrams') in diagram is not present in SysML AST or external actor roster.
+  - docs/reports/DEFECT_INTERRELATIONSHIP_AND_DEDUPLICATION_MATRIX.md:740: Topological drift: Undeclared phantom node 'S7' ('GL-93: ICD-02 Signal Metrology') in diagram is not present in SysML AST or external actor roster.
+  - docs/reports/DEFECT_INTERRELATIONSHIP_AND_DEDUPLICATION_MATRIX.md:861: Topological drift: Undeclared phantom node 'GH370' ('GH-370 and GL-85<br/>Dual-Provider CLI') in diagram is not present in SysML AST or external actor roster.
+  - docs/reports/DEFECT_INTERRELATIONSHIP_AND_DEDUPLICATION_MATRIX.md:861: Topological drift: Undeclared phantom node 'GH373' ('GH-373<br/>Column 3 Idempotency') in diagram is not present in SysML AST or external actor roster.
+  - docs/reports/DEFECT_INTERRELATIONSHIP_AND_DEDUPLICATION_MATRIX.md:861: Topological drift: Undeclared phantom node 'GH374' ('GH-374<br/>ARG MAX Description File') in diagram is not present in SysML AST or external actor roster.
+  - docs/reports/DEFECT_INTERRELATIONSHIP_AND_DEDUPLICATION_MATRIX.md:861: Topological drift: Undeclared phantom node 'GH372' ('GH-372<br/>Multi-Repo Rollout Gates') in diagram is not present in SysML AST or external actor roster.
+  - docs/reports/DEFECT_INTERRELATIONSHIP_AND_DEDUPLICATION_MATRIX.md:861: Topological drift: Undeclared phantom node 'GH375' ('GH-375<br/>Checks 17 20 23 Green Trap') in diagram is not present in SysML AST or external actor roster.
+  - docs/reports/DEFECT_INTERRELATIONSHIP_AND_DEDUPLICATION_MATRIX.md:861: Topological drift: Undeclared phantom node 'GH376' ('GH-376<br/>Delimiter Regex Expansion') in diagram is not present in SysML AST or external actor roster.
+  - docs/reports/DEFECT_INTERRELATIONSHIP_AND_DEDUPLICATION_MATRIX.md:861: Topological drift: Undeclared phantom node 'GH378' ('GH-378 RC-01<br/>Positive AST Provenance') in diagram is not present in SysML AST or external actor roster.
+  - docs/reports/DEFECT_INTERRELATIONSHIP_AND_DEDUPLICATION_MATRIX.md:861: Topological drift: Undeclared phantom node 'GH377' ('GH-377 RC-02<br/>Typed Param Dictionary') in diagram is not present in SysML AST or external actor roster.
+  - docs/reports/DEFECT_INTERRELATIONSHIP_AND_DEDUPLICATION_MATRIX.md:861: Topological drift: Undeclared phantom node 'GL94' ('GL-94 RC-03<br/>Phase 0-1 Epistemic Gate') in diagram is not present in SysML AST or external actor roster.
+  - docs/reports/DEFECT_INTERRELATIONSHIP_AND_DEDUPLICATION_MATRIX.md:861: Topological drift: Undeclared phantom node 'GL92' ('GL-92<br/>7 DoDAF-UAF Viewpoints') in diagram is not present in SysML AST or external actor roster.
+  - docs/reports/DEFECT_INTERRELATIONSHIP_AND_DEDUPLICATION_MATRIX.md:861: Topological drift: Undeclared phantom node 'GL93' ('GL-93<br/>Signal Metrology Docs') in diagram is not present in SysML AST or external actor roster.
+  - docs/reports/DEFECT_INTERRELATIONSHIP_AND_DEDUPLICATION_MATRIX.md:861: Topological drift: Undeclared phantom node 'GL91' ('GL-91<br/>Expunge 8 Raw Tags') in diagram is not present in SysML AST or external actor roster.
+  - docs/reports/DEFECT_INTERRELATIONSHIP_AND_DEDUPLICATION_MATRIX.md:861: Topological drift: Undeclared phantom node 'GL87' ('GL-87<br/>18 Subsystem Masses') in diagram is not present in SysML AST or external actor roster.
+  - docs/reports/DEFECT_INTERRELATIONSHIP_AND_DEDUPLICATION_MATRIX.md:861: Topological drift: Undeclared phantom node 'GL88' ('GL-88<br/>GSE Masses Grounding') in diagram is not present in SysML AST or external actor roster.
+  - docs/reports/DEFECT_INTERRELATIONSHIP_AND_DEDUPLICATION_MATRIX.md:861: Topological drift: Undeclared phantom node 'GL89' ('GL-89<br/>Motor ESC Servo Power') in diagram is not present in SysML AST or external actor roster.
+  - docs/reports/DEFECT_INTERRELATIONSHIP_AND_DEDUPLICATION_MATRIX.md:861: Topological drift: Undeclared phantom node 'GL90' ('GL-90<br/>Neutralize Diagram Rates') in diagram is not present in SysML AST or external actor roster.
+  - docs/reports/DEFECT_INTERRELATIONSHIP_AND_DEDUPLICATION_MATRIX.md:861: Topological drift: Undeclared phantom node 'GL95' ('GL-95 RC-04<br/>Reconcile 251 ConOps Params') in diagram is not present in SysML AST or external actor roster.
+  - docs/reports/DEFECT_INTERRELATIONSHIP_AND_DEDUPLICATION_MATRIX.md:861: Topological drift: Undeclared phantom node 'P1' ('Pipeline 1 Backlog<br/>Agile Spec Projection') in diagram is not present in SysML AST or external actor roster.
+NOTE: Destination path '/Users/perkunas/jail/uav-009' has no pubspec.yaml or package.json. Registering repository root for non-framework baseline checks.
+Success: Check 10 verified (.gitignore exists in repository root).
+Success: Check 11 verified (zero .DS_Store files found).
+Success: Check 12 verified (no duplicate master core blueprints found).
+Success: Check 13 verified (KaTeX / LaTeX mathematical syntax valid across all markdown files, including rules/sysml-ssot-completeness.md).
+Success: Mermaid syntax verified across all markdown files.
+Success: Check 14 verified (README.md, agent instruction entrypoints, and rules/sysml-ssot-completeness.md exist).
+Success: Check 15 verified (scripts/reconcile_backlog.py exists, is non-empty, and is executable).
+Success: Check 16 verified (Downstream repository detected -- skipping upstream clean landing zone gate).
+Check 17 AST validation: 128 UCA row(s) parsed, 52 expected Cartesian permutation(s)
+Success: Check 17 verified (Safety Integrity Quality Gate: 8 pillars, 24 SORA OSOs, FMECA matrix with AST closure, 4 UCA categories, ASTM F3269-17 RTA, and MATLAB/Simulink hooks).
+Success: Check 18 verified (Downstream repository detected -- skipping upstream blueprint domain cleanliness gate).
+Success: Check 19 verified (Downstream repository detected -- skipping domain-agnostic AST cleanliness gate).
+Success: Check 20 verified (WBS & Enterprise Deliverables Suite validated: Markdown structure, CSV RFC 4180 with 12 headers, JSON AST, and zero em dashes).
+Cleaning up workspace...
+EXIT_CODE: 1
