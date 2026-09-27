@@ -117,15 +117,21 @@ All repositories across `/Users/perkunas/jail` have been audited, synchronized, 
 
 | Workspace / Repository | Classification | Tracker Provider | Local Baseline Commit | Remote Tracking Branch | Remote Status / Diff | Baseline Gate Status |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `/Users/perkunas/jail/DEAP01-spec-core` | `UPSTREAM_SPEC_CORE_COMPILER` | GitHub (`gh`) | `dd7638c` / `6188e52` | `origin/main` | Clean (0 bytes diff) | Clean Baseline |
-| `/Users/perkunas/jail/uav-009` | Downstream Customer Application | GitLab (`glab`) | `a85149d` | `origin/main` | Clean (0 bytes diff) | All 31/31 Checks (Checks 10-31, including Check 31 Dual-Schema SSOT Parity Gate) empirically PASS with exit code 0 |
-| `/Users/perkunas/jail/uav-011` | Downstream Application Workspace | GitLab (`glab`) | `6f4f459` | `origin/main` | Clean (0 bytes diff) | All 31/31 Checks (Checks 10-31, including Check 31 Dual-Schema SSOT Parity Gate) empirically PASS with exit code 0 (Clean Landing Zones) |
-| `DEAP-uas-infrastructure-safety` | `DOMAIN_DISTRIBUTION_TEMPLATE` | GitHub (`gh`) | Synchronized | `origin/main` | Clean (0 bytes diff) | Clean Landing Zones (`.gitkeep` only) |
+| `/Users/perkunas/jail/DEAP01-spec-core` | `UPSTREAM_SPEC_CORE_COMPILER` | GitHub (`gh`) | `d40f013` | `origin/main` | Clean (0 bytes diff) | 31/31 checks PASS (Checks 10-31 verified, including Gate 25, 28, 29, 31) |
+| `DEAP-profile-backend-api` | `PLATFORM_PROFILE_TEMPLATE` | GitHub (`gh`) | `9977aad` | `origin/main` | Clean (0 bytes diff) | 31/31 checks PASS |
+| `DEAP-profile-react-web` | `PLATFORM_PROFILE_TEMPLATE` | GitHub (`gh`) | `899e0c7` | `origin/main` | Clean (0 bytes diff) | 31/31 checks PASS (Vite build verified) |
+| `DEAP-profile-flutter-app` | `PLATFORM_PROFILE_TEMPLATE` | GitHub (`gh`) | `9c8af22` | `origin/main` | Clean (0 bytes diff) | 31/31 checks PASS (Flutter test/analyze/build verified) |
+| `DEAP-profile-vhdl-hardware` | `PLATFORM_PROFILE_TEMPLATE` | GitHub (`gh`) | `c551fac` | `origin/main` | Clean (0 bytes diff) | 31/31 checks PASS |
+| `DEAP-implementation-driver` | `IMPLEMENTATION_DRIVER_TEMPLATE` | GitHub (`gh`) | `102857b` | `origin/main` | Clean (0 bytes diff) | 31/31 checks PASS |
+| `DEAP-avionic-flight-safety` | `DOMAIN_DISTRIBUTION_TEMPLATE` | GitHub (`gh`) | `c25b2e6` | `origin/main` | Clean (0 bytes diff) | Clean Landing Zones (`.gitkeep` only) |
+| `DEAP-uas-infrastructure-safety` | `DOMAIN_DISTRIBUTION_TEMPLATE` | GitHub (`gh`) | `fcba76d` | `origin/main` | Clean (0 bytes diff) | Clean Landing Zones (`.gitkeep` only) |
+| `/Users/perkunas/jail/uav-009` | Downstream Customer Application Workspace | GitLab (`glab`) | `a85149d` | `origin/main` | Clean (0 bytes diff) | 31/31 checks PASS (75 specification issues tracked on GitLab) |
+| `/Users/perkunas/jail/uav-011` | Downstream Application Workspace | GitLab (`glab`) | `6f4f459` | `origin/main` | Clean (0 bytes diff) | 31/31 checks PASS (Clean Landing Zones preserved) |
 
 ### 2.2 Detailed Fleet Parity & Architecture Baseline
 
 1. **Upstream Specification Core Compiler (`DEAP01-spec-core`)**:
-   - Baseline Commits: `dd7638c` / `6188e52`.
+   - Baseline Commit: `d40f013`.
    - Tooling Upgrade: Full dual-provider architecture in `skills/spec-orchestrator/scripts/create_issue.sh` and `scripts/reconcile_backlog.py` supporting both GitHub (`gh`) and GitLab (`glab`) CLI engines.
    - Installer Hardening: `scripts/install_pipeline.sh` automatically detects existing customer schema definitions, compiled ASTs, and localized report directories, preserving them during framework synchronization without clobbering.
    - CommonMark AST Validation: Rigorous transition from regex / substring heuristics to CommonMark and SysML v2 AST parsers.
