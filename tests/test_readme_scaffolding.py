@@ -68,7 +68,7 @@ def github_slugify(heading: str) -> str:
     cleaned = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', cleaned)
     s = cleaned.strip().lower()
     s = re.sub(r'[^\w\s-]', '', s)
-    s = re.sub(r'[\s]+', '-', s)
+    s = re.sub(r'\s', '-', s)
     return s
 
 
