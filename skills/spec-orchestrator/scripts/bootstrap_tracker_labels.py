@@ -480,8 +480,15 @@ class GitLabV4LabelProvider:
         glab_path = shutil.which("glab")
         if glab_path:
             try:
+                status_res = subprocess.run([glab_path, "auth", "status", "--show-token"], capture_output=True, text=True, timeout=5)
+                m = re.search(r'Token(?:\s+found\s+in\s+operating\s+system\s+keyring)?:\s*([A-Za-z0-9_\.\-]+)', (status_res.stdout or '') + ' ' + (status_res.stderr or ''))
+                if m:
+                    return m.group(1).strip(), "PRIVATE-TOKEN"
+            except Exception:
+                pass
+            try:
                 res = subprocess.run([glab_path, "auth", "token"], capture_output=True, text=True, timeout=5)
-                if res.returncode == 0 and res.stdout.strip():
+                if res.returncode == 0 and res.stdout.strip() and '\n' not in res.stdout.strip() and ' ' not in res.stdout.strip() and 'USAGE' not in res.stdout:
                     return res.stdout.strip(), "PRIVATE-TOKEN"
             except Exception:
                 pass
