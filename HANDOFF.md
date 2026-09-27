@@ -7,7 +7,7 @@
 | **Repository Classification** | `UPSTREAM_SPEC_CORE_COMPILER` (DEAP01-spec-core) |
 | **Target Branch** | `main` (clean working tree, synchronized with `origin/main`) |
 | **Upstream Baseline Commit** | `dd7638c` / `6188e52` |
-| **Customer Baseline Commit** | `uav-009 faff825` / `uav-011 c2826b9` |
+| **Customer Baseline Commit** | `uav-009 6ac6d86` / `uav-011 fddddcd` |
 | **Status** | Authoritative Operational Handoff Baseline for Incoming Agent |
 | **Date** | 2026-09-26 |
 | **Target Audience** | Incoming Autonomous Systems Engineering Agent / Multi-Harness Team |
@@ -118,8 +118,8 @@ All repositories across `/Users/perkunas/jail` have been audited, synchronized, 
 | Workspace / Repository | Classification | Tracker Provider | Local Baseline Commit | Remote Tracking Branch | Remote Status / Diff | Baseline Gate Status |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | `/Users/perkunas/jail/DEAP01-spec-core` | `UPSTREAM_SPEC_CORE_COMPILER` | GitHub (`gh`) | `dd7638c` / `6188e52` | `origin/main` | Clean (0 bytes diff) | Clean Baseline |
-| `/Users/perkunas/jail/uav-009` | Downstream Customer Application | GitLab (`glab`) | `faff825` | `origin/main` | Clean (0 bytes diff) | All 30/30 Checks PASS |
-| `/Users/perkunas/jail/uav-011` | Downstream Application Workspace | GitLab (`glab`) | `c2826b9` | `origin/main` | Clean (0 bytes diff) | Clean Landing Zones (`.gitkeep` only) |
+| `/Users/perkunas/jail/uav-009` | Downstream Customer Application | GitLab (`glab`) | `6ac6d86` | `origin/main` | Clean (0 bytes diff) | All 31/31 Checks PASS (Check 31 Dual-Schema SSOT Parity Gate verified) |
+| `/Users/perkunas/jail/uav-011` | Downstream Application Workspace | GitLab (`glab`) | `fddddcd` | `origin/main` | Clean (0 bytes diff) | Clean Landing Zones (`.gitkeep` only, Check 31 verified) |
 | `DEAP-uas-infrastructure-safety` | `DOMAIN_DISTRIBUTION_TEMPLATE` | GitHub (`gh`) | Synchronized | `origin/main` | Clean (0 bytes diff) | Clean Landing Zones (`.gitkeep` only) |
 
 ### 2.2 Detailed Fleet Parity & Architecture Baseline
@@ -132,19 +132,19 @@ All repositories across `/Users/perkunas/jail` have been audited, synchronized, 
    - Clean Landing Zone Mandate: Enforces abstract compiler decoupling from concrete customer domains.
 
 2. **Downstream Customer Application Workspace (`uav-009`)**:
-   - Baseline Commit: `faff825` (`docs(audit): preserve adversarial defect dossiers (refs #371)`).
+   - Baseline Commit: `6ac6d86` (`chore(pipeline): propagate upstream spec-core fixes and Check 31 SSOT parity gate`).
    - Tracker Resolution: All 75 specification items published to the remote GitLab tracker (`https://gitlab.com/gintatkinson/uav-009.git`):
      * **1 Epic**: `docs/epics/epic-01-system-ssot.md` (Issue #10)
      * **44 Features**: `docs/features/feat-01*` through `feat-44*` (Issues #11 through #54)
      * **24 User Stories**: `docs/user-stories/us-01*` through `us-24*` (Issues #55 through #78)
      * **6 Use Cases**: `docs/use-cases/uc-01*` through `uc-06*` (Issues #79 through #84)
    - Zero Contamination: All literal `#[IssueID]` tokens replaced with live numeric GitLab IDs across all frontmatter and Markdown tables.
-   - Conformance: All 30 baseline checks pass with exit code 0 under `verify_downstream_baseline.py`.
+   - Conformance: All 31 baseline checks pass with exit code 0 under `verify_downstream_baseline.py` (including Check 31 Dual-Schema SSOT Parity Gate).
 
 3. **Downstream Application Workspace (`uav-011`)**:
-   - Baseline Commit: `c2826b9` (`docs(readme): synchronize Pipeline 1 & 2 topologies and Flutter/ROS2 prompt catalog (refs #371)`).
+   - Baseline Commit: `fddddcd` (`chore(pipeline): propagate upstream spec-core fixes and Check 31 SSOT parity gate`).
    - Landing Zones: Enforced 100% clean landing zones (`schema/`, `docs/epics/`, `docs/features/`, `docs/user-stories/`, `docs/use-cases/` contain only `.gitkeep`).
-   - Conformance: All 30 baseline checks pass with exit code 0.
+   - Conformance: All 31 baseline checks pass with exit code 0.
 
 4. **Domain Distribution Templates (`DEAP-uas-infrastructure-safety`)**:
    - Upstream Distribution Template Clean Landing Zone Invariant verified. Zero domain models, zero concrete specs, zero phantom realizations.
