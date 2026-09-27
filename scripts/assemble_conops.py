@@ -896,9 +896,8 @@ class SysMLParameterBindingEngine:
 
     Ingests domain parameter dictionaries from:
     1. Explicit parameter dictionary JSON files (--params <path>)
-    2. Auto-detected domain configuration (schema/domain_config.json, .pipeline/domain_config.json)
-    3. Auto-detected schema digests (.pipeline/schema-digest.json)
-    4. SysML v2 AST textual specifications (.pipeline/schema.sysml, schema/*.sysml)
+    2. Auto-detected schema digests (.pipeline/schema-digest.json)
+    3. SysML v2 AST textual specifications (.pipeline/schema.sysml, schema/*.sysml)
 
     Substitutes canonical template placeholders ({{...}}) with bound values or
     sensible domain fallback defaults derived dynamically from the AST/schema context.
@@ -1091,36 +1090,33 @@ class SysMLParameterBindingEngine:
         if dom:
             return dom
 
-        # 3. Check domain_config.json in workspace
-        for cfg_rel in (
-            "schema/domain_config.json",
-            ".pipeline/domain_config.json",
-            "domain_config.json",
-            ".agents/domain_config.json",
-        ):
-            curr = self.workspace_dir
-            for _ in range(5):
-                cfg_path = os.path.join(curr, cfg_rel)
-                if os.path.isfile(cfg_path):
-                    try:
-                        with open(cfg_path, "r", encoding="utf-8") as f:
-                            cfg = json.load(f)
-                        dom_val = (
-                            cfg.get("domain")
-                            or cfg.get("domain_type")
-                            or cfg.get("operational_domain")
-                            or cfg.get("system_type")
-                            or ""
-                        )
-                        dom = _match_tokens(str(dom_val))
-                        if dom:
-                            return dom
-                    except Exception:
-                        pass
-                parent = os.path.dirname(curr)
-                if parent == curr:
-                    break
-                curr = parent
+        # 3. Check compiled schema digest (.pipeline/schema-digest.json)
+        curr = self.workspace_dir
+        for _ in range(5):
+            digest_path = os.path.join(curr, ".pipeline", "schema-digest.json")
+            if os.path.isfile(digest_path):
+                try:
+                    with open(digest_path, "r", encoding="utf-8") as f:
+                        digest = json.load(f)
+                    dom_val = (
+                        digest.get("domain")
+                        or digest.get("system_name")
+                        or digest.get("operational_domain")
+                        or digest.get("domain_type")
+                        or digest.get("system_identifier")
+                        or digest.get("program_title")
+                        or ""
+                    )
+                    dom = _match_tokens(str(dom_val))
+                    if dom:
+                        return dom
+                except Exception:
+                    pass
+                break
+            parent = os.path.dirname(curr)
+            if parent == curr:
+                break
+            curr = parent
 
         # 4. Fallback: inspect workspace directory string
         dom = _match_tokens(self.workspace_dir)
@@ -3340,8 +3336,6 @@ class SysMLParameterBindingEngine:
             for cand_f in (
                 os.path.join(sdir, ".pipeline", "schema.sysml"),
                 os.path.join(sdir, ".pipeline", "schema-digest.json"),
-                os.path.join(sdir, ".pipeline", "domain_config.json"),
-                os.path.join(sdir, "schema", "domain_config.json"),
             ):
                 if os.path.isfile(cand_f):
                     self.ingest_file(cand_f)
@@ -5148,8 +5142,6 @@ def assemble_conops(
             if (
                 os.path.isdir(os.path.join(cand, "schema"))
                 or os.path.isdir(os.path.join(cand, ".pipeline"))
-                or os.path.isfile(os.path.join(cand, "domain_config.json"))
-                or os.path.isfile(os.path.join(cand, "schema", "domain_config.json"))
             ):
                 ws_dir = cand
                 break
@@ -5366,7 +5358,7 @@ def main() -> int:
     parser.add_argument(
         "--params",
         default=None,
-        help="Path to JSON parameter dictionary or schema file (auto-detects .pipeline/schema-digest.json or schema/domain_config.json if not specified).",
+        help="Path to JSON parameter dictionary or schema file (auto-detects .pipeline/schema-digest.json if not specified).",
     )
     parser.add_argument(
         "--domain",

@@ -925,6 +925,73 @@ class TestCustomerWorkspaceScaffolding(unittest.TestCase):
             self.assertIn("hardware-in-the-loop", fence_content)
             self.assertIn("---GOVERNANCE-END---", fence_content)
 
+    def test_customer_workspace_scaffolding_schema_clean_landing_zone(self):
+        """Asserts customer project scaffolding produces a pristine landing zone in schema/ with only .gitkeep (fixes #390)."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            cust_dir = os.path.join(temp_dir, "uav-011")
+            os.makedirs(cust_dir)
+
+            proc = self._run_installer(cust_dir, "--role", "customer-project")
+            self.assertEqual(proc.returncode, 0, f"Installer failed. stderr: {proc.stderr}")
+
+            schema_dir = os.path.join(cust_dir, "schema")
+            self.assertTrue(os.path.isdir(schema_dir), "schema/ directory was not created in customer workspace")
+
+            schema_entries = sorted(os.listdir(schema_dir))
+            self.assertEqual(
+                schema_entries,
+                [".gitkeep"],
+                f"Customer workspace schema/ must contain ONLY .gitkeep, found: {schema_entries}"
+            )
+
+            # Explicitly assert zero copied .sysml or .json files
+            forbidden_files = [f for f in schema_entries if f.endswith(".sysml") or f.endswith(".json")]
+            self.assertEqual(
+                forbidden_files,
+                [],
+                f"Customer workspace schema/ contains forbidden .sysml or .json template files: {forbidden_files}"
+            )
+
+    def test_customer_workspace_scaffolding_schema_does_not_copy_installer_template_models(self):
+        """Asserts installer never copies template .sysml or .json models into customer schema/ even if present in installer root (fixes #390)."""
+        import shutil
+        with tempfile.TemporaryDirectory() as temp_dir:
+            mock_installer_dir = os.path.join(temp_dir, "mock_installer")
+            os.makedirs(mock_installer_dir, exist_ok=True)
+            for item in ("scripts", "rules", "skills", ".agents", ".pipeline", "tests"):
+                src_item = os.path.join(PROJECT_ROOT, item)
+                if os.path.isdir(src_item):
+                    shutil.copytree(src_item, os.path.join(mock_installer_dir, item))
+            for f in ("requirements.txt", "pyproject.toml", ".gitignore"):
+                src_f = os.path.join(PROJECT_ROOT, f)
+                if os.path.isfile(src_f):
+                    shutil.copy(src_f, os.path.join(mock_installer_dir, f))
+
+            # Plant template prototype models and domain configs in mock installer's schema/
+            mock_schema = os.path.join(mock_installer_dir, "schema")
+            os.makedirs(mock_schema, exist_ok=True)
+            with open(os.path.join(mock_schema, "PROTOTYPE_MODEL.sysml"), "w", encoding="utf-8") as f:
+                f.write("package PrototypeModel {}")
+            with open(os.path.join(mock_schema, "domain_config.json"), "w", encoding="utf-8") as f:
+                f.write('{"domain": "aviation", "system_identifier": "PROTOTYPE_01"}')
+            with open(os.path.join(mock_schema, ".gitkeep"), "w", encoding="utf-8") as f:
+                f.write("")
+
+            os.makedirs(os.path.join(mock_installer_dir, ".pipeline", "upstream"), exist_ok=True)
+
+            cust_target = os.path.join(temp_dir, "customer_app")
+            cmd = ["bash", os.path.join(mock_installer_dir, "scripts", "install_pipeline.sh"), cust_target, "--role", "customer-project"]
+            proc = subprocess.run(cmd, capture_output=True, text=True)
+            self.assertEqual(proc.returncode, 0, f"Installer execution failed. stderr: {proc.stderr}\nstdout: {proc.stdout}")
+
+            cust_schema = os.path.join(cust_target, "schema")
+            self.assertTrue(os.path.isdir(cust_schema), "Customer workspace schema/ directory missing")
+            entries = sorted(os.listdir(cust_schema))
+
+            self.assertEqual(entries, [".gitkeep"], f"Customer workspace schema must only contain .gitkeep, found {entries}")
+            self.assertFalse(os.path.exists(os.path.join(cust_schema, "PROTOTYPE_MODEL.sysml")), "PROTOTYPE_MODEL.sysml was copied into customer workspace")
+            self.assertFalse(os.path.exists(os.path.join(cust_schema, "domain_config.json")), "domain_config.json was copied into customer workspace")
+
 
 class TestShellCodeFenceHygiene(unittest.TestCase):
     """Verifies bash/sh syntax validity and hygiene across upstream README and scaffolded templates."""

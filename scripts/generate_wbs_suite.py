@@ -178,31 +178,30 @@ class WBSAstIngestionEngine:
 
     def _ingest_metadata(self) -> None:
         """Extracts system-level metadata from config, digest, conops, or safety files."""
-        # 1. Check schema / domain configs
-        for cfg_rel in ("schema/domain_config.json", ".pipeline/domain_config.json", "domain_config.json"):
-            cfg_file = self.workspace / cfg_rel
-            if cfg_file.is_file():
-                try:
-                    with open(cfg_file, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                        if "system_identifier" in data:
-                            self.metadata.system_id = str(data["system_identifier"])
-                        if "system_name" in data:
-                            self.metadata.program_title = str(data["system_name"])
-                        elif "program_title" in data:
-                            self.metadata.program_title = str(data["program_title"])
-                        if "mtow_kg" in data or "TOTAL_MTOW_KG" in data:
-                            raw_m = data.get("mtow_kg") or data.get("TOTAL_MTOW_KG")
-                            try:
-                                self.metadata.mtow_kg = float(raw_m)
-                            except (ValueError, TypeError):
-                                pass
-                        if "do178c_level" in data or "DAL" in data:
-                            self.metadata.do178c_level = str(data.get("do178c_level") or data.get("DAL"))
-                        if "sora_sail" in data or "SAIL" in data:
-                            self.metadata.sora_sail = str(data.get("sora_sail") or data.get("SAIL"))
-                except Exception:
-                    pass
+        # 1. Check compiled schema digest (.pipeline/schema-digest.json)
+        digest_file = self.workspace / ".pipeline" / "schema-digest.json"
+        if digest_file.is_file():
+            try:
+                with open(digest_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if "system_identifier" in data:
+                        self.metadata.system_id = str(data["system_identifier"])
+                    if "system_name" in data:
+                        self.metadata.program_title = str(data["system_name"])
+                    elif "program_title" in data:
+                        self.metadata.program_title = str(data["program_title"])
+                    if "mtow_kg" in data or "TOTAL_MTOW_KG" in data:
+                        raw_m = data.get("mtow_kg") or data.get("TOTAL_MTOW_KG")
+                        try:
+                            self.metadata.mtow_kg = float(raw_m)
+                        except (ValueError, TypeError):
+                            pass
+                    if "do178c_level" in data or "DAL" in data:
+                        self.metadata.do178c_level = str(data.get("do178c_level") or data.get("DAL"))
+                    if "sora_sail" in data or "SAIL" in data:
+                        self.metadata.sora_sail = str(data.get("sora_sail") or data.get("SAIL"))
+            except Exception:
+                pass
 
         # 2. Check CONOPS.md
         conops_file = self.workspace / "docs" / "conops" / "CONOPS.md"

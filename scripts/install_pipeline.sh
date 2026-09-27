@@ -412,7 +412,9 @@ if [ "$TARGET_DIR" != "$INSTALLER_ROOT" ]; then
   cp -RPf "$INSTALLER_ROOT/scripts" "$TARGET_DIR/"
   mkdir -p "$TARGET_DIR/schema"
   chmod -R u+w "$TARGET_DIR/schema" 2>/dev/null || true
-  if [ -d "$INSTALLER_ROOT/schema" ]; then
+  if [ "$TARGET_ROLE" = "DOWNSTREAM_CUSTOMER_PROJECT" ] || [ "$TARGET_ROLE" = "DOMAIN_DISTRIBUTION_TEMPLATE" ]; then
+    [ -z "$(ls -A "$TARGET_DIR/schema" 2>/dev/null)" ] && touch "$TARGET_DIR/schema/.gitkeep"
+  elif [ -d "$INSTALLER_ROOT/schema" ]; then
     cp -RPf "$INSTALLER_ROOT/schema/." "$TARGET_DIR/schema/"
   fi
   chmod u+w "$TARGET_DIR/requirements.txt" "$TARGET_DIR/pyproject.toml" 2>/dev/null || true
