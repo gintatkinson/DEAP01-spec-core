@@ -475,6 +475,78 @@ class TestUpstreamCompilerReadme(unittest.TestCase):
             "Found deprecated 'Gemini CLI' in Section 5.5 line slice of README.md (Defect #379)"
         )
 
+    def test_upstream_readme_section_5_5_native_config_discovery_no_manual_chat_steering(self):
+        """Verifies that Section 5.5 prescribes native configuration discovery and prohibits manual chat steering anti-patterns (Defect #380)."""
+        ast = parse_markdown_ast(self.content)
+        sec5_5_nodes = [s for s in ast.find_sections("5.5") if s.title.startswith("5.5")]
+        self.assertEqual(len(sec5_5_nodes), 1, "Expected exactly one Section 5.5 in README.md AST")
+        sec5_5_node = sec5_5_nodes[0]
+        sec5_5_text = sec5_5_node.get_all_text()
+
+        # 1. Negative Assertions: Prohibit manual chat steering anti-patterns
+        banned_steering_phrases = [
+            "Point Gemini",
+            "Point Google Antigravity",
+            "Point Antigravity",
+            "Execute view_file directly on .pipeline/ACTIVE_RULES_BUNDLE.md, and read skills in",
+            "Read the files in ./skills/, ./.agents/skills/, and ./rules/ directories.",
+            "paste",
+            "chat box",
+            "chat prompt",
+            "in chat",
+        ]
+        for phrase in banned_steering_phrases:
+            self.assertNotIn(
+                phrase.lower(),
+                sec5_5_text.lower(),
+                f"Found prohibited manual chat steering phrase '{phrase}' in Section 5.5 AST (Defect #380)"
+            )
+
+        # 2. Line-level slice check between Section 5.5 and Section 5.6
+        lines = self.content.splitlines()
+        sec_5_5_idx = None
+        sec_5_6_idx = None
+        for idx, line in enumerate(lines):
+            if re.match(r'^###\s+5\.5\s+', line):
+                sec_5_5_idx = idx
+            elif re.match(r'^###\s+5\.6\s+', line):
+                sec_5_6_idx = idx
+
+        self.assertIsNotNone(sec_5_5_idx, "Section 5.5 heading line not found in README.md")
+        self.assertIsNotNone(sec_5_6_idx, "Section 5.6 heading line not found in README.md")
+        self.assertLess(sec_5_5_idx, sec_5_6_idx, "Section 5.5 must precede Section 5.6")
+
+        sec_5_5_slice = "\n".join(lines[sec_5_5_idx:sec_5_6_idx])
+
+        # Assert no text/code fences instructing manual chat prompt commands
+        self.assertNotIn("```text\nExecute view_file", sec_5_5_slice)
+        for phrase in banned_steering_phrases:
+            self.assertNotIn(
+                phrase.lower(),
+                sec_5_5_slice.lower(),
+                f"Found prohibited manual chat steering phrase '{phrase}' in Section 5.5 slice (Defect #380)"
+            )
+
+        # 3. Positive Assertions: Require affirmative native configuration discovery directives
+        required_native_discovery_terms = [
+            "Native Configuration Discovery",
+            "AGENTS.md",
+            ".agents/AGENTS.md",
+            ".agents/skills/",
+            "<user_rules>",
+            "progressive disclosure",
+            "automatically discovers",
+            "CLAUDE.md",
+            ".cursor/rules/",
+        ]
+        for term in required_native_discovery_terms:
+            self.assertIn(
+                term,
+                sec_5_5_slice,
+                f"Required native configuration discovery term '{term}' missing from Section 5.5 (Defect #380)"
+            )
+
+
 
 class TestDomainDistributionTemplateScaffolding(unittest.TestCase):
     """Verifies that install_pipeline.sh properly scaffolds Tier 2 Domain Distribution Templates."""

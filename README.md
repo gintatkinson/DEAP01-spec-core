@@ -294,10 +294,10 @@ For customer onboarding instructions and domain-specific schemas, refer to the d
 
 ### 5.5 Setup for Google Antigravity
 
-After initializing or updating the pipeline tooling, configure Google Antigravity to operate under full repository governance:
+Google Antigravity automatically discovers workspace customizations, governance rules, and skills by traversing up to the repository root. Ensure native configuration parity with Claude Code (`CLAUDE.md`) and Cursor (`.cursor/rules/`) by maintaining persistent workspace rules without requiring manual chat steering:
 
 1. **Native Configuration Discovery & Governance Rules**:
-   Google Antigravity automatically discovers and ingests project-scoped rules from `AGENTS.md` and `.agents/AGENTS.md` into `<user_rules>`. Skills are discovered in `.agents/skills/`. To read the full active governance rules bundle, agents execute a direct-path read via `view_file` on `.pipeline/ACTIVE_RULES_BUNDLE.md`.
+   Google Antigravity natively loads project-scoped governance rules from `AGENTS.md` and `.agents/AGENTS.md` directly into `<user_rules>` upon workspace initialization. Custom pipeline skills located in `.agents/skills/` are automatically indexed and discovered via progressive disclosure on demand. Ad-hoc interactive prompting or manual steering directives to ingest rules are unnecessary and strictly avoided to prevent turn-1 coordinator context bloat and subagent self-rejection gate trips. To read the consolidated active governance rules bundle, agents execute a direct-path read via `view_file` on `.pipeline/ACTIVE_RULES_BUNDLE.md`.
 2. **Mandatory Post-Install Agent Initialization Sequence**:
    Immediately following turnkey installation, any AI agent (Antigravity, Claude Code, Cursor) initializing in this repository MUST execute the following sequence before accepting user directives or executing task implementations:
    0. **Detect Repository Role & Scope (Direct-Path Read)**:
