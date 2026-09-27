@@ -49,6 +49,13 @@ SAMPLE_SYSML_AST = """package AutonomousVehicle_SSOT {
     part def BatterySystem {
         attribute maxVoltageV : Real = 28.0;
     }
+
+    part def Propulsion {
+        attribute propulsionPeakPowerW : Real = 2800.0;
+        part def DriveMotor {
+            attribute motorPeakPowerW : Real = 3000.0;
+        }
+    }
 }
 """
 
@@ -92,6 +99,7 @@ class TestFactualGroundingValidatorAntiRegex(unittest.TestCase):
             doc_content = """# Propulsion and Structure
 The airframe total mass is 45.0 kg [TIER-3: DESIGN].
 The battery system maximum voltage is 48.0 V [TIER-3: DESIGN].
+The drive motor peak power is 3500 W [TIER-3: DESIGN].
 """
             with open(os.path.join(docs_dir, "feat-propulsion.md"), "w", encoding="utf-8") as f:
                 f.write(doc_content)
@@ -103,6 +111,7 @@ The battery system maximum voltage is 48.0 V [TIER-3: DESIGN].
             self.assertIn("factual-grounding-numeric-drift", rule_ids)
             findings_text = " ".join(f.message for f in findings)
             self.assertIn("45.0 kg", findings_text)
+            self.assertIn("3500", findings_text)
 
     def test_declared_assumption_cannot_bypass_protocol_or_rate_grounding(self):
         """Ungrounded protocol or execution rate with (Declared Assumption) fails closed."""
@@ -172,6 +181,7 @@ The empennage features 2 ruddervators [TIER-4: TBD] for pitch and yaw control.
 The vehicle has 4 ruddervators arranged in an X-tail configuration.
 Catapult launch acceleration is limited to 12.0g.
 Total airframe mass is 25.0 kg.
+Drive motor peak power is 3000 W.
 """
             with open(os.path.join(docs_dir, "feat-grounded.md"), "w", encoding="utf-8") as f:
                 f.write(doc_content)

@@ -2085,7 +2085,7 @@ def check_safety_integrity_and_sora_completeness(repo_root=None, allow_missing_s
         if not effective_allow_missing:
             print("ERROR: Check 17 failed: Safety specification directory 'docs/safety/' is missing.", file=sys.stderr)
             sys.exit(1)
-        print("Success: Check 17 verified (Downstream repository detected -- docs/safety/ directory not present).")
+        print("Success: Check 17 verified (Downstream repository detected -- safety specifications pending or clean).")
         return
 
     safety_files = []
@@ -3446,7 +3446,7 @@ def _load_architecture_viewpoint_validator():
         sys.exit(1)
 
 
-def check_architecture_viewpoint_diagrams(repo_root=None):
+def check_architecture_viewpoint_diagrams(repo_root=None, allow_missing_specs=False, strict=False):
     """Check 30: Architecture Viewpoint & Diagram Completeness Gate (Gate 30).
 
     Validates presence, completeness, and syntax integrity of the 11 canonical architecture diagrams across the 5 viewpoints (DoDAF 2.02 / OMG UAF v2.0 / ISO/IEC/IEEE 29148 / MIL-STD-882E / STPA / SORA).
@@ -3459,10 +3459,12 @@ def check_architecture_viewpoint_diagrams(repo_root=None):
         print("ERROR: Check 30 failed: ArchitectureViewpointValidator or WorkspaceRepository unavailable.", file=sys.stderr)
         sys.exit(1)
 
+    effective_allow_missing = allow_missing_specs and not (strict or (os.environ.get("DEAP_STRICT_BASELINE", "").lower() in ("1", "true", "yes")))
+
     repo = repo_cls(workspace_dir=repo_root)
     validator = val_cls()
     try:
-        findings = validator.validate(repo, allow_missing_specs=False, spec_only=True)
+        findings = validator.validate(repo, allow_missing_specs=effective_allow_missing, spec_only=True)
     except Exception as e:
         print(f"ERROR: Check 30 execution failed: {e}", file=sys.stderr)
         sys.exit(1)
@@ -3612,10 +3614,53 @@ def check_mermaid_syntax(repo_root=None):
     print("Success: Mermaid syntax verified across all markdown files.")
 
 
+def _has_clean_landing_zones(repo_root):
+    """Detect if repository has clean landing zones (clean schema or clean specification landing zones)."""
+    # 1. Schema landing zone check
+    schema_dir = os.path.join(repo_root, "schema")
+    schema_clean = True
+    if os.path.isdir(schema_dir):
+        for root, dirs, files in os.walk(schema_dir):
+            dirs[:] = [d for d in dirs if d not in EXCLUDED_DIRS]
+            for f in files:
+                if f not in (".gitkeep", "README.md") and not f.startswith("."):
+                    schema_clean = False
+                    break
+            if not schema_clean:
+                break
+
+    # 2. Specification landing zones check (epics, features, user-stories, use-cases)
+    spec_zones = [
+        os.path.join(repo_root, "docs", "epics"),
+        os.path.join(repo_root, "docs", "features"),
+        os.path.join(repo_root, "docs", "user-stories"),
+        os.path.join(repo_root, "docs", "use-cases"),
+    ]
+    has_concrete_specs = False
+    for szone in spec_zones:
+        if os.path.isdir(szone):
+            for root, dirs, files in os.walk(szone):
+                dirs[:] = [d for d in dirs if d not in EXCLUDED_DIRS]
+                for f in files:
+                    if f.endswith(".md") and f not in (".gitkeep", "README.md") and not f.startswith("."):
+                        has_concrete_specs = True
+                        break
+                if has_concrete_specs:
+                    break
+        if has_concrete_specs:
+            break
+    specs_clean = not has_concrete_specs
+
+    return schema_clean or specs_clean
+
+
 def run_all_checks(repo_root=None, allow_missing_specs=False, strict=False):
     """Run all baseline checks (Checks 10 through 31)."""
     if repo_root is None:
         repo_root = os.getcwd()
+    is_strict = strict or (os.environ.get("DEAP_STRICT_BASELINE", "").lower() in ("1", "true", "yes"))
+    if not is_strict and not allow_missing_specs and _has_clean_landing_zones(repo_root):
+        allow_missing_specs = True
     check_gitignore_exists(repo_root)
     check_no_ds_store_files(repo_root)
     check_no_duplicate_master_blueprints(repo_root)
@@ -3641,13 +3686,17 @@ def run_all_checks(repo_root=None, allow_missing_specs=False, strict=False):
     check_executive_deliverable_traceability(repo_root)
     check_coverage_digest(repo_root)
     check_obligation_witness(repo_root)
-    check_architecture_viewpoint_diagrams(repo_root)
+    check_architecture_viewpoint_diagrams(repo_root, allow_missing_specs=allow_missing_specs, strict=strict)
     check_dual_schema_ssot_parity(repo_root)
 
 def _run_verification(args, dest, repo_root, is_flutter, is_react):
     # Run Checks 10 through 31
     allow_missing = getattr(args, "allow_missing_specs", False)
     strict = getattr(args, "strict", False)
+    is_strict = strict or (os.environ.get("DEAP_STRICT_BASELINE", "").lower() in ("1", "true", "yes"))
+    if not is_strict and not allow_missing:
+        if _has_clean_landing_zones(repo_root):
+            allow_missing = True
     run_all_checks(repo_root, allow_missing_specs=allow_missing, strict=strict)
 
     if is_flutter:

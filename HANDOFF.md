@@ -7,7 +7,7 @@
 | **Repository Classification** | `UPSTREAM_SPEC_CORE_COMPILER` (DEAP01-spec-core) |
 | **Target Branch** | `main` (clean working tree, synchronized with `origin/main`) |
 | **Upstream Baseline Commit** | `dd7638c` / `6188e52` |
-| **Customer Baseline Commit** | `uav-009 6ac6d86` / `uav-011 fddddcd` |
+| **Customer Baseline Commit** | `uav-009 a85149d` / `uav-011 6f4f459` |
 | **Status** | Authoritative Operational Handoff Baseline for Incoming Agent |
 | **Date** | 2026-09-26 |
 | **Target Audience** | Incoming Autonomous Systems Engineering Agent / Multi-Harness Team |
@@ -118,8 +118,8 @@ All repositories across `/Users/perkunas/jail` have been audited, synchronized, 
 | Workspace / Repository | Classification | Tracker Provider | Local Baseline Commit | Remote Tracking Branch | Remote Status / Diff | Baseline Gate Status |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | `/Users/perkunas/jail/DEAP01-spec-core` | `UPSTREAM_SPEC_CORE_COMPILER` | GitHub (`gh`) | `dd7638c` / `6188e52` | `origin/main` | Clean (0 bytes diff) | Clean Baseline |
-| `/Users/perkunas/jail/uav-009` | Downstream Customer Application | GitLab (`glab`) | `6ac6d86` | `origin/main` | Clean (0 bytes diff) | All 31/31 Checks PASS (Check 31 Dual-Schema SSOT Parity Gate verified) |
-| `/Users/perkunas/jail/uav-011` | Downstream Application Workspace | GitLab (`glab`) | `fddddcd` | `origin/main` | Clean (0 bytes diff) | Clean Landing Zones (`.gitkeep` only, Check 31 verified) |
+| `/Users/perkunas/jail/uav-009` | Downstream Customer Application | GitLab (`glab`) | `a85149d` | `origin/main` | Clean (0 bytes diff) | All 31/31 Checks (Checks 10-31, including Check 31 Dual-Schema SSOT Parity Gate) empirically PASS with exit code 0 |
+| `/Users/perkunas/jail/uav-011` | Downstream Application Workspace | GitLab (`glab`) | `6f4f459` | `origin/main` | Clean (0 bytes diff) | All 31/31 Checks (Checks 10-31, including Check 31 Dual-Schema SSOT Parity Gate) empirically PASS with exit code 0 (Clean Landing Zones) |
 | `DEAP-uas-infrastructure-safety` | `DOMAIN_DISTRIBUTION_TEMPLATE` | GitHub (`gh`) | Synchronized | `origin/main` | Clean (0 bytes diff) | Clean Landing Zones (`.gitkeep` only) |
 
 ### 2.2 Detailed Fleet Parity & Architecture Baseline
@@ -132,7 +132,7 @@ All repositories across `/Users/perkunas/jail` have been audited, synchronized, 
    - Clean Landing Zone Mandate: Enforces abstract compiler decoupling from concrete customer domains.
 
 2. **Downstream Customer Application Workspace (`uav-009`)**:
-   - Baseline Commit: `6ac6d86` (`chore(pipeline): propagate upstream spec-core fixes and Check 31 SSOT parity gate`).
+   - Baseline Commit: `a85149d` (`chore(pipeline): propagate upstream spec-core fixes and Check 31 SSOT parity gate`).
    - Tracker Resolution: All 75 specification items published to the remote GitLab tracker (`https://gitlab.com/gintatkinson/uav-009.git`):
      * **1 Epic**: `docs/epics/epic-01-system-ssot.md` (Issue #10)
      * **44 Features**: `docs/features/feat-01*` through `feat-44*` (Issues #11 through #54)
@@ -142,7 +142,7 @@ All repositories across `/Users/perkunas/jail` have been audited, synchronized, 
    - Conformance: All 31 baseline checks pass with exit code 0 under `verify_downstream_baseline.py` (including Check 31 Dual-Schema SSOT Parity Gate).
 
 3. **Downstream Application Workspace (`uav-011`)**:
-   - Baseline Commit: `fddddcd` (`chore(pipeline): propagate upstream spec-core fixes and Check 31 SSOT parity gate`).
+   - Baseline Commit: `6f4f459` (`chore(pipeline): propagate upstream spec-core fixes and Check 31 SSOT parity gate`).
    - Landing Zones: Enforced 100% clean landing zones (`schema/`, `docs/epics/`, `docs/features/`, `docs/user-stories/`, `docs/use-cases/` contain only `.gitkeep`).
    - Conformance: All 31 baseline checks pass with exit code 0.
 

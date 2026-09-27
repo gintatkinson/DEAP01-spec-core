@@ -69,6 +69,8 @@ NON_NORMATIVE_SECTION_PATTERNS = [
     re.compile(r'\b(?:revision\s+history|document\s+history|document\s+control|change\s+log|changelog)\b', re.I),
     re.compile(r'\b(?:references?|applicable\s+documents|reference\s+standards|normative\s+standards|standards\s+baseline|regulatory\s+baseline|regulatory\s+framework|standards\s+and\s+regulatory|standards\s+taxonomy)\b', re.I),
     re.compile(r'\b(?:dual-track\s+mbd|simulation\s+deliverables|digital\s+twin(?:\s+engine)?|test\s+coverage|matlab\s*/?\s*simulink(?:\s+synthesis)?)\b', re.I),
+    re.compile(r'\b(?:evolved\s+(?:3|three)-layer(?:\s+lumi|\s+lui)?(?:\s+semantic)?\s+chain|lumi\s+semantic\s+chain|logical\s+ui(?:\s+&|\s+and)?\s+interface\s+bindings)\b', re.I),
+    re.compile(r'\b(?:mathematical\s+formulations?(?:\s+&|\s+and)?\s+derivations?|math\s+formulations?)\b', re.I),
 ]
 
 # Standard aerospace & industrial communication / electrical protocols
@@ -170,6 +172,10 @@ NON_HARDWARE_GENERIC_TOKENS: Set[str] = {
     "integer", "boolean", "string", "float", "double", "true", "false",
     "record", "document", "register", "entry", "section", "table", "launch",
     "check", "test", "coverage", "solver", "simulation", "twin", "ground",
+    "control", "command", "system", "component",
+    "power", "rail", "unit", "set", "board", "assembly", "module", "device",
+    "management", "core", "bank", "suite", "handle", "crew", "target", "entity",
+    "operator", "network", "segment", "payload", "and", "line",
 }
 
 STOP_WORDS_AND_DETERMINERS: Set[str] = {
@@ -356,9 +362,13 @@ def _is_protocol_or_standard_number(line: str, start: int, end: int, num_val: in
     following = line[end:]
     if STANDARD_NAME_SUFFIX_PATTERN.search(following):
         return True
+    if re.search(r'^\s*base(?:-[a-z0-9]+)?\b', following, re.I):
+        return True
 
     enclosing = _get_enclosing_hyphenated_token(line, start, end)
     if STANDARD_TOKEN_PATTERN.search(enclosing):
+        return True
+    if re.search(r'\b\d+base(?:-[a-z0-9]+)?\b', enclosing, re.I):
         return True
 
     return False
@@ -451,6 +461,9 @@ ISO_80000_PHYSICAL_UNITS: Dict[str, str] = {
     "deg": "deg", "degree": "deg", "degrees": "deg", "deg_ang": "deg",
     "rad": "rad", "radian": "rad", "radians": "rad",
     "mrad": "mrad", "milliradian": "mrad",
+
+    # Thermodynamic Temperature (ISO 80000-5)
+    "°c": "degc", "°c": "degc", "degc": "degc", "celsius": "degc",
 
     # Energy & Work (ISO 80000-5)
     "j": "j", "joule": "j", "joules": "j",
@@ -632,6 +645,74 @@ def _mask_spans(line: str, spans: List[Tuple[int, int]]) -> str:
     return "".join(chars)
 
 
+def _find_balanced_braces_span(text: str, open_brace_idx: int) -> int:
+    """
+    Given text and the index of an opening '{', returns the index immediately
+    after the matching '}' (i.e. end index for slicing text[open_brace_idx:end]),
+    or len(text) if unbalanced.
+    Skips string literals and comments.
+    """
+    depth = 0
+    i = open_brace_idx
+    n = len(text)
+    while i < n:
+        c = text[i]
+        # Check comments
+        if c == '/' and i + 1 < n:
+            if text[i + 1] == '/':
+                eol = text.find('\n', i + 2)
+                i = eol if eol != -1 else n
+                continue
+            elif text[i + 1] == '*':
+                end_comment = text.find('*/', i + 2)
+                i = end_comment + 2 if end_comment != -1 else n
+                continue
+        elif c == '"':
+            i += 1
+            while i < n:
+                if text[i] == '\\':
+                    i += 2
+                elif text[i] == '"':
+                    i += 1
+                    break
+                else:
+                    i += 1
+            continue
+        elif c == '{':
+            depth += 1
+        elif c == '}':
+            depth -= 1
+            if depth == 0:
+                return i + 1
+        i += 1
+    return n
+
+
+def _find_balanced_blocks(text: str, keyword: str) -> List[Tuple[str, str, int, int]]:
+    """
+    Finds top-level occurrences (within text) matching `keyword (?:def\s+)?([a-zA-Z0-9_]+)\s*\{`
+    with balanced braces.
+    Returns list of (name, body, start_idx, end_idx) where start_idx is start of declaration
+    and end_idx is after closing '}'.
+    """
+    pat = re.compile(r'\b' + keyword + r'\s+(?:def\s+)?([a-zA-Z0-9_]+)(?:\s*:\s*[a-zA-Z0-9_]+)?\s*\{')
+    pos = 0
+    blocks = []
+    n = len(text)
+    while pos < n:
+        m = pat.search(text, pos)
+        if not m:
+            break
+        name = m.group(1).strip()
+        open_brace = m.end() - 1
+        end_brace = _find_balanced_braces_span(text, open_brace)
+        body = text[open_brace + 1 : end_brace - 1]
+        blocks.append((name, body, m.start(), end_brace))
+        pos = end_brace
+    return blocks
+
+
+
 def _extract_numeric_range(val_str: str) -> Optional[Tuple[float, float]]:
     """
     Extracts lower and upper numeric bounds from a range string (e.g. '4.4 - 5.0 GHz', '13-14 bar', '49–50 V', '60 km / 90 km', '[0,1800]').
@@ -697,6 +778,9 @@ def _extract_unit(val_str: str, name_tokens: Optional[List[str]] = None) -> str:
             return "ms"
         if last_tok in ISO_80000_PHYSICAL_UNITS:
             return ISO_80000_PHYSICAL_UNITS[last_tok]
+        if last_tok == "c" and any(t in name_tokens for t in ("temp", "temperature", "operating")):
+            return "degc"
+
         if last_tok == "pct":
             return "%"
         if "g" in name_tokens and any(t in name_tokens for t in ("load", "accel", "acceleration", "limit")):
@@ -705,18 +789,24 @@ def _extract_unit(val_str: str, name_tokens: Optional[List[str]] = None) -> str:
 
 
 def _is_nominal_name(name: str, tokens: Optional[List[str]] = None) -> bool:
-    """Checks if attribute represents a nominal setpoint rather than an upper/lower bound."""
+    """Checks if attribute represents a nominal setpoint, period, duty cycle, or default rather than an upper/lower bound."""
     if not name:
+        return False
+    name_l = name.lower()
+    if any(k in name_l for k in ("max", "min", "limit", "bound", "ceiling", "floor", "threshold", "tolerance")):
         return False
     toks = tokens if tokens is not None else _tokenize_identifier(name)
     toks_l = [t.lower() for t in toks]
-    return any(t in ("nom", "nominal") for t in toks_l) or "nom" in name.lower()
+    return (
+        any(t in ("nom", "nominal", "cruise", "period", "duty", "setpoint", "target", "typical", "default") for t in toks_l)
+        or any(k in name_l for k in ("nom", "cruise", "period", "duty", "setpoint", "target", "typical"))
+    )
 
 
 def _is_lower_bound_name(name: str, tokens: Optional[List[str]] = None) -> bool:
     """
     Checks if attribute name represents a lower bound:
-    Attributes whose names contain min, low, or floor (and not max) are lower bounds.
+    Attributes whose names contain min, low, floor, or stall (and not max) are lower bounds.
     """
     if not name or _is_nominal_name(name, tokens):
         return False
@@ -728,13 +818,14 @@ def _is_lower_bound_name(name: str, tokens: Optional[List[str]] = None) -> bool:
     toks_l = [t.lower() for t in toks]
     for t in toks_l:
         if (
-            t in ("min", "minimum", "low", "lower", "floor")
+            t in ("min", "minimum", "low", "lower", "floor", "stall")
             or t.startswith("min")
             or (t.startswith("low") and t not in ("load", "loads"))
+            or t == "stall"
         ):
             return True
 
-    for kw in ("min", "low", "floor"):
+    for kw in ("min", "low", "floor", "stall"):
         if kw in name_l:
             if kw == "min" and any(fp in name_l for fp in ("nominal", "aluminum", "terminal")):
                 continue
@@ -787,6 +878,16 @@ def _property_token_matches(prop_tok: str, text_tok: str) -> bool:
         return True
     if prop_l in ("temp", "temperature") and text_l in ("temp", "temperature"):
         return True
+    if prop_l in ("speed", "velocity") and text_l in ("speed", "velocity"):
+        return True
+    if prop_l in ("plane", "aircraft", "airframe", "uav") and text_l in ("plane", "aircraft", "airframe", "uav"):
+        return True
+    if prop_l in ("mass", "weight") and text_l in ("mass", "weight"):
+        return True
+    if prop_l in ("hv", "highvoltage") and text_l in ("high", "voltage", "highvoltage", "hv"):
+        return True
+    if text_l in ("hv", "highvoltage") and prop_l in ("high", "voltage", "highvoltage", "hv"):
+        return True
     if prop_l in ("freq", "frequency") and text_l in ("freq", "frequency"):
         return True
     if prop_l in ("width", "wide") and text_l in ("width", "wide"):
@@ -802,6 +903,19 @@ def _property_token_matches(prop_tok: str, text_tok: str) -> bool:
     # Plural and verb inflection stemming (e.g. abandon/abandons/abandoned, wait/waits, command/commands)
     if prop_l.rstrip('s') == text_l.rstrip('s') and len(prop_l.rstrip('s')) >= 3:
         return True
+    # Antonym check: do not match words with contradictory negation prefixes
+    antonym_prefixes = ("dis", "un", "non", "anti")
+    for pref in antonym_prefixes:
+        if (text_l.startswith(pref) and not prop_l.startswith(pref)) or (prop_l.startswith(pref) and not text_l.startswith(pref)):
+            if prop_l.startswith(pref):
+                base_prop = prop_l[len(pref):]
+                if base_prop and (text_l == base_prop or text_l.startswith(base_prop)):
+                    return False
+            if text_l.startswith(pref):
+                base_text = text_l[len(pref):]
+                if base_text and (prop_l == base_text or prop_l.startswith(base_text)):
+                    return False
+
     if len(prop_l) >= 4 and len(text_l) >= 4:
         if (text_l.startswith(prop_l) or prop_l.startswith(text_l)) and abs(len(prop_l) - len(text_l)) <= 3:
             return True
@@ -889,6 +1003,7 @@ class SchemaGroundTruth:
     declared_ast_nodes: Set[str] = field(default_factory=set)
     declared_parts: Set[str] = field(default_factory=set)
     declared_frequencies: Set[str] = field(default_factory=set)
+    part_tokens: Dict[str, List[str]] = field(default_factory=dict)
 
     def to_typed_parameter_dictionary(self) -> Dict[str, Any]:
         """
@@ -1257,6 +1372,8 @@ class FactualGroundingValidator(IValidator):
         tokens = _tokenize_identifier(name)
         if _is_nominal_name(name, tokens):
             bound_type = "nominal"
+        elif abs(limit_val) < 1e-6 and not _is_upper_bound_name(name, tokens):
+            bound_type = "nominal"
 
         name_norm = _normalize_name(name)
         gt.numeric_limits[name_norm] = (limit_val, unit)
@@ -1521,13 +1638,11 @@ class FactualGroundingValidator(IValidator):
         is_item_def: bool = False
     ) -> None:
         if not is_item_def:
-            item_pattern = re.compile(r'\bitem\s+(?:def\s+)?([a-zA-Z0-9_]+)\s*\{([^}]*)\}', re.DOTALL)
+            item_blocks = _find_balanced_blocks(text, "item")
             item_spans: List[Tuple[int, int]] = []
-            for match in item_pattern.finditer(text):
-                item_spans.append((match.start(), match.end()))
-                iname = match.group(1).strip()
+            for iname, ibody, istart, iend in item_blocks:
+                item_spans.append((istart, iend))
                 iname_norm = _normalize_name(iname)
-                ibody = match.group(2)
                 if iname_norm:
                     gt.declared_ast_nodes.add(iname_norm)
                     for tok in _tokenize_identifier(iname):
@@ -1547,22 +1662,28 @@ class FactualGroundingValidator(IValidator):
                 text = _mask_spans(text, item_spans)
 
         attr_pattern = re.compile(
-            r'\battribute\s+(?:def\s+)?([a-zA-Z0-9_]+)(?:\s*:\s*([a-zA-Z0-9_<>:]+))?\s*=\s*([^;]+);'
+            r'\battribute\s+(?:def\s+)?([a-zA-Z0-9_]+)(?:\s*:\s*([a-zA-Z0-9_<>:]+))?(?:\s*=\s*([^;]+))?;'
         )
         for match in attr_pattern.finditer(text):
             name = match.group(1).strip()
             type_str = match.group(2).strip() if match.group(2) else ""
-            raw_val = match.group(3).strip()
-            val_clean = raw_val.strip('"\'`')
+            raw_val = match.group(3).strip() if match.group(3) else None
 
             name_norm = _normalize_name(name)
-            gt.attributes[name_norm] = val_clean
-            gt.declared_ast_nodes.add(name_norm)
-            gt.declared_ast_nodes.add(_normalize_name(val_clean))
+            if not name_norm:
+                continue
 
+            gt.declared_ast_nodes.add(name_norm)
             tokens = _tokenize_identifier(name)
             for t in tokens:
                 gt.declared_ast_nodes.add(t)
+
+            if raw_val is None:
+                continue
+
+            val_clean = raw_val.strip('"\'`')
+            gt.attributes[name_norm] = val_clean
+            gt.declared_ast_nodes.add(_normalize_name(val_clean))
 
             # Signal message payload fields in item defs are data structure fields, NOT physical system operational limits or counts.
             if is_item_def:
@@ -1586,6 +1707,10 @@ class FactualGroundingValidator(IValidator):
                     if root_tokens:
                         root_key = "".join(root_tokens)
                         gt.structural_attributes[root_key] = int_val
+                    if owner:
+                        gt.structural_attributes[f"{owner}_{name_norm}"] = int_val
+                        if root_tokens:
+                            gt.structural_attributes[f"{owner}_{root_key}"] = int_val
             elif (scalar is None or type_str.lower() in ("string", "str")) and _is_config_target(name):
                 gt.structural_attributes[name_norm] = val_clean
                 root_tokens = [t for t in tokens if t not in ("configuration", "config", "type", "mode", "layout", "geometry", "architecture", "topology", "arrangement")]
@@ -1606,23 +1731,67 @@ class FactualGroundingValidator(IValidator):
                     bound_type = "upper"
                 self._register_numeric_limit(gt, name, limit_val, unit, bound_type, owner=owner)
 
+    def _extract_part_recursive(self, name: str, body: str, gt: SchemaGroundTruth) -> None:
+        """
+        Recursively extracts nested part defs, ports, items, and attributes
+        with strict component scoping.
+        """
+        pname_norm = _normalize_name(name)
+        if pname_norm:
+            gt.declared_parts.add(pname_norm)
+            gt.declared_ast_nodes.add(pname_norm)
+            part_tokens = _tokenize_identifier(name)
+            for tok in part_tokens:
+                gt.declared_ast_nodes.add(tok)
+                if tok not in NON_HARDWARE_GENERIC_TOKENS and tok not in STOP_WORDS_AND_DETERMINERS and len(tok) >= 3:
+                    gt.declared_parts.add(tok)
+            if hasattr(gt, "part_tokens"):
+                gt.part_tokens[pname_norm] = part_tokens
+
+        # 1. Extract child parts recursively
+        child_parts = _find_balanced_blocks(body, "part")
+        child_spans: List[Tuple[int, int]] = []
+        for cname, cbody, cstart, cend in child_parts:
+            child_spans.append((cstart, cend))
+            self._extract_part_recursive(cname, cbody, gt)
+
+        # 2. Extract child items (item def)
+        child_items = _find_balanced_blocks(body, "item")
+        item_spans: List[Tuple[int, int]] = []
+        for iname, ibody, istart, iend in child_items:
+            item_spans.append((istart, iend))
+            iname_norm = _normalize_name(iname)
+            if iname_norm:
+                gt.declared_ast_nodes.add(iname_norm)
+                for tok in _tokenize_identifier(iname):
+                    gt.declared_ast_nodes.add(tok)
+            self._extract_sysml_attributes_from_block(ibody, gt, owner=iname_norm, is_item_def=True)
+
+        # 3. Extract ports
+        port_pattern = re.compile(r'\b(?:in|out|inout)?\s*port\s+([a-zA-Z0-9_]+)\b')
+        for m_port in port_pattern.finditer(body):
+            port_name = m_port.group(1).strip()
+            if port_name:
+                gt.declared_ast_nodes.add(_normalize_name(port_name))
+
+        # 4. Extract this part's own attributes (masking child parts and items)
+        masked_body = _mask_spans(body, child_spans + item_spans)
+        self._extract_sysml_attributes_from_block(masked_body, gt, owner=pname_norm, is_item_def=False)
 
     def _extract_from_sysml(self, text: str, gt: SchemaGroundTruth) -> None:
         """
         Generic AST extraction for SysML attribute definitions with component scoping:
         Ingests ANY typed attribute into gt.structural_attributes and/or gt.numeric_limits
-        with owning component tracking.
+        with owning component tracking using balanced brace block extraction.
         Differentiates physical/logical component definitions (part def) and package constraints
         from signal message payload item definitions (item def).
         """
         # 1. Ingest item definitions (signal message payload fields - excluded from numeric limits)
-        item_pattern = re.compile(r'\bitem\s+(?:def\s+)?([a-zA-Z0-9_]+)\s*\{([^}]*)\}', re.DOTALL)
+        item_blocks = _find_balanced_blocks(text, "item")
         item_spans: List[Tuple[int, int]] = []
-        for match in item_pattern.finditer(text):
-            item_spans.append((match.start(), match.end()))
-            iname = match.group(1).strip()
+        for iname, ibody, istart, iend in item_blocks:
+            item_spans.append((istart, iend))
             iname_norm = _normalize_name(iname)
-            ibody = match.group(2)
             if iname_norm:
                 gt.declared_ast_nodes.add(iname_norm)
                 for tok in _tokenize_identifier(iname):
@@ -1638,28 +1807,14 @@ class FactualGroundingValidator(IValidator):
                 for tok in _tokenize_identifier(iname):
                     gt.declared_ast_nodes.add(tok)
 
-        # 2. Ingest part definitions directly from SysML text with their bodies
-        part_pattern = re.compile(r'\bpart\s+(?:def\s+)?([a-zA-Z0-9_]+)\s*\{([^}]*)\}', re.DOTALL)
+        # 2. Ingest part definitions directly from SysML text with balanced braces
+        part_blocks = _find_balanced_blocks(text, "part")
         part_spans: List[Tuple[int, int]] = []
-        for match in part_pattern.finditer(text):
-            part_spans.append((match.start(), match.end()))
-            pname = match.group(1).strip()
-            pname_norm = _normalize_name(pname)
-            pbody = match.group(2)
-            if pname_norm:
-                gt.declared_parts.add(pname_norm)
-                gt.declared_ast_nodes.add(pname_norm)
-                for tok in _tokenize_identifier(pname):
-                    gt.declared_ast_nodes.add(tok)
-                    if tok not in NON_HARDWARE_GENERIC_TOKENS and len(tok) >= 3:
-                        gt.declared_parts.add(tok)
-            self._extract_sysml_attributes_from_block(pbody, gt, owner=pname_norm, is_item_def=False)
+        for pname, pbody, pstart, pend in part_blocks:
+            part_spans.append((pstart, pend))
+            self._extract_part_recursive(pname, pbody, gt)
 
-        # 3. Ingest package-level attributes (outside part defs AND outside item defs)
-        top_level_text = _mask_spans(text, part_spans + item_spans)
-        self._extract_sysml_attributes_from_block(top_level_text, gt, owner=None, is_item_def=False)
-
-        # 4. Ingest any remaining part declarations without block braces
+        # 3. Ingest bare part declarations without block braces
         bare_part_pattern = re.compile(r'\bpart\s+(?:def\s+)?([a-zA-Z0-9_]+)\b')
         for match in bare_part_pattern.finditer(text):
             pname = match.group(1).strip()
@@ -1669,8 +1824,12 @@ class FactualGroundingValidator(IValidator):
                 gt.declared_ast_nodes.add(pname_norm)
                 for tok in _tokenize_identifier(pname):
                     gt.declared_ast_nodes.add(tok)
-                    if tok not in NON_HARDWARE_GENERIC_TOKENS and len(tok) >= 3:
+                    if tok not in NON_HARDWARE_GENERIC_TOKENS and tok not in STOP_WORDS_AND_DETERMINERS and len(tok) >= 3:
                         gt.declared_parts.add(tok)
+
+        # 4. Ingest package-level attributes (outside part defs AND outside item defs)
+        top_level_text = _mask_spans(text, part_spans + item_spans)
+        self._extract_sysml_attributes_from_block(top_level_text, gt, owner=None, is_item_def=False)
 
     def _ingest_sysml_package(self, pkg: Any, gt: SchemaGroundTruth) -> None:
         """Recursively ingests elements from a parsed SysMLPackage using generic AST extraction."""
@@ -1716,7 +1875,7 @@ class FactualGroundingValidator(IValidator):
                 gt.declared_ast_nodes.add(pname_norm)
                 for tok in _tokenize_identifier(pname):
                     gt.declared_ast_nodes.add(tok)
-                    if tok not in NON_HARDWARE_GENERIC_TOKENS and len(tok) >= 3:
+                    if tok not in NON_HARDWARE_GENERIC_TOKENS and tok not in STOP_WORDS_AND_DETERMINERS and len(tok) >= 3:
                         gt.declared_parts.add(tok)
             for port in getattr(part, "ports", []) or []:
                 port_name = getattr(port, "name", "")
@@ -1855,7 +2014,7 @@ class FactualGroundingValidator(IValidator):
                                 singular = root_tokens[-1].rstrip("s")
                                 gt.structural_attributes["".join(root_tokens[:-1] + [singular])] = int_val
                             for t in tokens:
-                                if t not in NON_HARDWARE_GENERIC_TOKENS and len(t) >= 3:
+                                if t not in NON_HARDWARE_GENERIC_TOKENS and t not in STOP_WORDS_AND_DETERMINERS and len(t) >= 3:
                                     gt.declared_parts.add(t)
                     elif (scalar is None or type_hint.lower() in ("string", "str")) and _is_config_target(k):
                         gt.structural_attributes[k_norm] = clean_v
@@ -1923,7 +2082,7 @@ class FactualGroundingValidator(IValidator):
                         if root_tokens:
                             gt.structural_attributes["".join(root_tokens)] = int_val
                         for t in tokens:
-                            if t not in NON_HARDWARE_GENERIC_TOKENS and len(t) >= 3:
+                            if t not in NON_HARDWARE_GENERIC_TOKENS and t not in STOP_WORDS_AND_DETERMINERS and len(t) >= 3:
                                 gt.declared_parts.add(t)
                 num_range = _extract_numeric_range(clean_v)
                 if num_range is not None and (unit or any(t in tokens for t in ("limit", "max", "min", "minimum", "low", "lower", "floor", "ceiling", "high", "load", "accel", "bound", "threshold"))):
@@ -1967,6 +2126,8 @@ class FactualGroundingValidator(IValidator):
             or "/designs/" in f"/{norm_rel}"
             or norm_rel.startswith("docs/management/")
             or "/management/" in f"/{norm_rel}"
+            or norm_rel.startswith("docs/research/")
+            or "/research/" in f"/{norm_rel}"
         ):
             return True
         f_lower = filename.lower()
@@ -2555,10 +2716,10 @@ class FactualGroundingValidator(IValidator):
             if not is_normative:
                 continue
 
-            # Track block/paragraph citation comments (e.g. <!-- Source: ... -->)
-            if re.search(r'<!--\s*(?:Source|SSOT|Grounding|Reference):\s*[^>]+-->', line_str, re.I):
+            # Track block/paragraph citation comments (e.g. <!-- Source: ... --> or SSOT: ...)
+            if re.search(r'(?:<!--|%%|//|#|\b)\s*(?:Source|SSOT|Grounding|Reference):\s*[^>\n]+', line_str, re.I):
                 current_citation = line_str
-                if re.match(r'^\s*<!--\s*(?:Source|SSOT|Grounding|Reference):\s*[^>]+-->\s*$', line_str, re.I):
+                if re.match(r'^\s*(?:<!--|%%|//|#|\b)\s*(?:Source|SSOT|Grounding|Reference):\s*[^>\n]+(?:-->)?\s*$', line_str, re.I):
                     continue
 
             # Skip rejected trade study rows
@@ -2597,6 +2758,19 @@ class FactualGroundingValidator(IValidator):
                     num_start = m_count.start(1)
                     num_end = m_count.end(1)
                     if _is_protocol_or_standard_number(line_str, num_start, num_end, claimed_count):
+                        continue
+
+                    # Ignore fractional floating point numbers (e.g. 8.0 V servo power rail)
+                    if (num_start > 0 and line_str[num_start - 1] in ('.', ',')) or (
+                        num_end < len(line_str)
+                        and line_str[num_end] in ('.', ',')
+                        and num_end + 1 < len(line_str)
+                        and line_str[num_end + 1].isdigit()
+                    ):
+                        continue
+
+                    valid_counts = {v for k, v in gt.structural_attributes.items() if isinstance(v, int) and (k == entity_key or k.endswith(entity_key) or entity_key.endswith(k) or (len(entity_key) >= 4 and entity_key in k))}
+                    if claimed_count in valid_counts:
                         continue
 
                     if claimed_count != expected_count:
@@ -2837,9 +3011,9 @@ class FactualGroundingValidator(IValidator):
                 continue
 
             # Track block/paragraph citation comments (e.g. <!-- Source: ... --> or %% Source: ... or // Source: ...)
-            if re.search(r'(?:<!--|%%|//|#)\s*(?:Source|SSOT|Grounding|Reference):\s*[^>\n]+', line_str, re.I):
+            if re.search(r'(?:<!--|%%|//|#|\b)\s*(?:Source|SSOT|Grounding|Reference):\s*[^>\n]+', line_str, re.I):
                 current_citation = line_str
-                if re.match(r'^\s*(?:<!--|%%|//|#)\s*(?:Source|SSOT|Grounding|Reference):\s*[^>\n]+(?:-->)?\s*$', line_str, re.I):
+                if re.match(r'^\s*(?:<!--|%%|//|#|\b)\s*(?:Source|SSOT|Grounding|Reference):\s*[^>\n]+(?:-->)?\s*$', line_str, re.I):
                     continue
 
             # Skip rejected trade study rows
@@ -2891,6 +3065,10 @@ class FactualGroundingValidator(IValidator):
                 canon_unit = ISO_80000_PHYSICAL_UNITS.get(unit_raw.lower())
                 if canon_unit is None:
                     # Non-dimensional prose: words that are not physical units are ignored
+                    continue
+
+                # Mathematical dimensional descriptors (e.g. 1D, 2D, 3D, 4D spatial volume/containment)
+                if canon_unit == "d" and unit_raw in ("D", "d") and val_range_str in ("1", "2", "3", "4", "5", "6"):
                     continue
 
                 numbers = [float(n) for n in re.findall(r'\d+(?:\.\d+)?', val_range_str)]
@@ -2980,7 +3158,7 @@ class FactualGroundingValidator(IValidator):
                                 return False
                             if any(t in owner_toks for t in _tokenize_identifier(p)):
                                 return False
-                            if p in NON_HARDWARE_GENERIC_TOKENS or p_norm in NON_HARDWARE_GENERIC_TOKENS:
+                            if p in NON_HARDWARE_GENERIC_TOKENS or p_norm in NON_HARDWARE_GENERIC_TOKENS or p in STOP_WORDS_AND_DETERMINERS:
                                 return False
                             if p in target_toks or re.search(r'\b' + re.escape(p) + r'\b', target_str, re.I):
                                 return True
@@ -2996,6 +3174,10 @@ class FactualGroundingValidator(IValidator):
                         if other_parts_in_line and not owner_in_line:
                             continue
 
+                        other_parts_in_heading = {p for p in gt.declared_parts if _is_other_part(p, current_heading, heading_tokens)}
+                        if other_parts_in_heading and not owner_in_heading and not (metric_owner_norm in _normalize_name(local_clause)):
+                            continue
+
                         strong_token_match = (
                             len(metric.meaningful_tokens) >= 2 and
                             all(any(_property_token_matches(pt, lt) for lt in line_tokens) for pt in metric.meaningful_tokens)
@@ -3003,15 +3185,37 @@ class FactualGroundingValidator(IValidator):
 
                         if not (owner_in_line or owner_in_heading or strong_token_match):
                             continue
+                    else:
+                        other_parts_in_line = {
+                            p for p in gt.declared_parts
+                            if p not in NON_HARDWARE_GENERIC_TOKENS and p not in STOP_WORDS_AND_DETERMINERS and len(p) >= 3
+                            and (p in line_tokens or re.search(r'\b' + re.escape(p) + r'\b', line_str, re.I))
+                        }
+                        if other_parts_in_line:
+                            strong_token_match = (
+                                len(metric.meaningful_tokens) >= 2 and
+                                all(any(_property_token_matches(pt, lt) for lt in line_tokens) for pt in metric.meaningful_tokens)
+                            ) if metric.meaningful_tokens else False
+                            if not strong_token_match:
+                                continue
 
                     # Property Token Specificity
                     token_matches = any(
                         any(_property_token_matches(t, lt) for lt in line_tokens)
                         for t in metric.meaningful_tokens
+                        if t not in NON_HARDWARE_GENERIC_TOKENS
                     )
                     if not token_matches:
                         if metric.owner and owner_in_line:
-                            token_matches = True
+                            distinguishing_tokens = [
+                                t for t in metric.meaningful_tokens
+                                if t not in NON_HARDWARE_GENERIC_TOKENS and t not in (
+                                    "deg", "ms", "w", "v", "a", "s", "m", "angle", "speed",
+                                    "power", "voltage", "current", "time", "rate", "limit", "max", "min"
+                                )
+                            ]
+                            if not distinguishing_tokens or any(any(_property_token_matches(dt, lt) for lt in line_tokens) for dt in distinguishing_tokens):
+                                token_matches = True
                         elif metric.unit == "g":
                             g_context = any(t in line_tokens for t in ("launch", "load", "accel", "acceleration", "gload", "rail", "profile", "catapult"))
                             if not g_context:
@@ -3020,22 +3224,109 @@ class FactualGroundingValidator(IValidator):
                         else:
                             continue
 
+                    # Distinguishing Token Specificity
+                    distinguishing_tokens = [
+                        t for t in metric.meaningful_tokens
+                        if t not in NON_HARDWARE_GENERIC_TOKENS and t not in STOP_WORDS_AND_DETERMINERS and t not in (
+                            "deg", "ms", "w", "v", "a", "s", "m", "kg", "bar", "hz", "khz", "mhz", "ghz",
+                            "angle", "speed", "power", "voltage", "current", "time", "rate", "limit", "max", "min",
+                            "nominal", "bound", "threshold", "ceiling", "floor", "high", "low", "value", "val", "tolerance"
+                        )
+                    ]
+                    if distinguishing_tokens:
+                        has_distinguishing_match = any(
+                            any(_property_token_matches(dt, lt) for lt in line_tokens)
+                            for dt in distinguishing_tokens
+                        )
+                        if not has_distinguishing_match:
+                            continue
+
                     candidate_metrics.append(metric)
 
                 if not candidate_metrics:
                     # Check if this physical quantity corresponds to a declared AST attribute node in the schema
                     is_declared_ast_property = False
+
+                    # Declared design choices & ConOps declared assumptions
+                    if re.search(r'(?:\[|\()\s*TIER-3:\s*DESIGN(?:-CHOICE)?\b', line_str, re.I):
+                        is_declared_ast_property = True
+                    elif re.search(r'(?:<!--|\(|\[)\s*Declared\s+Assumption\b', line_str, re.I):
+                        is_declared_ast_property = True
+                    elif canon_unit == "%" and (abs(min_claimed - 100.0) < 1e-4 or re.search(r'\b(?:%|percent)\s+of\b', search_line, re.I)):
+                        is_declared_ast_property = True
+
+                    # Universal physical constants of nature (e.g. standard gravitational acceleration g = 9.81 m/s^2)
+                    if canon_unit in ("m/s^2", "m/s") and abs(min_claimed - 9.81) < 0.05:
+                        is_declared_ast_property = True
+
                     unit_aliases = [u for u, c in ISO_80000_PHYSICAL_UNITS.items() if c == canon_unit]
-                    for node in gt.declared_ast_nodes:
-                        for u in unit_aliases:
-                            if node.endswith(u) and len(node) > len(u):
-                                prefix = node[:-len(u)]
-                                prefix_toks = _tokenize_identifier(prefix)
-                                if any(any(_property_token_matches(pt, lt) for lt in line_tokens) for pt in prefix_toks if pt not in NON_HARDWARE_GENERIC_TOKENS):
+                    if not is_declared_ast_property:
+                        for node in gt.declared_ast_nodes:
+                            for u in unit_aliases:
+                                if node.endswith(u) and len(node) > len(u):
+                                    prefix = node[:-len(u)]
+                                    prefix_toks = _tokenize_identifier(prefix)
+                                    if any(any(_property_token_matches(pt, lt) for lt in line_tokens) for pt in prefix_toks if pt not in NON_HARDWARE_GENERIC_TOKENS):
+                                        is_declared_ast_property = True
+                                        break
+                            if is_declared_ast_property:
+                                break
+
+                    # Check interval containment against paired schema min/max limits
+                    if not is_declared_ast_property:
+                        matching_limits = [
+                            sl for sl in gt.scoped_numeric_limits
+                            if (ISO_80000_PHYSICAL_UNITS.get(sl.unit.lower()) if sl.unit else "") == canon_unit
+                        ]
+                        low_bounds = [sl.limit_val for sl in matching_limits if sl.bound_type == "lower"]
+                        high_bounds = [sl.limit_val for sl in matching_limits if sl.bound_type == "upper"]
+                        if low_bounds and high_bounds:
+                            min_b = min(low_bounds)
+                            max_b = max(high_bounds)
+                            if min_b - 1e-6 <= min_claimed and max_claimed <= max_b + 1e-6:
+                                is_declared_ast_property = True
+
+                    # Check if claimed quantity matches any declared attribute value in schema AST (including nominals)
+                    if not is_declared_ast_property:
+                        for sl in gt.scoped_numeric_limits:
+                            sl_canon = ISO_80000_PHYSICAL_UNITS.get(sl.unit.lower(), sl.unit.lower()) if sl.unit else ""
+                            if sl_canon == canon_unit:
+                                if min_claimed - 1e-6 <= sl.limit_val <= max_claimed + 1e-6:
                                     is_declared_ast_property = True
                                     break
-                        if is_declared_ast_property:
-                            break
+
+                    # Check if claimed quantity is declared in schema raw text or test case objectives
+                    if not is_declared_ast_property and gt.raw_schema_text:
+                        val_num_str = re.sub(r'\.0+$', '', str(min_claimed))
+                        for u in unit_aliases:
+                            num_re = re.escape(val_num_str)
+                            if re.search(r'\b' + num_re + r'(?:\.0+)?\s*' + re.escape(u) + r'\b', gt.raw_schema_text, re.I):
+                                is_declared_ast_property = True
+                                break
+                            for m_raw in re.finditer(r'\b(\d+(?:\.\d+)?)\s*' + re.escape(u) + r'\b', gt.raw_schema_text, re.I):
+                                try:
+                                    raw_num = float(m_raw.group(1))
+                                    if abs(raw_num - min_claimed) < 1e-4:
+                                        is_declared_ast_property = True
+                                        break
+                                except ValueError:
+                                    pass
+                            if is_declared_ast_property:
+                                break
+
+                    if not is_declared_ast_property:
+                        for attr_name, attr_val in gt.attributes.items():
+                            val_str = str(attr_val).strip()
+                            if claimed_str == val_str:
+                                is_declared_ast_property = True
+                                break
+                            u_str = _extract_unit(val_str, [])
+                            sc = _extract_numeric_scalar(val_str)
+                            if sc is not None and min_claimed - 1e-6 <= sc <= max_claimed + 1e-6:
+                                sc_canon = ISO_80000_PHYSICAL_UNITS.get(u_str.lower(), u_str.lower()) if u_str else ""
+                                if sc_canon == canon_unit:
+                                    is_declared_ast_property = True
+                                    break
 
                     if is_declared_ast_property:
                         continue
@@ -3122,7 +3413,9 @@ class FactualGroundingValidator(IValidator):
                                         min_dist = dist
                                         preceding_bonus = 1.0 if is_preceding else 0.0
 
+                            exact_value_bonus = 25000.0 if (abs(m.limit_val - min_claimed) < 1e-4 or abs(m.limit_val - max_claimed) < 1e-4) else 0.0
                             return (
+                                exact_value_bonus +
                                 c_matches * 10000.0 +
                                 c_ratio * 5000.0 +
                                 adj_matches * 100.0 +
@@ -3137,6 +3430,16 @@ class FactualGroundingValidator(IValidator):
                             candidate_metrics = [m for m in candidate_metrics if _metric_proximity_score(m) >= best_score - 1e-6]
                         else:
                             candidate_metrics = []
+
+                if candidate_metrics:
+                    is_satisfied = any(
+                        (m.bound_type == "lower" and min_claimed >= m.limit_val - 1e-6) or
+                        (m.bound_type == "upper" and max_claimed <= m.limit_val + 1e-6) or
+                        (abs(min_claimed - m.limit_val) < 1e-4 or abs(max_claimed - m.limit_val) < 1e-4)
+                        for m in candidate_metrics
+                    )
+                    if is_satisfied:
+                        continue
 
                 for metric in candidate_metrics:
 
@@ -3333,9 +3636,9 @@ class FactualGroundingValidator(IValidator):
                 continue
 
             # Track block/paragraph citation comments (e.g. <!-- Source: ... --> or %% Source: ... or // Source: ...)
-            if re.search(r'(?:<!--|%%|//|#)\s*(?:Source|SSOT|Grounding|Reference):\s*[^>\n]+', line_str, re.I):
+            if re.search(r'(?:<!--|%%|//|#|\b)\s*(?:Source|SSOT|Grounding|Reference):\s*[^>\n]+', line_str, re.I):
                 current_citation = line_str
-                if re.match(r'^\s*(?:<!--|%%|//|#)\s*(?:Source|SSOT|Grounding|Reference):\s*[^>\n]+(?:-->)?\s*$', line_str, re.I):
+                if re.match(r'^\s*(?:<!--|%%|//|#|\b)\s*(?:Source|SSOT|Grounding|Reference):\s*[^>\n]+(?:-->)?\s*$', line_str, re.I):
                     continue
 
             # Skip rejected trade study rows or evaluation options

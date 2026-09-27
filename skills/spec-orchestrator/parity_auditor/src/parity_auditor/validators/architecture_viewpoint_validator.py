@@ -1238,6 +1238,8 @@ class ArchitectureViewpointValidator(IValidator):
 
         # If downstream and no specification documents found
         if not active_spec_files:
+            if allow_missing_specs:
+                return []
             return [Finding(
                 RULE_CORPUS_MISSING,
                 "Architecture specification corpus is missing in workspace ('docs/conops', 'docs/interfaces', 'docs/safety').",

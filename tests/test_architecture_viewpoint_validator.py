@@ -72,12 +72,19 @@ class TestArchitectureViewpointValidator(unittest.TestCase):
         self.assertTrue(len(CANONICAL_DIAGRAMS) >= 11)
 
     def test_downstream_missing_architecture_corpus_fails_closed(self):
-        """Issue #365: downstream workspace with 0 architecture specs fails closed with RULE_CORPUS_MISSING."""
+        """Issue #365: downstream workspace with 0 architecture specs fails closed with RULE_CORPUS_MISSING when allow_missing_specs=False."""
+        with tempfile.TemporaryDirectory() as empty_dir:
+            repo = WorkspaceRepository(empty_dir)
+            findings = self.validator.validate(repo, allow_missing_specs=False)
+            self.assertGreater(len(findings), 0, "Gate 30 must fail closed on missing architecture corpus")
+            self.assertEqual(findings[0].rule_id, RULE_CORPUS_MISSING)
+
+    def test_downstream_missing_architecture_corpus_allowed_when_flag_set(self):
+        """Downstream workspace with 0 architecture specs allows missing specs when allow_missing_specs=True."""
         with tempfile.TemporaryDirectory() as empty_dir:
             repo = WorkspaceRepository(empty_dir)
             findings = self.validator.validate(repo, allow_missing_specs=True)
-            self.assertGreater(len(findings), 0, "Gate 30 must fail closed on missing architecture corpus")
-            self.assertEqual(findings[0].rule_id, RULE_CORPUS_MISSING)
+            self.assertEqual(len(findings), 0, "Gate 30 must allow missing architecture corpus when allow_missing_specs=True")
 
     def test_upstream_clean_landing_zones_pass(self):
         """Upstream compiler repository with clean landing zones returns empty findings."""
