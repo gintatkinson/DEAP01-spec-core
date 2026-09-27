@@ -4050,8 +4050,10 @@ def parse_sysml(content: str) -> Dict[str, Any]:
         "operation_defs": [],
         "interaction_defs": [],
         "constraint_defs": [],
+        "hazard_defs": [],
         "test_case_defs": [],
         "requirement_defs": [],
+        "requirement_annotations": {},
         "state_defs": [],
         "use_case_defs": [],
         "item_defs": [],
@@ -4061,6 +4063,20 @@ def parse_sysml(content: str) -> Dict[str, Any]:
         "operational_scenarios": [],
         "operational_nodes": []
     }
+
+    # Extract requirement annotations for referential integrity checking
+    req_block_pat = re.compile(r'(?:((?:@[a-zA-Z0-9_]+(?:\([^)]*\))?\s*)*))\brequirement\s+(?:def\s+)?([a-zA-Z0-9_]+)\s*(?:\{([^}]*)\}|;)')
+    for r_match in req_block_pat.finditer(content):
+        prefix = r_match.group(1) or ""
+        r_name = r_match.group(2)
+        r_body = (r_match.group(3) or "") + " " + prefix
+        realises = re.findall(r'@SafetyRealises\s*\(\s*(?:requirement\s*=\s*)?["\']?([a-zA-Z0-9_\-]+)["\']?', r_body)
+        hazards = re.findall(r'@TriggersHazard\s*\(\s*(?:id\s*=\s*)?["\']?([a-zA-Z0-9_\-]+)["\']?', r_body)
+        if r_name not in ast["requirement_annotations"]:
+            ast["requirement_annotations"][r_name] = {"safety_realises": list(realises), "triggers_hazard": list(hazards)}
+        else:
+            ast["requirement_annotations"][r_name]["safety_realises"].extend(realises)
+            ast["requirement_annotations"][r_name]["triggers_hazard"].extend(hazards)
 
     if SysMLParser is not None:
         try:
@@ -4093,6 +4109,10 @@ def parse_sysml(content: str) -> Dict[str, Any]:
                 for c in p.constraint_defs:
                     if c.name not in ast["constraint_defs"]:
                         ast["constraint_defs"].append(c.name)
+                for h in (getattr(p, "hazard_defs", []) or []):
+                    h_name = getattr(h, "name", "")
+                    if h_name and h_name not in ast["hazard_defs"]:
+                        ast["hazard_defs"].append(h_name)
                 for tc in p.test_case_defs:
                     if tc.name not in ast["test_case_defs"]:
                         ast["test_case_defs"].append(tc.name)
@@ -4145,6 +4165,10 @@ def parse_sysml(content: str) -> Dict[str, Any]:
                 for c in part.constraints:
                     if c.name not in ast["constraint_defs"]:
                         ast["constraint_defs"].append(c.name)
+                for hz in (getattr(part, "hazards", []) or []):
+                    hz_name = getattr(hz, "name", "")
+                    if hz_name and hz_name not in ast["hazard_defs"]:
+                        ast["hazard_defs"].append(hz_name)
                 for tc in part.test_cases:
                     if tc.name not in ast["test_case_defs"]:
                         ast["test_case_defs"].append(tc.name)
@@ -4168,6 +4192,22 @@ def parse_sysml(content: str) -> Dict[str, Any]:
                     _extract_from_part(sub_part)
 
             _extract_from_pkg(pkg)
+            if hasattr(pkg, "get_all_hazards"):
+                for hz in (pkg.get_all_hazards() or []):
+                    hz_name = getattr(hz, "name", "")
+                    if hz_name and hz_name not in ast["hazard_defs"]:
+                        ast["hazard_defs"].append(hz_name)
+            if hasattr(pkg, "get_all_constraints"):
+                for c in (pkg.get_all_constraints() or []):
+                    c_name = getattr(c, "name", "")
+                    if c_name and c_name not in ast["constraint_defs"]:
+                        ast["constraint_defs"].append(c_name)
+            for match in re.finditer(r'\b(?:assert\s+constraint|constraint\s+(?:def)?)\s+([a-zA-Z0-9_\-]+)', content):
+                if match.group(1) not in ast["constraint_defs"]:
+                    ast["constraint_defs"].append(match.group(1))
+            for match in re.finditer(r'\bhazard\s+(?:def\s+)?([a-zA-Z0-9_\-]+)', content):
+                if match.group(1) not in ast["hazard_defs"]:
+                    ast["hazard_defs"].append(match.group(1))
             op_act_names = set(pkg_action_names)
             for name in ast["action_defs"]:
                 if re.search(r'\bOA[-_]?\d+', name, re.IGNORECASE):
@@ -4209,9 +4249,12 @@ def parse_sysml(content: str) -> Dict[str, Any]:
     for match in re.finditer(r'\binteraction\s+(?:def\s+)?([a-zA-Z0-9_]+)', content):
         if match.group(1) not in ast["interaction_defs"]:
             ast["interaction_defs"].append(match.group(1))
-    for match in re.finditer(r'\b(?:assert\s+constraint|constraint\s+(?:def)?)\s+([a-zA-Z0-9_]+)', content):
+    for match in re.finditer(r'\b(?:assert\s+constraint|constraint\s+(?:def)?)\s+([a-zA-Z0-9_\-]+)', content):
         if match.group(1) not in ast["constraint_defs"]:
             ast["constraint_defs"].append(match.group(1))
+    for match in re.finditer(r'\bhazard\s+(?:def\s+)?([a-zA-Z0-9_\-]+)', content):
+        if match.group(1) not in ast["hazard_defs"]:
+            ast["hazard_defs"].append(match.group(1))
     for match in re.finditer(r'\btest\s+case\s+(?:def\s+)?([a-zA-Z0-9_]+)', content):
         if match.group(1) not in ast["test_case_defs"]:
             ast["test_case_defs"].append(match.group(1))
@@ -4307,7 +4350,49 @@ def enforce_pipeline0_compilation_gate(schema_path: Optional[str] = None, output
     if total_elements == 0:
         print(f"Error: Schema file {schema_path} contains 0 structural elements.", file=sys.stderr)
         return 1
-        
+
+    try:
+        with open(schema_path, "r", encoding="utf-8") as f:
+            raw_content = f.read()
+    except Exception as e:
+        print(f"Error reading schema file {schema_path}: {e}", file=sys.stderr)
+        return 1
+
+    ast = parse_sysml(raw_content)
+
+    # Enforce referential integrity on requirement annotations
+    known_constraints = set(ast.get("constraint_defs", []))
+    if hasattr(pkg, "get_all_constraints"):
+        for c in (pkg.get_all_constraints() or []):
+            c_name = getattr(c, "name", "")
+            if c_name:
+                known_constraints.add(c_name)
+    known_hazards = set(ast.get("hazard_defs", []))
+    if hasattr(pkg, "get_all_hazards"):
+        for h in (pkg.get_all_hazards() or []):
+            h_name = getattr(h, "name", "")
+            if h_name:
+                known_hazards.add(h_name)
+
+    clean_constraints = {c.replace("-", "_") for c in known_constraints}
+    clean_hazards = {h.replace("-", "_") for h in known_hazards}
+
+    dangling = []
+    for req_name, ann in ast.get("requirement_annotations", {}).items():
+        for uca in ann.get("safety_realises", []):
+            clean_uca = uca.replace("-", "_")
+            if not any(clean_uca in c for c in clean_constraints) and clean_uca not in clean_constraints:
+                dangling.append(f"Requirement '{req_name}' references undefined UCA '{uca}' in @SafetyRealises")
+        for haz in ann.get("triggers_hazard", []):
+            clean_haz = haz.replace("-", "_")
+            if not any(clean_haz in h for h in clean_hazards) and clean_haz not in clean_hazards:
+                dangling.append(f"Requirement '{req_name}' references undefined Hazard '{haz}' in @TriggersHazard")
+
+    if dangling:
+        for err in dangling:
+            print(f"Error: Referential integrity violation: {err}", file=sys.stderr)
+        return 1
+
     try:
         sysml_text = pkg.to_sysml() if hasattr(pkg, "to_sysml") else ""
         _atomic_write_file(output_path, sysml_text)
