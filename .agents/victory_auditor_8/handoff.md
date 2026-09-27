@@ -1,55 +1,96 @@
-# Handoff Report — Independent Victory Audit of Fleet-Wide Pipeline Propagation & Baseline Parity
+# Handoff Report: WP-04b Independent Victory Audit
 
-**Auditor Agent**: `victory_auditor_8`  
-**Role**: Independent Victory Auditor (`critic`, `specialist`, `auditor`, `victory_verifier`)  
-**Parent Sentinel ID**: `5fa3c628-16c9-4c40-be80-9ed51b9fc710`  
-**Target Milestone**: Fleet-wide pipeline propagation and parity verification across `DEAP01-spec-core`, `uav-009`, and `uav-011`  
-**Authoritative User Request**: `/Users/perkunas/jail/DEAP01-spec-core/.agents/ORIGINAL_REQUEST.md` (header `## 2026-09-27T07:04:27Z`)  
-**Verdict**: **VICTORY CONFIRMED**
+- **Work Product**: Commit `28649259efccec02a7fde7ab2f92b8d63099daca` (`2864925`)
+- **Target Workspace**: `/Users/perkunas/jail/DEAP01-spec-core`
+- **Work Package**: WP-04b (Independent Victory Audit)
+- **Assigned Auditor**: `victory_auditor_8` (`.agents/victory_auditor_8/`)
+- **Repository Classification**: `UPSTREAM_SPEC_CORE_COMPILER`
+- **Primary Commercial Toolchain Integration Context**: `MATLAB / Simulink / Stateflow / Embedded Coder`
+- **Date**: 2026-09-27
+- **Verdict**: **VICTORY APPROVED**
+
+---
+
+## Forensic Audit Report
+
+**Work Product**: Commit 2864925 (`README.md`, `scripts/install_pipeline.sh`, `tests/test_readme_scaffolding.py`, `implementation_plan.md`)  
+**Profile**: General Project / Victory Audit  
+**Verdict**: **CLEAN / VICTORY APPROVED**
+
+### Phase Results
+- **Check 1: Remote Tracking Status (`git diff origin/main HEAD`)**: PASS — Exactly 0 bytes diff between HEAD (`2864925`) and `origin/main` (`2864925`). Target source/doc/script files have 0 bytes diff.
+- **Check 2: Scaffolding Test Suite (`python3 -m unittest tests/test_readme_scaffolding.py`)**: PASS — 34/34 tests pass with exit code 0 in 34.567s.
+- **Check 3: Downstream Baseline Verification (`python3 scripts/verify_downstream_baseline.py --no-domain`)**: PASS — All 31 checks pass with exit code 0.
+- **Check 4: Commit Message Neutrality (`python3 scripts/verify_commit_messages.py --head`)**: PASS — Exit code 0, 0 auto-closing verbs detected. Neutral citation `(refs #371, refs #368)` verified.
+- **Check 5: Heading Hierarchy Inspection in `README.md`**: PASS — Section 1.1 (`### 1.1 Primary Commercial Toolchain Integration`, line 19) directly precedes Section 1.2 (`### 1.2 Three-Tier Architecture & Repository Boundaries`, line 23).
+- **Check 6: Three-Tier Architecture Normalization**: PASS — 0 contradictory "Tier 1 Domain" or "Tier 2 Customer" labels across `README.md` and `scripts/install_pipeline.sh`. Clean three-tier hierarchy verified (Tier 1: Upstream Compiler, Tier 2: Domain Distribution Templates, Tier 3: Customer Application Workspaces).
+- **Check 7: Section 9.4 Prompt Execution Boundary Hardening**: PASS — Section 9.4 strictly confines Pipeline 2 prompts to `DOWNSTREAM_CUSTOMER_PROJECT`. Ambiguous references permitting `UPSTREAM_SPEC_CORE_COMPILER` completely purged.
+- **Check 8: Facade / Mock / Integrity Analysis**: PASS — No facade implementations, no dummy tests, no synthetic mocks. Full test suite (`pytest tests/`) passes 297/297 tests cleanly in 227.70s.
 
 ---
 
 ## 1. Observation
 
-### 1.1 R1: Customer Workspace uav-009 Preservation
-- **SysML Model SHA-256 Check**:
-  - Command: `shasum -a 256 /Users/perkunas/jail/uav-009/schema/avenger5_system.sysml && shasum -a 256 /Users/perkunas/jail/uav-009/.pipeline/schema.sysml`
-  - Output:
-    ```text
-    140d4b655a6d3cb0e9073a4d33f8a7f216875dc5f3f5641f6b963ff4adb0b747  /Users/perkunas/jail/uav-009/schema/avenger5_system.sysml
-    140d4b655a6d3cb0e9073a4d33f8a7f216875dc5f3f5641f6b963ff4adb0b747  /Users/perkunas/jail/uav-009/.pipeline/schema.sysml
-    ```
-  - Result: Exact match with expected hash `140d4b655a6d3cb0e9073a4d33f8a7f216875dc5f3f5641f6b963ff4adb0b747`.
-- **Customer Specifications & Defect Dossiers**:
-  - Exactly 69 core specification markdown files (1 Epic, 44 Features, 24 User Stories) plus 6 interface specifications/units are 100% intact.
-  - All 20+ customer defect dossiers and ungrounded claims registers under `docs/reports/` are intact and unmolested.
-  - Zero clobbering detected (Failure Mode 11 strictly respected).
-
-### 1.2 R2: Automated Baseline Gate Verification for uav-009
-- **Command**:
-  ```bash
-  python3 /Users/perkunas/jail/DEAP01-spec-core/scripts/verify_downstream_baseline.py /Users/perkunas/jail/uav-009
+### 1.1 Remote Tracking & Commit Verification
+- Executed `git rev-parse HEAD origin/main`:
   ```
-- **Exit Code**: `0`
-- **Output Snippet**:
-  ```text
+  28649259efccec02a7fde7ab2f92b8d63099daca
+  28649259efccec02a7fde7ab2f92b8d63099daca
+  ```
+  Both local HEAD and remote tracking branch `origin/main` point to identical SHA `2864925`.
+- Executed `git diff origin/main HEAD`:
+  Returns exactly 0 bytes (exit code 0).
+- Executed `git diff origin/main -- README.md scripts/install_pipeline.sh tests/test_readme_scaffolding.py implementation_plan.md`:
+  Returns exactly 0 bytes (exit code 0).
+- Executed `git diff origin/main -- . ':(exclude).agents'`:
+  Returns exactly 0 bytes (exit code 0).
+- Executed `python3 scripts/verify_commit_messages.py --head`:
+  Exited with code 0 (zero violations).
+- Commit log:
+  ```
+  commit 28649259efccec02a7fde7ab2f92b8d63099daca
+  Author: gintatkinson <gintatkinson@gmail.com>
+  Date:   Sun Sep 27 19:11:25 2026 +0300
+
+      docs(readme): normalize architecture tiers, fix heading sequence, and harden repository boundary (refs #371, refs #368)
+
+   README.md                        |  62 +++++----
+   implementation_plan.md           | 287 ++++++++++++++++++---------------------
+   tests/test_readme_scaffolding.py |  58 +++++++-
+   3 files changed, 220 insertions(+), 187 deletions(-)
+  ```
+
+### 1.2 Automated Scaffolding Test Suite Execution
+- Executed `python3 -m unittest tests/test_readme_scaffolding.py`:
+  ```
+  ..................................
+  ----------------------------------------------------------------------
+  Ran 34 tests in 34.567s
+
+  OK
+  ```
+  Exit code 0. Exactly 34 out of 34 tests passed.
+
+### 1.3 Baseline Gate Conformance Verification
+- Executed `python3 scripts/verify_downstream_baseline.py --no-domain`:
+  ```
+  NOTE: Destination path '/Users/perkunas/jail/DEAP01-spec-core' has no pubspec.yaml or package.json. Registering repository root for non-framework baseline checks.
   Success: Check 10 verified (.gitignore exists in repository root).
   Success: Check 11 verified (zero .DS_Store files found).
-  Success: Check 12 verified (no duplicate master core blueprints found).
-  Success: Check 13 verified (KaTeX / LaTeX mathematical syntax valid across all markdown files...).
+  Success: Check 12 verified (Master core / upstream repository detected -- skipping duplicate blueprint check).
+  Success: Check 13 verified (KaTeX / LaTeX mathematical syntax valid across all markdown files, including rules/sysml-ssot-completeness.md).
   Success: Mermaid syntax verified across all markdown files.
   Success: Check 14 verified (README.md, agent instruction entrypoints, and rules/sysml-ssot-completeness.md exist).
   Success: Check 15 verified (scripts/reconcile_backlog.py exists, is non-empty, and is executable).
-  Success: Check 16 verified (Downstream repository detected -- skipping upstream clean landing zone gate).
-  Check 17 AST validation: 128 UCA row(s) parsed, 52 expected Cartesian permutation(s)
-  Success: Check 17 verified (Safety Integrity Quality Gate: 8 pillars, 24 SORA OSOs, FMECA matrix with AST closure, 4 UCA categories, ASTM F3269-17 RTA, and MATLAB/Simulink hooks).
-  Success: Check 18 verified (Downstream repository detected -- skipping upstream blueprint domain cleanliness gate).
-  Success: Check 19 verified (Downstream repository detected -- skipping domain-agnostic AST cleanliness gate).
-  Success: Check 20 verified (WBS & Enterprise Deliverables Suite validated: Markdown structure, CSV RFC 4180 with 12 headers, JSON AST, and zero em dashes).
-  Success: Check 21 verified (Semantic Diagram-to-AST Topology Parity Gate passed -- zero undeclared nodes, inverted flows, or ungrounded actuators).
-  Success: Check 22 verified (Physical Invariant Semantic Prose Gate passed -- zero ungrounded operational assertions).
-  Success: Check 23 verified (Factual Grounding & Numeric Provenance Gate passed -- zero ungrounded assertions).
-  Success: Level 1C ICD Completeness verified (zero dangling ports, 100% port contract parity).
+  Success: Check 16 verified (Upstream distribution template landing zones are clean with zero concrete specs).
+  Success: Check 17 verified (Upstream distribution template safety landing zone is clean).
+  Success: Check 18 verified (Upstream architecture blueprints are clean with zero domain concept papers or sysml models).
+  Success: Check 19 verified (Domain-Agnostic AST Cleanliness & Closed-Grammar Metamodel Gate passed -- pure dynamic schema AST architecture verified).
+  Success: Check 20 verified (WBS & Enterprise Deliverables Suite pending or not present).
+  Success: Check 21 verified (SysML model pending or landing zone clean).
+  Success: Check 22 verified (SysML model pending or landing zone clean).
+  Success: Check 23 verified (SysML model pending or landing zone clean).
+  Success: Level 1C ICD Completeness verified (SysML model pending or landing zone clean).
   Success: Check 24 verified (Operational-to-Resource Allocation passed -- zero orphan activities or phantom allocation tags).
   Success: Check 25 verified (Standards & SI 7D Parameter Metrology passed -- all parameter dimensions, units, and SDO baselines valid).
   Success: Check 25 verified (Cross-Document Diagram Parity Gate passed -- zero disparity in subgraphs, nodes, ports, or connections).
@@ -59,183 +100,113 @@
   Success: Check 28 verified (Coverage-Digest Population Gate passed -- zero phantom realizations).
   Success: Check 29 verified (Obligation-Witness Registry Gate passed -- zero phantom witnesses).
   Success: Check 30 verified (Architecture Viewpoint & Diagram Completeness Gate passed -- all 11 canonical diagrams verified).
-  Success: Check 31 verified (Dual-Schema SSOT Parity Gate passed -- schema/*.sysml and .pipeline/schema.sysml AST definitions are identical).
-  Success: Build and test suite execution passed for '/Users/perkunas/jail/uav-009'. Conformance gate verified.
+  Success: Check 31 verified (Dual-schema SSOT parity gate passed -- single schema or landing zone clean).
+  Success: Build and test suite execution passed for '/Users/perkunas/jail/DEAP01-spec-core'. Conformance gate verified.
+  Cleaning up workspace...
+  Tagging restoration point...
+  Updated tag 'restoration-point' (was d762d87)
   ```
+  Exit code 0. All 31 checks passed.
 
-### 1.3 R3: Git Stage, Commit & Remote Push for uav-009
-- **Commit Neutrality**:
-  - HEAD commit `a85149d`:
-    `chore(pipeline): propagate upstream spec-core fixes and Check 31 SSOT parity gate (refs #378, refs #377, refs #376, refs #375, refs #372, refs #366, refs #365, refs #364, refs #362, refs #361, refs #360, refs #349, refs #286)`
-  - Verification: `python3 /Users/perkunas/jail/uav-009/scripts/verify_commit_messages.py --head` exited with `0`.
-- **Remote Synchronization**:
-  - `git -C /Users/perkunas/jail/uav-009 diff origin/main` returned `0 bytes`.
-  - Working tree: clean (`On branch main, up to date with 'origin/main', nothing to commit`).
-
-### 1.4 R4: Application Workspace uav-011 Clean Landing Zones
-- **Landing Zone Verification**:
-  - `docs/epics/`: `['.gitkeep']`
-  - `docs/features/`: `['.gitkeep']`
-  - `docs/user-stories/`: `['.gitkeep']`
-  - `docs/use-cases/`: `['.gitkeep']`
-  - All specification landing zones maintain 100% clean `.gitkeep` state.
-
-### 1.5 R5: Automated Baseline Gate Verification for uav-011
-- **Command**:
-  ```bash
-  python3 /Users/perkunas/jail/DEAP01-spec-core/scripts/verify_downstream_baseline.py /Users/perkunas/jail/uav-011
+### 1.4 Full Pytest Suite Execution
+- Executed `python3 -m pytest tests/`:
   ```
-- **Exit Code**: `0`
-- **Output Snippet**:
-  ```text
-  Success: Check 10 verified (.gitignore exists in repository root).
-  Success: Check 11 verified (zero .DS_Store files found).
-  Success: Check 12 verified (no duplicate master core blueprints found).
-  Success: Check 13 verified (KaTeX / LaTeX mathematical syntax valid across all markdown files...).
-  Success: Mermaid syntax verified across all markdown files.
-  Success: Check 14 verified (README.md, agent instruction entrypoints, and rules/sysml-ssot-completeness.md exist).
-  Success: Check 15 verified (scripts/reconcile_backlog.py exists, is non-empty, and is executable).
-  Success: Check 16 verified (Downstream repository detected -- skipping upstream clean landing zone gate).
-  Success: Check 17 verified (Downstream repository detected -- safety specifications pending or clean).
-  Success: Check 18 verified (Downstream repository detected -- skipping upstream blueprint domain cleanliness gate).
-  Success: Check 19 verified (Downstream repository detected -- skipping domain-agnostic AST cleanliness gate).
-  Success: Check 20 verified (WBS & Enterprise Deliverables Suite pending or not present).
-  Success: Check 21 verified (Semantic Diagram-to-AST Topology Parity Gate passed -- zero undeclared nodes, inverted flows, or ungrounded actuators).
-  Success: Check 22 verified (Physical Invariant Semantic Prose Gate passed -- zero ungrounded operational assertions).
-  Success: Check 23 verified (Factual Grounding & Numeric Provenance Gate passed -- zero ungrounded assertions).
-  Success: Level 1C ICD Completeness verified (Downstream repository detected -- docs/interfaces/ directory not present).
-  Success: Check 24 verified (Operational-to-Resource Allocation passed -- zero orphan activities or phantom allocation tags).
-  Success: Check 25 verified (Standards & SI 7D Parameter Metrology passed -- all parameter dimensions, units, and SDO baselines valid).
-  Success: Check 25 verified (Cross-Document Diagram Parity Gate passed -- zero disparity in subgraphs, nodes, ports, or connections).
-  Success: Check 26 verified (Downstream repository detected -- docs/conops/ directory not present).
-  Success: Check 27 verified (Cited Research Inventory & Declared-Total Population Register passed).
-  Success: Check 27 verified (Executive Deliverable Traceability Gate passed -- all tables and diagrams anchored to SSOT).
-  Success: Check 28 verified (Coverage-Digest Population Gate passed -- zero phantom realizations).
-  Success: Check 29 verified (Obligation-Witness Registry Gate passed -- zero phantom witnesses).
-  Success: Check 30 verified (Architecture Viewpoint & Diagram Completeness Gate passed -- all 11 canonical diagrams verified).
-  Success: Check 31 verified (Dual-Schema SSOT Parity Gate passed -- schema/*.sysml and .pipeline/schema.sysml AST definitions are identical).
-  Success: Build and test suite execution passed for '/Users/perkunas/jail/uav-011'. Conformance gate verified.
+  ======================= 297 passed in 227.70s (0:03:47) ========================
   ```
+  Exit code 0. Zero failures, zero regressions across 297 tests.
 
-### 1.6 R6: Git Stage, Commit & Remote Push for uav-011
-- **Commit Neutrality**:
-  - HEAD commit `6f4f459`:
-    `chore(pipeline): propagate upstream spec-core fixes and Check 31 SSOT parity gate (refs #378, refs #377, refs #376, refs #375, refs #372, refs #366, refs #365, refs #364, refs #362, refs #361, refs #360, refs #349, refs #286)`
-  - Verification: `python3 /Users/perkunas/jail/uav-011/scripts/verify_commit_messages.py --head` exited with `0`.
-- **Remote Synchronization**:
-  - `git -C /Users/perkunas/jail/uav-011 diff origin/main` returned `0 bytes`.
-  - Working tree: clean (`On branch main, up to date with 'origin/main', nothing to commit`).
-
-### 1.7 R7: Upstream Fleet Parity Matrix in DEAP01-spec-core/HANDOFF.md
-- **Section 2.1 Table Inspection**:
-  - Line 121: `/Users/perkunas/jail/uav-009` | `Downstream Customer Application` | `GitLab (glab)` | `a85149d` | `origin/main` | `Clean (0 bytes diff)` | `All 31/31 Checks (Checks 10-31, including Check 31 Dual-Schema SSOT Parity Gate) empirically PASS with exit code 0`
-  - Line 122: `/Users/perkunas/jail/uav-011` | `Downstream Application Workspace` | `GitLab (glab)` | `6f4f459` | `origin/main` | `Clean (0 bytes diff)` | `All 31/31 Checks (Checks 10-31, including Check 31 Dual-Schema SSOT Parity Gate) empirically PASS with exit code 0 (Clean Landing Zones)`
-  - Recorded commit hashes (`a85149d`, `6f4f459`) and status match live reality.
-- **Commit Neutrality in DEAP01-spec-core**:
-  - `python3 /Users/perkunas/jail/DEAP01-spec-core/scripts/verify_commit_messages.py --head` exited with `0`.
-- **Remote Synchronization in DEAP01-spec-core**:
-  - `git -C /Users/perkunas/jail/DEAP01-spec-core diff origin/main..HEAD` returned `0 bytes`.
-- **Targeted Unit Tests**:
-  - Command: `python3 -m unittest tests/test_check23_factual_grounding_gate.py tests/test_factual_grounding_validator.py tests/test_architecture_viewpoint_validator.py`
-  - Result: Ran 43 tests in 0.185s, `OK` (Exit code `0`).
+### 1.5 Direct File Inspection: Heading Hierarchy & Normalization
+- In `README.md`:
+  - Line 13: `## 1. System Overview`
+  - Line 19: `### 1.1 Primary Commercial Toolchain Integration`
+  - Line 23: `### 1.2 Three-Tier Architecture & Repository Boundaries: Upstream Compiler vs. Domain Templates vs. Customer Workspaces`
+  - Section 1.1 unambiguously precedes Section 1.2.
+- In `README.md` (Sections 1.2 & 5.4) and `scripts/install_pipeline.sh`:
+  - Grep for case-insensitive `"Tier 1 Domain"` across the codebase returned 0 occurrences in `README.md` and 0 occurrences in `scripts/install_pipeline.sh`.
+  - Grep for case-insensitive `"Tier 2 Customer"` across the codebase returned 0 occurrences in `README.md` and 0 occurrences in `scripts/install_pipeline.sh`.
+  - `scripts/install_pipeline.sh` line 882: `As a **Tier 2 Domain Distribution Template**`.
+  - `scripts/install_pipeline.sh` line 952: `As a **Tier 3 Customer Application Workspace**`.
+  - `README.md` line 260-289: Clean Three-Tier architecture ASCII topology diagram and definitions.
+- In `README.md` (Section 9.4):
+  - Line 1094: Explicit execution boundary invariant:
+    `> **Execution Boundary Invariant:** Pipeline 2 prompts are strictly confined to downstream customer application workspaces (DOWNSTREAM_CUSTOMER_PROJECT, e.g. uav-*). Autonomous feature implementation, UI widgets (app_flutter/), real-time robotic nodes (ros2/, px4/), and digital twin simulation engines must NEVER be executed directly within the upstream specification compiler (UPSTREAM_SPEC_CORE_COMPILER)...`
+  - Lines 1105, 1160, 1191: All Worker 2 prompts declare `Repository Classification: DOWNSTREAM_CUSTOMER_PROJECT`.
+  - Exactly 0 occurrences of `(or UPSTREAM_SPEC_CORE_COMPILER depending on execution context)`.
 
 ---
 
 ## 2. Logic Chain
 
-1. **Prior Audit Findings Remediated**:
-   - `victory_auditor_6` previously rejected victory because `verify_downstream_baseline.py` failed on `uav-009` (Check 23 nested property extraction failure) and `uav-011` (Check 17 and Check 30 missing corpus failure on clean landing zones).
-   - In commit `c773e06` in `DEAP01-spec-core`, the team fixed `factual_grounding_validator.py` to extract nested part properties and relaxed exact scalar tolerance, and updated `architecture_viewpoint_validator.py` and `verify_downstream_baseline.py` to support `allow_missing_specs=True` when downstream specifications are pending.
-   - These fixes were then propagated to `uav-009` (commit `a85149d`) and `uav-011` (commit `6f4f459`).
-2. **Acceptance Criteria Verification (R1-R7)**:
-   - R1: Verified `uav-009` customer SysML models (`schema/avenger5_system.sysml` and `.pipeline/schema.sysml`) preserve exact SHA-256 `140d4b655a6d3cb0e9073a4d33f8a7f216875dc5f3f5641f6b963ff4adb0b747`, all 75 specs and 20+ defect dossiers are intact. PASS.
-   - R2: Verified `verify_downstream_baseline.py /Users/perkunas/jail/uav-009` executes all 31 checks with exit code 0, and Check 23 passes with 0 ungrounded assertions. PASS.
-   - R3: Verified commit `a85149d` neutral citation, `verify_commit_messages.py --head` passes with exit code 0, 0-byte remote diff against `origin/main`, clean tree. PASS.
-   - R4: Verified `uav-011` landing zones (`docs/epics/`, `docs/features/`, `docs/user-stories/`, `docs/use-cases/`) contain only `.gitkeep`. PASS.
-   - R5: Verified `verify_downstream_baseline.py /Users/perkunas/jail/uav-011` executes all 31 checks with exit code 0, including Check 31 Dual-Schema SSOT Parity Gate. PASS.
-   - R6: Verified commit `6f4f459` neutral citation, `verify_commit_messages.py --head` passes with exit code 0, 0-byte remote diff against `origin/main`, clean tree. PASS.
-   - R7: Verified `HANDOFF.md` Section 2.1 records `a85149d` and `6f4f459` and empirical pass status; commit neutrality passes; `git diff origin/main..HEAD` is 0 bytes; all 43 targeted unit tests pass with exit code 0. PASS.
-3. **Forensic Integrity Analysis**:
-   - Zero hardcoded test results, zero facade implementations, zero fake test logs. Tests fail closed on negative cases (as demonstrated by the 43 unit tests).
-   - Commercial toolchain integration context (MATLAB / Simulink / Stateflow / Embedded Coder) respected across hooks and documentation.
-4. **Deduction**: All acceptance criteria R1 through R7 are fully satisfied with rigorous empirical proof. Victory is confirmed.
+1. **Step 1 (Grounding to User Constraints & Plan)**: `ORIGINAL_REQUEST.md` (request 2026-09-27T15:38:55Z) and `implementation_plan.md` mandate normalizing the three-tier architecture (Tier 1 Compiler, Tier 2 Domain Templates, Tier 3 Customer Workspaces), placing Section 1.1 ahead of Section 1.2 in `README.md`, confining Pipeline 2 prompts strictly to `DOWNSTREAM_CUSTOMER_PROJECT`, asserting these via `test_readme_scaffolding.py`, and pushing to `origin/main` at 0 bytes diff with neutral commit messages.
+2. **Step 2 (Remote Parity Verification)**: Observation 1.1 proves that commit `2864925` is pushed to GitHub `origin/main`. `git rev-parse HEAD origin/main` confirms identical commit SHAs, and `git diff origin/main HEAD` as well as `git diff origin/main -- README.md scripts/install_pipeline.sh tests/test_readme_scaffolding.py implementation_plan.md` return exactly 0 bytes.
+3. **Step 3 (Commit Message Compliance)**: Observation 1.1 proves the commit message contains only neutral citations `(refs #371, refs #368)` and passed `python3 scripts/verify_commit_messages.py --head` with exit code 0.
+4. **Step 4 (Automated Regression Gates)**: Observations 1.2, 1.3, and 1.4 confirm that:
+   - All 34 tests in `tests/test_readme_scaffolding.py` pass.
+   - All 31 checks in `scripts/verify_downstream_baseline.py --no-domain` pass.
+   - All 297 tests across the entire repository test suite in `pytest tests/` pass.
+5. **Step 5 (Structural Content Inspection)**: Observation 1.5 proves that:
+   - Section 1.1 precedes Section 1.2 in `README.md`.
+   - Contradictory tier labels ("Tier 1 Domain", "Tier 2 Customer") have been eliminated.
+   - Section 9.4 strictly confines Pipeline 2 execution to downstream customer workspaces.
+6. **Step 6 (Integrity Forensics)**: Inspection of the newly added tests in `tests/test_readme_scaffolding.py` reveals authentic Markdown AST parsing and live shell execution against temporary directories. No mock objects, dummy facades, or hardcoded cheating patterns were introduced.
 
 ---
 
 ## 3. Caveats
 
-- In `uav-011`, `schema/` retains the customer Level 0 OEM schema files and AST (`model.sysml`, `DEAP_MODEL.sysml`, OEM PDFs/markdowns) ingested during prior onboarding phases per `ORIGINAL_REQUEST.md` requirements from 2026-09-21; the specification landing zones (`docs/epics/`, `docs/features/`, `docs/user-stories/`, `docs/use-cases/`) maintain 100% clean `.gitkeep` state.
-- Remote tracking checks were performed against `origin/main` on local git mirrors configured in `/Users/perkunas/jail`.
+- **Untracked Agent Metadata in `.agents/`**: As documented in `worker_wp04/handoff.md` and governed by the File Workspace Convention, files under `.agents/` represent ephemeral agent execution metadata and session logs. They are intentionally kept out of production release commits. Non-metadata repository paths have 0 diff against `origin/main`.
+- **Primary Tier-1 Commercial Toolchain**: The phrasing `Primary Tier-1 Commercial Toolchain Integration Context` refers to external toolchain vendor integration (MATLAB / Simulink) and is distinct from repository architecture tiers (Tiers 1, 2, 3). This distinction is properly preserved.
 
 ---
 
 ## 4. Conclusion
 
-```
-=== VICTORY AUDIT REPORT ===
+All acceptance criteria for Work Package WP-04b have been empirically verified and fully satisfied:
+- Remote tracking branch `origin/main` is in 100% parity with local HEAD commit `2864925`.
+- Scaffolding unit tests (`34/34`), baseline conformance checks (`31/31`), and full pytest regression suite (`297/297`) pass with zero errors.
+- Three-tier architecture, heading ordering, and repository execution boundaries are cleanly and consistently established.
+- Commit message neutrality invariant is strictly observed.
+- Zero integrity violations or facades detected.
 
-VERDICT: VICTORY CONFIRMED
-
-PHASE A — TIMELINE:
-  Result: PASS
-  Anomalies: none
-
-PHASE B — INTEGRITY CHECK:
-  Result: PASS
-  Details: Customer workspace uav-009 model preserved (SHA-256 matches 140d4b655a6d3cb0e9073a4d33f8a7f216875dc5f3f5641f6b963ff4adb0b747, 75 specs and 20+ defect dossiers intact). Landing zones in uav-011 maintain clean .gitkeep state. Commit neutrality verified across fleet with zero auto-closing verbs.
-
-PHASE C — INDEPENDENT TEST EXECUTION:
-  Test command: python3 /Users/perkunas/jail/DEAP01-spec-core/scripts/verify_downstream_baseline.py /Users/perkunas/jail/uav-009
-  Your results: All 31 checks pass with exit code 0 (Check 23: 0 ungrounded assertions; Check 31: identical AST definitions)
-  Claimed results: All 31 checks pass with exit code 0
-  Match: YES
-
-  Test command: python3 /Users/perkunas/jail/DEAP01-spec-core/scripts/verify_downstream_baseline.py /Users/perkunas/jail/uav-011
-  Your results: All 31 checks pass with exit code 0 (Check 31: identical AST definitions)
-  Claimed results: All 31 checks pass with exit code 0
-  Match: YES
-
-  Test command: python3 -m unittest tests/test_check23_factual_grounding_gate.py tests/test_factual_grounding_validator.py tests/test_architecture_viewpoint_validator.py
-  Your results: Ran 43 tests in 0.185s, OK (exit code 0)
-  Claimed results: 43 unit tests passing (exit code 0)
-  Match: YES
-
-  Git Remote Synchronization:
-  uav-009 diff origin/main: 0 bytes (clean tree)
-  uav-011 diff origin/main: 0 bytes (clean tree)
-  DEAP01-spec-core diff origin/main..HEAD: 0 bytes
-  Match: YES
-```
+**Final Verdict**: **VICTORY APPROVED**
 
 ---
 
 ## 5. Verification Method
 
-To independently reproduce the empirical verification:
+To independently reproduce and verify this audit:
 
-1. **Verify uav-009 Preservation**:
+1. **Verify Git Tracking & Commit Parity**:
    ```bash
-   shasum -a 256 /Users/perkunas/jail/uav-009/schema/avenger5_system.sysml
-   shasum -a 256 /Users/perkunas/jail/uav-009/.pipeline/schema.sysml
+   git rev-parse HEAD origin/main
+   git diff origin/main HEAD
+   git diff origin/main -- README.md scripts/install_pipeline.sh tests/test_readme_scaffolding.py implementation_plan.md
    ```
-2. **Execute uav-009 Baseline Verification**:
+2. **Verify Commit Neutrality**:
    ```bash
-   python3 /Users/perkunas/jail/DEAP01-spec-core/scripts/verify_downstream_baseline.py /Users/perkunas/jail/uav-009
+   python3 scripts/verify_commit_messages.py --head
    ```
-3. **Execute uav-011 Baseline Verification**:
+3. **Execute Scaffolding Unit Tests**:
    ```bash
-   python3 /Users/perkunas/jail/DEAP01-spec-core/scripts/verify_downstream_baseline.py /Users/perkunas/jail/uav-011
+   python3 -m unittest tests/test_readme_scaffolding.py
    ```
-4. **Execute DEAP01-spec-core Unit Tests**:
+4. **Execute Downstream Baseline Gate**:
    ```bash
-   python3 -m unittest tests/test_check23_factual_grounding_gate.py tests/test_factual_grounding_validator.py tests/test_architecture_viewpoint_validator.py
+   python3 scripts/verify_downstream_baseline.py --no-domain
    ```
-5. **Verify Commit Neutrality and Remote Diff Across Fleet**:
+5. **Verify Section Heading Sequence & Tiers in README**:
    ```bash
-   python3 /Users/perkunas/jail/uav-009/scripts/verify_commit_messages.py --head
-   python3 /Users/perkunas/jail/uav-011/scripts/verify_commit_messages.py --head
-   python3 /Users/perkunas/jail/DEAP01-spec-core/scripts/verify_commit_messages.py --head
-   git -C /Users/perkunas/jail/uav-009 diff origin/main
-   git -C /Users/perkunas/jail/uav-011 diff origin/main
-   git -C /Users/perkunas/jail/DEAP01-spec-core diff origin/main..HEAD
+   python3 -c '
+   content = open("README.md").read()
+   assert "### 1.1 Primary Commercial Toolchain Integration" in content
+   assert "### 1.2 Three-Tier Architecture" in content
+   assert content.index("### 1.1") < content.index("### 1.2")
+   assert "Tier 1 Domain" not in content
+   assert "Tier 2 Customer" not in content
+   print("README structural verification PASSED")
+   '
    ```
+6. **Invalidation Conditions**:
+   - `git diff origin/main HEAD` outputs non-zero bytes.
+   - Any test failure in `test_readme_scaffolding.py` or `verify_downstream_baseline.py`.
+   - Any appearance of "Tier 1 Domain" or "Tier 2 Customer" in `README.md` or `scripts/install_pipeline.sh`.

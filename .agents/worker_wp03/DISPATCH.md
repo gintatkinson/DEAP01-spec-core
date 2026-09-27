@@ -1,58 +1,29 @@
-## 2026-09-26T16:53:00Z
+## 2026-09-27T16:00:00Z
 
-Execute view_file on skills/spec-orchestrator/SKILL.md as your very first step before executing any file edits or commands, and strictly follow its formatting templates and instruction guidelines.
+# Task Assignment: WP-03 Automated Regression & Scaffolding Test Verification
 
-Repository Classification: UPSTREAM_SPEC_CORE_COMPILER
-Working directory: /Users/perkunas/jail/DEAP01-spec-core/.agents/worker_wp03
-Primary Native Skill: skills/spec-orchestrator/SKILL.md
+You are the Test Verification Worker for WP-03.
+Target File Owned:
+- `/Users/perkunas/jail/DEAP01-spec-core/tests/test_readme_scaffolding.py`
 
-Read the verbatim user request in /Users/perkunas/jail/DEAP01-spec-core/.agents/ORIGINAL_REQUEST.md.
-
-DO NOT CHEAT. All implementations must be genuine. DO NOT hardcode test results, create dummy/facade implementations, or circumvent the intended task. A teamwork_preview_auditor will independently verify your work. Integrity violations WILL be detected and your work WILL be rejected.
-
-Task: Stage and commit HANDOFF.md, push to GitHub origin/main, and verify git diff origin/main is 0 bytes.
-
-Execution Steps:
-1. Stage and commit HANDOFF.md using exact command:
-   git commit -am "docs(handoff): update HANDOFF.md to DEAP-HANDOFF-ROOT-006 (refs #371)"
-2. Push to GitHub origin/main:
-   git push origin main
-3. Verify remote synchronization:
-   git diff origin/main
-   Confirm the diff is 0 bytes.
-
-CONSTRAINT: Run ZERO tests. Do not invoke test runners, linters, or baseline verification scripts.
-
-When done, write /Users/perkunas/jail/DEAP01-spec-core/.agents/worker_wp03/handoff.md with the commit hash, push output, and diff verification.
-
-PROCEED
-
-## 2026-09-26T16:57:08Z
-
-Execute view_file on skills/spec-orchestrator/SKILL.md as your very first step before executing any file edits or commands, and strictly follow its formatting templates and instruction guidelines.
-
-Repository Classification: UPSTREAM_SPEC_CORE_COMPILER
-Working directory: /Users/perkunas/jail/DEAP01-spec-core/.agents/worker_wp03
-Primary Native Skill: skills/spec-orchestrator/SKILL.md
-
-Read the verbatim user request in /Users/perkunas/jail/DEAP01-spec-core/.agents/ORIGINAL_REQUEST.md and your dispatch instructions in /Users/perkunas/jail/DEAP01-spec-core/.agents/worker_wp03/DISPATCH.md.
-
-DO NOT CHEAT. All implementations must be genuine. DO NOT hardcode test results, create dummy/facade implementations, or circumvent the intended task. A teamwork_preview_auditor will independently verify your work. Integrity violations WILL be detected and your work WILL be rejected.
-
-Task: Stage and commit HANDOFF.md, push to GitHub origin/main, and verify git diff origin/main is 0 bytes.
-
-Execution Steps:
-1. Check git status to verify what is modified.
-2. Stage and commit HANDOFF.md using exact command:
-   git commit -am "docs(handoff): update HANDOFF.md to DEAP-HANDOFF-ROOT-006 (refs #371)"
-3. Push to GitHub origin/main:
-   git push origin main
-4. Verify remote synchronization:
-   git diff origin/main
-   Confirm the diff is 0 bytes.
-
-CONSTRAINT: Run ZERO tests. Do not invoke test runners, linters, or baseline verification scripts.
-
-When done, write /Users/perkunas/jail/DEAP01-spec-core/.agents/worker_wp03/handoff.md with the commit hash, push output, and diff verification. Then send a completion message to your caller.
+Tasks:
+1. Update `tests/test_readme_scaffolding.py` per the specifications in `.agents/auditor_wp01/handoff.md` Section 5.2 and `implementation_plan.md` WP-03:
+   - Update docstrings at lines 381 and 482 to reference Tier 2 Domain Distribution Templates and Tier 3 Customer Application Workspaces.
+   - In `TestUpstreamCompilerReadme`, add:
+     * `test_upstream_readme_section_1_heading_order_and_hierarchy`
+     * `test_upstream_readme_three_tier_architecture_normalization`
+     * `test_upstream_readme_pipeline_2_prompt_boundary_confinement`
+   - In `TestDomainDistributionTemplateScaffolding.test_domain_template_scaffolding_explicit_role`:
+     * Assert `content` contains `As a **Tier 2 Domain Distribution Template**`.
+     * Assert `content` does not contain `Tier 1 Domain Distribution Template`.
+   - In `TestCustomerWorkspaceScaffolding.test_customer_workspace_scaffolding_explicit_role`:
+     * Assert `content` contains `As a **Tier 3 Customer Application Workspace**`.
+     * Assert `content` does not contain `Tier 2 Customer Application Workspace`.
+2. Run automated test suites:
+   - `python3 -m unittest tests/test_readme_scaffolding.py` (assert exit code 0).
+   - `python3 scripts/verify_downstream_baseline.py --no-domain` (assert exit code 0).
+   - `python3 -m pytest tests/` (assert 0 failures).
+3. Deliver complete report to `/Users/perkunas/jail/DEAP01-spec-core/.agents/worker_wp03/handoff.md`.
+4. Notify orchestrator when done via send_message.
 
 PROCEED
