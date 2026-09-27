@@ -1,26 +1,34 @@
-# Implementation Plan: Defect #380 Resolution & Governance Completion
+# Implementation Plan: Defect #381 Resolution & Universal Multi-Runtime Governance Restructuring
 
 ## 1. Executive Summary & Problem Diagnosis
 
-This implementation plan governs the end-to-end resolution and constitutional completion of **Defect #380** (`[AUDIT] [README.md:297-302]: Section 5.5 Prescribes Anti-Pattern Manual Chat Steering Instead of Native Configuration Discovery`) in `DEAP01-spec-core`.
+This implementation plan governs the end-to-end resolution and constitutional completion of **Defect #381** (`[AUDIT] [README.md]: Universal multi-runtime initialization sequence misplaced inside vendor section 5.5`) in `DEAP01-spec-core`.
 
 ### Problem Statement:
-- Lines 297–302 of `README.md` (in Section 5.5 "Setup for Google Antigravity") prescribe manual chat steering instructions:
-  e.g., instructing the operator to manually paste or type prompts into the chat box to steer Antigravity, rather than relying on native workspace configuration discovery and automated pipeline directives.
-- This represents an anti-pattern that violates project governance principles (pure configuration discovery, autonomous execution, avoidance of interactive manual chat steering).
-- The repository requires:
-  1. Technical investigation of Issue #380 and the exact anti-pattern lines in `README.md` Section 5.5.
-  2. Removal/remediation of manual chat steering in Section 5.5 in favor of native configuration discovery and authoritative directives.
-  3. Regression test assertions in `tests/test_readme_scaffolding.py` verifying that Section 5.5 does not prescribe manual chat steering or anti-pattern prompts.
-  4. Inspection and purging of any untracked scratch files/artifacts in the working tree.
-  5. Clean execution and passing (exit code 0) of all automated test suites:
-     - `python3 -m unittest tests/test_readme_scaffolding.py`
-     - `pytest tests/test_readme_scaffolding.py`
-     - `python3 scripts/verify_downstream_baseline.py --no-domain`
-  6. Atomic git commit referencing `(fixes #380)`.
-  7. Remote synchronization mandate: push to `origin/main` and verify `git diff origin/main` returns exactly 0 bytes.
-  8. Mandatory Tracker Issue Transition Gate: apply `status:fixed-resolved` label to issue #380, post verification evidence comment, and close issue #380 via `gh issue`.
-  9. Independent forensic integrity audit confirming zero cheating, full verification, and clean remote diff.
+- In `README.md:301-324`, the mandatory post-install agent initialization sequence governing all AI agent runtimes (Google Antigravity, Claude Code, Cursor, Windsurf, Cascade, Devin) is architecturally nested under `### 5.5 Setup for Google Antigravity`.
+- Section 5.6 (`AGENTS.md Governance Configuration`) discusses repository role classifications without presenting the execution sequence.
+- Sections 5.7 (`Setup for Claude Code`) and 5.8 (`Setup for Cursor / Windsurf / Cascade`) omit steps 0, 1, 4, 5, and 6 (Role Scope Detection, Karpathy Compliance & Strict Planning Gate, Platform Profile Loading, Tracker Label Bootstrapping, and Transition to Operator Prompt Catalog).
+- This creates an architectural semantic traceability gap where universal multi-agent governance invariants are hidden inside vendor-specific instructions. Operators and non-Antigravity runtimes bypass repository role verification (risking upstream clean landing zone pollution) and active rules ingestion.
+
+### Remediation Objectives:
+1. **WP-01: Working Tree Inspection & Workspace Initialization**:
+   - Inspect git working tree status, clean up untracked scratch files, initialize `.agents/orchestrator_12/`, and update root `implementation_plan.md`.
+2. **WP-02: Forensic Audit & Technical Investigation**:
+   - Deploy an adversarial auditor / explorer subagent to perform a forensic audit of `README.md` (Sections 5.5–5.8) and `scripts/install_pipeline.sh` README scaffolding logic, drafting the exact diff.
+3. **WP-03: Section 5 Restructuring & Scaffolding Remediation**:
+   - Elevate Section 5.6 to `### 5.6 Universal Agent Governance & Initialization Sequence (AGENTS.md)`.
+   - Relocate the complete post-install initialization sequence (steps 0 through 7) and repository role taxonomy into Section 5.6.
+   - Update Section 5.5 (`Setup for Google Antigravity`) to focus on native configuration discovery and reference Section 5.6.
+   - Update Section 5.7 (`Setup for Claude Code`) and Section 5.8 (`Setup for Cursor / Windsurf / Cascade`) to cross-reference Section 5.6.
+   - Update downstream README scaffolding templates in `scripts/install_pipeline.sh` if applicable.
+4. **WP-04: Test Hardening & Automated Gate Verification**:
+   - Update `tests/test_readme_scaffolding.py` to assert the elevated placement of the universal initialization sequence in Section 5.6 and proper cross-references in vendor sections.
+   - Run `python3 -m unittest tests/test_readme_scaffolding.py`, `pytest tests/test_readme_scaffolding.py`, and `python3 scripts/verify_downstream_baseline.py --no-domain`.
+5. **WP-05: Git Stage, Commit, Remote Sync, Tracker Transition & Victory Audit**:
+   - Verify commit neutrality via `python3 scripts/verify_commit_messages.py --head`.
+   - Commit using neutral citation `(refs #381)`, push to `origin/main`, and verify `git diff origin/main` is 0 bytes.
+   - Transition Issue #381 to `status:fixed-resolved` with empirical evidence comment.
+   - Independent Victory Auditor confirmation.
 
 ---
 
@@ -28,106 +36,109 @@ This implementation plan governs the end-to-end resolution and constitutional co
 
 ```mermaid
 flowchart TD
-    subgraph Stage1 ["Stage 1: Working Tree Inspection & Technical Investigation"]
-        WP01["WP-01: Working Tree Inspection & Workspace Hygiene<br/>(teamwork_preview_worker)"]
-        WP02["WP-02: Issue #380 Technical Investigation<br/>(teamwork_preview_explorer)"]
+    subgraph Stage1 ["Stage 1: Working Tree Inspection & Forensic Audit"]
+        WP01["WP-01: Working Tree Inspection & Workspace Initialization<br/>(orchestrator_12)"]
+        WP02["WP-02: Forensic Audit & Technical Investigation<br/>(teamwork_preview_auditor / explorer)"]
     end
 
     subgraph Stage2 ["Stage 2: Code & Documentation Remediation"]
-        WP03["WP-03: Remediate README.md Section 5.5 & Add Regression Tests<br/>(teamwork_preview_worker)"]
+        WP03["WP-03: Section 5 Restructuring & Scaffolding Fix<br/>(teamwork_preview_worker)"]
     end
 
-    subgraph Stage3 ["Stage 3: Verification & Adversarial Stress Testing"]
-        WP04A["WP-04A: Full Test Suite Execution<br/>(teamwork_preview_reviewer)"]
-        WP04B["WP-04B: Adversarial Validation<br/>(teamwork_preview_challenger)"]
+    subgraph Stage3 ["Stage 3: Verification & Test Hardening"]
+        WP04A["WP-04A: Test Suite Hardening & Execution<br/>(teamwork_preview_reviewer)"]
+        WP04B["WP-04B: Adversarial Baseline Gate Verification<br/>(teamwork_preview_challenger)"]
     end
 
-    subgraph Stage4 ["Stage 4: Git Sync, Tracker Transition & Forensic Audit"]
-        WP05["WP-05: Git Commit (fixes #380) & Push to origin/main<br/>(teamwork_preview_worker)"]
-        WP06A["WP-06A: Tracker Issue #380 Transition Gate<br/>(teamwork_preview_worker)"]
-        WP06B["WP-06B: Forensic Integrity Audit<br/>(teamwork_preview_auditor)"]
-        WP05 --> WP06A
-        WP06A --> WP06B
+    subgraph Stage4 ["Stage 4: Git Sync, Tracker Transition & Victory Audit"]
+        WP05A["WP-05A: Git Commit (refs #381) & Remote Push<br/>(teamwork_preview_worker)"]
+        WP05B["WP-05B: Issue #381 Tracker Transition Gate<br/>(teamwork_preview_worker)"]
+        WP05C["WP-05C: Independent Victory Audit<br/>(teamwork_preview_auditor)"]
+        WP05A --> WP05B
+        WP05B --> WP05C
     end
 
-    WP01 --> WP03
+    WP01 --> WP02
     WP02 --> WP03
     WP03 --> WP04A
     WP03 --> WP04B
-    WP04A --> WP05
-    WP04B --> WP05
+    WP04A --> WP05A
+    WP04B --> WP05A
 ```
 
 ---
 
 ## 3. Detailed Work Packages
 
-### WP-01: Working Tree Status Inspection & Scratch File Cleanup
-- **Assigned Agent**: `teamwork_preview_worker` (Role: `Workspace Hygiene Worker`)
+### WP-01: Working Tree Inspection & Workspace Initialization
+- **Assigned Agent**: `orchestrator_12` (Role: `Project Orchestrator`)
 - **Directives & Constraints**:
+  - Execute `view_file` on `skills/spec-orchestrator/SKILL.md` as very first step.
   - Run `git status --porcelain` to inspect the working tree.
-  - Identify and safely remove untracked temporary scratch files, test dumps, or build artifacts while preserving intentional modifications and agent state in `.agents/`.
-  - Report exact status of modified and untracked files in handoff report.
-- **Completion Criteria**: Clean working tree with no untracked scratch artifacts outside `.agents/` and expected files.
+  - Clean up any untracked temporary scratch files or build artifacts outside `.agents/`.
+  - Initialize `.agents/orchestrator_12/` (`DISPATCH.md`, `BRIEFING.md`, `progress.md`).
+  - Update root `implementation_plan.md` with approved Defect #381 plan.
+- **Completion Criteria**: Working tree clean, workspace initialized, implementation plan updated.
 
-### WP-02: Issue #380 Technical Investigation
-- **Assigned Agent**: `teamwork_preview_explorer` (Role: `Codebase Researcher`)
+### WP-02: Forensic Audit & Technical Investigation of Defect #381
+- **Assigned Agent**: `teamwork_preview_auditor` / `teamwork_preview_explorer`
 - **Directives & Constraints**:
-  - Inspect GitHub issue #380 (`gh issue view 380`).
-  - Read lines 280–320 of `README.md` around Section 5.5 to identify the exact phrasing and prescribed manual chat steering instructions.
-  - Inspect `tests/test_readme_scaffolding.py` to examine existing Section 5.5 test coverage.
-  - Formulate a precise, minimal remediation plan: how Section 5.5 should be revised to use native configuration discovery rather than manual chat steering, and what regression tests should be added.
-  - Deliver detailed report in `handoff.md`.
-- **Completion Criteria**: Complete technical dossier with exact line diff proposal and test specification.
+  - Inspect GitHub issue #381 (`gh issue view 381`).
+  - Read lines 280–360 of `README.md` around Sections 5.5 through 5.8.
+  - Inspect `scripts/install_pipeline.sh` for downstream README scaffolding templates.
+  - Inspect `tests/test_readme_scaffolding.py` for existing Section 5 assertions.
+  - Formulate a precise, surgical remediation diff: relocate the universal initialization sequence from 5.5 to 5.6, update 5.5, 5.7, 5.8 cross-references, and define required regression assertions.
+  - Record findings in handoff report.
+- **Completion Criteria**: Complete technical dossier with exact target diff and test specifications.
 
-### WP-03: Defect #380 Remediation & Test Hardening
+### WP-03: Section 5 Restructuring & Scaffolding Remediation
 - **Assigned Agent**: `teamwork_preview_worker` (Role: `Documentation & Tooling Worker`)
 - **Target Files**:
   - `README.md`
-  - `tests/test_readme_scaffolding.py`
+  - `scripts/install_pipeline.sh` (if applicable)
 - **Directives & Constraints**:
-  - Apply the verified fix to Section 5.5 of `README.md`: eliminate manual chat steering anti-patterns in favor of native configuration discovery and authoritative instructions.
-  - Add regression test cases to `tests/test_readme_scaffolding.py` asserting that Section 5.5 does not prescribe manual chat steering prompts and strictly adheres to native configuration discovery.
-  - Run `python3 -m unittest tests/test_readme_scaffolding.py` to verify tests pass.
-- **Completion Criteria**: Section 5.5 updated; regression tests added and passing.
+  - Retitle Section 5.6 to `### 5.6 Universal Agent Governance & Initialization Sequence (AGENTS.md)`.
+  - Move the universal 8-step post-install initialization sequence (steps 0 through 7) and repository role taxonomy from Section 5.5 into Section 5.6.
+  - Update Section 5.5 (`Setup for Google Antigravity`) to focus on native configuration discovery and reference Section 5.6.
+  - Update Section 5.7 (`Setup for Claude Code`) and Section 5.8 (`Setup for Cursor / Windsurf / Cascade`) to explicitly reference Section 5.6.
+  - Update `scripts/install_pipeline.sh` README generation logic if Section 5 is scaffolded downstream.
+- **Completion Criteria**: Documentation and scaffolding updated cleanly; zero syntax errors.
 
-### WP-04: Full Automated Test Suite & Baseline Gate Verification
+### WP-04: Test Hardening & Automated Gate Verification
 - **Assigned Reviewer**: `teamwork_preview_reviewer` (Role: `Automated Test Reviewer`)
 - **Assigned Challenger**: `teamwork_preview_challenger` (Role: `Adversarial Verifier`)
+- **Target Files**:
+  - `tests/test_readme_scaffolding.py`
 - **Directives & Constraints**:
+  - Add regression test cases asserting:
+    1. Section 5.6 contains the Universal Agent Governance & Initialization Sequence.
+    2. Section 5.5 does not subordinate the universal sequence under Antigravity.
+    3. Section 5.5, 5.7, and 5.8 properly reference Section 5.6.
   - Reviewer runs:
     - `python3 -m unittest tests/test_readme_scaffolding.py` (must pass, exit code 0)
     - `pytest tests/test_readme_scaffolding.py` (must pass, exit code 0)
-    - `python3 scripts/verify_downstream_baseline.py --no-domain` (must pass all 30 checks, exit code 0)
-  - Challenger tests boundary cases and negative assertions (ensuring any reintroduction of manual chat steering or deprecated CLI patterns is caught).
-- **Completion Criteria**: All tests exit code 0; verdicts recorded in `GATE_STATUS.md`.
+    - `python3 scripts/verify_downstream_baseline.py --no-domain` (must pass all baseline checks, exit code 0)
+  - Challenger verifies negative boundary conditions.
+- **Completion Criteria**: All unit tests and baseline checks exit code 0; verdicts recorded.
 
-### WP-05: Git Commit & Remote Synchronization
-- **Assigned Agent**: `teamwork_preview_worker` (Role: `Git Synchronization Worker`)
+### WP-05: Git Stage, Commit, Remote Sync, Tracker Transition & Victory Audit
+- **Assigned Worker**: `teamwork_preview_worker` (Role: `Git & Tracker Synchronization Worker`)
+- **Assigned Auditor**: `teamwork_preview_auditor` (Role: `Independent Victory Auditor`)
 - **Directives & Constraints**:
-  - Verify commit neutrality rule: message must reference `(fixes #380)`.
-  - Stage target files: `git add README.md tests/test_readme_scaffolding.py implementation_plan.md`.
-  - Commit: `git commit -m "docs(readme): eliminate manual chat steering in section 5.5 in favor of native discovery (fixes #380)"`.
-  - Verify commit message via `python3 scripts/verify_commit_messages.py --head`.
-  - Push to remote tracking branch: `git push origin main`.
-  - Verify remote synchronization: `git diff origin/main` must be exactly 0 bytes.
-- **Completion Criteria**: Commit pushed to `origin/main`; `git diff origin/main` returns 0 bytes.
-
-### WP-06: Mandatory Tracker Issue Transition Gate & Forensic Audit
-- **Assigned Worker**: `teamwork_preview_worker` (Role: `Tracker Transition Worker`)
-- **Assigned Auditor**: `teamwork_preview_auditor` (Role: `Forensic Integrity Auditor`)
-- **Directives & Constraints**:
-  - Worker executes tracker transition:
-    - `gh issue edit 380 --add-label "status:fixed-resolved"`
-    - `gh issue comment 380 --body "<verification evidence with commit SHA and test logs>"`
-    - `gh issue close 380 --comment "Closed as verified fixed in commit <SHA>."`
-    - Verify `gh issue view 380 --json state,labels`.
-  - Auditor independently verifies:
+  - Worker executes:
+    - Verify commit neutrality rule: message must reference `(refs #381)`.
+    - Stage modified files (`git add README.md tests/test_readme_scaffolding.py implementation_plan.md ...`).
+    - Commit: `git commit -m "docs(readme): relocate universal initialization sequence to section 5.6 (refs #381)"`.
+    - Verify commit message via `python3 scripts/verify_commit_messages.py --head`.
+    - Push to remote tracking branch: `git push origin main`.
+    - Verify remote synchronization: `git diff origin/main` must return exactly 0 bytes.
+    - Post empirical verification evidence comment to Issue #381.
+    - Update issue label to `status:fixed-resolved` via `gh issue edit 381 --add-label "status:fixed-resolved"`.
+  - Victory Auditor independently verifies:
     - 0-byte diff against `origin/main`.
-    - Clean test runs.
-    - Zero cheating, mock evasion, or fabricated evidence.
-    - Status and labels on issue #380.
-- **Completion Criteria**: Issue #380 closed with `status:fixed-resolved` label and evidence comment; Auditor issues CLEAN verdict.
+    - Clean test runs across all suites.
+    - Status and labels on Issue #381.
+- **Completion Criteria**: Commit pushed to `origin/main`; remote diff 0 bytes; Issue #381 marked `status:fixed-resolved`; Victory Auditor confirms victory.
 
 ---
 
@@ -135,9 +146,9 @@ flowchart TD
 
 | Gate | Verification Command | Expected Outcome |
 |---|---|---|
-| Section 5.5 Scaffolding Unit Tests | `python3 -m unittest tests/test_readme_scaffolding.py` | Exit code 0, all tests pass |
+| Section 5 Scaffolding Unit Tests | `python3 -m unittest tests/test_readme_scaffolding.py` | Exit code 0, all tests pass |
 | Pytest Scaffolding Suite | `pytest tests/test_readme_scaffolding.py` | Exit code 0, all tests pass |
-| Downstream Baseline Gate | `python3 scripts/verify_downstream_baseline.py --no-domain` | Exit code 0, all 30 checks pass |
-| Commit Neutrality Gate | `python3 scripts/verify_commit_messages.py --head` | Exit code 0, valid syntax |
+| Downstream Baseline Gate | `python3 scripts/verify_downstream_baseline.py --no-domain` | Exit code 0, all baseline checks pass |
+| Commit Neutrality Gate | `python3 scripts/verify_commit_messages.py --head` | Exit code 0, neutral citations only |
 | Remote Synchronization Gate | `git diff origin/main` | Output is exactly 0 bytes |
-| Issue Tracker Status Gate | `gh issue view 380 --json state,labels` | `state: CLOSED`, label `status:fixed-resolved` present |
+| Issue Tracker Status Gate | `gh issue view 381 --json state,labels` | Label `status:fixed-resolved` present |

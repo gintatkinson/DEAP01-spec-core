@@ -298,47 +298,52 @@ Google Antigravity automatically discovers workspace customizations, governance 
 
 1. **Native Configuration Discovery & Governance Rules**:
    Google Antigravity natively loads project-scoped governance rules from `AGENTS.md` and `.agents/AGENTS.md` directly into `<user_rules>` upon workspace initialization. Custom pipeline skills located in `.agents/skills/` are automatically indexed and discovered via progressive disclosure on demand. Ad-hoc interactive prompting or manual steering directives to ingest rules are unnecessary and strictly avoided to prevent turn-1 coordinator context bloat and subagent self-rejection gate trips. To read the consolidated active governance rules bundle, agents execute a direct-path read via `view_file` on `.pipeline/ACTIVE_RULES_BUNDLE.md`.
-2. **Mandatory Post-Install Agent Initialization Sequence**:
-   Immediately following turnkey installation, any AI agent (Antigravity, Claude Code, Cursor) initializing in this repository MUST execute the following sequence before accepting user directives or executing task implementations:
-   0. **Detect Repository Role & Scope (Direct-Path Read)**:
-      - Inspect whether `.pipeline/upstream/` exists on disk by executing a direct-path read via `list_dir` or `view_file` (e.g. `list_dir` on `.pipeline/upstream` or `view_file` on `.pipeline/upstream/pipeline-tooling.md`). Do NOT rely on glob or search tools (`find_by_name`, `grep_search`), which ignore hidden dot-directories by default.
-      - If present -> **Upstream Compiler Mode**: The active repository is the upstream core compiler (`UPSTREAM_SPEC_CORE_COMPILER`). Customer application artifacts and concrete domain specifications are prohibited; work is restricted to pipeline compiler logic, verification tooling, and abstract schema parsers.
-      - If absent -> **Downstream Customer Project / Domain Template Mode**: The active repository is an initialized workspace. Authorized for domain specification or concrete application code implementation.
-   1. **Enforce Karpathy Compliance & Strict Planning Gate**:
-      - Every agent thought block MUST begin with the mandatory 4-Point Karpathy & Pipeline Compliance Check:
-        * Is the user's message a question/inquiry or a direct command?
-        * Has the user explicitly approved a file-write/command execution for this turn? (Yes/No)
-        * Am I making any silent assumptions about the user's intent?
-        * Does the active skill mandate context-isolated subagent dispatches, or does this turn write any repository source or specification file? (If yes to either, coordinator direct file-writing is locked).
-      - **Strict Planning Gate**: Agents are strictly forbidden from creating, modifying, or deleting files in the workspace or dispatching any subagents unless that action is documented in an approved implementation plan. Even if the user prompt contains authorization keywords like "PROCEED", agents MUST first write/update the implementation plan, stop, and wait for explicit user approval before execution.
-   2. **Read Governance Constitution**: Execute `view_file` on `.pipeline/constitution.md` to ingest the platform-independent functional governance layer and zero-mocking persistence mandates.
-   3. **Load Project Skills (Tier-Differentiated)**:
-      - For **Upstream Compiler (`UPSTREAM_SPEC_CORE_COMPILER`)**: Execute `view_file` on `skills/spec-orchestrator/SKILL.md` (and `skills/schema-specification-engineering/SKILL.md`, `skills/adversarial-code-auditor/SKILL.md`) to initialize compiler orchestration and audit protocols.
-      - For **Downstream Customer Project / Domain Template Mode**: Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` (and any active skills under `skills/` or `.agents/skills/`, such as `skills/spec-wbs-engineering/SKILL.md`) to initialize feature-driven implementation protocols and review gates.
-   4. **Load Governance Rules**: Execute `view_file` on `.pipeline/ACTIVE_RULES_BUNDLE.md` to ingest the complete, consolidated suite of active governance rules in a single read (covering dual-track MBD, SysML SSOT completeness, role boundary locks, and TDD mandates). Ingest `AGENTS.md` (or `.agents/AGENTS.md`) to enforce project-scoped agentic rules, context-isolated subagent dispatch loops, and role boundary locks.
-   5. **Load Platform Profile (Conditional / Downstream Workspaces Only)**:
-      - Applies ONLY to Downstream Customer Projects: read the target platform execution profile (`.pipeline/profiles/flutter.md`, `.pipeline/profiles/react.md`, `.pipeline/profiles/ros2_cpp.md`, or `.pipeline/profiles/px4_module.md`) to establish platform-specific build, test, and lifecycle constraints.
-      - N/A for Upstream Compiler Mode: SKIP this step when in `UPSTREAM_SPEC_CORE_COMPILER` mode; upstream specification compiler workflows are platform-independent and strictly forbidden from ingesting downstream execution profiles.
-   6. **Bootstrap Tracker Labels**: Verify that repository issue tracker labels are synchronized and operational by running `python3 skills/spec-orchestrator/scripts/bootstrap_tracker_labels.py --dry-run` or verifying label bootstrapping status.
-   7. **Transition to Operator Prompt Catalog**: Navigate to [Section 9 (Multi-Pipeline Operator Prompt Catalog & Autonomous Execution Workflows)](#9-multi-pipeline-operator-prompt-catalog--autonomous-execution-workflows) to select and execute the canonical agent prompts for Pipeline 0 (Pre-Spec Safety & Model Formulation), Pipeline 1 (Agile Specification Backlog Projection), or Pipeline 2 (Autonomous Feature Implementation & Simulation Driver).
+2. **Execute Universal Initialization**:
+   Follow the mandatory post-install initialization sequence in [Section 5.6 (Universal Agent Governance & Initialization Sequence)](#56-universal-agent-governance--initialization-sequence-agentsmd).
 
-### 5.6 AGENTS.md Governance Configuration
+### 5.6 Universal Agent Governance & Initialization Sequence (AGENTS.md)
 
 When propagating via `scripts/install_pipeline.sh`, the installer automatically configures `.agents/AGENTS.md` and `AGENTS.md` with the appropriate role classifications and governance rules for the target repository tier:
 - **Upstream Compiler (`DEAP01-spec-core`):** `UPSTREAM_SPEC_CORE_COMPILER` (abstract MBSE compiler, zero hardcoded domain concepts).
 - **Domain Distribution Templates (`DEAP-*`):** `DOMAIN_DISTRIBUTION_TEMPLATE` (domain SysML schemas, sector blueprints).
 - **Customer Application Workspaces (`uav-*`):** `DOWNSTREAM_CUSTOMER_PROJECT` (proprietary application code, ROS2 nodes, PX4 flight software).
 
+Immediately following turnkey installation, any AI agent (Antigravity, Claude Code, Cursor, Windsurf, Cascade, Devin) initializing in this repository MUST execute the following sequence before accepting user directives or executing task implementations:
+
+0. **Detect Repository Role & Scope (Direct-Path Read)**:
+   - Inspect whether `.pipeline/upstream/` exists on disk by executing a direct-path read via `list_dir` or `view_file` (e.g. `list_dir` on `.pipeline/upstream` or `view_file` on `.pipeline/upstream/pipeline-tooling.md`). Do NOT rely on glob or search tools (`find_by_name`, `grep_search`), which ignore hidden dot-directories by default.
+   - If present -> **Upstream Compiler Mode**: The active repository is the upstream core compiler (`UPSTREAM_SPEC_CORE_COMPILER`). Customer application artifacts and concrete domain specifications are prohibited; work is restricted to pipeline compiler logic, verification tooling, and abstract schema parsers.
+   - If absent -> **Downstream Customer Project / Domain Template Mode**: The active repository is an initialized workspace. Authorized for domain specification or concrete application code implementation.
+1. **Enforce Karpathy Compliance & Strict Planning Gate**:
+   - Every agent thought block MUST begin with the mandatory 4-Point Karpathy & Pipeline Compliance Check:
+     * Is the user's message a question/inquiry or a direct command?
+     * Has the user explicitly approved a file-write/command execution for this turn? (Yes/No)
+     * Am I making any silent assumptions about the user's intent?
+     * Does the active skill mandate context-isolated subagent dispatches, or does this turn write any repository source or specification file? (If yes to either, coordinator direct file-writing is locked).
+   - **Strict Planning Gate**: Agents are strictly forbidden from creating, modifying, or deleting files in the workspace or dispatching any subagents unless that action is documented in an approved implementation plan. Even if the user prompt contains authorization keywords like "PROCEED", agents MUST first write/update the implementation plan, stop, and wait for explicit user approval before execution.
+2. **Read Governance Constitution**: Execute `view_file` on `.pipeline/constitution.md` to ingest the platform-independent functional governance layer and zero-mocking persistence mandates.
+3. **Load Project Skills (Tier-Differentiated)**:
+   - For **Upstream Compiler (`UPSTREAM_SPEC_CORE_COMPILER`)**: Execute `view_file` on `skills/spec-orchestrator/SKILL.md` (and `skills/schema-specification-engineering/SKILL.md`, `skills/adversarial-code-auditor/SKILL.md`) to initialize compiler orchestration and audit protocols.
+   - For **Downstream Customer Project / Domain Template Mode**: Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` (and any active skills under `skills/` or `.agents/skills/`, such as `skills/spec-wbs-engineering/SKILL.md`) to initialize feature-driven implementation protocols and review gates.
+4. **Load Governance Rules**: Execute `view_file` on `.pipeline/ACTIVE_RULES_BUNDLE.md` to ingest the complete, consolidated suite of active governance rules in a single read (covering dual-track MBD, SysML SSOT completeness, role boundary locks, and TDD mandates). Ingest `AGENTS.md` (or `.agents/AGENTS.md`) to enforce project-scoped agentic rules, context-isolated subagent dispatch loops, and role boundary locks.
+5. **Load Platform Profile (Conditional / Downstream Workspaces Only)**:
+   - Applies ONLY to Downstream Customer Projects: read the target platform execution profile (`.pipeline/profiles/flutter.md`, `.pipeline/profiles/react.md`, `.pipeline/profiles/ros2_cpp.md`, or `.pipeline/profiles/px4_module.md`) to establish platform-specific build, test, and lifecycle constraints.
+   - N/A for Upstream Compiler Mode: SKIP this step when in `UPSTREAM_SPEC_CORE_COMPILER` mode; upstream specification compiler workflows are platform-independent and strictly forbidden from ingesting downstream execution profiles.
+6. **Bootstrap Tracker Labels**: Verify that repository issue tracker labels are synchronized and operational by running `python3 skills/spec-orchestrator/scripts/bootstrap_tracker_labels.py --dry-run` or verifying label bootstrapping status.
+7. **Transition to Operator Prompt Catalog**: Navigate to [Section 9 (Multi-Pipeline Operator Prompt Catalog & Autonomous Execution Workflows)](#9-multi-pipeline-operator-prompt-catalog--autonomous-execution-workflows) to select and execute the canonical agent prompts for Pipeline 0 (Pre-Spec Safety & Model Formulation), Pipeline 1 (Agile Specification Backlog Projection), or Pipeline 2 (Autonomous Feature Implementation & Simulation Driver).
+
 ### 5.7 Setup for Claude Code
+
+Configure Claude Code to follow the universal initialization sequence in [Section 5.6 (Universal Agent Governance & Initialization Sequence)](#56-universal-agent-governance--initialization-sequence-agentsmd):
 
 ```bash
 # Add to CLAUDE.md
-echo "Read all SKILL.md files in skills/ and .agents/skills/ and execute view_file on .pipeline/ACTIVE_RULES_BUNDLE.md before starting any task." >> CLAUDE.md
+echo "Follow the universal initialization sequence in Section 5.6 of README.md and execute view_file on .pipeline/ACTIVE_RULES_BUNDLE.md before starting any task." >> CLAUDE.md
 ```
 
 ### 5.8 Setup for Cursor / Windsurf / Cascade
 
-Create `.cursor/rules/pipeline.mdc` or `.windsurf/rules/pipeline.md` referencing `.agents/skills/`, `skills/`, `.agents/AGENTS.md`, and `.pipeline/`.
+Create `.cursor/rules/pipeline.mdc` or `.windsurf/rules/pipeline.md` referencing `.agents/skills/`, `skills/`, `.agents/AGENTS.md`, and `.pipeline/`. All agent sessions must follow the universal initialization sequence defined in [Section 5.6 (Universal Agent Governance & Initialization Sequence)](#56-universal-agent-governance--initialization-sequence-agentsmd).
 
 ### 5.9 Compiler Verification & Baseline Gate
 

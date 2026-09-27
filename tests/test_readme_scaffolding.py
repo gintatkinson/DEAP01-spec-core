@@ -12,6 +12,8 @@ Covers verification of:
      verify_downstream_baseline.py --no-domain, and propagation commands).
    - Verifies that all internal markdown links and anchor slugs in README.md resolve cleanly.
    - Verifies that Section 5.5 contains 0 occurrences of deprecated 'Gemini CLI' (refs #379).
+   - Verifies that Section 5.6 contains the Universal Agent Governance & Initialization Sequence
+     and that steps 0-7 are not misplaced in Section 5.5 (refs #381).
 2. TestDomainDistributionTemplateScaffolding:
    - Runs scripts/install_pipeline.sh on a temporary directory with --role domain-template
      and with auto-detection on DEAP-* directory names.
@@ -546,6 +548,135 @@ class TestUpstreamCompilerReadme(unittest.TestCase):
                 f"Required native configuration discovery term '{term}' missing from Section 5.5 (Defect #380)"
             )
 
+    def test_upstream_readme_section_5_universal_initialization_not_misplaced_in_vendor_5_5(self):
+        """Verifies that the universal agent initialization sequence is placed in Section 5.6 and not misplaced inside vendor Section 5.5 (Defect #381)."""
+        ast = parse_markdown_ast(self.content)
+
+        # 1. Assert Section 5.5 heading is "5.5 Setup for Google Antigravity"
+        sec5_5_nodes = [s for s in ast.find_sections("5.5") if s.title.startswith("5.5")]
+        self.assertEqual(len(sec5_5_nodes), 1, "Expected exactly one Section 5.5 in README.md AST")
+        sec5_5_node = sec5_5_nodes[0]
+        self.assertEqual(
+            sec5_5_node.title.strip(),
+            "5.5 Setup for Google Antigravity",
+            f"Section 5.5 heading must be '5.5 Setup for Google Antigravity', got: '{sec5_5_node.title}'"
+        )
+
+        # 2. Assert Section 5.5 does NOT contain the 8-step initialization sequence (steps 0 to 7) embedded in its AST or text slice
+        steps_0_to_7 = [
+            "Detect Repository Role & Scope",
+            "Enforce Karpathy Compliance & Strict Planning Gate",
+            "Read Governance Constitution",
+            "Load Project Skills",
+            "Load Governance Rules",
+            "Load Platform Profile",
+            "Bootstrap Tracker Labels",
+            "Transition to Operator Prompt Catalog",
+        ]
+        sec5_5_text = sec5_5_node.get_all_text()
+        for step in steps_0_to_7:
+            self.assertNotIn(
+                step,
+                sec5_5_text,
+                f"Universal initialization step '{step}' must not be embedded in Section 5.5 AST (Defect #381)"
+            )
+
+        lines = self.content.splitlines()
+        sec_5_5_idx = None
+        sec_5_6_idx = None
+        sec_5_7_idx = None
+        for idx, line in enumerate(lines):
+            if re.match(r'^###\s+5\.5\s+', line):
+                sec_5_5_idx = idx
+            elif re.match(r'^###\s+5\.6\s+', line):
+                sec_5_6_idx = idx
+            elif re.match(r'^###\s+5\.7\s+', line):
+                sec_5_7_idx = idx
+
+        self.assertIsNotNone(sec_5_5_idx, "Section 5.5 heading line not found in README.md")
+        self.assertIsNotNone(sec_5_6_idx, "Section 5.6 heading line not found in README.md")
+        self.assertIsNotNone(sec_5_7_idx, "Section 5.7 heading line not found in README.md")
+        self.assertLess(sec_5_5_idx, sec_5_6_idx, "Section 5.5 must precede Section 5.6")
+        self.assertLess(sec_5_6_idx, sec_5_7_idx, "Section 5.6 must precede Section 5.7")
+
+        sec_5_5_slice = "\n".join(lines[sec_5_5_idx:sec_5_6_idx])
+        sec_5_6_slice = "\n".join(lines[sec_5_6_idx:sec_5_7_idx])
+        for step in steps_0_to_7:
+            self.assertNotIn(
+                step,
+                sec_5_5_slice,
+                f"Universal initialization step '{step}' must not be embedded in Section 5.5 line slice (Defect #381)"
+            )
+
+        numbered_steps = [
+            "0. **Detect Repository Role & Scope",
+            "1. **Enforce Karpathy Compliance & Strict Planning Gate",
+            "2. **Read Governance Constitution",
+            "3. **Load Project Skills",
+            "4. **Load Governance Rules",
+            "5. **Load Platform Profile",
+            "6. **Bootstrap Tracker Labels",
+            "7. **Transition to Operator Prompt Catalog",
+        ]
+        for step in numbered_steps:
+            self.assertNotIn(
+                step,
+                sec_5_5_slice,
+                f"Numbered step '{step}' must not be in Section 5.5 line slice (Defect #381)"
+            )
+            self.assertIn(
+                step,
+                sec_5_6_slice,
+                f"Numbered step '{step}' missing from Section 5.6 line slice (Defect #381)"
+            )
+
+        # 3. Assert Section 5.5 contains a reference to Section 5.6
+        self.assertIn(
+            "Section 5.6",
+            sec5_5_text,
+            "Section 5.5 AST must reference Section 5.6 (Defect #381)"
+        )
+        self.assertIn(
+            "Section 5.6",
+            sec_5_5_slice,
+            "Section 5.5 line slice must reference Section 5.6 (Defect #381)"
+        )
+
+        # 4. Assert Section 5.6 heading is "5.6 Universal Agent Governance & Initialization Sequence (AGENTS.md)"
+        sec5_6_nodes = [s for s in ast.find_sections("5.6") if s.title.startswith("5.6")]
+        self.assertEqual(len(sec5_6_nodes), 1, "Expected exactly one Section 5.6 in README.md AST")
+        sec5_6_node = sec5_6_nodes[0]
+        self.assertEqual(
+            sec5_6_node.title.strip(),
+            "5.6 Universal Agent Governance & Initialization Sequence (AGENTS.md)",
+            f"Section 5.6 heading must be '5.6 Universal Agent Governance & Initialization Sequence (AGENTS.md)', got: '{sec5_6_node.title}'"
+        )
+
+        # 5. Assert Section 5.6 AST contains all 8 steps (Steps 0 through 7)
+        sec5_6_text = sec5_6_node.get_all_text()
+        for step in steps_0_to_7:
+            self.assertIn(
+                step,
+                sec5_6_text,
+                f"Universal initialization step '{step}' missing from Section 5.6 AST (Defect #381)"
+            )
+
+        # 6. Assert Section 5.7 and Section 5.8 contain references to Section 5.6
+        sec5_7_nodes = [s for s in ast.find_sections("5.7") if s.title.startswith("5.7")]
+        self.assertEqual(len(sec5_7_nodes), 1, "Expected exactly one Section 5.7 in README.md AST")
+        self.assertIn(
+            "Section 5.6",
+            sec5_7_nodes[0].get_all_text(),
+            "Section 5.7 AST must reference Section 5.6 (Defect #381)"
+        )
+
+        sec5_8_nodes = [s for s in ast.find_sections("5.8") if s.title.startswith("5.8")]
+        self.assertEqual(len(sec5_8_nodes), 1, "Expected exactly one Section 5.8 in README.md AST")
+        self.assertIn(
+            "Section 5.6",
+            sec5_8_nodes[0].get_all_text(),
+            "Section 5.8 AST must reference Section 5.6 (Defect #381)"
+        )
 
 
 class TestDomainDistributionTemplateScaffolding(unittest.TestCase):
