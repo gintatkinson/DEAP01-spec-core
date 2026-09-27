@@ -299,7 +299,7 @@ After initializing or updating the pipeline tooling, configure Google Antigravit
 1. **Native Configuration Discovery & Governance Rules**:
    Google Antigravity automatically discovers and ingests project-scoped rules from `AGENTS.md` and `.agents/AGENTS.md` into `<user_rules>`. Skills are discovered in `.agents/skills/`. To read the full active governance rules bundle, agents execute a direct-path read via `view_file` on `.pipeline/ACTIVE_RULES_BUNDLE.md`.
 2. **Mandatory Post-Install Agent Initialization Sequence**:
-   Immediately following turnkey installation, any AI agent (Antigravity, Claude Code, Gemini CLI, Cursor) initializing in this repository MUST execute the following sequence before accepting user directives or executing task implementations:
+   Immediately following turnkey installation, any AI agent (Antigravity, Claude Code, Cursor) initializing in this repository MUST execute the following sequence before accepting user directives or executing task implementations:
    0. **Detect Repository Role & Scope (Direct-Path Read)**:
       - Inspect whether `.pipeline/upstream/` exists on disk by executing a direct-path read via `list_dir` or `view_file` (e.g. `list_dir` on `.pipeline/upstream` or `view_file` on `.pipeline/upstream/pipeline-tooling.md`). Do NOT rely on glob or search tools (`find_by_name`, `grep_search`), which ignore hidden dot-directories by default.
       - If present -> **Upstream Compiler Mode**: The active repository is the upstream core compiler (`UPSTREAM_SPEC_CORE_COMPILER`). Customer application artifacts and concrete domain specifications are prohibited; work is restricted to pipeline compiler logic, verification tooling, and abstract schema parsers.

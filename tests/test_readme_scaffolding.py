@@ -11,6 +11,7 @@ Covers verification of:
    - Verifies presence of compiler-focus commands (compile_sysml.py, pytest,
      verify_downstream_baseline.py --no-domain, and propagation commands).
    - Verifies that all internal markdown links and anchor slugs in README.md resolve cleanly.
+   - Verifies that Section 5.5 contains 0 occurrences of deprecated 'Gemini CLI' (refs #379).
 2. TestDomainDistributionTemplateScaffolding:
    - Runs scripts/install_pipeline.sh on a temporary directory with --role domain-template
      and with auto-detection on DEAP-* directory names.
@@ -425,6 +426,54 @@ class TestUpstreamCompilerReadme(unittest.TestCase):
         self.assertNotIn("(or UPSTREAM_SPEC_CORE_COMPILER depending on execution context)", sec9_4_text)
         self.assertNotIn("Repository Classification: UPSTREAM_SPEC_CORE_COMPILER", sec9_4_text)
         self.assertIn("Repository Classification: DOWNSTREAM_CUSTOMER_PROJECT", sec9_4_text)
+
+    def test_upstream_readme_section_5_5_no_gemini_cli_conflation(self):
+        """Verifies that Section 5.5 is dedicated to Google Antigravity and contains 0 occurrences of deprecated 'Gemini CLI' (Defect #379)."""
+        ast = parse_markdown_ast(self.content)
+        sec5_5_nodes = [s for s in ast.find_sections("5.5") if s.title.startswith("5.5")]
+        self.assertEqual(len(sec5_5_nodes), 1, "Expected exactly one Section 5.5 in README.md AST")
+        sec5_5_node = sec5_5_nodes[0]
+
+        # Verify section title is dedicated to Google Antigravity without Gemini CLI conflation
+        self.assertEqual(
+            sec5_5_node.title.strip(),
+            "5.5 Setup for Google Antigravity",
+            f"Section 5.5 heading must be '5.5 Setup for Google Antigravity', got: '{sec5_5_node.title}'"
+        )
+        self.assertNotIn(
+            "Gemini CLI",
+            sec5_5_node.title,
+            "Section 5.5 heading must not reference deprecated 'Gemini CLI'"
+        )
+
+        # Assert 0 occurrences of deprecated 'Gemini CLI' in Section 5.5 AST subtree
+        sec5_5_text = sec5_5_node.get_all_text()
+        self.assertNotIn(
+            "Gemini CLI",
+            sec5_5_text,
+            "Found deprecated 'Gemini CLI' in Section 5.5 AST of README.md (Defect #379)"
+        )
+
+        # Also verify line-level slice between Section 5.5 and Section 5.6
+        lines = self.content.splitlines()
+        sec_5_5_idx = None
+        sec_5_6_idx = None
+        for idx, line in enumerate(lines):
+            if re.match(r'^###\s+5\.5\s+', line):
+                sec_5_5_idx = idx
+            elif re.match(r'^###\s+5\.6\s+', line):
+                sec_5_6_idx = idx
+
+        self.assertIsNotNone(sec_5_5_idx, "Section 5.5 heading line not found in README.md")
+        self.assertIsNotNone(sec_5_6_idx, "Section 5.6 heading line not found in README.md")
+        self.assertLess(sec_5_5_idx, sec_5_6_idx, "Section 5.5 must precede Section 5.6")
+
+        sec_5_5_slice = "\n".join(lines[sec_5_5_idx:sec_5_6_idx])
+        self.assertNotIn(
+            "Gemini CLI",
+            sec_5_5_slice,
+            "Found deprecated 'Gemini CLI' in Section 5.5 line slice of README.md (Defect #379)"
+        )
 
 
 class TestDomainDistributionTemplateScaffolding(unittest.TestCase):
