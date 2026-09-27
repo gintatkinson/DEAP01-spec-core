@@ -376,9 +376,59 @@ class TestUpstreamCompilerReadme(unittest.TestCase):
                         f"Relative path '{rel_path}' referenced in [{text}]({target}) does not exist on disk"
                     )
 
+    def test_upstream_readme_section_1_heading_order_and_hierarchy(self):
+        """Verifies that Section 1.1 precedes Section 1.2 and both are valid H3 subsections of Section 1."""
+        ast = parse_markdown_ast(self.content)
+        sec1_nodes = ast.find_sections("1. System Overview")
+        self.assertTrue(len(sec1_nodes) > 0, "Section 1 not found in README.md")
+
+        lines = self.content.splitlines()
+        sec_1_1_idx = None
+        sec_1_2_idx = None
+        for idx, line in enumerate(lines):
+            if re.match(r'^###\s+1\.1\s+Primary Commercial Toolchain Integration', line):
+                sec_1_1_idx = idx
+            elif re.match(r'^###\s+1\.2\s+Three-Tier Architecture', line):
+                sec_1_2_idx = idx
+
+        self.assertIsNotNone(sec_1_1_idx, "### 1.1 Primary Commercial Toolchain Integration not found as H3")
+        self.assertIsNotNone(sec_1_2_idx, "### 1.2 Three-Tier Architecture not found as H3")
+        self.assertLess(
+            sec_1_1_idx,
+            sec_1_2_idx,
+            f"Section 1.1 (line {sec_1_1_idx+1}) must precede Section 1.2 (line {sec_1_2_idx+1})"
+        )
+
+    def test_upstream_readme_three_tier_architecture_normalization(self):
+        """Verifies that README.md cleanly defines three tiers and has 0 contradictory tier labels."""
+        self.assertIn("### 1.2 Three-Tier Architecture & Repository Boundaries", self.content)
+        self.assertIn("Tier 1: Upstream Specification Core Compiler", self.content)
+        self.assertIn("Tier 2: Domain Distribution Templates", self.content)
+        self.assertIn("Tier 3: Customer Application Workspaces", self.content)
+
+        # Assert 0 contradictory duplicate Tier 1 labels for domain templates
+        self.assertNotIn("Tier 1: Domain Distribution Templates", self.content)
+        self.assertNotIn("Tier 1 Domain Distribution Template", self.content)
+
+        # Assert 0 contradictory Tier 2 labels for customer workspaces
+        self.assertNotIn("Tier 2: Customer Application Workspaces", self.content)
+        self.assertNotIn("Tier 2 Customer Application Workspace", self.content)
+
+    def test_upstream_readme_pipeline_2_prompt_boundary_confinement(self):
+        """Verifies that Section 9.4 strictly confines Pipeline 2 prompts to DOWNSTREAM_CUSTOMER_PROJECT."""
+        ast = parse_markdown_ast(self.content)
+        sec9_4_nodes = ast.find_sections("9.4 Pipeline 2 Prompts")
+        self.assertTrue(len(sec9_4_nodes) > 0, "Section 9.4 not found in README.md")
+
+        sec9_4_text = sec9_4_nodes[0].get_all_text()
+        self.assertIn("Execution Boundary Invariant", sec9_4_text)
+        self.assertNotIn("(or UPSTREAM_SPEC_CORE_COMPILER depending on execution context)", sec9_4_text)
+        self.assertNotIn("Repository Classification: UPSTREAM_SPEC_CORE_COMPILER", sec9_4_text)
+        self.assertIn("Repository Classification: DOWNSTREAM_CUSTOMER_PROJECT", sec9_4_text)
+
 
 class TestDomainDistributionTemplateScaffolding(unittest.TestCase):
-    """Verifies that install_pipeline.sh properly scaffolds Tier 1 Domain Distribution Templates."""
+    """Verifies that install_pipeline.sh properly scaffolds Tier 2 Domain Distribution Templates."""
 
     def setUp(self):
         self.assertTrue(os.path.isfile(INSTALL_SCRIPT), f"Installer not found at {INSTALL_SCRIPT}")
@@ -406,6 +456,8 @@ class TestDomainDistributionTemplateScaffolding(unittest.TestCase):
 
             self.assertIn("> **Repository Role:** `DOMAIN_DISTRIBUTION_TEMPLATE`", content)
             self.assertIn("### 1.1 Clean Landing Zone Invariant", content)
+            self.assertIn("As a **Tier 2 Domain Distribution Template**", content)
+            self.assertNotIn("Tier 1 Domain Distribution Template", content)
 
             # Assert single-line customer clone command
             expected_clone_pattern = (
@@ -479,7 +531,7 @@ class TestDomainDistributionTemplateScaffolding(unittest.TestCase):
 
 
 class TestCustomerWorkspaceScaffolding(unittest.TestCase):
-    """Verifies that install_pipeline.sh properly scaffolds Tier 2 Customer Application Workspaces."""
+    """Verifies that install_pipeline.sh properly scaffolds Tier 3 Customer Application Workspaces."""
 
     def setUp(self):
         self.assertTrue(os.path.isfile(INSTALL_SCRIPT), f"Installer not found at {INSTALL_SCRIPT}")
@@ -506,6 +558,8 @@ class TestCustomerWorkspaceScaffolding(unittest.TestCase):
                 content = f.read()
 
             self.assertIn("> **Repository Role:** `DOWNSTREAM_CUSTOMER_PROJECT`", content)
+            self.assertIn("As a **Tier 3 Customer Application Workspace**", content)
+            self.assertNotIn("Tier 2 Customer Application Workspace", content)
 
             # Assert ZERO circular clone commands
             self.assertIsNone(

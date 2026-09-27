@@ -14,11 +14,15 @@
 
 The **Digital Engineering Agent Platform Core Specification Compiler (`DEAP01-spec-core`)** is the upstream abstract systems engineering compiler and multi-agent verification framework for DEAP. It provides deterministic translation, model-based validation, bidirectional synchronization, and quality gate enforcement bridging formal engineering models (SysML v2, YANG, IDL, ARXML, OpenAPI, Protobuf) with downstream Agile specification backlogs and autonomous code generation.
 
-Operating purely on Abstract Syntax Tree (AST) tokens without hardcoding domain concepts, `DEAP01-spec-core` serves as the upstream parent compiler (`UPSTREAM_SPEC_CORE_COMPILER`) from which Tier 1 domain-specific distribution templates across 6 canonical cyber-physical sectors (Aerospace & Defense, Medical & Healthcare, Space & Satellites, Industrial Robotics, Subsea & Maritime, Rail & Transportation) are maintained, and from which Tier 2 downstream customer application workspaces (`uav-*`) are onboarded via domain distribution templates.
+Operating purely on Abstract Syntax Tree (AST) tokens without hardcoding domain concepts, `DEAP01-spec-core` serves as the upstream parent compiler (`UPSTREAM_SPEC_CORE_COMPILER`) from which Tier 2 domain-specific distribution templates across 6 canonical cyber-physical sectors (Aerospace & Defense, Medical & Healthcare, Space & Satellites, Industrial Robotics, Subsea & Maritime, Rail & Transportation) are maintained, and from which Tier 3 downstream customer application workspaces (`uav-*`) are onboarded via domain distribution templates.
 
-### 1.2 Two-Tier Architecture Boundary: Upstream Compiler vs. Domain Templates vs. Customer Workspaces
+### 1.1 Primary Commercial Toolchain Integration
 
-The DEAP framework strictly enforces a clean two-tier architecture separating upstream compiler tooling propagation from downstream customer onboarding:
+This platform explicitly declares **MATLAB / Simulink / Stateflow / Embedded Coder** as the Primary Tier-1 Commercial Toolchain Integration (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada Code Generation).
+
+### 1.2 Three-Tier Architecture & Repository Boundaries: Upstream Compiler vs. Domain Templates vs. Customer Workspaces
+
+The DEAP framework strictly enforces a clean three-tier architecture separating upstream compiler tooling propagation from downstream customer onboarding:
 
 ```text
 +-----------------------------------------------------------------------------------+
@@ -27,50 +31,46 @@ The DEAP framework strictly enforces a clean two-tier architecture separating up
 | Sentinel: .pipeline/upstream/ present | Pure Schema-Driven Abstract Compiler       |
 +-----------------------------------------------------------------------------------+
                                          |
-                                         |  Tier 1 Compiler Propagation (Maintainers)
+                                         |  Compiler Tooling Propagation (Maintainers)
                                          |  scripts/install_pipeline.sh
                                          v
 +-----------------------------------------------------------------------------------+
-| Tier 1: Domain Distribution Templates (Canonical Cyber-Physical Sectors)         |
+| Tier 2: Domain Distribution Templates (Canonical Cyber-Physical Sectors)         |
 | Repositories: DEAP-* (e.g. DEAP-uas-infrastructure-safety)                        |
 | Role: DOMAIN_DISTRIBUTION_TEMPLATE | Sentinel: .pipeline/upstream/ removed        |
 | Content: Domain SysML v2 schemas (schema/), sector blueprints, domain profiles    |
 | Landing zones (docs/epics/, docs/features/, etc.) remain clean (.gitkeep)         |
 +-----------------------------------------------------------------------------------+
                                          |
-                                         |  Tier 2 Customer Onboarding (End-Users)
+                                         |  Customer Project Onboarding (End-Users)
                                          |  Self-contained bootstrap via Domain URL
                                          v
 +-----------------------------------------------------------------------------------+
-| Tier 2: Customer Application Workspaces                                           |
+| Tier 3: Customer Application Workspaces                                           |
 | Repositories: uav-* (e.g. uav-tactical-mission, customer flight projects)         |
 | Role: DOWNSTREAM_APPLICATION_WORKSPACE / DOWNSTREAM_CUSTOMER_PROJECT             |
 | Content: Concrete proprietary flight code, ROS2 nodes, PX4 modules, SIL/HIL tests |
 +-----------------------------------------------------------------------------------+
 ```
 
-#### Tier 1: Upstream Compiler to Domain Distribution Templates
+#### Tier 1: Upstream Specification Core Compiler (`DEAP01-spec-core`)
 - **Upstream Spec Core Compiler (`DEAP01-spec-core`):** Abstract, domain-agnostic specification compiler and multi-agent verification platform. Operates with the sentinel `.pipeline/upstream/` directory present. All upstream landing zones (`docs/conops/`, `docs/safety/`, `docs/epics/`, `docs/features/`, `docs/user-stories/`, `docs/use-cases/`, `schema/`) remain pristine with zero concrete domain specifications or domain-specific `.sysml` files.
 - **Pure Schema-Driven Compiler Invariant:** `DEAP01-spec-core` is an abstract Model-Based Systems Engineering (MBSE) compiler; all domain semantics, safety statecharts, and specifications derive deterministically from user-provided schemas in `schema/`.
-- **Tier 1 Domain Distribution Templates (`DEAP-*`):** Canonical sector repositories derived from `DEAP01-spec-core` by compiler maintainers. Tooling propagation removes `.pipeline/upstream/`, enabling domain-specific SysML v2 models, schemas in `schema/`, and sector architecture blueprints across 6 canonical domains:
+
+#### Tier 2: Domain Distribution Templates (`DEAP-*`)
+- **Tier 2 Domain Distribution Templates (`DEAP-*`):** Canonical sector repositories derived from `DEAP01-spec-core` by compiler maintainers. Tooling propagation removes `.pipeline/upstream/`, enabling domain-specific SysML v2 models, schemas in `schema/`, and sector architecture blueprints across 6 canonical domains:
   1. **Aerospace & Defense:** `DEAP-uas-infrastructure-safety` (SORA, ASTM F3269, DO-365B)
   2. **Medical & Healthcare:** `DEAP-surgical-robotics-console` (IEC 62304 Class C, ISO 14971, FDA Class III)
   3. **Space & Satellites:** `DEAP-space-cubesat-constellation` (ECSS-E-ST-40C, NASA-STD-8739.8)
   4. **Industrial Robotics:** `DEAP-industrial-warehouse-agv` (ISO 3691-4, IEC 61508, VDA 5050)
   5. **Subsea & Maritime:** `DEAP-subsea-oceanographic-auv` (DNV-GL-ST-E403, IMO MASS)
   6. **Rail & Transportation:** `DEAP-rail-autonomous-locomotive` (EN 50126, EN 50128 SIL 4)
-  In Tier 1 domain templates, specification landing zones (`docs/epics/`, `docs/features/`, `docs/user-stories/`, `docs/use-cases/`) remain clean landing zones with `.gitkeep` files until projected for a concrete implementation.
+  In Tier 2 domain templates, specification landing zones (`docs/epics/`, `docs/features/`, `docs/user-stories/`, `docs/use-cases/`) remain clean landing zones with `.gitkeep` files until projected for a concrete implementation.
 
-#### Tier 2: Domain Distribution Templates to Customer Application Workspaces
+#### Tier 3: Customer Application Workspaces (`uav-*`)
 - **Customer Application Workspaces (`uav-*`, `DOWNSTREAM_APPLICATION_WORKSPACE` / `DOWNSTREAM_CUSTOMER_PROJECT`):** Concrete engineering repositories where end-user engineering teams build proprietary software, ROS2 nodes, PX4 flight modules, and hardware-in-the-loop tests.
 - **Clean Customer Boundary Mandate:** Customer projects onboard strictly from their relevant **Domain Distribution Template** (`DEAP-*`), NOT from the upstream compiler (`DEAP01-spec-core`). Onboarding from the domain template guarantees that all domain-specific SysML v2 schemas, safety contracts, and profile rules are seeded directly into the customer workspace in a single self-contained command with zero external sibling path dependencies.
 - **Illustrative Schema Payloads:** Any concrete flight controller, robotic surgical console, satellite bus, AGV guidance, subsea vehicle, rail locomotive controller, STPA hazard analysis, or domain safety examples presented throughout this README and documentation are strictly **illustrative schema payloads** demonstrating compiler ingestion, AST synthesis, projection, and verification capabilities.
-
----
-
-## 1.1 Primary Commercial Toolchain Integration
-
-This platform explicitly declares **MATLAB / Simulink / Stateflow / Embedded Coder** as the Primary Tier-1 Commercial Toolchain Integration (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada Code Generation).
 
 ---
 
@@ -149,7 +149,7 @@ DEAP01-spec-core/
 └── README.md                      # Upstream compiler master specification & usage guide
 ```
 
-#### Tier 1: Domain Distribution Template Repository (e.g. DEAP-uas-infrastructure-safety):
+#### Tier 2: Domain Distribution Template Repository (e.g. DEAP-uas-infrastructure-safety):
 ```text
 domain-distribution-template/ (e.g. DEAP-uas-infrastructure-safety, DEAP-surgical-robotics-console, ...)
 ├── .agents/
@@ -172,9 +172,9 @@ domain-distribution-template/ (e.g. DEAP-uas-infrastructure-safety, DEAP-surgica
 └── README.md                      # Domain template master specification & usage guide
 ```
 
-Tier 2 Customer Application Workspaces (`uav-*`) inherit this layout from the domain distribution template, populating `docs/epics/`, `docs/features/`, and application source directories (`app_flutter/`, `web_react/`, `ros2/`, `px4/`).
+Tier 3 Customer Application Workspaces (`uav-*`) inherit this layout from the domain distribution template, populating `docs/epics/`, `docs/features/`, and application source directories (`app_flutter/`, `web_react/`, `ros2/`, `px4/`).
 
-### 4.1 Supported Tier 1 Domain Distribution Templates (Canonical Taxonomies)
+### 4.1 Supported Tier 2 Domain Distribution Templates (Canonical Taxonomies)
 1. **Aerospace & Defense:** `DEAP-uas-infrastructure-safety` (SORA, ASTM F3269, DO-365B)
 2. **Medical & Healthcare:** `DEAP-surgical-robotics-console` (IEC 62304 Class C, ISO 14971, FDA Class III)
 3. **Space & Satellites:** `DEAP-space-cubesat-constellation` (ECSS-E-ST-40C, NASA-STD-8739.8)
@@ -259,9 +259,9 @@ bash scripts/install_pipeline.sh .
 
 ### 5.4 Architectural Boundary: Customer Project Onboarding
 
-The DEAP two-tier architecture strictly decouples compiler tooling propagation from customer project onboarding:
-- **Tier 1 (Upstream Compiler -> Domain Templates):** Maintainers propagate abstract compiler tooling and governance from `DEAP01-spec-core` to canonical sector distribution templates (`DEAP-*`).
-- **Tier 2 (Domain Templates -> Customer Workspaces):** Application engineers and customer teams onboard concrete project workspaces (`uav-*`) exclusively from the appropriate **Domain Distribution Template** (`DEAP-*`), never from `DEAP01-spec-core`.
+The DEAP three-tier architecture strictly decouples compiler tooling propagation from customer project onboarding:
+- **Compiler Propagation (Tier 1 Compiler -> Tier 2 Domain Templates):** Maintainers propagate abstract compiler tooling and governance from `DEAP01-spec-core` to canonical sector distribution templates (`DEAP-*`).
+- **Customer Onboarding (Tier 2 Domain Templates -> Tier 3 Customer Workspaces):** Application engineers and customer teams onboard concrete project workspaces (`uav-*`) exclusively from the appropriate **Domain Distribution Template** (`DEAP-*`), never from `DEAP01-spec-core`.
 
 > **Critical Architecture Rule:** End-user customer projects (`uav-*`) clone from their domain distribution template (e.g. `DEAP-uas-infrastructure-safety`), NOT from `DEAP01-spec-core`. Bootstrapping from the domain template seeds the customer workspace with domain-specific SysML v2 schemas, safety statecharts, and platform execution profiles.
 
@@ -274,7 +274,7 @@ The DEAP two-tier architecture strictly decouples compiler tooling propagation f
                                          │  bash scripts/install_pipeline.sh "<path-to-domain-template>"
                                          ▼
 +-----------------------------------------------------------------------------------+
-| Tier 1: Domain Distribution Templates                                             |
+| Tier 2: Domain Distribution Templates                                             |
 | DEAP-* (DOMAIN_DISTRIBUTION_TEMPLATE)                                              |
 | Contains: Domain SysML v2 schemas (schema/), sector blueprints, domain profiles    |
 +-----------------------------------------------------------------------------------+
@@ -282,13 +282,13 @@ The DEAP two-tier architecture strictly decouples compiler tooling propagation f
                                          │  git clone "<domain-url>" ./.tmp-pipeline && ...
                                          ▼
 +-----------------------------------------------------------------------------------+
-| Tier 2: Customer Application Workspaces                                           |
+| Tier 3: Customer Application Workspaces                                           |
 | uav-* (DOWNSTREAM_CUSTOMER_PROJECT)                                               |
 | Contains: Concrete proprietary flight code, ROS2 nodes, PX4 modules, SIL/HIL tests |
 +-----------------------------------------------------------------------------------+
 ```
 
-For customer onboarding instructions and domain-specific schemas, refer to the documentation in the respective canonical domain distribution template repository (see [Section 4.1](#41-supported-tier-1-domain-distribution-templates-canonical-taxonomies)).
+For customer onboarding instructions and domain-specific schemas, refer to the documentation in the respective canonical domain distribution template repository (see [Section 4.1](#41-supported-tier-2-domain-distribution-templates-canonical-taxonomies)).
 
 ---
 
@@ -1091,7 +1091,9 @@ python3 scripts/compile_sysml.py --reverse-sync
 
 ### 9.4 Pipeline 2 Prompts (Autonomous Feature Implementation & Two-Path Simulation Driver)
 
-Execute the following prompts to drive feature implementation and two-path (dual-track) simulation verification through context-isolated TDD micro-tasks:
+> **Execution Boundary Invariant:** Pipeline 2 prompts are strictly confined to downstream customer application workspaces (`DOWNSTREAM_CUSTOMER_PROJECT`, e.g. `uav-*`). Autonomous feature implementation, UI widgets (`app_flutter/`), real-time robotic nodes (`ros2/`, `px4/`), and digital twin simulation engines must NEVER be executed directly within the upstream specification compiler (`UPSTREAM_SPEC_CORE_COMPILER`), preserving the Upstream Clean Landing Zone and Pure Schema-Driven Compiler Invariants.
+
+Execute the following prompts within downstream customer application workspaces to drive feature implementation and two-path (dual-track) simulation verification through context-isolated TDD micro-tasks:
 
 #### 9.4.1 Worker 2A: Feature-Driven Implementation Prompts
 
@@ -1100,7 +1102,7 @@ Execute the following prompts to drive feature implementation and two-path (dual
 ```text
 Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` as your very first step before taking any action.
 
-Repository Classification: DOWNSTREAM_CUSTOMER_PROJECT (or UPSTREAM_SPEC_CORE_COMPILER depending on execution context)
+Repository Classification: DOWNSTREAM_CUSTOMER_PROJECT
 
 Role: Worker 2A -- Flutter Feature-Driven Implementation Specialist
 
@@ -1155,7 +1157,7 @@ PROCEED
 ```text
 Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` as your very first step before taking any action.
 
-Repository Classification: DOWNSTREAM_CUSTOMER_PROJECT (or UPSTREAM_SPEC_CORE_COMPILER depending on execution context)
+Repository Classification: DOWNSTREAM_CUSTOMER_PROJECT
 
 Role: Worker 2A -- Real-Time Robotics & Autopilot Implementation Specialist
 
@@ -1186,7 +1188,7 @@ PROCEED
 ```text
 Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` as your very first step before taking any action.
 
-Repository Classification: UPSTREAM_SPEC_CORE_COMPILER (or DOWNSTREAM_CUSTOMER_PROJECT depending on execution context)
+Repository Classification: DOWNSTREAM_CUSTOMER_PROJECT
 
 Role: Worker 2B -- Two-Path (Dual-Track) Simulation & Digital Twin Verification Driver
 

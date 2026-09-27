@@ -1,16 +1,33 @@
-# Implementation Plan: Fleet-Wide Pipeline Propagation & Baseline Parity Verification (Remediation Iteration 2)
+# Implementation Plan: Architecture Tier Normalization & Repository Boundary Hardening
 
-## 1. Executive Summary & Root Cause Analysis
+## 1. Executive Summary & Problem Diagnosis
 
-Following the Independent Victory Audit 6 report (`.agents/victory_auditor_6/handoff.md`), victory was **REJECTED** due to:
-1. **Empirical Gate 23 Failure on `uav-009`**: Running `python3 scripts/verify_downstream_baseline.py /Users/perkunas/jail/uav-009` terminates at Check 23 with exit code 1 (reporting 421 factual grounding violations).
-   - **Root Cause**: A severe parser flaw in `skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/factual_grounding_validator.py:1642`. The regex `part_pattern = re.compile(r'\bpart\s+(?:def\s+)?([a-zA-Z0-9_]+)\s*\{([^}]*)\}', re.DOTALL)` uses `[^}]*` which terminates at the first closing brace `}` inside nested `part def` blocks (e.g. inside `FlightController`). Consequently, `Avenger5AirVehicle` is prematurely truncated at line 180, and all subsequent subsystem attributes between lines 180 and 430—such as `radioOutputPowerW: Real = 2.0;`—are dumped into `top_level_text` with `owner=None`. As a global un-scoped metric with unit `W`, `2.0 W` was matched against every component in the aircraft mentioning "power", falsely flagging 421 legitimate physical attributes across 75 documents.
-2. **Empirical Gate 17 & Gate 30 Failures on `uav-011`**:
-   - Running `python3 scripts/verify_downstream_baseline.py /Users/perkunas/jail/uav-011` fails at Check 17 because `docs/safety/` is missing in unelaborated downstream workspaces where landing zones are clean and specifications are pending.
-   - Running with `--allow-missing-specs` fails at Check 30 because `architecture_viewpoint_validator.py:1240` unconditionally emits `RULE_CORPUS_MISSING` on empty specification corpora for downstream repositories, completely ignoring `allow_missing_specs=True`, while `scripts/verify_downstream_baseline.py:3465` hardcodes `allow_missing_specs=False`.
-3. **Attestation Discrepancy in `HANDOFF.md`**: Lines 121–122 and lines 142/147 in commit `ccbe7c0` claimed all 31 baseline checks pass with exit code 0 when run directly, which was empirically false.
+This implementation plan establishes atomic work packages to execute an adversarial audit and remediation of `README.md` and associated installer scaffolding templates in `DEAP01-spec-core` (addressing requirements R1 through R5).
 
-This plan establishes atomic work packages to resolve these tooling flaws in upstream `DEAP01-spec-core`, re-propagate the framework to `uav-009` and `uav-011`, verify that all 31 baseline checks pass with exit code 0 under `verify_downstream_baseline.py`, push to remote tracking branches at 0 bytes diff, update `HANDOFF.md` Section 2.1 accurately, and submit for re-audit.
+### Root Causes & Structural Defects Identified:
+1. **Contradictory Tier Numbering (R2)**:
+   - In `README.md` (Sections 1.2 and 5.4) and ASCII topology diagrams, both the Upstream Specification Core Compiler (`DEAP01-spec-core`) and the Domain Distribution Templates (`DEAP-*`) are labeled "Tier 1".
+   - In `scripts/install_pipeline.sh` (lines 882 & 953), Domain Distribution Templates are labeled "Tier 1" while Customer Application Workspaces are labeled "Tier 2".
+   - This creates confusion between two distinct propagation boundaries (Compiler Propagation vs. Customer Onboarding) and repository tier classifications.
+   - **Remediation**: Normalize to a clean, unambiguous three-tier architecture across all files:
+     * **Tier 1**: Upstream Specification Core Compiler (`DEAP01-spec-core`, `UPSTREAM_SPEC_CORE_COMPILER`)
+     * **Tier 2**: Domain Distribution Templates (`DEAP-*`, `DOMAIN_DISTRIBUTION_TEMPLATE`)
+     * **Tier 3**: Customer Application Workspaces (`uav-*`, `DOWNSTREAM_CUSTOMER_PROJECT`)
+2. **Inverted Heading Hierarchy in Section 1 (R2)**:
+   - In `README.md`, Section 1 begins with `## 1. System Overview`, followed immediately by `### 1.2 Two-Tier Architecture Boundary...`, and only later features `## 1.1 Primary Commercial Toolchain Integration` at line 71.
+   - **Remediation**: Correct heading order and hierarchy so `1.1 Primary Commercial Toolchain Integration` logically precedes `1.2 System Architecture & Repository Boundaries`.
+3. **Repository Execution Boundary Ambiguity in Pipeline 2 (R3)**:
+   - In `README.md` Section 9.4 (lines 1094, 1149, 1180), prompt preambles state: `Repository Classification: DOWNSTREAM_CUSTOMER_PROJECT (or UPSTREAM_SPEC_CORE_COMPILER depending on execution context)`.
+   - This implies that concrete application features (Flutter UI, ROS2 nodes, PX4 autopilot modules) and digital twin simulation engines may be executed inside `UPSTREAM_SPEC_CORE_COMPILER`, violating the Pure Schema-Driven Compiler Invariant and Clean Landing Zone mandate.
+   - **Remediation**: Clarify Section 9.4 preamble and purge all references suggesting Pipeline 2 can be run in `UPSTREAM_SPEC_CORE_COMPILER`. Restrict Pipeline 2 strictly to downstream customer application workspaces (`DOWNSTREAM_CUSTOMER_PROJECT`).
+4. **Automated Test Assertions & Regression Coverage (R4)**:
+   - `tests/test_readme_scaffolding.py` contains legacy docstrings and assertions referencing Tier 1 for domain templates and Tier 2 for customer workspaces.
+   - **Remediation**: Update test suite to assert the normalized three-tier architecture, correct heading sequence, and absence of contradictory tier labels. Verify `verify_downstream_baseline.py --no-domain` and `test_readme_scaffolding.py` pass with exit code 0.
+5. **Git Synchronization & Neutral Commit Mandate (R5)**:
+   - Verify commit neutrality via `scripts/verify_commit_messages.py --head`.
+   - Commit using neutral citation:
+     `git commit -m "docs(readme): normalize architecture tiers, fix heading sequence, and harden repository boundary (refs #371, refs #368)"`
+   - Push to GitHub `origin/main` and verify 0-byte remote diff via an independent Victory Auditor.
 
 ---
 
@@ -18,173 +35,133 @@ This plan establishes atomic work packages to resolve these tooling flaws in ups
 
 ```mermaid
 flowchart TD
-    subgraph Phase1 ["Phase 1: Upstream Tooling Remediation (DEAP01-spec-core)"]
-        WP09["WP-09: Tooling Fix for Check 30 & Clean Landing Zone Baseline Gating<br/>(architecture_viewpoint_validator.py & verify_downstream_baseline.py)"]
-        WP10["WP-10: Tooling Fix for Check 23 Balanced Brace AST Extraction<br/>(factual_grounding_validator.py)"]
-        WP09 --> WP10
+    subgraph Audit ["Stage 1: Forensic Adversarial Audit"]
+        WP01["WP-01: Forensic Audit of README.md & scripts/install_pipeline.sh<br/>(teamwork_preview_auditor)"]
     end
 
-    subgraph Phase2 ["Phase 2: Fleet Re-Propagation & Empirical Verification"]
-        WP11_Install["WP-11a: Re-propagate pipeline to uav-009 & uav-011 via install_pipeline.sh<br/>Verify Failure Mode 11 customer asset preservation"]
-        WP11_Gate009["WP-11b: Verify all 31 checks PASS on uav-009 (exit code 0)"]
-        WP11_Gate011["WP-11c: Verify all 31 checks PASS on uav-011 (exit code 0)"]
-        WP10 --> WP11_Install
-        WP11_Install --> WP11_Gate009
-        WP11_Install --> WP11_Gate011
+    subgraph Remediation ["Stage 2: Architecture Tier & Boundary Remediation"]
+        WP02["WP-02: Normalize Architecture Tiers, Heading Order & Prompt Boundaries<br/>(README.md & scripts/install_pipeline.sh)<br/>(teamwork_preview_worker)"]
     end
 
-    subgraph Phase3 ["Phase 3: Git Remote Synchronization & Victory Re-Submission"]
-        WP12_Sync009["WP-12a: Stage, commit (neutral refs) & push uav-009 to GitLab (0-byte diff)"]
-        WP12_Sync011["WP-12b: Stage, commit (neutral refs) & push uav-011 to GitLab (0-byte diff)"]
-        WP12_SyncUpstream["WP-12c: Update HANDOFF.md Section 2.1 with verified hashes & push upstream to GitHub"]
-        WP13_Victory["WP-13: Independent Victory Re-Audit & Parent Sentinel Notification"]
-        WP11_Gate009 --> WP12_Sync009
-        WP11_Gate011 --> WP12_Sync011
-        WP12_Sync009 --> WP12_SyncUpstream
-        WP12_Sync011 --> WP12_SyncUpstream
-        WP12_SyncUpstream --> WP13_Victory
+    subgraph Verification ["Stage 3: Test Suite Updates & Automated Regression Verification"]
+        WP03["WP-03: Update tests/test_readme_scaffolding.py & Run Baselines<br/>(teamwork_preview_worker)"]
     end
+
+    subgraph Delivery ["Stage 4: Git Sync, Victory Audit & Reporting"]
+        WP04_Sync["WP-04a: Git Stage, Neutral Citation Commit & Remote Push<br/>(teamwork_preview_worker)"]
+        WP04_Audit["WP-04b: Independent Victory Audit (0-byte diff & gate verification)<br/>(teamwork_preview_auditor)"]
+        WP04_Report["WP-04c: Victory Notification to Parent Sentinel via send_message<br/>(orchestrator_10)"]
+        WP04_Sync --> WP04_Audit
+        WP04_Audit --> WP04_Report
+    end
+
+    WP01 --> WP02
+    WP02 --> WP03
+    WP03 --> WP04_Sync
 ```
 
 ---
 
 ## 3. Detailed Work Packages
 
-### WP-09: Tooling Fix for Check 30 & Clean Landing Zone Baseline Gating
-- **Assigned Agent**: `teamwork_preview_worker` (Role: `Baseline Gating Tooling Worker`)
+### WP-01: Forensic Adversarial Audit of README.md & Installer Scaffolding
+- **Assigned Agent**: `teamwork_preview_auditor` (Role: `Adversarial Forensic Auditor`)
 - **Target Files**:
-  * `skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/architecture_viewpoint_validator.py`
-  * `scripts/verify_downstream_baseline.py`
+  * `README.md`
+  * `scripts/install_pipeline.sh`
+  * `tests/test_readme_scaffolding.py`
 - **Execution Details**:
-  1. In `architecture_viewpoint_validator.py:1240`, restore the `allow_missing_specs` check:
-     ```python
-     if not active_spec_files:
-         if allow_missing_specs:
-             return []
-         return [Finding(
-             RULE_CORPUS_MISSING,
-             "Architecture specification corpus is missing in workspace ('docs/conops', 'docs/interfaces', 'docs/safety').",
-             location="docs/conops",
-             detail={"target_dirs": target_dirs}
-         )]
-     ```
-  2. In `scripts/verify_downstream_baseline.py:3450`, update `check_architecture_viewpoint_diagrams(repo_root=None, allow_missing_specs=False, strict=False)` to accept `allow_missing_specs` and `strict`, calculate `effective_allow_missing`, and pass it to `validator.validate(repo, allow_missing_specs=effective_allow_missing, spec_only=True)`.
-  3. In `scripts/verify_downstream_baseline.py:3644`, pass `allow_missing_specs=allow_missing_specs, strict=strict` from `run_all_checks`.
-  4. In `scripts/verify_downstream_baseline.py:3649`, enhance downstream clean landing zone detection: if a downstream workspace has clean landing zones (e.g., `schema/` contains only `.gitkeep` and `docs/epics/`, `docs/features/` contain only `.gitkeep` with zero concrete specs), automatically set `allow_missing = True` unless `--strict` or `DEAP_STRICT_BASELINE=1` is explicitly asserted.
-  5. In `scripts/verify_downstream_baseline.py:2084` (Check 17): Ensure clean landing zones with pending safety specs pass when `effective_allow_missing` is True.
-- **Verification**: Run unit tests `python3 -m unittest tests/test_architecture_viewpoint_validator.py` and run `verify_downstream_baseline.py /Users/perkunas/jail/uav-011` directly to verify Checks 10-31 pass with exit code 0.
+  1. Audit `README.md` and `scripts/install_pipeline.sh` for:
+     - Contradictory "Tier 1" / "Tier 2" labels across upstream compiler, domain distribution templates, and customer workspaces.
+     - Heading sequence anomalies (e.g. 1.2 preceding 1.1).
+     - Ambiguous repository classification directives in Section 9.4 that permit executing Pipeline 2 inside `UPSTREAM_SPEC_CORE_COMPILER`.
+     - Outdated test citations or broken anchor links.
+  2. Deliver comprehensive audit report to `.agents/auditor_wp01/handoff.md`.
+- **Completion Criteria**: Detailed catalog of all contradictions and defects with exact line numbers and proposed structural fixes.
 
-### WP-10: Tooling Fix for Check 23 Balanced Brace AST Extraction & Component Scoping
-- **Assigned Agent**: `teamwork_preview_worker` (Role: `AST Parser Tooling Worker`)
+### WP-02: Architecture Tier Hierarchy, Heading Normalization & Repository Boundary Hardening
+- **Assigned Agent**: `teamwork_preview_worker` (Role: `Documentation & Tooling Worker`)
 - **Target Files**:
-  * `skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/factual_grounding_validator.py`
+  * `README.md`
+  * `scripts/install_pipeline.sh`
 - **Execution Details**:
-  1. In `factual_grounding_validator.py:1642` (`_extract_from_sysml`), replace the naive `[^}]*` regex with a balanced-brace block scanner that correctly parses nested `part def` blocks and nested body structures:
-     ```python
-     # Find part declarations and scan balanced braces
-     part_head_pat = re.compile(r'\bpart\s+(?:def\s+)?([a-zA-Z0-9_]+)\s*\{', re.DOTALL)
-     for m in part_head_pat.finditer(text):
-         pname = m.group(1).strip()
-         start = m.end()
-         depth = 1
-         i = start
-         while i < len(text) and depth > 0:
-             if text[i] == '{':
-                 depth += 1
-             elif text[i] == '}':
-                 depth -= 1
-             i += 1
-         pbody = text[start : i - 1]
-         # Register part and recurse on pbody with owner=pname_norm
-         ...
-     ```
-  2. Ensure nested part definitions preserve their scoped subsystem hierarchy and that child attributes are scoped to their respective declaring component rather than spilling into top-level global attributes with `owner=None`.
-  3. Ensure that when a metric has an owner or specific tokens (like `radioOutputPowerW`), it is never falsely matched against unrelated components (like `Gimbal` or `Battery`).
-- **Verification**: Run `python3 -m unittest tests/test_check23_factual_grounding_gate.py` and run `python3 scripts/verify_downstream_baseline.py /Users/perkunas/jail/uav-009` directly to verify Check 23 passes with exit code 0 with zero clobbering of customer assets.
+  1. In `README.md`:
+     - Move Section 1.1 `## 1.1 Primary Commercial Toolchain Integration` so it precedes Section 1.2.
+     - Update Section 1.2 title to `### 1.2 Three-Tier Architecture & Repository Boundaries`.
+     - Update Section 1.2 ASCII diagram and text to clean three-tier architecture:
+       * **Tier 1**: Upstream Specification Core Compiler (`DEAP01-spec-core`, `UPSTREAM_SPEC_CORE_COMPILER`)
+       * **Tier 2**: Domain Distribution Templates (`DEAP-*`, `DOMAIN_DISTRIBUTION_TEMPLATE`)
+       * **Tier 3**: Customer Application Workspaces (`uav-*`, `DOWNSTREAM_CUSTOMER_PROJECT`)
+     - Update Section 5.4 title and ASCII diagram to reflect the clean three-tier architecture (Tier 1 Compiler -> Tier 2 Domain Templates -> Tier 3 Customer Workspaces).
+     - In Section 9.4, add explicit restriction that Pipeline 2 is strictly intended for downstream customer application workspaces (`DOWNSTREAM_CUSTOMER_PROJECT`). Remove all occurrences of `(or UPSTREAM_SPEC_CORE_COMPILER depending on execution context)` from Worker 2A, Worker 2A.2, and Worker 2B prompt preambles.
+  2. In `scripts/install_pipeline.sh`:
+     - Update Section 1.1 of Domain Distribution Template README template (line 882): replace `As a **Tier 1 Domain Distribution Template**` with `As a **Tier 2 Domain Distribution Template**`.
+     - Update Section 1.1 of Customer Application Workspace README template (line 953): replace `As a **Tier 2 Customer Application Workspace**` with `As a **Tier 3 Customer Application Workspace**`.
+- **Completion Criteria**: Zero contradictory tier labels; clean 1.1 -> 1.2 sequence; strict customer-only boundary for Pipeline 2.
 
-### WP-11: Fleet Re-Propagation & Empirical Gate Verification
-- **Assigned Agent**: `teamwork_preview_worker` (Role: `Pipeline Propagation Worker`)
+### WP-03: Automated Regression & Scaffolding Test Verification
+- **Assigned Agent**: `teamwork_preview_worker` (Role: `Test Verification Worker`)
+- **Target Files**:
+  * `tests/test_readme_scaffolding.py`
 - **Execution Details**:
-  1. Propagate fixed framework to `uav-009`:
-     `bash /Users/perkunas/jail/DEAP01-spec-core/scripts/install_pipeline.sh /Users/perkunas/jail/uav-009`
-     Verify Failure Mode 11 customer non-clobbering:
-     * `schema/avenger5_system.sysml` SHA-256 `140d4b655a6d3cb0e9073a4d33f8a7f216875dc5f3f5641f6b963ff4adb0b747` (100% identical).
-     * `.pipeline/schema.sysml` (100% identical).
-     * 22 defect dossiers in `docs/reports/` and 75 published customer specifications in `docs/` have 0 bytes diff.
-  2. Propagate fixed framework to `uav-011`:
-     `bash /Users/perkunas/jail/DEAP01-spec-core/scripts/install_pipeline.sh /Users/perkunas/jail/uav-011`
-     Verify clean landing zones (`schema/`, `docs/epics/`, `docs/features/`, `docs/user-stories/`, `docs/use-cases/` have `.gitkeep` only).
-  3. Run baseline verification on `uav-009`:
-     `python3 /Users/perkunas/jail/DEAP01-spec-core/scripts/verify_downstream_baseline.py /Users/perkunas/jail/uav-009`
-     Verify all 31 checks (Checks 10 through 31, including Check 31 Dual-Schema SSOT Parity Gate) pass with exit code 0.
-  4. Run baseline verification on `uav-011`:
-     `python3 /Users/perkunas/jail/DEAP01-spec-core/scripts/verify_downstream_baseline.py /Users/perkunas/jail/uav-011`
-     Verify all 31 checks (Checks 10 through 31) pass with exit code 0.
+  1. Update `tests/test_readme_scaffolding.py`:
+     - Update docstrings and assertions to reflect three-tier architecture (Tier 1 Upstream Compiler, Tier 2 Domain Templates, Tier 3 Customer Workspaces).
+     - Add assertions verifying that Section 1.1 precedes Section 1.2 in `README.md`.
+     - Add assertions verifying that `README.md` and `scripts/install_pipeline.sh` contain zero contradictory "Tier 1" labels for domain templates and zero "Tier 2" labels for customer workspaces.
+     - Add assertions verifying that Section 9.4 prompt preambles do not permit `UPSTREAM_SPEC_CORE_COMPILER`.
+  2. Execute test suites:
+     - `python3 -m unittest tests/test_readme_scaffolding.py` (assert exit code 0).
+     - `python3 scripts/verify_downstream_baseline.py --no-domain` (assert exit code 0).
+     - `python3 -m pytest tests/` (assert 0 failures).
+- **Completion Criteria**: All tests pass cleanly with exit code 0.
 
-### WP-12: Git Stage, Commit & Remote Push Across All Three Repositories
-- **Assigned Agent**: `teamwork_preview_worker` (Role: `Git Synchronization Worker`)
+### WP-04: Git Stage, Neutral Citation Commit, Remote Synchronization & Victory Audit
+- **Assigned Agents**:
+  * `teamwork_preview_worker` (Role: `Git Synchronization Worker`)
+  * `teamwork_preview_auditor` (Role: `Independent Victory Auditor`)
 - **Execution Details**:
-  1. `uav-009`: Stage updated pipeline assets, commit with neutral citations:
-     ```text
-     chore(pipeline): propagate upstream spec-core fixes and Check 31 SSOT parity gate (refs #378, refs #377, refs #376, refs #375, refs #372, refs #366, refs #365, refs #364, refs #362, refs #361, refs #360, refs #349, refs #286)
+  1. Verify zero auto-closing verbs via `python3 scripts/verify_commit_messages.py --head`.
+  2. Stage all modified files (`git add README.md scripts/install_pipeline.sh tests/test_readme_scaffolding.py implementation_plan.md`).
+  3. Commit with exact neutral citation:
+     ```bash
+     git commit -m "docs(readme): normalize architecture tiers, fix heading sequence, and harden repository boundary (refs #371, refs #368)"
      ```
-     Verify commit neutrality via `python3 /Users/perkunas/jail/uav-009/scripts/verify_commit_messages.py --head`.
-     Push to GitLab `origin/main`: `git -C /Users/perkunas/jail/uav-009 push origin main`.
-     Confirm `git -C /Users/perkunas/jail/uav-009 diff origin/main` is 0 bytes and working tree is clean.
-     Capture HEAD commit hash of `uav-009`.
-  2. `uav-011`: Stage updated pipeline assets, commit with neutral citations (same message).
-     Verify commit neutrality via `python3 /Users/perkunas/jail/uav-011/scripts/verify_commit_messages.py --head`.
-     Push to GitLab `origin/main`: `git -C /Users/perkunas/jail/uav-011 push origin main`.
-     Confirm `git -C /Users/perkunas/jail/uav-011 diff origin/main` is 0 bytes and working tree is clean.
-     Capture HEAD commit hash of `uav-011`.
-  3. `DEAP01-spec-core`: Stage code changes in `skills/` and `scripts/`.
-     Update Section 2.1 in `HANDOFF.md` with:
-     * Verified baseline commit hashes for `uav-009` and `uav-011`.
-     * Accurate empirical gate verification table recording all 31 checks PASS with exit code 0 under `verify_downstream_baseline.py`.
-     Commit with neutral citation:
-     ```text
-     fix(tooling): resolve Check 23 nested AST extraction and Check 30 clean landing zone baseline gating (refs #378, refs #377, refs #376, refs #372)
-     ```
-     Verify commit neutrality via `python3 scripts/verify_commit_messages.py --head`.
-     Push to GitHub `origin/main`: `git push origin main`.
-     Confirm `git diff origin/main` is 0 bytes.
-
-### WP-13: Independent Victory Re-Audit & Sentinel Notification
-- **Assigned Agent**: `teamwork_preview_auditor` (Role: `Independent Victory Auditor`)
-- **Execution Details**:
-  1. Execute independent verification commands:
-     * `python3 scripts/verify_downstream_baseline.py /Users/perkunas/jail/uav-009` (assert exit code 0).
-     * `python3 scripts/verify_downstream_baseline.py /Users/perkunas/jail/uav-011` (assert exit code 0).
-     * Verify Check 31 Dual-Schema SSOT Parity Gate on both.
-     * Verify remote tracking branches have 0 bytes diff.
-  2. Send victory report to Parent Sentinel `5fa3c628-16c9-4c40-be80-9ed51b9fc710`.
+  4. Push to remote tracking branch: `git push origin main`.
+  5. Deploy Independent Victory Auditor to empirically verify:
+     - `git diff origin/main` returns exactly 0 bytes.
+     - `python3 -m unittest tests/test_readme_scaffolding.py` passes with exit code 0.
+     - `python3 scripts/verify_downstream_baseline.py --no-domain` passes with exit code 0.
+     - Commit message neutrality verified.
+  6. Orchestrator transmits victory report to Parent Sentinel via `send_message`.
+- **Completion Criteria**: Victory confirmed by auditor; remote synchronized at 0 bytes diff; parent sentinel notified.
 
 ---
 
 ## 4. Team Roster
 
-| Role | Agent Type | Assigned Work Packages |
-| :--- | :--- | :--- |
-| **Project Orchestrator** | `orchestrator` | Overall coordination, BRIEFING/progress tracking, synthesis, final victory report |
-| **Tooling Workers** | `teamwork_preview_worker` | WP-09 (Check 30/17 fixes), WP-10 (Check 23 AST parsing fix) |
-| **Propagation Worker** | `teamwork_preview_worker` | WP-11 (Fleet re-propagation & non-clobbering verification) |
-| **Git Sync Worker** | `teamwork_preview_worker` | WP-12 (Git stage, commit & push across all 3 repos) |
-| **Victory Auditor** | `teamwork_preview_auditor` | WP-13 (Independent victory re-audit and attestation verification) |
+| Role | Agent Type | Working Directory | Work Packages |
+| :--- | :--- | :--- | :--- |
+| **Project Orchestrator** | `orchestrator` | `.agents/orchestrator_10/` | Overall coordination, BRIEFING/progress tracking, synthesis, final victory report |
+| **Forensic Auditor** | `teamwork_preview_auditor` | `.agents/auditor_wp01/` | WP-01 (Forensic audit of README.md & installer scaffolding) |
+| **Remediation Worker** | `teamwork_preview_worker` | `.agents/worker_wp02/` | WP-02 (Normalize tiers, heading order, and boundary hardening) |
+| **Test Verification Worker**| `teamwork_preview_worker` | `.agents/worker_wp03/` | WP-03 (Update test suite and run regression gates) |
+| **Git Sync Worker** | `teamwork_preview_worker` | `.agents/worker_wp04/` | WP-04a (Git stage, commit, and push to origin/main) |
+| **Victory Auditor** | `teamwork_preview_auditor` | `.agents/victory_auditor_8/` | WP-04b (Independent verification of remote diff and gate compliance) |
 
 ---
 
 ## 5. Acceptance Criteria Checklist
 
-- [ ] **Upstream Tooling**: `architecture_viewpoint_validator.py` honors `allow_missing_specs=True` when no spec files are present.
-- [ ] **Upstream Tooling**: `verify_downstream_baseline.py` accepts and passes `allow_missing_specs` to Check 30 and auto-detects clean landing zones for downstream workspaces.
-- [ ] **Upstream Tooling**: `factual_grounding_validator.py` parses nested `part def` blocks using balanced braces without truncating parent blocks or dumping child attributes into global `owner=None` scope.
-- [ ] **uav-009**: Pipeline re-propagated without clobbering customer models (`schema/avenger5_system.sysml`), compiled ASTs (`.pipeline/schema.sysml`), defect dossiers (`docs/reports/`), or 75 specifications.
-- [ ] **uav-009**: All 31 baseline checks (Checks 10 through 31, including Check 31 Dual-Schema SSOT Parity Gate) pass with exit code 0 under `verify_downstream_baseline.py`.
-- [ ] **uav-009**: Pushed to GitLab `origin/main`, clean working tree, `git diff origin/main` is 0 bytes.
-- [ ] **uav-011**: Pipeline re-propagated while maintaining 100% clean landing zones (`schema/`, `docs/epics/`, `docs/features/`, `docs/user-stories/`, `docs/use-cases/` with `.gitkeep` only).
-- [ ] **uav-011**: All 31 baseline checks (Checks 10 through 31) pass with exit code 0 under `verify_downstream_baseline.py`.
-- [ ] **uav-011**: Pushed to GitLab `origin/main`, clean working tree, `git diff origin/main` is 0 bytes.
-- [ ] **DEAP01-spec-core**: `HANDOFF.md` Section 2.1 updated with verified baseline commit hashes and accurate empirical gate statuses.
-- [ ] **DEAP01-spec-core**: Pushed to GitHub `origin/main`, clean working tree, `git diff origin/main` is 0 bytes.
-- [ ] Zero issue auto-closing verbs across all commit messages; verified by `verify_commit_messages.py --head`.
-- [ ] Independent Victory Re-Audit passes with verdict **VICTORY APPROVED**.
+- [ ] **R1 / Audit**: Forensic audit report generated in `.agents/auditor_wp01/handoff.md` cataloging all tier numbering contradictions, heading ordering defects, and boundary ambiguities.
+- [ ] **R2 / Tiers**: Clean three-tier architecture normalized across `README.md` (Sections 1.2 & 5.4) and `scripts/install_pipeline.sh`:
+  * Tier 1: Upstream Specification Core Compiler (`DEAP01-spec-core`)
+  * Tier 2: Domain Distribution Templates (`DEAP-*`)
+  * Tier 3: Customer Application Workspaces (`uav-*`)
+- [ ] **R2 / Headings**: Section 1.1 logically precedes Section 1.2 in `README.md`.
+- [ ] **R3 / Boundaries**: Section 9.4 explicitly restricts Pipeline 2 to downstream customer workspaces (`DOWNSTREAM_CUSTOMER_PROJECT`); ambiguous references permitting `UPSTREAM_SPEC_CORE_COMPILER` purged.
+- [ ] **R4 / Tests**: `python3 -m unittest tests/test_readme_scaffolding.py` passes with exit code 0.
+- [ ] **R4 / Baseline**: `python3 scripts/verify_downstream_baseline.py --no-domain` passes all checks cleanly with exit code 0.
+- [ ] **R5 / Commit**: Commit message strictly matches `docs(readme): normalize architecture tiers, fix heading sequence, and harden repository boundary (refs #371, refs #368)` with zero auto-closing verbs.
+- [ ] **R5 / Remote**: `git diff origin/main` returns exactly 0 bytes after `git push origin main`.
+- [ ] **R5 / Victory**: Independent Victory Auditor confirms clean remote diff and gate compliance.
+- [ ] **Sentinel**: Final victory report delivered to Parent Sentinel via `send_message`.
