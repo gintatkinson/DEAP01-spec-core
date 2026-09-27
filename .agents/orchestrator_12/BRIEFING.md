@@ -1,7 +1,7 @@
 # BRIEFING — 2026-09-28T00:27:01+03:00
 
-## Mission
-Multi-agent adversarial audit, remediation, and verification of Defect #381 in `DEAP01-spec-core`, elevating the universal multi-agent post-install initialization sequence from vendor section 5.5 into universal governance section 5.6 (`AGENTS.md`), ensuring full semantic traceability across all agent runtimes.
+### Mission
+Multi-agent adversarial audit, remediation, and verification of Defect #395 in `DEAP01-spec-core` (preserving OEM source references and units in SysML AST doc generation from ingested Markdown specifications) and Defect #381.
 
 ## 🔒 My Identity
 - Archetype: orchestrator
@@ -13,23 +13,14 @@ Multi-agent adversarial audit, remediation, and verification of Defect #381 in `
 ## 🔒 My Workflow
 - **Pattern**: Project Orchestration Pattern
 - **Scope document**: /Users/perkunas/jail/DEAP01-spec-core/implementation_plan.md
-1. **Decompose**:
-   - WP-01: Working Tree Inspection & Workspace Initialization (orchestrator_12)
-   - WP-02: Forensic Audit & Technical Investigation of Defect #381 (teamwork_preview_auditor / explorer)
-   - WP-03: Section 5 Restructuring & Scaffolding Remediation (teamwork_preview_worker)
-   - WP-04: Test Hardening & Automated Gate Verification (teamwork_preview_reviewer / challenger)
-   - WP-05: Git Stage, Commit, Remote Sync, Tracker Transition & Victory Audit (teamwork_preview_worker & teamwork_preview_auditor)
-2. **Dispatch & Execute**: Context-isolated subagents for audit, implementation, verification, and victory audit.
-3. **On failure**: Retry -> Replace -> Skip (non-auditors) -> Redistribute -> Redesign -> Escalate to Parent. Auditor is non-skippable.
-4. **Succession**: Self-succeed at 16 spawns if context boundary reached.
 - **Work items**:
-  1. WP-01: Working Tree Inspection & Workspace Initialization [completed]
-  2. WP-02: Forensic Audit & Section 5 Remediation for Defect #381 [completed]
-  3. WP-03: Section 5 Restructuring & Scaffolding Remediation [completed]
-  4. WP-04: Test Hardening & Automated Gate Verification [completed]
-  5. WP-05: Git Sync, Tracker Transition & Victory Audit [in-progress]
-- **Current phase**: Stage 4 (Git Sync, Tracker Transition & Victory Audit)
-- **Current focus**: Git staging, commit, push, tracker issue closing, and victory dossier authoring
+  1. Defect #381 remediation, testing, and sync [completed]
+  2. Defect #395 implementation in `markdown_translator.py` and `sysmlv2_ast.py` [completed]
+  3. Defect #395 regression testing in `tests/test_sysmlv2_markdown_ingest.py` (22/22 tests passing) [completed]
+  4. Defect #395 baseline verification gate `scripts/verify_downstream_baseline.py --no-domain` (31/31 checks) [completed]
+  5. WP-04: Git commit, remote sync, tracker transition, and issue closure for Defect #395 [in-progress]
+- **Current phase**: Stage 4 (Git Sync, Tracker Transition & Issue Closure for Defect #395)
+- **Current focus**: Git staging, commit, push, tracker issue closing, and report back
 
 ## 🔒 Key Constraints
 - Repository Classification: UPSTREAM_SPEC_CORE_COMPILER.
@@ -38,28 +29,28 @@ Multi-agent adversarial audit, remediation, and verification of Defect #381 in `
 - Strict planning gate: Approved implementation plan required before file edits.
 - Context-isolated subagent dispatch for all code/spec modifications and audits.
 - No direct tool writing to repository source/docs by coordinator.
-- Non-closure commit message invariant (`refs #381`). Zero auto-closing verbs.
+- Non-closure commit message invariant (`refs #395`). Zero auto-closing verbs.
 - Remote synchronization: `git diff origin/main` must return exactly 0 bytes.
 
 ## Current Parent
 - Conversation ID: e7232793-5a87-425f-bffa-24d699db1fa7
-- Updated: 2026-09-28T00:37:30+03:00
+- Updated: 2026-09-28T00:52:00+03:00
 
 ## Key Decisions Made
 - Executed `view_file` on `skills/spec-orchestrator/SKILL.md` as very first step prior to any file writes or commands.
 - Initialized dedicated orchestrator working directory `.agents/orchestrator_12/`.
-- Inspected working tree via `git status --porcelain=v1 -uall`: verified clean working tree with zero untracked scratch files outside `.agents/`.
-- Decomposed Defect #381 resolution into 5 atomic work packages (WP-01 through WP-05).
-- Executed WP-02 remediation for Defect #381:
-  * Restructured README.md Section 5.5 to retain Native Configuration Discovery and cross-reference Section 5.6.
-  * Established Section 5.6 as `5.6 Universal Agent Governance & Initialization Sequence (AGENTS.md)` housing complete 8-step sequence (steps 0 through 7) and 3-tier role taxonomy.
-  * Updated Section 5.7 (Claude Code) and Section 5.8 (Cursor / Windsurf / Cascade) to explicitly reference Section 5.6.
-  * Added `test_upstream_readme_section_5_universal_initialization_not_misplaced_in_vendor_5_5` to `TestUpstreamCompilerReadme` in `tests/test_readme_scaffolding.py`.
-- Completed WP-04 test verification:
-  * `python3 -m unittest tests/test_readme_scaffolding.py` passed (39/39 tests, OK).
-  * `pytest tests/test_readme_scaffolding.py` passed (39/39 tests, 100%).
-  * `python3 scripts/verify_downstream_baseline.py --no-domain` passed (all 31 baseline verification checks passed, 100%).
-- Transitioned to WP-05 for git commit, push, tracker transitions (#381, #379), and handoff dossier authoring.
+- Cleaned untracked `.agents/orchestrator_20/` directory.
+- Ingested and synchronized `.agents/ORIGINAL_REQUEST.md` for Defect #395.
+- Remediation for Defect #395:
+  * Cataloged canonical OEM citation headers in `PROVENANCE_COLUMNS`.
+  * Implemented `extract_provenance_citation` and `compose_grounded_doc` in `markdown_translator.py`.
+  * Preserved OEM citations (`[Source: ...]`) and units (`[unit: ...]`) in SysML AST doc comments across BOM parts, attributes, ports, item flows, connections, constraints, and properties tables.
+  * Implemented `format_doc_comment` in `sysmlv2_ast.py` with `*/` escaping and clean indentation.
+  * Added 7 regression tests to `tests/test_sysmlv2_markdown_ingest.py`.
+- Verified test suites:
+  * `python3 -m unittest tests/test_sysmlv2_markdown_ingest.py` (22/22 tests passed).
+  * `python3 -m pytest tests/test_sysmlv2_markdown_ingest.py` (22 passed).
+  * `python3 scripts/verify_downstream_baseline.py --no-domain` (all 31 checks passed).
 
 ## Team Roster
 | Agent | Type | Work Item | Status | Conv ID |

@@ -86,12 +86,12 @@ class TestMarkdownTranslator(unittest.TestCase):
         self.assertIn("mass", ce_attrs)
         self.assertEqual(ce_attrs["mass"].type_name, "Real")
         self.assertEqual(ce_attrs["mass"].default_value, "2.5")
-        self.assertEqual(ce_attrs["mass"].doc, "unit: kg")
+        self.assertEqual(ce_attrs["mass"].doc, "[unit: kg]")
 
         self.assertIn("power", ce_attrs)
         self.assertEqual(ce_attrs["power"].type_name, "Real")
         self.assertEqual(ce_attrs["power"].default_value, "45.0")
-        self.assertEqual(ce_attrs["power"].doc, "unit: W")
+        self.assertEqual(ce_attrs["power"].doc, "[unit: W]")
 
         self.assertIn("redundant", ce_attrs)
         self.assertEqual(ce_attrs["redundant"].type_name, "Boolean")
@@ -103,6 +103,119 @@ class TestMarkdownTranslator(unittest.TestCase):
         self.assertIn("power", sh_attrs)
         self.assertEqual(sh_attrs["power"].type_name, "Integer")
         self.assertEqual(sh_attrs["power"].default_value, "12")
+
+    def test_bom_category_and_summary_row_filtering(self):
+        """Test BOM category subheaders, markdown dividers, and summary row filtering (Defect #394)."""
+        md_content = """# IntegratedSystemArchitecture
+
+## Bill of Materials
+| Component | Part Number | Mass (kg) | Power (W) | Description | Notes |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Actuation Assembly** | | | | | |
+| PrimaryActuator | ACT-001 | 4.5 | 60.0 | Primary flight surface actuation servo | Active |
+| BackupActuator | ACT-002 | 4.5 | 60.0 | Redundant standby actuation servo | Standby |
+| |---|---|---|---|---|
+| ### Sensor Subsystem | | | | | |
+| RateGyro | SEN-101 | 0.8 | 5.5 | Tri-axis rate gyroscopic sensor | Inertial |
+| |---|---|---|---|---|
+| Subtotal Power | | | 45.0 | | |
+| Total | | 12.5 | 95.0 | | |
+| Summary | | | | | |
+"""
+        pkg = self.translator.translate(md_content)
+        self.assertEqual(pkg.name, "IntegratedSystemArchitecture")
+
+        part_names = {p.name for p in pkg.part_defs}
+        self.assertEqual(len(pkg.part_defs), 3)
+
+        # Assert non-component items are NOT present in pkg.part_defs
+        for non_comp in [
+            "Actuation_Assembly", "ActuationAssembly",
+            "Sensor_Subsystem", "SensorSubsystem",
+            "Total",
+            "Subtotal_Power", "SubtotalPower",
+            "Summary"
+        ]:
+            self.assertNotIn(non_comp, part_names)
+
+        # Assert legitimate components ARE present in pkg.part_defs
+        self.assertIn("PrimaryActuator", part_names)
+        self.assertIn("BackupActuator", part_names)
+        self.assertIn("RateGyro", part_names)
+
+        part_map = {p.name: p for p in pkg.part_defs}
+
+        # Verify PrimaryActuator attributes, types, default values, and unit docs
+        pa = part_map["PrimaryActuator"]
+        self.assertIn("Primary flight surface actuation servo", pa.doc)
+        pa_attrs = {a.name: a for a in pa.attributes}
+        self.assertIn("part_number", pa_attrs)
+        self.assertEqual(pa_attrs["part_number"].type_name, "String")
+        self.assertEqual(pa_attrs["part_number"].default_value, '"ACT-001"')
+        self.assertIn("mass", pa_attrs)
+        self.assertEqual(pa_attrs["mass"].type_name, "Real")
+        self.assertEqual(pa_attrs["mass"].default_value, "4.5")
+        self.assertIn("unit: kg", pa_attrs["mass"].doc)
+        self.assertIn("power", pa_attrs)
+        self.assertEqual(pa_attrs["power"].type_name, "Real")
+        self.assertEqual(pa_attrs["power"].default_value, "60.0")
+        self.assertIn("unit: W", pa_attrs["power"].doc)
+
+        # Verify BackupActuator attributes, types, default values, and unit docs
+        ba = part_map["BackupActuator"]
+        self.assertIn("Redundant standby actuation servo", ba.doc)
+        ba_attrs = {a.name: a for a in ba.attributes}
+        self.assertIn("part_number", ba_attrs)
+        self.assertEqual(ba_attrs["part_number"].type_name, "String")
+        self.assertEqual(ba_attrs["part_number"].default_value, '"ACT-002"')
+        self.assertIn("mass", ba_attrs)
+        self.assertEqual(ba_attrs["mass"].type_name, "Real")
+        self.assertEqual(ba_attrs["mass"].default_value, "4.5")
+        self.assertIn("unit: kg", ba_attrs["mass"].doc)
+        self.assertIn("power", ba_attrs)
+        self.assertEqual(ba_attrs["power"].type_name, "Real")
+        self.assertEqual(ba_attrs["power"].default_value, "60.0")
+        self.assertIn("unit: W", ba_attrs["power"].doc)
+
+        # Verify RateGyro attributes, types, default values, and unit docs
+        rg = part_map["RateGyro"]
+        self.assertIn("Tri-axis rate gyroscopic sensor", rg.doc)
+        rg_attrs = {a.name: a for a in rg.attributes}
+        self.assertIn("part_number", rg_attrs)
+        self.assertEqual(rg_attrs["part_number"].type_name, "String")
+        self.assertEqual(rg_attrs["part_number"].default_value, '"SEN-101"')
+        self.assertIn("mass", rg_attrs)
+        self.assertEqual(rg_attrs["mass"].type_name, "Real")
+        self.assertEqual(rg_attrs["mass"].default_value, "0.8")
+        self.assertIn("unit: kg", rg_attrs["mass"].doc)
+        self.assertIn("power", rg_attrs)
+        self.assertEqual(rg_attrs["power"].type_name, "Real")
+        self.assertEqual(rg_attrs["power"].default_value, "5.5")
+        self.assertIn("unit: W", rg_attrs["power"].doc)
+
+        # Round-trip SysML v2 serialization and parsing passes cleanly
+        sysml_text = pkg.to_sysml()
+        self.assertTrue(len(sysml_text) > 0)
+
+        # SysMLParser.parse_text
+        parsed_pkg = SysMLParser.parse_text(sysml_text)
+        self.assertIsNotNone(parsed_pkg)
+        self.assertEqual(parsed_pkg.name, "IntegratedSystemArchitecture")
+        parsed_names = {p.name for p in parsed_pkg.part_defs}
+        self.assertIn("PrimaryActuator", parsed_names)
+        self.assertIn("BackupActuator", parsed_names)
+        self.assertIn("RateGyro", parsed_names)
+        for non_comp in ["Actuation_Assembly", "Sensor_Subsystem", "Total", "Subtotal_Power", "Summary"]:
+            self.assertNotIn(non_comp, parsed_names)
+
+        # compile_sysml.parse_sysml
+        compiled_ast = compile_sysml.parse_sysml(sysml_text)
+        self.assertIsNotNone(compiled_ast)
+        self.assertIn("PrimaryActuator", compiled_ast["part_defs"])
+        self.assertIn("BackupActuator", compiled_ast["part_defs"])
+        self.assertIn("RateGyro", compiled_ast["part_defs"])
+        for non_comp in ["Actuation_Assembly", "Sensor_Subsystem", "Total", "Subtotal_Power", "Summary"]:
+            self.assertNotIn(non_comp, compiled_ast["part_defs"])
 
     def test_interface_signal_table_ingestion(self):
         """Test interface / signal table ingestion into PortDefs with ItemFlowDefs."""
@@ -306,6 +419,184 @@ Auxiliary power distribution and fault isolation unit.
             # Check that PortAlpha was merged
             port_names = {prt.name for prt in merged_pkg.port_defs}
             self.assertIn("PortAlpha", port_names)
+
+    def test_defect395_bom_provenance_columns_and_grounded_doc(self):
+        """Test Defect #395: BOM provenance columns excluded from attributes and merged into doc."""
+        md_content = """# SensorSubsystemModel
+
+## Bill of Materials
+| Component | Part Number | Mass (kg) | Provenance Citation | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| IMUUnit | IMU-500 | 0.35 | OEM Spec Rev 3.2 Clause 4.1 | Inertial measurement unit |
+| GPSReceiver | GPS-100 | 0.20 | OEM ICD Document §2.4 | Satellite positioning receiver |
+"""
+        pkg = self.translator.translate(md_content)
+        self.assertEqual(len(pkg.part_defs), 2)
+        part_map = {p.name: p for p in pkg.part_defs}
+
+        imu = part_map["IMUUnit"]
+        # Provenance must be in doc, not attributes
+        self.assertIn("Inertial measurement unit", imu.doc)
+        self.assertIn("[Source: OEM Spec Rev 3.2 Clause 4.1]", imu.doc)
+
+        imu_attrs = {a.name: a for a in imu.attributes}
+        self.assertNotIn("provenance_citation", imu_attrs)
+        self.assertNotIn("provenance", imu_attrs)
+        self.assertIn("mass", imu_attrs)
+        self.assertIn("[unit: kg]", imu_attrs["mass"].doc)
+        self.assertIn("[Source: OEM Spec Rev 3.2 Clause 4.1]", imu_attrs["mass"].doc)
+
+        gps = part_map["GPSReceiver"]
+        self.assertIn("Satellite positioning receiver", gps.doc)
+        self.assertIn("[Source: OEM ICD Document §2.4]", gps.doc)
+        gps_attrs = {a.name: a for a in gps.attributes}
+        self.assertNotIn("provenance_citation", gps_attrs)
+
+    def test_defect395_bom_provenance_without_description_column(self):
+        """Test Defect #395: BOM table with citation column but no description column."""
+        md_content = """# ActuatorModel
+
+## Bill of Materials
+| Component | Part Number | Mass (kg) | Citation |
+| :--- | :--- | :--- | :--- |
+| ServoMotor | SM-10 | 1.2 | OEM Datasheet Section 8 |
+"""
+        pkg = self.translator.translate(md_content)
+        servo = pkg.part_defs[0]
+        self.assertEqual(servo.name, "ServoMotor")
+        self.assertEqual(servo.doc, "[Source: OEM Datasheet Section 8]")
+        servo_attrs = {a.name: a for a in servo.attributes}
+        self.assertNotIn("citation", servo_attrs)
+        self.assertIn("mass", servo_attrs)
+        self.assertEqual(servo_attrs["mass"].doc, "[unit: kg] [Source: OEM Datasheet Section 8]")
+
+    def test_defect395_ports_table_provenance(self):
+        """Test Defect #395: Port / interface table extracts citation into PortDef, ItemFlowDef, ConnectionDef."""
+        md_content = """# BusInterfaceModel
+
+## System Interfaces
+| Port | Direction | Type | Rate (Hz) | Unit | Protocol | Source Reference | Description | Source Port | Target Port |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| CANBus | inout | CANMessage | 100.0 | msg/s | CAN | SAE J1939 Clause 5 | Primary powertrain bus | EngineCtrl.CAN | TransmissionCtrl.CAN |
+"""
+        pkg = self.translator.translate(md_content)
+        ports = pkg.port_defs if pkg.port_defs else pkg.part_defs[0].ports
+        self.assertEqual(len(ports), 1)
+        p = ports[0]
+        self.assertEqual(p.name, "CANBus")
+        self.assertIn("Primary powertrain bus", p.doc)
+        self.assertIn("[Source: SAE J1939 Clause 5]", p.doc)
+
+        self.assertTrue(len(p.item_flows) > 0)
+        flow = p.item_flows[0]
+        self.assertIn("Primary powertrain bus", flow.doc)
+        self.assertIn("[unit: msg/s]", flow.doc)
+        self.assertIn("[Source: SAE J1939 Clause 5]", flow.doc)
+
+        conns = pkg.connection_defs
+        self.assertTrue(len(conns) > 0)
+        conn = conns[0]
+        self.assertIn("Primary powertrain bus", conn.doc)
+        self.assertIn("[Source: SAE J1939 Clause 5]", conn.doc)
+
+    def test_defect395_constraints_table_provenance(self):
+        """Test Defect #395: Constraints table extracts citation into SysMLConstraintDef and AttributeDef."""
+        md_content = """# VoltageLimitsModel
+
+## Parametric Limits
+| Parameter | Min | Max | Unit | Source | Description |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| CoreRailVoltage | 3.135 | 3.465 | V | Power Regulation Standard §3.1 | Core supply voltage tolerance |
+"""
+        pkg = self.translator.translate(md_content)
+        constraints = pkg.constraint_defs if pkg.constraint_defs else pkg.part_defs[0].constraints
+        self.assertEqual(len(constraints), 1)
+        c = constraints[0]
+        self.assertIn("Core supply voltage tolerance", c.doc)
+        self.assertIn("[unit: V]", c.doc)
+        self.assertIn("[Source: Power Regulation Standard §3.1]", c.doc)
+
+        attrs = pkg.attribute_defs if pkg.attribute_defs else pkg.part_defs[0].attributes
+        attr_map = {a.name: a for a in attrs}
+        self.assertIn("CoreRailVoltage", attr_map)
+        self.assertIn("Core supply voltage tolerance", attr_map["CoreRailVoltage"].doc)
+        self.assertIn("[unit: V]", attr_map["CoreRailVoltage"].doc)
+        self.assertIn("[Source: Power Regulation Standard §3.1]", attr_map["CoreRailVoltage"].doc)
+
+    def test_defect395_properties_table_provenance(self):
+        """Test Defect #395: Properties table extracts citation and unit into AttributeDef."""
+        md_content = """# ConfigModel
+
+## Configuration Parameters
+| Property | Value | Citation | Description |
+| :--- | :--- | :--- | :--- |
+| NominalFrequency | 50.0 Hz | IEEE Std 1547 Table 1 | Utility grid nominal frequency |
+"""
+        pkg = self.translator.translate(md_content)
+        attrs = pkg.attribute_defs if pkg.attribute_defs else pkg.part_defs[0].attributes
+        attr_map = {a.name: a for a in attrs}
+        self.assertIn("NominalFrequency", attr_map)
+        a = attr_map["NominalFrequency"]
+        self.assertIn("Utility grid nominal frequency", a.doc)
+        self.assertIn("[unit: Hz]", a.doc)
+        self.assertIn("[Source: IEEE Std 1547 Table 1]", a.doc)
+
+    def test_defect395_translate_files_part_doc_merge(self):
+        """Test Defect #395: translate_files merges PartDef docstrings across files."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            file1 = os.path.join(tmpdir, "01_core.md")
+            with open(file1, "w", encoding="utf-8") as f:
+                f.write("""# SubsystemModel
+## Bill of Materials
+| Component | Part Number | Description |
+| :--- | :--- | :--- |
+| ProcessorCard | PC-01 | Primary flight computer |
+""")
+
+            file2 = os.path.join(tmpdir, "02_details.md")
+            with open(file2, "w", encoding="utf-8") as f:
+                f.write("""# SubsystemModel
+## Bill of Materials
+| Component | Mass (kg) | Description |
+| :--- | :--- | :--- |
+| ProcessorCard | 1.5 | Dual-redundant execution unit |
+""")
+
+            merged_pkg = self.translator.translate_files([file1, file2], default_name="MergedModel")
+            proc = next(p for p in merged_pkg.part_defs if p.name == "ProcessorCard")
+            self.assertIn("Primary flight computer", proc.doc)
+            self.assertIn("Dual-redundant execution unit", proc.doc)
+            self.assertIn("\n", proc.doc)
+
+    def test_defect395_multiline_doc_sysml_formatting(self):
+        """Test Defect #395: format_doc_comment safely formats multi-line and comment-closing strings."""
+        from sysmlv2_ast import format_doc_comment
+        # Single line
+        self.assertEqual(format_doc_comment("simple doc", 4), "    doc /* simple doc */\n")
+        # Empty
+        self.assertEqual(format_doc_comment("", 4), "")
+
+        # Multi-line
+        multi = "Line 1\nLine 2"
+        expected = "    doc /* Line 1\n           Line 2 */\n"
+        self.assertEqual(format_doc_comment(multi, 4), expected)
+
+        # Premature closure prevention
+        sanitized = "Doc with */ embedded"
+        self.assertNotIn("*/ embedded", format_doc_comment(sanitized, 4).split(" */")[0])
+
+        # SysML textual rendering and round-trip parse
+        part = PartDef(name="ProtectedPart", doc="Line 1\nLine 2 [Source: Spec §1]")
+        part.attributes.append(AttributeDef(name="speed", type_name="Real", default_value="10.0", doc="Speed [unit: m/s]\n[Source: OEM]"))
+        pkg = SysMLPackage(name="DocPackage", doc="Package doc\nSecond line", part_defs=[part])
+        sysml_code = pkg.to_sysml()
+
+        # Must parse back into AST without syntax error
+        parsed = SysMLParser.parse_text(sysml_code)
+        self.assertIsNotNone(parsed)
+        self.assertEqual(parsed.name, "DocPackage")
+        self.assertEqual(len(parsed.part_defs), 1)
+        self.assertEqual(parsed.part_defs[0].name, "ProtectedPart")
 
 
 class TestSysMLv2IngestMarkdown(unittest.TestCase):

@@ -51,6 +51,32 @@ NON_COMPONENT_SECTION_KEYWORDS = {
     "system interfaces", "system parameters", "system limits", "system constraints"
 }
 
+PROVENANCE_COLUMNS: Set[str] = {
+    "provenance_citation", "provenance", "source_reference",
+    "oem_source_reference", "oem_document_citation", "citation",
+    "reference", "source", "clause", "specification_reference"
+}
+
+
+def extract_provenance_citation(row: Dict[str, str], headers: List[str]) -> str:
+    """Extracts authoritative OEM provenance citation from table row."""
+    cit_col = next((h for h in headers if h in PROVENANCE_COLUMNS), None)
+    if cit_col:
+        return row.get(cit_col, "").strip()
+    return ""
+
+
+def compose_grounded_doc(description: str = "", citation: str = "", unit: str = "") -> str:
+    """Composes structured docstring preserving description, unit, and OEM citation."""
+    tokens = []
+    if description:
+        tokens.append(description.strip())
+    if unit:
+        tokens.append(f"[unit: {unit.strip()}]")
+    if citation:
+        tokens.append(f"[Source: {citation.strip()}]")
+    return " ".join(tokens).strip()
+
 
 def sanitize_identifier(text: str, default: str = "Item") -> str:
     """Sanitizes any arbitrary text into a valid SysML v2 identifier."""
@@ -244,6 +270,8 @@ class MarkdownTranslator:
             for p in (sub_pkg.part_defs or []):
                 if p.name in part_registry:
                     existing = part_registry[p.name]
+                    if p.doc and p.doc not in (existing.doc or ""):
+                        existing.doc = f"{existing.doc}\n{p.doc}" if existing.doc else p.doc
                     # Merge attributes
                     existing_attr_names = {a.name for a in (existing.attributes or [])}
                     for a in (p.attributes or []):
@@ -501,9 +529,24 @@ class MarkdownTranslator:
 
         comp_col = next((h for h in headers if h in {"component", "component_name", "part", "part_name", "subsystem", "item", "module", "assembly"}), headers[0])
 
+        summary_keywords = {"total", "subtotal", "sum", "summary", "aggregate", "overall"}
+
         for row in table["rows"]:
             comp_raw = row.get(comp_col, "").strip()
             if not comp_raw:
+                continue
+
+            if re.match(r"^[-=_\s:|]+$", comp_raw):
+                continue
+
+            comp_clean = re.sub(r"[*`_#]", "", comp_raw).strip()
+            norm_comp = comp_clean.lower()
+            if norm_comp in summary_keywords or any(norm_comp.startswith(kw + " ") for kw in summary_keywords):
+                continue
+
+            non_comp_values = [v.strip() for k, v in row.items() if k != comp_col and v.strip()]
+            if not non_comp_values:
+                # Intra-table category header row: skip PartDef instantiation
                 continue
 
             comp_name = sanitize_identifier(comp_raw)
@@ -511,16 +554,24 @@ class MarkdownTranslator:
                 part_registry[comp_name] = PartDef(name=comp_name)
             part = part_registry[comp_name]
 
+            row_citation = extract_provenance_citation(row, headers)
+            desc_found = False
+
             # Parse attributes
             for col, val in row.items():
                 if col == comp_col or not val.strip():
                     continue
 
+                if col in PROVENANCE_COLUMNS:
+                    continue
+
                 attr_name = sanitize_identifier(col)
                 # Description column maps to doc
                 if col in ("description", "doc", "function", "notes"):
+                    desc_found = True
+                    part_doc = compose_grounded_doc(description=val.strip(), citation=row_citation)
                     if not part.doc:
-                        part.doc = val.strip()
+                        part.doc = part_doc
                     continue
 
                 col_unit = unit_map.get(col, "")
@@ -541,7 +592,7 @@ class MarkdownTranslator:
                     clean_str = val.strip('"\'; ')
                     def_val = f'"{clean_str}"'
 
-                doc_str = f"unit: {eff_unit}" if eff_unit else ""
+                doc_str = compose_grounded_doc(citation=row_citation, unit=eff_unit)
                 # Avoid duplicate attributes
                 if not any(a.name == attr_name for a in (part.attributes or [])):
                     part.attributes.append(AttributeDef(
@@ -550,6 +601,10 @@ class MarkdownTranslator:
                         default_value=def_val,
                         doc=doc_str
                     ))
+
+            if not desc_found and row_citation:
+                if not part.doc:
+                    part.doc = compose_grounded_doc(citation=row_citation)
 
             if not any(p.name == comp_name for p in (pkg.part_defs or [])):
                 pkg.part_defs.append(part)
@@ -609,8 +664,10 @@ class MarkdownTranslator:
             # Protocol
             protocol = (row.get(protocol_col, "") if protocol_col else "").strip()
 
-            # Description
-            doc = (row.get(doc_col, "") if doc_col else "").strip()
+            # Description & Provenance
+            cit = extract_provenance_citation(row, headers)
+            raw_desc = (row.get(doc_col, "") if doc_col else "").strip()
+            doc = compose_grounded_doc(description=raw_desc, citation=cit)
 
             # Rate
             rate_hz = None
@@ -631,11 +688,12 @@ class MarkdownTranslator:
             item_flows: List[ItemFlowDef] = []
             if rate_hz is not None or eff_unit or val_range or (type_name != "Port" and direction != "inout"):
                 flow_name = f"{port_name}_flow"
+                flow_doc = compose_grounded_doc(description=raw_desc, citation=cit, unit=eff_unit)
                 item_flows.append(ItemFlowDef(
                     name=flow_name,
                     direction=direction if direction != "inout" else "out",
                     item_type=type_name if type_name != "Port" else "Item",
-                    doc=doc,
+                    doc=flow_doc,
                     rate_hz=rate_hz,
                     unit=eff_unit,
                     valid_range=val_range,
@@ -665,6 +723,7 @@ class MarkdownTranslator:
                 tgt_val = row.get(tgt_col, "").strip()
                 if src_val and tgt_val:
                     conn_name = f"conn_{port_name}"
+                    conn_doc = compose_grounded_doc(description=raw_desc, citation=cit)
                     if not any(c.name == conn_name for c in (pkg.connection_defs or [])):
                         pkg.connection_defs.append(ConnectionDef(
                             name=conn_name,
@@ -672,7 +731,7 @@ class MarkdownTranslator:
                             target_port=tgt_val,
                             protocol=protocol,
                             item_payload=type_name if type_name != "Port" else port_name,
-                            doc=doc
+                            doc=conn_doc
                         ))
 
     def _process_constraints_table(self, table: Dict[str, Any], target_container: Union[SysMLPackage, PartDef], pkg: SysMLPackage):
@@ -697,7 +756,8 @@ class MarkdownTranslator:
                 continue
 
             param_name = sanitize_identifier(raw_param)
-            doc = (row.get(doc_col, "") if doc_col else "").strip()
+            cit = extract_provenance_citation(row, headers)
+            raw_desc = (row.get(doc_col, "") if doc_col else "").strip()
             eff_unit = (row.get(unit_col, "") if unit_col else "").strip() or unit_map.get(param_col, "")
 
             # Determine bounds
@@ -737,7 +797,7 @@ class MarkdownTranslator:
             # Create SysMLConstraintDef if expression is present
             if expression:
                 con_name = f"assert_{param_name}_range"
-                con_doc = f"{doc} [unit: {eff_unit}]".strip() if eff_unit else doc
+                con_doc = compose_grounded_doc(description=raw_desc, citation=cit, unit=eff_unit)
                 constraint_def = SysMLConstraintDef(
                     name=con_name,
                     expression=expression,
@@ -776,7 +836,7 @@ class MarkdownTranslator:
                 else:
                     def_val = f'"{raw_def.strip()}"'
 
-            attr_doc = f"{doc} (unit: {eff_unit})".strip() if eff_unit else doc
+            attr_doc = compose_grounded_doc(description=raw_desc, citation=cit, unit=eff_unit)
             attr_def = AttributeDef(
                 name=param_name,
                 type_name=type_name,
@@ -796,7 +856,13 @@ class MarkdownTranslator:
         headers = table["normalized_headers"]
         k_col = headers[0]
         v_col = headers[1] if len(headers) > 1 else headers[0]
-        d_col = headers[2] if len(headers) > 2 else None
+        d_col = next((h for h in headers if h in {"description", "doc", "notes", "comment", "details"}), None)
+        unit_col = next((h for h in headers if h in {"unit", "units", "engineering_units"}), None)
+        if not d_col and len(headers) > 2:
+            for h in headers[2:]:
+                if h not in PROVENANCE_COLUMNS and h != unit_col:
+                    d_col = h
+                    break
 
         for row in table["rows"]:
             raw_k = row.get(k_col, "").strip()
@@ -805,9 +871,13 @@ class MarkdownTranslator:
                 continue
 
             attr_name = sanitize_identifier(raw_k)
-            doc = (row.get(d_col, "") if d_col else "").strip()
+            cit = extract_provenance_citation(row, headers)
+            raw_desc = (row.get(d_col, "") if d_col else "").strip()
 
-            num_v, unit, int_v = parse_numeric_with_unit(raw_v)
+            num_v, parsed_unit, int_v = parse_numeric_with_unit(raw_v)
+            row_unit = (row.get(unit_col, "") if unit_col else "").strip()
+            unit = row_unit or parsed_unit or ""
+
             if int_v is not None and "." not in raw_v:
                 type_name = "Integer"
                 def_val = str(int_v)
@@ -821,7 +891,7 @@ class MarkdownTranslator:
                 type_name = "String"
                 def_val = f'"{raw_v.strip()}"' if raw_v else None
 
-            eff_doc = f"{doc} (unit: {unit})".strip() if unit else doc
+            eff_doc = compose_grounded_doc(description=raw_desc, citation=cit, unit=unit)
             attr_def = AttributeDef(
                 name=attr_name,
                 type_name=type_name,

@@ -29,6 +29,22 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any, Union
 
 
+def format_doc_comment(doc_text: str, indent: int = 4) -> str:
+    """Safely formats single or multi-line docstring into SysML v2 doc block."""
+    if not doc_text:
+        return ""
+    pad = " " * indent
+    sanitized = doc_text.replace("*/", "* /")
+    lines = sanitized.splitlines()
+    if len(lines) == 1:
+        return f"{pad}doc /* {lines[0]} */\n"
+    formatted = [f"{pad}doc /* {lines[0]}"]
+    for line in lines[1:]:
+        formatted.append(f"{pad}       {line}")
+    formatted[-1] += " */"
+    return "\n".join(formatted) + "\n"
+
+
 @dataclass
 class AttributeDef:
     name: str
@@ -46,7 +62,7 @@ class AttributeDef:
 
     def to_sysml(self, indent: int = 4) -> str:
         pad = " " * indent
-        doc_str = f"{pad}doc /* {self.doc} */\n" if self.doc else ""
+        doc_str = format_doc_comment(self.doc, indent)
         def_str = f" = {self.default_value}" if self.default_value is not None else ""
         return f"{doc_str}{pad}attribute {self.name} : {self.type_name}{def_str};"
 
@@ -76,7 +92,7 @@ class ItemFlowDef:
 
     def to_sysml(self, indent: int = 4) -> str:
         pad = " " * indent
-        doc_str = f"{pad}doc /* {self.doc} */\n" if self.doc else ""
+        doc_str = format_doc_comment(self.doc, indent)
         dir_prefix = f"{self.direction} " if self.direction else ""
         return f"{doc_str}{pad}{dir_prefix}flow {self.name} : {self.item_type};"
 
@@ -113,13 +129,16 @@ class PortDef:
 
     def to_sysml(self, indent: int = 4) -> str:
         pad = " " * indent
-        doc_str = f"{pad}doc /* {self.doc} */\n" if self.doc else ""
+        doc_str = format_doc_comment(self.doc, indent)
         dir_prefix = f"{self.direction} " if self.direction and self.direction != "inout" else ""
         conj_prefix = "~" if self.is_conjugated and not self.type_name.startswith("~") else ""
         type_str = f"{conj_prefix}{self.type_name}" if self.type_name else "Port"
         has_body = bool(self.item_flows or self.electrical_attributes)
         if has_body:
-            lines = [f"{doc_str}{pad}{dir_prefix}port {self.name} : {type_str} {{"]
+            lines = []
+            if doc_str:
+                lines.append(doc_str.rstrip("\n"))
+            lines.append(f"{pad}{dir_prefix}port {self.name} : {type_str} {{")
             if self.protocol_family:
                 lines.append(f"{pad}    attribute protocol_family : String = \"{self.protocol_family}\";")
             if self.port_category and self.port_category != "DataPort":
@@ -200,7 +219,7 @@ class ActionDef:
 
     def to_sysml(self, indent: int = 4) -> str:
         pad = " " * indent
-        doc_str = f"{pad}doc /* {self.doc} */\n" if self.doc else ""
+        doc_str = format_doc_comment(self.doc, indent)
         all_params = []
         for p in (self.in_params or []):
             all_params.append(f"in {p.name} : {p.type_name}")
@@ -213,7 +232,10 @@ class ActionDef:
         kw = "action def" if self.is_def else "action"
         has_body = bool(self.performer or self.attributes or self.attribute_defs or self.steps)
         if has_body:
-            lines = [f"{doc_str}{pad}{kw} {self.name}{params_str} {{"]
+            lines = []
+            if doc_str:
+                lines.append(doc_str.rstrip("\n"))
+            lines.append(f"{pad}{kw} {self.name}{params_str} {{")
             perf = self.performer or self.performer_part
             if perf:
                 lines.append(f"{pad}    perform {perf};")
@@ -253,7 +275,7 @@ class SysMLOperationDef:
 
     def to_sysml(self, indent: int = 4) -> str:
         pad = " " * indent
-        doc_str = f"{pad}doc /* {self.doc} */\n" if self.doc else ""
+        doc_str = format_doc_comment(self.doc, indent)
         if self.parameters:
             param_strs = []
             for p in self.parameters:
@@ -305,8 +327,9 @@ class SysMLCapabilityDef:
         pad = " " * indent
         lines = []
         doc_val = self.doc or self.description
-        if doc_val:
-            lines.append(f"{pad}doc /* {doc_val} */")
+        doc_str = format_doc_comment(doc_val, indent)
+        if doc_str:
+            lines.append(doc_str.rstrip("\n"))
         lines.append(f"{pad}capability def {self.name} {{")
         subsys = self.subsystem or self.package_ref or self.parent_package
         if subsys:
@@ -335,8 +358,9 @@ class SysMLInteractionDef:
     def to_sysml(self, indent: int = 4) -> str:
         pad = " " * indent
         lines = []
-        if self.doc:
-            lines.append(f"{pad}doc /* {self.doc} */")
+        doc_str = format_doc_comment(self.doc, indent)
+        if doc_str:
+            lines.append(doc_str.rstrip("\n"))
         lines.append(f"{pad}interaction {self.name} {{")
         for ll in (self.lifelines or []):
             lines.append(f"{pad}    lifeline {ll};")
@@ -368,8 +392,9 @@ class SysMLConstraintDef:
     def to_sysml(self, indent: int = 4) -> str:
         pad = " " * indent
         lines = []
-        if self.doc:
-            lines.append(f"{pad}doc /* {self.doc} */")
+        doc_str = format_doc_comment(self.doc, indent)
+        if doc_str:
+            lines.append(doc_str.rstrip("\n"))
         kw = "assert constraint" if self.is_assertion else "constraint def"
         params_str = f"({', '.join(self.parameters)})" if self.parameters else ""
         if self.expression:
@@ -403,8 +428,9 @@ class SysMLTestCaseDef:
     def to_sysml(self, indent: int = 4) -> str:
         pad = " " * indent
         lines = []
-        if self.doc:
-            lines.append(f"{pad}doc /* {self.doc} */")
+        doc_str = format_doc_comment(self.doc, indent)
+        if doc_str:
+            lines.append(doc_str.rstrip("\n"))
         lines.append(f"{pad}test case def {self.name} {{")
         if self.subject_part:
             lines.append(f"{pad}    subject {self.subject_part};")
@@ -444,13 +470,16 @@ class RequirementDef:
     def to_sysml(self, indent: int = 4) -> str:
         pad = " " * indent
         lines = []
-        if self.doc:
-            lines.append(f"{pad}doc /* {self.doc} */")
+        doc_str = format_doc_comment(self.doc, indent)
+        if doc_str:
+            lines.append(doc_str.rstrip("\n"))
         lines.append(f"{pad}requirement def {self.name} {{")
         if self.req_id:
             lines.append(f"{pad}    id = \"{self.req_id}\";")
         if self.text:
-            lines.append(f"{pad}    doc /* {self.text} */")
+            text_doc = format_doc_comment(self.text, indent + 4)
+            if text_doc:
+                lines.append(text_doc.rstrip("\n"))
         for a in (self.assumes or []):
             lines.append(f"{pad}    assume {a};")
         for r in (self.requires or []):
@@ -485,8 +514,9 @@ class StateDef:
     def to_sysml(self, indent: int = 4) -> str:
         pad = " " * indent
         lines = []
-        if self.doc:
-            lines.append(f"{pad}doc /* {self.doc} */")
+        doc_str = format_doc_comment(self.doc, indent)
+        if doc_str:
+            lines.append(doc_str.rstrip("\n"))
         lines.append(f"{pad}state def {self.name} {{")
         if self.entry_action:
             lines.append(f"{pad}    entry {self.entry_action};")
@@ -542,8 +572,9 @@ class UseCaseDef:
     def to_sysml(self, indent: int = 4) -> str:
         pad = " " * indent
         lines = []
-        if self.doc:
-            lines.append(f"{pad}doc /* {self.doc} */")
+        doc_str = format_doc_comment(self.doc, indent)
+        if doc_str:
+            lines.append(doc_str.rstrip("\n"))
         lines.append(f"{pad}use case def {self.name} {{")
         if self.subject:
             lines.append(f"{pad}    subject {self.subject};")
@@ -589,8 +620,9 @@ class ItemDef:
     def to_sysml(self, indent: int = 4) -> str:
         pad = " " * indent
         lines = []
-        if self.doc:
-            lines.append(f"{pad}doc /* {self.doc} */")
+        doc_str = format_doc_comment(self.doc, indent)
+        if doc_str:
+            lines.append(doc_str.rstrip("\n"))
         lines.append(f"{pad}item def {self.name} {{")
         for attr in (self.attributes or []):
             lines.append(attr.to_sysml(indent + 4))
@@ -623,8 +655,9 @@ class HazardDef:
     def to_sysml(self, indent: int = 4) -> str:
         pad = " " * indent
         lines = []
-        if self.doc:
-            lines.append(f"{pad}doc /* {self.doc} */")
+        doc_str = format_doc_comment(self.doc, indent)
+        if doc_str:
+            lines.append(doc_str.rstrip("\n"))
         lines.append(f"{pad}hazard def {self.name} {{")
         lines.append(f"{pad}    attribute severity : Integer = {self.severity};")
         if self.part_ref:
@@ -665,8 +698,9 @@ class RiskDef:
     def to_sysml(self, indent: int = 4) -> str:
         pad = " " * indent
         lines = []
-        if self.doc:
-            lines.append(f"{pad}doc /* {self.doc} */")
+        doc_str = format_doc_comment(self.doc, indent)
+        if doc_str:
+            lines.append(doc_str.rstrip("\n"))
         lines.append(f"{pad}risk def {self.name} {{")
         lines.append(f"{pad}    attribute severity : Integer = {self.severity};")
         if self.hazard_ref:
@@ -731,8 +765,9 @@ class ConnectionDef:
     def to_sysml(self, indent: int = 4) -> str:
         pad = " " * indent
         lines = []
-        if self.doc:
-            lines.append(f"{pad}doc /* {self.doc} */")
+        doc_str = format_doc_comment(self.doc, indent)
+        if doc_str:
+            lines.append(doc_str.rstrip("\n"))
         kw = "flow def" if self.is_flow else "connection def"
         lines.append(f"{pad}{kw} {self.name} {{")
         if self.source_port and self.target_port:
@@ -820,8 +855,9 @@ class PartDef:
     def to_sysml(self, indent: int = 4) -> str:
         pad = " " * indent
         lines = []
-        if self.doc:
-            lines.append(f"{pad}doc /* {self.doc} */")
+        doc_str = format_doc_comment(self.doc, indent)
+        if doc_str:
+            lines.append(doc_str.rstrip("\n"))
         lines.append(f"{pad}part def {self.name} {{")
 
         for attr in (self.attributes or []):
@@ -913,8 +949,9 @@ class SysMLPackage:
     def to_sysml(self, indent: int = 0) -> str:
         pad = " " * indent
         lines = []
-        if self.doc:
-            lines.append(f"{pad}doc /* {self.doc} */")
+        doc_str = format_doc_comment(self.doc, indent)
+        if doc_str:
+            lines.append(doc_str.rstrip("\n"))
         lines.append(f"{pad}package {self.name} {{")
 
         for attr in (self.attribute_defs or []):
