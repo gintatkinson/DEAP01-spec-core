@@ -29,6 +29,7 @@ from scripts.verify_downstream_baseline import (
     check_safety_integrity_and_sora_completeness,
     check_wbs_suite_integrity,
     check_factual_grounding,
+    check_standards_measurement,
 )
 
 
@@ -97,6 +98,31 @@ class TestBaselineFailClosed(unittest.TestCase):
         os.makedirs(os.path.join(self.tmpdir, ".pipeline", "upstream"), exist_ok=True)
         # Should not raise SystemExit even with allow_missing_specs=False
         check_factual_grounding(self.tmpdir, allow_missing_specs=False)
+
+    def test_check25_missing_safety_baseline_fails_closed_in_downstream_mode(self):
+        """Check 25 must exit with code 1 when safety standards declared but docs/safety has no specs and allow_missing_specs=False."""
+        os.makedirs(os.path.join(self.tmpdir, "docs", "research"), exist_ok=True)
+        with open(os.path.join(self.tmpdir, "docs", "research", "RESEARCH_INVENTORY.md"), "w") as f:
+            f.write("# Research Inventory\n\n| RTCA DO-178C | Level A Flight Control |\n")
+        os.makedirs(os.path.join(self.tmpdir, "docs", "features"), exist_ok=True)
+        with open(os.path.join(self.tmpdir, "docs", "features", "feat-01.md"), "w") as f:
+            f.write("# Feature 1\n/// Standard: [DO-178C]\n")
+        os.makedirs(os.path.join(self.tmpdir, "docs", "safety"), exist_ok=True)
+        with open(os.path.join(self.tmpdir, "docs", "safety", ".gitkeep"), "w") as f:
+            f.write("")
+        with self.assertRaises(SystemExit) as ctx:
+            check_standards_measurement(self.tmpdir, allow_missing_specs=False)
+        self.assertEqual(ctx.exception.code, 1)
+
+    def test_check25_allow_missing_specs_bypasses_in_downstream_mode(self):
+        """Check 25 must cleanly pass on a repository with clean landing zones and declared safety standards when allow_missing_specs=True."""
+        os.makedirs(os.path.join(self.tmpdir, "docs", "research"), exist_ok=True)
+        with open(os.path.join(self.tmpdir, "docs", "research", "RESEARCH_INVENTORY.md"), "w") as f:
+            f.write("# Research Inventory\n\n| RTCA DO-178C | Level A Flight Control |\n")
+        os.makedirs(os.path.join(self.tmpdir, "docs", "safety"), exist_ok=True)
+        with open(os.path.join(self.tmpdir, "docs", "safety", ".gitkeep"), "w") as f:
+            f.write("")
+        check_standards_measurement(self.tmpdir, allow_missing_specs=True)
 
 
 if __name__ == "__main__":

@@ -573,6 +573,35 @@ class TestObligationWitnessValidator(unittest.TestCase):
             self.assertEqual(cov_findings, [])
             self.assertEqual(wit_findings, [])
 
+    def test_witness_registry_scans_docs_catalogs_and_interfaces(self):
+        """Docs under docs/catalogs and docs/interfaces are scanned for specification witnesses (Issue #388)."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            os.makedirs(os.path.join(tmpdir, ".pipeline", "logical-ui"), exist_ok=True)
+            with open(os.path.join(tmpdir, ".pipeline", "logical-ui", "codebase_rules.json"), "w") as f:
+                f.write('{"meta": {"upstream_repository": "downstream-org/my-system"}}\n')
+
+            os.makedirs(os.path.join(tmpdir, "docs", "research"), exist_ok=True)
+            with open(os.path.join(tmpdir, "docs", "research", "RESEARCH_INVENTORY.md"), "w") as f:
+                f.write(SAMPLE_RESEARCH_INVENTORY)
+
+            os.makedirs(os.path.join(tmpdir, "docs", "catalogs"), exist_ok=True)
+            catalog_file = os.path.join(tmpdir, "docs", "catalogs", "STANDARDS_OBLIGATION_CATALOG.md")
+            with open(catalog_file, "w") as f:
+                f.write("# Standards Obligation Catalog\n\n/// ObligationWitness: [OBL-01]\n")
+
+            os.makedirs(os.path.join(tmpdir, "docs", "interfaces"), exist_ok=True)
+            interface_file = os.path.join(tmpdir, "docs", "interfaces", "ICD_INTERFACE.md")
+            with open(interface_file, "w") as f:
+                f.write("# Interface Catalog\n\n/// ObligationWitness: [INT-01]\n")
+
+            repo = WorkspaceRepository(tmpdir)
+            registry = self.validator.build_witness_registry(repo)
+
+            self.assertIn("OBL-01", registry.records)
+            self.assertTrue(any("docs/catalogs/STANDARDS_OBLIGATION_CATALOG.md" in loc for loc in registry.records["OBL-01"].spec_witnesses))
+            self.assertIn("INT-01", registry.records)
+            self.assertTrue(any("docs/interfaces/ICD_INTERFACE.md" in loc for loc in registry.records["INT-01"].spec_witnesses))
+
 
 class TestAggregatorAndCliRegistration(unittest.TestCase):
     """Unit tests confirming registration in aggregator and cli."""

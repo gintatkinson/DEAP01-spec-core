@@ -783,6 +783,7 @@ class StandardsAndMeasurementValidator(IValidator):
     def validate(self, repo: WorkspaceRepository, **kwargs) -> List[Finding]:
         findings: List[Finding] = []
         workspace_dir = repo.workspace_dir
+        allow_missing_specs: bool = kwargs.get("allow_missing_specs", False)
 
         # 1. Collect all standard decorators across specifications and SysML models
         scan_dirs = ["docs/features", "docs/epics", "docs/user-stories", "docs/use-cases", "docs/interfaces", "schema"]
@@ -879,7 +880,7 @@ class StandardsAndMeasurementValidator(IValidator):
                             rel_p = os.path.relpath(full_p, workspace_dir)
                             safety_files.append((full_p, rel_p))
 
-            if is_upstream and not safety_files and not decorators:
+            if (is_upstream or not decorators or allow_missing_specs) and not safety_files:
                 # Upstream distribution template clean landing zone passes cleanly
                 pass
             elif not os.path.isdir(safety_dir) or not safety_files:

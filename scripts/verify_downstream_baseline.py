@@ -3051,13 +3051,15 @@ def _load_standards_measurement_validator():
         sys.exit(1)
 
 
-def check_standards_measurement(repo_root=None):
+def check_standards_measurement(repo_root=None, allow_missing_specs=False, strict=False):
     """Check 25: Standards & SI 7-Dimensional Parameter Metrology Gate (Gate 25).
 
     Validates ISO 80000 / SI 7-dimensional parameter metrology, value bounds, and unit traceability.
     """
     if repo_root is None:
         repo_root = os.getcwd()
+
+    effective_allow_missing = allow_missing_specs and not (strict or (os.environ.get("DEAP_STRICT_BASELINE", "").lower() in ("1", "true", "yes")))
 
     val_cls, repo_cls = _load_standards_measurement_validator()
     if val_cls is None or repo_cls is None:
@@ -3067,7 +3069,7 @@ def check_standards_measurement(repo_root=None):
     repo = repo_cls(workspace_dir=repo_root)
     validator = val_cls()
     try:
-        findings = validator.validate(repo)
+        findings = validator.validate(repo, allow_missing_specs=effective_allow_missing)
     except Exception as e:
         print(f"ERROR: Check 25 execution failed: {e}", file=sys.stderr)
         sys.exit(1)
@@ -3679,7 +3681,7 @@ def run_all_checks(repo_root=None, allow_missing_specs=False, strict=False):
     check_factual_grounding(repo_root, allow_missing_specs=allow_missing_specs, strict=strict)
     check_icd_completeness(repo_root)
     check_operational_allocation(repo_root)
-    check_standards_measurement(repo_root)
+    check_standards_measurement(repo_root, allow_missing_specs=allow_missing_specs, strict=strict)
     check_cross_document_diagram_parity(repo_root)
     check_conops_and_mission_intent_completeness(repo_root)
     check_research_inventory(repo_root)
