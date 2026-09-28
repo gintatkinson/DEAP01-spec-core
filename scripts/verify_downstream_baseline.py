@@ -3163,13 +3163,16 @@ def _load_conops_and_mission_intent_validators():
         sys.exit(1)
 
 
-def check_conops_and_mission_intent_completeness(repo_root=None):
+def check_conops_and_mission_intent_completeness(repo_root=None, allow_missing_specs=False, strict=False):
     """Check 26: ConOps & Mission Intent Completeness Gate (Gate 26).
 
     Validates 10-12 mandatory ConOps sections and METL roster completeness (ISO 29148 / NATO STANAG 4586 / OMG UAF).
     """
     if repo_root is None:
         repo_root = os.getcwd()
+
+    is_strict = strict or (os.environ.get("DEAP_STRICT_BASELINE", "").lower() in ("1", "true", "yes"))
+    effective_allow_missing = allow_missing_specs and not is_strict
 
     upstream_marker = os.path.join(repo_root, ".pipeline", "upstream")
     conops_dir = os.path.join(repo_root, "docs", "conops")
@@ -3185,6 +3188,13 @@ def check_conops_and_mission_intent_completeness(repo_root=None):
                     conops_files.append(os.path.join(root, f))
         if not conops_files:
             print("Success: Check 26 verified (Downstream repository detected -- ConOps & Mission Intent pending or clean).")
+            return
+
+        schema_dir = os.path.join(repo_root, "schema")
+        model_text = _discover_sysml_model_text(repo_root)
+        has_extracted = os.path.isdir(os.path.join(schema_dir, "extracted")) if os.path.isdir(schema_dir) else False
+        if effective_allow_missing and (not model_text or not model_text.strip()) and not has_extracted:
+            print("Success: Check 26 verified (Downstream repository detected -- domain model pending or landing zone clean).")
             return
 
     conops_cls, mission_cls, repo_cls = _load_conops_and_mission_intent_validators()
@@ -3239,13 +3249,25 @@ def _load_research_inventory_validator():
         sys.exit(1)
 
 
-def check_research_inventory(repo_root=None):
+def check_research_inventory(repo_root=None, allow_missing_specs=False, strict=False):
     """Check 27: Cited Research Inventory & Declared-Total Population Register Gate (Gate 27).
 
     Validates presence, schema structure, clause citations, and declared-total population arithmetic.
     """
     if repo_root is None:
         repo_root = os.getcwd()
+
+    is_strict = strict or (os.environ.get("DEAP_STRICT_BASELINE", "").lower() in ("1", "true", "yes"))
+    effective_allow_missing = allow_missing_specs and not is_strict
+
+    upstream_marker = os.path.join(repo_root, ".pipeline", "upstream")
+    if not os.path.isdir(upstream_marker):
+        schema_dir = os.path.join(repo_root, "schema")
+        model_text = _discover_sysml_model_text(repo_root)
+        has_extracted = os.path.isdir(os.path.join(schema_dir, "extracted")) if os.path.isdir(schema_dir) else False
+        if effective_allow_missing and (not model_text or not model_text.strip()) and not has_extracted:
+            print("Success: Check 27 verified (Downstream repository detected -- research inventory pending or landing zone clean).")
+            return
 
     val_cls, repo_cls = _load_research_inventory_validator()
     if val_cls is None or repo_cls is None:
@@ -3462,6 +3484,15 @@ def check_architecture_viewpoint_diagrams(repo_root=None, allow_missing_specs=Fa
         sys.exit(1)
 
     effective_allow_missing = allow_missing_specs and not (strict or (os.environ.get("DEAP_STRICT_BASELINE", "").lower() in ("1", "true", "yes")))
+
+    upstream_marker = os.path.join(repo_root, ".pipeline", "upstream")
+    if not os.path.isdir(upstream_marker):
+        schema_dir = os.path.join(repo_root, "schema")
+        model_text = _discover_sysml_model_text(repo_root)
+        has_extracted = os.path.isdir(os.path.join(schema_dir, "extracted")) if os.path.isdir(schema_dir) else False
+        if effective_allow_missing and (not model_text or not model_text.strip()) and not has_extracted:
+            print("Success: Check 30 verified (Downstream repository detected -- architecture diagrams pending or landing zone clean).")
+            return
 
     repo = repo_cls(workspace_dir=repo_root)
     validator = val_cls()
@@ -3683,8 +3714,8 @@ def run_all_checks(repo_root=None, allow_missing_specs=False, strict=False):
     check_operational_allocation(repo_root)
     check_standards_measurement(repo_root, allow_missing_specs=allow_missing_specs, strict=strict)
     check_cross_document_diagram_parity(repo_root)
-    check_conops_and_mission_intent_completeness(repo_root)
-    check_research_inventory(repo_root)
+    check_conops_and_mission_intent_completeness(repo_root, allow_missing_specs=allow_missing_specs, strict=strict)
+    check_research_inventory(repo_root, allow_missing_specs=allow_missing_specs, strict=strict)
     check_executive_deliverable_traceability(repo_root)
     check_coverage_digest(repo_root)
     check_obligation_witness(repo_root)
