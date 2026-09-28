@@ -1132,7 +1132,10 @@ class MechanicalSectionSlicer:
         if os.path.isfile(full_path):
             return full_path
         # Strip leading relative navigation (e.g. ../../schema/... or ../research/...)
-        clean_rel = re.sub(r'^(?:\.\.[\\/])+', '', file_rel_path).lstrip('./')
+        clean_rel = re.sub(r'^(?:\.\.[\\/])+', '', file_rel_path)
+        while clean_rel.startswith(('./', '.\\')):
+            clean_rel = clean_rel[2:]
+        clean_rel = clean_rel.lstrip('/\\')
         if clean_rel:
             clean_full = os.path.join(self.workspace_dir, clean_rel)
             if os.path.isfile(clean_full):
@@ -2128,6 +2131,7 @@ class FactualGroundingValidator(IValidator):
             or "/management/" in f"/{norm_rel}"
             or norm_rel.startswith("docs/research/")
             or "/research/" in f"/{norm_rel}"
+            or "/units/" in f"/{norm_rel}"
         ):
             return True
         f_lower = filename.lower()
@@ -2165,7 +2169,8 @@ class FactualGroundingValidator(IValidator):
                 if not self._is_excluded_spec_file(rel, filename):
                     spec_files.append((full_tdir, rel))
             elif os.path.isdir(full_tdir):
-                for root, _, files in os.walk(full_tdir):
+                for root, dirs, files in os.walk(full_tdir):
+                    dirs[:] = [d for d in dirs if d not in ("units", ".git", "node_modules")]
                     for f in sorted(files):
                         if f.endswith(".md") and not f.startswith("."):
                             full_p = os.path.join(root, f)
@@ -2796,6 +2801,8 @@ class FactualGroundingValidator(IValidator):
                 if m_cfg_parts:
                     cfg_prefix = m_cfg_parts.group(1).strip()
                     cfg_noun = m_cfg_parts.group(2).strip()
+                    if cfg_noun.lower() in NON_HARDWARE_GENERIC_TOKENS or cfg_noun.lower() not in structural_nouns:
+                        continue
 
                     pat_desc = re.compile(
                         r'\b([a-zA-Z0-9]+(?:-[a-zA-Z0-9]+)?[- ]' + re.escape(cfg_noun) + r')\b',

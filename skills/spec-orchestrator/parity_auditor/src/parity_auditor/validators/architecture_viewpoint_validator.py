@@ -1212,7 +1212,8 @@ class ArchitectureViewpointValidator(IValidator):
         spec_files: List[str] = []
         for tdir in target_dirs:
             if os.path.isdir(tdir):
-                for root, _, files in os.walk(tdir):
+                for root, dirs, files in os.walk(tdir):
+                    dirs[:] = [d for d in dirs if d not in ("units", ".git", "node_modules")]
                     for f in sorted(files):
                         if f.endswith(".md") and not f.startswith("."):
                             spec_files.append(os.path.join(root, f))
@@ -1228,6 +1229,7 @@ class ArchitectureViewpointValidator(IValidator):
             and "template" not in os.path.basename(sf).lower()
             and "blueprints" not in sf.lower()
             and "docs/architecture" not in sf.replace("\\", "/")
+            and "/units/" not in sf.replace("\\", "/")
         ]
 
         # Upstream Clean Landing Zone Invariant:
