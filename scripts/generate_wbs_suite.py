@@ -46,8 +46,10 @@ CSV_HEADERS = [
     "Description",
 ]
 
-DEFAULT_DO178C_LEVEL = "DAL-B"
-DEFAULT_SORA_SAIL = "SAIL III"
+DEFAULT_ASSURANCE_LEVEL = "Level-B"
+DEFAULT_INTEGRITY_LEVEL = "High-Integrity"
+DEFAULT_DO178C_LEVEL = DEFAULT_ASSURANCE_LEVEL
+DEFAULT_SORA_SAIL = DEFAULT_INTEGRITY_LEVEL
 DEFAULT_STANDARD = "MIL-STD-881E"
 
 
@@ -133,11 +135,51 @@ class SystemMetadata:
     program_title: str = "Digital Engineering Cyber-Physical System"
     standard: str = DEFAULT_STANDARD
     mtow_kg: float = 50.0
-    do178c_level: str = DEFAULT_DO178C_LEVEL
-    sora_sail: str = DEFAULT_SORA_SAIL
+    assurance_level: str = DEFAULT_ASSURANCE_LEVEL
+    integrity_level: str = DEFAULT_INTEGRITY_LEVEL
     generated_at: str = ""
     workspace_dir: str = ""
     output_dir: str = ""
+
+    def __init__(
+        self,
+        system_id: str = "SYS-01",
+        program_title: str = "Digital Engineering Cyber-Physical System",
+        standard: str = DEFAULT_STANDARD,
+        mtow_kg: float = 50.0,
+        assurance_level: str = DEFAULT_ASSURANCE_LEVEL,
+        integrity_level: str = DEFAULT_INTEGRITY_LEVEL,
+        generated_at: str = "",
+        workspace_dir: str = "",
+        output_dir: str = "",
+        do178c_level: Optional[str] = None,
+        sora_sail: Optional[str] = None,
+    ):
+        self.system_id = system_id
+        self.program_title = program_title
+        self.standard = standard
+        self.mtow_kg = mtow_kg
+        self.assurance_level = do178c_level if do178c_level is not None else assurance_level
+        self.integrity_level = sora_sail if sora_sail is not None else integrity_level
+        self.generated_at = generated_at
+        self.workspace_dir = workspace_dir
+        self.output_dir = output_dir
+
+    @property
+    def do178c_level(self) -> str:
+        return self.assurance_level
+
+    @do178c_level.setter
+    def do178c_level(self, value: str) -> None:
+        self.assurance_level = value
+
+    @property
+    def sora_sail(self) -> str:
+        return self.integrity_level
+
+    @sora_sail.setter
+    def sora_sail(self, value: str) -> None:
+        self.integrity_level = value
 
 
 # ---------------------------------------------------------------------------
@@ -196,10 +238,14 @@ class WBSAstIngestionEngine:
                             self.metadata.mtow_kg = float(raw_m)
                         except (ValueError, TypeError):
                             pass
-                    if "do178c_level" in data or "DAL" in data:
-                        self.metadata.do178c_level = str(data.get("do178c_level") or data.get("DAL"))
-                    if "sora_sail" in data or "SAIL" in data:
-                        self.metadata.sora_sail = str(data.get("sora_sail") or data.get("SAIL"))
+                    for key in ("assurance_level", "do178c_level", "DAL", "ASSURANCE_LEVEL"):
+                        if key in data and data[key] is not None:
+                            self.metadata.assurance_level = str(data[key])
+                            break
+                    for key in ("integrity_level", "sora_sail", "SAIL", "INTEGRITY_LEVEL"):
+                        if key in data and data[key] is not None:
+                            self.metadata.integrity_level = str(data[key])
+                            break
             except Exception:
                 pass
 

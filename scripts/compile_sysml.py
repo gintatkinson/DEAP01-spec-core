@@ -4564,8 +4564,10 @@ STPA_GUIDE_WORDS = (
 
 PENDING_PARAMETER = "PENDING_PARAMETER"
 
-_SORA_OSO_ROSTER_SIZE = 24
-_SORA_OSO_FIELDS = ("Objective", "Robustness", "Integrity", "Assurance Level", "Evidence")
+_REGULATORY_OBJECTIVE_ROSTER_SIZE = 10
+_SORA_OSO_ROSTER_SIZE = _REGULATORY_OBJECTIVE_ROSTER_SIZE
+_REGULATORY_OBJECTIVE_FIELDS = ("Objective", "Robustness", "Integrity", "Assurance Level", "Evidence")
+_SORA_OSO_FIELDS = _REGULATORY_OBJECTIVE_FIELDS
 
 _FMECA_SCALE_KEYS = ("severity_scale", "occurrence_scale", "detection_scale")
 
@@ -5001,16 +5003,33 @@ def generate_fmeca_matrix(pkg: Any, scoring_config: Optional[Dict[str, Any]] = N
     return rows
 
 
-def generate_sora_oso_roster(tokens: Dict[str, str]) -> List[List[str]]:
-    """Renders the structural SORA OSO roster with values supplied by schema tokens or PENDING_PARAMETER."""
+def generate_regulatory_objectives_roster(tokens: Dict[str, str]) -> List[List[str]]:
+    """Renders the structural regulatory objectives roster with values supplied by schema tokens or PENDING_PARAMETER."""
+    raw_prefix = tokens.get("REGULATORY_OBJECTIVE_PREFIX") or tokens.get("OBJECTIVE_PREFIX") or "OBJ-"
+    prefix_label = raw_prefix if raw_prefix.endswith("-") else f"{raw_prefix}-"
+    token_prefix = raw_prefix.rstrip("-")
+
+    try:
+        roster_size = int(tokens.get("REGULATORY_OBJECTIVE_ROSTER_SIZE") or tokens.get("OSO_ROSTER_SIZE") or _REGULATORY_OBJECTIVE_ROSTER_SIZE)
+    except (ValueError, TypeError):
+        roster_size = _REGULATORY_OBJECTIVE_ROSTER_SIZE
+
     rows: List[List[str]] = []
-    for number in range(1, _SORA_OSO_ROSTER_SIZE + 1):
-        cells = [f"OSO-{number:02d}"]
-        for field in _SORA_OSO_FIELDS:
-            key = f"OSO{number:02d}_{field.replace(' ', '_')}"
-            cells.append(tokens.get(key, PENDING_PARAMETER))
+    for number in range(1, roster_size + 1):
+        cells = [f"{prefix_label}{number:02d}"]
+        for field in _REGULATORY_OBJECTIVE_FIELDS:
+            field_suffix = field.replace(" ", "_")
+            primary_key = f"{token_prefix}{number:02d}_{field_suffix}"
+            legacy_key = f"OSO{number:02d}_{field_suffix}"
+            val = tokens.get(primary_key)
+            if val is None:
+                val = tokens.get(legacy_key, PENDING_PARAMETER)
+            cells.append(val)
         rows.append(cells)
     return rows
+
+
+generate_sora_oso_roster = generate_regulatory_objectives_roster
 
 
 def render_proof_suite(tokens: Dict[str, str]) -> List[Dict[str, str]]:
@@ -5155,9 +5174,9 @@ def _render_fmeca_matrix(fmeca_rows: List[Dict[str, str]]) -> str:
     return "\n".join(lines)
 
 
-def _render_sora_assessment(oso_rows: List[List[str]]) -> str:
+def _render_regulatory_objectives_assessment(oso_rows: List[List[str]]) -> str:
     lines = [
-        "# SORA SAIL Assessment & Operational Safety Objective Roster",
+        "# Domain Regulatory Objectives Assessment & Safety Objective Roster",
         "",
         "| Assessment Field | Value |",
         "| :--- | :--- |",
@@ -5174,6 +5193,9 @@ def _render_sora_assessment(oso_rows: List[List[str]]) -> str:
         lines.append("| " + " | ".join(row) + " |")
     lines.append("")
     return "\n".join(lines)
+
+
+_render_sora_assessment = _render_regulatory_objectives_assessment
 
 
 def _render_rta_architecture(proofs: List[Dict[str, str]]) -> str:
@@ -5319,7 +5341,7 @@ def transpile_stpa(schema_path: str, out_dir: str, fmeca_scoring_config: Optiona
     ucas = expand_cartesian_stpa(pkg)
     constraint_defs = _collect_constraint_defs(pkg)
     fmeca_rows = generate_fmeca_matrix(pkg, scoring_config)
-    oso_rows = generate_sora_oso_roster(tokens)
+    oso_rows = generate_regulatory_objectives_roster(tokens)
     proofs = render_proof_suite(tokens)
 
     artifacts = {
@@ -5328,7 +5350,8 @@ def transpile_stpa(schema_path: str, out_dir: str, fmeca_scoring_config: Optiona
         "03_LOSS_SCENARIOS.md": _render_loss_scenarios(ucas),
         "04_SAFETY_CONSTRAINTS.md": _render_safety_constraints(ucas, constraint_defs),
         "05_FMECA_MATRIX.md": _render_fmeca_matrix(fmeca_rows),
-        "06_SORA_SAIL_ASSESSMENT.md": _render_sora_assessment(oso_rows),
+        "06_REGULATORY_OBJECTIVES_ASSESSMENT.md": _render_regulatory_objectives_assessment(oso_rows),
+        "06_SORA_SAIL_ASSESSMENT.md": _render_regulatory_objectives_assessment(oso_rows),
         "07_RTA_ARCHITECTURE.md": _render_rta_architecture(proofs),
         "STPA_MATRIX.md": _render_stpa_matrix(ucas),
         "HAZARD_LOG.md": _render_hazard_log(pkg),

@@ -10,7 +10,7 @@
     "incose_moe_mop",
     "threat_matrix",
     "pace_c2_plan",
-    "airspace_geozones",
+    "operational_geozones_and_boundaries",
     "bingo_energy_math",
     "allocation_tags"
   ],
@@ -314,9 +314,9 @@
         "additionalProperties": true
       }
     },
-    "airspace_geozones": {
+    "operational_geozones_and_boundaries": {
       "type": "object",
-      "description": "Section 7: Airspace Deconfliction and U-space Dynamic Geo-Zones.",
+      "description": "Section 7: Operational Geozones and Spatial Boundary Deconfliction.",
       "required": [
         "primary_boundary_perimeter",
         "dynamic_exclusion_zones",
@@ -333,7 +333,7 @@
         },
         "separation_minima": {
           "type": "string",
-          "description": "Minimum lateral and vertical deconfliction distance from other airspace participants."
+          "description": "Minimum lateral and vertical deconfliction distance from other operational participants."
         }
       },
       "additionalProperties": true

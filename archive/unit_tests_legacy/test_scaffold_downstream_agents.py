@@ -69,9 +69,8 @@ def test_scaffold_downstream_agents_transformation(temp_installer_root, temp_tar
     assert "UPSTREAM_SPEC_CORE_COMPILER" not in dot_content
     # Verify downstream header items
     assert "DOWNSTREAM_CUSTOMER_PROJECT" in dot_content
-    assert "DOMAIN_TEMPLATE_CHILD" in dot_content
-    assert "gintatkinson/DEAP-avionic-flight-safety" in dot_content
-    assert "Tactical UAS" in dot_content
+    assert "Downstream domain-specific application code" in dot_content
+    assert "gintatkinson/DEAP-avionic-flight-safety" not in dot_content
 
     # Verify preserved downstream rules
     assert "Rule 1: Always verify before acting." in dot_content

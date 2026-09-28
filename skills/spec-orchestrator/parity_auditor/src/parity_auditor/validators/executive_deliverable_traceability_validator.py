@@ -70,7 +70,9 @@ RE_ROW_CITATION = re.compile(
     r'|\bpartdef\b'
     r'|schema/[A-Za-z0-9_.-]+\.(?:md|sysml)'
     r'|\b[A-Za-z0-9_.-]+\.md\b'
-    r'|\b(STANAG|MIL[- ]?STD|DO[- ]?178[A-Z]?|DO[- ]?254[A-Z]?|ARP[- ]?4754[A-Z]?|ARP[- ]?4761[A-Z]?|ISO|IEEE|ASTM|FAA|EASA|SORA|JARUS)\b'
+    r'|\b(?:STANAG|MIL[- ]?STD|DO[- ]?\d+|ARP[- ]?\d+|ISO|IEEE|ASTM|FAA|EASA|SORA|JARUS|IEC|ITU|ETSI|NIST|ARINC|RTCA|AUTOSAR|MISRA|ECSS|SAE|CENELEC)\b'
+    r'|\b[A-Z0-9]+-[A-Z0-9\-]+\b'
+    r'|\b[A-Z]{2,10}\s+\d+[A-Z0-9\-]*\b'
     r')',
     re.IGNORECASE,
 )

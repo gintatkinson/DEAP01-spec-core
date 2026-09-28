@@ -730,8 +730,8 @@ if [ "$SHOULD_SCAFFOLD_README" = true ]; then
   # 1. Check existing README.md before overwriting (e.g. GitLab initial commit: "# <project_name>\n\nGetting started with GitLab...")
   if [ -z "$DOMAIN_PROJECT_NAME" ] && [ -f "$TARGET_DIR/README.md" ]; then
     CANDIDATE_TITLE=$(grep -E '^# ' "$TARGET_DIR/README.md" | head -n 1 | sed 's/^# *//' | tr -d '\r\n')
-    CLEAN_CANDIDATE=$(echo "$CANDIDATE_TITLE" | sed -E 's/( -- Downstream Cyber-Physical Infrastructure Safety Project)+$//; s/( -- Downstream Safety-Critical Engineering Project)+$//')
-    if ! echo "$CLEAN_CANDIDATE" | grep -qE "Getting started with GitLab|Downstream Cyber-Physical Infrastructure Safety Project|Downstream Safety-Critical Engineering Project" && [ -n "$CLEAN_CANDIDATE" ]; then
+    CLEAN_CANDIDATE=$(echo "$CANDIDATE_TITLE" | sed -E 's/( -- Downstream Systems Engineering Project)+$//; s/( -- Downstream Cyber-Physical Infrastructure Safety Project)+$//; s/( -- Downstream Safety-Critical Engineering Project)+$//')
+    if ! echo "$CLEAN_CANDIDATE" | grep -qE "Getting started with GitLab|Downstream Systems Engineering Project|Downstream Cyber-Physical Infrastructure Safety Project|Downstream Safety-Critical Engineering Project" && [ -n "$CLEAN_CANDIDATE" ]; then
       DOMAIN_PROJECT_NAME="$CLEAN_CANDIDATE"
     fi
   fi
@@ -816,7 +816,7 @@ if [ "$SHOULD_SCAFFOLD_README" = true ]; then
     if [ -n "$DIR_BASE" ] && [ "$DIR_BASE" != "." ] && [ "$DIR_BASE" != "/" ]; then
       DOMAIN_PROJECT_NAME="$DIR_BASE"
     else
-      DOMAIN_PROJECT_NAME="Downstream Cyber-Physical Infrastructure Safety Project"
+      DOMAIN_PROJECT_NAME="Downstream Systems Engineering Project"
     fi
   fi
 
@@ -825,20 +825,20 @@ if [ "$SHOULD_SCAFFOLD_README" = true ]; then
   fi
 
   if [ -z "$DOMAIN_TECH_PROFILE" ]; then
-    DOMAIN_TECH_PROFILE="\`ROS2 C++ Real-Time\` | \`Target Embedded Platform Execution Profile\`"
+    DOMAIN_TECH_PROFILE="\`Target Platform Execution Profile\`"
   fi
 
   if [ -z "$DOMAIN_REGULATORY" ]; then
-    DOMAIN_REGULATORY="\`JARUS SORA v2.5 (SAIL I–VI)\` | \`ASTM F3269-17 RTA\` | \`ASTM F3411-22a Remote ID\` | \`RTCA DO-365B DAA\`"
+    DOMAIN_REGULATORY="\`Schema-Derived Regulatory Standards\`"
   fi
 
   # Strip any redundant trailing suffix from DOMAIN_PROJECT_NAME to avoid duplicate title suffixes
-  DOMAIN_PROJECT_NAME=$(echo "$DOMAIN_PROJECT_NAME" | sed -E 's/( -- Downstream Cyber-Physical Infrastructure Safety Project)+$//; s/( -- Downstream Safety-Critical Engineering Project)+$//')
+  DOMAIN_PROJECT_NAME=$(echo "$DOMAIN_PROJECT_NAME" | sed -E 's/( -- Downstream Systems Engineering Project)+$//; s/( -- Downstream Cyber-Physical Infrastructure Safety Project)+$//; s/( -- Downstream Safety-Critical Engineering Project)+$//')
 
-  if [ "$DOMAIN_PROJECT_NAME" = "Downstream Cyber-Physical Infrastructure Safety Project" ] || [ -z "$DOMAIN_PROJECT_NAME" ]; then
-    README_TITLE="# Downstream Cyber-Physical Infrastructure Safety Project"
+  if [ "$DOMAIN_PROJECT_NAME" = "Downstream Systems Engineering Project" ] || [ -z "$DOMAIN_PROJECT_NAME" ]; then
+    README_TITLE="# Downstream Systems Engineering Project"
   else
-    README_TITLE="# ${DOMAIN_PROJECT_NAME} -- Downstream Cyber-Physical Infrastructure Safety Project"
+    README_TITLE="# ${DOMAIN_PROJECT_NAME} -- Downstream Systems Engineering Project"
   fi
 
   # Resolve domain repository git remote URL for customer onboarding instructions
@@ -849,7 +849,7 @@ if [ "$SHOULD_SCAFFOLD_README" = true ]; then
     DOMAIN_REMOTE_URL="$REMOTE_URL"
   elif [ -n "$DETECTED_SERVER_URL" ] && [ -n "$DETECTED_NAMESPACE" ] && [ -n "$DETECTED_PROJECT" ] && [ "$DETECTED_PROJECT" != "DEAP01-spec-core" ]; then
     DOMAIN_REMOTE_URL="${DETECTED_SERVER_URL}/${DETECTED_NAMESPACE}/${DETECTED_PROJECT}.git"
-  elif [ -n "$DETECTED_SERVER_URL" ] && [ -n "$DETECTED_NAMESPACE" ] && [ -n "$DOMAIN_PROJECT_NAME" ] && [ "$DOMAIN_PROJECT_NAME" != "Downstream Cyber-Physical Infrastructure Safety Project" ]; then
+  elif [ -n "$DETECTED_SERVER_URL" ] && [ -n "$DETECTED_NAMESPACE" ] && [ -n "$DOMAIN_PROJECT_NAME" ] && [ "$DOMAIN_PROJECT_NAME" != "Downstream Systems Engineering Project" ] && [ "$DOMAIN_PROJECT_NAME" != "Downstream Cyber-Physical Infrastructure Safety Project" ]; then
     CLEAN_NAME=$(echo "$DOMAIN_PROJECT_NAME" | tr ' ' '-')
     DOMAIN_REMOTE_URL="${DETECTED_SERVER_URL}/${DETECTED_NAMESPACE}/${CLEAN_NAME}.git"
   elif [ ! -e "$INSTALLER_ROOT/.pipeline/upstream" ]; then
@@ -881,7 +881,7 @@ $DOMAIN_PROJECT_DESC
 
 ### 1.1 Clean Landing Zone Invariant
 
-As a **Tier 2 Domain Distribution Template**, this repository maintains pristine, clean landing zones in \`schema/\`, \`docs/epics/\`, \`docs/features/\`, \`docs/user-stories/\`, and \`docs/use-cases/\` with only \`.gitkeep\` files (or domain-wide baseline SysML v2 schemas). Concrete customer project specifications, flight code, ROS2 nodes, and proprietary implementation artifacts belong exclusively in downstream customer application workspaces and must NOT be committed here.
+As a **Tier 2 Domain Distribution Template**, this repository maintains pristine, clean landing zones in \`schema/\`, \`docs/epics/\`, \`docs/features/\`, \`docs/user-stories/\`, and \`docs/use-cases/\` with only \`.gitkeep\` files (or domain-wide baseline SysML v2 schemas). Concrete customer project specifications, application source code, domain modules, and proprietary implementation artifacts belong exclusively in downstream customer application workspaces and must NOT be committed here.
 
 ### 1.2 Primary Commercial Toolchain Integration Context
 
@@ -893,7 +893,7 @@ This platform explicitly declares **MATLAB / Simulink / Stateflow / Embedded Cod
 
 - \`.agents/\` & \`AGENTS.md\`: Agent behavior rules, role boundaries, and subagent dispatch protocols.
 - \`CLAUDE.md\`: Claude Code guidelines and verification gates.
-- \`.pipeline/\`: Constitution (\`constitution.md\`), active governance rules bundle (\`ACTIVE_RULES_BUNDLE.md\`), domain specifications, and execution profiles (\`profiles/ros2_cpp.md\`, \`profiles/px4_module.md\`).
+- \`.pipeline/\`: Constitution (\`constitution.md\`), active governance rules bundle (\`ACTIVE_RULES_BUNDLE.md\`), domain specifications, and execution profiles (\`profiles/<platform>.md\`).
 - \`rules/\` & \`skills/\`: Platform engineering rules and agent workflow skills.
 - \`schema/\`: Contract definitions and SysML v2 schemas.
 - \`tests/\`: Automated baseline verification and safety compliance tests.
@@ -951,7 +951,7 @@ $DOMAIN_PROJECT_DESC
 
 ### 1.1 Customer Application Workspace Scope
 
-As a **Tier 3 Customer Application Workspace**, this repository is authorized for concrete engineering delivery, proprietary application code, ROS2 lifecycle nodes, PX4 flight modules, hardware-in-the-loop tests, and verified Agile backlog implementations.
+As a **Tier 3 Customer Application Workspace**, this repository is authorized for concrete engineering delivery, proprietary application code, domain lifecycle components, target execution nodes, hardware-in-the-loop tests, and verified Agile backlog implementations.
 
 ### 1.2 Primary Commercial Toolchain Integration Context
 
@@ -963,7 +963,7 @@ This platform explicitly declares **MATLAB / Simulink / Stateflow / Embedded Cod
 
 - \`.agents/\` & \`AGENTS.md\`: Agent behavior rules, role boundaries, and subagent dispatch protocols.
 - \`CLAUDE.md\`: Claude Code guidelines and verification gates.
-- \`.pipeline/\`: Constitution (\`constitution.md\`), active governance rules bundle (\`ACTIVE_RULES_BUNDLE.md\`), domain specifications, and execution profiles (\`profiles/ros2_cpp.md\`, \`profiles/px4_module.md\`).
+- \`.pipeline/\`: Constitution (\`constitution.md\`), active governance rules bundle (\`ACTIVE_RULES_BUNDLE.md\`), domain specifications, and execution profiles (\`profiles/<platform>.md\`).
 - \`rules/\` & \`skills/\`: Platform engineering rules and agent workflow skills.
 - \`schema/\`: Contract definitions and SysML v2 schemas.
 - \`tests/\`: Automated baseline verification and safety compliance tests.
@@ -1045,7 +1045,7 @@ flowchart TD
     subgraph P2["Pipeline 2: Autonomous Feature Implementation & Simulation"]
         Reconcile --> Backlog["Prioritized Backlog Feature"]
         Backlog --> W2A1["Worker 2A.1: Flutter Feature Implementer (app_flutter/)"]
-        Backlog --> W2A2["Worker 2A.2: ROS2 / PX4 Real-Time Control Implementer"]
+        Backlog --> W2A2["Worker 2A.2: Target Platform Execution Implementer"]
         Backlog --> W2B["Worker 2B: Dual-Track Simulation Driver (Simulink & Python Twin)"]
         W2A1 & W2A2 & W2B --> Rev1["Stage 1: Spec Compliance Review (Reviewer 1)"]
         Rev1 --> Rev2["Stage 2: Code Quality & Numerical Review (Reviewer 2)"]
@@ -1166,7 +1166,7 @@ Directive:
 Perform STPA hazard analysis, FMECA failure mode criticality evaluation, and domain safety risk assessment based on `docs/conops/CONOPS.md`.
 
 1. Standards Compliance & Domain Safety Framework:
-   - Dynamic Domain Safety Framework Selection: Apply the applicable safety framework governing the target domain (e.g., ISO 14971/IEC 62304 for Medical, EN 50128 for Rail, DNV-GL for Marine, ECSS for Space, ISO 3691-4 for Industrial AGV, SORA/DO-178C for Aviation).
+   - Dynamic Domain Safety Framework Selection: Apply the applicable schema-derived safety framework and regulatory standards governing the target domain.
    - Run-Time Assurance (RTA) Monitor Architecture & Safety Net switching (e.g., ASTM F3269-17 or domain-equivalent safety monitor pattern).
    - Domain-specific hazard detection, telemetry monitoring, and contingency guidance standards.
 
@@ -1179,7 +1179,7 @@ Perform STPA hazard analysis, FMECA failure mode criticality evaluation, and dom
      5. Loss Scenarios ($LS-1..N$) & Causal Factors
      6. Formal Safety Constraints ($SC-1..N$)
      7. FMECA Criticality Matrix: Component failure modes with 15+ rows, Severity ($S$), Occurrence ($O$), Detection ($D$), and Risk Priority Numbers ($\text{RPN} = S \times O \times D$)
-     8. Domain Safety Framework & Risk Mitigations Table: Risk class classification, integrity levels, and comprehensive mapping of domain safety objectives and mitigations (e.g., ISO 14971/IEC 62304, EN 50128, DNV-GL, ECSS, ISO 3691-4, SORA OSO-01..24)
+     8. Domain Safety Framework & Risk Mitigations Table: Risk class classification, integrity levels, and comprehensive mapping of domain safety objectives and mitigations to schema-derived regulatory requirements
    - Include Run-Time Assurance (RTA) Safety Net monitor architecture.
    - Include MATLAB / Simulink / Stateflow / Embedded Coder model integration baseline hooks and SLDV formal proof properties.
    - KaTeX / LaTeX Math Formatting Mandate: All multi-line aligned equations MUST be enclosed in `\begin{aligned} ... \end{aligned}` within `$$` delimiters on dedicated lines. Bare alignment tabs `&` outside an alignment environment (`aligned`, `matrix`, `cases`) and `\begin{align*}` environments are strictly forbidden. Markdown Table Math Prohibition Rule: Strictly ban `$ ... $` and `$$ ... $$` LaTeX math delimiters inside table headers, rows, and cells; plain text and Unicode (e.g. `Initial S`, `ΔV`, `λ`, `°C`, `≥`, `≤`, `→`, `10⁻⁶`) must be used instead, with 1:1 column count match between header and delimiter rows.
@@ -1476,30 +1476,30 @@ Implement prioritized Feature [Issue Number, e.g. #1] adhering strictly to the a
 PROCEED
 ```
 
-#### 4.5.2 Worker 2A.2 / Synthesis Driver: ROS2 / PX4 Feature Implementation Prompt
+#### 4.5.2 Worker 2A.2 / Synthesis Driver: Target Platform Feature Implementation Prompt
 
 ```text
 Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` as your very first step before taking any action.
 
 Repository Classification: DOWNSTREAM_CUSTOMER_PROJECT
 
-Role: Worker 2A.2 -- Real-Time Robotics & Autopilot Implementation Specialist
+Role: Worker 2A.2 -- Target Platform Execution Specialist
 
 Primary Commercial Toolchain Integration Context:
 This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
 
 Platform Profiles & Target Standards:
-Follow `.pipeline/profiles/ros2_cpp.md` (ROS 2 Humble/Iron/Jazzy, `rclcpp_lifecycle::LifecycleNode`, zero dynamic allocations in real-time loops via `rttest`, hardened QoS `RELIABILITY_RELIABLE`) and `.pipeline/profiles/px4_module.md` (PX4 Autopilot Firmware, `ModuleBase<T>`, uORB pub/sub messaging, ASTM F3269-17 Run-Time Assurance monitors). Hardware-in-the-loop (HIL) tests must validate real-time execution bounds, sensor jitter tolerances, and fail-safe actuation responses against simulated PX4 hardware targets.
+Follow `.pipeline/profiles/<target_platform>.md` (Target Platform Execution Profile, lifecycle state management, and real-time execution bounds). Target platform verification tests must validate real-time execution bounds, timing jitter tolerances, and fail-safe actuation responses against target execution environments.
 
 Execution Standards & Governance Mandates:
 - Adopt the feature-driven-implementation skill by reading `.pipeline/constitution.md`, `.pipeline/ACTIVE_RULES_BUNDLE.md`, and the target platform profile.
-- Architecture Pattern: Real-time ROS2 lifecycle nodes and PX4 uORB modules with deterministic execution semantics.
-- 3-Layer Definition of Done: Domain State Model, Lifecycle State Machine & Safety Monitor, Middleware Binding (uORB / ROS2 Topic) with automated unit, integration, and hardware-in-the-loop tests.
+- Architecture Pattern: Real-time target platform execution nodes and lifecycle state machine modules with deterministic execution semantics.
+- 3-Layer Definition of Done: Domain State Model, Lifecycle State Machine & Safety Monitor, Middleware Binding (Target Platform Topic / Bus Binding) with automated unit, integration, and hardware-in-the-loop tests.
 - TDD RED-GREEN-REFACTOR cycle with context-isolated micro-tasks.
 
 Verification Commands:
-colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
-colcon test --event-handlers console_direct+
+<target_platform_build_command>
+<target_platform_test_command>
 
 ---GOVERNANCE-END---
 

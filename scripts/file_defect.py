@@ -298,6 +298,20 @@ def fetch_existing_issues(
                 return json.loads(res.stdout)
         except Exception:
             pass
+        token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+        if token:
+            curl_cmd = [
+                "curl", "-s",
+                "-H", f"Authorization: token {token}",
+                "-H", "Accept: application/vnd.github.v3+json",
+                f"https://api.github.com/repos/{repo}/issues?state=all&per_page=100",
+            ]
+            try:
+                cres = subprocess.run(curl_cmd, capture_output=True, text=True)
+                if cres.returncode == 0 and cres.stdout.strip():
+                    return json.loads(cres.stdout)
+            except Exception:
+                pass
     elif prov == "gitlab":
         cmd = [
             "glab",
@@ -434,6 +448,33 @@ def file_defect_issue(
             print(res.stdout.strip())
         return 0
     else:
+        token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+        if prov == "github" and token:
+            labels_list = [label] if isinstance(label, str) else (label or [])
+            payload = json.dumps({
+                "title": title,
+                "body": body_content,
+                "labels": labels_list,
+            })
+            curl_cmd = [
+                "curl", "-s", "-X", "POST",
+                "-H", f"Authorization: token {token}",
+                "-H", "Accept: application/vnd.github.v3+json",
+                "-H", "Content-Type: application/json",
+                f"https://api.github.com/repos/{repo}/issues",
+                "-d", payload,
+            ]
+            cres = subprocess.run(curl_cmd, capture_output=True, text=True)
+            if cres.returncode == 0 and cres.stdout.strip():
+                try:
+                    cdata = json.loads(cres.stdout)
+                    if "html_url" in cdata:
+                        print(cdata["html_url"])
+                        return 0
+                    elif "message" in cdata:
+                        print(f"GitHub API Error: {cdata.get('message')}", file=sys.stderr)
+                except Exception:
+                    pass
         print(f"Error creating issue via {prov} CLI (exit code {res.returncode}):", file=sys.stderr)
         if res.stderr:
             print(res.stderr.strip(), file=sys.stderr)

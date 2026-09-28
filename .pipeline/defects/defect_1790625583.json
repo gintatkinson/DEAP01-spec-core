@@ -1,0 +1,11 @@
+{
+  "timestamp": 1790625583,
+  "exit_code": 1,
+  "failed_checks": [
+    "baseline_verification"
+  ],
+  "errors": [
+    "Verification failed, see logs for details"
+  ],
+  "target_repository": "/Users/perkunas/jail/DEAP01-spec-core"
+}

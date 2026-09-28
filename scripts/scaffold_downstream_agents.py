@@ -16,9 +16,8 @@ UPSTREAM_HEADER = """## Repository Role & Scope Classification
 
 DOWNSTREAM_HEADER = """## Repository Role & Scope Classification
 - **Repository Classification:** `DOWNSTREAM_CUSTOMER_PROJECT` / `DOMAIN_TEMPLATE_CHILD` (Domain-Specific Safety-Critical Engineering Project)
-- **Parent Domain Template:** `gintatkinson/DEAP-avionic-flight-safety` (Common Aviation Safety Standards)
 - **Sentinel Indicator:** The absence of `.pipeline/upstream/` denotes that this repository is an active **Downstream Customer Project Workspace**, authorized for concrete application code implementation and domain feature delivery.
-- **Customer Application Scope:** Tactical UAS flight safety, contingency management, run-time assurance (RTA), detect-and-avoid (DAA), and autopilot integration under SORA / ASTM / DO-178C frameworks. Customer-specific application code, domain nodes/modules, domain tests, mission envelopes, and proprietary safety models are developed, tested, and maintained directly within this project workspace across any target domain (Aerospace, Medical, Space, Industrial AGV, Subsea, Rail)."""
+- **Customer Application Scope:** Downstream domain-specific application code, modules, tests, and models developed, tested, and maintained directly within this project workspace across any target domain."""
 
 DEFAULT_CLAUDE = """# Claude Code Project Guidelines
 
@@ -34,7 +33,6 @@ This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder 
 DEFAULT_README = """# Downstream Safety-Critical Engineering Project
 
 > **Repository Role:** `DOWNSTREAM_APPLICATION_WORKSPACE`
-> **Parent Domain Template:** `gintatkinson/DEAP-avionic-flight-safety`
 
 ---
 

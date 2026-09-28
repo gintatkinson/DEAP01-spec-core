@@ -969,128 +969,35 @@ class SysMLParameterBindingEngine:
 
     def _detect_domain_type(self) -> str:
         """
-        Detects operational domain type: aviation, medical, rail, marine, space, industrial.
-        Fixes Issues #175, #186.
+        Detects operational domain type derived from schema tokens (DOMAIN_TYPE,
+        TARGET_DOMAIN, OPERATIONAL_DOMAIN), .pipeline/schema-digest.json, or defaults
+        cleanly to 'generic'.
+        Expunges hardcoded domain concepts (Fixes Issue #175, #186).
         """
-        aviation_tokens = {
-            "aviation",
-            "aircraft",
-            "uav",
-            "uas",
-            "drone",
-            "evtol",
-            "aerial",
-            "flight",
-            "airspace",
-            "aerospace",
-            "sora",
-            "fixed-wing",
-            "rotorcraft",
-            "interceptor",
-        }
-        medical_tokens = {
-            "medical",
-            "surgical",
-            "healthcare",
-            "patient",
-            "clinical",
-            "hospital",
-            "laparoscopic",
-            "trocar",
-        }
-        rail_tokens = {
-            "rail",
-            "locomotive",
-            "train",
-            "shunting",
-            "metro",
-            "tramway",
-            "railway",
-        }
-        marine_tokens = {
-            "marine",
-            "subsea",
-            "maritime",
-            "underwater",
-            "auv",
-            "rov",
-            "usv",
-            "uuv",
-            "vessel",
-            "naval",
-            "ocean",
-            "bathymetric",
-        }
-        space_tokens = {
-            "space",
-            "satellite",
-            "cubesat",
-            "orbital",
-            "spacecraft",
-            "launch",
-            "leo",
-            "geo",
-            "adcs",
-            "orbit",
-            "constellation",
-        }
-        industrial_tokens = {
-            "industrial",
-            "agv",
-            "forklift",
-            "warehouse",
-            "logistics",
-            "amr",
-            "ugv",
-        }
-
         def _match_tokens(text: str) -> Optional[str]:
-            clean = text.lower()
-            tokens = set(re.findall(r"[a-z0-9]+", clean))
-            if tokens & aviation_tokens or any(p in clean for p in ("fixed wing", "fixed-wing")):
-                return "aviation"
-            if tokens & medical_tokens:
-                return "medical"
-            if tokens & rail_tokens or any(p in clean for p in ("rolling stock", "track circuit")):
-                return "rail"
-            if tokens & marine_tokens or any(p in clean for p in ("surface vessel",)):
-                return "marine"
-            if tokens & space_tokens:
-                return "space"
-            if tokens & industrial_tokens or any(p in clean for p in ("industrial truck", "material handling", "vda 5050", "ground delivery", "ground robot")):
-                return "industrial"
-            return None
+            if not text:
+                return None
+            clean = str(text).strip()
+            if not clean:
+                return None
+            if "::" in clean:
+                parts = [p.strip() for p in clean.split("::") if p.strip()]
+                if parts:
+                    clean = parts[-1]
+            clean_lower = clean.lower()
+            if clean_lower in ("unknown", "none", "null", "undefined"):
+                return None
+            return clean_lower
 
         # 1. Explicit domain in parameter bindings
-        explicit = (
-            self.parameter_bindings.get("DOMAIN_TYPE")
-            or self.parameter_bindings.get("TARGET_DOMAIN")
-            or self.parameter_bindings.get("DOMAIN")
-        )
-        if explicit:
-            dom = _match_tokens(str(explicit))
-            if dom:
-                return dom
+        for key in ("DOMAIN_TYPE", "TARGET_DOMAIN", "OPERATIONAL_DOMAIN", "DOMAIN"):
+            val = self.parameter_bindings.get(key)
+            if val:
+                dom = _match_tokens(str(val))
+                if dom:
+                    return dom
 
-        # 2. Parameter bindings and inferred identifiers
-        domain_str = (
-            self.parameter_bindings.get("OPERATIONAL_DOMAIN")
-            or self.parameter_bindings.get("DOMAIN")
-            or ""
-        ).lower()
-        sys_str = (
-            self.parameter_bindings.get("SYSTEM_IDENTIFIER")
-            or self.parameter_bindings.get("SYSTEM_NAME")
-            or self.inferred_system_identifier
-            or ""
-        ).lower()
-        platform_type = (self.parameter_bindings.get("PLATFORM_TYPE") or "").lower()
-        params_combined = f"{domain_str} {sys_str} {platform_type}"
-        dom = _match_tokens(params_combined)
-        if dom:
-            return dom
-
-        # 3. Check compiled schema digest (.pipeline/schema-digest.json)
+        # 2. Check compiled schema digest (.pipeline/schema-digest.json)
         curr = self.workspace_dir
         for _ in range(5):
             digest_path = os.path.join(curr, ".pipeline", "schema-digest.json")
@@ -1100,9 +1007,10 @@ class SysMLParameterBindingEngine:
                         digest = json.load(f)
                     dom_val = (
                         digest.get("domain")
-                        or digest.get("system_name")
-                        or digest.get("operational_domain")
                         or digest.get("domain_type")
+                        or digest.get("target_domain")
+                        or digest.get("operational_domain")
+                        or digest.get("system_name")
                         or digest.get("system_identifier")
                         or digest.get("program_title")
                         or ""
@@ -1117,11 +1025,6 @@ class SysMLParameterBindingEngine:
             if parent == curr:
                 break
             curr = parent
-
-        # 4. Fallback: inspect workspace directory string
-        dom = _match_tokens(self.workspace_dir)
-        if dom:
-            return dom
 
         return "generic"
 
@@ -1331,57 +1234,21 @@ class SysMLParameterBindingEngine:
         Dynamically derives DOMAIN_REGULATORY_STANDARDS_TABLE_ROWS based on detected domain,
         SYSTEM_IDENTIFIER, REGULATORY_STANDARDS, or domain config (Issues #163, #164, #169, #175).
         """
-        if "DOMAIN_REGULATORY_STANDARDS_TABLE_ROWS" in self._explicit_keys:
-            return
-
-        dom = getattr(self, "detected_domain", "aviation")
-
-        # Medical domain
-        if dom == "medical":
-            rows = [
-                "| IEC 62304:2006+AMD1:2015 Class C | IEC | Medical device software -- Software life cycle processes | §4.3 Software safety classification, §5.2 Software development planning, §7.1 Software risk management |",
-                "| ISO 14971:2019 | ISO | Medical devices -- Application of risk management to medical devices | §4.4 Risk management plan, §5.4 Risk estimation, §7.1 Risk control option analysis |",
-                "| IEC 60601-1-8:2020 | IEC | Medical electrical equipment -- Part 1-8: General requirements for basic safety and essential performance -- Collateral Standard: Alarm systems | §6.3 Alarm condition categories, §6.8 Alarm signals, §6.9 Alarm limits |",
-            ]
-        # Rail domain
-        elif dom == "rail":
-            rows = [
-                "| EN 50126:2017 | CENELEC | Railway Applications -- The Specification and Demonstration of Reliability, Availability, Maintainability and Safety (RAMS) | §6.2 RAMS lifecycle processes, §7.3 Risk assessment and safety requirements |",
-                "| EN 50128:2011/A2:2020 SIL 4 | CENELEC | Railway applications -- Communication, signalling and processing systems -- Software for railway control and protection systems | §6.3 Software safety integrity levels (SIL 4), §7.5 Software verification and testing |",
-                "| EN 50129:2018 | CENELEC | Railway applications -- Communication, signalling and processing systems -- Safety related electronic systems for signalling | §5.2 Safety management for electronic systems, §6.3 Hardware safety integrity, §7.1 Safety acceptance |",
-            ]
-        # Space domain
-        elif dom == "space":
-            rows = [
-                "| ECSS-E-ST-40C | ECSS | Space engineering -- Software | §5.2 Software life cycle, §5.8 Software verification and validation, §6.3 Space software safety requirements |",
-                "| NASA-STD-8739.8 | NASA | Software Assurance Standard for NASA Programs and Projects | §4.2 Safety-critical software assurance, §5.3 Independent Verification and Validation (IV&V) |",
-                "| ECSS-E-ST-10C | ECSS | Space engineering -- System engineering general requirements | §5.2 System engineering process, §6.2 Verification and product assurance processes |",
-            ]
-        # AGV / Forklift / Warehouse logistics domain
-        elif dom == "industrial":
-            rows = [
-                "| ISO 3691-4:2023 | ISO | Industrial trucks -- Safety requirements and verification -- Part 4: Driverless industrial trucks and their systems | §4.2 Automated path containment, §4.3 Personnel detection and active obstacle avoidance, §5.2 Safety interlocks |",
-                "| IEC 61508 SIL 3 | IEC | Functional Safety of Electrical/Electronic/Programmable Electronic Safety-related Systems | Part 1 §6.2 Management of functional safety, Part 2 §7.4 Hardware safety integrity (SIL 3), Part 3 §7.4 Software design |",
-                "| VDA 5050 | VDA / VDMA | AGV Communication Interface -- Interface for the communication between automated guided vehicles (AGV) and a master control | §4.0 MQTT message formats, §5.2 Dynamic order execution, §6.3 Instant action and e-stop commands |",
-            ]
-        # Subsea / Maritime domain
-        elif dom == "marine":
-            rows = [
-                "| DNV-GL-ST-E403 | DNV GL | Subsea power and automation systems | §3.2 Subsea electrical and control system safety, §4.4 Redundant power and containment architectures |",
-                "| ISO 13628-6 | ISO | Petroleum and natural gas industries -- Design and operation of subsea production systems -- Part 6: Subsea production control systems | §5.2 Environmental qualification, §6.3 Pressure containment and emergency release interlocks |",
-                "| IMO MASS Code | IMO | Maritime Autonomous Surface Ships (MASS) Code | §3.1 Autonomous navigation modes, §4.2 Remote control center safety functions, §5.3 Failsafe state reversion |",
-                "| COLREGs Convention | IMO | Convention on the International Regulations for Preventing Collisions at Sea | Rule 5 Look-out, Rule 8 Action to avoid collision, Rule 18 Responsibilities between vessels |",
-            ]
-        # Aviation / UAS domain (default for aerial systems)
+        existing_rows = (
+            self.parameter_bindings.get("DOMAIN_REGULATORY_STANDARDS_TABLE_ROWS")
+            or self.parameter_bindings.get("REGULATORY_STANDARDS_TABLE_ROWS")
+        )
+        if existing_rows:
+            table_rows_str = existing_rows
         else:
             rows = [
-                "| RTCA DO-178C (DAL-B) | RTCA / EUROCAE (ED-12C) | Software Considerations in Airborne Systems and Equipment Certification | §6.3.1 Software Safety & Verification, §6.4.4 Structural Coverage (MC/DC Verification), Tables A-1 to A-7 Life Cycle Objectives |",
-                "| RTCA DO-254 | RTCA / EUROCAE (ED-80) | Design Assurance Guidance for Airborne Electronic Hardware | §5.0 Hardware Design Processes, §6.0 Validation & Verification, Appendix B Design Assurance Levels (DAL-B) |",
-                "| RTCA DO-365B | RTCA | Minimum Operational Performance Standards (MOPS) for Detect and Avoid (DAA) Systems | §2.2 DAA System Requirements, §2.2.4 Well-Clear Boundaries & Alerting, §2.2.5 Collision Avoidance Guidance & Maneuver Coordination |",
-                "| JARUS SORA v2.5 | JARUS | Specific Operations Risk Assessment (SORA) Methodology | Step #2 Initial Ground Risk Class (GRC), Step #4 Specific Assurance and Integrity Levels (SAIL I–VI), Step #5 Air Risk Class (ARC), Annex B M1–M3 Safety Mitigations |",
+                "| Standard Identifier | Standard Organization | Scope & Operational Governance | Applicable Life Cycle Clauses & Safety Objectives |",
+                "| ISO/IEC/IEEE 15288 | ISO / IEC / IEEE | Systems and software engineering -- System life cycle processes | §6.4 Technical processes, §6.4.2 Stakeholder requirements definition |",
+                "| ISO/IEC/IEEE 29148 | ISO / IEC / IEEE | Systems and software engineering -- Life cycle processes -- Requirements engineering | §6.4.2 Concept of operations (ConOps), §6.4.3 Operational concept (OpsCon) |",
+                "| Generic Functional Safety Standard | Standard Body | Functional safety and risk mitigation baseline | System safety integrity, hazard mitigation, and verification coverage |",
             ]
+            table_rows_str = "\n".join(rows)
 
-        table_rows_str = "\n".join(rows)
         self.parameter_bindings["DOMAIN_REGULATORY_STANDARDS_TABLE_ROWS"] = table_rows_str
         self.parameter_bindings["REGULATORY_STANDARDS_TABLE_ROWS"] = table_rows_str
 
@@ -1549,7 +1416,7 @@ class SysMLParameterBindingEngine:
         Derives platform-specific and civilian/military ontology tokens for all 6 domains (Solver 5).
         Fixes Issue #175.
         """
-        dom = getattr(self, "detected_domain", "aviation")
+        dom = getattr(self, "detected_domain", "generic")
 
         is_non_aircraft = dom in ("medical", "rail", "marine", "space", "industrial")
         is_civilian = dom in ("medical", "rail", "marine", "space", "industrial")
@@ -1791,15 +1658,15 @@ class SysMLParameterBindingEngine:
             if "STATE_VECTOR_MAX_UNITS" not in self._explicit_keys:
                 self.parameter_bindings["STATE_VECTOR_MAX_UNITS"] = "rad, rad, m, m/s, m/s, m/s"
             if "STATE_SAFETY_MITIGATION" not in self._explicit_keys:
-                self.parameter_bindings["STATE_SAFETY_MITIGATION"] = "SORA Annex B M1 Mitigations"
+                self.parameter_bindings["STATE_SAFETY_MITIGATION"] = "Boundary Containment & Operational Margin Controls"
             if "CONTAINMENT_BUFFER_UNIT" not in self._explicit_keys:
                 self.parameter_bindings["CONTAINMENT_BUFFER_UNIT"] = "m"
             if "CONTAINMENT_STANDARD" not in self._explicit_keys:
-                self.parameter_bindings["CONTAINMENT_STANDARD"] = "JARUS SORA v2.5 Step #2"
+                self.parameter_bindings["CONTAINMENT_STANDARD"] = "ISO/IEC/IEEE 29148:2018 §6.4.2"
             if "C2_STANDARD" not in self._explicit_keys:
-                self.parameter_bindings["C2_STANDARD"] = "RTCA DO-362A §2.2.1"
+                self.parameter_bindings["C2_STANDARD"] = "Operational Communication & Control Link Standard"
             if "CONTAINMENT_RESPONSE_STANDARD" not in self._explicit_keys:
-                self.parameter_bindings["CONTAINMENT_RESPONSE_STANDARD"] = "ASTM F3269-17 §7.1"
+                self.parameter_bindings["CONTAINMENT_RESPONSE_STANDARD"] = "Safety Architecture Assurance Standard"
 
         if is_civilian:
             self.parameter_bindings["INTERLOCK_PREFIX"] = "SAF"
@@ -1918,7 +1785,7 @@ class SysMLParameterBindingEngine:
           - SECONDARY_RECOVERY_FACILITY
           - LIFECYCLE_TRANSIT_MODE
         """
-        dom = getattr(self, "detected_domain", "aviation").lower()
+        dom = getattr(self, "detected_domain", "generic").lower()
         platform_type = str(self.parameter_bindings.get("PLATFORM_TYPE") or "").lower()
         sys_id = str(self.parameter_bindings.get("SYSTEM_IDENTIFIER") or self.inferred_system_identifier or "").lower()
         op_domain = str(self.parameter_bindings.get("OPERATIONAL_DOMAIN") or "").lower()
@@ -2227,7 +2094,7 @@ class SysMLParameterBindingEngine:
             or self.inferred_system_identifier
             or "AutonomousSystem"
         )
-        dom = getattr(self, "detected_domain", "aviation")
+        dom = getattr(self, "detected_domain", "generic")
 
         super_sys_text = self._synthesize_super_system_architecture_text(sys_id, dom)
         self.parameter_bindings["SUPER_SYSTEM_ARCHITECTURE"] = super_sys_text
@@ -3649,7 +3516,7 @@ class SysMLParameterBindingEngine:
         elif token_upper in ("INGRESS_PROTECTION_RATING", "INGRESS_PROTECTION_TARGET"):
             return "IP67"
 
-        # 6. SORA Ground Risk Buffer & Bingo Mathematics
+        # 6. Boundary Containment & Operational Energy Dynamics
         elif token_upper == "H_MAX_M":
             return "120.0"
         elif token_upper == "THETA_IMPACT_DEG":
@@ -4320,11 +4187,11 @@ class SysMLParameterBindingEngine:
         elif token_upper == "MET_01_USECASE_SLUG":
             return "uc-01"
         elif token_upper == "MET_02_STANDARD_ID":
-            return "JARUS SORA v2.5"
+            return "ISO/IEC/IEEE 29148:2018"
         elif token_upper == "MET_02_CLAUSE_CITATION":
-            return "Annex B"
+            return "§6.4.2"
         elif token_upper == "MET_02_CLAUSE_TITLE":
-            return "Ground Risk"
+            return "Operational Concept"
         elif token_upper == "EXT_01_STANDARD_ID":
             return "MIL-STD-810H"
         elif token_upper == "EXT_01_CLAUSE_CITATION":
@@ -4420,7 +4287,7 @@ class SysMLParameterBindingEngine:
                 break
             current = updated
 
-        dom = getattr(self, "detected_domain", "aviation")
+        dom = getattr(self, "detected_domain", "generic")
 
         # Domain-Specific Ontology Sanitization & Zero-Domain Invariants (Fixes #174, #175, #180)
         if dom == "medical":
@@ -5165,7 +5032,7 @@ def assemble_conops(
     if not hasattr(param_engine, "architecture_diagram_compiler") or param_engine.architecture_diagram_compiler is None:
         param_engine._derive_architecture_diagrams()
 
-    detected_dom = domain or getattr(param_engine, "detected_domain", "aviation")
+    detected_dom = domain or getattr(param_engine, "detected_domain", "generic")
 
     # Domain routing: check domain-native unit packages first, then fallback to standard directory
     conops_units_dir = None
@@ -5363,8 +5230,8 @@ def main() -> int:
     parser.add_argument(
         "--domain",
         default=None,
-        choices=["aviation", "medical", "rail", "marine", "space", "industrial"],
-        help="Target operational domain (aviation, medical, rail, marine, space, industrial). Auto-detected if not specified.",
+        type=str,
+        help="Target operational domain. Auto-detected if not specified.",
     )
 
     args = parser.parse_args()
@@ -5390,7 +5257,11 @@ def main() -> int:
                 if (
                     os.path.isdir(os.path.join(cand, "conops"))
                     or os.path.isdir(os.path.join(cand, "mission_intent"))
-                    or any(os.path.isdir(os.path.join(cand, d, "conops")) for d in ("aviation", "medical", "rail", "marine", "space", "industrial"))
+                    or any(
+                        os.path.isdir(os.path.join(cand, d, "conops"))
+                        for d in os.listdir(cand)
+                        if os.path.isdir(os.path.join(cand, d))
+                    )
                 ):
                     input_dir = cand
                     break

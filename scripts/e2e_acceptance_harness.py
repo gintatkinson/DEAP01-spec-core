@@ -7,8 +7,8 @@ Executes a 2-Tier Semantic Verification Architecture (6 layers) across all 10 do
     - Layer 1 (Delivery Gate 0): Physical presence, line counts, section line floors.
     - Layer 2 (Mechanical Syntax & Token Purity): 0 mustache tokens, 0 pseudovariables, 0 raw $ in tables, 0 KaTeX underscore syntax errors.
   Tier 2 (Semantic & Mathematical Physics Verification):
-    - Layer 3 (Statutory Cardinality & Normative Standards): 16 Threat Vectors, 4 PACE tiers, >=12 MIL-STD-810H methods, 24 SORA OSOs, 7 Emergency rows, and Solver 4 (Normative Standards Cross-Checker: IEC 62304, EN 50128, ECSS, ISO 3691-4, DNV-GL).
-    - Layer 4 (Closed-Form Physical & Math Solver): SORA kinetic energy (E_k <= 34.0J), Kalman covariance units & linear algebra dimensions, Bingo energy conservation, Solver 1 (Relational Table Mass Cross-Sum Solver), Solver 2 (Closed-Form Quadratic Physics Solver), and Solver 3 (Dimensional Scaling & Energy Conservation Engine).
+    - Layer 3 (Statutory Cardinality & Normative Standards): 16 Threat Vectors, 4 PACE tiers, >=12 MIL-STD-810H methods, Regulatory Safety Objectives (>=10 generic OBJ-/REG- or 24 SORA OSOs if SORA explicitly declared), 7 Emergency rows, and Solver 4 (Normative Standards Cross-Checker: IEC 62304, EN 50128, ECSS, ISO 3691-4, DNV-GL).
+    - Layer 4 (Closed-Form Physical & Math Solver): Conditional SORA kinetic energy (E_k <= 34.0J when SORA declared), Kalman covariance units & linear algebra dimensions, Bingo energy conservation, Solver 1 (Relational Table Mass Cross-Sum Solver), Solver 2 (Closed-Form Quadratic Physics Solver), and Solver 3 (Dimensional Scaling & Energy Conservation Engine).
     - Layer 5 (Adversarial Invariant Verification & Ontology Scanner): Priority arbitration (P_EMG07 > ... > P_EMG01), failsafe non-destructive RTB, NIST SP 800-82r3 anti-replay, Solver 5 (Forbidden Cross-Domain Ontology Scanner), Solver 6 (Positive Domain Lexicon Floor), and Solver 7 (Pairwise Anti-Plagiarism Gate).
     - Layer 6 (Baseline Parity & Model Coverage): verify_downstream_baseline.py and verify_model_coverage.py --spec-only.
 
@@ -1241,7 +1241,7 @@ def verify_layer3_cardinality(workspace_path: str) -> LayerResult:
     if len(methods) < 12:
         errors.append(f"Found only {len(methods)} MIL-STD-810H methods (< 12 required): {methods}")
         
-    # 4. 24 SORA OSOs (OSO-01..OSO-24)
+    # 4. Regulatory Safety Objectives (24 SORA OSOs if SORA declared, or >= 10 generic objectives)
     safety_files = []
     safety_dir = os.path.join(workspace_path, "docs", "safety")
     if os.path.isdir(safety_dir):
@@ -1252,7 +1252,8 @@ def verify_layer3_cardinality(workspace_path: str) -> LayerResult:
                         safety_files.append(handle.read())
     combined_safety = conops_c + "\n" + "\n".join(safety_files)
     
-    if safety_files or re.search(r"\bSORA\b", conops_c):
+    has_sora = bool(re.search(r"\bSORA\b", conops_c)) or any(re.search(r"\bSORA\b", sf) for sf in safety_files)
+    if has_sora:
         expected_osos = [f"OSO-{i:02d}" for i in range(1, 25)]
         found_osos = [o for o in expected_osos if re.search(r"\b" + o + r"\b", combined_safety)]
         details["sora_osos_found"] = len(found_osos)
@@ -1262,8 +1263,15 @@ def verify_layer3_cardinality(workspace_path: str) -> LayerResult:
                 errors.append(f"Missing SORA Operational Safety Objectives in docs/safety/: {missing_osos}")
         else:
             details["sora_status"] = "Level 1B ConOps framework baseline verified; STPA matrix pending Level 2"
+    elif safety_files:
+        found_reg_objs = sorted(set(re.findall(r"\b(?:OBJ|REG|OSO)-\d+\b", combined_safety)))
+        details["regulatory_safety_objectives_found"] = len(found_reg_objs)
+        details["regulatory_safety_objectives"] = found_reg_objs
+        if len(found_reg_objs) < 10:
+            errors.append(f"Found only {len(found_reg_objs)} regulatory safety objectives (< 10 required): {found_reg_objs}")
     else:
-        details["sora_osos_found"] = 24
+        details["sora_status"] = "Not Applicable (No SORA declaration or safety files present)"
+        details["regulatory_safety_objectives_status"] = "Not Applicable (No SORA declaration or safety files present)"
         
     # 5. 7 Emergency Rows (EMG-01..EMG-07)
     expected_emgs = [f"EMG-{i:02d}" for i in range(1, 8)]
@@ -1288,12 +1296,99 @@ def verify_layer3_cardinality(workspace_path: str) -> LayerResult:
     )
 
 
+verify_layer3_cardinality_and_standards = verify_layer3_cardinality
+
+
 # ---------------------------------------------------------------------------
 # Layer 4: Closed-Form Physical & Math Solver
 # ---------------------------------------------------------------------------
 
+def _validate_sora_kinetic_energy(
+    workspace_path: str,
+    conops_c: str,
+    details: Dict[str, object],
+    errors: List[str],
+) -> None:
+    """
+    Validate SORA kinetic energy strictly conditionally on explicit SORA
+    or kinetic energy declaration in ConOps/tokens.
+    """
+    tokens_c = ""
+    if workspace_path and os.path.isdir(workspace_path):
+        token_candidates = [
+            os.path.join(workspace_path, ".pipeline", "logical-ui", "design-tokens.json"),
+            os.path.join(workspace_path, ".pipeline", "tokens.json"),
+        ]
+        for tc in token_candidates:
+            if os.path.isfile(tc):
+                try:
+                    with open(tc, "r", encoding="utf-8", errors="ignore") as f:
+                        tokens_c += "\n" + f.read()
+                except Exception:
+                    pass
+
+    safety_sora = False
+    if workspace_path and os.path.isdir(workspace_path):
+        safety_dir = os.path.join(workspace_path, "docs", "safety")
+        if os.path.isdir(safety_dir):
+            for root, _, files in os.walk(safety_dir):
+                for sf in files:
+                    if sf.endswith(".md"):
+                        try:
+                            with open(os.path.join(root, sf), "r", encoding="utf-8", errors="ignore") as handle:
+                                if re.search(r"\bSORA\b", handle.read()):
+                                    safety_sora = True
+                                    break
+                        except Exception:
+                            pass
+                if safety_sora:
+                    break
+
+    sora_declared = bool(
+        re.search(r"\bSORA\b", conops_c)
+        or re.search(r"\bSORA\b", tokens_c)
+        or safety_sora
+    )
+    ke_declared = bool(
+        re.search(r"\|\s*(?:Mitigated\s+)?Kinetic\s+Energy\s*\|", conops_c, re.IGNORECASE)
+        or re.search(r"\bE_k(?:_mitigated)?\b", conops_c)
+        or re.search(r"\bkinetic\s+energy\b", conops_c, re.IGNORECASE)
+        or "E_k" in tokens_c
+        or "kinetic_energy" in tokens_c
+    )
+
+    if sora_declared or ke_declared:
+        m_ek = re.search(r"\|\s*Mitigated Kinetic Energy\s*\|\s*E_k_mitigated\s*\|\s*([\d\.]+)\s*\|\s*J", conops_c)
+        if not m_ek:
+            m_ek = re.search(r"E_k(?:_mitigated)?\s*\|\s*([\d\.]+)\s*\|\s*J", conops_c)
+
+        if m_ek:
+            ek = float(m_ek.group(1))
+            details["mitigated_kinetic_energy_J"] = ek
+            m_grc = re.search(r"GRC-(\d+)", conops_c)
+            grc_level = int(m_grc.group(1)) if m_grc else None
+            is_aircraft = not bool(
+                re.search(
+                    r"\b(subsea|maritime|ugv|cubesat|spacecraft|satellite|space|surgical|hospital|locomotive|rail|forklift|agv)\b",
+                    conops_c,
+                    re.IGNORECASE,
+                )
+            )
+            if is_aircraft and (grc_level is None or grc_level == 1) and ek > 34.0:
+                errors.append(f"Mitigated kinetic energy E_k ({ek} J) exceeds 34.0 J GRC-1 ceiling")
+        else:
+            if sora_declared:
+                errors.append("Mitigated Kinetic Energy E_k parameter definition not found in CONOPS.md")
+            else:
+                details["mitigated_kinetic_energy_J"] = "N/A"
+                details["sora_kinetic_energy_status"] = "Not Applicable (Kinetic energy parameter definition not found)"
+    else:
+        details["mitigated_kinetic_energy_J"] = "N/A"
+        details["sora_kinetic_energy_status"] = "Not Applicable (No SORA or kinetic energy declaration)"
+
+
 def verify_layer4_physical_math(workspace_path: str) -> LayerResult:
-    """Validate SORA kinetic energy, Kalman filter covariance units & dimensions, Bingo energy conservation, mass partitions, and quadratic physics."""
+    """Validate conditional SORA kinetic energy, Kalman filter covariance units & dimensions, Bingo energy conservation, mass partitions, and quadratic physics."""
     errors = []
     details = {}
     
@@ -1309,27 +1404,8 @@ def verify_layer4_physical_math(workspace_path: str) -> LayerResult:
     with open(intent_path, "r", encoding="utf-8", errors="ignore") as f:
         intent_c = f.read()
         
-    # 1. SORA Kinetic Energy Calculation (E_k <= 34.0J for GRC-1)
-    m_ek = re.search(r"\|\s*Mitigated Kinetic Energy\s*\|\s*E_k_mitigated\s*\|\s*([\d\.]+)\s*\|\s*J", conops_c)
-    if not m_ek:
-        m_ek = re.search(r"E_k(?:_mitigated)?\s*\|\s*([\d\.]+)\s*\|\s*J", conops_c)
-        
-    if m_ek:
-        ek = float(m_ek.group(1))
-        details["mitigated_kinetic_energy_J"] = ek
-        m_grc = re.search(r"GRC-(\d+)", conops_c)
-        grc_level = int(m_grc.group(1)) if m_grc else None
-        is_aircraft = not bool(
-            re.search(
-                r"\b(subsea|maritime|ugv|cubesat|spacecraft|satellite|space|surgical|hospital|locomotive|rail|forklift|agv)\b",
-                conops_c,
-                re.IGNORECASE,
-            )
-        )
-        if is_aircraft and (grc_level is None or grc_level == 1) and ek > 34.0:
-            errors.append(f"Mitigated kinetic energy E_k ({ek} J) exceeds 34.0 J GRC-1 ceiling")
-    else:
-        errors.append("Mitigated Kinetic Energy E_k parameter definition not found in CONOPS.md")
+    # 1. SORA Kinetic Energy Calculation (conditional on SORA / E_k declaration)
+    _validate_sora_kinetic_energy(workspace_path, conops_c, details, errors)
         
     # 2. Kalman Covariance Unit Checks
     kalman_expected_units = {

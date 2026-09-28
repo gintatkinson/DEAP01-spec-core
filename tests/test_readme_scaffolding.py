@@ -1030,8 +1030,8 @@ class TestCustomerWorkspaceScaffolding(unittest.TestCase):
             self.assertIn("The 15 Mandatory Domain Engineering Standards", fence_content)
             self.assertIn("---GOVERNANCE-END---", fence_content)
 
-    def test_customer_workspace_scaffolding_ast_worker_2a2_ros2_px4_prompt(self):
-        """Asserts Worker 2A.2 ROS2 / PX4 Feature Implementation Prompt exists with lifecycle nodes and uORB."""
+    def test_customer_workspace_scaffolding_ast_worker_2a2_target_platform_prompt(self):
+        """Asserts Worker 2A.2 Target Platform Feature Implementation Prompt exists with target platform profile and execution bounds."""
         with tempfile.TemporaryDirectory() as temp_dir:
             proc = self._run_installer(temp_dir, "--role", "customer-project")
             self.assertEqual(proc.returncode, 0, f"Installer failed. stderr: {proc.stderr}")
@@ -1041,19 +1041,19 @@ class TestCustomerWorkspaceScaffolding(unittest.TestCase):
                 content = f.read()
 
             ast = parse_markdown_ast(content)
-            sec_nodes = ast.find_sections("Worker 2A.2 / Synthesis Driver: ROS2 / PX4 Feature Implementation Prompt")
+            sec_nodes = ast.find_sections("Worker 2A.2 / Synthesis Driver: Target Platform Feature Implementation Prompt")
             self.assertTrue(
                 len(sec_nodes) > 0,
-                "Section 'Worker 2A.2 / Synthesis Driver: ROS2 / PX4 Feature Implementation Prompt' not found in AST"
+                "Section 'Worker 2A.2 / Synthesis Driver: Target Platform Feature Implementation Prompt' not found in AST"
             )
 
             fences = sec_nodes[0].find_fences()
             self.assertTrue(len(fences) > 0, "Worker 2A.2 section must contain a code block")
             fence_content = fences[0].content
 
-            self.assertIn("LifecycleNode", fence_content)
-            self.assertIn("uORB", fence_content)
-            self.assertIn("hardware-in-the-loop", fence_content)
+            self.assertIn("target_platform", fence_content)
+            self.assertIn("Target Platform Execution Specialist", fence_content)
+            self.assertIn("real-time execution bounds", fence_content)
             self.assertIn("---GOVERNANCE-END---", fence_content)
 
     def test_customer_workspace_scaffolding_schema_clean_landing_zone(self):
@@ -1426,7 +1426,7 @@ class TestActiveGovernanceRuleBundlingAndPromptCatalog(unittest.TestCase):
                     self.assertIn("ACTIVE_RULES_BUNDLE.md", upgraded)
 
     def test_customer_readme_title_deduplication(self):
-        """Verifies that installer strips duplicate -- Downstream Cyber-Physical Infrastructure Safety Project suffix."""
+        """Verifies that installer strips duplicate -- Downstream Systems Engineering Project and legacy suffixes."""
         with tempfile.TemporaryDirectory() as temp_dir:
             proj_dir = os.path.join(temp_dir, "uav-011")
             os.makedirs(proj_dir)
@@ -1450,7 +1450,7 @@ class TestActiveGovernanceRuleBundlingAndPromptCatalog(unittest.TestCase):
             with open(readme_path, "r", encoding="utf-8") as f:
                 first_line = f.readline().strip()
 
-            expected_title = "# uav-011 -- Downstream Cyber-Physical Infrastructure Safety Project"
+            expected_title = "# uav-011 -- Downstream Systems Engineering Project"
             self.assertEqual(first_line, expected_title, f"Title was not deduplicated. Got: {first_line}")
 
 

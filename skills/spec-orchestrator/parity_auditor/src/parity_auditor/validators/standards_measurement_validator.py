@@ -559,12 +559,13 @@ def is_safety_critical_standard(standard_id: str) -> bool:
     return False
 
 
-def _parse_sora_table_rows(text: str) -> Set[str]:
+def _parse_regulatory_objective_rows(text: str) -> Set[str]:
     """
-    Parses SORA OSO IDs from markdown table data rows in text.
-    Returns set of canonical OSO IDs (e.g. {'OSO-01', ..., 'OSO-24'}).
+    Parses regulatory objective rows (e.g. SORA OSO IDs or generic regulatory objectives)
+    from markdown table data rows in text.
+    Returns set of canonical OSO IDs (e.g. {'OSO-01', ..., 'OSO-24'}) or objective row identifiers.
     """
-    oso_ids: Set[str] = set()
+    objective_ids: Set[str] = set()
     lines = text.splitlines()
     header_seen = False
 
@@ -580,15 +581,31 @@ def _parse_sora_table_rows(text: str) -> Set[str]:
                 # Header row
                 continue
             # Data row
+            found_id = False
             for cell in cells:
                 m = re.search(r'\bOSO-?0*(\d+)\b', cell, re.IGNORECASE)
                 if m:
                     idx = int(m.group(1))
                     if 1 <= idx <= 24:
-                        oso_ids.add(f"OSO-{idx:02d}")
+                        objective_ids.add(f"OSO-{idx:02d}")
+                        found_id = True
+            if not found_id:
+                for cell in cells:
+                    m = re.search(r'\b((?:OBJ|REQ|SAF|HAZ|SEC|DAL|ASIL|SIL|OBL|MET|UCA|SC|LS)[-_]0*[0-9]+)\b', cell, re.IGNORECASE)
+                    if m:
+                        objective_ids.add(m.group(1).upper())
+                        found_id = True
+                        break
+                if not found_id:
+                    first_cell = next((c for c in cells if c and not c.startswith("---")), "")
+                    if first_cell:
+                        objective_ids.add(first_cell)
         else:
             header_seen = False
-    return oso_ids
+    return objective_ids
+
+
+_parse_sora_table_rows = _parse_regulatory_objective_rows
 
 
 def _resolve_sdo(standard_id: str) -> Optional[str]:
@@ -901,10 +918,11 @@ class StandardsAndMeasurementValidator(IValidator):
                         pass
                 safety_content = "\n\n".join(safety_content_parts)
 
-                # SORA OSO mechanical witness validation
+                # Regulatory objective / SORA OSO mechanical witness validation
                 is_sora_declared = any("SORA" in s.upper() for s in declared_safety_stds)
                 if is_sora_declared:
-                    oso_rows = _parse_sora_table_rows(safety_content)
+                    reg_rows = _parse_regulatory_objective_rows(safety_content)
+                    oso_rows = {r for r in reg_rows if r.startswith("OSO-")}
                     if len(oso_rows) == 0:
                         findings.append(Finding(
                             "standards-empty-oso-table",
@@ -922,6 +940,16 @@ class StandardsAndMeasurementValidator(IValidator):
                                 location="docs/safety",
                                 detail={"missing_osos": missing_osos, "found_count": len(oso_rows)}
                             ))
+                else:
+                    # Non-SORA standards: validate regulatory objective rows meet minimum table closure without demanding "OSO-01..24"
+                    reg_rows = _parse_regulatory_objective_rows(safety_content)
+                    if len(reg_rows) == 0:
+                        findings.append(Finding(
+                            "standards-empty-regulatory-objective-table",
+                            f"Safety standard(s) ({', '.join(sorted(declared_safety_stds))}) declared in normative baseline, but docs/safety/ contains 0 regulatory objective table rows (mechanical witness failure).",
+                            location="docs/safety",
+                            detail={"declared_standards": sorted(declared_safety_stds), "regulatory_rows_found": 0}
+                        ))
 
         # 3. Read Level 1C ICD tables for Theorem 3 and Nyquist validation
         icd01_path = os.path.join(workspace_dir, "docs", "interfaces", "ICD_01_SYSTEM_INTERFACE_MATRIX.md")

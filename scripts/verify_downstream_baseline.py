@@ -815,7 +815,10 @@ def check_uca_categories(content: str) -> list:
     return missing_categories
 
 def check_sora_osos(content: str) -> list:
-    """Verify all 24 SORA OSOs (OSO-01 through OSO-24) are present in content."""
+    """Verify all 24 SORA OSOs (OSO-01 through OSO-24) if SORA/aviation is declared; otherwise return empty."""
+    is_sora_context = bool(re.search(r'\bSORA\b|\bSAIL\b|\bJARUS\b|\bAviation\b|\bAvionic|\bOSO\b', content, re.IGNORECASE))
+    if not is_sora_context:
+        return []
     missing = []
     for i in range(1, 25):
         oso_id = f"OSO-{i:02d}"
@@ -844,14 +847,24 @@ class STPARowAST:
 
 
 @dataclass
-class SORAOsoAST:
-    """Typed AST record for a single SORA Operational Safety Objective table row."""
+class RegulatoryObjectiveAST:
+    """Typed AST record for a single domain regulatory safety objective table row."""
 
-    oso_id: str
+    objective_id: str
     robustness_level: str
     justification: str
     mitigation_ref: str
-    line_number: int
+    line_number: int = 0
+    oso_id: str = ""
+
+    def __post_init__(self):
+        if not self.objective_id and self.oso_id:
+            self.objective_id = self.oso_id
+        elif not self.oso_id and self.objective_id:
+            self.oso_id = self.objective_id
+
+
+SORAOsoAST = RegulatoryObjectiveAST
 
 
 @dataclass
@@ -1520,18 +1533,36 @@ class MarkdownTableASTParser:
         match = re.fullmatch(r"(OSO-\d{1,2})", cell.strip(), re.IGNORECASE)
         return match.group(1).upper() if match else None
 
+    @staticmethod
+    def _objective_id_cell(cell: str) -> Optional[str]:
+        cleaned = cell.strip()
+        if not cleaned:
+            return None
+        m = re.match(r"^([A-Za-z0-9_.-]+)", cleaned)
+        return m.group(1) if m else cleaned
+
     @classmethod
-    def parse_sora_table(cls, text: str) -> List[SORAOsoAST]:
-        """Parse SORA OSO evaluation rows from markdown tables headed by an OSO column."""
-        rows: List[SORAOsoAST] = []
+    def parse_regulatory_objectives_table(cls, text: str) -> List[RegulatoryObjectiveAST]:
+        """Parse regulatory safety objective evaluation rows from markdown tables headed by an objective/OSO column."""
+        rows: List[RegulatoryObjectiveAST] = []
         for header, data_rows in cls._iter_tables(text):
             header_text = " ".join(cell.lower() for cell in header)
-            if "oso" not in header_text and "operational safety objective" not in header_text:
+            is_obj_table = (
+                "oso" in header_text
+                or "operational safety objective" in header_text
+                or "objective" in header_text
+                or "regulatory" in header_text
+                or "integrity" in header_text
+                or "standard" in header_text
+            )
+            if "uca" in header_text or "rpn" in header_text or "causal" in header_text or "guide word" in header_text:
                 continue
-            col_id = cls._column_index(header, ("oso id", "oso"))
-            col_robust = cls._column_index(header, ("robust",))
-            col_just = cls._column_index(header, ("justification",))
-            col_mit = cls._column_index(header, ("mitigation",))
+            if not is_obj_table:
+                continue
+            col_id = cls._column_index(header, ("oso id", "oso", "objective id", "regulatory objective id", "objective", "standard / objective", "standard", "requirement id", "id"))
+            col_robust = cls._column_index(header, ("robust", "robustness level", "integrity level", "integrity", "assurance level", "assurance", "level", "sil", "dal", "sail", "asit"))
+            col_just = cls._column_index(header, ("compliance justification", "justification", "rationale", "causal basis", "causal", "description", "details"))
+            col_mit = cls._column_index(header, ("mitigation reference", "mitigation ref", "mitigation", "safety constraint", "mitigating control", "hazard ref", "hazard reference", "control", "reference"))
 
             def cell_for(cells, col):
                 return cells[col] if col is not None and col < len(cells) else ""
@@ -1541,17 +1572,20 @@ class MarkdownTableASTParser:
                     continue
                 if col_id is None or col_id >= len(cells):
                     continue
-                oso_id = cls._oso_id_cell(cells[col_id])
-                if oso_id is None:
+                raw_id = cells[col_id].strip()
+                if not raw_id:
                     continue
-                rows.append(SORAOsoAST(
-                    oso_id=oso_id,
+                obj_id = cls._oso_id_cell(raw_id) or cls._objective_id_cell(raw_id) or raw_id
+                rows.append(RegulatoryObjectiveAST(
+                    objective_id=obj_id,
                     robustness_level=cell_for(cells, col_robust),
                     justification=cell_for(cells, col_just),
                     mitigation_ref=cell_for(cells, col_mit),
                     line_number=line_number,
                 ))
         return rows
+
+    parse_sora_table = parse_regulatory_objectives_table
 
     @classmethod
     def parse_proof_blocks(cls, text: str) -> List[ProofBlockAST]:
@@ -1852,7 +1886,11 @@ def validate_safety_matrix_ast(content: str, model_text: Optional[str] = None) -
         report.part_criticalities.update(fmeca_report.part_criticalities)
         errors.extend(fmeca_ast_errors)
 
-    if model_text or oso_rows:
+    is_sora = bool(
+        re.search(r'\bSORA\b', content, re.IGNORECASE)
+        or (model_text and re.search(r'\bSORA\b', model_text, re.IGNORECASE))
+    )
+    if is_sora and (model_text or oso_rows):
         sora_report = CartesianProductValidator.verify_sora_oso_coverage(oso_rows)
         report.missing_osos.extend(sora_report.missing_osos)
         if sora_report.missing_osos:
@@ -2013,21 +2051,71 @@ def _validate_safety_matrix_pillars(
                 except ValueError:
                     errors.append(f"Pillar 7 violation: FMECA row '{row_id}' has non-integer S/O/D ratings (S='{s}', O='{o}', D='{d}').")
 
-    # Pillar 8: SORA SAIL Risk Mitigations & OSO Traceability Table
-    if not (re.search(r'\bSORA\b', content) and re.search(r'\bSAIL\b', content)):
-        errors.append("Pillar 8 violation: Missing SORA SAIL risk assessment.")
-    if not (re.search(r'\bGRC\b|Ground\s+Risk\s+Class', content, re.IGNORECASE) and re.search(r'\bARC\b|Air\s+Risk\s+Class', content, re.IGNORECASE)):
-        errors.append("Pillar 8 violation: Missing GRC (Ground Risk Class) or ARC (Air Risk Class) determinations.")
-    if not ast_path_active:
-        missing_osos = check_sora_osos(content)
-        if missing_osos:
-            errors.append(f"Pillar 8 violation: Missing mandatory SORA Operational Safety Objectives: {', '.join(missing_osos)}.")
+    # Pillar 8: Regulatory Objectives & Risk Mitigations (or Domain Regulatory Objectives & Integrity Mapping / legacy SORA)
+    has_pillar_8 = bool(
+        re.search(r'(?:^|\n)#{2,4}\s*8\.\s+.*', content)
+        or re.search(r'\bPillar\s+8\b', content, re.IGNORECASE)
+        or re.search(r'Regulatory\s+Objectives|SORA\s+SAIL', content, re.IGNORECASE)
+    )
+    if not has_pillar_8:
+        errors.append("Pillar 8 violation: Missing Pillar 8 (Domain Regulatory Objectives & Integrity Mapping / Regulatory Objectives & Risk Mitigations).")
+    else:
+        is_sora = bool(
+            re.search(r'\bSORA\b', content, re.IGNORECASE)
+            or (model_text and re.search(r'\bSORA\b', model_text, re.IGNORECASE))
+        )
+        if is_sora:
+            if not (re.search(r'\bSORA\b', content) and re.search(r'\bSAIL\b', content)):
+                errors.append("Pillar 8 violation: Missing SORA SAIL risk assessment.")
+            if not (re.search(r'\bGRC\b|Ground\s+Risk\s+Class', content, re.IGNORECASE) and re.search(r'\bARC\b|Air\s+Risk\s+Class', content, re.IGNORECASE)):
+                errors.append("Pillar 8 violation: Missing GRC (Ground Risk Class) or ARC (Air Risk Class) determinations.")
+            if not ast_path_active:
+                missing_osos = check_sora_osos(content)
+                if missing_osos:
+                    errors.append(f"Pillar 8 violation: Missing mandatory SORA Operational Safety Objectives: {', '.join(missing_osos)}.")
 
-    # ASTM F3269-17 RTA Architecture (AST-conditional)
-    has_model_rta = bool(model_text and re.search(r'ASTM\s+F3269|Run[- ]Time\s+Assurance|\bRTA\b|Safety[-_ ]?Net', model_text, re.IGNORECASE))
-    has_content_rta = bool(re.search(r'ASTM\s+F3269|Run-Time\s+Assurance|\bRTA\b|Safety\s+Net', content, re.IGNORECASE))
+        # Verify Pillar 8 has a valid markdown table containing objective mappings
+        objective_rows = MarkdownTableASTParser.parse_regulatory_objectives_table(content)
+        if not objective_rows:
+            errors.append("Pillar 8 violation: Missing valid markdown table containing objective mappings in Pillar 8.")
+        else:
+            # Verify that all referenced hazards/mitigations exist in AST / document
+            declared_hazards = {m.upper() for m in re.findall(r'\bH-\d+\b', content, re.IGNORECASE)}
+            declared_hazard_nums = {int(re.search(r'\d+', h).group(0)) for h in declared_hazards if re.search(r'\d+', h)}
+            if model_text:
+                for h_m in re.findall(r'\bHazard_H_?(\d+)\b|\bH_?(\d+)\b', model_text, re.IGNORECASE):
+                    num = h_m[0] or h_m[1]
+                    if num:
+                        declared_hazard_nums.add(int(num))
 
-    if has_model_rta or has_content_rta:
+            declared_constraints = {m.upper() for m in re.findall(r'\bSC-\d+\b', content, re.IGNORECASE)}
+            declared_constraint_nums = {int(re.search(r'\d+', c).group(0)) for c in declared_constraints if re.search(r'\d+', c)}
+            if model_text:
+                for sc_m in re.findall(r'\bSafetyConstraint_SC_?(\d+)\b|\bSC_?(\d+)\b', model_text, re.IGNORECASE):
+                    num = sc_m[0] or sc_m[1]
+                    if num:
+                        declared_constraint_nums.add(int(num))
+
+            for row in objective_rows:
+                row_ref_text = f"{row.mitigation_ref} {row.justification}"
+                ref_hazards = re.findall(r'\bH-\d+\b', row_ref_text, re.IGNORECASE)
+                for h_ref in ref_hazards:
+                    h_num_m = re.search(r'\d+', h_ref)
+                    if h_num_m and int(h_num_m.group(0)) not in declared_hazard_nums:
+                        errors.append(f"Pillar 8 violation: Objective row '{row.objective_id}' references undeclared hazard '{h_ref}'.")
+
+                ref_constraints = re.findall(r'\bSC-\d+\b', row_ref_text, re.IGNORECASE)
+                for sc_ref in ref_constraints:
+                    sc_num_m = re.search(r'\d+', sc_ref)
+                    if sc_num_m and int(sc_num_m.group(0)) not in declared_constraint_nums:
+                        errors.append(f"Pillar 8 violation: Objective row '{row.objective_id}' references undeclared mitigation / safety constraint '{sc_ref}'.")
+
+    # ASTM F3269-17 RTA Architecture: Only validate ASTM F3269 if the SysML model or content explicitly declares ASTM F3269
+    declares_astm_f3269 = bool(
+        re.search(r'ASTM\s+F3269', content, re.IGNORECASE)
+        or (model_text and re.search(r'ASTM\s+F3269', model_text, re.IGNORECASE))
+    )
+    if declares_astm_f3269:
         if not (re.search(r'ASTM\s+F3269', content, re.IGNORECASE) and re.search(r'Run-Time\s+Assurance|\bRTA\b|Safety\s+Net', content, re.IGNORECASE)):
             errors.append("Safety Architecture violation: Missing ASTM F3269-17 Run-Time Assurance (RTA) / Safety Net specification.")
 
@@ -2037,12 +2125,12 @@ def _validate_safety_matrix_pillars(
 
     return errors
 
-def check_safety_integrity_and_sora_completeness(repo_root=None, allow_missing_specs=False, strict=False):
-    """Check 17: Safety Integrity Quality Gate and SORA OSO-01..24 Completeness Verification.
+def check_safety_integrity_and_regulatory_objectives_completeness(repo_root=None, allow_missing_specs=False, strict=False):
+    """Check 17: Safety Integrity Quality Gate and Regulatory Objectives Completeness Verification.
 
     Validates:
     1. Upstream clean landing zone invariant for docs/safety/ (zero concrete specifications in templates).
-    2. Downstream 8-pillar STPA/FMECA/SORA specification schema in docs/safety/STPA_MATRIX.md:
+    2. Downstream 8-pillar STPA/FMECA/Regulatory Objectives specification schema in docs/safety/STPA_MATRIX.md:
        - Pillar 1: System Losses (L-1..N)
        - Pillar 2: System Hazards (H-1..N)
        - Pillar 3: Hierarchical Control Structure Topology
@@ -2050,8 +2138,8 @@ def check_safety_integrity_and_sora_completeness(repo_root=None, allow_missing_s
        - Pillar 5: Loss Scenarios (LS-1..N) & Causal Factors
        - Pillar 6: Formal Safety Constraints (SC-1..N)
        - Pillar 7: FMECA Criticality Matrix with AST closure, universal 4 dimensions, and RPN
-       - Pillar 8: SORA SAIL Risk Mitigations with all 24 OSOs (OSO-01 through OSO-24), GRC, and ARC
-       - ASTM F3269-17 Run-Time Assurance (RTA) architecture
+       - Pillar 8: Regulatory Objectives & Risk Mitigations mapping with AST closure (or SORA SAIL Risk Mitigations when SORA is declared)
+       - Safety architecture and Run-Time Assurance (RTA) / Safety Net specification (ASTM F3269-17 when declared)
        - MATLAB / Simulink / Stateflow model integration baseline hooks.
     """
     if repo_root is None:
@@ -2120,14 +2208,16 @@ def check_safety_integrity_and_sora_completeness(repo_root=None, allow_missing_s
         all_errors.append(f"docs/safety/ (aggregate specifications): {err}")
 
     if all_errors:
-        print("ERROR: Check 17 failed (Safety Integrity Quality Gate and SORA OSO-01..24 Completeness violations found):", file=sys.stderr)
+        print("ERROR: Check 17 failed (Safety Integrity Quality Gate and Regulatory Objectives Completeness violations found):", file=sys.stderr)
         for err in all_errors:
             print(f"  - {err}", file=sys.stderr)
         sys.exit(1)
 
     if ast_report is not None:
         print(ast_report.format_cli_summary())
-    print("Success: Check 17 verified (Safety Integrity Quality Gate: 8 pillars, 24 SORA OSOs, FMECA matrix with AST closure, 4 UCA categories, ASTM F3269-17 RTA, and MATLAB/Simulink hooks).")
+    print("Success: Check 17 verified (Safety Integrity Quality Gate: 8 pillars, regulatory objectives mapping, FMECA matrix with AST closure, 4 UCA categories, safety architecture, and toolchain hooks).")
+
+check_safety_integrity_and_sora_completeness = check_safety_integrity_and_regulatory_objectives_completeness
 
 def verify_upstream_blueprint_domain_cleanliness(target_dir):
     """Check 18: Upstream Blueprint Domain Cleanliness Gate.
@@ -3702,7 +3792,7 @@ def run_all_checks(repo_root=None, allow_missing_specs=False, strict=False):
     check_downstream_instructions_exist(repo_root)
     check_reconcile_backlog_tooling_exists(repo_root)
     check_upstream_template_clean_landing_zones(repo_root)
-    check_safety_integrity_and_sora_completeness(repo_root, allow_missing_specs=allow_missing_specs, strict=strict)
+    check_safety_integrity_and_regulatory_objectives_completeness(repo_root, allow_missing_specs=allow_missing_specs, strict=strict)
     verify_upstream_blueprint_domain_cleanliness(repo_root)
     check_domain_agnostic_ast_cleanliness(repo_root)
     check_wbs_suite_integrity(repo_root, allow_missing_specs=allow_missing_specs, strict=strict)

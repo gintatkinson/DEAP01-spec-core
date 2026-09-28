@@ -194,7 +194,7 @@ The baseline verification script [`scripts/verify_downstream_baseline.py`](scrip
 | **Check 14** | `check_downstream_instructions_exist()` | Verifies `README.md`, agent instructions, and `rules/sysml-ssot-completeness.md`. |
 | **Check 15** | `check_reconcile_backlog_tooling_exists()` | Verifies `scripts/reconcile_backlog.py` is present, non-empty, and executable. |
 | **Check 16** | `check_upstream_template_clean_landing_zones()` | Validates clean landing zones for `schema/`, `docs/epics/`, `docs/features/`, `docs/user-stories/`, `docs/use-cases/`. |
-| **Check 17** | `check_safety_integrity_and_sora_completeness()` | Validates clean upstream `docs/safety/` or downstream 8-pillar STPA/FMECA/SORA specification. |
+| **Check 17** | `check_safety_integrity_and_regulatory_objectives_completeness()` | Validates clean upstream `docs/safety/` or downstream 8-pillar STPA/FMECA/Regulatory Objectives specification. |
 | **Check 18** | `check_upstream_architecture_blueprints_clean()` | Validates abstract blueprints contain zero domain concept papers or concrete SysML models. |
 | **Check 19** | `check_domain_agnostic_ast_cleanliness()` | Enforces zero hardcoded domain tokens across all upstream compiler and validation scripts. |
 

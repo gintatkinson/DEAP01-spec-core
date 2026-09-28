@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://spec.deap.org/schemas/conops_specification_schema.json",
   "title": "Concept of Operations (ConOps) Specification Schema",
-  "description": "Draft 2020-12 JSON Schema defining the complete data contract for Concept of Operations (ConOps) specifications in accordance with ISO/IEC/IEEE 29148:2018, OMG UAF v1.2/v2.0, and JARUS SORA v2.5.",
+  "description": "Draft 2020-12 JSON Schema defining the complete data contract for Concept of Operations (ConOps) specifications in accordance with ISO/IEC/IEEE 29148:2018 and OMG UAF v1.2/v2.0.",
   "type": "object",
   "required": [
     "metadata",
@@ -13,7 +13,7 @@
     "super_system_architecture",
     "subsystem_architecture",
     "system_interface_topology",
-    "airspace_sora",
+    "operational_containment_and_risk",
     "uaf_activities",
     "optx_exchanges",
     "environmental_envelopes",
@@ -319,9 +319,9 @@
       },
       "additionalProperties": true
     },
-    "airspace_sora": {
+    "operational_containment_and_risk": {
       "type": "object",
-      "description": "Section 6: 4D Operational Volume and SORA Ground Risk Buffer mathematics.",
+      "description": "Section 6: Operational State Space, Boundary Containment & Operational Constraints.",
       "required": [
         "h_max_m",
         "theta_impact_deg",
@@ -364,7 +364,7 @@
         },
         "ground_risk_class": {
           "type": "string",
-          "description": "JARUS SORA Ground Risk Class designation (e.g., GRC-3)."
+          "description": "Operational risk classification designation."
         }
       },
       "additionalProperties": true

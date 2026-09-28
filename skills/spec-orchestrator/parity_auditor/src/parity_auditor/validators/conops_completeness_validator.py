@@ -66,7 +66,7 @@ except (ImportError, ValueError):
 # Mathematical Helpers
 # =============================================================================
 
-def calculate_sora_grb_radius(
+def calculate_boundary_containment_radius(
     h_max_m: float,
     theta_impact_deg: float = 45.0,
     v_wind_max_mps: float = 15.0,
@@ -74,16 +74,19 @@ def calculate_sora_grb_radius(
     d_glide_max_m: float = 0.0,
 ) -> float:
     """
-    Computes minimum theoretical SORA Ground Risk Buffer radius in accordance with
-    JARUS SORA v2.5 Annex B:
-        R_GRB = h_max * tan(theta_impact) + v_wind_max * sqrt(2 * h_max / g) + d_glide_max
+    Computes minimum theoretical boundary containment radius in accordance with
+    4D boundary containment mathematics (e.g. JARUS SORA v2.5 Annex B when SORA applies):
+        R_containment = h_max * tan(theta_impact) + v_wind_max * sqrt(2 * h_max / g) + d_glide_max
     """
     if h_max_m <= 0:
         return 0.0
     theta_rad = math.radians(theta_impact_deg)
     t_fall = math.sqrt((2.0 * h_max_m) / g)
-    r_grb = (h_max_m * math.tan(theta_rad)) + (v_wind_max_mps * t_fall) + d_glide_max_m
-    return r_grb
+    r_containment = (h_max_m * math.tan(theta_rad)) + (v_wind_max_mps * t_fall) + d_glide_max_m
+    return r_containment
+
+
+calculate_sora_grb_radius = calculate_boundary_containment_radius
 
 
 def calculate_bingo_energy_reserve_ratio(
@@ -159,7 +162,7 @@ def _extract_bingo_energy_parameters(sec9_content: str) -> Tuple[Optional[float]
 
 def _extract_sora_parameters(sec6_content: str) -> Tuple[Optional[float], Optional[float], float, Optional[float]]:
     """
-    Extracts h_max, v_wind, theta_impact, and R_GRB from Section 6.
+    Extracts h_max, v_wind, theta_impact, and R_GRB / R_containment from Section 5/6.
     Uses table-aware extraction first. Reference Fixes #130.
     """
     h_max_val: Optional[float] = None
@@ -189,7 +192,7 @@ def _extract_sora_parameters(sec6_content: str) -> Tuple[Optional[float], Option
                     v_wind_val = num_val
                 elif re.search(r'\btheta[_\s]*impact\b', symbol, re.IGNORECASE) or re.search(r'\bimpact\s+angle\b', param_name, re.IGNORECASE):
                     theta_val = num_val
-                elif re.search(r'\bR[_\s]*GRB\b', symbol, re.IGNORECASE) or re.search(r'\bground\s+risk\s+buffer\b', param_name, re.IGNORECASE):
+                elif re.search(r'\b(?:R[_\s]*GRB|R[_\s]*containment|R[_\s]*margin|R)\b', symbol, re.IGNORECASE) or re.search(r'\b(?:ground\s+risk\s+buffer|boundary\s+containment|containment\s+margin|containment\s+radius)\b', param_name, re.IGNORECASE):
                     r_grb_val = num_val
 
     # Fallback to regex
@@ -214,9 +217,9 @@ def _extract_sora_parameters(sec6_content: str) -> Tuple[Optional[float], Option
                 pass
 
     if r_grb_val is None:
-        m_r = re.search(r'R[_\s]*GRB[^\d]*([0-9]+(?:\.[0-9]+)?)', sec6_content, re.IGNORECASE)
+        m_r = re.search(r'(?:R[_\s]*GRB|R[_\s]*containment|R[_\s]*margin)[^\d]*([0-9]+(?:\.[0-9]+)?)', sec6_content, re.IGNORECASE)
         if not m_r:
-            m_r = re.search(r'(?:ground\s+risk\s+buffer\s+radius|buffer\s+radius)[^\d]*([0-9]+(?:\.[0-9]+)?)', sec6_content, re.IGNORECASE)
+            m_r = re.search(r'(?:ground\s+risk\s+buffer\s+radius|buffer\s+radius|containment\s+margin|containment\s+radius|boundary\s+containment\s+margin)[^\d]*([0-9]+(?:\.[0-9]+)?)', sec6_content, re.IGNORECASE)
         if m_r:
             try:
                 r_grb_val = float(m_r.group(1))
@@ -224,6 +227,9 @@ def _extract_sora_parameters(sec6_content: str) -> Tuple[Optional[float], Option
                 pass
 
     return h_max_val, v_wind_val, theta_val, r_grb_val
+
+
+_extract_containment_parameters = _extract_sora_parameters
 
 
 # =============================================================================
@@ -256,21 +262,45 @@ class OperationalVolume4D:
     min_altitude_meters: float = 0.0
     max_altitude_meters: float = 120.0
     contingency_margin_meters: float = 50.0
+    containment_margin_radius_meters: float = 200.0
     sora_grb_radius_meters: float = 200.0
 
     def is_volume_bounded(self) -> bool:
-        return self.max_altitude_meters > self.min_altitude_meters and self.sora_grb_radius_meters > 0
+        margin = max(self.containment_margin_radius_meters, self.sora_grb_radius_meters)
+        return self.max_altitude_meters > self.min_altitude_meters and margin > 0
 
 
 @dataclass
-class SoraRiskBuffer:
+class ContainmentRiskBuffer:
     max_altitude_agl: float = 120.0
     impact_angle_degrees: float = 45.0
     max_wind_speed_mps: float = 15.0
     free_fall_time_seconds: float = 4.95
     terminal_velocity_mps: float = 25.0
     impact_kinetic_energy_joules: float = 1562.5
-    sora_grc_classification: str = "GRC-3"
+    containment_risk_classification: str = "GRC-3"
+    sora_grc_classification: Optional[str] = None
+
+    def __post_init__(self):
+        if self.sora_grc_classification is not None and self.containment_risk_classification == "GRC-3":
+            self.containment_risk_classification = self.sora_grc_classification
+        elif self.sora_grc_classification is None:
+            self.sora_grc_classification = self.containment_risk_classification
+
+    def __getattr__(self, name: str) -> Any:
+        if name == "sora_grc_classification":
+            return self.containment_risk_classification
+        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        super().__setattr__(name, value)
+        if name == "containment_risk_classification":
+            super().__setattr__("sora_grc_classification", value)
+        elif name == "sora_grc_classification" and value is not None:
+            super().__setattr__("containment_risk_classification", value)
+
+
+SoraRiskBuffer = ContainmentRiskBuffer
 
 
 @dataclass
@@ -311,13 +341,20 @@ class ConopsDocumentModel:
     justification: str = ""
     operational_modes: List[str] = field(default_factory=list)
     operational_volume: Optional[OperationalVolume4D] = None
-    sora_risk_buffer: Optional[SoraRiskBuffer] = None
+    containment_risk_buffer: Optional[ContainmentRiskBuffer] = None
+    sora_risk_buffer: Optional[ContainmentRiskBuffer] = None
     activity_taxonomy: List[UafActivityEntry] = field(default_factory=list)
     op_tx_matrix: List[OpTxExchangeEntry] = field(default_factory=list)
     operational_environments: str = ""
     scenarios: List[str] = field(default_factory=list)
     maintenance_concepts: str = ""
     emergency_matrix: List[EmergencyDecisionRow] = field(default_factory=list)
+
+    def __post_init__(self):
+        if self.sora_risk_buffer is not None and self.containment_risk_buffer is None:
+            self.containment_risk_buffer = self.sora_risk_buffer
+        elif self.containment_risk_buffer is not None and self.sora_risk_buffer is None:
+            self.sora_risk_buffer = self.containment_risk_buffer
 
 
 @dataclass
@@ -782,7 +819,7 @@ class ConopsCompletenessValidator(IValidator):
         {"num": 2, "title": "Current Situation & Deficiency Analysis (Predecessors)", "aliases": ["current situation", "deficiency analysis", "predecessor", "predecessors", "deficiencies", "operational motivation", "deficiency analysis & operational motivation"]},
         {"num": 3, "title": "Proposed Capabilities & Trade-Offs (Pugh Decision Matrix)", "aliases": ["proposed capabilities", "trade-off", "trade-offs", "pugh decision matrix", "pugh matrix", "operational justification", "justification"]},
         {"num": 4, "title": "System Operational Architecture & Physical Subsystem Decomposition", "aliases": ["systems architecture", "system operational architecture", "physical subsystem decomposition", "super-system", "subsystem architecture", "system architecture", "physical architecture", "operational architecture"]},
-        {"num": 5, "title": "Operational State Space, Boundary Containment & Risk Assessment", "aliases": ["operational state space", "operational state space, boundary containment & risk assessment", "operational state space & sora 4d volume risk assessment", "boundary containment", "risk assessment", "sora", "4d volume", "ground risk buffer", "grb math", "grb"]},
+        {"num": 5, "title": "Operational State Space, Boundary Containment & Risk Assessment", "aliases": ["operational state space", "operational state space, boundary containment & risk assessment", "operational state space & risk assessment", "operational state space & sora 4d volume risk assessment", "boundary containment", "risk assessment", "sora", "4d volume", "ground risk buffer", "grb math", "grb"]},
         {"num": 6, "title": "OMG UAF Operational Activity Taxonomy", "aliases": ["operational activity taxonomy", "uaf operational activities", "operational activities", "uaf activities", "oa-", "omg uaf"]},
         {"num": 7, "title": "Operational Information Exchange (Op-Tx) Matrix", "aliases": ["operational information exchange", "op-tx matrix", "op-tx table", "information exchange", "op-tx"]},
         {"num": 8, "title": "Operational Environments & MIL-STD-810H", "aliases": ["operational environments", "mil-std-810h", "environmental stress qualification", "physical constraints", "environmental constraints", "environmental envelopes"]},
@@ -1152,20 +1189,65 @@ class ConopsCompletenessValidator(IValidator):
             _, sec4_line, sec4_content = matched_sections[4]
             findings.extend(self._validate_operational_architecture_coverage(content, rel_path, sec4_content, sec4_line, repo=repo))
 
-        # Section 5: SORA 4D Volume & GRB Math Validation (Fixes #298)
+        # Section 5: Boundary Containment & Risk Math Validation (Fixes #298)
         if 5 in matched_sections:
-            _, sec5_line, sec5_content = matched_sections[5]
+            sec5_title, sec5_line, sec5_content = matched_sections[5]
             h_max_val, v_wind_val, theta_val, r_grb_val = _extract_sora_parameters(sec5_content)
 
-            if h_max_val is not None and v_wind_val is not None and r_grb_val is not None and self.strict_sora_math:
-                r_calc = calculate_sora_grb_radius(h_max_m=h_max_val, theta_impact_deg=theta_val, v_wind_max_mps=v_wind_val)
-                if r_grb_val < (r_calc - 1.0):
-                    findings.append(Finding(
-                        "conops-sora-grb-underdimensioned",
-                        f"Ground Risk Buffer radius R_GRB = {r_grb_val:.1f} m in Section 5 is under-dimensioned against JARUS SORA v2.5 theoretical minimum {r_calc:.1f} m (for h_max={h_max_val} m, v_wind={v_wind_val} m/s).",
-                        location=f"{rel_path}:{sec5_line}",
-                        detail={"declared_r_grb": r_grb_val, "minimum_r_grb": r_calc, "section": 5},
-                    ))
+            # Check if SORA is explicitly cited in the ConOps text
+            is_sora_cited = bool(re.search(r'\bSORA\b', content, re.IGNORECASE))
+
+            if is_sora_cited:
+                # SORA Annex B math validation
+                if h_max_val is not None and v_wind_val is not None and r_grb_val is not None and self.strict_sora_math:
+                    r_calc = calculate_boundary_containment_radius(h_max_m=h_max_val, theta_impact_deg=theta_val, v_wind_max_mps=v_wind_val)
+                    if r_grb_val < (r_calc - 1.0):
+                        findings.append(Finding(
+                            "conops-sora-grb-underdimensioned",
+                            f"Ground Risk Buffer radius R_GRB = {r_grb_val:.1f} m in Section 5 is under-dimensioned against JARUS SORA v2.5 theoretical minimum {r_calc:.1f} m (for h_max={h_max_val} m, v_wind={v_wind_val} m/s).",
+                            location=f"{rel_path}:{sec5_line}",
+                            detail={"declared_r_grb": r_grb_val, "minimum_r_grb": r_calc, "section": 5},
+                        ))
+            else:
+                # Validate general boundary containment margin equation (R >= R_min)
+                r_val = r_grb_val
+                r_min_val: Optional[float] = None
+                sec5_tables, _ = _parse_commonmark_tables(sec5_content)
+                for tbl in sec5_tables:
+                    for row in tbl:
+                        sym = row.get("symbol", "").strip()
+                        pname = (row.get("parameter") or row.get("name") or "").strip()
+                        vstr = (row.get("value") or row.get("val") or "").strip()
+                        mv = re.search(r'([0-9]+(?:\.[0-9]+)?)', vstr)
+                        if mv:
+                            if re.search(r'\bR[_\s]*(?:min|floor)\b', sym, re.IGNORECASE) or re.search(r'\bminimum\s+(?:containment\s+)?(?:radius|margin)\b', pname, re.IGNORECASE):
+                                try:
+                                    r_min_val = float(mv.group(1))
+                                except ValueError:
+                                    pass
+                            elif r_val is None and (re.search(r'\bR[_\s]*(?:containment|margin)\b', sym, re.IGNORECASE) or re.search(r'\b(?:containment\s+(?:radius|margin)|boundary\s+margin)\b', pname, re.IGNORECASE)):
+                                try:
+                                    r_val = float(mv.group(1))
+                                except ValueError:
+                                    pass
+                if r_min_val is None:
+                    m_rmin = re.search(r'R[_\s]*min[^\d]*([0-9]+(?:\.[0-9]+)?)', sec5_content, re.IGNORECASE)
+                    if m_rmin:
+                        try:
+                            r_min_val = float(m_rmin.group(1))
+                        except ValueError:
+                            pass
+                    elif h_max_val is not None and v_wind_val is not None:
+                        r_min_val = calculate_boundary_containment_radius(h_max_m=h_max_val, theta_impact_deg=theta_val, v_wind_max_mps=v_wind_val)
+
+                if r_val is not None and r_min_val is not None and self.strict_sora_math:
+                    if r_val < (r_min_val - 1.0):
+                        findings.append(Finding(
+                            "conops-boundary-containment-underdimensioned",
+                            f"Boundary containment radius R = {r_val:.1f} m in Section 5 is under-dimensioned against minimum containment requirement {r_min_val:.1f} m.",
+                            location=f"{rel_path}:{sec5_line}",
+                            detail={"declared_radius": r_val, "minimum_radius": r_min_val, "section": 5},
+                        ))
 
         # Section 7: Operational Information Exchange (Op-Tx) Sequence Parity (Fixes #354)
         if 7 in matched_sections and "TEMPLATE" not in rel_path.upper():
