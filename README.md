@@ -144,8 +144,7 @@ DEAP01-spec-core/
 ├── schema/                        # Abstract landing zone (.gitkeep)
 ├── scripts/                       # Turnkey installer, compiler, and parity verification scripts
 ├── skills/                        # Multi-agent orchestrator & implementation skills
-├── tests/                         # Baseline, AST parser, and compiler verification test suites
-├── pyproject.toml                 # Pytest & toolchain configuration
+├── pyproject.toml                 # Project metadata & packaging configuration
 └── README.md                      # Upstream compiler master specification & usage guide
 ```
 
@@ -167,8 +166,7 @@ domain-distribution-template/ (e.g. DEAP-uas-infrastructure-safety, DEAP-surgica
 │   └── architecture/
 │       └── blueprints/            # Canonical architecture specifications & multi-provider blueprints
 ├── schema/                        # Domain-specific structural schemas & SysML v2 models
-├── tests/                         # Domain compliance test suite & verification harness
-├── pyproject.toml                 # Pytest & verification configuration
+├── pyproject.toml                 # Project metadata & packaging configuration
 └── README.md                      # Domain template master specification & usage guide
 ```
 
@@ -188,7 +186,7 @@ Tier 3 Customer Application Workspaces (`uav-*`) inherit this layout from the do
 
 ### 5.1 Prerequisites & Python 3.12 Setup
 
-The platform requires **Python 3.12+**, the configured tracker CLI (or native REST credentials), and git. Python scripts require `PyYAML` and `pytest`.
+The platform requires **Python 3.12+**, the configured tracker CLI (or native REST credentials), and git. Python scripts require `PyYAML`.
 
 #### Installing Python 3.12
 - **macOS (Homebrew)**:
@@ -216,10 +214,10 @@ Parse and compile the formal SysML v2 model into `.pipeline/schema.sysml` and `.
 python3 scripts/compile_sysml.py --compile
 ```
 
-#### 2. Run Compiler Regression & Unit Test Suite
-Execute the full pytest suite covering the AST parser, coverage linters, and verification harnesses:
+#### 2. Verify Upstream Baseline Conformance
+Verify compiler baseline conformance and abstract MBSE baseline checks:
 ```bash
-python3 -m pytest tests/
+python3 scripts/verify_downstream_baseline.py .
 ```
 
 #### 3. Verify Upstream Compiler Conformance Baseline
@@ -297,13 +295,13 @@ For customer onboarding instructions and domain-specific schemas, refer to the d
 Google Antigravity automatically discovers workspace customizations, governance rules, and skills by traversing up to the repository root. Ensure native configuration parity with Claude Code (`CLAUDE.md`) and Cursor (`.cursor/rules/`) by maintaining persistent workspace rules without requiring manual chat steering:
 
 1. **Native Configuration Discovery & Governance Rules**:
-   Google Antigravity natively loads project-scoped governance rules from `AGENTS.md` and `.agents/AGENTS.md` directly into `<user_rules>` upon workspace initialization. Custom pipeline skills located in `.agents/skills/` are automatically indexed and discovered via progressive disclosure on demand. Ad-hoc interactive prompting or manual steering directives to ingest rules are unnecessary and strictly avoided to prevent turn-1 coordinator context bloat and subagent self-rejection gate trips. To read the consolidated active governance rules bundle, agents execute a direct-path read via `view_file` on `.pipeline/ACTIVE_RULES_BUNDLE.md`.
+   Google Antigravity natively loads project-scoped governance rules from `AGENTS.md` directly into `<user_rules>` upon workspace initialization. Custom pipeline skills located in `.agents/skills/` are automatically indexed and discovered via progressive disclosure on demand. Ad-hoc interactive prompting or manual steering directives to ingest rules are unnecessary and strictly avoided to prevent turn-1 coordinator context bloat and subagent self-rejection gate trips. To read the consolidated active governance rules bundle, agents execute a direct-path read via `view_file` on `.pipeline/ACTIVE_RULES_BUNDLE.md`.
 2. **Execute Universal Initialization**:
    Follow the mandatory post-install initialization sequence in [Section 5.6 (Universal Agent Governance & Initialization Sequence)](#56-universal-agent-governance--initialization-sequence-agentsmd).
 
 ### 5.6 Universal Agent Governance & Initialization Sequence (AGENTS.md)
 
-When propagating via `scripts/install_pipeline.sh`, the installer automatically configures `.agents/AGENTS.md` and `AGENTS.md` with the appropriate role classifications and governance rules for the target repository tier:
+When propagating via `scripts/install_pipeline.sh`, the installer automatically configures `AGENTS.md` with the appropriate role classifications and governance rules for the target repository tier:
 - **Upstream Compiler (`DEAP01-spec-core`):** `UPSTREAM_SPEC_CORE_COMPILER` (abstract MBSE compiler, zero hardcoded domain concepts).
 - **Domain Distribution Templates (`DEAP-*`):** `DOMAIN_DISTRIBUTION_TEMPLATE` (domain SysML schemas, sector blueprints).
 - **Customer Application Workspaces (`uav-*`):** `DOWNSTREAM_CUSTOMER_PROJECT` (proprietary application code, ROS2 nodes, PX4 flight software).
@@ -325,7 +323,7 @@ Immediately following turnkey installation, any AI agent (Antigravity, Claude Co
 3. **Load Project Skills (Tier-Differentiated)**:
    - For **Upstream Compiler (`UPSTREAM_SPEC_CORE_COMPILER`)**: Execute `view_file` on `skills/spec-orchestrator/SKILL.md` (and `skills/schema-specification-engineering/SKILL.md`, `skills/adversarial-code-auditor/SKILL.md`) to initialize compiler orchestration and audit protocols.
    - For **Downstream Customer Project / Domain Template Mode**: Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` (and any active skills under `skills/` or `.agents/skills/`, such as `skills/spec-wbs-engineering/SKILL.md`) to initialize feature-driven implementation protocols and review gates.
-4. **Load Governance Rules**: Execute `view_file` on `.pipeline/ACTIVE_RULES_BUNDLE.md` to ingest the complete, consolidated suite of active governance rules in a single read (covering dual-track MBD, SysML SSOT completeness, role boundary locks, and TDD mandates). Ingest `AGENTS.md` (or `.agents/AGENTS.md`) to enforce project-scoped agentic rules, context-isolated subagent dispatch loops, and role boundary locks.
+4. **Load Governance Rules**: Execute `view_file` on `.pipeline/ACTIVE_RULES_BUNDLE.md` to ingest the complete, consolidated suite of active governance rules in a single read (covering dual-track MBD, SysML SSOT completeness, role boundary locks, and TDD mandates). Ingest `AGENTS.md` to enforce project-scoped agentic rules, context-isolated subagent dispatch loops, and role boundary locks.
 5. **Load Platform Profile (Conditional / Downstream Workspaces Only)**:
    - Applies ONLY to Downstream Customer Projects: read the target platform execution profile (`.pipeline/profiles/flutter.md`, `.pipeline/profiles/react.md`, `.pipeline/profiles/ros2_cpp.md`, or `.pipeline/profiles/px4_module.md`) to establish platform-specific build, test, and lifecycle constraints.
    - N/A for Upstream Compiler Mode: SKIP this step when in `UPSTREAM_SPEC_CORE_COMPILER` mode; upstream specification compiler workflows are platform-independent and strictly forbidden from ingesting downstream execution profiles.
@@ -343,14 +341,14 @@ echo "Follow the universal initialization sequence in Section 5.6 of README.md a
 
 ### 5.8 Setup for Cursor / Windsurf / Cascade
 
-Create `.cursor/rules/pipeline.mdc` or `.windsurf/rules/pipeline.md` referencing `.agents/skills/`, `skills/`, `.agents/AGENTS.md`, and `.pipeline/`. All agent sessions must follow the universal initialization sequence defined in [Section 5.6 (Universal Agent Governance & Initialization Sequence)](#56-universal-agent-governance--initialization-sequence-agentsmd).
+Create `.cursor/rules/pipeline.mdc` or `.windsurf/rules/pipeline.md` referencing `.agents/skills/`, `skills/`, `AGENTS.md`, and `.pipeline/`. All agent sessions must follow the universal initialization sequence defined in [Section 5.6 (Universal Agent Governance & Initialization Sequence)](#56-universal-agent-governance--initialization-sequence-agentsmd).
 
 ### 5.9 Compiler Verification & Baseline Gate
 
 The verification gate acts as a post-installation and post-implementation compliance check:
 
 ```bash
-python3 -m pytest tests/
+python3 scripts/verify_downstream_baseline.py .
 python3 scripts/verify_downstream_baseline.py --no-domain
 ```
 
@@ -429,7 +427,7 @@ $$\text{Pipeline} = \text{Stage}_{\text{lint}} \xrightarrow{\text{pass}} \text{S
 | Pipeline Stage | Target Job Name | Executed Verification Command | Pass / Fail Criteria |
 | :--- | :--- | :--- | :--- |
 | **Stage 1: `lint`** | `lint:downstream-baseline` | `python3 scripts/verify_downstream_baseline.py --no-domain` | Checks 10-20 (zero .DS_Store, KaTeX math integrity, valid entrypoints, clean landing zones, Safety Integrity & SORA completeness, domain AST cleanliness, and Check 20: WBS & Enterprise Deliverables Suite Validation). |
-| **Stage 2: `test`** | `test:unit-and-parity` | `python3 -m pytest tests/` | Automated unit tests, ROS2 node lifecycle tests, and PX4 safety mode tests pass with 0 failures. |
+| **Stage 2: `test`** | `test:unit-and-parity` | `python3 scripts/verify_downstream_baseline.py .` | Semantic acceptance verification suites, ROS2 node lifecycle tests, and PX4 safety mode tests pass with 0 failures. |
 | **Stage 3: `verify`** | `verify:model-coverage` | `python3 skills/spec-orchestrator/scripts/verify_model_coverage.py --spec-only` | All 22 Parity Verification Gates pass with zero specification-model drift. |
 
 ---
@@ -1012,7 +1010,7 @@ Synthesize MIL-STD-881E Work Breakdown Structures (WBS), Technical Realization R
 1. WBS & Enterprise Realization Synthesis:
    - Ingest `.pipeline/schema.sysml`, `docs/conops/`, `docs/safety/`, `docs/epics/`, `docs/features/`, `docs/user-stories/`, and `docs/use-cases/`.
    - Synthesize the complete 5-tier WBS hierarchy and 7 concrete Model-Based Design (MBD) work packages per feature (`WP-xxx-SPEC`, `WP-xxx-MAT-PARAM`, `WP-xxx-SL-BLD`, `WP-xxx-PY-DOM`, `WP-xxx-PY-ENG`, `WP-xxx-TST`, `WP-xxx-REP`).
-   - Construct the authoritative 7-Column End-to-End Traceability Matrix linking SysML components, Feature specs, User Stories, MATLAB/Simulink models, Python 250 Hz engines, Pytest verification suites, and DO-178C/DO-331 simulation evidence.
+   - Construct the authoritative 7-Column End-to-End Traceability Matrix linking SysML components, Feature specs, User Stories, MATLAB/Simulink models, Python 250 Hz engines, semantic acceptance verification suites, and DO-178C/DO-331 simulation evidence.
    - Run the deterministic WBS suite generator: `python3 scripts/generate_wbs_suite.py`.
 
 2. Deliverable Generation & Issue Registration:
@@ -1258,7 +1256,7 @@ docs/reports/simulink_results/
    Pure Python, license-free, headless discrete simulation engine executing identical algebraic formulations, cubic polynomial blending curves, and safety transition guards. Exposes typed state vectors and `step(dt, inputs) -> outputs` execution interface.
 
 4. **`tests/test_<feature_slug>_simulation.py` (Automated CI Verification Suite)**:
-   Pytest / Unittest test suite executing offline in CI/CD runners without MathWorks license blockers. Validates nominal control tracks, fault-injection responses, emergency safety transitions, and state invariants.
+   Semantic acceptance verification suite executing offline in CI/CD runners without MathWorks license blockers. Validates nominal control tracks, fault-injection responses, emergency safety transitions, and state invariants.
 
 5. **`docs/reports/simulink_results/<FEATURE-ID>_simulation_results.md` (DO-331 Verification Report)**:
    Formal DO-178C / DO-331 verification deliverable documenting mathematical equivalence, step-by-step state transition logs, fault injection test results, and numerical tolerance parity (<= 10^-6).
