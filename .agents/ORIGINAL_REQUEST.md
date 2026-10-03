@@ -453,3 +453,54 @@ Your mission is to fix defect #395 according to the constitution and methods of 
 Follow repository constitution (.pipeline/constitution.md) and AGENTS.md in totality. Maintain BRIEFING.md and progress.md in your working directory. Dispatch context-isolated workers/reviewers as required. When complete, report victory with a structured handoff.
 PROCEED
 
+## 2026-10-03T18:17:22Z
+
+Requested team: Full multi-agent team (dedicated architect, lead implementer, adversarial security auditor, and acceptance test engineer)
+
+Deploy a full multi-agent team to refactor `scripts/install_pipeline.sh` from a monolithic, brittle shell script into a modular Python package (`scripts/installer/`) with atomic directory staging, safe error rollbacks, zero inline shell-interpolated Python snippets, and rigorous semantic acceptance verification.
+
+Working directory: `/Users/perkunas/jail/DEAP01-spec-core`
+Integrity mode: development
+
+## Requirements
+
+### R1. Structured Python Package & Lightweight Bootstrap Wrapper
+- Deconstruct the monolithic logic of `scripts/install_pipeline.sh` into a structured Python package under `scripts/installer/` with clean functional separation (e.g. `cli.py`, `staging.py`, `tracker.py`, `scaffolding.py`, `metadata.py`).
+- Reduce `scripts/install_pipeline.sh` to a concise, lightweight bootstrap wrapper (<150 lines) that checks host prerequisites (Python 3.10+, Git) and delegates execution to `python3 -m scripts.installer.cli "$@"`.
+- Completely eliminate inline `python3 -c "..."` script blocks from shell scripts. All parameter handling, URL parsing, and JSON merging must be executed inside Python using `argparse` and type-safe data structures.
+
+### R2. Atomic Directory Staging & State Preservation
+- Eliminate destructive `rm -rf` operations followed by manual environment restoration.
+- Use atomic staging directories (`tempfile.TemporaryDirectory()`) to prepare pipeline assets, rule bundles, and templates before committing changes to the target downstream workspace.
+- Ensure all existing downstream configuration files (e.g., `project_metadata.json`, `profile_config.json`, git remote definitions, custom `.gitignore` entries) are automatically detected, safely merged, and preserved without data loss.
+
+### R3. Robust Error Trapping, Rollback, and Security Posture
+- Implement comprehensive exit/signal trapping (`trap cleanup EXIT ERR INT`) in `install_pipeline.sh` and structured exception handling in Python to guarantee automatic cleanup of staging directories and atomic rollback on failure.
+- Ensure all remote URLs, namespaces, and provider strings are parsed with strict input sanitization to eliminate shell injection and quoting collisions.
+
+### R4. Exclusive Semantic Acceptance Testing Mandate
+- Strictly adhere to the repository invariant: **Unit tests (`tests/`, `test_*.py`, `pytest`) are strictly forbidden**.
+- Verification must be performed exclusively via end-to-end semantic acceptance testing:
+  1. Cold install against a real temporary git repository: verify exit code 0, complete asset tree generation, and zero unescaped template tokens.
+  2. Upgrade test against an existing simulated downstream repository: verify exit code 0 and 100% preservation of custom metadata/configs.
+  3. Downstream baseline verification: execute `python3 scripts/verify_downstream_baseline.py <target_dir>` against the installed directory and assert exit code 0 across all checks.
+  4. Repository baseline verification: execute `python3 scripts/verify_downstream_baseline.py .` on `DEAP01-spec-core` and assert exit code 0.
+
+## Acceptance Criteria
+
+### Modularity & Code Quality
+- [ ] `scripts/install_pipeline.sh` is a clean bootstrap script (<150 lines) with zero inline Python blocks (`python3 -c`).
+- [ ] `scripts/installer/` is established as a clean Python package containing modular subcomponents with standard CLI entrypoint `cli.py`.
+- [ ] All configuration, git URL parsing, and metadata logic utilize `argparse` and native Python libraries (`urllib.parse`, `json`, `pathlib`, `shutil`).
+
+### Safety & Atomic Rollback
+- [ ] Interrupted or failed installations trigger automated cleanup and leave the target directory in its original uncorrupted state.
+- [ ] Existing downstream `project_metadata.json` and `profile_config.json` are preserved across consecutive install/upgrade runs.
+- [ ] Zero shell injection vulnerabilities: all subprocess invocations use list-style arguments (`subprocess.run(["git", ...])`).
+
+### Semantic Acceptance Verification
+- [ ] Cold installation test into a temporary workspace executes cleanly with exit code 0.
+- [ ] `python3 scripts/verify_downstream_baseline.py <temporary_workspace>` passes all baseline checks with exit code 0.
+- [ ] `python3 scripts/verify_downstream_baseline.py .` passes on the compiler repo with exit code 0.
+- [ ] Zero `test_*.py` unit test files exist in the repository (`find . -name "test_*.py" -not -path "./.git/*"` returns only the existing validator in `parity_auditor/`).
+- [ ] `git diff origin/main` is clean after changes are committed and pushed.
