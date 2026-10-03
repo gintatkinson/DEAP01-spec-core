@@ -1,79 +1,85 @@
-# Handoff Report: Sentinel — Architecture Tier Normalization & Repository Boundary Hardening
-
-- **Sentinel ID**: `51593246-6e8c-4cb0-8524-2d76e85cb74c`
-- **Archetype**: Sentinel
-- **Target Workspace**: `/Users/perkunas/jail/DEAP01-spec-core`
-- **Repository Classification**: `UPSTREAM_SPEC_CORE_COMPILER`
-- **Primary Native Skill**: `skills/spec-orchestrator/SKILL.md`
-- **Primary Commercial Toolchain Integration Context**: `MATLAB / Simulink / Stateflow / Embedded Coder`
-- **Date**: 2026-09-27
-- **Verdict**: **VICTORY CONFIRMED**
-
----
+# Sentinel Handoff Report: Modular Python Pipeline Installer Refactoring
 
 ## 1. Observation
 
-A multi-agent adversarial audit and remediation of `README.md` and installer scaffolding logic in `scripts/install_pipeline.sh` was completed and verified:
+1. **User Request Recording**:
+   - Recorded verbatim request to `/Users/perkunas/jail/DEAP01-spec-core/.agents/ORIGINAL_REQUEST.md` under timestamp header `2026-10-03T18:17:22Z`.
+   - Task routed to `teamwork_preview_orchestrator` (Orchestrator 13, conversation ID: `869d1ab9-c3f7-456e-858e-0a2717e401fb`).
 
-1. **R1 Forensic Audit**:
-   - `auditor_wp01` performed comprehensive AST and text audits cataloging tier numbering contradictions across Sections 1.2 and 5.4, out-of-order headings in Section 1, and boundary ambiguities in Pipeline 2 prompts.
+2. **Continuous Multi-Agent Execution**:
+   - Orchestrator authored comprehensive `implementation_plan.md` adhering to the Strict Planning Gate.
+   - Upon authorization (`PROCEED`), orchestrator dispatched dedicated subagents:
+     - **Architect** (`explorer_wp02`): Deconstructed monolithic shell script and designed modular package specification across `scripts/installer/`.
+     - **Lead Implementer** (`worker_wp03`): Implemented 7 Python modules (`cli.py`, `metadata.py`, `staging.py`, `rollback.py`, `scaffolding.py`, `tracker.py`, `__init__.py`) and reduced `scripts/install_pipeline.sh` to a 50-line bootstrap wrapper with zero inline Python blocks.
+     - **Adversarial Security Auditor** (`auditor_wp04`): Conducted 6-point forensic audit (shell injection, signal traps, atomic rollback, metadata preservation, line counts, pure compiler invariants) -> returned **CLEAN**.
+     - **Acceptance Test Engineer** (`challenger_wp05`): Purged 126 legacy unit test files, executed cold install and upgrade semantic tests, ran 31-gate baseline verifications (exit code 0 on both downstream and compiler workspaces). Identified edge-case README overwrite on repeated installs, which was remediated by `worker_remediation` and re-verified.
+     - **Git Worker** (`worker_wp06`): Staged changes, verified neutral commit citations (`refs #401`), committed (`8b82a1a8052fe5df63d545277c3a0d62fe6592e9`), pushed to `origin/main`, and confirmed 0-byte remote diff.
 
-2. **R2 Architecture Tier Normalization & Heading Reordering**:
-   - Section 1.1 (`Primary Commercial Toolchain Integration`) now cleanly precedes Section 1.2 (`Three-Tier Architecture & Repository Boundaries`) as valid H3 subsections of Section 1 in `README.md`.
-   - The framework repository topology is normalized to a strict three-tier architecture:
-     * **Tier 1**: Upstream Specification Core Compiler (`DEAP01-spec-core`)
-     * **Tier 2**: Domain Distribution Templates (`DEAP-*`)
-     * **Tier 3**: Customer Application Workspaces (`uav-*`)
-   - All conflicting duplicate "Tier 1 Domain" and "Tier 2 Customer" labels were removed from `README.md` and `scripts/install_pipeline.sh`.
+3. **Independent Victory Audit**:
+   - Orchestrator 13 claimed completion.
+   - Sentinel spawned independent, context-isolated Victory Auditor 10 (`teamwork_preview_victory_auditor`, conversation ID: `32b8d080-a911-4704-bf09-50578c135da5`).
+   - Victory Auditor 10 executed 3-phase audit (Timeline, Integrity Check, Independent Test Execution).
+   - Verdict delivered: **VICTORY CONFIRMED**.
 
-3. **R3 Upstream vs. Downstream Execution Boundary Hardening**:
-   - Section 9.4 in `README.md` now incorporates an explicit `Execution Boundary Invariant` stating that Pipeline 2 prompts are strictly confined to `DOWNSTREAM_CUSTOMER_PROJECT`.
-   - Ambiguous fallback preambles permitting `UPSTREAM_SPEC_CORE_COMPILER` for concrete feature implementation and simulation drivers were eliminated from `README.md` and `scripts/install_pipeline.sh`.
-
-4. **R4 Automated Regression & Baseline Verification**:
-   - `tests/test_readme_scaffolding.py` updated with 3 new automated test methods (`test_upstream_readme_section_1_heading_order_and_hierarchy`, `test_upstream_readme_three_tier_architecture_normalization`, `test_upstream_readme_pipeline_2_prompt_boundary_confinement`).
-   - `python3 -m unittest tests/test_readme_scaffolding.py`: 34/34 tests pass (exit code 0).
-   - `python3 scripts/verify_downstream_baseline.py --no-domain`: all 31 baseline checks pass (exit code 0).
-   - `python3 -m pytest tests/`: 297/297 tests pass (exit code 0).
-
-5. **R5 Git Stage, Neutral Citation Commit & Remote Synchronization**:
-   - Neutral citation commit created:
-     `git commit -m "docs(readme): normalize architecture tiers, fix heading sequence, and harden repository boundary (refs #371, refs #368)"` (commit `2864925`).
-   - Commit neutrality verified via `python3 scripts/verify_commit_messages.py --head` (exit code 0).
-   - Changes pushed to GitHub `origin/main`.
-
-6. **Post-Victory Audit**:
-   - Independent Victory Auditor `victory_auditor_9` (`49b2cc23-40c3-45a4-be4c-3d8b41de7512`) conducted an unsteered, context-isolated audit (Timeline, Integrity & Anti-Mocking, Independent Test Execution, Git Diff).
-   - Verdict: **VICTORY CONFIRMED**.
+4. **Resource Cleanup**:
+   - Progress and liveness monitoring crons (`task-24`, `task-26`) terminated via `manage_task(Action="kill")`.
+   - All subagents terminated via `manage_subagents(Action="kill_all")`.
 
 ---
 
 ## 2. Logic Chain
 
-1. User requested forensic audit and remediation of tier numbering contradictions, inverted headings, and repository boundaries.
-2. Sentinel recorded the verbatim request in `.agents/ORIGINAL_REQUEST.md` under `## 2026-09-27T15:38:55Z` and routed the task to `teamwork_preview_orchestrator`.
-3. Orchestrator `orchestrator_10` established `implementation_plan.md` and dispatched context-isolated subagents for audit (`auditor_wp01`), remediation (`worker_wp02`), test updates (`worker_wp03`), and commit/push (`worker_wp04`).
-4. On victory claim, Sentinel enforced mandatory independent verification by dispatching `victory_auditor_9`.
-5. `victory_auditor_9` verified all 5 requirements empirically with zero test skips or facades.
+1. Requirements R1, R2, R3, and R4 were systematically decomposed into atomic work packages (WP-01 through WP-06) by Project Orchestrator 13.
+2. The implementation was verified at multiple independent layers:
+   - Static analysis: wrapper line count is 50 (<150), zero `python3 -c` snippets, zero shell injection (`shell=False` across all subprocess calls), zero Unicode em dashes.
+   - Dynamic testing: atomic directory staging and transactional rollback tested under simulated signals and errors.
+   - Semantic acceptance: clean cold installs and 100% config/metadata preservation on upgrades.
+   - Repository invariant: 126 unit test files purged; `find . -name "test_*.py" -not -path "./.git/*"` returns exclusively `test_completeness_validator.py`.
+   - Baseline gates: All 31 checks passed with exit code 0 under `verify_downstream_baseline.py` for both downstream and compiler repositories.
+3. Commit neutrality and remote synchronization mandates are strictly verified with commit `8b82a1a` on `origin/main` at 0 bytes diff.
+4. Independent post-victory audit by Victory Auditor 10 confirmed 100% compliance across all acceptance criteria without discrepancies.
 
 ---
 
 ## 3. Caveats
 
-- **Commercial Toolchain Tier Designation**: The vendor phrase `Primary Tier-1 Commercial Toolchain Integration Context` (referencing MATLAB / Simulink / Stateflow / Embedded Coder) signifies industrial partner toolchain status and is strictly distinct from the 3-tier repository architecture.
-- **Landing Zones**: Landing zones in `schema/`, `docs/epics/`, `docs/features/`, `docs/user-stories/`, and `docs/use-cases/` remain clean with `.gitkeep` only.
+- None. All requirements and acceptance criteria have been empirically verified and independently audited.
 
 ---
 
 ## 4. Conclusion
 
-All requirements R1 through R5 are complete, verified by automated test suites, committed with neutral issue citations, synchronized to `origin/main`, and confirmed by an independent Victory Auditor.
+The refactoring of `scripts/install_pipeline.sh` into modular Python package `scripts/installer/` is complete, verified, audited, and synchronized with remote tracking branch `origin/main`. Independent victory audit verdict is **VICTORY CONFIRMED**.
 
 ---
 
 ## 5. Verification Method
 
-1. `python3 -m unittest tests/test_readme_scaffolding.py` -> 34 passed (exit code 0)
-2. `python3 scripts/verify_downstream_baseline.py --no-domain` -> 31 passed (exit code 0)
-3. `python3 scripts/verify_commit_messages.py --head` -> exit code 0
-4. `git log -1 --stat` -> commit `2864925` matches exact requested commit message
+To reproduce and independently verify the deliverable:
+
+```bash
+# 1. Verify bootstrap wrapper line count and inline Python elimination
+wc -l scripts/install_pipeline.sh  # Output: 50
+grep -c "python3 -c" scripts/install_pipeline.sh  # Output: 0
+
+# 2. Verify unit test prohibition invariant
+find . -name "test_*.py" -not -path "./.git/*"
+# Expected: ./skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/test_completeness_validator.py
+
+# 3. Verify compiler repository baseline gate
+python3 scripts/verify_downstream_baseline.py .
+# Expected: All 31 checks pass with exit code 0
+
+# 4. Verify cold installation in isolated temp workspace
+TDIR=$(mktemp -d /tmp/deap_verify_XXXXXX)
+git init -b main "$TDIR"
+git -C "$TDIR" remote add origin https://github.com/example/repo.git
+bash scripts/install_pipeline.sh "$TDIR"
+python3 scripts/verify_downstream_baseline.py "$TDIR"
+# Expected: Both exit code 0 with 31 checks passed
+
+# 5. Verify commit neutrality and clean remote diff
+python3 scripts/verify_commit_messages.py --head
+git diff origin/main
+# Expected: Exit code 0, 0 bytes diff
+```
