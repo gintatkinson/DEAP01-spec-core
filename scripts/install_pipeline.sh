@@ -489,7 +489,7 @@ mkdir -p "$TARGET_DIR/.pipeline"
 chmod u+w "$BUNDLE_FILE" 2>/dev/null || true
 
 cat << 'EOF' > "$BUNDLE_FILE"
-# ACTIVE RULES BUNDLE — Consolidated Governance Manifest
+# ACTIVE RULES BUNDLE -- Consolidated Governance Manifest
 
 > **Notice:** This consolidated governance manifest is compiled automatically at installation time by `scripts/install_pipeline.sh`.
 > It aggregates 100% of the active governance rules from `rules/` into a single, unified source of truth.
@@ -678,9 +678,8 @@ JIRA_API_TOKEN=your_jira_api_token_or_pat_here
 # JIRA_CA_CERT_PATH=/etc/ssl/certs/internal-ca.pem
 EOF
 
-# Transform and scaffold downstream .agents/AGENTS.md and root AGENTS.md with full governance armor
-mkdir -p "$TARGET_DIR/.agents"
-chmod u+w "$TARGET_DIR/AGENTS.md" "$TARGET_DIR/.agents/AGENTS.md" "$TARGET_DIR/CLAUDE.md" "$TARGET_DIR/README.md" 2>/dev/null || true
+# Transform and scaffold downstream root AGENTS.md with full governance armor
+chmod u+w "$TARGET_DIR/AGENTS.md" "$TARGET_DIR/CLAUDE.md" "$TARGET_DIR/README.md" 2>/dev/null || true
 python3 "$INSTALLER_ROOT/scripts/scaffold_downstream_agents.py" "$INSTALLER_ROOT" "$TARGET_DIR"
 
 
@@ -891,12 +890,12 @@ This platform explicitly declares **MATLAB / Simulink / Stateflow / Embedded Cod
 
 ## 2. Pipeline Structure & Governance
 
-- \`.agents/\` & \`AGENTS.md\`: Agent behavior rules, role boundaries, and subagent dispatch protocols.
+- \`AGENTS.md\`: Agent behavior rules, role boundaries, and subagent dispatch protocols.
 - \`CLAUDE.md\`: Claude Code guidelines and verification gates.
 - \`.pipeline/\`: Constitution (\`constitution.md\`), active governance rules bundle (\`ACTIVE_RULES_BUNDLE.md\`), domain specifications, and execution profiles (\`profiles/<platform>.md\`).
 - \`rules/\` & \`skills/\`: Platform engineering rules and agent workflow skills.
 - \`schema/\`: Contract definitions and SysML v2 schemas.
-- \`tests/\`: Automated baseline verification and safety compliance tests.
+- Semantic acceptance verification: Automated baseline verification and compliance checks via pipeline scripts.
 
 ---
 
@@ -961,12 +960,12 @@ This platform explicitly declares **MATLAB / Simulink / Stateflow / Embedded Cod
 
 ## 2. Pipeline Structure & Governance
 
-- \`.agents/\` & \`AGENTS.md\`: Agent behavior rules, role boundaries, and subagent dispatch protocols.
+- \`AGENTS.md\`: Agent behavior rules, role boundaries, and subagent dispatch protocols.
 - \`CLAUDE.md\`: Claude Code guidelines and verification gates.
 - \`.pipeline/\`: Constitution (\`constitution.md\`), active governance rules bundle (\`ACTIVE_RULES_BUNDLE.md\`), domain specifications, and execution profiles (\`profiles/<platform>.md\`).
 - \`rules/\` & \`skills/\`: Platform engineering rules and agent workflow skills.
 - \`schema/\`: Contract definitions and SysML v2 schemas.
-- \`tests/\`: Automated baseline verification and safety compliance tests.
+- Semantic acceptance verification: Automated baseline verification and compliance checks via pipeline scripts.
 
 ---
 

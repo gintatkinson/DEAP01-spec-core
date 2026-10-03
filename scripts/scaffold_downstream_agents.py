@@ -10,9 +10,9 @@ import re
 import sys
 
 UPSTREAM_HEADER = """## Repository Role & Scope Classification
-- **Repository Classification:** `UPSTREAM_SPEC_CORE_COMPILER` (Digital Engineering Agent Platform Core Specification Compiler)
+- **Repository Classification:** `UPSTREAM_SPEC_CORE_COMPILER` (Digital Engineering Agent Platform Core Specification Compiler).
 - **Sentinel Indicator:** The presence of `.pipeline/upstream/` and `skills/spec-orchestrator/` denotes that this repository is the **Upstream Specification Core Compiler**, NOT a downstream customer application workspace or domain template.
-- **Domain Template & Customer Data Boundary:** Domain-specific platforms (e.g. UAS safety, automotive, medical) and customer applications belong in downstream distribution repositories, and must NOT be committed to this upstream specification core compiler repository."""
+- **Domain Template & Customer Data Boundary:** Domain-specific platforms and customer applications belong in downstream distribution repositories, and must NOT be committed to this upstream specification core compiler repository."""
 
 DOWNSTREAM_HEADER = """## Repository Role & Scope Classification
 - **Repository Classification:** `DOWNSTREAM_CUSTOMER_PROJECT` / `DOMAIN_TEMPLATE_CHILD` (Domain-Specific Safety-Critical Engineering Project)
@@ -21,13 +21,10 @@ DOWNSTREAM_HEADER = """## Repository Role & Scope Classification
 
 DEFAULT_CLAUDE = """# Claude Code Project Guidelines
 
-## Primary Commercial Toolchain Integration Context
-This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
-
 ## Workflow & Quality Gates
 - Follow all pipeline rules by executing `view_file` on `.pipeline/ACTIVE_RULES_BUNDLE.md`, and skills in `skills/` and `.agents/skills/`.
 - Strict Planning Gate: Do not execute unauthorized modifications without an approved implementation plan.
-- Execute baseline verification: `pytest tests/test_baseline.py` and `python3 scripts/verify_downstream_baseline.py --no-domain`.
+- Execute baseline verification: `python3 scripts/verify_downstream_baseline.py --no-domain`.
 """
 
 DEFAULT_README = """# Downstream Safety-Critical Engineering Project
@@ -38,29 +35,25 @@ DEFAULT_README = """# Downstream Safety-Critical Engineering Project
 
 ## 1. System Overview
 
-This repository is an installed downstream implementation workspace governed by the **Digital Engineering Agent Platform (DEAP)** for tactical UAS and safety-critical autonomous systems.
-
-### 1.1 Primary Commercial Toolchain Integration Context
-
-This platform explicitly declares **MATLAB / Simulink / Stateflow / Embedded Coder** as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
+This repository is an installed downstream implementation workspace governed by the **Digital Engineering Agent Platform (DEAP)** for safety-critical autonomous systems and model-based engineering.
 
 ---
 
 ## 2. Pipeline Structure & Governance
 
-- `.agents/` & `AGENTS.md`: Agent behavior rules, role boundaries, and subagent dispatch protocols.
+- `AGENTS.md`: Agent behavior rules, role boundaries, and subagent dispatch protocols.
 - `CLAUDE.md`: Claude Code guidelines and verification gates.
 - `.pipeline/`: Constitution (`constitution.md`), active governance rules bundle (`ACTIVE_RULES_BUNDLE.md`), domain specifications, and execution profiles.
 - `rules/` & `skills/`: Platform engineering rules and agent workflow skills.
 - `schema/`: Contract definitions and SysML v2 schemas.
-- `tests/`: Automated baseline verification and safety compliance tests.
+- Semantic acceptance verification: Automated baseline verification and compliance checks via pipeline scripts.
 """
 
 
 def scaffold_downstream_agents(installer_root: str, target_dir: str) -> None:
     """
     Transforms AGENTS.md from installer_root to downstream classification,
-    writing both target_dir/.agents/AGENTS.md and target_dir/AGENTS.md.
+    writing target_dir/AGENTS.md.
     Scaffolds target_dir/CLAUDE.md and target_dir/README.md if missing.
     """
     src_candidates = [
@@ -90,28 +83,18 @@ def scaffold_downstream_agents(installer_root: str, target_dir: str) -> None:
             content,
         )
 
-    target_dot_agents_dir = os.path.join(target_dir, ".agents")
-    if os.path.exists(target_dot_agents_dir):
-        try:
-            os.chmod(target_dot_agents_dir, 0o755)
-        except OSError:
-            pass
-    os.makedirs(target_dot_agents_dir, exist_ok=True)
+    os.makedirs(target_dir, exist_ok=True)
 
-    dot_agents_path = os.path.join(target_dot_agents_dir, "AGENTS.md")
     root_agents_path = os.path.join(target_dir, "AGENTS.md")
     claude_path = os.path.join(target_dir, "CLAUDE.md")
     readme_path = os.path.join(target_dir, "README.md")
 
-    for target_path in [dot_agents_path, root_agents_path, claude_path, readme_path]:
+    for target_path in [root_agents_path, claude_path, readme_path]:
         if os.path.exists(target_path):
             try:
                 os.chmod(target_path, 0o644)
             except OSError:
                 pass
-
-    with open(dot_agents_path, "w", encoding="utf-8") as f:
-        f.write(transformed)
 
     with open(root_agents_path, "w", encoding="utf-8") as f:
         f.write(transformed)
