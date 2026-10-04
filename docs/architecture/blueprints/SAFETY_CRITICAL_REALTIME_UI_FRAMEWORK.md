@@ -1,246 +1,305 @@
-# DO-178C (DAL A/B) / DO-254 / ARINC 661 Safety-Critical Real-Time UI Framework Architectural Blueprint
+---
+identifier: DEAP-BLUEPRINT-SAFETY-UI-001
+title: "Safety-Critical Real-Time UI Framework & Deterministic State Machine Architecture Blueprint"
+version: "1.0.0"
+status: "APPROVED / PRODUCTION-GRADE"
+created: "2026-09-01"
+last_updated: "2026-10-04"
+classification: "UPSTREAM_SPEC_CORE_COMPILER"
+target_regulatory_frameworks:
+  - AssuranceLevel::Tier1 (Formal Deterministic Verification & Zero Dynamic Heap Post-Init)
+  - AssuranceLevel::Tier2 (Bounded Frame Latency & Static Memory Pools)
+  - AssuranceLevel::Tier3 (Decoupled Operator Consoles & BDD Verification)
+  - High Assurance Model-Based Systems Engineering
+---
+
+# Safety-Critical Real-Time UI Framework & Deterministic State Machine Architecture Blueprint
 
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Version** | 1.0.0 |
-| **Date** | 2026-09-01 |
-
-> **Document Identifier:** `DEAP-BLUEPRINT-SAFETY-UI-001`  
-> **Status:** `APPROVED / PRODUCTION-GRADE`  
-> **Classification:** `Safety-Critical Real-Time Display Architecture Specification`  
-> **Target Regulatory Frameworks:** `RTCA DO-178C (DAL A/B)` | `RTCA DO-254 (DAL A/B)` | `ARINC 661` | `ARINC 653` | `RTCA DO-330` | `SAE ARP4754A`  
+| **Document Identifier** | `DEAP-BLUEPRINT-SAFETY-UI-001` |
+| **Title** | Safety-Critical Real-Time UI Framework & Deterministic State Machine Architecture Blueprint |
+| **Version** | `1.0.0` |
+| **Date** | `2026-10-04` |
+| **Status** | `APPROVED / PRODUCTION-GRADE` |
+| **Classification** | `UPSTREAM_SPEC_CORE_COMPILER` |
+| **Assurance Level** | `AssuranceLevel::Tier1` (Formal Deterministic Execution & Mathematical Verification) |
+| **Target Technology Profile** | Modular Rust Cargo Workspace (`deap-core`, `deap-ast`, `deap-codegen`, `deap-harness`, `deap-cli`) |
 
 ---
 
 ## 1. Executive Summary & Vision
 
 ### 1.1 Architectural Vision
-In modern integrated modular avionics (IMA), cockpit display systems (CDS), primary flight displays (PFD), multi-function displays (MFD), and safety-critical operator interfaces are mission-essential and safety-critical components. A failure, latency spike, rendering anomaly, or corruption in a primary flight display can mislead flight crews or autonomous control systems, potentially leading to catastrophic events.
+In high-assurance industrial control systems and autonomous infrastructure, operator displays, supervisory control consoles, and real-time state visualizations are safety-critical components. Rendering anomalies, latency spikes, or corrupted telemetry displays can mislead supervisory operators or automated decision engines, triggering catastrophic system failures.
 
-This architectural blueprint establishes the reference architecture for a **DO-178C (DAL A/B) and DO-254 compliant Safety-Critical Real-Time UI Framework**. The framework operationalizes the **Evolved Logical UI (LUI)** architecture within the Digital Engineering Agentic Pipeline (DEAP), decoupling presentation definitions from runtime rendering kernels and supporting deterministic, low-latency, multi-pattern display execution. **MATLAB / Simulink 3D Animation & Stateflow Symbology Engine** serve as primary tool integrations for 3D synthetic vision and state-driven symbology generation.
+This architectural blueprint establishes the reference architecture for a **Safety-Critical Real-Time UI Framework**. The framework operationalizes the **Evolved Logical UI (LUI)** architecture within the Digital Engineering Agent Platform (DEAP), decoupling presentation specifications from runtime rendering kernels and supporting deterministic, low-latency display execution across three canonical architectural patterns.
+
+All models and requirements adhere strictly to the **Pure Schema-Driven Compiler Invariant**:
+- Zero concrete domain kinetics or physical platform implementations (no kinetic vehicle bodies, mechanical actuators, or specialized transport machinery).
+- All architectures express state using abstract symbolic computer science primitives: `PartDef_Alpha`, `Subsystem_01`, `Port_A`, `Action_01`, `Constraint_Invariant`.
+- Regulatory and safety standards are abstracted into formal mathematical assurance tiers: `AssuranceLevel::Tier1..5`.
 
 ```mermaid
 flowchart TD
-    subgraph Regulatory ["Regulatory & Safety Compliance"]
-        DO178C["RTCA DO-178C Software - DAL A 100% MCDC"]
-        DO254["RTCA DO-254 Hardware & GPU / FPGA"]
-        A653["ARINC 653 APEX Spatial & Temporal Partitioning"]
+    subgraph AssuranceTier ["Mathematical Assurance Framework"]
+        Tier1["AssuranceLevel::Tier1 (Formal Proof, 100% MC/DC Coverage)"]
+        Tier2["AssuranceLevel::Tier2 (Spatial & Temporal Partitioning)"]
+        Tier3["AssuranceLevel::Tier3 (Bounded Frame Latency <= 16.6ms)"]
     end
 
     subgraph Architecture ["Evolved LUI Core Architecture"]
-        PatA["Pattern A: ARINC 661 CDS (UA Parameter -> CDS Widget DF -> Display Kernel)"]
-        PatB["Pattern B: Real-Time Safety Statecharts (Discrete Event -> FSM -> Symbology)"]
+        PatA["Pattern A: Deterministic Display Kernel (Binary Buffer -> Widget DF -> Render Kernel)"]
+        PatB["Pattern B: Real-Time Safety Statecharts (Discrete Event -> FSM -> Vector Symbology)"]
         PatC["Pattern C: Decoupled Operator Consoles (Operator Action -> ViewModel -> GUI Binding)"]
     end
 
-    subgraph Hardware ["Execution & Rendering Engine"]
-        DisplayKernel["Deterministic Display Kernel (Zero Dynamic Heap)"]
-        FrameBuffer["Hardware Frame Buffer & Video Readback CRC Monitor"]
+    subgraph Hardware ["Deterministic Execution & Rendering Engine"]
+        DisplayKernel["Deterministic Display Kernel (Zero Dynamic Heap Post-Init)"]
+        FrameBuffer["Hardware Frame Buffer & Video Readback CRC-32 Monitor"]
     end
 
-    Regulatory --> Architecture
+    AssuranceTier --> Architecture
     Architecture --> Hardware
 ```
 
 ### 1.2 Deterministic Safety Constraints
-To meet the stringent requirements of RTCA DO-178C Design Assurance Level (DAL) A and B, the Safety-Critical Real-Time UI Framework enforces strict runtime design constraints:
+To satisfy `AssuranceLevel::Tier1` and `AssuranceLevel::Tier2` requirements, the Safety-Critical Real-Time UI Framework enforces non-negotiable runtime design constraints:
 
 1. **Zero Dynamic Heap Allocation Post-Initialization**: All widget memory pool blocks, parameter buffers, state machine contexts, and vertex buffers are statically allocated during cold initialization. Runtime dynamic memory management (`malloc`, `free`, garbage collection) is strictly forbidden.
-2. **Deterministic Bounded Frame Latency**: Display kernel processing operates on a fixed timing schedule (e.g., 60 Hz / 16.6ms or 120 Hz / 8.3ms frame deadline). Execution overruns trigger immediate spatial/temporal partition isolation under ARINC 653.
-3. **No Unbounded Recursion or Iteration**: Loop bounds and function call depth are statically determined and bounded at compile-time to guarantee finite execution duration.
-4. **Hardware Frame Readback & Video CRC Monitoring**: The display pipeline captures hardware frame output and performs real-time CRC-32 checksum comparison against calculated frame signatures to detect hardware pixel corruption or GPU freezing.
+2. **Deterministic Bounded Frame Latency**: Display kernel processing operates on a fixed timing schedule (strict 60 FPS / 16.6ms or 120 FPS / 8.3ms frame deadline). Execution overruns trigger immediate partition isolation and fault recovery.
+3. **Statically Bounded Recursion and Iteration**: Loop bounds and function call depths are statically verifiable at compile time, guaranteeing strictly finite execution time.
+4. **Hardware Frame Readback & Video CRC Monitoring**: The display pipeline captures hardware frame output and performs real-time CRC-32 checksum comparison against calculated signatures to detect GPU stalls or pixel corruption.
 
 ---
 
-## 2. Safety & Compliance Architecture
+## 2. Spatial & Temporal Partitioning Architecture
 
-### 2.1 Spatial & Temporal Partitioning (ARINC 653 APEX)
-The framework operates within an ARINC 653 temporal and spatial partition architecture, shielding the safety-critical rendering kernel from less critical user applications or external flight bag software.
+The framework operates within a partitioned operating system environment, isolating safety-critical rendering kernels from less critical auxiliary applications:
 
 ```mermaid
-graph TD
-    subgraph ARINC653 ["ARINC 653 Operating System Partition Environment"]
-        subgraph Part1 ["Partition 1: User Application (UA) - DAL C/D"]
-            UA_App["Flight Planning & EFB App"]
-            UA_Buffer["UA Parameter Output Buffer"]
+flowchart TD
+    subgraph OS_Partition ["Partitioned Operating System Environment"]
+        subgraph Part1 ["Partition 1: Supervisory Application - AssuranceLevel::Tier3"]
+            App_Logic["Supervisory Planning Application"]
+            App_Buffer["Parameter Output Buffer"]
         end
 
-        subgraph Part2 ["Partition 2: Display Kernel (CDS) - DAL A/B"]
-            A661_Parser["ARINC 661 Protocol Parser"]
-            Widget_Tree["Widget Definition Tree (DF)"]
+        subgraph Part2 ["Partition 2: Display Kernel - AssuranceLevel::Tier1"]
+            Binary_Parser["Binary Protocol Parser (O(1) Time Complexity)"]
+            Widget_Tree["Widget Definition Tree (Static Pool)"]
             Render_Engine["Deterministic Vector Symbology Engine"]
         end
 
-        subgraph Part3 ["Partition 3: Safety Monitor - DAL A"]
-            CRC_Monitor["Video Frame Buffer CRC Monitor"]
-            Health_Monitor["System Health & Timeout Monitor"]
+        subgraph Part3 ["Partition 3: Safety Monitor - AssuranceLevel::Tier1"]
+            CRC_Monitor["Video Frame Buffer CRC-32 Monitor"]
+            Health_Monitor["System Health & Deadline Watchdog"]
         end
     end
 
-    UA_Buffer -- "ARINC 653 Sampling Port UDP or Shared Memory" --> A661_Parser
+    App_Buffer -- "Sampling Port / Shared Memory" --> Binary_Parser
     Render_Engine -- "Direct Memory Access (DMA)" --> FrameBuffer["Hardware Frame Buffer"]
     FrameBuffer -- "Readback DMA" --> CRC_Monitor
 ```
 
-### 2.2 Dual-Core / Lockstep Rendering Integrity
-For DAL A primary flight instrumentation:
-- Dual independent display pipelines compute widget layouts and symbology geometries in parallel across lockstep core pairs.
-- Core 1 generates frame data; Core 2 generates frame CRC signatures. Frame display is permitted only when signatures match prior to vertical sync (VSYNC).
-
 ---
 
-## 3. Evolved Logical UI (LUI) 3 Canonical Architectural Patterns
+## 3. Evolved Logical UI (LUI) -- 3 Canonical Architectural Patterns
 
-The Evolved LUI Architecture defines 3 canonical architectural patterns to cover the full spectrum of avionics, defense, and safety-critical human-machine interfaces (HMI).
+The framework defines 3 canonical architectural patterns to span the entire spectrum of safety-critical human-machine interfaces:
 
-### 3.1 Pattern A: ARINC 661 Cockpit Display Systems (CDS) Architecture
-Pattern A governs standardized cockpit display systems where the User Application (UA) logic is executed in an isolated partition or avionics computer and communicates with the Cockpit Display System (CDS) via ARINC 661 binary protocol buffers.
+### 3.1 Pattern A: Deterministic Display Kernel Architecture
+Pattern A governs standardized decoupled display systems where the primary application logic executes in an isolated partition and communicates with the display kernel via deterministic binary protocols.
 
 ```mermaid
 sequenceDiagram
-    participant UA as User Application (UA)
-    participant Buffer as UA Parameter Buffer
-    participant A661 as ARINC 661 Display Kernel
-    participant DF as Widget Definition File (DF)
+    participant App as Supervisory Application
+    participant Buffer as Parameter Output Buffer
+    participant Kernel as Display Kernel Parser
+    participant DF as Widget Definition Tree
     participant GPU as Hardware Display Kernel Render
 
-    UA->>Buffer: Update Parameter (e.g. Airspeed = 250 kts)
-    Buffer->>A661: Send ARINC 661 Binary Block (A661_CMD_SET_PARAMETER)
-    A661->>DF: Lookup Widget ID (e.g. AirspeedTapeWidget #104)
-    DF->>A661: Update Internal Widget State Property
-    A661->>GPU: Issue Deterministic Render Commands (Draw Polygon / Vector Text)
+    App->>Buffer: Update Parameter (Parameter_01 = Value_Alpha)
+    Buffer->>Kernel: Send Binary Command Block (CMD_SET_PARAMETER)
+    Kernel->>DF: Lookup Widget ID (e.g. Widget_104)
+    DF->>Kernel: Update Internal State Attribute
+    Kernel->>GPU: Issue Deterministic Vector Commands
     GPU-->>Display: Display Frame Rendered
 ```
 
 #### Layer Mapping for Pattern A
-1. **Layer 1 (Domain State & Signal Model)**: User Application (UA) Parameter Buffer / Input Telemetry Data Stream.
-2. **Layer 2 (Logic & Safety State Management)**: ARINC 661 Cockpit Display System (CDS) Widget Definition File (DF) and Symbol Definition.
-3. **Layer 3 (Display & Actuator Interface Binding)**: Display Kernel Vector Engine Rendering to Hardware Frame Buffer and Actuator Interface.
+1. **Layer 1 (Domain State & Signal Model)**: Supervisory Parameter Output Buffer / Telemetry Input Stream.
+2. **Layer 2 (Logic & Safety State Management)**: Display Kernel Widget Definition Tree and Symbolic Attribute Registry.
+3. **Layer 3 (Display & Actuator Interface Binding)**: Deterministic Display Kernel Vector Engine rendering to hardware frame buffer and actuator interface.
 
 ---
 
-### 3.2 Pattern B: Real-Time Safety Statecharts & Symbology / Flight Control Engine
-Pattern B is optimized for high-speed, event-driven symbology generation and flight control law execution, such as Primary Flight Display (PFD) horizon ladders, TCAS resolution advisories, master warning alert overlays, and actuator control loops.
+### 3.2 Pattern B: Real-Time Safety Statecharts & Symbology Engine
+Pattern B is optimized for high-speed, discrete event-driven statechart execution and vector symbology generation.
 
 ```mermaid
 stateDiagram-v2
-    [*] --> NormalFlight
+    [*] --> State_Nominal
 
-    state NormalFlight {
-        [*] --> PitchRollTracking
-        PitchRollTracking --> AltitudeAlert: "Altitude deviation > 200ft"
+    state State_Nominal {
+        [*] --> Tracking_Active
+        Tracking_Active --> Warning_Threshold: "Signal_Deviation > Delta_Max"
     }
 
-    state EmergencyWarning {
-        [*] --> FlashRedBanner
-        FlashRedBanner --> SolidRedBanner: "Ack button pressed"
+    state State_Critical_Alert {
+        [*] --> Alert_Beacon_Flashing
+        Alert_Beacon_Flashing --> Alert_Beacon_Solid: "Acknowledge_Signal received"
     }
 
-    NormalFlight --> EmergencyWarning: "TCAS Resolution Advisory / Stall Event"
-    EmergencyWarning --> NormalFlight: "Clear Event & Reset"
+    State_Nominal --> State_Critical_Alert: "System_Fault_Trigger / Critical_Invariant_Breach"
+    State_Critical_Alert --> State_Nominal: "Fault_Cleared & System_Reset"
 ```
 
 #### Layer Mapping for Pattern B
-1. **Layer 1 (Domain State & Signal Model)**: Continuous Aircraft State Vector x(t) / Discrete Input Event / Flight Sensor Telemetry Frame.
-2. **Layer 2 (Logic & Safety State Management)**: Safety Statechart / Hierarchical Finite State Machine (FSM) Mode Logic State.
-3. **Layer 3 (Display & Actuator Interface Binding)**: Symbology & Alarm Vector Graphic Render with priority-based layering and Actuator Command Output Interface.
+1. **Layer 1 (Domain State & Signal Model)**: Continuous System State Vector $x(t) \in \mathbb{R}^n$ / Discrete Input Event Frame $\Sigma$.
+2. **Layer 2 (Logic & Safety State Management)**: Safety Statechart / Hierarchical Finite State Machine (FSM) Mode Controller.
+3. **Layer 3 (Display & Actuator Interface Binding)**: Vector Graphic Symbology with priority-based layer rasterization and Actuator Output Command Interface.
 
 ---
 
-### 3.3 Pattern C: Decoupled Operator Consoles & Electronic Flight Bags (EFBs)
-Pattern C provides a decoupled, model-driven architecture for ground control station HMIs, operator consoles, and Electronic Flight Bags (EFBs) operating under reactive programming paradigms (e.g., MVVM / BDD).
+### 3.3 Pattern C: Decoupled Operator Consoles
+Pattern C provides a model-driven, reactive presentation architecture for supervisory engineering consoles and operator workstations using BDD-verified ViewModels.
 
 ```mermaid
 flowchart LR
     subgraph L1 ["Layer 1: Domain State & Signal Model"]
-        DomainModel["Telemetry & Flight Plan Domain Model"]
+        DomainModel["Subsystem Domain Model & Repository Data Source"]
     end
 
     subgraph L2 ["Layer 2: Logic & Safety State Management"]
-        ViewModel["Operator Console ViewModel (Handles User Input Actions)"]
+        ViewModel["Operator Console ViewModel (State & Action Reducer)"]
     end
 
     subgraph L3 ["Layer 3: Display & Actuator Interface Binding"]
-        GUIWidget["GUI Component / Widget Binding"]
-        BDDTest["BDD User Story Test (Asserts Event -> Action -> Render)"]
+        GUIWidget["GUI Component / Widget Data-Binding"]
+        BDDTest["BDD Acceptance Test (Given-When-Then Verification)"]
     end
 
     DomainModel --> ViewModel
     ViewModel --> GUIWidget
-    GUIWidget -. "User Touch / Tap Event" .-> ViewModel
-    BDDTest -- "Automated Verification" --> GUIWidget
+    GUIWidget -. "User Input Event" .-> ViewModel
+    BDDTest -- "Automated Semantic Verification" --> GUIWidget
 ```
 
 #### Layer Mapping for Pattern C
-1. **Layer 1 (Domain State & Signal Model)**: Console Domain Model / Telemetry & Repository Data Source.
-2. **Layer 2 (Logic & Safety State Management)**: ViewModel / Reactive State Holder handling user actions.
-3. **Layer 3 (Display & Actuator Interface Binding)**: GUI Component / Widget Binding + BDD User Story Widget Test asserting `User Action -> ViewModel Action -> State Change -> Display/Actuator Binding Render`.
+1. **Layer 1 (Domain State & Signal Model)**: Console Domain Model / Sensor Telemetry & Persistent Repository.
+2. **Layer 2 (Logic & Safety State Management)**: ViewModel / Reactive State Holder handling user commands.
+3. **Layer 3 (Display & Actuator Interface Binding)**: GUI Component / Widget Binding + BDD Acceptance Test asserting:
+   `User Action -> ViewModel Action -> State Change -> Display/Actuator Binding Render`.
 
 ---
 
-## 4. ARINC 661 Protocol & Widget Subsystem
+## 4. Modular Cargo Workspace Architecture
 
-### 4.1 ARINC 661 Binary Command Structure
-The framework provides an ARINC 661 binary protocol parser operating in $O(1)$ time complexity with zero heap allocations.
+The Real-Time UI Framework is built upon the pure Rust Cargo workspace:
 
-| Field Offset | Parameter | Size (Bytes) | Description |
+```
+deap-workspace/
+├── Cargo.toml                      # Workspace manifest
+├── crates/
+│   ├── deap-core/                  # Fixed-point math, CRC-32 verification, static memory pools
+│   ├── deap-ast/                   # Statechart AST, Widget Definition metamodel, AST slicing
+│   ├── deap-codegen/               # State machine compiler, vector command synthesizer
+│   ├── deap-harness/               # Dual-LLM air-gapped agentic harness (DeepSeek-R1 / Qwen-2.5)
+│   └── deap-cli/                   # UI verification CLI & headless test harness
+```
+
+### 4.1 Crate Allocation
+
+| Crate | Responsibility |
+| :--- | :--- |
+| **`deap-core`** | Static pool allocators, memory arena primitives, CRC-32 frame signature verifier, ring buffer implementations. |
+| **`deap-ast`** | Statechart AST nodes (`StateDef`, `TransitionDef`, `ActionDef`), Widget Definition models, and token-bounded AST slicing. |
+| **`deap-codegen`** | Deterministic code generator producing static C/Rust state machine tables and LUI schema bindings. |
+| **`deap-harness`** | Dual-LLM air-gapped agent dispatch (DeepSeek-R1 CoT slot streaming to `.pipeline/diagnostics/cot_audit_log.json` -> Qwen-2.5-Coder execution slot). |
+| **`deap-cli`** | Headless frame buffer simulation and verification CLI. |
+
+---
+
+## 5. Strongly-Typed AST Slicing Mechanics ($\le 4,096$ Tokens)
+
+To synthesize UI components and state machines within strict context boundaries, the framework slices UI metamodels into discrete subgraphs:
+
+$$
+\mathcal{V}_{\text{ui\_slice}} = \{w_0\} \cup \mathcal{N}_{\text{child\_widgets}}(w_0) \cup \mathcal{N}_{\text{state\_bindings}}(w_0)
+$$
+
+subject to the token constraint:
+
+$$
+|\text{TokenCount}(\text{Serialize}(\mathcal{S}(w_0)))| \le 4096
+$$
+
+This ensures that agentic code synthesis prompts are mathematically bounded, eliminating context window degradation.
+
+---
+
+## 6. Binary Protocol & Static Widget Subsystem
+
+The framework provides an $O(1)$ time complexity binary protocol parser operating with zero dynamic heap allocation:
+
+| Field Offset | Parameter Identifier | Size (Bytes) | Description |
 | :--- | :--- | :--- | :--- |
-| `0x00` | `LayerId` | 2 | Unique Identifier of target ARINC 661 Layer |
+| `0x00` | `LayerId` | 2 | Unique Identifier of target Layer |
 | `0x02` | `ContextId` | 2 | Application Execution Context ID |
-| `0x04` | `StructureSize` | 2 | Total Size of ARINC 661 Command Block |
-| `0x06` | `CommandId` | 2 | e.g. `A661_CMD_SET_PARAMETER` (`0xB001`) |
-| `0x08` | `WidgetId` | 2 | Target Widget Unique Identifier |
+| `0x04` | `StructureSize` | 2 | Total Size of Binary Command Block |
+| `0x06` | `CommandId` | 2 | Command Identifier (e.g. `CMD_SET_PARAMETER`) |
+| `0x08` | `WidgetId` | 2 | Target Widget Static Identifier |
 | `0x0A` | `ParameterId` | 2 | Specific Parameter Identifier |
-| `0x0C` | `ParamValue` | 4 / 8 | Parameter Value (Fixed Point / IEEE 754 Float) |
+| `0x0C` | `ParamValue` | 4 / 8 | Parameter Value (Fixed-Point / IEEE 754 Float) |
 
 ---
 
-## 5. Deterministic Real-Time Symbology Engine
+## 7. Deterministic Real-Time Symbology Pipeline
 
-### 5.1 Vector Symbology Pipeline
-Primary Flight Display (PFD) symbology requiring rapid updates (Pitch Ladder, Airspeed Indicator, Altimeter, Bank Angle Pointer) utilizes a fixed-vertex buffer pipeline powered by **MATLAB / Simulink 3D Animation & Stateflow Symbology Engine** as primary tool integrations:
+Symbology generation requiring rapid frame updates utilizes a pre-allocated static vertex buffer:
 
 ```mermaid
 flowchart TD
-    Sensors["Sensor Input - IMU ADC GNSS"] --> MatrixCalc["Fixed-Point Projection Matrix Calculation"]
-    MatrixCalc --> VBuffer["Pre-allocated Static Vertex Buffer (Max 4096 Vertices)"]
-    VBuffer --> Rasterizer["Hardware Vector Rasterizer - DO-254 FPGA GPU Core"]
-    Rasterizer --> FrameBuffer["Display Frame Buffer"]
+    Sensors["Sensor Input Telemetry Stream"] --> MatrixCalc["Fixed-Point Projection Matrix Calculation"]
+    MatrixCalc --> VBuffer["Pre-allocated Static Vertex Buffer (Max 4,096 Vertices)"]
+    VBuffer --> Rasterizer["Hardware Vector Rasterizer Core"]
+    Rasterizer --> FrameBuffer["Display Hardware Frame Buffer"]
 ```
 
 ---
 
-## 6. Verification, Testing & MC/DC Coverage Strategy
+## 8. Verification, Formal Coverage & BDD Acceptance Strategy
 
-### 6.1 DO-178C DAL A 100% MC/DC Coverage
-Under DO-178C DAL A requirements, all software controlling safety-critical display logic must achieve 100% Modified Condition/Decision Coverage (MC/DC).
+### 8.1 100% Modified Condition/Decision Coverage (MC/DC)
+For safety-critical decision logic, all Boolean expressions in state transitions (e.g., `if (signal_a < threshold_1 && signal_b > threshold_2 && invariant_active)`) undergo formal condition isolation:
+- Every condition must be shown to independently affect the decision outcome.
+- Condition trees are statically extracted and verified via semantic acceptance test harnesses.
 
-- **Condition Isolation**: Every Boolean condition in decision logic (e.g., `if (altitude < 500 && airspeed < 60 && stall_warning)`) must be independently shown to affect decision outcome.
-- **Automated Verification Gate**: The DEAP pipeline mechanically extracts decision trees and runs unit test suites to confirm 100% MC/DC before code integration.
-
----
-
-## 7. Traceability Matrix & Pipeline Integration
-
-### 7.1 Bi-Directional Traceability
-All LUI architecture artifacts are bound by bi-directional traceability tags across all 3 layers:
-
-```
-[System Requirement] <---> [LUI Specification (Feature/Story)] <---> [Code Component] <---> [BDD & MC/DC Test]
-```
-
-Example inline tag:
-`/// Realises: [Feat-LUI-001/PatternA/ARINC661Parser]`
+### 8.2 Zero Forbidden Unit Tests Invariant
+- In strict adherence to repository invariants, unit test suites (`tests/`, `test_*.py`, `pytest`) are strictly prohibited.
+- Verification is performed exclusively through end-to-end semantic acceptance testing and baseline gate checks (`scripts/verify_downstream_baseline.py`).
+- Zero Unicode em dashes (`\u2014`); ASCII `--` or `-` exclusively.
 
 ---
 
-## 8. Document Sign-Off & Governance
+## 9. Bi-Directional Traceability Matrix
 
-| Role | Responsibility | Status | Signature |
+Every element of the Real-Time UI Framework maintains bi-directional traceability across all three architectural layers:
+
+$$
+[\text{System Requirement}] \longleftrightarrow [\text{LUI Specification (Feature/Story)}] \longleftrightarrow [\text{Code Component}] \longleftrightarrow [\text{BDD Acceptance Gate}]
+$$
+
+Inline traceability tag example:
+`/// Realises: [Feat-LUI-001/PatternA/BinaryParser]`
+
+---
+
+## 10. Governance & Document Sign-Off
+
+| Role | Domain Authority | Status | Verification Signature |
 | :--- | :--- | :--- | :--- |
-| **Avionics System Architect** | Architecture Definition | APPROVED | `S. Architect, PE` |
-| **Safety Lead (DO-178C/DO-254)** | Compliance Verification | APPROVED | `M. Safety, DER` |
-| **Lead Verification Engineer** | Test Gate Enforcement | APPROVED | `V. Lead, Lead QA` |
-
----
-*Source References: RTCA DO-178C, RTCA DO-254, ARINC 661 Specification, RTCA DO-330, SAE ARP4754A.*
+| **Real-Time Display Architect** | Framework Architecture & Timing | APPROVED | `Arch. Display, PE` |
+| **Safety Assurance Lead** | Mathematical Assurance Tiers | APPROVED | `Lead. Assurance, SE` |
+| **Forensic Quality Auditor** | Governance & Invariant Enforcement | APPROVED | `Audit. Teamwork, QA` |

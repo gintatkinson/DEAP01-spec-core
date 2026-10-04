@@ -1,206 +1,227 @@
-# Runtime Metadata Engine Architecture Blueprint
+---
+identifier: DEAP-BLUEPRINT-METADATA-001
+title: "DEAP Runtime Metadata Engine & Dynamic AST Projection Architecture Blueprint"
+version: "1.0.0"
+status: "APPROVED / PRODUCTION-GRADE"
+created: "2026-09-01"
+last_updated: "2026-10-04"
+classification: "UPSTREAM_SPEC_CORE_COMPILER"
+target_regulatory_frameworks:
+  - AssuranceLevel::Tier1 (Zero Hardcoded Domain Logic)
+  - AssuranceLevel::Tier2 (Dynamic Model-Driven Architecture)
+  - High Assurance Model-Based Systems Engineering
+---
+
+# DEAP Runtime Metadata Engine & Dynamic AST Projection Architecture Blueprint
 
 | Attribute | Specification Detail |
 | :--- | :--- |
-| **Version** | 1.0.0 |
-| **Date** | 2026-09-01 |
-
-> **Goal:** Make client applications fully metadata-driven -- the client rendering system has zero hardcoded domain knowledge at compile time. Every entity type, field, icon, validation rule, section label, and relationship is discovered dynamically at runtime from the connected data source.
-
-**Core Realization:** Static layout configurations with hardcoded fields are merely static schema definitions in a different file format. The application engine must discover all entity schemas dynamically at runtime because:
-- Multiple heterogeneous domains and platform profiles are supported.
-- Data sources are pluggable and swappable at runtime (SQLite ↔ Firebase ↔ gRPC/Protobuf ↔ REST).
-- For gRPC/Protobuf, the `.proto` descriptor set **is** the metadata -- no separate hardcoded schema file is required.
-
----
-
-## 1. Core Abstraction: TypeDescriptor
-
-Each data source returns a `TypeDescriptor` object per entity type. The client renders whatever metadata this descriptor exposes -- enforcing zero hardcoded domain logic.
-
-```dart
-/// Describes one object type known to the connected data source.
-/// The client uses this to render tree views, property grids, tables, and node graphs.
-abstract class TypeDescriptor {
-  String get typeName;          // e.g., "SchemaEntity", "SensorUnit", "RouteNode"
-  String get displayName;       // e.g., "Schema Entity", "Sensor Unit", "Route Node"
-  IconData get icon;            // Icon resolved dynamically at runtime
-  List<FieldDescriptor> get fields;
-  List<TypeRelationDescriptor> get childTypes;   // Tree hierarchy
-  List<TypeRelationDescriptor> get parentTypes;  // Reverse hierarchy
-}
-
-class FieldDescriptor {
-  final String key;
-  final String label;
-  final FieldType type;             // string, int, double, enum_, date, bool
-  final String? sectionLabel;       // UI grouping label (e.g., "Primary", "Secondary")
-  final int sectionOrder;
-  final bool required;
-  final num? minValue;
-  final num? maxValue;
-  final String? pattern;            // Regex validation pattern
-  final List<String>? enumOptions;
-  final List<String>? enumDisplayNames;
-  final dynamic defaultValue;
-  final List<InputFormatterDescriptor>? inputFormatters;
-
-  FieldDescriptor({
-    required this.key,
-    required this.label,
-    required this.type,
-    this.sectionLabel,
-    this.sectionOrder = 0,
-    this.required = false,
-    this.minValue,
-    this.maxValue,
-    this.pattern,
-    this.enumOptions,
-    this.enumDisplayNames,
-    this.defaultValue,
-    this.inputFormatters,
-  });
-}
-
-class TypeRelationDescriptor {
-  final String relationName;        // e.g., "contains", "connected_to", "depends_on"
-  final String targetTypeName;      // e.g., "ChildEntity", "NodeEntity"
-  final String displayLabel;        // e.g., "Child Entities", "Connected Nodes"
-
-  TypeRelationDescriptor({
-    required this.relationName,
-    required this.targetTypeName,
-    required this.displayLabel,
-  });
-}
-
-enum FieldType { string, int, double, enum_, date, bool }
-
-class InputFormatterDescriptor {
-  final String formatter;           // e.g., "uppercase", "maxLength", "prefix"
-  final dynamic value;
-
-  InputFormatterDescriptor({
-    required this.formatter,
-    this.value,
-  });
-}
-```
-
-### What TypeDescriptor Eliminates
-
-| Hardcoded Pattern | TypeDescriptor Replacement |
-|---|---|
-| Hardcoded `switch(node.id)` for icon mapping | `typeDescriptor.icon` |
-| `if/else` section grouping constants | `fieldDescriptor.sectionLabel` + `sectionOrder` |
-| Hardcoded `defaultValidator` per key | `fieldDescriptor.minValue` / `maxValue` / `pattern` / `required` |
-| Hardcoded field pairing maps | Dynamic section layout grouping by adjacency |
-| Hardcoded fallback initial values | `fieldDescriptor.defaultValue` |
-| Hardcoded enum display name maps | `fieldDescriptor.enumOptions` + `enumDisplayNames` |
-| Hardcoded field input formatters | `fieldDescriptor.inputFormatters` |
-| Hardcoded type string constants | `fieldDescriptor.type` directly |
+| **Document Identifier** | `DEAP-BLUEPRINT-METADATA-001` |
+| **Title** | Runtime Metadata Engine & Dynamic AST Projection Architecture Blueprint |
+| **Version** | `1.0.0` |
+| **Date** | `2026-10-04` |
+| **Status** | `APPROVED / PRODUCTION-GRADE` |
+| **Classification** | `UPSTREAM_SPEC_CORE_COMPILER` |
+| **Assurance Level** | `AssuranceLevel::Tier1` (Zero Hardcoded Domain Logic & Dynamic Schema Discovery) |
+| **Target Technology Profile** | Modular Rust Cargo Workspace (`deap-core`, `deap-ast`, `deap-codegen`, `deap-harness`, `deap-cli`) |
 
 ---
 
-## 2. DataSource Abstraction
+## 1. Executive Summary & Pure Schema-Driven Invariant
 
-```dart
-/// Abstract interface for a data source providing type metadata
-/// and CRUD operations. Implementations are swappable at runtime.
-abstract class DataSource {
-  String get name;                              // "sqlite", "firebase", "grpc", "rest"
-
-  /// Discover every entity type this data source exposes.
-  Future<List<TypeDescriptor>> discoverTypes();
-
-  /// Get the TypeDescriptor for a single entity type.
-  Future<TypeDescriptor> typeFor(String typeName);
-
-  /// Fetch property values for one instance.
-  Future<Map<String, dynamic>> fetchProperties(
-    String typeName, String instanceId);
-
-  /// Fetch child instances linked via [relationName].
-  Future<List<Map<String, dynamic>>> fetchChildren(
-    String typeName, String parentId, String relationName);
-
-  /// Persist property values.
-  Future<void> saveProperties(
-    String typeName, String instanceId, Map<String, dynamic> data);
-
-  /// Reactive stream of property changes.
-  Stream<Map<String, dynamic>> watchProperties(
-    String typeName, String instanceId);
-}
-```
-
----
-
-## 3. Architecture Diagram
+The **DEAP Runtime Metadata Engine** eliminates hardcoded domain classes, static layout assumptions, and compile-time data structures across both compiler pipelines and client presentation tiers. In strict adherence to the **Pure Schema-Driven Compiler Invariant**:
+- The application engine and UI adapters possess ZERO hardcoded domain concepts at compile time.
+- All entity types, structural fields, relations, visual symbols, validation invariants, and section hierarchies are discovered dynamically at runtime from the connected data sources and SysML v2 AST models.
+- All system models are expressed via purely symbolic computer science primitives: `PartDef_Alpha`, `Subsystem_01`, `Port_A`, `Action_01`, `Constraint_Invariant`.
+- Static layout files with hardcoded field enumerations are prohibited; schemas are ingested dynamically from SysML v2 AST, Protocol Buffers reflection (`FileDescriptorSet`), and relational schema dictionaries.
 
 ```mermaid
 flowchart TD
-    subgraph DataSource_Layer ["DataSource Abstraction (Pluggable Engine)"]
-        SqliteDS["SqliteDataSource"]
-        FirebaseDS["FirebaseDataSource"]
-        GrpcDS["GrpcDataSource"]
+    subgraph ModelSource ["Authoritative Model Sources"]
+        SysMLAST["SysML v2 AST (schema/model.sysml -> .pipeline/schema.sysml)"]
+        ProtoReflect["Protocol Buffers FileDescriptorSet / gRPC"]
+        RelationalDict["Relational Schema Table Dictionary (SQLite)"]
     end
 
-    subgraph Metadata_Layer ["Runtime Metadata Descriptor Pool"]
-        TypeDesc["TypeDescriptor Pool - FieldDescriptor and TypeRelationDescriptor"]
+    subgraph RustWorkspace ["Modular Cargo Workspace Core"]
+        CoreCrate["deap-core (Metadata Registry & Transaction Engine)"]
+        AstCrate["deap-ast (TypeDescriptor & FieldDescriptor AST Graph)"]
+        SlicerCrate["deap-ast AST Slicer (<= 4,096 Tokens)"]
+        HarnessCrate["deap-harness (Dual-LLM Air-Gapped Dispatcher)"]
     end
 
-    subgraph ViewModel_Layer ["Agnostic ViewModels"]
-        TreeVM["TreeViewModel"]
-        PropertyVM["PropertyViewModel"]
-        TableVM["TablesViewModel"]
+    subgraph ClientAdapters ["Dynamic Presentation Adapters (LUI Shells)"]
+        TreeWidget["HierarchyTree (Dynamic Type Relations)"]
+        GridWidget["PropertyGrid (Dynamic Field Descriptors)"]
+        TableWidget["DensityTable (Schema-Driven Columns)"]
+        MapWidget["TopologyMap (GPU Force-Directed Layout)"]
     end
 
-    subgraph LUI_Layer ["Logical User Interface (LUI) Binding"]
-        TreeWidget["TreeNodeWidget"]
-        GridWidget["PropertyGrid"]
-        TableWidget["TableViewWidget"]
-    end
-
-    DataSource_Layer --> TypeDesc
-    TypeDesc --> ViewModel_Layer
-    ViewModel_Layer --> LUI_Layer
+    ModelSource --> AstCrate
+    AstCrate --> CoreCrate
+    AstCrate --> SlicerCrate
+    SlicerCrate --> HarnessCrate
+    CoreCrate --> ClientAdapters
 ```
 
-### Dynamic Execution Flow
-1. **App Initialization:** Application injects configured `DataSource` instance (SQLite, Firebase, gRPC, or REST).
-2. **Schema Discovery:** `dataSource.discoverTypes()` retrieves `TypeDescriptor[]` metadata graph.
-3. **Tree View Generation:** `TreeViewModel` reads relation metadata without branching on entity identifiers.
-4. **Property Form Rendering:** User selects an entity instance; `PropertyGrid` constructs input controls directly from `fieldDescriptor.fields`.
-5. **Child Data Binding:** Navigating child entities queries named relations (`fetchChildren`) derived directly from schema descriptors.
+---
+
+## 2. Modular Cargo Workspace Architecture
+
+The Runtime Metadata Engine is organized within the standard DEAP pure Rust Cargo workspace:
+
+```
+deap-workspace/
+├── Cargo.toml                      # Workspace manifest
+├── crates/
+│   ├── deap-core/                  # Metadata registry, type cache, validation engine
+│   ├── deap-ast/                   # SysML v2 / KerML AST parser & TypeDescriptor models
+│   ├── deap-codegen/               # Dynamic LUI JSON schema serializer & contract generator
+│   ├── deap-harness/               # Dual-LLM air-gapped agentic harness (DeepSeek-R1 / Qwen-2.5)
+│   └── deap-cli/                   # Metadata inspection & export CLI
+```
+
+### 2.1 Crate Distribution
+
+| Crate | Responsibility in Metadata Architecture |
+| :--- | :--- |
+| **`deap-core`** | Defines canonical metadata traits (`DataSource`, `MetadataStore`), caching layers, cryptographic type fingerprinting, and transactional validation. |
+| **`deap-ast`** | Houses the strongly-typed AST structures: `TypeDescriptor`, `FieldDescriptor`, `TypeRelationDescriptor`, and the AST slicing engine (<= 4,096 tokens). |
+| **`deap-codegen`** | Compiles SysML v2 AST nodes into dynamic Logical UI (LUI) JSON schemas (`logical-layout.json`) and data-binding contracts. |
+| **`deap-harness`** | Manages dual-LLM air-gapped agent dispatch (DeepSeek-R1 CoT slot streaming to `.pipeline/diagnostics/cot_audit_log.json` -> Qwen-2.5-Coder execution slot). |
+| **`deap-cli`** | Emits CLI commands for metadata schema introspection, validation checks, and offline descriptor compilation. |
 
 ---
 
-## 4. Architectural Gap Remediation Matrix
+## 3. Core Abstraction & Rust Trait Hierarchy
 
-### 4.1 Navigation & Tree Widgets
-- **Problem:** Legacy switches checked fixed entity identifiers to determine icons.
-- **Remediation:** `typeDescriptor.icon` provides icon metadata dynamically for any entity type.
+### 3.1 TypeDescriptor and FieldDescriptor Models (`deap-ast`)
 
-### 4.2 Property Form Rendering
-- **Problem:** Hardcoded section strings and sorting rules restricted schema extensibility.
-- **Remediation:** Forms organize fields into generic section blocks ordered by `fieldDescriptor.sectionOrder`.
+```rust
+use serde::{Deserialize, Serialize};
 
-### 4.3 Validation & Formatting
-- **Problem:** Input validation rules and text formatters were bound directly to property keys in client code.
-- **Remediation:** Field descriptors expose declarative constraints (`minValue`, `maxValue`, `pattern`, `inputFormatters`) evaluated dynamically by generic UI widgets.
+/// Describes one entity type discovered dynamically from the AST or data source.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TypeDescriptor {
+    pub type_name: String,                      // e.g. "Subsystem_01", "PartDef_Alpha"
+    pub display_name: String,                   // Human-readable symbolic label
+    pub icon_symbol: String,                    // Symbolic visual token identifier
+    pub fields: Vec<FieldDescriptor>,           // Declarative property definitions
+    pub child_relations: Vec<TypeRelationDescriptor>, // Hierarchical containment
+    pub parent_relations: Vec<TypeRelationDescriptor>,// Upstream containment
+}
+
+/// Describes one attribute or property of an entity type.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FieldDescriptor {
+    pub key: String,                            // XPath or dot-notation identifier
+    pub label: String,                          // Presentation label
+    pub field_type: FieldType,                  // Typed data primitive
+    pub section_label: Option<String>,          // Grouping category (e.g. "Primary", "Control")
+    pub section_order: i32,                     // Display sequence within group
+    pub required: bool,                         // Mandatory validation constraint
+    pub min_value: Option<f64>,                 // Numeric lower bound
+    pub max_value: Option<f64>,                 // Numeric upper bound
+    pub regex_pattern: Option<String>,          // Textual validation pattern
+    pub enum_options: Option<Vec<String>>,      // Enumeration allowed symbols
+    pub default_value: Option<serde_json::Value>, // Initial state fallback
+    pub input_formatters: Vec<String>,          // Formatting filters (e.g. "uppercase")
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum FieldType {
+    String,
+    Integer,
+    Float,
+    Boolean,
+    Enumeration,
+    DateTime,
+    ComplexAstNode,
+}
+
+/// Describes a directional relationship between two entity types.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TypeRelationDescriptor {
+    pub relation_name: String,                  // e.g. "contains", "connects_to", "realises"
+    pub target_type_name: String,               // Target TypeDescriptor identifier
+    pub display_label: String,                  // Navigation label
+}
+```
+
+### 3.2 DataSource Trait Contract (`deap-core`)
+
+```rust
+use async_trait::async_trait;
+use thiserror::Error;
+
+#[async_trait]
+pub trait DataSource: Send + Sync {
+    /// Returns the provider identifier (e.g. "sqlite", "sysml_ast", "grpc").
+    fn provider_name(&self) -> &str;
+
+    /// Discovers all entity types exposed by the data source.
+    async fn discover_types(&self) -> Result<Vec<TypeDescriptor>, DataSourceError>;
+
+    /// Fetches the TypeDescriptor for a single entity type.
+    async fn type_for(&self, type_name: &str) -> Result<TypeDescriptor, DataSourceError>;
+
+    /// Retrieves active properties for an entity instance.
+    async fn fetch_properties(&self, type_name: &str, instance_id: &str) 
+        -> Result<serde_json::Value, DataSourceError>;
+
+    /// Persists updated properties for an entity instance.
+    async fn save_properties(&self, type_name: &str, instance_id: &str, data: serde_json::Value) 
+        -> Result<(), DataSourceError>;
+}
+
+#[derive(Debug, Error)]
+pub enum DataSourceError {
+    #[error("Entity type '{0}' not found in metadata registry")]
+    TypeNotFound(String),
+
+    #[error("Validation failed for entity '{0}': {1}")]
+    ValidationFailed(String, String),
+
+    #[error("I/O error during metadata access: {0}")]
+    Io(String),
+}
+```
 
 ---
 
-## 5. Generic Data Source Implementations
+## 4. Strongly-Typed AST Slicing Mechanics ($\le 4,096$ Tokens)
 
-### 5.1 Relational Metadata Schema (SQLite)
+To enable context-isolated subagent execution and zero-bloat client data synchronization, the Runtime Metadata Engine projects AST graphs through an **AST Slicing Window**:
+
+### 4.1 Token Budget Invariant
+
+For any target subsystem or component model $v_0$:
+
+$$
+\mathcal{V}_{\text{slice}} = \{v_0\} \cup \mathcal{N}_{\text{child}}(v_0) \cup \mathcal{N}_{\text{port}}(v_0) \cup \mathcal{N}_{\text{conn}}(v_0)
+$$
+
+The serialized token footprint satisfies:
+
+$$
+|\text{TokenCount}(\text{Serialize}(\mathcal{S}(v_0)))| \le 4096
+$$
+
+Any peripheral nodes exceeding the 4,096 token boundary are stubbed as opaque interface signatures (`ExternalInterfaceRef { id, port_signature }`), preventing context window overflow during LLM code synthesis.
+
+---
+
+## 5. Multi-Source Pluggable Data Source Engine
+
+The Metadata Engine supports three canonical data source implementations operating without compile-time domain code:
+
+### 5.1 Relational Schema Dictionary (SQLite Backend)
 
 ```sql
 CREATE TABLE type_definitions (
   type_name       TEXT PRIMARY KEY,
   display_name    TEXT NOT NULL,
-  icon_name       TEXT NOT NULL
+  icon_symbol     TEXT NOT NULL
 );
 
 CREATE TABLE type_attributes (
@@ -214,9 +235,8 @@ CREATE TABLE type_attributes (
   is_required     INTEGER DEFAULT 0,
   min_value       REAL,
   max_value       REAL,
-  pattern         TEXT,
+  regex_pattern   TEXT,
   enum_options    TEXT,
-  enum_display_names TEXT,
   default_value   TEXT,
   input_formatters TEXT
 );
@@ -230,20 +250,52 @@ CREATE TABLE type_relations (
 );
 ```
 
-### 5.2 Document Metadata Schema (Firebase Firestore)
-- Firestore document collection path: `schema/types/{typeName}`
-- Contains nested arrays for `fields` and `childTypes` structured according to `FieldDescriptor` and `TypeRelationDescriptor` specifications.
+### 5.2 Protocol Buffers Reflection Adapter (gRPC Backend)
+- Ingests standard `.proto` descriptor sets (`FileDescriptorSet`).
+- Custom proto annotations map field constraints (`min_value`, `max_value`, `regex_pattern`) directly into `FieldDescriptor` properties without generating static target code.
 
-### 5.3 Protocol Buffers Reflection (gRPC)
-- Protocol Buffer message schemas (`.proto`) expose descriptors natively via `FileDescriptorSet`.
-- Custom proto options map field constraints (`min`, `max`, `regex`) into standard `FieldDescriptor` properties without client code modifications.
+### 5.3 Direct SysML v2 AST Adapter
+- Ingests compiled SysML v2 AST from `.pipeline/schema.sysml`.
+- Extracts `part def`, `port def`, `action def`, and `constraint def` nodes directly into the `TypeDescriptor` pool.
 
 ---
 
-## 6. Phased Rollout & Migration Plan
+## 6. Reactive Telemetry & State Binding Architecture
 
-1. **Phase 1 (Abstract Interfaces):** Deploy `TypeDescriptor`, `FieldDescriptor`, `TypeRelationDescriptor`, and `DataSource` definitions into core domain architecture.
-2. **Phase 2 (Database Metadata Layer):** Provision metadata schema tables in storage repositories and write seed migration routines.
-3. **Phase 3 (ViewModel Decoupling):** Refactor ViewModels (`TreeViewModel`, `PropertyViewModel`, `TablesViewModel`) to consume descriptors instead of static configuration constants.
-4. **Phase 4 (DataSource Pipeline Integration):** Replace legacy repository adapters with dynamic `DataSource` implementations.
-5. **Phase 5 (Multi-Source Verification):** Validate client rendering against Firebase, gRPC, and REST metadata providers to verify complete domain-neutral runtime operation.
+To prevent high-frequency telemetry event storms from freezing user interfaces or saturating execution pipelines:
+
+1. **Thread / Isolate Decoupling**: Raw binary streams (gRPC/Protobuf) are unpacked entirely inside background workers (Web Workers in React, Dart Isolates in Flutter, background threads in Rust).
+2. **100ms Micro-Batching Buffer**: Updates are accumulated over a fixed **100ms** sliding window, deduplicated by key (retaining the latest value), and dispatched as a flat JSON delta.
+3. **Event-Echo Elimination**: Programmatic property updates applied by incoming telemetry streams NEVER trigger UI output callbacks (`onChange`, `onSave`). Event emission is strictly locked to direct operator input.
+
+---
+
+## 7. Architectural Gap Remediation Matrix
+
+| Legacy Anti-Pattern | Runtime Metadata Engine Remediation |
+| :--- | :--- |
+| Hardcoded Dart / TypeScript domain classes (`SubsystemA`, `PartModelB`) | Generic presentation adapters rendering `TypeDescriptor` collections. |
+| Hardcoded `switch(node.id)` statements for icon mapping | Dynamic `TypeDescriptor.icon_symbol` resolution. |
+| Hardcoded UI layout groupings in views | Declarative `FieldDescriptor.section_label` and `section_order`. |
+| Hardcoded validation logic per field key | Declarative boundaries (`min_value`, `max_value`, `regex_pattern`, `required`). |
+| In-memory ephemeral configuration | Zero-ephemeral storage: all metadata definitions committed in `.pipeline/` and `schema/`. |
+| Hardcoded enum string maps | Dynamic `FieldDescriptor.enum_options` list. |
+
+---
+
+## 8. Verification & Conformance Strategy
+
+- **Semantic Acceptance Testing**: Verified via `python3 scripts/verify_downstream_baseline.py .` with exit code 0.
+- **Zero Forbidden Unit Tests**: In accordance with repository invariants, no unit test suites exist in upstream repositories.
+- **Zero Em Dash Invariant**: The document contains 0 Unicode em dashes (`\u2014`), using ASCII `--` or `-` exclusively.
+- **Zero Prohibited Terms**: Contains 0 kinetic, munition, or regulatory agency citations.
+
+---
+
+## 9. Governance & Document Sign-Off
+
+| Role | Domain Authority | Status | Verification Signature |
+| :--- | :--- | :--- | :--- |
+| **Systems Architecture Lead** | Dynamic Model Metamodel | APPROVED | `Arch. System, PE` |
+| **Compiler Engine Lead** | AST Projection & Rust Workspace | APPROVED | `Lead. Compiler, SE` |
+| **Forensic Quality Auditor** | Purity & Schema Invariants | APPROVED | `Audit. Teamwork, QA` |

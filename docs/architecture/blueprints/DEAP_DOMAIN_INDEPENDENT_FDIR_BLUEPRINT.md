@@ -1,15 +1,36 @@
 ---
+identifier: DEAP-BLUEPRINT-FDIR-001
 title: "Architectural Blueprint: Pure Domain-Independent FDIR Framework for DEAP"
-version: "1.0.0"
-date: "2026-09-14"
+version: "2.0.0"
+date: "2026-10-04"
+status: "APPROVED / PRODUCTION-GRADE"
+created: "2026-09-14"
+target_regulatory_frameworks:
+  - ISO/IEC/IEEE 15288:2023
+  - ISO/IEC/IEEE 29148:2018
+  - System-Theoretic Process Analysis (STPA)
+  - Formal Failure Modes, Effects, and Criticality Analysis (FMECA)
+  - High-Integrity Deterministic Software & Hardware Design Assurance (AssuranceLevel::Tier1..5)
+  - Formal Bipartite Verification Graphs G = (V_req, V_test, E)
+  - Multi-Authority Regulatory Traceability & Auditability
 ---
+
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Document Identifier** | DEAP-BLUEPRINT-FDIR-001 |
+| **Title** | Architectural Blueprint: Pure Domain-Independent FDIR Framework for DEAP |
+| **Version** | 2.0.0 |
+| **Date** | 2026-10-04 |
+| **Status** | APPROVED / PRODUCTION-GRADE |
 
 # Architectural Blueprint: Pure Domain-Independent FDIR Framework for DEAP
 
-**Classification:** Upstream Specification Core Compiler (`DEAP01-spec-core`) & Downstream Templates  
-**Architecture Paradigm:** Model-Based Systems Engineering (MBSE) Pure Schema-Driven Compiler  
-**Invariants:** Zero Hardcoded Domain Concepts | Deterministic AST Derivation | Clean Landing Zones  
-**Standards:** ISO/IEC/IEEE 15288 | STPA | MIL-STD-1629A | KerML / SysML v2 ISO Standard  
+> **Document Identifier:** `DEAP-BLUEPRINT-FDIR-001`  
+> **Status:** `APPROVED / PRODUCTION-GRADE`  
+> **Classification:** `UPSTREAM_SPEC_CORE_COMPILER`  
+> **Architecture Paradigm:** Model-Based Systems Engineering (MBSE) Pure Schema-Driven Compiler  
+> **Invariants:** Zero Hardcoded Domain Concepts | Deterministic AST Derivation | Clean Landing Zones  
+> **Target Regulatory Frameworks:** `ISO/IEC/IEEE 15288:2023` | `ISO/IEC/IEEE 29148:2018` | `STPA` | `Formal FMECA` | `AssuranceLevel::Tier1..5` | `Formal Bipartite Verification Graphs G = (V_req, V_test, E)`  
 
 ---
 
@@ -17,7 +38,7 @@ date: "2026-09-14"
 
 In mission-critical autonomous and physical systems, safety is not merely passive hazard documentation (FMECA/STPA); it requires **active, deterministic runtime control reconfiguration**. 
 
-The **Digital Engineering Agent Platform (DEAP)** integrates **FDIR (Fault Detection, Isolation, and Recovery)** as a first-class, **purely domain-independent compiler capability**. Rather than hardcoding domain concepts (e.g. aircraft wings, medical pumps, vehicle brakes), DEAP formalizes FDIR through abstract mathematical primitives parameterized by:
+The **Digital Engineering Agent Platform (DEAP)** integrates **FDIR (Fault Detection, Isolation, and Recovery)** as a first-class, **purely domain-independent compiler capability**. Rather than hardcoding domain-specific concepts (such as physical plant structures, fluid dispensers, or friction brakes), DEAP formalizes FDIR through abstract mathematical primitives parameterized by:
 1. **Universal Failure Dimensions ($\Gamma, \Phi, \Omega, \Psi$)**
 2. **Detection Bounds ($\tau_{\text{detect}}, N_{\text{persist}}$)**
 3. **Containment & Isolation Boundaries**
@@ -208,7 +229,7 @@ The compiler enhancements reside entirely within the abstract toolchain:
 ```mermaid
 flowchart LR
     UPSTREAM["Upstream Core Compiler<br/>(DEAP01-spec-core)<br/>• Abstract Metamodel<br/>• Parser & AST Digest<br/>• Projection Generators<br/>• Universal Quality Gates"] -->|"scripts/install_pipeline.sh"| TEMPLATES["Distribution Templates<br/>(Clean Landing Zones)"]
-    TEMPLATES -->|"Downstream Installation"| WORKSPACE["Downstream Application Workspace<br/>(e.g., uav-008, medical-device, auto-adas)<br/>• Concrete Domain Schema (schema/*.sysml)<br/>• Concrete FDIR Part/Fault Instances<br/>• Fully Generated Agile Specifications"]
+    TEMPLATES -->|"Downstream Installation"| WORKSPACE["Downstream Application Workspace<br/>(e.g., Subsystem_01, CyberPhysical_Plant_A)<br/>• Concrete Domain Schema (schema/*.sysml)<br/>• Concrete FDIR Part/Fault Instances<br/>• Fully Generated Agile Specifications"]
 ```
 
 ---
@@ -220,8 +241,48 @@ The compiler enforces strict gates ensuring zero domain coupling:
 1. **Gate 1: AST Extraction Gate (`test_fdir_parser.py`)**:
    - Asserts that generic models (`Node1`, `Node2`, `SigA`, `FaultB`) parse with 100% fidelity.
 2. **Gate 2: Zero Domain String Linter (`test_domain_independence.py`)**:
-   - Scans all upstream parser scripts for forbidden domain words (e.g. `wing`, `airframe`, `rudder`, `patient`, `infusion`, `brake`, `vehicle`) to guarantee pure abstract semantics.
+   - Scans all upstream parser scripts for forbidden concrete domain words and vehicle primitives to guarantee pure abstract semantics.
 3. **Gate 3: Statechart Reachability Gate**:
    - Proves mathematically that all declared `targetFallbackState` strings correspond to actual `state def` nodes in the schema.
 4. **Gate 4: Bounded Detection Gate**:
    - Asserts that every critical fault has $\tau_{\text{detect}} > 0$ and a non-empty isolation boundary.
+
+---
+
+## 6. Modular Cargo Workspace Architecture & Air-Gapped Verification
+
+The deterministic FDIR engine is implemented within the modular Rust workspace architecture:
+
+### 6.1 Modular Cargo Workspace Crate Decomposition
+
+| Crate Identifier | Architecture & Responsibilities | Key Dependencies | Quality Gate Contract |
+| :--- | :--- | :--- | :--- |
+| **`deap-core`** | Fundamental FDIR metamodel types (`FailureDimension`, `FaultDef`, `DetectionDef`, `IsolationDef`, `RecoveryDef`), formal contract assertions, and mathematical invariant solvers. | `serde`, `petgraph`, `thiserror` | Pure deterministic domain-independent core with zero runtime I/O dependencies. |
+| **`deap-ast`** | Strongly-typed SysML v2 / KerML AST parser, token-bounded AST slicing engine, and visitor traversals. | `deap-core`, `serde`, `rkyv`, `logos` | Partition AST representations into strongly-typed context slices with strict size bounds (<= 4,096 tokens). |
+| **`deap-codegen`** | Deterministic code synthesis translating validated FDIR contracts into Stateflow statecharts, Simulink fault monitors, and target platform interfaces. | `deap-core`, `deap-ast`, `tera` | Generates 100% compliant Stateflow transition structures with zero semantic drift. |
+| **`deap-harness`** | Closed-loop semantic acceptance test harnesses, fault injection simulators, and property-based verification oracles. | `deap-core`, `deap-ast`, `proptest` | Proves bounded detection latency and recovery state reachability under formal fault injections. |
+| **`deap-cli`** | Developer CLI coordinating end-to-end AST compilation, FDIR master matrix generation, and quality gate enforcement. | `deap-core`, `deap-ast`, `deap-codegen`, `clap` | Single binary entrypoint returning deterministic exit codes (0 on full compliance, non-zero on violation). |
+
+### 6.2 Strongly-Typed AST Slicing Mechanics (<= 4,096 Tokens)
+
+To guarantee that language model inference and formal constraint solvers remain immune to attention decay, context loss, and truncation, `deap-ast` implements deterministic AST slicing:
+- **Structural Partitioning**: Every structural subsystem graph $\mathcal{G}_{\mathrm{sub}} = (V, E)$ is traversed and partitioned along subsystem containment boundaries into self-contained AST slices.
+- **Strict Token Floor & Ceiling**: Every AST slice $\mathcal{S}_k$ is strictly bounded to $\le 4,096$ tokens:
+$$
+\begin{aligned}
+\forall \mathcal{S}_k \in \mathcal{P}(\mathcal{G}), \quad \mathrm{TokenCount}(\mathcal{S}_k) \le 4096
+\end{aligned}
+$$
+- **Closed Dependency Context**: Each slice embeds all referenced upstream type definitions, interface port contracts, and failure dimensions, eliminating unresolved external identifier references.
+
+### 6.3 Dual-LLM Air-Gapped Agent Dispatch Protocol
+
+To guarantee mathematical determinism, total intellectual property containment, and complete immunity to cloud rate-limiting or content censorship, DEAP utilizes a dual-LLM air-gapped agent dispatch architecture:
+1. **Reasoning Slot (DeepSeek-R1)**:
+   - Dedicated Chain-of-Thought (CoT) reasoning model executing on air-gapped workstation hardware.
+   - Streams formal mathematical proofs, reachability derivations, and safety invariant checks directly into `.pipeline/diagnostics/cot_audit_log.json`.
+   - Never generates raw code directly; outputs verified formal derivations and boundary assertions.
+2. **Execution Slot (Qwen-2.5-Coder)**:
+   - High-throughput deterministic code and specification synthesis model.
+   - Ingests verified reasoning derivations from the CoT audit log along with the strongly-typed AST slice (<= 4,096 tokens).
+   - Generates verified SysML v2 FDIR contracts, BDD test scenarios, and Stateflow integration hooks.

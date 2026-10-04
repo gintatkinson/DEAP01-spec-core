@@ -1,4 +1,12 @@
-<!-- Copyright Gint Atkinson, gint.atkinson@gmail.com -->
+---
+identifier: DEAP-BLUEPRINT-SSOT-002
+title: "SysML v2 Single Source of Truth (SSOT) & Closed-Loop Bidirectional Synchronization Architecture"
+version: "2.0.0"
+status: "APPROVED / PRODUCTION-GRADE"
+created: "2026-09-01"
+authority: "SysML v2 Model-as-SSOT & Non-Drifting Elaboration Invariant (rules/sysml-ssot-completeness.md)"
+primary_toolchain: "SysML v2 AST, MATLAB / Simulink / Stateflow (R2024b), Embedded Coder (DO-178C / DO-331), Discrete Digital Twin Engine"
+---
 
 # Architecture Blueprint: SysML v2 Single Source of Truth (SSOT) & Closed-Loop Bidirectional Synchronization Architecture
 
@@ -10,7 +18,7 @@
 - **Document Version**: 2.0.0
 - **Classification**: Normative Architectural Blueprint
 - **Authority**: SysML v2 Model-as-SSOT & Non-Drifting Elaboration Invariant (`rules/sysml-ssot-completeness.md`)
-- **Primary Toolchain**: SysML v2 AST, MATLAB / Simulink / Stateflow (R2024b), Embedded Coder (DO-178C / DO-331), Python Discrete Digital Twin Engine
+- **Primary Toolchain**: SysML v2 AST, MATLAB / Simulink / Stateflow (R2024b), Embedded Coder (DO-178C / DO-331), Discrete Digital Twin Engine
 
 ---
 
@@ -18,18 +26,20 @@
 
 In the **Digital Engineering Autonomous Pipeline (DEAP)**, system models and textual engineering specifications do not exist as decoupled or loosely correlated artifacts. Instead, **SysML v2** (`.pipeline/schema.sysml`) serves as the 100% authoritative, mathematically grounded **Single Source of Truth (SSOT)** for all system structure, behaviors, interfaces, data definitions, and safety invariants.
 
-All downstream engineering artifacts--including Agile Epics, Features, BDD User Stories, formal Use Cases, verification suites, and flight code generators--are direct formal projections and non-drifting elaborations of the SysML v2 Abstract Syntax Tree (AST).
+All downstream engineering artifacts--including Agile Epics, Features, BDD User Stories, formal Use Cases, verification suites, and target code generators--are direct formal projections and non-drifting elaborations of the SysML v2 Abstract Syntax Tree (AST).
 
 ```mermaid
 flowchart TD
-    subgraph Ingestion["1. Schema Ingestion & AST Canonicalization"]
+    subgraph Ingestion["1. Schema Ingestion & AST Canonicalization (deap-ast & deap-core)"]
         HET_SCHEMA["Heterogeneous Schemas: schema/\nSysML v2, OpenAPI, ARXML, IDL, Proto"]
-        INGEST_ENG["SysML v2 Ingestion Engine: sysmlv2_ingest.py"]
+        INGEST_ENG["SysML v2 Ingestion Engine: deap-ast"]
+        CACHE["Incremental AST Cache: .pipeline/cache/ast/"]
         SYSML_AST["Canonical SysML v2 AST Model: .pipeline/schema.sysml"]
         DIGEST["Cryptographic Digest & Symbol Tables: .pipeline/schema-digest.json"]
     end
 
-    subgraph Downstream["2. Forward Specification Projection"]
+    subgraph Downstream["2. Forward Specification Projection (deap-codegen)"]
+        SLICES["AST Slices (<= 4,096 tokens)"]
         EPICS["docs/epics/ (Subsystems & Packages)"]
         FEATS["docs/features/ (Parts & Item Payloads)"]
         STORIES["docs/user-stories/ (Actions & States)"]
@@ -37,25 +47,27 @@ flowchart TD
         SAFETY["docs/safety/ (STPA / FMECA Requirements)"]
     end
 
-    subgraph ReverseSync["3. Closed-Loop Reverse Synchronization"]
-        REVERSE_ENG["Automated Reverse Sync Engine: compile_sysml.py --reverse-sync"]
-        DELTA_MERGE["Non-Destructive Semantic AST Delta Merge"]
+    subgraph ReverseSync["3. Closed-Loop Reverse Synchronization (deap-ast & deap-codegen)"]
+        REVERSE_ENG["Automated Reverse Sync Engine: deap-codegen --reverse-sync"]
+        DELTA_MERGE["Non-Destructive Semantic AST Delta Merge: deap-ast"]
     end
 
-    subgraph DualTrack["4. High-Integrity Synthesis & Dual-Track Verification"]
+    subgraph DualTrack["4. High-Integrity Synthesis & Dual-Track Verification (deap-harness)"]
         TRACK_A["Track A: Native MATLAB/Simulink/Stateflow Synthesis\nDO-178C / DO-331 Embedded Coder & SLDV"]
         TRACK_B["Track B: Headless CI Digital Twin Engine\nLicense-Free 250 Hz Continuous Regression"]
     end
 
     HET_SCHEMA --> INGEST_ENG
+    INGEST_ENG <--> CACHE
     INGEST_ENG --> SYSML_AST
     SYSML_AST --> DIGEST
 
-    SYSML_AST --> EPICS
-    SYSML_AST --> FEATS
-    SYSML_AST --> STORIES
-    SYSML_AST --> USECASES
-    SYSML_AST --> SAFETY
+    SYSML_AST --> SLICES
+    SLICES --> EPICS
+    SLICES --> FEATS
+    SLICES --> STORIES
+    SLICES --> USECASES
+    SLICES --> SAFETY
 
     EPICS -.->|"Elaborated Deltas"| REVERSE_ENG
     FEATS -.->|"Elaborated Deltas"| REVERSE_ENG
@@ -72,7 +84,56 @@ flowchart TD
 
 ---
 
-## 2. Core Architectural Principles & Model-as-SSOT Foundations
+## 2. Pure Rust Cargo Workspace Architecture & Synchronization Engine
+
+The Single Source of Truth (SSOT) and bidirectional synchronization architecture is implemented across the modular, pure Rust Cargo workspace:
+
+```
+deap-compiler/
+├── Cargo.toml                  # Workspace root manifest
+├── crates/
+│   ├── deap-core/              # Core primitives, cryptographic SHA-256 digests, symbol tables
+│   ├── deap-ast/               # SysML v2 AST, grammar parser, bidirectional AST merge, slicing engine
+│   ├── deap-codegen/           # Forward specification projection, reverse synchronization re-emitter
+│   ├── deap-harness/           # Dual-track verification harness, discrete equivalence gate, 22 parity gates
+│   └── deap-cli/               # Unified CLI (`deap sync --reverse`, `deap verify --parity`)
+```
+
+- **`deap-core`**: Computes SHA-256 cryptographic digests, line counts, and symbol manifests stored in `.pipeline/schema-digest.json`.
+- **`deap-ast`**: Houses the canonical in-memory `SemanticGraphDAG`, executes non-destructive semantic AST delta merging, maintains incremental parser caches, and enforces strongly-typed AST slicing ($\le 4,096$ tokens).
+- **`deap-codegen`**: Projects AST elements into Agile Epics, Features, BDD User Stories, and Use Cases, and re-emits canonical SysML v2 text during reverse synchronization.
+- **`deap-harness`**: Executes the Dual-Track Verification Protocol, enforcing numerical precision bounds ($\le 10^{-6}$), discrete loop rate equivalence ($\Delta t = 0.004\,\text{s}$ / 250 Hz), and all 22 parity gates.
+- **`deap-cli`**: Directs CLI operations for developers, CI/CD runners, and autonomous subagents.
+
+### 2.1 Strongly-Typed AST Slicing Mechanics (<= 4,096 Tokens)
+During forward projection and reverse synchronization, model complexity can exceed the context window limits of autonomous LLM subagents. The `deap-ast` slicing engine partitions the global model into strongly-typed, context-isolated subgraphs:
+1. **Target Subsystem Slicing:** Extracts a discrete subsystem package and its immediate boundaries.
+2. **Context Budget Enforcement:** Strictly bounds each slice to $\le 4,096$ tokens, preventing prompt truncation and output degradation.
+3. **Contract Stubbing:** Replaces external dependencies with typed port interfaces, preserving closed-world validity within the slice.
+
+### 2.2 Incremental AST Parser Caching
+To ensure sub-second turnaround during multi-agent synchronization loops:
+1. **Content-Hash Keyed Cache:** `.pipeline/cache/ast/<sha256>.bin` stores pre-parsed bincode representations of the AST.
+2. **Selective Delta Parsing:** Only files whose SHA-256 fingerprint has changed are re-lexed and re-parsed. Unchanged modules are loaded instantly from disk cache.
+
+### 2.3 Dual-LLM Air-Gapped Agent Dispatch Protocol
+To guarantee mathematical determinism, total intellectual property containment, and complete immunity to cloud rate-limiting or content censorship, DEAP utilizes a dual-LLM air-gapped agent dispatch architecture orchestrated by `deap-harness` and `deap-cli`:
+
+1. **Reasoning Slot (DeepSeek-R1)**:
+   - Dedicated Chain-of-Thought (CoT) reasoning model executing on sovereign air-gapped workstation hardware.
+   - Ingests strongly-typed AST slices ($\le 4,096$ tokens) from `deap-ast` to derive bidirectional AST delta transformations, merge resolutions, and synchronization invariants.
+   - Streams formal mathematical proofs, reachability derivations, and safety invariant checks directly into `.pipeline/diagnostics/cot_audit_log.json`.
+   - Never generates raw code directly; outputs verified formal derivations and boundary assertions.
+
+2. **Execution Slot (Qwen-2.5-Coder)**:
+   - High-throughput deterministic code and specification synthesis model.
+   - Ingests verified reasoning derivations from `.pipeline/diagnostics/cot_audit_log.json` alongside the strongly-typed AST slice.
+   - Generates verified SysML v2 AST updates, bidirectional specification projections, and reverse sync patches.
+   - All generated model and specification artifacts are validated through `deap-harness` mechanical gates before committing to the repository.
+
+---
+
+## 3. Core Architectural Principles & Model-as-SSOT Foundations
 
 The architecture adheres to four fundamental principles:
 
@@ -83,12 +144,12 @@ The architecture adheres to four fundamental principles:
 
 ---
 
-## 3. Schema Ingestion Pipeline & SysML v2 AST Metamodel
+## 4. Schema Ingestion Pipeline & SysML v2 AST Metamodel
 
-Input specifications and interface definitions placed in `schema/` are ingested via `skills/spec-orchestrator/scripts/sysmlv2_ingest.py`. The ingestion engine normalizes heterogeneous domain descriptions into standardized SysML v2 packages:
+Input specifications and interface definitions placed in `schema/` are ingested via `deap-ast` / `sysmlv2_ingest.py`. The ingestion engine normalizes heterogeneous domain descriptions into standardized SysML v2 packages:
 
 ```
-schema/  -->  sysmlv2_ingest.py  -->  .pipeline/schema.sysml  +  .pipeline/schema-digest.json
+schema/  -->  deap-ast (sysmlv2_ingest.py)  -->  .pipeline/schema.sysml  +  .pipeline/schema-digest.json
 ```
 
 ### AST Element Metamodel Mapping
@@ -106,7 +167,7 @@ schema/  -->  sysmlv2_ingest.py  -->  .pipeline/schema.sysml  +  .pipeline/schem
 
 ---
 
-## 4. Downstream Specification Projection & Traceability Threads
+## 5. Downstream Specification Projection & Traceability Threads
 
 Forward specification generation decomposes the canonical SysML v2 AST model into an unbroken digital thread:
 
@@ -118,12 +179,12 @@ Forward specification generation decomposes the canonical SysML v2 AST model int
 
 ---
 
-## 5. Automated Closed-Loop Reverse Synchronization Standard
+## 6. Automated Closed-Loop Reverse Synchronization Standard
 
 When agile specification workers elaborate edge cases, exception flows, or refined parameters during development phases, those deltas MUST be synchronized back into `.pipeline/schema.sysml` via the reverse synchronization compiler:
 
 ```bash
-python3 scripts/compile_sysml.py --reverse-sync
+deap sync --reverse # or python3 scripts/compile_sysml.py --reverse-sync
 ```
 
 ### Reverse Synchronization Engine Workflow
@@ -132,33 +193,33 @@ python3 scripts/compile_sysml.py --reverse-sync
 2. **Non-Destructive Semantic AST Merge**: Merges newly discovered components, states, actions, ports, and requirements into `.pipeline/schema.sysml` without overwriting existing formal constraints.
 3. **Canonical Serialization**: Re-emits `.pipeline/schema.sysml` using strict canonical indentation and symbol ordering.
 4. **Cryptographic Parity Digest Regeneration**: Computes updated SHA-256 hash, line counts, and symbol manifests in `.pipeline/schema-digest.json`.
-5. **Pre-Commit Parity Lock**: Automatically validates all 22 parity gates via `verify_model_coverage.py`.
+5. **Pre-Commit Parity Lock**: Automatically validates all 22 parity gates via `deap-harness` and `verify_downstream_baseline.py`.
 
 ---
 
-## 6. Primary Commercial Toolchain Synthesis & High-Integrity Verification Architecture
+## 7. Primary Commercial Toolchain Synthesis & High-Integrity Verification Architecture
 
-The primary commercial toolchain integration context for DEAP is **MATLAB / Simulink / Stateflow / Embedded Coder** (R2024b), delivering DO-178C / DO-331 Level A/B safety-critical flight code synthesis.
+The primary commercial toolchain integration context for DEAP is **MATLAB / Simulink / Stateflow / Embedded Coder** (R2024b), delivering DO-178C / DO-331 Level A/B safety-critical target software synthesis.
 
-### 6.1 MATLAB / Simulink / Stateflow Target Architecture
+### 7.1 MATLAB / Simulink / Stateflow Target Architecture
 - Structural blocks map to Simulink Subsystem hierarchies and Model References.
 - SysML v2 statecharts compile to Stateflow charts with deterministic transition priorities.
 - Port interfaces bind to Simulink Buses and Typed Inport/Outport blocks.
 
-### 6.2 DO-178C / DO-331 Software Qualification Workflow
+### 7.2 DO-178C / DO-331 Software Qualification Workflow
 - Traceability matrices link SysML v2 requirements directly to Simulink blocks and generated source lines.
 - Model Coverage objectives (100% Decision, Condition, and MC/DC coverage) are verified via Simulink Coverage.
 
-### 6.3 Simulink Design Verifier (SLDV) & Formal Property Proving
+### 7.3 Simulink Design Verifier (SLDV) & Formal Property Proving
 - SysML v2 `assert constraint` nodes are synthesized into SLDV Proof Objectives to mathematically verify absence of deadlocks, integer overflows, and out-of-bounds array accesses.
 
-### 6.4 Polyspace Static Analysis & Target Flight Code Generation
+### 7.4 Polyspace Static Analysis & Target Code Generation
 - Embedded Coder generates MISRA C:2012 and SPARK Ada safety-critical source code.
 - Polyspace Bug Finder and Code Prover formally prove absence of run-time errors in generated C/Ada code.
 
 ---
 
-### 6.5 Dual-Track Verification Protocol (Native MATLAB/Simulink Synthesis + Headless CI Digital Twin)
+### 7.5 Dual-Track Verification Protocol (Native MATLAB/Simulink Synthesis + Headless CI Digital Twin)
 
 To bridge rigorous DO-178C / DO-331 Model-Based Design with modern high-velocity continuous integration (CI) and containerized regression pipelines, DEAP mandates the **Dual-Track Verification Protocol**.
 
@@ -167,7 +228,7 @@ flowchart TD
     subgraph SSOT["SysML v2 Authoritative Architecture & Behavior"]
         AST["SysML v2 AST Model: .pipeline/schema.sysml"]
         FSM_SPEC["State Transition Tables & Guard Predicates"]
-        DYN_SPEC["6-DOF Kinematic Equations & Transfer Curves"]
+        DYN_SPEC["Kinematic Equations & Transfer Curves"]
     end
 
     subgraph TrackA["Track A: Native MATLAB / Simulink Synthesis (Commercial Toolchain)"]
@@ -182,7 +243,7 @@ flowchart TD
     subgraph TrackB["Track B: Headless CI Digital Twin Engine (License-Free Runner)"]
         PY_DOMAIN["Domain Models: models/python/*_domain.py"]
         PY_ENGINE["Discrete 250 Hz Engine: models/python/*_engine.py"]
-        PY_TESTS["CI Regression Harness: tests/test_*_simulation.py"]
+        SIM_HARNESS["CI Simulation Runner: deap-harness"]
         PY_COV["Branch & Condition Coverage Engine"]
     end
 
@@ -205,8 +266,8 @@ flowchart TD
     SLX_MODEL --> SLDV_COV
 
     PY_DOMAIN --> PY_ENGINE
-    PY_ENGINE --> PY_TESTS
-    PY_TESTS --> PY_COV
+    PY_ENGINE --> SIM_HARNESS
+    SIM_HARNESS --> PY_COV
 
     SLX_MODEL -.-> EQUIV
     PY_ENGINE -.-> EQUIV
@@ -214,7 +275,7 @@ flowchart TD
 ```
 
 #### 1. Track A: Native MATLAB / Simulink Synthesis
-- **Purpose**: DO-178C / DO-331 qualified model construction, commercial formal verification, and embedded flight software generation.
+- **Purpose**: DO-178C / DO-331 qualified model construction, commercial formal verification, and embedded target software generation.
 - **Deliverables**:
   - Programmatic build script: `models/scripts/build_<feature_slug>_model.m` using official MATLAB/Simulink APIs (`new_system`, `add_block`, `Stateflow.Data`, `Stateflow.State`, `Stateflow.Transition`).
   - Parameter dictionaries: `models/matlab/<feature_slug>_params.m` declaring all physical parameters, mass properties, and transition thresholds.
@@ -226,11 +287,11 @@ flowchart TD
 - **Deliverables**:
   - Domain state and telemetry models: `models/python/<feature_slug>_domain.py` with immutable data structures and explicit enum states.
   - Discrete-time simulation engine: `models/python/<feature_slug>_engine.py` executing synchronous time-step updates (`step(dt, inputs) -> outputs`).
-  - Automated CI test suites: `tests/test_<feature_slug>_simulation.py` asserting fault injection, boundary trips, and timing bounds.
-- **Runtime Model**: Operates without external MathWorks licenses, running inside standard Python environments and headless Linux CI runners in under 1 second.
+  - Automated CI simulation suites: executed by `deap-harness` asserting fault injection, boundary trips, and timing bounds.
+- **Runtime Model**: Operates without external MathWorks licenses, running inside standard headless Linux CI runners in under 1 second.
 
 #### 3. Zero License Blocker Invariant
-- Containerized CI/CD regression runners (GitHub Actions, GitLab CI, local CLI test runners) MUST execute 100% of safety, fault-injection, and control verification test cases without requiring a proprietary MathWorks desktop license, dongle, or cloud license server.
+- Containerized CI/CD regression runners (GitHub Actions, GitLab CI, local CLI runners) MUST execute 100% of safety, fault-injection, and control verification scenarios without requiring a proprietary MathWorks desktop license, dongle, or cloud license server.
 - All verification gates must pass cleanly in offline environments.
 
 #### 4. Mathematical & Discrete Equivalence Mandate
@@ -248,30 +309,30 @@ flowchart TD
   $$
 
 #### 5. DO-178C / DO-331 Alignment & Traceability
-- **Traceability Thread**: Every state, action, and guard condition maps directly from SysML v2 AST (`rules/sysml-ssot-completeness.md`) to both Track A Stateflow transitions and Track B Python engine branches.
+- **Traceability Thread**: Every state, action, and guard condition maps directly from SysML v2 AST (`rules/sysml-ssot-completeness.md`) to both Track A Stateflow transitions and Track B simulation engine branches.
 - **Simulation Results Reporting**: Every control feature must deliver a formal verification report under `docs/reports/simulink_results/<FEATURE-ID>_simulation_results.md` detailing fault-injection test scenarios, transition logs, execution traces, and standard compliance.
 
 ---
 
-## 7. 22-Gate Parity Lock & Automated Verification Enforcement
+## 8. 22-Gate Parity Lock & Automated Verification Enforcement
 
 The integrity of the bidirectional digital thread is mechanically enforced by the 22 parity validation gates:
 
 | Parity Gate ID | Category | Enforcing Mechanism | Blocking Threshold |
 | :--- | :--- | :--- | :--- |
-| **GATE-01** | Structural Completeness | `validators/uml.py` | 100% Schema-to-Feature coverage |
-| **GATE-02** | Behavioral Alignment | `validators/behavioral.py` | 100% State/Action trigger parity |
-| **GATE-03** | Use Case Realization | `validators/uml.py` | 100% Use-Case-to-Story mapping |
-| **GATE-04** | Safety Traceability | `validators/schema_mapping_validator.py` | 100% STPA/FMECA constraint satisfaction |
-| **GATE-05** | Reverse Sync Parity | `scripts/compile_sysml.py` | Zero AST delta drift |
-| **GATE-06** | Mathematical KaTeX Integrity | `validators/katex_validator.py` | 0 dangling operators, 0 math-in-table errors |
+| **GATE-01** | Structural Completeness | `deap-harness` / `validators/uml.py` | 100% Schema-to-Feature coverage |
+| **GATE-02** | Behavioral Alignment | `deap-harness` / `validators/behavioral.py` | 100% State/Action trigger parity |
+| **GATE-03** | Use Case Realization | `deap-harness` / `validators/uml.py` | 100% Use-Case-to-Story mapping |
+| **GATE-04** | Safety Traceability | `deap-harness` / `validators/schema_mapping_validator.py` | 100% STPA/FMECA constraint satisfaction |
+| **GATE-05** | Reverse Sync Parity | `deap-ast` / `compile_sysml.py` | Zero AST delta drift |
+| **GATE-06** | Mathematical KaTeX Integrity | `deap-harness` / `validators/katex_validator.py` | 0 dangling operators, 0 math-in-table errors |
 | **GATE-07** | Dual-Track MBD Compliance | `rules/dual-track-mbd-verification.md` | Track A + Track B deliverable completeness |
-| **GATE-08** | Discrete Loop Rate Parity | `tests/test_*_simulation.py` | Synchronous loop rate (dt = 0.004 s / 250 Hz) |
-| **GATE-09** | Numerical Precision Bound | Simulation Harness | State divergence <= 10^-6 |
+| **GATE-08** | Discrete Loop Rate Parity | `deap-harness` Simulation Runner | Synchronous loop rate (dt = 0.004 s / 250 Hz) |
+| **GATE-09** | Numerical Precision Bound | `deap-harness` Equivalence Engine | State divergence <= 10^-6 |
 | **GATE-10** | Headless CI License Freedom | CI Test Runners | 0 proprietary license dependencies |
 
 ---
 
-## 8. Conclusion
+## 9. Conclusion
 
-By treating SysML v2 as the authoritative single source of truth and binding it through automated bidirectional reverse synchronization and the Dual-Track MBD Verification Protocol, DEAP achieves uncompromised DO-178C / DO-331 airworthiness rigor while empowering autonomous, license-free, continuous integration pipelines.
+By treating SysML v2 as the authoritative single source of truth and binding it through automated bidirectional reverse synchronization and the Dual-Track MBD Verification Protocol, DEAP achieves uncompromised DO-178C / DO-331 high-assurance safety rigor while empowering autonomous, license-free, continuous integration pipelines.

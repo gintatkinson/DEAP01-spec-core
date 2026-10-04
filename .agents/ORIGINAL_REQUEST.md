@@ -504,3 +504,99 @@ Integrity mode: development
 - [ ] `python3 scripts/verify_downstream_baseline.py .` passes on the compiler repo with exit code 0.
 - [ ] Zero `test_*.py` unit test files exist in the repository (`find . -name "test_*.py" -not -path "./.git/*"` returns only the existing validator in `parity_auditor/`).
 - [ ] `git diff origin/main` is clean after changes are committed and pushed.
+
+
+
+## 2026-10-04T12:20:52Z
+
+<USER_REQUEST>
+Modernize the DEAP specification core compiler from procedural Python to a modular, mathematically deterministic Rust compiler workspace coordinating atomic, context-isolated LLM agent passes over strongly-typed AST slices. Decontaminate and modernize reference blueprints and establish the multi-repository master execution plan across DEAP01-spec-core, deap-compiler-spec, and DEAP02-spec-core.
+
+Working directory: /Users/perkunas/jail/DEAP01-spec-core
+Integrity mode: development
+
+## 1. High-Assurance Production Reality & Mission
+- **Platform**: Digital Engineering Agent Platform (DEAP).
+- **Assurance Context**: Active, mission-critical production compiler supporting safety-critical engineering under RTCA DO-178C (DAL A/B), DO-254, SAE ARP4754A/4761, and MIL-STD-882E standards.
+- **Mission**: Modernize the specification core compiler from legacy procedural Python to a modular, mathematically deterministic Rust compiler workspace coordinating atomic, context-isolated LLM agent passes over strongly-typed AST slices.
+- **Tri-Repository Architecture**:
+  1. `DEAP01-spec-core` (`/Users/perkunas/jail/DEAP01-spec-core`): Upstream specification core compiler repository. Reference blueprints authority and frozen black-box regression oracle.
+  2. `deap-compiler-spec` (`/Users/perkunas/jail/deap-compiler-spec`): Downstream customer specification project workspace where the new Rust compiler architecture is modeled in SysML v2 and compiled via DEAP01 into formal specifications.
+  3. `DEAP02-spec-core` (`/Users/perkunas/jail/DEAP02-spec-core`): Clean-slate upstream landing repository (to be created and initialized under `/Users/perkunas/jail/DEAP02-spec-core` during WP-04) where the modular pure Rust compiler workspace is built and verified.
+
+---
+
+## 2. The Non-Negotiable Prime Directive: Zero Domain Impressions from Ground Zero
+
+The DEAP specification compiler is an abstract Model-Based Systems Engineering (MBSE) compiler (analogous to `rustc` or `llvm`). It is **NOT** a domain-specific modeler.
+
+1. **Absolute Prohibition of Physical Domain Concepts**:
+   - The compiler core, its reference blueprints, and its execution plans must contain **ZERO** physical hardware or kinetic concepts (no aircraft, wings, throttles, rudders, ailerons, propulsion, missiles, warheads, ESADs, squibs, arrestor wires, medical devices, or automotive chassis).
+   - All models and illustrations must be purely symbolic computer science primitives: `PartDef_Alpha`, `Subsystem_01`, `Port_A`, `Action_01`, `Constraint_Invariant`.
+2. **Absolute Prohibition of Institutional Regulatory Agency Names**:
+   - The compiler core must contain **ZERO** institutional agency acronyms (no `FAA`, `EASA`, `FDA`, `NHTSA`, `IMO`, `CFR`, `CS-25`).
+   - The compiler deals exclusively with abstract mathematical assurance tiers (e.g. `AssuranceLevel::Tier1..5`), formal bipartite verification graphs ($G = (V_{\text{req}}, V_{\text{test}}, E)$), and cryptographic reasoning audit records.
+   - Agency-specific mappings belong **strictly and exclusively** in downstream customer domain repositories and platform profiles, never in upstream core code or blueprints.
+3. **Absolute Prohibition of Hardcoded Domain Dictionaries**:
+   - Zero hardcoded domain vectors, dictionaries, or static string lists in Python or Rust source code.
+   - Domain cleanliness must be enforced through **closed-world positive type theory**: the compiler parses strictly against the OMG KerML / SysML v2 metamodel, and any undefined identifier is an immediate compiler error.
+
+---
+
+## 3. Strict Director Governance Invariants
+- **Role Boundary**: The user is the Director. The Director sets high-level intent. The agent does the systems engineering work and does NOT push low-level design questions or "how to proceed" back to the Director.
+- **Anti-Contamination Mandate**: Legacy Python code serves strictly as an external black-box regression oracle (verifying AST and gate parity in CI), never an architectural design source.
+- **Dogfooding Protocol**: The compiler architecture is modeled in SysML v2 in `deap-compiler-spec`, generated via DEAP01 into formal specifications, and implemented in pure Rust in `DEAP02-spec-core`.
+- **Zero Forbidden Unit Tests**: Unit tests (`tests/`, `test_*.py`, `pytest`) are strictly forbidden across upstream repositories. All verification is performed exclusively via end-to-end semantic acceptance testing and baseline gate checks.
+- **Zero Em Dash Invariant**: Unicode em dashes (`\u2014`) are strictly forbidden across all files, commit messages, and outputs. Use ASCII `--` or `-` exclusively.
+- **Adversarial Audit Mandate**: Do not trust shallow regex scanner passes. Verify every claim by empirical inspection.
+
+---
+
+## Requirements
+
+### R1. Complete Decontamination & Modernization of Reference Blueprints (`DEAP01-spec-core`)
+Audit and thoroughly rewrite the reference architecture blueprints in `docs/architecture/blueprints/` to `status: APPROVED / PRODUCTION-GRADE`:
+- **Purge Concrete Project Leaks**: Eradicate all concrete defense, munition, and drone safety matrices (specifically the 84-row ESAD fuzing, squib trigger, and carrier arrestor tables in `DEAP_DETERMINISTIC_SAFETY_SPECIFICATION_COMPILER_BLUEPRINT.md`). Replace with purely symbolic mathematical formulations of Cartesian product expansion ($\mathcal{U} = \mathcal{A} \times \mathcal{G}$).
+- **Purge Agency Citations**: Replace all occurrences of `FAA`, `EASA`, `FDA` with domain-independent formal compliance abstractions (`safety-critical regulatory traceability`, `multi-authority auditability`).
+- **Codify the Pure Rust Workspace**: Formally document the modular Cargo workspace architecture (`deap-core`, `deap-ast`, `deap-codegen`, `deap-harness`, `deap-cli`), strongly-typed AST slicing mechanics ($\le 4,096$ tokens), and dual-LLM air-gapped agent dispatch (DeepSeek-R1 CoT reasoning slot streaming to `.pipeline/diagnostics/cot_audit_log.json` -> Qwen-2.5-Coder execution slot).
+
+### R2. Author Master Multi-Repository Execution Plan (`DEAP01-spec-core`)
+Author `docs/architecture/MASTER_EXECUTION_PLAN.md` orchestrating Work Packages WP-01 through WP-09:
+- **WP-01**: Baseline Blueprint Decontamination & Abstract Rust Architecture Definition (`DEAP01-spec-core`).
+- **WP-02**: SysML v2 Metamodeling of the Pure Rust Compiler Workspace (`deap-compiler-spec/schema/compiler_architecture.sysml`).
+- **WP-03**: Specification Compilation & Agile Backlog Generation (`deap-compiler-spec`).
+- **WP-04**: Rust Cargo Workspace Initialization & AST Metamodel Crates (`DEAP02-spec-core`).
+- **WP-05**: Strongly-Typed AST Slicing Engine & Atomic Agent Dispatch Protocol (`DEAP02-spec-core`).
+- **WP-06**: Deterministic Combinatorial Safety & Constraint Synthesizer (`DEAP02-spec-core`).
+- **WP-07**: Dual-LLM Air-Gapped Agent Orchestration Harness (`deap-harness`) & CoT Audit Logger (`DEAP02-spec-core`).
+- **WP-08**: Parity Verification Harness against DEAP01 Python Oracle (`DEAP01` <-> `DEAP02`).
+- **WP-09**: Production Cutover, Packaging & Single Static Binary Release (`DEAP02-spec-core`).
+
+Every Work Package must define:
+1. Target repository and workspace path.
+2. Formal mechanical entrance gates.
+3. Concrete, step-by-step deliverables.
+4. Formal mechanical exit gates with reproducible CLI verification commands (`exit code == 0`) and zero regression tolerance.
+
+---
+
+## Acceptance Criteria
+
+### Blueprint Purity & Verification
+- [ ] Every file in `docs/architecture/blueprints/` is verified to have exactly zero occurrences of:
+  - Munition/combat/vehicle terms: `ESAD`, `squib`, `warhead`, `fuze`, `arrestor`, `standoff`, `wing`, `aileron`, `rudder`.
+  - Regulatory agencies: `FAA`, `EASA`, `FDA`, `NHTSA`.
+  - Unicode em dashes: `\u2014`.
+  - Unresolved markers: `TODO`, `TBD`, `FIXME`, `draft`, `pending`.
+- [ ] All 14 blueprints have valid YAML frontmatter with `status: APPROVED / PRODUCTION-GRADE`.
+
+### Master Execution Plan Integrity
+- [ ] `docs/architecture/MASTER_EXECUTION_PLAN.md` is authored, committed, and defines the complete cross-repository lifecycle from `deap-compiler-spec` dogfooding to `DEAP02-spec-core` binary compilation.
+- [ ] All entrance and exit gates specify exact shell commands with objective pass criteria.
+
+### Baseline Validation
+- [ ] `python3 scripts/verify_downstream_baseline.py` exits with code 0 across all checks in `DEAP01-spec-core`.
+- [ ] Git working tree clean and synchronized with origin branch.
+
+</USER_REQUEST>

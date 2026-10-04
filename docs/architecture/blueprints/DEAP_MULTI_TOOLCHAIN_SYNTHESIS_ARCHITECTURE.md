@@ -1,3 +1,22 @@
+---
+identifier: DEAP-BLUEPRINT-TOOLCHAIN-001
+title: "DEAP Multi-Toolchain Synthesis & Formal Verification Architecture"
+version: "1.0.0"
+status: "APPROVED / PRODUCTION-GRADE"
+created: "2026-09-01"
+target_standards:
+  - RTCA DO-178C / DO-330 / DO-331 / DO-333
+  - ISO 26262:2018 (ASIL D)
+  - AssuranceLevel::Tier1..5
+  - EN 50128:2011 / EN 50657 (SIL 4)
+  - IEC 61508:2010 (SIL 4)
+  - OMG SysML v2 (ptc/2023-08-01)
+  - SAE AS5506D (AADL)
+  - Modelica FMI 2.0/3.0
+  - ARINC 653P1-5
+  - ARINC 661
+---
+
 # DEAP Multi-Toolchain Synthesis & Formal Verification Architecture
 
 | Attribute | Specification Detail |
@@ -8,21 +27,22 @@
 > **Document Identifier:** `DEAP-BLUEPRINT-TOOLCHAIN-001`  
 > **Status:** `APPROVED / PRODUCTION-GRADE`  
 > **Classification:** `Multi-Toolchain Synthesis, Formal Verification & Execution Framework Blueprint`  
-> **Target Standards:** `RTCA DO-178C / DO-330 / DO-331 / DO-333` | `ISO 26262:2018 (ASIL D)` | `IEC 62304:2015 (Class C)` | `EN 50128:2011 / EN 50657 (SIL 4)` | `IEC 61508:2010 (SIL 4)` | `OMG SysML v2 (ptc/2023-08-01)` | `SAE AS5506D (AADL)` | `Modelica FMI 2.0/3.0` | `ARINC 653P1-5` | `ARINC 661`
+> **Target Standards:** `RTCA DO-178C / DO-330 / DO-331 / DO-333` | `ISO 26262:2018 (ASIL D)` | `AssuranceLevel::Tier1..5` | `EN 50128:2011 / EN 50657 (SIL 4)` | `IEC 61508:2010 (SIL 4)` | `OMG SysML v2 (ptc/2023-08-01)` | `SAE AS5506D (AADL)` | `Modelica FMI 2.0/3.0` | `ARINC 653P1-5` | `ARINC 661`
 
 ---
+
 
 ## Section 1: Executive Summary & Abstract MBSE Compiler Positioning
 
 ### 1.1 The Cross-Industry Safety-Critical Software Synthesis Challenge
 
-Engineering safety-critical, cyber-physical, and autonomous systems across modern aerospace (**RTCA DO-178C DAL A**), automotive (**ISO 26262 ASIL D**), medical devices (**IEC 62304 Class C**), rail transportation (**EN 50128 SIL 4**), and industrial automation (**IEC 61508 SIL 4**) presents a fundamental systems engineering crisis: **the semantic gap between abstract architectural intent and verifiable, deterministic machine execution**.
+Engineering safety-critical, cyber-physical, and autonomous systems across modern aerospace (**RTCA DO-178C DAL A**), automotive (**ISO 26262 ASIL D**), high-assurance automation (**AssuranceLevel::Tier1..5**), rail transportation (**EN 50128 SIL 4**), and industrial automation (**IEC 61508 SIL 4**) presents a fundamental systems engineering crisis: **the semantic gap between abstract architectural intent and verifiable, deterministic machine execution**.
 
 Historically, safety-critical organizations have been trapped in rigid, single-vendor silos:
 1. **Commercial Model-Based Design (MBD) Silos:** Organizations relying exclusively on proprietary environments such as **ANSYS SCADE Suite** or **MathWorks MATLAB / Simulink / Stateflow** achieve high levels of code generation maturity, but face vendor lock-in, proprietary model representations that resist automated git-based CI/CD workflows, and steep licensing barriers that prevent elastic cloud verification.
 2. **Formal Verification Silos:** Specialized teams utilizing formal deductive provers such as **AdaCore SPARK Ada** or bounded model checkers (**nuXmv**, **UPPAAL**, **CBMC**, **Kani**) frequently operate independently of the primary systems engineering team, manually translating requirements into mathematical contracts and leading to specification drift.
 3. **Multi-Physics & Architectural Analysis Silos:** Multi-body dynamics, aerodynamic models, and thermal dissipation systems authored in **OpenModelica** / **FMI** or execution architecture models authored in **OSATE / AADL (SAE AS5506)** remain disconnected from real-time SystemController software synthesis.
-4. **Target Execution Framework Heterogeneity:** Embedded software teams must deploy synthesized control laws across vastly different real-time kernels and frameworks--from bare-metal microcontrollers running **Zephyr RTOS**, to space-grade **RTEMS**, certified commercial microkernels (**QNX Neutrino**, **Wind River VxWorks 653**), robotics middleware (**ROS 2**), autonomous flight stacks (**PX4 Autopilot**), and spaceSystemController software frameworks (**NASA cFS**).
+4. **Target Execution Framework Heterogeneity:** Embedded software teams must deploy synthesized control laws across vastly different real-time kernels and frameworks--from bare-metal microcontrollers running **Zephyr RTOS**, to space-grade **RTEMS**, certified commercial microkernels (**QNX Neutrino**, **Wind River VxWorks 653**), robotics middleware (**ROS 2**), and deterministic microkernel frameworks (**Generic_RTOS_Kernel**).
 
 ```mermaid
 flowchart TD
@@ -43,7 +63,7 @@ flowchart TD
         Tier1["Tier 1: Certified MBD ("SCADE KCG / Simulink Embedded Coder")"]
         Tier2["Tier 2: Formal Contract & Prover ("SPARK Ada / Ferrocene Rust / nuXmv")"]
         Tier3["Tier 3: Open Standards & Multi-Physics ("OpenModelica FMI / OSATE AADL")"]
-        Tier4["Tier 4: Target RTOS Frameworks ("Zephyr / RTEMS / QNX / VxWorks / PX4 / cFS")"]
+        Tier4["Tier 4: Target RTOS Frameworks ("Zephyr / RTEMS / QNX / VxWorks / Generic_RTOS_Kernel / ROS 2")"]
     end
 
     Problem_Silos -.->|"Eliminated by"| DEAP_Solution
@@ -82,7 +102,7 @@ flowchart LR
         T1_Out["SCADE Lustre AST / Simulink SLX + SLDD"]
         T2_Out["SPARK Ada Contracts / Ferrocene Rust / SMT Invariants"]
         T3_Out["Modelica DAE Models / AADL Declarations"]
-        T4_Out["Zephyr Drivers / QNX Partitions / PX4 uORB Modules / cFS Apps"]
+        T4_Out["Zephyr Drivers / QNX Partitions / Generic_RTOS_Kernel Modules / ROS 2 Nodes"]
     end
 
     AST_IR --> Lexer
@@ -109,6 +129,52 @@ The DEAP Multi-Toolchain Synthesis Architecture guarantees the following mathema
    $$\text{Synthesize}(\text{AST}_t) = \text{Synthesize}(\text{AST}_{t+\Delta t}) \iff \text{Digest}(\text{AST}_t) \equiv \text{Digest}(\text{AST}_{t+\Delta t})$$
 
 3. **Absence of Undefined Behavior (Soundness Guarantee):** Synthesized source code targeting C, Ada, or Rust complies with static memory bounds, deterministic scheduling budgets, and zero dynamic heap allocation post-initialization.
+
+---
+
+### 1.4 Pure Rust Modular Cargo Workspace Architecture, AST Slicing Mechanics & Incremental Caching
+
+To execute deterministic multi-toolchain synthesis without runtime memory hazards, latency jitter, or garbage collection stalls, DEAP organizes its synthesis engine as a modular, pure Rust Cargo workspace:
+
+```
+deap-compiler/
+├── Cargo.toml                  # Workspace root manifest
+├── crates/
+│   ├── deap-core/              # Core primitives, diagnostics, hashing, and configuration
+│   ├── deap-ast/               # SysML v2 AST, grammar parser, slicing engine, incremental cache
+│   ├── deap-codegen/           # Multi-toolchain code synthesis (MBD, SPARK, Rust, FMI, RTOS)
+│   ├── deap-harness/           # Parity validation gates, semantic acceptance tests, simulation drivers
+│   └── deap-cli/               # Unified CLI entrypoint (`deap synthesize`, `deap verify`)
+```
+
+- **`deap-core`**: Defines the shared vocabulary across crates, cryptographic digest generators (SHA-256), and structured diagnostic reporters.
+- **`deap-ast`**: Formal SysML v2 AST definitions, incremental AST parser caching, and strongly-typed topological AST slicing.
+- **`deap-codegen`**: Modular synthesis backends targeting SCADE Lustre, MATLAB Simulink/Stateflow, SPARK Ada contracts, Ferrocene Rust, OpenModelica FMI, and RTOS configurations.
+- **`deap-harness`**: Mechanical verification harness executing closed-world AST checks, MIL/SIL parity tests, and 22 verification gates.
+- **`deap-cli`**: High-performance CLI interface for developers, CI/CD runners, and automated agents.
+
+#### Strongly-Typed AST Slicing Mechanics (<= 4,096 Tokens)
+Autonomous AI code generation subagents require focused, context-isolated inputs to eliminate context saturation and prevent cross-boundary hallucinations. The `deap-ast` slicing engine provides:
+1. **Topological Subgraph Partitioning:** Decomposes the monolithic `SemanticGraphDAG` into targeted slices focused on a single subsystem, port boundary, or statechart.
+2. **Strict Context Budget (<= 4,096 tokens):** Calculates the exact token footprint of serialized AST nodes. Slices exceeding 4,096 tokens are recursively partitioned along interface boundaries.
+3. **Interface Stubbing:** Slices replace out-of-scope model entities with typed interface contracts and port stubs, ensuring each slice is syntactically and semantically self-contained.
+
+#### Incremental AST Parser Caching
+To accelerate multi-toolchain synthesis across incremental model revisions:
+1. **Content-Hash Keying:** Input schemas are indexed by SHA-256 content hashes in `.pipeline/cache/ast/<sha256>.bin`.
+2. **Sub-Millisecond Deserialization:** Pre-parsed AST DAGs are loaded via zero-copy bincode deserialization, bypassing the lexical and grammar parser when source files are unmodified.
+3. **Topological Invalidation:** Only modified packages and their transitive dependents in the DAG trigger re-synthesis, preserving downstream artifact stability.
+
+#### Dual-LLM Air-Gapped Agent Dispatch Protocol
+To guarantee mathematical determinism, total intellectual property containment, and complete immunity to cloud rate-limiting or content censorship, DEAP utilizes a dual-LLM air-gapped agent dispatch architecture:
+1. **Reasoning Slot (DeepSeek-R1)**:
+   - Dedicated Chain-of-Thought (CoT) reasoning model executing on sovereign air-gapped workstation hardware.
+   - Streams formal mathematical proofs, reachability derivations, and safety invariant checks directly into `.pipeline/diagnostics/cot_audit_log.json`.
+   - Never generates raw code directly; outputs verified formal derivations and boundary assertions.
+2. **Execution Slot (Qwen-2.5-Coder)**:
+   - High-throughput deterministic code and specification synthesis model.
+   - Ingests verified reasoning derivations from the CoT audit log along with the strongly-typed AST slice (<= 4,096 tokens).
+   - Generates verified multi-toolchain synthesis artifacts across MBD, formal contracts, and RTOS configurations.
 
 ---
 
@@ -144,11 +210,11 @@ flowchart TD
     subgraph Tier4 ["Tier 4: Target Real-Time Execution Frameworks & RTOS Platforms"]
         T4_ZEPHYR["Zephyr RTOS ("MPU Partitioning / Devicetree")"]
         T4_RTEMS["RTEMS (Space-Qualified Deterministic SMP POSIX)"]
-        T4_QNX["QNX Neutrino ("ASIL D / Class C Microkernel")"]
+        T4_QNX["QNX Neutrino ("ASIL D / High-Assurance Microkernel")"]
         T4_VXWORKS["Wind River VxWorks 653 (ARINC 653 Multi-Core DAL A)"]
         T4_ROS2["ROS 2 Real-Time (DDS Middleware and Micro-ROS)"]
-        T4_PX4["PX4 Autopilot ("uORB Pub-Sub / system modes")"]
-        T4_CFS["NASA Core Flight System cFS ("OSAL / Software Bus")"]
+        T4_PX4["Generic_RTOS_Kernel ("Deterministic Task Scheduling")"]
+        T4_CFS["Deterministic Separation Microkernel ("POSIX PSE51 Partitioning")"]
     end
 
     SysML --> Tier1
@@ -164,10 +230,10 @@ flowchart TD
 
 | Synthesis Tier | Primary Toolchains & Frameworks | Primary Function in DEAP Pipeline | Generated Artifacts & Formats | Target Safety Standards |
 | :--- | :--- | :--- | :--- | :--- |
-| **Tier 1: Certified MBD** | ANSYS SCADE Suite, SCADE Display, MATLAB, Simulink, Stateflow, Embedded Coder, SLDV | Synchronous dataflow modeling, control law synthesis, discrete statechart execution, Console Display generation | `.scade`, `.slx`, `.sldd`, MISRA C:2012, Qualifiable C/Ada, ARINC 661 Server DFs | RTCA DO-178C (DAL A/B), DO-331, ISO 26262 (ASIL D), IEC 62304 (Class C), EN 50128 (SIL 4) |
+| **Tier 1: Certified MBD** | ANSYS SCADE Suite, SCADE Display, MATLAB, Simulink, Stateflow, Embedded Coder, SLDV | Synchronous dataflow modeling, control law synthesis, discrete statechart execution, Console Display generation | `.scade`, `.slx`, `.sldd`, MISRA C:2012, Qualifiable C/Ada, ARINC 661 Server DFs | RTCA DO-178C (DAL A/B), DO-331, ISO 26262 (ASIL D), AssuranceLevel::Tier1..5, EN 50128 (SIL 4) |
 | **Tier 2: Formal Contracts & Provers** | AdaCore SPARK Ada, Ferrocene Rust, nuXmv, UPPAAL, CBMC, Kani, Z3, CVC5 | Deductive contract proving, Absence of Run-Time Errors (AoRTE), model checking, temporal logic verification | `.ads`/`.adb` with SPARK contracts, `.rs` with `kani::proof`, `.smv` (nuXmv), `.xml` (UPPAAL), SMT-LIB2 | RTCA DO-178C / DO-333 (Formal Methods), ISO 26262 (ASIL D), IEC 61508 (SIL 4) |
 | **Tier 3: Open Standards & Co-Sim** | OpenModelica, FMI 2.0/3.0, OSATE, AADL (SAE AS5506D) | Multi-physics continuous-discrete co-simulation, hardware-software architectural binding, ARINC 653 schedulability analysis | `.fmu` (Model Exchange / Co-Simulation), `.mo` (Modelica), `.aadl` models, schedulability reports | SAE ARP4754A / ED-79A, SAE AS5506D, ARINC 653 |
-| **Tier 4: Target RTOS Frameworks** | Zephyr RTOS, RTEMS, QNX Neutrino, VxWorks 653, ROS 2, PX4 Autopilot, NASA cFS | Deterministic target real-time task execution, hardware abstraction, message passing, partition memory isolation | C/C++/Rust drivers, task entrypoints, uORB modules, cFS applications, CMake/Kconfig manifests | ARINC 653, POSIX PSE51/52, ISO 26262 ASIL D, ECSS Space Standards |
+| **Tier 4: Target RTOS Frameworks** | Zephyr RTOS, RTEMS, QNX Neutrino, VxWorks 653, ROS 2, Generic_RTOS_Kernel | Deterministic target real-time task execution, hardware abstraction, message passing, partition memory isolation | C/C++/Rust drivers, task entrypoints, generic RTOS modules, CMake/Kconfig manifests | ARINC 653, POSIX PSE51/52, ISO 26262 ASIL D, ECSS Space Standards |
 
 ---
 
@@ -236,7 +302,7 @@ $$\forall k \ge 0, \quad y_k = f(x_k, s_k), \quad s_{k+1} = g(x_k, s_k)$$
 where $x_k$ is the input vector at tick $k$, $y_k$ is the output vector, and $s_k$ is the internal state vector.
 
 #### 3.1.2 KCG Code Generator Qualification (DO-330 TQL-1 / DO-178C DAL A)
-The **SCADE KCG (Qualifiable Code Generator)** holds a unique position in high-assurance (Aerospace, Automotive, Medical, Rail, Marine) software engineering: it is qualified as a **DO-330 Tool Qualification Level 1 (TQL-1)** tool (formerly DO-178B Development Tool). 
+The **SCADE KCG (Qualifiable Code Generator)** holds a unique position in high-assurance (Aerospace, Automotive, High-Assurance Automation, Rail, Marine) software engineering: it is qualified as a **DO-330 Tool Qualification Level 1 (TQL-1)** tool (formerly DO-178B Development Tool). 
 
 Because KCG is qualified at TQL-1:
 - The generated C or Ada source code is certified to be semantically equivalent to the SCADE model.
@@ -245,8 +311,8 @@ Because KCG is qualified at TQL-1:
 
 #### 3.1.3 SCADE Display & ARINC 661 Console Display Systems (CDS)
 SCADE Display integrates with SCADE Suite to generate certified graphics and human-machine interfaces:
-- **ARINC 661 Standard Conformance:** SCADE Display authors Widget Definition Files (DF) that define interactive Console symbology for Primary Flight Displays (PFD) and Multi-Function Displays (MFD).
-- **User Application (UA) Parameter Protocol:** DEAP maps SysML v2 `port def` interactions into ARINC 661 binary parameter packets (`A661_CMD_SET_PARAMETER`), maintaining strict separation between the rendering server and the flight control user application.
+- **ARINC 661 Standard Conformance:** SCADE Display authors Widget Definition Files (DF) that define interactive Console symbology for Primary System Displays (PSD) and Multi-Function Displays (MFD).
+- **User Application (UA) Parameter Protocol:** DEAP maps SysML v2 `port def` interactions into ARINC 661 binary parameter packets (`A661_CMD_SET_PARAMETER`), maintaining strict separation between the rendering server and the system controller user application.
 
 ---
 
@@ -275,7 +341,7 @@ SLDV uses automated formal methods (powered by the Prover Technology proof engin
 | :--- | :--- | :--- | :--- |
 | **Formal Mathematical Base** | Synchronous Dataflow (Lustre / Esterel), discrete-time clocks | Hybrid Continuous / Discrete (ODEs, Difference Equations, Stateflow) | SCADE for critical discrete supervisors; Simulink for continuous system dynamics |
 | **Code Generator Qualification**| **DO-330 TQL-1** (Eliminates low-level unit testing of generated code) | **DO-330 TQL-5** (Requires SIL/PIL back-to-back testing & MC/DC on code) | Select SCADE backend when customer mandates TQL-1 elimination of unit testing |
-| **Target Safety Standards** | DO-178C (DAL A), ISO 26262 (ASIL D), EN 50128 (SIL 4), IEC 60880 | DO-178C (DAL A/B), ISO 26262 (ASIL D), IEC 62304 (Class C) | Both supported via profile configurations (`scade_c.md`, `simulink_c.md`) |
+| **Target Safety Standards** | DO-178C (DAL A), ISO 26262 (ASIL D), EN 50128 (SIL 4), IEC 60880 | DO-178C (DAL A/B), ISO 26262 (ASIL D), AssuranceLevel::Tier1..5 | Both supported via profile configurations (`scade_c.md`, `simulink_c.md`) |
 | **Console Display Integration** | **SCADE Display** (Native ARINC 661 Widget DF generation & OpenGL SC) | Simulink 3D Animation (Non-certifiable prototyping only) | SCADE Display synthesized for certified ARINC 661 CDS |
 | **Formal Property Verification** | SCADE Design Verifier (Prover Technology embedded) | Simulink Design Verifier (SLDV Prover Engine + Polyspace) | SysML `assert constraint` nodes map symmetrically to both provers |
 | **Continuous Multi-Physics** | Limited (relies on FMI co-simulation for continuous physics) | Industry standard (Simscape, Aerospace Blockset, Control System Toolbox)| Simulink or OpenModelica synthesized for continuous plant dynamics |
@@ -288,46 +354,46 @@ SLDV uses automated formal methods (powered by the Prover Technology proof engin
 ```sysml
 /* Canonical SysML v2 Input */
 package CyberPhysicalSystemControl {
-    part def FlightModeSupervisor {
-        in port airDataIn : AirDataPayload;
+    part def SystemModeSupervisor {
+        in port stateVectorIn : StateVectorPayload;
         out port commandedModeOut : ModeEnum;
 
         state def SupervisorFSM {
             state Standby;
-            state ActiveFlight;
-            state SafeRTL;
+            state ActiveState;
+            state Fallback_Action_01;
 
-            transition Standby to ActiveFlight
-                accept commandEngage if airDataIn.airspeed_kts >= 45.0;
+            transition Standby to ActiveState
+                accept commandEngage if stateVectorIn.StateVariable_Alpha >= 45.0;
 
-            transition ActiveFlight to SafeRTL
-                accept sensorFault if airDataIn.altitude_agl_m < 15.0;
+            transition ActiveState to Fallback_Action_01
+                accept sensorFault if stateVectorIn.StateVariable_Beta < 15.0;
         }
 
-        assert constraint Assert_SafeAltitude {
-            airDataIn.altitude_agl_m >= 10.0;
+        assert constraint Assert_StateVariable_Beta_Bound {
+            stateVectorIn.StateVariable_Beta >= 10.0;
         }
     }
 }
 ```
 
-#### SCADE Lustre Transformation (`FlightModeSupervisor.scade`):
+#### SCADE Lustre Transformation (`SystemModeSupervisor.scade`):
 ```scade
-node FlightModeSupervisor(airDataIn : AirDataPayload)
-returns (commandedModeOut : ModeEnum; assert_SafeAltitude : bool);
+node SystemModeSupervisor(stateVectorIn : StateVectorPayload)
+returns (commandedModeOut : ModeEnum; assert_StateVariable_Beta_Bound : bool);
 var
     state : ModeEnum;
 let
-    assert_SafeAltitude = airDataIn.altitude_agl_m >= 10.0;
+    assert_StateVariable_Beta_Bound = stateVectorIn.StateVariable_Beta >= 10.0;
     automaton SupervisorFSM
         state Standby:
-            unless if (airDataIn.airspeed_kts >= 45.0) restart ActiveFlight;
+            unless if (stateVectorIn.StateVariable_Alpha >= 45.0) restart ActiveState;
             let commandedModeOut = MODE_STANDBY; tel
-        state ActiveFlight:
-            unless if (airDataIn.altitude_agl_m < 15.0) restart SafeRTL;
+        state ActiveState:
+            unless if (stateVectorIn.StateVariable_Beta < 15.0) restart Fallback_Action_01;
             let commandedModeOut = MODE_ACTIVE; tel
-        state SafeRTL:
-            let commandedModeOut = MODE_SAFE_RTL; tel
+        state Fallback_Action_01:
+            let commandedModeOut = MODE_FALLBACK_01; tel
     returns ..;
 tel
 ```
@@ -394,21 +460,21 @@ SPARK Ada 2014 is a formally verifiable subset of Ada based on **Hoare logic** a
 - `Depends => ...`: Information flow dependency contract specifying data lineage.
 
 ```ada
-package Flight_Management with SPARK_Mode is
-   type Speed_Knots is range 0 .. 600;
-   type Altitude_Feet is range -1000 .. 80000;
-   type Flight_Phase is (Pre_Flight, Climb, Cruise, Descent, Emergency_RTL);
+package State_Management with SPARK_Mode is
+   type State_Rate_Type is range 0 .. 600;
+   type State_Value_Type is range -1000 .. 80000;
+   type Operational_Phase is (Phase_Init, Phase_Armed, Phase_Active, Phase_Degraded, Fallback_Action_01);
 
-   procedure Update_Flight_State
-     (Airspeed    : in     Speed_Knots;
-      Altitude    : in     Altitude_Feet;
-      Phase       : in out Flight_Phase)
+   procedure Update_System_State
+     (StateVariable_Alpha : in     State_Rate_Type;
+      StateVariable_Beta  : in     State_Value_Type;
+      Phase               : in out Operational_Phase)
    with
      Global  => null,
-     Depends => (Phase =>+ (Airspeed, Altitude)),
-     Pre     => (if Phase = Cruise then Airspeed >= 120),
-     Post    => (if Altitude < 500 and then Phase'Old = Cruise then Phase = Emergency_RTL);
-end Flight_Management;
+     Depends => (Phase =>+ (StateVariable_Alpha, StateVariable_Beta)),
+     Pre     => (if Phase = Phase_Active then StateVariable_Alpha >= 120),
+     Post    => (if StateVariable_Beta < 500 and then Phase'Old = Phase_Active then Phase = Fallback_Action_01);
+end State_Management;
 ```
 
 #### 4.1.2 Absence of Run-Time Errors (AoRTE) Mathematical Proofs
@@ -440,17 +506,17 @@ mod verification {
 
     #[kani::proof]
     #[kani::unwind(5)]
-    fn verify_geofence_containment() {
-        let altitude: f32 = kani::any();
-        let airspeed: f32 = kani::any();
-        kani::assume(altitude >= 0.0 && altitude <= 10000.0);
-        kani::assume(airspeed >= 0.0 && airspeed <= 250.0);
+    fn verify_state_containment() {
+        let state_beta: f32 = kani::any();
+        let state_alpha: f32 = kani::any();
+        kani::assume(state_beta >= 0.0 && state_beta <= 10000.0);
+        kani::assume(state_alpha >= 0.0 && state_alpha <= 250.0);
 
         let mut controller = SystemSafetySupervisor::new();
-        let cmd = controller.step(altitude, airspeed);
+        let cmd = controller.step(state_beta, state_alpha);
 
-        if altitude < 15.0 {
-            assert_eq!(cmd.mode, FlightMode::EmergencyLanding);
+        if state_beta < 15.0 {
+            assert_eq!(cmd.mode, OperationalMode::Fallback_Action_01);
         }
     }
 }
@@ -522,7 +588,7 @@ flowchart TD
 ### 5.1 OpenModelica & Functional Mock-up Interface (FMI 2.0 / 3.0)
 
 #### 5.1.1 Acausal Multi-Physics Modeling with Differential Algebraic Equations (DAEs)
-Complex multi-domain cyber-physical systems (Aerospace, Automotive, Medical, Rail, Marine) operate across physical domains: plant physics, electrochemistry (lithium battery packs), electromechanics (brushless DC motors), and thermal dynamics.
+Complex multi-domain cyber-physical systems (High-Assurance Automation, Robotics, Energy Infrastructure, Rail, Marine) operate across physical domains: plant dynamics, electrochemistry (battery storage cells), electromechanics (actuator drives), and thermal dissipation.
 
 OpenModelica provides acausal, equation-based physical modeling governed by continuous Differential Algebraic Equations:
 $$F(t, x(t), \dot{x}(t), y(t), u(t)) = 0$$
@@ -541,10 +607,10 @@ sequenceDiagram
     participant Physics as "Tier 3 Physics Plant FMU (OpenModelica)"
 
     Master->>Cyber: Step discrete control law (dt = 10ms)
-    Cyber-->>Master: Commanded Actuator PWM & Rotor Thrust
+    Cyber-->>Master: Commanded Actuator PWM & Actuator_Output_01
     Master->>Physics: fmi2SetReal (Actuator Inputs)
     Master->>Physics: fmi2DoStep (t, dt = 10ms)
-    Physics-->>Master: Updated system telemetry (Attitude, Altitude, Velocities)
+    Physics-->>Master: Updated system telemetry (StateVariable_Alpha, StateVariable_Beta, Velocities)
     Master->>Cyber: Feed updated telemetry for next step
 ```
 
@@ -567,11 +633,11 @@ package CyberPhysical_Execution_Platform
 public
   with ARINC653;
 
-  virtual processor Flight_Partition
+  virtual processor Safety_Partition_Alpha
     properties
       ARINC653::Partition_Slots => (50ms);
       ARINC653::Execution_Time  => 40ms;
-  end Flight_Partition;
+  end Safety_Partition_Alpha;
 
   processor PowerPC_MultiCore
     properties
@@ -606,8 +672,8 @@ flowchart TD
         T4_QNX["QNX Neutrino (Microkernel ASIL D IPC)"]
         T4_VxWorks["VxWorks 653 (ARINC 653 Multi-Core)"]
         T4_ROS2["ROS 2 Real-Time (DDS Middleware and Micro-ROS)"]
-        T4_PX4["PX4 Autopilot (uORB Publish-Subscribe)"]
-        T4_cFS["NASA Core Flight System (OSAL and Software Bus)"]
+        T4_Kernel["Generic_RTOS_Kernel (Deterministic Task Scheduling)"]
+        T4_Micro["Deterministic Separation Microkernel (POSIX PSE51 Partitioning)"]
     end
 
     Tasks --> T4_Zephyr
@@ -615,14 +681,14 @@ flowchart TD
     Tasks --> T4_QNX
     Tasks --> T4_VxWorks
     Tasks --> T4_ROS2
-    Tasks --> T4_PX4
-    Tasks --> T4_cFS
+    Tasks --> T4_Kernel
+    Tasks --> T4_Micro
 
     IPC_Ports --> T4_Zephyr
     IPC_Ports --> T4_QNX
     IPC_Ports --> T4_ROS2
-    IPC_Ports --> T4_PX4
-    IPC_Ports --> T4_cFS
+    IPC_Ports --> T4_Kernel
+    IPC_Ports --> T4_Micro
 ```
 
 ---
@@ -635,18 +701,18 @@ flowchart TD
 - **DEAP Mapping:** SysML v2 `part def` components compile into Zephyr statically allocated threads (`K_THREAD_DEFINE`), message queues (`k_msgq`), and hardware device trees (`.dts`).
 
 #### 6.1.2 RTEMS (Real-Time Executive for Multiprocessor Systems)
-- **Architecture & Scoping:** Deterministic, open-source RTOS with extensive flight heritage across European Space Agency (ESA) and NASA satellite missions.
+- **Architecture & Scoping:** Deterministic, open-source RTOS with extensive operational heritage across high-assurance space and critical infrastructure missions.
 - **Standards & Multi-Core:** Full POSIX PSE51 and PSE52 profile conformance with deterministic Symmetric Multiprocessing (SMP) schedulers (Clustered Priority, EDF).
 - **DEAP Mapping:** Compiles SysML v2 periodic tasks to POSIX `pthread` constructs with static priority ceiling mutexes.
 
 #### 6.1.3 QNX Neutrino RTOS
-- **Architecture & Scoping:** Commercial, safety-certified microkernel operating system certified to **ISO 26262 ASIL D** and **IEC 62304 Class C**.
+- **Architecture & Scoping:** Commercial, safety-certified microkernel operating system certified to **ISO 26262 ASIL D** and **AssuranceLevel::Tier1..5**.
 - **Resilience & IPC:** True microkernel design where device drivers, networking stacks, and filesystems run entirely in isolated user-space memory partitions communicating via synchronous message passing (`MsgSend`, `MsgReceive`, `MsgReply`).
 - **DEAP Mapping:** SysML v2 port interactions synthesize into typed QNX resource managers and resilient pulse-channel message loops.
 
 #### 6.1.4 Wind River VxWorks 653
 - **Architecture & Scoping:** The global Cyber-Physical Systems gold standard for integrated modular Cyber-Physical Systems (IMA) conforming to **ARINC 653 Part 1 Supplement 5** with DO-178C DAL A certification evidence.
-- **Multi-Core Safety:** Certified under FAA **CAST-32A** / **AC 20-193** for multi-core processors, guaranteeing deterministic core interference isolation.
+- **Multi-Core Safety:** Certified under Multi-Core Safety Guidance **CAST-32A** / **AC 20-193** for multi-core processors, guaranteeing deterministic core interference isolation.
 - **DEAP Mapping:** SysML v2 partitions compile directly to VxWorks 653 XML module configuration descriptors and APEX process entry points.
 
 #### 6.1.5 ROS 2 (Robot Operating System 2)
@@ -654,15 +720,15 @@ flowchart TD
 - **Micro-ROS Integration:** Extends DDS communication down to microcontrollers with static memory footprints.
 - **DEAP Mapping:** SysML v2 `item def` schemas generate ROS 2 message definition files (`.msg`), and `port def` blocks generate publishers, subscribers, and ROS 2 lifecycle nodes.
 
-#### 6.1.6 PX4 Autopilot
-- **Architecture & Scoping:** Industry-standard open-source autonomous flight control software stack for drones and eVTOL platforms, running atop the NuttX POSIX RTOS.
-- **Internal Bus:** High-rate asynchronous publish-subscribe **uORB** message bus for sensor telemetry, state estimators (EKF2), and control allocation.
-- **DEAP Mapping:** SysML v2 system modes and safety supervisors compile to native PX4 system mode modules subscribing to uORB telemetry topics.
+#### 6.1.6 Generic RTOS Kernel (Generic_RTOS_Kernel)
+- **Architecture & Scoping:** Abstract deterministic real-time operating system kernel providing pre-emptive priority-based scheduling, static memory allocation, and zero dynamic heap requirement.
+- **Internal Bus:** High-rate asynchronous publish-subscribe message bus for sensor telemetry, state estimators, and actuator command allocation.
+- **DEAP Mapping:** SysML v2 system modes and safety supervisors compile to native task modules subscribing to state telemetry topics.
 
-#### 6.1.7 NASA Core Flight System (cFS)
-- **Architecture & Scoping:** NASA Goddard Space Flight Center's reusable SystemController software framework deployed on lunar orbiters, planetary rovers, and deep-space missions.
-- **Layered Decoupling:** Operating System Abstraction Layer (OSAL), Platform Support Package (PSP), and Core Flight Executive (cFE) Software Bus (SB).
-- **DEAP Mapping:** SysML v2 components generate complete cFS Applications with message IDs, command handlers, and software bus telemetry pipes.
+#### 6.1.7 Deterministic Separation Microkernel
+- **Architecture & Scoping:** Reusable high-assurance system software framework with strict spatial and temporal partition isolation.
+- **Layered Decoupling:** Operating System Abstraction Layer (OSAL), Platform Support Package (PSP), and Core Software Bus (SB).
+- **DEAP Mapping:** SysML v2 components generate complete isolated applications with message IDs, command handlers, and deterministic software bus pipes.
 
 ---
 
@@ -672,11 +738,11 @@ flowchart TD
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Zephyr RTOS** | Monolithic / Micro-configurable | ISO 26262, IEC 61508 (Safety WG) | Hardware MPU / User-space partitions | Fixed-Priority Preemptive / Cooperative | `k_msgq`, `k_fifo`, `k_sem` | Zephyr static threads & devicetrees |
 | **RTEMS** | Single Address Space / SMP | Space-Qualified (ECSS / NASA) | MMU/MPU partition support | Deterministic SMP, Clustered EDF | POSIX message queues, semaphores | POSIX `pthread` & rate monotonic tasks |
-| **QNX Neutrino** | Microkernel | ISO 26262 (ASIL D), IEC 62304 (Class C) | Full MMU Process Address Spaces | Priority-driven Preemptive + Adaptive | Synchronous `MsgSend` / `MsgReceive` | QNX Resource Managers & Channels |
+| **QNX Neutrino** | Microkernel | ISO 26262 (ASIL D), AssuranceLevel::Tier1..5 | Full MMU Process Address Spaces | Priority-driven Preemptive + Adaptive | Synchronous `MsgSend` / `MsgReceive` | QNX Resource Managers & Channels |
 | **VxWorks 653** | ARINC 653 Hypervisor / Microkernel | RTCA DO-178C (DAL A), CAST-32A | Strict ARINC 653 Spatial Isolation | ARINC 653 Major Time Frame Slicing | ARINC 653 Sampling & Queuing Ports | APEX processes & XML Module Descriptors |
 | **ROS 2** | Middleware layer over Linux/RTOS | Target-dependent (Apex.OS ASIL D) | OS-dependent memory model | Callback Groups & Static Single-Threaded | OMG DDS (Real-Time Publish-Subscribe) | ROS 2 Lifecycle Nodes & `.msg` files |
-| **PX4 Autopilot** | Modular Flight Stack on NuttX | ASTM F3269-17, SORA SAIL IV | NuttX MPU process isolation | Real-Time Priority Task Loop | Asynchronous uORB Publish-Subscribe | PX4 uORB modules & mode statecharts |
-| **NASA cFS** | Layered App Framework on OSAL | NASA Space Flight Standards | OSAL-managed memory boundaries | Priority-based periodic execution | cFE Software Bus (Zero-copy pipes) | cFS Applications & Command Handlers |
+| **Generic_RTOS_Kernel** | Modular Deterministic Kernel | AssuranceLevel::Tier1..5, ASTM F3269-17 | Hardware MPU process isolation | Real-Time Priority Task Loop | Asynchronous Publish-Subscribe | Generic RTOS task modules & mode statecharts |
+| **Separation Microkernel** | Layered App Framework on OSAL | High-Assurance Space Standards | OSAL-managed memory boundaries | Priority-based periodic execution | Core Software Bus (Zero-copy pipes) | Microkernel Applications & Command Handlers |
 
 ---
 
@@ -689,7 +755,7 @@ flowchart LR
     subgraph Regulatory_Domains ["Universal Regulatory Standards"]
         Aero["Aerospace: RTCA DO-178C / DO-330 / DO-331 / DO-333"]
         Auto["Automotive: ISO 26262:2018 (ASIL A - D)"]
-        Med["Medical: IEC 62304:2015 (Class A - C)"]
+        Med["High-Assurance Automation: AssuranceLevel::Tier1..5"]
         Rail["Rail: EN 50128:2011 / EN 50657 (SIL 1 - 4)"]
         Ind["Industrial: IEC 61508:2010 (SIL 1 - 4)"]
     end
@@ -724,11 +790,11 @@ flowchart LR
 
 | Industrial Domain | System Safety Standard | Software Development Standard | Tool Qualification Standard | Tool Classification Framework | Highest Safety Level |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Civil & Military Aviation** | SAE ARP4754A / ED-79A | RTCA DO-178C / EUROCAE ED-12C | **RTCA DO-330 / ED-215** | Tool Qualification Levels: **TQL-1** to **TQL-5** | **DAL A** (10^{-9}/\text{fh}) |
+| **High-Assurance Systems Engineering** | SAE ARP4754A / ED-79A | RTCA DO-178C / EUROCAE ED-12C | **RTCA DO-330 / ED-215** | Tool Qualification Levels: **TQL-1** to **TQL-5** | **DAL A** (10^{-9}/\text{fh}) |
 | **Model-Based Development** | DO-178C / ARP4754A | **RTCA DO-331 / ED-218** | RTCA DO-330 | Tool Qualification Levels: **TQL-1** to **TQL-5** | **DAL A** |
 | **Formal Methods** | DO-178C / ARP4754A | **RTCA DO-333 / ED-216** | RTCA DO-330 | Tool Qualification Levels: **TQL-1** to **TQL-5** | **DAL A** |
 | **Automotive Electronics** | **ISO 26262:2018** | ISO 26262 Part 6 (Software) | **ISO 26262 Part 8 (Clause 11)**| Tool Confidence Levels: **TCL 1, TCL 2, TCL 3** | **ASIL D** |
-| **Medical Devices** | ISO 14971 (Risk Mgmt) | **IEC 62304:2015 + AMD1:2015** | ISO TR 80002-2 (Tool Validation) | Software Safety Classes: **Class A, B, C** | **Class C** (Death/Serious Injury) |
+| **High-Assurance Automation** | ISO 14971 (Risk Mgmt) | **AssuranceLevel::Tier1..5** | ISO TR 80002-2 (Tool Validation) | Software Safety Classes: **Class A, B, C** | **Class C** (Severe Invariant Failure) |
 | **Railway Control & Signalling**| CENELEC EN 50126 | **EN 50128:2011 / EN 50657** | EN 50128 Section 6.7 | Tool Classes: **T1, T2, T3** | **SIL 4** |
 | **Industrial Automation** | **IEC 61508:2010** | IEC 61508 Part 3 (Software) | IEC 61508-3 Section 7.4.4 | Tool Classes: **T1, T2, T3** | **SIL 4** |
 
@@ -737,7 +803,7 @@ flowchart LR
 ### 7.2 Tool Qualification Level (TQL) Derivation & Equivalence Matrix
 
 Under RTCA DO-330 and DO-178C, a tool's **Tool Qualification Level (TQL)** is derived from the **Software DAL (DAL A through DAL D)** and the **Tool Criteria (Criteria 1, 2, or 3)**:
-- **Criteria 1:** A tool whose output is part of the airborne software and thus could insert an error (e.g., KCG code generator).
+- **Criteria 1:** A tool whose output is part of the safety-critical target software and thus could insert an error (e.g., KCG code generator).
 - **Criteria 2:** A tool that eliminates, reduces, or automates verification activities without independent verification (e.g., SPARK AoRTE prover).
 - **Criteria 3:** A tool that could fail to detect an error during verification (e.g., test execution framework, coverage analyzer).
 
@@ -758,7 +824,7 @@ $$\begin{aligned}
 
 ### 7.3 Automated Qualification Evidence Generation in DEAP
 
-The DEAP pipeline automatically generates compliance dossiers required by certification authorities (FAA, EASA, TÜV SÜD, FDA):
+The DEAP pipeline automatically generates compliance dossiers required by independent certification and regulatory authorities (National Competent Authorities, Notified Bodies, TÜV SÜD):
 1. **Tool Qualification Plan (TQP):** Formulates the operational context, environmental constraints, and intended use case.
 2. **Tool Operational Requirements (TOR):** Translates SysML v2 translation rules into testable operational requirements.
 3. **Tool Verification Results (TVR):** Executes exhaustive synthetic test suites across the compiler, recording 100% test pass evidence.

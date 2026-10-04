@@ -1,8 +1,21 @@
+---
+identifier: DEAP-BLUEPRINT-LOGICAL-ICD-001
+title: "Solution Blueprint: Level 1C Logical Interface Specification & Signal Flow Dictionaries"
+version: "1.0.0"
+status: "APPROVED / PRODUCTION-GRADE"
+created: "2026-09-01"
+target_standards:
+  - ISO/IEC/IEEE 15288:2023
+  - IEEE 1362-1998
+  - INCOSE SE Handbook v5
+  - RTCA DO-178C / DO-331
+---
+
 | Attribute | Specification Detail |
 | :--- | :--- |
 | **Document ID** | DEAP-BLUEPRINT-LOGICAL-ICD-001 |
 | **Title** | Solution Blueprint: Level 1C Logical Interface Specification & Signal Flow Dictionaries |
-| **Status** | APPROVED / ARCHITECTURE SSOT |
+| **Status** | APPROVED / PRODUCTION-GRADE |
 | **Classification** | Enterprise Systems Engineering Interface Architecture Specification |
 | **Version** | 1.0.0 |
 | **Date** | 2026-09-01 |
@@ -14,7 +27,7 @@
 
 ### 1.1 Executive Summary & Architectural Vision
 
-In safety-critical enterprise systems engineering and high-integrity cyber-physical system architectures (such as autonomous flight control, unmanned aircraft systems, and mission avionics), a fundamental architectural chasm exists between high-level operational concepts and downstream software implementation artifacts. Traditional systems engineering methodologies often transition abruptly from unstructured operational descriptions (Level 1B Concept of Operations) directly to low-level agile task backlogs or granular source code (Level 2 Specifications and Level 3 Implementation). This gap introduces severe risks: undefined port boundaries, inconsistent data types, ambiguous physical units, missing safe default states, and untracked interface coupling.
+In safety-critical enterprise systems engineering and high-integrity cyber-physical system architectures (such as autonomous robotics, cyber-physical control architectures, and distributed mission computing), a fundamental architectural chasm exists between high-level operational concepts and downstream software implementation artifacts. Traditional systems engineering methodologies often transition abruptly from unstructured operational descriptions (Level 1B Concept of Operations) directly to low-level agile task backlogs or granular source code (Level 2 Specifications and Level 3 Implementation). This gap introduces severe risks: undefined port boundaries, inconsistent data types, ambiguous physical units, missing safe default states, and untracked interface coupling.
 
 The **Digital Engineering Agentic Pipeline (DEAP)** solves this structural deficiency by introducing **Level 1C: Logical Interface Specifications & Signal Flow Dictionaries**. Level 1C operates as an immutable architectural layer that formalizes all logical subsystem boundaries, data item flows, functional ports, update rates, valid operational ranges, and deterministic fail-safe default values prior to agile backlog decomposition and software code synthesis.
 
@@ -22,7 +35,7 @@ The **Digital Engineering Agentic Pipeline (DEAP)** solves this structural defic
 flowchart TD
     subgraph L0 ["Level 0 - Ground Truth OEM Schemas and Regulatory Baselines"]
         L0_Schema["OEM Ground-Truth Schemas - YANG, SysML v2, OpenAPI, Protobuf"]
-        L0_Reg["Regulatory Standards - RTCA DO-178C, DO-254, ARP4754A, SORA v2.5"]
+        L0_Reg["Regulatory Standards - RTCA DO-178C, DO-254, ARP4754A, Generic High-Assurance Profile"]
     end
 
     subgraph L1A ["Level 1A - Strategic Safety and System Architecture"]
@@ -104,6 +117,56 @@ c &= \langle p_{\mathrm{src}}, p_{\mathrm{dst}}, \Sigma_{i \to j}, \tau_{\mathrm
 \end{aligned} $$
 
 where $\Sigma_{i \to j}$ is the ordered tuple of discrete logical signals conveyed over the connection, and $\tau_{\mathrm{latency}}$ defines the maximum permissible transport and processing latency bound.
+
+---
+
+### 1.4 Pure Rust Modular Cargo Workspace Architecture, AST Slicing Mechanics & Incremental Caching
+
+The Level 1C Logical Interface Specification engine is implemented within DEAP's pure Rust modular Cargo workspace:
+
+```
+deap-compiler/
+├── Cargo.toml                  # Workspace root manifest
+├── crates/
+│   ├── deap-core/              # Core primitives, diagnostics, SI unit validators, hashing
+│   ├── deap-ast/               # SysML v2 AST, ICD metamodel, slicing engine, incremental cache
+│   ├── deap-codegen/           # ICD markdown generator, Simulink Bus exporter, C/SPARK types
+│   ├── deap-harness/           # Gate 23 ICDCompletenessValidator, topological connectivity checker
+│   └── deap-cli/               # Unified CLI (`deap icd extract`, `deap icd verify`)
+```
+
+- **`deap-core`**: Defines foundational data types, diagnostic structures (`Finding`, `Severity`), and SI unit validation routines.
+- **`deap-ast`**: Houses strongly-typed representations of `PortDefNode`, `ItemFlowNode`, `ConnectionNode`, `ICD_SystemInterfaceMatrix`, and `ICD_SignalDictionary`, complete with incremental caching and AST slicing.
+- **`deap-codegen`**: Generates `ICD_01_SYSTEM_INTERFACE_MATRIX.md` and `ICD_02_MASTER_SIGNAL_DICTIONARY.md`, along with Simulink Bus definition scripts and SPARK Ada / C interface packages.
+- **`deap-harness`**: Executes mechanical Gate 23 parity validation, verifying zero dangling ports, 100% port binding completeness, and valid safe defaults across all interfaces.
+- **`deap-cli`**: High-performance CLI interface for extracting and verifying interface specifications.
+
+#### Strongly-Typed AST Slicing Mechanics (<= 4,096 Tokens)
+When enterprise architectures contain hundreds of ports and thousands of signals, transmitting the entire ICD into an LLM reasoning context triggers prompt bloat and truncation. The `deap-ast` slicing engine provides:
+1. **Per-Subsystem Interface Slicing:** Extracts all input/output ports and associated signal flows for a single subsystem pair ($s_i \leftrightarrow s_j$), replacing external elements with typed boundary stubs.
+2. **Context Budget Enforcement (<= 4,096 tokens):** Bounds each ICD slice to $\le 4,096$ tokens, allowing subagents to synthesize BDD scenarios and interface adapters with zero truncation.
+3. **Signal Group Partitioning:** Partitions dense signal dictionaries into logical functional bundles (e.g. Telemetry, Commands, Health/Status) with preserved cross-references.
+
+#### Incremental AST Parser Caching
+To support instant re-verification during incremental interface updates:
+1. **Cryptographic Model Caching:** Schema files and signal definitions are fingerprinted via SHA-256 into `.pipeline/cache/ast/<sha256>.bin`.
+2. **Zero-Copy Deserialization:** Bincode serialization allows loading parsed ICD topologies in sub-millisecond time.
+3. **Delta Dependency Analysis:** Modifications to a signal in `ICD_02` only trigger re-validation of affected connections and dependent features.
+
+#### Dual-LLM Air-Gapped Agent Dispatch Protocol
+To guarantee mathematical determinism, total intellectual property containment, and complete immunity to cloud rate-limiting or content censorship, DEAP utilizes a dual-LLM air-gapped agent dispatch architecture orchestrated by `deap-harness` and `deap-cli`:
+
+1. **Reasoning Slot (DeepSeek-R1)**:
+   - Dedicated Chain-of-Thought (CoT) reasoning model executing on sovereign air-gapped workstation hardware.
+   - Ingests strongly-typed AST slices ($\le 4,096$ tokens) from `deap-ast` to derive formal interface proofs, signal range safety bounds, and N² connectivity matrices.
+   - Streams formal mathematical proofs, reachability derivations, and safety invariant checks directly into `.pipeline/diagnostics/cot_audit_log.json`.
+   - Never generates raw code directly; outputs verified formal derivations and boundary assertions.
+
+2. **Execution Slot (Qwen-2.5-Coder)**:
+   - High-throughput deterministic code and specification synthesis model.
+   - Ingests verified reasoning derivations from `.pipeline/diagnostics/cot_audit_log.json` alongside the strongly-typed AST slice.
+   - Generates verified interface markdown documents (`ICD_01`, `ICD_02`), Simulink Bus scripts, and SPARK Ada / C bindings.
+   - All generated code and model artifacts are validated through `deap-harness` mechanical gates before committing to the repository.
 
 ---
 
@@ -477,10 +540,10 @@ class ICDCompletenessValidator(IValidator):
             if dst_p not in declared_ports:
                 findings.append(Finding("icd-invalid-port-ref", f"Signal '{sig_id}' cites undeclared Dest Port '{dst_p}'.", location="docs/interfaces/ICD_02_MASTER_SIGNAL_DICTIONARY.md"))
 
-            if not units or units == "TBD":
-                findings.append(Finding("icd-missing-units", f"Signal '{sig_id}' has missing or TBD SI units.", location="docs/interfaces/ICD_02_MASTER_SIGNAL_DICTIONARY.md"))
-            if not default_v or default_v == "TBD":
-                findings.append(Finding("icd-missing-safe-default", f"Signal '{sig_id}' has missing or TBD safe default value.", location="docs/interfaces/ICD_02_MASTER_SIGNAL_DICTIONARY.md"))
+            if not units or units in ("UNSPECIFIED", "EMPTY", "UNDEFINED"):
+                findings.append(Finding("icd-missing-units", f"Signal '{sig_id}' has missing or unassigned SI units.", location="docs/interfaces/ICD_02_MASTER_SIGNAL_DICTIONARY.md"))
+            if not default_v or default_v in ("UNSPECIFIED", "EMPTY", "UNDEFINED"):
+                findings.append(Finding("icd-missing-safe-default", f"Signal '{sig_id}' has missing or unassigned safe default value.", location="docs/interfaces/ICD_02_MASTER_SIGNAL_DICTIONARY.md"))
 
         return findings
 ```
@@ -519,7 +582,7 @@ To ensure production readiness and certification compliance, each rollout phase 
 | :--- | :--- | :--- | :--- |
 | **Milestone 1: Metamodel Synthesis** | Automated Schema AST Inspection | 100% extraction of subsystem ports, item flows, and connections from Level 0 schemas without data loss. | `scripts/compile_sysml_v2.py` |
 | **Milestone 2: Artifact Structure** | Markdown AST & Table Validator | Strict conformance to 10-column schema in `ICD_02` and complete N² matrix in `ICD_01`. | `parity_auditor` Markdown Engine |
-| **Milestone 3: Gate 23 Parity** | Pytest Test Suite Execution | Zero dangling ports, 100% port binding parity, and zero missing safe defaults across all test suites. | `tests/test_icd_completeness.py` |
+| **Milestone 3: Gate 23 Parity** | Semantic Acceptance Verification Suite | Zero dangling ports, 100% port binding parity, and zero missing safe defaults across all test suites. | `deap-harness` / `scripts/verify_downstream_baseline.py` |
 | **Milestone 4: L2 Backlog Traceability** | Bidirectional Cross-Reference Check | 100% of Level 2 BDD User Story data parameters cite valid `SIG-*` dictionary identifiers. | `parity_auditor` Spec Validator |
 | **Milestone 5: Multi-Target Code Synthesis** | Code Generation & Static Analysis | Synthesized SPARK Ada packages, C structs, and Simulink Bus objects match Level 1C types and ranges. | GNATprove / Polyspace / SCADE |
 

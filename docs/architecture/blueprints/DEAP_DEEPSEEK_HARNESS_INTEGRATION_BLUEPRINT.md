@@ -1,3 +1,24 @@
+---
+identifier: DEAP-BLUEPRINT-HARNESS-001
+title: "DEAP Agent Orchestration Harness (DEAP-Harness) -- DeepSeek Engine Integration Blueprint"
+version: "1.1.0"
+status: "APPROVED / PRODUCTION-GRADE"
+created: "2026-09-22"
+classification: "Modular Pure Rust Cargo Workspace Architecture & Native Harness Orchestration"
+assurance_levels:
+  - "AssuranceLevel::Tier1"
+  - "AssuranceLevel::Tier2"
+  - "AssuranceLevel::Tier3"
+  - "AssuranceLevel::Tier4"
+  - "AssuranceLevel::Tier5"
+target_frameworks:
+  - "JARUS SORA v2.5"
+  - "ASTM F3269-17 RTA"
+  - "RTCA DO-178C"
+  - "RTCA DO-365B DAA"
+primary_technology_profile: "Modular Cargo Workspace: deap-core, deap-ast, deap-codegen, deap-harness, deap-cli"
+---
+
 # DEAP Agent Orchestration Harness (DEAP-Harness) -- DeepSeek Engine Integration Blueprint
 
 | Attribute | Specification Detail |
@@ -7,9 +28,9 @@
 
 > **Document Identifier:** `DEAP-BLUEPRINT-HARNESS-001`  
 > **Status:** `APPROVED / PRODUCTION-GRADE`  
-> **Classification:** `Hybrid Native C++20 Core Compiler (bin/deap) + Nuitka Standalone Binary (bin/deap-harness)`  
-> **Target Frameworks:** `JARUS SORA v2.5` | `ASTM F3269-17 RTA` | `RTCA DO-178C` | `RTCA DO-365B DAA`  
-> **Primary Technology Profile:** `Hybrid Release Architecture: Native C++20 Core Compiler (bin/deap) + Standalone Nuitka Harness (bin/deap-harness)`
+> **Classification:** `Modular Pure Rust Cargo Workspace Architecture & Native Harness Orchestration`  
+> **Target Frameworks:** `JARUS SORA v2.5` | `ASTM F3269-17 RTA` | `RTCA DO-178C` | `RTCA DO-365B DAA` | `AssuranceLevel::Tier1..5`  
+> **Primary Technology Profile:** `Modular Cargo Workspace: deap-core, deap-ast, deap-codegen, deap-harness, deap-cli`
 
 ---
 
@@ -17,9 +38,12 @@
 
 The **DEAP Agent Orchestration Harness (`DEAP-Harness`)**, powered by the **DEAP-Seek Agent Engine**, establishes a unified, open-source, air-gapped agentic orchestration framework for the Digital Engineering Agent Platform (DEAP).
 
-Formally updated to a **Hybrid Commercial Market Release Architecture**, the platform decouples into two standalone compiled native binaries operating across a clean inter-process boundary:
-1. **Deterministic Core Specification Compiler (`bin/deap`)**: Written in modern C++20 for lightning-fast, zero-dependency schema parsing, formal AST model checks (Checks 10–30), and ConOps synthesis.
-2. **Agentic Orchestration Harness (`bin/deap-harness`)**: Written in Python and compiled via Nuitka into a standalone native machine code binary, managing asynchronous inference streaming, provider adapters (vLLM, Ollama, SGLang), Dual-LLM Chain-of-Thought (CoT) extraction (DeepSeek-R1 `<think>` to DeepSeek-V3 execution), and subagent supervision.
+Formally architected as a **Modular Pure Rust Cargo Workspace Architecture**, the platform organizes compilation, strongly-typed AST slicing (<= 4,096 tokens), and dual-LLM agentic orchestration across five cohesive crates:
+1. **`deap-core`**: Core systems engineering metamodel abstractions, AST traits, and formal assurance level definitions (`AssuranceLevel::Tier1..5`).
+2. **`deap-ast`**: Strongly-typed SysML v2 AST parsing, semantic model validation (Checks 10--30), and bounded AST context slicing ($\le 4,096$ tokens per dispatch).
+3. **`deap-codegen`**: Deterministic code synthesis, BDD scenario generation, and formal contract emitter engines.
+4. **`deap-harness`**: High-performance asynchronous execution engine managing local inference providers, Dual-LLM Chain-of-Thought (CoT) extraction (DeepSeek-R1 `<think>` reasoning slot streaming to `.pipeline/diagnostics/cot_audit_log.json`), and Qwen-2.5-Coder execution slot coordination.
+5. **`deap-cli`**: Consolidated command-line entrypoint (`bin/deap-harness`) providing turnkey multi-pipeline execution (`deap-harness run`).
 
 This architecture ties **Pipeline 0 (Pre-Spec Safety Engineering)**, **Pipeline 1 (Agile Backlog Projection)**, and **Pipeline 2 (TDD Code Synthesis)** into an end-to-end, autonomous, self-hosted engineering pipeline with enterprise-grade commercial IP protection and zero customer-visible source code.
 
@@ -28,28 +52,16 @@ flowchart TD
     subgraph ClientLayer["Operator and Environment Tier"]
         direction TB
         InputIntent["Customer System Architecture / SysML v2 AST"]
-        SecureLab["Defense and Aerospace Air-Gapped Facility"]
+        SecureLab["High-Assurance Air-Gapped Sovereign Facility"]
     end
 
-    subgraph BinaryHarness["Agentic Orchestration Binary (bin/deap-harness - Compiled Nuitka Standalone)"]
+    subgraph CargoWorkspace["Modular Rust Cargo Workspace Engine (bin/deap-harness)"]
         direction TB
-        HarnessCLI["Harness CLI and JSON-RPC Controller"]
-        CoTEngine["Dual-LLM Engine (DeepSeek-R1 CoT Extractor to DeepSeek-V3 Execution)"]
-        ProviderBridge["Air-Gapped Local Inference Engine (vLLM / Ollama / SGLang)"]
-        SubagentRunner["Context-Isolated Subagent Dispatcher and Process Supervisor"]
-    end
-
-    subgraph ProcessBoundary["Inter-Process Boundary (IPC Protocol)"]
-        direction LR
-        IPCPipe["CLI Execution and JSON-RPC over stdin/stdout"]
-    end
-
-    subgraph BinaryCore["Core Compiler Binary (bin/deap - Compiled Native C++20)"]
-        direction TB
-        CoreParser["C++20 AST Metamodel and Schema Parser"]
-        ChecksEngine["Formal Checks 10-30 Verification Engine"]
-        ConOpsSynthesizer["ConOps and Safety Spec Synthesizer"]
-        ArtifactWriter["Deterministic Artifact and Contract Generator"]
+        HarnessCLI["deap-cli: CLI and Pipeline Controller"]
+        ASTSlicer["deap-ast: AST Parser, Checks 10-30, and AST Slicer (<= 4,096 tokens)"]
+        DualEngine["deap-harness: Dual-LLM Engine (DeepSeek-R1 CoT to Qwen-2.5-Coder)"]
+        ProviderBridge["deap-harness: Air-Gapped Local Inference (vLLM / Ollama)"]
+        CodeGen["deap-codegen: Deterministic Code & Contract Emitter"]
     end
 
     subgraph PipelineOutputs["Pipeline Artifacts and Backlog"]
@@ -57,23 +69,17 @@ flowchart TD
         P0["Pipeline 0: Pre-Spec Safety Artifacts"]
         P1["Pipeline 1: Agile Projection (Epics, Features, BDD User Stories)"]
         P2["Pipeline 2: TDD Code Synthesis (Implementation Engine)"]
-        AuditLog[".pipeline/diagnostics/cot_audit_log.json (Audit Evidence Log)"]
+        AuditLog[".pipeline/diagnostics/cot_audit_log.json (CoT Audit Log)"]
     end
 
     InputIntent --> HarnessCLI
-    HarnessCLI --> CoTEngine
-    CoTEngine <--> ProviderBridge
+    HarnessCLI --> ASTSlicer
+    ASTSlicer --> DualEngine
+    DualEngine <--> ProviderBridge
     ProviderBridge <--> SecureLab
-    CoTEngine --> AuditLog
-
-    HarnessCLI --> SubagentRunner
-    SubagentRunner --> IPCPipe
-    IPCPipe --> CoreParser
-    CoreParser --> ChecksEngine
-    ChecksEngine --> ConOpsSynthesizer
-    ConOpsSynthesizer --> ArtifactWriter
-
-    ArtifactWriter --> P0
+    DualEngine --> AuditLog
+    DualEngine --> CodeGen
+    CodeGen --> P0
     P0 -->|"pipeline0_handoff_contract.json"| P1
     P1 -->|"Backlog Sync"| P2
 ```
@@ -83,10 +89,10 @@ flowchart TD
 ## 2. Core Architectural Objectives
 
 1. **Air-Gapped & Off-Grid Defense Operations**:
-   Enable aerospace, defense, and urban air mobility (UAM) organizations operating under DO-178C / DO-254 or SORA SAIL High-Risk categories to execute complete DEAP pipelines in 100% air-gapped, classified labs without transmitting proprietary flight control laws, CONOPS, or safety statecharts to cloud LLM endpoints.
+   Enable high-assurance organizations operating under DO-178C / DO-254 or SORA SAIL High-Risk categories to execute complete DEAP pipelines in 100% air-gapped labs without transmitting proprietary control laws, CONOPS, or safety statecharts to cloud LLM endpoints.
 
 2. **Deterministic Chain-of-Thought (CoT) Safety Audit Evidence**:
-   Automatically capture and archive raw DeepSeek-R1 reasoning traces (`<think>...</think>`) into `.pipeline/diagnostics/cot_audit_log.json`. Every safety constraint ($SC-1..N$), System-Theoretic Process Analysis (STPA) Unsafe Control Action ($UCA-1..N$), and Run-Time Assurance (RTA) switching threshold is backed by immutable, traceable LLM reasoning evidence for FAA/EASA regulatory reviews.
+   Automatically capture and archive raw DeepSeek-R1 reasoning traces (`<think>...</think>`) into `.pipeline/diagnostics/cot_audit_log.json`. Every safety constraint ($SC-1..N$), System-Theoretic Process Analysis (STPA) Unsafe Control Action ($UCA-1..N$), and Run-Time Assurance (RTA) switching threshold is backed by immutable, traceable LLM reasoning evidence for multi-authority regulatory reviews (AssuranceLevel::Tier1..5).
 
 3. **Autonomous End-to-End Pipeline State Machine**:
    Eliminate manual human context-switching between pipeline stages. `DEAP-Harness` orchestrates the handoff from Pipeline 0 (SysML v2 textual model and `pipeline0_handoff_contract.json`) to Pipeline 1 (Agile backlog generation) and Pipeline 2 (serial subagent RED-GREEN TDD code synthesis) with automated quality gate enforcement (`verify_model_coverage.py`, `verify_downstream_baseline.py`).
@@ -95,84 +101,88 @@ flowchart TD
 
 ## 3. System Architecture & Component Topology
 
-`DEAP-Harness` is structured into four primary subsystem modules:
+`DEAP-Harness` is structured into five cohesive Cargo workspace crates coordinating native execution across discrete token slots:
 
 ```mermaid
 flowchart LR
-    CLI["DEAP-Harness CLI (deap-harness run)"] --> ConfigLoader["Configuration and Profile Loader (deap_harness_config.yaml)"]
+    CLI["deap-cli (deap-harness run)"] --> ConfigLoader["Configuration & Profile Loader (deap_harness_config.yaml)"]
     ConfigLoader --> ProviderManager["Inference Provider Manager (Provider Abstraction)"]
-    ProviderManager --> DualEngine["Dual-LLM Engine (DeepSeek-R1 CoT + DeepSeek-V3 Tools)"]
+    ProviderManager --> ASTSlicer["deap-ast: Strongly-Typed AST Slicer (<= 4,096 tokens)"]
+    ASTSlicer --> DualEngine["deap-harness: Dual-LLM Engine (DeepSeek-R1 CoT -> Qwen-2.5-Coder)"]
     DualEngine --> SubagentDispatcher["Context-Isolated Subagent Dispatcher"]
-    SubagentDispatcher --> GateEnforcer["Constitutional Quality Gate Enforcer"]
+    SubagentDispatcher --> GateEnforcer["deap-core: Constitutional Quality Gate Enforcer"]
 ```
 
-### 3.1 Dual-LLM Inference Pattern (DeepSeek-R1 + DeepSeek-V3)
+### 3.1 Dual-LLM Air-Gapped Agent Dispatch Pattern (DeepSeek-R1 -> Qwen-2.5-Coder)
 
-`DEAP-Harness` employs a **Dual-LLM Orchestration Pattern** to maximize reasoning depth while maintaining high-speed tool calling and JSON generation:
+`DEAP-Harness` establishes a deterministic **Dual-LLM Air-Gapped Agent Dispatch** pattern that decouples deep mathematical reasoning from high-speed code synthesis:
 
-* **Reasoning Phase (DeepSeek-R1)**:
-  For complex safety engineering tasks (STPA hazard identification, SORA SAIL risk classification, SysML v2 statechart formalization), the harness routes the prompt to DeepSeek-R1. The engine extracts and logs the `<think>...</think>` block to the regulatory audit store.
-* **Execution & Tool Invocation Phase (DeepSeek-V3 / Coder)**:
-  The harness feeds the finalized reasoning state into DeepSeek-V3/Coder to generate valid AST JSON contracts, format Mermaid class diagrams, write clean Python/C++ code, and execute shell tools cleanly.
+1. **Reasoning Slot (DeepSeek-R1)**:
+   - **Role**: Mathematical, architectural, and safety invariant reasoning (STPA hazard analysis, SORA SAIL risk bounds, SysML v2 metamodel consistency, and temporal logic).
+   - **Streaming CoT Audit**: Emits raw `<think>...</think>` Chain-of-Thought tokens streamed directly to `.pipeline/diagnostics/cot_audit_log.json` with cryptographic SHA-256 verification.
+   - **Contract Synthesis**: Emits verified semantic specifications and JSON handoff contracts (`pipeline0_handoff_contract.json`).
 
-### 3.2 Native C++20 Core Compiler vs. Nuitka Python Harness Decoupling
+2. **Execution Slot (Qwen-2.5-Coder)**:
+   - **Role**: Deterministic code generation, BDD scenario realization, ROS 2 C++ / SPARK Ada 2014 implementation, and artifact packaging.
+   - **Bounded Context**: Ingests the finalized reasoning state along with bounded, strongly-typed AST slices (<= 4,096 tokens) partitioned by `deap-ast`.
+   - **High-Velocity Synthesis**: Runs with low temperature ($T = 0.1$) for deterministic, syntax-compliant code synthesis with zero hallucinated API methods.
 
-To guarantee both sub-millisecond deterministic model compilation and enterprise-grade intellectual property (IP) protection in commercial distribution, DEAP decouples orchestration into two dedicated native binaries operating across a strict inter-process boundary:
+### 3.2 Modular Cargo Workspace Architecture
+
+The DEAP platform transitions from legacy hybrid languages to a **Modular Pure Rust Cargo Workspace**, ensuring compile-time memory safety, thread safety, zero-cost abstractions, and sub-millisecond execution:
 
 ```mermaid
-flowchart LR
-    subgraph SubsystemB["Subsystem B: Agentic Orchestration Harness (bin/deap-harness)"]
+flowchart TD
+    subgraph CargoWorkspaceTree["Modular Rust Cargo Workspace (Cargo.toml)"]
         direction TB
-        PyHarness["Python + Nuitka Standalone Binary"]
-        InferenceStream["Async Inference Streaming"]
-        ProviderAdapters["Provider Adapters (vLLM, Ollama, SGLang)"]
-        DualLLMCoT["Dual-LLM CoT Extractor (DeepSeek-R1 to DeepSeek-V3)"]
-        SubagentSupervisor["Context-Isolated Subagent Runner"]
+        deap_cli["crate: deap-cli\nEntrypoint Binary (bin/deap-harness)\nTurnkey Pipeline Runner"]
+        deap_harness["crate: deap-harness\nRuntime Orchestration, Dual-LLM Engine\nLocal Inference Adapters (vLLM / Ollama)"]
+        deap_codegen["crate: deap-codegen\nDeterministic Code Generator\nContract & BDD Emitter"]
+        deap_ast["crate: deap-ast\nSysML v2 AST Metamodel, Checks 10-30\nBounded AST Slicer (<= 4,096 Tokens)"]
+        deap_core["crate: deap-core\nFundamental Primitives, AssuranceLevel::Tier1..5\nQuality Gate & Audit Traits"]
     end
 
-    subgraph IPCChannel["Inter-Process Communication Boundary"]
-        direction TB
-        CLICalls["Clean Subprocess CLI Execution"]
-        JSONRPC["JSON-RPC over stdin and stdout"]
-    end
-
-    subgraph SubsystemA["Subsystem A: Deterministic Specification Compiler (bin/deap)"]
-        direction TB
-        CppCore["Modern C++20 Native Compiled Binary"]
-        ASTEngine["AST Metamodel and Schema Parsing"]
-        Checks10to30["Formal Checks 10-30 Verification Engine"]
-        ConOpsModule["ConOps and Contract Assembly"]
-        FastExec["Sub-millisecond Execution (Zero Python Deps)"]
-    end
-
-    PyHarness --> InferenceStream
-    InferenceStream --> ProviderAdapters
-    ProviderAdapters --> DualLLMCoT
-    DualLLMCoT --> SubagentSupervisor
-    SubagentSupervisor --> CLICalls
-    SubagentSupervisor --> JSONRPC
-    CLICalls --> CppCore
-    JSONRPC --> CppCore
-    CppCore --> ASTEngine
-    ASTEngine --> Checks10to30
-    Checks10to30 --> ConOpsModule
-    ConOpsModule --> FastExec
+    deap_cli --> deap_harness
+    deap_cli --> deap_codegen
+    deap_harness --> deap_ast
+    deap_codegen --> deap_ast
+    deap_ast --> deap_core
+    deap_harness --> deap_core
+    deap_codegen --> deap_core
 ```
 
-#### 3.2.1 Subsystem A: Deterministic Specification Compiler (`bin/deap` in C++20)
-* **Core Responsibilities**: AST metamodel ingestion, formal verification Checks 10–30, ConOps assembly, and downstream handoff contract generation.
-* **Execution & Performance**: Sub-millisecond execution speed, minimal memory footprint, and deterministic validation across complex SysML v2 AST graphs.
-* **Zero Python Runtime Dependencies**: Completely free of Python runtime dependencies in the core engine; operates as a standalone statically/dynamically linked native executable.
-* **Upstream Source Maintenance**: Maintained in upstream (`src/*.cpp`, `include/*.hpp`) using clean, human-readable modern C++20 standards (concepts, ranges, `std::expected`, `std::format`) and full Doxygen comments.
+#### 3.2.1 Workspace Crate Breakdown
 
-#### 3.2.2 Subsystem B: Agentic Orchestration Harness (`bin/deap-harness` in Python + Nuitka)
-* **Core Responsibilities**: Asynchronous inference streaming, provider adapters (vLLM, Ollama, SGLang), Dual-LLM Chain-of-Thought (CoT) extraction (DeepSeek-R1 `<think>` to DeepSeek-V3 tool execution), and subagent supervision.
-* **Nuitka Native Compilation**: Authored in high-productivity Python and compiled via Nuitka into a standalone native machine code binary (`bin/deap-harness`).
-* **Commercial IP Protection**: Provides identical commercial IP protection as C++20 compilation, shipping 0 readable Python source code files to customers while retaining full C-extension performance.
+1. **`deap-core`**:
+   - Fundamental types, error taxonomies (`DeapError`), cryptographic hashing utilities, and abstract assurance definitions (`AssuranceLevel::Tier1` through `AssuranceLevel::Tier5`).
+   - Shared traits for pipeline stage transitions, AST node visitors, and audit record writers.
 
-#### 3.2.3 Inter-Process Communication (IPC) Protocol
-* **Clean Process Boundary**: Inter-process communication operates via clean CLI invocation (e.g. `bin/deap check`, `bin/deap compile`) and structured JSON-RPC over `stdin`/`stdout`.
-* **Robust Process Isolation**: Memory safety, signal handling, and execution lifecycles are decoupled; an agentic retry or inference stall never corrupts compiler state, and compiler diagnostics are piped deterministically as structured JSON.
+2. **`deap-ast`**:
+   - Strongly-typed SysML v2 textual model parser and KerML AST metamodel representation.
+   - Automated 22-gate mechanical parity validator enforcing Checks 10 through 30.
+   - **Strongly-Typed AST Slicer**: Context partitioner that slices complex, multi-thousand-node SysML v2 models into self-contained, semantically closed sub-graphs of $\le 4,096$ tokens for LLM context optimization.
+
+3. **`deap-codegen`**:
+   - Template and AST-driven code emitters for ROS 2 C++, PX4 Autopilot modules, SPARK Ada 2014, and Python.
+   - Deterministic markdown specification synthesizers (Epics, Features, BDD User Stories, Use Cases).
+
+4. **`deap-harness`**:
+   - Async runtime built on `tokio` managing local air-gapped inference endpoints (Ollama, vLLM).
+   - Dual-LLM agentic coordination engine streaming DeepSeek-R1 `<think>` traces to `.pipeline/diagnostics/cot_audit_log.json` and dispatching tasks to Qwen-2.5-Coder.
+   - Context-isolated subagent supervision, retry budgets, and error recovery policies.
+
+5. **`deap-cli`**:
+   - Turnkey CLI entrypoint producing the compiled native executable `bin/deap-harness`.
+   - Dispatches subcommands: `run`, `check`, `slice-ast`, `export-audit`, and `ui`.
+
+### 3.3 Strongly-Typed AST Slicing Mechanics ($\le 4,096$ Tokens)
+
+To prevent LLM context saturation and reasoning degradation during large-scale system synthesis, `deap-ast` enforces strongly-typed AST slicing:
+
+$$\text{AST}_{\text{slice}} = \text{Closure}(\mathcal{N}_{\text{target}}, \mathcal{E}_{\text{deps}}) \quad \text{such that} \quad |\text{Tokens}(\text{AST}_{\text{slice}})| \le 4096$$
+
+* **Semantic Closure Extraction**: For any target component, part definition, or action definition $\mathcal{N}_{\text{target}}$, the slicer traverses ports, bindings, and type hierarchies, extracting only necessary invariant boundaries.
+* **Bounded Context Allocation**: Every subagent dispatch receives exactly one slice (<= 4,096 tokens), guaranteeing deterministic attention and eliminating hallucinations caused by bloated prompt windows.
 
 ---
 
@@ -214,7 +224,7 @@ sequenceDiagram
         note over Harness,P2: Phase 3: Pipeline 2 TDD Code Synthesis
         loop Per Micro-Task Feature
             Harness->>P2: Dispatch Micro-Task Implementer (RED Phase)
-            P2-->>Harness: Failing BDD Unit Test Created
+            P2-->>Harness: Failing BDD Acceptance Test Created
             Harness->>P2: Dispatch Micro-Task Implementer (GREEN Phase)
             P2-->>Harness: Domain Code Written & Test Passing
         end
@@ -237,22 +247,22 @@ Every invocation managed by `DEAP-Harness` automatically generates a structured 
   "audit_metadata": {
     "execution_id": "EXEC-20260816-DEAPSEEK-001",
     "timestamp": "2026-08-16T22:14:00Z",
-    "model_reasoning_engine": "DeepSeek-R1-671B",
-    "tool_execution_engine": "DeepSeek-V3-671B",
+    "model_reasoning_engine": "deepseek-r1:70b-q4_K_M",
+    "tool_execution_engine": "qwen2.5-coder:32b-q4_K_M",
     "air_gapped_mode": true,
-    "inference_provider": "vllm_local_cluster"
+    "inference_provider": "local_ollama_rocm"
   },
   "pipeline_stage": "PIPELINE_0_STPA_HAZARD_ANALYSIS",
   "target_artifact": "docs/safety/STPA_MATRIX.md",
   "reasoning_trace": {
-    "raw_think_block": "Analyzing pitch command saturation under high-wind urban gusts (CONOPS Phase: Cruise/Inspection). STPA UCA-1 identifies provided-wrong-or-out-of-range pitch commands leading to Loss L-1 (UFIT). To enforce RTA safety net switching under ASTM F3269-17, pitch rate must be clamped between -15 deg and +25 deg before sending commands to PX4 actuator uORB topics.",
+    "raw_think_block": "Analyzing pitch command saturation under high-wind urban gusts (CONOPS Phase: Cruise/Inspection). STPA UCA-1 identifies provided-wrong-or-out-of-range pitch commands leading to Loss L-1 (UFIT). To enforce RTA safety net switching under ASTM F3269-17, pitch rate must be clamped between -15 deg and +25 deg before sending commands to actuator topics.",
     "extracted_safety_constraints": [
       {
         "id": "SC-1",
         "stpa_uca_ref": "UCA-1",
         "hazard_ref": "H-1",
         "derived_boundary": "pitch_deg >= -15.0 && pitch_deg <= 25.0",
-        "assurance_level": "DAL A / SAIL IV"
+        "assurance_level": "AssuranceLevel::Tier1"
       }
     ]
   },
@@ -271,22 +281,27 @@ Every invocation managed by `DEAP-Harness` automatically generates a structured 
 
 ```yaml
 version: "1.1"
-harness_branding: "DEAP-Harness / DEAP-Seek Engine"
+harness_branding: "DEAP-Harness / Pure Rust Engine"
 
 compiler:
-  binary_path: "bin/deap"
-  ipc_mode: "stdio_jsonrpc" # Options: stdio_jsonrpc, cli_exec
+  engine: "cargo_workspace"
+  crates: ["deap-core", "deap-ast", "deap-codegen", "deap-harness", "deap-cli"]
   timeout_ms: 5000
   strict_checks: true
 
 provider:
-  type: "vllm" # Options: vllm, sglang, ollama, custom_openai_compatible
-  base_url: "http://localhost:8000/v1"
+  type: "ollama" # Options: ollama, vllm, sglang
+  base_url: "http://localhost:11434"
   api_key: "DEAP_LOCAL_AIRGAPPED_TOKEN"
 
 models:
-  reasoning: "deepseek-r1-671b"
-  execution: "deepseek-v3-671b"
+  reasoning: "deepseek-r1:70b-q4_K_M"
+  execution: "qwen2.5-coder:32b-instruct-q4_K_M"
+
+ast_slicing:
+  enabled: true
+  max_slice_tokens: 4096
+  strategy: "semantic_closure"
 
 pipeline_settings:
   pipeline0:
@@ -296,7 +311,7 @@ pipeline_settings:
     reconcile_backlog_on_completion: true
   pipeline2:
     enforce_tdd_red_green: true
-    target_profile: "ros2_cpp" # Options: ros2_cpp, px4_module, python
+    target_profile: "ros2_cpp" # Options: ros2_cpp, spark_ada, python
 
 audit_logging:
   enabled: true
@@ -306,19 +321,19 @@ audit_logging:
 ### 6.2 CLI Usage Commands
 
 ```bash
-# 1. Execute full turnkey pipeline run via compiled harness binary invoking C++20 compiler
-./bin/deap-harness run --schema docs/architecture/blueprints/DEAP_MODEL.sysml --compiler-bin ./bin/deap --profile ros2_cpp
+# 1. Execute full turnkey pipeline run via native compiled deap-harness binary
+./bin/deap-harness run --schema docs/architecture/blueprints/DEAP_MODEL.sysml --profile ros2_cpp
 
-# 2. Invoke C++20 core compiler directly for deterministic AST validation and Checks 10-30
-./bin/deap check --schema docs/architecture/blueprints/DEAP_MODEL.sysml --strict
+# 2. Invoke deap-ast directly for deterministic AST validation and Checks 10-30
+cargo run -p deap-cli -- check --schema docs/architecture/blueprints/DEAP_MODEL.sysml --strict
 
-# 3. Compile ConOps and generate handoff contract via C++20 core
-./bin/deap compile --schema docs/architecture/blueprints/DEAP_MODEL.sysml --output pipeline0_handoff_contract.json
+# 3. Compile ConOps and generate handoff contract via deap-codegen
+cargo run -p deap-cli -- compile --schema docs/architecture/blueprints/DEAP_MODEL.sysml --output pipeline0_handoff_contract.json
 
 # 4. Launch air-gapped agentic orchestration harness with dual-LLM CoT capture
-./bin/deap-harness pipeline0 --sysml docs/architecture/blueprints/DEAP_MODEL.sysml --compiler-bin ./bin/deap
+./bin/deap-harness pipeline0 --sysml docs/architecture/blueprints/DEAP_MODEL.sysml
 
-# 5. Export DO-178C / SORA SAIL regulatory CoT audit evidence package
+# 5. Export regulatory CoT audit evidence package (AssuranceLevel::Tier1..5)
 ./bin/deap-harness export-audit --output-dir docs/safety/audit_evidence/
 ```
 
@@ -388,54 +403,31 @@ Embed the interactive Web GUI directly inside a VS Code editor tab alongside you
 #### 6.4.4 AI Agent Sidecar Protocol (Antigravity / Claude Code / Cursor / Gemini CLI)
 The `deap-harness` CLI exposes a local REST/WebSocket sidecar daemon (`http://localhost:8000`) that AI agent extensions inside VS Code call via standard process hooks to ingest `.pipeline/diagnostics/cot_audit_log.json` and execute subagent dispatches natively.
 
-### 6.5 Native Binary Build & Compilation Pipeline
+### 6.5 Modular Cargo Workspace Build & Compilation Pipeline
 
-The hybrid release architecture uses a dual compilation pipeline executed during upstream packaging:
+The pure Rust compiler and harness release architecture uses Cargo workspace compilation executed during upstream packaging:
 
-#### 6.5.1 C++20 Core Compiler Build (`bin/deap`)
-The core deterministic compiler is built with modern C++20 toolchains using CMake and Ninja, applying maximum optimizations and stripping debug symbols:
+#### 6.5.1 Workspace Compilation (`target/release/deap-harness`)
+All five crates (`deap-core`, `deap-ast`, `deap-codegen`, `deap-harness`, `deap-cli`) are compiled in release mode with Link-Time Optimization (LTO):
 
 ```bash
-# Configure release build with C++20, LTO, and maximum optimizations
-cmake -B build/compiler -G Ninja \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_CXX_STANDARD=20 \
-  -DCMAKE_CXX_FLAGS="-O3 -DNDEBUG -flto"
+# Configure release build with LTO and codegen optimization
+cargo build --workspace --release
 
-# Compile binary
-ninja -C build/compiler
+# Strip debug symbols for distribution
+strip -s target/release/deap-harness -o bin/deap-harness
 
-# Strip symbols for commercial distribution
-strip -s build/compiler/bin/deap
-
-# Stage into bin/ directory
-mkdir -p bin
-cp build/compiler/bin/deap bin/deap
+# Stage binary
+chmod +x bin/deap-harness
 ```
 
-#### 6.5.2 Nuitka Standalone Compilation (`bin/deap-harness`)
-The Python orchestration harness is compiled into a standalone native binary using Nuitka, bundling the Python runtime and dependencies into a single ELF/Mach-O binary with zero readable source:
-
+#### 6.5.2 Automated AST Slicing & Verification
 ```bash
-# Install harness dependencies and Nuitka compiler
-python3 -m pip install -r harness/requirements.txt nuitka
+# Verify AST slicing constraint (<= 4,096 tokens) across target schema models
+./bin/deap-harness check-ast --max-tokens 4096 --schema docs/architecture/blueprints/DEAP_MODEL.sysml
 
-# Compile standalone onefile native binary with stripped symbols
-python3 -m nuitka \
-  --standalone \
-  --onefile \
-  --assume-yes-for-downloads \
-  --output-dir=build/harness \
-  --output-filename=deap-harness \
-  --remove-output \
-  harness/main.py
-
-# Strip symbols
-strip -s build/harness/deap-harness
-
-# Stage into bin/ directory
-mkdir -p bin
-cp build/harness/deap-harness bin/deap-harness
+# Execute baseline conformance gate
+python3 scripts/verify_downstream_baseline.py --no-domain
 ```
 
 ---
@@ -446,19 +438,17 @@ To preserve enterprise intellectual property while providing maximum transparenc
 
 ### 7.1 Tier 1: Upstream Source Repository (`DEAP01-spec-core`)
 The upstream repository is the confidential engineering core containing full source code and engineering assets:
-* **C++20 Core Compiler Source**: Located in `src/*.cpp` and `include/*.hpp`, implementing the AST metamodel, SysML v2 parsing, and formal Checks 10–30 with clean Doxygen documentation.
-* **Agentic Harness Source**: Located in `harness/*.py`, containing the async provider drivers, Dual-LLM CoT extractor, and subagent state machine.
-* **Build System & Packaging Automation**: CMakeLists.txt, Ninja build scripts, and Nuitka packaging scripts.
-* **Test Suites & Continuous Integration**: Unit tests, formal verification suites, and CI pipelines validating compiler and harness invariants.
+* **Cargo Workspace Crates**: Located in `crates/deap-*` (`crates/deap-core`, `crates/deap-ast`, `crates/deap-codegen`, `crates/deap-harness`, `crates/deap-cli`), implementing the AST metamodel, SysML v2 parsing, AST slicing (<= 4,096 tokens), and dual-LLM orchestration with complete rustdoc documentation.
+* **Build System & Packaging Automation**: Workspace `Cargo.toml`, Cargo lockfiles, and packaging scripts.
+* **Test Suites & Continuous Integration**: Semantic acceptance tests, formal verification suites, and CI pipelines validating compiler and harness invariants.
 
 ### 7.2 Tier 2: Downstream Customer Deliverable (Zero-Source Binary Distribution)
 Downstream customer repositories and on-premises client distributions receive a clean, zero-source operational deployment:
-* **Binary Tier (`bin/`)**: Contains only the two pre-compiled native executables:
-  * `bin/deap` (Statically compiled C++20 Core Compiler, stripped)
-  * `bin/deap-harness` (Nuitka compiled standalone executable, stripped)
-* **Strict Zero-Source Invariant**: Downstream customer workspaces contain **exactly 0 `.py`, 0 `.cpp`, and 0 `.hpp` files**. Customers cannot view, decompile, or tamper with proprietary compiler or harness algorithms.
+* **Binary Tier (`bin/`)**: Contains only the pre-compiled native executable:
+  * `bin/deap-harness` (Statically compiled native Rust binary, stripped)
+* **Strict Zero-Source Invariant**: Downstream customer workspaces contain **exactly 0 `.rs`, 0 `.py`, 0 `.cpp`, and 0 `.hpp` files**. Customers cannot view, decompile, or tamper with proprietary compiler or harness algorithms.
 * **Compile-Time Hardening & Optimization**:
-  * Compiled with `-O3 -DNDEBUG -flto` (Link-Time Optimization) for optimal throughput and anti-reverse-engineering code flattening.
+  * Compiled with `opt-level = 3`, `lto = "fat"`, and `codegen-units = 1`.
   * Stripped of all debugging and symbol tables using `strip -s`.
 * **Plain Markdown Governance Layer**: Retained in plain human- and agent-readable Markdown so that AI coding agents (Antigravity, Claude Code, Cursor, Gemini CLI) can seamlessly parse and enforce constitutional requirements:
   * `.pipeline/constitution.md` (Constitutional rules, quality gates, and invariant definitions)
@@ -471,17 +461,17 @@ Downstream customer repositories and on-premises client distributions receive a 
 
 ## 8. Downstream Roadmap & Migration Schedule
 
-The transition to the hybrid commercial release architecture follows a four-phase rollout schedule:
+The transition to the modular Rust workspace release architecture follows a four-phase rollout schedule:
 
 | Phase | Milestone | Scope & Deliverables | Verification Gate |
 | :--- | :--- | :--- | :--- |
-| **Phase 1** | **Dual-Binary Architecture & IPC Protocol Specification** | Formalize CLI and JSON-RPC over `stdin`/`stdout` schema; define error codes, timeout semantics, and contract handoff boundaries between `bin/deap-harness` and `bin/deap`. | Protocol schema test suite passes; JSON-RPC schemas validated. |
-| **Phase 2** | **C++20 Core Engine Checks 10–30 & AST Metamodel Implementation** | Implement native C++20 AST parser, AST metamodel, formal Checks 10–30, and deterministic ConOps synthesis (`bin/deap`). Achieve sub-millisecond execution and complete Doxygen API docs. | 100% test coverage across Checks 10–30; `bin/deap check` exit code 0. |
-| **Phase 3** | **Nuitka Standalone Compilation & Harness Hardening** | Package Python orchestration harness with Nuitka into standalone native executable (`bin/deap-harness`). Validate async inference streaming, provider adapters (vLLM, Ollama, SGLang), and CoT extractor. | Single-binary standalone execution on clean test machine without Python runtime. |
-| **Phase 4** | **Zero-Source Downstream Packaging & Verification Pipeline** | Implement downstream installer (`scripts/install_pipeline.sh`) deploying only `bin/deap`, `bin/deap-harness`, and markdown governance. Verify downstream repository contains 0 `.py`, 0 `.cpp`, and 0 `.hpp` files. | Downstream zero-source audit passes; end-to-end pipeline run succeeds. |
+| **Phase 1** | **Modular Cargo Workspace & AST Slicing Specification** | Define workspace crates (`deap-core`, `deap-ast`, `deap-codegen`, `deap-harness`, `deap-cli`); formalize strongly-typed AST slicing (<= 4,096 tokens) and dual-LLM CoT audit contract. | Cargo workspace manifests validated; AST slicing schemas verified. |
+| **Phase 2** | **Core Engine Checks 10--30 & AST Metamodel Implementation** | Implement native SysML v2 AST parser, AST metamodel, formal Checks 10--30, and deterministic ConOps synthesis (`deap-ast`). Achieve sub-millisecond execution and complete rustdoc API docs. | 100% mechanical parity across Checks 10--30; `cargo check --workspace` passes. |
+| **Phase 3** | **Dual-LLM Air-Gapped Harness Hardening** | Implement async Tokio runtime, local provider adapters (Ollama, vLLM), DeepSeek-R1 CoT streaming to `.pipeline/diagnostics/cot_audit_log.json`, and Qwen-2.5-Coder execution slot (`deap-harness`). | End-to-end air-gapped run on clean workstation without external network access. |
+| **Phase 4** | **Zero-Source Downstream Packaging & Verification Pipeline** | Implement downstream installer (`scripts/install_pipeline.sh`) deploying only `bin/deap-harness` and markdown governance. Verify downstream repository contains 0 source code files. | Downstream zero-source audit passes; end-to-end pipeline run succeeds. |
 
 ### 8.1 Maintenance & Upstream Tracking
 1. **Repository Target**: Hosted centrally under `docs/architecture/blueprints/DEAP_DEEPSEEK_HARNESS_INTEGRATION_BLUEPRINT.md` in [`DEAP01-spec-core`](https://github.com/gintatkinson/DEAP01-spec-core).
 2. **Backlog Reconciliation**: Integrated into `DEAP_SPECIFICATIONS_SITEMAP.md` as the authoritative commercial market release architecture.
-3. **Execution Script**: Implementation entry points provided via `bin/deap` and `bin/deap-harness`, with installation automation managed via `scripts/install_pipeline.sh`.
+3. **Execution Script**: Implementation entry points provided via `bin/deap-harness`, with installation automation managed via `scripts/install_pipeline.sh`.
 

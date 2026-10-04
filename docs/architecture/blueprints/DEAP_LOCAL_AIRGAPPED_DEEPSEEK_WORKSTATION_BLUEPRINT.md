@@ -1,3 +1,25 @@
+---
+identifier: DEAP-BLUEPRINT-WORKSTATION-001
+title: "DEAP Local Air-Gapped DeepSeek Workstation Infrastructure Blueprint"
+version: "1.0.0"
+status: "APPROVED / PRODUCTION-GRADE"
+created: "2026-09-01"
+classification: "Air-Gapped Local Hardware Infrastructure & DeepSeek Engine Deployment"
+assurance_levels:
+  - "AssuranceLevel::Tier1"
+  - "AssuranceLevel::Tier2"
+  - "AssuranceLevel::Tier3"
+  - "AssuranceLevel::Tier4"
+  - "AssuranceLevel::Tier5"
+target_frameworks:
+  - "JARUS SORA v2.5"
+  - "ASTM F3269-17 RTA"
+  - "RTCA DO-178C"
+  - "AMD ROCm / HIP"
+  - "Linux Unified Memory"
+primary_hardware_target: "ASUS ProArt (AMD Ryzen AI Max+ 395 / Strix Halo, 128 GB Unified RAM, Ubuntu 26)"
+---
+
 # DEAP Local Air-Gapped DeepSeek Workstation Infrastructure Blueprint
 
 | Attribute | Specification Detail |
@@ -15,12 +37,16 @@
 
 ## 1. Executive Summary & System Vision
 
-The **Digital Engineering Agent Platform (DEAP)** requires a sovereign, deterministic, and fully air-gapped execution environment to synthesize safety-critical systems, avionic architectures, and formal software components under **RTCA DO-178C (DAL A/B)**, **ASTM F3269-17 Run-Time Assurance (RTA)**, and **JARUS SORA v2.5 (SAIL II–VI)** mandates.
+The **Digital Engineering Agent Platform (DEAP)** requires a sovereign, deterministic, and fully air-gapped execution environment to synthesize safety-critical systems, formal architectures, and verifiable software components under **RTCA DO-178C (DAL A/B)**, **ASTM F3269-17 Run-Time Assurance (RTA)**, and abstract **AssuranceLevel::Tier1..5** compliance mandates.
 
-Cloud-hosted Large Language Model (LLM) endpoints introduce operational hazards into defense and aerospace certification lifecycles:
-1. **Proprietary Data Exfiltration**: Transmission of confidential flight control laws, CONOPS, and system safety architectures across external networks violates classified and ITAR/EAR defense boundaries.
+Cloud-hosted Large Language Model (LLM) endpoints introduce operational hazards into high-assurance system certification lifecycles:
+1. **Proprietary Data Exfiltration**: Transmission of confidential control laws, CONOPS, and system safety architectures across external networks violates classified and sovereign boundaries.
 2. **API Non-Determinism & Drift**: Unannounced upstream model updates degrade reasoning reproducibility, invalidating regulatory validation baselines.
 3. **Network Latency & Flakiness**: Cloud-dependent multi-pipeline agent dispatches suffer from rate-limiting, socket disconnects, and non-deterministic response latencies.
+
+To eliminate these vulnerabilities, DEAP codifies a **Dual-LLM Air-Gapped Agent Dispatch** pattern orchestrated by modular Cargo workspace crates (`deap-core`, `deap-ast`, `deap-codegen`, `deap-harness`, `deap-cli`). Under this architecture:
+- **Reasoning Slot (DeepSeek-R1)**: Dedicated to mathematical and systems reasoning, generating structured Chain-of-Thought (CoT) traces streamed in real time to `.pipeline/diagnostics/cot_audit_log.json`.
+- **Execution Slot (Qwen-2.5-Coder)**: Dedicated to deterministic code generation and artifact synthesis, consuming bounded, strongly-typed AST slices (<= 4,096 tokens) partitioned by `deap-ast`.
 
 ```mermaid
 flowchart TD
@@ -87,7 +113,7 @@ flowchart LR
 
 | Subsystem Component | Architecture & Configuration | Technical Capabilities & DEAP Role |
 | :--- | :--- | :--- |
-| **CPU Complex** | 16-Core / 32-Thread AMD Zen 5 (Dual-CCD, 64 MB L3) | Orchestrates DEAP-Harness async queues, invokes compilation toolchains (GCC, Clang, GNAT), and executes automated test runners (GTest, pytest, AUnit). |
+| **CPU Complex** | 16-Core / 32-Thread AMD Zen 5 (Dual-CCD, 64 MB L3) | Orchestrates native deap-harness async queues, executes modular Cargo workspace builds (deap-core, deap-ast, deap-codegen, deap-harness, deap-cli), invokes compilation toolchains (Rustc/Cargo, GCC, Clang, GNAT), and executes semantic acceptance test runners and AST invariant gates. |
 | **GPU Complex** | 40 Compute Units AMD RDNA 3.5 (`Radeon 8060S` / `gfx1150` / `gfx1151`) | Executes matrix multiplications for transformer inference, PagedAttention kernels, and high-speed token generation via ROCm/HIP. |
 | **NPU Subsystem** | AMD XDNA 2 Neural Processing Unit | Delivers 50+ NPU TOPS for local background telemetry analysis, audio/speech interfaces, and low-power background health monitoring. |
 | **Memory Bus** | 256-bit LPDDR5X-8533 Unified Memory | Delivers **~273.0 GB/s** theoretical peak bandwidth across a shared physical address space accessible to both CPU and GPU without PCIe serialization. |
@@ -285,39 +311,39 @@ docker run -d \
 
 ## 5. Multi-Tier Dual-Engine Selection & Quantization
 
-The DEAP architecture employs a **Multi-Tier Dual-Engine Pattern** to optimize reasoning capability, code precision, and execution speed.
+The DEAP architecture employs a **Multi-Tier Dual-Engine Pattern** governed by the native atomic agent coordination harness (`deap-harness`) to optimize reasoning capability, code precision, and execution speed.
 
 ```mermaid
 flowchart TD
     subgraph DualEngineTopology["Multi-Tier Dual-Engine Architecture"]
-        subgraph Tier1["Tier 1: Deep Reasoning Engine (Pipeline 0)"]
-            R1["DeepSeek-R1-70B-GGUF (Q4_K_M)\nFootprint: ~43.2 GB | Context: 32k\nRole: STPA, SORA, RTA Invariants, SysML v2"]
+        subgraph Tier1["Tier 1: Deep Reasoning Engine (Pipeline 0 - DeepSeek-R1)"]
+            R1["DeepSeek-R1-70B-GGUF (Q4_K_M)\nFootprint: ~43.2 GB | Context: 32k\nRole: STPA, SORA, RTA Invariants, SysML v2\nStreams CoT to .pipeline/diagnostics/cot_audit_log.json"]
         end
 
-        subgraph Tier2["Tier 2: Code Synthesis & Agile Engine (Pipeline 1 & 2)"]
-            Coder["Qwen-2.5-Coder-32B-GGUF (Q4_K_M)\nFootprint: ~20.1 GB | Context: 32k\nRole: Agile Projection, ROS 2 C++, SPARK Ada, TDD"]
+        subgraph Tier2["Tier 2: Code Execution Engine (Pipeline 1 & 2 - Qwen-2.5-Coder)"]
+            Coder["Qwen-2.5-Coder-32B-GGUF (Q4_K_M)\nFootprint: ~20.1 GB | Context: 32k\nRole: Agile Projection, Code Synthesis\nConsumes AST Slices <= 4,096 Tokens"]
         end
 
         subgraph Tier3["Tier 3: Rapid Subagent Repair Engine (Hot-Fixes)"]
-            Repair["DeepSeek-R1-14B-GGUF (Q8_0 or Q4_K_M)\nFootprint: ~16.0 GB | Context: 16k\nRole: AST Lint Fixes, Failing Unit Test Triage"]
+            Repair["DeepSeek-R1-14B-GGUF (Q8_0 or Q4_K_M)\nFootprint: ~16.0 GB | Context: 16k\nRole: AST Lint Fixes, Failing Semantic Acceptance Triage"]
         end
     end
 
     P0_Req["Customer Intent / Safety Goals"] --> Tier1
     Tier1 -->|"pipeline0_handoff_contract.json\n(with raw think CoT trace)"| Tier2
-    Tier2 -->|"RED-GREEN Code & Tests"| TestGate{"Test Gate Pass?"}
+    Tier2 -->|"Synthesized Artifacts & Acceptance Specs"| TestGate{"Acceptance Gate Pass?"}
     TestGate -- "Pass" --> Release["Verified System Artifacts"]
     TestGate -- "Fail (Micro-Bug)" --> Tier3
-    Tier3 -->|"Patched AST / Test Fix"| TestGate
+    Tier3 -->|"Patched AST / Invariant Fix"| TestGate
 ```
 
 ### 5.1 Model Tier Allocation & Task Mapping
 
 | Model Tier & Checkpoint | Quantization & Size | DEAP Pipeline Phase & Responsibilities | Safety / Engineering Output |
 | :--- | :--- | :--- | :--- |
-| **Tier 1: DeepSeek-R1-70B** | GGUF `Q4_K_M` (~43.2 GB) | **Pipeline 0 (Pre-Spec Safety & Systems Architecture)**: Ingests unstructured customer intent; synthesizes CONOPS; derives 80 STPA Unsafe Control Actions (UCAs); computes JARUS SORA v2.5 Ground/Air Risk Classes (SAIL II–VI); derives ASTM F3269-17 RTA safety bounds; authors normative SysML v2 models. | `CONOPS.md`<br>`STPA_MATRIX.md`<br>`DEAP_MODEL.sysml`<br>`pipeline0_handoff_contract.json`<br>Raw `<think>` CoT Audit Log |
-| **Tier 2: Qwen-2.5-Coder-32B** | GGUF `Q4_K_M` (~20.1 GB) | **Pipeline 1 & Pipeline 2 (Agile Projection & TDD Synthesis)**: Ingests SysML AST; projects Agile backlog (Epics, Features, BDD User Stories); drives `reconcile_backlog.py`; executes RED-GREEN TDD code synthesis across ROS 2 C++, PX4 Autopilot C++, SPARK Ada 2014, Python, and UI dashboards. | `docs/epics/*`<br>`docs/features/*`<br>`docs/user-stories/*`<br>`src/*` (C++ / Ada / Python)<br>`tests/*` (GTest / AUnit / Pytest) |
-| **Tier 3: DeepSeek-R1-14B** | GGUF `Q8_0` (~16.0 GB) | **Subagent Micro-Task Triage & AST Repair**: Performs rapid AST syntax repairs, resolving single-function compiler warnings, fixing AST schema drift, and repairing isolated unit test assertions. | Hot-fix patches, syntax linter corrections. |
+| **Tier 1: DeepSeek-R1-70B** | GGUF `Q4_K_M` (~43.2 GB) | **Pipeline 0 (Pre-Spec Safety & Systems Architecture)**: Ingests unstructured customer intent; synthesizes CONOPS; derives 80 STPA Unsafe Control Actions (UCAs); computes AssuranceLevel::Tier1..5 compliance bounds; derives ASTM F3269-17 RTA safety bounds; authors normative SysML v2 models; streams reasoning trace to `.pipeline/diagnostics/cot_audit_log.json`. | `CONOPS.md`<br>`STPA_MATRIX.md`<br>`DEAP_MODEL.sysml`<br>`pipeline0_handoff_contract.json`<br>Raw `<think>` CoT Audit Log |
+| **Tier 2: Qwen-2.5-Coder-32B** | GGUF `Q4_K_M` (~20.1 GB) | **Pipeline 1 & Pipeline 2 (Agile Projection & Code Synthesis)**: Ingests strongly-typed AST slices (<= 4,096 tokens); projects Agile backlog (Epics, Features, BDD User Stories); drives `reconcile_backlog.py`; executes code synthesis across ROS 2 C++, SPARK Ada, Python, and UI dashboards with semantic acceptance coverage. | `docs/epics/*`<br>`docs/features/*`<br>`docs/user-stories/*`<br>`src/*` (C++ / Ada / Python)<br>`artifacts/verification/*` |
+| **Tier 3: DeepSeek-R1-14B** | GGUF `Q8_0` (~16.0 GB) | **Subagent Micro-Task Triage & AST Repair**: Performs rapid AST syntax repairs, resolving single-function compiler warnings, fixing AST schema drift, and repairing isolated semantic acceptance assertions. | Hot-fix patches, syntax linter corrections. |
 
 ### 5.2 Quantization Precision & Perplexity Analysis
 
@@ -431,12 +457,19 @@ pipeline_routing:
         enforce_schema: true
       worker_0b_stpa_safety:
         output_path: "docs/safety/STPA_MATRIX.md"
-        target_regulations: ["JARUS_SORA_V2.5", "ASTM_F3269_17", "RTCA_DO_178C"]
+        target_regulations: ["AssuranceLevel::Tier1", "AssuranceLevel::Tier2", "AssuranceLevel::Tier3", "AssuranceLevel::Tier4", "AssuranceLevel::Tier5", "JARUS_SORA_V2.5", "ASTM_F3269_17", "RTCA_DO_178C"]
         generate_cot_audit: true
       worker_0c_sysml_author:
         output_model_path: "docs/architecture/blueprints/DEAP_MODEL.sysml"
         output_handoff_contract: "pipeline0_handoff_contract.json"
         validate_ast_syntax: true
+
+  # Strongly-Typed AST Context Slicing Engine (deap-ast)
+  ast_slicing:
+    enabled: true
+    max_slice_tokens: 4096
+    strategy: "semantic_closure"
+    enforce_token_budget: true
 
   pipeline_1:
     name: "Agile Backlog & Specification Projection"
@@ -506,7 +539,7 @@ sequenceDiagram
     Harness->>Coder: Ingest SysML AST & Synthesize BDD Scenarios (Pipeline 1)
     Coder-->>Harness: Output Agile Backlog & Gherkin Features
     Harness->>Coder: Synthesize TDD Test & C++ Implementation (Pipeline 2)
-    Coder-->>Harness: Emits ROS 2 Node & GTest Suite
+    Coder-->>Harness: Emits ROS 2 Node & Semantic Acceptance Suite
     Harness->>Gate: Execute Local Build & Verification Gate
     Gate-->>Harness: Gate Passed (Exit Code 0)
     Harness-->>Op: Complete Sovereign Delivery & Verified Audit Package
@@ -514,14 +547,14 @@ sequenceDiagram
 
 ### 7.1 JARUS SORA v2.5 Ground & Air Risk Compliance
 
-Under JARUS SORA v2.5, operations in Specific Assurance and Integrity Levels (**SAIL II to VI**) require formal demonstration of Operational Safety Objectives (**OSO-01 through OSO-24**). 
+Under JARUS SORA v2.5, operations in Specific Assurance and Integrity Levels (**SAIL II-VI**) require formal demonstration of Operational Safety Objectives (**OSO-01 through OSO-24**). 
 * **Local Threat Modeling**: Tier 1 DeepSeek-R1-70B synthesizes containment loss scenarios, adjacent airspace infringements, and ground impact risk mitigations directly from local geographic vector data.
 * **Deterministic Risk Matrices**: Ground Risk Class (GRC) and Air Risk Class (ARC) reductions are derived with complete Chain-of-Thought transparency, eliminating black-box cloud model assertions.
 
 ### 7.2 ASTM F3269-17 Run-Time Assurance (RTA) Safety Bounds
 
 For non-deterministic or complex autonomy components, ASTM F3269-17 mandates a deterministic Run-Time Assurance (RTA) safety monitor:
-1. **Safety Boundary Synthesis**: DeepSeek-R1 derives explicit mathematical bounds for flight control envelopes:
+1. **Safety Boundary Synthesis**: DeepSeek-R1 derives explicit mathematical bounds for safety-critical state envelopes:
    $$\theta_{\text{min}} \le \theta(t) \le \theta_{\text{max}} \quad \forall t \ge 0$$
 2. **Switching Mechanism Generation**: Qwen-2.5-Coder-32B implements the non-bypassable RTA monitor in MISRA C++ / SPARK Ada, guaranteeing deterministic fallback to a Safe Recovery Maneuver (SRM) upon boundary violation.
 
@@ -664,8 +697,8 @@ Expected output includes the detailed `<think> ... </think>` block followed by t
 Run a complete DEAP multi-pipeline synthesis run locally:
 
 ```bash
-# Execute turnkey Pipeline 0 -> Pipeline 1 -> Pipeline 2 run
-python3 scripts/deap_harness.py run \
+# Execute turnkey Pipeline 0 -> Pipeline 1 -> Pipeline 2 run via native deap-harness binary
+./bin/deap-harness run \
   --config deap_harness_config.yaml \
   --schema docs/architecture/blueprints/DEAP_MODEL.sysml \
   --profile ros2_cpp \
@@ -696,4 +729,4 @@ python3 scripts/verify_downstream_baseline.py --no-domain
 
 1. **Repository Anchoring**: Maintained as an authoritative Tier-1 infrastructure blueprint under `docs/architecture/blueprints/DEAP_LOCAL_AIRGAPPED_DEEPSEEK_WORKSTATION_BLUEPRINT.md` in [`DEAP01-spec-core`](https://github.com/gintatkinson/DEAP01-spec-core).
 2. **Master Sitemap Registration**: Registered in `docs/architecture/DEAP_SPECIFICATIONS_SITEMAP.md` under Section 1 Authoritative Architecture & Blueprint Documents.
-3. **Execution Script Alignment**: Synchronized with `scripts/deap_harness.py` for automated hardware profile detection and GTT memory boundary validation.
+3. **Execution Script Alignment**: Synchronized with the native `deap-harness` binary and modular Cargo workspace crates (`deap-core`, `deap-ast`, `deap-codegen`, `deap-harness`, `deap-cli`) for automated hardware profile detection, AST slicing (<= 4,096 tokens), and GTT memory boundary validation.
