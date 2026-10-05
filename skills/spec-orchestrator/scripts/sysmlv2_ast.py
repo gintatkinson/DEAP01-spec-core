@@ -1,0 +1,3192 @@
+#!/usr/bin/env python3
+"""
+SysML v2 Abstract Syntax Tree (AST) Data Models & Parser
+
+Provides Canonical SysML v2 AST elements:
+- AttributeDef: Defines attributes (data elements / primitive types)
+- PortDef: Defines ports (flow / interaction interfaces)
+- ActionDef: Defines actions / methods
+- SysMLOperationDef: Defines operations with typed signatures and direction
+- SysMLCapabilityDef: Defines system/subsystem capability specifications
+- SysMLInteractionDef: Defines interaction sequences (lifelines, messages, triggers)
+- SysMLConstraintDef: Defines invariants and assertions (assert constraint / constraint def)
+- SysMLTestCaseDef: Defines test case definitions with subject and verification links
+- RequirementDef / SysMLRequirementDef: Defines requirement specifications
+- StateDef / SysMLStateDef: Defines statechart / state machine definitions
+- UseCaseDef / SysMLUseCaseDef: Defines formal use case definitions
+- ItemDef / SysMLItemDef: Defines data item / payload definitions
+- HazardDef / SysMLHazardDef: Defines hazard specifications with severity and port bindings
+- RiskDef / SysMLRiskDef: Defines risk specifications with severity and hazard references
+- ConnectionDef / SysMLConnectionDef: Defines connection specifications and topological links
+- PartDef / SysMLPart: Defines structural components (parts / blocks)
+- SysMLPackage: Top-level or nested SysML v2 package container
+- SysMLParser: Textual SysML v2 parser into canonical AST
+"""
+
+import os
+import re
+from dataclasses import dataclass, field
+from typing import List, Optional, Dict, Any, Union
+
+
+def format_doc_comment(doc_text: str, indent: int = 4) -> str:
+    """Safely formats single or multi-line docstring into SysML v2 doc block."""
+    if not doc_text:
+        return ""
+    pad = " " * indent
+    sanitized = doc_text.replace("*/", "* /")
+    lines = sanitized.splitlines()
+    if len(lines) == 1:
+        return f"{pad}doc /* {lines[0]} */\n"
+    formatted = [f"{pad}doc /* {lines[0]}"]
+    for line in lines[1:]:
+        formatted.append(f"{pad}       {line}")
+    formatted[-1] += " */"
+    return "\n".join(formatted) + "\n"
+
+
+@dataclass
+class AttributeDef:
+    name: str
+    type_name: str = "String"
+    doc: str = ""
+    default_value: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "type_name": self.type_name,
+            "doc": self.doc,
+            "default_value": self.default_value,
+        }
+
+    def to_sysml(self, indent: int = 4) -> str:
+        pad = " " * indent
+        doc_str = format_doc_comment(self.doc, indent)
+        def_str = f" = {self.default_value}" if self.default_value is not None else ""
+        return f"{doc_str}{pad}attribute {self.name} : {self.type_name}{def_str};"
+
+
+@dataclass
+class ItemFlowDef:
+    name: str
+    direction: str = "out"
+    item_type: str = "Item"
+    doc: str = ""
+    rate_hz: Optional[float] = None
+    unit: str = ""
+    valid_range: str = ""
+    default_value: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "direction": self.direction,
+            "item_type": self.item_type,
+            "doc": self.doc,
+            "rate_hz": self.rate_hz,
+            "unit": self.unit,
+            "valid_range": self.valid_range,
+            "default_value": self.default_value,
+        }
+
+    def to_sysml(self, indent: int = 4) -> str:
+        pad = " " * indent
+        doc_str = format_doc_comment(self.doc, indent)
+        dir_prefix = f"{self.direction} " if self.direction else ""
+        return f"{doc_str}{pad}{dir_prefix}flow {self.name} : {self.item_type};"
+
+
+@dataclass
+class PortDef:
+    name: str
+    type_name: str = "Port"
+    direction: str = "inout"
+    doc: str = ""
+    is_conjugated: bool = False
+    port_category: str = "DataPort"
+    protocol_family: str = ""
+    electrical_attributes: Dict[str, Any] = field(default_factory=dict)
+    item_flows: List[ItemFlowDef] = field(default_factory=list)
+
+    def __post_init__(self):
+        if self.type_name and self.type_name.startswith("~"):
+            self.is_conjugated = True
+            self.type_name = self.type_name.lstrip("~").strip() or "Port"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "type_name": self.type_name,
+            "direction": self.direction,
+            "doc": self.doc,
+            "is_conjugated": self.is_conjugated,
+            "port_category": self.port_category,
+            "protocol_family": self.protocol_family,
+            "electrical_attributes": dict(self.electrical_attributes or {}),
+            "item_flows": [f.to_dict() for f in (self.item_flows or [])],
+        }
+
+    def to_sysml(self, indent: int = 4) -> str:
+        pad = " " * indent
+        doc_str = format_doc_comment(self.doc, indent)
+        dir_prefix = f"{self.direction} " if self.direction and self.direction != "inout" else ""
+        conj_prefix = "~" if self.is_conjugated and not self.type_name.startswith("~") else ""
+        type_str = f"{conj_prefix}{self.type_name}" if self.type_name else "Port"
+        has_body = bool(self.item_flows or self.electrical_attributes)
+        if has_body:
+            lines = []
+            if doc_str:
+                lines.append(doc_str.rstrip("\n"))
+            lines.append(f"{pad}{dir_prefix}port {self.name} : {type_str} {{")
+            if self.protocol_family:
+                lines.append(f"{pad}    attribute protocol_family : String = \"{self.protocol_family}\";")
+            if self.port_category and self.port_category != "DataPort":
+                lines.append(f"{pad}    attribute port_category : String = \"{self.port_category}\";")
+            for k, v in (self.electrical_attributes or {}).items():
+                if k not in ("protocol_family", "port_category"):
+                    if isinstance(v, int):
+                        lines.append(f"{pad}    attribute {k} : Integer = {v};")
+                    elif isinstance(v, float):
+                        lines.append(f"{pad}    attribute {k} : Real = {v};")
+                    else:
+                        lines.append(f"{pad}    attribute {k} : String = \"{v}\";")
+            for f in (self.item_flows or []):
+                lines.append(f.to_sysml(indent + 4))
+            lines.append(f"{pad}}}")
+            return "\n".join(lines)
+        return f"{doc_str}{pad}{dir_prefix}port {self.name} : {type_str};"
+
+
+@dataclass
+class ActionDef:
+    name: str
+    doc: str = ""
+    in_params: List[AttributeDef] = field(default_factory=list)
+    out_params: List[AttributeDef] = field(default_factory=list)
+    parameters: List[AttributeDef] = field(default_factory=list)
+    performer: str = ""
+    performer_part: str = ""
+    allocation: str = ""
+    attributes: Dict[str, Any] = field(default_factory=dict)
+    attribute_defs: List[AttributeDef] = field(default_factory=list)
+    steps: List[str] = field(default_factory=list)
+    is_def: bool = True
+
+    def __post_init__(self):
+        if self.performer and not self.performer_part:
+            self.performer_part = self.performer
+        elif self.performer_part and not self.performer:
+            self.performer = self.performer_part
+        if self.allocation and not self.performer:
+            self.performer = self.allocation
+            self.performer_part = self.allocation
+        elif self.performer and not self.allocation:
+            self.allocation = self.performer
+        if not self.parameters and (self.in_params or self.out_params):
+            self.parameters = list(self.in_params or []) + list(self.out_params or [])
+        elif self.parameters and not self.in_params and not self.out_params:
+            for p in self.parameters:
+                d = getattr(p, "default_value", None) or ""
+                if str(d).lower() == "out":
+                    self.out_params.append(p)
+                else:
+                    self.in_params.append(p)
+
+    @property
+    def inputs(self) -> List[AttributeDef]:
+        return self.in_params
+
+    @property
+    def outputs(self) -> List[AttributeDef]:
+        return self.out_params
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "doc": self.doc,
+            "in_params": [p.to_dict() for p in (self.in_params or [])],
+            "out_params": [p.to_dict() for p in (self.out_params or [])],
+            "parameters": [p.to_dict() for p in (self.parameters or [])],
+            "inputs": [p.to_dict() for p in (self.in_params or [])],
+            "outputs": [p.to_dict() for p in (self.out_params or [])],
+            "performer": self.performer or self.performer_part,
+            "performer_part": self.performer_part or self.performer,
+            "allocation": self.allocation or self.performer,
+            "attributes": dict(self.attributes or {}),
+            "steps": list(self.steps or []),
+        }
+
+    def to_sysml(self, indent: int = 4) -> str:
+        pad = " " * indent
+        doc_str = format_doc_comment(self.doc, indent)
+        all_params = []
+        for p in (self.in_params or []):
+            all_params.append(f"in {p.name} : {p.type_name}")
+        for p in (self.out_params or []):
+            all_params.append(f"out {p.name} : {p.type_name}")
+        for p in (self.parameters or []):
+            if p not in (self.in_params or []) and p not in (self.out_params or []):
+                all_params.append(f"{p.name} : {p.type_name}")
+        params_str = f"({', '.join(all_params)})" if all_params else ""
+        kw = "action def" if self.is_def else "action"
+        has_body = bool(self.performer or self.attributes or self.attribute_defs or self.steps)
+        if has_body:
+            lines = []
+            if doc_str:
+                lines.append(doc_str.rstrip("\n"))
+            lines.append(f"{pad}{kw} {self.name}{params_str} {{")
+            perf = self.performer or self.performer_part
+            if perf:
+                lines.append(f"{pad}    perform {perf};")
+            for k, v in (self.attributes or {}).items():
+                if k not in ("performer", "performer_part", "allocation"):
+                    if isinstance(v, (int, float)):
+                        lines.append(f"{pad}    attribute {k} = {v};")
+                    else:
+                        lines.append(f"{pad}    attribute {k} = \"{v}\";")
+            for a in (self.attribute_defs or []):
+                lines.append(a.to_sysml(indent + 4))
+            for s in (self.steps or []):
+                lines.append(f"{pad}    step {s};")
+            lines.append(f"{pad}}}")
+            return "\n".join(lines)
+        return f"{doc_str}{pad}{kw} {self.name}{params_str};"
+
+
+@dataclass
+class SysMLOperationDef:
+    name: str
+    direction: str = "inout"
+    param_type: str = "String"
+    return_type: Optional[str] = None
+    doc: str = ""
+    parameters: List[AttributeDef] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "direction": self.direction,
+            "param_type": self.param_type,
+            "return_type": self.return_type,
+            "doc": self.doc,
+            "parameters": [p.to_dict() for p in (self.parameters or [])],
+        }
+
+    def to_sysml(self, indent: int = 4) -> str:
+        pad = " " * indent
+        doc_str = format_doc_comment(self.doc, indent)
+        if self.parameters:
+            param_strs = []
+            for p in self.parameters:
+                p_dir = getattr(p, "default_value", None) or self.direction
+                if p_dir not in ("in", "out", "inout"):
+                    p_dir = "in"
+                param_strs.append(f"{p_dir} {p.name} : {p.type_name}")
+            params_header = f"({', '.join(param_strs)})"
+        elif self.param_type and self.param_type != "None":
+            params_header = f"({self.direction} param : {self.param_type})"
+        else:
+            params_header = "()"
+        ret_str = f" : {self.return_type}" if self.return_type else ""
+        return f"{doc_str}{pad}operation {self.name}{params_header}{ret_str};"
+
+
+@dataclass
+class SysMLCapabilityDef:
+    name: str
+    description: str = ""
+    subsystem: str = ""
+    package_ref: str = ""
+    doc: str = ""
+    parent_package: str = ""
+
+    def __post_init__(self):
+        if not self.description and self.doc:
+            self.description = self.doc
+        elif not self.doc and self.description:
+            self.doc = self.description
+        if not self.parent_package and self.package_ref:
+            self.parent_package = self.package_ref
+        elif not self.package_ref and self.parent_package:
+            self.package_ref = self.parent_package
+        if not self.subsystem and self.parent_package:
+            self.subsystem = self.parent_package
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "doc": self.doc or self.description,
+            "description": self.description or self.doc,
+            "subsystem": self.subsystem,
+            "package_ref": self.package_ref,
+            "parent_package": self.parent_package or self.package_ref or self.subsystem,
+        }
+
+    def to_sysml(self, indent: int = 4) -> str:
+        pad = " " * indent
+        lines = []
+        doc_val = self.doc or self.description
+        doc_str = format_doc_comment(doc_val, indent)
+        if doc_str:
+            lines.append(doc_str.rstrip("\n"))
+        lines.append(f"{pad}capability def {self.name} {{")
+        subsys = self.subsystem or self.package_ref or self.parent_package
+        if subsys:
+            lines.append(f"{pad}    subsystem {subsys};")
+        lines.append(f"{pad}}}")
+        return "\n".join(lines)
+
+
+@dataclass
+class SysMLInteractionDef:
+    name: str
+    lifelines: List[str] = field(default_factory=list)
+    messages: List[str] = field(default_factory=list)
+    triggers: List[str] = field(default_factory=list)
+    doc: str = ""
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "lifelines": list(self.lifelines or []),
+            "messages": list(self.messages or []),
+            "triggers": list(self.triggers or []),
+            "doc": self.doc,
+        }
+
+    def to_sysml(self, indent: int = 4) -> str:
+        pad = " " * indent
+        lines = []
+        doc_str = format_doc_comment(self.doc, indent)
+        if doc_str:
+            lines.append(doc_str.rstrip("\n"))
+        lines.append(f"{pad}interaction {self.name} {{")
+        for ll in (self.lifelines or []):
+            lines.append(f"{pad}    lifeline {ll};")
+        for msg in (self.messages or []):
+            lines.append(f"{pad}    message {msg};")
+        for trg in (self.triggers or []):
+            lines.append(f"{pad}    trigger {trg};")
+        lines.append(f"{pad}}}")
+        return "\n".join(lines)
+
+
+@dataclass
+class SysMLConstraintDef:
+    name: str
+    expression: str = ""
+    parameters: List[str] = field(default_factory=list)
+    is_assertion: bool = False
+    doc: str = ""
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "expression": self.expression,
+            "parameters": list(self.parameters or []),
+            "is_assertion": self.is_assertion,
+            "doc": self.doc,
+        }
+
+    def to_sysml(self, indent: int = 4) -> str:
+        pad = " " * indent
+        lines = []
+        doc_str = format_doc_comment(self.doc, indent)
+        if doc_str:
+            lines.append(doc_str.rstrip("\n"))
+        kw = "assert constraint" if self.is_assertion else "constraint def"
+        params_str = f"({', '.join(self.parameters)})" if self.parameters else ""
+        if self.expression:
+            lines.append(f"{pad}{kw} {self.name}{params_str} {{")
+            lines.append(f"{pad}    {self.expression};")
+            lines.append(f"{pad}}}")
+        else:
+            lines.append(f"{pad}{kw} {self.name}{params_str};")
+        return "\n".join(lines)
+
+
+@dataclass
+class SysMLTestCaseDef:
+    name: str
+    subject_part: str = ""
+    verified_requirements: List[str] = field(default_factory=list)
+    objective: str = ""
+    test_steps: List[str] = field(default_factory=list)
+    doc: str = ""
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "subject_part": self.subject_part,
+            "verified_requirements": list(self.verified_requirements or []),
+            "objective": self.objective,
+            "test_steps": list(self.test_steps or []),
+            "doc": self.doc,
+        }
+
+    def to_sysml(self, indent: int = 4) -> str:
+        pad = " " * indent
+        lines = []
+        doc_str = format_doc_comment(self.doc, indent)
+        if doc_str:
+            lines.append(doc_str.rstrip("\n"))
+        lines.append(f"{pad}test case def {self.name} {{")
+        if self.subject_part:
+            lines.append(f"{pad}    subject {self.subject_part};")
+        for req in (self.verified_requirements or []):
+            lines.append(f"{pad}    verify requirement {req};")
+        if self.objective:
+            lines.append(f"{pad}    objective \"{self.objective}\";")
+        for step in (self.test_steps or []):
+            lines.append(f"{pad}    step {step};")
+        lines.append(f"{pad}}}")
+        return "\n".join(lines)
+
+
+@dataclass
+class RequirementDef:
+    name: str
+    doc: str = ""
+    req_id: str = ""
+    text: str = ""
+    assumes: List[str] = field(default_factory=list)
+    requires: List[str] = field(default_factory=list)
+    verified_by: List[str] = field(default_factory=list)
+    satisfied_by: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "req_id": self.req_id,
+            "doc": self.doc,
+            "text": self.text,
+            "assumes": list(self.assumes or []),
+            "requires": list(self.requires or []),
+            "verified_by": list(self.verified_by or []),
+            "satisfied_by": list(self.satisfied_by or []),
+        }
+
+    def to_sysml(self, indent: int = 4) -> str:
+        pad = " " * indent
+        lines = []
+        doc_str = format_doc_comment(self.doc, indent)
+        if doc_str:
+            lines.append(doc_str.rstrip("\n"))
+        lines.append(f"{pad}requirement def {self.name} {{")
+        if self.req_id:
+            lines.append(f"{pad}    id = \"{self.req_id}\";")
+        if self.text:
+            text_doc = format_doc_comment(self.text, indent + 4)
+            if text_doc:
+                lines.append(text_doc.rstrip("\n"))
+        for a in (self.assumes or []):
+            lines.append(f"{pad}    assume {a};")
+        for r in (self.requires or []):
+            lines.append(f"{pad}    require {r};")
+        for v in (self.verified_by or []):
+            lines.append(f"{pad}    verify by {v};")
+        for s in (self.satisfied_by or []):
+            lines.append(f"{pad}    satisfy by {s};")
+        lines.append(f"{pad}}}")
+        return "\n".join(lines)
+
+
+@dataclass
+class StateDef:
+    name: str
+    doc: str = ""
+    entry_action: Optional[str] = None
+    do_action: Optional[str] = None
+    exit_action: Optional[str] = None
+    transitions: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "doc": self.doc,
+            "entry_action": self.entry_action,
+            "do_action": self.do_action,
+            "exit_action": self.exit_action,
+            "transitions": list(self.transitions or []),
+        }
+
+    def to_sysml(self, indent: int = 4) -> str:
+        pad = " " * indent
+        lines = []
+        doc_str = format_doc_comment(self.doc, indent)
+        if doc_str:
+            lines.append(doc_str.rstrip("\n"))
+        lines.append(f"{pad}state def {self.name} {{")
+        if self.entry_action:
+            lines.append(f"{pad}    entry {self.entry_action};")
+        if self.do_action:
+            lines.append(f"{pad}    do {self.do_action};")
+        if self.exit_action:
+            lines.append(f"{pad}    exit {self.exit_action};")
+        for t in (self.transitions or []):
+            lines.append(f"{pad}    transition {t};")
+        lines.append(f"{pad}}}")
+        return "\n".join(lines)
+
+
+@dataclass
+class UseCaseDef:
+    name: str
+    doc: str = ""
+    subject: str = ""
+    actor: str = ""
+    actors: List[str] = field(default_factory=list)
+    objective: str = ""
+    includes: List[str] = field(default_factory=list)
+    extends: List[str] = field(default_factory=list)
+    steps: List[str] = field(default_factory=list)
+    preconditions: List[str] = field(default_factory=list)
+    postconditions: List[str] = field(default_factory=list)
+    attributes: Dict[str, Any] = field(default_factory=dict)
+    attribute_defs: List[AttributeDef] = field(default_factory=list)
+
+    def __post_init__(self):
+        if self.actor and self.actor not in self.actors:
+            self.actors.append(self.actor)
+        elif self.actors and not self.actor:
+            self.actor = self.actors[0]
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "doc": self.doc,
+            "subject": self.subject,
+            "actor": self.actor,
+            "actors": list(self.actors or ([self.actor] if self.actor else [])),
+            "objective": self.objective,
+            "includes": list(self.includes or []),
+            "extends": list(self.extends or []),
+            "steps": list(self.steps or []),
+            "sequence_steps": list(self.steps or []),
+            "preconditions": list(self.preconditions or []),
+            "postconditions": list(self.postconditions or []),
+            "attributes": dict(self.attributes or {}),
+        }
+
+    def to_sysml(self, indent: int = 4) -> str:
+        pad = " " * indent
+        lines = []
+        doc_str = format_doc_comment(self.doc, indent)
+        if doc_str:
+            lines.append(doc_str.rstrip("\n"))
+        lines.append(f"{pad}use case def {self.name} {{")
+        if self.subject:
+            lines.append(f"{pad}    subject {self.subject};")
+        for act in (self.actors or ([self.actor] if self.actor else [])):
+            lines.append(f"{pad}    actor {act};")
+        if self.objective:
+            lines.append(f"{pad}    objective \"{self.objective}\";")
+        for pre in (self.preconditions or []):
+            lines.append(f"{pad}    precondition {pre};")
+        for step in (self.steps or []):
+            lines.append(f"{pad}    step {step};")
+        for post in (self.postconditions or []):
+            lines.append(f"{pad}    postcondition {post};")
+        for inc in (self.includes or []):
+            lines.append(f"{pad}    include {inc};")
+        for ext in (self.extends or []):
+            lines.append(f"{pad}    extend {ext};")
+        for k, v in (self.attributes or {}).items():
+            if isinstance(v, (int, float)):
+                lines.append(f"{pad}    attribute {k} = {v};")
+            else:
+                lines.append(f"{pad}    attribute {k} = \"{v}\";")
+        for attr in (self.attribute_defs or []):
+            if attr.name not in self.attributes:
+                lines.append(attr.to_sysml(indent + 4))
+        lines.append(f"{pad}}}")
+        return "\n".join(lines)
+
+
+@dataclass
+class ItemDef:
+    name: str
+    doc: str = ""
+    attributes: List[AttributeDef] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "doc": self.doc,
+            "attributes": [a.to_dict() for a in (self.attributes or [])],
+        }
+
+    def to_sysml(self, indent: int = 4) -> str:
+        pad = " " * indent
+        lines = []
+        doc_str = format_doc_comment(self.doc, indent)
+        if doc_str:
+            lines.append(doc_str.rstrip("\n"))
+        lines.append(f"{pad}item def {self.name} {{")
+        for attr in (self.attributes or []):
+            lines.append(attr.to_sysml(indent + 4))
+        lines.append(f"{pad}}}")
+        return "\n".join(lines)
+
+
+@dataclass
+class HazardDef:
+    name: str
+    doc: str = ""
+    severity: int = 1
+    source_port: str = ""
+    target_port: str = ""
+    attributes: Dict[str, Any] = field(default_factory=dict)
+    attribute_defs: List[AttributeDef] = field(default_factory=list)
+    part_ref: str = ""
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "doc": self.doc,
+            "severity": self.severity,
+            "source_port": self.source_port,
+            "target_port": self.target_port,
+            "part_ref": self.part_ref,
+            "attributes": dict(self.attributes or {}),
+        }
+
+    def to_sysml(self, indent: int = 4) -> str:
+        pad = " " * indent
+        lines = []
+        doc_str = format_doc_comment(self.doc, indent)
+        if doc_str:
+            lines.append(doc_str.rstrip("\n"))
+        lines.append(f"{pad}hazard def {self.name} {{")
+        lines.append(f"{pad}    attribute severity : Integer = {self.severity};")
+        if self.part_ref:
+            lines.append(f"{pad}    attribute part_ref : String = \"{self.part_ref}\";")
+        if self.source_port:
+            lines.append(f"{pad}    attribute source_port : String = \"{self.source_port}\";")
+        if self.target_port:
+            lines.append(f"{pad}    attribute target_port : String = \"{self.target_port}\";")
+        for attr in (self.attribute_defs or []):
+            if attr.name not in ("severity", "part_ref", "source_port", "target_port"):
+                lines.append(attr.to_sysml(indent + 4))
+        lines.append(f"{pad}}}")
+        return "\n".join(lines)
+
+
+@dataclass
+class RiskDef:
+    name: str
+    doc: str = ""
+    severity: int = 1
+    source_port: str = ""
+    target_port: str = ""
+    attributes: Dict[str, Any] = field(default_factory=dict)
+    attribute_defs: List[AttributeDef] = field(default_factory=list)
+    hazard_ref: str = ""
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "doc": self.doc,
+            "severity": self.severity,
+            "source_port": self.source_port,
+            "target_port": self.target_port,
+            "hazard_ref": self.hazard_ref,
+            "attributes": dict(self.attributes or {}),
+        }
+
+    def to_sysml(self, indent: int = 4) -> str:
+        pad = " " * indent
+        lines = []
+        doc_str = format_doc_comment(self.doc, indent)
+        if doc_str:
+            lines.append(doc_str.rstrip("\n"))
+        lines.append(f"{pad}risk def {self.name} {{")
+        lines.append(f"{pad}    attribute severity : Integer = {self.severity};")
+        if self.hazard_ref:
+            lines.append(f"{pad}    attribute hazard_ref : String = \"{self.hazard_ref}\";")
+        if self.source_port:
+            lines.append(f"{pad}    attribute source_port : String = \"{self.source_port}\";")
+        if self.target_port:
+            lines.append(f"{pad}    attribute target_port : String = \"{self.target_port}\";")
+        for attr in (self.attribute_defs or []):
+            if attr.name not in ("severity", "hazard_ref", "source_port", "target_port"):
+                lines.append(attr.to_sysml(indent + 4))
+        lines.append(f"{pad}}}")
+        return "\n".join(lines)
+
+
+@dataclass
+class ConnectionDef:
+    name: str
+    source_port: str = ""
+    target_port: str = ""
+    doc: str = ""
+    severity: int = 1
+    source_part: str = ""
+    target_part: str = ""
+    item_flow_ref: str = ""
+    protocol: str = ""
+    latency_ms: Optional[float] = None
+    attributes: Dict[str, Any] = field(default_factory=dict)
+    attribute_defs: List[AttributeDef] = field(default_factory=list)
+    item_payload: str = ""
+    flow_properties: Dict[str, Any] = field(default_factory=dict)
+    is_flow: bool = False
+
+    def __post_init__(self):
+        if not self.source_part and self.source_port and "." in self.source_port:
+            self.source_part = self.source_port.split(".", 1)[0]
+        if not self.target_part and self.target_port and "." in self.target_port:
+            self.target_part = self.target_port.split(".", 1)[0]
+        if self.item_payload and not self.item_flow_ref:
+            self.item_flow_ref = self.item_payload
+        elif self.item_flow_ref and not self.item_payload:
+            self.item_payload = self.item_flow_ref
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "source_part": self.source_part,
+            "source_port": self.source_port,
+            "target_part": self.target_part,
+            "target_port": self.target_port,
+            "doc": self.doc,
+            "severity": self.severity,
+            "item_flow_ref": self.item_flow_ref,
+            "item_payload": self.item_payload or self.item_flow_ref,
+            "protocol": self.protocol,
+            "latency_ms": self.latency_ms,
+            "flow_properties": dict(self.flow_properties or {}),
+            "is_flow": self.is_flow,
+            "attributes": dict(self.attributes or {}),
+        }
+
+    def to_sysml(self, indent: int = 4) -> str:
+        pad = " " * indent
+        lines = []
+        doc_str = format_doc_comment(self.doc, indent)
+        if doc_str:
+            lines.append(doc_str.rstrip("\n"))
+        kw = "flow def" if self.is_flow else "connection def"
+        lines.append(f"{pad}{kw} {self.name} {{")
+        if self.source_port and self.target_port:
+            if self.is_flow:
+                lines.append(f"{pad}    flow from {self.source_port} to {self.target_port};")
+            else:
+                lines.append(f"{pad}    connect {self.source_port} to {self.target_port};")
+        if self.severity != 1:
+            lines.append(f"{pad}    attribute severity : Integer = {self.severity};")
+        if self.protocol and not any(a.name == "protocol" for a in (self.attribute_defs or [])):
+            lines.append(f"{pad}    attribute protocol : String = \"{self.protocol}\";")
+        if self.latency_ms is not None and not any(a.name in ("latency_ms", "latency") for a in (self.attribute_defs or [])):
+            lines.append(f"{pad}    attribute latency_ms : Real = {self.latency_ms};")
+        payload = self.item_flow_ref or self.item_payload
+        if payload and not any(a.name in ("item_flow_ref", "item_flow", "item_payload", "payload") for a in (self.attribute_defs or [])):
+            lines.append(f"{pad}    attribute item_flow_ref : String = \"{payload}\";")
+        for k, v in (self.flow_properties or {}).items():
+            if k not in ("protocol", "latency_ms", "latency", "item_flow_ref", "item_flow", "item_payload", "payload"):
+                if isinstance(v, (int, float)):
+                    lines.append(f"{pad}    attribute {k} = {v};")
+                else:
+                    lines.append(f"{pad}    attribute {k} = \"{v}\";")
+        for attr in (self.attribute_defs or []):
+            if attr.name not in ("source_port", "target_port", "severity", "protocol", "latency_ms", "latency", "item_flow_ref", "item_flow", "item_payload", "payload") and attr.name not in (self.flow_properties or {}):
+                lines.append(attr.to_sysml(indent + 4))
+        lines.append(f"{pad}}}")
+        return "\n".join(lines)
+
+
+# Type aliases for consistency
+SysMLRequirementDef = RequirementDef
+SysMLStateDef = StateDef
+SysMLUseCaseDef = UseCaseDef
+SysMLItemDef = ItemDef
+SysMLItemFlowDef = ItemFlowDef
+SysMLHazardDef = HazardDef
+SysMLRiskDef = RiskDef
+SysMLConnectionDef = ConnectionDef
+SysMLPortDef = PortDef
+
+
+@dataclass
+class PartDef:
+    name: str
+    doc: str = ""
+    attributes: List[AttributeDef] = field(default_factory=list)
+    ports: List[PortDef] = field(default_factory=list)
+    actions: List[ActionDef] = field(default_factory=list)
+    parts: List['PartDef'] = field(default_factory=list)
+    operations: List[SysMLOperationDef] = field(default_factory=list)
+    capabilities: List[SysMLCapabilityDef] = field(default_factory=list)
+    interactions: List[SysMLInteractionDef] = field(default_factory=list)
+    constraints: List[SysMLConstraintDef] = field(default_factory=list)
+    test_cases: List[SysMLTestCaseDef] = field(default_factory=list)
+    states: List[StateDef] = field(default_factory=list)
+    requirements: List[RequirementDef] = field(default_factory=list)
+    use_cases: List[UseCaseDef] = field(default_factory=list)
+    item_defs: List[ItemDef] = field(default_factory=list)
+    hazards: List[HazardDef] = field(default_factory=list)
+    risks: List[RiskDef] = field(default_factory=list)
+    connections: List[ConnectionDef] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "doc": self.doc,
+            "attributes": [a.to_dict() for a in (self.attributes or [])],
+            "ports": [p.to_dict() for p in (self.ports or [])],
+            "actions": [a.to_dict() for a in (self.actions or [])],
+            "operations": [o.to_dict() for o in (self.operations or [])],
+            "capabilities": [c.to_dict() for c in (self.capabilities or [])],
+            "interactions": [i.to_dict() for i in (self.interactions or [])],
+            "constraints": [c.to_dict() for c in (self.constraints or [])],
+            "test_cases": [t.to_dict() for t in (self.test_cases or [])],
+            "states": [s.to_dict() for s in (self.states or [])],
+            "requirements": [r.to_dict() for r in (self.requirements or [])],
+            "use_cases": [u.to_dict() for u in (self.use_cases or [])],
+            "item_defs": [i.to_dict() for i in (self.item_defs or [])],
+            "hazards": [h.to_dict() for h in (self.hazards or [])],
+            "risks": [r.to_dict() for r in (self.risks or [])],
+            "connections": [c.to_dict() for c in (self.connections or [])],
+            "parts": [p.to_dict() for p in (self.parts or [])],
+        }
+
+    def to_sysml(self, indent: int = 4) -> str:
+        pad = " " * indent
+        lines = []
+        doc_str = format_doc_comment(self.doc, indent)
+        if doc_str:
+            lines.append(doc_str.rstrip("\n"))
+        lines.append(f"{pad}part def {self.name} {{")
+
+        for attr in (self.attributes or []):
+            lines.append(attr.to_sysml(indent + 4))
+        for port in (self.ports or []):
+            lines.append(port.to_sysml(indent + 4))
+        for act in (self.actions or []):
+            lines.append(act.to_sysml(indent + 4))
+        for op in (self.operations or []):
+            lines.append(op.to_sysml(indent + 4))
+        for cap in (self.capabilities or []):
+            lines.append(cap.to_sysml(indent + 4))
+        for inter in (self.interactions or []):
+            lines.append(inter.to_sysml(indent + 4))
+        for c in (self.constraints or []):
+            lines.append(c.to_sysml(indent + 4))
+        for tc in (self.test_cases or []):
+            lines.append(tc.to_sysml(indent + 4))
+        for st in (self.states or []):
+            lines.append(st.to_sysml(indent + 4))
+        for req in (self.requirements or []):
+            lines.append(req.to_sysml(indent + 4))
+        for uc in (self.use_cases or []):
+            lines.append(uc.to_sysml(indent + 4))
+        for item in (self.item_defs or []):
+            lines.append(item.to_sysml(indent + 4))
+        for hz in (self.hazards or []):
+            lines.append(hz.to_sysml(indent + 4))
+        for rk in (self.risks or []):
+            lines.append(rk.to_sysml(indent + 4))
+        for conn in (self.connections or []):
+            lines.append(conn.to_sysml(indent + 4))
+        for subpart in (self.parts or []):
+            lines.append(subpart.to_sysml(indent + 4))
+
+        lines.append(f"{pad}}}")
+        return "\n".join(lines)
+
+
+SysMLPart = PartDef
+
+
+@dataclass
+class SysMLPackage:
+    name: str
+    doc: str = ""
+    part_defs: List[PartDef] = field(default_factory=list)
+    attribute_defs: List[AttributeDef] = field(default_factory=list)
+    port_defs: List[PortDef] = field(default_factory=list)
+    action_defs: List[ActionDef] = field(default_factory=list)
+    sub_packages: List['SysMLPackage'] = field(default_factory=list)
+    capability_defs: List[SysMLCapabilityDef] = field(default_factory=list)
+    operation_defs: List[SysMLOperationDef] = field(default_factory=list)
+    interaction_defs: List[SysMLInteractionDef] = field(default_factory=list)
+    constraint_defs: List[SysMLConstraintDef] = field(default_factory=list)
+    test_case_defs: List[SysMLTestCaseDef] = field(default_factory=list)
+    requirement_defs: List[RequirementDef] = field(default_factory=list)
+    state_defs: List[StateDef] = field(default_factory=list)
+    use_case_defs: List[UseCaseDef] = field(default_factory=list)
+    item_defs: List[ItemDef] = field(default_factory=list)
+    hazard_defs: List[HazardDef] = field(default_factory=list)
+    risk_defs: List[RiskDef] = field(default_factory=list)
+    connection_defs: List[ConnectionDef] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "name": self.name,
+            "doc": self.doc,
+            "parent_package": "",
+            "packages": [p.to_dict() for p in (self.sub_packages or [])],
+            "part_defs": [p.to_dict() for p in (self.part_defs or [])],
+            "capability_defs": [c.to_dict() for c in (self.capability_defs or [])],
+            "action_defs": [a.to_dict() for a in (self.action_defs or [])],
+            "operation_defs": [o.to_dict() for o in (self.operation_defs or [])],
+            "port_defs": [p.to_dict() for p in (self.port_defs or [])],
+            "attribute_defs": [a.to_dict() for a in (self.attribute_defs or [])],
+            "interaction_defs": [i.to_dict() for i in (self.interaction_defs or [])],
+            "constraint_defs": [c.to_dict() for c in (self.constraint_defs or [])],
+            "test_case_defs": [t.to_dict() for t in (self.test_case_defs or [])],
+            "requirement_defs": [r.to_dict() for r in (self.requirement_defs or [])],
+            "state_defs": [s.to_dict() for s in (self.state_defs or [])],
+            "use_case_defs": [u.to_dict() for u in (self.use_case_defs or [])],
+            "item_defs": [i.to_dict() for i in (self.item_defs or [])],
+            "hazard_defs": [h.to_dict() for h in (self.hazard_defs or [])],
+            "risk_defs": [r.to_dict() for r in (self.risk_defs or [])],
+            "connection_defs": [c.to_dict() for c in (self.connection_defs or [])],
+        }
+
+    def to_sysml(self, indent: int = 0) -> str:
+        pad = " " * indent
+        lines = []
+        doc_str = format_doc_comment(self.doc, indent)
+        if doc_str:
+            lines.append(doc_str.rstrip("\n"))
+        lines.append(f"{pad}package {self.name} {{")
+
+        for attr in (self.attribute_defs or []):
+            lines.append(attr.to_sysml(indent + 4))
+        for port in (self.port_defs or []):
+            lines.append(port.to_sysml(indent + 4))
+        for act in (self.action_defs or []):
+            lines.append(act.to_sysml(indent + 4))
+        for op in (self.operation_defs or []):
+            lines.append(op.to_sysml(indent + 4))
+        for cap in (self.capability_defs or []):
+            lines.append(cap.to_sysml(indent + 4))
+        for inter in (self.interaction_defs or []):
+            lines.append(inter.to_sysml(indent + 4))
+        for c in (self.constraint_defs or []):
+            lines.append(c.to_sysml(indent + 4))
+        for tc in (self.test_case_defs or []):
+            lines.append(tc.to_sysml(indent + 4))
+        for req in (self.requirement_defs or []):
+            lines.append(req.to_sysml(indent + 4))
+        for st in (self.state_defs or []):
+            lines.append(st.to_sysml(indent + 4))
+        for uc in (self.use_case_defs or []):
+            lines.append(uc.to_sysml(indent + 4))
+        for item in (self.item_defs or []):
+            lines.append(item.to_sysml(indent + 4))
+        for hz in (self.hazard_defs or []):
+            lines.append(hz.to_sysml(indent + 4))
+        for rk in (self.risk_defs or []):
+            lines.append(rk.to_sysml(indent + 4))
+        for conn in (self.connection_defs or []):
+            lines.append(conn.to_sysml(indent + 4))
+        for part in (self.part_defs or []):
+            lines.append(part.to_sysml(indent + 4))
+        for subpkg in (self.sub_packages or []):
+            lines.append(subpkg.to_sysml(indent + 4))
+
+        lines.append(f"{pad}}}")
+        return "\n".join(lines)
+
+    def node_counts(self) -> Dict[str, int]:
+        counts = {
+            "packages": 1,
+            "part_defs": len(self.part_defs or []),
+            "attribute_defs": len(self.attribute_defs or []),
+            "port_defs": len(self.port_defs or []),
+            "action_defs": len(self.action_defs or []),
+            "capability_defs": len(self.capability_defs or []),
+            "operation_defs": len(self.operation_defs or []),
+            "interaction_defs": len(self.interaction_defs or []),
+            "constraint_defs": len(self.constraint_defs or []),
+            "test_case_defs": len(self.test_case_defs or []),
+            "requirement_defs": len(self.requirement_defs or []),
+            "state_defs": len(self.state_defs or []),
+            "use_case_defs": len(self.use_case_defs or []),
+            "item_defs": len(self.item_defs or []),
+            "hazard_defs": len(self.hazard_defs or []),
+            "risk_defs": len(self.risk_defs or []),
+            "connection_defs": len(self.connection_defs or []),
+            "containers": len(self.part_defs or []),
+            "lists": len(self.action_defs or []),
+            "leaves": len(self.attribute_defs or []),
+            "typedefs": 0,
+            "identities": 0,
+            "groupings": 0,
+        }
+
+        def _aggregate_part(p: PartDef):
+            counts["attribute_defs"] += len(p.attributes or [])
+            counts["port_defs"] += len(p.ports or [])
+            counts["action_defs"] += len(p.actions or [])
+            counts["operation_defs"] += len(p.operations or [])
+            counts["capability_defs"] += len(p.capabilities or [])
+            counts["interaction_defs"] += len(p.interactions or [])
+            counts["constraint_defs"] += len(p.constraints or [])
+            counts["test_case_defs"] += len(p.test_cases or [])
+            counts["requirement_defs"] += len(p.requirements or [])
+            counts["state_defs"] += len(p.states or [])
+            counts["use_case_defs"] += len(p.use_cases or [])
+            counts["item_defs"] += len(p.item_defs or [])
+            counts["hazard_defs"] += len(p.hazards or [])
+            counts["risk_defs"] += len(p.risks or [])
+            counts["connection_defs"] += len(p.connections or [])
+            counts["leaves"] += len(p.attributes or [])
+            counts["lists"] += len(p.actions or [])
+            counts["part_defs"] += len(p.parts or [])
+            counts["containers"] += len(p.parts or [])
+            for sub_p in (p.parts or []):
+                _aggregate_part(sub_p)
+
+        for part in (self.part_defs or []):
+            _aggregate_part(part)
+
+        for sub in (self.sub_packages or []):
+            sub_counts = sub.node_counts()
+            for k in counts:
+                counts[k] += sub_counts.get(k, 0)
+        return counts
+
+    def get_all_node_names(self) -> List[str]:
+        names = [self.name]
+        for attr in (self.attribute_defs or []):
+            names.append(attr.name)
+        for port in (self.port_defs or []):
+            names.append(port.name)
+        for act in (self.action_defs or []):
+            names.append(act.name)
+        for op in (self.operation_defs or []):
+            names.append(op.name)
+        for cap in (self.capability_defs or []):
+            names.append(cap.name)
+        for inter in (self.interaction_defs or []):
+            names.append(inter.name)
+        for c in (self.constraint_defs or []):
+            names.append(c.name)
+        for tc in (self.test_case_defs or []):
+            names.append(tc.name)
+        for req in (self.requirement_defs or []):
+            names.append(req.name)
+        for st in (self.state_defs or []):
+            names.append(st.name)
+        for uc in (self.use_case_defs or []):
+            names.append(uc.name)
+        for item in (self.item_defs or []):
+            names.append(item.name)
+        for hz in (self.hazard_defs or []):
+            names.append(hz.name)
+        for rk in (self.risk_defs or []):
+            names.append(rk.name)
+        for conn in (self.connection_defs or []):
+            names.append(conn.name)
+
+        def _collect_part_names(p: PartDef):
+            names.append(p.name)
+            for attr in (p.attributes or []):
+                names.append(attr.name)
+            for port in (p.ports or []):
+                names.append(port.name)
+            for act in (p.actions or []):
+                names.append(act.name)
+            for op in (p.operations or []):
+                names.append(op.name)
+            for cap in (p.capabilities or []):
+                names.append(cap.name)
+            for inter in (p.interactions or []):
+                names.append(inter.name)
+            for c in (p.constraints or []):
+                names.append(c.name)
+            for tc in (p.test_cases or []):
+                names.append(tc.name)
+            for req in (p.requirements or []):
+                names.append(req.name)
+            for st in (p.states or []):
+                names.append(st.name)
+            for uc in (p.use_cases or []):
+                names.append(uc.name)
+            for item in (p.item_defs or []):
+                names.append(item.name)
+            for hz in (p.hazards or []):
+                names.append(hz.name)
+            for rk in (p.risks or []):
+                names.append(rk.name)
+            for conn in (p.connections or []):
+                names.append(conn.name)
+            for sub_p in (p.parts or []):
+                _collect_part_names(sub_p)
+
+        for part in (self.part_defs or []):
+            _collect_part_names(part)
+
+        for sub in (self.sub_packages or []):
+            names.extend(sub.get_all_node_names())
+
+        return sorted(list(set(names)))
+
+    def get_all_parts(self) -> List[PartDef]:
+        """Returns flat list of all PartDefs (including nested parts) across all packages."""
+        parts: List[PartDef] = []
+        def _collect(p: PartDef):
+            parts.append(p)
+            for sub_p in (p.parts or []):
+                _collect(sub_p)
+        for p in (self.part_defs or []):
+            _collect(p)
+        for sub in (self.sub_packages or []):
+            parts.extend(sub.get_all_parts())
+        return parts
+
+    def find_part(self, name: str) -> Optional[PartDef]:
+        """Finds a PartDef by name across the package hierarchy."""
+        for p in self.get_all_parts():
+            if p.name == name:
+                return p
+        return None
+
+    def get_all_connections(self) -> List[ConnectionDef]:
+        """Returns all ConnectionDefs declared at package and part levels."""
+        conns = list(self.connection_defs or [])
+        for p in self.get_all_parts():
+            conns.extend(p.connections or [])
+        for sub in (self.sub_packages or []):
+            conns.extend(sub.get_all_connections())
+        return conns
+
+    def get_all_hazards(self) -> List[HazardDef]:
+        """Returns all HazardDefs declared at package and part levels."""
+        hazards = list(self.hazard_defs or [])
+        for p in self.get_all_parts():
+            for h in (p.hazards or []):
+                if not h.part_ref:
+                    h.part_ref = p.name
+                hazards.append(h)
+        for sub in (self.sub_packages or []):
+            hazards.extend(sub.get_all_hazards())
+        return hazards
+
+    def get_all_risks(self) -> List[RiskDef]:
+        """Returns all RiskDefs declared at package and part levels."""
+        risks = list(self.risk_defs or [])
+        for p in self.get_all_parts():
+            risks.extend(p.risks or [])
+        for sub in (self.sub_packages or []):
+            risks.extend(sub.get_all_risks())
+        return risks
+
+    def get_all_states(self) -> List[StateDef]:
+        """Returns all StateDefs declared at package and part levels."""
+        states = list(self.state_defs or [])
+        for p in self.get_all_parts():
+            states.extend(p.states or [])
+        for sub in (self.sub_packages or []):
+            states.extend(sub.get_all_states())
+        return states
+
+    def get_all_actions(self) -> List[ActionDef]:
+        """Returns all ActionDefs declared at package and part levels."""
+        actions = list(self.action_defs or [])
+        for p in self.get_all_parts():
+            actions.extend(p.actions or [])
+        for sub in (self.sub_packages or []):
+            actions.extend(sub.get_all_actions())
+        return actions
+
+    def get_all_use_cases(self) -> List[UseCaseDef]:
+        """Returns all UseCaseDefs declared at package and part levels."""
+        ucs = list(self.use_case_defs or [])
+        for p in self.get_all_parts():
+            ucs.extend(p.use_cases or [])
+        for sub in (self.sub_packages or []):
+            ucs.extend(sub.get_all_use_cases())
+        return ucs
+
+    def get_all_constraints(self) -> List[SysMLConstraintDef]:
+        """Returns all SysMLConstraintDefs declared at package and part levels."""
+        cons = list(self.constraint_defs or [])
+        for p in self.get_all_parts():
+            cons.extend(p.constraints or [])
+        for sub in (self.sub_packages or []):
+            cons.extend(sub.get_all_constraints())
+        return cons
+
+    def get_all_requirements(self) -> List[RequirementDef]:
+        """Returns all RequirementDefs declared at package and part levels."""
+        reqs = list(self.requirement_defs or [])
+        for p in self.get_all_parts():
+            reqs.extend(p.requirements or [])
+        for sub in (self.sub_packages or []):
+            reqs.extend(sub.get_all_requirements())
+        return reqs
+
+    def get_all_capabilities(self) -> List[SysMLCapabilityDef]:
+        """Returns all SysMLCapabilityDefs declared at package and part levels."""
+        caps = list(self.capability_defs or [])
+        for p in self.get_all_parts():
+            caps.extend(p.capabilities or [])
+        for sub in (self.sub_packages or []):
+            caps.extend(sub.get_all_capabilities())
+        return caps
+
+    def get_all_ports(self) -> List[PortDef]:
+        """Returns all PortDefs declared at package and part levels."""
+        ports = list(self.port_defs or [])
+        for p in self.get_all_parts():
+            ports.extend(p.ports or [])
+        for sub in (self.sub_packages or []):
+            ports.extend(sub.get_all_ports())
+        return ports
+
+    def get_connection_graph(self) -> Dict[str, List[str]]:
+        """
+        Builds port-to-port and part-to-part adjacency graph from all connection definitions.
+        Returns a dictionary mapping node identifier (port or part) to connected node identifiers.
+        """
+        adj: Dict[str, List[str]] = {}
+
+        def _add_edge(u: str, v: str):
+            if not u or not v:
+                return
+            if u not in adj:
+                adj[u] = []
+            if v not in adj[u]:
+                adj[u].append(v)
+            if v not in adj:
+                adj[v] = []
+            if u not in adj[v]:
+                adj[v].append(u)
+
+        for conn in self.get_all_connections():
+            src = conn.source_port
+            tgt = conn.target_port
+            if src and tgt:
+                _add_edge(src, tgt)
+                src_part = src.split('.', 1)[0] if '.' in src else src
+                tgt_part = tgt.split('.', 1)[0] if '.' in tgt else tgt
+                if src_part != tgt_part:
+                    _add_edge(src_part, tgt_part)
+
+        return adj
+
+    def get_connected_parts(self, part_name: str) -> List[str]:
+        """
+        Returns all part names directly or transitively connected to the given part.
+        """
+        graph = self.get_connection_graph()
+        visited = set()
+        queue = [part_name]
+        while queue:
+            curr = queue.pop(0)
+            if curr not in visited:
+                visited.add(curr)
+                for neighbor in graph.get(curr, []):
+                    neighbor_part = neighbor.split('.', 1)[0] if '.' in neighbor else neighbor
+                    if neighbor_part not in visited:
+                        queue.append(neighbor_part)
+        visited.discard(part_name)
+        return sorted(list(visited))
+
+    def get_reachable_hazards(self, part_or_port: str, max_depth: Optional[int] = None) -> List[HazardDef]:
+        """
+        Queries reachable hazards from a given part def or port via connected topology.
+        Traverses connected ports/parts up to max_depth (or unbounded if None).
+        """
+        all_hazards = self.get_all_hazards()
+        graph = self.get_connection_graph()
+
+        start_part = part_or_port.split('.', 1)[0] if '.' in part_or_port else part_or_port
+
+        visited_nodes = set()
+        queue = [(start_part, 0)]
+        if '.' in part_or_port:
+            queue.append((part_or_port, 0))
+
+        reachable_parts = {start_part}
+        reachable_ports = {part_or_port} if '.' in part_or_port else set()
+
+        part_obj = self.find_part(start_part)
+        if part_obj:
+            for p in (part_obj.ports or []):
+                p_fqn = f"{start_part}.{p.name}"
+                reachable_ports.add(p_fqn)
+                reachable_ports.add(p.name)
+                queue.append((p_fqn, 0))
+
+        while queue:
+            curr_node, depth = queue.pop(0)
+            if curr_node in visited_nodes:
+                continue
+            visited_nodes.add(curr_node)
+
+            curr_part = curr_node.split('.', 1)[0] if '.' in curr_node else curr_node
+            reachable_parts.add(curr_part)
+            if '.' in curr_node:
+                reachable_ports.add(curr_node)
+
+            if max_depth is not None and depth >= max_depth:
+                continue
+
+            for neighbor in graph.get(curr_node, []):
+                if neighbor not in visited_nodes:
+                    queue.append((neighbor, depth + 1))
+                    n_part = neighbor.split('.', 1)[0] if '.' in neighbor else neighbor
+                    reachable_parts.add(n_part)
+                    if '.' in neighbor:
+                        reachable_ports.add(neighbor)
+
+        result_hazards: List[HazardDef] = []
+        seen_names = set()
+
+        for h in all_hazards:
+            is_match = False
+            if h.part_ref and h.part_ref in reachable_parts:
+                is_match = True
+            elif h.source_port and (h.source_port in reachable_ports or h.source_port in reachable_parts or (h.source_port.split('.', 1)[0] in reachable_parts)):
+                is_match = True
+            elif h.target_port and (h.target_port in reachable_ports or h.target_port in reachable_parts or (h.target_port.split('.', 1)[0] in reachable_parts)):
+                is_match = True
+            elif not h.part_ref and not h.source_port and not h.target_port:
+                for r_part in reachable_parts:
+                    p_def = self.find_part(r_part)
+                    if p_def and any(ph.name == h.name for ph in (p_def.hazards or [])):
+                        is_match = True
+                        break
+
+            if is_match and h.name not in seen_names:
+                seen_names.add(h.name)
+                result_hazards.append(h)
+
+        return result_hazards
+
+
+class SysMLParser:
+    """
+    Parser for Canonical SysML v2 textual models.
+    Translates textual SysML v2 packages, parts, capabilities, operations,
+    interactions, constraints/assertions, test cases, requirements, states,
+    actions, ports, and attributes into a canonical SysMLPackage AST.
+    """
+
+    @classmethod
+    def parse_file(cls, filepath: str) -> SysMLPackage:
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"SysML file not found: {filepath}")
+        with open(filepath, "r", encoding="utf-8") as f:
+            content = f.read()
+        default_name = os.path.splitext(os.path.basename(filepath))[0]
+        return cls.parse_text(content, default_name=default_name)
+
+    @classmethod
+    def parse_text(cls, content: str, default_name: str = "SysML_Model") -> SysMLPackage:
+        parser = cls()
+        return parser._parse(content, default_name=default_name)
+
+    @classmethod
+    def parse_to_dict(cls, content: str, default_name: str = "SysML_Model") -> Dict[str, Any]:
+        pkg = cls.parse_text(content, default_name=default_name)
+        return pkg.to_dict()
+
+    def _parse(self, content: str, default_name: str = "SysML_Model") -> SysMLPackage:
+        decls = self._scan_declarations(content)
+        pkg_decls = [d for d in decls if d["type"] == "block" and self._is_keyword(d["header"], "package")]
+
+        if pkg_decls:
+            primary_pkg = None
+            for p_decl in pkg_decls:
+                pkg_obj = self._parse_package(p_decl)
+                if primary_pkg is None:
+                    primary_pkg = pkg_obj
+                else:
+                    primary_pkg.sub_packages.append(pkg_obj)
+            non_pkg_decls = [d for d in decls if not (d["type"] == "block" and self._is_keyword(d["header"], "package"))]
+            if non_pkg_decls and primary_pkg is not None:
+                self._populate_container(primary_pkg, non_pkg_decls)
+            return primary_pkg if primary_pkg is not None else SysMLPackage(name=default_name)
+        else:
+            # Flat file without top-level package block
+            pkg = SysMLPackage(name=default_name)
+            self._populate_container(pkg, decls)
+            return pkg
+
+    def _is_keyword(self, header: str, keyword: str) -> bool:
+        tokens = header.strip().split()
+        return len(tokens) > 0 and tokens[0] == keyword
+
+    def _scan_declarations(self, text: str) -> List[Dict[str, Any]]:
+        decls = []
+        i = 0
+        n = len(text)
+        doc_comment = ""
+
+        while i < n:
+            while i < n and text[i].isspace():
+                i += 1
+            if i >= n:
+                break
+
+            # Handle doc /* ... */ or /* ... */
+            if text.startswith('/*', i):
+                end_c = text.find('*/', i + 2)
+                if end_c == -1:
+                    break
+                raw_c = text[i+2:end_c].strip()
+                if raw_c.startswith('doc'):
+                    raw_c = raw_c[3:].strip()
+                doc_comment = raw_c
+                i = end_c + 2
+                continue
+            elif text.startswith('//', i):
+                end_c = text.find('\n', i + 2)
+                if end_c == -1:
+                    break
+                i = end_c + 1
+                continue
+            elif text.startswith('doc', i) and i + 3 < n and (text[i+3].isspace() or text[i+3] in ('/', '"', "'")):
+                i += 3
+                while i < n and text[i].isspace():
+                    i += 1
+                if text.startswith('/*', i):
+                    end_c = text.find('*/', i + 2)
+                    if end_c != -1:
+                        doc_comment = text[i+2:end_c].strip()
+                        i = end_c + 2
+                        continue
+                elif text.startswith('"', i) or text.startswith("'", i):
+                    quote_char = text[i]
+                    end_c = text.find(quote_char, i + 1)
+                    if end_c != -1:
+                        doc_comment = text[i+1:end_c].strip()
+                        i = end_c + 1
+                        continue
+
+            start_decl = i
+            brace_pos = None
+            semi_pos = None
+
+            j = i
+            in_paren = 0
+            in_str = None
+            while j < n:
+                ch = text[j]
+                if in_str:
+                    if ch == '\\':
+                        j += 2
+                        continue
+                    elif ch == in_str:
+                        in_str = None
+                else:
+                    if ch in ('"', "'"):
+                        in_str = ch
+                    elif ch == '(':
+                        in_paren += 1
+                    elif ch == ')':
+                        in_paren = max(0, in_paren - 1)
+                    elif ch == '{' and in_paren == 0:
+                        brace_pos = j
+                        break
+                    elif ch == ';' and in_paren == 0:
+                        semi_pos = j
+                        break
+                j += 1
+
+            if brace_pos is not None and (semi_pos is None or brace_pos < semi_pos):
+                header = text[start_decl:brace_pos].strip()
+                body_start = brace_pos + 1
+                depth = 1
+                k = body_start
+                in_str = None
+                while k < n and depth > 0:
+                    ch = text[k]
+                    if in_str:
+                        if ch == '\\':
+                            k += 2
+                            continue
+                        elif ch == in_str:
+                            in_str = None
+                    else:
+                        if ch in ('"', "'"):
+                            in_str = ch
+                        elif ch == '/' and k + 1 < n and text[k+1] == '*':
+                            end_k = text.find('*/', k + 2)
+                            if end_k != -1:
+                                k = end_k + 2
+                                continue
+                        elif ch == '/' and k + 1 < n and text[k+1] == '/':
+                            end_k = text.find('\n', k + 2)
+                            if end_k != -1:
+                                k = end_k + 1
+                                continue
+                        elif ch == '{':
+                            depth += 1
+                        elif ch == '}':
+                            depth -= 1
+                            if depth == 0:
+                                break
+                    k += 1
+                body_end = k
+                body = text[body_start:body_end]
+                decls.append({
+                    "type": "block",
+                    "header": header,
+                    "body": body,
+                    "doc": doc_comment,
+                })
+                doc_comment = ""
+                i = k + 1
+                while i < n and text[i].isspace():
+                    i += 1
+                if i < n and text[i] == ';':
+                    i += 1
+            elif semi_pos is not None:
+                statement = text[start_decl:semi_pos].strip()
+                decls.append({
+                    "type": "statement",
+                    "statement": statement,
+                    "doc": doc_comment,
+                })
+                doc_comment = ""
+                i = semi_pos + 1
+            else:
+                break
+
+        return decls
+
+    def _parse_package(self, decl: Dict[str, Any]) -> SysMLPackage:
+        header = decl["header"]
+        match = re.search(r'\bpackage\s+([a-zA-Z0-9_\-\.]+)', header)
+        pkg_name = match.group(1).replace('.', '_') if match else "Package"
+        doc = decl.get("doc", "")
+        if not doc:
+            doc_m = re.search(r'(?:^\s*doc\s*/\*|\s*/\*)(.*?)\*/', decl.get("body", ""), re.DOTALL)
+            if doc_m:
+                extracted = doc_m.group(1).strip()
+                if extracted.startswith("doc"):
+                    extracted = extracted[3:].strip()
+                doc = extracted
+        pkg = SysMLPackage(name=pkg_name, doc=doc)
+
+        body_decls = self._scan_declarations(decl["body"])
+        self._populate_container(pkg, body_decls)
+        return pkg
+
+    def _populate_container(self, container: Union[SysMLPackage, PartDef], decls: List[Dict[str, Any]]) -> None:
+        for d in decls:
+            if d["type"] == "block":
+                header = d["header"]
+                doc = d.get("doc", "")
+
+                if re.search(r'\b(?:perform\s+)?capability\s+(?:def\s+)?([a-zA-Z0-9_]+)|\bperform\s+(?:[a-zA-Z0-9_]+::)?([a-zA-Z0-9_]+)', header):
+                    c_obj = self._parse_capability_block(d, parent_name=container.name)
+                    if isinstance(container, SysMLPackage):
+                        if not c_obj.parent_package:
+                            c_obj.parent_package = container.name
+                        if not c_obj.package_ref:
+                            c_obj.package_ref = container.name
+                        if not c_obj.subsystem:
+                            c_obj.subsystem = container.name
+                        container.capability_defs.append(c_obj)
+                    else:
+                        if not c_obj.subsystem:
+                            c_obj.subsystem = container.name
+                        if not c_obj.parent_package:
+                            c_obj.parent_package = getattr(container, "parent_package", "") or container.name
+                        container.capabilities.append(c_obj)
+
+                elif re.search(r'\binteraction\s+(?:def\s+)?([a-zA-Z0-9_]+)', header):
+                    i_obj = self._parse_interaction_block(d)
+                    if isinstance(container, SysMLPackage):
+                        container.interaction_defs.append(i_obj)
+                    else:
+                        container.interactions.append(i_obj)
+
+                elif re.search(r'\b(?:assert\s+constraint|constraint\s+def|constraint)\b', header):
+                    con_obj = self._parse_constraint_block(d)
+                    if isinstance(container, SysMLPackage):
+                        container.constraint_defs.append(con_obj)
+                    else:
+                        container.constraints.append(con_obj)
+
+                elif re.search(r'\btest\s+case\s+(?:def\s+)?([a-zA-Z0-9_]+)', header):
+                    tc_obj = self._parse_test_case_block(d)
+                    if isinstance(container, SysMLPackage):
+                        container.test_case_defs.append(tc_obj)
+                    else:
+                        container.test_cases.append(tc_obj)
+
+                elif re.search(r'\bpart\s+(?:def\s+)?([a-zA-Z0-9_]+)', header):
+                    part_obj = self._parse_part_block(d)
+                    if isinstance(container, SysMLPackage):
+                        container.part_defs.append(part_obj)
+                    else:
+                        container.parts.append(part_obj)
+
+                elif re.search(r'\bpackage\s+([a-zA-Z0-9_\-\.]+)', header):
+                    if isinstance(container, SysMLPackage):
+                        sub_pkg = self._parse_package(d)
+                        container.sub_packages.append(sub_pkg)
+
+                elif re.search(r'\baction\s+(?:def\s+)?([a-zA-Z0-9_]+)', header):
+                    act_obj = self._parse_action_block(d, parent_name=container.name if isinstance(container, PartDef) else "")
+                    if isinstance(container, SysMLPackage):
+                        container.action_defs.append(act_obj)
+                    else:
+                        container.actions.append(act_obj)
+
+                elif re.search(r'\boperation\s+(?:def\s+)?([a-zA-Z0-9_]+)', header):
+                    op_obj = self._parse_operation_decl(header, doc)
+                    if isinstance(container, SysMLPackage):
+                        container.operation_defs.append(op_obj)
+                    else:
+                        container.operations.append(op_obj)
+
+                elif re.search(r'\brequirement\s+(?:def\s+)?([a-zA-Z0-9_]+)', header):
+                    req_obj = self._parse_requirement_block(d)
+                    if isinstance(container, SysMLPackage):
+                        container.requirement_defs.append(req_obj)
+                    else:
+                        container.requirements.append(req_obj)
+
+                elif re.search(r'\bstate\s+(?:def\s+)?([a-zA-Z0-9_]+)', header):
+                    state_obj = self._parse_state_block(d)
+                    if isinstance(container, SysMLPackage):
+                        container.state_defs.append(state_obj)
+                    else:
+                        container.states.append(state_obj)
+
+                elif re.search(r'\buse\s+case\s+(?:def\s+)?([a-zA-Z0-9_]+)', header):
+                    uc_obj = self._parse_use_case_block(d)
+                    if isinstance(container, SysMLPackage):
+                        container.use_case_defs.append(uc_obj)
+                    else:
+                        container.use_cases.append(uc_obj)
+
+                elif re.search(r'\bitem\s+(?:def\s+)?([a-zA-Z0-9_]+)', header):
+                    item_obj = self._parse_item_block(d)
+                    if isinstance(container, SysMLPackage):
+                        container.item_defs.append(item_obj)
+                    else:
+                        container.item_defs.append(item_obj)
+
+                elif re.search(r'\bhazard\s+(?:def\s+)?([a-zA-Z0-9_]+)', header):
+                    h_obj = self._parse_hazard_block(d)
+                    if not h_obj.part_ref and isinstance(container, PartDef):
+                        h_obj.part_ref = container.name
+                    if isinstance(container, SysMLPackage):
+                        container.hazard_defs.append(h_obj)
+                    else:
+                        container.hazards.append(h_obj)
+
+                elif re.search(r'\brisk\s+(?:def\s+)?([a-zA-Z0-9_]+)', header):
+                    r_obj = self._parse_risk_block(d)
+                    if isinstance(container, SysMLPackage):
+                        container.risk_defs.append(r_obj)
+                    else:
+                        container.risks.append(r_obj)
+
+                elif re.search(r'\b(?:connection|flow|item\s+flow|interface)\s+(?:def\s+)?([a-zA-Z0-9_]+)', header):
+                    conn_obj = self._parse_connection_block(d)
+                    if isinstance(container, SysMLPackage):
+                        container.connection_defs.append(conn_obj)
+                    else:
+                        container.connections.append(conn_obj)
+
+                elif re.search(r'(?:~?\s*\b(?:in|out|inout)\s+)?~?\s*port\b', header):
+                    port_obj = self._parse_port_block(d)
+                    if isinstance(container, SysMLPackage):
+                        container.port_defs.append(port_obj)
+                    else:
+                        container.ports.append(port_obj)
+
+            elif d["type"] == "statement":
+                stmt = d["statement"]
+                doc = d.get("doc", "")
+
+                if re.search(r'\bpart\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt):
+                    m = re.search(r'\bpart\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt)
+                    part_name = m.group(1)
+                    p_obj = PartDef(name=part_name, doc=doc)
+                    if isinstance(container, SysMLPackage):
+                        container.part_defs.append(p_obj)
+                    else:
+                        container.parts.append(p_obj)
+
+                elif re.search(r'\b(?:assert\s+constraint|constraint\s+def|constraint)\b', stmt):
+                    con_obj = self._parse_constraint_stmt(stmt, doc)
+                    if isinstance(container, SysMLPackage):
+                        container.constraint_defs.append(con_obj)
+                    else:
+                        container.constraints.append(con_obj)
+
+                elif re.search(r'\bcapability\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt):
+                    m = re.search(r'\bcapability\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt)
+                    cap_name = m.group(1)
+                    cap_obj = SysMLCapabilityDef(
+                        name=cap_name,
+                        doc=doc,
+                        description=doc,
+                        subsystem=container.name,
+                        package_ref=container.name if isinstance(container, SysMLPackage) else "",
+                        parent_package=container.name
+                    )
+                    if isinstance(container, SysMLPackage):
+                        container.capability_defs.append(cap_obj)
+                    else:
+                        container.capabilities.append(cap_obj)
+
+                elif re.search(r'\bperform\s+(?:capability\s+|action\s+)?(?:[a-zA-Z0-9_]+::)?([a-zA-Z0-9_]+)', stmt):
+                    m = re.search(r'\bperform\s+(?:capability\s+|action\s+)?(?:[a-zA-Z0-9_]+::)?([a-zA-Z0-9_]+)', stmt)
+                    cap_name = m.group(1)
+                    cap_obj = SysMLCapabilityDef(
+                        name=cap_name,
+                        doc=doc,
+                        description=doc,
+                        subsystem=container.name,
+                        package_ref=container.name if isinstance(container, SysMLPackage) else "",
+                        parent_package=container.name
+                    )
+                    if isinstance(container, SysMLPackage):
+                        container.capability_defs.append(cap_obj)
+                    else:
+                        container.capabilities.append(cap_obj)
+
+                elif re.search(r'\b(?:operation|feature)\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt):
+                    op_obj = self._parse_operation_decl(stmt, doc)
+                    if isinstance(container, SysMLPackage):
+                        container.operation_defs.append(op_obj)
+                    else:
+                        container.operations.append(op_obj)
+
+                elif re.search(r'\baction\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt):
+                    act_obj = self._parse_action_decl(stmt, doc, parent_name=container.name if isinstance(container, PartDef) else "")
+                    if isinstance(container, SysMLPackage):
+                        container.action_defs.append(act_obj)
+                    else:
+                        container.actions.append(act_obj)
+
+                elif re.search(r'(?:~?\s*\b(?:in|out|inout)\s+)?~?\s*port\b', stmt):
+                    port_obj = self._parse_port_stmt(stmt, doc)
+                    if isinstance(container, SysMLPackage):
+                        container.port_defs.append(port_obj)
+                    else:
+                        container.ports.append(port_obj)
+
+                elif re.search(r'\battribute\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt):
+                    attr_obj = self._parse_attribute_stmt(stmt, doc)
+                    if isinstance(container, SysMLPackage):
+                        container.attribute_defs.append(attr_obj)
+                    else:
+                        container.attributes.append(attr_obj)
+
+                elif re.search(r'\brequirement\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt):
+                    m = re.search(r'\brequirement\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt)
+                    req_obj = RequirementDef(name=m.group(1), doc=doc)
+                    if isinstance(container, SysMLPackage):
+                        container.requirement_defs.append(req_obj)
+                    else:
+                        container.requirements.append(req_obj)
+
+                elif re.search(r'\bstate\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt):
+                    m = re.search(r'\bstate\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt)
+                    state_obj = StateDef(name=m.group(1), doc=doc)
+                    if isinstance(container, SysMLPackage):
+                        container.state_defs.append(state_obj)
+                    else:
+                        container.states.append(state_obj)
+
+                elif re.search(r'\bhazard\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt):
+                    h_obj = self._parse_hazard_stmt(stmt, doc)
+                    if not h_obj.part_ref and isinstance(container, PartDef):
+                        h_obj.part_ref = container.name
+                    if isinstance(container, SysMLPackage):
+                        container.hazard_defs.append(h_obj)
+                    else:
+                        container.hazards.append(h_obj)
+
+                elif re.search(r'\brisk\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt):
+                    r_obj = self._parse_risk_stmt(stmt, doc)
+                    if isinstance(container, SysMLPackage):
+                        container.risk_defs.append(r_obj)
+                    else:
+                        container.risks.append(r_obj)
+
+                elif re.search(r'\b(?:connection|flow|item\s+flow|interface)\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt):
+                    conn_obj = self._parse_connection_stmt(stmt, doc)
+                    if isinstance(container, SysMLPackage):
+                        container.connection_defs.append(conn_obj)
+                    else:
+                        container.connections.append(conn_obj)
+
+                elif re.search(r'\buse\s+case\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt):
+                    uc_obj = self._parse_use_case_stmt(stmt, doc)
+                    if isinstance(container, SysMLPackage):
+                        container.use_case_defs.append(uc_obj)
+                    else:
+                        container.use_cases.append(uc_obj)
+
+                elif re.search(r'\bconnect\b|\b(?:item\s+)?flow\s+from\b', stmt):
+                    conn_obj = self._parse_connect_stmt(stmt, doc)
+                    if conn_obj:
+                        if isinstance(container, SysMLPackage):
+                            container.connection_defs.append(conn_obj)
+                        else:
+                            container.connections.append(conn_obj)
+
+    def _parse_part_block(self, decl: Dict[str, Any]) -> PartDef:
+        header = decl["header"]
+        m = re.search(r'\bpart\s+(?:def\s+)?([a-zA-Z0-9_]+)', header)
+        name = m.group(1) if m else "Part"
+        doc = decl.get("doc", "")
+        if not doc:
+            doc_m = re.search(r'(?:^\s*doc\s*/\*|\s*/\*)(.*?)\*/', decl.get("body", ""), re.DOTALL)
+            if doc_m:
+                extracted = doc_m.group(1).strip()
+                if extracted.startswith("doc"):
+                    extracted = extracted[3:].strip()
+                doc = extracted
+        part = PartDef(name=name, doc=doc)
+        body_decls = self._scan_declarations(decl["body"])
+        self._populate_container(part, body_decls)
+        return part
+
+    def _parse_capability_block(self, decl: Dict[str, Any], parent_name: str = "") -> SysMLCapabilityDef:
+        header = decl["header"]
+        m = re.search(r'\b(?:perform\s+)?capability\s+(?:def\s+)?(?:[a-zA-Z0-9_]+::)?([a-zA-Z0-9_]+)|\bperform\s+(?:[a-zA-Z0-9_]+::)?([a-zA-Z0-9_]+)', header)
+        name = (m.group(1) or m.group(2)) if m else "Capability"
+        doc = decl.get("doc", "")
+        description = doc
+        subsystem = ""
+        package_ref = ""
+        parent_pkg = parent_name
+
+        if not doc:
+            doc_m = re.search(r'(?:^\s*doc\s*/\*|\s*/\*)(.*?)\*/', decl.get("body", ""), re.DOTALL)
+            if doc_m:
+                extracted = doc_m.group(1).strip()
+                if extracted.startswith("doc"):
+                    extracted = extracted[3:].strip()
+                doc = extracted
+                description = doc
+
+        body_decls = self._scan_declarations(decl["body"])
+        for d in body_decls:
+            if d["type"] == "statement":
+                stmt = d["statement"]
+                subsys_m = re.search(r'\bsubsystem\s+([a-zA-Z0-9_\-\.]+)', stmt)
+                if subsys_m:
+                    subsystem = subsys_m.group(1)
+                pkg_m = re.search(r'\b(?:package|parent_package)\s+([a-zA-Z0-9_\-\.]+)', stmt)
+                if pkg_m:
+                    parent_pkg = pkg_m.group(1)
+                    package_ref = pkg_m.group(1)
+                desc_m = re.search(r'\bdescription\s*[:=]\s*["\']?([^"\']+)["\']?', stmt)
+                if desc_m:
+                    description = desc_m.group(1).strip()
+            if d.get("doc") and not description:
+                description = d["doc"]
+
+        if not subsystem and parent_name:
+            subsystem = parent_name
+        if not package_ref and parent_name:
+            package_ref = parent_name
+        if not parent_pkg and parent_name:
+            parent_pkg = parent_name
+
+        return SysMLCapabilityDef(
+            name=name,
+            description=description or doc,
+            subsystem=subsystem,
+            package_ref=package_ref,
+            doc=doc or description,
+            parent_package=parent_pkg
+        )
+
+    def _parse_interaction_block(self, decl: Dict[str, Any]) -> SysMLInteractionDef:
+        header = decl["header"]
+        m = re.search(r'\binteraction\s+(?:def\s+)?([a-zA-Z0-9_]+)', header)
+        name = m.group(1) if m else "Interaction"
+        doc = decl.get("doc", "")
+
+        lifelines = []
+        messages = []
+        triggers = []
+
+        body_decls = self._scan_declarations(decl["body"])
+        for d in body_decls:
+            if d["type"] == "statement":
+                stmt = d["statement"]
+                # Lifelines
+                ll_m = re.search(r'\b(?:lifeline|part|actor)\s+([a-zA-Z0-9_]+)', stmt)
+                if ll_m:
+                    lifelines.append(ll_m.group(1))
+
+                # Messages / flows
+                msg_m = re.search(r'\b(?:message|send|action|flow)\s+([a-zA-Z0-9_]+)', stmt)
+                if msg_m:
+                    messages.append(msg_m.group(1))
+
+                # Triggers / events
+                trg_m = re.search(r'\b(?:trigger|on|when|after|event)\s+([a-zA-Z0-9_]+)', stmt)
+                if trg_m:
+                    triggers.append(trg_m.group(1))
+
+        return SysMLInteractionDef(
+            name=name,
+            lifelines=lifelines,
+            messages=messages,
+            triggers=triggers,
+            doc=doc
+        )
+
+    def _parse_constraint_block(self, decl: Dict[str, Any]) -> SysMLConstraintDef:
+        header = decl["header"]
+        is_assertion = bool(re.search(r'\bassert\s+constraint\b', header))
+        m = re.search(r'\b(?:assert\s+constraint|constraint\s+def|constraint)(?:\s+([a-zA-Z0-9_]+))?', header)
+        name = m.group(1) if m and m.group(1) else ""
+        if not name:
+            self._constraint_counter = getattr(self, "_constraint_counter", 0) + 1
+            name = f"Constraint_{self._constraint_counter}"
+        doc = decl.get("doc", "")
+
+        # Extract parameters if present in header, e.g. (in x: Type)
+        params = []
+        p_match = re.search(r'\(([^)]*)\)', header)
+        if p_match and p_match.group(1).strip():
+            raw_params = p_match.group(1).strip()
+            params = [p.strip() for p in raw_params.split(',') if p.strip()]
+
+        raw_body = decl["body"].strip()
+        doc_in_body = re.search(r'(?:doc\s*)?/\*(.*?)\*/', raw_body, re.DOTALL)
+        if doc_in_body:
+            if not doc:
+                extracted_doc = doc_in_body.group(1).strip()
+                if extracted_doc.startswith("doc"):
+                    extracted_doc = extracted_doc[3:].strip()
+                doc = extracted_doc
+            raw_body = re.sub(r'(?:doc\s*)?/\*.*?\*/', '', raw_body, flags=re.DOTALL)
+
+        raw_body = re.sub(r'//.*', '', raw_body)
+        raw_body = re.sub(r'[\r\n\t]+', ' ', raw_body).strip()
+        if raw_body.endswith(';'):
+            raw_body = raw_body[:-1].strip()
+
+        expression = raw_body
+
+        return SysMLConstraintDef(
+            name=name,
+            expression=expression,
+            parameters=params,
+            is_assertion=is_assertion,
+            doc=doc
+        )
+
+    def _parse_constraint_stmt(self, stmt: str, doc: str = "") -> SysMLConstraintDef:
+        is_assertion = bool(re.search(r'\bassert\s+constraint\b', stmt))
+        m = re.search(r'\b(?:assert\s+constraint|constraint\s+def|constraint)(?:\s+([a-zA-Z0-9_]+))?', stmt)
+        name = m.group(1) if m and m.group(1) else ""
+        if not name:
+            self._constraint_counter = getattr(self, "_constraint_counter", 0) + 1
+            name = f"Constraint_{self._constraint_counter}"
+
+        params = []
+        p_match = re.search(r'\(([^)]*)\)', stmt)
+        if p_match and p_match.group(1).strip():
+            raw_params = p_match.group(1).strip()
+            params = [p.strip() for p in raw_params.split(',') if p.strip()]
+
+        expression = ""
+        if ':' in stmt:
+            expression = stmt.split(':', 1)[1].strip()
+        elif '=' in stmt:
+            expression = stmt.split('=', 1)[1].strip()
+        else:
+            clean = re.sub(r'^\s*(?:assert\s+constraint|constraint\s+def|constraint)(?:\s+[a-zA-Z0-9_]+)?\s*', '', stmt).strip()
+            expression = clean
+
+        return SysMLConstraintDef(
+            name=name,
+            expression=expression,
+            parameters=params,
+            is_assertion=is_assertion,
+            doc=doc
+        )
+
+    def _parse_test_case_block(self, decl: Dict[str, Any]) -> SysMLTestCaseDef:
+        header = decl["header"]
+        m = re.search(r'\btest\s+case\s+(?:def\s+)?([a-zA-Z0-9_]+)', header)
+        name = m.group(1) if m else "TestCase"
+        doc = decl.get("doc", "")
+
+        subject_part = ""
+        verified_requirements = []
+        objective = doc
+        test_steps = []
+
+        body_decls = self._scan_declarations(decl["body"])
+        for d in body_decls:
+            if d["type"] == "statement":
+                stmt = d["statement"]
+                if re.match(r'^\s*subject\b', stmt):
+                    subj_m = re.search(r'^\s*subject\s+(?:part\s+)?([a-zA-Z0-9_]+)', stmt)
+                    if subj_m:
+                        subject_part = subj_m.group(1)
+
+                elif re.match(r'^\s*verify\b', stmt):
+                    req_m = re.search(r'^\s*verify\s+(?:requirement\s+)?([a-zA-Z0-9_\-]+)', stmt)
+                    if req_m:
+                        verified_requirements.append(req_m.group(1))
+
+                elif re.match(r'^\s*objective\b', stmt):
+                    obj_m = re.search(r'^\s*objective\s*[:=]?\s*["\']?([^"\']+)["\']?', stmt)
+                    if obj_m:
+                        objective = obj_m.group(1).strip()
+
+                elif re.match(r'^\s*(?:step|test\s+step|action|assert)\b', stmt):
+                    step_m = re.search(r'^\s*(?:step|test\s+step|action|assert)\s+([a-zA-Z0-9_\-]+)', stmt)
+                    if step_m:
+                        test_steps.append(step_m.group(1))
+
+        return SysMLTestCaseDef(
+            name=name,
+            subject_part=subject_part,
+            verified_requirements=verified_requirements,
+            objective=objective,
+            test_steps=test_steps,
+            doc=doc
+        )
+
+    def _parse_action_decl(self, text: str, doc: str = "", parent_name: str = "") -> ActionDef:
+        m = re.search(r'\baction\s+(?:def\s+)?([a-zA-Z0-9_]+)', text)
+        name = m.group(1) if m else "Action"
+        is_def = bool(re.search(r'\baction\s+def\b', text))
+        in_params: List[AttributeDef] = []
+        out_params: List[AttributeDef] = []
+        parameters: List[AttributeDef] = []
+        performer = parent_name
+        performer_part = parent_name
+        allocation = parent_name
+        attributes: Dict[str, Any] = {}
+
+        p_match = re.search(r'\(([^)]*)\)', text)
+        if p_match and p_match.group(1).strip():
+            raw_params = p_match.group(1).strip()
+            param_items = [p.strip() for p in raw_params.split(',') if p.strip()]
+            for p in param_items:
+                p_parts = p.split()
+                if len(p_parts) >= 3 and p_parts[0] in ('in', 'out', 'inout'):
+                    direction = p_parts[0]
+                    # Format: in name : type
+                    p_name = p_parts[1].rstrip(':')
+                    p_type = p_parts[2] if len(p_parts) > 2 else "String"
+                    if len(p_parts) >= 4 and p_parts[2] == ':':
+                        p_type = p_parts[3]
+                    attr = AttributeDef(name=p_name, type_name=p_type, default_value=direction)
+                    parameters.append(attr)
+                    if direction == 'out':
+                        out_params.append(attr)
+                    else:
+                        in_params.append(attr)
+                elif len(p_parts) >= 2:
+                    p_name = p_parts[0].rstrip(':')
+                    p_type = p_parts[1]
+                    if len(p_parts) >= 3 and p_parts[1] == ':':
+                        p_type = p_parts[2]
+                    attr = AttributeDef(name=p_name, type_name=p_type, default_value="in")
+                    in_params.append(attr)
+                    parameters.append(attr)
+
+        comb = text + " " + doc
+        m_perf = re.search(r'\[\s*(?:performer|performed_by|allocation|allocated_to)\s*[:=]\s*([a-zA-Z0-9_]+)\s*\]', comb, re.IGNORECASE)
+        if not m_perf:
+            m_perf = re.search(r'\b(?:performer|performed_by|allocated_to)\s*[:=]\s*["\']?([a-zA-Z0-9_]+)["\']?', comb, re.IGNORECASE)
+        if m_perf:
+            performer = m_perf.group(1)
+            performer_part = performer
+            allocation = performer
+
+        return ActionDef(
+            name=name,
+            doc=doc,
+            in_params=in_params,
+            out_params=out_params,
+            parameters=parameters,
+            performer=performer,
+            performer_part=performer_part,
+            allocation=allocation,
+            attributes=attributes,
+            is_def=is_def,
+        )
+
+    def _parse_action_block(self, decl: Dict[str, Any], parent_name: str = "") -> ActionDef:
+        header = decl["header"]
+        doc = decl.get("doc", "")
+        raw_body = decl.get("body", "")
+        if not doc:
+            doc_m = re.search(r'(?:^\s*doc\s*/\*|\s*/\*)(.*?)\*/', raw_body, re.DOTALL)
+            if doc_m:
+                extracted = doc_m.group(1).strip()
+                if extracted.startswith("doc"):
+                    extracted = extracted[3:].strip()
+                doc = extracted
+
+        base = self._parse_action_decl(header, doc, parent_name=parent_name)
+        name = base.name
+        is_def = bool(re.search(r'\baction\s+def\b', header)) or base.is_def
+        in_params = list(base.in_params)
+        out_params = list(base.out_params)
+        parameters = list(base.parameters)
+        performer = base.performer or parent_name
+        performer_part = base.performer_part or parent_name
+        allocation = base.allocation or performer
+        attributes: Dict[str, Any] = dict(base.attributes)
+        attribute_defs: List[AttributeDef] = []
+        steps: List[str] = []
+
+        body_decls = self._scan_declarations(raw_body)
+        for d in body_decls:
+            if d["type"] == "statement":
+                stmt = d["statement"]
+                s_doc = d.get("doc", "")
+                m_in = re.search(r'\bin\s+([a-zA-Z0-9_]+)\s*:\s*([a-zA-Z0-9_<>:]+)', stmt)
+                if m_in:
+                    p = AttributeDef(name=m_in.group(1), type_name=m_in.group(2).strip(), doc=s_doc, default_value="in")
+                    in_params.append(p)
+                    parameters.append(p)
+                    continue
+                m_out = re.search(r'\bout\s+([a-zA-Z0-9_]+)\s*:\s*([a-zA-Z0-9_<>:]+)', stmt)
+                if m_out:
+                    p = AttributeDef(name=m_out.group(1), type_name=m_out.group(2).strip(), doc=s_doc, default_value="out")
+                    out_params.append(p)
+                    parameters.append(p)
+                    continue
+                m_perf = re.search(r'\b(?:perform|performer|allocated_to|performer_part)\s*[:=]?\s*["\']?([a-zA-Z0-9_:]+)["\']?', stmt, re.IGNORECASE)
+                if m_perf:
+                    perf_val = m_perf.group(1).split("::")[-1]
+                    performer = perf_val
+                    performer_part = perf_val
+                    allocation = perf_val
+                    continue
+                m_alloc = re.search(r'\ballocate\s+(?:(?:this|action)\s+)?to\s+([a-zA-Z0-9_:]+)', stmt, re.IGNORECASE)
+                if m_alloc:
+                    alloc_val = m_alloc.group(1).split("::")[-1]
+                    performer = alloc_val
+                    performer_part = alloc_val
+                    allocation = alloc_val
+                    continue
+                m_step = re.search(r'\b(?:step|first|then)\s+([a-zA-Z0-9_]+)', stmt)
+                if m_step:
+                    steps.append(m_step.group(1))
+                    continue
+                if re.search(r'\battribute\s+', stmt):
+                    attr = self._parse_attribute_stmt(stmt, s_doc)
+                    attribute_defs.append(attr)
+                    val = attr.default_value if attr.default_value is not None else attr.type_name
+                    attributes[attr.name] = val
+                    if attr.name in ("performer", "performer_part", "allocation", "performer_node") and attr.default_value:
+                        val_str = str(attr.default_value).strip('"\'; ')
+                        performer = val_str
+                        performer_part = val_str
+                        allocation = val_str
+                    continue
+            elif d["type"] == "block":
+                b_header = d["header"]
+                m_act = re.search(r'\b(?:step|action)\s+([a-zA-Z0-9_]+)', b_header)
+                if m_act:
+                    steps.append(m_act.group(1))
+
+        if not performer or performer == parent_name:
+            comb = doc + " " + raw_body
+            m_perf_doc = re.search(r'\[\s*(?:performer|performed_by|allocation|allocated_to)\s*[:=]\s*([a-zA-Z0-9_]+)\s*\]', comb, re.IGNORECASE)
+            if not m_perf_doc:
+                m_perf_doc = re.search(r'@(?:performer|allocation)\s*\(\s*([a-zA-Z0-9_]+)\s*\)', comb, re.IGNORECASE)
+            if not m_perf_doc:
+                m_perf_doc = re.search(r'\b(?:performer|performed_by|allocated_to)\s*[:=]\s*["\']?([a-zA-Z0-9_]+)["\']?', comb, re.IGNORECASE)
+            if m_perf_doc:
+                performer = m_perf_doc.group(1)
+                performer_part = performer
+                allocation = performer
+
+        return ActionDef(
+            name=name,
+            doc=doc,
+            in_params=in_params,
+            out_params=out_params,
+            parameters=parameters,
+            performer=performer,
+            performer_part=performer_part,
+            allocation=allocation,
+            attributes=attributes,
+            attribute_defs=attribute_defs,
+            steps=steps,
+            is_def=is_def,
+        )
+
+    def _parse_operation_decl(self, text: str, doc: str = "") -> SysMLOperationDef:
+        m = re.search(r'\b(?:operation|feature)\s+(?:def\s+)?([a-zA-Z0-9_]+)', text)
+        name = m.group(1) if m else "Operation"
+
+        return_type = None
+        # Check return type after ':' outside params
+        after_paren = text
+        p_match = re.search(r'\(([^)]*)\)', text)
+        if p_match:
+            after_paren = text[p_match.end():]
+        ret_m = re.search(r':\s*([a-zA-Z0-9_<>:]+)', after_paren)
+        if ret_m:
+            return_type = ret_m.group(1).strip()
+
+        parameters = []
+        direction = "inout"
+        param_type = "String"
+
+        if p_match and p_match.group(1).strip():
+            raw_params = p_match.group(1).strip()
+            param_items = [p.strip() for p in raw_params.split(',') if p.strip()]
+            for p in param_items:
+                p_parts = p.split()
+                if len(p_parts) >= 3 and p_parts[0] in ('in', 'out', 'inout'):
+                    dir_val = p_parts[0]
+                    p_name = p_parts[1].rstrip(':')
+                    p_t = p_parts[2] if len(p_parts) > 2 else "String"
+                    if len(p_parts) >= 4 and p_parts[2] == ':':
+                        p_t = p_parts[3]
+                    parameters.append(AttributeDef(name=p_name, type_name=p_t, default_value=dir_val))
+                elif len(p_parts) >= 2:
+                    p_name = p_parts[0].rstrip(':')
+                    p_t = p_parts[1]
+                    if len(p_parts) >= 3 and p_parts[1] == ':':
+                        p_t = p_parts[2]
+                    parameters.append(AttributeDef(name=p_name, type_name=p_t, default_value="in"))
+
+            if parameters:
+                param_type = parameters[0].type_name
+                direction = getattr(parameters[0], "default_value", "inout")
+
+        return SysMLOperationDef(
+            name=name,
+            direction=direction,
+            param_type=param_type,
+            return_type=return_type,
+            doc=doc,
+            parameters=parameters
+        )
+
+    def _parse_item_flow_stmt(self, stmt: str, doc: str = "") -> ItemFlowDef:
+        dir_m = re.search(r'\b(in|out|inout)\b', stmt)
+        direction = dir_m.group(1) if dir_m else "out"
+
+        m_name = re.search(r'\b(?:item\s+)?flow\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt)
+        name = m_name.group(1) if m_name else "ItemFlow"
+
+        type_m = re.search(r':\s*([a-zA-Z0-9_<>:]+)', stmt)
+        if type_m:
+            item_type = type_m.group(1).strip()
+        else:
+            of_m = re.search(r'\b(?:of|item)\s+([a-zA-Z0-9_]+)', stmt)
+            item_type = of_m.group(1).strip() if of_m else "Item"
+
+        rate_m = re.search(r'\b(?:rate|rate_hz)\s*[:=]?\s*([0-9.]+)\s*(?:Hz)?', stmt, re.IGNORECASE)
+        rate_hz = float(rate_m.group(1)) if rate_m else None
+
+        unit_m = re.search(r'\bunit\s*[:=]\s*["\']?([^"\';\],]+)', stmt, re.IGNORECASE)
+        unit = unit_m.group(1).strip() if unit_m else ""
+
+        range_m = re.search(r'\b(?:valid_)?range\s*[:=]\s*["\']?(\[[^\]]+\]|[^"\';\],]+)', stmt, re.IGNORECASE)
+        valid_range = range_m.group(1).strip() if range_m else ""
+
+        def_m = re.search(r'\bdefault(?:_value)?\s*[:=]\s*["\']?([^"\';\],]+)', stmt, re.IGNORECASE)
+        default_value = def_m.group(1).strip() if def_m else None
+
+        return ItemFlowDef(
+            name=name,
+            direction=direction,
+            item_type=item_type,
+            doc=doc,
+            rate_hz=rate_hz,
+            unit=unit,
+            valid_range=valid_range,
+            default_value=default_value,
+        )
+
+    def _parse_port_stmt(self, stmt: str, doc: str = "") -> PortDef:
+        dir_m = re.search(r'\b(in|out|inout)\b', stmt)
+        direction = dir_m.group(1) if dir_m else "inout"
+
+        is_conjugated = bool('~' in stmt)
+
+        m = re.search(r'\bport\s+(?:def\s+)?~?\s*([a-zA-Z0-9_]+)', stmt)
+        name = m.group(1) if m else "Port"
+
+        type_m = re.search(r':\s*~?\s*([a-zA-Z0-9_<>:]+)', stmt)
+        type_name = type_m.group(1).strip() if type_m else "Port"
+        if type_name.startswith("~"):
+            is_conjugated = True
+            type_name = type_name.lstrip("~").strip() or "Port"
+
+        # Port category detection
+        m_cat = re.search(r'\b(?:port_)?category\s*[:=]\s*["\']?([a-zA-Z0-9_]+)', stmt + " " + doc, re.IGNORECASE)
+        if m_cat:
+            port_category = m_cat.group(1)
+        else:
+            text_check = f"{type_name} {name} {stmt} {doc}"
+            if re.search(r'\bCommand(?:Port)?\b', text_check, re.IGNORECASE):
+                port_category = "CommandPort"
+            elif re.search(r'\bTelemetry(?:Port)?\b', text_check, re.IGNORECASE):
+                port_category = "TelemetryPort"
+            elif re.search(r'\bEvent(?:Port)?\b', text_check, re.IGNORECASE):
+                port_category = "EventPort"
+            else:
+                port_category = "DataPort"
+
+        # Protocol family detection
+        m_proto = re.search(r'\b(?:protocol_family|protocol)\s*[:=]\s*["\']?([^"\';\],]+)', stmt + " " + doc, re.IGNORECASE)
+        if m_proto:
+            protocol_family = m_proto.group(1).strip()
+        else:
+            text_check = f"{stmt} {doc} {type_name}"
+            if re.search(r'\bARINC[- ]?429\b', text_check, re.IGNORECASE):
+                protocol_family = "ARINC 429"
+            elif re.search(r'\bMIL[- ]?STD[- ]?1553\b', text_check, re.IGNORECASE):
+                protocol_family = "MIL-STD-1553"
+            elif re.search(r'\bCAN\b|\bCAN[- ]?(?:FD|Bus)\b', text_check, re.IGNORECASE):
+                protocol_family = "CAN"
+            elif re.search(r'\bEthernet\b|\bAFDX\b', text_check, re.IGNORECASE):
+                protocol_family = "Ethernet"
+            elif re.search(r'\bRS[- ]?485\b', text_check, re.IGNORECASE):
+                protocol_family = "RS-485"
+            elif re.search(r'\bDiscrete\b', text_check, re.IGNORECASE):
+                protocol_family = "Discrete"
+            elif re.search(r'\bUART\b', text_check, re.IGNORECASE):
+                protocol_family = "UART"
+            elif re.search(r'\bSPI\b', text_check, re.IGNORECASE):
+                protocol_family = "SPI"
+            elif re.search(r'\bI2C\b', text_check, re.IGNORECASE):
+                protocol_family = "I2C"
+            elif re.search(r'\bSpaceWire\b', text_check, re.IGNORECASE):
+                protocol_family = "SpaceWire"
+            else:
+                protocol_family = ""
+
+        electrical_attributes: Dict[str, Any] = {}
+        m_baud = re.search(r'\bbaud(?:_rate)?\s*[:=]\s*([0-9]+)', stmt + " " + doc, re.IGNORECASE)
+        if m_baud:
+            electrical_attributes["baud_rate"] = int(m_baud.group(1))
+        m_volt = re.search(r'\bvoltage(?:_domain)?\s*[:=]\s*["\']?([0-9a-zA-Z._]+)', stmt + " " + doc, re.IGNORECASE)
+        if m_volt:
+            electrical_attributes["voltage_domain"] = m_volt.group(1)
+        m_wire = re.search(r'\bwire(?:_count)?\s*[:=]\s*([0-9]+)', stmt + " " + doc, re.IGNORECASE)
+        if m_wire:
+            electrical_attributes["wire_count"] = int(m_wire.group(1))
+        m_imp = re.search(r'\bimpedance\s*[:=]\s*["\']?([0-9a-zA-Z._]+)', stmt + " " + doc, re.IGNORECASE)
+        if m_imp:
+            electrical_attributes["impedance"] = m_imp.group(1)
+
+        item_flows: List[ItemFlowDef] = []
+        if re.search(r'\b(?:item\s+)?flow\b', stmt):
+            item_flows.append(self._parse_item_flow_stmt(stmt, doc))
+
+        return PortDef(
+            name=name,
+            type_name=type_name,
+            direction=direction,
+            doc=doc,
+            is_conjugated=is_conjugated,
+            port_category=port_category,
+            protocol_family=protocol_family,
+            electrical_attributes=electrical_attributes,
+            item_flows=item_flows,
+        )
+
+    def _parse_port_block(self, decl: Dict[str, Any]) -> PortDef:
+        header = decl["header"]
+        doc = decl.get("doc", "")
+        port = self._parse_port_stmt(header, doc)
+
+        body_decls = self._scan_declarations(decl.get("body", ""))
+        for d in body_decls:
+            if d["type"] == "statement":
+                stmt = d["statement"]
+                stmt_doc = d.get("doc", "")
+                if re.search(r'\b(?:item\s+)?flow\b', stmt):
+                    flow_obj = self._parse_item_flow_stmt(stmt, stmt_doc)
+                    port.item_flows.append(flow_obj)
+                elif re.search(r'\battribute\s+', stmt):
+                    attr = self._parse_attribute_stmt(stmt, stmt_doc)
+                    val = attr.default_value if attr.default_value is not None else attr.type_name
+                    if isinstance(val, str):
+                        val_clean = val.strip('"\'; ')
+                        if val_clean.isdigit():
+                            val = int(val_clean)
+                        else:
+                            val = val_clean
+                    port.electrical_attributes[attr.name] = val
+                    if attr.name in ("protocol", "protocol_family") and attr.default_value:
+                        port.protocol_family = attr.default_value.strip('"\'; ')
+                    elif attr.name in ("category", "port_category") and attr.default_value:
+                        port.port_category = attr.default_value.strip('"\'; ')
+            elif d["type"] == "block":
+                b_header = d["header"]
+                b_doc = d.get("doc", "")
+                if re.search(r'\b(?:item\s+)?flow\b', b_header):
+                    flow_obj = self._parse_item_flow_stmt(b_header, b_doc)
+                    port.item_flows.append(flow_obj)
+        return port
+
+    def _parse_attribute_stmt(self, stmt: str, doc: str = "") -> AttributeDef:
+        m = re.search(r'\battribute\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt)
+        name = m.group(1) if m else "Attribute"
+
+        type_name = "String"
+        type_m = re.search(r':\s*([a-zA-Z0-9_<>:]+)', stmt)
+        if type_m:
+            type_name = type_m.group(1).strip()
+
+        default_value = None
+        def_m = re.search(r'=\s*([^;]+)', stmt)
+        if def_m:
+            default_value = def_m.group(1).strip()
+
+        return AttributeDef(name=name, type_name=type_name, doc=doc, default_value=default_value)
+
+    def _parse_requirement_block(self, decl: Dict[str, Any]) -> RequirementDef:
+        header = decl["header"]
+        m = re.search(r'\brequirement\s+(?:def\s+)?([a-zA-Z0-9_]+)', header)
+        name = m.group(1) if m else "Requirement"
+        doc = decl.get("doc", "")
+        req_id = ""
+        text = doc
+
+        assumes = []
+        requires = []
+        verified_by = []
+        satisfied_by = []
+
+        body_decls = self._scan_declarations(decl["body"])
+        for d in body_decls:
+            if d["type"] == "statement":
+                stmt = d["statement"]
+                id_m = re.search(r'\bid\s*[:=]\s*["\']?([^"\']+)["\']?', stmt)
+                if id_m:
+                    req_id = id_m.group(1).strip()
+                asm_m = re.search(r'\bassume\s+([^;]+)', stmt)
+                if asm_m:
+                    assumes.append(asm_m.group(1).strip())
+                req_m = re.search(r'\brequire\s+([^;]+)', stmt)
+                if req_m:
+                    requires.append(req_m.group(1).strip())
+                vb_m = re.search(r'\bverify\s+(?:by\s+)?([^;]+)', stmt)
+                if vb_m:
+                    verified_by.append(vb_m.group(1).strip())
+                sb_m = re.search(r'\bsatisfy\s+(?:by\s+)?([^;]+)', stmt)
+                if sb_m:
+                    satisfied_by.append(sb_m.group(1).strip())
+            if d.get("doc") and not text:
+                text = d["doc"]
+
+        return RequirementDef(
+            name=name,
+            doc=doc,
+            req_id=req_id,
+            text=text,
+            assumes=assumes,
+            requires=requires,
+            verified_by=verified_by,
+            satisfied_by=satisfied_by
+        )
+
+    def _parse_state_block(self, decl: Dict[str, Any]) -> StateDef:
+        header = decl["header"]
+        m = re.search(r'\bstate\s+(?:def\s+)?([a-zA-Z0-9_]+)', header)
+        name = m.group(1) if m else "State"
+        doc = decl.get("doc", "")
+        entry_action = None
+        do_action = None
+        exit_action = None
+        transitions = []
+
+        body_decls = self._scan_declarations(decl["body"])
+        for d in body_decls:
+            if d["type"] == "statement":
+                stmt = d["statement"]
+                if stmt.startswith("entry"):
+                    entry_action = stmt[5:].strip()
+                elif stmt.startswith("do"):
+                    do_action = stmt[2:].strip()
+                elif stmt.startswith("exit"):
+                    exit_action = stmt[4:].strip()
+                elif stmt.startswith("transition"):
+                    transitions.append(stmt[10:].strip())
+
+        return StateDef(
+            name=name,
+            doc=doc,
+            entry_action=entry_action,
+            do_action=do_action,
+            exit_action=exit_action,
+            transitions=transitions
+        )
+
+    def _parse_use_case_block(self, decl: Dict[str, Any]) -> UseCaseDef:
+        header = decl["header"]
+        m = re.search(r'\buse\s+case\s+(?:def\s+)?([a-zA-Z0-9_]+)', header)
+        name = m.group(1) if m else "UseCase"
+        doc = decl.get("doc", "")
+        raw_body = decl.get("body", "")
+        if not doc:
+            doc_m = re.search(r'(?:^\s*doc\s*/\*|\s*/\*)(.*?)\*/', raw_body, re.DOTALL)
+            if doc_m:
+                extracted = doc_m.group(1).strip()
+                if extracted.startswith("doc"):
+                    extracted = extracted[3:].strip()
+                doc = extracted
+
+        subject = ""
+        actor = ""
+        actors: List[str] = []
+        objective = doc
+        includes: List[str] = []
+        extends: List[str] = []
+        steps: List[str] = []
+        preconditions: List[str] = []
+        postconditions: List[str] = []
+        attributes: Dict[str, Any] = {}
+        attribute_defs: List[AttributeDef] = []
+
+        body_decls = self._scan_declarations(raw_body)
+        for d in body_decls:
+            if d["type"] == "statement":
+                stmt = d["statement"]
+                stmt_doc = d.get("doc", "")
+                subj_m = re.search(r'\bsubject\s+([a-zA-Z0-9_]+)', stmt)
+                if subj_m:
+                    subject = subj_m.group(1)
+                act_m = re.search(r'\bactor\s+([a-zA-Z0-9_]+)', stmt)
+                if act_m:
+                    act_name = act_m.group(1)
+                    if act_name not in actors:
+                        actors.append(act_name)
+                    if not actor:
+                        actor = act_name
+                obj_m = re.search(r'\bobjective\s*[:=]?\s*["\']?([^"\']+)["\']?', stmt)
+                if obj_m:
+                    objective = obj_m.group(1).strip()
+                inc_m = re.search(r'\binclude\s+([a-zA-Z0-9_]+)', stmt)
+                if inc_m:
+                    includes.append(inc_m.group(1))
+                ext_m = re.search(r'\bextend\s+([a-zA-Z0-9_]+)', stmt)
+                if ext_m:
+                    extends.append(ext_m.group(1))
+                step_m = re.search(r'\b(?:step|first|then)\s+([a-zA-Z0-9_]+|["][^"]+["]|[^;]+)', stmt)
+                if step_m:
+                    step_val = step_m.group(1).strip().strip('"')
+                    steps.append(step_val)
+                pre_m = re.search(r'\bprecondition\s*[:=]?\s*([^;]+)', stmt)
+                if pre_m:
+                    preconditions.append(pre_m.group(1).strip().strip('"'))
+                post_m = re.search(r'\bpostcondition\s*[:=]?\s*([^;]+)', stmt)
+                if post_m:
+                    postconditions.append(post_m.group(1).strip().strip('"'))
+                if re.search(r'\battribute\s+', stmt):
+                    attr = self._parse_attribute_stmt(stmt, stmt_doc)
+                    attribute_defs.append(attr)
+                    val = attr.default_value if attr.default_value is not None else attr.type_name
+                    attributes[attr.name] = val
+            elif d["type"] == "block":
+                b_header = d["header"]
+                b_step_m = re.search(r'\b(?:step|action)\s+([a-zA-Z0-9_]+)', b_header)
+                if b_step_m:
+                    steps.append(b_step_m.group(1))
+
+        if actor and actor not in actors:
+            actors.insert(0, actor)
+        elif actors and not actor:
+            actor = actors[0]
+
+        return UseCaseDef(
+            name=name,
+            doc=doc,
+            subject=subject,
+            actor=actor,
+            actors=actors,
+            objective=objective,
+            includes=includes,
+            extends=extends,
+            steps=steps,
+            preconditions=preconditions,
+            postconditions=postconditions,
+            attributes=attributes,
+            attribute_defs=attribute_defs,
+        )
+
+    def _parse_use_case_stmt(self, stmt: str, doc: str = "") -> UseCaseDef:
+        m = re.search(r'\buse\s+case\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt)
+        name = m.group(1) if m else "UseCase"
+        actor = ""
+        actors: List[str] = []
+        act_m = re.search(r'\bactor\s+([a-zA-Z0-9_]+)', stmt)
+        if act_m:
+            actor = act_m.group(1)
+            actors.append(actor)
+        subj_m = re.search(r'\bsubject\s+([a-zA-Z0-9_]+)', stmt)
+        subject = subj_m.group(1) if subj_m else ""
+        return UseCaseDef(
+            name=name,
+            doc=doc,
+            subject=subject,
+            actor=actor,
+            actors=actors,
+            objective=doc,
+        )
+
+    def _parse_item_block(self, decl: Dict[str, Any]) -> ItemDef:
+        header = decl["header"]
+        m = re.search(r'\bitem\s+(?:def\s+)?([a-zA-Z0-9_]+)', header)
+        name = m.group(1) if m else "Item"
+        doc = decl.get("doc", "")
+        attributes = []
+
+        body_decls = self._scan_declarations(decl["body"])
+        for d in body_decls:
+            if d["type"] == "statement":
+                stmt = d["statement"]
+                if re.search(r'\battribute\s+', stmt):
+                    attributes.append(self._parse_attribute_stmt(stmt, d.get("doc", "")))
+
+        return ItemDef(name=name, doc=doc, attributes=attributes)
+
+    @classmethod
+    def query_reachable_hazards(cls, package: SysMLPackage, part_or_port: str, max_depth: Optional[int] = None) -> List[HazardDef]:
+        """Class method helper to query reachable hazards from a package AST."""
+        return package.get_reachable_hazards(part_or_port, max_depth=max_depth)
+
+    def _extract_severity(self, text: str, doc: str = "", default: int = 1) -> int:
+        """Extracts integer severity rating from attribute definitions, annotations, or doc comments."""
+        m = re.search(r'\bseverity\b\s*(?::\s*[a-zA-Z0-9_]+\s*)?=\s*([0-9]+)', text, re.IGNORECASE)
+        if m:
+            try:
+                return int(m.group(1))
+            except ValueError:
+                pass
+
+        full_text = f"{text} {doc}"
+        m_doc = re.search(r'\bseverity\s*[:=]\s*([0-9]+)', full_text, re.IGNORECASE)
+        if m_doc:
+            try:
+                return int(m_doc.group(1))
+            except ValueError:
+                pass
+
+        m_bracket = re.search(r'\[(?:severity|s)\s*[:=]\s*([0-9]+)\]', full_text, re.IGNORECASE)
+        if m_bracket:
+            try:
+                return int(m_bracket.group(1))
+            except ValueError:
+                pass
+
+        return default
+
+    def _parse_hazard_block(self, decl: Dict[str, Any]) -> HazardDef:
+        header = decl["header"]
+        m = re.search(r'\bhazard\s+(?:def\s+)?([a-zA-Z0-9_]+)', header)
+        name = m.group(1) if m else "Hazard"
+        doc = decl.get("doc", "")
+        attributes: Dict[str, Any] = {}
+        attribute_defs: List[AttributeDef] = []
+        source_port = ""
+        target_port = ""
+        part_ref = ""
+
+        body_decls = self._scan_declarations(decl["body"])
+        for d in body_decls:
+            if d["type"] == "statement":
+                stmt = d["statement"]
+                stmt_doc = d.get("doc", "")
+                if re.search(r'\battribute\s+', stmt):
+                    attr = self._parse_attribute_stmt(stmt, stmt_doc)
+                    attribute_defs.append(attr)
+                    val = attr.default_value if attr.default_value is not None else attr.type_name
+                    attributes[attr.name] = val
+                    if attr.name == "severity" and attr.default_value:
+                        try:
+                            attributes["severity"] = int(attr.default_value)
+                        except ValueError:
+                            pass
+                    elif attr.name in ("source_port", "source", "port") and attr.default_value:
+                        source_port = attr.default_value.strip('"\'; ')
+                    elif attr.name in ("target_port", "target") and attr.default_value:
+                        target_port = attr.default_value.strip('"\'; ')
+                    elif attr.name in ("part_ref", "part", "subsystem") and attr.default_value:
+                        part_ref = attr.default_value.strip('"\'; ')
+                elif re.search(r'\b(?:part_ref|part|subject)\s*[:=]\s*["\']?([^"\';\s]+)', stmt):
+                    m_part = re.search(r'\b(?:part_ref|part|subject)\s*[:=]\s*["\']?([^"\';\s]+)', stmt)
+                    if m_part:
+                        part_ref = m_part.group(1)
+                elif re.search(r'\b(?:source_port|source|port)\s*[:=]\s*["\']?([^"\';\s]+)', stmt):
+                    m_p = re.search(r'\b(?:source_port|source|port)\s*[:=]\s*["\']?([^"\';\s]+)', stmt)
+                    if m_p:
+                        source_port = m_p.group(1)
+                elif re.search(r'\b(?:target_port|target)\s*[:=]\s*["\']?([^"\';\s]+)', stmt):
+                    m_p = re.search(r'\b(?:target_port|target)\s*[:=]\s*["\']?([^"\';\s]+)', stmt)
+                    if m_p:
+                        target_port = m_p.group(1)
+
+        severity = 1
+        if "severity" in attributes:
+            try:
+                severity = int(attributes["severity"])
+            except (ValueError, TypeError):
+                severity = self._extract_severity(decl["body"], doc, default=1)
+        else:
+            severity = self._extract_severity(decl["body"], doc, default=1)
+
+        if source_port:
+            attributes["source_port"] = source_port
+        if target_port:
+            attributes["target_port"] = target_port
+        if part_ref:
+            attributes["part_ref"] = part_ref
+
+        return HazardDef(
+            name=name,
+            doc=doc,
+            severity=severity,
+            source_port=source_port,
+            target_port=target_port,
+            attributes=attributes,
+            attribute_defs=attribute_defs,
+            part_ref=part_ref,
+        )
+
+    def _parse_hazard_stmt(self, stmt: str, doc: str = "") -> HazardDef:
+        m = re.search(r'\bhazard\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt)
+        name = m.group(1) if m else "Hazard"
+        severity = self._extract_severity(stmt, doc, default=1)
+        attributes: Dict[str, Any] = {"severity": severity}
+        source_port = ""
+        target_port = ""
+        part_ref = ""
+
+        m_src = re.search(r'\b(?:source_port|source|port)\s*[:=]\s*["\']?([^"\';\s]+)', stmt)
+        if m_src:
+            source_port = m_src.group(1)
+            attributes["source_port"] = source_port
+        m_tgt = re.search(r'\b(?:target_port|target)\s*[:=]\s*["\']?([^"\';\s]+)', stmt)
+        if m_tgt:
+            target_port = m_tgt.group(1)
+            attributes["target_port"] = target_port
+        m_part = re.search(r'\b(?:part_ref|part|subject)\s*[:=]\s*["\']?([^"\';\s]+)', stmt)
+        if m_part:
+            part_ref = m_part.group(1)
+            attributes["part_ref"] = part_ref
+
+        return HazardDef(
+            name=name,
+            doc=doc,
+            severity=severity,
+            source_port=source_port,
+            target_port=target_port,
+            attributes=attributes,
+            part_ref=part_ref,
+        )
+
+    def _parse_risk_block(self, decl: Dict[str, Any]) -> RiskDef:
+        header = decl["header"]
+        m = re.search(r'\brisk\s+(?:def\s+)?([a-zA-Z0-9_]+)', header)
+        name = m.group(1) if m else "Risk"
+        doc = decl.get("doc", "")
+        attributes: Dict[str, Any] = {}
+        attribute_defs: List[AttributeDef] = []
+        source_port = ""
+        target_port = ""
+        hazard_ref = ""
+
+        body_decls = self._scan_declarations(decl["body"])
+        for d in body_decls:
+            if d["type"] == "statement":
+                stmt = d["statement"]
+                stmt_doc = d.get("doc", "")
+                if re.search(r'\battribute\s+', stmt):
+                    attr = self._parse_attribute_stmt(stmt, stmt_doc)
+                    attribute_defs.append(attr)
+                    val = attr.default_value if attr.default_value is not None else attr.type_name
+                    attributes[attr.name] = val
+                    if attr.name == "severity" and attr.default_value:
+                        try:
+                            attributes["severity"] = int(attr.default_value)
+                        except ValueError:
+                            pass
+                    elif attr.name in ("hazard_ref", "hazard") and attr.default_value:
+                        hazard_ref = attr.default_value.strip('"\'; ')
+                    elif attr.name in ("source_port", "source") and attr.default_value:
+                        source_port = attr.default_value.strip('"\'; ')
+                    elif attr.name in ("target_port", "target") and attr.default_value:
+                        target_port = attr.default_value.strip('"\'; ')
+                elif re.search(r'\b(?:hazard_ref|hazard)\s*[:=]\s*["\']?([^"\';\s]+)', stmt):
+                    m_haz = re.search(r'\b(?:hazard_ref|hazard)\s*[:=]\s*["\']?([^"\';\s]+)', stmt)
+                    if m_haz:
+                        hazard_ref = m_haz.group(1)
+
+        severity = 1
+        if "severity" in attributes:
+            try:
+                severity = int(attributes["severity"])
+            except (ValueError, TypeError):
+                severity = self._extract_severity(decl["body"], doc, default=1)
+        else:
+            severity = self._extract_severity(decl["body"], doc, default=1)
+
+        if source_port:
+            attributes["source_port"] = source_port
+        if target_port:
+            attributes["target_port"] = target_port
+        if hazard_ref:
+            attributes["hazard_ref"] = hazard_ref
+
+        return RiskDef(
+            name=name,
+            doc=doc,
+            severity=severity,
+            source_port=source_port,
+            target_port=target_port,
+            attributes=attributes,
+            attribute_defs=attribute_defs,
+            hazard_ref=hazard_ref,
+        )
+
+    def _parse_risk_stmt(self, stmt: str, doc: str = "") -> RiskDef:
+        m = re.search(r'\brisk\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt)
+        name = m.group(1) if m else "Risk"
+        severity = self._extract_severity(stmt, doc, default=1)
+        attributes: Dict[str, Any] = {"severity": severity}
+        hazard_ref = ""
+        source_port = ""
+        target_port = ""
+
+        m_haz = re.search(r'\b(?:hazard_ref|hazard)\s*[:=]\s*["\']?([^"\';\s]+)', stmt)
+        if m_haz:
+            hazard_ref = m_haz.group(1)
+            attributes["hazard_ref"] = hazard_ref
+
+        return RiskDef(
+            name=name,
+            doc=doc,
+            severity=severity,
+            source_port=source_port,
+            target_port=target_port,
+            attributes=attributes,
+            hazard_ref=hazard_ref,
+        )
+
+    def _parse_connection_block(self, decl: Dict[str, Any]) -> ConnectionDef:
+        header = decl["header"]
+        is_flow = bool(re.search(r'\b(?:flow|item\s+flow)\b', header))
+        m = re.search(r'\b(?:connection|flow|item\s+flow|interface)\s+(?:def\s+)?([a-zA-Z0-9_]+)', header)
+        name = m.group(1) if m else "Connection"
+        doc = decl.get("doc", "")
+
+        source_port = ""
+        target_port = ""
+        item_payload = ""
+        attributes: Dict[str, Any] = {}
+        attribute_defs: List[AttributeDef] = []
+        flow_properties: Dict[str, Any] = {}
+
+        m_to = re.search(r'\b(?:connect|flow\s+from)\s+([a-zA-Z0-9_\.]+)\s+to\s+([a-zA-Z0-9_\.]+)', header)
+        if m_to:
+            source_port = m_to.group(1)
+            target_port = m_to.group(2)
+
+        body_decls = self._scan_declarations(decl["body"])
+        for d in body_decls:
+            if d["type"] == "statement":
+                stmt = d["statement"]
+                stmt_doc = d.get("doc", "")
+                if re.search(r'\b(?:connect|flow\s+from)\b', stmt):
+                    sub_conn = self._parse_connect_stmt(stmt, stmt_doc)
+                    if sub_conn:
+                        if not source_port:
+                            source_port = sub_conn.source_port
+                        if not target_port:
+                            target_port = sub_conn.target_port
+                        if sub_conn.is_flow:
+                            is_flow = True
+                        if sub_conn.item_payload and not item_payload:
+                            item_payload = sub_conn.item_payload
+                elif re.search(r'\battribute\s+', stmt):
+                    attr = self._parse_attribute_stmt(stmt, stmt_doc)
+                    attribute_defs.append(attr)
+                    val = attr.default_value if attr.default_value is not None else attr.type_name
+                    attributes[attr.name] = val
+                    if attr.name in ("source_port", "source", "from", "src", "end1") and attr.default_value:
+                        source_port = attr.default_value.strip('"\'; ')
+                    elif attr.name in ("target_port", "target", "to", "dst", "end2") and attr.default_value:
+                        target_port = attr.default_value.strip('"\'; ')
+                    elif attr.name in ("item_payload", "payload", "item_flow_ref", "item_flow") and attr.default_value:
+                        item_payload = attr.default_value.strip('"\'; ')
+                elif re.search(r'\b(?:source|from|end1|source_port)\s*[:=]\s*["\']?([^"\';\s]+)', stmt):
+                    m_src = re.search(r'\b(?:source|from|end1|source_port)\s*[:=]\s*["\']?([^"\';\s]+)', stmt)
+                    if m_src:
+                        source_port = m_src.group(1)
+                elif re.search(r'\b(?:target|to|end2|target_port)\s*[:=]\s*["\']?([^"\';\s]+)', stmt):
+                    m_dst = re.search(r'\b(?:target|to|end2|target_port)\s*[:=]\s*["\']?([^"\';\s]+)', stmt)
+                    if m_dst:
+                        target_port = m_dst.group(1)
+                elif re.search(r'\bend\s+(?:port\s+)?([a-zA-Z0-9_\.]+)', stmt):
+                    m_end = re.search(r'\bend\s+(?:port\s+)?([a-zA-Z0-9_\.]+)', stmt)
+                    if m_end:
+                        if not source_port:
+                            source_port = m_end.group(1)
+                        elif not target_port:
+                            target_port = m_end.group(1)
+                elif re.search(r'\b(?:item|payload|item_payload)\s*[:=]?\s*["\']?([a-zA-Z0-9_]+)["\']?', stmt):
+                    m_p = re.search(r'\b(?:item|payload|item_payload)\s*[:=]?\s*["\']?([a-zA-Z0-9_]+)["\']?', stmt)
+                    if m_p and not item_payload:
+                        item_payload = m_p.group(1).strip()
+
+        severity = self._extract_severity(decl["body"], doc, default=1)
+        if "severity" in attributes:
+            try:
+                severity = int(attributes["severity"])
+            except (ValueError, TypeError):
+                pass
+
+        if source_port:
+            attributes["source_port"] = source_port
+        if target_port:
+            attributes["target_port"] = target_port
+
+        combined_text = decl.get("header", "") + " " + decl.get("body", "") + " " + doc
+        protocol = ""
+        if "protocol" in attributes:
+            raw_p = str(attributes["protocol"]).strip('"\'; ')
+            if raw_p.lower() not in ("string", "type", ""):
+                protocol = raw_p
+        elif "protocol_family" in attributes:
+            protocol = str(attributes["protocol_family"]).strip('"\'; ')
+        if not protocol:
+            m_proto = re.search(r'\b(?:protocol_family|protocol)\s*(?::\s*[a-zA-Z0-9_]+\s*)?[:=]\s*["\']?([^"\';\s]+)', combined_text, re.IGNORECASE)
+            if m_proto:
+                protocol = m_proto.group(1).strip('"\'; ')
+
+        latency_ms = None
+        if "latency_ms" in attributes:
+            try:
+                latency_ms = float(str(attributes["latency_ms"]).strip('"\'; '))
+            except (ValueError, TypeError):
+                pass
+        elif "latency" in attributes:
+            try:
+                latency_ms = float(str(attributes["latency"]).strip('"\'; '))
+            except (ValueError, TypeError):
+                pass
+        if latency_ms is None:
+            m_lat = re.search(r'\blatency(?:_ms)?\s*(?::\s*[a-zA-Z0-9_]+\s*)?[:=]\s*([0-9.]+)', combined_text, re.IGNORECASE)
+            if m_lat:
+                try:
+                    latency_ms = float(m_lat.group(1))
+                except ValueError:
+                    pass
+
+        item_flow_ref = ""
+        if "item_flow_ref" in attributes:
+            raw_flow = str(attributes["item_flow_ref"]).strip('"\'; ')
+            if raw_flow.lower() not in ("string", "type", ""):
+                item_flow_ref = raw_flow
+        elif "item_flow" in attributes:
+            item_flow_ref = str(attributes["item_flow"]).strip('"\'; ')
+        if not item_flow_ref:
+            m_flow = re.search(r'\b(?:item_flow(?:_ref)?|flow)\s*(?::\s*[a-zA-Z0-9_]+\s*)?[:=]\s*["\']?([^"\';\s]+)', combined_text, re.IGNORECASE)
+            if not m_flow:
+                m_flow = re.search(r'\b(?:flow\s+of|item\s+flow|item)\s+([a-zA-Z0-9_]+)', combined_text)
+            if not m_flow:
+                m_flow = re.search(r'\bflow\s+(?!from\b|to\b|of\b)([a-zA-Z0-9_]+)', combined_text)
+            item_flow_ref = m_flow.group(1).strip('"\';\\]\\[ ') if m_flow else ""
+
+        if not item_payload:
+            item_payload = item_flow_ref
+
+        source_part = str(attributes.get("source_part", ""))
+        target_part = str(attributes.get("target_part", ""))
+        if not source_part and source_port:
+            source_part = source_port.split('.', 1)[0] if '.' in source_port else source_port
+        if not target_part and target_port:
+            target_part = target_port.split('.', 1)[0] if '.' in target_port else target_port
+
+        for k, v in attributes.items():
+            if k not in ("source_port", "target_port", "source_part", "target_part", "severity", "protocol", "latency_ms", "latency", "item_flow_ref", "item_flow", "item_payload", "payload"):
+                flow_properties[k] = v
+
+        return ConnectionDef(
+            name=name,
+            source_port=source_port,
+            target_port=target_port,
+            doc=doc,
+            severity=severity,
+            source_part=source_part,
+            target_part=target_part,
+            item_flow_ref=item_flow_ref or item_payload,
+            protocol=protocol,
+            latency_ms=latency_ms,
+            attributes=attributes,
+            attribute_defs=attribute_defs,
+            item_payload=item_payload or item_flow_ref,
+            flow_properties=flow_properties,
+            is_flow=is_flow,
+        )
+
+    def _parse_connection_stmt(self, stmt: str, doc: str = "") -> ConnectionDef:
+        is_flow = bool(re.search(r'\b(?:flow|item\s+flow)\b', stmt))
+        m = re.search(r'\b(?:connection|flow|item\s+flow|interface)\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt)
+        name = m.group(1) if m else "Connection"
+        severity = self._extract_severity(stmt, doc, default=1)
+        source_port = ""
+        target_port = ""
+        item_payload = ""
+        attributes: Dict[str, Any] = {"severity": severity}
+        flow_properties: Dict[str, Any] = {}
+
+        m_to = re.search(r'\b(?:connect|flow\s+from)\s+([a-zA-Z0-9_\.]+)\s+to\s+([a-zA-Z0-9_\.]+)', stmt)
+        if m_to:
+            source_port = m_to.group(1)
+            target_port = m_to.group(2)
+        else:
+            m_src = re.search(r'\b(?:source|source_port|from)\s*[:=]\s*["\']?([^"\';\s]+)', stmt)
+            if m_src:
+                source_port = m_src.group(1)
+            m_dst = re.search(r'\b(?:target|target_port|to)\s*[:=]\s*["\']?([^"\';\s]+)', stmt)
+            if m_dst:
+                target_port = m_dst.group(1)
+
+        if source_port:
+            attributes["source_port"] = source_port
+        if target_port:
+            attributes["target_port"] = target_port
+
+        m_proto = re.search(r'\b(?:protocol_family|protocol)\s*(?::\s*[a-zA-Z0-9_]+\s*)?[:=]\s*["\']?([^"\';\s]+)', stmt + " " + doc, re.IGNORECASE)
+        protocol = m_proto.group(1).strip('"\';\\]\\[ ') if m_proto else ""
+
+        m_lat = re.search(r'\blatency(?:_ms)?\s*(?::\s*[a-zA-Z0-9_]+\s*)?[:=]\s*([0-9.]+)', stmt + " " + doc, re.IGNORECASE)
+        latency_ms = float(m_lat.group(1)) if m_lat else None
+
+        m_flow = re.search(r'\b(?:item_flow(?:_ref)?|flow)\s*(?::\s*[a-zA-Z0-9_]+\s*)?[:=]\s*["\']?([^"\';\s]+)', stmt, re.IGNORECASE)
+        if not m_flow:
+            m_flow = re.search(r'\b(?:flow\s+of|item\s+flow|item)\s+([a-zA-Z0-9_]+)', stmt)
+        if not m_flow:
+            m_flow = re.search(r'\bflow\s+(?!from\b|to\b|of\b)([a-zA-Z0-9_]+)', stmt)
+        item_flow_ref = m_flow.group(1).strip('"\';\\]\\[ ') if m_flow else ""
+
+        m_pay = re.search(r'\b(?:item_payload|payload)\s*[:=]?\s*["\']?([a-zA-Z0-9_]+)["\']?', stmt + " " + doc, re.IGNORECASE)
+        if m_pay:
+            item_payload = m_pay.group(1).strip()
+        elif item_flow_ref:
+            item_payload = item_flow_ref
+
+        source_part = source_port.split('.', 1)[0] if '.' in source_port else source_port
+        target_part = target_port.split('.', 1)[0] if '.' in target_port else target_port
+
+        return ConnectionDef(
+            name=name,
+            source_port=source_port,
+            target_port=target_port,
+            doc=doc,
+            severity=severity,
+            source_part=source_part,
+            target_part=target_part,
+            item_flow_ref=item_flow_ref or item_payload,
+            protocol=protocol,
+            latency_ms=latency_ms,
+            attributes=attributes,
+            item_payload=item_payload or item_flow_ref,
+            flow_properties=flow_properties,
+            is_flow=is_flow,
+        )
+
+    def _parse_connect_stmt(self, stmt: str, doc: str = "") -> Optional[ConnectionDef]:
+        name = ""
+        name_m = re.search(r'\bconnection\s+([a-zA-Z0-9_]+)', stmt)
+        if name_m:
+            name = name_m.group(1)
+
+        source_port = ""
+        target_port = ""
+        is_flow = bool(re.search(r'\b(?:item\s+)?flow\b', stmt))
+
+        m_to = re.search(r'\bconnect\s+([a-zA-Z0-9_\.]+)\s+to\s+([a-zA-Z0-9_\.]+)', stmt)
+        if m_to:
+            source_port = m_to.group(1)
+            target_port = m_to.group(2)
+        else:
+            m_flow_from = re.search(r'\b(?:item\s+)?flow\s+from\s+([a-zA-Z0-9_\.]+)\s+to\s+([a-zA-Z0-9_\.]+)', stmt)
+            if m_flow_from:
+                source_port = m_flow_from.group(1)
+                target_port = m_flow_from.group(2)
+                is_flow = True
+            else:
+                m_arrow = re.search(r'\bconnect\s+([a-zA-Z0-9_\.]+)\s*->\s*([a-zA-Z0-9_\.]+)', stmt)
+                if m_arrow:
+                    source_port = m_arrow.group(1)
+                    target_port = m_arrow.group(2)
+                else:
+                    m_paren = re.search(r'\bconnect\s*\(\s*([a-zA-Z0-9_\.]+)\s*,\s*([a-zA-Z0-9_\.]+)\s*\)', stmt)
+                    if m_paren:
+                        source_port = m_paren.group(1)
+                        target_port = m_paren.group(2)
+                    else:
+                        m_comma = re.search(r'\bconnect\s+([a-zA-Z0-9_\.]+)\s*,\s*([a-zA-Z0-9_\.]+)', stmt)
+                        if m_comma:
+                            source_port = m_comma.group(1)
+                            target_port = m_comma.group(2)
+
+        if not name:
+            if source_port and target_port:
+                src_clean = source_port.replace('.', '_')
+                dst_clean = target_port.replace('.', '_')
+                name = f"conn_{src_clean}_to_{dst_clean}"
+            else:
+                name = "Connection"
+
+        severity = self._extract_severity(stmt, doc, default=1)
+        attributes: Dict[str, Any] = {"severity": severity}
+        flow_properties: Dict[str, Any] = {}
+        if source_port:
+            attributes["source_port"] = source_port
+        if target_port:
+            attributes["target_port"] = target_port
+
+        m_proto = re.search(r'\b(?:protocol_family|protocol)\s*(?::\s*[a-zA-Z0-9_]+\s*)?[:=]\s*["\']?([^"\';\s]+)', stmt + " " + doc, re.IGNORECASE)
+        protocol = m_proto.group(1).strip('"\';\\]\\[ ') if m_proto else ""
+
+        m_lat = re.search(r'\blatency(?:_ms)?\s*(?::\s*[a-zA-Z0-9_]+\s*)?[:=]\s*([0-9.]+)', stmt + " " + doc, re.IGNORECASE)
+        latency_ms = float(m_lat.group(1)) if m_lat else None
+
+        m_flow = re.search(r'\b(?:item_flow(?:_ref)?|flow)\s*(?::\s*[a-zA-Z0-9_]+\s*)?[:=]\s*["\']?([^"\';\s]+)', stmt, re.IGNORECASE)
+        if not m_flow:
+            m_flow = re.search(r'\b(?:flow\s+of|item\s+flow|item)\s+([a-zA-Z0-9_]+)', stmt)
+        if not m_flow:
+            m_flow = re.search(r'\bflow\s+(?!from\b|to\b|of\b)([a-zA-Z0-9_]+)', stmt)
+        item_flow_ref = m_flow.group(1).strip('"\';\\]\\[ ') if m_flow else ""
+
+        m_pay = re.search(r'\b(?:item_payload|payload)\s*[:=]?\s*["\']?([a-zA-Z0-9_]+)["\']?', stmt + " " + doc, re.IGNORECASE)
+        item_payload = m_pay.group(1).strip() if m_pay else (item_flow_ref or "")
+
+        source_part = source_port.split('.', 1)[0] if '.' in source_port else source_port
+        target_part = target_port.split('.', 1)[0] if '.' in target_port else target_port
+
+        return ConnectionDef(
+            name=name,
+            source_port=source_port,
+            target_port=target_port,
+            doc=doc,
+            severity=severity,
+            source_part=source_part,
+            target_part=target_part,
+            item_flow_ref=item_flow_ref or item_payload,
+            protocol=protocol,
+            latency_ms=latency_ms,
+            attributes=attributes,
+            item_payload=item_payload or item_flow_ref,
+            flow_properties=flow_properties,
+            is_flow=is_flow,
+        )
