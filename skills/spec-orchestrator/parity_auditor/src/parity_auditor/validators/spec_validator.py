@@ -1,7 +1,10 @@
 import os
 import re
 from typing import List, Dict, Any, Set, Tuple
-import yaml
+try:
+    import yaml
+except ImportError:
+    yaml = None
 
 from .base import IValidator
 from ..core.findings import Finding
@@ -12,11 +15,30 @@ def _extract_frontmatter(content: str) -> Dict[str, Any]:
     m = re.match(r"^---\s*\n(.*?)\n---\s*\n", content, re.DOTALL)
     if not m:
         return {}
-    try:
-        data = yaml.safe_load(m.group(1).replace('\x01', ''))
-        return data if isinstance(data, dict) else {}
-    except Exception:
-        return {}
+    fm_text = m.group(1).replace('\x01', '')
+    if yaml is not None:
+        try:
+            data = yaml.safe_load(fm_text)
+            if isinstance(data, dict):
+                return data
+        except Exception:
+            pass
+    # Fallback line-based key-value parsing
+    data: Dict[str, Any] = {}
+    for line in fm_text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if ":" in line:
+            k, v = line.split(":", 1)
+            k_clean = k.strip()
+            v_clean = v.strip().strip('"').strip("'")
+            if v_clean.startswith("[") and v_clean.endswith("]"):
+                items = [x.strip().strip('"').strip("'") for x in v_clean[1:-1].split(",") if x.strip()]
+                data[k_clean] = items
+            else:
+                data[k_clean] = v_clean
+    return data
 
 
 class SpecValidator(IValidator):
@@ -116,8 +138,10 @@ class SpecValidator(IValidator):
                         if cfg_name.endswith(".json"):
                             import json
                             data = json.load(f)
-                        else:
+                        elif yaml is not None:
                             data = yaml.safe_load(f)
+                        else:
+                            data = None
                     if isinstance(data, dict):
                         dt = data.get("disallowed_technologies")
                         if isinstance(dt, list):

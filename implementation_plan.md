@@ -1,68 +1,75 @@
-# Implementation Plan: Reference Blueprint Decontamination & Master Multi-Repository Execution Plan
+# Implementation Plan: Adversarial Code Audit of PR #409 (SysML v2 Compiler & AST Engine)
 
 ## 1. Executive Summary & Objective
 
-This implementation plan governs the complete decontamination, modernization, and atomic materialization of the reference architecture blueprints and master multi-repository execution plan in `DEAP01-spec-core`:
-1. **Master Multi-Repository Execution Plan**: Establish `docs/architecture/MASTER_EXECUTION_PLAN.md` (1,009 lines) orchestrating Work Packages WP-01 through WP-09 across `DEAP01-spec-core`, `deap-compiler-spec`, and `DEAP02-spec-core`.
-2. **Reference Architecture Blueprints**: Modernize and decontaminate all 14 reference architecture blueprints in `docs/architecture/blueprints/` to `status: "APPROVED / PRODUCTION-GRADE"`.
-3. **Pure Schema-Driven Compiler Invariant**: Eradicate all physical hardware, kinetic, defense, munition, and vehicle terms (ESAD, squib, warhead, fuze, fuzing, arrestor, standoff, wing, aileron, rudder, propulsion, throttle, motor, rotor, glide, drone, airspeed, cfs, medical, chassis). Replace concrete safety matrices with purely symbolic mathematical formulations of Cartesian product expansion $(U = A \times G)$.
-4. **Institutional Regulatory Agency Decontamination**: Eradicate all regulatory agency acronyms (FAA, EASA, FDA, NHTSA, IMO, CFR, CS-25), replacing them with domain-independent formal compliance abstractions.
-5. **KaTeX & Markdown Hygiene**: Fix LaTeX syntax in Markdown tables (e.g. line 198 of `MASTER_EXECUTION_PLAN.md` and token bounds in table cells). Zero Unicode em dashes (`\u2014`); ASCII `--` or `-` exclusively. Zero unresolved markers (TODO, TBD, FIXME, draft, pending).
-6. **Pure Rust Workspace Architecture Codification**: Document the modular Cargo workspace crates (`deap-core`, `deap-ast`, `deap-codegen`, `deap-harness`, `deap-cli`), strongly-typed AST slicing mechanics ($\le 4,096$ tokens), and dual-LLM air-gapped agent dispatch (DeepSeek-R1 CoT reasoning slot streaming to `.pipeline/diagnostics/cot_audit_log.json` -> Qwen-2.5-Coder execution slot).
-7. **Downstream Baseline Verification**: Execute `python3 scripts/verify_downstream_baseline.py .` and achieve exit code 0 across all 31 checks.
-8. **Git Commit & Remote Push**: Commit with neutral citation `docs(architecture): decontaminate reference blueprints and establish master execution plan (refs #405, refs #406)` and push to `origin main`, ensuring `git diff origin/main` returns exactly 0 bytes.
+This implementation plan governs the systematic adversarial code audit of Pull Request [#409](https://github.com/gintatkinson/DEAP01-spec-core/pull/409) (`review(compiler): SysML v2 Compiler & AST Parser Engine`) against the four core correctness risk pillars plus semantic traceability, in accordance with `.agents/skills/adversarial-code-auditor/SKILL.md` and repository governance in `.pipeline/constitution.md`.
+
+### Audit Targets in Scope
+1. `scripts/compile_sysml.py` (5,379 additions):
+   - SysML v2 model compiler, validator, and textual model serializer.
+   - Closed-loop bidirectional synchronization (`--forward-sync` and `--reverse-sync`).
+   - STPA Cartesian product hazard matrix generator ($U = A \times G$) and Run-Time Assurance (RTA) / SLDV formal proof synthesizer.
+   - FMECA criticality scoring engine.
+2. `skills/spec-orchestrator/scripts/sysmlv2_ast.py` (3,192 additions):
+   - SysML v2 / KerML lexical scanner and tokenizer.
+   - Strongly-typed AST representations: `Package`, `PartDef`, `ItemDef`, `PortDef`, `ActionDef`, `StateDef`, `ConstraintDef`, `UseCaseDef`, `TestCaseDef`.
+   - AST traversal, serialization, and visitor dispatch mechanisms.
 
 ---
 
-## 2. Work Packages
+## 2. Risk Pillars & Focus Areas
 
-### WP-01: Baseline Blueprint Decontamination & Master Execution Plan Materialization
-- **Assigned Worker**: `worker_commit_restorer` (Implementer, QA, Specialist)
-- **Target Files**:
-  - `docs/architecture/MASTER_EXECUTION_PLAN.md`
-  - `docs/architecture/blueprints/DEAP_DEEPSEEK_HARNESS_INTEGRATION_BLUEPRINT.md`
-  - `docs/architecture/blueprints/DEAP_DETERMINISTIC_SAFETY_SPECIFICATION_COMPILER_BLUEPRINT.md`
-  - `docs/architecture/blueprints/DEAP_DOMAIN_AGNOSTIC_MISSION_LIFECYCLE_ARCHITECTURE.md`
-  - `docs/architecture/blueprints/DEAP_DOMAIN_INDEPENDENT_FDIR_BLUEPRINT.md`
-  - `docs/architecture/blueprints/DEAP_LOCAL_AIRGAPPED_DEEPSEEK_WORKSTATION_BLUEPRINT.md`
-  - `docs/architecture/blueprints/DEAP_LOGICAL_INTERFACE_SPECIFICATION_BLUEPRINT.md`
-  - `docs/architecture/blueprints/DEAP_MULTI_TOOLCHAIN_SYNTHESIS_ARCHITECTURE.md`
-  - `docs/architecture/blueprints/DEAP_SYSML_V2_INGESTION_ENGINE_BLUEPRINT.md`
-  - `docs/architecture/blueprints/MULTI_PROVIDER_GITLAB_INFRASTRUCTURE_ARCHITECTURE.md`
-  - `docs/architecture/blueprints/PERSISTENCE_ARCHITECTURE.md`
-  - `docs/architecture/blueprints/RUNTIME_METADATA_ENGINE.md`
-  - `docs/architecture/blueprints/SAFETY_CRITICAL_REALTIME_UI_FRAMEWORK.md`
-  - `docs/architecture/blueprints/SPECKIT_NATIVE_INTEGRATION.md`
-  - `docs/architecture/blueprints/SYSML_SSOT_BIDIRECTIONAL_SYNCHRONIZATION_ARCHITECTURE.md`
-  - `implementation_plan.md`
-- **Actions**:
-  1. Materialize all 15 files with exact required production-grade content.
-  2. Apply KaTeX table formatting fixes:
-     - In `MASTER_EXECUTION_PLAN.md` line 198: replace LaTeX inside table pipes with `(U = A x G)`.
-     - In `DEAP_LOCAL_AIRGAPPED_DEEPSEEK_WORKSTATION_BLUEPRINT.md` and `DEAP_DEEPSEEK_HARNESS_INTEGRATION_BLUEPRINT.md`: table rows with `(\le 4,096 tokens)` use `(<= 4,096 tokens)`.
-  3. Validate static invariants across all 15 files:
-     - Zero prohibited terms: ESAD, squib, warhead, fuze, fuzing, arrestor, standoff, wing, aileron, rudder, propulsion, throttle, motor, rotor, glide, drone, airspeed, cfs, medical, chassis.
-     - Zero regulatory agency acronyms: FAA, EASA, FDA, NHTSA, IMO, CFR, CS-25.
-     - Zero Unicode em dashes (`\u2014`).
-     - Zero unresolved markers: TODO, TBD, FIXME, draft, pending.
-     - Valid YAML frontmatter: `status: "APPROVED / PRODUCTION-GRADE"`.
-     - Cargo workspace crates documented across all blueprints.
-  4. Run `python3 scripts/verify_downstream_baseline.py .` and verify 31/31 checks pass with exit code 0.
-  5. Commit and push:
-     - `git add docs/architecture/ implementation_plan.md .agents/`
-     - `git commit -m "docs(architecture): decontaminate reference blueprints and establish master execution plan (refs #405, refs #406)"`
-     - `git push origin main`
-  6. Verify `git diff origin/main` returns exactly 0 bytes.
-
----
-
-## 3. Verification Gates Matrix
-
-| Gate | Verification Command | Acceptance Standard |
+| Risk Pillar | Audit Focus & Failure Modes | Target Files |
 |---|---|---|
-| **Blueprint & Plan Count** | `ls docs/architecture/blueprints/*.md docs/architecture/MASTER_EXECUTION_PLAN.md \| wc -l` | Exactly `15` files |
-| **Master Execution Plan Lines** | `wc -l docs/architecture/MASTER_EXECUTION_PLAN.md` | Exactly `1009` lines |
-| **Static Invariant Verification** | Python verification script checking 15 files | `0` errors across all invariants |
-| **Baseline Conformance Gate** | `python3 scripts/verify_downstream_baseline.py .` | Exit code `0`, all 31 checks pass |
-| **Commit Neutrality Gate** | `python3 scripts/verify_commit_messages.py --head` | Exit code `0`, neutral citations only |
-| **Remote Synchronization Gate** | `git diff origin/main` | Exactly `0` bytes |
+| **Resource Lifecycle** | Unclosed file descriptors in model serializers/deserializers, unbounded memory growth during recursive AST parsing, missing flush on atomic file writes, regex engine catastrophic backtracking (ReDoS). | `compile_sysml.py`, `sysmlv2_ast.py` |
+| **Concurrency & Re-entrancy** | AST node shared mutation during traversal, global state contamination across compiler invocations, race conditions during bidirectional sync, non-reentrant tokenizers. | `compile_sysml.py`, `sysmlv2_ast.py` |
+| **Semantic Traceability & Invariants** | SysML v2 / KerML OMG 2023-02-01 specification fidelity, pure schema-driven compiler invariant (zero hardcoded domain concepts), preservation of 6 core model constructs, exact Cartesian product math in STPA expansion, bidirectional sync roundtrip lossless preservation. | `compile_sysml.py`, `sysmlv2_ast.py` |
+| **Test Integrity & Regression Harness** | Bare assertions without diagnostics, missing AST edge cases (nested sub-packages, anonymous ports, circular specialization hierarchies), presence of reproducer test targets for all discovered defects. | `compile_sysml.py`, `sysmlv2_ast.py` |
+| **Memory Safety & Recursion Bounds** | Deeply nested KerML block expressions causing recursion depth overflow (`RecursionError`), circular reference memory leaks in AST parent/child cyclic references, unbounded string concatenations in code generation loops. | `compile_sysml.py`, `sysmlv2_ast.py` |
+
+---
+
+## 3. Work Packages
+
+### WP-01: Adversarial Code Audit of `scripts/compile_sysml.py` [COMPLETED]
+- **Target File**: `scripts/compile_sysml.py`
+- **Assigned Worker**: Context-isolated subagents (`CompileSysml Resource Auditor`, `CompileSysml Semantic Auditor`, `CompileSysml Concurrency Auditor`)
+- **Findings Filed**:
+  - [#411](https://github.com/gintatkinson/DEAP01-spec-core/issues/411): `[AUDIT] [compile_sysml.py]: Uncleaned temporary files leak on atomic write exception paths` (Important)
+  - [#412](https://github.com/gintatkinson/DEAP01-spec-core/issues/412): `[AUDIT] [compile_sysml.py]: Forward-sync pairs interactions to test cases positionally and drops requirement verification traceability` (Important)
+  - [#413](https://github.com/gintatkinson/DEAP01-spec-core/issues/413): `[AUDIT] [compile_sysml.py]: Multi-file TOCTOU race window during schema compilation desynchronizes model and digest` (Important)
+
+### WP-02: Adversarial Code Audit of `skills/spec-orchestrator/scripts/sysmlv2_ast.py` [COMPLETED]
+- **Target File**: `skills/spec-orchestrator/scripts/sysmlv2_ast.py`
+- **Assigned Worker**: Context-isolated subagents (`SysML AST Memory Auditor`, `SysML AST Semantic Auditor`, `SysML AST Resource Auditor`)
+- **Findings Filed**:
+  - [#414](https://github.com/gintatkinson/DEAP01-spec-core/issues/414): `[AUDIT] [sysmlv2_ast.py]: RequirementDef Normative Text Dropped on Roundtrip and Shadowed by Docstrings` (Important)
+  - [#415](https://github.com/gintatkinson/DEAP01-spec-core/issues/415): `[AUDIT] [sysmlv2_ast.py]: SysMLTestCaseDef Verify Requirement Parsing Truncates Namespaces and Multi-Requirement Lists` (Important)
+  - [#416](https://github.com/gintatkinson/DEAP01-spec-core/issues/416): `[AUDIT] [sysmlv2_ast.py]: Hardcoded Domain Protocol Regex False Positives Violate Pure Schema Compiler Invariant` (Important)
+  - [#417](https://github.com/gintatkinson/DEAP01-spec-core/issues/417): `[AUDIT] [sysmlv2_ast.py]: SysMLPackage Omits Hierarchical Collectors for TestCases, Interactions, and ItemDefs` (Important)
+  - [#418](https://github.com/gintatkinson/DEAP01-spec-core/issues/418): `[AUDIT] [sysmlv2_ast.py]: Unbounded Recursion Depth in Cyclic PartDef Traversal Causes Call Stack Exhaustion (RecursionError)` (Important)
+  - [#419](https://github.com/gintatkinson/DEAP01-spec-core/issues/419): `[AUDIT] [sysmlv2_ast.py]: Recursive Subpackage Traversal Duplicates AST Elements and Causes Severe GC Churn` (Important)
+  - [#420](https://github.com/gintatkinson/DEAP01-spec-core/issues/420): `[AUDIT] [sysmlv2_ast.py]: Exponential Memory Duplication in Package Element Accessors Causes Resource Exhaustion` (Important)
+
+### WP-03: Defect Dossier Verification & Issue Tracker Submission [COMPLETED]
+- All 10 defect dossiers verified with 12 mechanical checks (offline Mermaid syntax gate, 5 Whys, test-target discovery annotations).
+- All 10 issues created on GitHub issue tracker and verified live.
+
+### WP-04: PR Review Synthesis & Walkthrough Report [COMPLETED]
+- Unified review comment published to PR [#409](https://github.com/gintatkinson/DEAP01-spec-core/pull/409#issuecomment-5992172098).
+- Final audit dossier report delivered to coordinator.
+
+---
+
+## 4. Verification Gates Matrix
+
+| Gate | Verification Check | Acceptance Standard | Status |
+|---|---|---|---|
+| **7-Section Skeleton Gate** | Check 1: `^## [1-7]\.` count | Exactly 7 sections per finding | **PASSED** |
+| **Audit Source & Metadata** | Checks 2-5: Audit Source, SEVERITY, FILE_LOCATION, Section 1 bullets | 100% compliant with SKILL.md Section 2 | **PASSED** |
+| **5 Whys Completeness** | Check 6: `^[1-5]\. \*\*Why .*\?\*\* Because .*` | Exactly 5 Whys per finding | **PASSED** |
+| **Mermaid Syntax Offline Gate** | Check 7: `parity_auditor.validators.mermaid_syntax_validator.check_mermaid_text()` | Exit code `0` for all Critical/Important diagrams | **PASSED** |
+| **Code Block Balancing** | Check 9: Triple-backtick balancing | Even count, valid language tags | **PASSED** |
+| **Title Format Gate** | Check 11: `^\[AUDIT\] \[[^\]]+\]: .+` | Strict naming standard matching | **PASSED** |
+| **Test-Target Discovery Gate** | Check 12: `<!-- test-target: [path] -->` annotation | Valid test-target path annotated in every finding | **PASSED** |
+| **Remote Issue Verification Gate** | `gh issue view <id>` for all filed issues | Published payload verified live on GitHub | **PASSED** |

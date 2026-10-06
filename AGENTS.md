@@ -15,8 +15,16 @@
 - **Strict Prohibition of Concrete Specifications**: Committing concrete downstream project specifications, models, or code to upstream distribution templates is strictly forbidden.
 - **Downstream Workspace Boundary**: Concrete project schemas and specifications reside exclusively in downstream application workspaces installed via `scripts/install_pipeline.sh`.
 
-## Mandatory Hidden Folder Direct-Path Read (CRITICAL FIRST STEP)
-- You are strictly forbidden from assuming files or directories inside `.pipeline/` (such as `.pipeline/constitution.md` or `.pipeline/profiles/`) do not exist based on glob or search tool results. Because glob and ripgrep index queries skip hidden folders, you MUST verify their presence by directly executing a path read via `view_file` or a folder check via `list_dir` as your very first action upon starting a session before declaring state or starting tasks.
+## Mandatory Session Initialization Gate (CRITICAL FIRST STEP)
+Immediately following installation and on EVERY new session startup, before accepting ANY user directives, responding to inquiries, or executing task implementations, the agent MUST execute the following 6-step sequence in Turn 1:
+0. **Detect Repository Role & Scope (Direct-Path Read)**: Inspect whether `.pipeline/upstream/` exists on disk via direct-path read (`list_dir` or `view_file`). Do not rely on glob or search tools that ignore hidden dot-directories.
+   - If present -> `UPSTREAM_SPEC_CORE_COMPILER`
+   - If absent -> `DOWNSTREAM_CUSTOMER_PROJECT`
+1. **Read Governance Constitution**: Execute `view_file` on `.pipeline/constitution.md` to ingest the platform-independent functional governance layer and zero-mocking persistence mandates.
+2. **Load Project Skills**: Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` (and active skills under `skills/`) to initialize feature-driven implementation protocols and review gates.
+3. **Load Governance Rules**: Execute `view_file` on `.pipeline/ACTIVE_RULES_BUNDLE.md` to ingest the complete, consolidated suite of active governance rules in a single read.
+4. **Load Platform Profile**: Read the target platform execution profile (e.g., `.pipeline/profiles/flutter.md`, `.pipeline/profiles/react.md`, `.pipeline/profiles/ros2_cpp.md`, or `.pipeline/profiles/px4_module.md`) to establish platform-specific constraints.
+5. **Bootstrap Tracker Labels & Verify Baseline**: Verify that repository issue tracker labels and baseline conformance pass by running `python3 scripts/verify_downstream_baseline.py --no-domain`.
 
 ## Strict Planning Gate (No Execution Without Approved Plan)
 - You are strictly forbidden from creating, modifying, or deleting files in the workspace or dispatching any subagents unless that action is documented in an approved implementation plan.
@@ -67,6 +75,7 @@
   * Has the user explicitly approved a file-write/command execution for this turn? (Yes/No)
   * Am I making any silent assumptions about the user's intent?
   * Does the active skill mandate context-isolated subagent dispatches, **or** does this turn write any repository source or specification file? (If yes to either, coordinator direct file-writing is locked).
+  * Has the Section 3.3 Mandatory Initialization Sequence been completed and verified for this session? (Yes/No. If No, halt all other actions and execute initialization immediately).
 - The coordinator delegation duty binds for all repository source, governance, rules, tooling, and specification writes. All file writes MUST be delegated exclusively to spawned subagents.
 - **No Documentation/Installation Drift**: Update installation instructions (`README.md`, installer scripts) whenever rules or directories change. Verify `git diff origin/<branch>` is empty before declaring completion.
 

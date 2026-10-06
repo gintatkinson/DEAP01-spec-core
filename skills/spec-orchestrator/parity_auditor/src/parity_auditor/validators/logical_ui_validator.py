@@ -1,7 +1,11 @@
 import os
 import re
 import json
-from typing import List
+from typing import List, Dict, Any
+try:
+    import yaml
+except ImportError:
+    yaml = None
 from .base import IValidator
 from ..core.findings import Finding
 from ..core.workspace import WorkspaceRepository
@@ -117,17 +121,32 @@ class LogicalUiValidator(IValidator):
                 fm = {}
                 fm_match = re.match(r"^---\s*\n(.*?)\n---\s*\n", content, re.DOTALL)
                 if fm_match:
-                    try:
-                        import yaml
-                        parsed_fm = yaml.safe_load(fm_match.group(1).replace('\x01', ''))
-                        if isinstance(parsed_fm, dict):
-                            fm = parsed_fm
-                    except Exception as e:
-                        errors.append(Finding(
-                            "logical-ui-feature-frontmatter-must-parse",
-                            f"Logical UI Compliance: Failed to parse frontmatter YAML in '{rel_path}': {e}",
-                            location=rel_path,
-                        ))
+                    fm_text = fm_match.group(1).replace('\x01', '')
+                    yaml_parsed = False
+                    if yaml is not None:
+                        try:
+                            parsed_fm = yaml.safe_load(fm_text)
+                            if isinstance(parsed_fm, dict):
+                                fm = parsed_fm
+                                yaml_parsed = True
+                        except Exception as e:
+                            errors.append(Finding(
+                                "logical-ui-feature-frontmatter-must-parse",
+                                f"Logical UI Compliance: Failed to parse frontmatter YAML in '{rel_path}': {e}",
+                                location=rel_path,
+                            ))
+                            yaml_parsed = True
+                    if not yaml_parsed and not fm:
+                        for line in fm_text.splitlines():
+                            line = line.strip()
+                            if ":" in line:
+                                k, v = line.split(":", 1)
+                                k_str = k.strip()
+                                v_str = v.strip().strip('"').strip("'")
+                                if v_str.startswith("[") and v_str.endswith("]"):
+                                    fm[k_str] = [x.strip().strip('"').strip("'") for x in v_str[1:-1].split(",") if x.strip()]
+                                else:
+                                    fm[k_str] = v_str
             
             declared_interface_types = []
             if isinstance(fm, dict):

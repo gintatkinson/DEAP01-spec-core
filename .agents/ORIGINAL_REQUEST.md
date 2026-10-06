@@ -600,3 +600,61 @@ Every Work Package must define:
 - [ ] Git working tree clean and synchronized with origin branch.
 
 </USER_REQUEST>
+
+
+## 2026-10-06T13:28:43Z
+
+Use a full multi-agent team to implement a flawless fix for Issue #422, verify lossless SysML v2 AST round-trip compilation, and distribute the verified fixes across all downstream repositories and leaf nodes.
+
+Working directory: `/Users/perkunas/jail/DEAP01-spec-core`
+Integrity mode: development
+
+Reference: https://github.com/gintatkinson/DEAP01-spec-core/issues/422
+
+## Requirements
+
+### R1. Lossless SysML v2 AST Parsing and Serialization
+Ensure `skills/spec-orchestrator/scripts/sysmlv2_ast.py` losslessly parses and serializes SysML v2 models without altering semantics or syntax:
+- Retain typed part usages (`part x : Type;` and `part x : Type { ... }`) as typed instances (`is_def=False`, `type_name`) rather than degrading them into empty `part def x { }` blocks.
+- Preserve the `inout` port direction keyword in `to_sysml()` serialization so bidirectional ports do not become directionless.
+- Parse `action def` constructs without defaulting performer/allocation attributes to the parent container, eliminating circular self-performing calls (`perform <ParentPart>;`).
+
+### R2. Resilient Dependency Handling for Tooling and Validators
+Guard top-level `import yaml` in `skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/uml.py` and any related validator modules with fallback handling (`try...except ImportError: yaml = None`) so that baseline verification tools execute cleanly in minimal Python environments.
+
+### R3. Semantic AST Round-Trip Parity Verification Suite
+Deliver an automated regression test suite (`tests/test_sysml_compiler_parity.py`) verifying:
+- Lossless round-trip parsing and serialization of typed part usages.
+- Bidirectional port direction (`inout`) preservation.
+- Clean `action def` serialization without recursive self-invocation.
+- Full compatibility with existing SysML model compilation pipelines.
+
+### R4. Downstream Distribution and Baseline Conformance Verification
+Distribute the updated AST compiler, parity auditor validators, and test tooling to all active downstream repositories and leaf nodes located in `/Users/perkunas/jail/` (including `uav-009`, `uav-011`, `uav-012`, `DEAP-netcom`, `3dgs-040`, `deap-compiler-spec`, `DEAP02-spec-core`):
+- Run `python3 scripts/verify_downstream_baseline.py --no-domain` across `DEAP01-spec-core` and every target downstream project.
+- Verify zero regressions across all repository quality gates.
+
+### R5. Governance Compliance and Issue Tracker Resolution
+- Strictly adhere to the Commit Message Non-Closure Invariant (no auto-closing keywords like `fixes #`; use neutral citations `(refs #422)`).
+- Strictly adhere to the Zero Em Dash Invariant (ASCII `--` or `-` exclusively).
+- Update GitHub Issue #422 with empirical verification evidence and transition label `status:fixed-resolved`.
+
+## Acceptance Criteria
+
+### AST Round-Trip Parity
+- [ ] `part fcc_board : AutopilotController;` parses with `is_def=False` and `type_name="AutopilotController"`, and re-serializes identically to `part fcc_board : AutopilotController;`.
+- [ ] `inout port rs485_esad : RS485Port;` retains the `inout` keyword upon `to_sysml()` round-trip serialization.
+- [ ] `action def ExecuteFlightGuidance;` parses with empty performer and serializes cleanly without injecting `perform <ParentPart>;`.
+- [ ] `tests/test_sysml_compiler_parity.py` passes with 100% assertions green.
+
+### Baseline Conformance
+- [ ] `python3 scripts/verify_downstream_baseline.py --no-domain` in `DEAP01-spec-core` exits with code 0 without requiring external PyYAML installation.
+- [ ] `python3 scripts/verify_downstream_baseline.py --no-domain` passes with exit code 0 across all updated downstream projects in `/Users/perkunas/jail/`.
+
+### Distribution & Tracker Integrity
+- [ ] All target downstream projects in `/Users/perkunas/jail/` have the updated tooling synchronized and git trees clean.
+- [ ] All commit messages use neutral citations (`(refs #422)` or `(#422)`) with zero em dashes.
+- [ ] Issue #422 has a verification comment and label `status:fixed-resolved`.
+
+---
+PROCEED

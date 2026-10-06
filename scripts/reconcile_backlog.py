@@ -24,7 +24,10 @@ import subprocess
 import json
 import netrc
 import sys
-import yaml
+try:
+    import yaml
+except ImportError:
+    yaml = None
 import traceback
 import shutil
 import tempfile
@@ -2169,13 +2172,24 @@ def convert_frontmatter_to_table(content):
     frontmatter_text = parts[1]
     body_text = parts[2].lstrip()
     
-    try:
-        data = yaml.safe_load(frontmatter_text.replace('\x01', ''))
-        if not isinstance(data, dict):
+    data = None
+    if yaml is not None:
+        try:
+            data = yaml.safe_load(frontmatter_text.replace('\x01', ''))
+            if not isinstance(data, dict):
+                return content
+        except Exception as e:
+            print(f"Error parsing frontmatter YAML: {e}")
             return content
-    except Exception as e:
-        print(f"Error parsing frontmatter YAML: {e}")
-        return content
+    else:
+        data = {}
+        for line in frontmatter_text.replace('\x01', '').splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if ":" in line:
+                k, v = line.split(":", 1)
+                data[k.strip()] = v.strip().strip('"').strip("'")
     
     table_lines = [
         "| Attribute | Specification Detail |",
@@ -3254,7 +3268,7 @@ def load_compiler_backlog_manifest(
         try:
             with open(manifest_path, "r", encoding="utf-8") as f:
                 if manifest_path.endswith((".yaml", ".yml")):
-                    manifest_data = yaml.safe_load(f)
+                    manifest_data = yaml.safe_load(f) if yaml is not None else None
                 else:
                     manifest_data = json.load(f)
         except Exception as e:
@@ -3282,7 +3296,7 @@ def load_compiler_backlog_manifest(
                 try:
                     with open(cp, "r", encoding="utf-8") as f:
                         if cp.endswith((".yaml", ".yml")):
-                            manifest_data = yaml.safe_load(f)
+                            manifest_data = yaml.safe_load(f) if yaml is not None else None
                         else:
                             manifest_data = json.load(f)
                     if manifest_data:
@@ -3748,17 +3762,28 @@ def extract_metadata_from_content(content: str) -> Dict[str, Any]:
         parts = content.split("---", 2)
         if len(parts) >= 3:
             frontmatter_text = parts[1]
-            try:
-                data = yaml.safe_load(frontmatter_text.replace('\x01', ''))
-                if isinstance(data, dict):
-                    if "issue_id" in data:
-                        raw_id = data["issue_id"]
-                        clean_id = re.sub(r'["\'#]', '', str(raw_id)).strip()
-                        if clean_id.isdigit():
-                            data["issue_id"] = int(clean_id)
-                    return data
-            except Exception as e:
-                print(f"Error parsing legacy YAML frontmatter: {e}")
+            data = None
+            if yaml is not None:
+                try:
+                    loaded = yaml.safe_load(frontmatter_text.replace('\x01', ''))
+                    if isinstance(loaded, dict):
+                        data = loaded
+                except Exception as e:
+                    print(f"Error parsing legacy YAML frontmatter: {e}")
+            if data is None or not isinstance(data, dict):
+                data = {}
+                for line in frontmatter_text.replace('\x01', '').splitlines():
+                    line = line.strip()
+                    if ":" in line:
+                        k, v = line.split(":", 1)
+                        data[k.strip()] = v.strip().strip('"').strip("'")
+            if isinstance(data, dict):
+                if "issue_id" in data:
+                    raw_id = data["issue_id"]
+                    clean_id = re.sub(r'["\'#]', '', str(raw_id)).strip()
+                    if clean_id.isdigit():
+                        data["issue_id"] = int(clean_id)
+                return data
 
     return {}
 

@@ -55,7 +55,7 @@ class StagingManager:
         - .agents/ -> staging/.agents/
         - scripts/ -> staging/scripts/ (ensuring 0o755 executable permissions)
         - requirements.txt, pyproject.toml -> staging/ (if present)
-        - tests/fixtures/ -> staging/tests/fixtures/
+        - tests/fixtures/, tests/test_sysml_compiler_parity.py -> staging/tests/
         - docs/conops/README.md, docs/safety/README.md, docs/OPERATOR_PROMPT_CATALOG.md,
           docs/JIRA_INTEGRATION_GUIDE.md -> staging/docs/
         """
@@ -91,12 +91,18 @@ class StagingManager:
                 if src_f.is_file():
                     shutil.copy2(src_f, self.staging_path / fname)
 
-            # 5. Copy tests/fixtures
+            # 5. Copy tests/fixtures and parity test suite
             fixtures_src = installer_root / "tests" / "fixtures"
             if fixtures_src.is_dir():
                 fixtures_dest = self.staging_path / "tests" / "fixtures"
                 fixtures_dest.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copytree(fixtures_src, fixtures_dest, symlinks=True)
+
+            parity_test_src = installer_root / "tests" / "test_sysml_compiler_parity.py"
+            if parity_test_src.is_file():
+                parity_test_dest = self.staging_path / "tests" / "test_sysml_compiler_parity.py"
+                parity_test_dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(parity_test_src, parity_test_dest)
 
             # 6. Copy governance docs if present
             docs_map = [

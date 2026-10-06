@@ -130,7 +130,7 @@ class PortDef:
     def to_sysml(self, indent: int = 4) -> str:
         pad = " " * indent
         doc_str = format_doc_comment(self.doc, indent)
-        dir_prefix = f"{self.direction} " if self.direction and self.direction != "inout" else ""
+        dir_prefix = f"{self.direction} " if self.direction else ""
         conj_prefix = "~" if self.is_conjugated and not self.type_name.startswith("~") else ""
         type_str = f"{conj_prefix}{self.type_name}" if self.type_name else "Port"
         has_body = bool(self.item_flows or self.electrical_attributes)
@@ -813,6 +813,8 @@ SysMLPortDef = PortDef
 class PartDef:
     name: str
     doc: str = ""
+    is_def: bool = True
+    type_name: Optional[str] = None
     attributes: List[AttributeDef] = field(default_factory=list)
     ports: List[PortDef] = field(default_factory=list)
     actions: List[ActionDef] = field(default_factory=list)
@@ -834,6 +836,8 @@ class PartDef:
         return {
             "name": self.name,
             "doc": self.doc,
+            "is_def": self.is_def,
+            "type_name": self.type_name,
             "attributes": [a.to_dict() for a in (self.attributes or [])],
             "ports": [p.to_dict() for p in (self.ports or [])],
             "actions": [a.to_dict() for a in (self.actions or [])],
@@ -858,7 +862,22 @@ class PartDef:
         doc_str = format_doc_comment(self.doc, indent)
         if doc_str:
             lines.append(doc_str.rstrip("\n"))
-        lines.append(f"{pad}part def {self.name} {{")
+
+        has_children = bool(
+            self.attributes or self.ports or self.actions or self.parts or
+            self.operations or self.capabilities or self.interactions or
+            self.constraints or self.test_cases or self.states or
+            self.requirements or self.use_cases or self.item_defs or
+            self.hazards or self.risks or self.connections
+        )
+
+        kw = "part def" if self.is_def else "part"
+        type_str = f" : {self.type_name}" if self.type_name else ""
+
+        if not self.is_def and not has_children:
+            return f"{doc_str}{pad}{kw} {self.name}{type_str};"
+
+        lines.append(f"{pad}{kw} {self.name}{type_str} {{")
 
         for attr in (self.attributes or []):
             lines.append(attr.to_sysml(indent + 4))
@@ -898,6 +917,12 @@ class PartDef:
 
 
 SysMLPart = PartDef
+SysMLPartDef = PartDef
+
+
+@dataclass
+class SysMLPartUsage(PartDef):
+    is_def: bool = False
 
 
 @dataclass
@@ -1705,9 +1730,15 @@ class SysMLParser:
                 doc = d.get("doc", "")
 
                 if re.search(r'\bpart\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt):
+                    is_def = bool(re.search(r'\bpart\s+def\b', stmt))
                     m = re.search(r'\bpart\s+(?:def\s+)?([a-zA-Z0-9_]+)', stmt)
-                    part_name = m.group(1)
-                    p_obj = PartDef(name=part_name, doc=doc)
+                    part_name = m.group(1) if m else "Part"
+                    type_name = None
+                    type_m = re.search(r':\s*([a-zA-Z0-9_<>:]+)', stmt)
+                    if type_m:
+                        type_name = type_m.group(1).strip()
+                    part_cls = PartDef if is_def else SysMLPartUsage
+                    p_obj = part_cls(name=part_name, doc=doc, is_def=is_def, type_name=type_name)
                     if isinstance(container, SysMLPackage):
                         container.part_defs.append(p_obj)
                     else:
@@ -1836,8 +1867,13 @@ class SysMLParser:
 
     def _parse_part_block(self, decl: Dict[str, Any]) -> PartDef:
         header = decl["header"]
+        is_def = bool(re.search(r'\bpart\s+def\b', header))
         m = re.search(r'\bpart\s+(?:def\s+)?([a-zA-Z0-9_]+)', header)
         name = m.group(1) if m else "Part"
+        type_name = None
+        type_m = re.search(r':\s*([a-zA-Z0-9_<>:]+)', header)
+        if type_m:
+            type_name = type_m.group(1).strip()
         doc = decl.get("doc", "")
         if not doc:
             doc_m = re.search(r'(?:^\s*doc\s*/\*|\s*/\*)(.*?)\*/', decl.get("body", ""), re.DOTALL)
@@ -1846,7 +1882,8 @@ class SysMLParser:
                 if extracted.startswith("doc"):
                     extracted = extracted[3:].strip()
                 doc = extracted
-        part = PartDef(name=name, doc=doc)
+        part_cls = PartDef if is_def else SysMLPartUsage
+        part = part_cls(name=name, doc=doc, is_def=is_def, type_name=type_name)
         body_decls = self._scan_declarations(decl["body"])
         self._populate_container(part, body_decls)
         return part
@@ -2064,9 +2101,9 @@ class SysMLParser:
         in_params: List[AttributeDef] = []
         out_params: List[AttributeDef] = []
         parameters: List[AttributeDef] = []
-        performer = parent_name
-        performer_part = parent_name
-        allocation = parent_name
+        performer = "" if is_def else parent_name
+        performer_part = "" if is_def else parent_name
+        allocation = "" if is_def else parent_name
         attributes: Dict[str, Any] = {}
 
         p_match = re.search(r'\(([^)]*)\)', text)
@@ -2137,8 +2174,8 @@ class SysMLParser:
         in_params = list(base.in_params)
         out_params = list(base.out_params)
         parameters = list(base.parameters)
-        performer = base.performer or parent_name
-        performer_part = base.performer_part or parent_name
+        performer = base.performer or ("" if is_def else parent_name)
+        performer_part = base.performer_part or ("" if is_def else parent_name)
         allocation = base.allocation or performer
         attributes: Dict[str, Any] = dict(base.attributes)
         attribute_defs: List[AttributeDef] = []
@@ -2196,7 +2233,7 @@ class SysMLParser:
                 if m_act:
                     steps.append(m_act.group(1))
 
-        if not performer or performer == parent_name:
+        if not performer or (not is_def and performer == parent_name):
             comb = doc + " " + raw_body
             m_perf_doc = re.search(r'\[\s*(?:performer|performed_by|allocation|allocated_to)\s*[:=]\s*([a-zA-Z0-9_]+)\s*\]', comb, re.IGNORECASE)
             if not m_perf_doc:

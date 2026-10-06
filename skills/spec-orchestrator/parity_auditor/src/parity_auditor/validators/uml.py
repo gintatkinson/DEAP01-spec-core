@@ -107,7 +107,10 @@ def find_unresolved_placeholders(content: str, patterns=None):
                 yield lineno, label, line.strip()
                 break
 
-import yaml
+try:
+    import yaml
+except ImportError:
+    yaml = None
 from typing import Optional, Set, Tuple
 
 # Import SysML v2 AST classes via the fail-closed loader (refs #76): resolve
@@ -130,6 +133,34 @@ SysMLTestCaseDef = _sysml_ast.SysMLTestCaseDef
 RequirementDef = _sysml_ast.RequirementDef
 PartDef = _sysml_ast.PartDef
 AttributeDef = _sysml_ast.AttributeDef
+
+
+def _safe_load_yaml_frontmatter(text: str) -> Dict[str, Any]:
+    """Safely parse YAML frontmatter text with standard-library fallback when PyYAML is unavailable."""
+    clean_text = text.replace('\x01', '')
+    if yaml is not None:
+        try:
+            data = yaml.safe_load(clean_text)
+            if isinstance(data, dict):
+                return data
+        except Exception:
+            pass
+    # Standard-library line-based key-value fallback
+    data: Dict[str, Any] = {}
+    for line in clean_text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if ":" in line:
+            k, v = line.split(":", 1)
+            k_clean = k.strip()
+            v_clean = v.strip().strip('"').strip("'")
+            if v_clean.startswith("[") and v_clean.endswith("]"):
+                items = [x.strip().strip('"').strip("'") for x in v_clean[1:-1].split(",") if x.strip()]
+                data[k_clean] = items
+            else:
+                data[k_clean] = v_clean
+    return data
 
 
 def _find_sysml_files_in_repo(repo: WorkspaceRepository, schemas_dir: Optional[str] = None) -> List[str]:
@@ -357,22 +388,10 @@ class UmlValidator(IValidator):
             interface_type = "ui"
             frontmatter_match = re.match(r"^---\s*\n(.*?)\n---\s*\n", content, re.DOTALL)
             if frontmatter_match:
-                frontmatter_text = frontmatter_match.group(1)
-                try:
-                    import yaml
-                    data = yaml.safe_load(frontmatter_text.replace('\x01', ''))
-                    if isinstance(data, dict):
-                        for k, v in data.items():
-                            if k in ("interface_type", "interface-type"):
-                                interface_type = str(v).lower()
-                except Exception:
-                    for fm_line in frontmatter_text.splitlines():
-                        if ":" in fm_line:
-                            fm_parts = fm_line.split(":", 1)
-                            fm_key = fm_parts[0].strip()
-                            fm_val = fm_parts[1].strip().strip('"').strip("'")
-                            if fm_key in ("interface_type", "interface-type"):
-                                interface_type = fm_val.lower()
+                data = _safe_load_yaml_frontmatter(frontmatter_match.group(1))
+                for k, v in data.items():
+                    if k in ("interface_type", "interface-type"):
+                        interface_type = str(v).lower()
                             
             req_key = f"feature_{interface_type}"
             required_feature_sections = required_sections.get(req_key)
@@ -849,28 +868,12 @@ class UmlValidator(IValidator):
         frontmatter_match = re.match(r"^---\s*\n(.*?)\n---\s*\n", content, re.DOTALL)
         has_subagent_tag = False
         if frontmatter_match:
-            frontmatter_text = frontmatter_match.group(1)
-            try:
-                import yaml
-                data = yaml.safe_load(frontmatter_text.replace('\x01', ''))
-                if isinstance(data, dict):
-                    data_lower = {str(k).lower(): str(v).lower() for k, v in data.items() if v is not None}
-                    if data_lower.get("generation_mode") == "subagent" or data_lower.get("generation-mode") == "subagent":
-                        has_subagent_tag = True
-                    elif data_lower.get("subagent_drafted") == "true" or data_lower.get("subagent-drafted") == "true":
-                        has_subagent_tag = True
-            except Exception:
-                for fm_line in frontmatter_text.splitlines():
-                    if ":" in fm_line:
-                        fm_parts = fm_line.split(":", 1)
-                        fm_key = fm_parts[0].strip().lower()
-                        fm_val = fm_parts[1].strip().strip('"').strip("'").lower()
-                        if fm_key in ("generation_mode", "generation-mode") and fm_val == "subagent":
-                            has_subagent_tag = True
-                            break
-                        if fm_key in ("subagent_drafted", "subagent-drafted") and fm_val == "true":
-                            has_subagent_tag = True
-                            break
+            data = _safe_load_yaml_frontmatter(frontmatter_match.group(1))
+            data_lower = {str(k).lower(): str(v).lower() for k, v in data.items() if v is not None}
+            if data_lower.get("generation_mode") == "subagent" or data_lower.get("generation-mode") == "subagent":
+                has_subagent_tag = True
+            elif data_lower.get("subagent_drafted") == "true" or data_lower.get("subagent-drafted") == "true":
+                has_subagent_tag = True
 
         if not has_subagent_tag:
             for line in content.splitlines():
@@ -1156,16 +1159,13 @@ class UmlValidator(IValidator):
                         errors.append(Finding("subsystem-component-class-must-declare-members", f"{doc_type} {filename} subsystem component class '{cls_name}' is empty. Subsystem components must define at least one attribute or operation.", location=filename))
 
             # Validate schema containers
-            import yaml
             schema_containers = []
-            try:
-                frontmatter_match = re.match(r"^---\s*\n(.*?)\n---\s*\n", content, re.DOTALL)
-                if frontmatter_match:
-                    fm_data = yaml.safe_load(frontmatter_match.group(1).replace('\x01', ''))
-                    if isinstance(fm_data, dict):
-                        schema_containers = fm_data.get("schema_containers", [])
-            except Exception:
-                pass
+            frontmatter_match = re.match(r"^---\s*\n(.*?)\n---\s*\n", content, re.DOTALL)
+            if frontmatter_match:
+                fm_data = _safe_load_yaml_frontmatter(frontmatter_match.group(1))
+                schema_containers = fm_data.get("schema_containers", [])
+                if isinstance(schema_containers, str):
+                    schema_containers = [schema_containers]
 
             if schema_containers:
                 classes_lower_map = {c.lower(): c for c in classes.keys()}
@@ -1450,10 +1450,7 @@ class UmlValidator(IValidator):
             fm = None
             fm_match = re.match(r"^---\s*\n(.*?)\n---\s*\n", content, re.DOTALL)
             if fm_match:
-                try:
-                    fm = yaml.safe_load(fm_match.group(1).replace('\x01', ''))
-                except Exception:
-                    pass
+                fm = _safe_load_yaml_frontmatter(fm_match.group(1))
 
             seq_matches = list(re.finditer(r"```mermaid\s*\n\s*sequenceDiagram(.*?)(?=```|\Z)", content, re.DOTALL))
             for sm in seq_matches:
@@ -1715,10 +1712,7 @@ class UmlValidator(IValidator):
             fm = None
             fm_match = re.match(r"^---\s*\n(.*?)\n---\s*\n", content, re.DOTALL)
             if fm_match:
-                try:
-                    fm = yaml.safe_load(fm_match.group(1).replace('\x01', ''))
-                except Exception:
-                    pass
+                fm = _safe_load_yaml_frontmatter(fm_match.group(1))
 
             # Extract test case bindings
             tc_refs = []

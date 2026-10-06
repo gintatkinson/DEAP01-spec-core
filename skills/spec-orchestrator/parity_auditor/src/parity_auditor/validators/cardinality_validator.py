@@ -8,7 +8,10 @@ import os
 import re
 from typing import List, Dict, Any, Optional, Set, Tuple
 
-import yaml
+try:
+    import yaml
+except ImportError:
+    yaml = None
 
 from .base import IValidator
 from ..core.findings import Finding
@@ -36,10 +39,28 @@ def _extract_frontmatter(content: str):
     m = re.match(r"^---\s*\n(.*?)\n---\s*\n", content, re.DOTALL)
     if not m:
         return None
-    try:
-        return yaml.safe_load(m.group(1).replace('\x01', ''))
-    except Exception:
-        return None
+    fm_text = m.group(1).replace('\x01', '')
+    if yaml is not None:
+        try:
+            return yaml.safe_load(fm_text)
+        except Exception:
+            pass
+    # Fallback line-based key-value parsing
+    data: Dict[str, Any] = {}
+    for line in fm_text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if ":" in line:
+            k, v = line.split(":", 1)
+            k_clean = k.strip()
+            v_clean = v.strip().strip('"').strip("'")
+            if v_clean.startswith("[") and v_clean.endswith("]"):
+                items = [x.strip().strip('"').strip("'") for x in v_clean[1:-1].split(",") if x.strip()]
+                data[k_clean] = items
+            else:
+                data[k_clean] = v_clean
+    return data
 
 
 def _find_sysml_files(repo: WorkspaceRepository, schemas_dir: Optional[str] = None) -> List[str]:
