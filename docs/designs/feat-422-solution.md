@@ -100,7 +100,7 @@ Authored 11 comprehensive automated tests:
 | Resilient Cardinality Validator | `.../validators/cardinality_validator.py` | Null-safe YAML loader | Baseline Check 24 |
 | Resilient LUI Validator | `.../validators/logical_ui_validator.py` | Regex-assisted frontmatter reader | Baseline Check 28 |
 | Installer Test Staging | `scripts/installer/staging.py` | Staged `test_sysml_compiler_parity.py` | Semantic Acceptance |
-| Parity Regression Suite | `tests/test_sysml_compiler_parity.py` | 11 unit/integration tests | 11/11 Green (0.34s) |
+| Parity Regression Suite | `tests/test_sysml_compiler_parity.py` | 11 unit/integration tests | 11/11 Green (subsecond) |
 
 ---
 
@@ -108,7 +108,7 @@ Authored 11 comprehensive automated tests:
 
 ### 4.1 Unit & Parity Test Suite
 - Command: `python3 -m unittest tests/test_sysml_compiler_parity.py -v`
-- Results: **11/11 tests passing cleanly (0 failures, 0 errors, 0.34s execution time)**.
+- Results: **11/11 tests passing cleanly (0 failures, 0 errors, subsecond execution time)**.
 
 ### 4.2 Baseline Conformance Checks
 - Command: `python3 scripts/verify_downstream_baseline.py --no-domain`
@@ -119,7 +119,7 @@ The verified tooling and test suite were propagated across all active repositori
 - `DEAP01-spec-core` (branch `main`)
 - `uav-009` (branch `main`)
 - `uav-011` (branch `main`)
-- `uav-012` (branch `0A`)
+- `uav-012` (branch `Phase-0A`)
 - `DEAP-netcom` (branch `main`)
 - `3dgs-040` (branch `main`)
 - `deap-compiler-spec` (branch `main`)
