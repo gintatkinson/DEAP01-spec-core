@@ -1,6 +1,6 @@
-# ACTIVE RULES BUNDLE — Consolidated Governance Manifest
+# ACTIVE RULES BUNDLE -- Consolidated Governance Manifest
 
-> **Notice:** This consolidated governance manifest is compiled automatically at installation time by `scripts/install_pipeline.sh`.
+> **Notice:** This consolidated governance manifest is compiled automatically at installation time by `./target/release/verify-baseline setup-hooks`.
 > It aggregates 100% of the active governance rules from `rules/` into a single, unified source of truth.
 > Autonomous agents (Antigravity, Claude Code, Cursor) MUST execute `view_file` on this file to ingest the full suite of active governance rules in a single read before executing any implementation or orchestration tasks.
 
@@ -77,7 +77,7 @@ fragmentation issue #289 fixed for the Mermaid rules. The per-trigger requiremen
 themselves are data, not prose, and live in `rules/behavioral_triggers.json`.
 
 These rules are mechanically enforced, offline, by
-`parity_auditor/validators/behavioral.py`. Before issue #304 they were enforced and
+`./target/release/verify-baseline`. Before issue #304 they were enforced and
 stated in no document at all -- the orphan-enforcement shape recorded as #299 -- so a
 subagent drafting a User Story could not have known the requirement existed.
 
@@ -89,7 +89,9 @@ schema records that its concurrency, temporal or failure behaviour has been spec
 The trigger list is how the pipeline carries that obligation forward, and it is only
 worth carrying if it is both enforced and readable by whoever writes the specification.
 
+
 ---
+
 
 <a id="codebase-compliance-md"></a>
 <a id="rule-codebase-compliance-md"></a>
@@ -115,7 +117,7 @@ vocabulary is platform-specific, so this file is its normative home and
 `.pipeline/profiles/<platform>.md` supplies the vocabulary. That division follows
 `rules/platform-independence.md` § *Where platform-specific details belong*.
 
-Enforced offline by `parity_auditor/validators/codebase.py`. Every rule below was
+Enforced offline by `./target/release/verify-baseline`. Every rule below was
 enforced before issue #304 and stated in no document -- the orphan-enforcement shape
 recorded as issue #299 -- so nothing generating code into a downstream workspace could
 have been told what it had to satisfy.
@@ -202,7 +204,9 @@ ones whose violation is invisible in review -- a duplicated colour literal, a mi
 guard, an unclamped rate, an `aria-label` in a logical specification -- and each of them
 degrades silently rather than failing loudly.
 
+
 ---
+
 
 <a id="conops-mission-intent-integrity-md"></a>
 <a id="rule-conops-mission-intent-integrity-md"></a>
@@ -214,7 +218,7 @@ degrades silently rather than failing loudly.
 
 # Rule: Hierarchical Concept of Operations & Tactical Mission Intent Integrity
 
-**ALWAYS enforce:** All Concept of Operations (`docs/conops/units/conops/` and `CONOPS.md`) and Tactical Mission Intent (`docs/conops/units/mission_intent/` and `MISSION_INTENT.md`) specifications in the Digital Engineering Autonomous Pipeline (DEAP) MUST adhere strictly to pure open schema contracts ($N \ge N_{\mathrm{min}}$ with zero static row caps), open multi-domain threat taxonomies across all 7 operational domains, mandatory INCOSE SEH v5.0 MoE/MoP mathematical formulations, 100% public clause citations, and deterministic modular assembly via `scripts/assemble_conops.py`.
+**ALWAYS enforce:** All Concept of Operations (`docs/conops/units/conops/` and `CONOPS.md`) and Tactical Mission Intent (`docs/conops/units/mission_intent/` and `MISSION_INTENT.md`) specifications in the Digital Engineering Autonomous Pipeline (DEAP) MUST adhere strictly to pure open schema contracts ($N \ge N_{\mathrm{min}}$ with zero static row caps), open multi-domain threat taxonomies across all 7 operational domains, mandatory INCOSE SEH v5.0 MoE/MoP mathematical formulations, 100% public clause citations, and deterministic modular assembly via `./target/release/assemble-conops`.
 
 ## Scope and Normative Authority
 
@@ -234,9 +238,9 @@ This governance standard is aligned with:
 - **OMG UAF v1.2 / v2.0**: Unified Architecture Framework Operational Domain Views (Op-Pr, Op-Tx, Op-Is).
 
 Enforced offline by:
-- `parity_auditor/validators/conops_completeness_validator.py` (Gate 26)
-- `parity_auditor/validators/coverage_digest_validator.py` (Gate 28)
-- `parity_auditor/validators/obligation_witness_validator.py` (Gate 29)
+- `./target/release/verify-baseline` (Gate 26: ConOps Completeness)
+- `./target/release/verify-baseline` (Gate 28: Coverage Digest Integrity)
+- `./target/release/verify-baseline` (Gate 29: Obligation Witness Parity)
 
 ### Architecture Hierarchy & Standards Governance (INCOSE SEH v5.0 §3.4.4 / ISO/IEC/IEEE 15288:2023 / ISO/IEC/IEEE 29148:2018 §6.4.2)
 
@@ -252,7 +256,7 @@ In accordance with **INCOSE Systems Engineering Handbook v5.0 (§3.4.4 Concept D
 - **Strict Exclusion of Level 2 System Use Cases**: ConOps documents and SV-1 diagrams are strictly forbidden from defining, citing, or injecting formal Level 2 System Use Cases (`uc-xx`). Formal System Use Cases (`uc-xx`) specify technical system functions realizing Level 2 Features and belong strictly in downstream System Requirements Specifications (SyRS Level 2 under `docs/use-cases/`).
 
 ### System Architecture Diagram Representation Standard (Option 3) & 100% Mathematical Parity Invariant
-In accordance with DoDAF v2.02 SV-1, IEEE 1362 §5.3, ISO/IEC/IEEE 15288:2023, INCOSE SE Handbook v5.0 (§3.4.4), and ISO/IEC/IEEE 29148:2018 §6.4.2–§6.4.3:
+In accordance with DoDAF v2.02 SV-1, IEEE 1362 §5.3, ISO/IEC/IEEE 15288:2023, INCOSE SE Handbook v5.0 (§3.4.4), and ISO/IEC/IEEE 29148:2018 §6.4.2-§6.4.3:
 - **Option 3 Standard (Compact Subsystem Blocks with Embedded Port Attributes)**: Subsystems MUST be rendered as compact subsystem block nodes with embedded bulleted port declarations (`[<b>Name</b><br/>• PORT-... (DIRECTION)]`), rather than exploding ports into separate flowchart nodes within giant subgraphs.
 - **Vertical Hierarchical Tier Partitioning (`direction TB`)**: Multi-subsystem and segment interface diagrams MUST declare `direction TB` inside subgraphs and partition nodes into vertical tiers with a maximum of 3 columns horizontally (max 3-column vertical tier partitioning).
 - **100% Mathematical Parity with Section 4.8 Allocation Table**: Every subsystem block in the SV-1 diagram embeds the exact set of typed logical and physical ports (`• PORT-... (DIRECTION)`) matching the Section 4.8 Physical & Logical Interface Allocations table rows 1:1, derived deterministically from 100% of declared AST `part def` nodes in exact lockstep.
@@ -306,7 +310,7 @@ Per [`rules/latex-katex-integrity.md`](latex-katex-integrity.md):
 
 ### 6. Deterministic Modular Assembly & Cross-Model Allocation
 - **Modular Unit Storage**: ConOps and Mission Intent specifications MUST be authored as discrete modular unit files under `docs/conops/units/conops/` (12 modules: `01_METADATA_AND_OVERVIEW.md` through `12_EMERGENCY_DECISION_MATRIX.md`) and `docs/conops/units/mission_intent/` (10 modules: `01_COMMANDERS_INTENT.md` through `10_OPERATIONAL_ALLOCATION_TAGS.md`).
-- **Deterministic Assembly Engine**: Master documents (`docs/conops/CONOPS.md` and `docs/conops/MISSION_INTENT.md`) MUST be compiled via `python3 scripts/assemble_conops.py`.
+- **Deterministic Assembly Engine**: Master documents (`docs/conops/CONOPS.md` and `docs/conops/MISSION_INTENT.md`) MUST be compiled via `./target/release/assemble-conops` (or `cargo run -p assemble-conops --bin assemble-conops`).
 - **Zero Placeholder Tokens**: Assembled specifications MUST contain zero unresolved `{{...}}` template tokens.
 - **Gate 24 Operational Allocation**: Every UAF Operational Activity (`OA-XX`) and METL Task (`MET-XX`) MUST define a machine-verifiable Gate 24 allocation tag (`/// OperationalAllocation: [OA-XX]` or `/// OperationalAllocation: [MET-XX]`) linking operational tasks to structural and behavioral SysML v2 AST elements.
 
@@ -352,7 +356,9 @@ Treating operational concepts and mission intent as informal, ad-hoc prose leads
 
 Enforcing strict schema contracts, open multi-domain threat modeling, mathematical formulations, public clause citations, and deterministic assembly ensures that Level 1B operational concepts are as rigorous and machine-verifiable as low-level source code.
 
+
 ---
+
 
 <a id="constitution-first-md"></a>
 <a id="rule-constitution-first-md"></a>
@@ -377,7 +383,8 @@ Enforcing strict schema contracts, open multi-domain threat modeling, mathematic
 - If the functional constitution file exists in the repository, you MUST read it before starting work. Do not skip it.
 - If you are implementing a feature and no implementation profile exists for the target platform, HALT and ask the human to create one.
 - If a proposed change conflicts with any constitution document, HALT and escalate to the human.
-- Specification workers/modules MUST NOT read implementation profiles -- they operate on functional specs only.
+- Specification subagents/modules MUST NOT read implementation profiles -- they operate on functional specs only.
+- Upstream compiler and spec-core workspaces operate strictly at Tier 1 and must never parse or enforce Tier 3 platform implementation profiles.
 - You MUST read `.agents/AGENTS.md` before writing or modifying any file. Its *Strict Planning Gate* requires an approved implementation plan and overrides any rule that treats an authorization keyword alone as sufficient. See `rules/user-authorization-lock.md` § *Precedence*.
 - `.pipeline` and `.agents` are hidden directories and generic glob tools may exclude them. You MUST read `.agents/AGENTS.md`, `.pipeline/constitution.md` and `.pipeline/profiles/` directly by their explicit paths. A file absent from this list and hidden from glob is effectively invisible -- that is how the strictest authorization rule came to be missed.
 
@@ -385,7 +392,9 @@ Enforcing strict schema contracts, open multi-domain threat modeling, mathematic
 
 The constitution captures non-negotiable project constraints. Without reading it, agents may violate platform rules, skip required test types, use forbidden dependencies, or produce specs that don't conform to domain standards.
 
+
 ---
+
 
 <a id="document-references-md"></a>
 <a id="rule-document-references-md"></a>
@@ -485,7 +494,9 @@ sweep left one live violation behind in `skills/feature-driven-implementation/SK
 Stating the rule here gives it a normative home with repository-wide scope and a mechanical
 gate, rather than two file-local assertions that no document generalises and no test checks.
 
+
 ---
+
 
 <a id="domain-engineering-standards-md"></a>
 <a id="rule-domain-engineering-standards-md"></a>
@@ -503,7 +514,7 @@ gate, rather than two file-local assertions that no document generalises and no 
 
 These standards govern Tier 1 domain models and clean architecture boundaries across all supported target platforms. They ensure immutability, exhaustive error handling, static type safety, and spec-to-code traceability across downstream application codebases.
 
-Enforced offline by `parity_auditor/validators/profile_compliance_validator.py` and platform profiles (`.pipeline/profiles/<platform>.md`).
+Enforced offline by `./target/release/verify-baseline` and platform profiles (`.pipeline/profiles/<platform>.md`).
 
 ## The 15 Non-Negotiable Domain Engineering Standards
 
@@ -527,7 +538,9 @@ Enforced offline by `parity_auditor/validators/profile_compliance_validator.py` 
 
 Unenforced domain boundaries lead to runtime null-pointer crashes, unhandled exception leaks, fragile dynamic casting, and drift between functional specs and source implementations. Codifying and auditing these 15 rules guarantees high robustness and automated verification across the codebase.
 
+
 ---
+
 
 <a id="dual-track-mbd-verification-md"></a>
 <a id="rule-dual-track-mbd-verification-md"></a>
@@ -677,7 +690,9 @@ Relying exclusively on proprietary desktop MBD tools creates friction in automat
 
 The Dual-Track MBD Verification Protocol provides the ideal synthesis: uncompromised DO-178C / DO-331 aerospace certification rigor via Track A, paired with instantaneous, 100% license-free regression testing in headless CI via Track B.
 
+
 ---
+
 
 <a id="latex-katex-integrity-md"></a>
 <a id="rule-latex-katex-integrity-md"></a>
@@ -720,7 +735,9 @@ Markdown rendering engines (such as GitHub, web portals, and documentation gener
 8. **Unbalanced Delimiters**: Unbalanced `$$` delimiters or unescaped currency literals break subsequent markdown formatting, swallowing text and invalidating downstream documentation parsers.
 9. **Alphanumeric Identification Clashes**: Enclosing plain alphanumeric requirement or hazard tags in `$...$` math delimiters causes KaTeX to parse multi-letter tags as implicit algebraic multiplication with subtraction operators (e.g., `$SC-01$` parsed as $S \times C - 01$), producing corrupted duplicate or triplicate text in web tracker interfaces (e.g., GitLab Work Items, GitHub Issues).
 
+
 ---
+
 
 <a id="no-browser-automation-md"></a>
 <a id="rule-no-browser-automation-md"></a>
@@ -750,7 +767,9 @@ Markdown rendering engines (such as GitHub, web portals, and documentation gener
 
 Ad-hoc browser automation is flaky, environment-dependent, and creates false confidence. Manual verification by the human or project-configured E2E suites are the only reliable options.
 
+
 ---
+
 
 <a id="platform-independence-md"></a>
 <a id="rule-platform-independence-md"></a>
@@ -790,7 +809,7 @@ Ad-hoc browser automation is flaky, environment-dependent, and creates false con
 
 ## Universal Mermaid Diagram Ergonomics & Layout Invariant (Zero Horizontal Sprawl)
 
-To guarantee diagram readability, visual ergonomics, and prevent extreme horizontal aspect-ratio elongation across GitHub, GitLab, and IDE Markdown previewers, all Mermaid diagrams across all specifications, blueprinted interface documents, and architectural overviews MUST adhere to the following four ergonomics rules (E1–E4):
+To guarantee diagram readability, visual ergonomics, and prevent extreme horizontal aspect-ratio elongation across GitHub, GitLab, and IDE Markdown previewers, all Mermaid diagrams across all specifications, blueprinted interface documents, and architectural overviews MUST adhere to the following four ergonomics rules (E1-E4):
 
 - **Rule E1 (Horizontal Flow Prohibition)**: Unconstrained horizontal chaining and horizontal root layouts (`flowchart LR`, `graph LR`, `graph RL`) are strictly prohibited across all specification diagrams. Horizontal layouts force downstream renderers to scale diagrams into unreadable wide ribbons or trigger horizontal scrollbars. All flowcharts and topology graphs MUST use top-down orientation (`flowchart TD` or `graph TD`).
 - **Rule E2 (Mandatory Node Label Line-Wrapping <= 35 chars per line with `<br/>`)**: Long single-line node labels cause Mermaid boxes to stretch horizontally. Node labels MUST NOT exceed 35 characters on any single line. Any multi-word, descriptive, or compound label exceeding 35 characters MUST be broken into multiple lines using explicit `<br/>` tags inside the quoted string (e.g., `Node["Primary Telemetry Stream<br/>and Health Status Monitor"]`).
@@ -808,7 +827,7 @@ To guarantee diagram readability, visual ergonomics, and prevent extreme horizon
 ## Document integrity constraints
 
 These are the non-Mermaid constraints on the same corpus, enforced offline by
-`parity_auditor/validators/docs.py`. They are stated here because each one exists to keep
+`./target/release/verify-baseline` (Gates 3, 4, 11). They are stated here because each one exists to keep
 a Tier 1 document functional and standard-agnostic, or to keep it parseable by the tools
 that read it -- the same subject as the rules above. The three fence rules are deliberately
 **distinct** from `mermaid-fence-must-be-closed` in the Mermaid syntax checker: that rule
@@ -849,7 +868,7 @@ to say which checker fired.
 
 **This file is the single normative home for Mermaid syntax constraints.** Skills that emit Mermaid MUST reference this section rather than restating their own subset. These rules were previously fragmented across four files with disjoint subsets, so an author working from one file could breach a constraint documented in another -- see issue #289.
 
-These rules are mechanically enforced, offline, by `parity_auditor/validators/mermaid_syntax_validator.py`. That checker is a rule checker, not a full Mermaid grammar parser: a clean result means no documented rule was violated, which is not proof that a diagram renders. Blocking gates must not call remote renderers -- see `.pipeline/upstream/pipeline-tooling.md` § *Validation Gates*.
+These rules are mechanically enforced, offline, by `./target/release/verify-baseline` (Gate 2: Mermaid Syntax & Structure). That checker is a rule checker, not a full Mermaid grammar parser: a clean result means no documented rule was violated, which is not proof that a diagram renders. Blocking gates must not call remote renderers -- see `.pipeline/upstream/pipeline-tooling.md` § *Validation Gates*.
 
 
 
@@ -863,7 +882,9 @@ These rules are mechanically enforced, offline, by `parity_auditor/validators/me
 
 A single set of functional specs can drive implementations on React, Flutter, .NET, or any other platform. Contaminating specs with platform details forces re-specification when targeting a new platform and violates the two-tier constitution architecture.
 
+
 ---
+
 
 <a id="role-boundary-lock-md"></a>
 <a id="rule-role-boundary-lock-md"></a>
@@ -880,7 +901,7 @@ A single set of functional specs can drive implementations on React, Flutter, .N
 ## Hard constraints
 
 - **Coordinator Direct Writing & Research Lock**: The coordinator agent is strictly forbidden from directly writing or modifying target functional specifications (Epics, Features, User Stories, Use Cases) or codebase source files, and is locked from directly conducting technology stack research (Step 1.5). All codebase write and update operations must be delegated to spawned implementer subagents, and all tech stack research must be delegated to a dedicated research subagent (role: `Codebase Researcher`).
-- **Specification Phase Boundary**: Spec workers and specification subagents are strictly forbidden from reading, writing, or referencing implementation profiles, implementation plans, or target source code files. They must operate strictly within logical, functional, and platform-independent boundaries.
+- **Specification Phase Boundary**: Specification subagents are strictly forbidden from reading, writing, or referencing implementation profiles, implementation plans, or target source code files. They must operate strictly within logical, functional, and platform-independent boundaries.
 - **Implementation Phase Boundary**: Implementation subagents and micro-task implementers are strictly forbidden from generating or directly modifying upstream specification files (Epics, Features, User Stories, Use Cases) unless explicitly authorized via a synchronized backlog reconciliation task.
 - **Strict Subagent Tool Locking**: Spawned subagents must only execute tools that fall within their explicit domain (e.g., spec subagents do not run build/test commands or modify code, and implementation subagents do not edit high-level specifications).
 - **Subagent Cleanup**: The coordinator MUST immediately terminate or reclaim any spawned subagents once the subagent's task is completed and the work is integrated, using whichever capability the active runtime provides. Concrete per-runtime tool names are listed only in `.agents/AGENTS.md` § *Mandatory Subagent Dispatch for Research, Specification & Implementation Loops*; where the runtime reclaims subagents automatically on completion, confirming completion satisfies this rule (issue #312). Subagents must never be left in an idle or dormant state.
@@ -892,7 +913,9 @@ A single set of functional specs can drive implementations on React, Flutter, .N
 
 To prevent context window bloat, avoid memory leakage across phases, and maintain the integrity of the two-tier project constitution by ensuring specification remains purely functional and separate from implementation.
 
+
 ---
+
 
 <a id="serial-execution-md"></a>
 <a id="rule-serial-execution-md"></a>
@@ -916,7 +939,9 @@ To prevent context window bloat, avoid memory leakage across phases, and maintai
 
 Parallel feature work causes context drift, merge conflicts, and incomplete verification. Serial execution guarantees each feature is fully validated before moving on.
 
+
 ---
+
 
 <a id="specification-metadata-integrity-md"></a>
 <a id="rule-specification-metadata-integrity-md"></a>
@@ -928,7 +953,7 @@ Parallel feature work causes context drift, merge conflicts, and incomplete veri
 
 # Rule: Specification Metadata Integrity & Native Markdown Metadata Tables
 
-**ALWAYS enforce:** All engineering specification files across the repository (`docs/epics/`, `docs/features/`, `docs/user-stories/`, and `docs/use-cases/`) MUST start at lines 1–10 with a native CommonMark two-column Markdown Metadata Table. Raw `--- ... ---` YAML frontmatter blocks are strictly forbidden in specification markdown documents.
+**ALWAYS enforce:** All engineering specification files across the repository (`docs/epics/`, `docs/features/`, `docs/user-stories/`, and `docs/use-cases/`) MUST start at lines 1-10 with a native CommonMark two-column Markdown Metadata Table. Raw `--- ... ---` YAML frontmatter blocks are strictly forbidden in specification markdown documents.
 
 ## Scope and Normative Authority
 
@@ -948,7 +973,7 @@ This standard applies unconditionally to all specification documents residing un
    - All metadata previously carried in YAML frontmatter blocks MUST be converted to native CommonMark two-column tables.
 
 2. **Native CommonMark Two-Column Metadata Table**:
-   - Every specification document MUST begin within lines 1–10 (optionally preceded only by copyright comments) with a native CommonMark two-column table with the exact header:
+   - Every specification document MUST begin within lines 1-10 (optionally preceded only by copyright comments) with a native CommonMark two-column table with the exact header:
      ```markdown
      | Attribute | Specification Detail |
      | :--- | :--- |
@@ -1061,10 +1086,11 @@ Use Cases define formal operational capabilities (`use case def`), subject bound
   - `Issue ID`: Tracker issue identifier or integer ID.
   - `Title`: Full use case title (e.g., `uc-001-assemble-and-verify-subsystem`).
   - `Type`: Literal string `use-case`.
-  - `Parent Epic`: Identifier or relative link to parent Epic.
-  - `Schema Containers`: SysML use case element or container definition (e.g., `AssembleAndVerifySubsystem`).
+  - `Primary Actor`: Primary executing actor or role (e.g., `HumanEngineer`).
+  - `Scope`: Target system boundary or component (e.g., `DEAPCompilerSystem`).
+  - `Level`: Operational abstraction tier (e.g., `User Goal`).
   - `Generation Mode`: Mode of generation (e.g., `subagent`).
-  - `Specification Source`: Document-relative link to the source model (e.g., `[schema/SystemModel.sysml](../../schema/SystemModel.sysml)`).
+  - `Specification Source`: Document-relative link to the authoritative source model (e.g., `[schema/conops/activities.sysml](../../schema/conops/activities.sysml)`).
 
 #### Use Case Metadata Table Example:
 ```markdown
@@ -1073,10 +1099,11 @@ Use Cases define formal operational capabilities (`use case def`), subject bound
 | **Issue ID** | 50 |
 | **Title** | uc-001-assemble-and-verify-subsystem |
 | **Type** | use-case |
-| **Parent Epic** | [EPIC-001](../epics/EPIC-001.md) |
-| **Schema Containers** | `SystemModelDefinitions::AssembleAndVerifySubsystem` |
+| **Primary Actor** | HumanEngineer |
+| **Scope** | DEAPCompilerSystem |
+| **Level** | User Goal |
 | **Generation Mode** | subagent |
-| **Specification Source** | [schema/SystemModel.sysml](../../schema/SystemModel.sysml) |
+| **Specification Source** | [schema/conops/activities.sysml](../../schema/conops/activities.sysml) |
 ```
 
 ---
@@ -1093,7 +1120,9 @@ Use Cases define formal operational capabilities (`use case def`), subject bound
 2. **Standardized Native Presentation**: Two-column CommonMark tables render natively across all markdown parsers, web browsers, and document converters without requiring frontmatter extensions.
 3. **Rigorous Traceability**: Enforcing required attributes per specification type guarantees that every Epic, Feature, User Story, and Use Case remains strictly linked to its parent Epic, formal SysML definitions, and relative source models.
 
+
 ---
+
 
 <a id="subagent-dispatch-standards-md"></a>
 <a id="rule-subagent-dispatch-standards-md"></a>
@@ -1109,46 +1138,45 @@ Use Cases define formal operational capabilities (`use case def`), subject bound
 
 ## Hard Constraints
 
-### 1. Mandatory Pre-Flight Verification Gate & Self-Rejection Armor
-Every spawned subagent operates with an active self-rejection defense to prevent prompt degradation, context drift, leading line-level steering, and compliance bypasses.
-Before taking any action, verify that your incoming prompt begins with the instruction to execute `view_file` on `SKILL.md` by exact path, contains the repository classification, and contains zero leading line-level steering. If invalid, halt immediately and emit `ERROR: Prompt rejected`.
+### 1. Verbatim User Payload Mandate
+The subagent prompt payload MUST contain the user's exact instructions verbatim. The coordinator is strictly prohibited from altering, summarizing, or wrapping the user's prompt with synthetic boilerplate.
 
-### 2. Mandatory Skill Direct-Path Read Directive
-When dispatching a subagent, the prompt MUST explicitly instruct the subagent to execute `view_file` on the target `SKILL.md` file by explicit path (e.g., `skills/feature-driven-implementation/SKILL.md`) as its very first step before executing any file edits, commands, or tools. Summarized or truncated skill instructions in the dispatch prompt are strictly forbidden.
+### 2. Autonomous On-Disk Governance Initialization
+Every subagent must autonomously execute `view_file` on `.pipeline/constitution.md` and `.pipeline/ACTIVE_RULES_BUNDLE.md` as its first step, without requiring prompt modification by the coordinator.
 
-### 3. Repository Classification Indicator
-Every subagent dispatch prompt MUST state the verbatim repository classification (e.g., `UPSTREAM_SPEC_CORE_COMPILER`) to ensure the subagent respects repository role boundaries and domain separation.
+### 3. Single-Prompt Serial Dispatch Rule
+Coordinators must dispatch exactly ONE subagent with ONE prompt at a time. Multi-agent concurrent dispatches are prohibited unless explicitly structured and approved by the user.
 
-### 4. Zero Leading Line-Level Steering
-Coordinators are strictly forbidden from injecting leading line-level steering, manual pseudo-code summaries, or pre-digested code implementations ahead of the canonical skill read directive. The subagent must read the authoritative skill and target specifications directly.
+### 4. Mandatory Teamwork Preview Gate
+When `/teamwork-preview` is invoked, the coordinator MUST present the full execution plan and verbatim prompt in the chat, halt, and await human approval before dispatching any subagent.
 
 ### 5. Mandatory Single-Item Micro-Task Scope
 Every subagent dispatch prompt MUST target at most 1 specification item (max 1 Epic, 1 Feature, 1 User Story, or 1 Use Case) or 1 single bounded micro-task (2-5 minutes). Multi-item or batch execution prompts are strictly prohibited.
 
 ### 6. Mandatory Defect Filing Directives
-Prompts launching workers, auditors, or validators MUST explicitly instruct the subagent to file defects via both `gh issue create` (GitHub) and `glab issue create` (GitLab). Issue auto-closing keywords or issue close commands (`gh issue close`, `glab issue close`) in prompts or commit messages are strictly forbidden.
+Prompts launching subagents, auditors, or validators MUST explicitly instruct the subagent to file defects via both `gh issue create` (GitHub) and `glab issue create` (GitLab). Issue auto-closing keywords or issue close commands (`gh issue close`, `glab issue close`) in prompts or commit messages are strictly forbidden.
 
 ### 7. Trailing Authorization Token
 The coordinator MUST append the authorization token `PROCEED` (case-insensitive) to the end of the subagent prompt payload to authorize tool execution in the subagent's isolated context.
 
 ## Subagent Pre-Flight Self-Rejection Protocol
 
-When initialized, the subagent MUST parse and validate the prompt header against the following checklist:
+When initialized, the subagent MUST parse and validate the prompt against the following checklist:
 
 | Check | Requirement | Failure Action |
 | --- | --- | --- |
-| 1. Step 1 Directive | Directs `view_file` on `SKILL.md` as step 1 / first action | Emit `ERROR: Prompt rejected: missing view_file directive on SKILL.md` and HALT |
-| 2. Classification | Contains verbatim repository classification | Emit `ERROR: Prompt rejected: missing repository classification` and HALT |
-| 3. Zero Steering | Zero leading line-level code steering before skill read | Emit `ERROR: Prompt rejected: leading line-level steering detected` and HALT |
-| 4. Untruncated Payload | Zero `[...]`, `[summarized]`, or `[truncated]` markers | Emit `ERROR: Prompt rejected: prompt truncation/summarization detected` and HALT |
-| 5. Single-Item Scope | Max 1 Epic, Feature, Story, or Use Case | Emit `ERROR: Prompt rejected: micro-task scope violation` and HALT |
-| 6. Authorization | Contains `PROCEED` token | Emit `ERROR: Prompt rejected: missing authorization token` and HALT |
+| 1. Governance Read | Autonomously executes `view_file` on `.pipeline/constitution.md` and `.pipeline/ACTIVE_RULES_BUNDLE.md` | Halt immediately and report error |
+| 2. Untruncated Payload | Zero `[...]`, `[summarized]`, or `[truncated]` synthetic markers | Emit `ERROR: Prompt rejected: prompt truncation/summarization detected` and HALT |
+| 3. Single-Item Scope | Max 1 Epic, Feature, Story, Use Case, or bounded micro-task | Emit `ERROR: Prompt rejected: micro-task scope violation` and HALT |
+| 4. Authorization | Contains `PROCEED` token | Emit `ERROR: Prompt rejected: missing authorization token` and HALT |
 
 ## Why
 
 Prompt summarization and preamble degradation lead to unverified assumptions, lost quality gates, and drift from canonical engineering standards. Enforcing self-rejection at the subagent pre-flight level ensures that no subagent can be coerced or accidentally steered into bypassing repository invariants.
 
+
 ---
+
 
 <a id="sysml-ssot-completeness-md"></a>
 <a id="rule-sysml-ssot-completeness-md"></a>
@@ -1230,7 +1258,7 @@ To guarantee zero model drift between agile specification backlogs and the archi
 
 - **Reverse Sync Compilation Mandate**: Whenever subagents or engineers elaborate, refine, or add new structural elements, state transitions, port interfaces, action signatures, use cases, or safety constraints in markdown specifications (`docs/epics`, `docs/features`, `docs/user-stories`, `docs/use-cases`), the reverse synchronization compiler MUST be executed:
   ```bash
-  python3 scripts/compile_sysml.py --reverse-sync
+  ./target/release/compile-sysml --reverse-sync
   ```
 - **Automated AST Extraction & Elaboration**: The `--reverse-sync` engine mechanically extracts:
   1. *Structural Blocks & Items*: Ingests YAML frontmatter metadata and Mermaid class diagrams, compiling newly declared components and payload schemas into `part def` and `item def` nodes.
@@ -1295,7 +1323,9 @@ When dispatching subagents in upstream compiler mode:
 
 Treating textual specifications and models as separate entities inevitably causes specification drift, where documentation diverges from the architectural model and code generation toolchains. Enforcing SysML v2 as the 100% Single Source of Truth guarantees model integrity, enables automated bidirectional validation, and provides an unbroken digital thread from high-level safety invariants to generated DO-178C / ISO 26262 C/SPARK Ada safety-critical code.
 
+
 ---
+
 
 <a id="tdd-mandate-md"></a>
 <a id="rule-tdd-mandate-md"></a>
@@ -1327,9 +1357,9 @@ Treating textual specifications and models as separate entities inevitably cause
 ## Required assertion classes
 
 A test suite can be green, large, and still assert nothing about the constraints the
-specifications actually state. These are the assertion classes the parity auditor
+specifications actually state. These are the assertion classes the baseline verification
 requires a downstream test suite to demonstrate, enforced offline by
-`parity_auditor/validators/test_completeness_validator.py`. They are stated here rather
+`./target/release/verify-baseline` (Gate 16: Test Completeness). They are stated here rather
 than in a platform profile because the checker scans every supported test file type
 (`_test.dart`, `.test.ts`, `.test.tsx`, `.spec.ts`, `.spec.tsx`) and the requirement is
 about what is asserted, not about which framework asserts it.
@@ -1357,7 +1387,9 @@ about what is asserted, not about which framework asserts it.
 
 TDD prevents false confidence. A test written after the code is confirmation bias -- it tests what was built, not what was specified. RED-GREEN-REFACTOR guarantees the test actually validates the requirement.
 
+
 ---
+
 
 <a id="tracker-source-of-truth-md"></a>
 <a id="rule-tracker-source-of-truth-md"></a>
@@ -1381,13 +1413,13 @@ TDD prevents false confidence. A test written after the code is confirmation bia
 - When constructing links to files in issue descriptions, dynamically determine the remote URL from the repository settings (e.g., `meta.upstream_repository`). Never use relative paths like `../features/...` in issue bodies.
 - **Registered Issues Must Have A Local Specification**: every tracker issue carrying the Epic or Feature label MUST have a corresponding local specification file. A registered issue with no file means the branch baseline is incomplete, and the reconciler will write checklist state back to an issue whose specification nobody can read.
 - **Local Indices Must Not Collide With Registered Issues**: a local specification whose ordinal (`epic-02`, `feat-07`) is already claimed on the tracker by a *differently titled* issue is a collision and MUST be renumbered. Reconciliation addresses specifications by ordinal, so the ambiguity silently retargets updates at the wrong issue.
-- **Local Specification Titles Must Be Unique Within A Spec Type**: no two Epics, no two Features, no two User Stories and no two Use Cases may declare titles that normalise to the same key. Uniqueness is scoped **per spec type, not globally**: an Epic naming a theme and a Feature delivering part of it may legitimately share a subject, and the tracker treats `(spec type, normalised title)` as the identity for exactly that reason. Reconciliation builds its issue lookup on the normalised title, so two specifications of one type sharing a key resolve to whichever issue was seen last -- one body is published over the other and the loser is orphaned. Enforced offline by `parity_auditor/validators/spec_title_uniqueness_validator.py`, using the same normalisation as `reconcile_backlog.py` so the gate collides in exactly the space the reconciler collides in.
-- **Generated Item Titles Must Be Namespaced To Their Source Module**: a subagent drafting one item from one schema node MUST prefix the generated Epic, Feature, User Story and Use Case title with a bracketed short-code identifying the bounded context it came from -- for example `[NI-Location] Geo Location` rather than `Geo Location`. Item subagents draft in isolation and never see one another's output, so a node name that recurs across modules (`geo-location`, `status`, `interface` are the standard cases) produces the same title twice and neither subagent is in a position to notice. The namespace is what makes the item identifiable in a shared backlog without opening it. What is mechanically gated is the *effect* -- the uniqueness rule above; the gate does not check the shape of the prefix, because a prefix-shape check would reject every specification written before this rule and the invariant that actually protects the tracker is uniqueness rather than any particular spelling. That gap is recorded in `tests/rule_contracts.py` under `KNOWN_UNREGISTERED_FAMILIES` rather than left silent.
+- **Local Specification Titles Must Be Unique Within A Spec Type**: no two Epics, no two Features, no two User Stories and no two Use Cases may declare titles that normalise to the same key. Uniqueness is scoped **per spec type, not globally**: an Epic naming a theme and a Feature delivering part of it may legitimately share a subject, and the tracker treats `(spec type, normalised title)` as the identity for exactly that reason. Reconciliation builds its issue lookup on the normalised title, so two specifications of one type sharing a key resolve to whichever issue was seen last -- one body is published over the other and the loser is orphaned. Enforced offline by `./target/release/verify-baseline` (Gate 6: Spec Title Uniqueness), using the same normalisation as `./target/release/reconcile-backlog` so the gate collides in exactly the space the reconciler collides in.
+- **Generated Item Titles Must Be Namespaced To Their Source Module**: a subagent drafting one item from one schema node MUST prefix the generated Epic, Feature, User Story and Use Case title with a bracketed short-code identifying the bounded context it came from -- for example `[NI-Location] Geo Location` rather than `Geo Location`. Item subagents draft in isolation and never see one another's output, so a node name that recurs across modules (`geo-location`, `status`, `interface` are the standard cases) produces the same title twice and neither subagent is in a position to notice. The namespace is what makes the item identifiable in a shared backlog without opening it. What is mechanically gated is the *effect* -- the uniqueness rule above; the gate does not check the shape of the prefix, because a prefix-shape check would reject every specification written before this rule and the invariant that actually protects the tracker is uniqueness rather than any particular spelling. That gap is recorded in the baseline verification rules registry under `KNOWN_UNREGISTERED_FAMILIES` rather than left silent.
 
 ## What local files are for
 
 - Local markdown files (`docs/epics/`, `docs/features/`, etc.) are the specification source, but their checklist states may be stale.
-- Always sync local state with the tracker state using the backlog reconciliation script (e.g., `reconcile_backlog.py`).
+- Always sync local state with the tracker state using the backlog reconciliation engine (`./target/release/reconcile-backlog`).
 - The authoritative "done" state lives in the issue tracker, not in local frontmatter.
 
 ## Multi-Provider Issue Tracker Standards (GitHub & GitLab)
@@ -1458,7 +1490,9 @@ All issue references in git commit messages MUST use neutral reference syntax:
 
 Local files can be contaminated, outdated, or contain broken links. The configured issue tracker is the canonical state store. Querying it directly prevents agents from working on closed issues, creating duplicates, or referencing stale data.
 
+
 ---
+
 
 <a id="uml-model-integrity-md"></a>
 <a id="rule-uml-model-integrity-md"></a>
@@ -1476,10 +1510,10 @@ complete, and every UML diagram it carries must be a valid model rather than a p
 ## Scope and normative home
 
 **This file is the single normative home for the model-integrity constraints enforced by
-`parity_auditor/validators/uml.py`.** They span all four backlog document types, so
-stating them in any one worker skill would fragment them across four files with disjoint
+`./target/release/verify-baseline` (Gate 1: UML Model Structure & Stereotypes).** They span all four backlog document types, so
+stating them in any one specification skill would fragment them across four files with disjoint
 subsets -- the failure issue #289 fixed for the Mermaid rules by designating one home.
-The worker skills own the *templates*; this file owns the *rules* the templates exist to
+The specification skills own the *templates*; this file owns the *rules* the templates exist to
 satisfy.
 
 Three rules enforced here are **not** restated below, because they already have a
@@ -1719,7 +1753,9 @@ missing type, unbracketed guard, unreachable class or placeholder link is only d
 when something downstream tries to use it.
 
 
+
 ---
+
 
 <a id="user-authorization-lock-md"></a>
 <a id="rule-user-authorization-lock-md"></a>
@@ -1775,6 +1811,13 @@ Before transitioning any issue or task status to `status:fixed-resolved`, the ag
 
 Agents are strictly required to prioritize Structural Remediation Over Mechanical Replacement. Mechanical string replacements or surface-level patches that ignore underlying system invariants are strictly prohibited. Every remediation must include Mandatory Invariant Verification to guarantee that structural integrity is maintained.
 
+## User Intent Integrity & Verbatim Pass-Through Mandate
+
+**ALWAYS enforce:** Agents and coordinators are strictly prohibited from overriding, altering, rewriting, summarizing, or substituting the user's stated intentions, prompt text, or architectural parameters under any circumstances.
+- When the user provides a task prompt (including `/teamwork-preview`), that prompt MUST be preserved and passed to executing agents verbatim.
+- Coordinators are strictly forbidden from rewriting user prompts, injecting synthetic constraints, or altering the execution scope in background thought blocks.
+- Subagents must ingest repository rules directly from disk (`.pipeline/constitution.md` and `.pipeline/ACTIVE_RULES_BUNDLE.md`) rather than requiring prompt modification by the coordinator.
+
 ## Why
 
 To prevent the agent from making silent assumptions, performing unapproved actions, or violating the Karpathy guidelines in response to diagnostic or analytical questions.
@@ -1783,7 +1826,9 @@ Issue #295 records the failure this prevents: an agent read `rules/` and the con
 both of which stated that a keyword sufficed, never read `.agents/AGENTS.md`, and pushed
 two unapproved commits to `main`.
 
+
 ---
+
 
 <a id="verification-required-md"></a>
 <a id="rule-verification-required-md"></a>
@@ -1819,6 +1864,7 @@ two unapproved commits to `main`.
 ## Why
 
 Agents are prone to hallucinating success. Requiring raw evidence forces ground-truth verification and makes false completions impossible to hide.
+
 
 ---
 

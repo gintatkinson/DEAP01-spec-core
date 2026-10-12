@@ -1,36 +1,43 @@
+!/.agents/
+!/.agents/**
+.agents/teamwork/
+!/.pipeline/
+!/.pipeline/**
+!/rules/
+!/rules/**
+!/skills/
+!/skills/**
+# 1453 tracked files pinned to Python 3.9.6 and to /Applications/Xcode.app paths,
 # Copyright Gint Atkinson, gint.atkinson@gmail.com
-__pycache__/
+# Credentials & local env configuration
+# Diagnostics and reproduction payloads
+# Node dependencies & build artifacts
+# Pipeline infrastructure (whitelisted by setup_git_hooks.py)
+# Virtualenvs are per-machine and must never be committed. The previous one was
+# so it was broken on every machine but one and shipped an EOL runtime (#294).
+*.egg-info/
 *.pyc
 *.pyo
-*.egg-info/
-.pytest_cache/
-.DS_Store
-.tessl/
-scratch/
-
-# Credentials & local env configuration
-.env
-.env.local
-.env.*
 *define*.json
-config.json
+.DS_Store
+.dart_tool/
+.env
+.env.*
+.env.local
+.flutter-plugins*
+.pipeline/diagnostics/
+.pub/
+.pytest_cache/
+.tessl/
+.venv/
+__pycache__/
+app_flutter_release.zip
 benchmark_results.jsonl
-
-# Node dependencies & build artifacts
+build/
+config.json
+dist/
 node_modules/
 package-lock.json
-dist/
-build/
-.dart_tool/
-.pub/
-.flutter-plugins*
-app_flutter_release.zip
-
-# Diagnostics and reproduction payloads
-.pipeline/diagnostics/
-
-# Virtualenvs are per-machine and must never be committed. The previous one was
-# 1453 tracked files pinned to Python 3.9.6 and to /Applications/Xcode.app paths,
-# so it was broken on every machine but one and shipped an EOL runtime (#294).
-.venv/
+scratch/
+target/
 venv/

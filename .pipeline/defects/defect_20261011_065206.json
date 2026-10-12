@@ -1,0 +1,34 @@
+{
+  "title": "Baseline check failure: Check 31 (Dual-schema SSOT parity)",
+  "severity": "Critical",
+  "file_location": "/Users/perkunas/jail/dumpiler-01",
+  "pillar": "Pillar 1: System Baseline Integrity",
+  "symptom": "Violations found during Check 31 (Dual-schema SSOT parity):\n- action def defined in schema/*.sysml but missing in .pipeline/schema.sysml: [\"IngestSchemaInteraction\"]",
+  "whys": [
+    {
+      "question": "did the baseline verification check fail",
+      "because": "Check 31 (Dual-schema SSOT parity) failed with 1 violation(s)"
+    },
+    {
+      "question": "were these violations present",
+      "because": "required specification files or syntax constraints were violated"
+    },
+    {
+      "question": "did this occur in the repository",
+      "because": "specifications or workspace files drifted from baseline governance standards"
+    },
+    {
+      "question": "was this not caught earlier",
+      "because": "verification was not executed before commit"
+    },
+    {
+      "question": "is this critical",
+      "because": "all downstream projects must strictly satisfy baseline gates before delivery"
+    }
+  ],
+  "impact": "Halts pipeline verification and downstream implementation until resolved.",
+  "architectural_models": "DEAP Platform Specification and Baseline Architecture.",
+  "remediation": "Resolve the following violations:\n- action def defined in schema/*.sysml but missing in .pipeline/schema.sysml: [\"IngestSchemaInteraction\"]",
+  "verification": "Re-run verify-baseline until all checks pass cleanly.",
+  "regression_prevention": "Run verify-baseline before every commit and PR merge."
+}

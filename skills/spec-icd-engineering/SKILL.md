@@ -111,7 +111,7 @@ The Worker ICD synthesizes two primary Level 1C engineering artifacts in `docs/i
 
 ## Step 3: Standardized Level 1C Markdown Artifact Structures
 
-All Level 1C documents are stored under `docs/interfaces/` and MUST begin at lines 1–10 with a native CommonMark two-column Metadata Table per `rules/specification-metadata-integrity.md`.
+All Level 1C documents are stored under `docs/interfaces/` and MUST begin at lines 1-10 with a native CommonMark two-column Metadata Table per `rules/specification-metadata-integrity.md`.
 
 ### 3.1 Metadata Table Specification (Mandatory for all ICD files)
 
@@ -129,7 +129,7 @@ Every generated ICD document MUST open with the following exact table structure:
 ```
 
 > [!WARNING]
-> Raw `--- ... ---` YAML frontmatter blocks are strictly forbidden in specification markdown files. All metadata must reside in the native CommonMark 2-column table at lines 1–10.
+> Raw `--- ... ---` YAML frontmatter blocks are strictly forbidden in specification markdown files. All metadata must reside in the native CommonMark 2-column table at lines 1-10.
 
 ---
 
@@ -285,14 +285,10 @@ Per [`rules/platform-independence.md`](rules/platform-independence.md):
 
 ## Step 5: Parity Verification Gate 23 & Backlog Synchronization
 
-1. **Mandatory Local Verification Gate (Gate 23 - ICDCompletenessValidator)**:
+1. **Mandatory Local Verification Gate (Gate 23 - ICD Completeness)**:
    Before committing or creating tracker issues, the Worker ICD MUST run local verification checks:
    ```bash
-   python3 skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/icd_completeness_validator.py
-   ```
-   and the model coverage verifier:
-   ```bash
-   ./skills/spec-orchestrator/scripts/verify_model_coverage.py --spec-only --allow-missing-specs --only <spec>
+   ./target/release/verify-baseline . --spec-only
    ```
    - Asserts 100% port connection parity (zero dangling ports: $\mathcal{D}_{\mathrm{port}} = \emptyset$).
    - Asserts 100% signal dictionary coverage of schema interface leaves ($\Omega_{\mathrm{coverage}} = 1.0$).
@@ -303,9 +299,9 @@ Per [`rules/platform-independence.md`](rules/platform-independence.md):
 2. **Untracked Infrastructure Pre-Commit Check**:
    Check for untracked pipeline infrastructure files before committing:
    ```bash
-   UNTRACKED_INFRA=$(git ls-files --others --exclude-standard .pipeline/ skills/ rules/ scripts/)
+   UNTRACKED_INFRA=$(git ls-files --others --exclude-standard .pipeline/ skills/ rules/)
    if [ -n "$UNTRACKED_INFRA" ]; then
-     git add .pipeline/ skills/ rules/ scripts/
+     git add .pipeline/ skills/ rules/
    fi
    ```
 
@@ -328,7 +324,7 @@ Per [`rules/platform-independence.md`](rules/platform-independence.md):
      ```
    - Execute post-creation verification check:
      ```bash
-     gh issue view <ID> --json body | python3 -c "import sys,json; b=json.load(sys.stdin)['body']; assert 'Source References' in b or 'References' in b, 'Body is a stub'"
+     gh issue view <ID> --json body -q .body | grep -E 'Source References|References' >/dev/null || (echo "Body is a stub" >&2; exit 1)
      ```
 
 5. **Commit & Return Control**:

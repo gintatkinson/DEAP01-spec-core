@@ -2,7 +2,7 @@
 
 # Rule: Specification Metadata Integrity & Native Markdown Metadata Tables
 
-**ALWAYS enforce:** All engineering specification files across the repository (`docs/epics/`, `docs/features/`, `docs/user-stories/`, and `docs/use-cases/`) MUST start at lines 1–10 with a native CommonMark two-column Markdown Metadata Table. Raw `--- ... ---` YAML frontmatter blocks are strictly forbidden in specification markdown documents.
+**ALWAYS enforce:** All engineering specification files across the repository (`docs/epics/`, `docs/features/`, `docs/user-stories/`, and `docs/use-cases/`) MUST start at lines 1-10 with a native CommonMark two-column Markdown Metadata Table. Raw `--- ... ---` YAML frontmatter blocks are strictly forbidden in specification markdown documents.
 
 ## Scope and Normative Authority
 
@@ -22,7 +22,7 @@ This standard applies unconditionally to all specification documents residing un
    - All metadata previously carried in YAML frontmatter blocks MUST be converted to native CommonMark two-column tables.
 
 2. **Native CommonMark Two-Column Metadata Table**:
-   - Every specification document MUST begin within lines 1–10 (optionally preceded only by copyright comments) with a native CommonMark two-column table with the exact header:
+   - Every specification document MUST begin within lines 1-10 (optionally preceded only by copyright comments) with a native CommonMark two-column table with the exact header:
      ```markdown
      | Attribute | Specification Detail |
      | :--- | :--- |
@@ -135,10 +135,11 @@ Use Cases define formal operational capabilities (`use case def`), subject bound
   - `Issue ID`: Tracker issue identifier or integer ID.
   - `Title`: Full use case title (e.g., `uc-001-assemble-and-verify-subsystem`).
   - `Type`: Literal string `use-case`.
-  - `Parent Epic`: Identifier or relative link to parent Epic.
-  - `Schema Containers`: SysML use case element or container definition (e.g., `AssembleAndVerifySubsystem`).
+  - `Primary Actor`: Primary executing actor or role (e.g., `HumanEngineer`).
+  - `Scope`: Target system boundary or component (e.g., `DEAPCompilerSystem`).
+  - `Level`: Operational abstraction tier (e.g., `User Goal`).
   - `Generation Mode`: Mode of generation (e.g., `subagent`).
-  - `Specification Source`: Document-relative link to the source model (e.g., `[schema/SystemModel.sysml](../../schema/SystemModel.sysml)`).
+  - `Specification Source`: Document-relative link to the authoritative source model (e.g., `[schema/conops/activities.sysml](../../schema/conops/activities.sysml)`).
 
 #### Use Case Metadata Table Example:
 ```markdown
@@ -147,10 +148,11 @@ Use Cases define formal operational capabilities (`use case def`), subject bound
 | **Issue ID** | 50 |
 | **Title** | uc-001-assemble-and-verify-subsystem |
 | **Type** | use-case |
-| **Parent Epic** | [EPIC-001](../epics/EPIC-001.md) |
-| **Schema Containers** | `SystemModelDefinitions::AssembleAndVerifySubsystem` |
+| **Primary Actor** | HumanEngineer |
+| **Scope** | DEAPCompilerSystem |
+| **Level** | User Goal |
 | **Generation Mode** | subagent |
-| **Specification Source** | [schema/SystemModel.sysml](../../schema/SystemModel.sysml) |
+| **Specification Source** | [schema/conops/activities.sysml](../../schema/conops/activities.sysml) |
 ```
 
 ---

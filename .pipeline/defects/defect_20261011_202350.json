@@ -1,0 +1,34 @@
+{
+  "title": "Baseline check failure: Specification Quality & Coverage Audit",
+  "severity": "Critical",
+  "file_location": "/Users/perkunas/jail/dumpiler-01",
+  "pillar": "Pillar 1: System Baseline Integrity",
+  "symptom": "Violations found during Specification Quality & Coverage Audit:\n- docs/use-cases/UC-01-System_Vision_and_Foundational_Invariants.md:43: [factual-grounding-missing-unit] Engineering parameter 'timeout' on line 43 in 'docs/use-cases/UC-01-System_Vision_and_Foundational_Invariants.md' specifies numeric quantity '5' without an explicit physical/engineering unit.\n- docs/use-cases/UC-03-Node_Arena_Memory_Management_Workflow.md:47: [factual-grounding-missing-unit] Engineering parameter 'payload' on line 47 in 'docs/use-cases/UC-03-Node_Arena_Memory_Management_Workflow.md' specifies numeric quantity '5' without an explicit physical/engineering unit.\n- docs/use-cases/UC-05-Physical_Metrology_and_Flow_Conservation_Workflow.md:42: [factual-grounding-missing-unit] Engineering parameter 'rate' on line 42 in 'docs/use-cases/UC-05-Physical_Metrology_and_Flow_Conservation_Workflow.md' specifies numeric quantity '5' without an explicit physical/engineering unit.\n- docs/use-cases/UC-06-State_Machine_Solver_Workflow.md:47: [factual-grounding-missing-unit] Engineering parameter 'timeout' on line 47 in 'docs/use-cases/UC-06-State_Machine_Solver_Workflow.md' specifies numeric quantity '5' without an explicit physical/engineering unit.\n- docs/use-cases/UC-08-ICD_Interconnect_Contract_Generation_Workflow.md:43: [factual-grounding-missing-unit] Engineering parameter 'bandwidth' on line 43 in 'docs/use-cases/UC-08-ICD_Interconnect_Contract_Generation_Workflow.md' specifies numeric quantity '5' without an explicit physical/engineering unit.\n- docs/use-cases/UC-10-Multi_Target_CodeGen_Workflow.md:43: [factual-grounding-missing-unit] Engineering parameter 'timeout' on line 43 in 'docs/use-cases/UC-10-Multi_Target_CodeGen_Workflow.md' specifies numeric quantity '5' without an explicit physical/engineering unit.",
+  "whys": [
+    {
+      "question": "did the baseline verification check fail",
+      "because": "Specification Quality & Coverage Audit failed with 6 violation(s)"
+    },
+    {
+      "question": "were these violations present",
+      "because": "required specification files or syntax constraints were violated"
+    },
+    {
+      "question": "did this occur in the repository",
+      "because": "specifications or workspace files drifted from baseline governance standards"
+    },
+    {
+      "question": "was this not caught earlier",
+      "because": "verification was not executed before commit"
+    },
+    {
+      "question": "is this critical",
+      "because": "all downstream projects must strictly satisfy baseline gates before delivery"
+    }
+  ],
+  "impact": "Halts pipeline verification and downstream implementation until resolved.",
+  "architectural_models": "DEAP Platform Specification and Baseline Architecture.",
+  "remediation": "Resolve the following violations:\n- docs/use-cases/UC-01-System_Vision_and_Foundational_Invariants.md:43: [factual-grounding-missing-unit] Engineering parameter 'timeout' on line 43 in 'docs/use-cases/UC-01-System_Vision_and_Foundational_Invariants.md' specifies numeric quantity '5' without an explicit physical/engineering unit.\n- docs/use-cases/UC-03-Node_Arena_Memory_Management_Workflow.md:47: [factual-grounding-missing-unit] Engineering parameter 'payload' on line 47 in 'docs/use-cases/UC-03-Node_Arena_Memory_Management_Workflow.md' specifies numeric quantity '5' without an explicit physical/engineering unit.\n- docs/use-cases/UC-05-Physical_Metrology_and_Flow_Conservation_Workflow.md:42: [factual-grounding-missing-unit] Engineering parameter 'rate' on line 42 in 'docs/use-cases/UC-05-Physical_Metrology_and_Flow_Conservation_Workflow.md' specifies numeric quantity '5' without an explicit physical/engineering unit.\n- docs/use-cases/UC-06-State_Machine_Solver_Workflow.md:47: [factual-grounding-missing-unit] Engineering parameter 'timeout' on line 47 in 'docs/use-cases/UC-06-State_Machine_Solver_Workflow.md' specifies numeric quantity '5' without an explicit physical/engineering unit.\n- docs/use-cases/UC-08-ICD_Interconnect_Contract_Generation_Workflow.md:43: [factual-grounding-missing-unit] Engineering parameter 'bandwidth' on line 43 in 'docs/use-cases/UC-08-ICD_Interconnect_Contract_Generation_Workflow.md' specifies numeric quantity '5' without an explicit physical/engineering unit.\n- docs/use-cases/UC-10-Multi_Target_CodeGen_Workflow.md:43: [factual-grounding-missing-unit] Engineering parameter 'timeout' on line 43 in 'docs/use-cases/UC-10-Multi_Target_CodeGen_Workflow.md' specifies numeric quantity '5' without an explicit physical/engineering unit.",
+  "verification": "Re-run verify-baseline until all checks pass cleanly.",
+  "regression_prevention": "Run verify-baseline before every commit and PR merge."
+}

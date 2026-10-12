@@ -724,7 +724,7 @@ After:
 > ### Core System Boundaries & Invariants
 > 
 > - **Pure Schema-Driven Compiler**: The pipeline is an abstract compiler and verification framework. Agents are strictly forbidden from inventing, proposing, or hardcoding domain-specific concepts into pipeline logic or templates.
-> - **Upstream Clean Landing Zone Invariant**: Upstream distribution templates (`DEAP-*`) contain only the abstract compiler, linters, and empty landing zones (`schema/`, `docs/epics/`, `docs/features/`, `docs/user-stories/`, `docs/use-cases/` containing only `.gitkeep`). Concrete project schemas and specifications reside exclusively in downstream application workspaces installed via `scripts/install_pipeline.sh`.
+> - **Upstream Clean Landing Zone Invariant**: Upstream distribution templates (`DEAP-*`) contain only the abstract compiler, linters, and empty landing zones (`schema/`, `docs/epics/`, `docs/features/`, `docs/user-stories/`, `docs/use-cases/` containing only `.gitkeep`). Concrete project schemas and specifications reside exclusively in downstream application workspaces installed via `./target/release/verify-baseline setup-hooks`.
 > 
 > ## Domain Rules
 
@@ -888,7 +888,7 @@ Non-destructive: additive airworthiness governance clause, line count maintained
 
 ### Change
 
-Section *Universal Quality Gates*, subsection *Strict Planning Mode Gate*, lines 163–167.
+Section *Universal Quality Gates*, subsection *Strict Planning Mode Gate*, lines 163-167.
 
 Renamed section header to *Strict Planning Mode Gate & Plan Continuity Mandate* and added explicit third bullet point codifying the strict prohibition against abandoning, altering, or discarding approved implementation plans without explicit user approval.
 

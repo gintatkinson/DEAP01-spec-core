@@ -8,10 +8,10 @@ complete, and every UML diagram it carries must be a valid model rather than a p
 ## Scope and normative home
 
 **This file is the single normative home for the model-integrity constraints enforced by
-`parity_auditor/validators/uml.py`.** They span all four backlog document types, so
-stating them in any one worker skill would fragment them across four files with disjoint
+`./target/release/verify-baseline` (Gate 1: UML Model Structure & Stereotypes).** They span all four backlog document types, so
+stating them in any one specification skill would fragment them across four files with disjoint
 subsets -- the failure issue #289 fixed for the Mermaid rules by designating one home.
-The worker skills own the *templates*; this file owns the *rules* the templates exist to
+The specification skills own the *templates*; this file owns the *rules* the templates exist to
 satisfy.
 
 Three rules enforced here are **not** restated below, because they already have a

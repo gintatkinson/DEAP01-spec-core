@@ -40,7 +40,7 @@ fragmentation issue #289 fixed for the Mermaid rules. The per-trigger requiremen
 themselves are data, not prose, and live in `rules/behavioral_triggers.json`.
 
 These rules are mechanically enforced, offline, by
-`parity_auditor/validators/behavioral.py`. Before issue #304 they were enforced and
+`./target/release/verify-baseline`. Before issue #304 they were enforced and
 stated in no document at all -- the orphan-enforcement shape recorded as #299 -- so a
 subagent drafting a User Story could not have known the requirement existed.
 

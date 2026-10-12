@@ -72,7 +72,7 @@ To guarantee zero model drift between agile specification backlogs and the archi
 
 - **Reverse Sync Compilation Mandate**: Whenever subagents or engineers elaborate, refine, or add new structural elements, state transitions, port interfaces, action signatures, use cases, or safety constraints in markdown specifications (`docs/epics`, `docs/features`, `docs/user-stories`, `docs/use-cases`), the reverse synchronization compiler MUST be executed:
   ```bash
-  python3 scripts/compile_sysml.py --reverse-sync
+  ./target/release/compile-sysml --reverse-sync
   ```
 - **Automated AST Extraction & Elaboration**: The `--reverse-sync` engine mechanically extracts:
   1. *Structural Blocks & Items*: Ingests YAML frontmatter metadata and Mermaid class diagrams, compiling newly declared components and payload schemas into `part def` and `item def` nodes.

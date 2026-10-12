@@ -16,7 +16,7 @@ vocabulary is platform-specific, so this file is its normative home and
 `.pipeline/profiles/<platform>.md` supplies the vocabulary. That division follows
 `rules/platform-independence.md` § *Where platform-specific details belong*.
 
-Enforced offline by `parity_auditor/validators/codebase.py`. Every rule below was
+Enforced offline by `./target/release/verify-baseline`. Every rule below was
 enforced before issue #304 and stated in no document -- the orphan-enforcement shape
 recorded as issue #299 -- so nothing generating code into a downstream workspace could
 have been told what it had to satisfy.

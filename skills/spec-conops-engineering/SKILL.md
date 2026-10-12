@@ -2,7 +2,7 @@
 
 ---
 name: spec-conops-engineering
-description: "Synthesize hierarchical Concept of Operations (docs/conops/units/conops/) and Tactical Mission Intent (docs/conops/units/mission_intent/) specification units adhering to ISO/IEC/IEEE 29148:2018, INCOSE SE Handbook v5.0, NATO STANAG 4586, and MIL-STD-882E with pure schema contracts, zero truncation, and deterministic assembly via scripts/assemble_conops.py."
+description: "Synthesize hierarchical Concept of Operations (docs/conops/units/conops/) and Tactical Mission Intent (docs/conops/units/mission_intent/) specification units adhering to ISO/IEC/IEEE 29148:2018, INCOSE SE Handbook v5.0, NATO STANAG 4586, and MIL-STD-882E with pure schema contracts, zero truncation, and deterministic assembly via ./target/release/assemble-conops."
 version: "1.0"
 metadata:
   title: "Hierarchical ConOps & Mission Intent Engineering"
@@ -16,7 +16,7 @@ Use this skill as the single canonical workflow for transforming high-level oper
 
 In accordance with [`rules/conops-mission-intent-integrity.md`](../../rules/conops-mission-intent-integrity.md), [`rules/sysml-ssot-completeness.md`](../../rules/sysml-ssot-completeness.md), and [`rules/latex-katex-integrity.md`](../../rules/latex-katex-integrity.md), ConOps and Mission Intent specifications bridge high-level operational intent with downstream structural extraction (Level 2 Epics and Features) and Model-Based Design (MBD) synthesis.
 
-All specification units are authored as discrete, modular markdown files under `docs/conops/units/conops/` and `docs/conops/units/mission_intent/` adhering strictly to JSON Schema data contracts (`.pipeline/schemas/conops_specification_schema.json` and `.pipeline/schemas/mission_intent_specification_schema.json`) and compiled into canonical documents via `scripts/assemble_conops.py`.
+All specification units are authored as discrete, modular markdown files under `docs/conops/units/conops/` and `docs/conops/units/mission_intent/` adhering strictly to JSON Schema data contracts (`.pipeline/schemas/conops_specification_schema.json` and `.pipeline/schemas/mission_intent_specification_schema.json`) and compiled into canonical documents via `./target/release/assemble-conops`.
 
 ### Architecture Hierarchy & Standards Governance (INCOSE SEH v5.0 §3.4.4 / ISO/IEC/IEEE 15288:2023 / ISO/IEC/IEEE 29148:2018 §6.4.2)
 
@@ -116,7 +116,7 @@ The Tactical Mission Intent specification tree consists of 10 canonical modular 
 | `10_OPERATIONAL_ALLOCATION_TAGS.md` | `## 10. Gate 24 MissionTask Traceability Tags` | `allocation_tags` | Comprehensive listing of Gate 24 allocation tags (`/// OperationalAllocation: [MET-XX]`) for cross-model traceability. |
 
 ### 2.3 System Architecture Diagram Representation Standard (Option 3)
-In accordance with DoDAF v2.02 SV-1, IEEE 1362 §5.3, ISO/IEC/IEEE 15288:2023, INCOSE SE Handbook v5.0 (§3.4.4), and ISO/IEC/IEEE 29148:2018 §6.4.2–§6.4.3, all system interface and super-system architectural diagrams MUST implement **Option 3 (Compact Subsystem Block Representation with Embedded Port Attributes and Vertical Hierarchical Tiers)**:
+In accordance with DoDAF v2.02 SV-1, IEEE 1362 §5.3, ISO/IEC/IEEE 15288:2023, INCOSE SE Handbook v5.0 (§3.4.4), and ISO/IEC/IEEE 29148:2018 §6.4.2-§6.4.3, all system interface and super-system architectural diagrams MUST implement **Option 3 (Compact Subsystem Block Representation with Embedded Port Attributes and Vertical Hierarchical Tiers)**:
 1. **High-Level Operational Architecture Scope (Level 1B)**: The ConOps (Level 1B) represents High-Level Operational Architecture (OV-1 / OV-2 / High-Level SV-1) partitioned across operational segments (Ground Segment, Air Vehicle Segment, Launch Segment, External Actors) with operational information exchanges (Op-Tx: C2 Commands, Telemetry, Video, Target Tracks, Arming Authorization).
 2. **Strict Level 1B vs. Level 2 Boundary**: ConOps contains Operational Activities (`OA-xx`) and Operational Scenarios (`SCN-xx`), and strictly excludes formal System Use Cases (`uc-xx`), which belong in SyRS Level 2.
 3. **User Class Taxonomy Disambiguation (`UCL-xx`)**: In accordance with ISO/IEC/IEEE 29148:2018 §5.2.4, operational User Classes MUST use the `UCL-xx` prefix (`UCL-01` through `UCL-N`), strictly isolating stakeholder taxonomy from SyRS Level 2 System Use Cases (`uc-xx`) to prevent downstream agent reasoning collisions and automated sanitization corruption.
@@ -206,8 +206,8 @@ Per [`rules/latex-katex-integrity.md`](../../rules/latex-katex-integrity.md):
 - **Universal Formatting Contract**: Every mathematical constraint rendered as a display block `$$ \begin{aligned} ... \end{aligned} $$` must be followed by a parameter definition table specifying symbols, values, units, and descriptions extracted directly from the schema AST node attributes.
 - **Zero Pre-Baked Equations**: The compiler contains ZERO pre-baked equations.
 
-### 4.4 Mandatory AST Subsystem Architecture Invariant & Primary System Architecture Diagram (IEEE 1362 §5.3 / DoDAF SV-1 / ISO 29148 §6.4.2–§6.4.3 / ISO 15288:2023 / INCOSE SEH v5.0 §3.4.4)
-Per IEEE 1362-1998 §5.3 (Operational Environment & System Architecture), DoDAF v2.02 SV-1 (Systems Interface Description), ISO/IEC/IEEE 29148:2018 §6.4.2–§6.4.3 (ConOps & OpsCon Architecture), ISO/IEC/IEEE 15288:2023 (§6.4.2 & §6.4.3), INCOSE Systems Engineering Handbook v5.0 §3.4.4 & §3.3, and the Pure Schema-Driven Compiler Invariant:
+### 4.4 Mandatory AST Subsystem Architecture Invariant & Primary System Architecture Diagram (IEEE 1362 §5.3 / DoDAF SV-1 / ISO 29148 §6.4.2-§6.4.3 / ISO 15288:2023 / INCOSE SEH v5.0 §3.4.4)
+Per IEEE 1362-1998 §5.3 (Operational Environment & System Architecture), DoDAF v2.02 SV-1 (Systems Interface Description), ISO/IEC/IEEE 29148:2018 §6.4.2-§6.4.3 (ConOps & OpsCon Architecture), ISO/IEC/IEEE 15288:2023 (§6.4.2 & §6.4.3), INCOSE Systems Engineering Handbook v5.0 §3.4.4 & §3.3, and the Pure Schema-Driven Compiler Invariant:
 
 - **100% AST Part Coverage & Mathematical Parity Invariant**: ConOps Section 4 must synthesize formal Super-System Architecture and dedicated Subsystem Architecture subsections for 100% of declared `part def` nodes present in the SysML AST in exact lockstep mathematical parity with the primary SV-1 architecture diagram.
 - **Strict Level 1B vs. Level 2 Metamodel Abstraction Boundary**: ConOps models Operational Activities (`OA-xx`) and Operational Scenarios (`SCN-xx`), and strictly excludes formal Level 2 System Use Cases (`uc-xx`), which belong in SyRS Level 2. Operational User Classes MUST use the `UCL-xx` prefix (`UCL-01`..`UCL-N`) per ISO 29148 §5.2.4, strictly isolating stakeholder taxonomy from SyRS Level 2 System Use Cases (`uc-xx`).
@@ -224,7 +224,7 @@ Per IEEE 1362-1998 §5.3 (Operational Environment & System Architecture), DoDAF 
   5. **Strict Exclusion of Internal Software Modules (DoDAF SV-4)**: ConOps SV-1 operates strictly at the physical and logical subsystem / LRU boundary. Internal software execution classes, internal algorithms, class methods, and function signatures belong in Level 2 detailed design / DoDAF SV-4 and are strictly prohibited in the Level 1B ConOps SV-1 diagram. Detailed physical wire pinouts, signal dictionaries, ICD connection matrices (Level 1C), and internal software classes/methods (Level 2) are strictly decoupled from Level 1B operational architecture.
    6. **Option 3 Standard: Compact Subsystem Blocks with Embedded Port Attributes, Vertical Hierarchical Tiers & Segment Layout Enforcement**:
       - **Embedded Port Attributes**: All subsystem blocks MUST embed their discrete ports as bulleted attributes inside the subsystem node definition (`[<b>Name</b><br/>• PORT-... (DIRECTION)]`), rather than rendering individual ports as separate downstream child nodes or nested single-component subgraphs. All node label lines MUST NOT exceed 35 characters and must be wrapped with `<br/>` per Rule E2.
-      - **Vertical Hierarchical Tier Partitioning (`direction TB`) & Rule E3 Tiering**: Subgraphs and segment partitions MUST enforce top-to-bottom vertical layout (`direction TB`) with a maximum of 3 columns horizontally (max 3-column vertical tier partitioning). For large subsystem counts (15–25 subsystems), subsystems within a segment MUST be partitioned into 5–6 functional tiers of at most 3 nodes per row (`Tier_1` through `Tier_N`) chained with internal invisible rank spacers (`~~~`). Flat horizontal layout (`direction LR`), flat declaration of > 3 subsystems in a segment without tier subgraphs, or untiered horizontal chaining is strictly prohibited to prevent unreadable horizontal diagram sprawl (Rule E3).
+      - **Vertical Hierarchical Tier Partitioning (`direction TB`) & Rule E3 Tiering**: Subgraphs and segment partitions MUST enforce top-to-bottom vertical layout (`direction TB`) with a maximum of 3 columns horizontally (max 3-column vertical tier partitioning). For large subsystem counts (15-25 subsystems), subsystems within a segment MUST be partitioned into 5-6 functional tiers of at most 3 nodes per row (`Tier_1` through `Tier_N`) chained with internal invisible rank spacers (`~~~`). Flat horizontal layout (`direction LR`), flat declaration of > 3 subsystems in a segment without tier subgraphs, or untiered horizontal chaining is strictly prohibited to prevent unreadable horizontal diagram sprawl (Rule E3).
       - **Dynamic AST Segment Vertical Chaining Pattern**: Top-level operational segments and Mermaid layout subgraphs in the SV-1 diagram derive 100% from top-level packages or segment blocks declared in the user's SysML AST in `schema/`. Dynamic vertical spacers (`~~~`) MUST be generated between declared AST segments in top-to-bottom sequence (e.g. `External_Actors ~~~ Segment_1`, `Segment_1 ~~~ Segment_2`, ...). Omitting rank spacers between segments causes Dagre to place all segments on Rank 0 (collapsing onto a single horizontal line across Markdown/Mermaid renderers).
       - **100% Mathematical Parity with Section 4.8 Allocation Table**: Every subsystem block in the SV-1 diagram embeds the exact set of typed logical and physical ports (`• PORT-... (DIRECTION)`) matching the Section 4.8 Physical & Logical Interface Allocations table rows 1:1, derived deterministically from 100% of declared AST `part def` nodes in exact lockstep.
       - **Direct Traceable Interconnects**: Directed connection links (`CONN-01`..`CONN-N`) route directly between compact subsystem nodes and external actors using directed flows (`-->`), strictly avoiding bidirectional links (`<-->` or `<==>`) which trigger Dagre rank collapse onto a single horizontal line (Rule E3).
@@ -509,18 +509,18 @@ All analytical content across safety engineering deliverables (`docs/safety/STPA
 Once all unit files are written and verified, execute the deterministic assembly engine:
 
 ```bash
-python3 scripts/assemble_conops.py --input-dir docs/conops/units/ --output-dir docs/conops/ --verify
+./target/release/assemble-conops --input-dir docs/conops/units/ --output-dir docs/conops/ --verify
 ```
 
 and compile the master specification documents:
 
 ```bash
-python3 scripts/assemble_conops.py --input-dir docs/conops/units/ --output-dir docs/conops/
+./target/release/assemble-conops --input-dir docs/conops/units/ --output-dir docs/conops/
 ```
 
 ### Assembly Engine Responsibilities:
 1. **Unit Integrity Verification**: Validates that all unit markdown files exist, are non-empty, and contain zero unresolved `{{...}}` placeholder tokens.
-2. **Metadata Table Injection**: Synthesizes the standard document metadata header table at lines 1–10.
+2. **Metadata Table Injection**: Synthesizes the standard document metadata header table at lines 1-10.
 3. **Table of Contents (TOC) Synthesis**: Automatically parses H2 and H3 headings and generates a verified Markdown TOC.
 4. **Internal Link & Anchor Validation**: Confirms 100% of internal anchor links (`#slug`) resolve cleanly to existing headings with zero broken links.
 5. **Deterministic Output Emission**: Emits `docs/conops/CONOPS.md` and `docs/conops/MISSION_INTENT.md`.
@@ -531,9 +531,9 @@ python3 scripts/assemble_conops.py --input-dir docs/conops/units/ --output-dir d
 
 Before completing Phase 0.75, the `Worker ConOps` must execute and pass all required parity gates:
 
-1. **Gate 26 Verification (ConOps & Mission Intent Completeness Validator)**:
+1. **Gate 26 Verification (ConOps & Mission Intent Completeness)**:
    ```bash
-   python3 -m unittest tests.test_conops_and_mission_intent_validators
+   ./target/release/verify-baseline . --gate conops
    ```
    - Asserts all 12 mandatory sections exist in `CONOPS.md` and all 10 mandatory sections exist in `MISSION_INTENT.md`.
    - Validates boundary containment margin calculation ($R_{\mathrm{containment}} \ge R_{\mathrm{min}}$).
@@ -542,14 +542,14 @@ Before completing Phase 0.75, the `Worker ConOps` must execute and pass all requ
    - Validates METL task allocations.
 
 2. **Gate 28 & Gate 29 Verification**:
-   - Verify that all ConOps-allocated obligations in `docs/research/RESEARCH_INVENTORY.md` are witnessed in `docs/conops/CONOPS.md` and `docs/conops/MISSION_INTENT.md` per `obligation_witness_validator.py` (Gate 29).
-   - Verify coverage metrics per `coverage_digest_validator.py` (Gate 28).
+   - Verify that all ConOps-allocated obligations in `docs/research/RESEARCH_INVENTORY.md` are witnessed in `docs/conops/CONOPS.md` and `docs/conops/MISSION_INTENT.md` per `./target/release/verify-baseline` (Gate 29).
+   - Verify coverage metrics per `./target/release/verify-baseline` (Gate 28).
 
 3. **Untracked Infrastructure & Pre-Commit Check**:
    ```bash
-   UNTRACKED_INFRA=$(git ls-files --others --exclude-standard docs/conops/ skills/ rules/ scripts/)
+   UNTRACKED_INFRA=$(git ls-files --others --exclude-standard docs/conops/ skills/ rules/)
    if [ -n "$UNTRACKED_INFRA" ]; then
-     git add docs/conops/ skills/ rules/ scripts/
+     git add docs/conops/ skills/ rules/
    fi
    ```
 
