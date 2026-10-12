@@ -124,7 +124,7 @@ $$
 | Regulatory Energy Threshold | E_threshold | {{E_THRESHOLD_JOULES:34.0}} | J | E_threshold = 34.0 | Regulatory maximum kinetic energy threshold for low ground risk classification |
 
 3. **Kinetic Energy Threshold Compliance ($E_k \le E_{\mathrm{threshold}}$):**
-   - Unmitigated free-fall kinetic energy ($E_{k,\mathrm{unmitigated}} = {{E_K_UNMITIGATED_JOULES:74125.1}}\text{ J}$) exceeds the low-risk kinetic energy threshold ($E_{\mathrm{threshold}} = {{E_THRESHOLD_JOULES:34.0}}\text{ J}$), mandating certified safety mitigations (M1–M3) and autonomous containment mechanisms per system safety standards and MIL-STD-882E.
+   - Unmitigated free-fall kinetic energy ($E_{k,\mathrm{unmitigated}} = {{E_K_UNMITIGATED_JOULES:74125.1}}\text{ J}$) exceeds the low-risk kinetic energy threshold ($E_{\mathrm{threshold}} = {{E_THRESHOLD_JOULES:34.0}}\text{ J}$), mandating certified safety mitigations (M1-M3) and autonomous containment mechanisms per system safety standards and MIL-STD-882E.
    - Autonomous emergency {{RECOVERY_DEVICE_TERM:containment}} actuation reduces the terminal descent velocity to $v_{\mathrm{terminal,mitigated}} \le {{V_TERMINAL_MITIGATED_MPS:1.65}}\text{ m/s}$, capping the ground impact kinetic energy to $E_{k,\mathrm{mitigated}} \le {{E_K_MITIGATED_JOULES:34.0}}\text{ J}$, fulfilling the high-assurance energy containment criteria.
 
 ### 5.2.1 Domain-Specific Multi-Physics Failsafe Containment Architectures
@@ -163,7 +163,7 @@ To guarantee robust ground and operational safety across all operating states, t
   2. Electronic Conspicuity & State Telemetry: Continuous broadcast of system position, velocity vector, and operational status at standard periodic rates.
   3. Tactical Environmental Surveillance: Continuous multi-sensor situational awareness monitoring surrounding state space.
 
-### 5.4 System Boundary Containment Mitigations (M1–M3)
+### 5.4 System Boundary Containment Mitigations (M1-M3)
 In accordance with MIL-STD-882E §4.3 and ISO 15288:2023, Ground Risk Class (GRC) mitigations are systematically categorized across strategic isolation (M1), ground impact effects reduction (M2), and emergency response planning (M3):
 
 | Mitigation Code | Containment Mitigation Category | Technical Implementation Mechanism & Architecture | Assurance Level | Robustness & Integrity Level | Risk Class Reduction Level | Public Clause Citation |

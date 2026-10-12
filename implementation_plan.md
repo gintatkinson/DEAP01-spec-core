@@ -1,75 +1,138 @@
-# Implementation Plan: Adversarial Code Audit of PR #409 (SysML v2 Compiler & AST Engine)
+# Implementation Plan -- Deep Ralph Semantic Convergence & Quality Gate Arming
 
-## 1. Executive Summary & Objective
-
-This implementation plan governs the systematic adversarial code audit of Pull Request [#409](https://github.com/gintatkinson/DEAP01-spec-core/pull/409) (`review(compiler): SysML v2 Compiler & AST Parser Engine`) against the four core correctness risk pillars plus semantic traceability, in accordance with `.agents/skills/adversarial-code-auditor/SKILL.md` and repository governance in `.pipeline/constitution.md`.
-
-### Audit Targets in Scope
-1. `scripts/compile_sysml.py` (5,379 additions):
-   - SysML v2 model compiler, validator, and textual model serializer.
-   - Closed-loop bidirectional synchronization (`--forward-sync` and `--reverse-sync`).
-   - STPA Cartesian product hazard matrix generator ($U = A \times G$) and Run-Time Assurance (RTA) / SLDV formal proof synthesizer.
-   - FMECA criticality scoring engine.
-2. `skills/spec-orchestrator/scripts/sysmlv2_ast.py` (3,192 additions):
-   - SysML v2 / KerML lexical scanner and tokenizer.
-   - Strongly-typed AST representations: `Package`, `PartDef`, `ItemDef`, `PortDef`, `ActionDef`, `StateDef`, `ConstraintDef`, `UseCaseDef`, `TestCaseDef`.
-   - AST traversal, serialization, and visitor dispatch mechanisms.
+**Objective**: Completely eliminate specification hollow stubs, redundant stuttering naming, canned diagrams, and cross-tier disconnects. Restore full SysML v2 AST behavioral fidelity (matching `3dgs-039` standard), arm `crates/verify-baseline` with non-bypassable semantic quality gates, regenerate all specifications from Ground 0, and project clean verified outputs to GitHub.
 
 ---
 
-## 2. Risk Pillars & Focus Areas
+## 1. Problem Statement & Root Cause Analysis
 
-| Risk Pillar | Audit Focus & Failure Modes | Target Files |
-|---|---|---|
-| **Resource Lifecycle** | Unclosed file descriptors in model serializers/deserializers, unbounded memory growth during recursive AST parsing, missing flush on atomic file writes, regex engine catastrophic backtracking (ReDoS). | `compile_sysml.py`, `sysmlv2_ast.py` |
-| **Concurrency & Re-entrancy** | AST node shared mutation during traversal, global state contamination across compiler invocations, race conditions during bidirectional sync, non-reentrant tokenizers. | `compile_sysml.py`, `sysmlv2_ast.py` |
-| **Semantic Traceability & Invariants** | SysML v2 / KerML OMG 2023-02-01 specification fidelity, pure schema-driven compiler invariant (zero hardcoded domain concepts), preservation of 6 core model constructs, exact Cartesian product math in STPA expansion, bidirectional sync roundtrip lossless preservation. | `compile_sysml.py`, `sysmlv2_ast.py` |
-| **Test Integrity & Regression Harness** | Bare assertions without diagnostics, missing AST edge cases (nested sub-packages, anonymous ports, circular specialization hierarchies), presence of reproducer test targets for all discovered defects. | `compile_sysml.py`, `sysmlv2_ast.py` |
-| **Memory Safety & Recursion Bounds** | Deeply nested KerML block expressions causing recursion depth overflow (`RecursionError`), circular reference memory leaks in AST parent/child cyclic references, unbounded string concatenations in code generation loops. | `compile_sysml.py`, `sysmlv2_ast.py` |
+### A. The "Bad Code" in the Compiler Toolchain (`crates/compile-sysml`)
+1. **Grammar Parser Silently Discards Inner Doc Blocks** (`crates/compile-sysml/src/parser/grammar.rs:1101-1126`):
+   - In `parse_use_case_decl`, the parser checks for `Subject`, `Actor`, `Objective`, `Step`.
+   - When `doc /* ... */` is encountered inside `use case def { ... }`, it falls through to `else { self.skip_until_semi_or_brace(); }` and is **silently discarded**.
+   - Result: All 12 rich Use Case specifications in `schema/subsystems/*/behavior.sysml` (containing multi-actor roles, triggers, preconditions, 6-step scenarios, and `5a`..`5j` exception flows) are completely lost during parsing.
+2. **Canned Fallback Generator in `forward.rs`** (`crates/compile-sysml/src/sync/forward.rs:1151-1182`, `1243-1246`):
+   - When `parsed_doc` is empty due to the parser bug, `forward.rs` falls back to canned 4-line boilerplate (`"Actor HumanEngineer initiates workflow..."`) and a dummy 2-node flowchart (`Actor["HumanEngineer"] --> Target["..."]`).
+   - Violates `rules/uml-model-integrity.md` (missing system boundary subgraph, directed arrows instead of undirected associations, rectangle nodes instead of stadium shape `(["..."])`).
+3. **Hardcoded Canned Epics** (`crates/compile-sysml/src/sync/forward.rs:835-868`):
+   - Class diagrams hardcoded to only `DEAPCompilerSystem --> {primary_engine} : contains` (omitting all other constituent parts, ports, and attributes).
+   - State machine diagrams hardcoded to identical `Bootstrapping -> Ingesting -> Compiling -> Verifying` across all 14 Epics, completely ignoring real subsystem FSMs in `behavior.sysml` (e.g. `StateSolverExecutionStatechart`).
+4. **Hardcoded User Story Parent Epic & Canned Lifelines** (`crates/compile-sysml/src/sync/forward.rs:1061`):
+   - All 12 User Stories hardcode `| **Parent Epic** | [EPIC-02-ConOps] |`, disconnecting stories from their actual subsystem Epics.
+   - Ignores `interaction def` in `behavior.sysml` and generates fake lifelines `HumanEngineer -> DEAPCompilerSystem -> Engine`.
+5. **Redundant Stuttering Titles & Filenames** (`crates/compile-sysml/src/sync/forward.rs:1107-1110`):
+   - `format!("Use Case {:02}: {}", u_num, to_display_name(&uc_m.uc.name))` turns `UC_01_...` into `Use Case 01: UC 01 System Vision and Foundational Invariants`.
+   - `format!("use-cases/UC-{:02}-{}.md", u_num, uc_slug)` turns into `UC-01-UC_01_...md`.
+6. **Hardcoded Source References** (`crates/compile-sysml/src/sync/forward.rs:1237`):
+   - Hardcoded `[schema/conops/activities.sysml]` for all use cases, even when defined in `schema/subsystems/<subsystem>/behavior.sysml`.
+
+### B. Why `verify-baseline` Passed ("Checkbox Compliance")
+- `crates/verify-baseline/src/spec_audit/sections.rs:365-374` only checked whether heading text tokens existed in the document.
+- It never checked:
+  - Title/filename stuttering (e.g., `Use Case 01: UC 01`).
+  - Content word count or presence of canned fallback strings (`"initiates workflow"`, `"validates the operation"`).
+  - Minimum scenario steps ($\ge 5$) or alternate flows ($\ge 3$).
+  - Diagram topology: Use case flowcharts were never parsed or validated in `uml_validator.rs` (it only checked sequence and class diagrams).
+  - Epic statechart variety: Never checked if all Epics have the identical dummy statechart.
+  - Parent Epic parity: Never verified that a User Story's `Parent Epic` matches its subsystem package.
+
+### C. Where the SysML and UML Semantic Requirements Reside
+- `.pipeline/constitution.md`:
+  - **Universal Model Consistency Rules** (lines 77-83): Dynamic-to-Static Alignment; every lifeline must resolve to a defined classifier; every message must map to an active Operation; every transition trigger must be defined in the metamodel.
+  - **Quality Gates** (lines 181-204): Gate 1 (UML Model Integrity), Gate 21 (Semantic Diagram-to-AST Topology Parity), Gate 23 (Factual Grounding), Gate 30 (Architecture Viewpoint & Diagram Completeness).
+- `rules/sysml-ssot-completeness.md` (lines 1185-1250 of `.pipeline/ACTIVE_RULES_BUNDLE.md`):
+  - SysML v2 AST is 100% SSOT; formal mappings of `part def`, `item def`, `action def`, `state def`, `use case def`.
+  - Zero heuristic prose parsing; pure token AST lowering.
+- `rules/uml-model-integrity.md` (lines 1501-1680 of `.pipeline/ACTIVE_RULES_BUNDLE.md`):
+  - Use Cases Must Declare A System Boundary Subgraph.
+  - Actors Must Sit Outside The System Boundary.
+  - Use Case Nodes Must Sit Inside The System Boundary using Stadium Shape `(["..."])`.
+  - Actor Associations Must Be Undirected (`---`).
+  - Use Cases Must Carry Detailed Alternate and Exception Flows.
+  - Statecharts Must Form Deterministic Automata with Triggers and Bracketed Guards.
 
 ---
 
-## 3. Work Packages
+## 2. Work Packages Decomposition
 
-### WP-01: Adversarial Code Audit of `scripts/compile_sysml.py` [COMPLETED]
-- **Target File**: `scripts/compile_sysml.py`
-- **Assigned Worker**: Context-isolated subagents (`CompileSysml Resource Auditor`, `CompileSysml Semantic Auditor`, `CompileSysml Concurrency Auditor`)
-- **Findings Filed**:
-  - [#411](https://github.com/gintatkinson/DEAP01-spec-core/issues/411): `[AUDIT] [compile_sysml.py]: Uncleaned temporary files leak on atomic write exception paths` (Important)
-  - [#412](https://github.com/gintatkinson/DEAP01-spec-core/issues/412): `[AUDIT] [compile_sysml.py]: Forward-sync pairs interactions to test cases positionally and drops requirement verification traceability` (Important)
-  - [#413](https://github.com/gintatkinson/DEAP01-spec-core/issues/413): `[AUDIT] [compile_sysml.py]: Multi-file TOCTOU race window during schema compilation desynchronizes model and digest` (Important)
+### Work Package 1: Compiler Parser Fix (`crates/compile-sysml/src/parser/grammar.rs`)
+- In `parse_use_case_decl`, handle `TokenKind::Doc` and `TokenKind::DocComment` inside `use case def { ... }` braces.
+- Store inner doc comments on `UseCaseDef.doc` so that structured sections (`Actors:`, `Subject:`, `Preconditions:`, `Trigger:`, `Main Success Scenario:`, `Alternate and Exception Flows:`, `Postconditions:`) are retained in the AST.
 
-### WP-02: Adversarial Code Audit of `skills/spec-orchestrator/scripts/sysmlv2_ast.py` [COMPLETED]
-- **Target File**: `skills/spec-orchestrator/scripts/sysmlv2_ast.py`
-- **Assigned Worker**: Context-isolated subagents (`SysML AST Memory Auditor`, `SysML AST Semantic Auditor`, `SysML AST Resource Auditor`)
-- **Findings Filed**:
-  - [#414](https://github.com/gintatkinson/DEAP01-spec-core/issues/414): `[AUDIT] [sysmlv2_ast.py]: RequirementDef Normative Text Dropped on Roundtrip and Shadowed by Docstrings` (Important)
-  - [#415](https://github.com/gintatkinson/DEAP01-spec-core/issues/415): `[AUDIT] [sysmlv2_ast.py]: SysMLTestCaseDef Verify Requirement Parsing Truncates Namespaces and Multi-Requirement Lists` (Important)
-  - [#416](https://github.com/gintatkinson/DEAP01-spec-core/issues/416): `[AUDIT] [sysmlv2_ast.py]: Hardcoded Domain Protocol Regex False Positives Violate Pure Schema Compiler Invariant` (Important)
-  - [#417](https://github.com/gintatkinson/DEAP01-spec-core/issues/417): `[AUDIT] [sysmlv2_ast.py]: SysMLPackage Omits Hierarchical Collectors for TestCases, Interactions, and ItemDefs` (Important)
-  - [#418](https://github.com/gintatkinson/DEAP01-spec-core/issues/418): `[AUDIT] [sysmlv2_ast.py]: Unbounded Recursion Depth in Cyclic PartDef Traversal Causes Call Stack Exhaustion (RecursionError)` (Important)
-  - [#419](https://github.com/gintatkinson/DEAP01-spec-core/issues/419): `[AUDIT] [sysmlv2_ast.py]: Recursive Subpackage Traversal Duplicates AST Elements and Causes Severe GC Churn` (Important)
-  - [#420](https://github.com/gintatkinson/DEAP01-spec-core/issues/420): `[AUDIT] [sysmlv2_ast.py]: Exponential Memory Duplication in Package Element Accessors Causes Resource Exhaustion` (Important)
+### Work Package 2: Generator Overhaul for Full Model Fidelity (`crates/compile-sysml/src/sync/forward.rs`)
+1. **Use Case Clean Naming & Paths**:
+   - Implement `clean_use_case_name(name: &str) -> &str` stripping leading `UC_XX_`, `UC-XX-`, or `UCXX_`.
+   - Emit clean titles (`Use Case {:02}: {}`) and clean filenames (`use-cases/UC-{:02}-{}.md`).
+   - Update Epic checklists in `forward.rs:748-756` to link to clean titles and filenames.
+   - Update `resolve_issue_id` to resolve IDs across renames.
+2. **Use Case UML Diagram Compliance**:
+   - Replace the dummy 2-node flowchart with a valid UML Use Case diagram conforming to `rules/uml-model-integrity.md`:
+     - System boundary subgraph enclosing use case nodes in stadium shape `(["..."])`.
+     - Primary and secondary actors outside the boundary using `((Actor))` or `["Actor"]`.
+     - Undirected associations (`---`) between actors and use cases.
+     - Include/extend dependency connectors where applicable.
+3. **Dynamic Source References & Full Doc Lowering**:
+   - Bind `Specification Source` to `[schema/subsystems/{subsys_dir}/behavior.sysml](../../schema/subsystems/{subsys_dir}/behavior.sysml)`.
+   - Lower all 6+ numbered main scenario steps and `5a`..`5j` exception flows directly from the parsed doc block.
+4. **Epic Model Parity**:
+   - Replace canned state machine with genuine subsystem `state def` from `behavior.sysml` (e.g. `StateSolverExecutionStatechart`).
+   - Expand class diagrams to include all constituent `part def`, `port def`, and attributes from `architecture.sysml`.
+5. **User Story Model Parity**:
+   - Lower genuine `interaction def` lifelines and messages from `behavior.sysml` into sequence diagrams.
+   - Bind `Parent Epic` to the declaring subsystem Epic instead of hardcoded `[EPIC-02-ConOps]`.
 
-### WP-03: Defect Dossier Verification & Issue Tracker Submission [COMPLETED]
-- All 10 defect dossiers verified with 12 mechanical checks (offline Mermaid syntax gate, 5 Whys, test-target discovery annotations).
-- All 10 issues created on GitHub issue tracker and verified live.
+### Work Package 3: Arming `verify-baseline` with Semantic Quality Gates (`crates/verify-baseline`)
+1. **Anti-Stutter Gate**:
+   - In `spec_audit/metadata.rs`, fail if title or filename contains stuttering prefixes (e.g. `Use Case 01: UC 01` or `UC-01-UC_01_`).
+2. **Anti-Boilerplate / Minimum Scenario Gate**:
+   - In `spec_audit/sections.rs` / `uml_validator.rs`, scan Use Case content:
+     - Reject documents containing canned fallback strings (`"initiates workflow execution"`, `"processes structural elements and validates semantic constraints"`).
+     - Require Main Success Scenario to have $\ge 5$ numbered steps.
+     - Require Alternate and Exception Flows to have $\ge 3$ concrete exception cases.
+3. **Use Case Diagram Compliance Gate**:
+   - In `spec_audit/diagram_ast.rs` and `uml_validator.rs`:
+     - Reject Use Case diagrams missing a system boundary subgraph.
+     - Reject Use Case diagrams with directed arrows (`-->`) connecting actors to use cases.
+     - Reject Use Case diagrams with non-stadium nodes inside the boundary.
+     - Reject 2-node trivial diagrams (`Actor --> Target`).
+4. **Epic Statechart Heterogeneity Gate**:
+   - Verify that Epics do not share identical canned state machine diagrams; each must reflect its subsystem's actual behavioral states.
+5. **Parent Epic Alignment Gate**:
+   - Verify that User Stories declare a Parent Epic corresponding to their owning package, not hardcoded `EPIC-02-ConOps`.
 
-### WP-04: PR Review Synthesis & Walkthrough Report [COMPLETED]
-- Unified review comment published to PR [#409](https://github.com/gintatkinson/DEAP01-spec-core/pull/409#issuecomment-5992172098).
-- Final audit dossier report delivered to coordinator.
+### Work Package 4: Ground 0 Pipeline Recompilation & Purge
+- Rebuild workspace release binaries: `cargo build --release --workspace`.
+- Purge legacy misnamed files: `git rm docs/use-cases/UC-*-UC_*.md`.
+- Run Ground 0 compilation:
+  - `./target/release/compile-sysml --compile`
+  - `./target/release/compile-sysml --stpa-transpile`
+  - `./target/release/compile-sysml --forward-sync --force`
+- Audit regenerated files against reference `target/reference/3dgs-039/docs/use-cases/` to ensure 100% convergence.
+
+### Work Package 5: Verification, GitHub Projection & Remote Sync
+- Execute `./target/release/verify-baseline . --spec-only` (must pass with 0 findings).
+- Execute `./target/release/verify-baseline . --no-domain` (must pass all 32 quality gates).
+- Project cleaned specifications to GitHub: `./target/release/reconcile-backlog --sync-bodies`.
+- Commit changes using neutral citations: `(refs #115)`.
+- Push to `origin/main` and verify `git diff origin/main` is empty.
 
 ---
 
-## 4. Verification Gates Matrix
+## 3. Acceptance Criteria
 
-| Gate | Verification Check | Acceptance Standard | Status |
-|---|---|---|---|
-| **7-Section Skeleton Gate** | Check 1: `^## [1-7]\.` count | Exactly 7 sections per finding | **PASSED** |
-| **Audit Source & Metadata** | Checks 2-5: Audit Source, SEVERITY, FILE_LOCATION, Section 1 bullets | 100% compliant with SKILL.md Section 2 | **PASSED** |
-| **5 Whys Completeness** | Check 6: `^[1-5]\. \*\*Why .*\?\*\* Because .*` | Exactly 5 Whys per finding | **PASSED** |
-| **Mermaid Syntax Offline Gate** | Check 7: `parity_auditor.validators.mermaid_syntax_validator.check_mermaid_text()` | Exit code `0` for all Critical/Important diagrams | **PASSED** |
-| **Code Block Balancing** | Check 9: Triple-backtick balancing | Even count, valid language tags | **PASSED** |
-| **Title Format Gate** | Check 11: `^\[AUDIT\] \[[^\]]+\]: .+` | Strict naming standard matching | **PASSED** |
-| **Test-Target Discovery Gate** | Check 12: `<!-- test-target: [path] -->` annotation | Valid test-target path annotated in every finding | **PASSED** |
-| **Remote Issue Verification Gate** | `gh issue view <id>` for all filed issues | Published payload verified live on GitHub | **PASSED** |
+- [ ] `crates/compile-sysml/src/parser/grammar.rs` captures inner `doc /* ... */` in `use case def`.
+- [ ] `crates/compile-sysml/src/sync/forward.rs` generates clean Use Case titles, clean filenames, rich scenarios, valid UML Use Case diagrams, and dynamic source paths.
+- [ ] Epics carry genuine subsystem statecharts and multi-part class diagrams from `schema/subsystems/*/`.
+- [ ] User Stories carry genuine sequence diagrams and bind to their respective parent Epics.
+- [ ] `crates/verify-baseline` fails mechanically on stuttering titles, canned boilerplate, 2-node flowcharts, canned epic statecharts, and cross-tier epic mismatches.
+- [ ] All 93 specification files pass the armed `verify-baseline` with 0 findings.
+- [ ] All 32 quality gates pass with exit code 0.
+- [ ] All updated specifications projected to GitHub issues via `reconcile-backlog --sync-bodies`.
+- [ ] All changes committed with neutral citations and pushed cleanly to remote.
+
+---
+
+## 4. Human Authorization Gate
+
+Per `AGENTS.md` § **Strict Planning Gate**:
+To authorize execution of this implementation plan, please reply with **PROCEED**.

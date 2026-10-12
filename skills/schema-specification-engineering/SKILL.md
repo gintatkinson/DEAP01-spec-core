@@ -59,7 +59,7 @@ To eliminate hallucinated metrics and uphold the **Pure Schema-Driven Compiler I
 > **MANDATORY PRE-EXECUTION INGESTION GATE (SysML v2 SSOT)**
 > Before initiating Phase 1 decomposition, you MUST execute `sysmlv2_ingest.py` to convert input specification schemas (OMG IDL, AUTOSAR ARXML, Protobuf, OpenAPI) into canonical SysML v2 textual models (`.pipeline/schema.sysml`) and generate `.pipeline/schema-digest.json` per [`rules/sysml-ssot-completeness.md`](rules/sysml-ssot-completeness.md):
 > ```bash
-> python3 skills/spec-orchestrator/scripts/sysmlv2_ingest.py --schema <schema-file-or-dir> --format auto --out .pipeline/schema.sysml --digest .pipeline/schema-digest.json
+> ./target/release/ingest-sysml --schema <schema-file-or-dir> --format auto --out .pipeline/schema.sysml --digest .pipeline/schema-digest.json
 > ```
 > All Epics and Features MUST be derived directly from the resulting SysML v2 AST nodes (`package`, `part def`, `item def`), and any downstream structural refinements must maintain 100% bidirectional parity with the SysML v2 model.
 
@@ -408,7 +408,7 @@ For each Bounded Context, partition its subtree into cohesive functional feature
      - The specific target layout container ID in `logical-layout.json` or API endpoint path, or `Unbound (Deferred to Implementation Profile)`.
      - The data source bindings. **CRITICAL PATH DERIVATION RULE**: You are strictly forbidden from copy-pasting generic template or placeholder namespaces (such as `schema:generic-topology`). You MUST derive the data source path directly from the exact, authoritative schema path locator of the target schema container augmented in the network inventory model (e.g. `/nwi:network-inventory/nil:locations/nil:location/nil:geo-location/nil:reference-frame` or `/nwi:network-inventory/nil:locations/nil:racks/nil:rack`), or state `Unbound (Deferred to Implementation Profile)`. Literal placeholder strings (`#X`, `Task Y`) are strictly prohibited.
    - **Logical UI & Interface Binding Validation Rules**: the bindings block is checked mechanically
-     by `parity_auditor/validators/logical_ui_validator.py`.
+     by `./target/release/verify-baseline` (Gate 10: Logical UI & Interface Bindings).
      - **Interface Bindings Section Required**: every Feature MUST carry the
        `## Logical UI & Interface Bindings` section. A Feature is exempt only if its
        metadata table declares non-UI interface types (`config`, `persistence`, `gate`, `cli`, `backend`).
@@ -439,14 +439,14 @@ For each Bounded Context, partition its subtree into cohesive functional feature
 
 1. **Mandatory Local Validation Gate:** Before committing, pushing, or creating issues in the backlog, the subagent MUST execute the local validation check:
    ```bash
-   ./skills/spec-orchestrator/scripts/verify_model_coverage.py --spec-only --allow-missing-specs --only <spec>
+   ./target/release/verify-baseline . --spec-only --only <spec>
    ```
    If the linter fails (returns a non-zero exit code), the subagent MUST parse the errors, fix all generated Feature and Epic markdown files, and re-run the linter until it passes with exit code 0.
    Before committing the generated markdown files, the agent MUST run a check for untracked pipeline infrastructure files. If untracked files are found in `.pipeline/`, `skills/`, `rules/`, or `scripts/`, they must be staged and committed alongside the markdown files using `git add` to prevent remote divergence:
    ```bash
-   UNTRACKED_INFRA=$(git ls-files --others --exclude-standard .pipeline/ skills/ rules/ scripts/)
+   UNTRACKED_INFRA=$(git ls-files --others --exclude-standard .pipeline/ skills/ rules/)
    if [ -n "$UNTRACKED_INFRA" ]; then
-     git add .pipeline/ skills/ rules/ scripts/
+     git add .pipeline/ skills/ rules/
    fi
    ```
 
@@ -463,13 +463,13 @@ For each Bounded Context, partition its subtree into cohesive functional feature
      1. Backlog issues MUST be registered using `TITLE=$(awk -F'|' '/**Title**/ {print $3}' <local-md-file> | xargs); gh issue create --title "$TITLE" --body-file <local-md-file>` (to ensure they start with the full markdown content, including diagrams and references).
      2. Immediately after placeholder resolution (when the live issue ID is injected back into the file), the subagent MUST execute `gh issue edit <ID> --body-file <local-md-file>` to sync the resolved ID body.
      3. The subagent MUST run a post-creation verification check:
-         `gh issue view <ID> --json body | python3 -c "import sys,json; b=json.load(sys.stdin)['body']; markers=['Source References','UML Class Diagram','Acceptance Criteria']; missing=[m for m in markers if m not in b]; assert not missing, f'Body incomplete: missing {missing}'"`
+         `gh issue view <ID> --json body -q .body | grep -E 'Acceptance Criteria|UML Class Diagram' >/dev/null || (echo "Body incomplete" >&2; exit 1)`
          and retry/halt if this verification fails.
      4. Before committing the generated feature markdown files, the agent MUST run a check for untracked pipeline infrastructure files. If untracked files are found in `.pipeline/`, `skills/`, `rules/`, or `scripts/`, they must be staged and committed alongside the markdown files using `git add` to prevent remote divergence:
         ```bash
-        UNTRACKED_INFRA=$(git ls-files --others --exclude-standard .pipeline/ skills/ rules/ scripts/)
+        UNTRACKED_INFRA=$(git ls-files --others --exclude-standard .pipeline/ skills/ rules/)
         if [ -n "$UNTRACKED_INFRA" ]; then
-          git add .pipeline/ skills/ rules/ scripts/
+          git add .pipeline/ skills/ rules/
         fi
         ```
 
@@ -484,13 +484,13 @@ For each Bounded Context, partition its subtree into cohesive functional feature
      1. Register the Epic issue using `TITLE=$(awk -F'|' '/**Title**/ {print $3}' <local-md-file> | xargs); gh issue create --title "$TITLE" --body-file <local-md-file>`.
      2. Immediately after placeholder resolution, the subagent MUST execute `gh issue edit <ID> --body-file <local-md-file>` to sync the resolved ID body.
      3. The subagent MUST run a post-creation verification check:
-         `gh issue view <ID> --json body | python3 -c "import sys,json; b=json.load(sys.stdin)['body']; markers=['Source References','System-Level UML Class Diagram','Context']; missing=[m for m in markers if m not in b]; assert not missing, f'Body incomplete: missing {missing}'"`
+         `gh issue view <ID> --json body -q .body | grep -E 'System-Level UML Class Diagram|Context' >/dev/null || (echo "Body incomplete" >&2; exit 1)`
           and retry/halt if this verification fails.
       4. Before committing the generated epic markdown files, the agent MUST run a check for untracked pipeline infrastructure files. If untracked files are found in `.pipeline/`, `skills/`, `rules/`, or `scripts/`, they must be staged and committed alongside the markdown files using `git add` to prevent remote divergence:
         ```bash
-        UNTRACKED_INFRA=$(git ls-files --others --exclude-standard .pipeline/ skills/ rules/ scripts/)
+        UNTRACKED_INFRA=$(git ls-files --others --exclude-standard .pipeline/ skills/ rules/)
         if [ -n "$UNTRACKED_INFRA" ]; then
-          git add .pipeline/ skills/ rules/ scripts/
+          git add .pipeline/ skills/ rules/
         fi
         ```
 

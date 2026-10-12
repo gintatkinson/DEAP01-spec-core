@@ -187,14 +187,14 @@ Normative Specification: [Normative Specification](link-to-specification)
 ## Step 5: Zero-Fault Backlog Synchronization
 1. **Mandatory Local Validation Gate:** Before committing, pushing, or creating issues in the backlog, the subagent MUST execute the local validation check:
    ```bash
-   ./skills/spec-orchestrator/scripts/verify_model_coverage.py --spec-only --allow-missing-specs --only <spec>
+   ./target/release/verify-baseline . --spec-only --only <spec>
    ```
    If the linter fails (returns a non-zero exit code), the subagent MUST parse the errors, fix all generated Use Case markdown files, and re-run the linter until it passes with exit code 0.
-   Before committing the generated markdown files, the agent MUST run a check for untracked pipeline infrastructure files. If untracked files are found in `.pipeline/`, `skills/`, `rules/`, or `scripts/`, they must be staged and committed alongside the markdown files using `git add` to prevent remote divergence:
+   Before committing the generated markdown files, the agent MUST run a check for untracked pipeline infrastructure files. If untracked files are found in `.pipeline/`, `skills/`, or `rules/`, they must be staged and committed alongside the markdown files using `git add` to prevent remote divergence:
    ```bash
-   UNTRACKED_INFRA=$(git ls-files --others --exclude-standard .pipeline/ skills/ rules/ scripts/)
+   UNTRACKED_INFRA=$(git ls-files --others --exclude-standard .pipeline/ skills/ rules/)
    if [ -n "$UNTRACKED_INFRA" ]; then
-     git add .pipeline/ skills/ rules/ scripts/
+     git add .pipeline/ skills/ rules/
    fi
    ```
    Once the linter passes, commit and push the Markdown files to the remote repository.
@@ -210,6 +210,6 @@ Normative Specification: [Normative Specification](link-to-specification)
         (to ensure they start with the full markdown content, including diagrams and references).
      2. Immediately after placeholder resolution (when the live issue ID is injected back into the file), the subagent MUST execute `gh issue edit <ID> --body-file <local-md-file>` to sync the resolved ID body.
      3. The subagent MUST run a post-creation verification check:
-        `gh issue view <ID> --json body | python3 -c "import sys,json; b=json.load(sys.stdin)['body']; assert 'Source References' in b or 'References' in b, 'Body is a stub'"`
+        `gh issue view <ID> --json body -q .body | grep -E 'Source References|References' >/dev/null || (echo "Body is a stub" >&2; exit 1)`
         and retry/halt if this verification fails.
 5. Verify the creation and return the generated issue URLs/IDs to the Orchestrator or User.

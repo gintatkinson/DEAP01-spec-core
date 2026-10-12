@@ -8,7 +8,7 @@
 
 These standards govern Tier 1 domain models and clean architecture boundaries across all supported target platforms. They ensure immutability, exhaustive error handling, static type safety, and spec-to-code traceability across downstream application codebases.
 
-Enforced offline by `parity_auditor/validators/profile_compliance_validator.py` and platform profiles (`.pipeline/profiles/<platform>.md`).
+Enforced offline by `./target/release/verify-baseline` and platform profiles (`.pipeline/profiles/<platform>.md`).
 
 ## The 15 Non-Negotiable Domain Engineering Standards
 

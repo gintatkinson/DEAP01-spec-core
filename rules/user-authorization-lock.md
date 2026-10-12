@@ -46,6 +46,13 @@ Before transitioning any issue or task status to `status:fixed-resolved`, the ag
 
 Agents are strictly required to prioritize Structural Remediation Over Mechanical Replacement. Mechanical string replacements or surface-level patches that ignore underlying system invariants are strictly prohibited. Every remediation must include Mandatory Invariant Verification to guarantee that structural integrity is maintained.
 
+## User Intent Integrity & Verbatim Pass-Through Mandate
+
+**ALWAYS enforce:** Agents and coordinators are strictly prohibited from overriding, altering, rewriting, summarizing, or substituting the user's stated intentions, prompt text, or architectural parameters under any circumstances.
+- When the user provides a task prompt (including `/teamwork-preview`), that prompt MUST be preserved and passed to executing agents verbatim.
+- Coordinators are strictly forbidden from rewriting user prompts, injecting synthetic constraints, or altering the execution scope in background thought blocks.
+- Subagents must ingest repository rules directly from disk (`.pipeline/constitution.md` and `.pipeline/ACTIVE_RULES_BUNDLE.md`) rather than requiring prompt modification by the coordinator.
+
 ## Why
 
 To prevent the agent from making silent assumptions, performing unapproved actions, or violating the Karpathy guidelines in response to diagnostic or analytical questions.

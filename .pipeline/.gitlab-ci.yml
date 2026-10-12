@@ -4,28 +4,37 @@
 # ==============================================================================
 
 stages:
-  - lint
+  - build
   - test
 
 variables:
-  PYTHONUNBUFFERED: "1"
-  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  CARGO_HOME: "$CI_PROJECT_DIR/.cargo"
 
 default:
-  image: python:3.11-slim
+  image: rust:latest
   before_script:
-    - python3 --version
-    - export PYTHONPATH=".:skills/spec-orchestrator/parity_auditor/src:$PYTHONPATH"
-    - if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+    - rustc --version
+    - cargo --version
 
-lint:downstream-baseline:
-  stage: lint
+build:toolchain:
+  stage: build
+  script:
+    - echo "=== Building DEAP Native Rust Toolchain ==="
+    - cargo build --release
+  artifacts:
+    paths:
+      - target/release/verify-baseline
+      - target/release/compile-sysml
+      - target/release/reconcile-backlog
+      - target/release/assemble-conops
+      - target/release/ingest-sysml
+
+test:baseline-conformance:
+  stage: test
+  dependencies:
+    - build:toolchain
   script:
     - echo "=== Running Downstream Baseline Conformance Gate ==="
-    - python3 scripts/verify_downstream_baseline.py
-
-test:unit-and-parity:
-  stage: test
-  script:
-    - echo "=== Running Pytest Verification Suite ==="
-    - python3 -m pytest tests/
+    - ./target/release/verify-baseline . --no-domain
+    - echo "=== Running Spec Auditor Conformance Gate ==="
+    - ./target/release/verify-baseline . --spec-only

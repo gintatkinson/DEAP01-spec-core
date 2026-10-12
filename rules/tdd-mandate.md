@@ -22,9 +22,9 @@
 ## Required assertion classes
 
 A test suite can be green, large, and still assert nothing about the constraints the
-specifications actually state. These are the assertion classes the parity auditor
+specifications actually state. These are the assertion classes the baseline verification
 requires a downstream test suite to demonstrate, enforced offline by
-`parity_auditor/validators/test_completeness_validator.py`. They are stated here rather
+`./target/release/verify-baseline` (Gate 16: Test Completeness). They are stated here rather
 than in a platform profile because the checker scans every supported test file type
 (`_test.dart`, `.test.ts`, `.test.tsx`, `.spec.ts`, `.spec.tsx`) and the requirement is
 about what is asserted, not about which framework asserts it.

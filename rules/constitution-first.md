@@ -15,7 +15,8 @@
 - If the functional constitution file exists in the repository, you MUST read it before starting work. Do not skip it.
 - If you are implementing a feature and no implementation profile exists for the target platform, HALT and ask the human to create one.
 - If a proposed change conflicts with any constitution document, HALT and escalate to the human.
-- Specification workers/modules MUST NOT read implementation profiles -- they operate on functional specs only.
+- Specification subagents/modules MUST NOT read implementation profiles -- they operate on functional specs only.
+- Upstream compiler and spec-core workspaces operate strictly at Tier 1 and must never parse or enforce Tier 3 platform implementation profiles.
 - You MUST read `.agents/AGENTS.md` before writing or modifying any file. Its *Strict Planning Gate* requires an approved implementation plan and overrides any rule that treats an authorization keyword alone as sufficient. See `rules/user-authorization-lock.md` § *Precedence*.
 - `.pipeline` and `.agents` are hidden directories and generic glob tools may exclude them. You MUST read `.agents/AGENTS.md`, `.pipeline/constitution.md` and `.pipeline/profiles/` directly by their explicit paths. A file absent from this list and hidden from glob is effectively invisible -- that is how the strictest authorization rule came to be missed.
 

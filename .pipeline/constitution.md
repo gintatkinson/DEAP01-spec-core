@@ -43,12 +43,12 @@ graph TD
 
 1. **Tier 1: Functional Layer (Abstract Specification)**: Epics, Features, User Stories, Use Cases, and Logical User & Machine Interface (LUMI) specifications. LUMI is 100% platform-independent and framework-agnostic, covering three primary interface categories: Visual GUI (`gui`), Machine-to-Machine API (`mcp`/`api`), and Hardware Bus (`hardware`). LUMI supports the Evolved 3-Layer Semantic Chain (Domain State & Signal Model -> Logic & Safety State Management -> Display & Actuator Interface Binding) across canonical architectural patterns (ARINC 661 Cockpit Display Systems, Real-Time Safety Statecharts & Flight Control, Decoupled Operator Consoles & EFBs, Automated M2M Agentic Tooling, and Hardware Bus Register Mapping). Must be platform-independent and standard-agnostic. No framework keywords, specific standards designations, or hardcoded visual values allowed.
 2. **Tier 2: Runtime Configuration Parameters (Dynamic Context)**: Design tokens, dynamic mapping configurations, translation files. Single source of truth for standard-specific definitions and visual attributes.
-3. **Tier 3: Platform Implementation Profiles (Technical Execution)**: `.pipeline/profiles/<platform>.md` and codebase implementations. Govern build mechanics, performance patterns, and dependencies.
+3. **Tier 3: Platform Implementation Profiles (Technical Execution)**: `.pipeline/profiles/<platform>.md` and codebase implementations. Govern build mechanics, performance patterns, and dependencies. Tier 3 implementation profiles belong to external implementation profile repositories and downstream customer workspaces; upstream compiler and spec-core workspaces operate strictly at Tier 1 and do not store or enforce concrete platform implementation profiles.
 
 ### Core System Boundaries & Invariants
 
 - **Pure Schema-Driven Compiler**: The pipeline is an abstract compiler and verification framework. Agents are strictly forbidden from inventing, proposing, or hardcoding domain-specific concepts into pipeline logic or templates.
-- **Upstream Clean Landing Zone Invariant**: Upstream distribution templates (`DEAP-*`) contain only the abstract compiler, linters, and empty landing zones (`schema/`, `docs/epics/`, `docs/features/`, `docs/user-stories/`, `docs/use-cases/` containing only `.gitkeep`). Concrete project schemas and specifications reside exclusively in downstream application workspaces installed via `scripts/install_pipeline.sh`.
+- **Upstream Clean Landing Zone Invariant**: Upstream distribution templates (`DEAP-*`) contain only the abstract compiler, linters, and empty landing zones (`schema/`, `docs/epics/`, `docs/features/`, `docs/user-stories/`, `docs/use-cases/` containing only `.gitkeep`). Concrete project schemas and specifications reside exclusively in downstream application workspaces installed via `./target/release/verify-baseline setup-hooks`.
 
 ## Domain Rules
 
@@ -82,17 +82,17 @@ graph TD
 - Auto-verification Failure: Any diagram or spec that references undefined operations, classes, or signals will violate the quality gates and halt the pipeline.
 
 ### Traceability
-- Every Epic MUST reference the specification section(s) it covers. Enforced by parity_auditor/validators/uml.py via required sections configuration.
-- Every Feature MUST include a 'Source References' section with verbatim specification clause numbers and schema paths. Every Epic, User Story, and Use Case MUST also carry a 'Source References' section (or Realization / Target Features Matrix linking to upstream sources). Enforced by parity_auditor/validators/uml.py via required_sections configuration in codebase_rules.json.
-- Every User Story MUST link to the Features it validates. Enforced by parity_auditor/validators/uml.py via Required Features Matrix validation.
-- Every Use Case MUST link to the User Stories and Features it realizes. Enforced by parity_auditor/validators/uml.py via Realization Matrix validation.
+- Every Epic MUST reference the specification section(s) it covers. Enforced by `verify-baseline` via required sections configuration.
+- Every Feature MUST include a 'Source References' section with verbatim specification clause numbers and schema paths. Every Epic, User Story, and Use Case MUST also carry a 'Source References' section (or Realization / Target Features Matrix linking to upstream sources). Enforced by `verify-baseline` via required_sections configuration in codebase_rules.json.
+- Every User Story MUST link to the Features it validates. Enforced by `verify-baseline` via Required Features Matrix validation.
+- Every Use Case MUST link to the User Stories and Features it realizes. Enforced by `verify-baseline` via Realization Matrix validation.
 
 ### Standard & Platform Parameter Isolation
 - See top-level section [Architecture: Three-Tier Platform Isolation](#architecture-three-tier-platform-isolation) for tier isolation rules and boundary guidelines.
 
 ### Unique Backlog Identifiers
-- All local specification files MUST include a permanent unique identifier (`issue_id: <int>`) in their YAML frontmatter, mapped directly to their remote issue number.
-- Matching by title normalization is the primary selector used by the backlog reconciliation tool. To prevent collisions, all specification files of the same spec type MUST have unique normalised titles, as enforced by parity_auditor/validators/spec_title_uniqueness_validator.py and rules/tracker-source-of-truth.md.
+- All local specification files MUST include a permanent unique identifier (`issue_id: <int>`) in their CommonMark metadata table at lines 1-10 instead of YAML frontmatter, mapped directly to their remote issue number.
+- Matching by title normalization is the primary selector used by the backlog reconciliation tool. To prevent collisions, all specification files of the same spec type MUST have unique normalised titles, as enforced by `verify-baseline` and rules/tracker-source-of-truth.md.
 
 ### 1.9 Zero-Mocking Live Persistence Mandate
 - All client-side application targets (e.g., React, Flutter) MUST connect to a live, persistent database, emulator, or local register map at runtime.
@@ -104,8 +104,8 @@ graph TD
 ## Specification Standards
 
 ### Granularity Bounds
-- An Epic SHOULD contain 3-15 Features. Epics exceeding 15 Features MUST be split by the schema-specification-engineering worker during Step 1 decomposition; Epics with fewer than 3 Features MUST be reviewed for consolidation. Enforced by schema-specification-engineering decomposition heuristics.
-- A Feature SHOULD carry 3-10 acceptance criteria. Features exceeding 10 acceptance criteria MUST be split into targeted sub-features; Features with fewer than 3 acceptance criteria MUST be expanded to ensure full scenario coverage. Enforced by parity_auditor/validators/cardinality_validator.py and spec worker review gates.
+- An Epic SHOULD contain 3-15 Features. Epics exceeding 15 Features MUST be split by the schema-specification-engineering subagent during Step 1 decomposition; Epics with fewer than 3 Features MUST be reviewed for consolidation. Enforced by schema-specification-engineering decomposition heuristics.
+- A Feature SHOULD carry 3-10 acceptance criteria. Features exceeding 10 acceptance criteria MUST be split into targeted sub-features; Features with fewer than 3 acceptance criteria MUST be expanded to ensure full scenario coverage. Enforced by `verify-baseline` and spec subagent review gates.
 
 ### Epic Granularity
 - One Epic per major functional domain or protocol module.
@@ -149,7 +149,7 @@ graph TD
 - Implementation work: `feat/<issue-number>-<short-description>` branches.
 
 ### Documentation & Repository Artifact Management Standards
-- All generated markdown files include YAML frontmatter.
+- All generated markdown files include native CommonMark two-column metadata tables at lines 1-10.
 - All generated markdown files include a "Source References" section at the bottom.
 - No orphan documents -- every file must be linked from at least one tracker issue.
 - **Repository Artifact Management Mandate (Zero-Ephemeral Storage)**: All engineering artifacts, design blueprints, solution documents, architectural specifications, implementation plans, and reports MUST be created, managed, and committed directly within the active Git repository (e.g. under `docs/architecture/`, `docs/reports/`, `docs/designs/`, or `schema/`). Storing primary architectural decisions, solution documents, or engineering specifications exclusively in ephemeral application cache directories outside the repository (such as `<appDataDir>/brain/<conversation-id>/`) is strictly prohibited. Every artifact establishing architectural baselines, safety rationales, or implementation contracts must be version-controlled in Git in lockstep with the decision, ensuring full provenance, cross-session durability, and subagent accessibility.
@@ -166,29 +166,41 @@ graph TD
 - If a plan is written, the agent MUST immediately terminate its turn and stop calling tools to wait for approval.
 - **Prohibition of Unapproved Plan Abandonment & Mandatory Plan Continuity**: Once an implementation plan has been established, approved, or has in-flight work packages, the agent is strictly forbidden from abandoning, altering, replacing, or discarding the plan without explicit user review and authorization in the current conversation turn. The agent is strictly prohibited from reacting to user feedback, criticism, or diagnostic friction by unilaterally dropping planned work packages, abandoning uncommitted changes, or impulsively proposing wholesale file deletions, purges, or scope redirections. Any proposed deviation, scope refinement, or plan adjustment MUST be documented as an updated implementation plan and explicitly approved by the user before changing execution course.
 
+### User Intent Integrity & Verbatim Pass-Through Mandate
+- **ALWAYS enforce:** Agents and coordinators are strictly prohibited from overriding, altering, rewriting, summarizing, or substituting the user's stated intentions, prompt text, or architectural parameters under any circumstances.
+- When the user provides a task prompt (including `/teamwork-preview`), that prompt MUST be preserved and passed to executing agents verbatim.
+- Coordinators are strictly forbidden from rewriting user prompts, injecting synthetic constraints, or altering the execution scope in background thought blocks.
+- Subagents must ingest repository rules directly from disk (`.pipeline/constitution.md` and `.pipeline/ACTIVE_RULES_BUNDLE.md`) rather than requiring prompt modification by the coordinator.
+
+### Subagent Dispatch Standards & Governance Invariants
+- **Verbatim User Payload Mandate**: The subagent prompt payload MUST contain the user's exact instructions verbatim. The coordinator is strictly prohibited from altering, summarizing, or wrapping the user's prompt with synthetic boilerplate.
+- **Autonomous On-Disk Governance Initialization**: Every subagent must autonomously execute `view_file` on `.pipeline/constitution.md` and `.pipeline/ACTIVE_RULES_BUNDLE.md` as its first step, without requiring prompt modification by the coordinator.
+- **Single-Prompt Serial Dispatch Rule**: Coordinators must dispatch exactly ONE subagent with ONE prompt at a time. Multi-agent concurrent dispatches are prohibited unless explicitly structured and approved by the user.
+- **Mandatory Teamwork Preview Gate**: When `/teamwork-preview` is invoked, the coordinator MUST present the full execution plan and verbatim prompt in the chat, halt, and await human approval before dispatching any subagent.
+
 ## Universal Quality Gates
 
 ### Quality Gates & Verification Standards
-The pipeline mechanically enforces 16 active quality gates that halt execution on failure. All agents MUST ensure deliverables comply with these gates before declaring completion:
+The pipeline mechanically enforces 31 active quality gates via the native Rust toolchain (`./target/release/verify-baseline`) that halt execution on failure. All agents MUST ensure deliverables comply with these gates before declaring completion:
 
-| Quality Gate | Enforcing Validator Path | Documentation Reference |
+| Quality Gate | Enforcing Binary / Rule | Documentation Reference |
 |---|---|---|
-| Specification Validation | `validators/spec_validator.py` | `rules/platform-independence.md` |
-| Model Coverage Verification | `scripts/verify_model_coverage.py` | `rules/platform-independence.md` |
-| Cross-Reference Integrity | `validators/link_validator.py` | `rules/document-references.md` |
+| Specification Validation | `./target/release/verify-baseline --spec-only` | `rules/platform-independence.md` |
+| Model Coverage Verification | `./target/release/verify-baseline --spec-only` | `rules/platform-independence.md` |
+| Cross-Reference Integrity | `./target/release/verify-baseline` (Gate 4) | `rules/document-references.md` |
 | Human Approval | `rules/user-authorization-lock.md` | `.pipeline/constitution.md` |
-| Downstream Conformance | `scripts/verify_downstream_baseline.py` | `rules/downstream-conformance.md` |
-| UML Model Integrity | `validators/uml.py` | `rules/uml-model-integrity.md` |
-| Mermaid Syntax Constraints | `validators/mermaid_syntax_validator.py` | `rules/platform-independence.md` |
-| Behavioral Trigger Coverage | `validators/behavioral.py` | `rules/behavioral-trigger-coverage.md` |
-| Codebase Compliance | `validators/codebase.py` | `rules/codebase-compliance.md` |
-| Document Cross-Reference Integrity | `tests/test_skill_path_references.py` | `rules/document-references.md` |
-| Constitution Amendment Integrity | `tests/test_constitution_integrity.py` | `.pipeline/constitution-amendments.md` |
-| Specification File Integrity | `validators/docs.py` | `rules/platform-independence.md` |
-| Spec Title Uniqueness | `validators/spec_title_uniqueness_validator.py` | `rules/tracker-source-of-truth.md` |
-| Source Reference Integrity | `validators/source_reference_validator.py` | `rules/codebase-compliance.md` |
-| Logical UI Validation | `validators/logical_ui_validator.py` | `rules/platform-independence.md` |
-| Safety Integrity Quality Gate | `scripts/verify_downstream_baseline.py` | `docs/safety/README.md` |
+| Downstream Conformance | `./target/release/verify-baseline . --no-domain` | `rules/downstream-conformance.md` |
+| UML Model Integrity | `./target/release/verify-baseline` (Gate 1) | `rules/uml-model-integrity.md` |
+| Mermaid Syntax Constraints | `./target/release/verify-baseline` (Gate 2) | `rules/platform-independence.md` |
+| Behavioral Trigger Coverage | `./target/release/verify-baseline` (Gate 27) | `rules/behavioral-trigger-coverage.md` |
+| Codebase Compliance | `./target/release/verify-baseline` (Gates 7-10, 12-15) | `rules/codebase-compliance.md` |
+| Document Cross-Reference Integrity | `./target/release/verify-baseline` (Gate 4) | `rules/document-references.md` |
+| Constitution Amendment Integrity | `./target/release/verify-baseline` (Gate 5) | `.pipeline/constitution-amendments.md` |
+| Specification File Integrity | `./target/release/verify-baseline` (Gate 3) | `rules/platform-independence.md` |
+| Spec Title Uniqueness | `./target/release/verify-baseline` (Gate 6) | `rules/tracker-source-of-truth.md` |
+| Source Reference Integrity | `./target/release/verify-baseline` (Gate 11) | `rules/codebase-compliance.md` |
+| Logical UI Validation | `./target/release/verify-baseline` (Gate 10) | `rules/platform-independence.md` |
+| Safety Integrity Quality Gate | `./target/release/verify-baseline` (Check 17) | `docs/safety/README.md` |
 
 ### Phase 0 System Safety Assurance Gate
 - **8-Pillar Safety Specification Schema**: All downstream safety engineering deliverables (`docs/safety/STPA_MATRIX.md`) MUST conform to the 8-pillar STPA, FMECA, and SORA schema:
@@ -244,12 +256,12 @@ The pipeline explicitly substantiates CMMI Level 3 alignment across key engineer
 
 | Process Area (CMMI Acronym) | Enforcing Mechanisms & Pipeline Artifacts |
 |---|---|
-| Requirements Management (REQM) | `tracker-source-of-truth.md`, `reconcile_backlog.py` |
-| Verification (VER) | `verify_model_coverage.py`, `parity_auditor` validators |
+| Requirements Management (REQM) | `tracker-source-of-truth.md`, `reconcile-backlog` |
+| Verification (VER) | `verify-baseline` specification auditor |
 | Validation (VAL) | Product Owner `Closed` state transition & verification walkthroughs |
 | Configuration Management (CM) | Git-tracked specification files, `constitution-amendments.md` |
 | Technical Solution (TS) | 3-Layer LUI Definition of Done & implementation profiles |
-| Product Integration (PI) | Automated baseline verification `verify_downstream_baseline.py` |
+| Product Integration (PI) | Automated baseline verification `verify-baseline` |
 
 
 ### Separation of Verification and Validation

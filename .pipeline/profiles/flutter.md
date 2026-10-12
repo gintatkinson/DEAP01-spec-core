@@ -59,14 +59,12 @@ All Flutter feature implementations MUST adhere strictly to the 15 mandatory dom
 
 ## Platform Audit Gates
 
-These are the platform-specific constraints the parity auditor enforces against a
+These are the platform-specific constraints the baseline verification enforces against a
 Flutter workspace. They live here rather than in `rules/` because each one names the
 Flutter source tree, a Flutter widget, or Flutter UI directories, and would be
 meaningless on another platform -- see `rules/platform-independence.md`
 § *Where platform-specific details belong*. Enforced offline by
-`parity_auditor/validators/profile_scoping_validator.py`,
-`parity_auditor/validators/schema_mapping_validator.py`, and
-`parity_auditor/validators/profile_compliance_validator.py`.
+`./target/release/verify-baseline` (Gates 7, 8, 9).
 
 - **Profile Scoping Requires Platform Sources**: profile-compliance auditing runs over
   the Flutter source tree named by `target_directories.flutter`. A workspace with no

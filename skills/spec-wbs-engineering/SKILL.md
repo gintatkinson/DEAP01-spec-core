@@ -363,7 +363,7 @@ Generate the three canonical Level 4 engineering deliverables:
 
 ## Standardized Level 4 Markdown Artifact Structure
 
-All Level 4 WBS suite documents reside in `docs/management/` and MUST begin at lines 1–10 with a native CommonMark two-column Metadata Table per `rules/specification-metadata-integrity.md`.
+All Level 4 WBS suite documents reside in `docs/management/` and MUST begin at lines 1-10 with a native CommonMark two-column Metadata Table per `rules/specification-metadata-integrity.md`.
 
 ```markdown
 | Attribute | Specification Detail |
@@ -449,9 +449,9 @@ Per [`rules/platform-independence.md`](../../rules/platform-independence.md):
 2. **Untracked Infrastructure Pre-Commit Check**:
    Check for untracked pipeline infrastructure files before committing:
    ```bash
-   UNTRACKED_INFRA=$(git ls-files --others --exclude-standard .pipeline/ skills/ rules/ scripts/)
+   UNTRACKED_INFRA=$(git ls-files --others --exclude-standard .pipeline/ skills/ rules/)
    if [ -n "$UNTRACKED_INFRA" ]; then
-     git add .pipeline/ skills/ rules/ scripts/
+     git add .pipeline/ skills/ rules/
    fi
    ```
 

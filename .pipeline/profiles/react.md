@@ -82,8 +82,8 @@ last_updated_time: "2026-06-20T13:13:00+08:00"
     - **Navigation Breadcrumbs Component:** Exposes a breadcrumb path resolved from the current selection. Collapses middle segments dynamically when the path length exceeds available container space.
     - **Ubiquitous Navigation Links:** Whenever the UI presents a managed object or attribute, it must be rendered as a selectable, clickable link that directly navigates to that item.
     - **Density Table Component:** High information-density tables with sortable, filterable columns, row selections, and status badges. Table row sizing must use `min-height: 32px` and compact vertical cell padding of `4px` top/bottom to maximize information density while remaining scale-safe.
-  - **Typography:** Resolved dynamically from the typography design tokens (Roboto, Inter, sans-serif, base text size constrained at `12px`–`13px`, section headings at `13px`–`14px`, page title at `18px` max).
-  - **Icons & Vector Graphics:** SVG icons must be outline-only, constrained within a fixed `16px` viewport boundary with a stroke weight of `1.0px`–`1.2px` and a bounding padding of `2px`.
+  - **Typography:** Resolved dynamically from the typography design tokens (Roboto, Inter, sans-serif, base text size constrained at `12px`-`13px`, section headings at `13px`-`14px`, page title at `18px` max).
+  - **Icons & Vector Graphics:** SVG icons must be outline-only, constrained within a fixed `16px` viewport boundary with a stroke weight of `1.0px`-`1.2px` and a bounding padding of `2px`.
   - **Interactivity:** Micro-animations for hover states, side-panel slide-outs, loading skeletons, and inline help tooltips.
   - **Self-Documenting Code & Documentation Mandates:**
     - **Intention-Revealing Names:** Enforce intention-revealing names for all variables, hooks, components, and functions.
