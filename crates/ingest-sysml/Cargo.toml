@@ -1,0 +1,24 @@
+[package]
+name = "ingest-sysml"
+version = "0.1.0"
+edition = "2021"
+description = "Pure Rust Ground 0.0 SysML v2 Ingestion Engine"
+
+[dependencies]
+deap-core = { path = "../deap-core" }
+compile-sysml = { path = "../compile-sysml" }
+clap = { version = "4.4", features = ["derive"] }
+regex = "1.10"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+walkdir = "2.4"
+chrono = "0.4"
+rayon = "1.8"
+
+[[bin]]
+name = "ingest-sysml"
+path = "src/main.rs"
+
+[lib]
+name = "ingest_sysml"
+path = "src/lib.rs"

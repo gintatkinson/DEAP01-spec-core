@@ -1,0 +1,23 @@
+[package]
+name = "reconcile-backlog"
+version = "0.1.0"
+edition = "2021"
+description = "Pure Rust Backlog Reconciler for DEAP MBSE Framework"
+
+[dependencies]
+deap-core = { path = "../deap-core" }
+clap = { version = "4.4", features = ["derive"] }
+regex = "1.10"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+walkdir = "2.4"
+chrono = "0.4"
+pulldown-cmark = "0.13"
+
+[[bin]]
+name = "reconcile-backlog"
+path = "src/main.rs"
+
+[lib]
+name = "reconcile_backlog"
+path = "src/lib.rs"
