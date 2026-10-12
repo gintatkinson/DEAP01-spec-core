@@ -19,7 +19,6 @@
 //! - **Deterministic Identifier Sanitization**: All symbols pass through `sanitize_identifier` to prevent
 //!   SysML v2 reserved keyword collisions or illegal punctuation.
 
-use regex::Regex;
 use deap_core::sysml_ast::{ActionDef, AttributeDef, PackageDef, PartDef};
 use crate::table::sanitize_identifier;
 
@@ -52,9 +51,8 @@ impl IDLTranslator {
     /// ### Postconditions:
     /// - Returns a validated `PackageDef` containing mapped SysML v2 AST nodes.
     pub fn translate(&self, content: &str, default_name: &str) -> Result<PackageDef, String> {
-        let module_re = Regex::new(r"\bmodule\s+([a-zA-Z0-9_\-]+)\s*\{").unwrap();
-        let pkg_name = if let Some(caps) = module_re.captures(content) {
-            sanitize_identifier(caps.get(1).unwrap().as_str(), default_name)
+        let pkg_name = if let Some(mod_name) = scan_module_name(content) {
+            sanitize_identifier(&mod_name, default_name)
         } else {
             sanitize_identifier(default_name, "IDL_Package")
         };
@@ -66,17 +64,12 @@ impl IDLTranslator {
         };
 
         // Parse structs: struct <name> { <type> <field>; ... };
-        let struct_re = Regex::new(r"(?s)\bstruct\s+([a-zA-Z0-9_\-]+)\s*\{([^}]+)\};").unwrap();
-        let field_re = Regex::new(r"(?m)^\s*([a-zA-Z0-9_\-<>:]+)\s+([a-zA-Z0-9_\-]+)\s*;").unwrap();
-
-        for s_cap in struct_re.captures_iter(content) {
-            let s_name = sanitize_identifier(s_cap.get(1).unwrap().as_str(), "Struct");
-            let s_body = s_cap.get(2).unwrap().as_str();
+        for (s_raw_name, s_body) in scan_idl_blocks(content, "struct") {
+            let s_name = sanitize_identifier(s_raw_name, "Struct");
 
             let mut attrs = Vec::new();
-            for f_cap in field_re.captures_iter(s_body) {
-                let f_type = f_cap.get(1).unwrap().as_str().trim().to_string();
-                let f_name = sanitize_identifier(f_cap.get(2).unwrap().as_str().trim(), "field");
+            for (f_type, f_raw_name) in scan_struct_fields(s_body) {
+                let f_name = sanitize_identifier(&f_raw_name, "field");
                 attrs.push(AttributeDef {
                     name: f_name,
                     type_name: f_type,
@@ -94,17 +87,13 @@ impl IDLTranslator {
         }
 
         // Parse interfaces: interface <name> { <ret> <op>(<params>); ... };
-        let interface_re = Regex::new(r"(?s)\binterface\s+([a-zA-Z0-9_\-]+)\s*\{([^}]+)\};").unwrap();
-        let op_re = Regex::new(r"(?m)^\s*(?:[a-zA-Z0-9_\-\:]+)\s+([a-zA-Z0-9_\-]+)\s*\(([^)]*)\)\s*;").unwrap();
-
-        for if_cap in interface_re.captures_iter(content) {
-            let if_name = sanitize_identifier(if_cap.get(1).unwrap().as_str(), "Interface");
-            let if_body = if_cap.get(2).unwrap().as_str();
+        for (if_raw_name, if_body) in scan_idl_blocks(content, "interface") {
+            let if_name = sanitize_identifier(if_raw_name, "Interface");
 
             let mut actions = Vec::new();
-            for op_cap in op_re.captures_iter(if_body) {
-                let op_name = sanitize_identifier(op_cap.get(1).unwrap().as_str().trim(), "action");
-                let params_raw = op_cap.get(2).unwrap().as_str().trim();
+            for (op_raw_name, params_raw) in scan_interface_ops(if_body) {
+                let op_name = sanitize_identifier(&op_raw_name, "action");
+                let params_raw = params_raw.trim();
 
                 let mut in_params = Vec::new();
                 let mut out_params = Vec::new();
@@ -158,10 +147,8 @@ impl IDLTranslator {
         }
 
         // Parse typedefs: typedef <type> <name>;
-        let typedef_re = Regex::new(r"(?m)^\s*typedef\s+([a-zA-Z0-9_\-<>:]+)\s+([a-zA-Z0-9_\-]+)\s*;").unwrap();
-        for t_cap in typedef_re.captures_iter(content) {
-            let t_type = t_cap.get(1).unwrap().as_str().trim().to_string();
-            let t_name = sanitize_identifier(t_cap.get(2).unwrap().as_str().trim(), "typedef");
+        for (t_type, t_raw_name) in scan_typedefs(content) {
+            let t_name = sanitize_identifier(&t_raw_name, "typedef");
             pkg.attribute_defs.push(AttributeDef {
                 name: t_name,
                 type_name: t_type,
@@ -172,6 +159,144 @@ impl IDLTranslator {
 
         Ok(pkg)
     }
+}
+
+fn scan_module_name(content: &str) -> Option<String> {
+    let mut search_pos = 0;
+    while let Some(kw_pos) = content[search_pos..].find("module") {
+        let abs_pos = search_pos + kw_pos;
+        let before_ok = abs_pos == 0 || {
+            let b = content.as_bytes()[abs_pos - 1];
+            !b.is_ascii_alphanumeric() && b != b'_'
+        };
+        let after = &content[abs_pos + 6..];
+        if before_ok && after.starts_with(char::is_whitespace) {
+            if let Some(brace_pos) = after.find('{') {
+                let header = after[..brace_pos].trim();
+                let name: String = header
+                    .chars()
+                    .take_while(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-')
+                    .collect();
+                if !name.is_empty() {
+                    return Some(name);
+                }
+            }
+        }
+        search_pos = abs_pos + 6;
+    }
+    None
+}
+
+fn scan_idl_blocks<'a>(content: &'a str, keyword: &str) -> Vec<(&'a str, &'a str)> {
+    let mut results = Vec::new();
+    let mut search_pos = 0;
+    while let Some(kw_pos) = content[search_pos..].find(keyword) {
+        let abs_pos = search_pos + kw_pos;
+        let before_ok = abs_pos == 0 || {
+            let b = content.as_bytes()[abs_pos - 1];
+            !b.is_ascii_alphanumeric() && b != b'_'
+        };
+        let after = &content[abs_pos + keyword.len()..];
+        if before_ok && after.starts_with(char::is_whitespace) {
+            if let Some(brace_open) = after.find('{') {
+                let header = after[..brace_open].trim();
+                let name_len = header
+                    .chars()
+                    .take_while(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-')
+                    .count();
+                let block_name = &header[..name_len];
+                let body_and_rest = &after[brace_open + 1..];
+                if let Some(brace_close) = body_and_rest.find('}') {
+                    let body = &body_and_rest[..brace_close];
+                    let after_close = body_and_rest[brace_close + 1..].trim_start();
+                    if after_close.starts_with(';') {
+                        if !block_name.is_empty() {
+                            results.push((block_name, body));
+                        }
+                        search_pos = abs_pos + keyword.len() + brace_open + 1 + brace_close + 1;
+                        continue;
+                    }
+                }
+            }
+        }
+        search_pos = abs_pos + keyword.len();
+    }
+    results
+}
+
+fn scan_struct_fields(body: &str) -> Vec<(String, String)> {
+    let mut fields = Vec::new();
+    for stmt in body.split(';') {
+        let trimmed = stmt.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let parts: Vec<&str> = trimmed.split_whitespace().collect();
+        if parts.len() >= 2 {
+            let f_type = parts[..parts.len() - 1].join(" ");
+            let f_name = parts[parts.len() - 1];
+            if f_name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+                && f_type.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '<' || c == '>' || c == ':')
+            {
+                fields.push((f_type, f_name.to_string()));
+            }
+        }
+    }
+    fields
+}
+
+fn scan_interface_ops(if_body: &str) -> Vec<(String, String)> {
+    let mut ops = Vec::new();
+    for stmt in if_body.split(';') {
+        let stmt = stmt.trim();
+        if let Some(open_paren) = stmt.find('(') {
+            if let Some(close_paren) = stmt[open_paren + 1..].rfind(')') {
+                let close_idx = open_paren + 1 + close_paren;
+                let before_paren = stmt[..open_paren].trim();
+                let params_raw = stmt[open_paren + 1..close_idx].trim();
+                let tokens: Vec<&str> = before_paren.split_whitespace().collect();
+                if tokens.len() >= 2 {
+                    let op_name = tokens[tokens.len() - 1];
+                    if op_name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+                        ops.push((op_name.to_string(), params_raw.to_string()));
+                    }
+                }
+            }
+        }
+    }
+    ops
+}
+
+fn scan_typedefs(content: &str) -> Vec<(String, String)> {
+    let mut typedefs = Vec::new();
+    let mut search_pos = 0;
+    while let Some(kw_pos) = content[search_pos..].find("typedef") {
+        let abs_pos = search_pos + kw_pos;
+        let before_ok = abs_pos == 0 || {
+            let b = content.as_bytes()[abs_pos - 1];
+            !b.is_ascii_alphanumeric() && b != b'_'
+        };
+        let after = &content[abs_pos + 7..];
+        if before_ok && after.starts_with(char::is_whitespace) {
+            if let Some(semi_pos) = after.find(';') {
+                let stmt = after[..semi_pos].trim();
+                let parts: Vec<&str> = stmt.split_whitespace().collect();
+                if parts.len() >= 2 {
+                    let t_type = parts[..parts.len() - 1].join(" ");
+                    let t_name = parts[parts.len() - 1];
+                    if t_name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+                        && t_type.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '<' || c == '>' || c == ':')
+                    {
+                        typedefs.push((t_type, t_name.to_string()));
+                    }
+                }
+                search_pos = abs_pos + 7 + semi_pos + 1;
+                continue;
+            }
+        }
+        search_pos = abs_pos + 7;
+    }
+    typedefs
 }
 
 #[cfg(test)]

@@ -290,18 +290,40 @@ pub fn reverse_sync_specs_to_sysml(
                         });
 
                         // Extract operations/actions from markdown lists: - `+ActionName() : void`
-                        let act_re = regex::Regex::new(r"-\s*`\+([A-Za-z0-9_]+)\s*\([^)]*\)\s*:\s*([A-Za-z0-9_]+)`").unwrap();
                         let default_act = format!("execute_{}", part_name.to_lowercase());
-                        for cap in act_re.captures_iter(body) {
-                            let act_name = cap[1].to_string();
-                            // Skip forward-sync synthetic placeholder actions (execute_<part_name>) to preserve SSOT parity
-                            if act_name.to_lowercase() == default_act.to_lowercase() {
-                                continue;
-                            }
-                            if !entry.actions.iter().any(|a| a.name == act_name) {
-                                let mut a = ActionDef::default();
-                                a.name = act_name;
-                                entry.actions.push(a);
+                        for line in body.lines() {
+                            let trimmed = line.trim();
+                            if trimmed.starts_with('-') {
+                                let after_dash = trimmed[1..].trim_start();
+                                if after_dash.starts_with("`+") {
+                                    let rest = &after_dash[2..];
+                                    if let Some(paren_open) = rest.find('(') {
+                                        let act_name = rest[..paren_open].trim();
+                                        if !act_name.is_empty() && act_name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+                                            if let Some(paren_close) = rest[paren_open..].find(')') {
+                                                let after_paren = rest[paren_open + paren_close + 1..].trim_start();
+                                                if after_paren.starts_with(':') {
+                                                    let after_colon = after_paren[1..].trim();
+                                                    if after_colon.ends_with('`') {
+                                                        let ret_type = after_colon.trim_end_matches('`').trim();
+                                                        if !ret_type.is_empty() && ret_type.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+                                                            let act_name_str = act_name.to_string();
+                                                            // Skip forward-sync synthetic placeholder actions (execute_<part_name>) to preserve SSOT parity
+                                                            if act_name_str.to_lowercase() == default_act.to_lowercase() {
+                                                                continue;
+                                                            }
+                                                            if !entry.actions.iter().any(|a| a.name == act_name_str) {
+                                                                let mut a = ActionDef::default();
+                                                                a.name = act_name_str;
+                                                                entry.actions.push(a);
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -351,17 +373,31 @@ pub fn reverse_sync_specs_to_sysml(
                 _ => {
                     // Check if file is STPA_MATRIX.md
                     if path.file_name().map(|f| f == "STPA_MATRIX.md").unwrap_or(false) {
-                        let sc_re = regex::Regex::new(r"\|\s*\*\*?(SC-\d+)\*\*?\s*\|\s*([^|]+)\|\s*([^|]+)\|").unwrap();
-                        for cap in sc_re.captures_iter(&content) {
-                            let sc_id = cap[1].replace('-', "_");
-                            let stmt = cap[2].trim().to_string();
-                            extracted_constraints.push(ConstraintDef {
-                                name: format!("{}_SafetyConstraint", sc_id),
-                                doc: Some(stmt.clone()),
-                                expression: format!("{} == true", sc_id),
-                                is_assertion: true,
-                                ..Default::default()
-                            });
+                        for line in content.lines() {
+                            let trimmed = line.trim();
+                            if !trimmed.starts_with('|') {
+                                continue;
+                            }
+                            let cols: Vec<&str> = trimmed.split('|').map(|s| s.trim()).collect();
+                            if cols.len() >= 4 {
+                                let raw_sc = cols[1].trim_matches('*').trim();
+                                if raw_sc.starts_with("SC-")
+                                    && !raw_sc["SC-".len()..].is_empty()
+                                    && raw_sc["SC-".len()..].chars().all(|c| c.is_ascii_digit())
+                                {
+                                    let stmt = cols[2].trim();
+                                    if !stmt.is_empty() {
+                                        let sc_id = raw_sc.replace('-', "_");
+                                        extracted_constraints.push(ConstraintDef {
+                                            name: format!("{}_SafetyConstraint", sc_id),
+                                            doc: Some(stmt.to_string()),
+                                            expression: format!("{} == true", sc_id),
+                                            is_assertion: true,
+                                            ..Default::default()
+                                        });
+                                    }
+                                }
+                            }
                         }
                     }
                 }

@@ -14,7 +14,7 @@
 //! ## 2. Core Safety Invariants & Hazard Mitigation
 //! - **H-INGEST-OAS-01 (Malformed Input & Parser Vulnerability)**:
 //!   Input strings are parsed via `serde_json` with strict type bounds. If JSON parsing fails,
-//!   a bounded regex fallback recovers package titles and structural components without
+//!   a bounded scanner fallback recovers package titles and structural components without
 //!   arbitrary code execution or infinite parsing loops.
 //! - **H-INGEST-OAS-02 (Type Mapping Soundness)**:
 //!   OpenAPI primitive types (`integer`, `number`, `boolean`, `string`) map directly to canonical
@@ -28,7 +28,6 @@
 //!   Translation rules operate strictly on the abstract OpenAPI 3.x meta-model schema
 //!   (`info`, `components.schemas`, `paths`). Zero domain concepts or specific endpoints are hardcoded.
 
-use regex::Regex;
 use serde_json::Value;
 use deap_core::sysml_ast::{ActionDef, AttributeDef, PackageDef, PartDef};
 use crate::table::sanitize_identifier;
@@ -45,7 +44,7 @@ impl OpenAPITranslator {
         Self
     }
 
-    /// Parses raw specification content as JSON or extracts structured elements via regex fallback.
+    /// Parses raw specification content as JSON or extracts structured elements via scanner fallback.
     ///
     /// /// Realises: [REQ-SYSML-INGEST-OAS/parse_raw]
     ///
@@ -69,9 +68,15 @@ impl OpenAPITranslator {
 
         // Resilient fallback for YAML OpenAPI subsets
         let mut title = "OpenAPI_Package".to_string();
-        let title_re = Regex::new(r#"(?m)^\s*title:\s*["']?([^"'\r\n]+)["']?"#).unwrap();
-        if let Some(caps) = title_re.captures(content) {
-            title = caps.get(1).unwrap().as_str().trim().to_string();
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if let Some(val) = trimmed.strip_prefix("title:") {
+                let val = val.trim().trim_matches(|c| c == '"' || c == '\'').trim();
+                if !val.is_empty() {
+                    title = val.to_string();
+                    break;
+                }
+            }
         }
 
         serde_json::json!({

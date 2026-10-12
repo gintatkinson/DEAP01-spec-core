@@ -32,7 +32,6 @@ pub mod translators;
 
 use std::collections::HashSet;
 use deap_core::sysml_ast::{ConstraintDef, PackageDef, PartDef};
-use regex::Regex;
 
 /// Translates a single Markdown requirement document into a canonical SysML v2 `PackageDef`.
 ///
@@ -157,9 +156,10 @@ pub fn filter_ast_to_target_scope(
 
     // Step 2: Project negative exclusion invariants into formal constraint assertions
     if let Some(neg_list) = negative_invariants {
-        let non_alnum_re = Regex::new(r"[^a-zA-Z0-9_]").unwrap();
         for inv in neg_list {
-            let clean = non_alnum_re.replace_all(inv, "_").to_ascii_lowercase();
+            let clean = inv
+                .replace(|c: char| !c.is_ascii_alphanumeric() && c != '_', "_")
+                .to_ascii_lowercase();
             let clean_name = clean.trim_matches('_');
             let constraint_name = format!("assert_exclusion_{}", clean_name);
             if !pkg.constraint_defs.iter().any(|c| c.name == constraint_name) {

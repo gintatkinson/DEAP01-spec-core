@@ -2,7 +2,6 @@
 
 use super::symbols::{Symbol, SymbolKind, SymbolTable};
 use deap_core::sysml_ast::*;
-use regex::Regex;
 use std::collections::HashSet;
 
 /// Severity level of semantic diagnostics.
@@ -245,15 +244,70 @@ impl<'a> SemanticValidator<'a> {
             .map(|s| normalize_id(&s.name))
             .collect();
 
-        let safety_realises_re = Regex::new(
-            r#"(?i)@SafetyRealises\s*(?:\(([^)]+)\)|:\s*([A-Za-z0-9_\-]+))"#,
-        )
-        .unwrap();
-
-        let triggers_hazard_re = Regex::new(
-            r#"(?i)@TriggersHazard\s*(?:\(([^)]+)\)|:\s*([A-Za-z0-9_\-]+))"#,
-        )
-        .unwrap();
+        let extract_annotation_targets = |text: &str, tag: &str| -> Vec<Vec<String>> {
+            let mut results = Vec::new();
+            let lower_text = text.to_lowercase();
+            let lower_tag = tag.to_lowercase();
+            let mut search_idx = 0;
+            while let Some(pos) = lower_text[search_idx..].find(&lower_tag) {
+                let tag_start = search_idx + pos;
+                let idx = tag_start + tag.len();
+                let rest = &text[idx..];
+                let mut chars = rest.char_indices();
+                let mut ws_end = rest.len();
+                let mut next_char = None;
+                while let Some((c_idx, c)) = chars.next() {
+                    if !c.is_whitespace() {
+                        ws_end = c_idx;
+                        next_char = Some(c);
+                        break;
+                    }
+                }
+                match next_char {
+                    Some('(') => {
+                        let inside_start = idx + ws_end + 1;
+                        if let Some(close_pos) = text[inside_start..].find(')') {
+                            let inside = &text[inside_start..inside_start + close_pos];
+                            let targets: Vec<String> = inside
+                                .split(',')
+                                .map(|s| s.trim().to_string())
+                                .filter(|s| !s.is_empty())
+                                .collect();
+                            results.push(targets);
+                            search_idx = inside_start + close_pos + 1;
+                            continue;
+                        }
+                    }
+                    Some(':') => {
+                        let after_colon = &rest[ws_end + 1..];
+                        let mut colon_chars = after_colon.char_indices();
+                        let mut id_start = after_colon.len();
+                        while let Some((c_idx, c)) = colon_chars.next() {
+                            if !c.is_whitespace() {
+                                id_start = c_idx;
+                                break;
+                            }
+                        }
+                        let id_rest = &after_colon[id_start..];
+                        let id_len = id_rest
+                            .chars()
+                            .take_while(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-')
+                            .map(|c| c.len_utf8())
+                            .sum::<usize>();
+                        if id_len > 0 {
+                            let id = id_rest[..id_len].trim().to_string();
+                            results.push(vec![id]);
+                            let global_end = idx + ws_end + 1 + id_start + id_len;
+                            search_idx = global_end.max(tag_start + 1);
+                            continue;
+                        }
+                    }
+                    _ => {}
+                }
+                search_idx = tag_start + 1;
+            }
+            results
+        };
 
         let mut req_texts = Vec::new();
         self.collect_requirement_texts(&self.pkg.requirement_defs, &mut req_texts);
@@ -263,20 +317,8 @@ impl<'a> SemanticValidator<'a> {
 
         for (req_name, text_corpus) in req_texts {
             // Check @SafetyRealises
-            for cap in safety_realises_re.captures_iter(&text_corpus) {
-                let targets = if let Some(grp) = cap.get(1) {
-                    grp.as_str()
-                        .split(',')
-                        .map(|s| s.trim())
-                        .filter(|s| !s.is_empty())
-                        .collect()
-                } else if let Some(grp) = cap.get(2) {
-                    vec![grp.as_str().trim()]
-                } else {
-                    vec![]
-                };
-
-                for target in targets {
+            for targets in extract_annotation_targets(&text_corpus, "@SafetyRealises") {
+                for target in &targets {
                     let clean_target = normalize_id(target);
                     if !known_constraints.is_empty()
                         && !known_constraints.iter().any(|c| c == &clean_target || c.contains(&clean_target))
@@ -293,20 +335,8 @@ impl<'a> SemanticValidator<'a> {
             }
 
             // Check @TriggersHazard
-            for cap in triggers_hazard_re.captures_iter(&text_corpus) {
-                let targets = if let Some(grp) = cap.get(1) {
-                    grp.as_str()
-                        .split(',')
-                        .map(|s| s.trim())
-                        .filter(|s| !s.is_empty())
-                        .collect()
-                } else if let Some(grp) = cap.get(2) {
-                    vec![grp.as_str().trim()]
-                } else {
-                    vec![]
-                };
-
-                for target in targets {
+            for targets in extract_annotation_targets(&text_corpus, "@TriggersHazard") {
+                for target in &targets {
                     let clean_target = normalize_id(target);
                     if !known_hazards.is_empty()
                         && !known_hazards.iter().any(|h| h == &clean_target || h.contains(&clean_target))

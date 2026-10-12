@@ -40,7 +40,6 @@
 //! - State transitions in [`parse_markdown_tables`] are strictly monotonic and resilient against
 //!   unclosed tables, empty rows, and malformed Markdown separators.
 
-use regex::Regex;
 use std::collections::HashMap;
 
 /// SysML v2 reserved keywords that must not be used as bare identifiers in AST generation.
@@ -156,8 +155,7 @@ pub fn sanitize_identifier(text: &str, default_name: &str) -> String {
 
     // Step 1: Remove parentheses/bracketed content if that leaves a non-empty name:
     // e.g. "Mass (kg)" -> "Mass", "Voltage [V]" -> "Voltage"
-    let bracket_re = Regex::new(r"[\(\[\{][^\)\]\}]*[\)\]\}]").unwrap();
-    let stripped = bracket_re.replace_all(text, "").trim().to_string();
+    let stripped = strip_bracketed_content(text);
     let clean_cand = if !stripped.is_empty() {
         stripped
     } else {
@@ -165,16 +163,17 @@ pub fn sanitize_identifier(text: &str, default_name: &str) -> String {
     };
 
     // Step 2: Remove Markdown inline formatting tokens (*, `, _, #)
-    let fmt_re = Regex::new(r"[*`_#]").unwrap();
-    let formatted = fmt_re.replace_all(&clean_cand, " ").trim().to_string();
+    let formatted: String = clean_cand
+        .chars()
+        .map(|c| if c == '*' || c == '`' || c == '_' || c == '#' { ' ' } else { c })
+        .collect();
+    let formatted = formatted.trim();
 
     // Step 3: Replace non-alphanumeric characters with underscores
-    let non_alnum_re = Regex::new(r"[^a-zA-Z0-9_]").unwrap();
-    let mut clean = non_alnum_re.replace_all(&formatted, "_").into_owned();
+    let mut clean = formatted.replace(|c: char| !c.is_ascii_alphanumeric() && c != '_', "_");
 
     // Step 4: Collapse multiple consecutive underscores and trim boundary underscores
-    let multi_under_re = Regex::new(r"_+").unwrap();
-    clean = multi_under_re.replace_all(&clean, "_").into_owned();
+    clean = collapse_underscores(&clean);
     clean = clean.trim_matches('_').to_string();
 
     // Fallback if sanitization completely evacuated the identifier
@@ -193,6 +192,40 @@ pub fn sanitize_identifier(text: &str, default_name: &str) -> String {
     }
 
     clean
+}
+
+fn strip_bracketed_content(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '(' || c == '[' || c == '{' {
+            for inner in chars.by_ref() {
+                if inner == ')' || inner == ']' || inner == '}' {
+                    break;
+                }
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out.trim().to_string()
+}
+
+fn collapse_underscores(s: &str) -> String {
+    let mut res = String::with_capacity(s.len());
+    let mut prev_under = false;
+    for c in s.chars() {
+        if c == '_' {
+            if !prev_under {
+                res.push('_');
+                prev_under = true;
+            }
+        } else {
+            res.push(c);
+            prev_under = false;
+        }
+    }
+    res
 }
 
 /// Extracts measurement physical units enclosed in parentheses or brackets.
@@ -220,18 +253,41 @@ pub fn sanitize_identifier(text: &str, default_name: &str) -> String {
 /// assert_eq!(unit, "Hz");
 /// ```
 pub fn extract_unit_from_header_or_val(header_or_val: &str) -> (String, String) {
-    // Regex matching unit tokens inside parentheses or brackets: e.g. (kg), [m/s^2], (deg_C)
-    let unit_re = Regex::new(r"[\(\[]([a-zA-Z0-9_/°^%\-]+)[\)\]]").unwrap();
-    let strip_re = Regex::new(r"[\(\[][^\)\]]*[\)\]]").unwrap();
+    let mut unit = String::new();
+    let mut cleaned = String::with_capacity(header_or_val.len());
 
-    let unit = if let Some(caps) = unit_re.captures(header_or_val) {
-        caps.get(1).map_or("", |m| m.as_str()).trim().to_string()
-    } else {
-        String::new()
-    };
+    let mut chars = header_or_val.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '(' || c == '[' {
+            let mut inner = String::new();
+            let mut closed = false;
+            for next_c in chars.by_ref() {
+                if next_c == ')' || next_c == ']' {
+                    closed = true;
+                    break;
+                }
+                inner.push(next_c);
+            }
+            if closed && unit.is_empty() {
+                let is_valid_unit = !inner.is_empty() && inner.chars().all(|ch| {
+                    ch.is_ascii_alphanumeric()
+                        || ch == '_'
+                        || ch == '/'
+                        || ch == '°'
+                        || ch == '^'
+                        || ch == '%'
+                        || ch == '-'
+                });
+                if is_valid_unit {
+                    unit = inner.trim().to_string();
+                }
+            }
+        } else {
+            cleaned.push(c);
+        }
+    }
 
-    let cleaned = strip_re.replace_all(header_or_val, "").trim().to_string();
-    (cleaned, unit)
+    (cleaned.trim().to_string(), unit)
 }
 
 /// Normalizes a column header into a canonical snake_case lookup key.
@@ -250,13 +306,21 @@ pub fn extract_unit_from_header_or_val(header_or_val: &str) -> (String, String) 
 /// - Returns a lowercased, underscore-delimited snake_case string stripped of formatting.
 pub fn normalize_col(name: &str) -> String {
     let (cleaned, _) = extract_unit_from_header_or_val(name);
-    let fmt_re = Regex::new(r"[*`_]").unwrap();
-    let unformatted = fmt_re.replace_all(&cleaned, " ").trim().to_ascii_lowercase();
-
-    let non_alnum_re = Regex::new(r"[^a-z0-9]+").unwrap();
-    let mut clean = non_alnum_re.replace_all(&unformatted, "_").into_owned();
-    clean = clean.trim_matches('_').to_string();
-    clean
+    let mut clean = String::with_capacity(cleaned.len());
+    let mut prev_under = false;
+    for c in cleaned.chars() {
+        let lower = c.to_ascii_lowercase();
+        if lower.is_ascii_alphanumeric() {
+            clean.push(lower);
+            prev_under = false;
+        } else {
+            if !prev_under {
+                clean.push('_');
+                prev_under = true;
+            }
+        }
+    }
+    clean.trim_matches('_').to_string()
 }
 
 /// Strips Markdown hyperlinks, HTML tags, and inline formatting from a table cell value.
@@ -280,18 +344,58 @@ pub fn clean_cell_value(val: &str) -> String {
     }
 
     // Step 1: Strip Markdown hyperlink syntax: [visible text](http://target) -> visible text
-    let link_re = Regex::new(r"\[([^\]]+)\]\([^\)]+\)").unwrap();
-    let step1 = link_re.replace_all(val, "$1");
+    let step1 = strip_markdown_links(val);
 
-    // Step 2: Replace line break tags with whitespace separator
-    let br_re = Regex::new(r"(?i)<br\s*/?>").unwrap();
-    let step2 = br_re.replace_all(&step1, " ");
-
-    // Step 3: Strip remaining HTML tags
-    let html_re = Regex::new(r"<[^>]+>").unwrap();
-    let step3 = html_re.replace_all(&step2, "");
+    // Step 2: Replace line break tags with whitespace separator & Step 3: Strip remaining HTML tags
+    let step3 = strip_html_tags(&step1);
 
     step3.trim().to_string()
+}
+
+fn strip_markdown_links(val: &str) -> String {
+    let mut out = String::with_capacity(val.len());
+    let mut rest = val;
+    while let Some(start_bracket) = rest.find('[') {
+        out.push_str(&rest[..start_bracket]);
+        let after_start = &rest[start_bracket + 1..];
+        if let Some(end_bracket) = after_start.find(']') {
+            let visible_text = &after_start[..end_bracket];
+            let after_end_bracket = &after_start[end_bracket + 1..];
+            if after_end_bracket.starts_with('(') {
+                if let Some(end_paren) = after_end_bracket.find(')') {
+                    out.push_str(visible_text);
+                    rest = &after_end_bracket[end_paren + 1..];
+                    continue;
+                }
+            }
+        }
+        out.push('[');
+        rest = after_start;
+    }
+    out.push_str(rest);
+    out
+}
+
+fn strip_html_tags(val: &str) -> String {
+    let mut out = String::with_capacity(val.len());
+    let mut rest = val;
+    while let Some(start_tag) = rest.find('<') {
+        out.push_str(&rest[..start_tag]);
+        let after_start = &rest[start_tag + 1..];
+        if let Some(end_tag) = after_start.find('>') {
+            let tag_content = after_start[..end_tag].trim();
+            let lower = tag_content.to_ascii_lowercase();
+            if lower == "br" || lower.starts_with("br ") || lower.starts_with("br/") || lower == "br/" {
+                out.push(' ');
+            }
+            rest = &after_start[end_tag + 1..];
+        } else {
+            out.push('<');
+            rest = after_start;
+        }
+    }
+    out.push_str(rest);
+    out
 }
 
 /// Parses a scalar string into numeric float, unit, and optional signed integer representation.
@@ -323,24 +427,22 @@ pub fn clean_cell_value(val: &str) -> String {
 /// assert_eq!(i_hex, Some(32));
 /// ```
 pub fn parse_numeric_with_unit(raw_val: &str) -> (Option<f64>, Option<String>, Option<i64>) {
-    let fmt_re = Regex::new(r"[*`]").unwrap();
-    let clean = fmt_re.replace_all(raw_val, "").trim().to_string();
+    let clean: String = raw_val.chars().filter(|&c| c != '*' && c != '`').collect();
+    let clean = clean.trim();
 
     // Check hexadecimal pattern: 0x...
-    let hex_re = Regex::new(r"^(0x[0-9a-fA-F]+)$").unwrap();
-    if let Some(caps) = hex_re.captures(&clean) {
-        let hex_str = caps.get(1).unwrap().as_str();
-        if let Ok(val_int) = i64::from_str_radix(&hex_str[2..], 16) {
-            return (Some(val_int as f64), Some(String::new()), Some(val_int));
+    if (clean.starts_with("0x") || clean.starts_with("0X")) && clean.len() > 2 {
+        let hex_str = &clean[2..];
+        if hex_str.chars().all(|c| c.is_ascii_hexdigit()) {
+            if let Ok(val_int) = i64::from_str_radix(hex_str, 16) {
+                return (Some(val_int as f64), Some(String::new()), Some(val_int));
+            }
         }
     }
 
     // Number followed by optional physical unit: e.g. 100.5 kg, -20.0 degC
-    let num_re = Regex::new(r"^([-+]?[0-9]*\.?[0-9]+(?:[eE][-+]?[0-9]+)?)\s*([a-zA-Z0-9_/°^%\-]*)$").unwrap();
-    if let Some(caps) = num_re.captures(&clean) {
-        let val_str = caps.get(1).unwrap().as_str();
-        let unit_str = caps.get(2).map_or("", |m| m.as_str()).trim().to_string();
-
+    if let Some((val_str, unit_str)) = split_number_and_unit(clean) {
+        let unit_str = unit_str.to_string();
         if val_str.contains('.') || val_str.to_ascii_lowercase().contains('e') {
             if let Ok(val_float) = val_str.parse::<f64>() {
                 return (Some(val_float), Some(unit_str), None);
@@ -351,6 +453,68 @@ pub fn parse_numeric_with_unit(raw_val: &str) -> (Option<f64>, Option<String>, O
     }
 
     (None, None, None)
+}
+
+fn split_number_and_unit(s: &str) -> Option<(&str, &str)> {
+    let bytes = s.as_bytes();
+    if bytes.is_empty() {
+        return None;
+    }
+    let mut idx = 0;
+    if bytes[idx] == b'+' || bytes[idx] == b'-' {
+        idx += 1;
+    }
+    let mut has_digits = false;
+    while idx < bytes.len() && bytes[idx].is_ascii_digit() {
+        has_digits = true;
+        idx += 1;
+    }
+    if idx < bytes.len() && bytes[idx] == b'.' {
+        idx += 1;
+        let mut has_dec_digits = false;
+        while idx < bytes.len() && bytes[idx].is_ascii_digit() {
+            has_dec_digits = true;
+            idx += 1;
+        }
+        if !has_digits && !has_dec_digits {
+            return None;
+        }
+        has_digits = true;
+    }
+    if !has_digits {
+        return None;
+    }
+    if idx < bytes.len() && (bytes[idx] == b'e' || bytes[idx] == b'E') {
+        let exp_start = idx;
+        idx += 1;
+        if idx < bytes.len() && (bytes[idx] == b'+' || bytes[idx] == b'-') {
+            idx += 1;
+        }
+        let mut has_exp_digits = false;
+        while idx < bytes.len() && bytes[idx].is_ascii_digit() {
+            has_exp_digits = true;
+            idx += 1;
+        }
+        if !has_exp_digits {
+            idx = exp_start;
+        }
+    }
+    let num_part = &s[..idx];
+    let rest = s[idx..].trim_start();
+    let valid_unit = rest.chars().all(|c| {
+        c.is_ascii_alphanumeric()
+            || c == '_'
+            || c == '/'
+            || c == '°'
+            || c == '^'
+            || c == '%'
+            || c == '-'
+    });
+    if valid_unit {
+        Some((num_part, rest))
+    } else {
+        None
+    }
 }
 
 /// Parses range bounds string e.g. `[0.0, 100.0]`, `-20.0 to 60.0`, `18.0 .. 25.2`.
@@ -368,11 +532,13 @@ pub fn parse_numeric_with_unit(raw_val: &str) -> (Option<f64>, Option<String>, O
 /// - Returns `(Some(min), Some(max))` where `min <= max` if two valid bounds are extracted.
 /// - Returns `(None, None)` if interval syntax cannot be resolved.
 pub fn parse_range_bounds(range_text: &str) -> (Option<f64>, Option<f64>) {
-    let fmt_re = Regex::new(r"[*`\[\]\(\)]").unwrap();
-    let clean = fmt_re.replace_all(range_text, "").trim().to_string();
+    let clean: String = range_text
+        .chars()
+        .filter(|&c| c != '*' && c != '`' && c != '[' && c != ']' && c != '(' && c != ')')
+        .collect();
+    let clean = clean.trim();
 
-    let split_re = Regex::new(r"\s*(?:,|\.\.|\bto\b|:)\s*").unwrap();
-    let parts: Vec<&str> = split_re.split(&clean).collect();
+    let parts = split_range_parts(clean);
     if parts.len() >= 2 {
         let (val1, _, _) = parse_numeric_with_unit(parts[0]);
         let (val2, _, _) = parse_numeric_with_unit(parts[1]);
@@ -384,6 +550,37 @@ pub fn parse_range_bounds(range_text: &str) -> (Option<f64>, Option<f64>) {
     }
 
     (None, None)
+}
+
+fn split_range_parts(s: &str) -> Vec<&str> {
+    let mut parts = Vec::new();
+    let mut start = 0;
+    let s_bytes = s.as_bytes();
+    let mut i = 0;
+    while i < s.len() {
+        if s_bytes[i] == b',' || s_bytes[i] == b':' {
+            parts.push(s[start..i].trim());
+            i += 1;
+            start = i;
+        } else if s[i..].starts_with("..") {
+            parts.push(s[start..i].trim());
+            i += 2;
+            start = i;
+        } else if s[i..].starts_with("to")
+            && (i == 0 || s_bytes[i - 1].is_ascii_whitespace())
+            && (i + 2 == s.len() || s_bytes[i + 2].is_ascii_whitespace())
+        {
+            parts.push(s[start..i].trim());
+            i += 2;
+            start = i;
+        } else {
+            i += 1;
+        }
+    }
+    if start < s.len() {
+        parts.push(s[start..].trim());
+    }
+    parts
 }
 
 /// Extracts authoritative provenance citation from a row dictionary.
@@ -558,9 +755,6 @@ pub fn parse_markdown_tables(lines: &[&str]) -> Vec<MarkdownTable> {
     let mut units = Vec::new();
     let mut rows = Vec::new();
 
-    // Regex matching standard Markdown table delimiter row: e.g. | :--- | ---: | :---: |
-    let delim_re = Regex::new(r"^:?-+:?$").unwrap();
-
     let mut flush_table = |in_tbl: &mut bool,
                            raw_h: &mut Vec<String>,
                            norm_h: &mut Vec<String>,
@@ -594,7 +788,7 @@ pub fn parse_markdown_tables(lines: &[&str]) -> Vec<MarkdownTable> {
                 .map(|c| c.trim().to_string())
                 .collect();
 
-            let is_delimiter = !cells.is_empty() && cells.iter().all(|c| delim_re.is_match(c));
+            let is_delimiter = !cells.is_empty() && cells.iter().all(|c| is_table_delimiter_cell(c));
 
             if is_delimiter && !in_table {
                 // Header was on previous line if available
@@ -644,7 +838,7 @@ pub fn parse_markdown_tables(lines: &[&str]) -> Vec<MarkdownTable> {
                         .split('|')
                         .map(|c| c.trim().to_string())
                         .collect();
-                    if !next_cells.is_empty() && next_cells.iter().all(|c| delim_re.is_match(c)) {
+                    if !next_cells.is_empty() && next_cells.iter().all(|c| is_table_delimiter_cell(c)) {
                         flush_table(&mut in_table, &mut raw_headers, &mut norm_headers, &mut units, &mut rows);
                         raw_headers = cells.clone();
                         norm_headers = cells.iter().map(|c| normalize_col(c)).collect();
@@ -667,6 +861,16 @@ pub fn parse_markdown_tables(lines: &[&str]) -> Vec<MarkdownTable> {
 
     flush_table(&mut in_table, &mut raw_headers, &mut norm_headers, &mut units, &mut rows);
     tables
+}
+
+pub(crate) fn is_table_delimiter_cell(s: &str) -> bool {
+    let trimmed = s.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+    let without_left = trimmed.strip_prefix(':').unwrap_or(trimmed);
+    let without_colons = without_left.strip_suffix(':').unwrap_or(without_left);
+    !without_colons.is_empty() && without_colons.chars().all(|c| c == '-')
 }
 
 #[cfg(test)]

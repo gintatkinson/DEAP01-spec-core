@@ -10,7 +10,6 @@ use deap_core::workspace::{
     check_upstream_template_clean_landing_zones as core_check_upstream_template_clean_landing_zones,
     is_upstream_compiler,
 };
-use regex::Regex;
 use std::fs;
 use std::path::Path;
 use walkdir::WalkDir;
@@ -46,7 +45,32 @@ pub fn check_upstream_template_clean_landing_zones(repo_root: &Path) -> Result<(
 }
 
 /// Check 18: Upstream Blueprint Domain Cleanliness Gate.
-///
+/// Helper checking whether a file name matches forbidden upstream blueprint domain concepts.
+fn is_forbidden_blueprint_name(fname: &str) -> bool {
+    let lower = fname.to_lowercase();
+    if lower.ends_with(".sysml") {
+        return true;
+    }
+    const FORBIDDEN_PATTERNS: &[&str] = &[
+        "flightsystems",
+        "flight-systems",
+        "flight_systems",
+        "uasinfrastructure",
+        "uas-infrastructure",
+        "uas_infrastructure",
+        "frontendsystems",
+        "frontend-systems",
+        "frontend_systems",
+        "safetymodel",
+        "safety-model",
+        "safety_model",
+        "conceptpaper",
+        "concept-paper",
+        "concept_paper",
+    ];
+    FORBIDDEN_PATTERNS.iter().any(|&p| lower.contains(p))
+}
+
 /// Verifies that upstream architecture blueprints contain zero concrete domain platform
 /// concept papers or domain SysML models (e.g. *FLIGHT_SYSTEMS*, *UAS_INFRASTRUCTURE*,
 /// *FRONTEND_SYSTEMS*, *SAFETY_MODEL*.sysml). Downstream repositories are exempt.
@@ -59,15 +83,6 @@ pub fn verify_upstream_blueprint_domain_cleanliness(repo_root: &Path) -> Result<
     if !blueprints_dir.is_dir() {
         return Ok(());
     }
-
-    let forbidden_patterns = [
-        Regex::new(r"(?i)flight[-_]?systems").unwrap(),
-        Regex::new(r"(?i)uas[-_]?infrastructure").unwrap(),
-        Regex::new(r"(?i)frontend[-_]?systems").unwrap(),
-        Regex::new(r"(?i)safety[-_]?model").unwrap(),
-        Regex::new(r"(?i)\.sysml$").unwrap(),
-        Regex::new(r"(?i)concept[-_]?paper").unwrap(),
-    ];
 
     let mut violations = Vec::new();
     for entry in WalkDir::new(&blueprints_dir)
@@ -84,7 +99,7 @@ pub fn verify_upstream_blueprint_domain_cleanliness(repo_root: &Path) -> Result<
     {
         if entry.file_type().is_file() {
             let fname = entry.file_name().to_string_lossy();
-            if forbidden_patterns.iter().any(|re| re.is_match(&fname)) {
+            if is_forbidden_blueprint_name(&fname) {
                 let rel = entry
                     .path()
                     .strip_prefix(repo_root)
@@ -105,6 +120,29 @@ pub fn verify_upstream_blueprint_domain_cleanliness(repo_root: &Path) -> Result<
         );
         Err(vec![msg])
     }
+}
+
+/// Helper checking if a line is a static hardcoded parameter assignment in python tools.
+fn is_static_param_assignment(line: &str) -> bool {
+    const FORBIDDEN_KEYWORDS: &[&str] = &[
+        "GROUND_TRUTH",
+        "EXPECTED_SPECS",
+        "DOMAIN_SPECS",
+        "DOMAIN_PARAMS",
+        "SYSML_PARAMS",
+        "MANDATED_SPECS",
+        "PHYSICAL_LIMITS",
+        "HARDWARE_REGISTRY",
+    ];
+    for &kw in FORBIDDEN_KEYWORDS {
+        if let Some(rest) = line.strip_prefix(kw) {
+            let after_ws = rest.trim_start();
+            if after_ws.starts_with('=') {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 /// Check 19: Domain-Agnostic AST Cleanliness & Closed-Grammar Metamodel Gate.
@@ -134,11 +172,6 @@ pub fn check_domain_agnostic_ast_cleanliness(repo_root: &Path) -> Result<(), Vec
             .join("core"),
     ];
 
-    let static_param_re = Regex::new(
-        r#"^(?:GROUND_TRUTH|EXPECTED_SPECS|DOMAIN_SPECS|DOMAIN_PARAMS|SYSML_PARAMS|MANDATED_SPECS|PHYSICAL_LIMITS|HARDWARE_REGISTRY)\s*="#,
-    )
-    .unwrap();
-
     let mut violations = Vec::new();
     for dir in &scan_dirs {
         if !dir.is_dir() {
@@ -163,7 +196,7 @@ pub fn check_domain_agnostic_ast_cleanliness(repo_root: &Path) -> Result<(), Vec
                     if let Ok(content) = fs::read_to_string(path) {
                         for (idx, line) in content.lines().enumerate() {
                             let trimmed = line.trim();
-                            if static_param_re.is_match(trimmed) {
+                            if is_static_param_assignment(trimmed) {
                                 let rel = path
                                     .strip_prefix(repo_root)
                                     .unwrap_or(path)
@@ -228,6 +261,211 @@ pub fn check_zero_shell_scripts(repo_root: &Path) -> Result<(), Vec<String>> {
     } else {
         violations.sort();
         Err(violations)
+    }
+}
+
+/// Check 33: Zero Python Scripts Invariant
+///
+/// Recursively walks the repository filesystem from root using WalkDir,
+/// skipping `target` and `.git` directories.
+/// Fails closed if ANY file with extension `.py` (case-insensitive) is detected.
+pub fn check_zero_python_scripts(repo_root: &Path) -> Result<(), Vec<String>> {
+    let mut violations = Vec::new();
+
+    for entry in WalkDir::new(repo_root)
+        .into_iter()
+        .filter_entry(|e| {
+            if e.file_type().is_dir() {
+                let name = e.file_name().to_string_lossy();
+                name != "target" && name != ".git"
+            } else {
+                true
+            }
+        })
+        .filter_map(|e| e.ok())
+    {
+        if entry.file_type().is_file() {
+            let fname = entry.file_name().to_string_lossy();
+            let is_py = fname.to_ascii_lowercase().ends_with(".py")
+                || entry
+                    .path()
+                    .extension()
+                    .map(|ext| ext.to_string_lossy().eq_ignore_ascii_case("py"))
+                    .unwrap_or(false);
+            if is_py {
+                let rel = entry
+                    .path()
+                    .strip_prefix(repo_root)
+                    .unwrap_or(entry.path())
+                    .display()
+                    .to_string();
+                violations.push(rel);
+            }
+        }
+    }
+
+    if violations.is_empty() {
+        Ok(())
+    } else {
+        violations.sort();
+        Err(violations)
+    }
+}
+
+/// Check 34: Zero Regex Invariant
+///
+/// Scans all `.rs` and `Cargo.toml` files in `crates/` and root `Cargo.toml`.
+/// Fails closed if any line contains forbidden pattern tokens
+/// or Cargo.toml dependency on the regex crate.
+///
+/// Note: To prevent self-triggering false positives on scanner source code,
+/// forbidden tokens are dynamically synthesized without raw literal patterns.
+pub fn check_zero_regex(repo_root: &Path) -> Result<(), Vec<String>> {
+    let mut violations = Vec::new();
+
+    // Dynamically assemble forbidden pattern needles to ensure scanner source
+    // does not match itself as a false positive.
+    let pat_regex_colons = ["Reg", "ex::"].concat();
+    let pat_inline_regex = ["reg", "ex::"].concat();
+    let pat_use_bare = ["use", " ", "reg", "ex;"].concat();
+    let pat_extern = ["extern", " crate ", "reg", "ex;"].concat();
+    let crate_needle = ["reg", "ex"].concat();
+
+    // 1. Check root Cargo.toml if it exists
+    let root_cargo = repo_root.join("Cargo.toml");
+    if root_cargo.is_file() {
+        scan_cargo_toml_file(&root_cargo, repo_root, &crate_needle, &mut violations);
+    }
+
+    // 2. Scan crates/ directory for all .rs and Cargo.toml files
+    let crates_dir = repo_root.join("crates");
+    if crates_dir.is_dir() {
+        for entry in WalkDir::new(&crates_dir)
+            .into_iter()
+            .filter_entry(|e| {
+                if e.file_type().is_dir() {
+                    let name = e.file_name().to_string_lossy();
+                    name != "target" && name != ".git"
+                } else {
+                    true
+                }
+            })
+            .filter_map(|e| e.ok())
+        {
+            if entry.file_type().is_file() {
+                let path = entry.path();
+                let fname = entry.file_name().to_string_lossy();
+                if fname == "Cargo.toml" {
+                    scan_cargo_toml_file(path, repo_root, &crate_needle, &mut violations);
+                } else if path.extension().map(|ext| ext == "rs").unwrap_or(false) {
+                    scan_rs_file(
+                        path,
+                        repo_root,
+                        &pat_regex_colons,
+                        &pat_inline_regex,
+                        &pat_use_bare,
+                        &pat_extern,
+                        &mut violations,
+                    );
+                }
+            }
+        }
+    }
+
+    if violations.is_empty() {
+        Ok(())
+    } else {
+        violations.sort();
+        Err(violations)
+    }
+}
+
+fn scan_cargo_toml_file(
+    path: &Path,
+    repo_root: &Path,
+    crate_needle: &str,
+    violations: &mut Vec<String>,
+) {
+    if let Ok(content) = fs::read_to_string(path) {
+        let rel = path
+            .strip_prefix(repo_root)
+            .unwrap_or(path)
+            .display()
+            .to_string();
+
+        for (idx, line) in content.lines().enumerate() {
+            let code = if let Some((before, _)) = line.split_once('#') {
+                before
+            } else {
+                line
+            };
+            let trimmed = code.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+
+            let mut is_dep = false;
+            if let Some((dep_key, _)) = trimmed.split_once('=') {
+                let key = dep_key.trim().trim_matches('"').trim_matches('\'');
+                if key == crate_needle || key.starts_with(&format!("{crate_needle}.")) {
+                    is_dep = true;
+                }
+            } else if trimmed.starts_with('[') && trimmed.ends_with(']') {
+                let section = trimmed[1..trimmed.len() - 1].trim();
+                if section
+                    .split('.')
+                    .any(|part| part.trim().trim_matches('"').trim_matches('\'') == crate_needle)
+                {
+                    is_dep = true;
+                }
+            } else if trimmed.contains(&format!("\"{crate_needle}\""))
+                || trimmed.contains(&format!("'{crate_needle}'"))
+            {
+                is_dep = true;
+            }
+
+            if is_dep {
+                violations.push(format!("{}:{}: {}", rel, idx + 1, line.trim()));
+            }
+        }
+    }
+}
+
+fn scan_rs_file(
+    path: &Path,
+    repo_root: &Path,
+    pat_regex_colons: &str,
+    pat_inline_regex: &str,
+    pat_use_bare: &str,
+    pat_extern: &str,
+    violations: &mut Vec<String>,
+) {
+    if let Ok(content) = fs::read_to_string(path) {
+        let rel = path
+            .strip_prefix(repo_root)
+            .unwrap_or(path)
+            .display()
+            .to_string();
+
+        for (idx, line) in content.lines().enumerate() {
+            let code = if let Some((before, _)) = line.split_once("//") {
+                before
+            } else {
+                line
+            };
+            let trimmed = code.trim();
+            if trimmed.is_empty() || trimmed.starts_with("/*") || trimmed.starts_with('*') {
+                continue;
+            }
+
+            if trimmed.contains(pat_regex_colons)
+                || trimmed.contains(pat_inline_regex)
+                || trimmed.contains(pat_use_bare)
+                || trimmed.contains(pat_extern)
+            {
+                violations.push(format!("{}:{}: {}", rel, idx + 1, line.trim()));
+            }
+        }
     }
 }
 
@@ -303,5 +541,77 @@ mod tests {
         writeln!(f, "GROUND_TRUTH = {{'speed': 100}}").unwrap();
 
         assert!(check_domain_agnostic_ast_cleanliness(&tmp.path).is_err());
+    }
+
+    #[test]
+    fn test_check_33_zero_python_clean() {
+        let tmp = TempDir::new("c33_clean");
+        let rs_file = tmp.path.join("main.rs");
+        File::create(&rs_file).unwrap();
+        assert!(check_zero_python_scripts(&tmp.path).is_ok());
+    }
+
+    #[test]
+    fn test_check_33_zero_python_violation() {
+        let tmp = TempDir::new("c33_violation");
+        let py_file = tmp.path.join("script.py");
+        File::create(&py_file).unwrap();
+        let res = check_zero_python_scripts(&tmp.path);
+        assert!(res.is_err());
+        let errs = res.unwrap_err();
+        assert_eq!(errs.len(), 1);
+        assert_eq!(errs[0], "script.py");
+    }
+
+    #[test]
+    fn test_check_34_zero_regex_clean() {
+        let tmp = TempDir::new("c34_clean");
+        let crates_dir = tmp.path.join("crates").join("sample").join("src");
+        fs::create_dir_all(&crates_dir).unwrap();
+        let rs_file = crates_dir.join("lib.rs");
+        let mut f = File::create(&rs_file).unwrap();
+        writeln!(f, "pub fn add(a: i32, b: i32) -> i32 {{ a + b }}").unwrap();
+
+        let cargo_file = tmp.path.join("crates").join("sample").join("Cargo.toml");
+        let mut fc = File::create(&cargo_file).unwrap();
+        writeln!(fc, "[package]\nname = \"sample\"\nversion = \"0.1.0\"").unwrap();
+
+        assert!(check_zero_regex(&tmp.path).is_ok());
+    }
+
+    #[test]
+    fn test_check_34_zero_regex_violation_rs() {
+        let tmp = TempDir::new("c34_viol_rs");
+        let crates_dir = tmp.path.join("crates").join("sample").join("src");
+        fs::create_dir_all(&crates_dir).unwrap();
+        let rs_file = crates_dir.join("lib.rs");
+        let mut f = File::create(&rs_file).unwrap();
+        // Construct forbidden pattern dynamically to avoid literal in this file
+        let pat = ["Reg", "ex::"].concat();
+        writeln!(f, "let _ = {}new(\"\");", pat).unwrap();
+
+        let res = check_zero_regex(&tmp.path);
+        assert!(res.is_err());
+        let errs = res.unwrap_err();
+        assert_eq!(errs.len(), 1);
+        assert!(errs[0].contains("crates/sample/src/lib.rs:1:"));
+    }
+
+    #[test]
+    fn test_check_34_zero_regex_violation_cargo() {
+        let tmp = TempDir::new("c34_viol_cargo");
+        let crates_dir = tmp.path.join("crates").join("sample");
+        fs::create_dir_all(&crates_dir).unwrap();
+        let cargo_file = crates_dir.join("Cargo.toml");
+        let mut fc = File::create(&cargo_file).unwrap();
+        // Construct forbidden dependency dynamically
+        let dep = ["reg", "ex"].concat();
+        writeln!(fc, "[dependencies]\n{} = \"1.10\"", dep).unwrap();
+
+        let res = check_zero_regex(&tmp.path);
+        assert!(res.is_err());
+        let errs = res.unwrap_err();
+        assert_eq!(errs.len(), 1);
+        assert!(errs[0].contains("crates/sample/Cargo.toml:2:"));
     }
 }

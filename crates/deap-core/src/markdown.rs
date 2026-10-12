@@ -1,6 +1,5 @@
 //! Markdown token scanner, KaTeX, and math block parser.
 
-use regex::Regex;
 
 /// Allowed LaTeX environments where bare `&` alignment operators are permitted.
 pub const ALLOWED_ALIGNMENT_ENVS: &[&str] = &[
@@ -216,10 +215,8 @@ pub fn check_latex_katex_syntax(content: &str, file_rel_path: &str) -> Vec<Strin
     }
 
     // 2. Check balanced \begin{aligned} and \end{aligned} globally in the file
-    let begin_aligned_re = Regex::new(r"\\begin\{aligned\}").unwrap();
-    let end_aligned_re = Regex::new(r"\\end\{aligned\}").unwrap();
-    let num_begin_aligned_all = begin_aligned_re.find_iter(&cleaned).count();
-    let num_end_aligned_all = end_aligned_re.find_iter(&cleaned).count();
+    let num_begin_aligned_all = cleaned.matches(r"\begin{aligned}").count();
+    let num_end_aligned_all = cleaned.matches(r"\end{aligned}").count();
     if num_begin_aligned_all != num_end_aligned_all {
         errors.push(format!(
             "Unbalanced \\begin{{aligned}} ({}) and \\end{{aligned}} ({}) pairs in {}.",
@@ -227,15 +224,12 @@ pub fn check_latex_katex_syntax(content: &str, file_rel_path: &str) -> Vec<Strin
         ));
     }
 
-    let align_forbidden_re = Regex::new(r"\\begin\{align\*?\}").unwrap();
-    let token_pattern = Regex::new(r"\\begin\{([a-zA-Z*]+)\}|\\end\{([a-zA-Z*]+)\}|\\&|&").unwrap();
-
     // 3. Validate each display math block
     for i in (1..parts.len()).step_by(2) {
         let block = parts[i];
 
         // Detect top-level \begin{align} or \begin{align*}
-        if align_forbidden_re.is_match(block) {
+        if block.contains(r"\begin{align}") || block.contains(r"\begin{align*}") {
             errors.push(format!(
                 "Forbidden \\begin{{align}} or \\begin{{align*}} found in display math block in {}. In markdown KaTeX, \\begin{{aligned}} must be used instead.",
                 file_rel_path
@@ -243,8 +237,8 @@ pub fn check_latex_katex_syntax(content: &str, file_rel_path: &str) -> Vec<Strin
         }
 
         // Validate balanced \begin{aligned} and \end{aligned} within block
-        let num_begin = begin_aligned_re.find_iter(block).count();
-        let num_end = end_aligned_re.find_iter(block).count();
+        let num_begin = block.matches(r"\begin{aligned}").count();
+        let num_end = block.matches(r"\end{aligned}").count();
         if num_begin != num_end {
             errors.push(format!(
                 "Unbalanced \\begin{{aligned}} ({}) and \\end{{aligned}} ({}) in math block in {}.",
@@ -254,31 +248,53 @@ pub fn check_latex_katex_syntax(content: &str, file_rel_path: &str) -> Vec<Strin
 
         // Detect bare alignment operator & outside allowed alignment environments
         let mut env_stack: Vec<String> = Vec::new();
-        for m in token_pattern.find_iter(block) {
-            let token = m.as_str();
-            if token.starts_with(r"\begin{") {
-                let name = &token[7..token.len() - 1];
-                env_stack.push(name.to_string());
-            } else if token.starts_with(r"\end{") {
-                let end_name = &token[5..token.len() - 1];
-                if let Some(pos) = env_stack.iter().rposition(|x| x == end_name) {
-                    env_stack.truncate(pos);
+        let mut idx = 0;
+        let bytes = block.as_bytes();
+        while idx < bytes.len() {
+            if bytes[idx] == b'\\' {
+                if block[idx..].starts_with(r"\begin{") {
+                    let after = &block[idx + 7..];
+                    if let Some(close_pos) = after.find('}') {
+                        let env_name = &after[..close_pos];
+                        if !env_name.is_empty() && env_name.chars().all(|c| c.is_ascii_alphabetic() || c == '*') {
+                            env_stack.push(env_name.to_string());
+                            idx += 7 + close_pos + 1;
+                            continue;
+                        }
+                    }
+                } else if block[idx..].starts_with(r"\end{") {
+                    let after = &block[idx + 5..];
+                    if let Some(close_pos) = after.find('}') {
+                        let env_name = &after[..close_pos];
+                        if !env_name.is_empty() && env_name.chars().all(|c| c.is_ascii_alphabetic() || c == '*') {
+                            if let Some(pos) = env_stack.iter().rposition(|x| x == env_name) {
+                                env_stack.truncate(pos);
+                            }
+                            idx += 5 + close_pos + 1;
+                            continue;
+                        }
+                    }
+                } else if block[idx..].starts_with(r"\&") {
+                    idx += 2;
+                    continue;
                 }
-            } else if token == r"\&" {
-                continue;
-            } else if token == "&" {
+                idx += 1;
+            } else if bytes[idx] == b'&' {
                 let inside_allowed = env_stack
                     .iter()
                     .any(|env| ALLOWED_ALIGNMENT_ENVS.contains(&env.as_str()));
                 if !inside_allowed {
-                    let start = m.start().saturating_sub(20);
-                    let end = (m.end() + 20).min(block.len());
+                    let start = idx.saturating_sub(20);
+                    let end = (idx + 1 + 20).min(block.len());
                     let snippet = block[start..end].trim().replace('\n', " ");
                     errors.push(format!(
                         "Bare alignment operator '&' outside alignment environment in {}: \"...{}...\"",
                         file_rel_path, snippet
                     ));
                 }
+                idx += 1;
+            } else {
+                idx += 1;
             }
         }
     }
@@ -289,8 +305,24 @@ pub fn check_latex_katex_syntax(content: &str, file_rel_path: &str) -> Vec<Strin
 /// Helper to validate angle bracket escaping on a single Mermaid line.
 fn validate_mermaid_angle_bracket_escaping(line: &str) -> Option<char> {
     let mut clean_line = line.trim().to_string();
-    let stereotype_re = Regex::new(r"<<[a-zA-Z0-9_\-]+>>").unwrap();
-    clean_line = stereotype_re.replace_all(&clean_line, "").to_string();
+    // Strip stereotypes: <<[a-zA-Z0-9_\-]+>>
+    let mut stripped = String::with_capacity(clean_line.len());
+    let mut idx = 0;
+    while idx < clean_line.len() {
+        if clean_line[idx..].starts_with("<<") {
+            if let Some(close_pos) = clean_line[idx + 2..].find(">>") {
+                let inner = &clean_line[idx + 2..idx + 2 + close_pos];
+                if !inner.is_empty() && inner.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+                    idx += 2 + close_pos + 2;
+                    continue;
+                }
+            }
+        }
+        let ch = clean_line[idx..].chars().next().unwrap();
+        stripped.push(ch);
+        idx += ch.len_utf8();
+    }
+    clean_line = stripped;
 
     // Strip longest arrows first to prevent partial replacements (e.g. "-->" matching inside "<-->")
     let arrows = [

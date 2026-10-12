@@ -1,4 +1,4 @@
-//! Baseline verification runner orchestrating checks 10 through 32 and platform gates.
+//! Baseline verification runner orchestrating checks 10 through 34 and platform gates.
 
 use crate::checks::*;
 use crate::spec_audit::{run_spec_audit, SpecAuditOptions};
@@ -608,6 +608,28 @@ pub fn run(options: &BaselineOptions) -> Result<(), ()> {
         return Err(());
     }
     println!("Success: Check 32 verified (Zero Shell Scripts Invariant passed -- zero .sh files exist on disk).");
+
+    // Check 33: Zero Python Scripts Invariant
+    if let Err(errs) = check_zero_python_scripts(&repo_root) {
+        eprintln!("ERROR: Check 33 failed (Zero Python Scripts Invariant violated -- .py files found on disk):");
+        for e in &errs {
+            eprintln!("  - {}", e);
+        }
+        write_defect_dossier(&repo_root, "Check 33 (Zero Python Scripts Invariant)", &errs);
+        return Err(());
+    }
+    println!("Success: Check 33 verified (Zero Python Scripts Invariant passed -- zero .py files exist on disk).");
+
+    // Check 34: Zero Regex Invariant
+    if let Err(errs) = check_zero_regex(&repo_root) {
+        eprintln!("ERROR: Check 34 failed (Zero Regex Invariant violated -- regex usage found across crates):");
+        for e in &errs {
+            eprintln!("  - {}", e);
+        }
+        write_defect_dossier(&repo_root, "Check 34 (Zero Regex Invariant)", &errs);
+        return Err(());
+    }
+    println!("Success: Check 34 verified (Zero Regex Invariant passed -- zero regex occurrences exist across crates).");
 
     // Platform Checks
     let dest = &options.destination;

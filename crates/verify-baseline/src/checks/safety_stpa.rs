@@ -2,7 +2,6 @@
 
 use deap_core::rules::EXCLUDED_DIRS;
 use deap_core::workspace::is_upstream_compiler;
-use regex::Regex;
 use std::fs;
 use std::path::Path;
 use walkdir::WalkDir;
@@ -37,6 +36,16 @@ pub struct FmecaRow {
     pub basis: Option<String>,
 }
 
+/// Helper checking if a markdown table row is an FMECA header.
+fn is_fmeca_header(line: &str) -> bool {
+    let lower = line.to_lowercase();
+    if lower.contains("fmeca") || lower.contains("failure mode") {
+        return true;
+    }
+    let words: Vec<&str> = lower.split_whitespace().collect();
+    words.windows(2).any(|w| w[0].contains("failure") && w[1].contains("mode"))
+}
+
 /// Parse FMECA markdown tables from content.
 pub fn parse_fmeca_table(content: &str) -> FmecaData {
     let mut data = FmecaData::default();
@@ -44,11 +53,9 @@ pub fn parse_fmeca_table(content: &str) -> FmecaData {
     let n = lines.len();
     let mut i = 0;
 
-    let fmeca_header_re = Regex::new(r"(?i)failure\s+mode|fmeca").unwrap();
-
     while i < n {
         let line = lines[i].trim();
-        if line.starts_with('|') && fmeca_header_re.is_match(line) {
+        if line.starts_with('|') && is_fmeca_header(line) {
             let headers: Vec<String> = line
                 .split('|')
                 .filter(|s| !s.trim().is_empty())
@@ -171,14 +178,75 @@ pub fn parse_fmeca_table(content: &str) -> FmecaData {
     data
 }
 
+const INTERFACE_KEYWORDS: &[&str] = &[
+    "interface", "port", "bus", "signal", "protocol", "packet", "message", "frame",
+    "channel", "link", "crc", "timeout", "io", "input", "output", "data",
+    "transceiver", "receiver", "uplink", "downlink", "telemetry", "transient", "transients",
+    "γ", "\\gamma", "gamma",
+];
+
+const STATE_KEYWORDS: &[&str] = &[
+    "state", "mode", "transition", "deadlock", "latch", "phase", "statechart",
+    "fsm", "sync", "synchronization", "desync", "drift", "stuck", "uninitialized",
+    "freeze", "lockup", "trip", "abort", "corruption", "disagreement",
+    "φ", "\\phi", "phi",
+];
+
+const ACTION_KEYWORDS: &[&str] = &[
+    "action", "command", "execution", "operation", "control", "timing", "deadline",
+    "compute", "calculation", "process", "logic", "omission", "commission", "latency",
+    "jitter", "delay", "rate", "clamping", "limiter", "saturation", "step",
+    "overshoot", "schedule", "task", "authority", "miss",
+    "ω", "\\omega", "omega",
+];
+
+const RESOURCE_KEYWORDS: &[&str] = &[
+    "resource", "memory", "cpu", "buffer", "power", "energy", "battery", "thermal",
+    "heat", "overheat", "overload", "bandwidth", "storage", "capacity", "stack",
+    "heap", "overflow", "underflow", "brownout", "voltage", "current", "load",
+    "fault", "short", "sag", "circuit", "crowbar", "degradation", "flash", "ram",
+    "supply", "undervoltage", "overvoltage", "seizure", "winding", "windings",
+    "wiper", "hardware", "bearing", "dielectric", "squib", "fuse", "fusing",
+    "ψ", "\\psi", "psi",
+];
+
+fn matches_dimension_lower(lower: &str, keywords: &[&str]) -> bool {
+    for &kw in keywords {
+        let kw_len = kw.len();
+        let mut start = 0;
+        while let Some(pos) = lower[start..].find(kw) {
+            let actual_pos = start + pos;
+            let end_pos = actual_pos + kw_len;
+
+            let prev_ok = if actual_pos == 0 {
+                true
+            } else {
+                let prev_char = lower[..actual_pos].chars().next_back().unwrap();
+                !prev_char.is_alphanumeric() && prev_char != '_'
+            };
+
+            let next_ok = if end_pos == lower.len() {
+                true
+            } else {
+                let next_char = lower[end_pos..].chars().next().unwrap();
+                !next_char.is_alphanumeric() && next_char != '_'
+            };
+
+            if prev_ok && next_ok {
+                return true;
+            }
+            start = actual_pos + 1;
+            while start < lower.len() && !lower.is_char_boundary(start) {
+                start += 1;
+            }
+        }
+    }
+    false
+}
+
 /// Verify that failure modes across the FMECA table span the 4 universal failure dimensions:
 /// Interface (Γ), State (Φ), Action (Ω), Resource (Ψ).
 pub fn check_failure_dimension_coverage(content: &str, fmeca: &FmecaData) -> Vec<String> {
-    let interface_re = Regex::new(r"(?i)\b(?:Interface|Port|Bus|Signal|Protocol|Packet|Message|Frame|Channel|Link|CRC|Timeout|IO|Input|Output|Data|Transceiver|Receiver|Uplink|Downlink|Telemetry|Transients?|Γ|\\Gamma)\b").unwrap();
-    let state_re = Regex::new(r"(?i)\b(?:State|Mode|Transition|Deadlock|Latch|Phase|Statechart|FSM|Sync|Synchronization|Desync|Drift|Stuck|Uninitialized|Freeze|Lockup|Trip|Abort|Corruption|Disagreement|Φ|\\Phi)\b").unwrap();
-    let action_re = Regex::new(r"(?i)\b(?:Action|Command|Execution|Operation|Control|Timing|Deadline|Compute|Calculation|Process|Logic|Omission|Commission|Latency|Jitter|Delay|Rate|Clamping|Limiter|Saturation|Step|Overshoot|Schedule|Task|Authority|Miss|Ω|\\Omega)\b").unwrap();
-    let resource_re = Regex::new(r"(?i)\b(?:Resource|Memory|CPU|Buffer|Power|Energy|Battery|Thermal|Heat|Overheat|Overload|Bandwidth|Storage|Capacity|Stack|Heap|Overflow|Underflow|Brownout|Voltage|Current|Load|Fault|Short|Sag|Circuit|Crowbar|Degradation|Flash|RAM|Supply|Undervoltage|Overvoltage|Seizure|Windings?|Wiper|Hardware|Bearing|Dielectric|Squib|Fuse|Fusing|Ψ|\\Psi)\b").unwrap();
-
     let mut found_interface = false;
     let mut found_state = false;
     let mut found_action = false;
@@ -187,31 +255,33 @@ pub fn check_failure_dimension_coverage(content: &str, fmeca: &FmecaData) -> Vec
     // Check rows first
     for row in &fmeca.rows {
         let combined = format!("{} {} {}", row.failure_mode, row.component, row.basis.as_deref().unwrap_or(""));
-        if interface_re.is_match(&combined) {
+        let combined_lower = combined.to_lowercase();
+        if !found_interface && matches_dimension_lower(&combined_lower, INTERFACE_KEYWORDS) {
             found_interface = true;
         }
-        if state_re.is_match(&combined) {
+        if !found_state && matches_dimension_lower(&combined_lower, STATE_KEYWORDS) {
             found_state = true;
         }
-        if action_re.is_match(&combined) {
+        if !found_action && matches_dimension_lower(&combined_lower, ACTION_KEYWORDS) {
             found_action = true;
         }
-        if resource_re.is_match(&combined) {
+        if !found_resource && matches_dimension_lower(&combined_lower, RESOURCE_KEYWORDS) {
             found_resource = true;
         }
     }
 
     // Fallback: check whole content if FMECA is described in text
-    if !found_interface && interface_re.is_match(content) {
+    let content_lower = content.to_lowercase();
+    if !found_interface && matches_dimension_lower(&content_lower, INTERFACE_KEYWORDS) {
         found_interface = true;
     }
-    if !found_state && state_re.is_match(content) {
+    if !found_state && matches_dimension_lower(&content_lower, STATE_KEYWORDS) {
         found_state = true;
     }
-    if !found_action && action_re.is_match(content) {
+    if !found_action && matches_dimension_lower(&content_lower, ACTION_KEYWORDS) {
         found_action = true;
     }
-    if !found_resource && resource_re.is_match(content) {
+    if !found_resource && matches_dimension_lower(&content_lower, RESOURCE_KEYWORDS) {
         found_resource = true;
     }
 
@@ -234,36 +304,138 @@ pub fn check_failure_dimension_coverage(content: &str, fmeca: &FmecaData) -> Vec
 /// Verify that all 4 STPA UCA guide words / categories are covered in content.
 pub fn check_uca_categories(content: &str) -> Vec<String> {
     let mut missing = Vec::new();
+    let lower = content.to_lowercase();
 
     // 1. Not providing causes hazard
-    let re_not_providing = Regex::new(r"(?i)\b(?:not\s+provid(?:ing|ed)|omission)\b").unwrap();
-    if !re_not_providing.is_match(content) {
+    let has_not_providing = lower.contains("not providing")
+        || lower.contains("not provided")
+        || lower.contains("omission")
+        || lower
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .windows(2)
+            .any(|w| w[0] == "not" && (w[1].starts_with("provid") || w[1] == "providing" || w[1] == "provided"));
+    if !has_not_providing {
         missing.push("1. Not providing causes hazard".to_string());
     }
 
     // 2. Providing causes hazard
-    let re_providing_explicit = Regex::new(r"(?i)\b(?:providing\s+(?:causes|incorrectly)|commission)\b").unwrap();
-    let re_providing_any = Regex::new(r"(?i)\bproviding\b").unwrap();
-    let re_providing_too = Regex::new(r"(?i)\bproviding\s+too\b").unwrap();
-    let has_providing = re_providing_explicit.is_match(content)
-        || (re_providing_any.is_match(content) && !re_providing_too.is_match(content));
+    let has_providing_explicit = lower.contains("commission")
+        || lower.contains("providing causes")
+        || lower.contains("providing incorrectly");
+    let has_providing = if has_providing_explicit {
+        true
+    } else {
+        let mut found = false;
+        let mut start = 0;
+        while let Some(pos) = lower[start..].find("providing") {
+            let actual_pos = start + pos;
+            let end_pos = actual_pos + "providing".len();
+
+            let prev_ok = actual_pos == 0 || {
+                let prev_char = lower[..actual_pos].chars().next_back().unwrap();
+                !prev_char.is_alphanumeric() && prev_char != '_'
+            };
+            let next_ok = end_pos == lower.len() || {
+                let next_char = lower[end_pos..].chars().next().unwrap();
+                !next_char.is_alphanumeric() && next_char != '_'
+            };
+
+            if prev_ok && next_ok {
+                let after = lower[end_pos..].trim_start();
+                let is_providing_too = after.starts_with("too") && (after.len() == 3 || {
+                    let after_too = after["too".len()..].chars().next().unwrap();
+                    !after_too.is_alphanumeric() && after_too != '_'
+                });
+                if !is_providing_too {
+                    found = true;
+                    break;
+                }
+            }
+            start = actual_pos + 1;
+            while start < lower.len() && !lower.is_char_boundary(start) {
+                start += 1;
+            }
+        }
+        found
+    };
     if !has_providing {
         missing.push("2. Providing causes hazard".to_string());
     }
 
     // 3. Providing too early, too late, or out of order
-    let re_timing = Regex::new(r"(?i)\b(?:too\s+early|too\s+late|out\s+of\s+order|timing|early/late)\b").unwrap();
-    if !re_timing.is_match(content) {
+    let has_timing = lower.contains("too early")
+        || lower.contains("too late")
+        || lower.contains("out of order")
+        || lower.contains("timing")
+        || lower.contains("early/late");
+    if !has_timing {
         missing.push("3. Providing too early, too late, or out of order".to_string());
     }
 
     // 4. Stopped too soon or applied too long
-    let re_duration = Regex::new(r"(?i)\b(?:stopped\s+too\s+soon|applied\s+too\s+long|duration|stopped\s+early)\b").unwrap();
-    if !re_duration.is_match(content) {
+    let has_duration = lower.contains("stopped too soon")
+        || lower.contains("applied too long")
+        || lower.contains("duration")
+        || lower.contains("stopped early");
+    if !has_duration {
         missing.push("4. Stopped too soon or applied too long".to_string());
     }
 
     missing
+}
+
+/// Helper checking whether text contains an STPA identifier with prefix, e.g. "l-", "h-", "ls-", "sc-", "uca-".
+/// Matches "L-\d+", "$L-\d+", etc.
+fn has_stpa_id(lower: &str, prefix: &str) -> bool {
+    // Fast path: scan word tokens
+    for raw_token in lower.split_whitespace() {
+        let token = raw_token.trim_matches(|c: char| !c.is_alphanumeric() && c != '-' && c != '$');
+        let clean = token.strip_prefix('$').unwrap_or(token);
+        if let Some(rest) = clean.strip_prefix(prefix) {
+            let digits = rest.trim_end_matches(|c: char| !c.is_ascii_digit());
+            if !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit()) {
+                return true;
+            }
+        }
+    }
+    // Substring boundary fallback
+    let mut start = 0;
+    while let Some(pos) = lower[start..].find(prefix) {
+        let actual_pos = start + pos;
+        let prev_ok = if actual_pos == 0 {
+            true
+        } else {
+            let prev_char = lower[..actual_pos].chars().next_back().unwrap();
+            !prev_char.is_alphanumeric() && prev_char != '_'
+        };
+        let after_prefix = &lower[actual_pos + prefix.len()..];
+        let mut digits_count = 0;
+        for ch in after_prefix.chars() {
+            if ch.is_ascii_digit() {
+                digits_count += 1;
+            } else {
+                break;
+            }
+        }
+        if prev_ok && digits_count > 0 {
+            let after_digits = &after_prefix[digits_count..];
+            let next_ok = if after_digits.is_empty() {
+                true
+            } else {
+                let next_char = after_digits.chars().next().unwrap();
+                !next_char.is_alphanumeric() && next_char != '_'
+            };
+            if next_ok {
+                return true;
+            }
+        }
+        start = actual_pos + prefix.len();
+        while start < lower.len() && !lower.is_char_boundary(start) {
+            start += 1;
+        }
+    }
+    false
 }
 
 /// Check 17: Safety Integrity Quality Gate and Regulatory Objectives Completeness Verification.
@@ -370,34 +542,35 @@ pub fn check_safety_integrity(
     }
 
     let mut errors = Vec::new();
+    let combined_lower = combined_content.to_lowercase();
 
     // Pillar 1: System Losses (L-1..N)
-    let re_loss = Regex::new(r"(?i)loss(?:es)?").unwrap();
-    let re_l_id = Regex::new(r"(?i)\bL-\d+\b|\$L-\d+").unwrap();
-    if !(re_loss.is_match(&combined_content) && re_l_id.is_match(&combined_content)) {
+    let has_loss = combined_lower.contains("loss") || combined_lower.contains("losses");
+    let has_l_id = has_stpa_id(&combined_lower, "l-");
+    if !(has_loss && has_l_id) {
         errors.push("Pillar 1 violation: Missing System Losses ($L-1..N$) identification.".to_string());
     }
 
     // Pillar 2: System Hazards (H-1..N)
-    let re_hazard = Regex::new(r"(?i)hazard(?:s)?").unwrap();
-    let re_h_id = Regex::new(r"(?i)\bH-\d+\b|\$H-\d+").unwrap();
-    if !(re_hazard.is_match(&combined_content) && re_h_id.is_match(&combined_content)) {
+    let has_hazard = combined_lower.contains("hazard") || combined_lower.contains("hazards");
+    let has_h_id = has_stpa_id(&combined_lower, "h-");
+    if !(has_hazard && has_h_id) {
         errors.push("Pillar 2 violation: Missing System Hazards ($H-1..N$) identification.".to_string());
     }
 
     // Pillar 3: Control Structure Topology
-    let re_control_struct = Regex::new(r"(?i)control\s+structure").unwrap();
-    let re_controller = Regex::new(r"(?i)controller").unwrap();
-    let re_actuator = Regex::new(r"(?i)actuator").unwrap();
-    if !(re_control_struct.is_match(&combined_content)
-        || (re_controller.is_match(&combined_content) && re_actuator.is_match(&combined_content)))
-    {
+    let has_control_struct = combined_lower.contains("control structure");
+    let has_controller = combined_lower.contains("controller");
+    let has_actuator = combined_lower.contains("actuator");
+    if !(has_control_struct || (has_controller && has_actuator)) {
         errors.push("Pillar 3 violation: Missing Hierarchical Control Structure Topology.".to_string());
     }
 
     // Pillar 4: Unsafe Control Actions (UCA-1..N)
-    let re_uca = Regex::new(r"(?i)unsafe\s+control\s+actions?|\bUCA-\d+\b").unwrap();
-    if !re_uca.is_match(&combined_content) {
+    let has_uca_kw = combined_lower.contains("unsafe control action")
+        || combined_lower.contains("unsafe control actions");
+    let has_uca_id = has_stpa_id(&combined_lower, "uca-");
+    if !(has_uca_kw || has_uca_id) {
         errors.push("Pillar 4 violation: Missing Unsafe Control Actions ($UCA-1..N$).".to_string());
     }
     let missing_uca_cats = check_uca_categories(&combined_content);
@@ -409,22 +582,26 @@ pub fn check_safety_integrity(
     }
 
     // Pillar 5: Loss Scenarios (LS-1..N)
-    let re_ls = Regex::new(r"(?i)loss\s+scenarios?|causal\s+scenarios?").unwrap();
-    let re_ls_id = Regex::new(r"(?i)\bLS-\d+\b|\$LS-\d+").unwrap();
-    if !(re_ls.is_match(&combined_content) && re_ls_id.is_match(&combined_content)) {
+    let has_ls_kw = combined_lower.contains("loss scenario")
+        || combined_lower.contains("loss scenarios")
+        || combined_lower.contains("causal scenario")
+        || combined_lower.contains("causal scenarios");
+    let has_ls_id = has_stpa_id(&combined_lower, "ls-");
+    if !(has_ls_kw && has_ls_id) {
         errors.push("Pillar 5 violation: Missing Loss Scenarios ($LS-1..N$) & Causal Factors.".to_string());
     }
 
     // Pillar 6: Formal Safety Constraints (SC-1..N)
-    let re_sc = Regex::new(r"(?i)safety\s+constraints?").unwrap();
-    let re_sc_id = Regex::new(r"(?i)\bSC-\d+\b|\$SC-\d+").unwrap();
-    if !(re_sc.is_match(&combined_content) && re_sc_id.is_match(&combined_content)) {
+    let has_sc_kw = combined_lower.contains("safety constraint")
+        || combined_lower.contains("safety constraints");
+    let has_sc_id = has_stpa_id(&combined_lower, "sc-");
+    if !(has_sc_kw && has_sc_id) {
         errors.push("Pillar 6 violation: Missing Formal Safety Constraints ($SC-1..N$).".to_string());
     }
 
     // Pillar 7: FMECA Criticality Matrix
-    let re_fmeca = Regex::new(r"(?i)fmeca|failure\s+mode").unwrap();
-    if !re_fmeca.is_match(&combined_content) {
+    let has_fmeca = combined_lower.contains("fmeca") || combined_lower.contains("failure mode");
+    if !has_fmeca {
         errors.push("Pillar 7 violation: Missing FMECA Criticality Matrix.".to_string());
     } else {
         let fmeca = parse_fmeca_table(&combined_content);
@@ -438,7 +615,10 @@ pub fn check_safety_integrity(
             ));
         }
 
-        if !fmeca.has_rpn && !Regex::new(r"(?i)\bRPN\b|Risk\s+Priority\s+Number").unwrap().is_match(&combined_content) {
+        let has_rpn = fmeca.has_rpn
+            || combined_lower.contains("risk priority number")
+            || matches_dimension_lower(&combined_lower, &["rpn"]);
+        if !has_rpn {
             errors.push("Pillar 7 violation: FMECA table missing RPN (Risk Priority Number) calculation.".to_string());
         }
 
@@ -480,14 +660,26 @@ pub fn check_safety_integrity(
     }
 
     // Pillar 8: Regulatory Objectives & Risk Mitigations
-    let re_pillar_8 = Regex::new(r"(?i)pillar\s+8|regulatory\s+objectives|sora\s+sail").unwrap();
-    if !re_pillar_8.is_match(&combined_content) && !Regex::new(r"(?m)^#{2,4}\s*8\.\s+").unwrap().is_match(&combined_content) {
+    let has_pillar_8_kw = combined_lower.contains("pillar 8")
+        || combined_lower.contains("regulatory objectives")
+        || combined_lower.contains("sora sail");
+    let has_heading_8 = combined_content.lines().any(|l| {
+        let trimmed = l.trim();
+        let after_hashes = trimmed.trim_start_matches('#');
+        let hash_count = trimmed.len() - after_hashes.len();
+        (2..=4).contains(&hash_count) && after_hashes.trim_start().starts_with("8.")
+    });
+    if !(has_pillar_8_kw || has_heading_8) {
         errors.push("Pillar 8 violation: Missing Pillar 8 (Domain Regulatory Objectives & Integrity Mapping / Regulatory Objectives & Risk Mitigations).".to_string());
     }
 
     // Commercial Toolchain Hooks (MATLAB / Simulink / Stateflow)
-    let re_toolchain = Regex::new(r"(?i)matlab|simulink|stateflow|embedded\s+coder|sldv").unwrap();
-    if !re_toolchain.is_match(&combined_content) {
+    let has_toolchain = combined_lower.contains("matlab")
+        || combined_lower.contains("simulink")
+        || combined_lower.contains("stateflow")
+        || combined_lower.contains("embedded coder")
+        || combined_lower.contains("sldv");
+    if !has_toolchain {
         errors.push("Commercial Toolchain violation: Missing MATLAB / Simulink / Stateflow / Embedded Coder integration hooks.".to_string());
     }
 

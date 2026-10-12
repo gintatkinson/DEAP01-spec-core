@@ -23,7 +23,6 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 /// Canonical truncation and summarization tokens strictly prohibited in input ingestion streams.
@@ -208,20 +207,40 @@ pub fn parse_input_file(file_path: &Path) -> Result<(DigestFileEntry, Vec<u8>), 
 
     let mut structural_section_markers = Vec::new();
 
-    let md_header_re = Regex::new(r"^\s*(#{1,6}\s+.*)").unwrap();
-    let yang_node_re = Regex::new(r"^\s*(container|list|typedef|identity|grouping|module)\s+([a-zA-Z0-9_\-]+)").unwrap();
+    const YANG_KEYWORDS: &[&str] = &[
+        "container", "list", "typedef", "identity", "grouping", "module",
+    ];
 
     for line in &lines {
-        if let Some(caps) = md_header_re.captures(line) {
-            let marker = caps.get(1).unwrap().as_str().trim().to_string();
-            if !structural_section_markers.contains(&marker) {
-                structural_section_markers.push(marker);
+        let trimmed = line.trim_start();
+        let hash_count = trimmed.chars().take_while(|&c| c == '#').count();
+        if (1..=6).contains(&hash_count) {
+            let rest = &trimmed[hash_count..];
+            if rest.starts_with(char::is_whitespace) {
+                let marker = trimmed.trim().to_string();
+                if !structural_section_markers.contains(&marker) {
+                    structural_section_markers.push(marker);
+                }
             }
         }
-        if let Some(caps) = yang_node_re.captures(line) {
-            let marker = format!("{} {}", caps.get(1).unwrap().as_str(), caps.get(2).unwrap().as_str());
-            if !structural_section_markers.contains(&marker) {
-                structural_section_markers.push(marker);
+
+        for &kw in YANG_KEYWORDS {
+            if let Some(rest) = trimmed.strip_prefix(kw) {
+                if rest.starts_with(char::is_whitespace) {
+                    let id_rest = rest.trim_start();
+                    let id_len = id_rest
+                        .chars()
+                        .take_while(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-')
+                        .count();
+                    if id_len > 0 {
+                        let id = &id_rest[..id_len];
+                        let marker = format!("{} {}", kw, id);
+                        if !structural_section_markers.contains(&marker) {
+                            structural_section_markers.push(marker);
+                        }
+                        break;
+                    }
+                }
             }
         }
     }

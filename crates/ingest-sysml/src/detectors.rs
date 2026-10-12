@@ -13,7 +13,7 @@
 //! - **Pure Schema-Driven Classification**: Format detection operates strictly on formal
 //!   file extensions and syntactic grammar markers. Zero domain-specific vocabulary is used.
 //! - **Deterministic Precedence**: Direct extension matches take precedence over content
-//!   heuristics. Content inspection employs bounded regex scans.
+//!   heuristics. Content inspection employs bounded content scans.
 //! - **Canonical Path Sorting**: All directory scans sort paths lexicographically to ensure
 //!   bitwise identical AST construction order across different host filesystems.
 //! - **Bounded Complexity**: Execution time is $O(N + M)$ where $N$ is directory entry count
@@ -21,7 +21,6 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use regex::Regex;
 
 /// Raw uncompiled document extensions that require formal AST extraction prior to lowering.
 /// These extensions represent human-oriented document formats where direct compilation is
@@ -55,13 +54,50 @@ pub fn detect_format(schema_path: &str, content: &str) -> Result<String, String>
         .unwrap_or_default();
 
     // 1. Direct Markdown detection via extension or structural table syntax
-    let table_header_re = Regex::new(
-        r"(?i)\|\s*(?:Component|Part|BOM|Port|Signal|Parameter|Interface|Property|Attribute)\s*\|",
-    )
-    .unwrap();
-    let table_delim_re = Regex::new(r"\|[^\n]+\|\s*\n\s*\|[\s:\-]+\|").unwrap();
+    let has_table_header = content.lines().any(|line| {
+        if line.contains('|') {
+            const KEYWORDS: &[&str] = &[
+                "component", "part", "bom", "port", "signal", "parameter", "interface",
+                "property", "attribute",
+            ];
+            line.split('|').any(|cell| {
+                let cell_clean = cell.trim().to_ascii_lowercase();
+                KEYWORDS.contains(&cell_clean.as_str())
+            })
+        } else {
+            false
+        }
+    });
 
-    if ext == ".md" || table_header_re.is_match(content) || table_delim_re.is_match(content) {
+    let has_table_delim = {
+        let mut prev_had_pipe = false;
+        let mut found = false;
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                prev_had_pipe = false;
+                continue;
+            }
+            if trimmed.contains('|') {
+                if prev_had_pipe && trimmed.starts_with('|') {
+                    let inner = trimmed.trim_matches('|');
+                    if !inner.is_empty()
+                        && inner.contains('-')
+                        && inner.chars().all(|c| c == '-' || c == ':' || c == '|' || c.is_whitespace())
+                    {
+                        found = true;
+                        break;
+                    }
+                }
+                prev_had_pipe = true;
+            } else {
+                prev_had_pipe = false;
+            }
+        }
+        found
+    };
+
+    if ext == ".md" || has_table_header || has_table_delim {
         return Ok("markdown".to_string());
     }
 

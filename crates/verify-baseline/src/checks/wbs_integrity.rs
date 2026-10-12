@@ -1,6 +1,5 @@
 //! Check 20: WBS & Enterprise Deliverables Suite Validation.
 
-use regex::Regex;
 use serde_json::Value;
 use std::fs;
 use std::path::Path;
@@ -96,10 +95,8 @@ pub fn check_wbs_suite_integrity(
                 }
 
                 // Check internal markdown hyperlinks resolve
-                let link_re = Regex::new(r"\[([^\]]+)\]\(([^)]+)\)").unwrap();
                 let parent_dir = target_md.parent().unwrap_or(repo_root);
-                for cap in link_re.captures_iter(&content) {
-                    let target = &cap[2];
+                for target in extract_markdown_link_targets(&content) {
                     if !target.starts_with("http://")
                         && !target.starts_with("https://")
                         && !target.starts_with('#')
@@ -193,6 +190,30 @@ pub fn check_wbs_suite_integrity(
     } else {
         Err(errors)
     }
+}
+
+/// Extract link target destinations from markdown `[text](target)` patterns without regex.
+fn extract_markdown_link_targets(content: &str) -> Vec<&str> {
+    let mut targets = Vec::new();
+    let bytes = content.as_bytes();
+    let len = bytes.len();
+    let mut i = 0;
+    while i < len {
+        if bytes[i] == b'[' {
+            if let Some(close_bracket) = bytes[i + 1..].iter().position(|&b| b == b']').map(|p| i + 1 + p) {
+                if close_bracket + 1 < len && bytes[close_bracket + 1] == b'(' {
+                    if let Some(close_paren) = bytes[close_bracket + 2..].iter().position(|&b| b == b')').map(|p| close_bracket + 2 + p) {
+                        let target = &content[close_bracket + 2..close_paren];
+                        targets.push(target);
+                        i = close_paren + 1;
+                        continue;
+                    }
+                }
+            }
+        }
+        i += 1;
+    }
+    targets
 }
 
 #[cfg(test)]

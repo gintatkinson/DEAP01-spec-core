@@ -3,7 +3,6 @@
 use deap_core::rules::EXCLUDED_DIRS;
 use deap_core::sysml_ast::{parse_action_defs, parse_part_defs, parse_port_defs};
 use deap_core::workspace::is_upstream_compiler;
-use regex::Regex;
 use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
@@ -68,6 +67,74 @@ pub fn discover_sysml_model_text(repo_root: &Path) -> Option<String> {
     None
 }
 
+/// Validate whether the given line matches a valid Mermaid diagram type header.
+fn is_valid_mermaid_header(s: &str) -> bool {
+    let lower = s.to_lowercase();
+    const HEADERS: &[&str] = &[
+        "flowchart",
+        "graph",
+        "classdiagram",
+        "statediagram-v2",
+        "statediagram",
+        "sequencediagram",
+    ];
+    for &kw in HEADERS {
+        if lower.starts_with(kw) {
+            let rest = &lower[kw.len()..];
+            // Word boundary: next char (if any) is not alphanumeric or underscore
+            if rest.is_empty()
+                || (!rest.chars().next().unwrap().is_alphanumeric()
+                    && rest.chars().next().unwrap() != '_')
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Token scanner checking for forbidden Mermaid class method colon syntax:
+/// e.g. `+method(): ReturnType` instead of `+ReturnType method()`.
+fn has_colon_method_syntax(s: &str) -> bool {
+    let trimmed = s.trim();
+    let mut chars = trimmed.chars();
+
+    // Check leading visibility symbol: +, -, #, ~
+    match chars.next() {
+        Some('+' | '-' | '#' | '~') => {}
+        _ => return false,
+    }
+
+    // Followed by identifier \w+
+    let rem = chars.as_str();
+    let ident_end = rem
+        .find(|c: char| !c.is_alphanumeric() && c != '_')
+        .unwrap_or(rem.len());
+    if ident_end == 0 {
+        return false;
+    }
+
+    let after_ident = rem[ident_end..].trim_start();
+    if !after_ident.starts_with('(') {
+        return false;
+    }
+
+    // Must have closing paren followed by ':' and return type identifier
+    if let Some(close_idx) = after_ident.rfind(')') {
+        let after_paren = after_ident[close_idx + 1..].trim_start();
+        if let Some(after_colon) = after_paren.strip_prefix(':') {
+            let ret_type = after_colon.trim_start();
+            if let Some(first_ch) = ret_type.chars().next() {
+                if first_ch.is_alphanumeric() || first_ch == '_' {
+                    return true;
+                }
+            }
+        }
+    }
+
+    false
+}
+
 /// Check 21: Semantic Diagram-to-AST Topology Parity Gate.
 pub fn check_semantic_diagram_ast_parity(repo_root: &Path) -> Result<ParityOutcome, Vec<String>> {
     let model_text = discover_sysml_model_text(repo_root);
@@ -83,8 +150,6 @@ pub fn check_semantic_diagram_ast_parity(repo_root: &Path) -> Result<ParityOutco
 
     let mut errors = Vec::new();
     let forbidden_hardware = ["VTOLMotor", "LandingGear", "QuadPlane", "AutolandBeacon"];
-    let header_re = Regex::new(r"(?i)^(?:flowchart|graph|classDiagram|stateDiagram(?:-v2)?|sequenceDiagram)\b").unwrap();
-    let colon_method_re = Regex::new(r"^\s*[+\-#~]\w+\s*\(.*\)\s*:\s*\w+").unwrap();
 
     for dir_rel in &target_scan_dirs {
         let dir = repo_root.join(dir_rel);
@@ -122,7 +187,7 @@ pub fn check_semantic_diagram_ast_parity(repo_root: &Path) -> Result<ParityOutco
 
                                 if let Some(&first) = block_lines.iter().find(|l| !l.trim().is_empty() && !l.trim().starts_with("%%")) {
                                     let trimmed = first.trim();
-                                    if !header_re.is_match(trimmed) {
+                                    if !is_valid_mermaid_header(trimmed) {
                                         errors.push(format!("Missing mandatory Mermaid diagram type header in {} (got: '{}')", rel, trimmed));
                                     }
 
@@ -139,7 +204,7 @@ pub fn check_semantic_diagram_ast_parity(repo_root: &Path) -> Result<ParityOutco
                                             if (s.contains('{') || s.contains('}')) && !s.starts_with("class ") && s != "{" && s != "}" {
                                                 errors.push(format!("Mermaid syntax violation in {}: Curly braces '{{}}' inside class member line: '{}'.", rel, s));
                                             }
-                                            if colon_method_re.is_match(s) {
+                                            if has_colon_method_syntax(s) {
                                                 errors.push(format!("Mermaid syntax violation in {}: Colons ':' forbidden in class member line: '{}'. Use '+ReturnType methodName(Type arg)' spacing.", rel, s));
                                             }
                                         }

@@ -1,6 +1,6 @@
 //! Table of Contents generation, heading extraction, and anchor slugification.
 
-use regex::Regex;
+use pulldown_cmark::{Event, HeadingLevel, Parser, Tag, TagEnd};
 use std::collections::HashSet;
 
 /// Converts a heading string into a standard GitHub Markdown anchor slug.
@@ -21,34 +21,35 @@ pub fn slugify(text: &str) -> String {
 /// Ignores code blocks and math blocks.
 pub fn extract_headings(content: &str) -> Vec<(usize, String, String)> {
     let mut headings = Vec::new();
-    let mut in_code_block = false;
-    let mut in_math_block = false;
+    let parser = Parser::new(content);
+    let mut current_heading: Option<(usize, String)> = None;
 
-    let heading_re = Regex::new(r"^(#{1,6})\s+(.+)$").unwrap();
-
-    for line in content.lines() {
-        let stripped = line.trim();
-        if stripped.starts_with("```") {
-            in_code_block = !in_code_block;
-            continue;
-        }
-        if stripped.starts_with("$$") {
-            if stripped.len() > 2 && stripped.ends_with("$$") {
-                continue;
+    for event in parser {
+        match event {
+            Event::Start(Tag::Heading { level, .. }) => {
+                let lvl = match level {
+                    HeadingLevel::H1 => 1,
+                    HeadingLevel::H2 => 2,
+                    HeadingLevel::H3 => 3,
+                    HeadingLevel::H4 => 4,
+                    HeadingLevel::H5 => 5,
+                    HeadingLevel::H6 => 6,
+                };
+                current_heading = Some((lvl, String::new()));
             }
-            in_math_block = !in_math_block;
-            continue;
-        }
-        if in_code_block || in_math_block {
-            continue;
-        }
-
-        if let Some(caps) = heading_re.captures(stripped) {
-            let hashes = caps.get(1).map(|m| m.as_str()).unwrap_or("");
-            let title = caps.get(2).map(|m| m.as_str().trim()).unwrap_or("");
-            let level = hashes.len();
-            let slug = slugify(title);
-            headings.push((level, title.to_string(), slug));
+            Event::End(TagEnd::Heading(_)) => {
+                if let Some((lvl, title)) = current_heading.take() {
+                    let trimmed = title.trim();
+                    let slug = slugify(trimmed);
+                    headings.push((lvl, trimmed.to_string(), slug));
+                }
+            }
+            Event::Text(t) | Event::Code(t) => {
+                if let Some((_, ref mut title)) = current_heading {
+                    title.push_str(&t);
+                }
+            }
+            _ => {}
         }
     }
 
@@ -80,14 +81,31 @@ pub fn verify_markdown_links(content: &str) -> Vec<String> {
     let valid_slugs: HashSet<String> = headings.into_iter().map(|(_, _, slug)| slug).collect();
     let mut errors = Vec::new();
 
-    let link_re = Regex::new(r"\[([^\]]+)\]\(#([^\)]+)\)").unwrap();
-    for caps in link_re.captures_iter(content) {
-        let text = caps.get(1).map(|m| m.as_str()).unwrap_or("");
-        let anchor = caps.get(2).map(|m| m.as_str()).unwrap_or("");
-        if !valid_slugs.contains(anchor) {
-            errors.push(format!(
-                "Broken anchor link: [{text}](#{anchor}) does not match any heading in document."
-            ));
+    let parser = Parser::new(content);
+    let mut current_link: Option<(String, String)> = None;
+
+    for event in parser {
+        match event {
+            Event::Start(Tag::Link { dest_url, .. }) => {
+                if let Some(anchor) = dest_url.strip_prefix('#') {
+                    current_link = Some((anchor.to_string(), String::new()));
+                }
+            }
+            Event::End(TagEnd::Link) => {
+                if let Some((anchor, text)) = current_link.take() {
+                    if !valid_slugs.contains(&anchor) {
+                        errors.push(format!(
+                            "Broken anchor link: [{text}](#{anchor}) does not match any heading in document."
+                        ));
+                    }
+                }
+            }
+            Event::Text(t) | Event::Code(t) => {
+                if let Some((_, ref mut text)) = current_link {
+                    text.push_str(&t);
+                }
+            }
+            _ => {}
         }
     }
 

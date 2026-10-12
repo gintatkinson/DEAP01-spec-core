@@ -329,24 +329,65 @@ pub fn collect_parameter_tokens(pkg: &PackageDef) -> HashMap<String, String> {
 }
 
 fn extract_constraint_tokens(expr: &str, tokens: &mut HashMap<String, String>) {
-    let re = regex::Regex::new(r"([A-Za-z_][A-Za-z0-9_]*)\s*(<=|>=|<|>|=)\s*([^\s;]+)").unwrap();
-    for cap in re.captures_iter(expr) {
-        if let (Some(k), Some(v)) = (cap.get(1), cap.get(3)) {
-            tokens.insert(k.as_str().to_string(), v.as_str().to_string());
+    let operators = ["<=", ">=", "<", ">", "="];
+    let mut idx = 0;
+    while idx < expr.len() {
+        let matched_op = operators.iter().find(|&&op| expr[idx..].starts_with(op));
+        if let Some(&op) = matched_op {
+            let before = &expr[..idx];
+            let before_trimmed = before.trim_end();
+            let id_start = before_trimmed
+                .rfind(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+                .map(|p| p + 1)
+                .unwrap_or(0);
+            let key = &before_trimmed[id_start..];
+            let key_valid = !key.is_empty()
+                && (key.as_bytes()[0].is_ascii_alphabetic() || key.as_bytes()[0] == b'_')
+                && key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+
+            let after = &expr[idx + op.len()..];
+            let after_trimmed = after.trim_start();
+            let val_len = after_trimmed
+                .find(|c: char| c.is_whitespace() || c == ';')
+                .unwrap_or(after_trimmed.len());
+            let val = &after_trimmed[..val_len];
+
+            if key_valid && !val.is_empty() {
+                tokens.insert(key.to_string(), val.to_string());
+                idx += op.len() + (after.len() - after_trimmed.len()) + val_len;
+                continue;
+            }
+            idx += op.len();
+        } else {
+            idx += 1;
         }
     }
 }
 
 fn resolve_template(text: &str, tokens: &HashMap<String, String>) -> String {
-    let re = regex::Regex::new(r"%%([A-Za-z0-9_]+)%%").unwrap();
-    re.replace_all(text, |caps: &regex::Captures| {
-        let key = &caps[1];
-        tokens
-            .get(key)
-            .cloned()
-            .unwrap_or_else(|| PENDING_PARAMETER.to_string())
-    })
-    .to_string()
+    let mut result = String::with_capacity(text.len());
+    let mut idx = 0;
+    while let Some(start) = text[idx..].find("%%") {
+        let open_pos = idx + start;
+        result.push_str(&text[idx..open_pos]);
+        let param_start = open_pos + 2;
+        if let Some(close) = text[param_start..].find("%%") {
+            let key = &text[param_start..param_start + close];
+            if !key.is_empty() && key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+                let val = tokens
+                    .get(key)
+                    .cloned()
+                    .unwrap_or_else(|| PENDING_PARAMETER.to_string());
+                result.push_str(&val);
+                idx = param_start + close + 2;
+                continue;
+            }
+        }
+        result.push_str("%%");
+        idx = open_pos + 2;
+    }
+    result.push_str(&text[idx..]);
+    result
 }
 
 /// Collects all constraint defs across package and part scopes.
@@ -529,17 +570,18 @@ fn render_losses_hazards_topology(pkg: &PackageDef, ucas: &[UnsafeControlAction]
     out.push_str("```mermaid\n");
     out.push_str("graph TD\n");
     out.push_str("    subgraph \"Hierarchical Safety Control Structure\"\n");
+    out.push_str("        direction TB\n");
     out.push_str(&format!(
-        "        CompilerController[\"{} (Supervisory Controller)\"]\n",
+        "        CompilerController[\"{}<br/>(Supervisory Controller)\"]\n",
         primary_controller
     ));
-    out.push_str("        ActuatorEngine[\"UniversalIngestionEngine (Actuator Engine)\"]\n");
-    out.push_str("        ControlledProcess[\"DownstreamApplicationHost (Execution Environment)\"]\n");
-    out.push_str("        DiagnosticSensors[\"CompilerAssuranceEngine (Diagnostic Sensors)\"]\n\n");
-    out.push_str("        CompilerController -->|\"supervisory dispatch: trigger_lowering, invoke_codegen\"| ActuatorEngine\n");
-    out.push_str("        ActuatorEngine -->|\"artifact synthesis: lower_ast, write_binaries\"| ControlledProcess\n");
+    out.push_str("        ActuatorEngine[\"UniversalIngestionEngine<br/>(Actuator Engine)\"]\n");
+    out.push_str("        ControlledProcess[\"DownstreamApplicationHost<br/>(Execution Environment)\"]\n");
+    out.push_str("        DiagnosticSensors[\"CompilerAssuranceEngine<br/>(Diagnostic Sensors)\"]\n\n");
+    out.push_str("        CompilerController -->|\"supervisory dispatch: trigger_lowering - invoke_codegen\"| ActuatorEngine\n");
+    out.push_str("        ActuatorEngine -->|\"artifact synthesis: lower_ast - write_binaries\"| ControlledProcess\n");
     out.push_str("        ControlledProcess -->|\"compilation artifacts and execution traces\"| DiagnosticSensors\n");
-    out.push_str("        DiagnosticSensors -->|\"sensor feedback: diagnostic_errors, verification_metrics\"| CompilerController\n");
+    out.push_str("        DiagnosticSensors -->|\"sensor feedback: diagnostic_errors - verification_metrics\"| CompilerController\n");
     out.push_str("    end\n");
     out.push_str("```\n\n");
 
@@ -724,9 +766,10 @@ fn render_rta_architecture(tokens: &HashMap<String, String>) -> String {
     out.push_str("```mermaid\n");
     out.push_str("graph TD\n");
     out.push_str("    subgraph \"Run-Time Assurance Architecture\"\n");
-    out.push_str("        CompilerAssuranceEngine[\"High Assurance Channel (CompilerAssuranceEngine)\"] --> StateMachineSolverEngine[\"Safety Monitor Switch (StateMachineSolverEngine)\"]\n");
-    out.push_str("        SafetyAssuranceEngine[\"Recovery Channel (SafetyAssuranceEngine)\"] --> StateMachineSolverEngine\n");
-    out.push_str("        StateMachineSolverEngine --> DEAPCompilerSystem[\"System Under Assurance (DEAPCompilerSystem)\"]\n");
+    out.push_str("        direction TB\n");
+    out.push_str("        CompilerAssuranceEngine[\"High Assurance Channel<br/>(CompilerAssuranceEngine)\"] --> StateMachineSolverEngine[\"Safety Monitor Switch<br/>(StateMachineSolverEngine)\"]\n");
+    out.push_str("        SafetyAssuranceEngine[\"Recovery Channel<br/>(SafetyAssuranceEngine)\"] --> StateMachineSolverEngine\n");
+    out.push_str("        StateMachineSolverEngine --> DEAPCompilerSystem[\"System Under Assurance<br/>(DEAPCompilerSystem)\"]\n");
     out.push_str("    end\n");
     out.push_str("```\n\n");
 
@@ -869,52 +912,73 @@ pub fn compile_stpa_to_constraints(content: &str, package_name: &str) -> Package
     pkg.name = package_name.to_string();
     pkg.doc = Some("STPA and FMECA Safety Invariants compiled for Run-Time Assurance (RTA) & SLDV Verification".to_string());
 
-    // Regex to match UCA table rows: | UCA-### | Controller | Action | Guide Word | ... | Hazard | Constraint | ...
-    let uca_row_re = regex::Regex::new(
-        r"\|\s*(UCA-\d+)\s*\|\s*([^|]+)\|\s*([^|]+)\|\s*([^|]+)\|\s*([^|]+)\|\s*([^|]+)\|\s*(SC-\d+)"
-    ).unwrap();
+    // Match UCA table rows: | UCA-### | Controller | Action | Guide Word | ... | Hazard | Constraint | ...
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if !trimmed.starts_with('|') {
+            continue;
+        }
+        let cols: Vec<&str> = trimmed.split('|').map(|s| s.trim()).collect();
+        if cols.len() >= 8 && cols[1].starts_with("UCA-") && cols[1]["UCA-".len()..].chars().all(|c| c.is_ascii_digit()) && !cols[1]["UCA-".len()..].is_empty() {
+            let uca_id = cols[1];
+            let _controller = cols[2];
+            let action = cols[3];
+            let guide_word = cols[4];
+            let sc_col = cols[7];
+            let sc_id = if let Some(pos) = sc_col.find("SC-") {
+                let rest = &sc_col[pos + 3..];
+                let digit_len = rest.chars().take_while(|c| c.is_ascii_digit()).count();
+                if digit_len > 0 {
+                    &sc_col[pos..pos + 3 + digit_len]
+                } else {
+                    ""
+                }
+            } else {
+                ""
+            };
 
-    for cap in uca_row_re.captures_iter(content) {
-        let uca_id = cap.get(1).map(|m| m.as_str().trim()).unwrap_or("");
-        let _controller = cap.get(2).map(|m| m.as_str().trim()).unwrap_or("");
-        let action = cap.get(3).map(|m| m.as_str().trim()).unwrap_or("");
-        let guide_word = cap.get(4).map(|m| m.as_str().trim()).unwrap_or("");
-        let sc_id = cap.get(7).map(|m| m.as_str().trim()).unwrap_or("");
+            if !sc_id.is_empty() && !action.is_empty() {
+                let constraint_name = format!("{}_{}", sc_id.replace('-', "_"), action.replace(' ', "_"));
+                let doc = format!("{}: {} shall not violate safety under {} (ref {})", sc_id, action, guide_word, uca_id);
+                let expression = format!("{}SafeState == true", action.replace(' ', ""));
 
-        let constraint_name = format!("{}_{}", sc_id.replace('-', "_"), action.replace(' ', "_"));
-        let doc = format!("{}: {} shall not violate safety under {} (ref {})", sc_id, action, guide_word, uca_id);
-        let expression = format!("{}SafeState == true", action.replace(' ', ""));
-
-        pkg.constraint_defs.push(ConstraintDef {
-            name: constraint_name,
-            doc: Some(doc),
-            expression,
-            is_assertion: true,
-            ..Default::default()
-        });
+                pkg.constraint_defs.push(ConstraintDef {
+                    name: constraint_name,
+                    doc: Some(doc),
+                    expression,
+                    is_assertion: true,
+                    ..Default::default()
+                });
+            }
+        }
     }
 
-    // Regex to match FMECA table rows: | FMECA-### | Component | Failure Mode | Potential Effect | ... | Mitigation |
-    let fmeca_row_re = regex::Regex::new(
-        r"\|\s*(FMECA-\d+)\s*\|\s*([^|]+)\|\s*([^|]+)\|\s*([^|]+)\|"
-    ).unwrap();
+    // Match FMECA table rows: | FMECA-### | Component | Failure Mode | Potential Effect | ... | Mitigation |
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if !trimmed.starts_with('|') {
+            continue;
+        }
+        let cols: Vec<&str> = trimmed.split('|').map(|s| s.trim()).collect();
+        if cols.len() >= 5 && cols[1].starts_with("FMECA-") && cols[1]["FMECA-".len()..].chars().all(|c| c.is_ascii_digit()) && !cols[1]["FMECA-".len()..].is_empty() {
+            let fmeca_id = cols[1];
+            let component = cols[2];
+            let failure_mode = cols[3];
 
-    for cap in fmeca_row_re.captures_iter(content) {
-        let fmeca_id = cap.get(1).map(|m| m.as_str().trim()).unwrap_or("");
-        let component = cap.get(2).map(|m| m.as_str().trim()).unwrap_or("");
-        let failure_mode = cap.get(3).map(|m| m.as_str().trim()).unwrap_or("");
+            if !component.is_empty() && !failure_mode.is_empty() {
+                let constraint_name = format!("{}_{}_Integrity", fmeca_id.replace('-', "_"), component.replace(' ', "_"));
+                let doc = format!("{}: {} shall mitigate {}", fmeca_id, component, failure_mode);
+                let expression = format!("{}HealthStatus >= 1", component.replace(' ', ""));
 
-        let constraint_name = format!("{}_{}_Integrity", fmeca_id.replace('-', "_"), component.replace(' ', "_"));
-        let doc = format!("{}: {} shall mitigate {}", fmeca_id, component, failure_mode);
-        let expression = format!("{}HealthStatus >= 1", component.replace(' ', ""));
-
-        pkg.constraint_defs.push(ConstraintDef {
-            name: constraint_name,
-            doc: Some(doc),
-            expression,
-            is_assertion: false,
-            ..Default::default()
-        });
+                pkg.constraint_defs.push(ConstraintDef {
+                    name: constraint_name,
+                    doc: Some(doc),
+                    expression,
+                    is_assertion: false,
+                    ..Default::default()
+                });
+            }
+        }
     }
 
     pkg
@@ -958,11 +1022,11 @@ mod tests {
         // Verify closed-loop STPA control structure topology
         let topo = suite.get("01_LOSSES_HAZARDS_TOPOLOGY.md").unwrap();
         assert!(topo.contains("subgraph \"Hierarchical Safety Control Structure\""));
-        assert!(topo.contains("CompilerController[\"FlightComputer (Supervisory Controller)\"]"));
-        assert!(topo.contains("ActuatorEngine[\"UniversalIngestionEngine (Actuator Engine)\"]"));
-        assert!(topo.contains("ControlledProcess[\"DownstreamApplicationHost (Execution Environment)\"]"));
-        assert!(topo.contains("DiagnosticSensors[\"CompilerAssuranceEngine (Diagnostic Sensors)\"]"));
-        assert!(topo.contains("DiagnosticSensors -->|\"sensor feedback: diagnostic_errors, verification_metrics\"| CompilerController"));
+        assert!(topo.contains("CompilerController[\"FlightComputer<br/>(Supervisory Controller)\"]"));
+        assert!(topo.contains("ActuatorEngine[\"UniversalIngestionEngine<br/>(Actuator Engine)\"]"));
+        assert!(topo.contains("ControlledProcess[\"DownstreamApplicationHost<br/>(Execution Environment)\"]"));
+        assert!(topo.contains("DiagnosticSensors[\"CompilerAssuranceEngine<br/>(Diagnostic Sensors)\"]"));
+        assert!(topo.contains("DiagnosticSensors -->|\"sensor feedback: diagnostic_errors - verification_metrics\"| CompilerController"));
     }
 
     #[test]

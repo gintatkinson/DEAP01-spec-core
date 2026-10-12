@@ -36,7 +36,6 @@ use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::Path;
 use std::sync::OnceLock;
-use regex::Regex;
 
 use deap_core::sysml_ast::{
     AttributeDef, ConnectionDef, ConstraintDef, FlowDef, PackageDef, PartDef, PortDef,
@@ -44,9 +43,9 @@ use deap_core::sysml_ast::{
 };
 use crate::table::{
     classify_table, clean_cell_value, compose_grounded_doc, extract_provenance_citation,
-    extract_unit_from_header_or_val, normalize_col, parse_numeric_with_unit, parse_range_bounds,
-    sanitize_identifier, MarkdownTable, TableType, NON_COMPONENT_SECTION_KEYWORDS,
-    PROVENANCE_COLUMNS,
+    extract_unit_from_header_or_val, is_table_delimiter_cell, normalize_col, parse_numeric_with_unit,
+    parse_range_bounds, sanitize_identifier, MarkdownTable, TableType,
+    NON_COMPONENT_SECTION_KEYWORDS, PROVENANCE_COLUMNS,
 };
 
 /// Extracted YAML frontmatter metadata from the beginning of a Markdown requirement document.
@@ -280,15 +279,89 @@ pub fn map_subsystem(subsystem_str: &str, req_id: &str) -> SubsystemMeta {
     get_subsystem_meta_by_idx(idx)
 }
 
+fn strip_markdown_links(val: &str) -> String {
+    let mut out = String::with_capacity(val.len());
+    let mut rest = val;
+    while let Some(start_bracket) = rest.find('[') {
+        out.push_str(&rest[..start_bracket]);
+        let after_start = &rest[start_bracket + 1..];
+        if let Some(end_bracket) = after_start.find(']') {
+            let visible_text = &after_start[..end_bracket];
+            let after_end_bracket = &after_start[end_bracket + 1..];
+            if after_end_bracket.starts_with('(') {
+                if let Some(end_paren) = after_end_bracket.find(')') {
+                    out.push_str(visible_text);
+                    rest = &after_end_bracket[end_paren + 1..];
+                    continue;
+                }
+            }
+        }
+        out.push('[');
+        rest = after_start;
+    }
+    out.push_str(rest);
+    out
+}
+
+fn collapse_whitespace(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut prev_ws = false;
+    for c in text.trim().chars() {
+        if c.is_whitespace() {
+            if !prev_ws {
+                out.push(' ');
+                prev_ws = true;
+            }
+        } else {
+            out.push(c);
+            prev_ws = false;
+        }
+    }
+    out
+}
+
+fn strip_latex_math_commands(text: &str, cmds: Option<&[&str]>) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(slash_idx) = rest.find('\\') {
+        out.push_str(&rest[..slash_idx]);
+        let after_slash = &rest[slash_idx + 1..];
+        let cmd_len = after_slash.chars().take_while(|c| c.is_ascii_alphabetic()).count();
+        if cmd_len > 0 {
+            let cmd = &after_slash[..cmd_len];
+            let is_match = match cmds {
+                Some(allowed) => allowed.contains(&cmd),
+                None => true,
+            };
+            if is_match {
+                let after_cmd = &after_slash[cmd_len..];
+                if after_cmd.starts_with('{') {
+                    if let Some(close_brace) = after_cmd.find('}') {
+                        let inner = &after_cmd[1..close_brace];
+                        if inner.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c.is_whitespace()) {
+                            out.push_str(inner);
+                            rest = &after_cmd[close_brace + 1..];
+                            continue;
+                        }
+                    }
+                }
+                rest = after_cmd;
+                continue;
+            }
+        }
+        out.push('\\');
+        rest = after_slash;
+    }
+    out.push_str(rest);
+    out
+}
+
 fn clean_normative_text(raw: &str) -> String {
-    let link_re = Regex::new(r"\[([^\]]+)\]\([^\)]+\)").unwrap();
-    let text = link_re.replace_all(raw, "$1");
+    let text = strip_markdown_links(raw);
     let text = text.replace('`', "");
     let text = text.replace('$', "");
-    let math_re = Regex::new(r"\\(?:mathbf|mathcal|text|oint)\{?([a-zA-Z0-9_\s]*)\}?").unwrap();
-    let text = math_re.replace_all(&text, "$1");
-    let ws_re = Regex::new(r"\s+").unwrap();
-    let mut cleaned = ws_re.replace_all(&text, " ").trim().to_string();
+    let text = strip_latex_math_commands(&text, Some(&["mathbf", "mathcal", "text", "oint"]));
+    let mut cleaned = collapse_whitespace(&text);
     cleaned = cleaned.replace('"', "\\\"");
 
     if cleaned.len() > 300 {
@@ -339,10 +412,8 @@ fn extract_normative_statement(content: &str) -> String {
 fn clean_meta_val(val: &str) -> String {
     let s = val.replace(['`', '*'], "");
     let s = s.replace('$', "");
-    let math_re = Regex::new(r"\\(?:mathbf|mathcal|text)\{?([a-zA-Z0-9_\s]*)\}?").unwrap();
-    let s = math_re.replace_all(&s, "$1");
-    let ws_re = Regex::new(r"\s+").unwrap();
-    ws_re.replace_all(&s, " ").trim().to_string()
+    let s = strip_latex_math_commands(&s, Some(&["mathbf", "mathcal", "text"]));
+    collapse_whitespace(&s)
 }
 
 fn extract_req_metadata(
@@ -393,17 +464,51 @@ fn extract_req_metadata(
 }
 
 fn clean_bdd_text(raw: &str) -> String {
-    let link_re = Regex::new(r"\[([^\]]+)\]\([^\)]+\)").unwrap();
-    let text = link_re.replace_all(raw, "$1");
+    let text = strip_markdown_links(raw);
     let text = text.replace('`', "");
     let text = text.replace('$', "");
-    let latex_cmd_re = Regex::new(r"\\[a-zA-Z]+\{?([a-zA-Z0-9_\s]*)\}?").unwrap();
-    let text = latex_cmd_re.replace_all(&text, "$1");
+    let text = strip_latex_math_commands(&text, None);
     let text = text.replace('\\', "");
-    let ws_re = Regex::new(r"\s+").unwrap();
-    let mut cleaned = ws_re.replace_all(&text, " ").trim().to_string();
+    let mut cleaned = collapse_whitespace(&text);
     cleaned = cleaned.replace('"', "\\\"");
     cleaned
+}
+
+fn parse_ac_header(line: &str) -> Option<(usize, String)> {
+    let trimmed = line.trim();
+    let rest = trimmed.strip_prefix("###")?.trim_start();
+    let rest = if let Some(after_ac_label) = rest.strip_prefix("Acceptance Criteria:") {
+        after_ac_label.trim_start()
+    } else if let Some(after_ac_label) = rest.strip_prefix("Acceptance Criteria") {
+        after_ac_label.trim_start()
+    } else {
+        rest
+    };
+    let rest = if let Some(after_ac) = rest.strip_prefix("AC-") {
+        after_ac
+    } else if let Some(after_ac) = rest.strip_prefix("AC") {
+        after_ac
+    } else if let Some(after_ac) = rest.strip_prefix("ac-") {
+        after_ac
+    } else if let Some(after_ac) = rest.strip_prefix("ac") {
+        after_ac
+    } else {
+        return None;
+    };
+    let num_len = rest.chars().take_while(|c| c.is_ascii_digit()).count();
+    if num_len == 0 {
+        return None;
+    }
+    let num: usize = rest[..num_len].parse().ok()?;
+    let after_num = rest[num_len..].trim_start();
+    let title = if let Some(t) = after_num.strip_prefix(':') {
+        t.trim()
+    } else if let Some(t) = after_num.strip_prefix('-') {
+        t.trim()
+    } else {
+        after_num.trim()
+    };
+    Some((num, title.to_string()))
 }
 
 fn extract_bullet_content(line: &str, tag: &str) -> String {
@@ -419,11 +524,6 @@ fn extract_bullet_content(line: &str, tag: &str) -> String {
 
 /// Extracted Acceptance Criterion tuple: (ac_num_str, clean_ac_slug, bdd_text)
 fn extract_acceptance_criteria(content: &str) -> Vec<(String, String, String)> {
-    let ac_header_re = Regex::new(
-        r#"(?m)^###\s+(?:Acceptance\s+Criteria:?\s*)?AC-?(?P<num>\d+)\s*[:\-]?\s*(?P<title>.*?)$"#,
-    )
-    .unwrap();
-
     let mut ac_list = Vec::new();
     let lines: Vec<&str> = content.lines().collect();
     let mut i = 0;
@@ -431,11 +531,9 @@ fn extract_acceptance_criteria(content: &str) -> Vec<(String, String, String)> {
 
     while i < n {
         let line = lines[i].trim();
-        if let Some(caps) = ac_header_re.captures(line) {
-            let num: usize = caps["num"].parse().unwrap_or(0);
+        if let Some((num, raw_title)) = parse_ac_header(line) {
             let ac_num_str = format!("{:02}", num);
-            let raw_title = caps["title"].trim();
-            let clean_ac_slug = sanitize_identifier(raw_title, "Criteria");
+            let clean_ac_slug = sanitize_identifier(&raw_title, "Criteria");
 
             i += 1;
             let mut given = String::new();
@@ -513,6 +611,44 @@ fn extract_acceptance_criteria(content: &str) -> Vec<(String, String, String)> {
     ac_list
 }
 
+fn strip_dollar_math_spans(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut in_dollar = false;
+    for c in text.chars() {
+        if c == '$' {
+            in_dollar = !in_dollar;
+        } else if !in_dollar {
+            out.push(c);
+        }
+    }
+    out
+}
+
+fn strip_latex_commands(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(slash_idx) = rest.find('\\') {
+        out.push_str(&rest[..slash_idx]);
+        let after_slash = &rest[slash_idx + 1..];
+        let cmd_len = after_slash.chars().take_while(|c| c.is_ascii_alphabetic()).count();
+        if cmd_len > 0 {
+            let after_cmd = &after_slash[cmd_len..];
+            if after_cmd.starts_with('{') {
+                if let Some(close_brace) = after_cmd.find('}') {
+                    rest = &after_cmd[close_brace + 1..];
+                    continue;
+                }
+            }
+            rest = after_cmd;
+            continue;
+        }
+        out.push('\\');
+        rest = after_slash;
+    }
+    out.push_str(rest);
+    out
+}
+
 fn clean_invariant_title(raw: &str) -> String {
     let mut text = raw.trim();
     if let Some(pos) = text.find(':') {
@@ -521,11 +657,9 @@ fn clean_invariant_title(raw: &str) -> String {
     // Remove markdown formatting characters
     let text = text.replace(['*', '`', '_', '#'], " ");
     // Remove math spans $...$
-    let math_re = Regex::new(r"\$[^$]*\$").unwrap();
-    let text = math_re.replace_all(&text, "");
+    let text = strip_dollar_math_spans(&text);
     // Remove LaTeX commands
-    let cmd_re = Regex::new(r"\\[a-zA-Z]+(?:\{[^}]*\})?").unwrap();
-    let text = cmd_re.replace_all(&text, "");
+    let text = strip_latex_commands(&text);
 
     // Truncate at common connectors
     let mut s = text.to_string();
@@ -535,14 +669,12 @@ fn clean_invariant_title(raw: &str) -> String {
         }
     }
 
-    let ws_re = Regex::new(r"\s+").unwrap();
-    let cleaned = ws_re.replace_all(&s, " ").trim().to_string();
+    let cleaned = collapse_whitespace(&s);
     cleaned.replace('\u{2014}', "--")
 }
 
 fn clean_math_doc(raw: &str) -> String {
-    let ws_re = Regex::new(r"\s+").unwrap();
-    let mut cleaned = ws_re.replace_all(raw, " ").trim().to_string();
+    let mut cleaned = collapse_whitespace(raw);
     cleaned = cleaned.replace('\u{2014}', "--");
     cleaned = cleaned.replace("*/", "* /");
     cleaned
@@ -734,6 +866,25 @@ pub fn resolve_requirement_reference(req_id: &str) -> String {
 /// Extracts cross-referenced requirement identifiers (`REQ-XXXX`) from Section 1 and Section 2.
 ///
 /// /// Realises: [REQ-SYSML-INGEST-MD/extract_requirement_cross_references]
+fn find_req_ids(text: &str) -> Vec<&str> {
+    let mut ids = Vec::new();
+    let mut rest = text;
+    while let Some(idx) = rest.find("REQ-") {
+        let candidate = &rest[idx..];
+        if candidate.len() >= 8 {
+            let digits_slice = &candidate[4..8];
+            if digits_slice.chars().all(|c| c.is_ascii_digit()) {
+                let end_boundary = candidate.len() == 8 || !candidate.as_bytes()[8].is_ascii_digit();
+                if end_boundary {
+                    ids.push(&candidate[..8]);
+                }
+            }
+        }
+        rest = &rest[idx + 4..];
+    }
+    ids
+}
+
 pub fn extract_requirement_cross_references(content: &str, current_req_id: &str) -> Vec<String> {
     let mut relevant_text = content;
     if let Some(pos) = content.find("## 1.") {
@@ -745,12 +896,10 @@ pub fn extract_requirement_cross_references(content: &str, current_req_id: &str)
         }
     }
 
-    let req_re = Regex::new(r"REQ-[0-9]{4}").unwrap();
     let current_digits: String = current_req_id.chars().filter(|c| c.is_ascii_digit()).collect();
     let mut refs = Vec::new();
 
-    for cap in req_re.find_iter(relevant_text) {
-        let r_str = cap.as_str();
+    for r_str in find_req_ids(relevant_text) {
         let r_digits: String = r_str.chars().filter(|c| c.is_ascii_digit()).collect();
         if r_digits != current_digits {
             let canonical = resolve_requirement_reference(r_str);
@@ -778,6 +927,47 @@ struct ParsedSection {
     pub section_doc: String,
     /// All structured Markdown tables parsed within this section.
     pub tables: Vec<MarkdownTable>,
+}
+
+fn strip_pkg_words(s: &str) -> String {
+    const PKG_WORDS: &[&str] = &["package", "specification", "model", "spec", "system"];
+    let mut out = String::with_capacity(s.len());
+    let mut i = 0;
+    let bytes = s.as_bytes();
+    while i < bytes.len() {
+        if (bytes[i] as char).is_ascii_alphanumeric() {
+            let start = i;
+            while i < bytes.len() && ((bytes[i] as char).is_ascii_alphanumeric() || bytes[i] == b'_') {
+                i += 1;
+            }
+            let word = &s[start..i];
+            let lower = word.to_ascii_lowercase();
+            if PKG_WORDS.contains(&lower.as_str()) {
+                out.push(' ');
+            } else {
+                out.push_str(word);
+            }
+        } else {
+            out.push(bytes[i] as char);
+            i += 1;
+        }
+    }
+    out.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn strip_comp_prefix(header: &str) -> String {
+    const PREFIXES: &[&str] = &["component", "part", "subsystem", "assembly", "block", "module"];
+    let lower = header.to_ascii_lowercase();
+    for &prefix in PREFIXES {
+        if lower.starts_with(prefix) {
+            let rest = &header[prefix.len()..];
+            let trimmed = rest.trim_start();
+            if let Some(after_sep) = trimmed.strip_prefix(':').or_else(|| trimmed.strip_prefix('-')) {
+                return after_sep.trim().to_string();
+            }
+        }
+    }
+    header.trim().to_string()
 }
 
 /// Deterministic translator that transforms Level 0 OEM Markdown requirements into canonical SysML v2 ASTs.
@@ -1413,14 +1603,6 @@ impl MarkdownTranslator {
         let mut table_units: Vec<String> = Vec::new();
         let mut table_rows: Vec<HashMap<String, String>> = Vec::new();
 
-        let delim_re = Regex::new(r"^:?-+:?$").unwrap();
-        let h1_re = Regex::new(r"^#\s+([^#].*)$").unwrap();
-        let h_sub_re = Regex::new(r"^(#{2,4})\s+([^#].*)$").unwrap();
-        let pkg_word_re = Regex::new(r"(?i)\b(?:package|specification|model|spec|system)\b").unwrap();
-        let comp_prefix_re = Regex::new(r"(?i)^(?:component|part|subsystem|assembly|block|module)\s*[:\-]\s*").unwrap();
-        let non_alnum_re = Regex::new(r"[^a-z0-9]+").unwrap();
-        let fmt_strip_re = Regex::new(r"[*`]").unwrap();
-
         let flush_table = |in_tbl: &mut bool,
                            raw_h: &mut Vec<String>,
                            norm_h: &mut Vec<String>,
@@ -1473,15 +1655,29 @@ impl MarkdownTranslator {
             let line_str = line.trim();
 
             // Heading 1 detection: # <PackageName>
-            if let Some(h1_cap) = h1_re.captures(line_str) {
+            let is_h1 = if let Some(rest) = line_str.strip_prefix('#') {
+                if !rest.starts_with('#') && rest.starts_with(char::is_whitespace) {
+                    let trimmed_rest = rest.trim();
+                    if !trimmed_rest.is_empty() {
+                        Some(trimmed_rest)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            if let Some(raw_pkg) = is_h1 {
                 flush_section(
                     &mut in_table, &mut table_raw_headers, &mut table_norm_headers,
                     &mut table_units, &mut table_rows, &mut current_tables,
                     &mut current_sec_header, &mut current_component_target,
                     &mut current_sec_doc, &mut sections,
                 );
-                let raw_pkg = h1_cap.get(1).unwrap().as_str().trim();
-                let raw_pkg_clean = pkg_word_re.replace_all(raw_pkg, " ").trim().to_string();
+                let raw_pkg_clean = strip_pkg_words(raw_pkg);
                 let cand_name = if !raw_pkg_clean.is_empty() {
                     raw_pkg_clean
                 } else {
@@ -1495,18 +1691,55 @@ impl MarkdownTranslator {
             }
 
             // Heading 2, 3, 4 detection: ## <SectionOrComponent>
-            if let Some(h_cap) = h_sub_re.captures(line_str) {
+            let is_h_sub = {
+                let hash_count = line_str.chars().take_while(|&c| c == '#').count();
+                if (2..=4).contains(&hash_count) {
+                    let after_hashes = &line_str[hash_count..];
+                    if after_hashes.starts_with(char::is_whitespace) {
+                        let trimmed = after_hashes.trim();
+                        if !trimmed.is_empty() {
+                            Some((hash_count, trimmed))
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            };
+
+            if let Some((level, raw_header)) = is_h_sub {
                 flush_section(
                     &mut in_table, &mut table_raw_headers, &mut table_norm_headers,
                     &mut table_units, &mut table_rows, &mut current_tables,
                     &mut current_sec_header, &mut current_component_target,
                     &mut current_sec_doc, &mut sections,
                 );
-                let raw_header = h_cap.get(2).unwrap().as_str().trim();
                 current_sec_header = raw_header.to_string();
 
-                let norm_header = fmt_strip_re.replace_all(raw_header, "").trim().to_ascii_lowercase();
-                let clean_header_key = non_alnum_re.replace_all(&norm_header, " ").trim().to_string();
+                let norm_header: String = raw_header
+                    .chars()
+                    .filter(|&c| c != '*' && c != '`')
+                    .collect::<String>()
+                    .trim()
+                    .to_ascii_lowercase();
+
+                let clean_header_key = {
+                    let mut s = String::with_capacity(norm_header.len());
+                    let mut prev_ws = false;
+                    for c in norm_header.chars() {
+                        if c.is_ascii_alphanumeric() {
+                            s.push(c);
+                            prev_ws = false;
+                        } else if !prev_ws {
+                            s.push(' ');
+                            prev_ws = true;
+                        }
+                    }
+                    s.trim().to_string()
+                };
 
                 let is_ac = norm_header.starts_with("ac-")
                     || norm_header.starts_with("ac ")
@@ -1515,7 +1748,7 @@ impl MarkdownTranslator {
                     || clean_header_key.starts_with("acceptance criteria");
 
                 let is_functional = is_ac || NON_COMPONENT_SECTION_KEYWORDS.iter().any(|&kw| {
-                    clean_header_key == kw
+                    clean_header_key == *kw
                         || clean_header_key.starts_with(&format!("{} ", kw))
                         || clean_header_key.ends_with(&format!(" {}", kw))
                 });
@@ -1523,12 +1756,11 @@ impl MarkdownTranslator {
                 if is_ac {
                     current_component_target = None;
                 } else if is_functional {
-                    let level = h_cap.get(1).unwrap().as_str().len();
                     if level <= 2 {
                         current_component_target = None;
                     }
                 } else {
-                    let comp_cand = comp_prefix_re.replace_all(raw_header, "").trim().to_string();
+                    let comp_cand = strip_comp_prefix(raw_header);
                     current_component_target = Some(comp_cand);
                 }
 
@@ -1544,7 +1776,7 @@ impl MarkdownTranslator {
                     .map(|c| c.trim().to_string())
                     .collect();
 
-                let is_delimiter = !cells.is_empty() && cells.iter().all(|c| delim_re.is_match(c));
+                let is_delimiter = !cells.is_empty() && cells.iter().all(|c| is_table_delimiter_cell(c));
 
                 if is_delimiter && !in_table {
                     if let Some(header_line) = current_sec_doc.pop() {
@@ -1588,7 +1820,7 @@ impl MarkdownTranslator {
                             .split('|')
                             .map(|c| c.trim().to_string())
                             .collect();
-                        if !next_cells.is_empty() && next_cells.iter().all(|c| delim_re.is_match(c)) {
+                        if !next_cells.is_empty() && next_cells.iter().all(|c| is_table_delimiter_cell(c)) {
                             flush_table(
                                 &mut in_table, &mut table_raw_headers, &mut table_norm_headers,
                                 &mut table_units, &mut table_rows, &mut current_tables,
@@ -1682,16 +1914,22 @@ impl MarkdownTranslator {
             });
 
         let summary_keywords = ["total", "subtotal", "sum", "summary", "aggregate", "overall"];
-        let sep_re = Regex::new(r"^[-=_\s:|]+$").unwrap();
-        let clean_comp_re = Regex::new(r"[*`_#]").unwrap();
 
         for row in &table.rows {
             let comp_raw = row.get(&comp_col).map_or("", |v| v.trim());
-            if comp_raw.is_empty() || sep_re.is_match(comp_raw) {
+            let is_sep = !comp_raw.is_empty()
+                && comp_raw
+                    .chars()
+                    .all(|c| c == '-' || c == '=' || c == '_' || c == ':' || c == '|' || c.is_whitespace());
+            if comp_raw.is_empty() || is_sep {
                 continue;
             }
 
-            let comp_clean = clean_comp_re.replace_all(comp_raw, "").trim().to_ascii_lowercase();
+            let comp_clean: String = comp_raw
+                .chars()
+                .filter(|&c| c != '*' && c != '`' && c != '_' && c != '#')
+                .collect();
+            let comp_clean = comp_clean.trim().to_ascii_lowercase();
             if summary_keywords.contains(&comp_clean.as_str())
                 || summary_keywords.iter().any(|&kw| comp_clean.starts_with(&format!("{} ", kw)))
             {

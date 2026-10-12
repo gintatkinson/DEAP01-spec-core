@@ -5,7 +5,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use chrono::Utc;
-use regex::Regex;
 use serde_json::Value;
 
 use crate::sanitize::sanitize_level_1b_operational_text;
@@ -60,6 +59,376 @@ pub struct SysMLParameterBindingEngine {
     pub is_non_aircraft: bool,
     pub is_civilian: bool,
     pub ast_part_names: BTreeSet<String>,
+}
+
+fn is_ident_char(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || b == b'_'
+}
+
+fn find_first_package(text: &str) -> Option<&str> {
+    let bytes = text.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if let Some(pos) = text[i..].find("package") {
+            let start = i + pos;
+            let end = start + 7;
+            let left_ok = start == 0 || !is_ident_char(bytes[start - 1]);
+            let right_ok = end < bytes.len() && bytes[end].is_ascii_whitespace();
+            if left_ok && right_ok {
+                let mut j = end;
+                while j < bytes.len() && bytes[j].is_ascii_whitespace() {
+                    j += 1;
+                }
+                let ident_start = j;
+                while j < bytes.len() && is_ident_char(bytes[j]) {
+                    j += 1;
+                }
+                if j > ident_start {
+                    return Some(&text[ident_start..j]);
+                }
+            }
+            i = end;
+        } else {
+            break;
+        }
+    }
+    None
+}
+
+fn find_all_part_defs(text: &str) -> Vec<&str> {
+    let mut results = Vec::new();
+    let bytes = text.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if let Some(pos) = text[i..].find("part") {
+            let start = i + pos;
+            let end = start + 4;
+            let left_ok = start == 0 || !is_ident_char(bytes[start - 1]);
+            let right_ok = end < bytes.len() && bytes[end].is_ascii_whitespace();
+            if left_ok && right_ok {
+                let mut j = end;
+                while j < bytes.len() && bytes[j].is_ascii_whitespace() {
+                    j += 1;
+                }
+                if text[j..].starts_with("def") {
+                    let def_end = j + 3;
+                    if def_end < bytes.len() && bytes[def_end].is_ascii_whitespace() {
+                        let mut k = def_end;
+                        while k < bytes.len() && bytes[k].is_ascii_whitespace() {
+                            k += 1;
+                        }
+                        let ident_start = k;
+                        while k < bytes.len() && is_ident_char(bytes[k]) {
+                            k += 1;
+                        }
+                        if k > ident_start {
+                            results.push(&text[ident_start..k]);
+                            i = k;
+                            continue;
+                        }
+                    }
+                }
+            }
+            i = end;
+        } else {
+            break;
+        }
+    }
+    results
+}
+
+fn find_all_attributes(text: &str) -> Vec<(&str, &str)> {
+    let mut results = Vec::new();
+    let bytes = text.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if let Some(pos) = text[i..].find("attribute") {
+            let start = i + pos;
+            let end = start + 9;
+            let left_ok = start == 0 || !is_ident_char(bytes[start - 1]);
+            let right_ok = end < bytes.len() && bytes[end].is_ascii_whitespace();
+            if left_ok && right_ok {
+                let mut j = end;
+                while j < bytes.len() && bytes[j].is_ascii_whitespace() {
+                    j += 1;
+                }
+                let name_start = j;
+                while j < bytes.len() && is_ident_char(bytes[j]) {
+                    j += 1;
+                }
+                if j > name_start {
+                    let attr_name = &text[name_start..j];
+                    let mut k = j;
+                    while k < bytes.len() && bytes[k].is_ascii_whitespace() {
+                        k += 1;
+                    }
+                    if k < bytes.len() && bytes[k] == b':' {
+                        k += 1;
+                        while k < bytes.len() && bytes[k].is_ascii_whitespace() {
+                            k += 1;
+                        }
+                        while k < bytes.len() && is_ident_char(bytes[k]) {
+                            k += 1;
+                        }
+                        while k < bytes.len() && bytes[k].is_ascii_whitespace() {
+                            k += 1;
+                        }
+                    }
+                    if k < bytes.len() && bytes[k] == b'=' {
+                        k += 1;
+                        let val_start = k;
+                        while k < bytes.len() && bytes[k] != b';' && bytes[k] != b'\n' {
+                            k += 1;
+                        }
+                        if k < bytes.len() && bytes[k] == b';' {
+                            let raw_val = text[val_start..k].trim().trim_matches(['"', '\'']);
+                            results.push((attr_name, raw_val));
+                            i = k + 1;
+                            continue;
+                        }
+                    }
+                }
+            }
+            i = end;
+        } else {
+            break;
+        }
+    }
+    results
+}
+
+fn extract_numeric_substring(val: &str) -> Option<&str> {
+    let bytes = val.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        let b = bytes[i];
+        let is_sign = (b == b'+' || b == b'-')
+            && i + 1 < bytes.len()
+            && (bytes[i + 1].is_ascii_digit()
+                || (bytes[i + 1] == b'.' && i + 2 < bytes.len() && bytes[i + 2].is_ascii_digit()));
+        let is_digit = b.is_ascii_digit();
+        let is_dot_digit = b == b'.' && i + 1 < bytes.len() && bytes[i + 1].is_ascii_digit();
+
+        if is_sign || is_digit || is_dot_digit {
+            let start = i;
+            let mut j = if is_sign { i + 1 } else { i };
+            let mut has_dot = false;
+            let mut has_digits = false;
+            while j < bytes.len() {
+                if bytes[j].is_ascii_digit() {
+                    has_digits = true;
+                    j += 1;
+                } else if bytes[j] == b'.' && !has_dot {
+                    if has_digits || (j + 1 < bytes.len() && bytes[j + 1].is_ascii_digit()) {
+                        has_dot = true;
+                        j += 1;
+                    } else {
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            }
+            if has_digits {
+                return Some(&val[start..j]);
+            }
+        }
+        i += 1;
+    }
+    None
+}
+
+fn replace_placeholders<F>(text: &str, mut resolver: F) -> (String, bool)
+where
+    F: FnMut(&str, Option<&str>) -> String,
+{
+    let bytes = text.as_bytes();
+    let mut result = String::with_capacity(text.len());
+    let mut idx = 0;
+    let mut changed = false;
+
+    while idx < bytes.len() {
+        if idx + 4 <= bytes.len() && bytes[idx] == b'{' && bytes[idx + 1] == b'{' {
+            let start = idx;
+            let mut j = idx + 2;
+            let mut found_end = None;
+            while j + 1 < bytes.len() {
+                if bytes[j] == b'}' && bytes[j + 1] == b'}' {
+                    found_end = Some(j);
+                    break;
+                }
+                if bytes[j] == b'\n' {
+                    break;
+                }
+                j += 1;
+            }
+
+            if let Some(end_pos) = found_end {
+                let inner = &text[start + 2..end_pos];
+                let (key, default_val) = match inner.split_once(':') {
+                    Some((k, d)) => (k, Some(d)),
+                    None => (inner, None),
+                };
+                if !key.is_empty() && key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+                    let replacement = resolver(key, default_val);
+                    result.push_str(&replacement);
+                    changed = true;
+                    idx = end_pos + 2;
+                    continue;
+                }
+            }
+        }
+
+        let ch = text[idx..].chars().next().unwrap();
+        result.push(ch);
+        idx += ch.len_utf8();
+    }
+
+    (result, changed)
+}
+
+fn replace_word_case_insensitive(text: &str, target_word: &str, replacement: &str) -> String {
+    let lower_text = text.to_lowercase();
+    let lower_target = target_word.to_lowercase();
+    let target_len = lower_target.len();
+    let bytes = text.as_bytes();
+
+    let mut result = String::with_capacity(text.len());
+    let mut last_idx = 0;
+    let mut search_idx = 0;
+
+    while search_idx < lower_text.len() {
+        if let Some(pos) = lower_text[search_idx..].find(&lower_target) {
+            let start = search_idx + pos;
+            let end = start + target_len;
+
+            let left_ok = start == 0 || !(bytes[start - 1].is_ascii_alphanumeric() || bytes[start - 1] == b'_');
+            let right_ok = end == bytes.len() || !(bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_');
+
+            if left_ok && right_ok {
+                result.push_str(&text[last_idx..start]);
+                result.push_str(replacement);
+                last_idx = end;
+                search_idx = end;
+            } else {
+                search_idx = start + 1;
+            }
+        } else {
+            break;
+        }
+    }
+    result.push_str(&text[last_idx..]);
+    result
+}
+
+fn replace_altitude_agl(text: &str, replacement: &str) -> String {
+    let lower = text.to_lowercase();
+    let bytes = text.as_bytes();
+    let mut result = String::with_capacity(text.len());
+    let mut last_idx = 0;
+    let mut i = 0;
+
+    while i < lower.len() {
+        if let Some(pos) = lower[i..].find("agl") {
+            let agl_start = i + pos;
+            let agl_end = agl_start + 3;
+            let right_ok = agl_end == bytes.len() || !(bytes[agl_end].is_ascii_alphanumeric() || bytes[agl_end] == b'_');
+
+            if right_ok && agl_start > 0 && bytes[agl_start - 1].is_ascii_whitespace() {
+                let mut prev = agl_start - 1;
+                while prev > 0 && bytes[prev].is_ascii_whitespace() {
+                    prev -= 1;
+                }
+                let prev_end = prev + 1;
+                let mut word_start = prev;
+                while word_start > 0 && (bytes[word_start - 1].is_ascii_alphanumeric() || bytes[word_start - 1] == b'_') {
+                    word_start -= 1;
+                }
+                let left_ok = word_start == 0 || !(bytes[word_start - 1].is_ascii_alphanumeric() || bytes[word_start - 1] == b'_');
+                let prev_word = &lower[word_start..prev_end];
+
+                if left_ok && (prev_word == "altitude" || prev_word == "m") {
+                    result.push_str(&text[last_idx..word_start]);
+                    result.push_str(replacement);
+                    last_idx = agl_end;
+                    i = agl_end;
+                    continue;
+                }
+            }
+            i = agl_end;
+        } else {
+            break;
+        }
+    }
+    result.push_str(&text[last_idx..]);
+    result
+}
+
+fn replace_astm_f3411(text: &str, replacement: &str) -> String {
+    let lower = text.to_lowercase();
+    let bytes = text.as_bytes();
+    let mut result = String::with_capacity(text.len());
+    let mut last_idx = 0;
+    let mut i = 0;
+
+    while i < lower.len() {
+        if let Some(pos) = lower[i..].find("astm") {
+            let start = i + pos;
+            let mut j = start + 4;
+            let left_ok = start == 0 || !(bytes[start - 1].is_ascii_alphanumeric() || bytes[start - 1] == b'_');
+            if left_ok {
+                while j < bytes.len() && bytes[j].is_ascii_whitespace() {
+                    j += 1;
+                }
+                if lower[j..].starts_with("f3411") {
+                    j += 5;
+                    if lower[j..].starts_with("-22a") {
+                        j += 4;
+                    }
+                    result.push_str(&text[last_idx..start]);
+                    result.push_str(replacement);
+                    last_idx = j;
+                    i = j;
+                    continue;
+                }
+            }
+            i = start + 4;
+        } else {
+            break;
+        }
+    }
+    result.push_str(&text[last_idx..]);
+    result
+}
+
+fn replace_roe_phrase(text: &str) -> String {
+    let lower = text.to_lowercase();
+    let bytes = text.as_bytes();
+    let mut result = String::with_capacity(text.len());
+    let mut last_idx = 0;
+    let mut i = 0;
+
+    while i < lower.len() {
+        if let Some(pos) = lower[i..].find("rules of engagement") {
+            let start = i + pos;
+            let mut end = start + "rules of engagement".len();
+            let mut j = end;
+            while j < bytes.len() && (bytes[j] == b' ' || bytes[j] == b'\t') {
+                j += 1;
+            }
+            if lower[j..].starts_with("(roe)") {
+                end = j + 5;
+            }
+            result.push_str(&text[last_idx..start]);
+            result.push_str("operational safety interlocks");
+            last_idx = end;
+            i = end;
+        } else {
+            break;
+        }
+    }
+    result.push_str(&text[last_idx..]);
+    result
 }
 
 impl SysMLParameterBindingEngine {
@@ -352,9 +721,8 @@ impl SysMLParameterBindingEngine {
     }
 
     pub fn ingest_sysml_text(&mut self, text: &str) -> bool {
-        let pkg_re = Regex::new(r"\bpackage\s+([A-Za-z0-9_]+)").unwrap();
-        if let Some(caps) = pkg_re.captures(text) {
-            let pkg_name = caps.get(1).map(|m| m.as_str().trim()).unwrap_or("");
+        if let Some(pkg_name) = find_first_package(text) {
+            let pkg_name = pkg_name.trim();
             if !["Package", "Model", "Root"].contains(&pkg_name) {
                 self.inferred_system_identifier = Some(pkg_name.to_string());
                 self.parameter_bindings
@@ -366,26 +734,14 @@ impl SysMLParameterBindingEngine {
             }
         }
 
-        let part_re = Regex::new(r"\bpart\s+def\s+([A-Za-z0-9_]+)").unwrap();
-        for caps in part_re.captures_iter(text) {
-            if let Some(m) = caps.get(1) {
-                let p_name = m.as_str().trim().to_string();
-                self.ast_part_names.insert(p_name.clone());
-                self.explicit_keys.insert(p_name.clone());
-                self.explicit_keys.insert(p_name.to_uppercase());
-            }
+        for p_name in find_all_part_defs(text) {
+            let p_name = p_name.trim().to_string();
+            self.ast_part_names.insert(p_name.clone());
+            self.explicit_keys.insert(p_name.clone());
+            self.explicit_keys.insert(p_name.to_uppercase());
         }
 
-        let attr_re = Regex::new(
-            r"\battribute\s+([A-Za-z0-9_]+)(?:\s*:\s*[A-Za-z0-9_]+)?\s*=\s*([^;]+);",
-        )
-        .unwrap();
-        for caps in attr_re.captures_iter(text) {
-            let attr_name = caps.get(1).map(|m| m.as_str().trim()).unwrap_or("");
-            let raw_val = caps
-                .get(2)
-                .map(|m| m.as_str().trim().trim_matches(['"', '\'']))
-                .unwrap_or("");
+        for (attr_name, raw_val) in find_all_attributes(text) {
             self.explicit_keys.insert(attr_name.to_string());
             self.explicit_keys.insert(attr_name.to_uppercase());
             self.parameter_bindings
@@ -400,37 +756,39 @@ impl SysMLParameterBindingEngine {
 
     pub fn ingest_markdown_file(&mut self, path: &Path) -> bool {
         if let Ok(content) = fs::read_to_string(path) {
-            let title_re = Regex::new(r"^#\s+(.+)$").unwrap();
             for line in content.lines() {
-                if let Some(caps) = title_re.captures(line.trim()) {
-                    let title = caps.get(1).map(|m| m.as_str().trim()).unwrap_or("");
-                    let title_clean = title.replace(['*', '_', '`'], "").trim().to_string();
-                    let generic = [
-                        "technical specifications",
-                        "specifications",
-                        "table of contents",
-                        "overview",
-                        "system specifications",
-                        "concept of operations",
-                        "conops",
-                        "mission intent",
-                        "requirements",
-                        "architecture",
-                        "metadata",
-                    ];
-                    if !generic.contains(&title_clean.to_lowercase().as_str())
-                        && !title_clean.is_empty()
-                        && self.inferred_system_identifier.is_none()
-                    {
-                        self.inferred_system_identifier = Some(title_clean.clone());
-                        self.parameter_bindings
-                            .insert("SYSTEM_IDENTIFIER".to_string(), title_clean.clone());
-                        self.parameter_bindings
-                            .insert("MISSION_SYSTEM_NAME".to_string(), title_clean);
-                        self.explicit_keys.insert("SYSTEM_IDENTIFIER".to_string());
-                        self.explicit_keys.insert("MISSION_SYSTEM_NAME".to_string());
+                let trimmed = line.trim();
+                if let Some(rest) = trimmed.strip_prefix('#') {
+                    if !rest.starts_with('#') {
+                        let title = rest.trim();
+                        let title_clean = title.replace(['*', '_', '`'], "").trim().to_string();
+                        let generic = [
+                            "technical specifications",
+                            "specifications",
+                            "table of contents",
+                            "overview",
+                            "system specifications",
+                            "concept of operations",
+                            "conops",
+                            "mission intent",
+                            "requirements",
+                            "architecture",
+                            "metadata",
+                        ];
+                        if !generic.contains(&title_clean.to_lowercase().as_str())
+                            && !title_clean.is_empty()
+                            && self.inferred_system_identifier.is_none()
+                        {
+                            self.inferred_system_identifier = Some(title_clean.clone());
+                            self.parameter_bindings
+                                .insert("SYSTEM_IDENTIFIER".to_string(), title_clean.clone());
+                            self.parameter_bindings
+                                .insert("MISSION_SYSTEM_NAME".to_string(), title_clean);
+                            self.explicit_keys.insert("SYSTEM_IDENTIFIER".to_string());
+                            self.explicit_keys.insert("MISSION_SYSTEM_NAME".to_string());
+                        }
+                        break;
                     }
-                    break;
                 }
             }
 
@@ -461,10 +819,7 @@ impl SysMLParameterBindingEngine {
 
     pub fn _map_semantic_aliases(&mut self, key: &str, val: &str) {
         let lower = key.to_lowercase().replace(['-', ' '], "_");
-        let num_re = Regex::new(r"[-+]?\d*\.?\d+").unwrap();
-        let num_val = num_re
-            .find(val)
-            .map(|m| m.as_str())
+        let num_val = extract_numeric_substring(val)
             .unwrap_or(val)
             .to_string();
 
@@ -570,9 +925,8 @@ impl SysMLParameterBindingEngine {
             "SYSTEM_MASS_KG",
         ] {
             if let Some(val) = self.parameter_bindings.get(*key) {
-                let num_re = Regex::new(r"[-+]?\d*\.?\d+").unwrap();
-                if let Some(m) = num_re.find(val) {
-                    if let Ok(v) = m.as_str().parse::<f64>() {
+                if let Some(m) = extract_numeric_substring(val) {
+                    if let Ok(v) = m.parse::<f64>() {
                         return v;
                     }
                 }
@@ -1097,19 +1451,12 @@ impl SysMLParameterBindingEngine {
             return String::new();
         }
 
-        let placeholder_re = Regex::new(r"\{\{([A-Za-z0-9_]+)(?::([^\}]*))?\}\}").unwrap();
         let mut current = content.to_string();
 
         for _ in 0..3 {
-            let mut changed = false;
-            let next = placeholder_re
-                .replace_all(&current, |caps: &regex::Captures| {
-                    changed = true;
-                    let key = caps.get(1).map(|m| m.as_str()).unwrap_or("");
-                    let default_val = caps.get(2).map(|m| m.as_str());
-                    self.resolve_token(key, default_val)
-                })
-                .to_string();
+            let (next, changed) = replace_placeholders(&current, |key, default_val| {
+                self.resolve_token(key, default_val)
+            });
 
             if !changed || next == current {
                 break;
@@ -1140,52 +1487,38 @@ impl SysMLParameterBindingEngine {
     pub fn apply_domain_ontology_sanitization(&self, current: &mut String) {
         let dom = self.detected_domain.to_lowercase();
         if dom == "medical" {
-            let re_para = Regex::new(r"(?i)\bparachute\b").unwrap();
-            *current = re_para.replace_all(current, "failsafe joint brake").to_string();
+            *current = replace_word_case_insensitive(current, "parachute", "failsafe joint brake");
             *current = current.replace("PARACHUTE", "JOINT_BRAKE");
-            let re_alt = Regex::new(r"(?i)\b(?:altitude\s+AGL|m\s+AGL)\b").unwrap();
-            *current = re_alt.replace_all(current, "mm").to_string();
-            let re_astm = Regex::new(r"ASTM\s+F3411(?:-22a)?").unwrap();
-            *current = re_astm.replace_all(current, "IEC 62304 / ISO 14971").to_string();
+            *current = replace_altitude_agl(current, "mm");
+            *current = replace_astm_f3411(current, "IEC 62304 / ISO 14971");
         } else if dom == "rail" {
-            let re_para = Regex::new(r"(?i)\bparachute\b").unwrap();
-            *current = re_para.replace_all(current, "pneumatic emergency brake").to_string();
+            *current = replace_word_case_insensitive(current, "parachute", "pneumatic emergency brake");
             *current = current.replace("PARACHUTE", "EMERGENCY_BRAKE");
-            let re_alt = Regex::new(r"(?i)\b(?:altitude\s+AGL|m\s+AGL)\b").unwrap();
-            *current = re_alt.replace_all(current, "m").to_string();
-            let re_astm = Regex::new(r"ASTM\s+F3411(?:-22a)?").unwrap();
-            *current = re_astm.replace_all(current, "EN 50128 SIL 4").to_string();
+            *current = replace_altitude_agl(current, "m");
+            *current = replace_astm_f3411(current, "EN 50128 SIL 4");
         } else if dom == "marine" {
-            let re_para = Regex::new(r"(?i)\bparachute\b").unwrap();
-            *current = re_para.replace_all(current, "positive buoyancy drop-weight").to_string();
+            *current = replace_word_case_insensitive(current, "parachute", "positive buoyancy drop-weight");
             *current = current.replace("PARACHUTE", "DROP_WEIGHT");
-            let re_alt = Regex::new(r"(?i)\b(?:altitude\s+AGL|m\s+AGL)\b").unwrap();
-            *current = re_alt.replace_all(current, "m Depth").to_string();
-            let re_astm = Regex::new(r"ASTM\s+F3411(?:-22a)?").unwrap();
-            *current = re_astm.replace_all(current, "DNV-GL-ST-E403").to_string();
+            *current = replace_altitude_agl(current, "m Depth");
+            *current = replace_astm_f3411(current, "DNV-GL-ST-E403");
         } else if dom == "space" {
-            let re_para = Regex::new(r"(?i)\bparachute\b").unwrap();
-            *current = re_para.replace_all(current, "autonomous de-orbit propulsion").to_string();
+            *current = replace_word_case_insensitive(current, "parachute", "autonomous de-orbit propulsion");
             *current = current.replace("PARACHUTE", "DEORBIT_THRUSTER");
-            let re_alt = Regex::new(r"(?i)\b(?:altitude\s+AGL|m\s+AGL)\b").unwrap();
-            *current = re_alt.replace_all(current, "km").to_string();
-            let re_astm = Regex::new(r"ASTM\s+F3411(?:-22a)?").unwrap();
-            *current = re_astm.replace_all(current, "ECSS-E-ST-40C").to_string();
+            *current = replace_altitude_agl(current, "km");
+            *current = replace_astm_f3411(current, "ECSS-E-ST-40C");
         } else if self.is_non_aircraft {
-            let re_para = Regex::new(r"(?i)\bparachute\b").unwrap();
-            *current = re_para.replace_all(current, "recovery system").to_string();
+            *current = replace_word_case_insensitive(current, "parachute", "recovery system");
             *current = current.replace("PARACHUTE", "RECOVERY");
         }
 
         if self.is_civilian {
             for idx in 1..=6 {
-                let re_roe = Regex::new(&format!(r"\bROE-0{idx}\b")).unwrap();
-                *current = re_roe.replace_all(current, format!("SAF-0{idx}").as_str()).to_string();
+                let target = format!("ROE-0{idx}");
+                let repl = format!("SAF-0{idx}");
+                *current = replace_word_case_insensitive(current, &target, &repl);
             }
-            let re_roe_word = Regex::new(r"(?i)rules of engagement(?:\s*\(ROE\))?").unwrap();
-            *current = re_roe_word.replace_all(current, "operational safety interlocks").to_string();
-            let re_weapons = Regex::new(r"(?i)\bweapons release\b").unwrap();
-            *current = re_weapons.replace_all(current, "high-consequence actuation").to_string();
+            *current = replace_roe_phrase(current);
+            *current = replace_word_case_insensitive(current, "weapons release", "high-consequence actuation");
         }
     }
 }

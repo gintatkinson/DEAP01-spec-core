@@ -3,9 +3,7 @@
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
-use regex::Regex;
-
-use crate::params::{SysMLParameterBindingEngine, RAW_TOKEN_FINDER};
+use crate::params::SysMLParameterBindingEngine;
 use crate::sanitize::sanitize_level_1b_operational_text;
 use crate::toc::{extract_headings, generate_table_of_contents, verify_markdown_links};
 
@@ -65,6 +63,24 @@ pub fn path_relative_from(path: &Path, base: &Path) -> PathBuf {
     result
 }
 
+fn is_uri_scheme(s: &str) -> bool {
+    if let Some(pos) = s.find("://") {
+        if pos == 0 {
+            return false;
+        }
+        let scheme = &s[..pos];
+        let mut chars = scheme.chars();
+        if let Some(first) = chars.next() {
+            if first.is_ascii_alphabetic()
+                && chars.all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '-' || c == '.')
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 /// Normalizes markdown links `[label](target)` so they resolve relative to the directory of `output_file`.
 pub fn relativize_markdown_links(text: &str, output_file: &Path, workspace_dir: &Path) -> String {
     if text.is_empty() {
@@ -84,111 +100,201 @@ pub fn relativize_markdown_links(text: &str, output_file: &Path, workspace_dir: 
         .unwrap_or(&abs_ws_dir)
         .to_path_buf();
 
-    let link_re = Regex::new(r"\[(?P<label>(?:\\\]|[^\]])+)\]\((?P<target>[^)\n]+)\)").unwrap();
-    let scheme_re = Regex::new(r"^[a-zA-Z][a-zA-Z0-9+.-]*://").unwrap();
+    let bytes = text.as_bytes();
+    let mut result = String::with_capacity(text.len());
+    let mut idx = 0;
 
-    link_re
-        .replace_all(text, |caps: &regex::Captures| {
-            let label = caps.name("label").map(|m| m.as_str()).unwrap_or("");
-            let raw_target = caps.name("target").map(|m| m.as_str()).unwrap_or("");
-            let target_trimmed = raw_target.trim();
-
-            if target_trimmed.is_empty() {
-                return caps.get(0).unwrap().as_str().to_string();
-            }
-
-            let (url_part, title_part, has_angle_brackets) = if target_trimmed.starts_with('<')
-                && target_trimmed.contains('>')
-            {
-                let end = target_trimmed.find('>').unwrap();
-                let url = target_trimmed[1..end].trim();
-                let title = &target_trimmed[end + 1..];
-                (url, title.to_string(), true)
-            } else {
-                let parts: Vec<&str> = target_trimmed.splitn(2, ' ').collect();
-                if parts.len() == 2
-                    && (parts[1].starts_with('"')
-                        || parts[1].starts_with('\'')
-                        || parts[1].starts_with('('))
-                {
-                    (parts[0], format!(" {}", parts[1]), false)
-                } else {
-                    (target_trimmed, String::new(), false)
+    while idx < bytes.len() {
+        if bytes[idx] == b'[' {
+            let mut j = idx + 1;
+            let mut label_end = None;
+            while j < bytes.len() {
+                if bytes[j] == b'\\' && j + 1 < bytes.len() {
+                    j += 2;
+                    continue;
                 }
-            };
-
-            // Preserve external URLs and anchors
-            if url_part.starts_with('#')
-                || url_part.starts_with("http://")
-                || url_part.starts_with("https://")
-                || url_part.starts_with("mailto:")
-                || url_part.starts_with("ftp://")
-                || scheme_re.is_match(url_part)
-                || url_part.is_empty()
-            {
-                return caps.get(0).unwrap().as_str().to_string();
-            }
-
-            let (path_part, anchor_suffix) = if let Some((p, a)) = url_part.split_once('#') {
-                (p, format!("#{a}"))
-            } else {
-                (url_part, String::new())
-            };
-
-            if path_part.is_empty() {
-                return caps.get(0).unwrap().as_str().to_string();
-            }
-
-            let is_explicit_rel = path_part.starts_with("./")
-                || path_part.starts_with("../")
-                || path_part == "."
-                || path_part == "..";
-            let is_abs = path_part.starts_with('/')
-                || (path_part.len() > 2 && path_part.as_bytes()[1] == b':');
-
-            let target_abs = if is_abs {
-                let p = Path::new(path_part);
-                if p.starts_with(&abs_ws_dir) {
-                    p.to_path_buf()
-                } else {
-                    abs_ws_dir.join(path_part.trim_start_matches(['/', '\\']))
+                if bytes[j] == b']' {
+                    label_end = Some(j);
+                    break;
                 }
-            } else if is_explicit_rel {
-                let candidate = abs_output_dir.join(path_part);
-                if candidate.exists() {
-                    candidate
-                } else {
-                    let cand_ws =
-                        abs_ws_dir.join(path_part.trim_start_matches(['.', '/', '\\']));
-                    let cand_docs = abs_ws_dir
-                        .join("docs")
-                        .join(path_part.trim_start_matches(['.', '/', '\\']));
-                    if cand_ws.exists() {
-                        cand_ws
-                    } else if cand_docs.exists() {
-                        cand_docs
-                    } else {
-                        candidate
+                j += 1;
+            }
+
+            if let Some(lend) = label_end {
+                if lend > idx + 1 && lend + 1 < bytes.len() && bytes[lend + 1] == b'(' {
+                    let target_start = lend + 2;
+                    let mut k = target_start;
+                    let mut target_end = None;
+                    while k < bytes.len() {
+                        if bytes[k] == b')' {
+                            target_end = Some(k);
+                            break;
+                        }
+                        if bytes[k] == b'\n' {
+                            break;
+                        }
+                        k += 1;
+                    }
+
+                    if let Some(tend) = target_end {
+                        if tend > target_start {
+                            let label = &text[idx + 1..lend];
+                            let raw_target = &text[target_start..tend];
+                            let target_trimmed = raw_target.trim();
+
+                            if target_trimmed.is_empty() {
+                                result.push_str(&text[idx..tend + 1]);
+                                idx = tend + 1;
+                                continue;
+                            }
+
+                            let (url_part, title_part, has_angle_brackets) = if target_trimmed.starts_with('<')
+                                && target_trimmed.contains('>')
+                            {
+                                let end = target_trimmed.find('>').unwrap();
+                                let url = target_trimmed[1..end].trim();
+                                let title = &target_trimmed[end + 1..];
+                                (url, title.to_string(), true)
+                            } else {
+                                let parts: Vec<&str> = target_trimmed.splitn(2, ' ').collect();
+                                if parts.len() == 2
+                                    && (parts[1].starts_with('"')
+                                        || parts[1].starts_with('\'')
+                                        || parts[1].starts_with('('))
+                                {
+                                    (parts[0], format!(" {}", parts[1]), false)
+                                } else {
+                                    (target_trimmed, String::new(), false)
+                                }
+                            };
+
+                            // Preserve external URLs and anchors
+                            if url_part.starts_with('#')
+                                || url_part.starts_with("http://")
+                                || url_part.starts_with("https://")
+                                || url_part.starts_with("mailto:")
+                                || url_part.starts_with("ftp://")
+                                || is_uri_scheme(url_part)
+                                || url_part.is_empty()
+                            {
+                                result.push_str(&text[idx..tend + 1]);
+                                idx = tend + 1;
+                                continue;
+                            }
+
+                            let (path_part, anchor_suffix) = if let Some((p, a)) = url_part.split_once('#') {
+                                (p, format!("#{a}"))
+                            } else {
+                                (url_part, String::new())
+                            };
+
+                            if path_part.is_empty() {
+                                result.push_str(&text[idx..tend + 1]);
+                                idx = tend + 1;
+                                continue;
+                            }
+
+                            let is_explicit_rel = path_part.starts_with("./")
+                                || path_part.starts_with("../")
+                                || path_part == "."
+                                || path_part == "..";
+                            let is_abs = path_part.starts_with('/')
+                                || (path_part.len() > 2 && path_part.as_bytes()[1] == b':');
+
+                            let target_abs = if is_abs {
+                                let p = Path::new(path_part);
+                                if p.starts_with(&abs_ws_dir) {
+                                    p.to_path_buf()
+                                } else {
+                                    abs_ws_dir.join(path_part.trim_start_matches(['/', '\\']))
+                                }
+                            } else if is_explicit_rel {
+                                let candidate = abs_output_dir.join(path_part);
+                                if candidate.exists() {
+                                    candidate
+                                } else {
+                                    let cand_ws =
+                                        abs_ws_dir.join(path_part.trim_start_matches(['.', '/', '\\']));
+                                    let cand_docs = abs_ws_dir
+                                        .join("docs")
+                                        .join(path_part.trim_start_matches(['.', '/', '\\']));
+                                    if cand_ws.exists() {
+                                        cand_ws
+                                    } else if cand_docs.exists() {
+                                        cand_docs
+                                    } else {
+                                        candidate
+                                    }
+                                }
+                            } else {
+                                abs_ws_dir.join(path_part)
+                            };
+
+                            let rel = path_relative_from(&target_abs, &abs_output_dir);
+                            let mut rel_str = rel.to_string_lossy().replace('\\', "/");
+                            if path_part.starts_with("./") && !rel_str.starts_with('.') && !rel_str.is_empty() {
+                                rel_str = format!("./{rel_str}");
+                            }
+
+                            let new_url = format!("{rel_str}{anchor_suffix}");
+                            let replacement = if has_angle_brackets {
+                                format!("[{label}](<{new_url}>{title_part})")
+                            } else {
+                                format!("[{label}]({new_url}{title_part})")
+                            };
+                            result.push_str(&replacement);
+                            idx = tend + 1;
+                            continue;
+                        }
                     }
                 }
-            } else {
-                abs_ws_dir.join(path_part)
-            };
-
-            let rel = path_relative_from(&target_abs, &abs_output_dir);
-            let mut rel_str = rel.to_string_lossy().replace('\\', "/");
-            if path_part.starts_with("./") && !rel_str.starts_with('.') && !rel_str.is_empty() {
-                rel_str = format!("./{rel_str}");
             }
+        }
 
-            let new_url = format!("{rel_str}{anchor_suffix}");
-            if has_angle_brackets {
-                format!("[{label}](<{new_url}>{title_part})")
-            } else {
-                format!("[{label}]({new_url}{title_part})")
+        let ch = text[idx..].chars().next().unwrap();
+        result.push(ch);
+        idx += ch.len_utf8();
+    }
+
+    result
+}
+
+/// Scans text for unresolved parameter tokens matching `{{...}}`.
+pub fn find_raw_tokens(text: &str) -> Vec<String> {
+    let mut tokens = Vec::new();
+    let bytes = text.as_bytes();
+    let mut i = 0;
+    while i + 4 <= bytes.len() {
+        if bytes[i] == b'{' && bytes[i + 1] == b'{' {
+            let start = i;
+            let mut j = i + 2;
+            let mut found_end = None;
+            while j + 1 < bytes.len() {
+                if bytes[j] == b'}' && bytes[j + 1] == b'}' {
+                    found_end = Some(j);
+                    break;
+                }
+                if bytes[j] == b'\n' {
+                    break;
+                }
+                j += 1;
             }
-        })
-        .to_string()
+            if let Some(end_pos) = found_end {
+                let inner = &text[start + 2..end_pos];
+                let (key, _default) = match inner.split_once(':') {
+                    Some((k, d)) => (k, Some(d)),
+                    None => (inner, None),
+                };
+                if !key.is_empty() && key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+                    tokens.push(text[start..end_pos + 2].to_string());
+                    i = end_pos + 2;
+                    continue;
+                }
+            }
+        }
+        i += 1;
+    }
+    tokens
 }
 
 /// Validates unit integrity:
@@ -199,7 +305,6 @@ pub fn validate_unit_integrity(
     param_engine: Option<&SysMLParameterBindingEngine>,
 ) -> (bool, Vec<String>) {
     let mut errors = Vec::new();
-    let token_re = Regex::new(RAW_TOKEN_FINDER).unwrap();
 
     for path in unit_paths {
         if !path.is_file() {
@@ -226,10 +331,7 @@ pub fn validate_unit_integrity(
             text
         };
 
-        let placeholders: Vec<String> = token_re
-            .find_iter(&processed)
-            .map(|m| m.as_str().to_string())
-            .collect();
+        let placeholders: Vec<String> = find_raw_tokens(&processed);
         if !placeholders.is_empty() {
             let mut unique = placeholders;
             unique.sort();
@@ -431,25 +533,19 @@ pub fn assemble_document(
     let mut meta_version = default_ver.to_string();
     let mut meta_date = default_date.to_string();
 
-    let title_meta_re = Regex::new(r"(?i)\|\s*\*\*Title\*\*\s*\|\s*([^|]+)\|").unwrap();
-    let ver_meta_re = Regex::new(r"(?i)\|\s*\*\*Version\*\*\s*\|\s*([^|]+)\|").unwrap();
-    let date_meta_re = Regex::new(r"(?i)\|\s*\*\*Date\*\*\s*\|\s*([^|]+)\|").unwrap();
-
     for (_, content) in &units {
         for line in content.lines() {
-            if let Some(caps) = title_meta_re.captures(line) {
-                if let Some(m) = caps.get(1) {
-                    meta_title = m.as_str().trim().to_string();
-                }
-            }
-            if let Some(caps) = ver_meta_re.captures(line) {
-                if let Some(m) = caps.get(1) {
-                    meta_version = m.as_str().trim().to_string();
-                }
-            }
-            if let Some(caps) = date_meta_re.captures(line) {
-                if let Some(m) = caps.get(1) {
-                    meta_date = m.as_str().trim().to_string();
+            let trimmed = line.trim();
+            if trimmed.starts_with('|') {
+                let parts: Vec<&str> = trimmed.trim_matches('|').split('|').map(str::trim).collect();
+                if parts.len() >= 2 {
+                    if parts[0].eq_ignore_ascii_case("**title**") {
+                        meta_title = parts[1].to_string();
+                    } else if parts[0].eq_ignore_ascii_case("**version**") {
+                        meta_version = parts[1].to_string();
+                    } else if parts[0].eq_ignore_ascii_case("**date**") {
+                        meta_date = parts[1].to_string();
+                    }
                 }
             }
         }

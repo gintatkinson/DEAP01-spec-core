@@ -2,8 +2,6 @@
 //!
 //! Realises: [Zero-Placeholder Invariant, Strict Bidirectional Checklist Sync]
 
-use regex::Regex;
-
 /// Represents a parsed checklist item.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ChecklistItem {
@@ -12,6 +10,80 @@ pub struct ChecklistItem {
     pub issue_number: Option<u64>,
     pub text: String,
     pub full_line: String,
+}
+
+/// Internal helper representing a parsed checklist line.
+struct ParsedCheckline<'a> {
+    checked: bool,
+    issue_number: Option<u64>,
+    text: &'a str,
+    mark_pos: usize,
+}
+
+/// Parses a line into checklist components if it matches `- [ ]` or `- [x]`.
+fn parse_checklist_line(line: &str) -> Option<ParsedCheckline<'_>> {
+    let trimmed = line.trim_start();
+    let indent_len = line.len() - trimmed.len();
+
+    // Check for checkbox prefix with str::strip_prefix
+    let (checked, after_box) = if let Some(rest) = trimmed.strip_prefix("- [ ] ") {
+        (false, rest)
+    } else if let Some(rest) = trimmed.strip_prefix("- [x] ").or_else(|| trimmed.strip_prefix("- [X] ")) {
+        (true, rest)
+    } else if let Some(rest) = trimmed.strip_prefix("- [ ]") {
+        (false, rest)
+    } else if let Some(rest) = trimmed.strip_prefix("- [x]").or_else(|| trimmed.strip_prefix("- [X]")) {
+        (true, rest)
+    } else {
+        // Fallback for optional whitespace between '-' and '['
+        let after_dash = trimmed.strip_prefix('-')?;
+        let after_dash_trimmed = after_dash.trim_start();
+        if let Some(rest) = after_dash_trimmed.strip_prefix("[ ] ") {
+            (false, rest)
+        } else if let Some(rest) = after_dash_trimmed.strip_prefix("[x] ").or_else(|| after_dash_trimmed.strip_prefix("[X] ")) {
+            (true, rest)
+        } else if let Some(rest) = after_dash_trimmed.strip_prefix("[ ]") {
+            (false, rest)
+        } else if let Some(rest) = after_dash_trimmed.strip_prefix("[x]").or_else(|| after_dash_trimmed.strip_prefix("[X]")) {
+            (true, rest)
+        } else {
+            return None;
+        }
+    };
+
+    // Calculate exact byte position of the checkbox mark character in `line`
+    let bracket_offset = trimmed.find('[')?;
+    let mark_pos = indent_len + bracket_offset + 1;
+
+    // Parse optional issue number (#123) and title from `after_box`
+    let after_ws = after_box.trim_start();
+    let (issue_number, text) = if let Some(after_hash) = after_ws.strip_prefix('#') {
+        let digits_len = after_hash.chars().take_while(|c| c.is_ascii_digit()).count();
+        if digits_len > 0 {
+            let num = after_hash[..digits_len].parse::<u64>().ok();
+            let after_digits = &after_hash[digits_len..];
+            let after_digits_trimmed = after_digits.trim_start();
+            let after_sep = if let Some(rest) = after_digits_trimmed.strip_prefix('-') {
+                rest
+            } else if let Some(rest) = after_digits_trimmed.strip_prefix(':') {
+                rest
+            } else {
+                after_digits_trimmed
+            };
+            (num, after_sep.trim_start())
+        } else {
+            (None, after_ws)
+        }
+    } else {
+        (None, after_ws)
+    };
+
+    Some(ParsedCheckline {
+        checked,
+        issue_number,
+        text,
+        mark_pos,
+    })
 }
 
 /// Identifies if a string contains prohibited unpopulated fallback placeholders.
@@ -24,26 +96,56 @@ pub fn contains_unpopulated_placeholders(text: &str) -> bool {
 
 /// Replaces prohibited placeholder blocks with compliant allocated notes or removes them.
 pub fn clean_unpopulated_placeholders(content: &str) -> String {
-    let re = Regex::new(r"(?i)\*?\s*To be populated after Phase 3\s*\*?").unwrap();
-    re.replace_all(content, "- None allocated (structural subsystem component)").to_string()
+    let target = "to be populated after phase 3";
+    let replacement = "- None allocated (structural subsystem component)";
+    let mut result = String::with_capacity(content.len());
+    let mut rest = content;
+
+    while let Some(pos) = rest.to_ascii_lowercase().find(target) {
+        // Look backwards from pos in rest for optional whitespace and optional '*'
+        let before = &rest[..pos];
+        let bytes_before = before.as_bytes();
+        let mut idx = pos;
+        while idx > 0 && bytes_before[idx - 1].is_ascii_whitespace() {
+            idx -= 1;
+        }
+        if idx > 0 && bytes_before[idx - 1] == b'*' {
+            idx -= 1;
+        }
+        let start_idx = idx;
+
+        // Look forwards from pos + target.len() in rest for optional whitespace and optional '*'
+        let after_pos = pos + target.len();
+        let after = &rest[after_pos..];
+        let bytes_after = after.as_bytes();
+        let mut end_offset = 0;
+        while end_offset < bytes_after.len() && bytes_after[end_offset].is_ascii_whitespace() {
+            end_offset += 1;
+        }
+        if end_offset < bytes_after.len() && bytes_after[end_offset] == b'*' {
+            end_offset += 1;
+        }
+        let end_idx = after_pos + end_offset;
+
+        result.push_str(&rest[..start_idx]);
+        result.push_str(replacement);
+        rest = &rest[end_idx..];
+    }
+    result.push_str(rest);
+    result
 }
 
 /// Parses all `- [ ]` or `- [x]` checklist items from markdown content.
 pub fn parse_checklists(content: &str) -> Vec<ChecklistItem> {
     let mut items = Vec::new();
-    let re = Regex::new(r"^(\s*-\s*\[([ xX])\])\s*(?:#(\d+)\s*[-:]?\s*)?(.*)$").unwrap();
 
     for (idx, line) in content.lines().enumerate() {
-        if let Some(caps) = re.captures(line) {
-            let checked = &caps[2] == "x" || &caps[2] == "X";
-            let issue_number = caps.get(3).and_then(|m| m.as_str().parse::<u64>().ok());
-            let text = caps.get(4).map(|m| m.as_str().to_string()).unwrap_or_default();
-
+        if let Some(parsed) = parse_checklist_line(line) {
             items.push(ChecklistItem {
                 line_number: idx + 1,
-                checked,
-                issue_number,
-                text,
+                checked: parsed.checked,
+                issue_number: parsed.issue_number,
+                text: parsed.text.to_string(),
                 full_line: line.to_string(),
             });
         }
@@ -60,23 +162,16 @@ pub fn reconcile_checklist_content<F>(
 where
     F: Fn(Option<u64>, &str) -> Option<bool>,
 {
-    let re = Regex::new(r"^(\s*-\s*\[)([ xX])(\]\s*(?:#(\d+)\s*[-:]?\s*)?)(.*)$").unwrap();
     let mut new_lines = Vec::new();
     let mut modified_count = 0;
 
     for line in content.lines() {
-        if let Some(caps) = re.captures(line) {
-            let current_checked = &caps[2] == "x" || &caps[2] == "X";
-            let issue_num = caps.get(4).and_then(|m| m.as_str().parse::<u64>().ok());
-            let text = caps.get(5).map(|m| m.as_str().trim()).unwrap_or("");
-
-            if let Some(target_resolved) = is_item_resolved(issue_num, text) {
-                if target_resolved != current_checked {
+        if let Some(parsed) = parse_checklist_line(line) {
+            if let Some(target_resolved) = is_item_resolved(parsed.issue_number, parsed.text.trim()) {
+                if target_resolved != parsed.checked {
                     let mark = if target_resolved { "x" } else { " " };
-                    let prefix = &caps[1];
-                    let suffix = &caps[3];
-                    let rest = &caps[5];
-                    new_lines.push(format!("{}{}{}{}", prefix, mark, suffix, rest));
+                    let new_line = format!("{}{}{}", &line[..parsed.mark_pos], mark, &line[parsed.mark_pos + 1..]);
+                    new_lines.push(new_line);
                     modified_count += 1;
                     continue;
                 }
