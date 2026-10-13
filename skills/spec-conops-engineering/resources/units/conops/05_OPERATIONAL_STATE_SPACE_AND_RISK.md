@@ -7,7 +7,7 @@
 ## 5. Operational State Space, Boundary Containment & Risk Assessment
 
 ### 5.1 Operational State Space Formulation & Boundary Containment Mathematics
-The system operational domain is formally defined as a bounded multi-dimensional Operational State Space $\Omega_{\mathrm{state}} \subset \mathbb{R}^n$, bounded by physical, environmental, and operational parameter limits $\mathbf{X}_{\mathrm{boundary}} = [\mathbf{x}_{\mathrm{min}}, \mathbf{x}_{\mathrm{max}}]^\top$. The total operational envelope consists of the nominal operational geometry, the contingency envelope, and the containment risk buffer:
+The system operational domain is formally defined as a bounded multi-dimensional Operational State Space $\Omega_{\mathrm{state}} \subset \mathbb{R}^n$, bounded by physical, environmental, and operational parameter limits $\mathbf{X}_{\mathrm{boundary}} = [\mathbf{x}_{\mathrm{min}}, \mathbf{x}_{\mathrm{max}}]^\top$. Grounded in classical kinematic trajectory dynamics and operational boundary containment geometry principles, the total operational envelope consists of the nominal operational geometry, the contingency envelope, and the containment risk buffer:
 
 $$
 \begin{aligned}
@@ -33,14 +33,14 @@ $$
 | Kinetic Boundary Energy | E_k | J | E_k = 0.5 * m_system * v_boundary_max^2 | Kinetic energy at operational boundary impact |
 | Risk Classification | RC | Dimensionless | RC in {RC-1, ..., RC-7} | Intrinsic operational risk class rating |
 
-The symbolic derivation for $R_{\mathrm{buffer}}$ accounts for:
+Derived from classical kinematic trajectory dynamics and operational boundary containment geometry principles, the symbolic derivation for $R_{\mathrm{buffer}}$ accounts for:
 - Reaction translation during anomaly detection and command execution: $d_{\mathrm{reaction}} = v_{\mathrm{max}} \cdot t_{\mathrm{resp}}$
 - Dynamic braking deceleration distance: $d_{\mathrm{decel}} = \frac{v_{\mathrm{max}}^2}{2 \cdot a_{\mathrm{decel}}}$
 - Margin for state estimator uncertainty and ambient dynamic disturbances: $d_{\mathrm{margin}}$
 - Declared $R_{\mathrm{buffer}}$ satisfies $R_{\mathrm{buffer}} \ge d_{\mathrm{reaction}} + d_{\mathrm{decel}} + d_{\mathrm{margin}}$, providing a mathematically verified containment envelope.
 
 ### 5.1.1 Operational Containment Buffer Parametric Sensitivity Analysis
-Under ISO/IEC/IEEE 15026-3 / ISO/IEC/IEEE 15288:2023 §6.4.4 and MIL-STD-882E §4.3 guidelines, the Operational Containment Buffer ($R_{\mathrm{buffer}}$) must account for worst-case system response latency, deceleration dissipation displacement, external environmental disturbance drift, and state estimation margins across the operational envelope:
+Applying classical kinematic trajectory dynamics and operational boundary containment geometry principles, the Operational Containment Buffer ($R_{\mathrm{buffer}}$) must account for worst-case system response latency, deceleration dissipation displacement, external environmental disturbance drift, and state estimation margins across the operational envelope. Whereas ISO/IEC/IEEE 15288:2023 §6.4.4 governs the system life cycle architecture definition process and ISO/IEC/IEEE 15026-3 / MIL-STD-882E §4.3 establish system assurance and risk integrity levels, containment geometry and dynamic buffer equations ($R_{\mathrm{buffer}}$, $t_{\mathrm{contain}}$, $d_{\mathrm{dist}}$, $d_{\mathrm{trajectory}}$) derive strictly from kinematic trajectory dynamics and boundary containment geometry:
 
 $$
 \begin{aligned}
@@ -68,7 +68,7 @@ The parametric disturbance sensitivity sweep across the declared environmental d
 | 20.0 | 11.0 | 220.0 | 360.0 | 300.0 | -60.0 | Non-Compliant (Breach - Exceeds Operational Envelope) |
 
 ### 5.2 Domain Risk Containment & Energy Dissipation Physics
-In accordance with ISO/IEC/IEEE 15026-3 (Systems and software assurance -- Part 3: System integrity levels) and ISO/IEC/IEEE 15288:2023 §6.4.4, operational risk containment requires deterministic physical energy bounds governing worst-case boundary excursions:
+In accordance with ISO/IEC/IEEE 15026-3 (Systems and software assurance -- Part 3: System integrity levels) for system risk integrity classification and ISO/IEC/IEEE 15288:2023 §6.4.4 for system life cycle architecture processes, operational risk containment requires deterministic physical energy bounds governing worst-case boundary excursions:
 
 1. **Operational Risk Classification (Initial RC):**
    - Maximum characteristic physical dimension: $L_{\mathrm{char}}$.

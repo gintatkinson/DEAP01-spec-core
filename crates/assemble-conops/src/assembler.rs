@@ -870,6 +870,26 @@ mod tests {
         assert!(!raw_content.contains('\u{2013}'), "Unit 05 must not contain en dash");
         assert!(raw_content.contains("ISO/IEC/IEEE 15026-3"), "Unit 05 must cite ISO/IEC/IEEE 15026-3");
         assert!(raw_content.contains("E_{\\mathrm{boundary\\_impact}}"), "Unit 05 must contain boundary impact energy math");
+
+        // Verify state space containment geometry is accurately attributed to kinematic trajectory dynamics
+        assert!(
+            raw_content.contains("kinematic trajectory dynamics"),
+            "Unit 05 must attribute state space containment to kinematic trajectory dynamics"
+        );
+        assert!(
+            raw_content.contains("boundary containment geometry"),
+            "Unit 05 must attribute containment envelopes to boundary containment geometry"
+        );
+
+        // Verify containment geometry is NOT misattributed to ISO/IEC/IEEE 15026-3 or 15288:2023
+        assert!(
+            !raw_content.contains("Under ISO/IEC/IEEE 15026-3 / ISO/IEC/IEEE 15288:2023"),
+            "Unit 05 must not misattribute containment buffer geometry to ISO/IEC/IEEE 15026-3 or 15288:2023"
+        );
+        assert!(
+            !raw_content.contains("containment geometry (ISO/IEC/IEEE 15026-3"),
+            "Unit 05 must not misattribute containment geometry to ISO/IEC/IEEE 15026-3"
+        );
     }
 
     #[test]
