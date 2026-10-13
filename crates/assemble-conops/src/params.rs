@@ -513,15 +513,23 @@ impl SysMLParameterBindingEngine {
 
         engine._derive_operational_intent();
         engine._derive_mass_budgets();
+        engine._derive_domain_ontology();
+        engine._derive_lifecycle_contract();
         engine._derive_quadratic_physics();
         engine._derive_energy_budgets();
         engine._derive_domain_regulatory_standards();
         engine._derive_domain_risk_assessment();
-        engine._derive_domain_ontology();
-        engine._derive_lifecycle_contract();
         engine._derive_subsystem_architecture();
 
         engine
+    }
+
+    pub fn has_ast_component(&self, name: &str) -> bool {
+        let name_lower = name.to_lowercase();
+        self.ast_part_names.iter().any(|p| {
+            let p_lower = p.to_lowercase();
+            p_lower == name_lower || p_lower.contains(&name_lower)
+        })
     }
 
     pub fn auto_discover_sources(&mut self, root_dir: &Path) {
@@ -587,6 +595,7 @@ impl SysMLParameterBindingEngine {
         self._derive_operational_intent();
         self._derive_domain_risk_assessment();
         self._derive_lifecycle_contract();
+        self._derive_quadratic_physics();
         self._derive_subsystem_architecture();
     }
 
@@ -1065,7 +1074,57 @@ impl SysMLParameterBindingEngine {
             .unwrap_or(25.0);
 
         let ek_unmit = (0.5 * m * v_max.powi(2) * 10.0).round() / 10.0;
-        let v_residual: f64 = 1.5;
+
+        let explicit_v_res = self
+            .parameter_bindings
+            .get("V_RESIDUAL_MPS")
+            .or_else(|| self.parameter_bindings.get("V_RESIDUAL"))
+            .and_then(|s| s.parse::<f64>().ok());
+
+        let has_parachute_component = self.has_ast_component("parachute") || self.has_ast_component("chute");
+        let has_parachute_params = self.parameter_bindings.contains_key("S_CANOPY")
+            || self.parameter_bindings.contains_key("PARACHUTE_DRAG_COEFFICIENT");
+
+        let v_residual = if let Some(vr) = explicit_v_res {
+            vr
+        } else if has_parachute_component || has_parachute_params {
+            // Dynamic derivation strictly from user-supplied AST / parameter definitions
+            let rho = self
+                .parameter_bindings
+                .get("AIR_DENSITY_KGM3")
+                .or_else(|| self.parameter_bindings.get("FLUID_DENSITY_KGM3"))
+                .and_then(|s| s.parse::<f64>().ok())
+                .unwrap_or(1.225);
+            let s_canopy = self
+                .parameter_bindings
+                .get("S_CANOPY")
+                .or_else(|| self.parameter_bindings.get("S_MIT"))
+                .and_then(|s| s.parse::<f64>().ok())
+                .unwrap_or(84.0);
+            let cd_canopy = self
+                .parameter_bindings
+                .get("PARACHUTE_DRAG_COEFFICIENT")
+                .or_else(|| self.parameter_bindings.get("C_D_MIT"))
+                .and_then(|s| s.parse::<f64>().ok())
+                .unwrap_or(1.75);
+            let denom = rho * s_canopy * cd_canopy;
+            let g = 9.80665;
+            if denom > 0.0 && m > 0.0 {
+                ((2.0 * m * g / denom).sqrt() * 100.0).round() / 100.0
+            } else {
+                1.5
+            }
+        } else if self.parameter_bindings.get("LIFECYCLE_TYPE").map(|s| s == "EXPENDABLE_DISPOSAL").unwrap_or(false)
+            || self.parameter_bindings.get("IS_EXPENDABLE").map(|s| s == "true").unwrap_or(false)
+        {
+            // For expendable platforms without deceleration containment, residual perimeter impact velocity equals v_max
+            v_max
+        } else if self.detected_domain == "medical" {
+            0.0
+        } else {
+            1.5
+        };
+
         let ek_mit = (0.5 * m * v_residual.powi(2) * 10.0).round() / 10.0;
 
         self.parameter_bindings
@@ -1092,6 +1151,12 @@ impl SysMLParameterBindingEngine {
         self.parameter_bindings
             .entry("V_TERMINAL_MITIGATED_MPS".to_string())
             .or_insert_with(|| format!("{:.1}", v_residual));
+        self.parameter_bindings
+            .entry("SAFE_CONTAINMENT_VELOCITY_MS".to_string())
+            .or_insert_with(|| format!("{:.1}", v_residual));
+        self.parameter_bindings
+            .entry("CONTAINMENT_DEPLOY_TIME_MAX_S".to_string())
+            .or_insert_with(|| "0.5".to_string());
     }
 
     pub fn _derive_domain_risk_assessment(&mut self) {
@@ -1262,25 +1327,147 @@ impl SysMLParameterBindingEngine {
 
     pub fn _derive_lifecycle_contract(&mut self) {
         let dom = self.detected_domain.to_lowercase();
-        let selected_type = if dom == "medical" {
-            LifecycleType::ContinuousStationary
-        } else if dom == "rail" {
-            LifecycleType::TrackBoundGuided
-        } else if dom == "space" {
-            LifecycleType::PersistentOrbital
-        } else if dom == "disposable" || dom == "single_use" || dom == "expendable" || self.parameter_bindings.get("IS_EXPENDABLE").map(|s| s == "true").unwrap_or(false) {
+        let is_expendable = self
+            .parameter_bindings
+            .get("IS_EXPENDABLE")
+            .map(|s| s == "true" || s == "1")
+            .unwrap_or(false)
+            || dom == "disposable"
+            || dom == "single_use"
+            || dom == "expendable"
+            || self.has_ast_component("expendable")
+            || self.has_ast_component("effector")
+            || self.has_ast_component("munition");
+
+        let selected_type = if let Some(lt) = self.parameter_bindings.get("LIFECYCLE_TYPE") {
+            match lt.as_str() {
+                "EXPENDABLE_DISPOSAL" => LifecycleType::ExpendableDisposal,
+                "CONTINUOUS_STATIONARY" => LifecycleType::ContinuousStationary,
+                "TRACK_BOUND_GUIDED" => LifecycleType::TrackBoundGuided,
+                "PERSISTENT_ORBITAL" => LifecycleType::PersistentOrbital,
+                _ => LifecycleType::ReusableRecovery,
+            }
+        } else if is_expendable {
             LifecycleType::ExpendableDisposal
+        } else if dom == "medical" || self.has_ast_component("joint_brake") {
+            LifecycleType::ContinuousStationary
+        } else if dom == "rail" || self.has_ast_component("rail") {
+            LifecycleType::TrackBoundGuided
+        } else if dom == "space" || self.has_ast_component("orbit") {
+            LifecycleType::PersistentOrbital
         } else {
             LifecycleType::ReusableRecovery
         };
 
         self.parameter_bindings
             .insert("LIFECYCLE_TYPE".to_string(), selected_type.as_str().to_string());
-        self.parameter_bindings.entry("PRIMARY_TERMINAL_TARGET".to_string()).or_insert_with(|| "Primary Recovery Base".to_string());
-        self.parameter_bindings.entry("SECONDARY_TERMINAL_TARGET".to_string()).or_insert_with(|| "Secondary Divert Site LZ-DIVERT-ALPHA".to_string());
-        self.parameter_bindings.entry("PRIMARY_RECOVERY_FACILITY".to_string()).or_insert_with(|| "Primary Recovery Base".to_string());
-        self.parameter_bindings.entry("SECONDARY_RECOVERY_FACILITY".to_string()).or_insert_with(|| "Secondary Divert Base".to_string());
-        self.parameter_bindings.entry("LIFECYCLE_TRANSIT_MODE".to_string()).or_insert_with(|| "Autonomous_RTB_Transit".to_string());
+
+        match selected_type {
+            LifecycleType::ExpendableDisposal => {
+                self.parameter_bindings.entry("PRIMARY_TERMINAL_TARGET".to_string()).or_insert_with(|| "Designated Kinetic Intercept / Terminal Containment Zone".to_string());
+                self.parameter_bindings.entry("SECONDARY_TERMINAL_TARGET".to_string()).or_insert_with(|| "Safe Containment Ditching Zone LZ-DIVERT-ALPHA".to_string());
+                self.parameter_bindings.entry("PRIMARY_RECOVERY_FACILITY".to_string()).or_insert_with(|| "Safe Impact Containment Grid (No Vehicle Recovery)".to_string());
+                self.parameter_bindings.entry("SECONDARY_RECOVERY_FACILITY".to_string()).or_insert_with(|| "Secondary Safe Ditching Area (No Vehicle Recovery)".to_string());
+                self.parameter_bindings.entry("LIFECYCLE_TRANSIT_MODE".to_string()).or_insert_with(|| "Terminal_Engagement_Transit".to_string());
+                self.parameter_bindings.entry("LIFECYCLE_FAILSAFE_SEQUENCE".to_string()).or_insert_with(|| "autonomous terminal containment ditching and zeroization sequence".to_string());
+                self.parameter_bindings.entry("LIFECYCLE_END_STATE".to_string()).or_insert_with(|| "All assigned operational corridor waypoints fully traversed and verified; zero unauthorized state boundary excursions; zero unmitigated collision or interference hazards; and successful terminal impact or safe containment ditching in the designated containment zone with complete cryptographic zeroization.".to_string());
+                self.parameter_bindings.entry("LIFECYCLE_BINGO_SAFETY_ACTION".to_string()).or_insert_with(|| "Continuously compute closed-loop dynamic resource state and execute terminal target engagement or safe containment ditching with cryptographic zeroization upon reaching safety thresholds ($R(t) \\le R_{\\mathrm{threshold}}(t)$).".to_string());
+                self.parameter_bindings.entry("LIFECYCLE_POST_OP_STATE".to_string()).or_insert_with(|| "Terminal kinetic impact or safe containment ditching with complete cryptographic key zeroization, volatile memory purge, and structural containment verification".to_string());
+                self.parameter_bindings.entry("CONTAINMENT_MITIGATION_TYPE".to_string()).or_insert_with(|| "SAFE_IMPACT_ZEROIZATION".to_string());
+                self.parameter_bindings.entry("RECOVERY_DEVICE_TERM".to_string()).or_insert_with(|| "containment".to_string());
+                self.parameter_bindings.entry("FAILSAFE_CONTAINMENT_SYSTEM".to_string()).or_insert_with(|| "autonomous containment watchdog and kinetic energy absorption".to_string());
+                self.parameter_bindings.entry("TIER4_CONTAINMENT_DESC".to_string()).or_insert_with(|| "autonomous terminal containment ditching or safe impact zeroization".to_string());
+            }
+            LifecycleType::ContinuousStationary => {
+                self.parameter_bindings.entry("PRIMARY_TERMINAL_TARGET".to_string()).or_insert_with(|| "Primary Sterile Field Docking Station".to_string());
+                self.parameter_bindings.entry("SECONDARY_TERMINAL_TARGET".to_string()).or_insert_with(|| "Secondary Clinical Safe Staging Console".to_string());
+                self.parameter_bindings.entry("PRIMARY_RECOVERY_FACILITY".to_string()).or_insert_with(|| "Clinical Operating Suite".to_string());
+                self.parameter_bindings.entry("SECONDARY_RECOVERY_FACILITY".to_string()).or_insert_with(|| "Secondary Maintenance Staging Bay".to_string());
+                self.parameter_bindings.entry("LIFECYCLE_TRANSIT_MODE".to_string()).or_insert_with(|| "Autonomous_Clinical_Safing".to_string());
+                self.parameter_bindings.entry("LIFECYCLE_FAILSAFE_SEQUENCE".to_string()).or_insert_with(|| "electromechanical joint brake lock and sterile field safing sequence".to_string());
+                self.parameter_bindings.entry("LIFECYCLE_END_STATE".to_string()).or_insert_with(|| "All assigned operational trajectory segments fully traversed and verified; zero unauthorized workspace boundary excursions; and successful safe parking at the primary sterile console with residual power reserves strictly satisfying $R_{\\mathrm{reserve}} \\ge \\text{Ratio}_{\\text{reserve\\_min}} \\cdot R_{\\mathrm{capacity}}$.".to_string());
+                self.parameter_bindings.entry("LIFECYCLE_BINGO_SAFETY_ACTION".to_string()).or_insert_with(|| "Continuously compute closed-loop dynamic resource state and execute automated electromechanical joint brake locking and sterile field preservation upon reaching safety thresholds ($R(t) \\le R_{\\mathrm{threshold}}(t)$).".to_string());
+                self.parameter_bindings.entry("LIFECYCLE_POST_OP_STATE".to_string()).or_insert_with(|| "Post-operation stationary safe rest at sterile field console with engaged electromechanical joint brake locks, complete cryptographic key zeroization, and diagnostic log offloading".to_string());
+                self.parameter_bindings.entry("CONTAINMENT_MITIGATION_TYPE".to_string()).or_insert_with(|| "ELECTROMECHANICAL_BRAKE_LOCK".to_string());
+                self.parameter_bindings.entry("RECOVERY_DEVICE_TERM".to_string()).or_insert_with(|| "failsafe joint brake".to_string());
+                self.parameter_bindings.entry("FAILSAFE_CONTAINMENT_SYSTEM".to_string()).or_insert_with(|| "electromechanical joint brake lock and sterile field interlocks".to_string());
+                self.parameter_bindings.entry("TIER4_CONTAINMENT_DESC".to_string()).or_insert_with(|| "instant electromechanical joint brake locking and actuator power bus disconnect".to_string());
+            }
+            LifecycleType::TrackBoundGuided => {
+                self.parameter_bindings.entry("PRIMARY_TERMINAL_TARGET".to_string()).or_insert_with(|| "Primary Rail Maintenance Siding".to_string());
+                self.parameter_bindings.entry("SECONDARY_TERMINAL_TARGET".to_string()).or_insert_with(|| "Secondary Controlled Deceleration Spur LZ-DIVERT-ALPHA".to_string());
+                self.parameter_bindings.entry("PRIMARY_RECOVERY_FACILITY".to_string()).or_insert_with(|| "Classification Yard Maintenance Depot".to_string());
+                self.parameter_bindings.entry("SECONDARY_RECOVERY_FACILITY".to_string()).or_insert_with(|| "Secondary Service Siding".to_string());
+                self.parameter_bindings.entry("LIFECYCLE_TRANSIT_MODE".to_string()).or_insert_with(|| "Autonomous_Track_Deceleration".to_string());
+                self.parameter_bindings.entry("LIFECYCLE_FAILSAFE_SEQUENCE".to_string()).or_insert_with(|| "controlled track deceleration and siding brake sequence".to_string());
+                self.parameter_bindings.entry("LIFECYCLE_END_STATE".to_string()).or_insert_with(|| "All assigned track blocks and route sections fully traversed and verified; zero unauthorized siding excursions; and successful controlled arrival at the primary maintenance siding or designated secondary spur with residual resources strictly satisfying $R_{\\mathrm{reserve}} \\ge \\text{Ratio}_{\\text{reserve\\_min}} \\cdot R_{\\mathrm{capacity}}$.".to_string());
+                self.parameter_bindings.entry("LIFECYCLE_BINGO_SAFETY_ACTION".to_string()).or_insert_with(|| "Continuously compute closed-loop dynamic resource state and execute controlled track deceleration or secondary maintenance siding divert upon reaching safety thresholds ($R(t) \\le R_{\\mathrm{threshold}}(t)$).".to_string());
+                self.parameter_bindings.entry("LIFECYCLE_POST_OP_STATE".to_string()).or_insert_with(|| "Post-operation stationary rest at rail siding with mechanical parking brakes engaged, pneumatic systems vented, cryptographic key zeroization, and diagnostic log offloading".to_string());
+                self.parameter_bindings.entry("CONTAINMENT_MITIGATION_TYPE".to_string()).or_insert_with(|| "TRACK_SIDING_BRAKE".to_string());
+                self.parameter_bindings.entry("RECOVERY_DEVICE_TERM".to_string()).or_insert_with(|| "pneumatic emergency brake".to_string());
+                self.parameter_bindings.entry("FAILSAFE_CONTAINMENT_SYSTEM".to_string()).or_insert_with(|| "pneumatic emergency brake and track siding deceleration system".to_string());
+                self.parameter_bindings.entry("TIER4_CONTAINMENT_DESC".to_string()).or_insert_with(|| "emergency brake pipe venting and mechanical friction caliper clamping".to_string());
+            }
+            LifecycleType::PersistentOrbital => {
+                self.parameter_bindings.entry("PRIMARY_TERMINAL_TARGET".to_string()).or_insert_with(|| "Designated De-Orbit Reentry Corridor / Graveyard Orbit".to_string());
+                self.parameter_bindings.entry("SECONDARY_TERMINAL_TARGET".to_string()).or_insert_with(|| "Secondary Disposal Orbit Node LZ-DIVERT-ALPHA".to_string());
+                self.parameter_bindings.entry("PRIMARY_RECOVERY_FACILITY".to_string()).or_insert_with(|| "Designated Atmospheric Demise Footprint".to_string());
+                self.parameter_bindings.entry("SECONDARY_RECOVERY_FACILITY".to_string()).or_insert_with(|| "Stable Graveyard Disposal Orbit".to_string());
+                self.parameter_bindings.entry("LIFECYCLE_TRANSIT_MODE".to_string()).or_insert_with(|| "Autonomous_Disposal_Burn_Transit".to_string());
+                self.parameter_bindings.entry("LIFECYCLE_FAILSAFE_SEQUENCE".to_string()).or_insert_with(|| "autonomous de-orbit disposal and passivation sequence".to_string());
+                self.parameter_bindings.entry("LIFECYCLE_END_STATE".to_string()).or_insert_with(|| "All assigned orbital mission phases fully executed and verified; zero unauthorized constellation slot excursions; zero unmitigated orbital debris collision hazards; and successful de-orbit disposal or transfer to graveyard orbit with residual propellant satisfying disposal containment standards.".to_string());
+                self.parameter_bindings.entry("LIFECYCLE_BINGO_SAFETY_ACTION".to_string()).or_insert_with(|| "Continuously compute closed-loop dynamic resource state and execute autonomous de-orbit disposal burn or graveyard orbit maneuver upon reaching safety thresholds ($R(t) \\le R_{\\mathrm{threshold}}(t)$).".to_string());
+                self.parameter_bindings.entry("LIFECYCLE_POST_OP_STATE".to_string()).or_insert_with(|| "Post-mission passivation and safe disposal state with reaction wheels desaturated, batteries passivated, cryptographic key zeroization, and final ephemeris offload".to_string());
+                self.parameter_bindings.entry("CONTAINMENT_MITIGATION_TYPE".to_string()).or_insert_with(|| "DEORBIT_DISPOSAL_BURN".to_string());
+                self.parameter_bindings.entry("RECOVERY_DEVICE_TERM".to_string()).or_insert_with(|| "autonomous de-orbit propulsion".to_string());
+                self.parameter_bindings.entry("FAILSAFE_CONTAINMENT_SYSTEM".to_string()).or_insert_with(|| "autonomous de-orbit propulsion and orbital passivation unit".to_string());
+                self.parameter_bindings.entry("TIER4_CONTAINMENT_DESC".to_string()).or_insert_with(|| "autonomous retro-burn execution, reaction wheel desaturation, and battery passivation".to_string());
+            }
+            LifecycleType::ReusableRecovery => {
+                let has_chute = self.has_ast_component("parachute")
+                    || self.has_ast_component("chute")
+                    || self.parameter_bindings.get("CONTAINMENT_MITIGATION_TYPE").map(|s| s.contains("PARACHUTE")).unwrap_or(false);
+                let has_buoyant = self.has_ast_component("buoyancy")
+                    || self.has_ast_component("drop_weight")
+                    || self.has_ast_component("ballast");
+                let has_brake = self.has_ast_component("brake");
+
+                if has_chute {
+                    self.parameter_bindings.entry("CONTAINMENT_MITIGATION_TYPE".to_string()).or_insert_with(|| "PARACHUTE_DESCENT".to_string());
+                    self.parameter_bindings.entry("RECOVERY_DEVICE_TERM".to_string()).or_insert_with(|| "parachute recovery system".to_string());
+                    self.parameter_bindings.entry("FAILSAFE_CONTAINMENT_SYSTEM".to_string()).or_insert_with(|| "certified parachute recovery system".to_string());
+                    self.parameter_bindings.entry("TIER4_CONTAINMENT_DESC".to_string()).or_insert_with(|| "autonomous parachute deployment and motor drive power isolation".to_string());
+                    self.parameter_bindings.entry("LIFECYCLE_FAILSAFE_SEQUENCE".to_string()).or_insert_with(|| "autonomous return-to-base or parachute recovery sequence".to_string());
+                } else if has_buoyant {
+                    self.parameter_bindings.entry("CONTAINMENT_MITIGATION_TYPE".to_string()).or_insert_with(|| "BUOYANT_SURFACE_ASCENT".to_string());
+                    self.parameter_bindings.entry("RECOVERY_DEVICE_TERM".to_string()).or_insert_with(|| "positive buoyancy drop-weight".to_string());
+                    self.parameter_bindings.entry("FAILSAFE_CONTAINMENT_SYSTEM".to_string()).or_insert_with(|| "galvanic drop-weight ballast release and passive buoyancy ascent system".to_string());
+                    self.parameter_bindings.entry("TIER4_CONTAINMENT_DESC".to_string()).or_insert_with(|| "galvanic drop-weight release and passive buoyancy ascent".to_string());
+                    self.parameter_bindings.entry("LIFECYCLE_FAILSAFE_SEQUENCE".to_string()).or_insert_with(|| "ballast expulsion and passive buoyant surface recovery sequence".to_string());
+                } else if has_brake {
+                    self.parameter_bindings.entry("CONTAINMENT_MITIGATION_TYPE".to_string()).or_insert_with(|| "MECHANICAL_BRAKE_DECELERATION".to_string());
+                    self.parameter_bindings.entry("RECOVERY_DEVICE_TERM".to_string()).or_insert_with(|| "emergency brake".to_string());
+                    self.parameter_bindings.entry("FAILSAFE_CONTAINMENT_SYSTEM".to_string()).or_insert_with(|| "autonomous friction brake deceleration system".to_string());
+                    self.parameter_bindings.entry("TIER4_CONTAINMENT_DESC".to_string()).or_insert_with(|| "friction caliper clamping and actuator power cutoff".to_string());
+                    self.parameter_bindings.entry("LIFECYCLE_FAILSAFE_SEQUENCE".to_string()).or_insert_with(|| "autonomous deceleration and safe parking sequence".to_string());
+                } else {
+                    self.parameter_bindings.entry("CONTAINMENT_MITIGATION_TYPE".to_string()).or_insert_with(|| "FAILSAFE_CONTAINMENT".to_string());
+                    self.parameter_bindings.entry("RECOVERY_DEVICE_TERM".to_string()).or_insert_with(|| "failsafe containment".to_string());
+                    self.parameter_bindings.entry("FAILSAFE_CONTAINMENT_SYSTEM".to_string()).or_insert_with(|| "autonomous failsafe containment system".to_string());
+                    self.parameter_bindings.entry("TIER4_CONTAINMENT_DESC".to_string()).or_insert_with(|| "autonomous emergency containment actuation or actuator power cutoff".to_string());
+                    self.parameter_bindings.entry("LIFECYCLE_FAILSAFE_SEQUENCE".to_string()).or_insert_with(|| "autonomous return-to-base sequence".to_string());
+                }
+
+                self.parameter_bindings.entry("PRIMARY_TERMINAL_TARGET".to_string()).or_insert_with(|| "Primary Recovery Base".to_string());
+                self.parameter_bindings.entry("SECONDARY_TERMINAL_TARGET".to_string()).or_insert_with(|| "Secondary Divert Site LZ-DIVERT-ALPHA".to_string());
+                self.parameter_bindings.entry("PRIMARY_RECOVERY_FACILITY".to_string()).or_insert_with(|| "Primary Recovery Base".to_string());
+                self.parameter_bindings.entry("SECONDARY_RECOVERY_FACILITY".to_string()).or_insert_with(|| "Secondary Divert Base".to_string());
+                self.parameter_bindings.entry("LIFECYCLE_TRANSIT_MODE".to_string()).or_insert_with(|| "Autonomous_RTB_Transit".to_string());
+                self.parameter_bindings.entry("LIFECYCLE_END_STATE".to_string()).or_insert_with(|| "All assigned operational corridor waypoints fully traversed and verified; zero unauthorized state boundary excursions; zero unmitigated collision or interference hazards; all state conditions positively identified and verified ($C_{\\mathrm{condition}} \\ge C_{\\mathrm{threshold}}$); and successful recovery at the primary base or designated secondary divert recovery site with residual resources strictly satisfying $R_{\\mathrm{reserve}} \\ge \\text{Ratio}_{\\text{reserve\\_min}} \\cdot R_{\\mathrm{capacity}}$.".to_string());
+                self.parameter_bindings.entry("LIFECYCLE_BINGO_SAFETY_ACTION".to_string()).or_insert_with(|| "Continuously compute closed-loop dynamic resource state and execute autonomous return-to-base (RTB) or secondary divert routing upon reaching safety thresholds ($R(t) \\le R_{\\mathrm{threshold}}(t)$).".to_string());
+                self.parameter_bindings.entry("LIFECYCLE_POST_OP_STATE".to_string()).or_insert_with(|| "Post-operation stationary rest at recovery site with actuator safe locking, cryptographic data zeroization, and diagnostic log offloading".to_string());
+            }
+        }
     }
 
     pub fn _derive_subsystem_architecture(&mut self) {
@@ -1580,6 +1767,10 @@ impl SysMLParameterBindingEngine {
 
     pub fn apply_domain_ontology_sanitization(&self, current: &mut String) {
         let dom = self.detected_domain.to_lowercase();
+        let has_chute_in_ast = self.has_ast_component("parachute")
+            || self.has_ast_component("chute")
+            || self.parameter_bindings.contains_key("S_CANOPY");
+
         if dom == "medical" {
             *current = replace_word_case_insensitive(current, "parachute", "failsafe joint brake");
             *current = current.replace("PARACHUTE", "JOINT_BRAKE");
@@ -1600,6 +1791,24 @@ impl SysMLParameterBindingEngine {
             *current = current.replace("PARACHUTE", "DEORBIT_THRUSTER");
             *current = replace_altitude_agl(current, "km");
             *current = replace_astm_f3411(current, "ECSS-E-ST-40C");
+        } else if self.parameter_bindings.get("LIFECYCLE_TYPE").map(|s| s == "EXPENDABLE_DISPOSAL").unwrap_or(false)
+            || self.parameter_bindings.get("IS_EXPENDABLE").map(|s| s == "true").unwrap_or(false)
+        {
+            *current = replace_word_case_insensitive(current, "parachute", "controlled impact containment");
+            *current = current.replace("PARACHUTE", "CONTAINMENT");
+        } else if !has_chute_in_ast {
+            let rec_term = self
+                .parameter_bindings
+                .get("RECOVERY_DEVICE_TERM")
+                .cloned()
+                .unwrap_or_else(|| "failsafe containment".to_string());
+            let rec_upper = self
+                .parameter_bindings
+                .get("CONTAINMENT_MITIGATION_TYPE")
+                .cloned()
+                .unwrap_or_else(|| "FAILSAFE_CONTAINMENT".to_string());
+            *current = replace_word_case_insensitive(current, "parachute", &rec_term);
+            *current = current.replace("PARACHUTE", &rec_upper);
         } else if self.is_non_aircraft {
             *current = replace_word_case_insensitive(current, "parachute", "recovery system");
             *current = current.replace("PARACHUTE", "RECOVERY");
@@ -1703,5 +1912,69 @@ mod tests {
         assert!(seg_matrix.contains("SSOT Ground Truth Source & Citation"), "Segment allocation matrix must contain SSOT Ground Truth column");
         assert!(seg_matrix.contains("SysML v2: `part def Avionics`"), "Segment allocation matrix must bind AST part def node");
     }
+
+    #[test]
+    fn test_issue_248_pure_schema_driven_containment_and_zero_fallback_recovery() {
+        // 1. Expendable / Zero-Recovery platform must NOT have hardcoded recovery base or RTB transit
+        let mut exp_bindings = HashMap::new();
+        exp_bindings.insert("IS_EXPENDABLE".to_string(), "true".to_string());
+        let exp_engine = SysMLParameterBindingEngine::new(Some(exp_bindings), None, None, false, None);
+
+        assert_ne!(
+            exp_engine.resolve_token("PRIMARY_TERMINAL_TARGET", None),
+            "Primary Recovery Base",
+            "Expendable system must not default to Primary Recovery Base"
+        );
+        assert_ne!(
+            exp_engine.resolve_token("PRIMARY_RECOVERY_FACILITY", None),
+            "Primary Recovery Base",
+            "Expendable system must not default to Primary Recovery Base facility"
+        );
+        assert_ne!(
+            exp_engine.resolve_token("LIFECYCLE_TRANSIT_MODE", None),
+            "Autonomous_RTB_Transit",
+            "Expendable system must not default to Autonomous_RTB_Transit"
+        );
+        assert_ne!(
+            exp_engine.resolve_token("LIFECYCLE_FAILSAFE_SEQUENCE", None),
+            "N/A",
+            "Lifecycle failsafe sequence must be derived"
+        );
+        assert_ne!(
+            exp_engine.resolve_token("CONTAINMENT_MITIGATION_TYPE", None),
+            "N/A",
+            "Containment mitigation type must be derived"
+        );
+
+        // 2. Generic platform with ZERO parachute in AST must decontaminate ungrounded parachute references
+        let generic_engine = SysMLParameterBindingEngine::new(None, None, None, false, None);
+        let input_text = "Emergency containment initiates parachute deployment for recovery.";
+        let substituted = generic_engine.substitute(input_text);
+        assert!(
+            !substituted.to_lowercase().contains("parachute"),
+            "System with zero parachute in AST must not retain parachute: got '{substituted}'"
+        );
+
+        // 3. User-supplied parachute AST parameters must be dynamically calculated (not hardcoded 1.5 m/s)
+        let mut chute_bindings = HashMap::new();
+        chute_bindings.insert("TOTAL_MTOW_KG".to_string(), "200.0".to_string());
+        chute_bindings.insert("AIR_DENSITY_KGM3".to_string(), "1.2".to_string());
+        chute_bindings.insert("S_CANOPY".to_string(), "50.0".to_string());
+        chute_bindings.insert("PARACHUTE_DRAG_COEFFICIENT".to_string(), "1.5".to_string());
+        let mut chute_engine = SysMLParameterBindingEngine::new(Some(chute_bindings), None, None, false, None);
+        chute_engine.ast_part_names.insert("ParachuteRecoveryUnit".to_string());
+        chute_engine._derive_quadratic_physics();
+
+        let v_mit: f64 = chute_engine
+            .resolve_token("V_TERMINAL_MITIGATED_MPS", None)
+            .parse()
+            .expect("V_TERMINAL_MITIGATED_MPS must be numeric");
+        // v_calc = sqrt(2 * 200 * 9.80665 / (1.2 * 50 * 1.5)) = sqrt(3922.66 / 90) = 6.60 m/s
+        assert!(
+            (v_mit - 6.60).abs() < 0.1,
+            "Mitigated terminal velocity must be dynamically derived from AST parameters: got {v_mit}"
+        );
+    }
 }
+
 

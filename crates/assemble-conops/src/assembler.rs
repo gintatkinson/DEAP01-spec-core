@@ -953,4 +953,40 @@ mod tests {
             assert!(!raw.contains('\u{2013}'), "Unit 08 must not contain en dash");
         }
     }
+
+    #[test]
+    fn test_canonical_unit_12_and_lifecycle_containment_decontamination() {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let repo_root = manifest_dir.parent().unwrap().parent().unwrap();
+        let conops_units_dir = repo_root.join("skills/spec-conops-engineering/resources/units/conops");
+
+        let unit_12_path = conops_units_dir.join("12_EMERGENCY_DECISION_MATRIX.md");
+        if unit_12_path.is_file() {
+            let engine = SysMLParameterBindingEngine::new(None, None, None, false, None);
+            let (is_valid, errors) = validate_unit_integrity(&[unit_12_path.clone()], Some(&engine));
+            assert!(is_valid, "Unit 12 integrity validation failed: {:?}", errors);
+            assert!(errors.is_empty());
+
+            let text = fs::read_to_string(&unit_12_path).unwrap();
+            let substituted = engine.substitute(&text);
+            assert!(!substituted.contains("{{"), "Unit 12 must have zero unresolved tokens");
+            assert!(!substituted.contains('\u{2014}'), "Unit 12 must not contain em dash");
+            assert!(!substituted.to_lowercase().contains("parachute"), "Unit 12 must not contain parachute");
+        }
+
+        // Verify expendable platform assembly produces zero recovery facility or parachute references
+        let mut exp_bindings = std::collections::HashMap::new();
+        exp_bindings.insert("IS_EXPENDABLE".to_string(), "true".to_string());
+        let exp_engine = SysMLParameterBindingEngine::new(Some(exp_bindings), None, None, false, None);
+
+        let unit_05_path = conops_units_dir.join("05_OPERATIONAL_STATE_SPACE_AND_RISK.md");
+        if unit_05_path.is_file() {
+            let (is_valid, errors) = validate_unit_integrity(&[unit_05_path.clone()], Some(&exp_engine));
+            assert!(is_valid, "Unit 05 expendable integrity failed: {:?}", errors);
+            let text = fs::read_to_string(&unit_05_path).unwrap();
+            let substituted = exp_engine.substitute(&text);
+            assert!(!substituted.to_lowercase().contains("parachute"), "Expendable Unit 05 must not contain parachute");
+        }
+    }
 }
+

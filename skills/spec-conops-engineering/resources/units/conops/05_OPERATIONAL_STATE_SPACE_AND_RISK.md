@@ -124,7 +124,8 @@ For multi-domain operations across cyber-physical platforms, containment mechani
 3. **Space LEO Constellation Containment:**
    - Cold-gas thruster retro-burn perigee lowering for controlled atmospheric demise and passivation (zero residual stored energy / battery disconnect).
 4. **Dynamic Boundary & Spatial Autonomous Containment:**
-   - Autonomous containment actuation unit with {{RECOVERY_DEVICE_TERM:emergency recovery system}} deployment ($t_{\mathrm{deploy}} \le 0.5\text{ s}$) and actuator drive power isolation.
+   - Autonomous containment actuation unit with {{RECOVERY_DEVICE_TERM:failsafe containment}} deployment ($t_{\mathrm{deploy}} \le 0.5\text{ s}$) and actuator drive power isolation.
+
 
 ---
 
