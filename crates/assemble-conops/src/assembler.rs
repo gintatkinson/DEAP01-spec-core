@@ -17,6 +17,7 @@ pub static CANONICAL_CONOPS_UNITS: &[&str] = &[
     "05_OPERATIONAL_STATE_SPACE_AND_RISK.md",
     "06_UAF_OPERATIONAL_ACTIVITIES.md",
     "07_OPTX_EXCHANGES.md",
+    "08_SYSTEM_ARCHITECTURE.md",
     "08_ENVIRONMENTAL_OPERATING_LIMITS.md",
     "08_ENVIRONMENTAL_MIL_STD_810H.md",
     "09_SCENARIOS_AND_TIMELINES.md",
@@ -404,15 +405,21 @@ pub fn assemble_document(
     let mut filenames = Vec::new();
     if let Some(whitelist) = effective_whitelist {
         for &item in whitelist {
-            if item == "04_SYSTEM_ARCHITECTURE.md" || item == "04_USER_CLASSES_AND_STAKEHOLDERS.md" {
+            if item == "04_SYSTEM_ARCHITECTURE.md"
+                || item == "04_USER_CLASSES_AND_STAKEHOLDERS.md"
+                || item == "08_SYSTEM_ARCHITECTURE.md"
+            {
                 let unit4_handled = filenames.iter().any(|x: &String| {
                     x == "04_SYSTEM_ARCHITECTURE.md"
                         || x == "04_USER_CLASSES_AND_STAKEHOLDERS.md"
                         || x == "04_SYSTEM_CAPABILITIES_AND_FUNCTIONS.md"
+                        || x == "08_SYSTEM_ARCHITECTURE.md"
                 });
                 if !unit4_handled {
                     if all_entries.contains(&"04_SYSTEM_ARCHITECTURE.md".to_string()) {
                         filenames.push("04_SYSTEM_ARCHITECTURE.md".to_string());
+                    } else if all_entries.contains(&"08_SYSTEM_ARCHITECTURE.md".to_string()) {
+                        filenames.push("08_SYSTEM_ARCHITECTURE.md".to_string());
                     } else if all_entries.contains(&"04_USER_CLASSES_AND_STAKEHOLDERS.md".to_string()) {
                         filenames.push("04_USER_CLASSES_AND_STAKEHOLDERS.md".to_string());
                     } else if all_entries.contains(&"04_SYSTEM_CAPABILITIES_AND_FUNCTIONS.md".to_string()) {
@@ -479,6 +486,7 @@ pub fn assemble_document(
         let fname = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
         if [
             "04_SYSTEM_ARCHITECTURE.md",
+            "08_SYSTEM_ARCHITECTURE.md",
             "04_USER_CLASSES_AND_STAKEHOLDERS.md",
             "04_SYSTEM_CAPABILITIES_AND_FUNCTIONS.md",
         ]
@@ -486,10 +494,12 @@ pub fn assemble_document(
         {
             if let Ok(u4_raw) = fs::read_to_string(path) {
                 let has_concrete_super = (u4_raw.contains("### 4.1")
+                    || u4_raw.contains("### 8.1")
                     || u4_raw.contains("Super-System")
                     || u4_raw.contains("Super-system"))
                     && (u4_raw.contains("```mermaid") || u4_raw.contains("SV-1"));
                 let has_concrete_sub = (u4_raw.contains("### 4.3")
+                    || u4_raw.contains("### 8.3")
                     || u4_raw.contains("### 4.8")
                     || u4_raw.contains("Subsystem Architecture"))
                     && (u4_raw.contains("LRU") || u4_raw.contains("Subsystem") || u4_raw.contains("Part"));
@@ -860,5 +870,67 @@ mod tests {
         assert!(!raw_content.contains('\u{2013}'), "Unit 05 must not contain en dash");
         assert!(raw_content.contains("ISO/IEC/IEEE 15026-3"), "Unit 05 must cite ISO/IEC/IEEE 15026-3");
         assert!(raw_content.contains("E_{\\mathrm{boundary\\_impact}}"), "Unit 05 must contain boundary impact energy math");
+    }
+
+    #[test]
+    fn test_canonical_unit_system_architecture_and_optx_decontamination() {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let repo_root = manifest_dir.parent().unwrap().parent().unwrap();
+        let conops_units_dir = repo_root.join("skills/spec-conops-engineering/resources/units/conops");
+
+        let optx_path = conops_units_dir.join("07_OPTX_EXCHANGES.md");
+        if optx_path.is_file() {
+            let engine = SysMLParameterBindingEngine::new(None, None, None, false, None);
+            let (is_valid, errors) = validate_unit_integrity(&[optx_path.clone()], Some(&engine));
+            assert!(is_valid, "Unit 07 integrity validation failed: {:?}", errors);
+            assert!(errors.is_empty());
+
+            let raw = fs::read_to_string(&optx_path).unwrap();
+            assert!(!raw.contains("ARINC"), "Unit 07 must not contain ARINC bus protocols");
+            assert!(!raw.contains("avionic"), "Unit 07 must not contain avionic network tiers");
+            assert!(!raw.contains("DO-178"), "Unit 07 must not contain DO-178");
+            assert!(!raw.contains("DO-254"), "Unit 07 must not contain DO-254");
+            assert!(!raw.contains("DAL-A"), "Unit 07 must not contain DAL-A");
+            assert!(!raw.contains("DAL-B"), "Unit 07 must not contain DAL-B");
+            assert!(!raw.contains("Control Surface Deflections"), "Unit 07 must not contain Control Surface Deflections");
+            assert!(!raw.contains("Barometric Static Pressure"), "Unit 07 must not contain Barometric Static Pressure");
+            assert!(!raw.contains("Dynamic Bingo"), "Unit 07 must not contain Dynamic Bingo");
+            assert!(!raw.contains("ROE Arming Keys"), "Unit 07 must not contain ROE Arming Keys");
+            assert!(!raw.contains("ASTM F3411"), "Unit 07 must not contain ASTM F3411");
+            assert!(!raw.contains("ASD-STAN"), "Unit 07 must not contain ASD-STAN");
+            assert!(!raw.contains("ballistic recovery"), "Unit 07 must not contain ballistic recovery");
+            assert!(!raw.contains("Squib"), "Unit 07 must not contain Squib");
+            assert!(!raw.contains('\u{2014}'), "Unit 07 must not contain em dash");
+            assert!(!raw.contains('\u{2013}'), "Unit 07 must not contain en dash");
+        }
+
+        let arch_04_path = conops_units_dir.join("04_SYSTEM_ARCHITECTURE.md");
+        if arch_04_path.is_file() {
+            let engine = SysMLParameterBindingEngine::new(None, None, None, false, None);
+            let (is_valid, errors) = validate_unit_integrity(&[arch_04_path.clone()], Some(&engine));
+            assert!(is_valid, "Unit 04 integrity validation failed: {:?}", errors);
+            assert!(errors.is_empty());
+
+            let raw = fs::read_to_string(&arch_04_path).unwrap();
+            assert!(!raw.contains("Encrypted PACE Communications"), "Unit 04 must not contain PACE Communications");
+            assert!(!raw.contains("MATLAB"), "Unit 04 must not contain MATLAB");
+            assert!(!raw.contains('\u{2014}'), "Unit 04 must not contain em dash");
+            assert!(!raw.contains('\u{2013}'), "Unit 04 must not contain en dash");
+        }
+
+        let arch_08_path = conops_units_dir.join("08_SYSTEM_ARCHITECTURE.md");
+        if arch_08_path.is_file() {
+            let engine = SysMLParameterBindingEngine::new(None, None, None, false, None);
+            let (is_valid, errors) = validate_unit_integrity(&[arch_08_path.clone()], Some(&engine));
+            assert!(is_valid, "Unit 08 integrity validation failed: {:?}", errors);
+            assert!(errors.is_empty());
+
+            let raw = fs::read_to_string(&arch_08_path).unwrap();
+            assert!(!raw.contains("ARINC"), "Unit 08 must not contain ARINC");
+            assert!(!raw.contains("STANAG"), "Unit 08 must not contain STANAG");
+            assert!(!raw.contains("MIL-STD-1553"), "Unit 08 must not contain MIL-STD-1553");
+            assert!(!raw.contains('\u{2014}'), "Unit 08 must not contain em dash");
+            assert!(!raw.contains('\u{2013}'), "Unit 08 must not contain en dash");
+        }
     }
 }

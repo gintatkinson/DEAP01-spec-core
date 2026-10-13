@@ -17,8 +17,8 @@ Physical subsystems, computational nodes, and functional elements are allocated 
 | Subsystem Part | Operational Segment | SSOT Ground Truth Source & Citation | Primary Functional Role |
 | :--- | :--- | :--- | :--- |
 | `CoreController` | Primary Operational Segment | [../../schema/<source_file>](../../schema/<source_file>#anchor) ("OEM Clause Title") \| SysML v2: `part def <NodeName>` | Realizes core operational mission functions |
-| `TelemetryTerminal` | Command & Control Segment | [../../schema/<source_file>](../../schema/<source_file>#anchor) ("OEM Clause Title") \| SysML v2: `part def <NodeName>` | Encrypted PACE Communications |
-| `GroundSupportUnit` | Auxiliary Support Segment | [../../schema/<source_file>](../../schema/<source_file>#anchor) ("OEM Clause Title") \| SysML v2: `part def <NodeName>` | Pre-Operation Power & Diagnostics |
+| `TelemetryTerminal` | Supervisory Interface Segment | [../../schema/<source_file>](../../schema/<source_file>#anchor) ("OEM Clause Title") \| SysML v2: `part def <NodeName>` | Encrypted Communications Interconnect |
+| `GroundSupportUnit` | Auxiliary Support Segment | [../../schema/<source_file>](../../schema/<source_file>#anchor) ("OEM Clause Title") \| SysML v2: `part def <NodeName>` | Operational Power & Diagnostics |
 
 {{SEGMENT_ALLOCATION_MATRIX}}
 
@@ -46,7 +46,7 @@ Formal declaration binding this operational architecture specification to the au
 {{MODEL_BINDING_STATEMENT}}
 
 ### 4.6 DoDAF SV-4 / UAF Rs-Fn Function-to-Subsystem Allocation Architecture
-In accordance with DoDAF 2.02 SV-4, OMG UAF v2.0 Resource Functions (Rs-Fn), and ISO/IEC/IEEE 15288:2023 §6.4.4, system functional operations and actions are allocated deterministically to physical subsystem performer nodes. This allocation enforces strict operational decoupling, modular real-time determinism, and direct traceability to executable MATLAB / Simulink / Stateflow / Embedded Coder digital twin control synthesis models.
+In accordance with DoDAF 2.02 SV-4, OMG UAF v2.0 Resource Functions (Rs-Fn), and ISO/IEC/IEEE 15288:2023 §6.4.4, system functional operations and actions are allocated deterministically to physical subsystem performer nodes. This allocation enforces strict operational decoupling, modular real-time determinism, and direct traceability to executable digital twin control synthesis models.
 
 ```mermaid
 flowchart TD
@@ -68,7 +68,7 @@ flowchart TD
         FN06["FN-06: Deterministic Failsafe<br/>Containment Execution"]
     end
 
-    subgraph CommGateway ["PACE Communications Gateway Node"]
+    subgraph CommGateway ["Supervisory Communications Gateway Node"]
         direction TB
         FN07["FN-07: Bidirectional Telemetry<br/>Serialization & Encryption"]
     end
