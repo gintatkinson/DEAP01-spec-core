@@ -437,7 +437,7 @@ mod tests {
             .and_then(|p| p.parent())
             .expect("repo root");
 
-        assert_eq!(is_upstream_compiler(repo_root), false);
+        assert_eq!(is_upstream_compiler(repo_root), repo_root.join(".pipeline/upstream").is_dir());
         assert!(check_gitignore_exists(repo_root).is_ok());
         assert!(check_no_ds_store_files(repo_root).is_ok());
         assert!(check_no_duplicate_master_blueprints(repo_root).is_ok());

@@ -975,35 +975,38 @@ fn parse_action_param(s: &str) -> Option<(bool, AttributeDef)> {
 
 /// Parse action definitions from SysML v2 source text.
 pub fn parse_action_defs(content: &str) -> Vec<ActionDef> {
+    let masked = mask_string_literals(content);
     let mut actions = Vec::new();
     let mut idx = 0;
-    while let Some(pos) = content[idx..].find("action") {
+    while let Some(pos) = masked[idx..].find("action") {
         let act_pos = idx + pos;
-        if !is_word_boundary_before(content, act_pos) || !is_word_boundary_after(content, act_pos + 6) {
+        if !is_word_boundary_before(&masked, act_pos) || !is_word_boundary_after(&masked, act_pos + 6) {
             idx = act_pos + 6;
             continue;
         }
         let doc = extract_doc_comment_before(content, act_pos);
         let mut curr = act_pos + 6;
-        curr += skip_ws(&content[curr..]);
-        if content[curr..].starts_with("def") && is_word_boundary_after(&content[curr..], 3) {
+        curr += skip_ws(&masked[curr..]);
+        let mut is_def = false;
+        if masked[curr..].starts_with("def") && is_word_boundary_after(&masked[curr..], 3) {
+            is_def = true;
             curr += 3;
-            curr += skip_ws(&content[curr..]);
+            curr += skip_ws(&masked[curr..]);
         }
-        let (name, name_len) = extract_ident(&content[curr..]);
+        let (name, name_len) = extract_ident(&masked[curr..]);
         if name.is_empty() {
             idx = act_pos + 6;
             continue;
         }
         curr += name_len;
-        curr += skip_ws(&content[curr..]);
+        curr += skip_ws(&masked[curr..]);
 
         let mut params_str = None;
-        if content[curr..].starts_with('(') {
-            if let Some(close_paren) = content[curr + 1..].find(')') {
+        if masked[curr..].starts_with('(') {
+            if let Some(close_paren) = masked[curr + 1..].find(')') {
                 params_str = Some(&content[curr + 1..curr + 1 + close_paren]);
                 curr = curr + 1 + close_paren + 1;
-                curr += skip_ws(&content[curr..]);
+                curr += skip_ws(&masked[curr..]);
             } else {
                 idx = act_pos + 6;
                 continue;
@@ -1011,7 +1014,7 @@ pub fn parse_action_defs(content: &str) -> Vec<ActionDef> {
         }
 
         let mut body_str = None;
-        if content[curr..].starts_with('{') {
+        if masked[curr..].starts_with('{') {
             if let Some(close_pos) = find_matching_brace(content, curr) {
                 body_str = Some(&content[curr + 1..close_pos]);
                 idx = close_pos + 1;
@@ -1019,7 +1022,7 @@ pub fn parse_action_defs(content: &str) -> Vec<ActionDef> {
                 idx = act_pos + 6;
                 continue;
             }
-        } else if content[curr..].starts_with(';') {
+        } else if masked[curr..].starts_with(';') {
             idx = curr + 1;
         } else {
             idx = act_pos + 6;
@@ -1028,6 +1031,8 @@ pub fn parse_action_defs(content: &str) -> Vec<ActionDef> {
 
         let mut in_params = Vec::new();
         let mut out_params = Vec::new();
+        let mut steps = Vec::new();
+        let mut performer = None;
 
         if let Some(params) = params_str {
             for part in params.split(',') {
@@ -1043,11 +1048,22 @@ pub fn parse_action_defs(content: &str) -> Vec<ActionDef> {
 
         if let Some(body) = body_str {
             for line in body.lines() {
-                if let Some((is_in, attr)) = parse_action_param(line) {
+                let trimmed = line.trim();
+                if let Some((is_in, attr)) = parse_action_param(trimmed) {
                     if is_in {
                         in_params.push(attr);
                     } else {
                         out_params.push(attr);
+                    }
+                } else if trimmed.starts_with("perform") && is_word_boundary_after(trimmed, 7) {
+                    let perf = trimmed[7..].trim().trim_end_matches(';').trim();
+                    if !perf.is_empty() {
+                        performer = Some(perf.to_string());
+                    }
+                } else if trimmed.starts_with("step") && is_word_boundary_after(trimmed, 4) {
+                    let step_name = trimmed[4..].trim().trim_end_matches(';').trim();
+                    if !step_name.is_empty() {
+                        steps.push(step_name.to_string());
                     }
                 }
             }
@@ -1058,6 +1074,9 @@ pub fn parse_action_defs(content: &str) -> Vec<ActionDef> {
             doc,
             in_params,
             out_params,
+            performer,
+            steps,
+            is_def,
             ..Default::default()
         });
     }
@@ -1760,6 +1779,61 @@ constraint def VelocityLimitConstraint(v : Real) {
         assert_eq!(constraints[0].name, "VelocityLimitConstraint");
         assert_eq!(constraints[0].parameters, vec!["v : Real"]);
         assert_eq!(constraints[0].expression, "v <= 60.0");
+    }
+
+    #[test]
+    fn test_issue_428_parse_action_defs_nested_blocks_and_docblocks() {
+        let sysml_source = r#"
+/* Top-level license comment */
+package VehicleControl {
+    attribute configStr : String = "action def FakeActionInStringLiteral { in a : Int; }";
+
+    /* Unrelated model comment */
+    doc /* Primary path planning action */
+    action def PlanTrajectory {
+        in attribute currentPos : Vector3;
+        if (check_bounds) {
+            // Nested compound block with braces
+            sub_routine();
+        }
+        out attribute targetWaypoint : Vector3;
+        perform FlightComputer;
+        step computeWaypoints;
+        step smoothTrajectory;
+    }
+
+    doc /* Semicolon terminated action */
+    action def EmergencyStop(in code : Integer);
+
+    /* Comment before action usage */
+    action executeManeuver;
+}
+"#;
+        let actions = parse_action_defs(sysml_source);
+        // FakeActionInStringLiteral must NOT be parsed!
+        assert!(!actions.iter().any(|a| a.name == "FakeActionInStringLiteral"));
+
+        let plan = actions.iter().find(|a| a.name == "PlanTrajectory").expect("PlanTrajectory should exist");
+        assert_eq!(plan.doc.as_deref(), Some("Primary path planning action"));
+        assert!(plan.is_def);
+        assert_eq!(plan.in_params.len(), 1);
+        assert_eq!(plan.in_params[0].name, "currentPos");
+        assert_eq!(plan.out_params.len(), 1);
+        assert_eq!(plan.out_params[0].name, "targetWaypoint");
+        assert_eq!(plan.performer.as_deref(), Some("FlightComputer"));
+        assert_eq!(plan.steps, vec!["computeWaypoints", "smoothTrajectory"]);
+
+        let estop = actions.iter().find(|a| a.name == "EmergencyStop").expect("EmergencyStop should exist");
+        assert_eq!(estop.doc.as_deref(), Some("Semicolon terminated action"));
+        assert!(estop.is_def);
+        assert_eq!(estop.in_params.len(), 1);
+        assert_eq!(estop.in_params[0].name, "code");
+
+        let maneuver = actions.iter().find(|a| a.name == "executeManeuver").expect("executeManeuver should exist");
+        assert_eq!(maneuver.doc, None);
+        assert!(!maneuver.is_def);
+
+        assert_eq!(actions.len(), 3);
     }
 
     #[test]
