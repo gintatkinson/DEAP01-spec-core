@@ -348,7 +348,11 @@ fn collect_connections_from_path(dir: &Path, conns: &mut HashSet<String>) {
             let path = entry.path();
             if path.is_dir() {
                 collect_connections_from_path(&path, conns);
-            } else if path.is_file() && path.extension().map_or(false, |e| e == "md") {
+            } else if path.is_file()
+                && path
+                    .extension()
+                    .map_or(false, |e| e == "md" || e == "mmd")
+            {
                 if let Ok(content) = fs::read_to_string(&path) {
                     conns.extend(extract_connection_ids(&content));
                 }
@@ -359,12 +363,36 @@ fn collect_connections_from_path(dir: &Path, conns: &mut HashSet<String>) {
 
 /// Check 27: Cross-Document Diagram Parity Gate (Gate 25B).
 ///
-/// Mandates 1:1 bidirectional parity between ConOps SV-1 connection links (`CONN-01`..`CONN-N`)
-/// and Level 1C System Interface Matrix entries (`docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md`).
+/// Mandates 1:1 bidirectional parity between ConOps SV-1 connection links (`CONN-01`..`CONN-N`),
+/// Level 1C System Interface Matrix entries (`docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md`),
+/// executive engineering reports (`docs/reports/`), and the canonical SSOT Architecture Views Library
+/// (`docs/architecture/views/`).
 pub fn check_cross_document_diagram_parity(repo_root: &Path) -> Result<ParityOutcome, Vec<String>> {
-    let mut conns_conops = HashSet::new();
-    let mut conns_icd = HashSet::new();
+    let is_upstream = is_upstream_compiler(repo_root);
+    let arch_views_dir = repo_root.join("docs").join("architecture").join("views");
 
+    // In upstream distribution template compiler repositories, enforce the presence
+    // of the Canonical SSOT Architecture Views Library and its canonical views.
+    if is_upstream {
+        if !arch_views_dir.is_dir() {
+            return Err(vec![
+                "Canonical SSOT Architecture Views Library (docs/architecture/views/) is missing in upstream compiler workspace (mandating canonical architecture views library per refs #276)".to_string(),
+            ]);
+        }
+        let sv1_view = arch_views_dir.join("sv1_super_system.mmd");
+        if !sv1_view.is_file() {
+            return Err(vec![
+                "Canonical SSOT Architecture Views Library (docs/architecture/views/) is missing required canonical view sv1_super_system.mmd (refs #276)".to_string(),
+            ]);
+        }
+    }
+
+    let mut conns_arch = HashSet::new();
+    if arch_views_dir.is_dir() {
+        collect_connections_from_path(&arch_views_dir, &mut conns_arch);
+    }
+
+    let mut conns_conops = HashSet::new();
     let conops_dir = repo_root.join("docs").join("conops");
     if conops_dir.is_dir() {
         collect_connections_from_path(&conops_dir, &mut conns_conops);
@@ -376,6 +404,7 @@ pub fn check_cross_document_diagram_parity(repo_root: &Path) -> Result<ParityOut
         }
     }
 
+    let mut conns_icd = HashSet::new();
     let interfaces_dir = repo_root.join("docs").join("interfaces");
     if interfaces_dir.is_dir() {
         collect_connections_from_path(&interfaces_dir, &mut conns_icd);
@@ -385,9 +414,74 @@ pub fn check_cross_document_diagram_parity(repo_root: &Path) -> Result<ParityOut
         collect_connections_from_path(&icd_dir, &mut conns_icd);
     }
 
-    if !conns_conops.is_empty() && !conns_icd.is_empty() {
-        let mut mismatches = Vec::new();
+    let mut conns_reports = HashSet::new();
+    let reports_dir = repo_root.join("docs").join("reports");
+    if reports_dir.is_dir() {
+        collect_connections_from_path(&reports_dir, &mut conns_reports);
+    }
 
+    let mut mismatches = Vec::new();
+
+    // 1. Cross-check against Canonical SSOT Architecture Views Library if populated
+    if !conns_arch.is_empty() {
+        if !conns_conops.is_empty() {
+            let mut missing_in_arch: Vec<_> = conns_conops.difference(&conns_arch).cloned().collect();
+            missing_in_arch.sort();
+            for conn in missing_in_arch {
+                mismatches.push(format!(
+                    "ConOps SV-1 diagram declares connection '{}', but it is missing from Canonical SSOT Architecture Library (docs/architecture/views/) (mandating 1:1 bidirectional parity per refs #276)",
+                    conn
+                ));
+            }
+            let mut missing_in_conops: Vec<_> = conns_arch.difference(&conns_conops).cloned().collect();
+            missing_in_conops.sort();
+            for conn in missing_in_conops {
+                mismatches.push(format!(
+                    "Canonical SSOT Architecture Library (docs/architecture/views/) registers connection '{}', but it is missing from ConOps SV-1 diagram (mandating 1:1 bidirectional parity per refs #276)",
+                    conn
+                ));
+            }
+        }
+        if !conns_icd.is_empty() {
+            let mut missing_in_arch: Vec<_> = conns_icd.difference(&conns_arch).cloned().collect();
+            missing_in_arch.sort();
+            for conn in missing_in_arch {
+                mismatches.push(format!(
+                    "Level 1C System Interface Matrix registers connection '{}', but it is missing from Canonical SSOT Architecture Library (docs/architecture/views/) (mandating 1:1 bidirectional parity per refs #276)",
+                    conn
+                ));
+            }
+            let mut missing_in_icd: Vec<_> = conns_arch.difference(&conns_icd).cloned().collect();
+            missing_in_icd.sort();
+            for conn in missing_in_icd {
+                mismatches.push(format!(
+                    "Canonical SSOT Architecture Library (docs/architecture/views/) registers connection '{}', but it is missing from Level 1C System Interface Matrix (mandating 1:1 bidirectional parity per refs #276)",
+                    conn
+                ));
+            }
+        }
+        if !conns_reports.is_empty() {
+            let mut missing_in_arch: Vec<_> = conns_reports.difference(&conns_arch).cloned().collect();
+            missing_in_arch.sort();
+            for conn in missing_in_arch {
+                mismatches.push(format!(
+                    "Executive engineering report declares connection '{}', but it is missing from Canonical SSOT Architecture Library (docs/architecture/views/) (mandating 1:1 bidirectional parity per refs #276)",
+                    conn
+                ));
+            }
+            let mut missing_in_reports: Vec<_> = conns_arch.difference(&conns_reports).cloned().collect();
+            missing_in_reports.sort();
+            for conn in missing_in_reports {
+                mismatches.push(format!(
+                    "Canonical SSOT Architecture Library (docs/architecture/views/) registers connection '{}', but it is missing from executive engineering report (mandating 1:1 bidirectional parity per refs #276)",
+                    conn
+                ));
+            }
+        }
+    }
+
+    // 2. Direct Cross-Document Parity (ConOps vs ICD)
+    if !conns_conops.is_empty() && !conns_icd.is_empty() {
         let mut missing_in_icd: Vec<_> = conns_conops.difference(&conns_icd).cloned().collect();
         missing_in_icd.sort();
         for conn in missing_in_icd {
@@ -405,10 +499,52 @@ pub fn check_cross_document_diagram_parity(repo_root: &Path) -> Result<ParityOut
                 conn
             ));
         }
+    }
 
-        if !mismatches.is_empty() {
-            return Err(mismatches);
+    // 3. Direct Cross-Document Parity (Reports vs ConOps & ICD)
+    if !conns_reports.is_empty() {
+        if !conns_conops.is_empty() {
+            let mut missing_in_conops: Vec<_> = conns_reports.difference(&conns_conops).cloned().collect();
+            missing_in_conops.sort();
+            for conn in missing_in_conops {
+                mismatches.push(format!(
+                    "Executive engineering report declares connection '{}', but it is missing from ConOps SV-1 diagram (mandating 1:1 bidirectional parity per refs #276)",
+                    conn
+                ));
+            }
+            let mut missing_in_reports: Vec<_> = conns_conops.difference(&conns_reports).cloned().collect();
+            missing_in_reports.sort();
+            for conn in missing_in_reports {
+                mismatches.push(format!(
+                    "ConOps SV-1 diagram declares connection '{}', but it is missing from executive engineering report (mandating 1:1 bidirectional parity per refs #276)",
+                    conn
+                ));
+            }
         }
+        if !conns_icd.is_empty() {
+            let mut missing_in_icd: Vec<_> = conns_reports.difference(&conns_icd).cloned().collect();
+            missing_in_icd.sort();
+            for conn in missing_in_icd {
+                mismatches.push(format!(
+                    "Executive engineering report declares connection '{}', but it is missing from Level 1C System Interface Matrix (mandating 1:1 bidirectional parity per refs #276)",
+                    conn
+                ));
+            }
+            let mut missing_in_reports: Vec<_> = conns_icd.difference(&conns_reports).cloned().collect();
+            missing_in_reports.sort();
+            for conn in missing_in_reports {
+                mismatches.push(format!(
+                    "Level 1C System Interface Matrix registers connection '{}', but it is missing from executive engineering report (mandating 1:1 bidirectional parity per refs #276)",
+                    conn
+                ));
+            }
+        }
+    }
+
+    if !mismatches.is_empty() {
+        mismatches.sort();
+        mismatches.dedup();
+        return Err(mismatches);
     }
 
     Ok(ParityOutcome::Verified)
@@ -527,7 +663,19 @@ pub fn check_architecture_viewpoint_diagrams(
     strict: bool,
 ) -> Result<ParityOutcome, Vec<String>> {
     let is_upstream = is_upstream_compiler(repo_root);
-    if !is_upstream {
+    if is_upstream {
+        let arch_views_dir = repo_root.join("docs").join("architecture").join("views");
+        if !arch_views_dir.is_dir() {
+            return Err(vec![
+                "Gate 30 failed: Canonical SSOT Architecture Views Library (docs/architecture/views/) is missing in upstream compiler workspace (refs #276)".to_string(),
+            ]);
+        }
+        if !arch_views_dir.join("sv1_super_system.mmd").is_file() {
+            return Err(vec![
+                "Gate 30 failed: Canonical SSOT Architecture Views Library is missing required view sv1_super_system.mmd (refs #276)".to_string(),
+            ]);
+        }
+    } else {
         let model_text = discover_sysml_model_text(repo_root);
         let schema_dir = repo_root.join("schema");
         let has_extracted = schema_dir.join("extracted").is_dir();
@@ -860,6 +1008,105 @@ flowchart TD
         let res = check_cross_document_diagram_parity(&tmp.path);
         assert_eq!(res, Ok(ParityOutcome::Verified));
     }
+
+    #[test]
+    fn test_defect_276_divergent_reports_diagram_without_ssot_views_library_fails() {
+        let tmp = TempDir::new("check27_reports_divergence");
+        let conops_dir = tmp.path.join("docs").join("conops");
+        let reports_dir = tmp.path.join("docs").join("reports");
+        let interfaces_dir = tmp.path.join("docs").join("interfaces");
+        fs::create_dir_all(&conops_dir).unwrap();
+        fs::create_dir_all(&reports_dir).unwrap();
+        fs::create_dir_all(&interfaces_dir).unwrap();
+
+        let conops_content = r#"## 4. System Operational Architecture
+```mermaid
+flowchart TD
+    Operator -->|"CONN-01: Supervisory Command"| SupervisoryStation
+    SupervisoryStation -->|"CONN-02: System Datalink"| Controller
+```
+"#;
+        fs::write(conops_dir.join("04_SYSTEM_ARCHITECTURE.md"), conops_content).unwrap();
+
+        let icd_content = r#"# Level 1C: System Interface Matrix
+| Connection ID | Source Port | Dest Port |
+| `CONN-01` | PORT-SUP-CMD | PORT-CTRL-CMD |
+| `CONN-02` | PORT-SUP-TLM | PORT-CTRL-TLM |
+"#;
+        fs::write(interfaces_dir.join("ICD_01_SYSTEM_INTERFACE_MATRIX.md"), icd_content).unwrap();
+
+        let report_content = r#"# Executive Engineering Deliverables
+```mermaid
+flowchart TD
+    SubA -->|"CONN-99: Divergent Unaligned Flow"| SubB
+```
+"#;
+        fs::write(reports_dir.join("PHASE_1_EXECUTIVE_ENGINEERING_DELIVERABLES.md"), report_content).unwrap();
+
+        let res = check_cross_document_diagram_parity(&tmp.path);
+        assert!(res.is_err(), "Check 27 must fail when executive deliverables report contains divergent diagram connections");
+    }
+
+    #[test]
+    fn test_defect_276_upstream_missing_architecture_views_library_fails() {
+        let tmp = TempDir::new("check27_upstream_missing_arch_views");
+        let pipeline_upstream = tmp.path.join(".pipeline").join("upstream");
+        fs::create_dir_all(&pipeline_upstream).unwrap();
+
+        let res = check_cross_document_diagram_parity(&tmp.path);
+        assert!(res.is_err(), "Upstream compiler workspace must fail when canonical SSOT architecture views library (docs/architecture/views/) is missing");
+    }
+
+    #[test]
+    fn test_defect_276_canonical_architecture_views_parity_passes() {
+        let tmp = TempDir::new("check27_canonical_arch_views_matching");
+        let pipeline_upstream = tmp.path.join(".pipeline").join("upstream");
+        let arch_views_dir = tmp.path.join("docs").join("architecture").join("views");
+        let conops_dir = tmp.path.join("docs").join("conops");
+        let interfaces_dir = tmp.path.join("docs").join("interfaces");
+        let reports_dir = tmp.path.join("docs").join("reports");
+
+        fs::create_dir_all(&pipeline_upstream).unwrap();
+        fs::create_dir_all(&arch_views_dir).unwrap();
+        fs::create_dir_all(&conops_dir).unwrap();
+        fs::create_dir_all(&interfaces_dir).unwrap();
+        fs::create_dir_all(&reports_dir).unwrap();
+
+        let sv1_content = r#"flowchart TD
+    Operator -->|"CONN-01: Supervisory Command"| SupervisoryStation
+    SupervisoryStation -->|"CONN-02: System Datalink"| Controller
+"#;
+        fs::write(arch_views_dir.join("sv1_super_system.mmd"), sv1_content).unwrap();
+
+        let conops_content = r#"## 4. System Operational Architecture
+```mermaid
+flowchart TD
+    Operator -->|"CONN-01: Supervisory Command"| SupervisoryStation
+    SupervisoryStation -->|"CONN-02: System Datalink"| Controller
+```
+"#;
+        fs::write(conops_dir.join("04_SYSTEM_ARCHITECTURE.md"), conops_content).unwrap();
+
+        let icd_content = r#"# Level 1C: System Interface Matrix
+| Connection ID | Source Port | Dest Port |
+| `CONN-01` | PORT-SUP-CMD | PORT-CTRL-CMD |
+| `CONN-02` | PORT-SUP-TLM | PORT-CTRL-TLM |
+"#;
+        fs::write(interfaces_dir.join("ICD_01_SYSTEM_INTERFACE_MATRIX.md"), icd_content).unwrap();
+
+        let report_content = r#"# Executive Engineering Deliverables
+```mermaid
+flowchart TD
+    Operator -->|"CONN-01: Supervisory Command"| SupervisoryStation
+    SupervisoryStation -->|"CONN-02: System Datalink"| Controller
+```
+"#;
+        fs::write(reports_dir.join("PHASE_1_EXECUTIVE_ENGINEERING_DELIVERABLES.md"), report_content).unwrap();
+
+        let res = check_cross_document_diagram_parity(&tmp.path);
+        assert_eq!(res, Ok(ParityOutcome::Verified));
+    }
 }
+
 
 

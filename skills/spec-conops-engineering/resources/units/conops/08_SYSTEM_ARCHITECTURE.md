@@ -7,7 +7,7 @@
 ## 8. System Operational Architecture & Physical Subsystem Decomposition
 
 ### 8.1 Super-System Operational Architecture & Segment Boundaries
-In accordance with IEEE Std 1362-1998 §5.3, ISO/IEC/IEEE 29148:2018 §6.4.2-§6.4.3, DoDAF 2.02 SV-1, and ISO/IEC/IEEE 15288:2023 §6.4.4, the super-system operational architecture is partitioned across major physical segments and operational boundaries with discrete port definitions and traceable connection item flows.
+In accordance with IEEE Std 1362-1998 §5.3, ISO/IEC/IEEE 29148:2018 §6.4.2-§6.4.3, DoDAF 2.02 SV-1, and ISO/IEC/IEEE 15288:2023 §6.4.4, the super-system operational architecture is partitioned across major physical segments and operational boundaries with discrete port definitions and traceable connection item flows, maintaining 1:1 parity with the canonical SSOT Architecture Views Library (`docs/architecture/views/sv1_super_system.mmd`).
 
 {{SUPER_SYSTEM_ARCHITECTURE}}
 

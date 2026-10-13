@@ -1,0 +1,41 @@
+flowchart TD
+    subgraph ICD_Interfaces["Level 1C: System Interface Matrix Topology (DoDAF SV-1 / IEEE 1362)"]
+        direction TB
+        subgraph Segment_External["External Actors Segment"]
+            direction TB
+            ExtOperator["Operator Console<br/>• PORT_SUP_C2 (INOUT)"]
+            ExtEnvironment["Operating Environment<br/>• PORT_SENS_IN (IN)"]
+            ExtAuthority["Safety Authority<br/>• PORT_SUP_DISP (OUT)"]
+        end
+
+        subgraph Segment_Supervisory["Supervisory & Control Segment"]
+            direction TB
+            SupervisoryNode["Supervisory Station<br/>• PORT_SUP_C2 (INOUT)<br/>• PORT_SUP_DISP (OUT)"]
+        end
+
+        subgraph Segment_Core["Core Execution Segment"]
+            direction TB
+            ControllerNode["Central Controller<br/>• PORT_CTRL_C2 (INOUT)<br/>• PORT_CTRL_CMD (OUT)<br/>• PORT_CTRL_TLM (IN)"]
+            SensorNode["Perception Unit<br/>• PORT_SENS_IN (IN)<br/>• PORT_SENS_DATA (OUT)"]
+            ActuatorNode["Actuation Core<br/>• PORT_ACT_IN (IN)"]
+            SafetyNode["Safety Monitor<br/>• PORT_WD_IN (IN)<br/>• PORT_WD_TRIG (OUT)"]
+        end
+
+        subgraph Segment_Support["Auxiliary & Support Segment"]
+            direction TB
+            SupportNode["Support Equipment<br/>• PORT_SUPP_PWR (OUT)"]
+        end
+
+        Segment_External ~~~ Segment_Supervisory
+        Segment_Supervisory ~~~ Segment_Core
+        Segment_Core ~~~ Segment_Support
+    end
+
+    ExtOperator -->|"CONN-01: Supervisory Command & Control"| SupervisoryNode
+    ExtEnvironment -.->|"CONN-02: Environmental & Boundary Telemetry"| SensorNode
+    ExtAuthority -->|"CONN-03: Authorization & Safety Consent"| SupervisoryNode
+    SupervisoryNode -->|"CONN-04: System C2 Datalink [PORT_SUP_C2 -> PORT_CTRL_C2]"| ControllerNode
+    SensorNode -->|"CONN-05: Sensor State Estimates [PORT_SENS_DATA -> PORT_CTRL_TLM]"| ControllerNode
+    ControllerNode -->|"CONN-06: Actuator Demand Vector [PORT_CTRL_CMD -> PORT_ACT_IN]"| ActuatorNode
+    ControllerNode -->|"CONN-07: Safety Heartbeat & State [PORT_CTRL_CMD -> PORT_WD_IN]"| SafetyNode
+    SupportNode -.->|"CONN-08: Auxiliary Power & Diagnostics [PORT_SUPP_PWR]"| ControllerNode
