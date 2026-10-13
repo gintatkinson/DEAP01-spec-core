@@ -798,4 +798,14 @@ mod tests {
             assert!(is_clean);
         }
     }
+
+    #[test]
+    fn test_runner_check_34_zero_regex() {
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(|p| p.parent())
+            .expect("repo root");
+        let res = check_zero_regex(repo_root);
+        assert!(res.is_ok(), "Check 34 Zero Regex Invariant failed on repo: {:?}", res.err());
+    }
 }
