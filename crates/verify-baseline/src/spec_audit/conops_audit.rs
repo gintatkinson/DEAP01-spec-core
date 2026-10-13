@@ -18,7 +18,7 @@
 use crate::spec_audit::markdown_ast::{parse_markdown, MarkdownDoc};
 use crate::spec_audit::{SpecAuditError, SpecAuditFinding};
 use serde_json::Value;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 
@@ -773,7 +773,155 @@ pub fn validate_super_system_architecture(content: &str, rel_path: &str) -> Vec<
         ));
     }
 
+    // 7. Must enforce Rule E5: Modularized Subgraph Boundary Edge Routing (refs #277)
+    if !is_template_placeholder {
+        if let Some(m_idx) = content.find("```mermaid") {
+            let m_slice = &content[m_idx..];
+            let end_idx = m_slice[10..].find("```").map(|i| m_idx + 10 + i).unwrap_or(content.len());
+            let diag_text = &content[m_idx..end_idx];
+
+            if let Some(err_msg) = audit_modular_subgraph_edge_routing(diag_text) {
+                findings.push(SpecAuditFinding::new(
+                    "conops-super-system-modular-edge-routing-missing",
+                    format!(
+                        "Section 4 / 8 Super-System Architecture diagram in '{}' {}. Decouple super-system segment context from internal subsystem breakdown views and route external edges cleanly to boundary ports (Rule E5, refs #277).",
+                        rel_path, err_msg
+                    ),
+                    rel_path,
+                    None,
+                ));
+            }
+        }
+    }
+
     findings
+}
+
+/// Audits Mermaid diagram for Rule E5 modularized boundary edge routing.
+/// Detects monolithic nested subgraphs (depth >= 3) and cross-hierarchy edges penetrating into nested subgraphs.
+pub fn audit_modular_subgraph_edge_routing(diag_text: &str) -> Option<String> {
+    let mut subgraph_stack: Vec<String> = Vec::new();
+    let mut max_nesting_depth = 0usize;
+    let mut nested_nodes: HashSet<String> = HashSet::new();
+    let mut node_subgraph: HashMap<String, String> = HashMap::new();
+    let mut cross_edges: Vec<(String, String, String)> = Vec::new();
+
+    const ARROWS: &[&str] = &[
+        "<-->", "<-.->", "<==>", "-->", "-.->", "==>", "---", "-.-", "===",
+    ];
+
+    for raw_line in diag_text.lines() {
+        let line = strip_mermaid_comment_local(raw_line).trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        if line.starts_with("subgraph") {
+            let after = line["subgraph".len()..].trim();
+            let sub_id = if let Some(bracket_pos) = after.find('[') {
+                after[..bracket_pos].trim().to_string()
+            } else if let Some(space_pos) = after.find(' ') {
+                after[..space_pos].trim().to_string()
+            } else {
+                after.trim_matches('"').to_string()
+            };
+            subgraph_stack.push(sub_id);
+            if subgraph_stack.len() > max_nesting_depth {
+                max_nesting_depth = subgraph_stack.len();
+            }
+            continue;
+        }
+
+        if line == "end" || line.starts_with("end ") {
+            subgraph_stack.pop();
+            continue;
+        }
+
+        // Check if edge
+        let mut is_edge = false;
+        for &arrow in ARROWS {
+            if let Some(pos) = line.find(arrow) {
+                is_edge = true;
+                let from_part = line[..pos].trim();
+                let after_arrow = line[pos + arrow.len()..].trim();
+                let to_part = if after_arrow.starts_with('|') {
+                    if let Some(second_pipe) = after_arrow[1..].find('|') {
+                        after_arrow[second_pipe + 2..].trim()
+                    } else {
+                        after_arrow
+                    }
+                } else {
+                    after_arrow
+                };
+                let from_id = extract_node_id_local(from_part);
+                let to_id = extract_node_id_local(to_part);
+                if !from_id.is_empty() && !to_id.is_empty() {
+                    cross_edges.push((from_id, to_id, line.to_string()));
+                }
+                break;
+            }
+        }
+
+        // If not edge, check if node declaration inside subgraph
+        if !is_edge && !subgraph_stack.is_empty() {
+            let node_id = extract_node_id_local(line);
+            if !node_id.is_empty()
+                && node_id != "direction"
+                && node_id != "style"
+                && node_id != "class"
+                && node_id != "classDef"
+                && !node_id.contains("~~~")
+            {
+                if let Some(current_sub) = subgraph_stack.last() {
+                    node_subgraph.insert(node_id.clone(), current_sub.clone());
+                }
+                if subgraph_stack.len() >= 2 {
+                    nested_nodes.insert(node_id);
+                }
+            }
+        }
+    }
+
+    if max_nesting_depth >= 3 {
+        return Some(format!(
+            "contains monolithic deeply nested subgraphs (nesting depth {} >= 3), violating Rule E5 (modularized boundary edge routing)",
+            max_nesting_depth
+        ));
+    }
+
+    if !nested_nodes.is_empty() {
+        for (from, to, edge_line) in &cross_edges {
+            if nested_nodes.contains(to) || nested_nodes.contains(from) {
+                let from_sub = node_subgraph.get(from).map(|s| s.as_str()).unwrap_or("");
+                let to_sub = node_subgraph.get(to).map(|s| s.as_str()).unwrap_or("");
+                if from_sub != to_sub {
+                    return Some(format!(
+                        "routes cross-hierarchy edge '{}' across nested subgraph boundaries, violating Rule E5 (modularized boundary edge routing)",
+                        edge_line
+                    ));
+                }
+            }
+        }
+    }
+
+    None
+}
+
+fn extract_node_id_local(s: &str) -> String {
+    let delimiters = ['[', '(', '{', '>', '-', '.', '='];
+    if let Some(idx) = s.find(|c| delimiters.contains(&c)) {
+        s[..idx].trim().to_string()
+    } else {
+        s.trim().to_string()
+    }
+}
+
+fn strip_mermaid_comment_local(line: &str) -> &str {
+    if let Some(pos) = line.find("%%") {
+        &line[..pos]
+    } else {
+        line
+    }
 }
 
 /// Audits Section 4.3 / 8.3 Subsystem Architecture (100% AST part definition coverage) (ISO/IEC/IEEE 29148:2018 §6.4.3).
@@ -1630,4 +1778,92 @@ Taxonomy of interface interconnects:
             findings
         );
     }
+
+    #[test]
+    fn test_issue_277_monolithic_nested_subgraph_cross_hierarchy_edges_detected_and_rejected() {
+        let hairball_conops = r#"# Concept of Operations (ConOps)
+## 4. System Operational Architecture & Physical Subsystem Decomposition
+
+### 4.1 Super-System Operational Architecture & Segment Boundaries
+In accordance with IEEE Std 1362-1998 §5.3, ISO/IEC/IEEE 29148:2018 §6.4.3, and DoDAF 2.02 SV-1:
+
+```mermaid
+flowchart TD
+    subgraph Super_System["Super-System (IEEE 1362)"]
+        direction TB
+        subgraph External_Actors["External Actors"]
+            direction TB
+            Operator["Operator<br/>• PORT_OP (OUT)"]
+        end
+        subgraph Supervisory_Segment["Supervisory Segment"]
+            direction TB
+            GCS["Ground Control Station<br/>• PORT_SUP (INOUT)"]
+        end
+        subgraph Platform_Segment["Platform Segment"]
+            direction TB
+            subgraph Tier_1["Tier 1 - Primary Flight"]
+                direction TB
+                Controller["Flight Computer<br/>• PORT_CTRL (INOUT)"]
+            end
+            subgraph Tier_2["Tier 2 - Actuation"]
+                direction TB
+                Actuator["Actuator Core<br/>• PORT_ACT (IN)"]
+            end
+        end
+    end
+    Operator -->|"CONN-01: Command"| GCS
+    GCS -->|"CONN-02: Datalink"| Controller
+    Controller -->|"CONN-03: Actuation Demand"| Actuator
+```
+
+### 4.3 Subsystem Architecture (100% AST Part Coverage)
+Decomposition of subsystems:
+- Controller | SysML v2: `part def FlightComputer` | SSOT Ground Truth Mapping: schema/model.sysml
+Functional Purpose & Scope: Core guidance.
+
+### 4.4 Port Taxonomy & Interface Interconnects
+Taxonomy of interface interconnects:
+- PORT-C2-IN (IN)
+- PORT-TLM-OUT (OUT)
+"#;
+        let findings = validate_super_system_architecture(hairball_conops, "docs/conops/CONOPS.md");
+        assert!(
+            findings.iter().any(|f| f.rule_id == "conops-super-system-modular-edge-routing-missing"),
+            "Monolithic SV-1 diagram with 3-level nested subgraphs and cross-hierarchy edge routing into internal tiers must be rejected with 'conops-super-system-modular-edge-routing-missing' finding. Got findings: {:?}",
+            findings
+        );
+    }
+
+    #[test]
+    fn test_issue_277_modularized_boundary_edge_routing_passes() {
+        let modular_conops = r#"# Concept of Operations (ConOps)
+## 4. System Operational Architecture & Physical Subsystem Decomposition
+
+### 4.1 Super-System Operational Architecture & Segment Boundaries
+In accordance with IEEE Std 1362-1998 §5.3, ISO/IEC/IEEE 29148:2018 §6.4.3, and DoDAF 2.02 SV-1:
+
+```mermaid
+flowchart TD
+    subgraph Supervisory_Segment["Supervisory Segment"]
+        direction TB
+        GCS["Ground Control Station<br/>• PORT_SUP (INOUT)"]
+    end
+    subgraph Platform_Segment["Platform Segment"]
+        direction TB
+        Controller["Flight Computer<br/>• PORT_CTRL (INOUT)"]
+        Actuator["Actuator Core<br/>• PORT_ACT (IN)"]
+    end
+    GCS -->|"CONN-01: Datalink"| Controller
+    Controller -->|"CONN-02: Actuation Demand"| Actuator
+```
+"#;
+        let findings = validate_super_system_architecture(modular_conops, "docs/conops/CONOPS.md");
+        assert!(
+            !findings.iter().any(|f| f.rule_id == "conops-super-system-modular-edge-routing-missing"),
+            "Modular SV-1 diagram with single-level segment subgraphs must pass Rule E5 validation. Got findings: {:?}",
+            findings
+        );
+    }
 }
+
+

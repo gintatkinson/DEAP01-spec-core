@@ -231,6 +231,7 @@ Per IEEE 1362-1998 §5.3 (Operational Environment & System Architecture), DoDAF 
    7. **Canonical Compliant Mermaid SV-1 Diagram Template**: The architecture diagram MUST be authored using a compliant Mermaid flowchart (`flowchart TD` or `flowchart TB`) declaring segment subgraphs, discrete port nodes, internal tier subgraphs with `~~~` spacers, mandatory inter-segment vertical spacers, and directed connection links (`CONN-XX`).
    8. **Operational Architecture Scope (Section 4.1 / Section 4.7)**: Section 4.1 / Section 4.7 represents High-Level Operational Architecture (OV-1 / OV-2 / High-Level SV-1) partitioned across operational segments derived dynamically from the schema AST (and External Actors) with operational information exchanges (Op-Tx: supervisory commands, telemetry, payload streams, status, authorization). Every ConOps SV-1 connection link (`CONN-01`..`CONN-N`) maps 1:1 bidirectionally with a registered Level 1C interface entry in the System Interface Matrix (`ICD_01_SYSTEM_INTERFACE_MATRIX.md`). Detailed internal wire-level interconnects, pinouts, RS-485 serial framing, opcodes (0x10, 0x11, etc.), register bitmasks, and CRC-16 equations are registered in Level 1C Interface Control Documents (`ICD_01_SYSTEM_INTERFACE_MATRIX.md` and `ICD_02_MASTER_SIGNAL_DICTIONARY.md`) in lockstep with ConOps operational connections.
    9. **Canonical SSOT Architecture Views Library Binding (`docs/architecture/views/`)**: ConOps Section 4 architecture diagrams (including Figure 4.1 SV-1 Super-System Architecture) MUST derive directly from or maintain 1:1 bidirectional parity with the canonical SSOT Architecture Views Library in `docs/architecture/views/` (`sv1_super_system.mmd`, `sv1_platform_subsystems.mmd`, and `icd_system_interface_matrix.mmd`). Authoring independent inline diagrams that diverge from canonical views violates Check 25 / Check 27 and is rejected by the compiler (refs #276).
+   10. **Rule E5 Modularized Subgraph Boundary Edge Routing & View Decoupling**: Inter-segment and cross-subgraph communication MUST route cleanly between top-level segment boundary nodes or discrete boundary interface ports, strictly avoiding edges penetrating deeply into nested subgraphs across multiple hierarchy levels. Detailed internal subsystem LRU buses and tier inter-connects MUST be decoupled into the platform subsystem breakdown view (`sv1_platform_subsystems.mmd`) rather than creating a monolithic visual hairball in the super-system operational context view (Rule E5, refs #277).
 
 #### Figure 4.1: Canonical ConOps SV-1 Primary System Architecture Diagram Template (Option 3: Compact Blocks & Vertical Tiers | SSOT: docs/architecture/views/sv1_super_system.mmd)
 ```mermaid
@@ -249,19 +250,10 @@ flowchart TD
 
     subgraph Core_Execution_Segment["Core System Execution Segment (DoDAF SV-1)"]
         direction TB
-        subgraph Core_Tier1["Tier 1 - Mission Management & Processing"]
-            direction TB
-            SystemController["Central System Controller<br/>• PORT_CTRL_C2 (INOUT)<br/>• PORT_CTRL_CMD (OUT)<br/>• PORT_CTRL_TLM (IN)"]
-            SensorFusion["Perception & Sensor Fusion Unit<br/>• PORT_SENS_IN (IN)<br/>• PORT_SENS_DATA (OUT)"]
-        end
-
-        subgraph Core_Tier2["Tier 2 - Actuation Power and Safety"]
-            direction TB
-            ActuationCore["Distributed Actuation and<br/>Effector Core<br/>• PORT_ACT_IN (IN)"]
-            SafetyWatchdog["Hardware Safety Monitor & Watchdog<br/>• PORT_WD_IN (IN)<br/>• PORT_WD_TRIG (OUT)"]
-        end
-
-        Core_Tier1 ~~~ Core_Tier2
+        SystemController["Central System Controller<br/>• PORT_CTRL_C2 (INOUT)<br/>• PORT_CTRL_CMD (OUT)<br/>• PORT_CTRL_TLM (IN)"]
+        SensorFusion["Perception & Sensor Fusion Unit<br/>• PORT_SENS_IN (IN)<br/>• PORT_SENS_DATA (OUT)"]
+        ActuationCore["Distributed Actuation and<br/>Effector Core<br/>• PORT_ACT_IN (IN)"]
+        SafetyWatchdog["Hardware Safety Monitor & Watchdog<br/>• PORT_WD_IN (IN)<br/>• PORT_WD_TRIG (OUT)"]
     end
 
     subgraph Support_Segment["Auxiliary & Support Segment (IEEE 1362 §5.3)"]
@@ -283,7 +275,7 @@ flowchart TD
     SensorFusion -->|"CONN-05: Sensor State Estimates [PORT_SENS_DATA -> PORT_CTRL_TLM]"| SystemController
     SystemController -->|"CONN-06: Actuator Demand Vector [PORT_CTRL_CMD -> PORT_ACT_IN]"| ActuationCore
     SystemController -->|"CONN-07: Safety Heartbeat & State [PORT_CTRL_CMD -> PORT_WD_IN]"| SafetyWatchdog
-    SupportEquipment -.->|"CONN-08: Auxiliary Power & Diagnostics [PORT_SUPP_PWR]"| Core_Execution_Segment
+    SupportEquipment -.->|"CONN-08: Auxiliary Power & Diagnostics [PORT_SUPP_PWR]"| SystemController
 ```
 
 - **Super-System Segment Allocation Matrix (Table 4.2 / Section 4.2)**:

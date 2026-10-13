@@ -30,7 +30,7 @@
 
 ## Universal Mermaid Diagram Ergonomics & Layout Invariant (Zero Horizontal Sprawl)
 
-To guarantee diagram readability, visual ergonomics, and prevent extreme horizontal aspect-ratio elongation across GitHub, GitLab, and IDE Markdown previewers, all Mermaid diagrams across all specifications, blueprinted interface documents, and architectural overviews MUST adhere to the following four ergonomics rules (E1–E4):
+To guarantee diagram readability, visual ergonomics, and prevent extreme horizontal aspect-ratio elongation across GitHub, GitLab, and IDE Markdown previewers, all Mermaid diagrams across all specifications, blueprinted interface documents, and architectural overviews MUST adhere to the following five ergonomics rules (E1-E5):
 
 - **Rule E1 (Horizontal Flow Prohibition)**: Unconstrained horizontal chaining and horizontal root layouts (`flowchart LR`, `graph LR`, `graph RL`) are strictly prohibited across all specification diagrams. Horizontal layouts force downstream renderers to scale diagrams into unreadable wide ribbons or trigger horizontal scrollbars. All flowcharts and topology graphs MUST use top-down orientation (`flowchart TD` or `graph TD`).
 - **Rule E2 (Mandatory Node Label Line-Wrapping <= 35 chars per line with `<br/>`)**: Long single-line node labels cause Mermaid boxes to stretch horizontally. Node labels MUST NOT exceed 35 characters on any single line. Any multi-word, descriptive, or compound label exceeding 35 characters MUST be broken into multiple lines using explicit `<br/>` tags inside the quoted string (e.g., `Node["Primary Telemetry Stream<br/>and Health Status Monitor"]`).
@@ -44,6 +44,11 @@ To guarantee diagram readability, visual ergonomics, and prevent extreme horizon
       end
   ```
   Topological connections bind directly between subsystem block nodes with descriptive edge labels (e.g. `SubA -->|"CONN-01 (Telemetry)"| SubB`).
+- **Rule E5 (Modularized Subgraph Boundary Edge Routing & Prohibition of Monolithic Cross-Hierarchy Edge Routing)**:
+  To eliminate unreadable visual hairballs and prevent Mermaid Dagre layout engine spline collisions cutting through intermediate nested subgraph boundaries, node text boxes, and port labels:
+  1. **Decoupled Hierarchical Architecture Views**: Architectural models MUST decouple super-system operational context (e.g. DoDAF SV-1 Super-System View `sv1_super_system.mmd` partitioning external actors, ground stations, and primary platform segments) from detailed internal subsystem bus interconnects (e.g. DoDAF SV-1 Platform Subsystems View `sv1_platform_subsystems.mmd`). Attempting to depict all operational segments and multi-tier internal LRU buses in a single monolithic flowchart is strictly prohibited.
+  2. **Boundary Port & Gateway Routing**: Cross-segment and external connection edges (such as supervisory command, telemetry, or auxiliary power) MUST connect to discrete segment boundary ports or designated gateway/controller nodes, and MUST NOT penetrate across multiple nested subgraph boundaries (>= 2 subgraph nesting levels).
+  3. **Zero Nested Subgraphs with Cross-Hierarchy Edges**: If a segment subgraph contains internal nested tier subgraphs, external edges MUST NOT target nodes inside those nested tiers. Segment containers receiving external connections MUST maintain flat node hierarchy (`direction TB`) or route external edges exclusively to segment boundary interfaces (refs #277).
 
 ## Document integrity constraints
 

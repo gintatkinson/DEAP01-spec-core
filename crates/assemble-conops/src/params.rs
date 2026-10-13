@@ -1515,37 +1515,27 @@ impl SysMLParameterBindingEngine {
         let mut node_ids = Vec::new();
 
         if parts.is_empty() {
-            super_lines.push("        subgraph Core_Tier1[\"Tier 1 - Mission Management & Processing\"]".to_string());
-            super_lines.push("            direction TB".to_string());
-            super_lines.push(format!("            Platform[\"<b>{sys_id} Core Controller</b><br/>• PORT_CTRL_C2 (INOUT)<br/>• PORT_CTRL_CMD (OUT)<br/>• PORT_CTRL_TLM (IN)\"]"));
-            super_lines.push("        end".to_string());
+            super_lines.push(format!("        Platform[\"<b>{sys_id} Core Controller</b><br/>• PORT_CTRL_C2 (INOUT)<br/>• PORT_CTRL_CMD (OUT)<br/>• PORT_CTRL_TLM (IN)\"]"));
             node_ids.push("Platform".to_string());
         } else {
-            // Partition parts into vertical tiers of at most 3 parts per tier (Option 3 layout)
-            let chunk_size = 3;
-            let mut tier_names = Vec::new();
-            for (tier_idx, chunk) in parts.chunks(chunk_size).enumerate() {
-                let tier_name = format!("Core_Tier{}", tier_idx + 1);
-                tier_names.push(tier_name.clone());
-                super_lines.push(format!("        subgraph {tier_name}[\"Tier {} - Functional Subsystems\"]", tier_idx + 1));
-                super_lines.push("            direction TB".to_string());
-                for (p_idx, p) in chunk.iter().enumerate() {
-                    let global_idx = tier_idx * chunk_size + p_idx + 1;
-                    let clean_p = sanitize_level_1b_operational_text(p);
-                    let clean_p_wrapped = wrap_mermaid_label(&clean_p, 28);
-                    let node_id = format!("P{global_idx}");
-                    node_ids.push(node_id.clone());
-                    let p_upper = clean_p.to_uppercase().replace([' ', '_', '.'], "-");
-                    super_lines.push(format!(
-                        "            {node_id}[\"<b>{clean_p_wrapped}</b><br/>• PORT-{p_upper}-IN (IN)<br/>• PORT-{p_upper}-OUT (OUT)\"]"
-                    ));
-                }
-                super_lines.push("        end".to_string());
+            // Render parts directly inside Core_Execution_Segment adhering to Rule E5 (zero nested subgraphs with cross-hierarchy edge collisions)
+            for (p_idx, p) in parts.iter().enumerate() {
+                let global_idx = p_idx + 1;
+                let clean_p = sanitize_level_1b_operational_text(p);
+                let clean_p_wrapped = wrap_mermaid_label(&clean_p, 28);
+                let node_id = format!("P{global_idx}");
+                node_ids.push(node_id.clone());
+                let p_upper = clean_p.to_uppercase().replace([' ', '_', '.'], "-");
+                super_lines.push(format!(
+                    "        {node_id}[\"<b>{clean_p_wrapped}</b><br/>• PORT-{p_upper}-IN (IN)<br/>• PORT-{p_upper}-OUT (OUT)\"]"
+                ));
             }
 
-            // Rank spacers between internal tiers
-            for i in 0..tier_names.len().saturating_sub(1) {
-                super_lines.push(format!("        {} ~~~ {}", tier_names[i], tier_names[i + 1]));
+            // Rank spacers between consecutive nodes for top-to-bottom layout
+            if node_ids.len() > 1 {
+                for i in 0..node_ids.len().saturating_sub(1) {
+                    super_lines.push(format!("        {} ~~~ {}", node_ids[i], node_ids[i + 1]));
+                }
             }
         }
 
@@ -1940,6 +1930,7 @@ mod tests {
         assert!(super_arch.contains("~~~"), "Super-system architecture must include vertical rank spacers");
         assert!(super_arch.contains("CONN-"), "Super-system architecture must include CONN- connection labels");
         assert!(super_arch.contains("• PORT-"), "Super-system architecture must include embedded port attributes");
+        assert!(!super_arch.contains("Core_Tier"), "Super-system architecture must eliminate nested tier subgraphs per Rule E5 (refs #277)");
 
         let sub_arch = engine.parameter_bindings.get("SUBSYSTEM_ARCHITECTURE_SECTION").unwrap();
         assert!(sub_arch.contains("- **Functional Purpose & Scope:**"), "Subsystem architecture must contain Functional Purpose & Scope");

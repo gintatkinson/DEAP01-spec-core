@@ -13,19 +13,10 @@ flowchart TD
 
     subgraph Core_Execution_Segment["Core System Execution Segment (DoDAF SV-1)"]
         direction TB
-        subgraph Core_Tier1["Tier 1 - Mission Management & Processing"]
-            direction TB
-            SystemController["Central System Controller<br/>• PORT_CTRL_C2 (INOUT)<br/>• PORT_CTRL_CMD (OUT)<br/>• PORT_CTRL_TLM (IN)"]
-            SensorFusion["Perception & Sensor Fusion Unit<br/>• PORT_SENS_IN (IN)<br/>• PORT_SENS_DATA (OUT)"]
-        end
-
-        subgraph Core_Tier2["Tier 2 - Actuation Power and Safety"]
-            direction TB
-            ActuationCore["Distributed Actuation and<br/>Effector Core<br/>• PORT_ACT_IN (IN)"]
-            SafetyWatchdog["Hardware Safety Monitor & Watchdog<br/>• PORT_WD_IN (IN)<br/>• PORT_WD_TRIG (OUT)"]
-        end
-
-        Core_Tier1 ~~~ Core_Tier2
+        SystemController["Central System Controller<br/>• PORT_CTRL_C2 (INOUT)<br/>• PORT_CTRL_CMD (OUT)<br/>• PORT_CTRL_TLM (IN)"]
+        SensorFusion["Perception & Sensor Fusion Unit<br/>• PORT_SENS_IN (IN)<br/>• PORT_SENS_DATA (OUT)"]
+        ActuationCore["Distributed Actuation and<br/>Effector Core<br/>• PORT_ACT_IN (IN)"]
+        SafetyWatchdog["Hardware Safety Monitor & Watchdog<br/>• PORT_WD_IN (IN)<br/>• PORT_WD_TRIG (OUT)"]
     end
 
     subgraph Support_Segment["Auxiliary & Support Segment (IEEE 1362 §5.3)"]
@@ -47,4 +38,4 @@ flowchart TD
     SensorFusion -->|"CONN-05: Sensor State Estimates [PORT_SENS_DATA -> PORT_CTRL_TLM]"| SystemController
     SystemController -->|"CONN-06: Actuator Demand Vector [PORT_CTRL_CMD -> PORT_ACT_IN]"| ActuationCore
     SystemController -->|"CONN-07: Safety Heartbeat & State [PORT_CTRL_CMD -> PORT_WD_IN]"| SafetyWatchdog
-    SupportEquipment -.->|"CONN-08: Auxiliary Power & Diagnostics [PORT_SUPP_PWR]"| Core_Execution_Segment
+    SupportEquipment -.->|"CONN-08: Auxiliary Power & Diagnostics [PORT_SUPP_PWR]"| SystemController
