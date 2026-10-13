@@ -135,6 +135,24 @@ pub fn validate_body_file(body_file: &str) -> Result<String, String> {
         ));
     }
 
+    // Check for unreplaced checklist placeholder tokens (Issue #223 blocking registration gate)
+    for line in content.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("- [ ]") || trimmed.starts_with("- [x]") || trimmed.starts_with("- [X]") {
+            if trimmed.contains("#[IssueID]")
+                || trimmed.contains("#[FeatureIssueID]")
+                || trimmed.contains("#[UseCaseIssueID]")
+                || trimmed.contains("#[StoryIssueID]")
+                || trimmed.contains("#[EpicIssueID]")
+            {
+                return Err(format!(
+                    "FATAL: Unresolved checklist placeholder token detected in: {}. Sibling specifications must be registered on the tracker before publishing.",
+                    body_file
+                ));
+            }
+        }
+    }
+
     let fence_count = content.lines().filter(|l| l.contains("```")).count();
     if fence_count % 2 != 0 {
         return Err(format!(
@@ -360,6 +378,14 @@ mod tests {
         let token_tf = TempFile::new("token", "Sample {{REQUIRED_FOO}} here\n```\nblock\n```\n");
         let err = validate_body_file(token_tf.path.to_str().unwrap()).unwrap_err();
         assert!(err.contains("Unreplaced {{REQUIRED_*}} escape token"));
+
+        // Unresolved checklist placeholder token probe (Issue #223 RED phase)
+        let ph_tf = TempFile::new(
+            "placeholder_checklist",
+            "# Epic\n## 2. Requirements & Checklist\n- [ ] #[IssueID] - Feature 01\n```\nblock\n```\n",
+        );
+        let err = validate_body_file(ph_tf.path.to_str().unwrap()).unwrap_err();
+        assert!(err.contains("Unresolved checklist placeholder token"));
 
         // Valid file
         let valid_tf = TempFile::new("valid", "# Valid\n```rust\nlet a = 1;\n```\nAll good.");

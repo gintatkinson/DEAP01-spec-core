@@ -196,14 +196,20 @@ For each Bounded Context, partition its subtree into cohesive functional feature
 
     #### Associated Use Cases
     - [ ] #[IssueID] - [Use Case Title](../use-cases/uc-XX-name.md) (semantic linkage justification)
+    <!-- If no Use Cases are allocated at structural extraction time, use: -->
+    <!-- - None directly allocated (operational behavior allocated at system ConOps level) -->
 
     #### Associated User Stories
     - [ ] #[IssueID] - [User Story Title](../user-stories/us-XX-name.md) (semantic linkage justification)
+    <!-- If no User Stories are allocated at structural extraction time, use: -->
+    <!-- - None directly allocated (operational behavior allocated at system ConOps level) -->
 
     > [!IMPORTANT]
-    > **MANDATORY CHECKLIST PLACEHOLDER DISCIPLINE & EXPLICIT LINKAGE JUSTIFICATION**
-    > - **Placeholder Discipline (#223)**: Until a sibling Feature, Use Case, or User Story is registered with the issue tracker and assigned a live issue number, checklist items in Epic documents MUST carry the literal placeholder `#[IssueID]`. Authors and subagents are strictly forbidden from guessing, predicting, assuming, or hardcoding future issue numbers. Only live issue numbers returned directly from tracker registration commands (`gh issue create` / `glab issue create`) or live tracker queries may replace `#[IssueID]`.
-    > - **Semantic Justification**: Subagents MUST provide concise, context-specific semantic justifications for all checklist items. Omitting justifications or leaving unreplaced placeholder text in generated Epic specifications is strictly prohibited and will trigger validator rejection.
+    > **MANDATORY CHECKLIST PLACEHOLDER DISCIPLINE & BLOCKING REGISTRATION GATE (#223)**
+    > - **Strict Prohibition of Assumed Issue Numbers**: Authors and subagents are strictly forbidden from guessing, predicting, estimating, or assuming provisional future issue numbers (such as projecting sequential ordinals `#101`, `#102` for unregistered siblings). Only live issue numbers returned directly from tracker registration commands (`gh issue create` / `glab issue create`) or verified tracker queries may enter checklist items.
+    > - **Blocking Placeholder Discipline**: For any sibling specification (Feature, Use Case, or User Story) not yet registered on the tracker, checklist items in local drafts MUST strictly retain the literal placeholder `#[IssueID]`, or the section must state `- None allocated (structural subsystem component)` or `- None directly allocated`. Retaining `#[IssueID]` acts as a mandatory blocking gate.
+    > - **Blocking Registration Publish Gate**: No Epic specification may be published or synced to the tracker while its checklist contains unreplaced `#[IssueID]` placeholder tokens or unresolvable issue references. All referenced child specifications MUST be registered on the tracker first to obtain live Issue IDs before the Epic is published. Authors MUST NEVER substitute assumed numbers to evade placeholder checks; any unresolvable issue reference or placeholder will fail the blocking publish gate.
+    > - **Semantic Justification**: Subagents MUST provide concise, context-specific semantic justifications for all checklist items. Omitting justifications or leaving unreplaced placeholder text in published Epic specifications is strictly prohibited.
 
 
     ## 3. Architecture
@@ -475,11 +481,12 @@ For each Bounded Context, partition its subtree into cohesive functional feature
 
 5. **Epic Backlog Assembly:**
    - For extracted features that have been registered on the tracker and returned live Issue IDs, inject their live Issue IDs into the Epic's checklist.
-   - For any sibling specification (Feature, Use Case, or User Story) not yet registered on the tracker, the checklist item MUST strictly retain the `#[IssueID]` placeholder. Hardcoding, predicting, or assuming provisional future issue numbers is strictly forbidden (#223).
+   - For any sibling specification (Feature, Use Case, or User Story) not yet registered on the tracker, the checklist item MUST strictly retain the `#[IssueID]` placeholder, or state non-allocation (e.g. `- None allocated (structural subsystem component)` or `- None directly allocated (operational behavior allocated at system ConOps level)`). Hardcoding, predicting, estimating, or assuming provisional future issue numbers is strictly forbidden (#223).
    - Ensure the body of the Epic lists its child features as a tasklist referencing the Issue ID (or `#[IssueID]`) and canonical relative markdown links to the feature document (e.g., `../features/feat-01.md`). Link expansion to web blob URLs and explicit issue hyperlinks for tracker UI navigation is handled automatically by the backlog reconciler during tracker payload synchronization (#45, #224).
 
-6. **Epic Backlog Creation LAST:**
-   - Register the Epic specification containing the fully resolved tasklist with the active tracker provider.
+6. **Epic Backlog Creation LAST (Blocking Registration Gate):**
+   - **Mandatory Blocking Registration Gate (#223)**: Before registering or publishing the Epic specification to the tracker, the subagent MUST verify that all child checklist items reference genuine, live tracker issues. Registering or publishing an Epic containing unreplaced `#[IssueID]` placeholder tokens or speculative, assumed issue numbers is strictly forbidden and rejected by the tracker validation gate (`validate_body_file` and `validate_checklist_publish_integrity`). If sibling Use Cases or User Stories are scheduled for later extraction phases, they must either be registered prior to Epic creation or designated as `- None directly allocated (operational behavior allocated at system ConOps level)`.
+   - Register the Epic specification containing the fully resolved, verified tasklist with the active tracker provider.
    - **Crucial Verification & Body Synchronization:**
      1. Register the Epic issue using `TITLE=$(awk -F'|' '/**Title**/ {print $3}' <local-md-file> | xargs); gh issue create --title "$TITLE" --body-file <local-md-file>`.
      2. Immediately after placeholder resolution, the subagent MUST execute `gh issue edit <ID> --body-file <local-md-file>` to sync the resolved ID body.

@@ -183,6 +183,13 @@ pub fn run_reconciliation<T: TrackerClient>(
             .or_else(|| detect_git_branch(&options.workspace_root))
             .unwrap_or_else(|| "main".to_string());
 
+        // Blocking registration publish gate (Issue #223): verify 100% of checklist references
+        for spec in &specs {
+            if spec.frontmatter.issue_id.is_some() {
+                validate_checklist_publish_integrity(&spec.rel_path, &spec.content, &issue_index)?;
+            }
+        }
+
         for spec in &specs {
             if let Some(issue_id) = spec.frontmatter.issue_id {
                 let projected_body = project_body_for_tracker(
@@ -198,6 +205,41 @@ pub fn run_reconciliation<T: TrackerClient>(
     }
 
     Ok(summary)
+}
+
+/// Validates that all checklist items in a specification body resolve to live tracker issues
+/// and contain zero unresolved placeholder tokens before publishing to the tracker.
+///
+/// Preconditions: `issue_index` contains live issues from the tracker.
+/// Postconditions: Returns Ok(()) if all checklist items are valid, Err otherwise.
+pub fn validate_checklist_publish_integrity(
+    spec_rel_path: &str,
+    content: &str,
+    issue_index: &IssueIndex,
+) -> Result<(), String> {
+    for item in checklist::parse_checklists(content) {
+        if item.full_line.contains("#[IssueID]")
+            || item.full_line.contains("#[FeatureIssueID]")
+            || item.full_line.contains("#[UseCaseIssueID]")
+            || item.full_line.contains("#[StoryIssueID]")
+            || item.full_line.contains("#[EpicIssueID]")
+        {
+            return Err(format!(
+                "Publish gate blocked: specification '{}' contains unresolved checklist placeholder token. Sibling must be registered before publishing.",
+                spec_rel_path
+            ));
+        }
+
+        if let Some(num) = item.issue_number {
+            if !issue_index.by_number.contains_key(&num) {
+                return Err(format!(
+                    "Publish gate blocked: specification '{}' contains unresolvable checklist issue reference '#{}'. Sibling must be registered on live tracker before publishing.",
+                    spec_rel_path, num
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Cleans a repository name or URL to `owner/repo` format without regex.
@@ -521,6 +563,66 @@ type: user-story
 
         let projected = project_body_for_tracker(raw_body, None, "main", &map);
         assert_eq!(projected, "[EPIC-01](#10) and [schema](../../schema/model.sysml)");
+    }
+
+    #[test]
+    fn test_publish_gate_blocks_unregistered_checklist_issue_numbers() {
+        let content = r#"# Epic: Test
+## 2. Requirements & Checklist
+- [ ] #999 - Feature 99: Ghost Feature (justification)
+"#;
+        let mut issue_index = IssueIndex::default();
+        // Tracker only has issue 10, not 999
+        issue_index.by_number.insert(
+            10,
+            tracker::TrackerIssue {
+                number: 10,
+                title: "Feature 01".to_string(),
+                labels: vec![],
+                state: "OPEN".to_string(),
+                body: None,
+                url: None,
+            },
+        );
+
+        let err = validate_checklist_publish_integrity("docs/epics/EPIC-01.md", content, &issue_index)
+            .unwrap_err();
+        assert!(err.contains("contains unresolvable checklist issue reference '#999'"));
+    }
+
+    #[test]
+    fn test_publish_gate_blocks_placeholder_checklist_tokens() {
+        let content = r#"# Epic: Test
+## 2. Requirements & Checklist
+- [ ] #[IssueID] - Feature 01: Test Feature (justification)
+"#;
+        let issue_index = IssueIndex::default();
+        let err = validate_checklist_publish_integrity("docs/epics/EPIC-01.md", content, &issue_index)
+            .unwrap_err();
+        assert!(err.contains("contains unresolved checklist placeholder token"));
+    }
+
+    #[test]
+    fn test_publish_gate_passes_for_registered_checklist_issue_numbers() {
+        let content = r#"# Epic: Test
+## 2. Requirements & Checklist
+- [ ] #10 - Feature 01: Real Feature (justification)
+"#;
+        let mut issue_index = IssueIndex::default();
+        issue_index.by_number.insert(
+            10,
+            tracker::TrackerIssue {
+                number: 10,
+                title: "Feature 01".to_string(),
+                labels: vec![],
+                state: "OPEN".to_string(),
+                body: None,
+                url: None,
+            },
+        );
+
+        let res = validate_checklist_publish_integrity("docs/epics/EPIC-01.md", content, &issue_index);
+        assert!(res.is_ok());
     }
 }
 
