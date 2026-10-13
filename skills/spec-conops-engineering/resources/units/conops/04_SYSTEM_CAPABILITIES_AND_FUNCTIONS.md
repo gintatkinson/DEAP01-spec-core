@@ -125,8 +125,12 @@ The system operates across six mutually exclusive, deterministic lifecycle stage
 - **Phase_MaintenanceMode:** Diagnostic telemetry offload, actuator calibration, firmware updating, and structural/hardware inspection.
 
 ### 4.7 Super-System Architecture & Segment Boundaries
+In accordance with IEEE Std 1362-1998 §5.3, ISO/IEC/IEEE 29148:2018 §6.4.2-§6.4.3, DoDAF 2.02 SV-1, and ISO/IEC/IEEE 15288:2023 §6.4.4, the super-system operational architecture is partitioned across major operational segments with discrete port definitions and traceable connection item flows:
+
 {{SUPER_SYSTEM_ARCHITECTURE}}
 
 ### 4.8 Subsystem Architecture & AST Part Allocation
+In accordance with ISO/IEC/IEEE 29148:2018 §6.4.3, IEEE Std 1362-1998 §5.3, and the Pure Schema-Driven Compiler Invariant, physical subsystems are allocated deterministically to AST part definitions:
+
 {{SUBSYSTEM_ARCHITECTURE_SECTION}}
 

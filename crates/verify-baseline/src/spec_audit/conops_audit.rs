@@ -654,18 +654,19 @@ pub fn validate_super_system_architecture(content: &str, rel_path: &str) -> Vec<
         return findings;
     }
 
-    // 1. Must define Section 4.1 / 8.1 Super-System Architecture
+    // 1. Must define Section 4.1 / 8.1 / 4.7 Super-System Architecture
     let has_super_arch = (lower_doc.contains("super-system") || lower_doc.contains("super system"))
         && (lower_doc.contains("operational architecture")
             || lower_doc.contains("segment boundaries")
             || lower_doc.contains("### 4.1")
-            || lower_doc.contains("### 8.1"));
+            || lower_doc.contains("### 8.1")
+            || lower_doc.contains("### 4.7"));
 
     if !has_super_arch {
         findings.push(SpecAuditFinding::new(
             "conops-super-system-architecture-missing",
             format!(
-                "ConOps specification in '{}' omits required Section 4.1 / 8.1 Super-System Operational Architecture and Segment Boundaries (ISO/IEC/IEEE 29148:2018 §6.4.2 / IEEE Std 1362-1998 §5.3).",
+                "ConOps specification in '{}' omits required Section 4.1 / 8.1 / 4.7 Super-System Operational Architecture and Segment Boundaries (ISO/IEC/IEEE 29148:2018 §6.4.2 / IEEE Std 1362-1998 §5.3).",
                 rel_path
             ),
             rel_path,
@@ -674,15 +675,18 @@ pub fn validate_super_system_architecture(content: &str, rel_path: &str) -> Vec<
         return findings;
     }
 
+    let is_template_placeholder = content.contains("{{SUPER_SYSTEM_ARCHITECTURE}}");
+
     // 2. Must contain Mermaid boundary diagram formalizing segment boundaries
-    let has_diagram = content.contains("```mermaid")
-        && (lower_doc.contains("flowchart") || lower_doc.contains("graph "));
+    let has_diagram = is_template_placeholder
+        || (content.contains("```mermaid")
+            && (lower_doc.contains("flowchart") || lower_doc.contains("graph ")));
 
     if !has_diagram {
         findings.push(SpecAuditFinding::new(
             "conops-super-system-boundary-diagram-missing",
             format!(
-                "Section 4.1 / 8.1 in '{}' omits required Mermaid boundary diagram formalizing system operational segment boundaries.",
+                "Section 4.1 / 8.1 / 4.7 in '{}' omits required Mermaid boundary diagram formalizing system operational segment boundaries.",
                 rel_path
             ),
             rel_path,
@@ -696,7 +700,72 @@ pub fn validate_super_system_architecture(content: &str, rel_path: &str) -> Vec<
         findings.push(SpecAuditFinding::new(
             "conops-super-system-segments-missing",
             format!(
-                "Section 4.1 / 8.1 in '{}' omits required operational segment definitions and segment allocation matrix.",
+                "Section 4.1 / 8.1 / 4.7 in '{}' omits required operational segment definitions and segment allocation matrix.",
+                rel_path
+            ),
+            rel_path,
+            None,
+        ));
+    }
+
+    // 4. Must enforce IEEE 1362 and DoDAF SV-1 standards governance (Issue #267)
+    let has_ieee1362 = lower_doc.contains("ieee 1362") || lower_doc.contains("ieee std 1362") || lower_doc.contains("ieee:1362");
+    let has_dodaf_sv1 = (lower_doc.contains("dodaf") && (lower_doc.contains("sv-1") || lower_doc.contains("sv1")))
+        || lower_doc.contains("dodaf 2.02 sv-1")
+        || lower_doc.contains("dodaf v2.02 sv-1");
+    if !has_ieee1362 || !has_dodaf_sv1 {
+        findings.push(SpecAuditFinding::new(
+            "conops-super-system-standards-governance-missing",
+            format!(
+                "ConOps Section 4 / 8 Super-System Architecture in '{}' lacks explicit IEEE 1362 (§5.3) and DoDAF SV-1 standards governance.",
+                rel_path
+            ),
+            rel_path,
+            None,
+        ));
+    }
+
+    // 5. Must enforce discrete port definitions in architecture diagram (DoDAF SV-1 / SysML v2 Port Taxonomy)
+    let has_diagram_ports = if is_template_placeholder {
+        true
+    } else if let Some(m_idx) = content.find("```mermaid") {
+        let m_slice = &content[m_idx..];
+        let end_idx = m_slice[10..].find("```").map(|i| m_idx + 10 + i).unwrap_or(content.len());
+        let diag_text = &content[m_idx..end_idx];
+        diag_text.contains("PORT-") || diag_text.contains("PORT_") || diag_text.to_lowercase().contains("port")
+    } else {
+        false
+    };
+
+    if !has_diagram_ports {
+        findings.push(SpecAuditFinding::new(
+            "conops-super-system-ports-missing",
+            format!(
+                "Section 4 / 8 Super-System Architecture diagram in '{}' omits discrete port definitions (PORT-<SUBSYS>-<NAME>) mandated by DoDAF SV-1 and SysML v2 Port Taxonomy.",
+                rel_path
+            ),
+            rel_path,
+            None,
+        ));
+    }
+
+    // 6. Must enforce traceable connection identifiers (CONN-01..CONN-N)
+    let has_diagram_conns = if is_template_placeholder {
+        true
+    } else if let Some(m_idx) = content.find("```mermaid") {
+        let m_slice = &content[m_idx..];
+        let end_idx = m_slice[10..].find("```").map(|i| m_idx + 10 + i).unwrap_or(content.len());
+        let diag_text = &content[m_idx..end_idx];
+        diag_text.contains("CONN-") || diag_text.contains("conn-")
+    } else {
+        false
+    };
+
+    if !has_diagram_conns {
+        findings.push(SpecAuditFinding::new(
+            "conops-super-system-connections-missing",
+            format!(
+                "Section 4 / 8 Super-System Architecture diagram in '{}' omits traceable connection identifiers (CONN-01..CONN-N) mandated by ISO/IEC/IEEE 29148:2018 §6.4.3 and IEEE 1362 §5.3.",
                 rel_path
             ),
             rel_path,
@@ -1414,14 +1483,27 @@ Current gaps and issues.
 ## 4. System Operational Architecture & Physical Subsystem Decomposition
 
 ### 4.1 Super-System Operational Architecture & Segment Boundaries
-Operational system is partitioned across major physical segments:
+In accordance with IEEE Std 1362-1998 §5.3, ISO/IEC/IEEE 29148:2018 §6.4.3, and DoDAF 2.02 SV-1, the operational system is partitioned across major physical segments:
 - Primary Operational Segment (SEG-01)
 - Supervisory Control Segment (SEG-02)
 - Auxiliary Support Segment (SEG-03)
 
 ```mermaid
 flowchart TD
-    GCS["Ground Control Station"] --> Platform["Core Platform"]
+    subgraph External_Actors["External Operating Environment & Actors (IEEE 1362 §5.1)"]
+        direction TB
+        Operator["Operator"]
+    end
+    subgraph Supervisory_Segment["Supervisory Control Segment (IEEE 1362 §5.3)"]
+        direction TB
+        GCS["Ground Control Station<br/>• PORT-SUP-C2 (INOUT)"]
+    end
+    subgraph Core_Execution_Segment["Core System Execution Segment (DoDAF SV-1)"]
+        direction TB
+        Platform["Core Platform<br/>• PORT-CTRL-C2 (INOUT)"]
+    end
+    Operator -->|"CONN-01: Supervisory Command"| GCS
+    GCS -->|"CONN-02: System Datalink"| Platform
 ```
 
 ### 4.3 Subsystem Architecture (100% AST Part Coverage)
@@ -1453,5 +1535,99 @@ Taxonomy of interface interconnects:
             let findings = validate_conops_schema_file(&schema_path).expect("Failed to parse live schema file");
             assert!(findings.is_empty(), "Live .pipeline/schemas/conops_specification_schema.json must pass contract validation: {:?}", findings);
         }
+    }
+
+    #[test]
+    fn test_issue_267_unconstrained_diagram_lacking_ieee_1362_and_dodaf_sv1_fails() {
+        let unconstrained_conops = r#"# Concept of Operations (ConOps)
+## 4. System Operational Architecture & Physical Subsystem Decomposition
+
+### 4.1 Super-System Operational Architecture & Segment Boundaries
+Operational system is partitioned across major physical segments:
+- Primary Operational Segment (SEG-01)
+- Supervisory Control Segment (SEG-02)
+
+```mermaid
+flowchart TD
+    GCS["Ground Control Station"] --> Platform["Core Platform"]
+```
+
+### 4.3 Subsystem Architecture (100% AST Part Coverage)
+Decomposition of subsystems derived deterministically from AST part definitions:
+- Primary Controller | SysML v2: `part def FlightComputer` | SSOT Ground Truth Mapping: schema/model.sysml
+Functional Purpose & Scope: Core flight guidance.
+
+### 4.4 Port Taxonomy & Interface Interconnects
+Taxonomy of interface interconnects:
+- PORT-C2-IN (IN)
+- PORT-TLM-OUT (OUT)
+"#;
+        let findings = validate_super_system_architecture(unconstrained_conops, "docs/conops/CONOPS.md");
+        assert!(
+            !findings.is_empty(),
+            "Unconstrained architecture diagram lacking IEEE 1362 and DoDAF SV-1 must fail quality gate"
+        );
+        let codes: Vec<&str> = findings.iter().map(|f| f.rule_id.as_str()).collect();
+        assert!(
+            codes.contains(&"conops-super-system-standards-governance-missing"),
+            "Expected finding 'conops-super-system-standards-governance-missing', got: {:?}",
+            codes
+        );
+        assert!(
+            codes.contains(&"conops-super-system-ports-missing"),
+            "Expected finding 'conops-super-system-ports-missing', got: {:?}",
+            codes
+        );
+        assert!(
+            codes.contains(&"conops-super-system-connections-missing"),
+            "Expected finding 'conops-super-system-connections-missing', got: {:?}",
+            codes
+        );
+    }
+
+    #[test]
+    fn test_issue_267_compliant_diagram_with_ieee_1362_and_dodaf_sv1_passes() {
+        let compliant_conops = r#"# Concept of Operations (ConOps)
+## 4. System Operational Architecture & Physical Subsystem Decomposition
+
+### 4.1 Super-System Operational Architecture & Segment Boundaries
+In accordance with IEEE Std 1362-1998 §5.3, ISO/IEC/IEEE 29148:2018 §6.4.3, and DoDAF 2.02 SV-1, the operational system is partitioned across major physical segments:
+- Primary Operational Segment (SEG-01)
+- Supervisory Control Segment (SEG-02)
+
+```mermaid
+flowchart TD
+    subgraph External_Actors["External Operating Environment & Actors (IEEE 1362 §5.1)"]
+        direction TB
+        Operator["Operator"]
+    end
+    subgraph Supervisory_Segment["Supervisory Segment (IEEE 1362 §5.3)"]
+        direction TB
+        GCS["Ground Control Station<br/>• PORT-SUP-C2 (INOUT)"]
+    end
+    subgraph Core_Execution_Segment["Core System Execution Segment (DoDAF SV-1)"]
+        direction TB
+        Platform["Core Platform<br/>• PORT-CTRL-C2 (INOUT)"]
+    end
+    Operator -->|"CONN-01: Supervisory Command"| GCS
+    GCS -->|"CONN-02: Datalink"| Platform
+```
+
+### 4.3 Subsystem Architecture (100% AST Part Coverage)
+Decomposition of subsystems derived deterministically from AST part definitions:
+- Primary Controller | SysML v2: `part def FlightComputer` | SSOT Ground Truth Mapping: schema/model.sysml
+Functional Purpose & Scope: Core flight guidance.
+
+### 4.4 Port Taxonomy & Interface Interconnects
+Taxonomy of interface interconnects:
+- PORT-C2-IN (IN)
+- PORT-TLM-OUT (OUT)
+"#;
+        let findings = validate_super_system_architecture(compliant_conops, "docs/conops/CONOPS.md");
+        assert!(
+            findings.is_empty(),
+            "Compliant architecture diagram with IEEE 1362 and DoDAF SV-1 must pass quality gate, got: {:?}",
+            findings
+        );
     }
 }

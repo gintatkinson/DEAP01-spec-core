@@ -7,7 +7,7 @@
 ## 4. System Operational Architecture & Physical Subsystem Decomposition
 
 ### 4.1 Super-System Operational Architecture & Segment Boundaries
-In accordance with IEEE 1362:1998 Clause 5.3, ISO/IEC/IEEE 29148:2018 §6.4.3, and DoDAF 2.02 SV-1, the operational system is partitioned across major physical segments and operational boundaries.
+In accordance with IEEE Std 1362-1998 §5.3, ISO/IEC/IEEE 29148:2018 §6.4.2-§6.4.3, DoDAF 2.02 SV-1, and ISO/IEC/IEEE 15288:2023 §6.4.4, the super-system operational architecture is partitioned across major physical segments and operational boundaries with discrete port definitions and traceable connection item flows.
 
 {{SUPER_SYSTEM_ARCHITECTURE}}
 
@@ -17,7 +17,7 @@ Physical subsystems, computational nodes, and functional elements are allocated 
 {{SEGMENT_ALLOCATION_MATRIX}}
 
 ### 4.3 Subsystem Architecture (100% AST Part Coverage)
-Detailed architectural decomposition of all physical and logical subsystems derived deterministically from the abstract SysML v2 AST part definitions.
+In accordance with ISO/IEC/IEEE 29148:2018 §6.4.3, IEEE Std 1362-1998 §5.3, and the Pure Schema-Driven Compiler Invariant, physical and logical subsystems are derived deterministically from the abstract SysML v2 AST part definitions.
 
 {{SUBSYSTEM_ARCHITECTURE_SECTION}}
 
