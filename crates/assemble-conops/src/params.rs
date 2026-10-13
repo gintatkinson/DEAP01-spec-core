@@ -19,6 +19,29 @@ pub static DEFAULT_CONOPS_PARAMS: &[(&str, &str)] = &[
     ("OPERATIONAL_AVAILABILITY_OBJECTIVE", "0.99"),
     ("OPERATING_TEMPERATURE_MIN_C", "-20.0"),
     ("OPERATING_TEMPERATURE_MAX_C", "+55.0"),
+    ("TOTAL_MASS_KG", "25.0"),
+    ("MASS_FRACTION_STRUCTURE_PCT", "30.0"),
+    ("MASS_BUDGET_STRUCTURE_KG", "7.5"),
+    ("POWER_NOMINAL_STRUCTURE_W", "0.0"),
+    ("POWER_PEAK_STRUCTURE_W", "0.0"),
+    ("MASS_FRACTION_CONTROLLER_PCT", "15.0"),
+    ("MASS_BUDGET_CONTROLLER_KG", "3.75"),
+    ("POWER_NOMINAL_CONTROLLER_W", "25.0"),
+    ("POWER_PEAK_CONTROLLER_W", "50.0"),
+    ("M_MAX_LIMIT_KG", "25.0"),
+    ("M_MAX_NOMINAL_KG", "20.0"),
+    ("V_NOMINAL_MIN_MPS", "15.0"),
+    ("V_NOMINAL_MAX_MPS", "25.0"),
+    ("V_NOMINAL_MPS", "20.0"),
+    ("V_MAX_MPS", "35.0"),
+    ("V_MAX_NOMINAL_MPS", "30.0"),
+    ("V_MIN_MAX_MPS", "10.0"),
+    ("V_MIN_NOMINAL_MPS", "8.0"),
+    ("SPATIAL_LIMIT_MAX_M", "120.0"),
+    ("SPATIAL_LIMIT_NOMINAL_M", "100.0"),
+    ("SPATIAL_LIMIT_UNIT", "m"),
+    ("DISTURBANCE_LIMIT_MAX_MPS", "15.0"),
+    ("DISTURBANCE_LIMIT_NOMINAL_MPS", "12.0"),
 ];
 
 pub static PLACEHOLDER_PATTERN: &str = r"\{\{([A-Za-z0-9_]+)(?::([^\}]*))?\}\}";
@@ -29,7 +52,7 @@ pub static RAW_TOKEN_FINDER: &str = r"\{\{[A-Za-z0-9_]+(?::[^\}]*)?\}\}";
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LifecycleType {
     ReusableRecovery,
-    ExpendableKineticEffector,
+    ExpendableDisposal,
     ContinuousStationary,
     PersistentOrbital,
     TrackBoundGuided,
@@ -39,7 +62,7 @@ impl LifecycleType {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::ReusableRecovery => "REUSABLE_RECOVERY",
-            Self::ExpendableKineticEffector => "EXPENDABLE_KINETIC_EFFECTOR",
+            Self::ExpendableDisposal => "EXPENDABLE_DISPOSAL",
             Self::ContinuousStationary => "CONTINUOUS_STATIONARY",
             Self::PersistentOrbital => "PERSISTENT_ORBITAL",
             Self::TrackBoundGuided => "TRACK_BOUND_GUIDED",
@@ -1244,8 +1267,8 @@ impl SysMLParameterBindingEngine {
             LifecycleType::TrackBoundGuided
         } else if dom == "space" {
             LifecycleType::PersistentOrbital
-        } else if dom == "interceptor" || self.parameter_bindings.get("IS_EXPENDABLE").map(|s| s == "true").unwrap_or(false) {
-            LifecycleType::ExpendableKineticEffector
+        } else if dom == "disposable" || dom == "single_use" || dom == "expendable" || self.parameter_bindings.get("IS_EXPENDABLE").map(|s| s == "true").unwrap_or(false) {
+            LifecycleType::ExpendableDisposal
         } else {
             LifecycleType::ReusableRecovery
         };

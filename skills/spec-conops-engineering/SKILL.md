@@ -2,7 +2,7 @@
 
 ---
 name: spec-conops-engineering
-description: "Synthesize hierarchical Concept of Operations (docs/conops/units/conops/) and Tactical Mission Intent (docs/conops/units/mission_intent/) specification units adhering to ISO/IEC/IEEE 29148:2018, INCOSE SE Handbook v5.0, NATO STANAG 4586, and MIL-STD-882E with pure schema contracts, zero truncation, and deterministic assembly via scripts/assemble_conops.py."
+description: "Synthesize hierarchical Concept of Operations (docs/conops/units/conops/) and Tactical Mission Intent (docs/conops/units/mission_intent/) specification units adhering to ISO/IEC/IEEE 29148:2018, INCOSE SE Handbook v5.0, ISO/IEC/IEEE 15288:2023, and OMG UAF v2.0 with pure schema contracts, zero truncation, and deterministic assembly via scripts/assemble_conops.py."
 version: "1.0"
 metadata:
   title: "Hierarchical ConOps & Mission Intent Engineering"
@@ -55,13 +55,13 @@ The `Worker ConOps` ingests and synthesizes the following foundational inputs:
 
 1. **Normative Research Inventory & Standards Baseline**:
    - Ingest `docs/research/RESEARCH_INVENTORY.md` and `docs/research/FAILURE_MODE_REGISTRY.md`.
-   - Extract all applicable standards: ISO/IEC/IEEE 29148:2018 (§6.4.2 ConOps & §6.4.3 OpsCon), INCOSE Systems Engineering Handbook v5.0, NATO STANAG 4586, MIL-STD-882E, RTCA DO-178C / DO-254, and SAE ARP4754A / ARP4761 (domain-specific standards, such as JARUS SORA v2.5, are derived from the active schema).
+   - Extract all applicable standards: ISO/IEC/IEEE 29148:2018 (§6.4.2 ConOps & §6.4.3 OpsCon), INCOSE Systems Engineering Handbook v5.0, ISO/IEC/IEEE 15288:2023, and OMG UAF v2.0 (domain-specific standards are derived from the active schema).
    - Map all allocated obligations (`OBL-*`) assigned to ConOps and Mission Intent.
 
 2. **System Architecture & Structural Schemas**:
    - Ingest `.pipeline/schema.sysml` and `.pipeline/schema-digest.json` to extract system boundaries, subsystems, and architectural partitions.
    - **Mandatory AST Manifest Ingestion**: Ingest the explicit manifest of all AST `state def` prefix families with 2 or more states ($\ge 2$ states) and AST `part def` nodes with ports, actions, and constraints for Section 6.1 Stateflow synthesis hooks, Section 7 FMECA tables, and **Section 4 Super-System and Subsystem Architecture synthesis**.
-   - **Mandatory AST Part Taxonomy Invariant**: Enforce automated extraction of all `part def` blocks from `schema/` and `.pipeline/schema.sysml`. Require ConOps Section 4 to synthesize formal Super-System Architecture (Air Vehicle / Primary Segment, Ground Segment, Launch / Support Segment) and Subsystem Architecture subsections for 100% of declared AST `part def` nodes (100% AST part coverage invariant).
+   - **Mandatory AST Part Taxonomy Invariant**: Enforce automated extraction of all `part def` blocks from `schema/` and `.pipeline/schema.sysml`. Require ConOps Section 4 to synthesize formal Super-System Architecture (Primary Segment / System Under Design, Control Segment, Support Segment) and Subsystem Architecture subsections for 100% of declared AST `part def` nodes (100% AST part coverage invariant).
    - Ingest domain schemas under `schema/` (OMG IDL, Protobuf, ARXML, SysML v2).
 
 3. **Safety & Risk Baselines (3-Tier Lifecycle Integration)**:

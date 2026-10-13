@@ -13,7 +13,7 @@ use assemble_conops::assemble_conops;
     name = "assemble-conops",
     author = "Gint Atkinson",
     version = "0.1.0",
-    about = "Deterministic ConOps & Mission Intent Assembly Engine (ISO 29148 / NATO STANAG 4586 / OMG UAF)."
+    about = "Deterministic ConOps & Mission Intent Assembly Engine (ISO/IEC/IEEE 29148 / ISO/IEC/IEEE 15288 / OMG UAF)."
 )]
 struct Args {
     /// Target workspace or project directory (optional positional argument).
