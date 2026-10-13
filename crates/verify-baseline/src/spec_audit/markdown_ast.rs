@@ -120,7 +120,7 @@ pub fn is_metadata_header_table_row(line: &str) -> bool {
 
     let mut key = String::with_capacity(cells[0].len());
     for c in cells[0].chars() {
-        if !matches!(c, '*' | '`' | '_' | ':' | '#') {
+        if !matches!(c, '*' | '`' | ':' | '#') {
             key.push(c);
         }
     }
@@ -128,7 +128,7 @@ pub fn is_metadata_header_table_row(line: &str) -> bool {
     let mut normalized = String::with_capacity(key.len());
     let mut last_was_sep = false;
     for c in key.chars() {
-        if c.is_whitespace() || c == '-' || c == '/' {
+        if c.is_whitespace() || c == '-' || c == '/' || c == '_' {
             if !last_was_sep {
                 normalized.push('_');
                 last_was_sep = true;
@@ -169,6 +169,10 @@ pub fn is_metadata_header_table_row(line: &str) -> bool {
         "package",
         "subsystem",
         "generation_mode",
+        "generation-mode",
+        "subagent_drafted",
+        "subagent",
+        "subagent_mode",
         "specification_source",
         "interface_type",
         "schema_containers",
@@ -446,7 +450,7 @@ pub fn extract_table_metadata(content: &str) -> HashMap<String, String> {
 
         let mut key = String::with_capacity(cells[0].len());
         for c in cells[0].chars() {
-            if !matches!(c, '*' | '`' | '_' | ':' | '#') {
+            if !matches!(c, '*' | '`' | ':' | '#') {
                 key.push(c);
             }
         }
@@ -454,7 +458,7 @@ pub fn extract_table_metadata(content: &str) -> HashMap<String, String> {
         let mut normalized_key = String::with_capacity(key.len());
         let mut last_was_sep = false;
         for c in key.chars() {
-            if c.is_whitespace() || c == '-' || c == '/' {
+            if c.is_whitespace() || c == '-' || c == '/' || c == '_' {
                 if !last_was_sep {
                     normalized_key.push('_');
                     last_was_sep = true;

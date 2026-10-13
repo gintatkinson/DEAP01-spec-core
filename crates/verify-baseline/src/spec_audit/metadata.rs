@@ -601,7 +601,14 @@ pub fn validate_metadata(
     }
 
     // 6. Mandatory generation_mode
-    match get_field("generation_mode") {
+    let gen_mode = get_field("generation_mode")
+        .or_else(|| get_field("generation-mode"))
+        .or_else(|| get_field("subagent_drafted"))
+        .or_else(|| get_field("subagent-drafted"))
+        .or_else(|| get_field("subagentdrafted"))
+        .or_else(|| get_field("subagent"))
+        .or_else(|| get_field("subagent_mode"));
+    match gen_mode {
         Some(val) if !val.trim().is_empty() => {}
         _ => {
             errors.push(format!(
@@ -1052,4 +1059,47 @@ mod tests {
         assert!(check_filename_anti_stutter("US-01-BootstrapSystemVisionAction.md").is_none());
         assert!(check_filename_anti_stutter("EPIC-03-SystemVision.md").is_none());
     }
+
+    #[test]
+    fn test_validate_metadata_generation_mode_variants() {
+        let template = |key: &str, val: &str| format!(
+            r#"| Attribute | Specification Detail |
+| :--- | :--- |
+| **Issue ID** | #10 |
+| **Title** | Feature 01 Telemetry Stream |
+| **Type** | feature |
+| **Parent Epic** | [EPIC-01](../epics/EPIC-01.md) |
+| **Package** | FlightControl |
+| **Interface Type** | programmatic |
+| **Schema Containers** | FlightPackage |
+| **{}** | {} |
+| **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
+
+# Feature 01: Telemetry Stream
+"#,
+            key, val
+        );
+
+        let variants = [
+            ("Generation Mode", "subagent"),
+            ("generation-mode", "subagent"),
+            ("subagent_drafted", "true"),
+            ("subagent", "autonomous"),
+            ("subagent_mode", "active"),
+        ];
+
+        for (k, v) in variants {
+            let md = template(k, v);
+            let doc = parse_markdown(&md).expect("parse markdown");
+            let errors = validate_metadata("feature", &doc, &md, "docs/features/feat-01-telemetry.md");
+            assert!(
+                errors.is_empty(),
+                "Variant '{}' failed with errors: {:?}",
+                k,
+                errors
+            );
+        }
+    }
 }
+
+

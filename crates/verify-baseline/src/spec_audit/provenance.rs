@@ -125,6 +125,111 @@ pub fn is_recognized_unit(token: &str) -> bool {
     RECOGNIZED_UNITS.iter().any(|&u| u == clean)
 }
 
+/// Validates whether a token or table cell is a pure scalar numeric value
+/// (e.g. `1800.0`, `-45`, `+12.5`, `50 ms`, `250 Hz`), rather than an identifier,
+/// package name, or title (e.g. `AVENGER5_ControlActions`, `PL-40`, `RS-485`, `RBF3`).
+///
+/// Preconditions: None.
+/// Postconditions: Returns true if and only if val represents a pure scalar number or scalar with unit.
+/// Algorithmic Complexity: O(N) where N is val byte length.
+pub fn is_pure_scalar_numeric(val: &str) -> bool {
+    let trimmed = val.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+
+    // Strip markdown formatting (*, `, _, ", ')
+    let clean = trimmed.trim_matches(|c| c == '*' || c == '`' || c == '_' || c == '"' || c == '\'');
+    let bytes = clean.as_bytes();
+    if bytes.is_empty() {
+        return false;
+    }
+
+    let mut idx = 0;
+    // Optional sign: +, -, or unicode minus
+    if clean.starts_with('+') || clean.starts_with('-') {
+        idx += 1;
+    } else if clean.starts_with('−') {
+        idx += '−'.len_utf8();
+    }
+
+    if idx >= bytes.len() {
+        return false;
+    }
+
+    // Must have at least one digit
+    let mut has_digits = false;
+    while idx < bytes.len() && bytes[idx].is_ascii_digit() {
+        has_digits = true;
+        idx += 1;
+    }
+    if !has_digits {
+        return false;
+    }
+
+    // Optional decimal point and digits
+    if idx < bytes.len() && bytes[idx] == b'.' {
+        idx += 1;
+        while idx < bytes.len() && bytes[idx].is_ascii_digit() {
+            idx += 1;
+        }
+    }
+
+    // Optional exponent (e/E)
+    if idx < bytes.len() && (bytes[idx] == b'e' || bytes[idx] == b'E') {
+        idx += 1;
+        if idx < bytes.len() && (bytes[idx] == b'+' || bytes[idx] == b'-') {
+            idx += 1;
+        }
+        while idx < bytes.len() && bytes[idx].is_ascii_digit() {
+            idx += 1;
+        }
+    }
+
+    // Remainder should be empty or a recognized physical unit
+    let rest = clean[idx..].trim();
+    if rest.is_empty() {
+        return true;
+    }
+
+    is_recognized_unit(rest)
+}
+
+/// Parses a table cell into a scalar numeric value and optional unit if and only if
+/// the cell represents a pure numeric claim, rejecting arbitrary identifier text,
+/// subsystem package names, or document titles.
+///
+/// Preconditions: None.
+/// Postconditions: Returns Some((val, unit)) if pure scalar, otherwise None.
+/// Algorithmic Complexity: O(N) where N is val byte length.
+pub fn extract_scalar_numeric_claim(val: &str) -> Option<(f64, Option<String>)> {
+    let trimmed = val.trim();
+    if !is_pure_scalar_numeric(trimmed) {
+        return None;
+    }
+
+    let clean = trimmed.trim_matches(|c| c == '*' || c == '`' || c == '_' || c == '"' || c == '\'');
+    let mut num_end = 0;
+    for (i, c) in clean.char_indices() {
+        if c.is_ascii_digit() || c == '.' || c == '+' || c == '-' || c == '−' || c == 'e' || c == 'E' {
+            num_end = i + c.len_utf8();
+        } else if !c.is_whitespace() {
+            break;
+        }
+    }
+
+    let num_str = clean[..num_end].trim().replace('−', "-");
+    let val_f64 = num_str.parse::<f64>().ok()?;
+    let rem = clean[num_end..].trim();
+    let unit = if !rem.is_empty() && is_recognized_unit(rem) {
+        Some(rem.to_string())
+    } else {
+        None
+    };
+
+    Some((val_f64, unit))
+}
+
 /// Checks whether a line contains an engineering parameter keyword.
 ///
 /// Preconditions: None.
@@ -176,7 +281,7 @@ pub fn find_naked_numeric_quantities(line: &str) -> Vec<(String, usize)> {
         if bytes[idx].is_ascii_digit() {
             let start = idx;
 
-            // Check if this digit is part of an identifier prefix (e.g. REQ-02, FEAT-01, AC-03, v1)
+            // Check if this digit is part of an identifier prefix (e.g. REQ-02, FEAT-01, AC-03, v1, PL-40, RS-485, AVENGER5)
             let mut word_start = start;
             while word_start > 0 {
                 let b = bytes[word_start - 1];
@@ -186,7 +291,7 @@ pub fn find_naked_numeric_quantities(line: &str) -> Vec<(String, usize)> {
                 word_start -= 1;
             }
             let prefix = &bytes[word_start..start];
-            let is_id_token = prefix.iter().any(|b| b.is_ascii_alphabetic());
+            let is_id_token_prefix = prefix.iter().any(|b| b.is_ascii_alphabetic() || *b == b'_');
 
             let mut dot_seen = false;
             while idx < len && (bytes[idx].is_ascii_digit() || (bytes[idx] == b'.' && !dot_seen && idx + 1 < len && bytes[idx + 1].is_ascii_digit())) {
@@ -197,8 +302,39 @@ pub fn find_naked_numeric_quantities(line: &str) -> Vec<(String, usize)> {
             }
             let end = idx;
 
+            // Character after digits: check if it's an identifier suffix (e.g. 5_ControlActions, 40_Catapult, 5pkg)
+            let is_id_token_suffix = if end < len {
+                let b = bytes[end];
+                if b == b'_' || b == b'-' {
+                    true
+                } else if b.is_ascii_alphabetic() {
+                    let mut unit_end = end;
+                    while unit_end < len && (bytes[unit_end].is_ascii_alphanumeric() || bytes[unit_end] == b'/' || bytes[unit_end] == b'^' || bytes[unit_end] == b'%') {
+                        unit_end += 1;
+                    }
+                    let unit_candidate = &line[end..unit_end];
+                    !is_recognized_unit(unit_candidate)
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
+
+            // Check if preceding token is an index/label word (e.g. "feature 24", "epic 01", "req 02", "step 3")
+            let is_preceded_by_label_word = if word_start > 0 {
+                let before_text = line[..word_start].trim_end();
+                let last_word = before_text.rsplit(|c: char| c.is_whitespace() || c == '|' || c == '*' || c == '`' || c == '#').next().unwrap_or("");
+                let lw_clean = last_word.trim().to_lowercase();
+                matches!(lw_clean.as_str(), "feature" | "feat" | "epic" | "req" | "ac" | "step" | "item" | "section" | "table" | "figure" | "level" | "mode" | "id" | "issue")
+            } else {
+                false
+            };
+
+            let is_identifier = is_id_token_prefix || is_id_token_suffix || is_preceded_by_label_word;
+
             // Character after digits: if it's alphanumeric, check if it forms a recognized unit
-            if !is_id_token && start < end {
+            if !is_identifier && start < end {
                 let num_str = &line[start..end];
 
                 // Skip version strings, ISO dates, section numbers like 1.2 or 3.4.1, labels like 02:,
@@ -383,16 +519,65 @@ pub fn validate_factual_grounding(
             continue;
         }
 
-        // Skip non-normative metadata header table rows
+        // Skip non-normative metadata header table rows, table dividers, and document metadata entries
         if trimmed.starts_with('|') {
+            if crate::spec_audit::markdown_ast::is_metadata_header_table_row(trimmed) {
+                continue;
+            }
+            if trimmed.chars().all(|c| c == '|' || c == '-' || c == ':' || c.is_ascii_whitespace()) {
+                continue;
+            }
             let lower = trimmed.to_lowercase();
             if lower.contains("version")
                 || lower.contains("date")
                 || lower.contains("author")
                 || lower.contains("type")
                 || lower.contains("status")
+                || lower.contains("title")
+                || lower.contains("package")
+                || lower.contains("subsystem")
+                || lower.contains("generation_mode")
+                || lower.contains("generation mode")
+                || lower.contains("generation-mode")
+                || lower.contains("subagent")
+                || lower.contains("actor")
+                || lower.contains("scope")
+                || lower.contains("level")
+                || lower.contains("source")
             {
-                continue;
+                let parts: Vec<&str> = trimmed
+                    .split('|')
+                    .map(|c| c.trim())
+                    .filter(|c| !c.is_empty())
+                    .collect();
+                if parts.len() == 2 {
+                    let k_norm = parts[0].replace(['*', '_', '`'], "").trim().to_lowercase();
+                    if k_norm == "title"
+                        || k_norm == "package"
+                        || k_norm == "subsystem"
+                        || k_norm == "version"
+                        || k_norm == "date"
+                        || k_norm == "author"
+                        || k_norm == "type"
+                        || k_norm == "status"
+                        || k_norm == "generation mode"
+                        || k_norm == "generation_mode"
+                        || k_norm == "generation-mode"
+                        || k_norm == "subagent drafted"
+                        || k_norm == "subagent_drafted"
+                        || k_norm == "specification source"
+                        || k_norm == "parent epic"
+                        || k_norm == "interface type"
+                        || k_norm == "schema containers"
+                        || k_norm == "primary actor"
+                        || k_norm == "scope"
+                        || k_norm == "level"
+                        || k_norm == "issue id"
+                        || k_norm == "issue"
+                    {
+                        continue;
+                    }
+                }
             }
         }
 
@@ -710,18 +895,25 @@ pub fn validate_cardinality_bounds(
 ) -> Result<Vec<SpecAuditFinding>, SpecAuditError> {
     let mut findings = Vec::new();
 
-    // Determine document type (Epic vs Feature)
+    // Determine document type (Epic vs Feature) from metadata table or frontmatter
     let mut is_epic = false;
     let mut is_feature = false;
 
-    if let Some(ref fm) = doc.frontmatter {
-        if let Some(t) = fm.get("type") {
-            let lower = t.to_lowercase();
-            if lower == "epic" {
-                is_epic = true;
-            } else if lower == "feature" {
-                is_feature = true;
-            }
+    if let Some(t) = doc
+        .table_metadata
+        .get("type")
+        .map(|s| s.as_str())
+        .or_else(|| {
+            doc.frontmatter
+                .as_ref()
+                .and_then(|fm| fm.get("type").map(|s| s.as_str()))
+        })
+    {
+        let lower = t.to_lowercase();
+        if lower == "epic" {
+            is_epic = true;
+        } else if lower == "feature" {
+            is_feature = true;
         }
     }
 
@@ -1048,4 +1240,100 @@ type: feature
             .expect("validation succeeds");
         assert!(findings3.iter().any(|f| f.rule_id == "cardinality-bounds-feature-overflow"));
     }
+
+    #[test]
+    fn test_reproduce_defect_213_package_digits_and_metadata_table_contradiction() {
+        let content = r#"| Attribute | Specification Detail |
+| :--- | :--- |
+| **Issue ID** | #10 |
+| **Title** | Feature 24 Power Management System |
+| **Type** | feature |
+| **Parent Epic** | [EPIC-01](../epics/EPIC-01.md) |
+| **Package** | 5_PowerControl |
+| **Generation Mode** | subagent |
+| **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
+
+# Feature 24: Power Management System
+
+## Requirements
+| Property | Subsystem Package | Value |
+| :--- | :--- | :--- |
+| DSC_IN1 Power | 5_ControlActions | 50 W |
+| Catapult Speed | PL-40_Catapult | 35 m/s |
+| Serial Bus Rate | RS-485_Bus | 115200 bps |
+
+## Acceptance Criteria
+- [ ] AC-01: Primary DC bus power shall not exceed 50 W.
+- [ ] AC-02: Catapult speed shall reach 35 m/s.
+- [ ] AC-03: Serial telemetry rate shall sustain 115200 bps.
+
+## Source References
+Derived from schema/model.sysml and RTCA DO-178C §6.3.1.
+"#;
+        let doc = parse_markdown(content).expect("parse markdown");
+        let index = build_test_symbol_index();
+
+        // 1. Cardinality bounds must read 'type' from CommonMark metadata table (not just YAML frontmatter)
+        let cb_findings = validate_cardinality_bounds(&doc, content, "specifications/feat-custom-path.md")
+            .expect("cardinality validation succeeds");
+        assert!(
+            cb_findings.is_empty(),
+            "Expected 0 cardinality findings for nominal 3 criteria, but got: {:?}",
+            cb_findings
+        );
+
+        // 2. Factual grounding must NOT treat metadata table rows or package-name digits as claimed parameters / naked numbers
+        let findings = validate_factual_grounding(&doc, content, "docs/features/feat-24.md", Some(&index), &[], &[])
+            .expect("validation succeeds");
+
+        assert!(
+            findings.is_empty(),
+            "Expected 0 factual grounding findings, but package-name digits were erroneously extracted: {:?}",
+            findings
+        );
+    }
+
+    #[test]
+    fn test_is_pure_scalar_numeric() {
+        // Pure scalar quantities and quantities with valid units
+        assert!(is_pure_scalar_numeric("42"));
+        assert!(is_pure_scalar_numeric("-40.0"));
+        assert!(is_pure_scalar_numeric("+5.5"));
+        assert!(is_pure_scalar_numeric("115200"));
+        assert!(is_pure_scalar_numeric("1e-3"));
+        assert!(is_pure_scalar_numeric("50 W"));
+        assert!(is_pure_scalar_numeric("35 m/s"));
+        assert!(is_pure_scalar_numeric("115200 bps"));
+        assert!(is_pure_scalar_numeric("250 Hz"));
+        assert!(is_pure_scalar_numeric("10 ms"));
+        assert!(is_pure_scalar_numeric("`50 W`"));
+        assert!(is_pure_scalar_numeric("*35 m/s*"));
+
+        // Non-scalar identifiers, subsystem packages, and document titles
+        assert!(!is_pure_scalar_numeric("5_ControlActions"));
+        assert!(!is_pure_scalar_numeric("PL-40_Catapult"));
+        assert!(!is_pure_scalar_numeric("RS-485_Bus"));
+        assert!(!is_pure_scalar_numeric("AVENGER5"));
+        assert!(!is_pure_scalar_numeric("Feature 24 Power Management System"));
+        assert!(!is_pure_scalar_numeric("AVENGER5_ControlActions"));
+        assert!(!is_pure_scalar_numeric("DSC_IN1 Arm Enable"));
+        assert!(!is_pure_scalar_numeric(""));
+        assert!(!is_pure_scalar_numeric("N/A"));
+    }
+
+    #[test]
+    fn test_extract_scalar_numeric_claim() {
+        assert_eq!(extract_scalar_numeric_claim("50 W"), Some((50.0, Some("W".to_string()))));
+        assert_eq!(extract_scalar_numeric_claim("-40.0"), Some((-40.0, None)));
+        assert_eq!(extract_scalar_numeric_claim("115200 bps"), Some((115200.0, Some("bps".to_string()))));
+        assert_eq!(extract_scalar_numeric_claim("35 m/s"), Some((35.0, Some("m/s".to_string()))));
+
+        // Subsystem packages and titles must return None
+        assert_eq!(extract_scalar_numeric_claim("5_ControlActions"), None);
+        assert_eq!(extract_scalar_numeric_claim("AVENGER5"), None);
+        assert_eq!(extract_scalar_numeric_claim("Feature 24 Power Management System"), None);
+        assert_eq!(extract_scalar_numeric_claim("PL-40_Catapult"), None);
+    }
 }
+
+

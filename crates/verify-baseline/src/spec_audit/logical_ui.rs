@@ -70,8 +70,12 @@ const FORBIDDEN_DOM_EVENTS: &[&str] = &[
 /// Postconditions: Returns true if the specification declares a UI/LUMI interface channel.
 /// Algorithmic Complexity: O(H + M) where H is headings count and M is metadata entries count.
 pub fn is_lumi_spec(doc: &MarkdownDoc, content: &str) -> bool {
-    // 1. Check table metadata interface_type or channel
-    if let Some(iface) = doc.table_metadata.get("interface_type") {
+    // 1. Check table metadata interface_type or interface_types
+    if let Some(iface) = doc
+        .table_metadata
+        .get("interface_type")
+        .or_else(|| doc.table_metadata.get("interface_types"))
+    {
         let lower = iface.to_lowercase();
         if lower.contains("ui") || lower.contains("gui") || lower.contains("lumi") || lower.contains("user") {
             return true;
@@ -80,14 +84,8 @@ pub fn is_lumi_spec(doc: &MarkdownDoc, content: &str) -> bool {
 
     // 2. Check frontmatter interface_type or interface_types
     if let Some(ref fm) = doc.frontmatter {
-        if let Some(iface) = fm.get("interface_type") {
+        if let Some(iface) = fm.get("interface_type").or_else(|| fm.get("interface_types")) {
             let lower = iface.to_lowercase();
-            if lower.contains("ui") || lower.contains("gui") || lower.contains("lumi") || lower.contains("user") {
-                return true;
-            }
-        }
-        if let Some(ifaces) = fm.get("interface_types") {
-            let lower = ifaces.to_lowercase();
             if lower.contains("ui") || lower.contains("gui") || lower.contains("lumi") || lower.contains("user") {
                 return true;
             }
@@ -555,19 +553,26 @@ pub fn detect_pixel_dimensions(content: &str, rel_path: &str) -> Vec<SpecAuditFi
 pub fn detect_framework_leaks(doc: &MarkdownDoc, content: &str, rel_path: &str) -> Vec<SpecAuditFinding> {
     let mut findings = Vec::new();
 
-    // 1. Check YAML frontmatter for forbidden platform field
-    if let Some(ref fm) = doc.frontmatter {
-        if let Some(platform_val) = fm.get("platform") {
-            findings.push(SpecAuditFinding::new(
-                "platform-independence-frontmatter-platform-field",
-                format!(
-                    "Specification '{}' contains forbidden 'platform: {}' field in YAML frontmatter. Tier 1 specs must be platform-agnostic.",
-                    rel_path, platform_val
-                ),
-                rel_path,
-                None,
-            ));
-        }
+    // 1. Check metadata table or YAML frontmatter for forbidden platform field
+    let platform_field = doc
+        .table_metadata
+        .get("platform")
+        .map(|s| s.as_str())
+        .or_else(|| {
+            doc.frontmatter
+                .as_ref()
+                .and_then(|fm| fm.get("platform").map(|s| s.as_str()))
+        });
+    if let Some(platform_val) = platform_field {
+        findings.push(SpecAuditFinding::new(
+            "platform-independence-frontmatter-platform-field",
+            format!(
+                "Specification '{}' contains forbidden 'platform: {}' field in metadata. Tier 1 specs must be platform-agnostic.",
+                rel_path, platform_val
+            ),
+            rel_path,
+            None,
+        ));
     }
 
     // 2. Scan lines outside code blocks for forbidden frameworks
