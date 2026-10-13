@@ -428,7 +428,7 @@ $$\text{Pipeline} = \text{Stage}_{\text{lint}} \xrightarrow{\text{pass}} \text{S
 | :--- | :--- | :--- | :--- |
 | **Stage 1: `lint`** | `lint:downstream-baseline` | `python3 scripts/verify_downstream_baseline.py --no-domain` | Checks 10-20 (zero .DS_Store, KaTeX math integrity, valid entrypoints, clean landing zones, Safety Integrity & SORA completeness, domain AST cleanliness, and Check 20: WBS & Enterprise Deliverables Suite Validation). |
 | **Stage 2: `test`** | `test:unit-and-parity` | `python3 scripts/verify_downstream_baseline.py .` | Semantic acceptance verification suites, ROS2 node lifecycle tests, and PX4 safety mode tests pass with 0 failures. |
-| **Stage 3: `verify`** | `verify:model-coverage` | `python3 skills/spec-orchestrator/scripts/verify_model_coverage.py --spec-only` | All 22 Parity Verification Gates pass with zero specification-model drift. |
+| **Stage 3: `verify`** | `verify:model-coverage` | `./target/release/verify-baseline . --spec-only` | All 22 Parity Verification Gates pass with zero specification-model drift. |
 
 ---
 
@@ -446,7 +446,7 @@ python3 skills/spec-orchestrator/scripts/sysmlv2_ingest.py --schema schema/model
 python3 scripts/compile_sysml.py --reverse-sync --docs docs/ --schema schema/model.sysml --out .pipeline/schema.sysml
 
 # 3. 22-Gate Mechanical Parity Lock: Verify 100% semantic alignment across all artifacts
-python3 skills/spec-orchestrator/scripts/verify_model_coverage.py --spec-only
+./target/release/verify-baseline . --spec-only
 ```
 
 ### 7.2 The 6-Layer MBSE Parity Architecture
@@ -640,7 +640,7 @@ flowchart LR
 #### 8.2.1 Worker 1A: Structural Specification Worker (Epics & Features)
 - **Role Description:** Subagent responsible for ingesting SysML v2 AST packages, structural components (`part def`), and data payloads (`item def`) to decompose the architecture into formal Agile Epics (`docs/epics/epic-*.md`) and independently testable Features (`docs/features/feat-*.md`).
 - **Primary Inputs:** Canonical SysML model (`.pipeline/schema.sysml`), schema digest (`.pipeline/schema-digest.json`).
-- **Deliverables & Outputs:** Epics and Features registered with unique tracker issue IDs, passing model coverage linter (`verify_model_coverage.py`).
+- **Deliverables & Outputs:** Epics and Features registered with unique tracker issue IDs, passing model coverage linter (`verify-baseline`).
 
 #### 8.2.2 Worker 1B: Behavioral Specification Worker (User Stories & Statecharts)
 - **Role Description:** Subagent responsible for deriving Behavior-Driven Development (BDD) User Stories, UML Sequence Lifelines, and Stateflow transition triggers from SysML v2 behavioral AST nodes (`action def`, `state def`, `port def`, `interaction def`).
@@ -914,7 +914,7 @@ Transform structural schemas and SysML v2 AST models into formal Agile Epics and
    - Dispatch fresh context-isolated subagents for each individual Epic and Feature with YAML frontmatter declaring `generation_mode: "subagent"`.
 
 2. Local Validation & Issue Registration:
-   - Execute the local model coverage linter: `./skills/spec-orchestrator/scripts/verify_model_coverage.py --spec-only --allow-missing-specs --only <spec_file>`.
+   - Execute the local model coverage linter: `./target/release/verify-baseline . --spec-only --only "<spec_file>"`.
    - Register Features first via `./skills/spec-orchestrator/scripts/create_issue.sh "<file>" "feature" "<title>"`.
    - Verify live published payload on the issue tracker (`gh issue view <ID> --json body` or `glab issue view <ID>`).
    - Inject verified Feature Issue IDs into Epic tasklists.
@@ -949,7 +949,7 @@ Extract Behavior-Driven Development (BDD) User Stories, UML Sequence Lifelines, 
 
 2. Deliverable Generation & Issue Registration:
    - Dispatch fresh context-isolated subagents per User Story (`docs/user-stories/us-*.md`) with YAML frontmatter (`generation_mode: "subagent"`).
-   - Execute local model coverage linter: `./skills/spec-orchestrator/scripts/verify_model_coverage.py --spec-only --allow-missing-specs --only <spec_file>`.
+   - Execute local model coverage linter: `./target/release/verify-baseline . --spec-only --only "<spec_file>"`.
    - Register User Stories via `./skills/spec-orchestrator/scripts/create_issue.sh "<file>" "user-story" "<title>"`.
    - Verify live published payload on the issue tracker (`gh issue view <ID> --json body` or `glab issue view <ID>`).
 
@@ -982,7 +982,7 @@ Derive formal UML System Use Cases directly from SysML v2 `use case def` AST blo
 
 2. Realization Matrix & Registration:
    - Construct `## Realization Matrix` resolving specific, unique tracker Issue IDs for each intersecting User Story and Feature.
-   - Execute local model coverage check: `./skills/spec-orchestrator/scripts/verify_model_coverage.py --spec-only --allow-missing-specs --only <spec_file>`.
+   - Execute local model coverage check: `./target/release/verify-baseline . --spec-only --only "<spec_file>"`.
    - Register Use Cases via `./skills/spec-orchestrator/scripts/create_issue.sh "<file>" "use-case" "<title>"`.
    - Verify live published payload on the issue tracker (`gh issue view <ID> --json body` or `glab issue view <ID>`).
 
@@ -1052,7 +1052,7 @@ Conduct a closed-world factual grounding audit across all generated specificatio
 
 2. Parity Verification Gate:
    - Run the model coverage verification linter:
-     python3 skills/spec-orchestrator/scripts/verify_model_coverage.py schema docs/features --spec-only
+     ./target/release/verify-baseline . --spec-only
    - Verify that all cross-references between Epics, Features, User Stories, and Use Cases resolve cleanly with zero broken links.
 
 Defect Filing Directive:
@@ -1089,7 +1089,7 @@ python3 scripts/compile_sysml.py --reverse-sync
 ./scripts/reconcile_backlog.py --offline
 
 # 23-Gate Model Coverage and UML Compliance Lock
-./skills/spec-orchestrator/scripts/verify_model_coverage.py schema docs/features --spec-only
+./target/release/verify-baseline . --spec-only
 ```
 
 ### 9.4 Pipeline 2 Prompts (Autonomous Feature Implementation & Two-Path Simulation Driver)

@@ -31,7 +31,7 @@ Transform structural schemas and SysML v2 AST models into formal Agile Epics and
    - Dispatch fresh context-isolated subagents for each individual Epic and Feature with YAML frontmatter declaring `generation_mode: "subagent"`.
 
 2. Local Validation & Issue Registration:
-   - Execute the local model coverage linter: `./skills/spec-orchestrator/scripts/verify_model_coverage.py --spec-only --allow-missing-specs --only <spec_file>`.
+   - Execute the local model coverage linter: `./target/release/verify-baseline . --spec-only --only "<spec_file>"`.
    - Register Features first via `./skills/spec-orchestrator/scripts/create_issue.sh "<file>" "feature" "<title>"`.
    - Verify live published payload on the issue tracker (`gh issue view <ID> --json body` or `glab issue view <ID>`).
    - Inject verified Feature Issue IDs into Epic tasklists.
@@ -65,7 +65,7 @@ Extract Behavior-Driven Development (BDD) User Stories, UML Sequence Lifelines, 
 
 2. Deliverable Generation & Issue Registration:
    - Dispatch fresh context-isolated subagents per User Story (`docs/user-stories/us-*.md`) with YAML frontmatter (`generation_mode: "subagent"`).
-   - Execute local model coverage linter: `./skills/spec-orchestrator/scripts/verify_model_coverage.py --spec-only --allow-missing-specs --only <spec_file>`.
+   - Execute local model coverage linter: `./target/release/verify-baseline . --spec-only --only "<spec_file>"`.
    - Register User Stories via `./skills/spec-orchestrator/scripts/create_issue.sh "<file>" "user-story" "<title>"`.
    - Verify live published payload on the issue tracker (`gh issue view <ID> --json body` or `glab issue view <ID>`).
 
@@ -97,7 +97,7 @@ Derive formal UML System Use Cases directly from SysML v2 `use case def` AST blo
 
 2. Realization Matrix & Registration:
    - Construct `## Realization Matrix` resolving specific, unique tracker Issue IDs for each intersecting User Story and Feature.
-   - Execute local model coverage check: `./skills/spec-orchestrator/scripts/verify_model_coverage.py --spec-only --allow-missing-specs --only <spec_file>`.
+   - Execute local model coverage check: `./target/release/verify-baseline . --spec-only --only "<spec_file>"`.
    - Register Use Cases via `./skills/spec-orchestrator/scripts/create_issue.sh "<file>" "use-case" "<title>"`.
    - Verify live published payload on the issue tracker (`gh issue view <ID> --json body` or `glab issue view <ID>`).
 
@@ -162,7 +162,7 @@ Conduct a closed-world factual grounding audit across all generated specificatio
 
 2. Parity Verification Gate:
    - Run the model coverage verification linter:
-     python3 skills/spec-orchestrator/scripts/verify_model_coverage.py schema docs/features --spec-only
+     ./target/release/verify-baseline . --spec-only
    - Verify that all cross-references between Epics, Features, User Stories, and Use Cases resolve cleanly with zero broken links.
 
 Defect Filing Directive:
@@ -199,7 +199,7 @@ python3 scripts/compile_sysml.py --reverse-sync
 ./scripts/reconcile_backlog.py --offline
 
 # 23-Gate Model Coverage and UML Compliance Lock
-./skills/spec-orchestrator/scripts/verify_model_coverage.py schema docs/features --spec-only
+./target/release/verify-baseline . --spec-only
 ```
 
 ## Section for "Pipeline 2" and "Synthesis Driver"

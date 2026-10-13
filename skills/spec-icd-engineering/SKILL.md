@@ -292,7 +292,7 @@ Per [`rules/platform-independence.md`](rules/platform-independence.md):
    ```
    and the model coverage verifier:
    ```bash
-   ./skills/spec-orchestrator/scripts/verify_model_coverage.py --spec-only --allow-missing-specs --only <spec>
+   ./target/release/verify-baseline . --spec-only --only "<spec_file>"
    ```
    - Asserts 100% port connection parity (zero dangling ports: $\mathcal{D}_{\mathrm{port}} = \emptyset$).
    - Asserts 100% signal dictionary coverage of schema interface leaves ($\Omega_{\mathrm{coverage}} = 1.0$).

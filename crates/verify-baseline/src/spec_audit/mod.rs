@@ -392,27 +392,72 @@ pub fn collect_spec_files(
     repo_root: &Path,
     only_file: Option<&Path>,
 ) -> Result<Vec<PathBuf>, SpecAuditError> {
-    if let Some(single_path) = only_file {
-        let path = if single_path.is_absolute() {
-            single_path.to_path_buf()
-        } else {
-            repo_root.join(single_path)
-        };
-        if !path.is_file() {
-            return Err(SpecAuditError::IoError(format!(
-                "Target specification file not found at: {}",
-                path.display()
-            )));
-        }
-        return Ok(vec![path]);
-    }
-
     let target_dirs = [
         repo_root.join("docs").join("epics"),
         repo_root.join("docs").join("features"),
         repo_root.join("docs").join("user-stories"),
         repo_root.join("docs").join("use-cases"),
     ];
+
+    if let Some(single_path) = only_file {
+        if single_path.is_file() {
+            return Ok(vec![single_path.to_path_buf()]);
+        }
+
+        let from_root = if single_path.is_absolute() {
+            single_path.to_path_buf()
+        } else {
+            repo_root.join(single_path)
+        };
+        if from_root.is_file() {
+            return Ok(vec![from_root]);
+        }
+
+        // Check inside standard specification directories
+        let mut matched = Vec::new();
+        for dir in &target_dirs {
+            let candidate = dir.join(single_path);
+            if candidate.is_file() {
+                matched.push(candidate);
+            }
+        }
+        if !matched.is_empty() {
+            return Ok(matched);
+        }
+
+        // Search by filename or relative suffix across target specification directories
+        let target_name = single_path.file_name().unwrap_or(single_path.as_os_str());
+        for dir in &target_dirs {
+            if !dir.is_dir() {
+                continue;
+            }
+            for entry in walkdir::WalkDir::new(dir)
+                .into_iter()
+                .filter_entry(|e| {
+                    let name = e.file_name().to_string_lossy();
+                    !name.starts_with('.') && !name.starts_with('#')
+                })
+                .filter_map(|e| e.ok())
+            {
+                if entry.file_type().is_file() {
+                    let p = entry.path();
+                    if p.file_name() == Some(target_name) || p.ends_with(single_path) {
+                        matched.push(p.to_path_buf());
+                    }
+                }
+            }
+        }
+        if !matched.is_empty() {
+            matched.sort();
+            matched.dedup();
+            return Ok(matched);
+        }
+
+        return Err(SpecAuditError::IoError(format!(
+            "Target specification file not found at: {}",
+            from_root.display()
+        )));
+    }
 
     let mut files = Vec::new();
     for dir in &target_dirs {
