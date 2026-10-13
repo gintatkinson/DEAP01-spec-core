@@ -108,7 +108,7 @@ The Tactical Mission Intent specification tree consists of 10 canonical modular 
 | `02_MISSION_ESSENTIAL_TASK_LIST.md` | `## 2. Mission Essential Task List (METL)` | `metl_tasks` | Doctrinal task list (`MET-01`..`MET-N`) with conditions, quantitative metrics, verification methods, and Gate 24 allocation tags. |
 | `03_INCOSE_MOE_MOP_MATH.md` | `## 3. Measures of Effectiveness (MoE) & Measures of Performance (MoP) Metrics` | `incose_moe_mop` | INCOSE SEH v5.0 metrics table with KaTeX mathematical formulas, Threshold and Objective performance values, and engineering units. |
 | `04_MULTI_DOMAIN_THREAT_MATRIX.md` | `## 4. Multi-Domain Operational Threat & Contested Environment Matrix` | `threat_matrix` | Open multi-domain threat matrix across Kinetic, Mechanical, Environmental, EW/Cyber, Power/Thermal, Optical, and Human domains with public clause citations. |
-| `05_PACE_C2_PLAN.md` | `## 5. PACE C2 Link Communications Plan` | `pace_c2_plan` | 4-tier PACE communications plan (Primary, Alternate, Contingency, Emergency) with frequency bands, bandwidth, heartbeat timeouts, and failover hysteresis. |
+| `05_PACE_C2_PLAN.md` | `## 5. PACE C2 Link Communications Plan` | `pace_c2_plan` | 4-tier PACE communications plan (Primary, Alternate, Contingency, Emergency) with schema-derived frequency bands, bandwidth, parameterized heartbeat timeouts, failover hysteresis, and verified SSOT public clause citations. |
 | `06_SAFETY_INTERLOCKS.md` | `## 6. Safety Constraints & Subsystem Interlocks` | `safety_interlocks` | Safety constraints, interlock predicates, and subsystem state interlocks (`INT-01`..`INT-N`) derived from AST constraint and state definitions. |
 | `07_AIRSPACE_GEOZONES.md` | `## 7. Airspace Deconfliction & U-space Dynamic Geo-Zones` | `airspace_geozones` | Primary boundary perimeter, dynamic exclusion/keep-out zones, and horizontal/vertical separation minima. |
 | `08_GO_NO_GO_MATRIX.md` | `## 8. Go/No-Go Decision Matrix` | `go_no_go_matrix` | Operational phase checks (`GNG-01`..`GNG-N`), threshold conditions, sensors/mechanisms, and deterministic Go/No-Go actions. |
@@ -314,10 +314,10 @@ flowchart TD
 
 ### 4.6 Section 5 PACE C2 Link Communications Plan Template & Schema-Driven Extraction Guidelines
 Per [`rules/sysml-ssot-completeness.md`](../../rules/sysml-ssot-completeness.md) and [`rules/conops-mission-intent-integrity.md`](../../rules/conops-mission-intent-integrity.md):
-- **Zero Hardcoded Synthetic Timeouts Invariant**: Agents and Worker ConOps are strictly forbidden from hardcoding synthetic timeout constants (such as `tau_loss = 5.0 s`, `tau_reacquire = 15.0 s`, `tau_escalate = 30.0 s`) or ungrounded generic protocol standards (e.g. NATO STANAG 4586) into Section 5 PACE templates and generated artifacts.
+- **Zero Hardcoded Synthetic Timeouts Invariant**: Agents and Worker ConOps are strictly forbidden from hardcoding synthetic timeout constants (such as `tau_loss = 5.0 s`, `tau_reacquire = 15.0 s`, `tau_escalate = 30.0 s`) or ungrounded generic protocol standards (e.g. NATO STANAG 4586, MIL-STD-188-220E) into Section 5 PACE templates and generated artifacts.
 - **Parametric Schema-Driven Extraction**:
   1. All PACE communications tiers (`Primary`, `Alternate`, `Contingency`, `Emergency`) must extract link medium characteristics, frequency bands ($f_{\mathrm{band}}$), data rates ($\text{Rate}_{\mathrm{nom}}$), and heartbeat timeout thresholds ($\tau_{\mathrm{timeout},i}$) dynamically from schema definitions in `schema/` (e.g., OMG IDL, Protobuf, ARXML, SysML v2 port contracts) and SysML `state def` timing constraints.
-  2. Public clause citations must reference authoritative, grounded standards declared in `docs/research/RESEARCH_INVENTORY.md` (e.g., `IEEE Std 1558-2020 §4.5`, `MIL-STD-188-220E §5.3`, `MIL-STD-882E §4.3`, `NIST SP 800-82r3 §5.2`).
+  2. Public clause citations must reference authoritative, grounded standards declared in `docs/research/RESEARCH_INVENTORY.md` (e.g., `IEEE Std 1558-2020 §4.5`, `ISO/IEC/IEEE 15288:2023 §6.4.5`, `NIST SP 800-82r3 §5.2`).
 - **Parametric Failover Transition Dynamics Equation**:
 $$
 \begin{aligned}
@@ -334,11 +334,11 @@ $$
 | Parameter | Symbol | Units | Constraint / Rule | Description |
 | :--- | :--- | :--- | :--- | :--- |
 | Active Link Loss Duration | Delta t_loss | s | Measured Online | Measured elapsed duration since last authenticated frame |
-| Primary Heartbeat Timeout | tau_timeout_Primary | s | tau_timeout_Primary > 0 | Timeout triggering fallback to Alternate tier extracted from schema |
-| Alternate Heartbeat Timeout | tau_timeout_Alternate | s | tau_timeout_Alternate > tau_timeout_Primary | Timeout triggering fallback to Contingency tier extracted from schema |
-| Contingency Heartbeat Timeout | tau_timeout_Contingency | s | tau_timeout_Contingency > tau_timeout_Alternate | Timeout triggering fallback to Emergency tier extracted from schema |
-| Emergency Heartbeat Timeout | tau_timeout_Emergency | s | tau_timeout_Emergency > tau_timeout_Contingency | Timeout initiating definitive failsafe sequence extracted from SysML state def |
-| Re-acquisition Hysteresis Window | tau_hysteresis | s | tau_hysteresis > 0 | Continuous stable link duration required before up-tier promotion |
+| Primary Heartbeat Timeout | tau_timeout_Primary | s | tau_timeout_Primary > 0 | Timeout triggering fallback to Alternate tier extracted from schema AST or OPERATOR_CONFIGURED |
+| Alternate Heartbeat Timeout | tau_timeout_Alternate | s | tau_timeout_Alternate > tau_timeout_Primary | Timeout triggering fallback to Contingency tier extracted from schema AST or OPERATOR_CONFIGURED |
+| Contingency Heartbeat Timeout | tau_timeout_Contingency | s | tau_timeout_Contingency > tau_timeout_Alternate | Timeout triggering fallback to Emergency tier extracted from schema AST or OPERATOR_CONFIGURED |
+| Emergency Heartbeat Timeout | tau_timeout_Emergency | s | tau_timeout_Emergency > tau_timeout_Contingency | Timeout initiating definitive failsafe sequence extracted from SysML state def or OPERATOR_CONFIGURED |
+| Re-acquisition Hysteresis Window | tau_hysteresis | s | tau_hysteresis > 0 | Continuous stable link duration required before up-tier promotion extracted from schema AST or OPERATOR_CONFIGURED |
 
 ### 4.7 Section 9/10 Operational Sequence Diagram Templates & Deterministic Safety Interlock Invariants (DoDAF OV-6c / ISO 29148 §6.4.2)
 Per [`rules/sysml-ssot-completeness.md`](../../rules/sysml-ssot-completeness.md) §3 and MIL-STD-882E §4.4:

@@ -988,5 +988,44 @@ mod tests {
             assert!(!substituted.to_lowercase().contains("parachute"), "Expendable Unit 05 must not contain parachute");
         }
     }
+
+    #[test]
+    fn test_canonical_unit_05_pace_c2_plan_decontamination() {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let repo_root = manifest_dir.parent().unwrap().parent().unwrap();
+        let pace_path = repo_root
+            .join("skills/spec-conops-engineering/resources/units/mission_intent/05_PACE_C2_PLAN.md");
+
+        if !pace_path.is_file() {
+            return;
+        }
+
+        let engine = SysMLParameterBindingEngine::new(None, None, None, false, None);
+        let (is_valid, errors) = validate_unit_integrity(&[pace_path.clone()], Some(&engine));
+        assert!(is_valid, "Unit 05 PACE C2 Plan integrity validation failed: {:?}", errors);
+        assert!(errors.is_empty());
+
+        let raw = fs::read_to_string(&pace_path).unwrap();
+        assert!(!raw.contains("MIL-STD-188-220"), "Unit 05 PACE C2 Plan must not contain MIL-STD-188-220");
+        assert!(!raw.contains("MIL-STD-882E"), "Unit 05 PACE C2 Plan must not contain MIL-STD-882E");
+        assert!(!raw.contains("STANAG"), "Unit 05 PACE C2 Plan must not contain STANAG");
+        assert!(!raw.contains("CJCSI"), "Unit 05 PACE C2 Plan must not contain CJCSI");
+        assert!(!raw.contains('\u{2014}'), "Unit 05 PACE C2 Plan must not contain em dash");
+        assert!(!raw.contains('\u{2013}'), "Unit 05 PACE C2 Plan must not contain en dash");
+        assert!(raw.contains("IEEE Std 1558-2020"), "Unit 05 PACE C2 Plan must cite IEEE Std 1558-2020");
+        assert!(raw.contains("ISO/IEC/IEEE 15288:2023"), "Unit 05 PACE C2 Plan must cite ISO/IEC/IEEE 15288:2023");
+
+        // Verify absence of hardcoded synthetic timeouts
+        assert!(!raw.contains("5.0s"), "Unit 05 PACE C2 Plan must not contain hardcoded 5.0s timeout");
+        assert!(!raw.contains("2.0s"), "Unit 05 PACE C2 Plan must not contain hardcoded 2.0s timeout");
+        assert!(!raw.contains("15.0s"), "Unit 05 PACE C2 Plan must not contain hardcoded 15.0s timeout");
+        assert!(!raw.contains("30.0s"), "Unit 05 PACE C2 Plan must not contain hardcoded 30.0s timeout");
+        assert!(!raw.contains("tau_loss = 5.0"), "Unit 05 PACE C2 Plan must not contain tau_loss = 5.0");
+
+        // Verify AST-driven timing parameters and operator-configured fallbacks
+        assert!(raw.contains("tau_timeout_Primary"), "Unit 05 PACE C2 Plan must define tau_timeout_Primary");
+        assert!(raw.contains("tau_hysteresis_Primary"), "Unit 05 PACE C2 Plan must define tau_hysteresis_Primary");
+        assert!(raw.contains("OPERATOR_CONFIGURED"), "Unit 05 PACE C2 Plan must support OPERATOR_CONFIGURED parameters");
+    }
 }
 
