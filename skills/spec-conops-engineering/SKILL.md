@@ -2,7 +2,7 @@
 
 ---
 name: spec-conops-engineering
-description: "Synthesize hierarchical Concept of Operations (docs/conops/units/conops/) and Tactical Mission Intent (docs/conops/units/mission_intent/) specification units adhering to ISO/IEC/IEEE 29148:2018, INCOSE SE Handbook v5.0, ISO/IEC/IEEE 15288:2023, and OMG UAF v2.0 with pure schema contracts, zero truncation, and deterministic assembly via scripts/assemble_conops.py."
+description: "Synthesize hierarchical Concept of Operations (docs/conops/units/conops/) and Tactical Mission Intent (docs/conops/units/mission_intent/) specification units adhering to ISO/IEC/IEEE 29148:2018, INCOSE SE Handbook v5.0, ISO/IEC/IEEE 15288:2023, and OMG UAF v2.0 with pure schema contracts, zero truncation, and deterministic assembly via ./target/release/assemble-conops."
 version: "1.0"
 metadata:
   title: "Hierarchical ConOps & Mission Intent Engineering"
@@ -16,7 +16,7 @@ Use this skill as the single canonical workflow for transforming high-level oper
 
 In accordance with [`rules/conops-mission-intent-integrity.md`](../../rules/conops-mission-intent-integrity.md), [`rules/sysml-ssot-completeness.md`](../../rules/sysml-ssot-completeness.md), and [`rules/latex-katex-integrity.md`](../../rules/latex-katex-integrity.md), ConOps and Mission Intent specifications bridge high-level operational intent with downstream structural extraction (Level 2 Epics and Features) and Model-Based Design (MBD) synthesis.
 
-All specification units are authored as discrete, modular markdown files under `docs/conops/units/conops/` and `docs/conops/units/mission_intent/` adhering strictly to JSON Schema data contracts (`.pipeline/schemas/conops_specification_schema.json` and `.pipeline/schemas/mission_intent_specification_schema.json`) and compiled into canonical documents via `scripts/assemble_conops.py`.
+All specification units are authored as discrete, modular markdown files under `docs/conops/units/conops/` and `docs/conops/units/mission_intent/` adhering strictly to JSON Schema data contracts (`.pipeline/schemas/conops_specification_schema.json` and `.pipeline/schemas/mission_intent_specification_schema.json`) and compiled into canonical documents via `./target/release/assemble-conops` (or `crates/assemble-conops`).
 
 ### Architecture Hierarchy & Standards Governance (INCOSE SEH v5.0 §3.4.4 / ISO/IEC/IEEE 15288:2023 / ISO/IEC/IEEE 29148:2018 §6.4.2)
 
@@ -509,18 +509,18 @@ All analytical content across safety engineering deliverables (`docs/safety/STPA
 Once all unit files are written and verified, execute the deterministic assembly engine:
 
 ```bash
-python3 scripts/assemble_conops.py --input-dir docs/conops/units/ --output-dir docs/conops/ --verify
+./target/release/assemble-conops --input-dir docs/conops/units/ --output-dir docs/conops/ --verify
 ```
 
 and compile the master specification documents:
 
 ```bash
-python3 scripts/assemble_conops.py --input-dir docs/conops/units/ --output-dir docs/conops/
+./target/release/assemble-conops --input-dir docs/conops/units/ --output-dir docs/conops/
 ```
 
 ### Assembly Engine Responsibilities:
 1. **Unit Integrity Verification**: Validates that all unit markdown files exist, are non-empty, and contain zero unresolved `{{...}}` placeholder tokens.
-2. **Metadata Table Injection**: Synthesizes the standard document metadata header table at lines 1–10.
+2. **Metadata Table Injection**: Synthesizes the standard document metadata header table at lines 1-10.
 3. **Table of Contents (TOC) Synthesis**: Automatically parses H2 and H3 headings and generates a verified Markdown TOC.
 4. **Internal Link & Anchor Validation**: Confirms 100% of internal anchor links (`#slug`) resolve cleanly to existing headings with zero broken links.
 5. **Deterministic Output Emission**: Emits `docs/conops/CONOPS.md` and `docs/conops/MISSION_INTENT.md`.
@@ -533,7 +533,7 @@ Before completing Phase 0.75, the `Worker ConOps` must execute and pass all requ
 
 1. **Gate 26 Verification (ConOps & Mission Intent Completeness Validator)**:
    ```bash
-   python3 -m unittest tests.test_conops_and_mission_intent_validators
+   ./target/release/verify-baseline . --spec-only
    ```
    - Asserts all 12 mandatory sections exist in `CONOPS.md` and all 10 mandatory sections exist in `MISSION_INTENT.md`.
    - Validates boundary containment margin calculation ($R_{\mathrm{containment}} \ge R_{\mathrm{min}}$).
@@ -547,9 +547,9 @@ Before completing Phase 0.75, the `Worker ConOps` must execute and pass all requ
 
 3. **Untracked Infrastructure & Pre-Commit Check**:
    ```bash
-   UNTRACKED_INFRA=$(git ls-files --others --exclude-standard docs/conops/ skills/ rules/ scripts/)
+   UNTRACKED_INFRA=$(git ls-files --others --exclude-standard docs/conops/ skills/ rules/ crates/)
    if [ -n "$UNTRACKED_INFRA" ]; then
-     git add docs/conops/ skills/ rules/ scripts/
+     git add docs/conops/ skills/ rules/ crates/
    fi
    ```
 

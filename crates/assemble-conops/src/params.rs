@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use chrono::Utc;
 use serde_json::Value;
 
-use crate::sanitize::sanitize_level_1b_operational_text;
+use crate::sanitize::{sanitize_level_1b_operational_text, wrap_mermaid_label};
 
 /// Canonical default ConOps parameters dictionary.
 pub static DEFAULT_CONOPS_PARAMS: &[(&str, &str)] = &[
@@ -1293,56 +1293,131 @@ impl SysMLParameterBindingEngine {
 
         let parts: Vec<String> = self.ast_part_names.iter().cloned().collect();
 
-        // 1. Super-System Architecture
+        // 1. Super-System Architecture (Option 3: Compact Blocks & Vertical Tiers)
         let mut super_lines = vec![
             format!("The **{sys_id}** architecture formalizes the complete system boundary and segment allocations in accordance with IEEE 1362 §5.3, DoDAF OV-2 / SV-1, and ISO/IEC/IEEE 29148:2018."),
             String::new(),
             "```mermaid".to_string(),
             "flowchart TD".to_string(),
-            format!("    subgraph Super_System[\"Operational Super-System Architecture ({sys_id})\"]"),
+            "    subgraph External_Actors[\"External Operating Environment & Actors (IEEE 1362 §5.1)\"]".to_string(),
             "        direction TB".to_string(),
-            "        subgraph Platform_Segment[\"Primary Operational Segment (DoDAF SV-1)\"]".to_string(),
-            "            direction TB".to_string(),
+            "        Operator[\"Operator and<br/>Supervisory Entity\"]".to_string(),
+            "        Environment[\"External Operating Environment<br/>and Boundary Dynamics\"]".to_string(),
+            "        ExternalAuthority[\"External Oversight and<br/>Assurance Authority\"]".to_string(),
+            "    end".to_string(),
+            String::new(),
+            "    subgraph Supervisory_Segment[\"Supervisory & Control Segment (IEEE 1362 §5.3)\"]".to_string(),
+            "        direction TB".to_string(),
+            "        SupervisoryStation[\"Supervisory Control Station<br/>• PORT_SUP_C2 (INOUT)<br/>• PORT_SUP_DISP (OUT)\"]".to_string(),
+            "    end".to_string(),
+            String::new(),
+            "    subgraph Core_Execution_Segment[\"Core System Execution Segment (DoDAF SV-1)\"]".to_string(),
+            "        direction TB".to_string(),
         ];
 
+        let mut node_ids = Vec::new();
+
         if parts.is_empty() {
-            super_lines.push(format!("            Platform[\"{sys_id} Core System\"]"));
+            super_lines.push("        subgraph Core_Tier1[\"Tier 1 - Mission Management & Processing\"]".to_string());
+            super_lines.push("            direction TB".to_string());
+            super_lines.push(format!("            Platform[\"<b>{sys_id} Core Controller</b><br/>• PORT_CTRL_C2 (INOUT)<br/>• PORT_CTRL_CMD (OUT)<br/>• PORT_CTRL_TLM (IN)\"]"));
+            super_lines.push("        end".to_string());
+            node_ids.push("Platform".to_string());
         } else {
-            for (idx, p) in parts.iter().enumerate() {
-                let clean_p = sanitize_level_1b_operational_text(p);
-                let node_id = format!("P{}", idx + 1);
-                super_lines.push(format!("            {node_id}[\"{clean_p}\"]"));
+            // Partition parts into vertical tiers of at most 3 parts per tier (Option 3 layout)
+            let chunk_size = 3;
+            let mut tier_names = Vec::new();
+            for (tier_idx, chunk) in parts.chunks(chunk_size).enumerate() {
+                let tier_name = format!("Core_Tier{}", tier_idx + 1);
+                tier_names.push(tier_name.clone());
+                super_lines.push(format!("        subgraph {tier_name}[\"Tier {} - Functional Subsystems\"]", tier_idx + 1));
+                super_lines.push("            direction TB".to_string());
+                for (p_idx, p) in chunk.iter().enumerate() {
+                    let global_idx = tier_idx * chunk_size + p_idx + 1;
+                    let clean_p = sanitize_level_1b_operational_text(p);
+                    let clean_p_wrapped = wrap_mermaid_label(&clean_p, 28);
+                    let node_id = format!("P{global_idx}");
+                    node_ids.push(node_id.clone());
+                    let p_upper = clean_p.to_uppercase().replace([' ', '_', '.'], "-");
+                    super_lines.push(format!(
+                        "            {node_id}[\"<b>{clean_p_wrapped}</b><br/>• PORT-{p_upper}-IN (IN)<br/>• PORT-{p_upper}-OUT (OUT)\"]"
+                    ));
+                }
+                super_lines.push("        end".to_string());
+            }
+
+            // Rank spacers between internal tiers
+            for i in 0..tier_names.len().saturating_sub(1) {
+                super_lines.push(format!("        {} ~~~ {}", tier_names[i], tier_names[i + 1]));
             }
         }
-        super_lines.push("        end".to_string());
+
         super_lines.push("    end".to_string());
+        super_lines.push(String::new());
+        super_lines.push("    subgraph Support_Segment[\"Auxiliary & Support Segment (IEEE 1362 §5.3)\"]".to_string());
+        super_lines.push("        direction TB".to_string());
+        super_lines.push("        SupportEquipment[\"Support and Maintenance<br/>Infrastructure<br/>• PORT_SUPP_PWR (OUT)\"]".to_string());
+        super_lines.push("    end".to_string());
+        super_lines.push(String::new());
+
+        // Inter-segment vertical spacers (mandatory for top-to-bottom layout)
+        super_lines.push("    External_Actors ~~~ Supervisory_Segment".to_string());
+        super_lines.push("    Supervisory_Segment ~~~ Core_Execution_Segment".to_string());
+        super_lines.push("    Core_Execution_Segment ~~~ Support_Segment".to_string());
+        super_lines.push(String::new());
+
+        // Connection links (CONN-01..CONN-N)
+        super_lines.push("    %% External Interface Connections".to_string());
+        super_lines.push("    Operator -->|\"CONN-01: Supervisory Command & Control\"| SupervisoryStation".to_string());
+        super_lines.push("    ExternalAuthority -->|\"CONN-02: Authorization & Safety Consent\"| SupervisoryStation".to_string());
+
+        let target_node = node_ids.first().cloned().unwrap_or_else(|| "Platform".to_string());
+        super_lines.push(format!("    SupervisoryStation -->|\"CONN-03: System C2 Datalink [PORT_SUP_C2 -> PORT_CTRL_C2]\"| {target_node}"));
+        super_lines.push(format!("    Environment -.->|\"CONN-04: Environmental & Boundary Telemetry\"| {target_node}"));
+
+        let mut conn_idx = 5;
+        if node_ids.len() > 1 {
+            for i in 0..node_ids.len().saturating_sub(1) {
+                super_lines.push(format!(
+                    "    {} -->|\"CONN-{:02}: Inter-Subsystem Interface Bus\"| {}",
+                    node_ids[i], conn_idx, node_ids[i + 1]
+                ));
+                conn_idx += 1;
+            }
+        }
+        super_lines.push(format!("    SupportEquipment -.->|\"CONN-{:02}: Auxiliary Power & Diagnostics [PORT_SUPP_PWR]\"| {target_node}", conn_idx));
         super_lines.push("```".to_string());
 
         let super_arch = super_lines.join("\n");
         self.parameter_bindings
             .insert("SUPER_SYSTEM_ARCHITECTURE".to_string(), super_arch);
 
-        // 2. Subsystem Architecture
+        // 2. Subsystem Architecture (100% AST Part Coverage with 6-Bullet Invariant)
         let mut sub_lines = vec![
             format!("All declared SysML AST structural parts for **{sys_id}** are allocated formal operational specifications:"),
             String::new(),
         ];
 
         if parts.is_empty() {
-            sub_lines.push(format!("### 4.8.1 {sys_id} Core Subsystem Architecture"));
-            sub_lines.push(format!("Houses core operational capabilities for {sys_id}."));
+            sub_lines.push(format!("#### 4.3.1 {sys_id} Core Subsystem Architecture"));
+            sub_lines.push(format!("- **Functional Purpose & Scope:** Dedicated operational capability, deterministic state processing, and safety-critical execution for {sys_id}."));
+            sub_lines.push("- **Physical & Logical Interface / Port Allocations:** Declared input port `PORT_CTRL_CMD (IN)`, output port `PORT_CTRL_TLM (OUT)`, and high-level system bus interconnects.".to_string());
+            sub_lines.push("- **Power, Mass & Resource Envelopes:** Operating electrical power draw: 50.0 W, mass partition budget ($m_{\\mathrm{alloc}}$): 5.0 kg, and thermal operating envelopes: -20 °C to +55 °C.".to_string());
+            sub_lines.push("- **Operational Role & Statechart Integration:** Lifecycle mode allocation ($\\Phi_{\\mathrm{lifecycle}}$) and active operational states across nominal and degraded phases.".to_string());
+            sub_lines.push("- **Safety Invariants, Containment Interlocks & FMECA Linkage:** Watchdog interlocks, emergency trigger containment bindings (`EMG-01`..`EMG-07`), and safety criticalities.".to_string());
+            sub_lines.push(format!("- **SSOT Ground Truth Mapping:** [schema/model.sysml](schema/model.sysml#{sys_id}) (\"OEM Clause Title\") | SysML v2: `part def {sys_id}`"));
+            sub_lines.push(String::new());
         } else {
             for (idx, p) in parts.iter().enumerate() {
                 let clean_p = sanitize_level_1b_operational_text(p);
-                sub_lines.push(format!("### 4.8.{} {} Subsystem Architecture", idx + 1, clean_p));
-                sub_lines.push(format!("#### 4.8.{}.1 Functional Scope & Operational Role", idx + 1));
-                sub_lines.push(format!("Provides dedicated operational capability for {clean_p}."));
-                sub_lines.push(format!("#### 4.8.{}.2 Interface & Port Allocation", idx + 1));
-                sub_lines.push(format!("- PORT-01 (INOUT): PACE C2 telemetry interface for {clean_p}."));
-                sub_lines.push(format!("#### 4.8.{}.3 Mass, Power, & Thermal Resource Budget Allocation", idx + 1));
-                sub_lines.push(format!("- Nominal mass: 5.0 kg, Nominal power: 50.0 W."));
-                sub_lines.push(format!("#### 4.8.{}.4 Operational State Space, Lifecycle Modes, & Safety Invariants", idx + 1));
-                sub_lines.push(format!("- Bound to system safety net with independent hardware watchdog monitoring."));
+                let p_upper = clean_p.to_uppercase().replace([' ', '_', '.'], "-");
+                sub_lines.push(format!("#### 4.3.{} {} Subsystem Architecture", idx + 1, clean_p));
+                sub_lines.push(format!("- **Functional Purpose & Scope:** Dedicated operational capability, deterministic state processing, and safety-critical execution for {clean_p}."));
+                sub_lines.push(format!("- **Physical & Logical Interface / Port Allocations:** Declared input port `PORT-{p_upper}-IN (IN)`, output port `PORT-{p_upper}-OUT (OUT)`, and high-level system bus interconnects."));
+                sub_lines.push("- **Power, Mass & Resource Envelopes:** Operating electrical power draw: 50.0 W, mass partition budget ($m_{\\mathrm{alloc}}$): 5.0 kg, and thermal operating envelopes: -20 °C to +55 °C.".to_string());
+                sub_lines.push("- **Operational Role & Statechart Integration:** Lifecycle mode allocation ($\\Phi_{\\mathrm{lifecycle}}$) and active operational states across nominal and degraded phases.".to_string());
+                sub_lines.push("- **Safety Invariants, Containment Interlocks & FMECA Linkage:** Watchdog interlocks, emergency trigger containment bindings (`EMG-01`..`EMG-07`), and safety criticalities.".to_string());
+                sub_lines.push(format!("- **SSOT Ground Truth Mapping:** [schema/model.sysml](schema/model.sysml#{p}) (\"OEM Clause Title\") | SysML v2: `part def {p}`"));
                 sub_lines.push(String::new());
             }
         }
@@ -1353,17 +1428,17 @@ impl SysMLParameterBindingEngine {
         self.parameter_bindings
             .insert("CONOPS_SECTION_4_SUBSYSTEMS".to_string(), sub_arch);
 
-        // 3. Segment Allocation Matrix
+        // 3. Segment Allocation Matrix (Table 4.2 with SSOT Column)
         let mut seg_lines = vec![
-            "| Subsystem Part | Operational Segment | Allocation Authority | Functional Role |".to_string(),
+            "| Subsystem Part | Operational Segment | SSOT Ground Truth Source & Citation | Primary Functional Role |".to_string(),
             "| :--- | :--- | :--- | :--- |".to_string(),
         ];
         if parts.is_empty() {
-            seg_lines.push(format!("| `{sys_id}` | Primary Operational Segment | IEEE 1362 §5.3 | Autonomous Guidance & Control |"));
+            seg_lines.push(format!("| `{sys_id}` | Primary Operational Segment | [schema/model.sysml](schema/model.sysml#{sys_id}) (\"OEM Clause Title\") | SysML v2: `part def {sys_id}` | Realizes core operational mission functions |"));
         } else {
             for p in &parts {
                 let clean_p = sanitize_level_1b_operational_text(p);
-                seg_lines.push(format!("| `{clean_p}` | Primary Operational Segment | IEEE 1362 §5.3 / DoDAF SV-1 | Realizes core operational mission functions |"));
+                seg_lines.push(format!("| `{clean_p}` | Primary Operational Segment | [schema/model.sysml](schema/model.sysml#{p}) (\"OEM Clause Title\") | SysML v2: `part def {p}` | Realizes core operational mission functions |"));
             }
         }
         self.parameter_bindings
@@ -1599,4 +1674,34 @@ mod tests {
         assert_eq!(engine.resolve_token("SORA_AIR_RISK_CLASS", None), "N/A");
         assert_eq!(engine.resolve_token("SAIL_LEVEL", None), "N/A");
     }
+
+    #[test]
+    fn test_super_system_and_subsystem_architecture_synthesis_contract() {
+        let mut engine = SysMLParameterBindingEngine::new(None, None, None, false, None);
+        engine.ast_part_names.insert("Avionics".to_string());
+        engine.ast_part_names.insert("Actuation".to_string());
+        engine._derive_subsystem_architecture();
+
+        let super_arch = engine.parameter_bindings.get("SUPER_SYSTEM_ARCHITECTURE").unwrap();
+        assert!(super_arch.contains("External_Actors"), "Super-system architecture must include External_Actors");
+        assert!(super_arch.contains("Supervisory_Segment"), "Super-system architecture must include Supervisory_Segment");
+        assert!(super_arch.contains("Support_Segment"), "Super-system architecture must include Support_Segment");
+        assert!(super_arch.contains("~~~"), "Super-system architecture must include vertical rank spacers");
+        assert!(super_arch.contains("CONN-"), "Super-system architecture must include CONN- connection labels");
+        assert!(super_arch.contains("• PORT-"), "Super-system architecture must include embedded port attributes");
+
+        let sub_arch = engine.parameter_bindings.get("SUBSYSTEM_ARCHITECTURE_SECTION").unwrap();
+        assert!(sub_arch.contains("- **Functional Purpose & Scope:**"), "Subsystem architecture must contain Functional Purpose & Scope");
+        assert!(sub_arch.contains("- **Physical & Logical Interface / Port Allocations:**"), "Subsystem architecture must contain Physical & Logical Interface");
+        assert!(sub_arch.contains("- **Power, Mass & Resource Envelopes:**"), "Subsystem architecture must contain Power, Mass & Resource Envelopes");
+        assert!(sub_arch.contains("- **Operational Role & Statechart Integration:**"), "Subsystem architecture must contain Operational Role");
+        assert!(sub_arch.contains("- **Safety Invariants, Containment Interlocks & FMECA Linkage:**"), "Subsystem architecture must contain Safety Invariants");
+        assert!(sub_arch.contains("- **SSOT Ground Truth Mapping:**"), "Subsystem architecture must contain SSOT Ground Truth Mapping bullet");
+        assert!(sub_arch.contains("SysML v2: `part def Avionics`"), "Subsystem architecture must bind AST part def node");
+
+        let seg_matrix = engine.parameter_bindings.get("SEGMENT_ALLOCATION_MATRIX").unwrap();
+        assert!(seg_matrix.contains("SSOT Ground Truth Source & Citation"), "Segment allocation matrix must contain SSOT Ground Truth column");
+        assert!(seg_matrix.contains("SysML v2: `part def Avionics`"), "Segment allocation matrix must bind AST part def node");
+    }
 }
+
