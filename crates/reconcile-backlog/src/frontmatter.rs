@@ -41,7 +41,19 @@ fn parse_table_row(line: &str) -> Option<(String, String)> {
         return None;
     }
     let key = normalize_table_key(parts[0]);
-    if key.is_empty() || key == "attribute" || key == "key" {
+    if key.is_empty()
+        || key == "attribute"
+        || key == "metadata"
+        || key == "property"
+        || key == "field"
+        || key == "key"
+    {
+        return None;
+    }
+    if parts
+        .iter()
+        .all(|p| !p.is_empty() && p.chars().all(|c| c == '-' || c == ':'))
+    {
         return None;
     }
     let val = parts[1]
@@ -79,9 +91,23 @@ pub fn parse_frontmatter(content: &str) -> Option<SpecFrontmatter> {
                             spec_type = val.clone();
                         }
                     }
-                    "issue_id" => {
-                        let cleaned = val
+                    "issue_id" | "issue" | "id" => {
+                        let inner = if let Some(bracket_end) = val.find(']') {
+                            if val.starts_with('[') {
+                                &val[1..bracket_end]
+                            } else {
+                                val.as_str()
+                            }
+                        } else {
+                            val.as_str()
+                        };
+                        let cleaned = inner
+                            .trim_matches('*')
+                            .trim_matches('`')
+                            .trim_matches('"')
+                            .trim_matches('\'')
                             .trim_start_matches(|c| c == '#' || c == '[' || c == ']')
+                            .trim_end_matches(|c| c == ']' || c == ')')
                             .trim();
                         if let Ok(id) = cleaned.parse::<u64>() {
                             issue_id = Some(id);
@@ -282,11 +308,11 @@ pub fn update_frontmatter_issue_id(content: &str, issue_id: u64) -> String {
             let parts: Vec<&str> = inner.split('|').map(|s| s.trim()).collect();
             if parts.len() >= 2 {
                 let key = normalize_table_key(parts[0]);
-                if key == "attribute" {
+                if key == "attribute" || key == "metadata" || key == "property" || key == "field" {
                     table_header_idx = Some(idx);
                 } else if parts.iter().all(|p| !p.is_empty() && p.chars().all(|c| c == '-' || c == ':')) {
                     table_delim_idx = Some(idx);
-                } else if key == "issue_id" {
+                } else if key == "issue_id" || key == "issue" || key == "id" {
                     table_issue_id_idx = Some(idx);
                     break;
                 }
@@ -369,6 +395,38 @@ mod tests {
         assert_eq!(fm.spec_type, "feature");
         assert_eq!(fm.issue_id, Some(10));
         assert_eq!(fm.part.as_deref(), Some("HumanEngineer"));
+    }
+
+    #[test]
+    fn test_commonmark_2column_metadata_table_parser_red_probe() {
+        let content = r#"| Attribute | Specification Detail |
+| :--- | :--- |
+| **Issue ID** | #430 |
+| **Title** | Feature 42: CommonMark 2-Column Metadata Parser |
+| **Type** | feature |
+| **Primary Actor** | Subagent Worker |
+| **Scope** | crates/reconcile-backlog |
+| **Level** | 2 |
+| **Generation Mode** | autonomous |
+| **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
+
+# Feature 42: CommonMark 2-Column Metadata Parser
+"#;
+        let fm = parse_frontmatter(content)
+            .expect("RED PROBE FAILED: parse_frontmatter returned None for CommonMark 2-column table");
+        assert_eq!(fm.issue_id, Some(430));
+        assert_eq!(fm.title, "Feature 42: CommonMark 2-Column Metadata Parser");
+        assert_eq!(fm.spec_type, "feature");
+        assert_eq!(fm.raw_fields.get("actors").map(|s| s.as_str()), Some("Subagent Worker"));
+        assert_eq!(fm.raw_fields.get("subject").map(|s| s.as_str()), Some("crates/reconcile-backlog"));
+        assert_eq!(fm.raw_fields.get("level").map(|s| s.as_str()), Some("2"));
+        assert_eq!(fm.raw_fields.get("generation_mode").map(|s| s.as_str()), Some("autonomous"));
+        assert_eq!(fm.raw_fields.get("specification_source").map(|s| s.as_str()), Some("[schema/model.sysml](../../schema/model.sysml)"));
+
+        let updated = update_frontmatter_issue_id(content, 999);
+        assert!(updated.contains("| **Issue ID** | #999 |"));
+        assert!(!updated.contains("#430"));
+        assert!(!updated.lines().any(|l| l.trim() == "---"));
     }
 
     #[test]
