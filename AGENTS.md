@@ -84,7 +84,7 @@ Immediately following installation and on EVERY new session startup, before acce
 - **Mandatory Tracker Issue Transition Gate**: Every issue referenced in the commit log must carry `status:fixed-resolved` (or `status::fixed-resolved` on GitLab) and verification evidence comments prior to walkthrough completion.
 
 ## Mandatory Upstream Tooling Bug Reporting
-- If a tooling bug or limitation is identified in shared pipeline scripts, dispatch a subagent with `skills/adversarial-code-auditor/SKILL.md` to produce a 7-section defect dossier and submit via `python3 scripts/file_defect.py`. Do not apply silent local-only patches.
+- Before filing an upstream defect or tooling bug, an adversarial auditor subagent MUST be dispatched with `skills/adversarial-code-auditor/SKILL.md` to produce a verified 7-section defect dossier with un-falsifiable empirical reproduction, and validate it offline via `./target/release/verify-baseline check-defect` before submitting via `./target/release/reconcile-backlog create-issue --label bug` (or `./target/release/file-defect`). Filing raw or unverified defect reports is strictly prohibited. Do not apply silent local-only patches.
 
 ## Documentation Integrity -- No Wholesale Replacement Without Approval
 - You are strictly forbidden from replacing, truncating, or rewriting any documentation file in a way that removes substantial content unless explicitly approved by the user in the current conversation turn.
