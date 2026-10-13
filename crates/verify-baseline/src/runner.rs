@@ -148,7 +148,7 @@ pub fn write_defect_dossier(repo_root: &Path, check_name: &str, errors: &[String
     let _ = fs::write(&md_path, dossier.to_markdown());
 }
 
-/// Execute all baseline verification checks (Checks 10 through 31) and platform checks.
+/// Execute all baseline verification checks (Checks 10 through 34) and platform checks.
 pub fn run(options: &BaselineOptions) -> Result<(), ()> {
     let repo_root = options
         .destination
