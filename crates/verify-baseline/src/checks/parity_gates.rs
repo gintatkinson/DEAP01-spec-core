@@ -5,7 +5,7 @@ use deap_core::sysml_ast::{parse_action_defs, parse_part_defs, parse_port_defs};
 use deap_core::workspace::is_upstream_compiler;
 use std::collections::HashSet;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
 /// Outcome status for parity gates.
@@ -239,6 +239,311 @@ pub fn check_semantic_prose_invariants(repo_root: &Path) -> Result<ParityOutcome
     Ok(ParityOutcome::Verified)
 }
 
+/// Persistent Section Slicer validating physical on-disk citations and section anchors.
+#[derive(Debug, Clone)]
+pub struct SectionSlicer<'a> {
+    pub repo_root: &'a Path,
+}
+
+impl<'a> SectionSlicer<'a> {
+    pub fn new(repo_root: &'a Path) -> Self {
+        Self { repo_root }
+    }
+
+    pub fn resolve_path(&self, target_file: &str) -> Option<PathBuf> {
+        let clean = target_file.trim_matches(|c: char| {
+            c.is_whitespace()
+                || c == '`'
+                || c == '\''
+                || c == '"'
+                || c == '['
+                || c == ']'
+                || c == '('
+                || c == ')'
+                || c == '<'
+                || c == '>'
+        });
+        let stripped = clean.trim_start_matches("./").trim_start_matches("../");
+        let path = self.repo_root.join(stripped);
+        if path.is_file() {
+            Some(path)
+        } else {
+            None
+        }
+    }
+
+    pub fn extract_section(&self, target_file: &str, section: &str) -> Option<String> {
+        let path = self.resolve_path(target_file)?;
+        let content = fs::read_to_string(path).ok()?;
+        let sec_norm = section.trim().trim_start_matches('§').trim();
+        if sec_norm.is_empty() {
+            return Some(content);
+        }
+
+        let lines: Vec<&str> = content.lines().collect();
+        let mut in_target_sec = false;
+        let mut target_level = 0;
+        let mut sec_content = String::new();
+
+        for line in lines {
+            let trimmed = line.trim();
+            if trimmed.starts_with('#') {
+                let level = trimmed.chars().take_while(|&c| c == '#').count();
+                if in_target_sec {
+                    if level <= target_level {
+                        break;
+                    }
+                } else if trimmed.contains(sec_norm) {
+                    in_target_sec = true;
+                    target_level = level;
+                }
+            }
+            if in_target_sec {
+                sec_content.push_str(line);
+                sec_content.push('\n');
+            }
+        }
+
+        if in_target_sec && !sec_content.is_empty() {
+            Some(sec_content)
+        } else if content.contains(sec_norm) {
+            Some(content)
+        } else {
+            None
+        }
+    }
+}
+
+/// Extracted source citation from specification or safety prose.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CitationRef {
+    pub target_file: String,
+    pub section: Option<String>,
+    pub line_no: usize,
+}
+
+/// Parses a citation token into target file and optional section identifier.
+fn parse_citation_string(raw: &str, line_no: usize) -> Option<CitationRef> {
+    let lower = raw.to_lowercase();
+    let start_pos = if let Some(p) = lower.find("schema/") {
+        p
+    } else if let Some(p) = lower.find("docs/") {
+        p
+    } else {
+        return None;
+    };
+
+    let slice = &raw[start_pos..];
+    let path_end = slice
+        .find(|c: char| {
+            c.is_whitespace()
+                || c == '`'
+                || c == '\''
+                || c == '"'
+                || c == '('
+                || c == ')'
+                || c == '['
+                || c == ']'
+                || c == '<'
+                || c == '>'
+                || c == '§'
+                || c == ','
+                || c == ';'
+                || c == '|'
+        })
+        .unwrap_or(slice.len());
+
+    let path = slice[..path_end]
+        .trim_matches(|c: char| c == '.' || c == ':' || c == '`' || c == '\'' || c == '"')
+        .to_string();
+    if path.is_empty() {
+        return None;
+    }
+
+    let mut section = None;
+    if let Some(sec_pos) = slice.find('§') {
+        let after_sec = slice[sec_pos + '§'.len_utf8()..].trim_start();
+        let sec_end = after_sec
+            .find(|c: char| {
+                c.is_whitespace()
+                    || c == '`'
+                    || c == '\''
+                    || c == '"'
+                    || c == ')'
+                    || c == ']'
+                    || c == '>'
+                    || c == ','
+                    || c == ';'
+                    || c == '.'
+                    || c == '|'
+            })
+            .unwrap_or(after_sec.len());
+        let sec_val = after_sec[..sec_end].trim();
+        if !sec_val.is_empty() {
+            section = Some(sec_val.to_string());
+        }
+    }
+
+    Some(CitationRef {
+        target_file: path,
+        section,
+        line_no,
+    })
+}
+
+/// Extracts citations from a single line of text across HTML comments, prose, lists, and tables.
+pub fn extract_citations_from_line(line: &str, line_no: usize) -> Vec<CitationRef> {
+    let mut citations = Vec::new();
+    let lower = line.to_lowercase();
+
+    // 1. HTML comment citations: <!-- Source: schema/foo.sysml §1.2 -->
+    if let Some(start_idx) = lower.find("<!-- source:") {
+        let after = &line[start_idx + "<!-- source:".len()..];
+        if let Some(end_idx) = after.find("-->") {
+            let cit_str = after[..end_idx].trim();
+            if let Some(c) = parse_citation_string(cit_str, line_no) {
+                citations.push(c);
+            }
+        }
+    }
+
+    // 2. Prose citations: "as defined in schema/foo.md §7.2.3" or "as specified in schema/..."
+    for marker in &["as defined in ", "as specified in ", "per schema/", "from schema/", "source: "] {
+        let mut search_from = 0;
+        while let Some(pos) = lower[search_from..].find(marker) {
+            let abs_pos = search_from + pos + marker.len();
+            let rem = &line[abs_pos..];
+            if let Some(c) = parse_citation_string(rem, line_no) {
+                if !citations.iter().any(|existing| existing.target_file == c.target_file) {
+                    citations.push(c);
+                }
+            }
+            search_from = abs_pos;
+        }
+    }
+
+    // 3. YAML frontmatter or Markdown list entries: "- schema/..." or "schema/..."
+    let trimmed = line.trim();
+    let candidate = if trimmed.starts_with("- ") {
+        trimmed[2..].trim()
+    } else if trimmed.starts_with("* ") {
+        trimmed[2..].trim()
+    } else {
+        trimmed
+    };
+
+    if candidate.starts_with("schema/") || candidate.starts_with("docs/") || candidate.contains("schema/") {
+        if let Some(c) = parse_citation_string(candidate, line_no) {
+            if !citations.iter().any(|existing| existing.target_file == c.target_file) {
+                citations.push(c);
+            }
+        }
+    }
+
+    // 4. SSOT table cells: "SSOT: schema/..." or "SSOT: [schema/...]"
+    if lower.contains("ssot") {
+        for word in line.split('|') {
+            let w_trim = word.trim();
+            if w_trim.to_lowercase().contains("schema/") {
+                if let Some(c) = parse_citation_string(w_trim, line_no) {
+                    if !citations.iter().any(|existing| existing.target_file == c.target_file) {
+                        citations.push(c);
+                    }
+                }
+            }
+        }
+    }
+
+    citations
+}
+
+/// Audits citations and protocols in a specification file to eliminate citation fraud and ungrounded claims.
+pub fn audit_spec_citations_and_protocols(
+    content: &str,
+    rel_path: &str,
+    slicer: &SectionSlicer,
+    model_lower: &str,
+    errors: &mut Vec<String>,
+) {
+    for (idx, line) in content.lines().enumerate() {
+        let line_no = idx + 1;
+        let trimmed = line.trim();
+        if trimmed.starts_with("```") || trimmed.is_empty() {
+            continue;
+        }
+
+        let citations = extract_citations_from_line(trimmed, line_no);
+        for cit in &citations {
+            // 1. Missing file fraud check
+            if slicer.resolve_path(&cit.target_file).is_none() {
+                errors.push(format!(
+                    "Check 23 failed: Citation fraud detected in '{}': cited source file '{}' does not exist in workspace.",
+                    rel_path, cit.target_file
+                ));
+                continue;
+            }
+
+            // 2. Section fraud check
+            if let Some(ref sec) = cit.section {
+                let sec_extracted = slicer.extract_section(&cit.target_file, sec);
+                if sec_extracted.is_none() {
+                    errors.push(format!(
+                        "Check 23 failed: Citation fraud detected in '{}': cited section '§{}' does not exist in '{}'.",
+                        rel_path, sec, cit.target_file
+                    ));
+                } else if let Some(ref sec_text) = sec_extracted {
+                    let lower_line = trimmed.to_lowercase();
+                    let lower_sec = sec_text.to_lowercase();
+                    if lower_line.contains("pwm") && !lower_sec.contains("pwm") && !model_lower.contains("pwm") {
+                        errors.push(format!(
+                            "Check 23 failed: Citation fraud detected in '{}' on line {}: cited section '§{}' in '{}' does not substantiate PWM interface claim.",
+                            rel_path, line_no, sec, cit.target_file
+                        ));
+                    }
+                    if lower_line.contains("50 hz") && !lower_sec.contains("50 hz") && !model_lower.contains("50 hz") {
+                        errors.push(format!(
+                            "Check 23 failed: Citation fraud detected in '{}' on line {}: cited section '§{}' in '{}' does not substantiate 50 Hz claim.",
+                            rel_path, line_no, sec, cit.target_file
+                        ));
+                    }
+                }
+            }
+        }
+
+        // 3. Protocol grounding validation
+        let lower_line = trimmed.to_lowercase();
+        if lower_line.contains("dshot") || lower_line.contains("dshot600") {
+            let in_model = model_lower.contains("dshot");
+            let in_cited_sec = citations.iter().any(|c| {
+                if let Some(ref sec) = c.section {
+                    slicer
+                        .extract_section(&c.target_file, sec)
+                        .map(|t| t.to_lowercase().contains("dshot"))
+                        .unwrap_or(false)
+                } else {
+                    false
+                }
+            });
+            if !in_model && !in_cited_sec {
+                errors.push(format!(
+                    "Check 23 failed: Ungrounded protocol detected in '{}' on line {}: protocol 'DShot600' is not declared in SysML model or cited source section.",
+                    rel_path, line_no
+                ));
+            }
+        }
+
+        if lower_line.contains("stanag 4586") || lower_line.contains("stanag4586") {
+            let in_model = model_lower.contains("stanag");
+            if !in_model {
+                errors.push(format!(
+                    "Check 23 failed: Ungrounded protocol detected in '{}' on line {}: protocol 'STANAG 4586' is not declared in SysML model or cited source section.",
+                    rel_path, line_no
+                ));
+            }
+        }
+    }
+}
+
 /// Check 23: Factual Grounding & Numeric Provenance Gate.
 pub fn check_factual_grounding(
     repo_root: &Path,
@@ -260,8 +565,69 @@ pub fn check_factual_grounding(
         return Ok(ParityOutcome::PendingOrClean);
     }
 
-    Ok(ParityOutcome::Verified)
+    if is_upstream {
+        return Ok(ParityOutcome::Verified);
+    }
+
+    let mut errors = Vec::new();
+    let slicer = SectionSlicer::new(repo_root);
+    let model_str = model_text.unwrap_or_default();
+    let model_lower = model_str.to_lowercase();
+
+    let spec_dirs = [
+        repo_root.join("docs").join("epics"),
+        repo_root.join("docs").join("features"),
+        repo_root.join("docs").join("user-stories"),
+        repo_root.join("docs").join("use-cases"),
+        repo_root.join("docs").join("safety"),
+    ];
+
+    for dir in &spec_dirs {
+        if !dir.is_dir() {
+            continue;
+        }
+        for entry in WalkDir::new(dir)
+            .into_iter()
+            .filter_entry(|e| {
+                let name = e.file_name().to_string_lossy();
+                !EXCLUDED_DIRS.iter().any(|&ex| name == ex)
+                    && name != "defects"
+                    && name != "audits"
+                    && !name.starts_with('.')
+                    && !name.starts_with('#')
+            })
+            .filter_map(|e| e.ok())
+        {
+            if entry.file_type().is_file() {
+                let fname = entry.file_name().to_string_lossy();
+                if fname.ends_with(".md") && fname != "README.md" {
+                    let path = entry.path();
+                    let rel_path = path
+                        .strip_prefix(repo_root)
+                        .unwrap_or(path)
+                        .to_string_lossy()
+                        .to_string();
+                    if let Ok(content) = fs::read_to_string(path) {
+                        audit_spec_citations_and_protocols(
+                            &content,
+                            &rel_path,
+                            &slicer,
+                            &model_lower,
+                            &mut errors,
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    if errors.is_empty() {
+        Ok(ParityOutcome::Verified)
+    } else {
+        Err(errors)
+    }
 }
+
 
 /// Check 24: Level 1C ICD Completeness & Signal Flow Parity Gate.
 pub fn check_icd_completeness(repo_root: &Path) -> Result<ParityOutcome, Vec<String>> {
@@ -1105,6 +1471,56 @@ flowchart TD
 
         let res = check_cross_document_diagram_parity(&tmp.path);
         assert_eq!(res, Ok(ParityOutcome::Verified));
+    }
+
+    #[test]
+    fn test_reproduce_defect_286_synthetic_mocks_blind_compiler_to_citation_fraud() {
+        use crate::checks::safety_stpa::check_safety_integrity;
+
+        let tmp = TempDir::new("check23_reproduce_defect_286");
+        let schema_dir = tmp.path.join("schema");
+        let features_dir = tmp.path.join("docs").join("features");
+        let safety_dir = tmp.path.join("docs").join("safety");
+        fs::create_dir_all(&schema_dir).unwrap();
+        fs::create_dir_all(&features_dir).unwrap();
+        fs::create_dir_all(&safety_dir).unwrap();
+
+        // 1. Write authoritative model from persistent safety fixture ground_truth_model.sysml
+        let model_fixture = include_str!("../../../../tests/fixtures/safety/ground_truth_model.sysml");
+        fs::write(schema_dir.join("model.sysml"), model_fixture).unwrap();
+
+        // Also write oem_user_manual.md from persistent fixture
+        let oem_manual_fixture = include_str!("../../../../tests/fixtures/safety/oem_user_manual.md");
+        fs::write(schema_dir.join("oem_user_manual.md"), oem_manual_fixture).unwrap();
+
+        // 2. Add specifications containing citation fraud:
+        // (a) missing_file_citation_feature: cites non-existent schema/phantom-spec.md §1.2
+        let missing_file_fixture = include_str!("../../../../tests/fixtures/safety/missing_file_citation_feature.md");
+        fs::write(features_dir.join("feat_missing_file.md"), missing_file_fixture).unwrap();
+
+        // (b) fraudulent_citation_feature: cites schema/oem_user_manual.md §7.2.3 for 50 Hz PWM
+        let fraudulent_cit_fixture = include_str!("../../../../tests/fixtures/safety/fraudulent_citation_feature.md");
+        fs::write(features_dir.join("feat_fraudulent_cit.md"), fraudulent_cit_fixture).unwrap();
+
+        // (c) section_symbol_fraud_feature: claims DShot600 via schema/oem_user_manual.md §7.2.3
+        let section_fraud_fixture = include_str!("../../../../tests/fixtures/safety/section_symbol_fraud_feature.md");
+        fs::write(features_dir.join("feat_section_fraud.md"), section_fraud_fixture).unwrap();
+
+        // (d) ungrounded_dshot_feature: claims DShot600 digital ESC protocol
+        let ungrounded_dshot_fixture = include_str!("../../../../tests/fixtures/safety/ungrounded_dshot_feature.md");
+        fs::write(features_dir.join("feat_ungrounded_dshot.md"), ungrounded_dshot_fixture).unwrap();
+
+        // 3. Add safety STPA matrix with citation fraud in docs/safety/
+        let mut stpa_content = String::from(include_str!("../../../../tests/fixtures/safety/complete_stpa_matrix.md"));
+        stpa_content.push_str("\n\n<!-- Source: schema/phantom-safety-spec.md §9.9.9 -->\nActuator servos operate via DShot600 ungrounded bus.\n");
+        fs::write(safety_dir.join("STPA_MATRIX.md"), stpa_content).unwrap();
+
+        // Under unfixed code, Check 23 and Check 17 return Ok, BLINDING the compiler to downstream citation fraud.
+        let check23_res = check_factual_grounding(&tmp.path, false, true);
+        assert!(check23_res.is_err(), "Check 23 failed to reject downstream citation fraud and ungrounded protocols!");
+
+        let check17_res = check_safety_integrity(&tmp.path, false, true);
+        assert!(check17_res.is_err(), "Check 17 failed to reject fraudulent safety citations to phantom files!");
     }
 }
 

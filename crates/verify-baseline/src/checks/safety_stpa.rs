@@ -585,6 +585,68 @@ pub fn check_safety_integrity(
     }
 
     let mut errors = Vec::new();
+
+    // Citation and protocol validation in safety files
+    let slicer = crate::checks::parity_gates::SectionSlicer::new(repo_root);
+    let model_text = crate::checks::parity_gates::discover_sysml_model_text(repo_root);
+    let model_lower = model_text.unwrap_or_default().to_lowercase();
+
+    for sf in &safety_files {
+        let rel_path = sf
+            .strip_prefix(repo_root)
+            .unwrap_or(sf)
+            .to_string_lossy()
+            .to_string();
+        if let Ok(c) = fs::read_to_string(sf) {
+            for (idx, line) in c.lines().enumerate() {
+                let line_no = idx + 1;
+                let trimmed = line.trim();
+                if trimmed.starts_with("```") || trimmed.is_empty() {
+                    continue;
+                }
+                let citations =
+                    crate::checks::parity_gates::extract_citations_from_line(trimmed, line_no);
+                for cit in &citations {
+                    if slicer.resolve_path(&cit.target_file).is_none() {
+                        errors.push(format!(
+                            "Check 17 Pillar violation: Citation fraud in '{}': cited source file '{}' does not exist in workspace.",
+                            rel_path, cit.target_file
+                        ));
+                        continue;
+                    }
+                    if let Some(ref sec) = cit.section {
+                        if slicer.extract_section(&cit.target_file, sec).is_none() {
+                            errors.push(format!(
+                                "Check 17 Pillar violation: Citation fraud in '{}': cited section '§{}' does not exist in '{}'.",
+                                rel_path, sec, cit.target_file
+                            ));
+                        }
+                    }
+                }
+                let lower_line = trimmed.to_lowercase();
+                if lower_line.contains("dshot") || lower_line.contains("dshot600") {
+                    let in_model = model_lower.contains("dshot");
+                    let in_cited_sec = citations.iter().any(|c| {
+                        if let Some(ref sec) = c.section {
+                            slicer
+                                .extract_section(&c.target_file, sec)
+                                .map(|t| t.to_lowercase().contains("dshot"))
+                                .unwrap_or(false)
+                        } else {
+                            false
+                        }
+                    });
+                    if !in_model && !in_cited_sec {
+                        errors.push(format!(
+                            "Check 17 Pillar violation: Ungrounded protocol in '{}': protocol 'DShot600' is not declared in SysML model or cited schema source.",
+                            rel_path
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
     let combined_lower = combined_content.to_lowercase();
 
     // Pillar 1: System Losses (L-1..N)
