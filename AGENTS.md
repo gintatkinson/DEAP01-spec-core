@@ -65,6 +65,7 @@ Immediately following installation and on EVERY new session startup, before acce
   6. **Enforce 3-Layer Definition of Done**: The full 3-layer semantic chain ((1) Domain State & Data Model, (2) Logic & State Management, (3) Presentation & Actuator Interface Binding) is mandatory per specification item. Each micro-task must state deliverables or the task number closing each layer; writing `N/A` is forbidden.
   7. **Runtime Dispatch Capability**: Use whichever context-isolated dispatch tool the active runtime provides. If unavailable, halt and escalate as a blocker.
   8. **Authorization**: Append `PROCEED` (case-insensitive) to authorize subagents to use modifying tools.
+  9. **Component-Level Failure Mode Research Swarm Mandate**: During Step 1.5, monolithic failure mode research is strictly prohibited. The coordinator MUST decompose all AST `part def` components declared in `.pipeline/schema.sysml` and dispatch context-isolated research subagents per component (role: `Component Failure Mode Researcher`) to populate `docs/research/FAILURE_MODE_REGISTRY.md` across the 4 Universal Failure Dimensions before authorizing downstream STPA/FMECA matrix synthesis.
 
 ## Mandatory Application Compilation Build for Verification
 - During Step 4 verification, the agent MUST run a full compilation build of the application (e.g. `flutter build` or `npm run build` as specified by the platform profile) to ensure it compiles cleanly. Assertions of completion without verified compile output are strictly forbidden.

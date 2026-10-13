@@ -879,7 +879,7 @@ A single set of functional specs can drive implementations on React, Flutter, .N
 
 ## Hard constraints
 
-- **Coordinator Direct Writing & Research Lock**: The coordinator agent is strictly forbidden from directly writing or modifying target functional specifications (Epics, Features, User Stories, Use Cases) or codebase source files, and is locked from directly conducting technology stack research (Step 1.5). All codebase write and update operations must be delegated to spawned implementer subagents, and all tech stack research must be delegated to a dedicated research subagent (role: `Codebase Researcher`).
+- **Coordinator Direct Writing & Research Lock**: The coordinator agent is strictly forbidden from directly writing or modifying target functional specifications (Epics, Features, User Stories, Use Cases) or codebase source files, and is locked from directly conducting technology stack research (Step 1.5). All codebase write and update operations must be delegated to spawned implementer subagents, all tech stack research must be delegated to a dedicated research subagent (role: `Codebase Researcher`), and all component-level failure mode research must be delegated to dedicated context-isolated research subagents per `part def` component (role: `Component Failure Mode Researcher` or `Failure Mode Research Worker`).
 - **Specification Phase Boundary**: Spec workers and specification subagents are strictly forbidden from reading, writing, or referencing implementation profiles, implementation plans, or target source code files. They must operate strictly within logical, functional, and platform-independent boundaries.
 - **Implementation Phase Boundary**: Implementation subagents and micro-task implementers are strictly forbidden from generating or directly modifying upstream specification files (Epics, Features, User Stories, Use Cases) unless explicitly authorized via a synchronized backlog reconciliation task.
 - **Strict Subagent Tool Locking**: Spawned subagents must only execute tools that fall within their explicit domain (e.g., spec subagents do not run build/test commands or modify code, and implementation subagents do not edit high-level specifications).
@@ -1130,6 +1130,9 @@ Prompts launching workers, auditors, or validators are strictly forbidden from f
 
 ### 7. Trailing Authorization Token
 The coordinator MUST append the authorization token `PROCEED` (case-insensitive) to the end of the subagent prompt payload to authorize tool execution in the subagent's isolated context.
+
+### 8. Component-Level Failure Mode Research Swarm Mandate
+During Step 1.5 Technology Stack & Architecture Research (Phase 0.5), monolithic drafting of component failure modes is strictly forbidden. The coordinator MUST extract all structural `part def` components from the authoritative schema (`.pipeline/schema.sysml`) and dispatch dedicated, context-isolated research subagents per component (role: `Component Failure Mode Researcher` or `Failure Mode Research Worker`). Each subagent prompt MUST target exactly one component AST fragment, instructing the worker to query standard failure mode catalogs (SAE ARP4761, MIL-HDBK-338B, RTCA DO-254, RTCA DO-178C), evaluate the 4 Universal Failure Dimensions (Interface, State, Action, Resource), and document at least 3 distinct failure modes per component with integer S/O/D ratings in [1, 10] for intermediate assembly into `docs/research/FAILURE_MODE_REGISTRY.md` before authorizing downstream STPA/FMECA matrix synthesis.
 
 ## Subagent Pre-Flight Self-Rejection Protocol
 
