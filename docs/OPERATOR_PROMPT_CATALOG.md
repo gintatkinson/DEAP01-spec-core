@@ -460,7 +460,7 @@ Execute front-end modular CONOPS and Tactical Mission Intent synthesis for the t
 3. Modular Deliverable Generation:
    - Do NOT draft monolithic files directly. Author modular units conforming to JSON Schema contracts under:
      * `docs/conops/units/conops/`: 12 canonical units (`01_METADATA_AND_OVERVIEW.md` through `12_EMERGENCY_DECISION_MATRIX.md`), including decoupled 3-tier architecture in `04_SYSTEM_ARCHITECTURE.md`.
-     * `docs/conops/units/mission_intent/`: 10 canonical units (`01_COMMANDERS_INTENT.md` through `10_OPERATIONAL_ALLOCATION_TAGS.md`), including operational `06_ROE_SAFETY_INTERLOCKS.md` and tactical `08_GO_NO_GO_MATRIX.md`.
+     * `docs/conops/units/mission_intent/`: 10 canonical units (`01_COMMANDERS_INTENT.md` through `10_OPERATIONAL_ALLOCATION_TAGS.md`), including operational `06_SAFETY_INTERLOCKS.md` and tactical `08_GO_NO_GO_MATRIX.md`.
    - Ensure clear operational phase boundaries, system physical and functional boundaries, and environmental envelope constraints.
    - Include MATLAB / Simulink / Stateflow model integration baseline hooks for downstream control law synthesis.
    - Relative Link Mandate: Intra-document and schema links must use valid file-relative paths (`../../schema/...`, `../<dir>/...`).

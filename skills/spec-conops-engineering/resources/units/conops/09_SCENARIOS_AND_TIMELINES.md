@@ -78,7 +78,7 @@ sequenceDiagram
     Guidance ->> Controller: 5. Compute Deconflicted Recovery Trajectory
     Controller ->> Actuator: 6. Apply Closed-Loop Heading and Vector Correction
     Actuator -->> Controller: 7. Restorative Attitude Maneuver Executed
-    Controller ->> Sensors: 8. Verify Margin Restoration (R_margin >= R_min)
+    Controller ->> Sensors: "8. Verify Margin Restoration (R_margin >= R_min)"
     Sensors -->> Controller: 9. Within Authorized Operational Corridor
     Controller ->> Operator: 10. Notify Boundary Recovery Successful
 ```

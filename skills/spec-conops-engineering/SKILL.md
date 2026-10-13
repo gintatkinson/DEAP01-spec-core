@@ -304,7 +304,7 @@ flowchart TD
   - [ ] **Subsection 4.3 6th Bullet Mandate**: Every subsystem entry in Subsection 4.3 (`### 4.3 Subsystem Architecture (100% AST Part Coverage)`) contains the mandatory 6th bullet: `- **SSOT Ground Truth Mapping:** [schema/<source_file>](schema/<source_file>#anchor) ("OEM Clause Title") | SysML v2: \`part def <NodeName>\`` providing direct machine-resolvable links to Level 0 schema documents and SysML AST part bindings.
   - [ ] **100% AST Part Coverage**: 100% of declared AST `part def` nodes have dedicated subsections in Subsection 4.3 in lockstep mathematical parity with the SV-1 diagram.
   - [ ] **Option 3 Compact Blocks & Vertical Tiers**: Mermaid SV-1 diagram implements Option 3 with embedded port attributes and vertical layout (`direction TB`) capped at 3 horizontal columns.
-- **Zero-Omission Rule**: Omitting any declared AST `part def` is strictly forbidden and triggers compiler validation failure during `assemble_conops.py` assembly.
+- **Zero-Omission Rule**: Omitting any declared AST `part def` is strictly forbidden and triggers compiler validation failure during `assemble-conops` assembly.
 - **Level 1B Operational Boundary & Section 8 Op-Tx Exclusions**: Section 4.8 and Section 8 (Op-Tx) capture high-level operational information exchanges (Op-Tx: C2 Commands, Telemetry, Video, State Telemetry, Safety Interlock Authorization) and strictly exclude component-internal serial opcode reference tables, register bitmasks, RS-485 serial framing, and CRC-16 equations, which belong strictly in Level 1C Interface Control Documents (`ICD_01_SYSTEM_INTERFACE_MATRIX.md` and `ICD_02_MASTER_SIGNAL_DICTIONARY.md`).
 
 
@@ -542,8 +542,7 @@ Before completing Phase 0.75, the `Worker ConOps` must execute and pass all requ
    - Validates METL task allocations.
 
 2. **Gate 28 & Gate 29 Verification**:
-   - Verify that all ConOps-allocated obligations in `docs/research/RESEARCH_INVENTORY.md` are witnessed in `docs/conops/CONOPS.md` and `docs/conops/MISSION_INTENT.md` per `obligation_witness_validator.py` (Gate 29).
-   - Verify coverage metrics per `coverage_digest_validator.py` (Gate 28).
+   - Verify that all ConOps-allocated obligations in `docs/research/RESEARCH_INVENTORY.md` are witnessed in `docs/conops/CONOPS.md` and `docs/conops/MISSION_INTENT.md` per native verification gates (Gate 29 and Gate 28 via `./target/release/verify-baseline`).
 
 3. **Untracked Infrastructure & Pre-Commit Check**:
    ```bash

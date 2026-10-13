@@ -33,8 +33,8 @@ pub static CANONICAL_MISSION_INTENT_UNITS: &[&str] = &[
     "04_MULTI_DOMAIN_THREAT_MATRIX.md",
     "05_PACE_C2_PLAN.md",
     "06_SAFETY_INTERLOCKS.md",
-    "06_RULES_OF_ENGAGEMENT.md",
     "06_ROE_SAFETY_INTERLOCKS.md",
+    "06_RULES_OF_ENGAGEMENT.md",
     "07_AIRSPACE_GEOZONES.md",
     "08_GO_NO_GO_MATRIX.md",
     "09_ENERGY_AND_RESERVE_BOUNDS.md",
@@ -450,19 +450,12 @@ pub fn assemble_document(
                         || x == "06_RULES_OF_ENGAGEMENT.md"
                 });
                 if !unit6_handled {
-                    if all_entries.contains(&item.to_string()) {
-                        filenames.push(item.to_string());
-                    } else {
-                        for alt in &[
-                            "06_RULES_OF_ENGAGEMENT.md",
-                            "06_SAFETY_INTERLOCKS.md",
-                            "06_ROE_SAFETY_INTERLOCKS.md",
-                        ] {
-                            if all_entries.contains(&alt.to_string()) && !filenames.contains(&alt.to_string()) {
-                                filenames.push(alt.to_string());
-                                break;
-                            }
-                        }
+                    if all_entries.contains(&"06_SAFETY_INTERLOCKS.md".to_string()) {
+                        filenames.push("06_SAFETY_INTERLOCKS.md".to_string());
+                    } else if all_entries.contains(&"06_ROE_SAFETY_INTERLOCKS.md".to_string()) {
+                        filenames.push("06_ROE_SAFETY_INTERLOCKS.md".to_string());
+                    } else if all_entries.contains(&"06_RULES_OF_ENGAGEMENT.md".to_string()) {
+                        filenames.push("06_RULES_OF_ENGAGEMENT.md".to_string());
                     }
                 }
             } else if all_entries.contains(&item.to_string()) && !filenames.contains(&item.to_string()) {

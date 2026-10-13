@@ -1265,9 +1265,26 @@ impl SysMLParameterBindingEngine {
 
         // Abstract MBSE operational safety interlocks and positive condition verification parameters.
         // Pure schema-driven compiler invariant: strictly zero domain-specific strike, targeting, or arming concepts.
-        self.parameter_bindings.insert("INTERLOCK_PREFIX".to_string(), "SAF".to_string());
-        self.parameter_bindings.insert("INTERLOCK_SECTION_TITLE".to_string(), "Operational Safety Interlocks & High-Consequence Controls".to_string());
-        self.parameter_bindings.insert("INTERLOCK_POLICY_NAME".to_string(), "Operational Safety Interlocks".to_string());
+        self.parameter_bindings
+            .entry("INTERLOCK_PREFIX".to_string())
+            .or_insert_with(|| "INT".to_string());
+        self.parameter_bindings
+            .entry("INTERLOCK_SECTION_TITLE".to_string())
+            .or_insert_with(|| "Safety Constraints & Subsystem Interlocks".to_string());
+        self.parameter_bindings
+            .entry("INTERLOCK_POLICY_NAME".to_string())
+            .or_insert_with(|| "Operational Safety Interlocks".to_string());
+
+        let pfx = self
+            .parameter_bindings
+            .get("INTERLOCK_PREFIX")
+            .cloned()
+            .unwrap_or_else(|| "INT".to_string());
+        for idx in 1..=6 {
+            self.parameter_bindings
+                .entry(format!("INTERLOCK_0{idx}_TAG"))
+                .or_insert_with(|| format!("{pfx}-0{idx}"));
+        }
         self.parameter_bindings.insert("TARGET_VERIFICATION_LABEL".to_string(), "Positive Condition Verification (PCV)".to_string());
         self.parameter_bindings.insert("TARGET_VERIFICATION_ACRONYM".to_string(), "PCV".to_string());
         self.parameter_bindings.insert("TARGET_VERIFICATION_PHRASE".to_string(), "positive condition verification".to_string());
@@ -1808,10 +1825,19 @@ impl SysMLParameterBindingEngine {
         }
 
         // Domain decontamination purge: always sanitize military ROE, weapons release, and collateral damage phrases
+        let pfx = self
+            .parameter_bindings
+            .get("INTERLOCK_PREFIX")
+            .map(|s| s.as_str())
+            .unwrap_or("INT");
         for idx in 1..=6 {
             let target = format!("ROE-0{idx}");
-            let repl = format!("SAF-0{idx}");
+            let repl = format!("{pfx}-0{idx}");
             *current = replace_word_case_insensitive(current, &target, &repl);
+            if pfx == "INT" {
+                let target_saf = format!("SAF-0{idx}");
+                *current = replace_word_case_insensitive(current, &target_saf, &repl);
+            }
         }
         *current = replace_roe_phrase(current);
         *current = replace_word_case_insensitive(current, "weapons release", "high-consequence actuation");
@@ -1850,7 +1876,7 @@ mod tests {
         let input = "The parachute deployment is authorized under ROE-01 for weapons release.";
         let output = engine.substitute(input);
         assert!(output.contains("failsafe joint brake"));
-        assert!(output.contains("SAF-01"));
+        assert!(output.contains("INT-01"));
         assert!(output.contains("high-consequence actuation"));
     }
 
@@ -1859,9 +1885,22 @@ mod tests {
         let engine = SysMLParameterBindingEngine::new(None, None, None, false, None);
         assert_eq!(engine.resolve_token("HIGH_CONSEQUENCE_ACTION", None), "high-consequence actuation");
         assert_eq!(engine.resolve_token("COLLATERAL_RISK_PHRASE", None), "adjacent operational risk");
-        assert_eq!(engine.resolve_token("INTERLOCK_PREFIX", None), "SAF");
+        assert_eq!(engine.resolve_token("INTERLOCK_PREFIX", None), "INT");
         assert_eq!(engine.resolve_token("TARGET_VERIFICATION_ACRONYM", None), "PCV");
         assert_eq!(engine.resolve_token("INTERLOCK_POLICY_NAME", None), "Operational Safety Interlocks");
+        assert_eq!(engine.resolve_token("INTERLOCK_SECTION_TITLE", None), "Safety Constraints & Subsystem Interlocks");
+    }
+
+    #[test]
+    fn test_interlock_prefix_saf_compatibility() {
+        let mut bindings = HashMap::new();
+        bindings.insert("INTERLOCK_PREFIX".to_string(), "SAF".to_string());
+        let engine = SysMLParameterBindingEngine::new(Some(bindings), None, None, false, None);
+        assert_eq!(engine.resolve_token("INTERLOCK_PREFIX", None), "SAF");
+        assert_eq!(engine.resolve_token("INTERLOCK_01_TAG", None), "SAF-01");
+        let input = "Authorized under ROE-01.";
+        let output = engine.substitute(input);
+        assert!(output.contains("SAF-01"));
     }
 
     #[test]
