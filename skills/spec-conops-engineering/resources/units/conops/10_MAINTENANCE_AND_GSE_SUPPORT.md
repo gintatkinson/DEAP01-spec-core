@@ -64,20 +64,20 @@ The 7-step turnaround sequence encompasses:
 - Step 4: Rapid Visual & Structural Inspection
 - Step 5: Mission Re-Tasking & Key Injection
 - Step 6: Automated PBIT Diagnostics
-- Step 7: Final Safety Verification & Operational Release
+- Step 7: Final Arming & Sortie Release
 - Contingency: Abort Turnaround & Route to MTC-04 LRU Swap
 
 ```mermaid
 flowchart TD
-    Step1["Step 1: System Ingress &<br/>Safe-State Safing<br/>(T+0 to T+2 min)"] --> Step2["Step 2: Telemetry Data Offload<br/>& Log Audit<br/>(T+2 to T+4 min)"]
+    Step1["Step 1: System Ingress &<br/>Safe-State Disarm<br/>(T+0 to T+2 min)"] --> Step2["Step 2: Telemetry Data Offload<br/>& Log Audit<br/>(T+2 to T+4 min)"]
     Step2 --> Step3["Step 3: Rapid Energy Module<br/>Hot-Swap<br/>(T+4 to T+6 min)<br/>(t_swap <= 2 min)"]
     Step3 --> Step4["Step 4: Rapid Visual &<br/>Structural Inspection<br/>(T+6 to T+9 min)"]
     Step4 --> Step5["Step 5: Mission Re-Tasking &<br/>Key Injection<br/>(T+9 to T+11 min)"]
     Step5 --> Step6["Step 6: Automated PBIT Diagnostics<br/>(T+11 to T+13 min)<br/>(t_PBIT <= tau_PBIT_max)"]
     Step6 --> GateCheck{"PBIT Diagnostics &<br/>Safety Interlocks"}
-    GateCheck -- "PASS (100%)" --> Step7["Step 7: Final Safety Verification &<br/>Operational Release<br/>(T+13 to T+15 min)"]
+    GateCheck -- "PASS (100%)" --> Step7["Step 7: Final Arming &<br/>Sortie Release<br/>(T+13 to T+15 min)"]
     GateCheck -- "FAIL" --> AbortMTC04["Abort Turnaround &<br/>Route to MTC-04 LRU Swap"]
-    Step7 --> SortieLaunch["Nominal Operational Execution<br/>(Phase_NominalExecution)"]
+    Step7 --> SortieLaunch["Nominal Sortie Launch<br/>(Phase_NominalExecution)"]
 ```
 
 1. **Step 1: System Recovery & Ingress Safe-Area Positioning ($T_0 + 0\text{ min}$ to $T_0 + 2\text{ min}$):**
@@ -97,14 +97,14 @@ flowchart TD
    - Actuator control linkages and mechanical interfaces checked for zero foreign object debris (FOD) and nominal play.
 5. **Step 5: Mission Re-Tasking & Cryptographic Plan Injection ($T_0 + 9\text{ min}$ to $T_0 + 11\text{ min}$):**
    - Next-phase operational mission plan, geofence boundary parameters, and Bingo energy thresholds are uploaded via `SE-02`.
-   - Authenticated Operation Release Token and mission encryption keys are injected into the core guidance controller.
+   - Authenticated Sortie Release Token and mission encryption keys are injected into the core guidance controller.
 6. **Step 6: Automated Power-On Built-In-Test (PBIT) Diagnostics ($T_0 + 11\text{ min}$ to $T_0 + 13\text{ min}$):**
    - Automated PBIT initiated via operator terminal ($t_{\mathrm{PBIT}} \le \tau_{\text{PBIT\_max}}$).
    - Verifies multi-channel sensor parity, actuator sweep response, C2 communication link margins, and safety watchdog health.
    - All pre-operation go/no-go gates (`GNG-01` through `GNG-05`) must evaluate strictly to `TRUE`.
-7. **Step 7: Final Safety Verification, Crew Clear & Operational Release ($T_0 + 13\text{ min}$ to $T_0 + 15\text{ min}$):**
+7. **Step 7: Final Arming, Crew Clear & Sortie Release ($T_0 + 13\text{ min}$ to $T_0 + 15\text{ min}$):**
    - Diagnostic umbilical disconnected; weather-sealed port covers secured.
-   - Maintenance Technician confirms all interlocks green, signs electronic operational authorization, and clears operating area.
+   - Maintenance Technician confirms all interlocks green, signs electronic sortie authorization, and clears launch area.
    - System transitions to `Phase_NominalExecution` within the 15-minute SLA envelope ($t_{\mathrm{turnaround}} \le {{RAPID_TURNAROUND_SLA_MIN}}\text{ min}$).
 
 #### 10.1.3 Tool-less Modular Line Replaceable Unit (LRU) Replacement Procedures

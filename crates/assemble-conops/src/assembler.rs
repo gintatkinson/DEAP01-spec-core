@@ -1020,5 +1020,226 @@ mod tests {
         assert!(raw.contains("tau_hysteresis_Primary"), "Unit 05 PACE C2 Plan must define tau_hysteresis_Primary");
         assert!(raw.contains("OPERATOR_CONFIGURED"), "Unit 05 PACE C2 Plan must support OPERATOR_CONFIGURED parameters");
     }
+
+    #[test]
+    fn test_canonical_unit_01_metadata_and_overview_integrity() {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let repo_root = manifest_dir.parent().unwrap().parent().unwrap();
+        let unit_01_path = repo_root
+            .join("skills/spec-conops-engineering/resources/units/conops/01_METADATA_AND_OVERVIEW.md");
+
+        if !unit_01_path.is_file() {
+            return;
+        }
+
+        let engine = SysMLParameterBindingEngine::new(None, None, None, false, None);
+        let (is_valid, errors) = validate_unit_integrity(&[unit_01_path.clone()], Some(&engine));
+        assert!(is_valid, "Unit 01 integrity validation failed: {:?}", errors);
+        assert!(errors.is_empty());
+
+        let raw = fs::read_to_string(&unit_01_path).unwrap();
+
+        // Section 1.3.1: Parametric Coordinate Reference Frames Math
+        assert!(
+            raw.contains("### 1.3.1 Parametric Coordinate Reference Frames Math"),
+            "Unit 01 must contain Section 1.3.1 heading"
+        );
+        assert!(
+            raw.contains("Primary Global Geodetic Frame"),
+            "Unit 01 must contain Primary Global Geodetic Frame"
+        );
+        assert!(
+            raw.contains("Local Tangent Plane / Navigation Frame"),
+            "Unit 01 must contain Local Tangent Plane / Navigation Frame"
+        );
+        assert!(
+            raw.contains("Body-Fixed Geometric Frame"),
+            "Unit 01 must contain Body-Fixed Geometric Frame"
+        );
+
+        // Section 1.3.2: Parametric Subsystem Mass/Resource Budget Breakdown Table
+        assert!(
+            raw.contains("### 1.3.2 Parametric Subsystem Mass/Resource Budget Breakdown Table"),
+            "Unit 01 must contain Section 1.3.2 heading"
+        );
+        assert!(
+            raw.contains("{{TOTAL_MASS_KG}}") || raw.contains("{{TOTAL_MTOW_KG}}"),
+            "Unit 01 must contain TOTAL_MASS_KG or TOTAL_MTOW_KG token"
+        );
+
+        // Section 1.3.3: Master Physical Limits Table
+        assert!(
+            raw.contains("### 1.3.3 Master Physical Limits Table"),
+            "Unit 01 must contain Section 1.3.3 heading"
+        );
+        assert!(
+            raw.contains("{{M_MAX_LIMIT_KG}}") || raw.contains("{{MTOW_MAX_KG}}"),
+            "Unit 01 must contain M_MAX_LIMIT_KG or MTOW_MAX_KG token"
+        );
+
+        // Section 1.4: Abstract UAF Context Diagram (Mermaid flowchart TB)
+        assert!(
+            raw.contains("### 1.4 Abstract UAF Context Diagram"),
+            "Unit 01 must contain Section 1.4 heading"
+        );
+        assert!(
+            raw.contains("flowchart TB"),
+            "Unit 01 must contain flowchart TB diagram"
+        );
+
+        // Canonical segments: SupportSegment MUST be present, legacy divergent AuxSupport MUST NOT
+        assert!(
+            raw.contains("subgraph SupportSegment[\"Support & Ground Support Equipment (GSE) Segment\"]"),
+            "Unit 01 must declare canonical subgraph SupportSegment (fixes #305)"
+        );
+        assert!(
+            !raw.contains("subgraph AuxSupport"),
+            "Unit 01 must not contain legacy divergent subgraph AuxSupport (refs #305)"
+        );
+        assert!(
+            raw.contains("subgraph ControlSegment"),
+            "Unit 01 must declare subgraph ControlSegment"
+        );
+        assert!(
+            raw.contains("subgraph OperationalRoles"),
+            "Unit 01 must declare subgraph OperationalRoles"
+        );
+        assert!(
+            raw.contains("subgraph ExternalAuthorities"),
+            "Unit 01 must declare subgraph ExternalAuthorities"
+        );
+
+        // Section 1.5: Normative Standards & Regulatory Baseline
+        assert!(
+            raw.contains("### 1.5 Normative Standards & Regulatory Baseline"),
+            "Unit 01 must contain Section 1.5 heading"
+        );
+        assert!(
+            raw.contains("ISO/IEC/IEEE 29148:2018"),
+            "Unit 01 must cite ISO/IEC/IEEE 29148:2018"
+        );
+        assert!(
+            raw.contains("ISO/IEC/IEEE 15288:2023"),
+            "Unit 01 must cite ISO/IEC/IEEE 15288:2023"
+        );
+
+        // Strict punctuation invariants
+        assert!(!raw.contains('\u{2014}'), "Unit 01 must not contain Unicode em dash");
+        assert!(!raw.contains('\u{2013}'), "Unit 01 must not contain Unicode en dash");
+    }
+
+    #[test]
+    fn test_canonical_unit_10_maintenance_and_gse_support_integrity() {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let repo_root = manifest_dir.parent().unwrap().parent().unwrap();
+        let unit_10_path = repo_root
+            .join("skills/spec-conops-engineering/resources/units/conops/10_MAINTENANCE_AND_GSE_SUPPORT.md");
+
+        if !unit_10_path.is_file() {
+            return;
+        }
+
+        let engine = SysMLParameterBindingEngine::new(None, None, None, false, None);
+        let (is_valid, errors) = validate_unit_integrity(&[unit_10_path.clone()], Some(&engine));
+        assert!(is_valid, "Unit 10 integrity validation failed: {:?}", errors);
+        assert!(errors.is_empty());
+
+        let raw = fs::read_to_string(&unit_10_path).unwrap();
+
+        // Section 10.1.1: Maintenance task cards
+        for card in &["MTC-01", "MTC-01A", "MTC-02", "MTC-03", "MTC-04", "MTC-05"] {
+            assert!(
+                raw.contains(&format!("**{}**", card)),
+                "Unit 10 must contain maintenance task card {}",
+                card
+            );
+        }
+
+        // Section 10.1.2: Rapid Sortie Turnaround Workflow & 7-Step Protocol
+        assert!(
+            raw.contains("#### 10.1.2 Rapid Sortie Turnaround Workflow & 7-Step Protocol"),
+            "Unit 10 must contain Section 10.1.2 heading"
+        );
+        assert!(
+            raw.contains("flowchart TD"),
+            "Unit 10 must contain flowchart TD diagram"
+        );
+
+        // Canonical 7-step turnaround bullet list (fixes #305: missing in divergent copies)
+        assert!(
+            raw.contains("The 7-step turnaround sequence encompasses:"),
+            "Unit 10 must contain plain-text 7-step sequence header (fixes #305)"
+        );
+        assert!(
+            raw.contains("- Step 1: System Ingress & Safe-State Disarm"),
+            "Unit 10 must contain Step 1 bullet (fixes #305)"
+        );
+        assert!(
+            raw.contains("- Step 2: Telemetry Data Offload & Log Audit"),
+            "Unit 10 must contain Step 2 bullet"
+        );
+        assert!(
+            raw.contains("- Step 3: Rapid Energy Module Hot-Swap"),
+            "Unit 10 must contain Step 3 bullet"
+        );
+        assert!(
+            raw.contains("- Step 4: Rapid Visual & Structural Inspection"),
+            "Unit 10 must contain Step 4 bullet"
+        );
+        assert!(
+            raw.contains("- Step 5: Mission Re-Tasking & Key Injection"),
+            "Unit 10 must contain Step 5 bullet"
+        );
+        assert!(
+            raw.contains("- Step 6: Automated PBIT Diagnostics"),
+            "Unit 10 must contain Step 6 bullet"
+        );
+        assert!(
+            raw.contains("- Step 7: Final Arming & Sortie Release"),
+            "Unit 10 must contain Step 7 bullet (fixes #305)"
+        );
+        assert!(
+            raw.contains("- Contingency: Abort Turnaround & Route to MTC-04 LRU Swap"),
+            "Unit 10 must contain contingency route bullet (fixes #305)"
+        );
+
+        // Mermaid flowchart nodes: must synchronize with upstream unit test assertion
+        // In #305, the test asserts "Step 1: System Ingress & Safe-State Disarm" and "Abort Turnaround & Route to MTC-04 LRU Swap"
+        assert!(
+            raw.contains("Step 1: System Ingress &<br/>Safe-State Disarm"),
+            "Unit 10 Mermaid flowchart must contain Step 1 with Safe-State Disarm (fixes #305)"
+        );
+        assert!(
+            raw.contains("Step 7: Final Arming &<br/>Sortie Release"),
+            "Unit 10 Mermaid flowchart must contain Step 7 with Final Arming & Sortie Release (fixes #305)"
+        );
+        assert!(
+            raw.contains("Abort Turnaround &<br/>Route to MTC-04 LRU Swap"),
+            "Unit 10 Mermaid flowchart must contain Abort Turnaround route (fixes #305)"
+        );
+
+        // Ensure divergent conjunction and line breaks are NOT present
+        assert!(
+            !raw.contains("Step 1: System Ingress and<br/>Safe-State Disarm"),
+            "Unit 10 must not contain divergent 'and' conjunction in Step 1 (refs #305)"
+        );
+
+        // Section 10.2: Support Equipment Taxonomy Table (SE-01..SE-06)
+        assert!(
+            raw.contains("### 10.2 Support Equipment (SE) Taxonomy"),
+            "Unit 10 must contain Section 10.2 heading"
+        );
+        for se_id in &["SE-01", "SE-02", "SE-03", "SE-04", "SE-05", "SE-06"] {
+            assert!(
+                raw.contains(&format!("**{}**", se_id)),
+                "Unit 10 must contain support equipment {}",
+                se_id
+            );
+        }
+
+        // Strict punctuation invariants
+        assert!(!raw.contains('\u{2014}'), "Unit 10 must not contain Unicode em dash");
+        assert!(!raw.contains('\u{2013}'), "Unit 10 must not contain Unicode en dash");
+    }
 }
 
