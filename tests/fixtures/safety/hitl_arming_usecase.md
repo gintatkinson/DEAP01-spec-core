@@ -1,16 +1,16 @@
-# Payload Deployment Use Case
+# Actuator Control Use Case
 
-## Human Authorized Ignition Sequence
+## Human Authorized Actuation Sequence
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Pilot as GCS_Operator
-    participant Autopilot as FCS
-    participant SafeArm as FiringCircuit
-    participant Motor as SolidRocketMotor
+    actor Operator as SystemOperator
+    participant Controller as SystemController
+    participant PowerStage as ActuatorPowerStage
+    participant Actuator as CoreActuator
 
-    Pilot ->> Autopilot: Arm_Command (Consent_Granted)
-    Autopilot ->> SafeArm: Arm_Circuit
-    Autopilot ->> SafeArm: Fire_Pulse
-    SafeArm ->> Motor: Ignite_Motor
+    Operator ->> Controller: Authorize_Actuation (Consent_Granted)
+    Controller ->> PowerStage: Enable_PowerStage
+    Controller ->> PowerStage: Actuate_Pulse
+    PowerStage ->> Actuator: Engage_Drive
 ```

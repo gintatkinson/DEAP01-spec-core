@@ -443,21 +443,21 @@ Compiles SysML v2 models into structured ASTs, transpiles STPA/FMECA safety tabl
 
 **File:** `scripts/assemble_conops.py`
 
-Assembles modular ConOps and Mission Intent units into canonical systems engineering specifications conforming to ISO/IEC/IEEE 29148, NATO STANAG 4586, and OMG UAF.
+Assembles modular ConOps and Mission Intent units into canonical systems engineering specifications conforming to ISO/IEC/IEEE 29148, ISO/IEC/IEEE 15288, and OMG UAF.
 
 #### Core Contracts & Functions:
 
 ```python
 class LifecycleType(str, Enum):
     REUSABLE_RECOVERY = "REUSABLE_RECOVERY"
-    EXPENDABLE_KINETIC_EFFECTOR = "EXPENDABLE_KINETIC_EFFECTOR"
+    EXPENDABLE_DISPOSAL = "EXPENDABLE_DISPOSAL"
     CONTINUOUS_STATIONARY = "CONTINUOUS_STATIONARY"
     PERSISTENT_ORBITAL = "PERSISTENT_ORBITAL"
     TRACK_BOUND_GUIDED = "TRACK_BOUND_GUIDED"
 
 class ContainmentActionType(str, Enum):
     CONTROLLED_RECOVERY_LANDING = "CONTROLLED_RECOVERY_LANDING"
-    SAFE_IMPACT_ZEROIZATION = "SAFE_IMPACT_ZEROIZATION"
+    CONTROLLED_DECOMMISSIONING_DISPOSAL = "CONTROLLED_DECOMMISSIONING_DISPOSAL"
     ELECTROMECHANICAL_BRAKE_LOCK = "ELECTROMECHANICAL_BRAKE_LOCK"
     DEORBIT_DISPOSAL_BURN = "DEORBIT_DISPOSAL_BURN"
     TRACK_SIDING_BRAKE = "TRACK_SIDING_BRAKE"

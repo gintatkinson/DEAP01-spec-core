@@ -1,1 +1,0 @@
-"""Multi-schema translators package."""

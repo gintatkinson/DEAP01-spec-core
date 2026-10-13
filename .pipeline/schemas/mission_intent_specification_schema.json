@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://spec.deap.org/schemas/mission_intent_specification_schema.json",
   "title": "Tactical Mission Intent Specification Schema",
-  "description": "Draft 2020-12 JSON Schema defining the complete data contract for Tactical Mission Intent specifications in accordance with NATO STANAG 4586, INCOSE SE Handbook, and CJCSI 3500.02 METL guidelines.",
+  "description": "Draft 2020-12 JSON Schema defining the complete data contract for Tactical Mission Intent specifications in accordance with INCOSE SE Handbook and schema-derived operational guidelines.",
   "type": "object",
   "required": [
     "commanders_intent",
@@ -241,14 +241,22 @@
               "string",
               "number"
             ],
-            "description": "Link loss heartbeat timeout threshold."
+            "description": "Link loss heartbeat timeout threshold (seconds or OPERATOR_CONFIGURED / OPEN_QUESTION)."
           },
           "failover_hysteresis": {
             "type": [
               "string",
               "number"
             ],
-            "description": "Hysteresis window or stabilization time before switching tiers."
+            "description": "Hysteresis window or stabilization time before switching tiers (seconds or OPERATOR_CONFIGURED / OPEN_QUESTION)."
+          },
+          "public_clause_citation": {
+            "type": "string",
+            "description": "Public standards clause citation (e.g., IEEE Std 1558-2020 §4.5, ISO/IEC/IEEE 15288:2023 §6.4.5)."
+          },
+          "derivation_grade": {
+            "type": "string",
+            "description": "Derivation grade annotation (Directly Evidenced, Analytically Derived, Declared Assumption, OPERATOR_CONFIGURED, or OPEN_QUESTION)."
           },
           "priority_role": {
             "type": "string",

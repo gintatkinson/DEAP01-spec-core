@@ -29,7 +29,7 @@
 | `THR-MEC-01` | Mechanical | {{THR_MEC_VECTOR}} | {{THR_MEC_DESCRIPTION}} | Critical | Actuator telemetry / vibration monitor | Reconfigure dynamic control allocation matrix | MIL-STD-882E §4.3 |
 | `THR-PWR-01` | Power/Thermal | {{THR_PWR_VECTOR}} | {{THR_PWR_DESCRIPTION}} | Critical | BMS thermistor array / current sensor | Isolate faulted module and initiate divert | MIL-STD-882E §4.3 |
 | `THR-ENV-01` | Environmental | {{THR_ENV_VECTOR}} | {{THR_ENV_DESCRIPTION}} | High | Pitot air data / temperature sensor | Transition to high-stability penetration mode | MIL-STD-810H Method 514.8 |
-| `THR-EWC-01` | EW | {{THR_EW_VECTOR}} | {{THR_EW_DESCRIPTION}} | High | RAIM alert / SNR degradation | Switch frequency-hopping channel / alternate PACE | STANAG 4586 §3.2 |
+| `THR-EWC-01` | EW | {{THR_EW_VECTOR}} | {{THR_EW_DESCRIPTION}} | High | RAIM alert / SNR degradation | Switch frequency-hopping channel / alternate PACE | IEEE Std 1558-2020 §4.5 |
 | `THR-CYB-01` | Cyber | {{THR_CYB_VECTOR}} | {{THR_CYB_DESCRIPTION}} | Critical | Cryptographic HMAC validation failure | Drop unauthorized frames, cycle crypto keys | NIST SP 800-82r3 §5.2 |
 | `THR-OPT-01` | Optical | {{THR_OPT_VECTOR}} | {{THR_OPT_DESCRIPTION}} | High | Optical sensor saturation / dazzle detector | Shutter sensor and switch to secondary modality | MIL-STD-882E §4.3 |
 | `THR-SIG-01` | Signature | {{THR_SIG_VECTOR}} | {{THR_SIG_DESCRIPTION}} | Medium | Acoustic / emission monitor | Reduce actuator RPM and optimize signature | MIL-STD-882E §4.3 |

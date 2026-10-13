@@ -1,4 +1,4 @@
-# ACTIVE RULES BUNDLE — Consolidated Governance Manifest
+# ACTIVE RULES BUNDLE -- Consolidated Governance Manifest
 
 > **Notice:** This consolidated governance manifest is compiled automatically at installation time by `scripts/install_pipeline.sh`.
 > It aggregates 100% of the active governance rules from `rules/` into a single, unified source of truth.
@@ -879,7 +879,7 @@ A single set of functional specs can drive implementations on React, Flutter, .N
 
 ## Hard constraints
 
-- **Coordinator Direct Writing & Research Lock**: The coordinator agent is strictly forbidden from directly writing or modifying target functional specifications (Epics, Features, User Stories, Use Cases) or codebase source files, and is locked from directly conducting technology stack research (Step 1.5). All codebase write and update operations must be delegated to spawned implementer subagents, and all tech stack research must be delegated to a dedicated research subagent (role: `Codebase Researcher`).
+- **Coordinator Direct Writing & Research Lock**: The coordinator agent is strictly forbidden from directly writing or modifying target functional specifications (Epics, Features, User Stories, Use Cases) or codebase source files, and is locked from directly conducting technology stack research (Step 1.5). All codebase write and update operations must be delegated to spawned implementer subagents, all tech stack research must be delegated to a dedicated research subagent (role: `Codebase Researcher`), and all component-level failure mode research must be delegated to dedicated context-isolated research subagents per `part def` component (role: `Component Failure Mode Researcher` or `Failure Mode Research Worker`).
 - **Specification Phase Boundary**: Spec workers and specification subagents are strictly forbidden from reading, writing, or referencing implementation profiles, implementation plans, or target source code files. They must operate strictly within logical, functional, and platform-independent boundaries.
 - **Implementation Phase Boundary**: Implementation subagents and micro-task implementers are strictly forbidden from generating or directly modifying upstream specification files (Epics, Features, User Stories, Use Cases) unless explicitly authorized via a synchronized backlog reconciliation task.
 - **Strict Subagent Tool Locking**: Spawned subagents must only execute tools that fall within their explicit domain (e.g., spec subagents do not run build/test commands or modify code, and implementation subagents do not edit high-level specifications).
@@ -1126,10 +1126,13 @@ Coordinators are strictly forbidden from injecting leading line-level steering, 
 Every subagent dispatch prompt MUST target at most 1 specification item (max 1 Epic, 1 Feature, 1 User Story, or 1 Use Case) or 1 single bounded micro-task (2-5 minutes). Multi-item or batch execution prompts are strictly prohibited.
 
 ### 6. Mandatory Defect Filing Directives
-Prompts launching workers, auditors, or validators MUST explicitly instruct the subagent to file defects via both `gh issue create` (GitHub) and `glab issue create` (GitLab). Issue auto-closing keywords or issue close commands (`gh issue close`, `glab issue close`) in prompts or commit messages are strictly forbidden.
+Prompts launching workers, auditors, or validators are strictly forbidden from filing raw defects directly. Before filing an upstream defect, an adversarial auditor subagent MUST be dispatched with `skills/adversarial-code-auditor/SKILL.md` to produce a verified 7-section defect dossier with un-falsifiable empirical reproduction, and validate it offline via `./target/release/verify-baseline check-defect` before submitting via `./target/release/reconcile-backlog create-issue --label bug` (or `./target/release/file-defect` / dual `gh issue create` and `glab issue create` with verified `--body-file`). Issue auto-closing keywords or issue close commands (`gh issue close`, `glab issue close`) in prompts or commit messages are strictly forbidden.
 
 ### 7. Trailing Authorization Token
 The coordinator MUST append the authorization token `PROCEED` (case-insensitive) to the end of the subagent prompt payload to authorize tool execution in the subagent's isolated context.
+
+### 8. Component-Level Failure Mode Research Swarm Mandate
+During Step 1.5 Technology Stack & Architecture Research (Phase 0.5), monolithic drafting of component failure modes is strictly forbidden. The coordinator MUST extract all structural `part def` components from the authoritative schema (`.pipeline/schema.sysml`) and dispatch dedicated, context-isolated research subagents per component (role: `Component Failure Mode Researcher` or `Failure Mode Research Worker`). Each subagent prompt MUST target exactly one component AST fragment, instructing the worker to query standard failure mode catalogs (SAE ARP4761, MIL-HDBK-338B, RTCA DO-254, RTCA DO-178C), evaluate the 4 Universal Failure Dimensions (Interface, State, Action, Resource), and document at least 3 distinct failure modes per component with integer S/O/D ratings in [1, 10] for intermediate assembly into `docs/research/FAILURE_MODE_REGISTRY.md` before authorizing downstream STPA/FMECA matrix synthesis.
 
 ## Subagent Pre-Flight Self-Rejection Protocol
 
@@ -1182,22 +1185,24 @@ This project explicitly declares **MATLAB / Simulink / Stateflow / Embedded Code
 Every downstream engineering specification artifact MUST be formally rooted in and mapped to corresponding SysML v2 AST elements:
 
 1. **Epics & Features -> Structural Definitions (`package`, `part def`, `item def`)**:
-   - Every Epic must map to a top-level or architectural `package` defining subsystem boundaries.
-   - Every Feature specification must map to at least one `part def` (structural component/block) or `item def` (data definition/message payload).
+   - Every Epic must map to a top-level or architectural `package` defining subsystem boundaries, linked to ConOps Super-System architecture.
+   - Every Feature specification must map to at least one `part def` (structural component/block) or `item def` (data definition/message payload), bound to component-level failure modes from `docs/research/FAILURE_MODE_REGISTRY.md` and ConOps Subsystem architecture.
    - Component hierarchies, composition relationships, and data item schemas must be formally defined in SysML v2 before Feature elaboration.
 
-2. **User Stories -> Behavioral & Interface Definitions (`action def`, `state def`, `port def`)**:
-   - Every User Story must map to formal behavioral elements: discrete computational operations (`action def`), lifecycle and operational modes (`state def`), or interface boundaries (`port def`).
-   - Given-When-Then BDD scenarios must execute against the actions, states, and ports declared on the parent component's SysML definition.
+2. **User Stories -> Behavioral & Interface Definitions (`part def`, `action def`, `state def`, `port def`)**:
+   - Every User Story must ground in formal structural `part def` components: internal participant lifelines must bind 1:1 to SysML `part def`s.
+   - Behavioral elements map to discrete computational operations (`action def`), lifecycle and operational modes (`state def`), or interface boundaries (`port def`).
+   - Given-When-Then BDD scenarios must execute against the actions, states, and ports declared on the parent component's SysML definition, incorporating failure mode mitigations from `docs/research/FAILURE_MODE_REGISTRY.md` across the 4 Universal Failure Dimensions.
    - Parameter inputs (`in`), outputs (`out`), and flow directions must be explicitly typed.
 
-3. **Use Cases -> Formal Use Case Definitions (`use case def`)**:
+3. **Use Cases -> Formal Use Case Definitions (`use case def`, subject `part def`)**:
    - Every Use Case specification must be declared as a formal `use case def` in the SysML v2 model.
    - Each `use case def` MUST formally specify:
      - `subject`: The system or subsystem part under design (`part def`) providing the capability.
      - `actor`: Primary initiating actors and secondary participating actors (bound via typed ports/interfaces).
      - `objective`: Formal operational goal and success criteria.
      - `include` / `extend`: Formal relationships connecting modular or conditional sub-use-cases.
+   - Alternate and exception flows must address component-level failure modes from `docs/research/FAILURE_MODE_REGISTRY.md` for the subject `part def`.
 
 4. **Safety Invariants -> Formal Requirement Definitions (`requirement def`)**:
    - All safety constraints derived from STPA (System-Theoretic Process Analysis: Unsafe Control Actions, Loss Scenarios) and FMECA (Failure Mode, Effects, and Criticality Analysis) MUST be modeled as formal `requirement def` nodes.
@@ -1378,6 +1383,7 @@ TDD prevents false confidence. A test written after the code is confirmation bia
 - All issue lifecycle operations (create, close, edit, transition) MUST use the tracker's configured issue management commands -- never modify local files as the primary operation.
 - Every local specification file MUST include the tracker issue ID in its YAML frontmatter (`issue_id: <int>`).
 - When referencing Issue IDs in markdown, use the live tracker Issue number -- never hard-code or assume numbers.
+- **Blocking Registration Gate for Checklist References (#223)**: Only issue numbers returned by live tracker registration commands (`gh issue create`, `glab issue create`) or query commands may enter markdown checklist items. Embedding speculative, predicted, provisional, or assumed future issue numbers is strictly forbidden across all specification tiers. Checklist items for specifications not yet registered must either retain the blocking placeholder `#[IssueID]` or declare non-allocation. Any sync or publish operation MUST abort if a checklist item references an issue number that does not resolve on the live tracker.
 - When constructing links to files in issue descriptions, dynamically determine the remote URL from the repository settings (e.g., `meta.upstream_repository`). Never use relative paths like `../features/...` in issue bodies.
 - **Registered Issues Must Have A Local Specification**: every tracker issue carrying the Epic or Feature label MUST have a corresponding local specification file. A registered issue with no file means the branch baseline is incomplete, and the reconciler will write checklist state back to an issue whose specification nobody can read.
 - **Local Indices Must Not Collide With Registered Issues**: a local specification whose ordinal (`epic-02`, `feat-07`) is already claimed on the tracker by a *differently titled* issue is a collision and MUST be renumbered. Reconciliation addresses specifications by ordinal, so the ambiguity silently retargets updates at the wrong issue.

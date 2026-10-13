@@ -2,7 +2,7 @@
 
 ---
 name: spec-conops-engineering
-description: "Synthesize hierarchical Concept of Operations (docs/conops/units/conops/) and Tactical Mission Intent (docs/conops/units/mission_intent/) specification units adhering to ISO/IEC/IEEE 29148:2018, INCOSE SE Handbook v5.0, NATO STANAG 4586, and MIL-STD-882E with pure schema contracts, zero truncation, and deterministic assembly via scripts/assemble_conops.py."
+description: "Synthesize hierarchical Concept of Operations (docs/conops/units/conops/) and Tactical Mission Intent (docs/conops/units/mission_intent/) specification units adhering to ISO/IEC/IEEE 29148:2018, INCOSE SE Handbook v5.0, ISO/IEC/IEEE 15288:2023, and OMG UAF v2.0 with pure schema contracts, zero truncation, and deterministic assembly via ./target/release/assemble-conops."
 version: "1.0"
 metadata:
   title: "Hierarchical ConOps & Mission Intent Engineering"
@@ -16,7 +16,7 @@ Use this skill as the single canonical workflow for transforming high-level oper
 
 In accordance with [`rules/conops-mission-intent-integrity.md`](../../rules/conops-mission-intent-integrity.md), [`rules/sysml-ssot-completeness.md`](../../rules/sysml-ssot-completeness.md), and [`rules/latex-katex-integrity.md`](../../rules/latex-katex-integrity.md), ConOps and Mission Intent specifications bridge high-level operational intent with downstream structural extraction (Level 2 Epics and Features) and Model-Based Design (MBD) synthesis.
 
-All specification units are authored as discrete, modular markdown files under `docs/conops/units/conops/` and `docs/conops/units/mission_intent/` adhering strictly to JSON Schema data contracts (`.pipeline/schemas/conops_specification_schema.json` and `.pipeline/schemas/mission_intent_specification_schema.json`) and compiled into canonical documents via `scripts/assemble_conops.py`.
+All specification units are authored as discrete, modular markdown files under `docs/conops/units/conops/` and `docs/conops/units/mission_intent/` adhering strictly to JSON Schema data contracts (`.pipeline/schemas/conops_specification_schema.json` and `.pipeline/schemas/mission_intent_specification_schema.json`) and compiled into canonical documents via `./target/release/assemble-conops` (or `crates/assemble-conops`).
 
 ### Architecture Hierarchy & Standards Governance (INCOSE SEH v5.0 §3.4.4 / ISO/IEC/IEEE 15288:2023 / ISO/IEC/IEEE 29148:2018 §6.4.2)
 
@@ -55,13 +55,13 @@ The `Worker ConOps` ingests and synthesizes the following foundational inputs:
 
 1. **Normative Research Inventory & Standards Baseline**:
    - Ingest `docs/research/RESEARCH_INVENTORY.md` and `docs/research/FAILURE_MODE_REGISTRY.md`.
-   - Extract all applicable standards: ISO/IEC/IEEE 29148:2018 (§6.4.2 ConOps & §6.4.3 OpsCon), INCOSE Systems Engineering Handbook v5.0, NATO STANAG 4586, MIL-STD-882E, RTCA DO-178C / DO-254, and SAE ARP4754A / ARP4761 (domain-specific standards, such as JARUS SORA v2.5, are derived from the active schema).
+   - Extract all applicable standards: ISO/IEC/IEEE 29148:2018 (§6.4.2 ConOps & §6.4.3 OpsCon), INCOSE Systems Engineering Handbook v5.0, ISO/IEC/IEEE 15288:2023, and OMG UAF v2.0 (domain-specific standards are derived from the active schema).
    - Map all allocated obligations (`OBL-*`) assigned to ConOps and Mission Intent.
 
 2. **System Architecture & Structural Schemas**:
    - Ingest `.pipeline/schema.sysml` and `.pipeline/schema-digest.json` to extract system boundaries, subsystems, and architectural partitions.
    - **Mandatory AST Manifest Ingestion**: Ingest the explicit manifest of all AST `state def` prefix families with 2 or more states ($\ge 2$ states) and AST `part def` nodes with ports, actions, and constraints for Section 6.1 Stateflow synthesis hooks, Section 7 FMECA tables, and **Section 4 Super-System and Subsystem Architecture synthesis**.
-   - **Mandatory AST Part Taxonomy Invariant**: Enforce automated extraction of all `part def` blocks from `schema/` and `.pipeline/schema.sysml`. Require ConOps Section 4 to synthesize formal Super-System Architecture (Air Vehicle / Primary Segment, Ground Segment, Launch / Support Segment) and Subsystem Architecture subsections for 100% of declared AST `part def` nodes (100% AST part coverage invariant).
+   - **Mandatory AST Part Taxonomy Invariant**: Enforce automated extraction of all `part def` blocks from `schema/` and `.pipeline/schema.sysml`. Require ConOps Section 4 to synthesize formal Super-System Architecture (Primary Segment / System Under Design, Control Segment, Support Segment) and Subsystem Architecture subsections for 100% of declared AST `part def` nodes (100% AST part coverage invariant).
    - Ingest domain schemas under `schema/` (OMG IDL, Protobuf, ARXML, SysML v2).
 
 3. **Safety & Risk Baselines (3-Tier Lifecycle Integration)**:
@@ -91,7 +91,7 @@ The ConOps specification tree consists of 12 canonical modular units:
 | `04_SYSTEM_ARCHITECTURE.md` | `## 4. System Operational Architecture & Physical Subsystem Decomposition` | `system_architecture` / `operational_context` | Super-System Architecture (Air Vehicle, Ground Segment, Launch System) conforming to Option 3 (Compact Subsystem Blocks with Embedded Port Attributes and max 3-column vertical tier partitioning); Subsystem Architecture subsections covering 100% of declared AST `part def` nodes; Port Taxonomy and SSOT Model Binding statement (accepts backward-compatible alias `04_USER_CLASSES_AND_STAKEHOLDERS.md`). |
 | `05_OPERATIONAL_STATE_SPACE_AND_RISK.md` | `## 5. Operational State Space, Boundary Containment & Risk Assessment` | `operational_containment_and_risk` | 4D volume mathematical formulation, Boundary Containment Margin ($R_{\mathrm{containment}} \ge R_{\mathrm{min}}$) equation, and boundary containment / risk parameters table. |
 | `06_UAF_OPERATIONAL_ACTIVITIES.md` | `## 6. OMG UAF Operational Activity Taxonomy` | `uaf_activities` | Open-ended UAF activity roster (`OA-01`..`OA-N`) with mandatory Gate 24 allocation tags (`/// OperationalAllocation: [OA-XX]`). |
-| `07_OPTX_EXCHANGES.md` | `## 7. Operational Information Exchange (Op-Tx) Matrix` | `optx_exchanges` | Information exchange roster (`OpTx-01`..`OpTx-N`) specifying source, destination, data rates, latency limits, criticality; captures high-level operational information exchanges (C2 Commands, Telemetry, Video, Target Tracks, Arming Authorization) and strictly excludes component-internal serial opcode reference tables; enforces 100% Op-Tx sequence parity where declared exchanges are partitioned across canonical operational interaction sequence diagrams (`Diagram 10.1` through `Diagram 10.4`) with zero uncovered Op-Tx exchanges. |
+| `07_OPTX_EXCHANGES.md` | `## 7. Operational Information Exchange (Op-Tx) Matrix` | `optx_exchanges` | Information exchange roster (`OpTx-01`..`OpTx-N`) specifying source, destination, data rates, latency limits, criticality; captures high-level operational information exchanges (C2 Commands, Telemetry, Video, State Telemetry, Safety Interlock Authorization) and strictly excludes component-internal serial opcode reference tables; enforces 100% Op-Tx sequence parity where declared exchanges are partitioned across canonical operational interaction sequence diagrams (`Diagram 10.1` through `Diagram 10.4`) with zero uncovered Op-Tx exchanges. |
 | `08_ENVIRONMENTAL_OPERATING_LIMITS.md` / `08_ENVIRONMENTAL_MIL_STD_810H.md` | `## 8. Environmental Operating Limits & Stress Qualification` | `environmental_envelopes` | Ambient temperature, ingress protection (IP), electromagnetic/RF environment, spatial clearance envelopes. |
 | `09_SCENARIOS_AND_TIMELINES.md` | `## 9. Multi-Threaded Operational Scenarios & System Timelines` | `scenarios` | Nominal, degraded, and contingency scenario threads with sequential execution steps and exit criteria; enforces 100% scenario-to-diagram parity where 100% of declared operational scenarios (`SCN-01`..`SCN-N`) MUST include a dedicated `OV-6c` Mermaid sequence diagram (`sequenceDiagram`) detailing multi-threaded lifeline sequences across the canonical scenario spectrum spanning nominal sortie, GNSS-denied navigation, lost C2 link, tactical abort, bingo energy divert, and boundary containment / flight termination. |
 | `10_MAINTENANCE_AND_GSE_SUPPORT.md` | `## 10. Maintenance & Sustainment Concepts (O/I/D Maintenance)` | `maintenance` | Three-tier maintenance model: Organizational (O-Level), Intermediate (I-Level), Depot (D-Level). |
@@ -108,7 +108,7 @@ The Tactical Mission Intent specification tree consists of 10 canonical modular 
 | `02_MISSION_ESSENTIAL_TASK_LIST.md` | `## 2. Mission Essential Task List (METL)` | `metl_tasks` | Doctrinal task list (`MET-01`..`MET-N`) with conditions, quantitative metrics, verification methods, and Gate 24 allocation tags. |
 | `03_INCOSE_MOE_MOP_MATH.md` | `## 3. Measures of Effectiveness (MoE) & Measures of Performance (MoP) Metrics` | `incose_moe_mop` | INCOSE SEH v5.0 metrics table with KaTeX mathematical formulas, Threshold and Objective performance values, and engineering units. |
 | `04_MULTI_DOMAIN_THREAT_MATRIX.md` | `## 4. Multi-Domain Operational Threat & Contested Environment Matrix` | `threat_matrix` | Open multi-domain threat matrix across Kinetic, Mechanical, Environmental, EW/Cyber, Power/Thermal, Optical, and Human domains with public clause citations. |
-| `05_PACE_C2_PLAN.md` | `## 5. PACE C2 Link Communications Plan` | `pace_c2_plan` | 4-tier PACE communications plan (Primary, Alternate, Contingency, Emergency) with frequency bands, bandwidth, heartbeat timeouts, and failover hysteresis. |
+| `05_PACE_C2_PLAN.md` | `## 5. PACE C2 Link Communications Plan` | `pace_c2_plan` | 4-tier PACE communications plan (Primary, Alternate, Contingency, Emergency) with schema-derived frequency bands, bandwidth, parameterized heartbeat timeouts, failover hysteresis, and verified SSOT public clause citations. |
 | `06_SAFETY_INTERLOCKS.md` | `## 6. Safety Constraints & Subsystem Interlocks` | `safety_interlocks` | Safety constraints, interlock predicates, and subsystem state interlocks (`INT-01`..`INT-N`) derived from AST constraint and state definitions. |
 | `07_AIRSPACE_GEOZONES.md` | `## 7. Airspace Deconfliction & U-space Dynamic Geo-Zones` | `airspace_geozones` | Primary boundary perimeter, dynamic exclusion/keep-out zones, and horizontal/vertical separation minima. |
 | `08_GO_NO_GO_MATRIX.md` | `## 8. Go/No-Go Decision Matrix` | `go_no_go_matrix` | Operational phase checks (`GNG-01`..`GNG-N`), threshold conditions, sensors/mechanisms, and deterministic Go/No-Go actions. |
@@ -117,7 +117,7 @@ The Tactical Mission Intent specification tree consists of 10 canonical modular 
 
 ### 2.3 System Architecture Diagram Representation Standard (Option 3)
 In accordance with DoDAF v2.02 SV-1, IEEE 1362 §5.3, ISO/IEC/IEEE 15288:2023, INCOSE SE Handbook v5.0 (§3.4.4), and ISO/IEC/IEEE 29148:2018 §6.4.2–§6.4.3, all system interface and super-system architectural diagrams MUST implement **Option 3 (Compact Subsystem Block Representation with Embedded Port Attributes and Vertical Hierarchical Tiers)**:
-1. **High-Level Operational Architecture Scope (Level 1B)**: The ConOps (Level 1B) represents High-Level Operational Architecture (OV-1 / OV-2 / High-Level SV-1) partitioned across operational segments (Ground Segment, Air Vehicle Segment, Launch Segment, External Actors) with operational information exchanges (Op-Tx: C2 Commands, Telemetry, Video, Target Tracks, Arming Authorization).
+1. **High-Level Operational Architecture Scope (Level 1B)**: The ConOps (Level 1B) represents High-Level Operational Architecture (OV-1 / OV-2 / High-Level SV-1) partitioned across operational segments (Ground Segment, Air Vehicle Segment, Launch Segment, External Actors) with operational information exchanges (Op-Tx: C2 Commands, Telemetry, Video, State Telemetry, Safety Interlock Authorization).
 2. **Strict Level 1B vs. Level 2 Boundary**: ConOps contains Operational Activities (`OA-xx`) and Operational Scenarios (`SCN-xx`), and strictly excludes formal System Use Cases (`uc-xx`), which belong in SyRS Level 2.
 3. **User Class Taxonomy Disambiguation (`UCL-xx`)**: In accordance with ISO/IEC/IEEE 29148:2018 §5.2.4, operational User Classes MUST use the `UCL-xx` prefix (`UCL-01` through `UCL-N`), strictly isolating stakeholder taxonomy from SyRS Level 2 System Use Cases (`uc-xx`) to prevent downstream agent reasoning collisions and automated sanitization corruption.
 4. **Strict Level 1B vs. Level 1C ICD Boundary**: Detailed internal wire-level interconnects, pinouts, RS-485 serial framing, opcodes (0x10, 0x11, etc.), register bitmasks, and CRC-16 equations belong strictly in Level 1C Interface Control Documents (`ICD_01_SYSTEM_INTERFACE_MATRIX.md` and `ICD_02_MASTER_SIGNAL_DICTIONARY.md`), NOT in the ConOps document. ConOps SV-1 diagrams and Section 8 (Op-Tx) capture high-level operational information exchanges and strictly exclude component-internal serial opcode reference tables.
@@ -305,7 +305,7 @@ flowchart TD
   - [ ] **100% AST Part Coverage**: 100% of declared AST `part def` nodes have dedicated subsections in Subsection 4.3 in lockstep mathematical parity with the SV-1 diagram.
   - [ ] **Option 3 Compact Blocks & Vertical Tiers**: Mermaid SV-1 diagram implements Option 3 with embedded port attributes and vertical layout (`direction TB`) capped at 3 horizontal columns.
 - **Zero-Omission Rule**: Omitting any declared AST `part def` is strictly forbidden and triggers compiler validation failure during `assemble_conops.py` assembly.
-- **Level 1B Operational Boundary & Section 8 Op-Tx Exclusions**: Section 4.8 and Section 8 (Op-Tx) capture high-level operational information exchanges (Op-Tx: C2 Commands, Telemetry, Video, Target Tracks, Arming Authorization) and strictly exclude component-internal serial opcode reference tables, register bitmasks, RS-485 serial framing, and CRC-16 equations, which belong strictly in Level 1C Interface Control Documents (`ICD_01_SYSTEM_INTERFACE_MATRIX.md` and `ICD_02_MASTER_SIGNAL_DICTIONARY.md`).
+- **Level 1B Operational Boundary & Section 8 Op-Tx Exclusions**: Section 4.8 and Section 8 (Op-Tx) capture high-level operational information exchanges (Op-Tx: C2 Commands, Telemetry, Video, State Telemetry, Safety Interlock Authorization) and strictly exclude component-internal serial opcode reference tables, register bitmasks, RS-485 serial framing, and CRC-16 equations, which belong strictly in Level 1C Interface Control Documents (`ICD_01_SYSTEM_INTERFACE_MATRIX.md` and `ICD_02_MASTER_SIGNAL_DICTIONARY.md`).
 
 
 ### 4.5 100% Public Clause Citations
@@ -314,10 +314,10 @@ flowchart TD
 
 ### 4.6 Section 5 PACE C2 Link Communications Plan Template & Schema-Driven Extraction Guidelines
 Per [`rules/sysml-ssot-completeness.md`](../../rules/sysml-ssot-completeness.md) and [`rules/conops-mission-intent-integrity.md`](../../rules/conops-mission-intent-integrity.md):
-- **Zero Hardcoded Synthetic Timeouts Invariant**: Agents and Worker ConOps are strictly forbidden from hardcoding synthetic timeout constants (such as `tau_loss = 5.0 s`, `tau_reacquire = 15.0 s`, `tau_escalate = 30.0 s`) or ungrounded generic protocol standards (e.g. NATO STANAG 4586) into Section 5 PACE templates and generated artifacts.
+- **Zero Hardcoded Synthetic Timeouts Invariant**: Agents and Worker ConOps are strictly forbidden from hardcoding synthetic timeout constants (such as `tau_loss = 5.0 s`, `tau_reacquire = 15.0 s`, `tau_escalate = 30.0 s`) or ungrounded generic protocol standards (e.g. NATO STANAG 4586, MIL-STD-188-220E) into Section 5 PACE templates and generated artifacts.
 - **Parametric Schema-Driven Extraction**:
   1. All PACE communications tiers (`Primary`, `Alternate`, `Contingency`, `Emergency`) must extract link medium characteristics, frequency bands ($f_{\mathrm{band}}$), data rates ($\text{Rate}_{\mathrm{nom}}$), and heartbeat timeout thresholds ($\tau_{\mathrm{timeout},i}$) dynamically from schema definitions in `schema/` (e.g., OMG IDL, Protobuf, ARXML, SysML v2 port contracts) and SysML `state def` timing constraints.
-  2. Public clause citations must reference authoritative, grounded standards declared in `docs/research/RESEARCH_INVENTORY.md` (e.g., `IEEE Std 1558-2020 §4.5`, `MIL-STD-188-220E §5.3`, `MIL-STD-882E §4.3`, `NIST SP 800-82r3 §5.2`).
+  2. Public clause citations must reference authoritative, grounded standards declared in `docs/research/RESEARCH_INVENTORY.md` (e.g., `IEEE Std 1558-2020 §4.5`, `ISO/IEC/IEEE 15288:2023 §6.4.5`, `NIST SP 800-82r3 §5.2`).
 - **Parametric Failover Transition Dynamics Equation**:
 $$
 \begin{aligned}
@@ -334,11 +334,11 @@ $$
 | Parameter | Symbol | Units | Constraint / Rule | Description |
 | :--- | :--- | :--- | :--- | :--- |
 | Active Link Loss Duration | Delta t_loss | s | Measured Online | Measured elapsed duration since last authenticated frame |
-| Primary Heartbeat Timeout | tau_timeout_Primary | s | tau_timeout_Primary > 0 | Timeout triggering fallback to Alternate tier extracted from schema |
-| Alternate Heartbeat Timeout | tau_timeout_Alternate | s | tau_timeout_Alternate > tau_timeout_Primary | Timeout triggering fallback to Contingency tier extracted from schema |
-| Contingency Heartbeat Timeout | tau_timeout_Contingency | s | tau_timeout_Contingency > tau_timeout_Alternate | Timeout triggering fallback to Emergency tier extracted from schema |
-| Emergency Heartbeat Timeout | tau_timeout_Emergency | s | tau_timeout_Emergency > tau_timeout_Contingency | Timeout initiating definitive failsafe sequence extracted from SysML state def |
-| Re-acquisition Hysteresis Window | tau_hysteresis | s | tau_hysteresis > 0 | Continuous stable link duration required before up-tier promotion |
+| Primary Heartbeat Timeout | tau_timeout_Primary | s | tau_timeout_Primary > 0 | Timeout triggering fallback to Alternate tier extracted from schema AST or OPERATOR_CONFIGURED |
+| Alternate Heartbeat Timeout | tau_timeout_Alternate | s | tau_timeout_Alternate > tau_timeout_Primary | Timeout triggering fallback to Contingency tier extracted from schema AST or OPERATOR_CONFIGURED |
+| Contingency Heartbeat Timeout | tau_timeout_Contingency | s | tau_timeout_Contingency > tau_timeout_Alternate | Timeout triggering fallback to Emergency tier extracted from schema AST or OPERATOR_CONFIGURED |
+| Emergency Heartbeat Timeout | tau_timeout_Emergency | s | tau_timeout_Emergency > tau_timeout_Contingency | Timeout initiating definitive failsafe sequence extracted from SysML state def or OPERATOR_CONFIGURED |
+| Re-acquisition Hysteresis Window | tau_hysteresis | s | tau_hysteresis > 0 | Continuous stable link duration required before up-tier promotion extracted from schema AST or OPERATOR_CONFIGURED |
 
 ### 4.7 Section 9/10 Operational Sequence Diagram Templates & Deterministic Safety Interlock Invariants (DoDAF OV-6c / ISO 29148 §6.4.2)
 Per [`rules/sysml-ssot-completeness.md`](../../rules/sysml-ssot-completeness.md) §3 and MIL-STD-882E §4.4:
@@ -509,18 +509,18 @@ All analytical content across safety engineering deliverables (`docs/safety/STPA
 Once all unit files are written and verified, execute the deterministic assembly engine:
 
 ```bash
-python3 scripts/assemble_conops.py --input-dir docs/conops/units/ --output-dir docs/conops/ --verify
+./target/release/assemble-conops --input-dir docs/conops/units/ --output-dir docs/conops/ --verify
 ```
 
 and compile the master specification documents:
 
 ```bash
-python3 scripts/assemble_conops.py --input-dir docs/conops/units/ --output-dir docs/conops/
+./target/release/assemble-conops --input-dir docs/conops/units/ --output-dir docs/conops/
 ```
 
 ### Assembly Engine Responsibilities:
 1. **Unit Integrity Verification**: Validates that all unit markdown files exist, are non-empty, and contain zero unresolved `{{...}}` placeholder tokens.
-2. **Metadata Table Injection**: Synthesizes the standard document metadata header table at lines 1–10.
+2. **Metadata Table Injection**: Synthesizes the standard document metadata header table at lines 1-10.
 3. **Table of Contents (TOC) Synthesis**: Automatically parses H2 and H3 headings and generates a verified Markdown TOC.
 4. **Internal Link & Anchor Validation**: Confirms 100% of internal anchor links (`#slug`) resolve cleanly to existing headings with zero broken links.
 5. **Deterministic Output Emission**: Emits `docs/conops/CONOPS.md` and `docs/conops/MISSION_INTENT.md`.
@@ -533,7 +533,7 @@ Before completing Phase 0.75, the `Worker ConOps` must execute and pass all requ
 
 1. **Gate 26 Verification (ConOps & Mission Intent Completeness Validator)**:
    ```bash
-   python3 -m unittest tests.test_conops_and_mission_intent_validators
+   ./target/release/verify-baseline . --spec-only
    ```
    - Asserts all 12 mandatory sections exist in `CONOPS.md` and all 10 mandatory sections exist in `MISSION_INTENT.md`.
    - Validates boundary containment margin calculation ($R_{\mathrm{containment}} \ge R_{\mathrm{min}}$).
@@ -547,9 +547,9 @@ Before completing Phase 0.75, the `Worker ConOps` must execute and pass all requ
 
 3. **Untracked Infrastructure & Pre-Commit Check**:
    ```bash
-   UNTRACKED_INFRA=$(git ls-files --others --exclude-standard docs/conops/ skills/ rules/ scripts/)
+   UNTRACKED_INFRA=$(git ls-files --others --exclude-standard docs/conops/ skills/ rules/ crates/)
    if [ -n "$UNTRACKED_INFRA" ]; then
-     git add docs/conops/ skills/ rules/ scripts/
+     git add docs/conops/ skills/ rules/ crates/
    fi
    ```
 

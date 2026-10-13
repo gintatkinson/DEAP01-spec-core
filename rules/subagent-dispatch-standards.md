@@ -23,10 +23,13 @@ Coordinators are strictly forbidden from injecting leading line-level steering, 
 Every subagent dispatch prompt MUST target at most 1 specification item (max 1 Epic, 1 Feature, 1 User Story, or 1 Use Case) or 1 single bounded micro-task (2-5 minutes). Multi-item or batch execution prompts are strictly prohibited.
 
 ### 6. Mandatory Defect Filing Directives
-Prompts launching workers, auditors, or validators MUST explicitly instruct the subagent to file defects via both `gh issue create` (GitHub) and `glab issue create` (GitLab). Issue auto-closing keywords or issue close commands (`gh issue close`, `glab issue close`) in prompts or commit messages are strictly forbidden.
+Prompts launching workers, auditors, or validators are strictly forbidden from filing raw defects directly. Before filing an upstream defect, an adversarial auditor subagent MUST be dispatched with `skills/adversarial-code-auditor/SKILL.md` to produce a verified 7-section defect dossier with un-falsifiable empirical reproduction, and validate it offline via `./target/release/verify-baseline check-defect` before submitting via `./target/release/reconcile-backlog create-issue --label bug` (or `./target/release/file-defect` / dual `gh issue create` and `glab issue create` with verified `--body-file`). Issue auto-closing keywords or issue close commands (`gh issue close`, `glab issue close`) in prompts or commit messages are strictly forbidden.
 
 ### 7. Trailing Authorization Token
 The coordinator MUST append the authorization token `PROCEED` (case-insensitive) to the end of the subagent prompt payload to authorize tool execution in the subagent's isolated context.
+
+### 8. Component-Level Failure Mode Research Swarm Mandate
+During Step 1.5 Technology Stack & Architecture Research (Phase 0.5), monolithic drafting of component failure modes is strictly forbidden. The coordinator MUST extract all structural `part def` components from the authoritative schema (`.pipeline/schema.sysml`) and dispatch dedicated, context-isolated research subagents per component (role: `Component Failure Mode Researcher` or `Failure Mode Research Worker`). Each subagent prompt MUST target exactly one component AST fragment, instructing the worker to query standard failure mode catalogs (SAE ARP4761, MIL-HDBK-338B, RTCA DO-254, RTCA DO-178C), evaluate the 4 Universal Failure Dimensions (Interface, State, Action, Resource), and document at least 3 distinct failure modes per component with integer S/O/D ratings in [1, 10] for intermediate assembly into `docs/research/FAILURE_MODE_REGISTRY.md` before authorizing downstream STPA/FMECA matrix synthesis.
 
 ## Subagent Pre-Flight Self-Rejection Protocol
 

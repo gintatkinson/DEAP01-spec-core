@@ -1,8 +1,8 @@
 package AutonomousVehicle_SSOT {
     doc /* SSOT for Autonomous System Architecture and Safety Model */
 
-    attribute ruddervatorCount : Integer = 4;
-    attribute tailConfiguration : String = "X-tail";
+    attribute actuatorCount : Integer = 4;
+    attribute topologyConfiguration : String = "Cruciform";
     attribute catapultLaunchLimitG : Real = 12.0;
     attribute maxGLoad : Real = 12.0;
 

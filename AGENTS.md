@@ -65,6 +65,7 @@ Immediately following installation and on EVERY new session startup, before acce
   6. **Enforce 3-Layer Definition of Done**: The full 3-layer semantic chain ((1) Domain State & Data Model, (2) Logic & State Management, (3) Presentation & Actuator Interface Binding) is mandatory per specification item. Each micro-task must state deliverables or the task number closing each layer; writing `N/A` is forbidden.
   7. **Runtime Dispatch Capability**: Use whichever context-isolated dispatch tool the active runtime provides. If unavailable, halt and escalate as a blocker.
   8. **Authorization**: Append `PROCEED` (case-insensitive) to authorize subagents to use modifying tools.
+  9. **Component-Level Failure Mode Research Swarm Mandate**: During Step 1.5, monolithic failure mode research is strictly prohibited. The coordinator MUST decompose all AST `part def` components declared in `.pipeline/schema.sysml` and dispatch context-isolated research subagents per component (role: `Component Failure Mode Researcher`) to populate `docs/research/FAILURE_MODE_REGISTRY.md` across the 4 Universal Failure Dimensions before authorizing downstream STPA/FMECA matrix synthesis.
 
 ## Mandatory Application Compilation Build for Verification
 - During Step 4 verification, the agent MUST run a full compilation build of the application (e.g. `flutter build` or `npm run build` as specified by the platform profile) to ensure it compiles cleanly. Assertions of completion without verified compile output are strictly forbidden.
@@ -84,7 +85,7 @@ Immediately following installation and on EVERY new session startup, before acce
 - **Mandatory Tracker Issue Transition Gate**: Every issue referenced in the commit log must carry `status:fixed-resolved` (or `status::fixed-resolved` on GitLab) and verification evidence comments prior to walkthrough completion.
 
 ## Mandatory Upstream Tooling Bug Reporting
-- If a tooling bug or limitation is identified in shared pipeline scripts, dispatch a subagent with `skills/adversarial-code-auditor/SKILL.md` to produce a 7-section defect dossier and submit via `python3 scripts/file_defect.py`. Do not apply silent local-only patches.
+- Before filing an upstream defect or tooling bug, an adversarial auditor subagent MUST be dispatched with `skills/adversarial-code-auditor/SKILL.md` to produce a verified 7-section defect dossier with un-falsifiable empirical reproduction, and validate it offline via `./target/release/verify-baseline check-defect` before submitting via `./target/release/reconcile-backlog create-issue --label bug` (or `./target/release/file-defect`). Filing raw or unverified defect reports is strictly prohibited. Do not apply silent local-only patches.
 
 ## Documentation Integrity -- No Wholesale Replacement Without Approval
 - You are strictly forbidden from replacing, truncating, or rewriting any documentation file in a way that removes substantial content unless explicitly approved by the user in the current conversation turn.
