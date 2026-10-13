@@ -24,22 +24,24 @@ This project explicitly declares **MATLAB / Simulink / Stateflow / Embedded Code
 Every downstream engineering specification artifact MUST be formally rooted in and mapped to corresponding SysML v2 AST elements:
 
 1. **Epics & Features -> Structural Definitions (`package`, `part def`, `item def`)**:
-   - Every Epic must map to a top-level or architectural `package` defining subsystem boundaries.
-   - Every Feature specification must map to at least one `part def` (structural component/block) or `item def` (data definition/message payload).
+   - Every Epic must map to a top-level or architectural `package` defining subsystem boundaries, linked to ConOps Super-System architecture.
+   - Every Feature specification must map to at least one `part def` (structural component/block) or `item def` (data definition/message payload), bound to component-level failure modes from `docs/research/FAILURE_MODE_REGISTRY.md` and ConOps Subsystem architecture.
    - Component hierarchies, composition relationships, and data item schemas must be formally defined in SysML v2 before Feature elaboration.
 
-2. **User Stories -> Behavioral & Interface Definitions (`action def`, `state def`, `port def`)**:
-   - Every User Story must map to formal behavioral elements: discrete computational operations (`action def`), lifecycle and operational modes (`state def`), or interface boundaries (`port def`).
-   - Given-When-Then BDD scenarios must execute against the actions, states, and ports declared on the parent component's SysML definition.
+2. **User Stories -> Behavioral & Interface Definitions (`part def`, `action def`, `state def`, `port def`)**:
+   - Every User Story must ground in formal structural `part def` components: internal participant lifelines must bind 1:1 to SysML `part def`s.
+   - Behavioral elements map to discrete computational operations (`action def`), lifecycle and operational modes (`state def`), or interface boundaries (`port def`).
+   - Given-When-Then BDD scenarios must execute against the actions, states, and ports declared on the parent component's SysML definition, incorporating failure mode mitigations from `docs/research/FAILURE_MODE_REGISTRY.md` across the 4 Universal Failure Dimensions.
    - Parameter inputs (`in`), outputs (`out`), and flow directions must be explicitly typed.
 
-3. **Use Cases -> Formal Use Case Definitions (`use case def`)**:
+3. **Use Cases -> Formal Use Case Definitions (`use case def`, subject `part def`)**:
    - Every Use Case specification must be declared as a formal `use case def` in the SysML v2 model.
    - Each `use case def` MUST formally specify:
      - `subject`: The system or subsystem part under design (`part def`) providing the capability.
      - `actor`: Primary initiating actors and secondary participating actors (bound via typed ports/interfaces).
      - `objective`: Formal operational goal and success criteria.
      - `include` / `extend`: Formal relationships connecting modular or conditional sub-use-cases.
+   - Alternate and exception flows must address component-level failure modes from `docs/research/FAILURE_MODE_REGISTRY.md` for the subject `part def`.
 
 4. **Safety Invariants -> Formal Requirement Definitions (`requirement def`)**:
    - All safety constraints derived from STPA (System-Theoretic Process Analysis: Unsafe Control Actions, Loss Scenarios) and FMECA (Failure Mode, Effects, and Criticality Analysis) MUST be modeled as formal `requirement def` nodes.

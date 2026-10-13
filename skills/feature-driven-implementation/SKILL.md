@@ -116,9 +116,10 @@ The implementer receives ONLY (Prompt Payload Template):
 - Mandatory Skill and Profile Read: Explicit prompt instruction requiring the subagent to execute view_file on both (1) the active SKILL.md file by explicit path (e.g., `skills/feature-driven-implementation/SKILL.md`) and (2) `.pipeline/profiles/<platform>.md` (e.g., `.pipeline/profiles/flutter.md`) as its very first steps.
 - Preamble Integrity Sentinel: Mandatory sentinel token line (e.g. `---GOVERNANCE-END---`) terminating the governance preamble block. The subagent MUST verify the sentinel token before executing and report BLOCKED if missing due to preamble truncation.
 - Mandatory Docstring & Traceability Requirement: Prompt instruction requiring that every generated class, interface, method, function, and public property MUST include full docstrings (DartDoc `///`, JSDoc `/** */`, Python `"""`), and attach UML traceability tags (`/// Realises: [SpecName/ClassName]`) to every public class header.
+- Mandatory AST PartDef Grounding & Failure Mode Traceability: Prompt instruction requiring that every generated domain entity, state machine, service, or interface MUST maintain architectural grounding in its underlying SysML `part def` component definition, attach UML & SysML traceability tags (`/// Realises: [SpecName/ClassName] | SysML v2: part def <NodeName>`), and implement defensive guards against the component failure modes cataloged in `docs/research/FAILURE_MODE_REGISTRY.md` across the 4 Universal Failure Dimensions (Interface, State, Action, Resource).
 - **Mandatory Governance Acknowledgment**: Before executing any code writes, the subagent MUST echo back a structured summary of the governance rules received, declaring that it has read and will honor:
   (a) `.pipeline/constitution.md` Section 1.9 Zero-Mocking Live Persistence Mandate
-  (b) The 3-layer LUI Definition of Done: DomainModel, ViewModel, LUI Widget Binding
+  (b) The 3-layer LUI Definition of Done (DomainModel, ViewModel, LUI Widget Binding) and continuous SysML `part def` architectural grounding with `docs/research/FAILURE_MODE_REGISTRY.md` failure mode mitigations
   (c) The target platform profile (`.pipeline/profiles/<platform>.md`)
   (d) TDD RED-GREEN-REFACTOR cycle mandate
   The coordinator MUST validate acknowledgment receipt before the subagent proceeds to code generation. If the acknowledgment does not arrive or omits any of the four items, the coordinator MUST re-dispatch the subagent with the full preamble and log a governance delivery failure.
@@ -187,6 +188,7 @@ After each micro-task's implementation, two reviews MUST occur **in this order**
 - **Coupling & Leakage Audit:** Verify that no direct database SDK dependencies (e.g. `@firebase/firestore` or `cloud_firestore`) leak into UI / presentation components. All components must interact exclusively with abstract repositories.
 - **Layout Engine Compliance:** Verify that split workspaces align with `logical-layout.json`, resizable splitter containers isolate reflows using CSS Container Queries to prevent unmounting state loss, and icons conform to the 16px SVG outline limits (stroke weight 1.0px–1.2px, cell padding 4px).
 - **Model Integrity Check:** Verify that every constructor, `copyWith`, and `valueWriter` in the diff includes or passes through new fields.
+- **AST PartDef Grounding & Failure Mode Mitigation:** Verify that the implemented code maintains continuous architectural grounding in its target SysML `part def` component and handles the failure modes cataloged in `docs/research/FAILURE_MODE_REGISTRY.md`.
 - **Governance Adherence Check:** Verify the subagent's governance acknowledgment is present and complete. If missing or incomplete, fail the review and require re-dispatch.
 - **If issues found:** Implementer fixes → re-review. Do NOT proceed to Stage 2 until Stage 1 passes.
 
