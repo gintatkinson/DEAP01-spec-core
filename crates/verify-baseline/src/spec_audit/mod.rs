@@ -49,9 +49,9 @@ pub use sections::{
 };
 pub use uml_validator::{
     validate_class_diagram, validate_document_uml, validate_epic_statechart_heterogeneity,
-    validate_parent_epic_alignment, validate_sequence_diagram, validate_source_references,
-    validate_state_diagram, validate_use_case_diagram_compliance, ClassifierSymbolInfo,
-    SysmlSymbolIndex,
+    validate_feature_operation_coverage, validate_parent_epic_alignment, validate_sequence_diagram,
+    validate_source_references, validate_state_diagram, validate_use_case_diagram_compliance,
+    validate_user_story_test_cases, ClassifierSymbolInfo, SysmlSymbolIndex,
 };
 pub use conops_audit::{
     check_conops_dir_exists, extract_markdown_tables, validate_conops, validate_conops_workspace,
@@ -357,6 +357,7 @@ pub fn load_sysml_symbol_index(repo_root: &Path) -> Result<SysmlSymbolIndex, Spe
     let requirements = deap_core::sysml_ast::parse_requirement_defs(&combined_content);
     let attributes = deap_core::sysml_ast::parse_attribute_defs(&combined_content);
     let top_states = deap_core::sysml_ast::parse_state_defs(&combined_content);
+    let test_cases = deap_core::sysml_ast::parse_test_case_defs(&combined_content);
 
     let model = deap_core::sysml_ast::SysmlModel {
         package_name: None,
@@ -367,6 +368,7 @@ pub fn load_sysml_symbol_index(repo_root: &Path) -> Result<SysmlSymbolIndex, Spe
         actions,
         constraints,
         requirements,
+        test_cases,
     };
 
     let mut index = SysmlSymbolIndex::from_model(&model);
@@ -604,6 +606,18 @@ pub fn run_spec_audit(options: &SpecAuditOptions) -> Result<SpecAuditSummary, Sp
                             None,
                         ));
                     }
+                }
+
+                if spec_type == "feature" {
+                    let feat_findings =
+                        validate_feature_operation_coverage(&doc, &content, &rel_path, &symbol_index);
+                    findings.extend(feat_findings);
+                }
+
+                if spec_type == "user_story" {
+                    let us_findings =
+                        validate_user_story_test_cases(&doc, &content, &rel_path, &symbol_index);
+                    findings.extend(us_findings);
                 }
             }
 

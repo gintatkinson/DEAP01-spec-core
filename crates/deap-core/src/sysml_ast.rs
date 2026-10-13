@@ -643,6 +643,8 @@ pub struct SysmlModel {
     pub actions: Vec<ActionDef>,
     pub constraints: Vec<ConstraintDef>,
     pub requirements: Vec<RequirementDef>,
+    #[serde(default)]
+    pub test_cases: Vec<TestCaseDef>,
 }
 
 impl From<PackageDef> for SysmlModel {
@@ -656,6 +658,7 @@ impl From<PackageDef> for SysmlModel {
             actions: pkg.action_defs,
             constraints: pkg.constraint_defs,
             requirements: pkg.requirement_defs,
+            test_cases: pkg.test_case_defs,
         }
     }
 }
@@ -676,7 +679,7 @@ impl From<SysmlModel> for PackageDef {
             capability_defs: Vec::new(),
             interaction_defs: Vec::new(),
             constraint_defs: m.constraints,
-            test_case_defs: Vec::new(),
+            test_case_defs: m.test_cases,
             requirement_defs: m.requirements,
             state_defs: Vec::new(),
             use_case_defs: Vec::new(),
@@ -1306,6 +1309,110 @@ pub fn parse_requirement_defs(content: &str) -> Vec<RequirementDef> {
     reqs
 }
 
+/// Parse test case definitions from SysML v2 source text.
+pub fn parse_test_case_defs(content: &str) -> Vec<TestCaseDef> {
+    let masked = mask_string_literals(content);
+    let mut test_cases = Vec::new();
+    let mut idx = 0;
+    while let Some(pos) = masked[idx..].find("test") {
+        let test_pos = idx + pos;
+        if !is_word_boundary_before(&masked, test_pos) || !is_word_boundary_after(&masked, test_pos + 4) {
+            idx = test_pos + 4;
+            continue;
+        }
+        let doc = extract_doc_comment_before(content, test_pos);
+        let mut curr = test_pos + 4;
+        curr += skip_ws(&masked[curr..]);
+        if !masked[curr..].starts_with("case") || !is_word_boundary_after(&masked[curr..], 4) {
+            idx = test_pos + 4;
+            continue;
+        }
+        curr += 4;
+        curr += skip_ws(&masked[curr..]);
+        if masked[curr..].starts_with("def") && is_word_boundary_after(&masked[curr..], 3) {
+            curr += 3;
+            curr += skip_ws(&masked[curr..]);
+        }
+        let (name, name_len) = extract_ident(&masked[curr..]);
+        if name.is_empty() {
+            idx = test_pos + 4;
+            continue;
+        }
+        curr += name_len;
+        curr += skip_ws(&masked[curr..]);
+
+        let mut subject_part = None;
+        let mut verified_requirements = Vec::new();
+        let mut objective = None;
+        let mut test_steps = Vec::new();
+
+        if masked[curr..].starts_with('{') {
+            if let Some(close_pos) = find_matching_brace(content, curr) {
+                let body = &content[curr + 1..close_pos];
+                for line in body.lines() {
+                    let mut line_str = line;
+                    if let Some(comment_pos) = line_str.find("//") {
+                        line_str = &line_str[..comment_pos];
+                    }
+                    let trimmed = line_str.trim();
+                    if trimmed.starts_with("subject") && is_word_boundary_after(trimmed, 7) {
+                        let val = trimmed[7..].trim().trim_end_matches(';').trim();
+                        if !val.is_empty() {
+                            subject_part = Some(val.to_string());
+                        }
+                    } else if trimmed.starts_with("verify") && is_word_boundary_after(trimmed, 6) {
+                        let mut rest = trimmed[6..].trim();
+                        if rest.starts_with("assert") && is_word_boundary_after(rest, 6) {
+                            rest = rest[6..].trim();
+                        }
+                        if rest.starts_with("requirement") && is_word_boundary_after(rest, 11) {
+                            rest = rest[11..].trim();
+                        } else if rest.starts_with("constraint") && is_word_boundary_after(rest, 10) {
+                            rest = rest[10..].trim();
+                        }
+                        let targets = rest.trim_end_matches(';').trim();
+                        for target in targets.split(',') {
+                            let t = target.trim();
+                            if !t.is_empty() {
+                                verified_requirements.push(t.to_string());
+                            }
+                        }
+                    } else if trimmed.starts_with("objective") && is_word_boundary_after(trimmed, 9) {
+                        let val = trimmed[9..].trim().trim_end_matches(';').trim().trim_matches('"');
+                        if !val.is_empty() {
+                            objective = Some(val.to_string());
+                        }
+                    } else if trimmed.starts_with("step") && is_word_boundary_after(trimmed, 4) {
+                        let val = trimmed[4..].trim().trim_end_matches(';').trim();
+                        if !val.is_empty() {
+                            test_steps.push(val.to_string());
+                        }
+                    }
+                }
+                idx = close_pos + 1;
+            } else {
+                idx = test_pos + 4;
+                continue;
+            }
+        } else if masked[curr..].starts_with(';') {
+            idx = curr + 1;
+        } else {
+            idx = test_pos + 4;
+            continue;
+        }
+
+        test_cases.push(TestCaseDef {
+            name: name.to_string(),
+            subject_part,
+            verified_requirements,
+            objective,
+            test_steps,
+            doc,
+        });
+    }
+    test_cases
+}
+
 /// Parse connection definitions from SysML v2 source text.
 pub fn parse_connection_defs(content: &str) -> Vec<ConnectionDef> {
     let mut conns = Vec::new();
@@ -1677,6 +1784,7 @@ pub fn parse_sysml(content: &str) -> SysmlModel {
         let constraints = parse_constraint_defs(body);
         let requirements = parse_requirement_defs(body);
         let attributes = parse_attribute_defs(body);
+        let test_cases = parse_test_case_defs(body);
 
         SysmlModel {
             package_name: Some(package_name),
@@ -1687,6 +1795,7 @@ pub fn parse_sysml(content: &str) -> SysmlModel {
             actions,
             constraints,
             requirements,
+            test_cases,
         }
     } else {
         let parts = parse_part_defs(content);
@@ -1695,6 +1804,7 @@ pub fn parse_sysml(content: &str) -> SysmlModel {
         let constraints = parse_constraint_defs(content);
         let requirements = parse_requirement_defs(content);
         let attributes = parse_attribute_defs(content);
+        let test_cases = parse_test_case_defs(content);
 
         SysmlModel {
             package_name: None,
@@ -1705,6 +1815,7 @@ pub fn parse_sysml(content: &str) -> SysmlModel {
             actions,
             constraints,
             requirements,
+            test_cases,
         }
     }
 }
@@ -2048,6 +2159,25 @@ part def VehicleSystem {
         assert_eq!(root.get_all_actions()[0].name, "SubAction");
         assert_eq!(root.get_all_constraints().len(), 1);
         assert_eq!(root.get_all_constraints()[0].name, "NestedConstraint");
+    }
+
+    #[test]
+    fn test_parse_test_case_defs_with_assert_constraints() {
+        let content = r#"
+            test case def TC_UCA_33_Verification {
+                subject WeaponController;
+                verify requirement Assert_UCA_33, Assert_UCA_34;
+                objective "Verify armState interlock per UCA-33";
+                step trigger_arming;
+            }
+        "#;
+        let test_cases = parse_test_case_defs(content);
+        assert_eq!(test_cases.len(), 1);
+        assert_eq!(test_cases[0].name, "TC_UCA_33_Verification");
+        assert_eq!(test_cases[0].subject_part.as_deref(), Some("WeaponController"));
+        assert_eq!(test_cases[0].verified_requirements, vec!["Assert_UCA_33", "Assert_UCA_34"]);
+        assert_eq!(test_cases[0].objective.as_deref(), Some("Verify armState interlock per UCA-33"));
+        assert_eq!(test_cases[0].test_steps, vec!["trigger_arming"]);
     }
 }
 

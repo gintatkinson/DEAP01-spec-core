@@ -1358,10 +1358,19 @@ impl<'a> SysmlParser<'a> {
                     subject_part = Some(self.read_until_semi());
                 } else if self.check(&TokenKind::Verify) {
                     self.advance();
-                    if self.check(&TokenKind::Requirement) {
+                    if self.check(&TokenKind::Assert) {
                         self.advance();
                     }
-                    verified_requirements.push(self.read_until_semi());
+                    if self.check(&TokenKind::Requirement) || self.check(&TokenKind::Constraint) {
+                        self.advance();
+                    }
+                    let targets_raw = self.read_until_semi();
+                    for target in targets_raw.split(',') {
+                        let trimmed = target.trim();
+                        if !trimmed.is_empty() {
+                            verified_requirements.push(trimmed.to_string());
+                        }
+                    }
                 } else if self.check(&TokenKind::Objective) {
                     self.advance();
                     objective = Some(self.read_until_semi());
@@ -2462,6 +2471,35 @@ package TestPackage {
         assert!(doc.contains("Actors: CIContinuousIntegrationRunner, HumanEngineer"));
         assert!(doc.contains("Main Success Scenario:"));
         assert!(doc.contains("5a. SI unit dimension mismatch."));
+    }
+
+    #[test]
+    fn test_parse_test_case_def_with_assert_constraint_ids() {
+        let source = r#"
+package AutonomousDefenseSystem {
+    assert constraint Assert_UCA_33 {
+        armState == ArmStatus::ARMED;
+    }
+
+    assert constraint Assert_UCA_34 {
+        lockConfidence >= 0.98;
+    }
+
+    test case def TC_UCA_33_Verification {
+        subject WeaponController;
+        verify requirement Assert_UCA_33, Assert_UCA_34;
+        objective "Verify armState interlock per UCA-33";
+        step trigger_arming;
+    }
+}
+"#;
+        let pkg = SysmlParser::parse_source(source, "TestModel").unwrap();
+        assert_eq!(pkg.test_case_defs.len(), 1);
+        let tc = &pkg.test_case_defs[0];
+        assert_eq!(tc.name, "TC_UCA_33_Verification");
+        assert_eq!(tc.verified_requirements.len(), 2);
+        assert_eq!(tc.verified_requirements[0], "Assert_UCA_33");
+        assert_eq!(tc.verified_requirements[1], "Assert_UCA_34");
     }
 }
 

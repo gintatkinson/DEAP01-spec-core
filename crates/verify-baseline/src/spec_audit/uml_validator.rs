@@ -53,6 +53,12 @@ pub struct SysmlSymbolIndex {
     pub attribute_names: HashSet<String>,
     /// Mapping of classifier name -> ClassifierSymbolInfo.
     pub classifiers: HashMap<String, ClassifierSymbolInfo>,
+    /// Valid Requirement IDs and names.
+    pub requirement_ids: HashSet<String>,
+    /// Valid Constraint IDs and names (including assert constraints).
+    pub constraint_ids: HashSet<String>,
+    /// Test case name -> list of verified requirement/constraint IDs.
+    pub test_cases: HashMap<String, Vec<String>>,
 }
 
 impl SysmlSymbolIndex {
@@ -87,6 +93,35 @@ impl SysmlSymbolIndex {
         for act in &model.actions {
             if !act.name.is_empty() {
                 index.action_names.insert(act.name.clone());
+            }
+        }
+
+        // Index model-level constraints
+        for c in &model.constraints {
+            if !c.name.is_empty() {
+                index.constraint_ids.insert(c.name.clone());
+            }
+        }
+
+        // Index model-level requirements
+        for req in &model.requirements {
+            if !req.name.is_empty() {
+                index.requirement_ids.insert(req.name.clone());
+            }
+            if !req.req_id.is_empty() {
+                index.requirement_ids.insert(req.req_id.clone());
+            }
+            for c in &req.constraints {
+                if !c.name.is_empty() {
+                    index.constraint_ids.insert(c.name.clone());
+                }
+            }
+        }
+
+        // Index model-level test cases
+        for tc in &model.test_cases {
+            if !tc.name.is_empty() {
+                index.test_cases.insert(tc.name.clone(), tc.verified_requirements.clone());
             }
         }
 
@@ -130,6 +165,29 @@ impl SysmlSymbolIndex {
         for op in &pkg.operation_defs {
             if !op.name.is_empty() {
                 self.action_names.insert(op.name.clone());
+            }
+        }
+        for c in &pkg.constraint_defs {
+            if !c.name.is_empty() {
+                self.constraint_ids.insert(c.name.clone());
+            }
+        }
+        for req in &pkg.requirement_defs {
+            if !req.name.is_empty() {
+                self.requirement_ids.insert(req.name.clone());
+            }
+            if !req.req_id.is_empty() {
+                self.requirement_ids.insert(req.req_id.clone());
+            }
+            for c in &req.constraints {
+                if !c.name.is_empty() {
+                    self.constraint_ids.insert(c.name.clone());
+                }
+            }
+        }
+        for tc in &pkg.test_case_defs {
+            if !tc.name.is_empty() {
+                self.test_cases.insert(tc.name.clone(), tc.verified_requirements.clone());
             }
         }
         for st in &pkg.state_defs {
@@ -189,6 +247,30 @@ impl SysmlSymbolIndex {
             }
 
             classifier.states.extend(classifier_states);
+        }
+
+        for c in &part.constraints {
+            if !c.name.is_empty() {
+                self.constraint_ids.insert(c.name.clone());
+            }
+        }
+        for req in &part.requirements {
+            if !req.name.is_empty() {
+                self.requirement_ids.insert(req.name.clone());
+            }
+            if !req.req_id.is_empty() {
+                self.requirement_ids.insert(req.req_id.clone());
+            }
+            for c in &req.constraints {
+                if !c.name.is_empty() {
+                    self.constraint_ids.insert(c.name.clone());
+                }
+            }
+        }
+        for tc in &part.test_cases {
+            if !tc.name.is_empty() {
+                self.test_cases.insert(tc.name.clone(), tc.verified_requirements.clone());
+            }
         }
 
         for st in &part.states {
@@ -1078,6 +1160,330 @@ pub fn validate_parent_epic_alignment(
     errors
 }
 
+/// Helper to extract leading alphanumeric identifier characters.
+fn extract_simple_ident(s: &str) -> &str {
+    let trimmed = s.trim();
+    let end = trimmed
+        .find(|c: char| !c.is_alphanumeric() && c != '_')
+        .unwrap_or(trimmed.len());
+    &trimmed[..end]
+}
+
+/// Helper to check if needle is contained in haystack as a distinct whole word (bounded by non-alphanumeric/_ characters).
+fn contains_whole_word(haystack: &str, needle: &str) -> bool {
+    if needle.is_empty() {
+        return false;
+    }
+    let mut start = 0;
+    while let Some(pos) = haystack[start..].find(needle) {
+        let abs_pos = start + pos;
+        let end_pos = abs_pos + needle.len();
+        let left_ok = abs_pos == 0
+            || !haystack[..abs_pos]
+                .chars()
+                .next_back()
+                .map_or(false, |c| c.is_alphanumeric() || c == '_');
+        let right_ok = end_pos >= haystack.len()
+            || !haystack[end_pos..]
+                .chars()
+                .next()
+                .map_or(false, |c| c.is_alphanumeric() || c == '_');
+        if left_ok && right_ok {
+            return true;
+        }
+        start = abs_pos + 1;
+    }
+    false
+}
+
+/// Validates that all SysML actions and operations declared on bound parts are covered in the feature specification.
+///
+/// Scopes part matching strictly to frontmatter/table `schema_containers` (with fallback strictly to explicit
+/// Mermaid `classDiagram` blocks or SysML code blocks), guaranteeing that casual body prose mentions of foreign
+/// parts never re-attribute operations.
+pub fn validate_feature_operation_coverage(
+    doc: &MarkdownDoc,
+    content: &str,
+    rel_path: &str,
+    index: &SysmlSymbolIndex,
+) -> Vec<crate::spec_audit::SpecAuditFinding> {
+    let mut findings = Vec::new();
+    let filename = std::path::Path::new(rel_path)
+        .file_name()
+        .map(|f| f.to_string_lossy().to_string())
+        .unwrap_or_else(|| rel_path.to_string());
+
+    // 1. Determine matched parts from schema_containers (frontmatter or table metadata)
+    let mut matched_classifiers: Vec<&ClassifierSymbolInfo> = Vec::new();
+    let mut container_vals = Vec::new();
+
+    if let Some(ref fm) = doc.frontmatter {
+        if let Some(val) = fm.get("schema_containers") {
+            container_vals.push(val.as_str());
+        }
+    }
+    for (k, v) in &doc.table_metadata {
+        let norm_k = k.to_ascii_lowercase().replace(' ', "_");
+        if norm_k == "schema_containers" {
+            container_vals.push(v.as_str());
+        }
+    }
+
+    for c_val in container_vals {
+        // Strip brackets if array-like: "[Container1, Container2]"
+        let cleaned = c_val.trim_matches(|c| c == '[' || c == ']' || c == '`');
+        for part_entry in cleaned.split(',') {
+            let entry = part_entry.trim().trim_matches('"').trim_matches('\'').trim();
+            if entry.is_empty() {
+                continue;
+            }
+            let leaf = if let Some(pos) = entry.rfind('/') {
+                &entry[pos + 1..]
+            } else if let Some(pos) = entry.rfind("::") {
+                &entry[pos + 2..]
+            } else if let Some(pos) = entry.rfind(':') {
+                &entry[pos + 1..]
+            } else {
+                entry
+            };
+            let leaf = leaf.trim().trim_matches('`');
+            let leaf_lower = leaf.to_ascii_lowercase();
+
+            for (c_name, c_info) in &index.classifiers {
+                if c_name.to_ascii_lowercase() == leaf_lower {
+                    if !matched_classifiers.iter().any(|existing| existing.name == c_info.name) {
+                        matched_classifiers.push(c_info);
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Strict Fallback: ONLY if schema_containers did not match any classifier,
+    // match parts declared in explicit Mermaid classDiagram blocks or SysML code blocks.
+    // Crucially: casual body prose mentions are NEVER used.
+    if matched_classifiers.is_empty() {
+        let mut explicit_declared_parts = HashSet::new();
+
+        // 2a. Mermaid classDiagram blocks
+        for block in &doc.mermaid_blocks {
+            if block.header == "classDiagram" {
+                for line in block.raw.lines() {
+                    let mut line_str = line.trim();
+                    if let Some(idx) = line_str.find("%%") {
+                        line_str = line_str[..idx].trim();
+                    }
+                    if line_str.is_empty() {
+                        continue;
+                    }
+                    if line_str.starts_with("class ") {
+                        let ident = line_str[6..].trim().trim_matches('{').trim();
+                        let ident_clean = extract_simple_ident(ident);
+                        if !ident_clean.is_empty() {
+                            explicit_declared_parts.insert(ident_clean.to_ascii_lowercase());
+                        }
+                    } else if line_str.contains(':') && !line_str.to_ascii_lowercase().starts_with("note") {
+                        if let Some(colon_pos) = line_str.find(':') {
+                            let ident = line_str[..colon_pos].trim();
+                            let ident_clean = extract_simple_ident(ident);
+                            if !ident_clean.is_empty() {
+                                explicit_declared_parts.insert(ident_clean.to_ascii_lowercase());
+                            }
+                        }
+                    } else if line_str.contains('{') {
+                        if let Some(brace_pos) = line_str.find('{') {
+                            let ident = line_str[..brace_pos].trim();
+                            let ident_clean = extract_simple_ident(ident);
+                            if !ident_clean.is_empty() {
+                                explicit_declared_parts.insert(ident_clean.to_ascii_lowercase());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2b. SysML code blocks
+        let mut in_sysml_block = false;
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("```") {
+                let tag = trimmed.trim_start_matches('`').trim();
+                if !in_sysml_block && (tag == "sysml" || tag == "sysmlv2") {
+                    in_sysml_block = true;
+                } else {
+                    in_sysml_block = false;
+                }
+                continue;
+            }
+            if in_sysml_block {
+                if let Some(pos) = trimmed.find("part def ") {
+                    let rest = &trimmed[pos + 9..];
+                    let ident = extract_simple_ident(rest);
+                    if !ident.is_empty() {
+                        explicit_declared_parts.insert(ident.to_ascii_lowercase());
+                    }
+                } else if let Some(pos) = trimmed.find("part ") {
+                    let rest = &trimmed[pos + 5..];
+                    let ident = extract_simple_ident(rest);
+                    if !ident.is_empty() {
+                        explicit_declared_parts.insert(ident.to_ascii_lowercase());
+                    }
+                }
+            }
+        }
+
+        for (c_name, c_info) in &index.classifiers {
+            if explicit_declared_parts.contains(&c_name.to_ascii_lowercase()) {
+                if !matched_classifiers.iter().any(|existing| existing.name == c_info.name) {
+                    matched_classifiers.push(c_info);
+                }
+            }
+        }
+    }
+
+    // 3. Validate operation and action coverage for all matched parts
+    for classifier in matched_classifiers {
+        let mut ops_to_check = HashSet::new();
+        ops_to_check.extend(&classifier.operations);
+        ops_to_check.extend(&classifier.actions);
+
+        for op_name in ops_to_check {
+            if !contains_whole_word(content, op_name) {
+                findings.push(crate::spec_audit::SpecAuditFinding::new(
+                    "feature-operation-missing",
+                    format!(
+                        "Feature '{}': SysML action/operation '{}' on part '{}' is not extracted or bound in feature specification.",
+                        filename, op_name, classifier.name
+                    ),
+                    rel_path,
+                    None,
+                ));
+            }
+        }
+    }
+
+    findings
+}
+
+/// Validates that test cases bound in User Story specifications exist in the SysML AST
+/// and that their `verify requirement` bindings target valid requirements or assert constraints.
+pub fn validate_user_story_test_cases(
+    doc: &MarkdownDoc,
+    content: &str,
+    rel_path: &str,
+    index: &SysmlSymbolIndex,
+) -> Vec<crate::spec_audit::SpecAuditFinding> {
+    let mut findings = Vec::new();
+    let filename = std::path::Path::new(rel_path)
+        .file_name()
+        .map(|f| f.to_string_lossy().to_string())
+        .unwrap_or_else(|| rel_path.to_string());
+
+    // If SysML schema defines no test cases across the entire model, this check is skipped.
+    if index.test_cases.is_empty() {
+        return findings;
+    }
+
+    let mut tc_refs = Vec::new();
+
+    // 1. From frontmatter
+    if let Some(ref fm) = doc.frontmatter {
+        for key in &["sysml_test_case", "test_case", "test_case_def", "test_cases"] {
+            if let Some(val) = fm.get(*key) {
+                let cleaned = val.trim_matches(|c| c == '[' || c == ']' || c == '`');
+                for t in cleaned.split(',') {
+                    let trimmed = t.trim().trim_matches('"').trim_matches('\'').trim();
+                    if !trimmed.is_empty() {
+                        tc_refs.push(trimmed.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. From table metadata
+    for (k, v) in &doc.table_metadata {
+        let norm_k = k.to_ascii_lowercase().replace(' ', "_");
+        if norm_k == "sysml_test_case" || norm_k == "test_case" || norm_k == "test_case_def" {
+            let cleaned = v.trim_matches(|c| c == '[' || c == ']' || c == '`');
+            for t in cleaned.split(',') {
+                let trimmed = t.trim().trim_matches('"').trim_matches('\'').trim();
+                if !trimmed.is_empty() {
+                    tc_refs.push(trimmed.to_string());
+                }
+            }
+        }
+    }
+
+    // 3. Scan content for TC_ prefix tokens
+    for word in content.split(|c: char| !c.is_alphanumeric() && c != '_') {
+        if word.starts_with("TC_") && word.len() > 3 {
+            tc_refs.push(word.to_string());
+        }
+    }
+
+    // Filter out generic keywords
+    tc_refs.retain(|t| {
+        t != "TestCase"
+            && t != "test_case"
+            && t != "test_case_def"
+            && t != "Name"
+            && t != "TC_"
+    });
+    tc_refs.sort();
+    tc_refs.dedup();
+
+    for tc_name in &tc_refs {
+        match index.test_cases.get(tc_name) {
+            None => {
+                findings.push(crate::spec_audit::SpecAuditFinding::new(
+                    "user-story-test-case-not-in-ast",
+                    format!(
+                        "User Story '{}': Bound test case '{}' is not defined in SysML AST.",
+                        filename, tc_name
+                    ),
+                    rel_path,
+                    None,
+                ));
+            }
+            Some(verified_reqs) => {
+                if verified_reqs.is_empty() {
+                    findings.push(crate::spec_audit::SpecAuditFinding::new(
+                        "test-case-missing-verify-requirement",
+                        format!(
+                            "User Story '{}': Test case def '{}' does not declare any 'verify requirement' bindings for safety requirements.",
+                            filename, tc_name
+                        ),
+                        rel_path,
+                        None,
+                    ));
+                } else {
+                    for v_target in verified_reqs {
+                        // Crucial fix for Issue #231:
+                        // Acceptance check passes if v_target is found in EITHER requirement_ids OR constraint_ids!
+                        let is_valid = index.requirement_ids.contains(v_target)
+                            || index.constraint_ids.contains(v_target);
+                        if !is_valid {
+                            findings.push(crate::spec_audit::SpecAuditFinding::new(
+                                "test-case-verify-requirement-invalid",
+                                format!(
+                                    "User Story '{}': Test case def '{}' specifies verify requirement '{}' which is not defined in SysML AST.",
+                                    filename, tc_name, v_target
+                                ),
+                                rel_path,
+                                None,
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    findings
+}
+
 // ============================================================================
 // SEMANTIC ACCEPTANCE UNIT TESTS
 // ============================================================================
@@ -1684,5 +2090,219 @@ mod tests {
         let clean_stories = vec![("docs/user-stories/US-01-BootstrapSystemVisionAction.md", &aligned_story)];
         let clean_errs = validate_parent_epic_alignment(&clean_stories, &features, &epics);
         assert!(clean_errs.is_empty(), "Aligned story should have 0 errors: {:?}", clean_errs);
+    }
+
+    #[test]
+    fn test_feature_operation_coverage_scoping_ignores_prose_mentions() {
+        let mut model = SysmlModel::default();
+
+        let mut avenger = PartDef {
+            name: "Avenger5".to_string(),
+            ..Default::default()
+        };
+        avenger.actions.push(ActionDef {
+            name: "PressEngage".to_string(),
+            ..Default::default()
+        });
+        avenger.operations.push(OperationDef {
+            name: "SlideToConfirm".to_string(),
+            ..Default::default()
+        });
+
+        let mut warhead = PartDef {
+            name: "WarheadModule".to_string(),
+            ..Default::default()
+        };
+        warhead.actions.push(ActionDef {
+            name: "detonate".to_string(),
+            ..Default::default()
+        });
+
+        model.parts.push(avenger);
+        model.parts.push(warhead);
+        let index = SysmlSymbolIndex::from_model(&model);
+
+        // FEAT-102: specifies WarheadModule, but has casual prose mention of Avenger5
+        let feat102_content = r#"
+| Attribute | Detail |
+| :--- | :--- |
+| **Schema Containers** | `AutonomousDefenseSystem::WarheadModule` |
+
+# Feature 102: Warhead Module
+
+This module is nested under part def Avenger5 and interacts with the Avenger5 arm-state machine.
+
+## Behavior
+detonate
+"#;
+        let feat102_doc = MarkdownDoc {
+            headings: vec![],
+            frontmatter: None,
+            table_metadata: HashMap::from([(
+                "schema_containers".to_string(),
+                "AutonomousDefenseSystem::WarheadModule".to_string(),
+            )]),
+            prose: vec![ProseSegment {
+                text: "This module is nested under part def Avenger5 and interacts with the Avenger5 arm-state machine.".to_string(),
+                line: 6,
+            }],
+            mermaid_blocks: vec![],
+            unresolved_placeholders: vec![],
+        };
+
+        let findings = validate_feature_operation_coverage(
+            &feat102_doc,
+            feat102_content,
+            "docs/features/FEAT-102-WarheadModule.md",
+            &index,
+        );
+        assert!(
+            findings.is_empty(),
+            "FEAT-102 should NOT be flagged for Avenger5 operations via prose mention: {:?}",
+            findings
+        );
+
+        // FEAT-101: owning feature for Avenger5, but omits SlideToConfirm
+        let feat101_content = r#"
+| Attribute | Detail |
+| :--- | :--- |
+| **Schema Containers** | `AutonomousDefenseSystem::Avenger5` |
+
+# Feature 101: Avenger5 Platform
+
+PressEngage
+"#;
+        let feat101_doc = MarkdownDoc {
+            headings: vec![],
+            frontmatter: None,
+            table_metadata: HashMap::from([(
+                "schema_containers".to_string(),
+                "AutonomousDefenseSystem::Avenger5".to_string(),
+            )]),
+            prose: vec![],
+            mermaid_blocks: vec![],
+            unresolved_placeholders: vec![],
+        };
+
+        let findings_101 = validate_feature_operation_coverage(
+            &feat101_doc,
+            feat101_content,
+            "docs/features/FEAT-101-Avenger5.md",
+            &index,
+        );
+        assert_eq!(findings_101.len(), 1);
+        assert_eq!(findings_101[0].rule_id, "feature-operation-missing");
+        assert!(findings_101[0].message.contains("SlideToConfirm"));
+        assert!(findings_101[0].message.contains("Avenger5"));
+    }
+
+    #[test]
+    fn test_user_story_test_case_accepts_assert_constraint_ids() {
+        let mut model = SysmlModel::default();
+
+        // Add assert constraints
+        model.constraints.push(deap_core::sysml_ast::ConstraintDef {
+            name: "Assert_UCA_33".to_string(),
+            is_assertion: true,
+            ..Default::default()
+        });
+        model.constraints.push(deap_core::sysml_ast::ConstraintDef {
+            name: "Assert_UCA_34".to_string(),
+            is_assertion: true,
+            ..Default::default()
+        });
+
+        // Add test case verifying assert constraints
+        model.test_cases.push(deap_core::sysml_ast::TestCaseDef {
+            name: "TC_UCA_33_Verification".to_string(),
+            verified_requirements: vec!["Assert_UCA_33".to_string(), "Assert_UCA_34".to_string()],
+            ..Default::default()
+        });
+
+        // Add another test case verifying an invalid target
+        model.test_cases.push(deap_core::sysml_ast::TestCaseDef {
+            name: "TC_Invalid_Target".to_string(),
+            verified_requirements: vec!["NonExistentRequirement_99".to_string()],
+            ..Default::default()
+        });
+
+        let index = SysmlSymbolIndex::from_model(&model);
+        assert!(index.constraint_ids.contains("Assert_UCA_33"));
+        assert!(index.constraint_ids.contains("Assert_UCA_34"));
+        assert!(index.test_cases.contains_key("TC_UCA_33_Verification"));
+
+        // Valid user story: binds TC_UCA_33_Verification targeting assert constraints
+        let valid_story_doc = MarkdownDoc {
+            headings: vec![],
+            frontmatter: None,
+            table_metadata: HashMap::from([(
+                "sysml_test_case".to_string(),
+                "TC_UCA_33_Verification".to_string(),
+            )]),
+            prose: vec![],
+            mermaid_blocks: vec![],
+            unresolved_placeholders: vec![],
+        };
+        let valid_story_content = "SysML Test Case: TC_UCA_33_Verification";
+
+        let findings_valid = validate_user_story_test_cases(
+            &valid_story_doc,
+            valid_story_content,
+            "docs/user-stories/US-201-Valid.md",
+            &index,
+        );
+        assert!(
+            findings_valid.is_empty(),
+            "Valid user story with assert constraints should pass with 0 findings: {:?}",
+            findings_valid
+        );
+
+        // Invalid user story: binds TC_Invalid_Target
+        let invalid_story_doc = MarkdownDoc {
+            headings: vec![],
+            frontmatter: None,
+            table_metadata: HashMap::from([(
+                "sysml_test_case".to_string(),
+                "TC_Invalid_Target".to_string(),
+            )]),
+            prose: vec![],
+            mermaid_blocks: vec![],
+            unresolved_placeholders: vec![],
+        };
+        let invalid_story_content = "SysML Test Case: TC_Invalid_Target";
+
+        let findings_invalid = validate_user_story_test_cases(
+            &invalid_story_doc,
+            invalid_story_content,
+            "docs/user-stories/US-203-Invalid.md",
+            &index,
+        );
+        assert_eq!(findings_invalid.len(), 1);
+        assert_eq!(findings_invalid[0].rule_id, "test-case-verify-requirement-invalid");
+        assert!(findings_invalid[0].message.contains("NonExistentRequirement_99"));
+
+        // Unbound user story: binds TC_Ghost not in AST
+        let ghost_story_doc = MarkdownDoc {
+            headings: vec![],
+            frontmatter: None,
+            table_metadata: HashMap::from([(
+                "sysml_test_case".to_string(),
+                "TC_Ghost".to_string(),
+            )]),
+            prose: vec![],
+            mermaid_blocks: vec![],
+            unresolved_placeholders: vec![],
+        };
+        let ghost_story_content = "SysML Test Case: TC_Ghost";
+
+        let findings_ghost = validate_user_story_test_cases(
+            &ghost_story_doc,
+            ghost_story_content,
+            "docs/user-stories/US-204-Ghost.md",
+            &index,
+        );
+        assert_eq!(findings_ghost.len(), 1);
+        assert_eq!(findings_ghost[0].rule_id, "user-story-test-case-not-in-ast");
+        assert!(findings_ghost[0].message.contains("TC_Ghost"));
     }
 }
