@@ -1260,12 +1260,14 @@ impl SysMLParameterBindingEngine {
 
     pub fn _derive_domain_ontology(&mut self) {
         let dom = self.detected_domain.to_lowercase();
+        let is_military = ["military", "defense"].contains(&dom.as_str());
         self.is_non_aircraft = ["medical", "rail", "marine", "space", "industrial"].contains(&dom.as_str());
-        self.is_civilian = ["medical", "rail", "marine", "space", "industrial"].contains(&dom.as_str());
+        self.is_civilian = !is_military;
 
         if self.is_civilian {
             self.parameter_bindings.insert("INTERLOCK_PREFIX".to_string(), "SAF".to_string());
             self.parameter_bindings.insert("INTERLOCK_SECTION_TITLE".to_string(), "Operational Safety Interlocks & High-Consequence Controls".to_string());
+            self.parameter_bindings.insert("INTERLOCK_POLICY_NAME".to_string(), "Operational Safety Interlocks".to_string());
             self.parameter_bindings.insert("TARGET_VERIFICATION_LABEL".to_string(), "Positive Condition Verification (PCV)".to_string());
             self.parameter_bindings.insert("TARGET_VERIFICATION_ACRONYM".to_string(), "PCV".to_string());
             self.parameter_bindings.insert("TARGET_VERIFICATION_PHRASE".to_string(), "positive condition verification".to_string());
@@ -1274,6 +1276,7 @@ impl SysMLParameterBindingEngine {
         } else {
             self.parameter_bindings.insert("INTERLOCK_PREFIX".to_string(), "ROE".to_string());
             self.parameter_bindings.insert("INTERLOCK_SECTION_TITLE".to_string(), "Rules of Engagement (ROE) & Operational Safety Interlocks".to_string());
+            self.parameter_bindings.insert("INTERLOCK_POLICY_NAME".to_string(), "Rules of Engagement (ROE)".to_string());
             self.parameter_bindings.insert("TARGET_VERIFICATION_LABEL".to_string(), "Positive Identification (PID)".to_string());
             self.parameter_bindings.insert("TARGET_VERIFICATION_ACRONYM".to_string(), "PID".to_string());
             self.parameter_bindings.insert("TARGET_VERIFICATION_PHRASE".to_string(), "positive identification".to_string());
@@ -1822,6 +1825,7 @@ impl SysMLParameterBindingEngine {
             }
             *current = replace_roe_phrase(current);
             *current = replace_word_case_insensitive(current, "weapons release", "high-consequence actuation");
+            *current = replace_word_case_insensitive(current, "collateral damage", "adjacent operational risk");
         }
     }
 }
@@ -1859,6 +1863,16 @@ mod tests {
         assert!(output.contains("failsafe joint brake"));
         assert!(output.contains("SAF-01"));
         assert!(output.contains("high-consequence actuation"));
+    }
+
+    #[test]
+    fn test_default_domain_ontology_pure_schema_driven_no_kinetic_bias() {
+        let engine = SysMLParameterBindingEngine::new(None, None, None, false, None);
+        assert_eq!(engine.resolve_token("HIGH_CONSEQUENCE_ACTION", None), "high-consequence actuation");
+        assert_eq!(engine.resolve_token("COLLATERAL_RISK_PHRASE", None), "adjacent operational risk");
+        assert_eq!(engine.resolve_token("INTERLOCK_PREFIX", None), "SAF");
+        assert_eq!(engine.resolve_token("TARGET_VERIFICATION_ACRONYM", None), "PCV");
+        assert_eq!(engine.resolve_token("INTERLOCK_POLICY_NAME", None), "Operational Safety Interlocks");
     }
 
     #[test]

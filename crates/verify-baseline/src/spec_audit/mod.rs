@@ -68,8 +68,9 @@ pub use provenance::{
     find_engineering_parameter, find_naked_numeric_quantities, is_assertion_grounded,
     is_recognized_unit, validate_cardinality_bounds, validate_factual_grounding,
     validate_factual_grounding_content, validate_provenance,
-    validate_source_reference_clause_integrity, ENGINEERING_PARAMETER_TERMS, NORMATIVE_STANDARDS,
-    PROHIBITED_PLACEHOLDERS, RECOGNIZED_UNITS,
+    validate_sequence_diagram_temporal_safety, validate_source_reference_clause_integrity,
+    ENGINEERING_PARAMETER_TERMS, HITL_SENDER_TOKENS, NORMATIVE_STANDARDS,
+    PHYSICAL_ARMING_TARGET_TOKENS, PROHIBITED_PLACEHOLDERS, RECOGNIZED_UNITS,
 };
 
 use serde::{Deserialize, Serialize};

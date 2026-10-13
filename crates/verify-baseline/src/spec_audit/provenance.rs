@@ -14,6 +14,8 @@
 //! 3. Specification Cardinality Bounds (`validate_cardinality_bounds`):
 //!    - Epics: 3--15 features recommended; flags anomalies.
 //!    - Features: 3--10 acceptance criteria recommended; flags anomalies.
+//! 4. Sequence diagram temporal safety (`validate_sequence_diagram_temporal_safety`):
+//!    - Validates that physical arming/firing signals in Mermaid sequence diagrams are preceded by explicit HITL C2 consent.
 //!
 //! Strictly zero regex, zero unwrap/expect/panic in non-test code, zero Unicode em dashes (uses ASCII -- exclusively).
 
@@ -114,6 +116,22 @@ pub const PROHIBITED_PLACEHOLDERS: &[&str] = &[
     "to be populated",
     "tbd",
     "unspecified",
+];
+
+/// Physical arming/firing target entity tokens in sequence diagrams.
+pub const PHYSICAL_ARMING_TARGET_TOKENS: &[&str] = &[
+    "actuator", "pyro", "firingcircuit", "safetyswitch", "motor",
+    "igniter", "armingdevice", "payloadrelease", "laser",
+    "powerstage", "highvoltage", "emitter",
+    "squib", "propulsionenable", "armswitch", "firingunit",
+    "safearm", "safeandarm", "initiator", "booster", "payloadbay", "ejector",
+];
+
+/// Human C2 / HITL participant tokens in sequence diagrams.
+pub const HITL_SENDER_TOKENS: &[&str] = &[
+    "operator", "operators", "pilot", "pilots", "human", "commander",
+    "supervisor", "controller", "technician", "safetyofficer", "user",
+    "c2", "gcsoperator", "gcs", "groundcontrolstation", "groundstation", "console",
 ];
 
 /// Checks if a token represents a recognized physical or engineering unit.
@@ -499,7 +517,7 @@ pub fn is_assertion_grounded(
 /// Postconditions: Returns Ok(Vec<SpecAuditFinding>) detailing missing units or ungrounded assertions.
 /// Algorithmic Complexity: O(L * K) where L is lines and K is line length.
 pub fn validate_factual_grounding(
-    _doc: &MarkdownDoc,
+    doc: &MarkdownDoc,
     content: &str,
     rel_path: &str,
     symbol_index: Option<&SysmlSymbolIndex>,
@@ -615,6 +633,10 @@ pub fn validate_factual_grounding(
         }
     }
 
+    // 3. Sequence diagram temporal safety gate (factual-grounding-temporal-safety-violation)
+    let mut temporal_findings = validate_sequence_diagram_temporal_safety(doc, content, rel_path);
+    findings.append(&mut temporal_findings);
+
     Ok(findings)
 }
 
@@ -630,6 +652,315 @@ pub fn validate_factual_grounding_content(
 ) -> Result<Vec<SpecAuditFinding>, SpecAuditError> {
     let doc = parse_markdown(content)?;
     validate_factual_grounding(&doc, content, rel_path, symbol_index, &[], &[])
+}
+
+/// Normalizes an identifier or token by filtering alphanumeric characters and lowercasing.
+///
+/// Preconditions: None.
+/// Postconditions: Returns lowercased alphanumeric string with all non-alphanumerics removed.
+/// Algorithmic Complexity: O(N) where N is name byte length.
+pub fn normalize_token(name: &str) -> String {
+    name.chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .collect::<String>()
+        .to_ascii_lowercase()
+}
+
+/// Splits a string by non-alphanumeric characters into lowercase words.
+///
+/// Preconditions: None.
+/// Postconditions: Returns vector of non-empty lowercased word tokens.
+/// Algorithmic Complexity: O(N) where N is string byte length.
+pub fn tokenize_words(s: &str) -> Vec<String> {
+    s.split(|c: char| !c.is_ascii_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .map(|w| w.to_ascii_lowercase())
+        .collect()
+}
+
+/// Parses a participant or actor declaration in Mermaid sequence diagrams without regex.
+///
+/// Preconditions: `line` is trimmed.
+/// Postconditions: Returns Some((identifier, alias_or_label)) if line declares a participant or actor.
+/// Algorithmic Complexity: O(L) where L is line length.
+fn parse_participant_declaration(line: &str) -> Option<(String, String)> {
+    let trimmed = line.trim();
+    let rest = if let Some(r) = trimmed.strip_prefix("participant ") {
+        r.trim()
+    } else if let Some(r) = trimmed.strip_prefix("actor ") {
+        r.trim()
+    } else {
+        return None;
+    };
+
+    if let Some((id, alias_part)) = rest.split_once(" as ") {
+        let id_clean = id.trim().trim_matches('"');
+        let alias_clean = alias_part.trim().trim_matches('"');
+        Some((id_clean.to_string(), alias_clean.to_string()))
+    } else {
+        let id_clean = rest.trim().trim_matches('"');
+        Some((id_clean.to_string(), String::new()))
+    }
+}
+
+/// Parses a message arrow line in Mermaid sequence diagrams without regex.
+/// Format: `<sender> <arrow> <target>: <action>`
+///
+/// Preconditions: `line` is trimmed.
+/// Postconditions: Returns Some((sender, target, action)) if line is a valid sequence message.
+/// Algorithmic Complexity: O(L) where L is line length.
+fn parse_message_arrow(line: &str) -> Option<(&str, &str, &str)> {
+    let trimmed = line.trim();
+    let (left, action) = trimmed.split_once(':')?;
+    let left = left.trim();
+    let action = action.trim();
+
+    const ARROWS: &[&str] = &[
+        "-->>", "-->", "--)", "--x",
+        "->>", "->", "-x", "-)",
+    ];
+
+    for arrow in ARROWS {
+        if let Some(idx) = left.find(arrow) {
+            let sender = left[..idx].trim().trim_matches('"');
+            let target = left[idx + arrow.len()..].trim().trim_matches('"');
+            if !sender.is_empty() && !target.is_empty() {
+                return Some((sender, target, action));
+            }
+        }
+    }
+
+    None
+}
+
+/// Determines whether a message sender represents a Human-in-the-Loop (HITL) operator or C2 console.
+///
+/// Preconditions: None.
+/// Postconditions: Returns true if sender or its declared alias matches HITL tokens.
+/// Algorithmic Complexity: O(1) bounded token set search.
+fn is_hitl_sender(
+    sender: &str,
+    participants: &std::collections::HashMap<String, String>,
+) -> bool {
+    let s_norm = normalize_token(sender);
+    let alias = participants.get(sender).cloned().unwrap_or_default();
+    let a_norm = normalize_token(&alias);
+
+    const HITL_SUBSTRINGS: &[&str] = &[
+        "operator", "pilot", "gcs", "commander", "human",
+        "supervisor", "safetyofficer", "controller", "console",
+        "technician", "user", "c2",
+    ];
+
+    if HITL_SENDER_TOKENS.contains(&s_norm.as_str()) || HITL_SENDER_TOKENS.contains(&a_norm.as_str()) {
+        return true;
+    }
+
+    HITL_SUBSTRINGS.iter().any(|tok| s_norm.contains(tok) || a_norm.contains(tok))
+}
+
+/// Determines whether a message action signifies an explicit HITL arming authorization or operator consent.
+///
+/// Preconditions: None.
+/// Postconditions: Returns true if action words indicate operator consent or arming command.
+/// Algorithmic Complexity: O(W) where W is action word count.
+fn is_hitl_consent_action(action: &str) -> bool {
+    let words = tokenize_words(action);
+    if words.is_empty() {
+        return false;
+    }
+
+    if words.iter().any(|w| {
+        w == "consent"
+            || w == "consent_granted"
+            || w == "authorize"
+            || w == "authorized"
+            || w == "authorization"
+            || w == "permit"
+            || w == "permission"
+            || w == "confirm_engagement"
+    }) {
+        return true;
+    }
+
+    let has_arm = words.iter().any(|w| w == "arm" || w.starts_with("arm"));
+    let has_cmd_or_token = words.iter().any(|w| {
+        w == "command"
+            || w == "cmd"
+            || w == "token"
+            || w == "tokens"
+            || w == "key"
+            || w == "keys"
+            || w == "confirm"
+            || w == "switch"
+            || w == "request"
+            || w == "grant"
+            || w == "granted"
+    });
+    if has_arm && has_cmd_or_token {
+        return true;
+    }
+
+    let has_fire = words.iter().any(|w| w == "fire" || w.starts_with("fire") || w == "launch");
+    if has_fire && has_cmd_or_token {
+        return true;
+    }
+
+    false
+}
+
+/// Determines whether an action signifies a disarm, safe, or inhibit command that resets active consent.
+///
+/// Preconditions: None.
+/// Postconditions: Returns true if action words signify safing or disarming.
+/// Algorithmic Complexity: O(W) where W is action word count.
+fn is_disarm_action(action: &str) -> bool {
+    let words = tokenize_words(action);
+    const DISARM_WORDS: &[&str] = &[
+        "disarm", "disarming", "safe", "safing", "inhibit", "inhibiting",
+        "abort", "aborting", "disable", "deactivate",
+    ];
+    words.iter().any(|w| DISARM_WORDS.contains(&w.as_str()))
+}
+
+/// Determines whether a message target represents a physical arming, firing, or motor-enable device.
+///
+/// Preconditions: None.
+/// Postconditions: Returns true if target or its declared alias matches physical arming target tokens.
+/// Algorithmic Complexity: O(1) bounded token set search.
+fn is_physical_arming_target(
+    target: &str,
+    participants: &std::collections::HashMap<String, String>,
+) -> bool {
+    let t_norm = normalize_token(target);
+    let alias = participants.get(target).cloned().unwrap_or_default();
+    let a_norm = normalize_token(&alias);
+
+    PHYSICAL_ARMING_TARGET_TOKENS.iter().any(|tok| {
+        t_norm == *tok || t_norm.contains(tok) || (!a_norm.is_empty() && (a_norm == *tok || a_norm.contains(tok)))
+    })
+}
+
+/// Determines whether an action signifies a physical arming, firing, ignition, or effector trigger.
+///
+/// Preconditions: None.
+/// Postconditions: Returns true if action words signify physical arming or firing actuation.
+/// Algorithmic Complexity: O(W) where W is action word count.
+fn is_physical_arming_action(action: &str) -> bool {
+    let words = tokenize_words(action);
+    if words.is_empty() {
+        return false;
+    }
+
+    const ARMING_KEYWORDS: &[&str] = &[
+        "arm", "arming", "fire", "firing", "detonate", "detonation",
+        "ignite", "ignition", "actuate", "actuation",
+    ];
+
+    if words.iter().any(|w| ARMING_KEYWORDS.contains(&w.as_str())) {
+        return true;
+    }
+
+    let act_norm = normalize_token(action);
+    const COMBOS: &[&str] = &[
+        "motorenable", "enablemotor", "propulsionenable", "enablefiring",
+        "deploypayload", "releasepayload", "ejectpayload", "payloadrelease",
+        "activatepyro", "activateinitiator", "activatepowerstage",
+        "highvoltage",
+    ];
+
+    COMBOS.iter().any(|c| act_norm.contains(c))
+}
+
+/// Scans Mermaid sequence diagrams and validates that any physical arming or firing signal
+/// is preceded temporally by an explicit Human-in-the-Loop (HITL) C2 arming command or operator consent.
+///
+/// Preconditions: `doc` has been parsed into `MarkdownDoc`, `content` is valid UTF-8.
+/// Postconditions: Emits `SpecAuditFinding` with rule ID "factual-grounding-temporal-safety-violation"
+/// for any unauthorized physical actuation signal.
+/// Algorithmic Complexity: O(M * L) where M is diagram count and L is lines per diagram.
+pub fn validate_sequence_diagram_temporal_safety(
+    doc: &MarkdownDoc,
+    content: &str,
+    rel_path: &str,
+) -> Vec<SpecAuditFinding> {
+    let mut findings = Vec::new();
+
+    for block in &doc.mermaid_blocks {
+        let is_sequence = block.header.eq_ignore_ascii_case("sequenceDiagram")
+            || block.raw.lines().any(|l| l.trim().starts_with("sequenceDiagram"));
+        if !is_sequence {
+            continue;
+        }
+
+        let mut hitl_consent_granted = false;
+        let mut participants = std::collections::HashMap::new();
+
+        for (idx, line) in block.raw.lines().enumerate() {
+            let curr_lineno = block.start_line + 1 + idx;
+            let trimmed = line.trim();
+
+            if trimmed.is_empty()
+                || trimmed.starts_with("%%")
+                || trimmed.starts_with("Note ")
+                || trimmed.starts_with("Note\t")
+                || trimmed.starts_with("autonumber")
+                || trimmed.starts_with("title ")
+            {
+                continue;
+            }
+
+            if let Some((id, alias)) = parse_participant_declaration(trimmed) {
+                participants.insert(id, alias);
+                continue;
+            }
+
+            if let Some((sender, target, action)) = parse_message_arrow(trimmed) {
+                // 1. Check if this message grants Human C2 Arming / Consent
+                if is_hitl_sender(sender, &participants) && is_hitl_consent_action(action) {
+                    hitl_consent_granted = true;
+                }
+
+                // 2. Check if this message is a disarm/safe action (resets consent)
+                if is_disarm_action(action) {
+                    hitl_consent_granted = false;
+                    continue;
+                }
+
+                // 3. Check if target is a Physical Arming Target
+                let is_target_phys = is_physical_arming_target(target, &participants);
+
+                // 4. Check if action is a Physical Arming Action
+                let is_act_arm = is_physical_arming_action(action);
+
+                if is_target_phys && is_act_arm {
+                    if !hitl_consent_granted {
+                        let reported_line = content
+                            .lines()
+                            .enumerate()
+                            .find(|(i, l)| {
+                                let lno = i + 1;
+                                lno >= block.start_line && lno <= block.end_line && l.trim() == trimmed
+                            })
+                            .map(|(i, _)| i + 1)
+                            .unwrap_or(curr_lineno);
+
+                        findings.push(SpecAuditFinding::new(
+                            "factual-grounding-temporal-safety-violation",
+                            format!(
+                                "Autonomous arming sequence detected in '{}' on line {}. Physical signal '{}' targeting '{}' is not preceded by an explicit Human-in-the-Loop (HITL) C2 arming command or operator consent.",
+                                rel_path, reported_line, action, target
+                            ),
+                            rel_path,
+                            Some(reported_line),
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    findings
 }
 
 /// Extracts the text slice and starting line number of the `## Source References` section.
@@ -1465,6 +1796,88 @@ This spec lacks normative citations and schema grounding for its operational vel
         assert!(
             findings.iter().any(|f| f.rule_id == "factual-grounding-ungrounded-assertion"),
             "Expected ungrounded assertion finding for unverified claim, got: {:?}",
+            findings
+        );
+    }
+
+    #[test]
+    fn test_autonomous_arming_sequence_diagram_detected_and_rejected() {
+        let content = include_str!("../../../../tests/fixtures/safety/autonomous_arming_usecase.md");
+        let doc = parse_markdown(content).expect("parse markdown");
+        let findings = validate_sequence_diagram_temporal_safety(&doc, content, "tests/fixtures/safety/autonomous_arming_usecase.md");
+
+        assert!(
+            !findings.is_empty(),
+            "Autonomous arming sequence fixture must be rejected by temporal safety validator"
+        );
+        let violations: Vec<_> = findings
+            .iter()
+            .filter(|f| f.rule_id == "factual-grounding-temporal-safety-violation")
+            .collect();
+        assert!(
+            !violations.is_empty(),
+            "Expected factual-grounding-temporal-safety-violation findings, got: {:?}",
+            findings
+        );
+        assert!(
+            violations.iter().any(|f| f.message.contains("Autonomous arming sequence detected")),
+            "Violation message must explain autonomous arming sequence"
+        );
+    }
+
+    #[test]
+    fn test_hitl_authorized_arming_sequence_diagram_passes() {
+        let content = include_str!("../../../../tests/fixtures/safety/hitl_arming_usecase.md");
+        let doc = parse_markdown(content).expect("parse markdown");
+        let findings = validate_sequence_diagram_temporal_safety(&doc, content, "tests/fixtures/safety/hitl_arming_usecase.md");
+
+        let violations: Vec<_> = findings
+            .iter()
+            .filter(|f| f.rule_id == "factual-grounding-temporal-safety-violation")
+            .collect();
+        assert!(
+            violations.is_empty(),
+            "HITL authorized arming sequence fixture must pass temporal safety validator, got: {:?}",
+            violations
+        );
+    }
+
+    #[test]
+    fn test_conops_scn_05_sequence_diagram_passes_temporal_safety() {
+        let content = r#"# ConOps
+```mermaid
+sequenceDiagram
+    autonumber
+    actor MissionSup as "Mission Supervisor"
+    actor SafetySup as "Safety Supervisor"
+    participant Console as "Supervisory Console"
+    participant Controller as "Core Controller"
+    participant EdgeNode as "Edge Processing Node"
+    participant Watchdog as "Safety Watchdog"
+    participant Actuator as "Payload Actuator"
+
+    Controller ->> EdgeNode: 1. Initiate Positive Condition Verification
+    EdgeNode ->> Controller: 2. Verification Confidence Exceeds Threshold
+    Controller ->> Watchdog: 3. Verify Separation to Protected Boundaries
+    Watchdog -->> Controller: 4. Standoff Margin Clear (SAF-05 PASS)
+    Controller ->> Console: 5. Display Verification Data and Request Dual Keys
+    MissionSup ->> Console: 6. Submit Cryptographic Key-A
+    SafetySup ->> Console: 7. Submit Cryptographic Key-B
+    Console ->> Controller: 8. Transmit Dual Consent Tokens (SAF-03 HITL Consent)
+    Controller ->> Watchdog: 9. Validate Timestamps and Signatures
+    Watchdog -->> Controller: 10. Dual Consent Validated - System Armed
+    Controller ->> Actuator: 11. Execute Controlled Actuation Command
+    Actuator -->> Controller: 12. Actuation Execution Confirmed
+    Controller ->> Actuator: 13. Isolate Actuator Power (SAF-06)
+    Controller ->> Watchdog: 14. Transition to Safe Egress Corridor
+    Controller ->> Console: 15. Stream Post-Action Cryptographic Telemetry
+```
+"#;
+        let doc = parse_markdown(content).expect("parse markdown");
+        let findings = validate_sequence_diagram_temporal_safety(&doc, content, "docs/conops/SCN-05.md");
+        assert!(
+            findings.is_empty(),
+            "SCN-05 sequence diagram should pass temporal safety without violations: {:?}",
             findings
         );
     }
