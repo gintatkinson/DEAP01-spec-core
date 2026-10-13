@@ -1918,7 +1918,7 @@ mod tests {
             Some("SSOT for Autonomous System Architecture and Safety Model")
         );
         assert_eq!(pkg.attribute_defs.len(), 4);
-        assert_eq!(pkg.attribute_defs[0].name, "ruddervatorCount");
+        assert_eq!(pkg.attribute_defs[0].name, "actuatorCount");
         assert_eq!(pkg.attribute_defs[0].type_name, "Integer");
         assert_eq!(pkg.attribute_defs[0].default_value.as_deref(), Some("4"));
 

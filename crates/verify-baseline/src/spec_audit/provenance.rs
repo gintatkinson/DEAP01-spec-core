@@ -41,6 +41,8 @@ pub const RECOGNIZED_UNITS: &[&str] = &[
     "kg", "g", "mg", "c", "°c", "k",
     // Ratios, Levels, Percentages
     "%", "percent", "db", "dbm", "dbi", "ppm", "ratio",
+    // Pressure & Force
+    "bar", "mbar", "pa", "kpa", "mpa", "psi", "n", "kn",
     // Data storage
     "b", "kb", "mb", "gb", "tb", "byte", "bytes",
 ];
@@ -302,7 +304,7 @@ pub fn find_naked_numeric_quantities(line: &str) -> Vec<(String, usize)> {
             }
             let end = idx;
 
-            // Character after digits: check if it's an identifier suffix (e.g. 5_ControlActions, 40_Catapult, 5pkg)
+            // Character after digits: check if it's an identifier suffix (e.g. 5_ControlActions, 40_Actuator, 5pkg)
             let is_id_token_suffix = if end < len {
                 let b = bytes[end];
                 if b == b'_' || b == b'-' {
@@ -1259,12 +1261,12 @@ type: feature
 | Property | Subsystem Package | Value |
 | :--- | :--- | :--- |
 | DSC_IN1 Power | 5_ControlActions | 50 W |
-| Catapult Speed | PL-40_Catapult | 35 m/s |
+| Actuator Speed | PL-40_Actuator | 35 m/s |
 | Serial Bus Rate | RS-485_Bus | 115200 bps |
 
 ## Acceptance Criteria
 - [ ] AC-01: Primary DC bus power shall not exceed 50 W.
-- [ ] AC-02: Catapult speed shall reach 35 m/s.
+- [ ] AC-02: Actuator speed shall reach 35 m/s.
 - [ ] AC-03: Serial telemetry rate shall sustain 115200 bps.
 
 ## Source References
@@ -1311,7 +1313,7 @@ Derived from schema/model.sysml and RTCA DO-178C §6.3.1.
 
         // Non-scalar identifiers, subsystem packages, and document titles
         assert!(!is_pure_scalar_numeric("5_ControlActions"));
-        assert!(!is_pure_scalar_numeric("PL-40_Catapult"));
+        assert!(!is_pure_scalar_numeric("PL-40_Actuator"));
         assert!(!is_pure_scalar_numeric("RS-485_Bus"));
         assert!(!is_pure_scalar_numeric("AVENGER5"));
         assert!(!is_pure_scalar_numeric("Feature 24 Power Management System"));
@@ -1332,7 +1334,139 @@ Derived from schema/model.sysml and RTCA DO-178C §6.3.1.
         assert_eq!(extract_scalar_numeric_claim("5_ControlActions"), None);
         assert_eq!(extract_scalar_numeric_claim("AVENGER5"), None);
         assert_eq!(extract_scalar_numeric_claim("Feature 24 Power Management System"), None);
-        assert_eq!(extract_scalar_numeric_claim("PL-40_Catapult"), None);
+        assert_eq!(extract_scalar_numeric_claim("PL-40_Actuator"), None);
+    }
+
+    #[test]
+    fn test_concept_provenance_abstract_structural_property_graph() {
+        let content = r#"---
+title: "Feature 30: Abstract Structural Topology"
+type: feature
+---
+# Feature 30: Abstract Structural Topology
+
+## Metadata
+| Attribute | Detail |
+| :--- | :--- |
+| **Title** | Feature 30: Abstract Structural Topology |
+
+## Architecture Baseline
+| Property | Value |
+| :--- | :--- |
+| structure_topology | DistributedMesh |
+| actuation_mode | DualRedundantHydraulic |
+| cooling_architecture | VaporCycleLoop |
+
+## Requirements
+- [ ] REQ-01: Bus interface operates at 1000 bps with DistributedMesh topology.
+- [ ] REQ-02: Actuation hydraulic circuit maintains 210 bar working pressure.
+- [ ] REQ-03: Vapor cycle loop sustains heat dissipation of 500 W.
+
+## Source References
+Derived from schema/model.sysml §2.1 and ISO/IEC/IEEE 15288:2023.
+"#;
+        let doc = parse_markdown(content).expect("parse markdown");
+        let index = build_test_symbol_index();
+        let findings = validate_factual_grounding(&doc, content, "docs/features/feat-30.md", Some(&index), &[], &[])
+            .expect("validation succeeds");
+
+        assert!(
+            findings.is_empty(),
+            "Abstract structural property graph should pass without domain bias: {:?}",
+            findings
+        );
+    }
+
+    #[test]
+    fn test_concept_provenance_cruciform_empennage_fixtures() {
+        let content = r#"---
+title: "Feature 31: Cruciform Actuator Surface Control"
+type: feature
+---
+# Feature 31: Cruciform Actuator Surface Control
+
+## Metadata
+| Attribute | Detail |
+| :--- | :--- |
+| **Title** | Feature 31: Cruciform Actuator Surface Control |
+
+## Requirements
+- [ ] REQ-01: Orthogonal control surface actuators sustain peak torque of 15 Nm per axis.
+- [ ] REQ-02: Cruciform empennage independent rudder and elevator deflection limits span -25.0 deg to +25.0 deg.
+- [ ] REQ-03: Bus telemetry updates at 100 Hz.
+
+## Source References
+Derived from schema/model.sysml and ISO/IEC/IEEE 15026-3.
+"#;
+        let doc = parse_markdown(content).expect("parse markdown");
+        let index = build_test_symbol_index();
+        let findings = validate_factual_grounding(&doc, content, "docs/features/feat-31.md", Some(&index), &[], &[])
+            .expect("validation succeeds");
+
+        assert!(
+            findings.is_empty(),
+            "Cruciform empennage fixture should validate cleanly without domain bias: {:?}",
+            findings
+        );
+    }
+
+    #[test]
+    fn test_concept_provenance_multi_stabiliser_independent_surfaces() {
+        let content = r#"---
+title: "Feature 32: Multi-Stabiliser Actuation Architecture"
+type: feature
+---
+# Feature 32: Multi-Stabiliser Actuation Architecture
+
+## Metadata
+| Attribute | Detail |
+| :--- | :--- |
+| **Title** | Feature 32: Multi-Stabiliser Actuation Architecture |
+
+## Requirements
+- [ ] REQ-01: Twin vertical stabilizer surfaces provide dual yaw authority over 50 ms step response.
+- [ ] REQ-02: Split elevator surfaces command differential pitch control within 20 ms.
+- [ ] REQ-03: Actuator bus power consumption shall not exceed 120 W.
+
+## Source References
+Derived from schema/model.sysml and ISO/IEC/IEEE 12207:2017.
+"#;
+        let doc = parse_markdown(content).expect("parse markdown");
+        let index = build_test_symbol_index();
+        let findings = validate_factual_grounding(&doc, content, "docs/features/feat-32.md", Some(&index), &[], &[])
+            .expect("validation succeeds");
+
+        assert!(
+            findings.is_empty(),
+            "Multi-stabiliser independent surface fixture should validate cleanly: {:?}",
+            findings
+        );
+    }
+
+    #[test]
+    fn test_concept_provenance_fails_on_unverified_domain_claim() {
+        let content = r#"---
+title: "Feature 33: Ungrounded Domain Claim"
+type: feature
+---
+# Feature 33: Ungrounded Domain Claim
+
+## Requirements
+- [ ] REQ-01: Vehicle operates at 450 m/s maximum velocity without schema derivation.
+
+## Description
+This spec lacks normative citations and schema grounding for its operational velocity parameter.
+"#;
+        let doc = parse_markdown(content).expect("parse markdown");
+        let index = build_test_symbol_index();
+        let findings = validate_factual_grounding(&doc, content, "docs/features/feat-33.md", Some(&index), &[], &[])
+            .expect("validation succeeds");
+
+        assert!(
+            findings.iter().any(|f| f.rule_id == "factual-grounding-ungrounded-assertion"),
+            "Expected ungrounded assertion finding for unverified claim, got: {:?}",
+            findings
+        );
     }
 }
 
