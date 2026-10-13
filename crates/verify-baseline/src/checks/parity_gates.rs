@@ -331,6 +331,17 @@ pub fn check_conops_and_mission_intent_completeness(
     let is_upstream = is_upstream_compiler(repo_root);
     let conops_dir = repo_root.join("docs").join("conops");
 
+    // 1. Validate top-level schema contract if present in .pipeline/schemas/
+    let schema_file = repo_root.join(".pipeline").join("schemas").join("conops_specification_schema.json");
+    if schema_file.is_file() {
+        if let Ok(schema_findings) = crate::spec_audit::conops_audit::validate_conops_schema_file(&schema_file) {
+            if !schema_findings.is_empty() {
+                let errs: Vec<String> = schema_findings.into_iter().map(|f| f.to_string()).collect();
+                return Err(errs);
+            }
+        }
+    }
+
     if !is_upstream {
         if !conops_dir.is_dir() {
             return Ok(ParityOutcome::ConopsDirMissing);
@@ -357,6 +368,20 @@ pub fn check_conops_and_mission_intent_completeness(
 
         if effective_allow_missing && model_text.is_none() && !has_extracted {
             return Ok(ParityOutcome::PendingOrClean);
+        }
+
+        for path in &conops_files {
+            if let Ok(content) = fs::read_to_string(path) {
+                if let Ok(doc) = crate::spec_audit::markdown_ast::parse_markdown(&content) {
+                    let rel = path.strip_prefix(repo_root).unwrap_or(path).to_string_lossy().to_string();
+                    if let Ok(findings) = crate::spec_audit::conops_audit::validate_conops(&doc, &content, &rel) {
+                        if !findings.is_empty() && (strict || !effective_allow_missing) {
+                            let errs: Vec<String> = findings.into_iter().map(|f| f.to_string()).collect();
+                            return Err(errs);
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -637,6 +662,50 @@ mod tests {
             check_dual_schema_ssot_parity(&tmp.path),
             Ok(ParityOutcome::DualSchemaIdentical)
         );
+    }
+
+    #[test]
+    fn test_issue_256_check28_rejects_missing_conops_schema_architecture_contract() {
+        let tmp = TempDir::new("check28_missing_arch");
+        let schemas_dir = tmp.path.join(".pipeline").join("schemas");
+        fs::create_dir_all(&schemas_dir).unwrap();
+
+        // Mutated schema contract missing super_system_architecture and subsystem_architecture
+        let invalid_schema = r#"{
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "required": ["metadata", "operational_context"],
+            "properties": {
+                "metadata": { "type": "object" },
+                "operational_context": { "type": "object" }
+            }
+        }"#;
+        fs::write(schemas_dir.join("conops_specification_schema.json"), invalid_schema).unwrap();
+
+        let res = check_conops_and_mission_intent_completeness(&tmp.path, false, true);
+        assert!(res.is_err(), "Check 28 must fail when conops schema omits architecture properties");
+        let errs = res.err().unwrap();
+        assert!(errs.iter().any(|e| e.contains("super_system_architecture")));
+        assert!(errs.iter().any(|e| e.contains("subsystem_architecture")));
+    }
+
+    #[test]
+    fn test_issue_256_check28_passes_valid_conops_schema_architecture_contract() {
+        let tmp = TempDir::new("check28_valid_arch");
+        let schemas_dir = tmp.path.join(".pipeline").join("schemas");
+        fs::create_dir_all(&schemas_dir).unwrap();
+
+        // Copy actual live schema
+        let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let root = manifest_dir.parent().and_then(|p| p.parent()).unwrap();
+        let live_schema = root.join(".pipeline").join("schemas").join("conops_specification_schema.json");
+        if live_schema.is_file() {
+            let content = fs::read_to_string(&live_schema).unwrap();
+            fs::write(schemas_dir.join("conops_specification_schema.json"), content).unwrap();
+
+            let res = check_conops_and_mission_intent_completeness(&tmp.path, false, true);
+            assert!(res.is_ok(), "Check 28 must pass when conops schema contract is complete: {:?}", res);
+        }
     }
 }
 

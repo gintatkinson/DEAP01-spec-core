@@ -55,8 +55,11 @@ pub use uml_validator::{
 };
 pub use conops_audit::{
     check_conops_dir_exists, extract_markdown_tables, validate_conops, validate_conops_workspace,
+    validate_conops_schema_contract, validate_conops_schema_file,
     validate_emergency_decision_matrix, validate_moe_mop_metrics,
-    validate_operational_allocation_tags, validate_pace_plan, validate_threat_matrix,
+    validate_operational_allocation_tags, validate_pace_plan,
+    validate_subsystem_architecture, validate_super_system_architecture,
+    validate_system_interface_topology, validate_threat_matrix,
     MarkdownTable, TableRow, ThreatDomainSpec, CANONICAL_EMERGENCY_TRIGGERS,
     MANDATORY_THREAT_DOMAINS, MOE_MOP_RECOGNIZED_UNITS, PACE_TIERS,
 };

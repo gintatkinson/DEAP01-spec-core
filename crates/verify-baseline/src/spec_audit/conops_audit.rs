@@ -17,6 +17,7 @@
 
 use crate::spec_audit::markdown_ast::{parse_markdown, MarkdownDoc};
 use crate::spec_audit::{SpecAuditError, SpecAuditFinding};
+use serde_json::Value;
 use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
@@ -630,6 +631,411 @@ pub fn validate_operational_allocation_tags(content: &str, rel_path: &str) -> Ve
     findings
 }
 
+/// Audits Section 4.1 / 8.1 Super-System Operational Architecture and Segment Boundaries (ISO/IEC/IEEE 29148:2018 §6.4.2 / IEEE Std 1362-1998 §5.3).
+///
+/// Preconditions: `content` is valid UTF-8.
+/// Postconditions: Returns findings if a ConOps document omits super-system operational architecture, operational segment definitions, or boundary diagram.
+/// Algorithmic Complexity: O(L) where L is lines count.
+pub fn validate_super_system_architecture(content: &str, rel_path: &str) -> Vec<SpecAuditFinding> {
+    let mut findings = Vec::new();
+    let lower_doc = content.to_lowercase();
+    let lower_path = rel_path.to_lowercase();
+
+    let in_conops_dir = lower_path.contains("docs/conops/") || lower_path.starts_with("docs/conops");
+    let is_conops_spec = lower_path.ends_with("/conops.md")
+        || lower_path == "conops.md"
+        || lower_doc.contains("# concept of operations");
+
+    let is_full_conops = is_conops_spec || (in_conops_dir && lower_path.ends_with("conops.md"));
+    let is_arch_unit = in_conops_dir
+        && (lower_path.contains("04_") || lower_path.contains("08_") || lower_path.contains("architecture"));
+
+    if !is_full_conops && !is_arch_unit {
+        return findings;
+    }
+
+    // 1. Must define Section 4.1 / 8.1 Super-System Architecture
+    let has_super_arch = (lower_doc.contains("super-system") || lower_doc.contains("super system"))
+        && (lower_doc.contains("operational architecture")
+            || lower_doc.contains("segment boundaries")
+            || lower_doc.contains("### 4.1")
+            || lower_doc.contains("### 8.1"));
+
+    if !has_super_arch {
+        findings.push(SpecAuditFinding::new(
+            "conops-super-system-architecture-missing",
+            format!(
+                "ConOps specification in '{}' omits required Section 4.1 / 8.1 Super-System Operational Architecture and Segment Boundaries (ISO/IEC/IEEE 29148:2018 §6.4.2 / IEEE Std 1362-1998 §5.3).",
+                rel_path
+            ),
+            rel_path,
+            None,
+        ));
+        return findings;
+    }
+
+    // 2. Must contain Mermaid boundary diagram formalizing segment boundaries
+    let has_diagram = content.contains("```mermaid")
+        && (lower_doc.contains("flowchart") || lower_doc.contains("graph "));
+
+    if !has_diagram {
+        findings.push(SpecAuditFinding::new(
+            "conops-super-system-boundary-diagram-missing",
+            format!(
+                "Section 4.1 / 8.1 in '{}' omits required Mermaid boundary diagram formalizing system operational segment boundaries.",
+                rel_path
+            ),
+            rel_path,
+            None,
+        ));
+    }
+
+    // 3. Must declare operational segments
+    let has_segments = lower_doc.contains("segment");
+    if !has_segments {
+        findings.push(SpecAuditFinding::new(
+            "conops-super-system-segments-missing",
+            format!(
+                "Section 4.1 / 8.1 in '{}' omits required operational segment definitions and segment allocation matrix.",
+                rel_path
+            ),
+            rel_path,
+            None,
+        ));
+    }
+
+    findings
+}
+
+/// Audits Section 4.3 / 8.3 Subsystem Architecture (100% AST part definition coverage) (ISO/IEC/IEEE 29148:2018 §6.4.3).
+///
+/// Preconditions: `content` is valid UTF-8.
+/// Postconditions: Returns findings if a ConOps document omits subsystem architecture or AST part bindings.
+/// Algorithmic Complexity: O(L) where L is lines count.
+pub fn validate_subsystem_architecture(content: &str, rel_path: &str) -> Vec<SpecAuditFinding> {
+    let mut findings = Vec::new();
+    let lower_doc = content.to_lowercase();
+    let lower_path = rel_path.to_lowercase();
+
+    let in_conops_dir = lower_path.contains("docs/conops/") || lower_path.starts_with("docs/conops");
+    let is_conops_spec = lower_path.ends_with("/conops.md")
+        || lower_path == "conops.md"
+        || lower_doc.contains("# concept of operations");
+
+    let is_full_conops = is_conops_spec || (in_conops_dir && lower_path.ends_with("conops.md"));
+    let is_arch_unit = in_conops_dir
+        && (lower_path.contains("04_") || lower_path.contains("08_") || lower_path.contains("architecture"));
+
+    if !is_full_conops && !is_arch_unit {
+        return findings;
+    }
+
+    // 1. Must define Section 4.3 / 8.3 Subsystem Architecture
+    let has_subsys = lower_doc.contains("subsystem architecture")
+        || lower_doc.contains("physical subsystem decomposition")
+        || lower_doc.contains("### 4.3")
+        || lower_doc.contains("### 8.3")
+        || lower_doc.contains("### 4.8");
+
+    if !has_subsys {
+        findings.push(SpecAuditFinding::new(
+            "conops-subsystem-architecture-missing",
+            format!(
+                "ConOps specification in '{}' omits required Section 4.3 / 8.3 Subsystem Architecture (100% AST Part Coverage) in accordance with ISO/IEC/IEEE 29148:2018 §6.4.3.",
+                rel_path
+            ),
+            rel_path,
+            None,
+        ));
+        return findings;
+    }
+
+    // 2. Must contain AST part allocations / ground truth citations
+    let has_ast_binding = lower_doc.contains("part def")
+        || lower_doc.contains("ast part")
+        || lower_doc.contains("ast_part_ref")
+        || lower_doc.contains("ssot ground truth")
+        || lower_doc.contains("subsystem part")
+        || lower_doc.contains("functional purpose");
+
+    if !has_ast_binding {
+        findings.push(SpecAuditFinding::new(
+            "conops-subsystem-ast-coverage-missing",
+            format!(
+                "Section 4.3 / 8.3 in '{}' omits deterministic AST part def coverage and SSOT ground truth citations.",
+                rel_path
+            ),
+            rel_path,
+            None,
+        ));
+    }
+
+    findings
+}
+
+/// Audits Section 4.4 / 8.4 System Interface Topology and Port Taxonomy (ISO/IEC/IEEE 29148:2018 §6.4.3).
+///
+/// Preconditions: `content` is valid UTF-8.
+/// Postconditions: Returns findings if a ConOps document omits port taxonomy or interface topology.
+/// Algorithmic Complexity: O(L) where L is lines count.
+pub fn validate_system_interface_topology(content: &str, rel_path: &str) -> Vec<SpecAuditFinding> {
+    let mut findings = Vec::new();
+    let lower_doc = content.to_lowercase();
+    let lower_path = rel_path.to_lowercase();
+
+    let in_conops_dir = lower_path.contains("docs/conops/") || lower_path.starts_with("docs/conops");
+    let is_conops_spec = lower_path.ends_with("/conops.md")
+        || lower_path == "conops.md"
+        || lower_doc.contains("# concept of operations");
+
+    let is_full_conops = is_conops_spec || (in_conops_dir && lower_path.ends_with("conops.md"));
+    let is_arch_unit = in_conops_dir
+        && (lower_path.contains("04_") || lower_path.contains("08_") || lower_path.contains("architecture"));
+
+    if !is_full_conops && !is_arch_unit {
+        return findings;
+    }
+
+    let has_topo = lower_doc.contains("port taxonomy")
+        || lower_doc.contains("interface interconnect")
+        || lower_doc.contains("system interface topology")
+        || lower_doc.contains("### 4.4")
+        || lower_doc.contains("### 8.4");
+
+    if !has_topo {
+        findings.push(SpecAuditFinding::new(
+            "conops-system-interface-topology-missing",
+            format!(
+                "ConOps specification in '{}' omits required Section 4.4 / 8.4 System Interface Topology and Port Taxonomy in accordance with ISO/IEC/IEEE 29148:2018 §6.4.3.",
+                rel_path
+            ),
+            rel_path,
+            None,
+        ));
+    }
+
+    findings
+}
+
+/// Audits top-level schema contract in .pipeline/schemas/conops_specification_schema.json (Issue #256).
+///
+/// Preconditions: `schema` is valid parsed JSON.
+/// Postconditions: Returns findings if schema contract omits super_system_architecture, subsystem_architecture, or system_interface_topology.
+/// Algorithmic Complexity: O(P) where P is schema properties count.
+pub fn validate_conops_schema_contract(schema: &Value, schema_path: &str) -> Vec<SpecAuditFinding> {
+    let mut findings = Vec::new();
+
+    let req_array = match schema.get("required").and_then(|r| r.as_array()) {
+        Some(arr) => arr,
+        None => {
+            findings.push(SpecAuditFinding::new(
+                "conops-schema-required-array-missing",
+                format!("Top-level schema in '{}' has no required array.", schema_path),
+                schema_path,
+                None,
+            ));
+            return findings;
+        }
+    };
+
+    let required_props: HashSet<&str> = req_array
+        .iter()
+        .filter_map(|v| v.as_str())
+        .collect();
+
+    // 1. Verify required array presence
+    if !required_props.contains("super_system_architecture") {
+        findings.push(SpecAuditFinding::new(
+            "conops-schema-super-system-architecture-missing",
+            format!("Top-level schema contract required array in '{}' omits 'super_system_architecture'.", schema_path),
+            schema_path,
+            None,
+        ));
+    }
+
+    if !required_props.contains("subsystem_architecture") {
+        findings.push(SpecAuditFinding::new(
+            "conops-schema-subsystem-architecture-missing",
+            format!("Top-level schema contract required array in '{}' omits 'subsystem_architecture'.", schema_path),
+            schema_path,
+            None,
+        ));
+    }
+
+    if !required_props.contains("system_interface_topology") {
+        findings.push(SpecAuditFinding::new(
+            "conops-schema-interface-topology-missing",
+            format!("Top-level schema contract required array in '{}' omits 'system_interface_topology'.", schema_path),
+            schema_path,
+            None,
+        ));
+    }
+
+    // 2. Verify properties definitions
+    let props = match schema.get("properties").and_then(|p| p.as_object()) {
+        Some(p) => p,
+        None => {
+            findings.push(SpecAuditFinding::new(
+                "conops-schema-properties-missing",
+                format!("Top-level schema in '{}' has no properties object.", schema_path),
+                schema_path,
+                None,
+            ));
+            return findings;
+        }
+    };
+
+    // 2a. super_system_architecture property structure
+    if let Some(super_sys) = props.get("super_system_architecture") {
+        let is_obj = super_sys.get("type").and_then(|t| t.as_str()).map_or(false, |t| t == "object");
+        let super_req: HashSet<&str> = super_sys
+            .get("required")
+            .and_then(|r| r.as_array())
+            .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
+            .unwrap_or_default();
+
+        let has_segments = super_req.contains("segments");
+        let has_diagram = super_req.contains("boundary_diagram_mermaid");
+
+        let seg_items_req: HashSet<&str> = super_sys
+            .get("properties")
+            .and_then(|p| p.get("segments"))
+            .and_then(|s| s.get("items"))
+            .and_then(|i| i.get("required"))
+            .and_then(|r| r.as_array())
+            .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
+            .unwrap_or_default();
+
+        let has_seg_fields = seg_items_req.contains("segment_id")
+            && seg_items_req.contains("segment_name")
+            && seg_items_req.contains("operational_role");
+
+        if !is_obj || !has_segments || !has_diagram || !has_seg_fields {
+            findings.push(SpecAuditFinding::new(
+                "conops-schema-super-system-architecture-incomplete",
+                format!("Property 'super_system_architecture' in '{}' is incomplete; requires object with segments (segment_id, segment_name, operational_role) and boundary_diagram_mermaid.", schema_path),
+                schema_path,
+                None,
+            ));
+        }
+    } else {
+        findings.push(SpecAuditFinding::new(
+            "conops-schema-super-system-architecture-missing",
+            format!("Top-level schema properties in '{}' omits 'super_system_architecture'.", schema_path),
+            schema_path,
+            None,
+        ));
+    }
+
+    // 2b. subsystem_architecture property structure
+    if let Some(subsys) = props.get("subsystem_architecture") {
+        let is_obj = subsys.get("type").and_then(|t| t.as_str()).map_or(false, |t| t == "object");
+        let subsys_req: HashSet<&str> = subsys
+            .get("required")
+            .and_then(|r| r.as_array())
+            .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
+            .unwrap_or_default();
+
+        let has_subsystems = subsys_req.contains("subsystems");
+        let has_allocations = subsys_req.contains("ast_part_allocations");
+
+        let subsys_items_req: HashSet<&str> = subsys
+            .get("properties")
+            .and_then(|p| p.get("subsystems"))
+            .and_then(|s| s.get("items"))
+            .and_then(|i| i.get("required"))
+            .and_then(|r| r.as_array())
+            .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
+            .unwrap_or_default();
+
+        let has_subsys_fields = subsys_items_req.contains("subsystem_id")
+            && subsys_items_req.contains("subsystem_name")
+            && subsys_items_req.contains("ast_part_ref")
+            && subsys_items_req.contains("functional_description");
+
+        if !is_obj || !has_subsystems || !has_allocations || !has_subsys_fields {
+            findings.push(SpecAuditFinding::new(
+                "conops-schema-subsystem-architecture-incomplete",
+                format!("Property 'subsystem_architecture' in '{}' is incomplete; requires object with subsystems (subsystem_id, subsystem_name, ast_part_ref, functional_description) and ast_part_allocations.", schema_path),
+                schema_path,
+                None,
+            ));
+        }
+    } else {
+        findings.push(SpecAuditFinding::new(
+            "conops-schema-subsystem-architecture-missing",
+            format!("Top-level schema properties in '{}' omits 'subsystem_architecture'.", schema_path),
+            schema_path,
+            None,
+        ));
+    }
+
+    // 2c. system_interface_topology property structure
+    if let Some(topo) = props.get("system_interface_topology") {
+        let is_obj = topo.get("type").and_then(|t| t.as_str()).map_or(false, |t| t == "object");
+        let topo_req: HashSet<&str> = topo
+            .get("required")
+            .and_then(|r| r.as_array())
+            .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
+            .unwrap_or_default();
+
+        let has_links = topo_req.contains("interface_links");
+
+        let link_items_req: HashSet<&str> = topo
+            .get("properties")
+            .and_then(|p| p.get("interface_links"))
+            .and_then(|l| l.get("items"))
+            .and_then(|i| i.get("required"))
+            .and_then(|r| r.as_array())
+            .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
+            .unwrap_or_default();
+
+        let has_link_fields = link_items_req.contains("link_id")
+            && link_items_req.contains("source_subsystem")
+            && link_items_req.contains("target_subsystem")
+            && link_items_req.contains("protocol_type");
+
+        if !is_obj || !has_links || !has_link_fields {
+            findings.push(SpecAuditFinding::new(
+                "conops-schema-interface-topology-incomplete",
+                format!("Property 'system_interface_topology' in '{}' is incomplete; requires object with interface_links (link_id, source_subsystem, target_subsystem, protocol_type).", schema_path),
+                schema_path,
+                None,
+            ));
+        }
+    } else {
+        findings.push(SpecAuditFinding::new(
+            "conops-schema-interface-topology-missing",
+            format!("Top-level schema properties in '{}' omits 'system_interface_topology'.", schema_path),
+            schema_path,
+            None,
+        ));
+    }
+
+    findings
+}
+
+/// Audits top-level schema contract file on disk.
+///
+/// Preconditions: `schema_path` exists on disk.
+/// Postconditions: Returns Ok(Vec<SpecAuditFinding>) detailing schema contract violations.
+/// Algorithmic Complexity: O(B) where B is file byte length.
+pub fn validate_conops_schema_file(schema_path: &Path) -> Result<Vec<SpecAuditFinding>, SpecAuditError> {
+    if !schema_path.is_file() {
+        return Ok(Vec::new());
+    }
+    let content = match fs::read_to_string(schema_path) {
+        Ok(c) => c,
+        Err(e) => return Err(SpecAuditError::IoError(e.to_string())),
+    };
+    let json_val: Value = match serde_json::from_str(&content) {
+        Ok(v) => v,
+        Err(e) => return Err(SpecAuditError::RuleError(e.to_string())),
+    };
+    let path_str = schema_path.to_string_lossy().to_string();
+    Ok(validate_conops_schema_contract(&json_val, &path_str))
+}
+
 /// Audits an individual ConOps or Mission Intent specification against all Open Schema Contract requirements.
 ///
 /// Preconditions: `doc` has been parsed, `content` is valid UTF-8.
@@ -656,6 +1062,15 @@ pub fn validate_conops(
 
     // 5. Operational Allocation Tags
     findings.append(&mut validate_operational_allocation_tags(content, rel_path));
+
+    // 6. Super-System Operational Architecture (ISO 29148 §6.4.2 / IEEE 1362 §5.3)
+    findings.append(&mut validate_super_system_architecture(content, rel_path));
+
+    // 7. Subsystem Architecture (100% AST part coverage, ISO 29148 §6.4.3)
+    findings.append(&mut validate_subsystem_architecture(content, rel_path));
+
+    // 8. System Interface Topology & Port Taxonomy (ISO 29148 §6.4.3)
+    findings.append(&mut validate_system_interface_topology(content, rel_path));
 
     Ok(findings)
 }
@@ -883,5 +1298,160 @@ mod tests {
 "#;
         let malformed_findings = validate_operational_allocation_tags(malformed_content, "docs/conops/MISSION_INTENT.md");
         assert!(malformed_findings.iter().any(|f| f.rule_id == "conops-operational-allocation-malformed"));
+    }
+
+    #[test]
+    fn test_issue_256_conops_schema_rejects_missing_super_system_and_subsystem_architecture() {
+        let invalid_schema = serde_json::json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "required": [
+                "metadata",
+                "operational_context",
+                "deficiencies",
+                "proposed_capabilities",
+                "user_classes"
+            ],
+            "properties": {
+                "metadata": { "type": "object" },
+                "operational_context": { "type": "object" }
+            }
+        });
+        let findings = validate_conops_schema_contract(&invalid_schema, ".pipeline/schemas/conops_specification_schema.json");
+        assert!(!findings.is_empty(), "Schema contract must reject omission of super_system_architecture and subsystem_architecture");
+        assert!(findings.iter().any(|f| f.rule_id == "conops-schema-super-system-architecture-missing"));
+        assert!(findings.iter().any(|f| f.rule_id == "conops-schema-subsystem-architecture-missing"));
+        assert!(findings.iter().any(|f| f.rule_id == "conops-schema-interface-topology-missing"));
+    }
+
+    #[test]
+    fn test_issue_256_conops_doc_rejects_missing_super_system_and_subsystem_architecture() {
+        let content = r#"# Concept of Operations (ConOps)
+## 1. Operational Context
+System boundaries and context.
+
+## 2. Operational Deficiencies
+Current gaps and issues.
+"#;
+        let super_findings = validate_super_system_architecture(content, "docs/conops/CONOPS.md");
+        assert!(!super_findings.is_empty(), "Must reject ConOps doc missing super-system architecture");
+        assert_eq!(super_findings[0].rule_id, "conops-super-system-architecture-missing");
+
+        let subsys_findings = validate_subsystem_architecture(content, "docs/conops/CONOPS.md");
+        assert!(!subsys_findings.is_empty(), "Must reject ConOps doc missing subsystem architecture");
+        assert_eq!(subsys_findings[0].rule_id, "conops-subsystem-architecture-missing");
+
+        let topo_findings = validate_system_interface_topology(content, "docs/conops/CONOPS.md");
+        assert!(!topo_findings.is_empty(), "Must reject ConOps doc missing interface topology");
+        assert_eq!(topo_findings[0].rule_id, "conops-system-interface-topology-missing");
+    }
+
+    #[test]
+    fn test_issue_256_conops_schema_valid_contract_passes() {
+        let valid_schema = serde_json::json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "required": [
+                "metadata",
+                "super_system_architecture",
+                "subsystem_architecture",
+                "system_interface_topology"
+            ],
+            "properties": {
+                "super_system_architecture": {
+                    "type": "object",
+                    "required": ["segments", "boundary_diagram_mermaid"],
+                    "properties": {
+                        "segments": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "required": ["segment_id", "segment_name", "operational_role"]
+                            }
+                        },
+                        "boundary_diagram_mermaid": { "type": "string" }
+                    }
+                },
+                "subsystem_architecture": {
+                    "type": "object",
+                    "required": ["subsystems", "ast_part_allocations"],
+                    "properties": {
+                        "subsystems": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "required": ["subsystem_id", "subsystem_name", "ast_part_ref", "functional_description"]
+                            }
+                        },
+                        "ast_part_allocations": {
+                            "type": "array",
+                            "items": { "type": "string" }
+                        }
+                    }
+                },
+                "system_interface_topology": {
+                    "type": "object",
+                    "required": ["interface_links"],
+                    "properties": {
+                        "interface_links": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "required": ["link_id", "source_subsystem", "target_subsystem", "protocol_type"]
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        let findings = validate_conops_schema_contract(&valid_schema, ".pipeline/schemas/conops_specification_schema.json");
+        assert!(findings.is_empty(), "Valid schema contract must pass with zero findings, got: {:?}", findings);
+    }
+
+    #[test]
+    fn test_issue_256_conops_doc_valid_architecture_passes() {
+        let valid_conops = r#"# Concept of Operations (ConOps)
+## 4. System Operational Architecture & Physical Subsystem Decomposition
+
+### 4.1 Super-System Operational Architecture & Segment Boundaries
+Operational system is partitioned across major physical segments:
+- Primary Operational Segment (SEG-01)
+- Supervisory Control Segment (SEG-02)
+- Auxiliary Support Segment (SEG-03)
+
+```mermaid
+flowchart TD
+    GCS["Ground Control Station"] --> Platform["Core Platform"]
+```
+
+### 4.3 Subsystem Architecture (100% AST Part Coverage)
+Decomposition of subsystems derived deterministically from AST part definitions:
+- Primary Controller | SysML v2: `part def FlightComputer` | SSOT Ground Truth Mapping: schema/model.sysml
+Functional Purpose & Scope: Core flight guidance.
+
+### 4.4 Port Taxonomy & Interface Interconnects
+Taxonomy of interface interconnects:
+- PORT-C2-IN (IN)
+- PORT-TLM-OUT (OUT)
+"#;
+        let super_f = validate_super_system_architecture(valid_conops, "docs/conops/CONOPS.md");
+        assert!(super_f.is_empty(), "Valid super-system architecture must pass: {:?}", super_f);
+
+        let subsys_f = validate_subsystem_architecture(valid_conops, "docs/conops/CONOPS.md");
+        assert!(subsys_f.is_empty(), "Valid subsystem architecture must pass: {:?}", subsys_f);
+
+        let topo_f = validate_system_interface_topology(valid_conops, "docs/conops/CONOPS.md");
+        assert!(topo_f.is_empty(), "Valid interface topology must pass: {:?}", topo_f);
+    }
+
+    #[test]
+    fn test_issue_256_live_conops_schema_file_passes() {
+        let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let root = manifest_dir.parent().and_then(|p| p.parent()).unwrap();
+        let schema_path = root.join(".pipeline").join("schemas").join("conops_specification_schema.json");
+        if schema_path.is_file() {
+            let findings = validate_conops_schema_file(&schema_path).expect("Failed to parse live schema file");
+            assert!(findings.is_empty(), "Live .pipeline/schemas/conops_specification_schema.json must pass contract validation: {:?}", findings);
+        }
     }
 }
