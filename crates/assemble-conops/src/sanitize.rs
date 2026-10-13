@@ -853,4 +853,22 @@ mod tests {
         let wrapped = wrap_mermaid_label(label, 25);
         assert!(wrapped.contains("<br/>"));
     }
+
+    #[test]
+    fn test_issue_291_user_class_taxonomy_preserved_and_collision_eliminated() {
+        // Legacy UC-xx was stripped as Level 2 System Use Case:
+        let legacy_conops = "Maintenance Technician (UC-04) performing pre-sortie inspection under UC-01.";
+        let sanitized_legacy = sanitize_level_1b_operational_text(legacy_conops);
+        // Stripped UC-04 and UC-01 because of collision with Level 2 use cases!
+        assert!(!sanitized_legacy.contains("UC-04"));
+        assert!(!sanitized_legacy.contains("UC-01"));
+
+        // With ISO 29148 UCL-xx taxonomy disambiguation:
+        let compliant_conops = "Maintenance Technician (UCL-04) performing pre-sortie inspection under UCL-01.";
+        let sanitized_compliant = sanitize_level_1b_operational_text(compliant_conops);
+        // UCL-04 and UCL-01 are preserved intact!
+        assert!(sanitized_compliant.contains("UCL-04"));
+        assert!(sanitized_compliant.contains("UCL-01"));
+    }
 }
+

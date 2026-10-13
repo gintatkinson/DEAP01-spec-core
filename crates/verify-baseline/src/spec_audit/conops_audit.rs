@@ -1088,6 +1088,16 @@ pub fn validate_conops_schema_contract(schema: &Value, schema_path: &str) -> Vec
         ));
     }
 
+    if !required_props.contains("user_classes") {
+        findings.push(SpecAuditFinding::new(
+            "conops-schema-user-classes-missing",
+            format!("Top-level schema contract required array in '{}' omits 'user_classes'.", schema_path),
+            schema_path,
+            None,
+        ));
+    }
+
+
     // 2. Verify properties definitions
     let props = match schema.get("properties").and_then(|p| p.as_object()) {
         Some(p) => p,
@@ -1229,8 +1239,64 @@ pub fn validate_conops_schema_contract(schema: &Value, schema_path: &str) -> Vec
         ));
     }
 
+    // 2d. user_classes property structure (ISO 29148 §5.2.4, refs #291)
+    if let Some(user_classes) = props.get("user_classes") {
+        let is_arr = user_classes.get("type").and_then(|t| t.as_str()).map_or(false, |t| t == "array");
+        let min_items = user_classes.get("minItems").and_then(|m| m.as_u64()).unwrap_or(0);
+
+        let items_req: HashSet<&str> = user_classes
+            .get("items")
+            .and_then(|i| i.get("required"))
+            .and_then(|r| r.as_array())
+            .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
+            .unwrap_or_default();
+
+        let has_req_fields = items_req.contains("id")
+            && items_req.contains("title")
+            && items_req.contains("player_or_operator")
+            && items_req.contains("interfacing_stakeholder")
+            && items_req.contains("characteristics")
+            && items_req.contains("training_type")
+            && items_req.contains("constraint_source");
+
+        let id_pattern = user_classes
+            .get("items")
+            .and_then(|i| i.get("properties"))
+            .and_then(|p| p.get("id"))
+            .and_then(|id| id.get("pattern"))
+            .and_then(|p| p.as_str());
+
+        let has_ucl_pattern = id_pattern.map_or(false, |p| p == "^UCL-[0-9]{2}$");
+
+        if !is_arr || min_items < 1 || !has_req_fields {
+            findings.push(SpecAuditFinding::new(
+                "conops-schema-user-classes-incomplete",
+                format!("Property 'user_classes' in '{}' is incomplete; requires array with minItems >= 1 and items required fields (id, title, player_or_operator, interfacing_stakeholder, characteristics, training_type, constraint_source).", schema_path),
+                schema_path,
+                None,
+            ));
+        }
+
+        if !has_ucl_pattern {
+            findings.push(SpecAuditFinding::new(
+                "conops-schema-user-classes-taxonomy-collision",
+                format!("Property 'user_classes.items.properties.id.pattern' in '{}' must be '^UCL-[0-9]{{2}}$' to enforce unambiguous User Class taxonomy and prevent collision with Level 2 System Use Cases (refs #291).", schema_path),
+                schema_path,
+                None,
+            ));
+        }
+    } else {
+        findings.push(SpecAuditFinding::new(
+            "conops-schema-user-classes-missing",
+            format!("Top-level schema properties in '{}' omits 'user_classes'.", schema_path),
+            schema_path,
+            None,
+        ));
+    }
+
     findings
 }
+
 
 /// Audits top-level schema contract file on disk.
 ///
@@ -1251,6 +1317,113 @@ pub fn validate_conops_schema_file(schema_path: &Path) -> Result<Vec<SpecAuditFi
     };
     let path_str = schema_path.to_string_lossy().to_string();
     Ok(validate_conops_schema_contract(&json_val, &path_str))
+}
+
+/// Audits ConOps documents for User Class taxonomy disambiguation (`UCL-xx`) per ISO/IEC/IEEE 29148:2018 §5.2.4 (refs #291).
+///
+/// Preconditions: `content` is valid UTF-8.
+/// Postconditions: Returns findings if any User Class uses legacy `UC-xx` prefix or collides with System Use Cases.
+/// Algorithmic Complexity: O(T + L) where T is tables and L is lines count.
+pub fn validate_user_classes(content: &str, rel_path: &str) -> Vec<SpecAuditFinding> {
+    let mut findings = Vec::new();
+
+    // 1. Audit Markdown Tables defining User Classes
+    let tables = extract_markdown_tables(content);
+    for tbl in &tables {
+        let mut id_col_idx = None;
+        for (col_idx, header) in tbl.headers.iter().enumerate() {
+            let h_lower = header.to_lowercase();
+            if h_lower.contains("user class id") || h_lower.contains("user class") {
+                id_col_idx = Some(col_idx);
+                break;
+            }
+        }
+
+        if let Some(col) = id_col_idx {
+            for row in &tbl.rows {
+                if col < row.cells.len() {
+                    let cell = &row.cells[col];
+                    let raw_id = cell.trim()
+                        .trim_matches('*')
+                        .trim_matches('_')
+                        .trim_matches('`')
+                        .trim();
+                    if raw_id.is_empty() {
+                        continue;
+                    }
+                    if (raw_id.starts_with("UC-") || raw_id.starts_with("uc-"))
+                        && !raw_id.starts_with("UCL-")
+                        && !raw_id.starts_with("ucl-")
+                    {
+                        findings.push(SpecAuditFinding::new(
+                            "conops-user-class-taxonomy-collision",
+                            format!(
+                                "User Class '{}' in '{}' at line {} uses legacy 'UC-xx' prefix colliding with Level 2 System Use Cases. User Classes must use unambiguous 'UCL-xx' prefix per ISO/IEC/IEEE 29148:2018 §5.2.4 (refs #291).",
+                                raw_id, rel_path, row.line_no
+                            ),
+                            rel_path,
+                            Some(row.line_no),
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Scan prose and diagrams for colliding Level 2 System Use Case citations or legacy User Class citations (UC-xx)
+    for (line_idx, line) in content.lines().enumerate() {
+        let line_no = line_idx + 1;
+        let trimmed = line.trim();
+
+        if trimmed.starts_with('#') {
+            continue;
+        }
+
+        // Avoid re-flagging rows already processed in table step
+        if trimmed.starts_with('|') && trimmed.ends_with('|') {
+            continue;
+        }
+
+        let bytes = line.as_bytes();
+        let mut i = 0;
+        while i < bytes.len() {
+            let is_uc = (bytes[i] == b'U' || bytes[i] == b'u')
+                && i + 2 < bytes.len()
+                && (bytes[i + 1] == b'C' || bytes[i + 1] == b'c')
+                && bytes[i + 2] == b'-';
+
+            if is_uc {
+                let left_ok = i == 0 || !(bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'_' || bytes[i - 1] == b'-');
+                if left_ok {
+                    let digit_start = i + 3;
+                    let mut j = digit_start;
+                    while j < bytes.len() && bytes[j].is_ascii_digit() {
+                        j += 1;
+                    }
+                    if j > digit_start {
+                        let right_ok = j == bytes.len() || !(bytes[j].is_ascii_alphanumeric() || bytes[j] == b'_' || bytes[j] == b'-');
+                        if right_ok {
+                            let matched = &line[i..j];
+                            findings.push(SpecAuditFinding::new(
+                                "conops-user-class-taxonomy-collision",
+                                format!(
+                                    "Found colliding prefix '{}' in '{}' at line {}. ConOps documents must not cite legacy 'UC-xx' User Classes or Level 2 System Use Cases; use 'UCL-xx' for User Classes per ISO/IEC/IEEE 29148:2018 §5.2.4 (refs #291).",
+                                    matched, rel_path, line_no
+                                ),
+                                rel_path,
+                                Some(line_no),
+                            ));
+                            i = j;
+                            continue;
+                        }
+                    }
+                }
+            }
+            i += 1;
+        }
+    }
+
+    findings
 }
 
 /// Audits an individual ConOps or Mission Intent specification against all Open Schema Contract requirements.
@@ -1289,8 +1462,12 @@ pub fn validate_conops(
     // 8. System Interface Topology & Port Taxonomy (ISO 29148 §6.4.3)
     findings.append(&mut validate_system_interface_topology(content, rel_path));
 
+    // 9. User Class Taxonomy Disambiguation (ISO 29148 §5.2.4, refs #291)
+    findings.append(&mut validate_user_classes(content, rel_path));
+
     Ok(findings)
 }
+
 
 /// Audits all ConOps and Mission Intent specifications under `docs/conops/` in the workspace.
 ///
@@ -1572,7 +1749,8 @@ Current gaps and issues.
                 "metadata",
                 "super_system_architecture",
                 "subsystem_architecture",
-                "system_interface_topology"
+                "system_interface_topology",
+                "user_classes"
             ],
             "properties": {
                 "super_system_architecture": {
@@ -1618,9 +1796,32 @@ Current gaps and issues.
                             }
                         }
                     }
+                },
+                "user_classes": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "object",
+                        "required": [
+                            "id",
+                            "title",
+                            "player_or_operator",
+                            "interfacing_stakeholder",
+                            "characteristics",
+                            "training_type",
+                            "constraint_source"
+                        ],
+                        "properties": {
+                            "id": {
+                                "type": "string",
+                                "pattern": "^UCL-[0-9]{2}$"
+                            }
+                        }
+                    }
                 }
             }
         });
+
         let findings = validate_conops_schema_contract(&valid_schema, ".pipeline/schemas/conops_specification_schema.json");
         assert!(findings.is_empty(), "Valid schema contract must pass with zero findings, got: {:?}", findings);
     }
@@ -1864,6 +2065,131 @@ flowchart TD
             findings
         );
     }
+
+    #[test]
+    fn test_issue_291_conops_schema_rejects_user_class_uc_pattern_collision() {
+        let invalid_schema = serde_json::json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "required": [
+                "metadata",
+                "super_system_architecture",
+                "subsystem_architecture",
+                "system_interface_topology",
+                "user_classes"
+            ],
+            "properties": {
+                "super_system_architecture": {
+                    "type": "object",
+                    "required": ["segments", "boundary_diagram_mermaid"],
+                    "properties": {
+                        "segments": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "required": ["segment_id", "segment_name", "operational_role"]
+                            }
+                        },
+                        "boundary_diagram_mermaid": { "type": "string" }
+                    }
+                },
+                "subsystem_architecture": {
+                    "type": "object",
+                    "required": ["subsystems", "ast_part_allocations"],
+                    "properties": {
+                        "subsystems": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "required": ["subsystem_id", "subsystem_name", "ast_part_ref", "functional_description"]
+                            }
+                        },
+                        "ast_part_allocations": {
+                            "type": "array",
+                            "items": { "type": "string" }
+                        }
+                    }
+                },
+                "system_interface_topology": {
+                    "type": "object",
+                    "required": ["interface_links"],
+                    "properties": {
+                        "interface_links": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "required": ["link_id", "source_subsystem", "target_subsystem", "protocol_type"]
+                            }
+                        }
+                    }
+                },
+                "user_classes": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "object",
+                        "required": [
+                            "id", "title", "player_or_operator", "interfacing_stakeholder",
+                            "characteristics", "training_type", "constraint_source"
+                        ],
+                        "properties": {
+                            "id": {
+                                "type": "string",
+                                "pattern": "^UC-[0-9]{2}$"
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        let findings = validate_conops_schema_contract(&invalid_schema, ".pipeline/schemas/conops_specification_schema.json");
+        assert!(
+            findings.iter().any(|f| f.rule_id == "conops-schema-user-classes-taxonomy-collision"),
+            "Schema with legacy ^UC-[0-9]{{2}}$ pattern must be rejected with 'conops-schema-user-classes-taxonomy-collision' (refs #291)"
+        );
+    }
+
+    #[test]
+    fn test_issue_291_conops_doc_rejects_user_class_uc_collision() {
+        let colliding_conops = r#"# Concept of Operations (ConOps)
+## 4. User Classes & Stakeholder Taxonomy
+| User Class ID | Title | Player or Operator | Interfacing Stakeholder | Characteristics & Responsibilities | Training & Qualification | Constraint Source |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **UC-01** | System Operator (SO) | Direct Operator | Safety Authority | Supervision oversight | Type Qualification | ISO 29148 |
+| **UC-04** | Maintenance Technician (MT) | Support Operator | Maintenance Depot | Pre-sortie inspections | Certified Tech | ISO 29148 |
+
+Operational handover is executed between incoming operator and outgoing operator (UC-01).
+"#;
+        let findings = validate_user_classes(colliding_conops, "docs/conops/04_USER_CLASSES.md");
+        assert!(
+            findings.iter().any(|f| f.rule_id == "conops-user-class-taxonomy-collision" && f.message.contains("UC-01")),
+            "ConOps declaring User Class UC-01 must be rejected with taxonomy collision finding (refs #291)"
+        );
+        assert!(
+            findings.iter().any(|f| f.rule_id == "conops-user-class-taxonomy-collision" && f.message.contains("UC-04")),
+            "ConOps declaring User Class UC-04 must be rejected with taxonomy collision finding (refs #291)"
+        );
+    }
+
+    #[test]
+    fn test_issue_291_conops_doc_ucl_taxonomy_passes() {
+        let compliant_conops = r#"# Concept of Operations (ConOps)
+## 4. User Classes & Stakeholder Taxonomy
+| User Class ID | Title | Player or Operator | Interfacing Stakeholder | Characteristics & Responsibilities | Training & Qualification | Constraint Source |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **UCL-01** | System Operator (SO) | Direct Operator | Safety Authority | Supervision oversight | Type Qualification | ISO 29148 |
+| **UCL-04** | Maintenance Technician (MT) | Support Operator | Maintenance Depot | Pre-sortie inspections | Certified Tech | ISO 29148 |
+
+Operational handover is executed between incoming operator and outgoing operator (UCL-01).
+"#;
+        let findings = validate_user_classes(compliant_conops, "docs/conops/04_USER_CLASSES.md");
+        assert!(
+            findings.is_empty(),
+            "ConOps with unambiguous UCL-xx taxonomy must pass with zero findings, got: {:?}",
+            findings
+        );
+    }
 }
+
 
 
