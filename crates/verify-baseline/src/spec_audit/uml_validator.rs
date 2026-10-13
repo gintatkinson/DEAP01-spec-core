@@ -2096,54 +2096,54 @@ mod tests {
     fn test_feature_operation_coverage_scoping_ignores_prose_mentions() {
         let mut model = SysmlModel::default();
 
-        let mut avenger = PartDef {
-            name: "Avenger5".to_string(),
+        let mut platform = PartDef {
+            name: "MockPlatform".to_string(),
             ..Default::default()
         };
-        avenger.actions.push(ActionDef {
-            name: "PressEngage".to_string(),
+        platform.actions.push(ActionDef {
+            name: "ExecuteAction".to_string(),
             ..Default::default()
         });
-        avenger.operations.push(OperationDef {
-            name: "SlideToConfirm".to_string(),
+        platform.operations.push(OperationDef {
+            name: "VerifyInterface".to_string(),
             ..Default::default()
         });
 
-        let mut warhead = PartDef {
-            name: "WarheadModule".to_string(),
+        let mut payload = PartDef {
+            name: "MockPayload".to_string(),
             ..Default::default()
         };
-        warhead.actions.push(ActionDef {
-            name: "detonate".to_string(),
+        payload.actions.push(ActionDef {
+            name: "ProcessData".to_string(),
             ..Default::default()
         });
 
-        model.parts.push(avenger);
-        model.parts.push(warhead);
+        model.parts.push(platform);
+        model.parts.push(payload);
         let index = SysmlSymbolIndex::from_model(&model);
 
-        // FEAT-102: specifies WarheadModule, but has casual prose mention of Avenger5
+        // FEAT-102: specifies MockPayload, but has casual prose mention of MockPlatform
         let feat102_content = r#"
 | Attribute | Detail |
 | :--- | :--- |
-| **Schema Containers** | `AutonomousDefenseSystem::WarheadModule` |
+| **Schema Containers** | `MockSystem::MockPayload` |
 
-# Feature 102: Warhead Module
+# Feature 102: Mock Payload
 
-This module is nested under part def Avenger5 and interacts with the Avenger5 arm-state machine.
+This module is nested under part def MockPlatform and interacts with the MockPlatform state machine.
 
 ## Behavior
-detonate
+ProcessData
 "#;
         let feat102_doc = MarkdownDoc {
             headings: vec![],
             frontmatter: None,
             table_metadata: HashMap::from([(
                 "schema_containers".to_string(),
-                "AutonomousDefenseSystem::WarheadModule".to_string(),
+                "MockSystem::MockPayload".to_string(),
             )]),
             prose: vec![ProseSegment {
-                text: "This module is nested under part def Avenger5 and interacts with the Avenger5 arm-state machine.".to_string(),
+                text: "This module is nested under part def MockPlatform and interacts with the MockPlatform state machine.".to_string(),
                 line: 6,
             }],
             mermaid_blocks: vec![],
@@ -2153,31 +2153,31 @@ detonate
         let findings = validate_feature_operation_coverage(
             &feat102_doc,
             feat102_content,
-            "docs/features/FEAT-102-WarheadModule.md",
+            "docs/features/FEAT-102-MockPayload.md",
             &index,
         );
         assert!(
             findings.is_empty(),
-            "FEAT-102 should NOT be flagged for Avenger5 operations via prose mention: {:?}",
+            "FEAT-102 should NOT be flagged for MockPlatform operations via prose mention: {:?}",
             findings
         );
 
-        // FEAT-101: owning feature for Avenger5, but omits SlideToConfirm
+        // FEAT-101: owning feature for MockPlatform, but omits VerifyInterface
         let feat101_content = r#"
 | Attribute | Detail |
 | :--- | :--- |
-| **Schema Containers** | `AutonomousDefenseSystem::Avenger5` |
+| **Schema Containers** | `MockSystem::MockPlatform` |
 
-# Feature 101: Avenger5 Platform
+# Feature 101: Mock Platform
 
-PressEngage
+ExecuteAction
 "#;
         let feat101_doc = MarkdownDoc {
             headings: vec![],
             frontmatter: None,
             table_metadata: HashMap::from([(
                 "schema_containers".to_string(),
-                "AutonomousDefenseSystem::Avenger5".to_string(),
+                "MockSystem::MockPlatform".to_string(),
             )]),
             prose: vec![],
             mermaid_blocks: vec![],
@@ -2187,13 +2187,13 @@ PressEngage
         let findings_101 = validate_feature_operation_coverage(
             &feat101_doc,
             feat101_content,
-            "docs/features/FEAT-101-Avenger5.md",
+            "docs/features/FEAT-101-MockPlatform.md",
             &index,
         );
         assert_eq!(findings_101.len(), 1);
         assert_eq!(findings_101[0].rule_id, "feature-operation-missing");
-        assert!(findings_101[0].message.contains("SlideToConfirm"));
-        assert!(findings_101[0].message.contains("Avenger5"));
+        assert!(findings_101[0].message.contains("VerifyInterface"));
+        assert!(findings_101[0].message.contains("MockPlatform"));
     }
 
     #[test]

@@ -2476,9 +2476,9 @@ package TestPackage {
     #[test]
     fn test_parse_test_case_def_with_assert_constraint_ids() {
         let source = r#"
-package AutonomousDefenseSystem {
+package AutonomousSystem {
     assert constraint Assert_UCA_33 {
-        armState == ArmStatus::ARMED;
+        interlockState == InterlockStatus::ENGAGED;
     }
 
     assert constraint Assert_UCA_34 {
@@ -2486,10 +2486,10 @@ package AutonomousDefenseSystem {
     }
 
     test case def TC_UCA_33_Verification {
-        subject WeaponController;
+        subject SafetyController;
         verify requirement Assert_UCA_33, Assert_UCA_34;
-        objective "Verify armState interlock per UCA-33";
-        step trigger_arming;
+        objective "Verify safety interlock per UCA-33";
+        step trigger_interlock;
     }
 }
 "#;

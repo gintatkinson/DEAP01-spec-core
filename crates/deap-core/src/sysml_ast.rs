@@ -2408,19 +2408,19 @@ part def VehicleSystem {
     fn test_parse_test_case_defs_with_assert_constraints() {
         let content = r#"
             test case def TC_UCA_33_Verification {
-                subject WeaponController;
+                subject SafetyController;
                 verify requirement Assert_UCA_33, Assert_UCA_34;
-                objective "Verify armState interlock per UCA-33";
-                step trigger_arming;
+                objective "Verify safety interlock per UCA-33";
+                step trigger_interlock;
             }
         "#;
         let test_cases = parse_test_case_defs(content);
         assert_eq!(test_cases.len(), 1);
         assert_eq!(test_cases[0].name, "TC_UCA_33_Verification");
-        assert_eq!(test_cases[0].subject_part.as_deref(), Some("WeaponController"));
+        assert_eq!(test_cases[0].subject_part.as_deref(), Some("SafetyController"));
         assert_eq!(test_cases[0].verified_requirements, vec!["Assert_UCA_33", "Assert_UCA_34"]);
-        assert_eq!(test_cases[0].objective.as_deref(), Some("Verify armState interlock per UCA-33"));
-        assert_eq!(test_cases[0].test_steps, vec!["trigger_arming"]);
+        assert_eq!(test_cases[0].objective.as_deref(), Some("Verify safety interlock per UCA-33"));
+        assert_eq!(test_cases[0].test_steps, vec!["trigger_interlock"]);
     }
 
     #[test]
@@ -2455,8 +2455,8 @@ part def VehicleSystem {
         assert!(has_negative_recovery_constraint(r#"attribute recovery_system = "none";"#));
         assert!(has_negative_recovery_constraint("Recovery system: No"));
         assert!(has_negative_recovery_constraint("No recovery system installed"));
-        assert!(has_negative_recovery_constraint(r#"Avenger5.recoverySystem = "No""#));
-        assert!(has_negative_recovery_constraint(r#"Avenger5.chuteEnabled = 0"#));
+        assert!(has_negative_recovery_constraint(r#"MockPlatform.recoverySystem = "No""#));
+        assert!(has_negative_recovery_constraint(r#"MockPlatform.chuteEnabled = 0"#));
         assert!(!has_negative_recovery_constraint(r#"attribute recoverySystem = "Yes";"#));
         assert!(!has_negative_recovery_constraint(r#"attribute chuteEnabled = 1;"#));
         assert!(!has_negative_recovery_constraint("Nominal flight operations"));

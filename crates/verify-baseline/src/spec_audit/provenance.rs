@@ -145,7 +145,7 @@ pub fn is_recognized_unit(token: &str) -> bool {
 
 /// Validates whether a token or table cell is a pure scalar numeric value
 /// (e.g. `1800.0`, `-45`, `+12.5`, `50 ms`, `250 Hz`), rather than an identifier,
-/// package name, or title (e.g. `AVENGER5_ControlActions`, `PL-40`, `RS-485`, `RBF3`).
+/// package name, or title (e.g. `ALPHA5_ControlActions`, `PL-40`, `RS-485`, `RBF3`).
 ///
 /// Preconditions: None.
 /// Postconditions: Returns true if and only if val represents a pure scalar number or scalar with unit.
@@ -299,7 +299,7 @@ pub fn find_naked_numeric_quantities(line: &str) -> Vec<(String, usize)> {
         if bytes[idx].is_ascii_digit() {
             let start = idx;
 
-            // Check if this digit is part of an identifier prefix (e.g. REQ-02, FEAT-01, AC-03, v1, PL-40, RS-485, AVENGER5)
+            // Check if this digit is part of an identifier prefix (e.g. REQ-02, FEAT-01, AC-03, v1, PL-40, RS-485, ALPHA5)
             let mut word_start = start;
             while word_start > 0 {
                 let b = bytes[word_start - 1];
@@ -1639,9 +1639,9 @@ Derived from schema/model.sysml and RTCA DO-178C §6.3.1.
         assert!(!is_pure_scalar_numeric("5_ControlActions"));
         assert!(!is_pure_scalar_numeric("PL-40_Actuator"));
         assert!(!is_pure_scalar_numeric("RS-485_Bus"));
-        assert!(!is_pure_scalar_numeric("AVENGER5"));
+        assert!(!is_pure_scalar_numeric("ALPHA5"));
         assert!(!is_pure_scalar_numeric("Feature 24 Power Management System"));
-        assert!(!is_pure_scalar_numeric("AVENGER5_ControlActions"));
+        assert!(!is_pure_scalar_numeric("ALPHA5_ControlActions"));
         assert!(!is_pure_scalar_numeric("DSC_IN1 Arm Enable"));
         assert!(!is_pure_scalar_numeric(""));
         assert!(!is_pure_scalar_numeric("N/A"));
@@ -1656,7 +1656,7 @@ Derived from schema/model.sysml and RTCA DO-178C §6.3.1.
 
         // Subsystem packages and titles must return None
         assert_eq!(extract_scalar_numeric_claim("5_ControlActions"), None);
-        assert_eq!(extract_scalar_numeric_claim("AVENGER5"), None);
+        assert_eq!(extract_scalar_numeric_claim("ALPHA5"), None);
         assert_eq!(extract_scalar_numeric_claim("Feature 24 Power Management System"), None);
         assert_eq!(extract_scalar_numeric_claim("PL-40_Actuator"), None);
     }
