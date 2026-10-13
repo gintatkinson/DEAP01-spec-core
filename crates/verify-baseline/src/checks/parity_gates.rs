@@ -143,7 +143,7 @@ pub fn check_semantic_diagram_ast_parity(repo_root: &Path) -> Result<ParityOutco
     }
 
     let target_scan_dirs = [
-        "docs/conops", "docs/safety", "docs/interfaces", "docs/architecture",
+        "docs/conops", "docs/safety", "docs/interfaces", "docs/icd", "docs/architecture",
         "docs/epics", "docs/features", "docs/user-stories", "docs/use-cases",
         "docs/management", "docs/reports",
     ];
@@ -640,7 +640,13 @@ pub fn check_icd_completeness(repo_root: &Path) -> Result<ParityOutcome, Vec<Str
     }
 
     let is_upstream = is_upstream_compiler(repo_root);
-    let interfaces_dir = repo_root.join("docs").join("interfaces");
+    let interfaces_dir = if repo_root.join("docs").join("interfaces").is_dir() {
+        repo_root.join("docs").join("interfaces")
+    } else if repo_root.join("docs").join("icd").is_dir() {
+        repo_root.join("docs").join("icd")
+    } else {
+        repo_root.join("docs").join("interfaces")
+    };
 
     if !is_upstream {
         if !interfaces_dir.is_dir() {

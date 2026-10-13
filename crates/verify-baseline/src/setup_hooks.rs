@@ -162,9 +162,41 @@ pub fn run_setup_hooks(args: &SetupHooksArgs) -> Result<(), i32> {
         eprintln!("Warning: Failed to update .gitignore: {}", e);
     }
 
+    // Scaffold downstream specification and modular unit landing zones
+    let landing_zones = [
+        "docs/conops/units/conops",
+        "docs/conops/units/mission_intent",
+        "docs/interfaces",
+        "docs/safety",
+        "docs/architecture/blueprints",
+        "docs/epics",
+        "docs/features",
+        "docs/user-stories",
+        "docs/use-cases",
+        "docs/management",
+    ];
+
+    for zone in &landing_zones {
+        let zone_dir = repo_root.join(zone);
+        if let Err(e) = fs::create_dir_all(&zone_dir) {
+            eprintln!("Warning: Failed to create landing zone {}: {}", zone_dir.display(), e);
+        }
+        let gitkeep = zone_dir.join(".gitkeep");
+        if !gitkeep.exists() {
+            let _ = fs::write(&gitkeep, "");
+        }
+    }
+
+    // Ensure operator prompt catalog is present if available in source
+    let catalog_src = Path::new("docs/OPERATOR_PROMPT_CATALOG.md");
+    let catalog_dst = repo_root.join("docs").join("OPERATOR_PROMPT_CATALOG.md");
+    if catalog_src.is_file() && !catalog_dst.exists() {
+        let _ = fs::copy(catalog_src, &catalog_dst);
+    }
+
     let _ = Command::new("git")
         .current_dir(&repo_root)
-        .args(["add", ".pipeline/", "skills/", "rules/", ".agents/"])
+        .args(["add", ".pipeline/", "skills/", "rules/", ".agents/", "docs/"])
         .output();
 
     println!("Successfully configured git hooks and staged pipeline infrastructure.");

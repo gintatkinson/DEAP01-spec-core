@@ -228,6 +228,7 @@ pub fn check_upstream_template_clean_landing_zones(repo_root: &Path) -> Result<(
     let landing_zones = [
         "docs/conops",
         "docs/safety",
+        "docs/interfaces",
         "docs/epics",
         "docs/features",
         "docs/user-stories",
