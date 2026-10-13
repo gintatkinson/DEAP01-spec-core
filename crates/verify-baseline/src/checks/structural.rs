@@ -145,116 +145,7 @@ pub fn verify_upstream_blueprint_domain_cleanliness(repo_root: &Path) -> Result<
     }
 }
 
-/// Helper checking if a line is a static hardcoded parameter dictionary in native Rust sources.
-fn is_rust_static_param_assignment(line: &str) -> bool {
-    let trimmed = line.trim();
-    if trimmed.starts_with("//") || trimmed.starts_with("/*") || trimmed.starts_with('*') {
-        return false;
-    }
-    // Dynamically assemble forbidden static parameter dictionary identifiers
-    // to prevent scanner false positives on its own source file.
-    let kws = [
-        ["GROUND", "_TRUTH"].concat(),
-        ["EXPECTED", "_SPECS"].concat(),
-        ["DOMAIN", "_SPECS"].concat(),
-        ["DOMAIN", "_PARAMS"].concat(),
-        ["SYSML", "_PARAMS"].concat(),
-        ["MANDATED", "_SPECS"].concat(),
-        ["PHYSICAL", "_LIMITS"].concat(),
-        ["HARDWARE", "_REGISTRY"].concat(),
-    ];
-    for kw in &kws {
-        if trimmed.contains(kw.as_str()) {
-            if trimmed.contains(&format!("const {}", kw))
-                || trimmed.contains(&format!("static {}", kw))
-                || trimmed.contains(&format!("let {}", kw))
-                || trimmed.contains(&format!("{} =", kw))
-                || trimmed.contains(&format!("{}:", kw))
-            {
-                return true;
-            }
-        }
-    }
-    false
-}
-
-/// Check 19: Domain-Agnostic AST Cleanliness & Native Workspace Invariant Gate.
-///
-/// Verifies that upstream compiler tools and crates maintain pure dynamic schema AST
-/// architecture and contain zero static/hardcoded domain parameter dictionaries.
-/// Also enforces zero legacy Python parity auditor directory presence.
-/// Downstream repositories are exempt.
-pub fn check_domain_agnostic_ast_cleanliness(repo_root: &Path) -> Result<(), Vec<String>> {
-    if !is_upstream_compiler(repo_root) {
-        return Ok(());
-    }
-
-    let mut violations = Vec::new();
-
-    // 1. Enforce zero legacy Python parity_auditor directories on disk
-    let legacy_paths = [
-        repo_root.join("skills").join("spec-orchestrator").join("parity_auditor"),
-        repo_root.join("parity_auditor"),
-    ];
-    for p in &legacy_paths {
-        if p.exists() {
-            let rel = p.strip_prefix(repo_root).unwrap_or(p).display().to_string();
-            violations.push(format!(
-                "Check 19 violation: Legacy Python parity_auditor directory detected on disk: {}",
-                rel
-            ));
-        }
-    }
-
-    // 2. Validate native Rust workspace crates directory exists
-    let crates_dir = repo_root.join("crates");
-    if !crates_dir.is_dir() {
-        violations.push("Check 19 violation: Native Rust workspace crates/ directory missing in upstream compiler repository.".to_string());
-    } else {
-        // 3. Scan all native Rust source files in crates/ for hardcoded parameter dictionaries
-        for entry in WalkDir::new(&crates_dir)
-            .into_iter()
-            .filter_entry(|e| {
-                if e.file_type().is_dir() {
-                    let name = e.file_name().to_string_lossy();
-                    name != "target" && name != ".git" && !EXCLUDED_DIRS.iter().any(|&ex| name == ex)
-                } else {
-                    true
-                }
-            })
-            .filter_map(|e| e.ok())
-        {
-            if entry.file_type().is_file() {
-                let path = entry.path();
-                if path.extension().map(|ext| ext == "rs").unwrap_or(false) {
-                    if let Ok(content) = fs::read_to_string(path) {
-                        for (idx, line) in content.lines().enumerate() {
-                            if is_rust_static_param_assignment(line) {
-                                let rel = path
-                                    .strip_prefix(repo_root)
-                                    .unwrap_or(path)
-                                    .display()
-                                    .to_string();
-                                violations.push(format!(
-                                    "Check 19 violation: Static hardcoded parameter dictionary declared in {}:{}.",
-                                    rel,
-                                    idx + 1
-                                ));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    if violations.is_empty() {
-        Ok(())
-    } else {
-        violations.sort();
-        Err(violations)
-    }
-}
+pub use super::domain_cleanliness_gate::check_domain_agnostic_ast_cleanliness;
 
 /// Check 32: Zero Shell Scripts Invariant
 ///
@@ -609,6 +500,18 @@ mod tests {
         let kw = ["DOM", "AIN_PARAMS"].concat();
         writeln!(f, "pub const {}: &[&str] = &[\"speed\"];", kw).unwrap();
         assert!(check_domain_agnostic_ast_cleanliness(&tmp.path).is_err());
+    }
+
+    #[test]
+    fn test_reproduce_defect_265_unflagged_m1_domain_dict_bypasses_check_19() {
+        let tmp = TempDir::new("c19_m1_bypass");
+        fs::create_dir_all(tmp.path.join(".pipeline/upstream")).unwrap();
+        let src_dir = tmp.path.join("crates/test-crate/src");
+        fs::create_dir_all(&src_dir).unwrap();
+        let mut f = File::create(src_dir.join("lib.rs")).unwrap();
+        writeln!(f, "pub const FLIGHT_ENVELOPE_MAP: &[(&str, f64)] = &[(\"max_altitude\", 10000.0)];").unwrap();
+        // Under unfixed Check 19, this fails because check_domain_agnostic_ast_cleanliness incorrectly returns Ok(())
+        assert!(check_domain_agnostic_ast_cleanliness(&tmp.path).is_err(), "Check 19 failed to reject unflagged M1 domain dict FLIGHT_ENVELOPE_MAP");
     }
 
     #[test]
