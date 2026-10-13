@@ -44,141 +44,36 @@ pub fn check_upstream_template_clean_landing_zones(repo_root: &Path) -> Result<(
     core_check_upstream_template_clean_landing_zones(repo_root)
 }
 
-/// Check 18: Upstream Blueprint Domain Cleanliness Gate.
-/// Helper checking whether a file name matches forbidden upstream blueprint domain concepts.
-fn is_forbidden_blueprint_name(fname: &str) -> bool {
-    let lower = fname.to_lowercase();
-    if lower.ends_with(".sysml") {
-        return true;
-    }
-    const FORBIDDEN_PATTERNS: &[&str] = &[
-        "flightsystems",
-        "flight-systems",
-        "flight_systems",
-        "uasinfrastructure",
-        "uas-infrastructure",
-        "uas_infrastructure",
-        "frontendsystems",
-        "frontend-systems",
-        "frontend_systems",
-        "safetymodel",
-        "safety-model",
-        "safety_model",
-        "conceptpaper",
-        "concept-paper",
-        "concept_paper",
-    ];
-    FORBIDDEN_PATTERNS.iter().any(|&p| lower.contains(p))
-}
-
-/// Verifies that upstream architecture blueprints contain zero concrete domain platform
-/// concept papers or domain SysML models (e.g. *FLIGHT_SYSTEMS*, *UAS_INFRASTRUCTURE*,
-/// *FRONTEND_SYSTEMS*, *SAFETY_MODEL*.sysml). Downstream repositories are exempt.
+/// Check 18: Upstream Template Clean Landing Zone & Blueprint Cleanliness Gate.
+///
+/// In upstream distribution template repositories (`DEAP-*`), enforces:
+/// 1. Pure schema landing zone cleanliness: `schema/`, `docs/epics/`, `docs/features/`,
+///    `docs/user-stories/`, and `docs/use-cases/` must contain ONLY `.gitkeep` files.
+/// 2. Zero concrete modeling files (`.sysml`) in upstream architecture blueprints (`docs/architecture/blueprints`).
+/// Downstream repositories are exempt.
 pub fn verify_upstream_blueprint_domain_cleanliness(repo_root: &Path) -> Result<(), Vec<String>> {
     if !is_upstream_compiler(repo_root) {
         return Ok(());
     }
 
-    let blueprints_dir = repo_root.join("docs").join("architecture").join("blueprints");
-    if !blueprints_dir.is_dir() {
-        return Ok(());
-    }
-
     let mut violations = Vec::new();
-    for entry in WalkDir::new(&blueprints_dir)
-        .into_iter()
-        .filter_entry(|e| {
-            if e.file_type().is_dir() {
-                let name = e.file_name().to_string_lossy();
-                !EXCLUDED_DIRS.iter().any(|&ex| name == ex)
-            } else {
-                true
-            }
-        })
-        .filter_map(|e| e.ok())
-    {
-        if entry.file_type().is_file() {
-            let fname = entry.file_name().to_string_lossy();
-            if is_forbidden_blueprint_name(&fname) {
-                let rel = entry
-                    .path()
-                    .strip_prefix(repo_root)
-                    .unwrap_or(entry.path())
-                    .display()
-                    .to_string();
-                violations.push(rel);
-            }
-        }
-    }
 
-    if violations.is_empty() {
-        Ok(())
-    } else {
-        let msg = format!(
-            "Check 18 failed: Upstream blueprints contain concrete domain platform concept papers or sysml models: {}",
-            violations.join(", ")
-        );
-        Err(vec![msg])
-    }
-}
-
-/// Helper checking if a line is a static hardcoded parameter assignment in python tools.
-fn is_static_param_assignment(line: &str) -> bool {
-    const FORBIDDEN_KEYWORDS: &[&str] = &[
-        "GROUND_TRUTH",
-        "EXPECTED_SPECS",
-        "DOMAIN_SPECS",
-        "DOMAIN_PARAMS",
-        "SYSML_PARAMS",
-        "MANDATED_SPECS",
-        "PHYSICAL_LIMITS",
-        "HARDWARE_REGISTRY",
-    ];
-    for &kw in FORBIDDEN_KEYWORDS {
-        if let Some(rest) = line.strip_prefix(kw) {
-            let after_ws = rest.trim_start();
-            if after_ws.starts_with('=') {
-                return true;
-            }
-        }
-    }
-    false
-}
-
-/// Check 19: Domain-Agnostic AST Cleanliness & Closed-Grammar Metamodel Gate.
-///
-/// Verifies that upstream tools, scripts, and validator modules contain zero static/hardcoded
-/// parameter dictionaries (e.g. GROUND_TRUTH = {...}, EXPECTED_SPECS = {...}).
-/// Downstream repositories are exempt.
-pub fn check_domain_agnostic_ast_cleanliness(repo_root: &Path) -> Result<(), Vec<String>> {
-    if !is_upstream_compiler(repo_root) {
-        return Ok(());
-    }
-
-    let scan_dirs = [
-        repo_root
-            .join("skills")
-            .join("spec-orchestrator")
-            .join("parity_auditor")
-            .join("src")
-            .join("parity_auditor")
-            .join("validators"),
-        repo_root
-            .join("skills")
-            .join("spec-orchestrator")
-            .join("parity_auditor")
-            .join("src")
-            .join("parity_auditor")
-            .join("core"),
+    // 1. Enforce pure schema landing zone cleanliness (only .gitkeep)
+    const LANDING_ZONES: &[&str] = &[
+        "schema",
+        "docs/epics",
+        "docs/features",
+        "docs/user-stories",
+        "docs/use-cases",
     ];
 
-    let mut violations = Vec::new();
-    for dir in &scan_dirs {
-        if !dir.is_dir() {
+    for zone in LANDING_ZONES {
+        let zone_dir = repo_root.join(zone);
+        if !zone_dir.is_dir() {
             continue;
         }
 
-        for entry in WalkDir::new(dir)
+        for entry in WalkDir::new(&zone_dir)
             .into_iter()
             .filter_entry(|e| {
                 if e.file_type().is_dir() {
@@ -191,12 +86,150 @@ pub fn check_domain_agnostic_ast_cleanliness(repo_root: &Path) -> Result<(), Vec
             .filter_map(|e| e.ok())
         {
             if entry.file_type().is_file() {
+                let fname = entry.file_name().to_string_lossy();
+                if fname != ".gitkeep" {
+                    let rel = entry
+                        .path()
+                        .strip_prefix(repo_root)
+                        .unwrap_or(entry.path())
+                        .display()
+                        .to_string();
+                    violations.push(format!(
+                        "Upstream template landing zone '{}' contains forbidden non-.gitkeep file: {}",
+                        zone, rel
+                    ));
+                }
+            }
+        }
+    }
+
+    // 2. Enforce zero concrete modeling files (.sysml) in upstream blueprints
+    let blueprints_dir = repo_root.join("docs").join("architecture").join("blueprints");
+    if blueprints_dir.is_dir() {
+        for entry in WalkDir::new(&blueprints_dir)
+            .into_iter()
+            .filter_entry(|e| {
+                if e.file_type().is_dir() {
+                    let name = e.file_name().to_string_lossy();
+                    !EXCLUDED_DIRS.iter().any(|&ex| name == ex)
+                } else {
+                    true
+                }
+            })
+            .filter_map(|e| e.ok())
+        {
+            if entry.file_type().is_file() {
+                let fname = entry.file_name().to_string_lossy();
+                if fname.to_lowercase().ends_with(".sysml") {
+                    let rel = entry
+                        .path()
+                        .strip_prefix(repo_root)
+                        .unwrap_or(entry.path())
+                        .display()
+                        .to_string();
+                    violations.push(format!("Upstream blueprint contains SysML model: {}", rel));
+                }
+            }
+        }
+    }
+
+    if violations.is_empty() {
+        Ok(())
+    } else {
+        violations.sort();
+        let msg = format!(
+            "Check 18 failed: Upstream cleanliness violations found: {}",
+            violations.join("; ")
+        );
+        Err(vec![msg])
+    }
+}
+
+/// Helper checking if a line is a static hardcoded parameter dictionary in native Rust sources.
+fn is_rust_static_param_assignment(line: &str) -> bool {
+    let trimmed = line.trim();
+    if trimmed.starts_with("//") || trimmed.starts_with("/*") || trimmed.starts_with('*') {
+        return false;
+    }
+    // Dynamically assemble forbidden static parameter dictionary identifiers
+    // to prevent scanner false positives on its own source file.
+    let kws = [
+        ["GROUND", "_TRUTH"].concat(),
+        ["EXPECTED", "_SPECS"].concat(),
+        ["DOMAIN", "_SPECS"].concat(),
+        ["DOMAIN", "_PARAMS"].concat(),
+        ["SYSML", "_PARAMS"].concat(),
+        ["MANDATED", "_SPECS"].concat(),
+        ["PHYSICAL", "_LIMITS"].concat(),
+        ["HARDWARE", "_REGISTRY"].concat(),
+    ];
+    for kw in &kws {
+        if trimmed.contains(kw.as_str()) {
+            if trimmed.contains(&format!("const {}", kw))
+                || trimmed.contains(&format!("static {}", kw))
+                || trimmed.contains(&format!("let {}", kw))
+                || trimmed.contains(&format!("{} =", kw))
+                || trimmed.contains(&format!("{}:", kw))
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Check 19: Domain-Agnostic AST Cleanliness & Native Workspace Invariant Gate.
+///
+/// Verifies that upstream compiler tools and crates maintain pure dynamic schema AST
+/// architecture and contain zero static/hardcoded domain parameter dictionaries.
+/// Also enforces zero legacy Python parity auditor directory presence.
+/// Downstream repositories are exempt.
+pub fn check_domain_agnostic_ast_cleanliness(repo_root: &Path) -> Result<(), Vec<String>> {
+    if !is_upstream_compiler(repo_root) {
+        return Ok(());
+    }
+
+    let mut violations = Vec::new();
+
+    // 1. Enforce zero legacy Python parity_auditor directories on disk
+    let legacy_paths = [
+        repo_root.join("skills").join("spec-orchestrator").join("parity_auditor"),
+        repo_root.join("parity_auditor"),
+    ];
+    for p in &legacy_paths {
+        if p.exists() {
+            let rel = p.strip_prefix(repo_root).unwrap_or(p).display().to_string();
+            violations.push(format!(
+                "Check 19 violation: Legacy Python parity_auditor directory detected on disk: {}",
+                rel
+            ));
+        }
+    }
+
+    // 2. Validate native Rust workspace crates directory exists
+    let crates_dir = repo_root.join("crates");
+    if !crates_dir.is_dir() {
+        violations.push("Check 19 violation: Native Rust workspace crates/ directory missing in upstream compiler repository.".to_string());
+    } else {
+        // 3. Scan all native Rust source files in crates/ for hardcoded parameter dictionaries
+        for entry in WalkDir::new(&crates_dir)
+            .into_iter()
+            .filter_entry(|e| {
+                if e.file_type().is_dir() {
+                    let name = e.file_name().to_string_lossy();
+                    name != "target" && name != ".git" && !EXCLUDED_DIRS.iter().any(|&ex| name == ex)
+                } else {
+                    true
+                }
+            })
+            .filter_map(|e| e.ok())
+        {
+            if entry.file_type().is_file() {
                 let path = entry.path();
-                if path.extension().map(|ext| ext == "py").unwrap_or(false) {
+                if path.extension().map(|ext| ext == "rs").unwrap_or(false) {
                     if let Ok(content) = fs::read_to_string(path) {
                         for (idx, line) in content.lines().enumerate() {
-                            let trimmed = line.trim();
-                            if is_static_param_assignment(trimmed) {
+                            if is_rust_static_param_assignment(line) {
                                 let rel = path
                                     .strip_prefix(repo_root)
                                     .unwrap_or(path)
@@ -218,6 +251,7 @@ pub fn check_domain_agnostic_ast_cleanliness(repo_root: &Path) -> Result<(), Vec
     if violations.is_empty() {
         Ok(())
     } else {
+        violations.sort();
         Err(violations)
     }
 }
@@ -506,6 +540,23 @@ mod tests {
     }
 
     #[test]
+    fn test_check_18_upstream_clean() {
+        let tmp = TempDir::new("c18_clean");
+        fs::create_dir_all(tmp.path.join(".pipeline/upstream")).unwrap();
+        let schema_dir = tmp.path.join("schema");
+        fs::create_dir_all(&schema_dir).unwrap();
+        File::create(schema_dir.join(".gitkeep")).unwrap();
+
+        let bp_dir = tmp.path.join("docs/architecture/blueprints");
+        fs::create_dir_all(&bp_dir).unwrap();
+        File::create(bp_dir.join("CORE_ARCHITECTURE.md")).unwrap();
+        // Domain-agnostic markdown blueprint that formerly failed fragile blacklist must now pass
+        File::create(bp_dir.join("FRONTEND_SYSTEMS_PATTERN.md")).unwrap();
+
+        assert!(verify_upstream_blueprint_domain_cleanliness(&tmp.path).is_ok());
+    }
+
+    #[test]
     fn test_check_18_upstream_violations() {
         let tmp = TempDir::new("c18_upstream");
         fs::create_dir_all(tmp.path.join(".pipeline/upstream")).unwrap();
@@ -522,23 +573,54 @@ mod tests {
     }
 
     #[test]
+    fn test_check_18_landing_zone_non_gitkeep_fails() {
+        let tmp = TempDir::new("c18_lz");
+        fs::create_dir_all(tmp.path.join(".pipeline/upstream")).unwrap();
+        let schema_dir = tmp.path.join("schema");
+        fs::create_dir_all(&schema_dir).unwrap();
+        File::create(schema_dir.join("domain_model.sysml")).unwrap();
+        assert!(verify_upstream_blueprint_domain_cleanliness(&tmp.path).is_err());
+    }
+
+    #[test]
     fn test_check_19_downstream_exempt() {
         let tmp = TempDir::new("c19_downstream");
         assert!(check_domain_agnostic_ast_cleanliness(&tmp.path).is_ok());
     }
 
     #[test]
-    fn test_check_19_upstream_violations() {
-        let tmp = TempDir::new("c19_upstream");
+    fn test_check_19_upstream_clean() {
+        let tmp = TempDir::new("c19_clean");
         fs::create_dir_all(tmp.path.join(".pipeline/upstream")).unwrap();
-        let val_dir = tmp
-            .path
-            .join("skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators");
-        fs::create_dir_all(&val_dir).unwrap();
+        let src_dir = tmp.path.join("crates/test-crate/src");
+        fs::create_dir_all(&src_dir).unwrap();
+        let mut f = File::create(src_dir.join("lib.rs")).unwrap();
+        writeln!(f, "pub fn compute_hash(val: &[u8]) -> u64 {{ 42 }}").unwrap();
+        assert!(check_domain_agnostic_ast_cleanliness(&tmp.path).is_ok());
+    }
 
-        let py_file = val_dir.join("test_validator.py");
-        let mut f = File::create(&py_file).unwrap();
-        writeln!(f, "GROUND_TRUTH = {{'speed': 100}}").unwrap();
+    #[test]
+    fn test_check_19_rust_crates_domain_params_fails() {
+        let tmp = TempDir::new("c19_rust");
+        fs::create_dir_all(tmp.path.join(".pipeline/upstream")).unwrap();
+        let src_dir = tmp.path.join("crates/test-crate/src");
+        fs::create_dir_all(&src_dir).unwrap();
+        let mut f = File::create(src_dir.join("lib.rs")).unwrap();
+        let kw = ["DOM", "AIN_PARAMS"].concat();
+        writeln!(f, "pub const {}: &[&str] = &[\"speed\"];", kw).unwrap();
+        assert!(check_domain_agnostic_ast_cleanliness(&tmp.path).is_err());
+    }
+
+    #[test]
+    fn test_check_19_legacy_python_parity_auditor_dir_fails() {
+        let tmp = TempDir::new("c19_legacy");
+        fs::create_dir_all(tmp.path.join(".pipeline/upstream")).unwrap();
+        let crates_dir = tmp.path.join("crates");
+        fs::create_dir_all(&crates_dir).unwrap();
+        let legacy_dir = tmp
+            .path
+            .join("skills/spec-orchestrator/parity_auditor");
+        fs::create_dir_all(&legacy_dir).unwrap();
 
         assert!(check_domain_agnostic_ast_cleanliness(&tmp.path).is_err());
     }
