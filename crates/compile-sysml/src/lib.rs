@@ -22,7 +22,7 @@ pub use semantic::serializer::{to_sysml, SysmlSerializable};
 pub use semantic::symbols::{Symbol, SymbolKind, SymbolTable};
 pub use semantic::validator::{DiagnosticSeverity, SemanticDiagnostic, SemanticValidator};
 pub use stpa::{
-    compile_stpa_to_constraints, emit_safety_suite, expand_cartesian_stpa, generate_fmeca_matrix,
+    compile_stpa_to_constraints, compile_stpa_to_constraints_filtered, emit_safety_suite, expand_cartesian_stpa, generate_fmeca_matrix,
     transpile_safety_suite, transpile_stpa, FmecaRow, FmecaScoringConfig, UnsafeControlAction,
 };
 pub use sync::{

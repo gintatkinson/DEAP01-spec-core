@@ -544,6 +544,63 @@ impl PackageDef {
         result
     }
 
+    /// Returns all attribute definitions declared across self and all nested packages/parts.
+    pub fn get_all_attributes(&self) -> Vec<AttributeDef> {
+        let mut result = Vec::new();
+        for pkg in self.get_all_packages() {
+            result.extend(pkg.attribute_defs.clone());
+            for part in &pkg.part_defs {
+                collect_part_attributes(part, &mut result);
+            }
+        }
+        result
+    }
+
+    /// Checks whether this package or any nested subpackages/parts declare attributes or constraints negating recovery systems.
+    pub fn has_negative_recovery_constraint(&self) -> bool {
+        let recovery_keys = [
+            "recoverysystem",
+            "recovery_system",
+            "chuteenabled",
+            "chute_enabled",
+            "recoveryenabled",
+            "recovery_enabled",
+            "hasrecovery",
+            "has_recovery",
+            "hasparachute",
+            "has_parachute",
+        ];
+        let negative_vals = ["0", "false", "\"no\"", "\"none\"", "no", "none"];
+
+        for attr in self.get_all_attributes() {
+            let name_clean = attr.name.to_lowercase().replace('_', "");
+            if recovery_keys.iter().any(|k| name_clean == k.replace('_', "")) {
+                if let Some(val) = &attr.default_value {
+                    let v = val.trim().to_lowercase();
+                    if negative_vals.iter().any(|neg| v == *neg || v.starts_with(neg)) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        for con in self.get_all_constraints() {
+            if has_negative_recovery_constraint(&con.expression) {
+                return true;
+            }
+        }
+
+        for pkg in self.get_all_packages() {
+            if let Some(doc) = &pkg.doc {
+                if has_negative_recovery_constraint(doc) {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
+
     /// Recursively searches for a mutable reference to a part definition by identifier name across self, nested parts, and all subpackages.
     ///
     /// ## 1. Safety Intent & Regulatory Scope
@@ -629,6 +686,13 @@ fn collect_part_constraints(part: &PartDef, result: &mut Vec<ConstraintDef>) {
     result.extend(part.constraints.clone());
     for sub in &part.parts {
         collect_part_constraints(sub, result);
+    }
+}
+
+fn collect_part_attributes(part: &PartDef, result: &mut Vec<AttributeDef>) {
+    result.extend(part.attributes.clone());
+    for sub in &part.parts {
+        collect_part_attributes(sub, result);
     }
 }
 
@@ -1820,6 +1884,185 @@ pub fn parse_sysml(content: &str) -> SysmlModel {
     }
 }
 
+/// Checks if an FMECA table component string matches an AST part def name.
+/// Matches case-insensitively, ignoring whitespace, underscores, hyphens, and markdown formatting.
+/// Also checks word boundary inclusion without regular expressions.
+pub fn component_matches(table_comp: &str, ast_part_name: &str) -> bool {
+    let tc = table_comp.trim();
+    let pn = ast_part_name.trim();
+    if tc.eq_ignore_ascii_case(pn) {
+        return true;
+    }
+
+    let tc_clean: String = tc.chars().filter(|c| c.is_alphanumeric()).collect();
+    let pn_clean: String = pn.chars().filter(|c| c.is_alphanumeric()).collect();
+
+    if !tc_clean.is_empty() && tc_clean.eq_ignore_ascii_case(&pn_clean) {
+        return true;
+    }
+
+    // Word boundary containment: check if needle appears as a distinct word in haystack
+    fn contains_word(haystack: &str, needle: &str) -> bool {
+        let h_lower = haystack.to_lowercase();
+        let n_lower = needle.to_lowercase();
+        if n_lower.is_empty() {
+            return false;
+        }
+        let mut start = 0;
+        while let Some(pos) = h_lower[start..].find(&n_lower) {
+            let actual_pos = start + pos;
+            let before = if actual_pos == 0 {
+                true
+            } else {
+                !h_lower[..actual_pos].chars().last().unwrap().is_alphanumeric()
+            };
+            let after_pos = actual_pos + n_lower.len();
+            let after = if after_pos >= h_lower.len() {
+                true
+            } else {
+                !h_lower[after_pos..].chars().next().unwrap().is_alphanumeric()
+            };
+            if before && after {
+                return true;
+            }
+            start = actual_pos + 1;
+        }
+        false
+    }
+
+    contains_word(tc, pn) || contains_word(pn, tc)
+}
+
+/// Checks whether a component represents a recovery subsystem (e.g. Parachute, Ballistic Recovery, Chute).
+pub fn is_recovery_component(comp: &str) -> bool {
+    let lower = comp.to_lowercase();
+    let clean: String = lower.chars().filter(|c| c.is_alphanumeric()).collect();
+    clean.contains("parachute")
+        || clean.contains("ballisticrecovery")
+        || clean.contains("chuterecovery")
+        || (clean.contains("recovery")
+            && (clean.contains("system")
+                || clean.contains("unit")
+                || clean.contains("device")
+                || clean.contains("chute")
+                || clean.contains("subsystem")
+                || clean.contains("module")
+                || clean == "recovery"))
+        || clean.starts_with("chute")
+}
+
+/// Checks whether model text or attributes/constraints explicitly negate recovery systems.
+pub fn has_negative_recovery_constraint(content: &str) -> bool {
+    let lower = content.to_lowercase();
+
+    // Prose patterns in text / markdown
+    let prose_patterns = [
+        "recovery system: no",
+        "recovery system : no",
+        "recovery system: none",
+        "recovery system : none",
+        "no recovery system",
+        "no vehicle recovery",
+        "no parachute",
+    ];
+    for p in &prose_patterns {
+        if lower.contains(p) {
+            return true;
+        }
+    }
+
+    let recovery_keys = [
+        "recoverysystem",
+        "recovery_system",
+        "chuteenabled",
+        "chute_enabled",
+        "recoveryenabled",
+        "recovery_enabled",
+        "hasrecovery",
+        "has_recovery",
+        "hasparachute",
+        "has_parachute",
+    ];
+
+    let negative_vals = ["0", "false", "\"no\"", "\"none\"", "no", "none"];
+
+    for line in lower.lines() {
+        let line_clean = if let Some(idx) = line.find("//") {
+            &line[..idx]
+        } else {
+            line
+        };
+
+        for key in &recovery_keys {
+            if line_clean.contains(key) {
+                let parts: Vec<&str> = if line_clean.contains('=') {
+                    line_clean.split('=').collect()
+                } else if line_clean.contains(':') {
+                    line_clean.split(':').collect()
+                } else {
+                    Vec::new()
+                };
+
+                if let Some(val_part) = parts.last() {
+                    let val = val_part
+                        .trim()
+                        .trim_matches(|c: char| c == ';' || c == '}' || c == '{' || c == ',' || c == ')' || c == '(' || c == '.')
+                        .trim();
+                    for neg in &negative_vals {
+                        if val == *neg || val.starts_with(neg) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Direct substring checks on clean alphanumeric string
+    let clean: String = lower.chars().filter(|c| c.is_alphanumeric() || *c == '=' || *c == '"' || *c == ':').collect();
+    if clean.contains("recoverysystem=\"no\"")
+        || clean.contains("recoverysystem==\"no\"")
+        || clean.contains("recoverysystem:=\"no\"")
+        || clean.contains("recoverysystem:\"no\"")
+        || clean.contains("recoverysystem:no")
+        || clean.contains("recoverysystem=no")
+        || clean.contains("recoverysystem:=no")
+        || clean.contains("recoverysystem=\"none\"")
+        || clean.contains("recoverysystem==\"none\"")
+        || clean.contains("recoverysystem:=\"none\"")
+        || clean.contains("recoverysystem:\"none\"")
+        || clean.contains("recoverysystem:none")
+        || clean.contains("recoverysystem=none")
+        || clean.contains("recoverysystem:=none")
+        || clean.contains("chuteenabled=0")
+        || clean.contains("chuteenabled==0")
+        || clean.contains("chuteenabled:=0")
+        || clean.contains("chuteenabled=false")
+        || clean.contains("chuteenabled==false")
+        || clean.contains("chuteenabled:=false")
+        || clean.contains("chuteenabled:0")
+        || clean.contains("chuteenabled:false")
+        || clean.contains("recoveryenabled=0")
+        || clean.contains("recoveryenabled==0")
+        || clean.contains("recoveryenabled:=0")
+        || clean.contains("recoveryenabled=false")
+        || clean.contains("recoveryenabled==false")
+        || clean.contains("recoveryenabled:=false")
+        || clean.contains("hasrecovery=false")
+        || clean.contains("hasrecovery:=false")
+        || clean.contains("hasrecovery=0")
+        || clean.contains("hasrecovery:=0")
+        || clean.contains("hasparachute=false")
+        || clean.contains("hasparachute:=false")
+        || clean.contains("hasparachute=0")
+        || clean.contains("hasparachute:=0")
+    {
+        return true;
+    }
+
+    false
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2178,6 +2421,45 @@ part def VehicleSystem {
         assert_eq!(test_cases[0].verified_requirements, vec!["Assert_UCA_33", "Assert_UCA_34"]);
         assert_eq!(test_cases[0].objective.as_deref(), Some("Verify armState interlock per UCA-33"));
         assert_eq!(test_cases[0].test_steps, vec!["trigger_arming"]);
+    }
+
+    #[test]
+    fn test_component_matches_and_clean_names() {
+        assert!(component_matches("Electric Motor", "Electric_Motor"));
+        assert!(component_matches("FlightController", "FlightController"));
+        assert!(component_matches("flight_controller", "FlightController"));
+        assert!(component_matches("NavigationSensor", "navigation_sensor"));
+        assert!(component_matches("[FlightController]", "FlightController"));
+        assert!(component_matches("**FlightController**", "FlightController"));
+        assert!(component_matches("`FlightController`", "FlightController"));
+        assert!(!component_matches("PhantomSubsystem", "ElectricMotor"));
+        assert!(!component_matches("GhostUnit", "FlightController"));
+    }
+
+    #[test]
+    fn test_is_recovery_component_detection() {
+        assert!(is_recovery_component("ParachuteRecovery"));
+        assert!(is_recovery_component("Parachute"));
+        assert!(is_recovery_component("BallisticRecoveryUnit"));
+        assert!(is_recovery_component("ChuteDeploymentSystem"));
+        assert!(is_recovery_component("EmergencyRecoverySubsystem"));
+        assert!(!is_recovery_component("FlightController"));
+        assert!(!is_recovery_component("NavigationSensor"));
+        assert!(!is_recovery_component("ElectricMotor"));
+    }
+
+    #[test]
+    fn test_has_negative_recovery_constraint_detection() {
+        assert!(has_negative_recovery_constraint(r#"attribute recoverySystem = "No";"#));
+        assert!(has_negative_recovery_constraint(r#"attribute chuteEnabled = 0;"#));
+        assert!(has_negative_recovery_constraint(r#"attribute recovery_system = "none";"#));
+        assert!(has_negative_recovery_constraint("Recovery system: No"));
+        assert!(has_negative_recovery_constraint("No recovery system installed"));
+        assert!(has_negative_recovery_constraint(r#"Avenger5.recoverySystem = "No""#));
+        assert!(has_negative_recovery_constraint(r#"Avenger5.chuteEnabled = 0"#));
+        assert!(!has_negative_recovery_constraint(r#"attribute recoverySystem = "Yes";"#));
+        assert!(!has_negative_recovery_constraint(r#"attribute chuteEnabled = 1;"#));
+        assert!(!has_negative_recovery_constraint("Nominal flight operations"));
     }
 }
 

@@ -908,9 +908,36 @@ fn render_sldv_script(constraints: &[ConstraintDef], tokens: &HashMap<String, St
 
 /// Parses an STPA markdown file and compiles its hazard matrices into a SysML constraint package.
 pub fn compile_stpa_to_constraints(content: &str, package_name: &str) -> PackageDef {
+    compile_stpa_to_constraints_filtered(content, package_name, None, None)
+}
+
+/// Parses an STPA markdown file and compiles its hazard matrices into a SysML constraint package,
+/// enforcing AST constraint verification against declared AST part defs and negative model constraints.
+pub fn compile_stpa_to_constraints_filtered(
+    content: &str,
+    package_name: &str,
+    valid_parts: Option<&std::collections::HashSet<String>>,
+    model: Option<&PackageDef>,
+) -> PackageDef {
     let mut pkg = PackageDef::default();
     pkg.name = package_name.to_string();
     pkg.doc = Some("STPA and FMECA Safety Invariants compiled for Run-Time Assurance (RTA) & SLDV Verification".to_string());
+
+    let is_negated_recovery = deap_core::sysml_ast::has_negative_recovery_constraint(content)
+        || model.map_or(false, |m| {
+            let sysml = crate::semantic::serializer::to_sysml(m);
+            deap_core::sysml_ast::has_negative_recovery_constraint(&sysml)
+        });
+
+    let model_part_set: Option<std::collections::HashSet<String>> = model.map(|m| {
+        m.get_all_parts()
+            .into_iter()
+            .map(|p| p.name)
+            .filter(|n| !n.starts_with('_'))
+            .collect()
+    });
+
+    let effective_valid_parts = valid_parts.or(model_part_set.as_ref());
 
     // Match UCA table rows: | UCA-### | Controller | Action | Guide Word | ... | Hazard | Constraint | ...
     for line in content.lines() {
@@ -966,9 +993,23 @@ pub fn compile_stpa_to_constraints(content: &str, package_name: &str) -> Package
             let failure_mode = cols[3];
 
             if !component.is_empty() && !failure_mode.is_empty() {
-                let constraint_name = format!("{}_{}_Integrity", fmeca_id.replace('-', "_"), component.replace(' ', "_"));
-                let doc = format!("{}: {} shall mitigate {}", fmeca_id, component, failure_mode);
-                let expression = format!("{}HealthStatus >= 1", component.replace(' ', ""));
+                let comp_clean = component.trim_matches(|c| c == '`' || c == '*').trim();
+
+                // If negative AST constraints negate recovery, forbid synthesis of recovery components
+                if is_negated_recovery && deap_core::sysml_ast::is_recovery_component(comp_clean) {
+                    continue;
+                }
+
+                // If valid parts are provided or derived from model, verify component existence in AST
+                if let Some(parts) = effective_valid_parts {
+                    if !parts.iter().any(|p| deap_core::sysml_ast::component_matches(comp_clean, p)) {
+                        continue;
+                    }
+                }
+
+                let constraint_name = format!("{}_{}_Integrity", fmeca_id.replace('-', "_"), comp_clean.replace(' ', "_"));
+                let doc = format!("{}: {} shall mitigate {}", fmeca_id, comp_clean, failure_mode);
+                let expression = format!("{}HealthStatus >= 1", comp_clean.replace(' ', ""));
 
                 pkg.constraint_defs.push(ConstraintDef {
                     name: constraint_name,
@@ -1041,5 +1082,42 @@ mod tests {
         assert_eq!(pkg.constraint_defs.len(), 1);
         assert_eq!(pkg.constraint_defs[0].name, "SC_001_DeployParachute");
         assert!(pkg.constraint_defs[0].is_assertion);
+    }
+
+    #[test]
+    fn test_issue_249_compile_stpa_rejects_phantom_recovery_when_negated() {
+        let md = r#"
+| UCA ID | Controller | Control Action | Guide Word | Context | Hazard | Safety Constraint | Severity | SAIL |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| UCA-001 | FlightComputer | CalculateGuidance | Not providing | In-flight | H-1 | SC-001 | High | IV |
+
+Negative safety model invariant: chuteEnabled = 0, recoverySystem = "No"
+
+| FMECA ID | Component | Failure Mode | Potential Effect | Severity (S) | Occurrence (O) | Detection (D) | RPN (S x O x D) | Mitigation | Derivation Basis |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| FMECA-001 | FlightComputer | CPU Lockup | Loss of Guidance | 8 | 2 | 2 | 32 | Dual redundant voting | SSOT |
+| FMECA-002 | ParachuteRecovery | Deployment Jam | Hard Impact | 9 | 2 | 3 | 54 | Redundant pyrotechnic cutter | Derived |
+"#;
+        let pkg = compile_stpa_to_constraints(md, "SafetyConstraintsPackage");
+        let con_names: Vec<String> = pkg.constraint_defs.iter().map(|c| c.name.clone()).collect();
+        assert!(con_names.iter().any(|c| c.contains("FlightComputer")), "FlightComputer constraint must be present");
+        assert!(!con_names.iter().any(|c| c.contains("ParachuteRecovery")), "ParachuteRecovery constraint must NOT be synthesized when negated by negative AST constraints");
+    }
+
+    #[test]
+    fn test_issue_249_compile_stpa_filtered_by_valid_parts() {
+        let md = r#"
+| FMECA ID | Component | Failure Mode | Potential Effect | Severity (S) | Occurrence (O) | Detection (D) | RPN (S x O x D) | Mitigation | Derivation Basis |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| FMECA-001 | FlightComputer | CPU Lockup | Loss of Guidance | 8 | 2 | 2 | 32 | Dual redundant voting | SSOT |
+| FMECA-002 | PhantomSubsystem | Ghost Logic Fail | None | 5 | 2 | 2 | 20 | None | Derived |
+"#;
+        let mut valid_parts = std::collections::HashSet::new();
+        valid_parts.insert("FlightComputer".to_string());
+
+        let pkg = compile_stpa_to_constraints_filtered(md, "SafetyConstraintsPackage", Some(&valid_parts), None);
+        let con_names: Vec<String> = pkg.constraint_defs.iter().map(|c| c.name.clone()).collect();
+        assert!(con_names.iter().any(|c| c.contains("FlightComputer")), "FlightComputer constraint must be present");
+        assert!(!con_names.iter().any(|c| c.contains("PhantomSubsystem")), "PhantomSubsystem constraint must NOT be synthesized when missing from valid_parts");
     }
 }

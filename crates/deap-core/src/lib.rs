@@ -15,6 +15,7 @@ pub use rules::{
     CodebaseRules, MetaConfig, TrackerRules, ValidationRules, EXCLUDED_DIRS, MASTER_BLUEPRINTS,
 };
 pub use sysml_ast::{
+    component_matches, has_negative_recovery_constraint, is_recovery_component,
     parse_action_defs, parse_attribute_defs, parse_connection_defs, parse_constraint_defs,
     parse_part_defs, parse_port_defs, parse_requirement_defs, parse_state_defs, parse_sysml,
     ActionDef, AttributeDef, CapabilityDef, ConnectionDef, ConstraintDef, FlowDef, HazardDef,

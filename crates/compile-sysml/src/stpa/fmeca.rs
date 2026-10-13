@@ -117,16 +117,25 @@ pub fn generate_fmeca_matrix(
     pkg: &PackageDef,
     scoring_config: Option<&FmecaScoringConfig>,
 ) -> Vec<FmecaRow> {
+    let pkg_sysml = crate::semantic::serializer::to_sysml(pkg);
+    let is_negated_recovery = pkg.has_negative_recovery_constraint()
+        || deap_core::sysml_ast::has_negative_recovery_constraint(&pkg_sysml);
+
     let mut rows = Vec::new();
     let all_parts = pkg.get_all_parts();
     let mut parts: Vec<&str> = all_parts
         .iter()
         .map(|p| p.name.as_str())
         .filter(|name| !name.starts_with('_'))
+        .filter(|name| !(is_negated_recovery && deap_core::sysml_ast::is_recovery_component(name)))
         .collect();
 
     if parts.is_empty() {
-        parts = all_parts.iter().map(|p| p.name.as_str()).collect();
+        parts = all_parts
+            .iter()
+            .map(|p| p.name.as_str())
+            .filter(|name| !(is_negated_recovery && deap_core::sysml_ast::is_recovery_component(name)))
+            .collect();
     }
 
     if parts.is_empty() {
@@ -267,5 +276,33 @@ mod tests {
         assert!(dims.contains(&"State"));
         assert!(dims.contains(&"Action"));
         assert!(dims.contains(&"Resource"));
+    }
+
+    #[test]
+    fn test_fmeca_matrix_excludes_negated_recovery_components() {
+        let mut pkg = PackageDef::default();
+        let mut p1 = PartDef::default();
+        p1.name = "FlightControlComputer".to_string();
+        let mut p2 = PartDef::default();
+        p2.name = "ParachuteRecoveryUnit".to_string();
+        pkg.part_defs.push(p1);
+        pkg.part_defs.push(p2);
+
+        // Explicit negative constraint: chuteEnabled = 0; recoverySystem = "No";
+        pkg.attribute_defs.push(deap_core::sysml_ast::AttributeDef {
+            name: "chuteEnabled".to_string(),
+            default_value: Some("0".to_string()),
+            ..Default::default()
+        });
+        pkg.attribute_defs.push(deap_core::sysml_ast::AttributeDef {
+            name: "recoverySystem".to_string(),
+            default_value: Some("\"No\"".to_string()),
+            ..Default::default()
+        });
+
+        let rows = generate_fmeca_matrix(&pkg, None);
+        let components: Vec<_> = rows.iter().map(|r| r.component.as_str()).collect();
+        assert!(components.contains(&"FlightControlComputer"));
+        assert!(!components.contains(&"ParachuteRecoveryUnit"), "Negated ParachuteRecoveryUnit must NOT be present in FMECA rows");
     }
 }

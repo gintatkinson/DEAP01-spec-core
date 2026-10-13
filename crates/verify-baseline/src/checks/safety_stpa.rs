@@ -734,6 +734,81 @@ pub fn check_safety_integrity(
             } else {
                 errors.push("Pillar 7 violation: FMECA Criticality Matrix contains rows but no valid components or failure modes could be resolved.".to_string());
             }
+
+            // Bidirectional AST closure and negative AST constraint verification (Issue #249)
+            let model_text = crate::checks::parity_gates::discover_sysml_model_text(repo_root);
+            if let Some(ref text) = model_text {
+                let model_parts = deap_core::sysml_ast::parse_part_defs(text);
+                let expected_parts: Vec<String> = model_parts
+                    .into_iter()
+                    .map(|p| p.name)
+                    .filter(|n| !n.starts_with('_'))
+                    .collect();
+
+                if !expected_parts.is_empty() {
+                    let mut table_components: Vec<String> = Vec::new();
+                    for row in &fmeca.rows {
+                        let comp_raw = row.component.trim();
+                        let clean_comp = if let Some(idx) = comp_raw.find(']') {
+                            if comp_raw.starts_with('[') {
+                                &comp_raw[1..idx]
+                            } else {
+                                comp_raw
+                            }
+                        } else {
+                            comp_raw
+                        };
+                        let comp = clean_comp.trim_matches(|c| c == '`' || c == '*').trim();
+                        if !comp.is_empty() && !table_components.iter().any(|c| c.eq_ignore_ascii_case(comp)) {
+                            table_components.push(comp.to_string());
+                        }
+                    }
+
+                    // 1. Missing declared AST part def components
+                    let mut missing_parts = Vec::new();
+                    for p in &expected_parts {
+                        if !table_components.iter().any(|c| deap_core::sysml_ast::component_matches(c, p)) {
+                            missing_parts.push(p.clone());
+                        }
+                    }
+                    if !missing_parts.is_empty() {
+                        missing_parts.sort();
+                        errors.push(format!(
+                            "Pillar 7 violation: FMECA table missing declared AST part def component(s): {}.",
+                            missing_parts.join(", ")
+                        ));
+                    }
+
+                    // 2. Undeclared phantom components not in AST
+                    let mut undeclared_parts = Vec::new();
+                    for c in &table_components {
+                        if !expected_parts.iter().any(|p| deap_core::sysml_ast::component_matches(c, p)) {
+                            undeclared_parts.push(c.clone());
+                        }
+                    }
+                    if !undeclared_parts.is_empty() {
+                        undeclared_parts.sort();
+                        errors.push(format!(
+                            "Pillar 7 violation: FMECA table references undeclared phantom component(s) not in AST: {}.",
+                            undeclared_parts.join(", ")
+                        ));
+                    }
+
+                    // 3. Negative safety model constraints enforcement
+                    let is_negated_recovery = deap_core::sysml_ast::has_negative_recovery_constraint(text)
+                        || deap_core::sysml_ast::has_negative_recovery_constraint(&combined_content);
+                    if is_negated_recovery {
+                        for c in &table_components {
+                            if deap_core::sysml_ast::is_recovery_component(c) {
+                                errors.push(format!(
+                                    "Pillar 7 violation: FMECA table references recovery component '{}' contradicted by negative AST model constraint.",
+                                    c
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // Validate S/O/D ratings and RPN = S * O * D
@@ -1124,5 +1199,159 @@ mod tests {
         assert!(res.is_err());
         let errs = res.unwrap_err();
         assert!(errs.iter().any(|e| e.contains("missing explicit Derivation Basis classification")));
+    }
+
+    #[test]
+    fn test_issue_249_check17_rejects_fmeca_with_undeclared_or_negated_recovery_component() {
+        let temp = TempDir::new("check17_issue249");
+        let safety_dir = temp.path.join("docs").join("safety");
+        let schema_dir = temp.path.join("schema");
+        fs::create_dir_all(&safety_dir).unwrap();
+        fs::create_dir_all(&schema_dir).unwrap();
+
+        // Model declares FlightComputer and SensorUnit, and negates recovery: chuteEnabled = 0; recoverySystem = "No";
+        let model_text = r#"package SystemSSOT {
+    part def FlightComputer;
+    part def SensorUnit;
+    attribute chuteEnabled = 0;
+    attribute recoverySystem = "No";
+}
+"#;
+        fs::write(schema_dir.join("model.sysml"), model_text).unwrap();
+
+        // FMECA table includes undeclared / negated ParachuteRecovery
+        let mut content = String::from("# System Safety & STPA Matrix\n\n");
+        content.push_str("## 1. System Losses ($L-1..N$)\n- Loss L-1: Loss of Vehicle\n\n");
+        content.push_str("## 2. System Hazards ($H-1..N$)\n- Hazard H-1: Loss of Control\n\n");
+        content.push_str("## 3. Control Structure Topology\n```mermaid\ngraph TD\n  A --> B\n```\n\n");
+        content.push_str("## 4. Unsafe Control Actions ($UCA-1..N$)\n- UCA-1: Providing Land command too late\n- UCA-2: Not providing Land command\n- UCA-3: Stopped too soon\n- UCA-4: Applied too long\n\n");
+        content.push_str("## 5. Loss Scenarios ($LS-1..N$)\n- Scenario LS-1: Sensor failure causes loss\n\n");
+        content.push_str("## 6. Formal Safety Constraints ($SC-1..N$)\n- SC-01: Vehicle shall remain in safe corridor\n\n");
+        content.push_str("## 7. FMECA Criticality Matrix\n\n");
+        content.push_str("| FMECA ID | Component | Failure Mode | Potential Effect | Severity (S) | Occurrence (O) | Detection (D) | RPN (S x O x D) | Mitigation | Derivation Basis |\n");
+        content.push_str("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n");
+        // 14 rows of FlightComputer / SensorUnit
+        for i in 1..=8 {
+            content.push_str(&format!("| FMECA-{:03} | FlightComputer | Mode {} (Interface Γ, State Φ) | Effect | 5 | 2 | 2 | 20 | Mit | SSOT |\n", i, i));
+        }
+        for i in 9..=14 {
+            content.push_str(&format!("| FMECA-{:03} | SensorUnit | Mode {} (Action Ω, Resource Ψ) | Effect | 5 | 2 | 2 | 20 | Mit | SSOT |\n", i, i));
+        }
+        // Rows 15 & 16: ParachuteRecovery (undeclared & negated by model, 2 distinct modes)
+        content.push_str("| FMECA-015 | ParachuteRecovery | Deployment Jam (Action Ω) | Crash | 10 | 2 | 2 | 40 | Cutter | Derived |\n");
+        content.push_str("| FMECA-016 | ParachuteRecovery | Pyrotechnic Misfire (Resource Ψ) | Crash | 10 | 2 | 2 | 40 | Dual Igniter | Derived |\n\n");
+        content.push_str("## 8. Domain Regulatory Objectives & Integrity Mapping\n- Pillar 8 SORA SAIL II objectives\n\n");
+        content.push_str("## Commercial Toolchain Hooks\n- MATLAB / Simulink / Stateflow hooks\n");
+
+        fs::write(safety_dir.join("STPA_MATRIX.md"), content).unwrap();
+
+        let result = check_safety_integrity(&temp.path, false, true);
+        assert!(result.is_err(), "Expected Check 17 to fail when FMECA references undeclared/negated ParachuteRecovery");
+        let errs = result.unwrap_err();
+        assert!(errs.iter().any(|e| e.contains("Pillar 7 violation") && (e.contains("ParachuteRecovery") || e.contains("undeclared") || e.contains("negated") || e.contains("negative"))),
+            "Expected Pillar 7 error referencing ParachuteRecovery/undeclared/negative, got: {:?}", errs);
+    }
+
+    #[test]
+    fn test_issue_249_check17_rejects_missing_declared_part() {
+        let temp = TempDir::new("check17_missing_part");
+        let safety_dir = temp.path.join("docs").join("safety");
+        let schema_dir = temp.path.join("schema");
+        fs::create_dir_all(&safety_dir).unwrap();
+        fs::create_dir_all(&schema_dir).unwrap();
+
+        // Model declares FlightComputer and ActuatorUnit
+        let model_text = r#"package SystemSSOT {
+    part def FlightComputer;
+    part def ActuatorUnit;
+}
+"#;
+        fs::write(schema_dir.join("model.sysml"), model_text).unwrap();
+
+        // FMECA table covers FlightComputer across all 15 rows, but completely omits ActuatorUnit
+        let mut content = String::from("# System Safety & STPA Matrix\n\n");
+        content.push_str("## 1. System Losses ($L-1..N$)\n- Loss L-1: Loss of Vehicle\n\n");
+        content.push_str("## 2. System Hazards ($H-1..N$)\n- Hazard H-1: Loss of Control\n\n");
+        content.push_str("## 3. Control Structure Topology\n```mermaid\ngraph TD\n  A --> B\n```\n\n");
+        content.push_str("## 4. Unsafe Control Actions ($UCA-1..N$)\n- UCA-1: Providing Land command too late\n- UCA-2: Not providing Land command\n- UCA-3: Stopped too soon\n- UCA-4: Applied too long\n\n");
+        content.push_str("## 5. Loss Scenarios ($LS-1..N$)\n- Scenario LS-1: Sensor failure causes loss\n\n");
+        content.push_str("## 6. Formal Safety Constraints ($SC-1..N$)\n- SC-01: Vehicle shall remain in safe corridor\n\n");
+        content.push_str("## 7. FMECA Criticality Matrix\n\n");
+        content.push_str("| FMECA ID | Component | Failure Mode | Potential Effect | Severity (S) | Occurrence (O) | Detection (D) | RPN (S x O x D) | Mitigation | Derivation Basis |\n");
+        content.push_str("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n");
+        for i in 1..=15 {
+            let dim = match i % 4 {
+                0 => "Interface Γ",
+                1 => "State Φ",
+                2 => "Action Ω",
+                _ => "Resource Ψ",
+            };
+            content.push_str(&format!("| FMECA-{:03} | FlightComputer | Mode {} ({}) | Effect | 5 | 2 | 2 | 20 | Mit | SSOT |\n", i, i, dim));
+        }
+        content.push_str("\n## 8. Domain Regulatory Objectives & Integrity Mapping\n- Pillar 8 SORA SAIL II objectives\n\n");
+        content.push_str("## Commercial Toolchain Hooks\n- MATLAB / Simulink / Stateflow hooks\n");
+
+        fs::write(safety_dir.join("STPA_MATRIX.md"), content).unwrap();
+
+        let result = check_safety_integrity(&temp.path, false, true);
+        assert!(result.is_err(), "Expected Check 17 to fail when declared ActuatorUnit is missing from FMECA");
+        let errs = result.unwrap_err();
+        assert!(errs.iter().any(|e| e.contains("missing declared AST part def component(s): ActuatorUnit")),
+            "Expected missing declared part error for ActuatorUnit, got: {:?}", errs);
+    }
+
+    #[test]
+    fn test_issue_249_check17_valid_bidirectional_ast_closure_passes() {
+        let temp = TempDir::new("check17_valid_ast");
+        let safety_dir = temp.path.join("docs").join("safety");
+        let schema_dir = temp.path.join("schema");
+        fs::create_dir_all(&safety_dir).unwrap();
+        fs::create_dir_all(&schema_dir).unwrap();
+
+        // Model declares FlightComputer and SensorUnit with valid positive configuration
+        let model_text = r#"package SystemSSOT {
+    part def FlightComputer;
+    part def SensorUnit;
+}
+"#;
+        fs::write(schema_dir.join("model.sysml"), model_text).unwrap();
+
+        let mut content = String::from("# System Safety & STPA Matrix\n\n");
+        content.push_str("## 1. System Losses ($L-1..N$)\n- Loss L-1: Loss of Vehicle\n\n");
+        content.push_str("## 2. System Hazards ($H-1..N$)\n- Hazard H-1: Loss of Control\n\n");
+        content.push_str("## 3. Control Structure Topology\n```mermaid\ngraph TD\n  A --> B\n```\n\n");
+        content.push_str("## 4. Unsafe Control Actions ($UCA-1..N$)\n- UCA-1: Providing Land command too late\n- UCA-2: Not providing Land command\n- UCA-3: Stopped too soon\n- UCA-4: Applied too long\n\n");
+        content.push_str("## 5. Loss Scenarios ($LS-1..N$)\n- Scenario LS-1: Sensor failure causes loss\n\n");
+        content.push_str("## 6. Formal Safety Constraints ($SC-1..N$)\n- SC-01: Vehicle shall remain in safe corridor\n\n");
+        content.push_str("## 7. FMECA Criticality Matrix\n\n");
+        content.push_str("| FMECA ID | Component | Failure Mode | Potential Effect | Severity (S) | Occurrence (O) | Detection (D) | RPN (S x O x D) | Mitigation | Derivation Basis |\n");
+        content.push_str("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n");
+        // 8 rows for FlightComputer spanning dimensions
+        for i in 1..=8 {
+            let dim = match i % 4 {
+                0 => "Interface Γ",
+                1 => "State Φ",
+                2 => "Action Ω",
+                _ => "Resource Ψ",
+            };
+            content.push_str(&format!("| FMECA-{:03} | FlightComputer | Mode {} ({}) | Effect | 5 | 2 | 2 | 20 | Mit | SSOT |\n", i, i, dim));
+        }
+        // 8 rows for SensorUnit spanning dimensions
+        for i in 9..=16 {
+            let dim = match i % 4 {
+                0 => "Interface Γ",
+                1 => "State Φ",
+                2 => "Action Ω",
+                _ => "Resource Ψ",
+            };
+            content.push_str(&format!("| FMECA-{:03} | SensorUnit | Mode {} ({}) | Effect | 5 | 2 | 2 | 20 | Mit | Derived |\n", i, i, dim));
+        }
+        content.push_str("\n## 8. Domain Regulatory Objectives & Integrity Mapping\n- Pillar 8 SORA SAIL II objectives\n\n");
+        content.push_str("## Commercial Toolchain Hooks\n- MATLAB / Simulink / Stateflow hooks\n");
+
+        fs::write(safety_dir.join("STPA_MATRIX.md"), content).unwrap();
+
+        let result = check_safety_integrity(&temp.path, false, true);
+        assert!(result.is_ok(), "Expected Check 17 to pass with valid bidirectional AST closure, got: {:?}", result);
     }
 }

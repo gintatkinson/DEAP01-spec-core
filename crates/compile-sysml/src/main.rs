@@ -3,7 +3,7 @@
 use clap::Parser;
 use compile_sysml::semantic::serializer::{to_sysml, SysmlSerializable};
 use compile_sysml::semantic::validator::SemanticValidator;
-use compile_sysml::stpa::compile_stpa_to_constraints;
+use compile_sysml::stpa::compile_stpa_to_constraints_filtered;
 use compile_sysml::sync::{
     forward_sync_sysml_to_specs, reverse_sync_specs_to_sysml, ForwardSyncOptions,
     ReverseSyncOptions,
@@ -172,7 +172,11 @@ fn main() {
             }
         };
 
-        let pkg = compile_stpa_to_constraints(&content, "System_SafetyConstraints");
+        let schema_target = cli.schema.or(cli.file);
+        let base_model = schema_target.and_then(|sp| {
+            fs::read_to_string(&sp).ok().and_then(|txt| parse_sysml(&txt).ok())
+        });
+        let pkg = compile_stpa_to_constraints_filtered(&content, "System_SafetyConstraints", None, base_model.as_ref());
         let sysml_code = to_sysml(&pkg);
 
         if cli.out != PathBuf::from(".pipeline/schema.sysml") {
