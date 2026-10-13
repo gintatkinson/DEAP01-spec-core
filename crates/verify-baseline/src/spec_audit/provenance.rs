@@ -1702,21 +1702,21 @@ Derived from schema/model.sysml §2.1 and ISO/IEC/IEEE 15288:2023.
     }
 
     #[test]
-    fn test_concept_provenance_cruciform_empennage_fixtures() {
+    fn test_concept_provenance_orthogonal_actuator_fixtures() {
         let content = r#"---
-title: "Feature 31: Cruciform Actuator Surface Control"
+title: "Feature 31: Orthogonal Actuator Subsystem Control"
 type: feature
 ---
-# Feature 31: Cruciform Actuator Surface Control
+# Feature 31: Orthogonal Actuator Subsystem Control
 
 ## Metadata
 | Attribute | Detail |
 | :--- | :--- |
-| **Title** | Feature 31: Cruciform Actuator Surface Control |
+| **Title** | Feature 31: Orthogonal Actuator Subsystem Control |
 
 ## Requirements
-- [ ] REQ-01: Orthogonal control surface actuators sustain peak torque of 15 Nm per axis.
-- [ ] REQ-02: Cruciform empennage independent rudder and elevator deflection limits span -25.0 deg to +25.0 deg.
+- [ ] REQ-01: Orthogonal actuation mechanisms sustain peak torque of 15 Nm per axis.
+- [ ] REQ-02: Articulated orthogonal actuator deflection limits span -25.0 deg to +25.0 deg.
 - [ ] REQ-03: Bus telemetry updates at 100 Hz.
 
 ## Source References
@@ -1729,27 +1729,27 @@ Derived from schema/model.sysml and ISO/IEC/IEEE 15026-3.
 
         assert!(
             findings.is_empty(),
-            "Cruciform empennage fixture should validate cleanly without domain bias: {:?}",
+            "Orthogonal actuator fixture should validate cleanly without domain bias: {:?}",
             findings
         );
     }
 
     #[test]
-    fn test_concept_provenance_multi_stabiliser_independent_surfaces() {
+    fn test_concept_provenance_multi_channel_actuation_architecture() {
         let content = r#"---
-title: "Feature 32: Multi-Stabiliser Actuation Architecture"
+title: "Feature 32: Multi-Channel Actuation Architecture"
 type: feature
 ---
-# Feature 32: Multi-Stabiliser Actuation Architecture
+# Feature 32: Multi-Channel Actuation Architecture
 
 ## Metadata
 | Attribute | Detail |
 | :--- | :--- |
-| **Title** | Feature 32: Multi-Stabiliser Actuation Architecture |
+| **Title** | Feature 32: Multi-Channel Actuation Architecture |
 
 ## Requirements
-- [ ] REQ-01: Twin vertical stabilizer surfaces provide dual yaw authority over 50 ms step response.
-- [ ] REQ-02: Split elevator surfaces command differential pitch control within 20 ms.
+- [ ] REQ-01: Redundant primary channel controllers provide dual authority over 50 ms step response.
+- [ ] REQ-02: Secondary stage actuators command differential positioning control within 20 ms.
 - [ ] REQ-03: Actuator bus power consumption shall not exceed 120 W.
 
 ## Source References
@@ -1762,7 +1762,7 @@ Derived from schema/model.sysml and ISO/IEC/IEEE 12207:2017.
 
         assert!(
             findings.is_empty(),
-            "Multi-stabiliser independent surface fixture should validate cleanly: {:?}",
+            "Multi-channel actuation architecture fixture should validate cleanly: {:?}",
             findings
         );
     }

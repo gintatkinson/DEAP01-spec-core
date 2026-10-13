@@ -408,10 +408,11 @@ pub fn check_domain_agnostic_ast_cleanliness(repo_root: &Path) -> Result<(), Vec
         }
     }
 
-    // 4. Scan upstream compiler templates for unmapped domain instance concepts
+    // 4. Scan upstream compiler templates and platform rules for unmapped domain instance concepts
     let template_dirs = [
         repo_root.join("skills").join("spec-conops-engineering").join("resources").join("units"),
         repo_root.join(".pipeline").join("templates"),
+        repo_root.join("rules"),
     ];
 
     for t_dir in &template_dirs {
@@ -449,11 +450,17 @@ pub fn check_domain_agnostic_ast_cleanliness(repo_root: &Path) -> Result<(), Vec
                             ));
                         }
 
-                        // Check for hardcoded M1 domain instance dictionaries embedded in templates
-                        for concept in &["FLIGHT_ENVELOPE_MAP", "SENSOR_CALIBRATION_DATA", "PAYLOAD_CONFIG"] {
-                            if line.contains(concept) {
+                        // Check for hardcoded M1 domain instance dictionaries and customer empennage concepts
+                        for concept in &[
+                            "FLIGHT_ENVELOPE_MAP",
+                            "SENSOR_CALIBRATION_DATA",
+                            "PAYLOAD_CONFIG",
+                            "ruddervator",
+                            "empennage",
+                        ] {
+                            if line.to_lowercase().contains(&concept.to_lowercase()) {
                                 violations.push(format!(
-                                    "Check 19 violation (domain-metamodel-typing-violation): Upstream template '{}:{}' contains unmapped M1 domain instance dictionary '{}'. Upstream templates must derive strictly from schema AST nodes.",
+                                    "Check 19 violation (domain-metamodel-typing-violation): Upstream rule or template '{}:{}' contains forbidden domain concept '{}'. Upstream templates and rules must derive strictly from schema AST nodes.",
                                     rel,
                                     idx + 1,
                                     concept
@@ -617,6 +624,21 @@ mod tests {
         assert!(res.is_err());
         let errs = res.unwrap_err();
         assert!(errs.iter().any(|e| e.contains("Unicode em dash")));
+    }
+
+    #[test]
+    fn test_check_19_rule_empennage_rejection() {
+        let tmp = TempDir::new("c19_rule_empennage");
+        fs::create_dir_all(tmp.path.join(".pipeline/upstream")).unwrap();
+        fs::create_dir_all(tmp.path.join("crates")).unwrap();
+        let rules_dir = tmp.path.join("rules");
+        fs::create_dir_all(&rules_dir).unwrap();
+        let mut f = File::create(rules_dir.join("test-rule.md")).unwrap();
+        writeln!(f, "# Rule\n\nControl surface: cruciform empennage").unwrap();
+        let res = check_domain_agnostic_ast_cleanliness(&tmp.path);
+        assert!(res.is_err());
+        let errs = res.unwrap_err();
+        assert!(errs.iter().any(|e| e.contains("empennage")));
     }
 
     #[test]
