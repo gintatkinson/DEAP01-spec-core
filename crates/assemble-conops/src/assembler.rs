@@ -831,4 +831,34 @@ mod tests {
         assert!(errors[0].contains("NONEXISTENT_TOKEN_12345"));
         fs::remove_dir_all(&temp_dir).unwrap();
     }
+
+    #[test]
+    fn test_canonical_unit_05_integrity_and_decontamination() {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let repo_root = manifest_dir.parent().unwrap().parent().unwrap();
+        let unit_05_path = repo_root
+            .join("skills/spec-conops-engineering/resources/units/conops/05_OPERATIONAL_STATE_SPACE_AND_RISK.md");
+
+        if !unit_05_path.is_file() {
+            return;
+        }
+
+        let engine = SysMLParameterBindingEngine::new(None, None, None, false, None);
+        let (is_valid, errors) = validate_unit_integrity(&[unit_05_path.clone()], Some(&engine));
+        assert!(is_valid, "Unit 05 integrity validation failed: {:?}", errors);
+        assert!(errors.is_empty());
+
+        let raw_content = fs::read_to_string(&unit_05_path).unwrap();
+        assert!(!raw_content.contains("AIR_DENSITY"), "Unit 05 must not contain AIR_DENSITY");
+        assert!(!raw_content.contains("t_{\\mathrm{fall}}"), "Unit 05 must not contain ballistic t_fall");
+        assert!(!raw_content.contains("d_{\\mathrm{wind}}"), "Unit 05 must not contain wind drift d_wind");
+        assert!(!raw_content.contains("FRONTAL_AREA"), "Unit 05 must not contain FRONTAL_AREA");
+        assert!(!raw_content.contains("DRAG_COEFFICIENT"), "Unit 05 must not contain DRAG_COEFFICIENT");
+        assert!(!raw_content.contains("Ground Risk Buffer"), "Unit 05 must not contain Ground Risk Buffer");
+        assert!(!raw_content.contains("Ground Risk Class"), "Unit 05 must not contain Ground Risk Class");
+        assert!(!raw_content.contains('\u{2014}'), "Unit 05 must not contain em dash");
+        assert!(!raw_content.contains('\u{2013}'), "Unit 05 must not contain en dash");
+        assert!(raw_content.contains("ISO/IEC/IEEE 15026-3"), "Unit 05 must cite ISO/IEC/IEEE 15026-3");
+        assert!(raw_content.contains("E_{\\mathrm{boundary\\_impact}}"), "Unit 05 must contain boundary impact energy math");
+    }
 }

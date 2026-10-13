@@ -516,6 +516,7 @@ impl SysMLParameterBindingEngine {
         engine._derive_quadratic_physics();
         engine._derive_energy_budgets();
         engine._derive_domain_regulatory_standards();
+        engine._derive_domain_risk_assessment();
         engine._derive_domain_ontology();
         engine._derive_lifecycle_contract();
         engine._derive_subsystem_architecture();
@@ -584,6 +585,7 @@ impl SysMLParameterBindingEngine {
 
         self._derive_domain_ontology();
         self._derive_operational_intent();
+        self._derive_domain_risk_assessment();
         self._derive_lifecycle_contract();
         self._derive_subsystem_architecture();
     }
@@ -1055,48 +1057,47 @@ impl SysMLParameterBindingEngine {
 
     pub fn _derive_quadratic_physics(&mut self) {
         let m = self._get_mtow_value();
-        let g = 9.80665;
-        let rho = if self.detected_domain == "marine" {
-            1025.0
-        } else if self.detected_domain == "space" {
-            1.0e-12
-        } else {
-            1.225
-        };
+        let v_max = self
+            .parameter_bindings
+            .get("V_MAX_MPS")
+            .or_else(|| self.parameter_bindings.get("V_MAX_NOMINAL_MPS"))
+            .and_then(|s| s.parse::<f64>().ok())
+            .unwrap_or(25.0);
 
-        let s_ref = 0.081;
-        let cd_unmit = 1.0;
-        let cd_mit = 1.75;
-        let s_mit = 84.18;
+        let ek_unmit = (0.5 * m * v_max.powi(2) * 10.0).round() / 10.0;
+        let v_residual: f64 = 1.5;
+        let ek_mit = (0.5 * m * v_residual.powi(2) * 10.0).round() / 10.0;
 
-        if rho > 0.0 && s_ref > 0.0 && cd_unmit > 0.0 {
-            let v_term_unmit = ((2.0 * m * g) / (rho * s_ref * cd_unmit)).sqrt();
-            let v_term_unmit_round = (v_term_unmit * 100.0).round() / 100.0;
-            let ek_unmit = (0.5 * m * v_term_unmit_round.powi(2) * 10.0).round() / 10.0;
+        self.parameter_bindings
+            .entry("V_BOUNDARY_MAX_MPS".to_string())
+            .or_insert_with(|| format!("{:.1}", v_max));
+        self.parameter_bindings
+            .entry("E_BOUNDARY_IMPACT_JOULES".to_string())
+            .or_insert_with(|| format!("{:.1}", ek_unmit));
+        self.parameter_bindings
+            .entry("E_K_UNMITIGATED_JOULES".to_string())
+            .or_insert_with(|| format!("{:.1}", ek_unmit));
+        self.parameter_bindings
+            .entry("V_RESIDUAL_MPS".to_string())
+            .or_insert_with(|| format!("{:.1}", v_residual));
+        self.parameter_bindings
+            .entry("E_K_MITIGATED_JOULES".to_string())
+            .or_insert_with(|| format!("{:.1}", ek_mit));
+        self.parameter_bindings
+            .entry("MITIGATED_KINETIC_ENERGY_J".to_string())
+            .or_insert_with(|| format!("{:.1}", ek_mit));
+        self.parameter_bindings
+            .entry("V_TERMINAL_UNMITIGATED_MPS".to_string())
+            .or_insert_with(|| format!("{:.1}", v_max));
+        self.parameter_bindings
+            .entry("V_TERMINAL_MITIGATED_MPS".to_string())
+            .or_insert_with(|| format!("{:.1}", v_residual));
+    }
 
-            self.parameter_bindings
-                .entry("V_TERMINAL_UNMITIGATED_MPS".to_string())
-                .or_insert_with(|| v_term_unmit_round.to_string());
-            self.parameter_bindings
-                .entry("E_K_UNMITIGATED_JOULES".to_string())
-                .or_insert_with(|| ek_unmit.to_string());
-        }
-
-        let denom = rho * s_mit * cd_mit;
-        if denom > 0.0 && m > 0.0 {
-            let v_calc = ((2.0 * m * g) / denom).sqrt();
-            let v_calc_round = (v_calc * 100.0).round() / 100.0;
-            let ek_calc = (0.5 * m * v_calc_round.powi(2) * 10.0).round() / 10.0;
-
-            self.parameter_bindings
-                .entry("V_TERMINAL_MITIGATED_MPS".to_string())
-                .or_insert_with(|| v_calc_round.to_string());
-            self.parameter_bindings
-                .entry("E_K_MITIGATED_JOULES".to_string())
-                .or_insert_with(|| ek_calc.to_string());
-            self.parameter_bindings
-                .entry("MITIGATED_KINETIC_ENERGY_J".to_string())
-                .or_insert_with(|| ek_calc.to_string());
+    pub fn _derive_domain_risk_assessment(&mut self) {
+        if !self.parameter_bindings.contains_key("DOMAIN_RISK_ASSESSMENT_CLAUSES") {
+            let clauses = "<!-- Domain-specific risk containment and safety integrity clauses derived from active domain schema -->";
+            self.parameter_bindings.insert("DOMAIN_RISK_ASSESSMENT_CLAUSES".to_string(), clauses.to_string());
         }
     }
 
@@ -1425,7 +1426,7 @@ impl SysMLParameterBindingEngine {
             "OPERATIONAL_DEFICIENCIES" => "Lack of autonomous failsafe containment, manual telemetry latency, non-deterministic failover.".to_string(),
             "MISSION_DRIVERS_AND_VALUE_PROPOSITION" => "High-assurance autonomous operation with deterministic safety containment.".to_string(),
             "TRADE_OFF_ANALYSIS" => "Dedicated backup communication link vs payload mass and thermal budget allocation.".to_string(),
-            "USER_CLASSES_AND_STAKEHOLDERS" => "- **UCL-01 System Operator (SO):** Direct supervisory mission management and boundary oversight.\n- **UCL-02 Range Safety Officer (RSO):** Airspace containment enforcement and failsafe override authority.\n- **UCL-03 Payload Specialist (PS):** Multi-modal sensor data interpretation and payload stream management.\n- **UCL-04 Maintenance Technician (MT):** O-Level pre-operation inspections, modular LRU swaps, and BIT checks.\n- **UCL-05 Safety Monitor (SM):** Continuous perimeter monitoring, environmental anomaly detection, and safety oversight.".to_string(),
+            "USER_CLASSES_AND_STAKEHOLDERS" => "- **UCL-01 System Operator (SO):** Direct supervisory mission management and boundary oversight.\n- **UCL-02 Range Safety Officer (RSO):** Operational containment enforcement and failsafe override authority.\n- **UCL-03 Payload Specialist (PS):** Multi-modal sensor data interpretation and payload stream management.\n- **UCL-04 Maintenance Technician (MT):** O-Level pre-operation inspections, modular LRU swaps, and BIT checks.\n- **UCL-05 Safety Monitor (SM):** Continuous perimeter monitoring, environmental anomaly detection, and safety oversight.".to_string(),
             "OPERATIONAL_LIFECYCLE_MODES" => "- **Phase_Startup:** Power-on Built-In-Test (PBIT), sensor alignment, and pre-operation validation.\n- **Phase_NominalExecution:** Autonomous mission start, state corridor tracking, and real-time telemetry streaming.\n- **Phase_DegradedMode:** Non-critical sensor failover, PACE datalink fallback, and degraded envelope limits.\n- **Phase_ContingencyFailsafe:** Autonomous contingency execution, divert to recovery site, or state containment.\n- **Phase_SecureShutdown:** Autonomous precision arrival, power de-energization, and diagnostic blackbox archival.\n- **Phase_MaintenanceMode:** Diagnostic telemetry offload, calibration, firmware update, and hardware inspection.".to_string(),
             "WEIGHT_CRIT_1" => "0.40".to_string(),
             "WEIGHT_CRIT_2" => "0.35".to_string(),
@@ -1436,17 +1437,12 @@ impl SysMLParameterBindingEngine {
             "WEIGHTED_SCORE_A" => "0.90".to_string(),
             "WEIGHTED_SCORE_B" => "0.79".to_string(),
             "WEIGHTED_SCORE_C" => "0.80".to_string(),
-            "SAIL_LEVEL" => "II".to_string(),
-            "SORA_GROUND_RISK_CLASS" => "GRC-2".to_string(),
-            "SORA_AIR_RISK_CLASS" => "ARC-a".to_string(),
             "V_CRUISE_NOMINAL_MPS" => "18.0".to_string(),
             "V_MAX_MPS" => "25.0".to_string(),
-            "V_STALL_MPS" => "12.0".to_string(),
             "TOTAL_MTOW_KG" => "50.0".to_string(),
             "PAYLOAD_MAX_KG" => "5.0".to_string(),
             "ENDURANCE_NOMINAL_MIN" => "90.0".to_string(),
             "C2_RANGE_NOMINAL_KM" => "15.0".to_string(),
-            "CEILING_MAX_M" => "3000.0".to_string(),
             "WIND_LIMIT_MAX_MPS" => "12.0".to_string(),
             "INGRESS_PROTECTION_RATING" => "IP54".to_string(),
             _ => {
@@ -1585,9 +1581,22 @@ mod tests {
     fn test_mass_and_physics_derivation() {
         let mut bindings = HashMap::new();
         bindings.insert("TOTAL_MTOW_KG".to_string(), "100.0".to_string());
+        bindings.insert("V_MAX_MPS".to_string(), "20.0".to_string());
         let engine = SysMLParameterBindingEngine::new(Some(bindings), None, None, false, None);
         assert_eq!(engine.resolve_token("TOTAL_MTOW_KG", None), "100.0");
+        assert_eq!(engine.resolve_token("V_BOUNDARY_MAX_MPS", None), "20.0");
+        assert_eq!(engine.resolve_token("E_BOUNDARY_IMPACT_JOULES", None), "20000.0");
+        assert_eq!(engine.resolve_token("E_K_UNMITIGATED_JOULES", None), "20000.0");
+        assert_eq!(engine.resolve_token("V_RESIDUAL_MPS", None), "1.5");
+        assert_eq!(engine.resolve_token("E_K_MITIGATED_JOULES", None), "112.5");
         let v_term = engine.resolve_token("V_TERMINAL_UNMITIGATED_MPS", None);
         assert_ne!(v_term, "N/A");
+        let risk_clauses = engine.resolve_token("DOMAIN_RISK_ASSESSMENT_CLAUSES", None);
+        assert!(!risk_clauses.is_empty());
+
+        // Verify purged aviation SORA defaults
+        assert_eq!(engine.resolve_token("SORA_GROUND_RISK_CLASS", None), "N/A");
+        assert_eq!(engine.resolve_token("SORA_AIR_RISK_CLASS", None), "N/A");
+        assert_eq!(engine.resolve_token("SAIL_LEVEL", None), "N/A");
     }
 }
