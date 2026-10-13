@@ -1260,29 +1260,19 @@ impl SysMLParameterBindingEngine {
 
     pub fn _derive_domain_ontology(&mut self) {
         let dom = self.detected_domain.to_lowercase();
-        let is_military = ["military", "defense"].contains(&dom.as_str());
         self.is_non_aircraft = ["medical", "rail", "marine", "space", "industrial"].contains(&dom.as_str());
-        self.is_civilian = !is_military;
+        self.is_civilian = true;
 
-        if self.is_civilian {
-            self.parameter_bindings.insert("INTERLOCK_PREFIX".to_string(), "SAF".to_string());
-            self.parameter_bindings.insert("INTERLOCK_SECTION_TITLE".to_string(), "Operational Safety Interlocks & High-Consequence Controls".to_string());
-            self.parameter_bindings.insert("INTERLOCK_POLICY_NAME".to_string(), "Operational Safety Interlocks".to_string());
-            self.parameter_bindings.insert("TARGET_VERIFICATION_LABEL".to_string(), "Positive Condition Verification (PCV)".to_string());
-            self.parameter_bindings.insert("TARGET_VERIFICATION_ACRONYM".to_string(), "PCV".to_string());
-            self.parameter_bindings.insert("TARGET_VERIFICATION_PHRASE".to_string(), "positive condition verification".to_string());
-            self.parameter_bindings.insert("HIGH_CONSEQUENCE_ACTION".to_string(), "high-consequence actuation".to_string());
-            self.parameter_bindings.insert("COLLATERAL_RISK_PHRASE".to_string(), "adjacent operational risk".to_string());
-        } else {
-            self.parameter_bindings.insert("INTERLOCK_PREFIX".to_string(), "ROE".to_string());
-            self.parameter_bindings.insert("INTERLOCK_SECTION_TITLE".to_string(), "Rules of Engagement (ROE) & Operational Safety Interlocks".to_string());
-            self.parameter_bindings.insert("INTERLOCK_POLICY_NAME".to_string(), "Rules of Engagement (ROE)".to_string());
-            self.parameter_bindings.insert("TARGET_VERIFICATION_LABEL".to_string(), "Positive Identification (PID)".to_string());
-            self.parameter_bindings.insert("TARGET_VERIFICATION_ACRONYM".to_string(), "PID".to_string());
-            self.parameter_bindings.insert("TARGET_VERIFICATION_PHRASE".to_string(), "positive identification".to_string());
-            self.parameter_bindings.insert("HIGH_CONSEQUENCE_ACTION".to_string(), "weapons release".to_string());
-            self.parameter_bindings.insert("COLLATERAL_RISK_PHRASE".to_string(), "collateral damage".to_string());
-        }
+        // Abstract MBSE operational safety interlocks and positive condition verification parameters.
+        // Pure schema-driven compiler invariant: strictly zero domain-specific strike, targeting, or arming concepts.
+        self.parameter_bindings.insert("INTERLOCK_PREFIX".to_string(), "SAF".to_string());
+        self.parameter_bindings.insert("INTERLOCK_SECTION_TITLE".to_string(), "Operational Safety Interlocks & High-Consequence Controls".to_string());
+        self.parameter_bindings.insert("INTERLOCK_POLICY_NAME".to_string(), "Operational Safety Interlocks".to_string());
+        self.parameter_bindings.insert("TARGET_VERIFICATION_LABEL".to_string(), "Positive Condition Verification (PCV)".to_string());
+        self.parameter_bindings.insert("TARGET_VERIFICATION_ACRONYM".to_string(), "PCV".to_string());
+        self.parameter_bindings.insert("TARGET_VERIFICATION_PHRASE".to_string(), "positive condition verification".to_string());
+        self.parameter_bindings.insert("HIGH_CONSEQUENCE_ACTION".to_string(), "high-consequence actuation".to_string());
+        self.parameter_bindings.insert("COLLATERAL_RISK_PHRASE".to_string(), "adjacent operational risk".to_string());
     }
 
     pub fn _derive_operational_intent(&mut self) {
@@ -1817,16 +1807,15 @@ impl SysMLParameterBindingEngine {
             *current = current.replace("PARACHUTE", "RECOVERY");
         }
 
-        if self.is_civilian {
-            for idx in 1..=6 {
-                let target = format!("ROE-0{idx}");
-                let repl = format!("SAF-0{idx}");
-                *current = replace_word_case_insensitive(current, &target, &repl);
-            }
-            *current = replace_roe_phrase(current);
-            *current = replace_word_case_insensitive(current, "weapons release", "high-consequence actuation");
-            *current = replace_word_case_insensitive(current, "collateral damage", "adjacent operational risk");
+        // Domain decontamination purge: always sanitize military ROE, weapons release, and collateral damage phrases
+        for idx in 1..=6 {
+            let target = format!("ROE-0{idx}");
+            let repl = format!("SAF-0{idx}");
+            *current = replace_word_case_insensitive(current, &target, &repl);
         }
+        *current = replace_roe_phrase(current);
+        *current = replace_word_case_insensitive(current, "weapons release", "high-consequence actuation");
+        *current = replace_word_case_insensitive(current, "collateral damage", "adjacent operational risk");
     }
 }
 

@@ -8,7 +8,7 @@
 
 In accordance with MIL-STD-882E (§4.4) and autonomous system safety principles, the execution of critical operational actions, sensor tracking, and high-consequence state transitions is strictly constrained by deterministic logical interlocks and multi-level human authorization architectures.
 
-### 6.1 Doctrinal Interlock Principles
+### 6.1 Core Safety Interlock Principles
 1. **Dual-Consent Authorization:** High-consequence operational actions require cryptographic key validation from two independent authorized operators.
 2. **Multi-Modal Positive Condition Verification:** State transitions and operational locks require spatial and temporal concurrence across at least two independent sensor modalities ($C_{\mathrm{condition}} \ge C_{\mathrm{threshold}}$).
 3. **Human-in-the-Loop (HITL) & Human-on-the-Loop (HOTL) Oversight:** Human operators maintain real-time situational awareness and an un-overridable emergency abort/veto capability at all times.
@@ -25,15 +25,15 @@ In accordance with MIL-STD-882E (§4.4) and autonomous system safety principles,
   - **Public Clause Citation:** MIL-STD-882E §4.4
 
 - **{{INTERLOCK_02_TAG:SAF-02}}: Multi-Modal Positive Condition Verification**
-  - **Rule Statement:** Precision target state locking or high-priority task execution shall only occur when multi-modal sensor correlation exceeds the normative confidence threshold ($C_{\mathrm{condition}} \ge C_{\mathrm{threshold}}$).
+  - **Rule Statement:** Precision state estimation locking or critical task execution shall only occur when multi-modal sensor correlation exceeds the normative confidence threshold ($C_{\mathrm{condition}} \ge C_{\mathrm{threshold}}$).
   - **Interlock Condition:**
     $$\mathrm{AllowAction} \iff (\mathrm{Score}_{\mathrm{SensorA}} \ge \mathrm{Score}_{\mathrm{min}}) \land (\mathrm{Score}_{\mathrm{SensorB}} \ge \mathrm{Score}_{\mathrm{min}}) \land (C_{\mathrm{condition}} \ge C_{\mathrm{threshold}})$$
   - **Public Clause Citation:** INCOSE SEH v5.0 §3.3
 
 - **{{INTERLOCK_03_TAG:SAF-03}}: Dual-Consent Cryptographic Authorization Interlock**
-  - **Rule Statement:** High-consequence state arming sequence requires simultaneous cryptographic signature submission from Mission Supervisor (Key A) and Safety Supervisor (Key B) within a rolling validation window $\Delta t_{\text{arm\_window}}$.
+  - **Rule Statement:** Critical actuator authorization sequence requires simultaneous cryptographic signature submission from Mission Supervisor (Key A) and Safety Supervisor (Key B) within a rolling validation window $\Delta t_{\text{auth\_window}}$.
   - **Interlock Condition:**
-    $$\mathrm{SystemArmed} \iff \mathrm{VerifySig}(\mathrm{Key}_A) \land \mathrm{VerifySig}(\mathrm{Key}_B) \land (|t_A - t_B| \le \Delta t_{\text{arm\_window}}) \land (\mathrm{BoundaryStatus} = \mathrm{INSIDE})$$
+    $$\mathrm{ActionAuthorized} \iff \mathrm{VerifySig}(\mathrm{Key}_A) \land \mathrm{VerifySig}(\mathrm{Key}_B) \land (|t_A - t_B| \le \Delta t_{\text{auth\_window}}) \land (\mathrm{BoundaryStatus} = \mathrm{INSIDE})$$
   - **Public Clause Citation:** NIST SP 800-82r3 §5.2
 
 - **{{INTERLOCK_04_TAG:SAF-04}}: Human-on-the-Loop (HOTL) Veto Authority Interlock**
@@ -43,9 +43,9 @@ In accordance with MIL-STD-882E (§4.4) and autonomous system safety principles,
   - **Public Clause Citation:** MIL-STD-882E §4.4
 
 - **{{INTERLOCK_05_TAG:SAF-05}}: Protected Zone & Exclusion Boundary Interlock**
-  - **Rule Statement:** Automated trajectories and sensor pointing corridors must enforce a minimum standoff distance ($R_{\text{CDA\_min}}$) from all designated protected structures, exclusion zones, and dynamic keep-out boundaries.
+  - **Rule Statement:** Automated trajectories and sensor pointing corridors must enforce a minimum standoff distance ($R_{\text{standoff\_min}}$) from all designated protected structures, exclusion zones, and dynamic keep-out boundaries.
   - **Interlock Condition:**
-    $$\mathrm{StateValid} \iff \forall \mathbf{p}_{\mathrm{protected}} \in \mathcal{Z}_{\mathrm{protected}}, \quad \|\mathbf{p}_{\mathrm{system}} - \mathbf{p}_{\mathrm{protected}}\|_2 \ge R_{\text{CDA\_min}}$$
+    $$\mathrm{StateValid} \iff \forall \mathbf{p}_{\mathrm{protected}} \in \mathcal{Z}_{\mathrm{protected}}, \quad \|\mathbf{p}_{\mathrm{system}} - \mathbf{p}_{\mathrm{protected}}\|_2 \ge R_{\text{standoff\_min}}$$
   - **Public Clause Citation:** ISO/IEC/IEEE 29148:2018 §5.2.4
 
 - **{{INTERLOCK_06_TAG:SAF-06}}: Communication Loss Autonomous Safing Interlock**

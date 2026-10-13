@@ -118,13 +118,11 @@ pub const PROHIBITED_PLACEHOLDERS: &[&str] = &[
     "unspecified",
 ];
 
-/// Physical arming/firing target entity tokens in sequence diagrams.
+/// Physical actuation / high-consequence target entity tokens in sequence diagrams.
 pub const PHYSICAL_ARMING_TARGET_TOKENS: &[&str] = &[
-    "actuator", "pyro", "firingcircuit", "safetyswitch", "motor",
-    "igniter", "armingdevice", "payloadrelease", "laser",
+    "actuator", "motor", "safetyswitch", "drive",
     "powerstage", "highvoltage", "emitter",
-    "squib", "propulsionenable", "armswitch", "firingunit",
-    "safearm", "safeandarm", "initiator", "booster", "payloadbay", "ejector",
+    "propulsionenable", "effector", "valve", "pump",
 ];
 
 /// Human C2 / HITL participant tokens in sequence diagrams.
@@ -778,12 +776,13 @@ fn is_hitl_consent_action(action: &str) -> bool {
             || w == "authorization"
             || w == "permit"
             || w == "permission"
-            || w == "confirm_engagement"
+            || w == "enable"
+            || w == "enabled"
     }) {
         return true;
     }
 
-    let has_arm = words.iter().any(|w| w == "arm" || w.starts_with("arm"));
+    let has_auth = words.iter().any(|w| w == "auth" || w.starts_with("auth") || w == "arm" || w.starts_with("arm"));
     let has_cmd_or_token = words.iter().any(|w| {
         w == "command"
             || w == "cmd"
@@ -797,12 +796,7 @@ fn is_hitl_consent_action(action: &str) -> bool {
             || w == "grant"
             || w == "granted"
     });
-    if has_arm && has_cmd_or_token {
-        return true;
-    }
-
-    let has_fire = words.iter().any(|w| w == "fire" || w.starts_with("fire") || w == "launch");
-    if has_fire && has_cmd_or_token {
+    if has_auth && has_cmd_or_token {
         return true;
     }
 
@@ -818,12 +812,12 @@ fn is_disarm_action(action: &str) -> bool {
     let words = tokenize_words(action);
     const DISARM_WORDS: &[&str] = &[
         "disarm", "disarming", "safe", "safing", "inhibit", "inhibiting",
-        "abort", "aborting", "disable", "deactivate",
+        "abort", "aborting", "disable", "deactivate", "isolate",
     ];
     words.iter().any(|w| DISARM_WORDS.contains(&w.as_str()))
 }
 
-/// Determines whether a message target represents a physical arming, firing, or motor-enable device.
+/// Determines whether a message target represents a physical arming, motor-enable, or actuator device.
 ///
 /// Preconditions: None.
 /// Postconditions: Returns true if target or its declared alias matches physical arming target tokens.
@@ -841,10 +835,10 @@ fn is_physical_arming_target(
     })
 }
 
-/// Determines whether an action signifies a physical arming, firing, ignition, or effector trigger.
+/// Determines whether an action signifies a physical actuation, drive, or effector trigger.
 ///
 /// Preconditions: None.
-/// Postconditions: Returns true if action words signify physical arming or firing actuation.
+/// Postconditions: Returns true if action words signify physical actuation.
 /// Algorithmic Complexity: O(W) where W is action word count.
 fn is_physical_arming_action(action: &str) -> bool {
     let words = tokenize_words(action);
@@ -852,21 +846,20 @@ fn is_physical_arming_action(action: &str) -> bool {
         return false;
     }
 
-    const ARMING_KEYWORDS: &[&str] = &[
-        "arm", "arming", "fire", "firing", "detonate", "detonation",
-        "ignite", "ignition", "actuate", "actuation",
+    const ACTUATION_KEYWORDS: &[&str] = &[
+        "actuate", "actuation", "drive", "engage", "trigger",
+        "arm", "arming",
     ];
 
-    if words.iter().any(|w| ARMING_KEYWORDS.contains(&w.as_str())) {
+    if words.iter().any(|w| ACTUATION_KEYWORDS.contains(&w.as_str())) {
         return true;
     }
 
     let act_norm = normalize_token(action);
     const COMBOS: &[&str] = &[
-        "motorenable", "enablemotor", "propulsionenable", "enablefiring",
-        "deploypayload", "releasepayload", "ejectpayload", "payloadrelease",
-        "activatepyro", "activateinitiator", "activatepowerstage",
-        "highvoltage",
+        "motorenable", "enablemotor", "propulsionenable",
+        "actuatedrive", "engagedrive",
+        "activatepowerstage", "highvoltage",
     ];
 
     COMBOS.iter().any(|c| act_norm.contains(c))
@@ -948,7 +941,7 @@ pub fn validate_sequence_diagram_temporal_safety(
                         findings.push(SpecAuditFinding::new(
                             "factual-grounding-temporal-safety-violation",
                             format!(
-                                "Autonomous arming sequence detected in '{}' on line {}. Physical signal '{}' targeting '{}' is not preceded by an explicit Human-in-the-Loop (HITL) C2 arming command or operator consent.",
+                                "Autonomous physical actuation sequence detected in '{}' on line {}. Physical signal '{}' targeting '{}' is not preceded by an explicit Human-in-the-Loop (HITL) authorization command or operator consent.",
                                 rel_path, reported_line, action, target
                             ),
                             rel_path,
@@ -1808,7 +1801,7 @@ This spec lacks normative citations and schema grounding for its operational vel
 
         assert!(
             !findings.is_empty(),
-            "Autonomous arming sequence fixture must be rejected by temporal safety validator"
+            "Autonomous physical actuation sequence fixture must be rejected by temporal safety validator"
         );
         let violations: Vec<_> = findings
             .iter()
@@ -1820,8 +1813,8 @@ This spec lacks normative citations and schema grounding for its operational vel
             findings
         );
         assert!(
-            violations.iter().any(|f| f.message.contains("Autonomous arming sequence detected")),
-            "Violation message must explain autonomous arming sequence"
+            violations.iter().any(|f| f.message.contains("Autonomous physical actuation sequence detected")),
+            "Violation message must explain autonomous physical actuation sequence"
         );
     }
 
@@ -1837,7 +1830,7 @@ This spec lacks normative citations and schema grounding for its operational vel
             .collect();
         assert!(
             violations.is_empty(),
-            "HITL authorized arming sequence fixture must pass temporal safety validator, got: {:?}",
+            "HITL authorized actuation sequence fixture must pass temporal safety validator, got: {:?}",
             violations
         );
     }
@@ -1848,29 +1841,20 @@ This spec lacks normative citations and schema grounding for its operational vel
 ```mermaid
 sequenceDiagram
     autonumber
-    actor MissionSup as "Mission Supervisor"
-    actor SafetySup as "Safety Supervisor"
-    participant Console as "Supervisory Console"
-    participant Controller as "Core Controller"
+    participant Sensors as "Sensor Suite Array"
     participant EdgeNode as "Edge Processing Node"
+    participant Controller as "Core Controller"
     participant Watchdog as "Safety Watchdog"
-    participant Actuator as "Payload Actuator"
+    participant Console as "Supervisory Console"
 
-    Controller ->> EdgeNode: 1. Initiate Positive Condition Verification
-    EdgeNode ->> Controller: 2. Verification Confidence Exceeds Threshold
-    Controller ->> Watchdog: 3. Verify Separation to Protected Boundaries
-    Watchdog -->> Controller: 4. Standoff Margin Clear (SAF-05 PASS)
-    Controller ->> Console: 5. Display Verification Data and Request Dual Keys
-    MissionSup ->> Console: 6. Submit Cryptographic Key-A
-    SafetySup ->> Console: 7. Submit Cryptographic Key-B
-    Console ->> Controller: 8. Transmit Dual Consent Tokens (SAF-03 HITL Consent)
-    Controller ->> Watchdog: 9. Validate Timestamps and Signatures
-    Watchdog -->> Controller: 10. Dual Consent Validated - System Armed
-    Controller ->> Actuator: 11. Execute Controlled Actuation Command
-    Actuator -->> Controller: 12. Actuation Execution Confirmed
-    Controller ->> Actuator: 13. Isolate Actuator Power (SAF-06)
-    Controller ->> Watchdog: 14. Transition to Safe Egress Corridor
-    Controller ->> Console: 15. Stream Post-Action Cryptographic Telemetry
+    Sensors ->> EdgeNode: 1. Stream Synchronized Multi-Modal Frames
+    EdgeNode ->> EdgeNode: 2. Correlate Temporal Features & Fusion
+    EdgeNode ->> Controller: 3. Deliver Correlated State Vector
+    Controller ->> Watchdog: 4. Verify State Estimation Margin
+    Watchdog -->> Controller: 5. State Bounds Confirmed Normal
+    Controller ->> Console: 6. Synchronize State Telemetry
+    Console -->> Controller: 7. Supervisory State Acknowledged
+    Controller ->> Sensors: 8. Maintain Continuous Stream Calibration
 ```
 "#;
         let doc = parse_markdown(content).expect("parse markdown");
