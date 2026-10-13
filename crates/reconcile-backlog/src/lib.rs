@@ -11,8 +11,10 @@ use checklist::{clean_unpopulated_placeholders, contains_unpopulated_placeholder
 use frontmatter::{parse_frontmatter, update_frontmatter_issue_id, SpecFrontmatter};
 use tracker::{IssueIndex, TrackerClient};
 
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use walkdir::WalkDir;
 
 /// Represents a loaded specification document.
@@ -32,6 +34,22 @@ pub struct ReconcileOptions {
     pub dry_run: bool,
     pub provider: String,
     pub sync_bodies: bool,
+    pub repo: Option<String>,
+    pub default_branch: Option<String>,
+}
+
+impl Default for ReconcileOptions {
+    fn default() -> Self {
+        Self {
+            workspace_root: PathBuf::from("."),
+            offline: false,
+            dry_run: false,
+            provider: "github".to_string(),
+            sync_bodies: true,
+            repo: None,
+            default_branch: None,
+        }
+    }
 }
 
 /// Result summary of reconciliation execution.
@@ -142,10 +160,38 @@ pub fn run_reconciliation<T: TrackerClient>(
                 .map_err(|e| format!("Failed to write updated spec '{}': {}", spec.path.display(), e))?;
         }
 
-        // Step 4: Remote sync if enabled
-        if options.sync_bodies && !options.offline && !options.dry_run {
+    }
+
+    // Step 4: Remote sync if enabled with relative link projection
+    if options.sync_bodies && !options.offline && !options.dry_run {
+        let mut spec_path_to_issue: HashMap<String, u64> = HashMap::new();
+        for spec in &specs {
             if let Some(issue_id) = spec.frontmatter.issue_id {
-                tracker.update_issue_body(issue_id, &spec.content)?;
+                spec_path_to_issue.insert(spec.rel_path.clone(), issue_id);
+                if let Some(stripped) = spec.rel_path.strip_prefix("docs/") {
+                    spec_path_to_issue.insert(stripped.to_string(), issue_id);
+                }
+                if let Some(fname) = Path::new(&spec.rel_path).file_name().and_then(|f| f.to_str()) {
+                    spec_path_to_issue.insert(fname.to_string(), issue_id);
+                }
+            }
+        }
+
+        let repo_name = options.repo.clone()
+            .or_else(|| detect_git_repo(&options.workspace_root));
+        let default_branch = options.default_branch.clone()
+            .or_else(|| detect_git_branch(&options.workspace_root))
+            .unwrap_or_else(|| "main".to_string());
+
+        for spec in &specs {
+            if let Some(issue_id) = spec.frontmatter.issue_id {
+                let projected_body = project_body_for_tracker(
+                    &spec.content,
+                    repo_name.as_deref(),
+                    &default_branch,
+                    &spec_path_to_issue,
+                );
+                tracker.update_issue_body(issue_id, &projected_body)?;
                 summary.remote_issues_synced += 1;
             }
         }
@@ -153,3 +199,329 @@ pub fn run_reconciliation<T: TrackerClient>(
 
     Ok(summary)
 }
+
+/// Cleans a repository name or URL to `owner/repo` format without regex.
+pub fn clean_repo_name(raw: &str) -> String {
+    let mut s = raw.trim();
+    if let Some(stripped) = s.strip_prefix("https://github.com/") {
+        s = stripped;
+    } else if let Some(stripped) = s.strip_prefix("http://github.com/") {
+        s = stripped;
+    } else if let Some(stripped) = s.strip_prefix("git@github.com:") {
+        s = stripped;
+    }
+    s = s.trim_end_matches(".git").trim_matches('/');
+    s.to_string()
+}
+
+/// Parses `owner/repo` from a remote Git URL without regex.
+pub fn parse_repo_from_remote_url(url: &str) -> Option<String> {
+    let cleaned = clean_repo_name(url);
+    if cleaned.contains('/') && !cleaned.contains(' ') {
+        let parts: Vec<&str> = cleaned.split('/').collect();
+        if parts.len() == 2 && !parts[0].is_empty() && !parts[1].is_empty() {
+            return Some(cleaned);
+        }
+    }
+    None
+}
+
+/// Automatically detects Git repository name (`owner/repo`) from workspace root without regex.
+pub fn detect_git_repo(workspace_root: &Path) -> Option<String> {
+    // 1. git config --get remote.origin.url
+    if let Ok(output) = Command::new("git")
+        .args(["config", "--get", "remote.origin.url"])
+        .current_dir(workspace_root)
+        .output()
+    {
+        if output.status.success() {
+            let s = String::from_utf8_lossy(&output.stdout);
+            if let Some(repo) = parse_repo_from_remote_url(&s) {
+                return Some(repo);
+            }
+        }
+    }
+
+    // 2. gh repo view
+    if let Ok(output) = Command::new("gh")
+        .args(["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"])
+        .current_dir(workspace_root)
+        .output()
+    {
+        if output.status.success() {
+            let s = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if let Some(repo) = parse_repo_from_remote_url(&s) {
+                return Some(repo);
+            }
+        }
+    }
+
+    None
+}
+
+/// Automatically detects Git default branch from workspace root without regex.
+pub fn detect_git_branch(workspace_root: &Path) -> Option<String> {
+    if let Ok(output) = Command::new("git")
+        .args(["branch", "--show-current"])
+        .current_dir(workspace_root)
+        .output()
+    {
+        if output.status.success() {
+            let s = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !s.is_empty() && s != "HEAD" {
+                return Some(s);
+            }
+        }
+    }
+    None
+}
+
+/// Translates relative filesystem markdown links in a spec body to tracker-compatible links:
+/// - Relative spec links (`../epics/EPIC-03-*.md`) -> Issue references (`#<id>` or canonical issue links)
+/// - Relative schema links (`../../schema/...`) -> GitHub blob URLs (`https://github.com/<repo>/blob/<branch>/schema/...`)
+/// - Relative docs links (`../../docs/...`) -> GitHub blob URLs (`https://github.com/<repo>/blob/<branch>/docs/...`)
+pub fn project_body_for_tracker(
+    body: &str,
+    repo: Option<&str>,
+    default_branch: &str,
+    spec_path_to_issue: &HashMap<String, u64>,
+) -> String {
+    let mut projected = body.to_string();
+
+    // 1. Translate relative spec links to issue citations
+    let mut replacements: Vec<(String, String)> = Vec::new();
+
+    for (spec_path, issue_num) in spec_path_to_issue {
+        let issue_ref = format!("#{}", issue_num);
+
+        let file_name = Path::new(spec_path)
+            .file_name()
+            .and_then(|f| f.to_str())
+            .unwrap_or("");
+
+        replacements.push((format!("../../{}", spec_path), issue_ref.clone()));
+        replacements.push((format!("../{}", spec_path), issue_ref.clone()));
+
+        if let Some(stripped) = spec_path.strip_prefix("docs/") {
+            replacements.push((format!("../../{}", stripped), issue_ref.clone()));
+            replacements.push((format!("../{}", stripped), issue_ref.clone()));
+        } else {
+            replacements.push((format!("../../docs/{}", spec_path), issue_ref.clone()));
+            replacements.push((format!("../docs/{}", spec_path), issue_ref.clone()));
+        }
+
+        if !file_name.is_empty() {
+            replacements.push((format!("../epics/{}", file_name), issue_ref.clone()));
+            replacements.push((format!("../features/{}", file_name), issue_ref.clone()));
+            replacements.push((format!("../user-stories/{}", file_name), issue_ref.clone()));
+            replacements.push((format!("../use-cases/{}", file_name), issue_ref.clone()));
+            replacements.push((format!("../../epics/{}", file_name), issue_ref.clone()));
+            replacements.push((format!("../../features/{}", file_name), issue_ref.clone()));
+            replacements.push((format!("../../user-stories/{}", file_name), issue_ref.clone()));
+            replacements.push((format!("../../use-cases/{}", file_name), issue_ref.clone()));
+            replacements.push((format!("./{}", file_name), issue_ref.clone()));
+        }
+    }
+
+    // Sort by pattern length descending to avoid partial matches
+    replacements.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
+    replacements.dedup_by(|a, b| a.0 == b.0);
+
+    for (pattern, replacement) in replacements {
+        projected = projected.replace(&pattern, &replacement);
+    }
+
+    // 2. Translate relative schema and docs links to absolute GitHub blob URLs
+    if let Some(r) = repo {
+        let clean_repo = clean_repo_name(r);
+        if !clean_repo.is_empty() {
+            let branch = if default_branch.trim().is_empty() {
+                "main"
+            } else {
+                default_branch.trim()
+            };
+            let schema_blob_base = format!("https://github.com/{}/blob/{}/schema/", clean_repo, branch);
+            projected = projected.replace("../../../schema/", &schema_blob_base);
+            projected = projected.replace("../../schema/", &schema_blob_base);
+            projected = projected.replace("../schema/", &schema_blob_base);
+
+            let docs_blob_base = format!("https://github.com/{}/blob/{}/docs/", clean_repo, branch);
+            projected = projected.replace("../../../docs/", &docs_blob_base);
+            projected = projected.replace("../../docs/", &docs_blob_base);
+            projected = projected.replace("../docs/", &docs_blob_base);
+        }
+    }
+
+    projected
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tracker::{OfflineTracker, TrackerIssue, TrackerLabel};
+    use std::fs;
+
+    #[test]
+    fn test_relative_links_in_projected_issue_bodies_red_probe() {
+        let temp_dir = std::env::temp_dir().join(format!("reconcile_red_probe_{}", chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)));
+        let epics_dir = temp_dir.join("docs/epics");
+        let stories_dir = temp_dir.join("docs/user-stories");
+        fs::create_dir_all(&epics_dir).unwrap();
+        fs::create_dir_all(&stories_dir).unwrap();
+
+        let epic_content = r#"---
+issue_id: 80
+title: "Epic 03: System Vision"
+type: epic
+---
+# Epic 03: System Vision
+"#;
+        fs::write(epics_dir.join("EPIC-03-SystemVision.md"), epic_content).unwrap();
+
+        let story_content = r#"---
+issue_id: 89
+title: "User Story 01: Bootstrap System Vision Action"
+type: user-story
+---
+| Attribute | Specification Detail |
+| :--- | :--- |
+| **Issue ID** | #89 |
+| **Parent Epic** | [EPIC-03-SystemVision](../epics/EPIC-03-SystemVision.md) |
+| **Specification Source** | [schema/model.sysml](../../schema/model.sysml) |
+
+## Required Features
+- [ ] [Feature 01: [ConOps] Human Engineer Interface](../features/FEAT-01-HumanEngineer.md)
+"#;
+        fs::write(stories_dir.join("US-01-BootstrapSystemVisionAction.md"), story_content).unwrap();
+
+        let issues = vec![
+            TrackerIssue {
+                number: 80,
+                title: "Epic 03: System Vision".to_string(),
+                state: "OPEN".to_string(),
+                labels: vec![TrackerLabel::String("epic".to_string())],
+                body: None,
+                url: Some("https://github.com/gintatkinson/dumpiler-01/issues/80".to_string()),
+            },
+            TrackerIssue {
+                number: 89,
+                title: "User Story 01: Bootstrap System Vision Action".to_string(),
+                state: "OPEN".to_string(),
+                labels: vec![TrackerLabel::String("user-story".to_string())],
+                body: None,
+                url: Some("https://github.com/gintatkinson/dumpiler-01/issues/89".to_string()),
+            },
+        ];
+
+        let tracker = OfflineTracker::with_issues(issues);
+        let options = ReconcileOptions {
+            workspace_root: temp_dir.clone(),
+            offline: false,
+            dry_run: false,
+            provider: "offline".to_string(),
+            sync_bodies: true,
+            repo: Some("gintatkinson/dumpiler-01".to_string()),
+            default_branch: Some("main".to_string()),
+        };
+
+        let summary = run_reconciliation(&tracker, &options).unwrap();
+        assert_eq!(summary.remote_issues_synced, 2);
+
+        let synced_issues = tracker.fetch_all_issues().unwrap();
+        let synced_story = synced_issues.iter().find(|i| i.number == 89).unwrap();
+        let body = synced_story.body.as_ref().expect("Body should have been synced");
+
+        // The probe: Projected body must NOT contain relative filesystem links that 404 on the remote tracker!
+        assert!(
+            !body.contains("../epics/EPIC-03-SystemVision.md"),
+            "Projected issue body still contains relative filesystem link '../epics/EPIC-03-SystemVision.md'!"
+        );
+        assert!(
+            !body.contains("../../schema/model.sysml"),
+            "Projected issue body still contains relative filesystem link '../../schema/model.sysml'!"
+        );
+        assert!(
+            body.contains("[EPIC-03-SystemVision](#80)"),
+            "Projected body should contain translated citation '[EPIC-03-SystemVision](#80)', found:\n{}",
+            body
+        );
+        assert!(
+            body.contains("https://github.com/gintatkinson/dumpiler-01/blob/main/schema/model.sysml"),
+            "Projected body should contain translated blob URL, found:\n{}",
+            body
+        );
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_project_body_for_tracker_comprehensive() {
+        let raw_body = r#"
+| **Parent Epic** | [EPIC-03-SystemVision](../epics/EPIC-03-SystemVision.md) |
+| **Specification Source** | [schema/subsystems/system_vision/behavior.sysml](../../schema/subsystems/system_vision/behavior.sysml) |
+
+## Required Features
+- [ ] [Feature 01: [ConOps] Human Engineer Interface](../features/FEAT-01-HumanEngineer.md)
+- [ ] [Feature 02: [Core] Baseline Verifier](../../docs/features/FEAT-02-Verifier.md)
+
+## Design Docs
+- [Architecture Blueprint](../../docs/architecture/DEAP_MASTER_ARCHITECTURE.md)
+"#;
+        let mut spec_to_issue = HashMap::new();
+        spec_to_issue.insert("docs/epics/EPIC-03-SystemVision.md".to_string(), 80);
+        spec_to_issue.insert("features/FEAT-01-HumanEngineer.md".to_string(), 75);
+        spec_to_issue.insert("docs/features/FEAT-02-Verifier.md".to_string(), 76);
+
+        let projected = project_body_for_tracker(
+            raw_body,
+            Some("gintatkinson/dumpiler-01"),
+            "main",
+            &spec_to_issue,
+        );
+
+        assert!(!projected.contains("../epics/EPIC-03-SystemVision.md"));
+        assert!(!projected.contains("../../schema/"));
+        assert!(!projected.contains("../features/FEAT-01-HumanEngineer.md"));
+        assert!(!projected.contains("../../docs/features/FEAT-02-Verifier.md"));
+        assert!(!projected.contains("../../docs/architecture/"));
+
+        assert!(projected.contains("[EPIC-03-SystemVision](#80)"));
+        assert!(projected.contains("[Feature 01: [ConOps] Human Engineer Interface](#75)"));
+        assert!(projected.contains("[Feature 02: [Core] Baseline Verifier](#76)"));
+        assert!(projected.contains("https://github.com/gintatkinson/dumpiler-01/blob/main/schema/subsystems/system_vision/behavior.sysml"));
+        assert!(projected.contains("https://github.com/gintatkinson/dumpiler-01/blob/main/docs/architecture/DEAP_MASTER_ARCHITECTURE.md"));
+    }
+
+    #[test]
+    fn test_parse_repo_from_remote_url() {
+        assert_eq!(
+            parse_repo_from_remote_url("https://github.com/gintatkinson/DEAP01-spec-core.git"),
+            Some("gintatkinson/DEAP01-spec-core".to_string())
+        );
+        assert_eq!(
+            parse_repo_from_remote_url("git@github.com:gintatkinson/dumpiler-01.git"),
+            Some("gintatkinson/dumpiler-01".to_string())
+        );
+        assert_eq!(
+            parse_repo_from_remote_url("https://github.com/owner/repo"),
+            Some("owner/repo".to_string())
+        );
+        assert_eq!(
+            parse_repo_from_remote_url("owner/repo"),
+            Some("owner/repo".to_string())
+        );
+        assert_eq!(parse_repo_from_remote_url("invalid-url"), None);
+    }
+
+    #[test]
+    fn test_project_body_for_tracker_without_repo() {
+        let raw_body = "[EPIC-01](../epics/EPIC-01.md) and [schema](../../schema/model.sysml)";
+        let mut map = HashMap::new();
+        map.insert("epics/EPIC-01.md".to_string(), 10);
+
+        let projected = project_body_for_tracker(raw_body, None, "main", &map);
+        assert_eq!(projected, "[EPIC-01](#10) and [schema](../../schema/model.sysml)");
+    }
+}
+
+

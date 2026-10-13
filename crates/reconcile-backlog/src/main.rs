@@ -36,6 +36,14 @@ struct Cli {
     /// Synchronize modified specification bodies to remote tracker issues
     #[arg(long, default_value_t = true)]
     sync_bodies: bool,
+
+    /// Target repository (e.g. owner/repo)
+    #[arg(long)]
+    repo: Option<String>,
+
+    /// Default branch name (defaults to auto-detected or main)
+    #[arg(long)]
+    default_branch: Option<String>,
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -74,6 +82,8 @@ fn main() {
         dry_run: cli.dry_run,
         provider: cli.provider.clone(),
         sync_bodies: cli.sync_bodies,
+        repo: cli.repo.clone(),
+        default_branch: cli.default_branch.clone(),
     };
 
     println!("Starting backlog reconciliation for workspace: {}", options.workspace_root.display());

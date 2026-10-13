@@ -218,9 +218,15 @@ pub fn run_create_issue<T: TrackerClient>(
     } else {
         // New issue: ensure label exists, create issue, report issue number and URL, exit 0
         tracker.ensure_label_exists(&params.label, params.repo.as_deref())?;
+        let projected_body = crate::project_body_for_tracker(
+            &body_content,
+            params.repo.as_deref(),
+            "main",
+            &std::collections::HashMap::new(),
+        );
         let (number, url) = tracker.create_issue(
             &params.title,
-            &body_content,
+            &projected_body,
             &params.label,
             params.repo.as_deref(),
         )?;
