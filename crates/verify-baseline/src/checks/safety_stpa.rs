@@ -39,11 +39,17 @@ pub struct FmecaRow {
 /// Helper checking if a markdown table row is an FMECA header.
 fn is_fmeca_header(line: &str) -> bool {
     let lower = line.to_lowercase();
-    if lower.contains("fmeca") || lower.contains("failure mode") {
-        return true;
-    }
-    let words: Vec<&str> = lower.split_whitespace().collect();
-    words.windows(2).any(|w| w[0].contains("failure") && w[1].contains("mode"))
+    let has_mode = lower.contains("failure mode")
+        || (lower.contains("failure") && (lower.contains("mode") || lower.contains("mechanism")));
+    let has_fmeca_col = lower.contains("fmeca id") || lower.contains("fmeca-id");
+    let has_fmeca_general = lower.contains("fmeca")
+        && (lower.contains("component")
+            || lower.contains("subsystem")
+            || lower.contains("item")
+            || lower.contains("rpn")
+            || lower.contains("severity")
+            || lower.contains("criticality"));
+    has_mode || has_fmeca_col || has_fmeca_general
 }
 
 /// Parse FMECA markdown tables from content.
@@ -56,6 +62,13 @@ pub fn parse_fmeca_table(content: &str) -> FmecaData {
     while i < n {
         let line = lines[i].trim();
         if line.starts_with('|') && is_fmeca_header(line) {
+            // Must be followed by a table separator line containing '---'
+            let next_line = if i + 1 < n { lines[i + 1].trim() } else { "" };
+            if !next_line.starts_with('|') || !next_line.contains("---") {
+                i += 1;
+                continue;
+            }
+
             let headers: Vec<String> = line
                 .split('|')
                 .filter(|s| !s.trim().is_empty())
@@ -63,14 +76,28 @@ pub fn parse_fmeca_table(content: &str) -> FmecaData {
                 .collect();
 
             // Locate columns
-            let id_idx = headers.iter().position(|h| h.contains("id") || h.contains("item"));
-            let comp_idx = headers.iter().position(|h| h.contains("component") || h.contains("item") || h.contains("subsystem"));
-            let mode_idx = headers.iter().position(|h| h.contains("failure mode") || h.contains("failure") || h.contains("mode"));
+            let id_idx = headers.iter().position(|h| {
+                h.contains("id") || h.contains("code") || h.starts_with("fm#") || h.starts_with("item#")
+            });
+            let comp_idx = headers.iter().position(|h| {
+                (h.contains("component") || h.contains("subsystem") || h.contains("part") || h.contains("unit"))
+                    && !h.contains("effect")
+                    && !h.contains("mode")
+            }).or_else(|| {
+                headers.iter().position(|h| h.contains("item") && !h.contains("id"))
+            });
+            let mode_idx = headers.iter().position(|h| {
+                (h.contains("failure mode") || h.contains("failure mechanism") || h.contains("mode"))
+                    && !h.contains("dimension")
+                    && !h.contains("effect")
+            }).or_else(|| {
+                headers.iter().position(|h| h.contains("failure") && !h.contains("id") && !h.contains("effect"))
+            });
             let s_idx = headers.iter().position(|h| h == "s" || h.starts_with("sev") || h.contains("severity"));
             let o_idx = headers.iter().position(|h| h == "o" || h.starts_with("occ") || h.contains("occurrence"));
             let d_idx = headers.iter().position(|h| h == "d" || h.starts_with("det") || h.contains("detection"));
             let rpn_idx = headers.iter().position(|h| h == "rpn" || h.contains("priority"));
-            let basis_idx = headers.iter().position(|h| h.contains("basis") || h.contains("derivation"));
+            let basis_idx = headers.iter().position(|h| h.contains("basis") || h.contains("derivation") || h.contains("provenance"));
 
             if rpn_idx.is_some() || headers.iter().any(|h| h.contains("rpn")) {
                 data.has_rpn = true;
@@ -112,6 +139,22 @@ pub fn parse_fmeca_table(content: &str) -> FmecaData {
                     if let Some(idx) = mode_idx {
                         if idx < cells.len() {
                             row.failure_mode = cells[idx].clone();
+                        }
+                    }
+
+                    // Fallbacks if columns were not matched by header
+                    if row.component.is_empty() {
+                        if id_idx == Some(0) && cells.len() > 1 {
+                            row.component = cells[1].clone();
+                        } else if cells.len() > 1 && (cells[0].to_uppercase().starts_with("FM") || cells[0].to_uppercase().starts_with("FMECA")) {
+                            row.component = cells[1].clone();
+                        }
+                    }
+                    if row.failure_mode.is_empty() {
+                        if comp_idx == Some(1) && cells.len() > 2 {
+                            row.failure_mode = cells[2].clone();
+                        } else if cells.len() > 2 && (cells[0].to_uppercase().starts_with("FM") || cells[0].to_uppercase().starts_with("FMECA")) {
+                            row.failure_mode = cells[2].clone();
                         }
                     }
 
@@ -625,6 +668,11 @@ pub fn check_safety_integrity(
         let total_basis = fmeca.ssot_basis_count + fmeca.derived_basis_count;
         if fmeca.total_rows > 0 && total_basis == 0 {
             errors.push("Pillar 7 violation: FMECA Criticality Matrix missing explicit Derivation Basis classification ('SSOT' / 'Derived').".to_string());
+        } else if fmeca.total_rows > 0 && total_basis < fmeca.total_rows {
+            errors.push(format!(
+                "Pillar 7 violation: FMECA Criticality Matrix contains {} row(s) missing explicit Derivation Basis classification ('SSOT' / 'Derived').",
+                fmeca.total_rows - total_basis
+            ));
         }
 
         if fmeca.total_rows > 0 {
@@ -634,6 +682,57 @@ pub fn check_safety_integrity(
                     "Pillar 7 violation: FMECA table missing coverage for universal failure dimension(s): {} (expected Interface (Γ), State (Φ), Action (Ω), Resource (Ψ)).",
                     missing_dims.join(", ")
                 ));
+            }
+
+            // Check multi-failure-mode per component coverage (Issue #212)
+            let mut component_modes: std::collections::BTreeMap<String, Vec<String>> = std::collections::BTreeMap::new();
+            for row in &fmeca.rows {
+                let comp_raw = row.component.trim();
+                let clean_comp = if let Some(idx) = comp_raw.find(']') {
+                    if comp_raw.starts_with('[') {
+                        &comp_raw[1..idx]
+                    } else {
+                        comp_raw
+                    }
+                } else {
+                    comp_raw
+                };
+                let comp = clean_comp.trim_matches(|c| c == '`' || c == '*').trim();
+                if !comp.is_empty() {
+                    let mode = row.failure_mode.trim();
+                    if !mode.is_empty() {
+                        component_modes
+                            .entry(comp.to_string())
+                            .or_default()
+                            .push(mode.to_string());
+                    }
+                }
+            }
+
+            if !component_modes.is_empty() {
+                let mut single_mode_components = Vec::new();
+                for (comp, modes) in &component_modes {
+                    let mut distinct_modes = modes.clone();
+                    distinct_modes.sort_by_key(|m| m.to_lowercase());
+                    distinct_modes.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
+                    if distinct_modes.len() < 2 {
+                        single_mode_components.push(comp.clone());
+                    }
+                }
+
+                if single_mode_components.len() == component_modes.len() {
+                    errors.push(format!(
+                        "Pillar 7 violation: FMECA matrix exhibits degenerate single-failure-mode-per-component coverage (all {} components have only 1 failure mode). Multi-failure-mode coverage per component is required (minimum >= 2 distinct failure modes per component).",
+                        component_modes.len()
+                    ));
+                } else if !single_mode_components.is_empty() {
+                    errors.push(format!(
+                        "Pillar 7 violation: FMECA component(s) with degenerate single-failure-mode coverage (minimum >= 2 distinct failure modes required): {}.",
+                        single_mode_components.join(", ")
+                    ));
+                }
+            } else {
+                errors.push("Pillar 7 violation: FMECA Criticality Matrix contains rows but no valid components or failure modes could be resolved.".to_string());
             }
         }
 
@@ -741,5 +840,289 @@ mod tests {
         let incomplete = "Only omission causes hazard.";
         let missing = check_uca_categories(incomplete);
         assert_eq!(missing.len(), 3);
+    }
+
+    #[test]
+    fn test_fmeca_single_failure_mode_per_component_rejected() {
+        let tmp = TempDir::new("single_mode");
+        let safety_dir = tmp.path.join("docs").join("safety");
+        fs::create_dir_all(&safety_dir).unwrap();
+
+        let mut fmeca_content = String::from(
+            "# Safety Analysis\n\n\
+             ## Losses\nL-1: Loss of vehicle\n\n\
+             ## Hazards\nH-1: Hazard 1\n\n\
+             ## Control Structure\nController and actuator interface.\n\n\
+             ## Unsafe Control Actions\n\
+             UCA-1: Not providing command causes hazard. Providing causes hazard. Too early or out of order. Stopped too soon or applied too long.\n\n\
+             ## Loss Scenarios\nLS-1: Scenario\n\n\
+             ## Safety Constraints\nSC-1: Constraint\n\n\
+             ## Pillar 7: FMECA Criticality Matrix\n\n\
+             | FMECA ID | Component | Failure Mode | Severity (S) | Occurrence (O) | Detection (D) | RPN | Derivation Basis |\n\
+             |---|---|---|---|---|---|---|---|\n"
+        );
+        let components = [
+            ("Comp1", "Interface bus loss"),
+            ("Comp2", "State transition deadlock"),
+            ("Comp3", "Action timing latency"),
+            ("Comp4", "Resource power fault"),
+            ("Comp5", "Interface frame dropout"),
+            ("Comp6", "State desync lockup"),
+            ("Comp7", "Action command overshoot"),
+            ("Comp8", "Resource thermal overheat"),
+            ("Comp9", "Interface signal noise"),
+            ("Comp10", "State corruption error"),
+            ("Comp11", "Action computation delay"),
+            ("Comp12", "Resource memory overflow"),
+            ("Comp13", "Interface packet timeout"),
+            ("Comp14", "State abort trip"),
+            ("Comp15", "Action rate limiting"),
+            ("Comp16", "Resource battery sag"),
+        ];
+        for (i, (comp, mode)) in components.iter().enumerate() {
+            fmeca_content.push_str(&format!(
+                "| FM-{:03} | {} | {} | 2 | 2 | 2 | 8 | Derived |\n",
+                i + 1, comp, mode
+            ));
+        }
+
+        fmeca_content.push_str(
+            "\n## Pillar 8: Regulatory Objectives\n\
+             | Objective ID | Requirement | Allocation |\n\
+             |---|---|---|\n\
+             | OBJ-1 | Req 1 | Comp1 |\n\n\
+             MATLAB Simulink Stateflow Embedded Coder hooks.\n"
+        );
+
+        fs::write(safety_dir.join("STPA_MATRIX.md"), fmeca_content).unwrap();
+
+        let res = check_safety_integrity(&tmp.path, false, true);
+        assert!(res.is_err(), "Single-failure-mode-per-component matrix must be rejected, but got: {:?}", res);
+    }
+
+    #[test]
+    fn test_fmeca_multi_failure_mode_per_component_passes() {
+        let tmp = TempDir::new("multi_mode");
+        let safety_dir = tmp.path.join("docs").join("safety");
+        fs::create_dir_all(&safety_dir).unwrap();
+
+        let mut fmeca_content = String::from(
+            "# Safety Analysis\n\n\
+             ## Losses\nL-1: Loss of vehicle\n\n\
+             ## Hazards\nH-1: Hazard 1\n\n\
+             ## Control Structure\nController and actuator interface.\n\n\
+             ## Unsafe Control Actions\n\
+             UCA-1: Not providing command causes hazard. Providing causes hazard. Too early or out of order. Stopped too soon or applied too long.\n\n\
+             ## Loss Scenarios\nLS-1: Scenario\n\n\
+             ## Safety Constraints\nSC-1: Constraint\n\n\
+             ## Pillar 7: FMECA Criticality Matrix\n\n\
+             | FMECA ID | Component | Failure Mode | Severity (S) | Occurrence (O) | Detection (D) | RPN | Derivation Basis |\n\
+             |---|---|---|---|---|---|---|---|\n"
+        );
+        let component_pairs = [
+            ("Comp1", "Interface bus dropout", "State desync lockup"),
+            ("Comp2", "Action timing latency", "Resource power fault"),
+            ("Comp3", "Interface frame corruption", "State transition freeze"),
+            ("Comp4", "Action command overshoot", "Resource thermal overheat"),
+            ("Comp5", "Interface packet loss", "State corruption error"),
+            ("Comp6", "Action rate limiting", "Resource battery sag"),
+            ("Comp7", "Interface bus jitter", "State abort trip"),
+            ("Comp8", "Action torque clamping", "Resource memory exhaustion"),
+        ];
+        let mut row_idx = 1;
+        for (comp, mode1, mode2) in &component_pairs {
+            fmeca_content.push_str(&format!(
+                "| FM-{:03} | {} | {} | 2 | 2 | 2 | 8 | Derived |\n",
+                row_idx, comp, mode1
+            ));
+            row_idx += 1;
+            fmeca_content.push_str(&format!(
+                "| FM-{:03} | {} | {} | 2 | 2 | 2 | 8 | Derived |\n",
+                row_idx, comp, mode2
+            ));
+            row_idx += 1;
+        }
+
+        fmeca_content.push_str(
+            "\n## Pillar 8: Regulatory Objectives\n\
+             | Objective ID | Requirement | Allocation |\n\
+             |---|---|---|\n\
+             | OBJ-1 | Req 1 | Comp1 |\n\n\
+             MATLAB Simulink Stateflow Embedded Coder hooks.\n"
+        );
+
+        fs::write(safety_dir.join("STPA_MATRIX.md"), fmeca_content).unwrap();
+
+        let res = check_safety_integrity(&tmp.path, false, true);
+        assert_eq!(res, Ok(SafetyCheckOutcome::DownstreamVerified));
+    }
+
+    #[test]
+    fn test_fmeca_partial_single_mode_component_fails() {
+        let tmp = TempDir::new("partial_single");
+        let safety_dir = tmp.path.join("docs").join("safety");
+        fs::create_dir_all(&safety_dir).unwrap();
+
+        let mut fmeca_content = String::from(
+            "# Safety Analysis\n\n\
+             ## Losses\nL-1: Loss of vehicle\n\n\
+             ## Hazards\nH-1: Hazard 1\n\n\
+             ## Control Structure\nController and actuator interface.\n\n\
+             ## Unsafe Control Actions\n\
+             UCA-1: Not providing command causes hazard. Providing causes hazard. Too early or out of order. Stopped too soon or applied too long.\n\n\
+             ## Loss Scenarios\nLS-1: Scenario\n\n\
+             ## Safety Constraints\nSC-1: Constraint\n\n\
+             ## Pillar 7: FMECA Criticality Matrix\n\n\
+             | FMECA ID | Component | Failure Mode | Severity (S) | Occurrence (O) | Detection (D) | RPN | Derivation Basis |\n\
+             |---|---|---|---|---|---|---|---|\n"
+        );
+        for i in 1..=7 {
+            fmeca_content.push_str(&format!(
+                "| FM-{:03} | Comp{} | Interface bus loss {} | 2 | 2 | 2 | 8 | Derived |\n\
+                 | FM-{:03} | Comp{} | State desync lockup {} | 2 | 2 | 2 | 8 | Derived |\n",
+                (i - 1) * 2 + 1, i, i,
+                (i - 1) * 2 + 2, i, i
+            ));
+        }
+        fmeca_content.push_str(
+            "| FM-015 | Comp8 | Action command latency and resource power fault | 2 | 2 | 2 | 8 | Derived |\n"
+        );
+
+        fmeca_content.push_str(
+            "\n## Pillar 8: Regulatory Objectives\n\
+             | Objective ID | Requirement | Allocation |\n\
+             |---|---|---|\n\
+             | OBJ-1 | Req 1 | Comp1 |\n\n\
+             MATLAB Simulink Stateflow Embedded Coder hooks.\n"
+        );
+
+        fs::write(safety_dir.join("STPA_MATRIX.md"), fmeca_content).unwrap();
+
+        let res = check_safety_integrity(&tmp.path, false, true);
+        assert!(res.is_err());
+        let errs = res.unwrap_err();
+        assert!(errs.iter().any(|e| e.contains("Comp8") && e.contains("degenerate single-failure-mode coverage")));
+    }
+
+    #[test]
+    fn test_fmeca_duplicate_mode_does_not_satisfy_multi_mode() {
+        let tmp = TempDir::new("duplicate_mode");
+        let safety_dir = tmp.path.join("docs").join("safety");
+        fs::create_dir_all(&safety_dir).unwrap();
+
+        let mut fmeca_content = String::from(
+            "# Safety Analysis\n\n\
+             ## Losses\nL-1: Loss of vehicle\n\n\
+             ## Hazards\nH-1: Hazard 1\n\n\
+             ## Control Structure\nController and actuator interface.\n\n\
+             ## Unsafe Control Actions\n\
+             UCA-1: Not providing command causes hazard. Providing causes hazard. Too early or out of order. Stopped too soon or applied too long.\n\n\
+             ## Loss Scenarios\nLS-1: Scenario\n\n\
+             ## Safety Constraints\nSC-1: Constraint\n\n\
+             ## Pillar 7: FMECA Criticality Matrix\n\n\
+             | FMECA ID | Component | Failure Mode | Severity (S) | Occurrence (O) | Detection (D) | RPN | Derivation Basis |\n\
+             |---|---|---|---|---|---|---|---|\n"
+        );
+        fmeca_content.push_str(
+            "| FM-001 | Comp1 | Interface bus dropout | 2 | 2 | 2 | 8 | Derived |\n\
+             | FM-002 | Comp1 | Interface bus dropout | 2 | 2 | 2 | 8 | Derived |\n"
+        );
+        let pairs = [
+            ("Comp2", "Action timing latency", "Resource power fault"),
+            ("Comp3", "Interface frame corruption", "State transition freeze"),
+            ("Comp4", "Action command overshoot", "Resource thermal overheat"),
+            ("Comp5", "Interface packet loss", "State corruption error"),
+            ("Comp6", "Action rate limiting", "Resource battery sag"),
+            ("Comp7", "Interface bus jitter", "State abort trip"),
+            ("Comp8", "Action torque clamping", "Resource memory exhaustion"),
+        ];
+        let mut row_idx = 3;
+        for (comp, mode1, mode2) in &pairs {
+            fmeca_content.push_str(&format!(
+                "| FM-{:03} | {} | {} | 2 | 2 | 2 | 8 | Derived |\n",
+                row_idx, comp, mode1
+            ));
+            row_idx += 1;
+            fmeca_content.push_str(&format!(
+                "| FM-{:03} | {} | {} | 2 | 2 | 2 | 8 | Derived |\n",
+                row_idx, comp, mode2
+            ));
+            row_idx += 1;
+        }
+
+        fmeca_content.push_str(
+            "\n## Pillar 8: Regulatory Objectives\n\
+             | Objective ID | Requirement | Allocation |\n\
+             |---|---|---|\n\
+             | OBJ-1 | Req 1 | Comp1 |\n\n\
+             MATLAB Simulink Stateflow Embedded Coder hooks.\n"
+        );
+
+        fs::write(safety_dir.join("STPA_MATRIX.md"), fmeca_content).unwrap();
+
+        let res = check_safety_integrity(&tmp.path, false, true);
+        assert!(res.is_err());
+        let errs = res.unwrap_err();
+        assert!(errs.iter().any(|e| e.contains("Comp1")));
+    }
+
+    #[test]
+    fn test_fmeca_missing_derivation_basis_fails() {
+        let tmp = TempDir::new("missing_basis");
+        let safety_dir = tmp.path.join("docs").join("safety");
+        fs::create_dir_all(&safety_dir).unwrap();
+
+        let mut fmeca_content = String::from(
+            "# Safety Analysis\n\n\
+             ## Losses\nL-1: Loss of vehicle\n\n\
+             ## Hazards\nH-1: Hazard 1\n\n\
+             ## Control Structure\nController and actuator interface.\n\n\
+             ## Unsafe Control Actions\n\
+             UCA-1: Not providing command causes hazard. Providing causes hazard. Too early or out of order. Stopped too soon or applied too long.\n\n\
+             ## Loss Scenarios\nLS-1: Scenario\n\n\
+             ## Safety Constraints\nSC-1: Constraint\n\n\
+             ## Pillar 7: FMECA Criticality Matrix\n\n\
+             | FMECA ID | Component | Failure Mode | Severity (S) | Occurrence (O) | Detection (D) | RPN | Derivation Basis |\n\
+             |---|---|---|---|---|---|---|---|\n"
+        );
+        let pairs = [
+            ("Comp1", "Interface bus dropout", "State desync lockup"),
+            ("Comp2", "Action timing latency", "Resource power fault"),
+            ("Comp3", "Interface frame corruption", "State transition freeze"),
+            ("Comp4", "Action command overshoot", "Resource thermal overheat"),
+            ("Comp5", "Interface packet loss", "State corruption error"),
+            ("Comp6", "Action rate limiting", "Resource battery sag"),
+            ("Comp7", "Interface bus jitter", "State abort trip"),
+            ("Comp8", "Action torque clamping", "Resource memory exhaustion"),
+        ];
+        let mut row_idx = 1;
+        for (comp, mode1, mode2) in &pairs {
+            let basis1 = if row_idx == 1 { "" } else { "Derived" };
+            fmeca_content.push_str(&format!(
+                "| FM-{:03} | {} | {} | 2 | 2 | 2 | 8 | {} |\n",
+                row_idx, comp, mode1, basis1
+            ));
+            row_idx += 1;
+            fmeca_content.push_str(&format!(
+                "| FM-{:03} | {} | {} | 2 | 2 | 2 | 8 | Derived |\n",
+                row_idx, comp, mode2
+            ));
+            row_idx += 1;
+        }
+
+        fmeca_content.push_str(
+            "\n## Pillar 8: Regulatory Objectives\n\
+             | Objective ID | Requirement | Allocation |\n\
+             |---|---|---|\n\
+             | OBJ-1 | Req 1 | Comp1 |\n\n\
+             MATLAB Simulink Stateflow Embedded Coder hooks.\n"
+        );
+
+        fs::write(safety_dir.join("STPA_MATRIX.md"), fmeca_content).unwrap();
+
+        let res = check_safety_integrity(&tmp.path, false, true);
+        assert!(res.is_err());
+        let errs = res.unwrap_err();
+        assert!(errs.iter().any(|e| e.contains("missing explicit Derivation Basis classification")));
     }
 }
