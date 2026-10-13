@@ -39,12 +39,12 @@ You should invoke this skill as **Phase 1.5 (Worker ICD - Logical Interface Engi
 
 ## Step 1: Context Ingestion (SysML v2 AST, Digest & Safety Concept)
 
-1. **Ingest Canonical SysML v2 Model & Cryptographic Digest**:
-   - Ingest `.pipeline/schema.sysml` and `.pipeline/schema-digest.json`.
-   - Verify SHA-256 integrity hash against `.pipeline/schema-digest.json` per [`rules/sysml-ssot-completeness.md`](rules/sysml-ssot-completeness.md).
+1. **Ingest Canonical Schema Models & Cryptographic Digest**:
+   - Ingest authoritative schemas from `schema/` and `.pipeline/` (`.pipeline/schema.sysml`, `.pipeline/schema-digest.json`, or heterogeneous schemas `.yaml`, `.json`, `.proto`, `.idl`, `.arxml`, `.md` discovered via `UnifiedSchemaModelExtractor`).
+   - When `.pipeline/schema.sysml` is present, verify SHA-256 integrity hash against `.pipeline/schema-digest.json` per [`rules/sysml-ssot-completeness.md`](rules/sysml-ssot-completeness.md).
 
 2. **AST Query & Entity Extraction**:
-   Scan and parse the SysML v2 AST to identify all formal interface elements:
+   Scan and parse the authoritative schema AST (SysML v2 or heterogeneous model extracted via `UnifiedSchemaModelExtractor`) to identify all formal interface elements:
    - **`part def`**: Subsystems and structural components forming the system boundary partitions.
    - **`port def` / `port`**: Directional ports (`in`, `out`, `inout`) declared on subsystem boundaries with port typing (Command, Telemetry, Data, Event).
    - **`interface def` / `interface`**: Formal interface block contracts declaring provided/required capabilities and service signatures.

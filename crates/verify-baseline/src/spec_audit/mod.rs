@@ -303,25 +303,18 @@ pub fn infer_spec_type(rel_path: &str) -> &'static str {
 pub fn load_sysml_symbol_index(repo_root: &Path) -> Result<SysmlSymbolIndex, SpecAuditError> {
     let schema_dir = repo_root.join("schema");
     let mut sysml_files = Vec::new();
+    let mut other_schema_files = Vec::new();
 
     if schema_dir.is_dir() {
-        for entry in walkdir::WalkDir::new(&schema_dir)
-            .into_iter()
-            .filter_entry(|e| {
-                let name = e.file_name().to_string_lossy();
-                !name.starts_with('.') && !name.starts_with('#')
-            })
-            .filter_map(|e| e.ok())
-        {
-            if entry.file_type().is_file() {
-                let p = entry.path();
-                if p.extension().map_or(false, |ext| ext == "sysml") {
-                    sysml_files.push(p.to_path_buf());
-                }
+        let all_schemas = deap_core::sysml_ast::UnifiedSchemaModelExtractor::discover_schema_files(&[&schema_dir]);
+        for p in all_schemas {
+            if p.extension().map_or(false, |ext| ext == "sysml") {
+                sysml_files.push(p);
+            } else {
+                other_schema_files.push(p);
             }
         }
     }
-    sysml_files.sort();
 
     let mut combined_content = String::new();
     for f in &sysml_files {
@@ -350,11 +343,7 @@ pub fn load_sysml_symbol_index(repo_root: &Path) -> Result<SysmlSymbolIndex, Spe
         }
     }
 
-    if combined_content.trim().is_empty() {
-        return Ok(SysmlSymbolIndex::new());
-    }
-
-    let parts = deap_core::sysml_ast::parse_part_defs(&combined_content);
+    let mut parts = deap_core::sysml_ast::parse_part_defs(&combined_content);
     let ports = deap_core::sysml_ast::parse_port_defs(&combined_content);
     let actions = deap_core::sysml_ast::parse_action_defs(&combined_content);
     let constraints = deap_core::sysml_ast::parse_constraint_defs(&combined_content);
@@ -362,6 +351,31 @@ pub fn load_sysml_symbol_index(repo_root: &Path) -> Result<SysmlSymbolIndex, Spe
     let attributes = deap_core::sysml_ast::parse_attribute_defs(&combined_content);
     let top_states = deap_core::sysml_ast::parse_state_defs(&combined_content);
     let test_cases = deap_core::sysml_ast::parse_test_case_defs(&combined_content);
+
+    if !other_schema_files.is_empty() {
+        let non_sysml_parts = deap_core::sysml_ast::UnifiedSchemaModelExtractor::extract_subsystem_parts(&other_schema_files);
+        for nsp in non_sysml_parts {
+            if !parts.iter().any(|p| p.name == nsp) {
+                parts.push(deap_core::sysml_ast::PartDef {
+                    name: nsp,
+                    is_def: true,
+                    ..Default::default()
+                });
+            }
+        }
+    }
+
+    if parts.is_empty()
+        && ports.is_empty()
+        && actions.is_empty()
+        && constraints.is_empty()
+        && requirements.is_empty()
+        && attributes.is_empty()
+        && top_states.is_empty()
+        && test_cases.is_empty()
+    {
+        return Ok(SysmlSymbolIndex::new());
+    }
 
     let model = deap_core::sysml_ast::SysmlModel {
         package_name: None,
@@ -1047,5 +1061,37 @@ Links to [FEAT-06-SystemVisionEngine.md](../features/feat-06.md).
         let errors = validate_parent_epic_alignment(&stories, &features, &epics);
         assert!(!errors.is_empty());
         assert!(errors.iter().any(|e| e.contains("Parent Epic Alignment Gate violation")));
+    }
+
+    #[test]
+    fn test_load_sysml_symbol_index_with_heterogeneous_schemas() {
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let temp_dir = std::env::temp_dir().join(format!("test_schema_hetero_{}", ts));
+        let schema_dir = temp_dir.join("schema");
+        fs::create_dir_all(&schema_dir).unwrap();
+
+        let yaml_file = schema_dir.join("model.yaml");
+        fs::write(
+            &yaml_file,
+            "subsystems:\n  - FlightComputer\n  - NavigationSensor\n",
+        )
+        .unwrap();
+
+        let json_file = schema_dir.join("components.json");
+        fs::write(
+            &json_file,
+            r#"{"components": [{"name": "TelemetryGateway"}]}"#,
+        )
+        .unwrap();
+
+        let index = load_sysml_symbol_index(&temp_dir).unwrap();
+        assert!(index.part_names.contains("FlightComputer"));
+        assert!(index.part_names.contains("NavigationSensor"));
+        assert!(index.part_names.contains("TelemetryGateway"));
+
+        fs::remove_dir_all(&temp_dir).ok();
     }
 }

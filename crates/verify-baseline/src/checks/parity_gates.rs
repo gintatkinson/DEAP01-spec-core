@@ -20,38 +20,42 @@ pub enum ParityOutcome {
     DualSchemaIdentical,
 }
 
-/// Locate and read authoritative SysML v2 model content (schema/**/*.sysml or .pipeline/schema.sysml).
+/// Locate and read authoritative SysML v2 or multi-format schema model content (schema/**/* or .pipeline/schema.sysml).
 pub fn discover_sysml_model_text(repo_root: &Path) -> Option<String> {
     let schema_dir = repo_root.join("schema");
     if schema_dir.is_dir() {
-        let mut paths: Vec<_> = WalkDir::new(&schema_dir)
-            .into_iter()
-            .filter_entry(|e| {
-                let name = e.file_name().to_string_lossy();
-                !name.starts_with('.') && !name.starts_with('#')
-            })
-            .filter_map(|e| e.ok())
-            .filter(|e| e.file_type().is_file())
-            .map(|e| e.into_path())
-            .filter(|p| {
-                let fname = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
-                !fname.starts_with('.')
-                    && !fname.starts_with('#')
-                    && p.extension().map(|ext| ext == "sysml").unwrap_or(false)
-            })
-            .collect();
-        paths.sort();
-
+        let paths = deap_core::sysml_ast::UnifiedSchemaModelExtractor::discover_schema_files(&[&schema_dir]);
         let mut sysml_contents = Vec::new();
+        let mut non_sysml_paths = Vec::new();
+
         for p in paths {
-            if let Ok(content) = fs::read_to_string(&p) {
-                if !content.trim().is_empty() {
-                    sysml_contents.push(content);
+            let is_sysml = p.extension().map(|ext| ext == "sysml").unwrap_or(false);
+            if is_sysml {
+                if let Ok(content) = fs::read_to_string(&p) {
+                    if !content.trim().is_empty() {
+                        sysml_contents.push(content);
+                    }
                 }
+            } else {
+                non_sysml_paths.push(p);
             }
         }
+
         if !sysml_contents.is_empty() {
             return Some(sysml_contents.join("\n\n"));
+        }
+
+        if !non_sysml_paths.is_empty() {
+            let parts = deap_core::sysml_ast::UnifiedSchemaModelExtractor::extract_subsystem_parts(&non_sysml_paths);
+            if !parts.is_empty() {
+                let mut synthetic = String::new();
+                synthetic.push_str("package DownstreamSchema {\n");
+                for part in parts {
+                    synthetic.push_str(&format!("    part def {};\n", part));
+                }
+                synthetic.push_str("}\n");
+                return Some(synthetic);
+            }
         }
     }
 
@@ -1070,25 +1074,14 @@ pub fn check_dual_schema_ssot_parity(repo_root: &Path) -> Result<ParityOutcome, 
 
     let mut schema_sysml_files = Vec::new();
     if schema_dir.is_dir() {
-        let mut paths: Vec<_> = WalkDir::new(&schema_dir)
+        let all_files = deap_core::sysml_ast::UnifiedSchemaModelExtractor::discover_schema_files(&[&schema_dir]);
+        schema_sysml_files = all_files
             .into_iter()
-            .filter_entry(|e| {
-                let name = e.file_name().to_string_lossy();
-                !name.starts_with('.') && !name.starts_with('#')
-            })
-            .filter_map(|e| e.ok())
-            .filter(|e| e.file_type().is_file())
-            .map(|e| e.into_path())
             .filter(|p| {
-                let fname = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
-                !fname.starts_with('.')
-                    && !fname.starts_with('#')
-                    && p.extension().map(|ext| ext == "sysml").unwrap_or(false)
+                p.extension().map(|ext| ext == "sysml").unwrap_or(false)
                     && fs::metadata(p).map(|m| m.len() > 0).unwrap_or(false)
             })
             .collect();
-        paths.sort();
-        schema_sysml_files = paths;
     }
 
     let has_pipeline_schema = pipeline_schema.is_file()

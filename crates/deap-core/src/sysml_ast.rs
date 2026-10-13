@@ -1,7 +1,9 @@
 //! AST structures for SysML v2 entities, requirements, and system architecture.
 
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+use std::path::{Path, PathBuf};
+use walkdir::WalkDir;
 
 fn default_true() -> bool {
     true
@@ -2063,6 +2065,412 @@ pub fn has_negative_recovery_constraint(content: &str) -> bool {
     false
 }
 
+/// Strips C-style multi-line comments (`/* ... */`) and line comments (`// ...`) from SysML text without regex.
+pub fn strip_sysml_comments(content: &str) -> String {
+    let mut out = String::with_capacity(content.len());
+    let mut chars = content.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '/' {
+            if let Some(&'/') = chars.peek() {
+                chars.next();
+                for next_c in chars.by_ref() {
+                    if next_c == '\n' {
+                        out.push('\n');
+                        break;
+                    }
+                }
+            } else if let Some(&'*') = chars.peek() {
+                chars.next();
+                while let Some(next_c) = chars.next() {
+                    if next_c == '*' && chars.peek() == Some(&'/') {
+                        chars.next();
+                        break;
+                    }
+                }
+            } else {
+                out.push(c);
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+/// Checks if a string is a valid identifier for a subsystem, component, or part.
+pub fn is_valid_subsystem_identifier(s: &str) -> bool {
+    if s.is_empty() || s.len() > 128 {
+        return false;
+    }
+    let first = s.chars().next().unwrap();
+    if !first.is_ascii_alphabetic() && first != '_' {
+        return false;
+    }
+    let generic_blacklist = &[
+        "true", "false", "null", "none", "na", "string", "int", "integer", "boolean", "float",
+        "description", "version", "name", "id", "type", "subsystem", "component", "part", "module",
+        "parameters", "attributes", "properties", "specs", "metadata", "title", "status", "real",
+        "primary", "secondary", "optional", "required", "level", "segment", "layer", "architecture",
+        "purpose", "function", "item", "flow", "port", "interface", "doc", "package", "def",
+    ];
+    if generic_blacklist.contains(&s.to_ascii_lowercase().as_str()) {
+        return false;
+    }
+    s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+/// Centralized schema discovery and AST part extractor shared across compiler and validators.
+///
+/// Supports multi-schema formats:
+/// - SysML v2 (`.sysml`)
+/// - Structural YAML (`.yaml`, `.yml`)
+/// - Structural JSON (`.json`)
+/// - Protocol Buffers (`.proto`)
+/// - OMG IDL (`.idl`)
+/// - AUTOSAR (`.arxml`)
+/// - Markdown architecture tables (`.md`, `.markdown`)
+#[derive(Debug, Clone, Default)]
+pub struct UnifiedSchemaModelExtractor;
+
+impl UnifiedSchemaModelExtractor {
+    /// Supported schema extensions across all pipeline tools.
+    pub const SUPPORTED_EXTENSIONS: &'static [&'static str] = &[
+        ".sysml", ".yaml", ".yml", ".json", ".proto", ".idl", ".arxml", ".md", ".markdown",
+    ];
+
+    /// Recursively discovers all supported schema files across the provided search directories.
+    /// Excludes hidden entries (`.`), editor swap files (`#`), and `README.md`.
+    /// Results are lexicographically sorted to eliminate filesystem traversal jitter.
+    pub fn discover_schema_files<P: AsRef<Path>>(search_dirs: &[P]) -> Vec<PathBuf> {
+        let mut schema_files = Vec::new();
+        for sdir in search_dirs {
+            let p = sdir.as_ref();
+            if !p.is_dir() {
+                continue;
+            }
+            for entry in WalkDir::new(p)
+                .into_iter()
+                .filter_entry(|e| {
+                    let name = e.file_name().to_string_lossy();
+                    !name.starts_with('.') && !name.starts_with('#')
+                })
+                .filter_map(|e| e.ok())
+            {
+                if entry.file_type().is_file() {
+                    let fpath = entry.path();
+                    let fname = fpath.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                    if fname.starts_with('.')
+                        || fname.starts_with('#')
+                        || fname.eq_ignore_ascii_case("readme.md")
+                    {
+                        continue;
+                    }
+                    if let Some(ext) = fpath.extension().and_then(|e| e.to_str()) {
+                        let dot_ext = format!(".{}", ext.to_ascii_lowercase());
+                        if Self::SUPPORTED_EXTENSIONS.contains(&dot_ext.as_str()) {
+                            schema_files.push(fpath.to_path_buf());
+                        }
+                    }
+                }
+            }
+        }
+        schema_files.sort();
+        schema_files.dedup();
+        schema_files
+    }
+
+    /// Extracts all subsystem part and component names across the provided file paths.
+    pub fn extract_subsystem_parts<P: AsRef<Path>>(file_paths: &[P]) -> BTreeSet<String> {
+        let mut part_names = BTreeSet::new();
+        for fp in file_paths {
+            let p = fp.as_ref();
+            if let Ok(content) = std::fs::read_to_string(p) {
+                let ext = p
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .unwrap_or("")
+                    .to_ascii_lowercase();
+                let dot_ext = format!(".{}", ext);
+                let extracted = Self::extract_subsystem_parts_from_text(&dot_ext, &content);
+                part_names.extend(extracted);
+            }
+        }
+        part_names
+    }
+
+    /// Extracts subsystem and component names from raw text of a specific format.
+    pub fn extract_subsystem_parts_from_text(ext: &str, content: &str) -> BTreeSet<String> {
+        let mut part_names = BTreeSet::new();
+        let norm_ext = ext.to_ascii_lowercase();
+
+        if norm_ext == ".sysml" {
+            let clean = strip_sysml_comments(content);
+            for p in parse_part_defs(&clean) {
+                if !p.name.is_empty() {
+                    part_names.insert(p.name);
+                }
+            }
+            // Fallback token scan for `part def <Ident>` or `part <Ident> :>`
+            for line in clean.lines() {
+                let trimmed = line.trim();
+                if let Some(pos) = trimmed.find("part ") {
+                    let rest = &trimmed[pos + 5..].trim_start();
+                    let rest = rest.strip_prefix("def ").unwrap_or(rest).trim_start();
+                    let ident: String = rest
+                        .chars()
+                        .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+                        .collect();
+                    if !ident.is_empty() && ident != "def" && is_valid_subsystem_identifier(&ident) {
+                        part_names.insert(ident);
+                    }
+                }
+            }
+        } else if norm_ext == ".yaml" || norm_ext == ".yml" || norm_ext == ".json" {
+            // Check structured JSON if parseable
+            if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(content) {
+                Self::extract_parts_from_json(&json_val, &mut part_names);
+            }
+            // Pure string/line scan for YAML and JSON component/subsystem keys
+            Self::extract_parts_from_yaml_lines(content, &mut part_names);
+        } else if norm_ext == ".md" || norm_ext == ".markdown" {
+            let mut in_table = false;
+            let mut col_subsys_idx = None;
+            for line in content.lines() {
+                let trimmed = line.trim();
+                if trimmed.starts_with('|') && trimmed.ends_with('|') {
+                    let cells: Vec<&str> = trimmed
+                        .split('|')
+                        .map(|c| c.trim())
+                        .filter(|c| !c.is_empty())
+                        .collect();
+                    if cells.is_empty() {
+                        continue;
+                    }
+                    if cells.iter().all(|c| c.chars().all(|ch| ch == '-' || ch == ':' || ch.is_whitespace())) {
+                        in_table = true;
+                        continue;
+                    }
+                    if !in_table {
+                        for (idx, cell) in cells.iter().enumerate() {
+                            let clower = cell.to_ascii_lowercase();
+                            if clower.contains("subsystem")
+                                || clower.contains("component")
+                                || clower.contains("segment")
+                                || clower.contains("part")
+                                || clower.contains("unit")
+                            {
+                                col_subsys_idx = Some(idx);
+                                break;
+                            }
+                        }
+                    } else {
+                        let candidate_cell = if let Some(idx) = col_subsys_idx {
+                            cells.get(idx).copied()
+                        } else {
+                            cells.first().copied()
+                        };
+                        if let Some(raw_cand) = candidate_cell {
+                            let clean_cand = raw_cand
+                                .replace(['`', '*', '_', '[', ']'], "")
+                                .trim()
+                                .to_string();
+                            let clean_ident: String = clean_cand
+                                .chars()
+                                .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+                                .collect();
+                            if is_valid_subsystem_identifier(&clean_ident) {
+                                part_names.insert(clean_ident);
+                            }
+                        }
+                    }
+                } else {
+                    in_table = false;
+                    col_subsys_idx = None;
+                }
+            }
+        } else if norm_ext == ".proto" {
+            for line in content.lines() {
+                let trimmed = line.trim();
+                for kw in &["service ", "message "] {
+                    if let Some(rest) = trimmed.strip_prefix(kw) {
+                        let ident: String = rest
+                            .trim_start()
+                            .chars()
+                            .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+                            .collect();
+                        if !ident.is_empty() && is_valid_subsystem_identifier(&ident) {
+                            part_names.insert(ident);
+                        }
+                    }
+                }
+            }
+        } else if norm_ext == ".idl" {
+            for line in content.lines() {
+                let trimmed = line.trim();
+                for kw in &["interface ", "module ", "struct "] {
+                    if let Some(rest) = trimmed.strip_prefix(kw) {
+                        let ident: String = rest
+                            .trim_start()
+                            .chars()
+                            .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+                            .collect();
+                        if !ident.is_empty() && is_valid_subsystem_identifier(&ident) {
+                            part_names.insert(ident);
+                        }
+                    }
+                }
+            }
+        } else if norm_ext == ".arxml" {
+            for line in content.lines() {
+                if line.contains("<SHORT-NAME>") && line.contains("</SHORT-NAME>") {
+                    if let Some(start) = line.find("<SHORT-NAME>") {
+                        let after = &line[start + 12..];
+                        if let Some(end) = after.find("</SHORT-NAME>") {
+                            let ident = after[..end].trim();
+                            if is_valid_subsystem_identifier(ident) {
+                                part_names.insert(ident.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        part_names
+    }
+
+    fn extract_parts_from_json(val: &serde_json::Value, parts: &mut BTreeSet<String>) {
+        match val {
+            serde_json::Value::Object(map) => {
+                if let Some(serde_json::Value::Array(nodes)) = map.get("schema_nodes") {
+                    for node in nodes {
+                        if let serde_json::Value::String(s) = node {
+                            if let Some((kind, name)) = s.split_once(':') {
+                                if kind == "part" || kind == "component" || kind == "subsystem" {
+                                    let n = name.trim();
+                                    if is_valid_subsystem_identifier(n) {
+                                        parts.insert(n.to_string());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                for key in &["subsystems", "components", "parts", "modules"] {
+                    if let Some(v) = map.get(*key) {
+                        match v {
+                            serde_json::Value::Array(arr) => {
+                                for item in arr {
+                                    match item {
+                                        serde_json::Value::String(s) => {
+                                            let s_clean = s.trim();
+                                            if is_valid_subsystem_identifier(s_clean) {
+                                                parts.insert(s_clean.to_string());
+                                            }
+                                        }
+                                        serde_json::Value::Object(submap) => {
+                                            for name_key in &["name", "id", "identifier", "title"] {
+                                                if let Some(serde_json::Value::String(n)) = submap.get(*name_key) {
+                                                    let n_clean = n.trim();
+                                                    if is_valid_subsystem_identifier(n_clean) {
+                                                        parts.insert(n_clean.to_string());
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                            }
+                            serde_json::Value::Object(submap) => {
+                                for k in submap.keys() {
+                                    let k_clean = k.trim();
+                                    if is_valid_subsystem_identifier(k_clean) {
+                                        parts.insert(k_clean.to_string());
+                                    }
+                                }
+                            }
+                            serde_json::Value::String(s) => {
+                                let s_clean = s.trim();
+                                if is_valid_subsystem_identifier(s_clean) {
+                                    parts.insert(s_clean.to_string());
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                for (_, subval) in map {
+                    Self::extract_parts_from_json(subval, parts);
+                }
+            }
+            serde_json::Value::Array(arr) => {
+                for item in arr {
+                    Self::extract_parts_from_json(item, parts);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn extract_parts_from_yaml_lines(content: &str, parts: &mut BTreeSet<String>) {
+        let mut in_parts_list = false;
+        let mut list_indent = 0;
+
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with('#') {
+                continue;
+            }
+            let current_indent = line.len() - line.trim_start().len();
+
+            let is_key = [
+                "subsystems:", "components:", "parts:", "modules:", "subsystem:", "component:", "part:", "module:",
+            ]
+            .iter()
+            .any(|kw| trimmed.to_ascii_lowercase().starts_with(kw));
+
+            if is_key {
+                in_parts_list = true;
+                list_indent = current_indent;
+                if let Some((_, val)) = trimmed.split_once(':') {
+                    let val_clean = val.trim().trim_matches(['"', '\'', '[', ']']);
+                    if !val_clean.is_empty() {
+                        for item in val_clean.split(',') {
+                            let item_trim = item.trim().trim_matches(['"', '\'']);
+                            if is_valid_subsystem_identifier(item_trim) {
+                                parts.insert(item_trim.to_string());
+                            }
+                        }
+                    }
+                }
+                continue;
+            }
+
+            if in_parts_list {
+                if current_indent <= list_indent && !trimmed.starts_with('-') {
+                    in_parts_list = false;
+                } else if let Some(rest) = trimmed.strip_prefix('-') {
+                    let item_clean = rest.trim();
+                    let name = if let Some((_, v)) = item_clean.split_once(':') {
+                        v.trim().trim_matches(['"', '\''])
+                    } else {
+                        item_clean.trim_matches(['"', '\''])
+                    };
+                    let ident: String = name
+                        .chars()
+                        .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+                        .collect();
+                    if is_valid_subsystem_identifier(&ident) {
+                        parts.insert(ident);
+                    }
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2460,6 +2868,101 @@ part def VehicleSystem {
         assert!(!has_negative_recovery_constraint(r#"attribute recoverySystem = "Yes";"#));
         assert!(!has_negative_recovery_constraint(r#"attribute chuteEnabled = 1;"#));
         assert!(!has_negative_recovery_constraint("Nominal flight operations"));
+    }
+
+    #[test]
+    fn test_unified_schema_model_extractor_all_formats() {
+        // 1. SysML v2
+        let sysml = r#"
+            /* multi-line comment */
+            package SampleSystem {
+                // single line comment
+                part def FlightComputer;
+                part NavigationSensor :> SensorBase;
+            }
+        "#;
+        let sysml_parts = UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(".sysml", sysml);
+        assert!(sysml_parts.contains("FlightComputer"));
+        assert!(sysml_parts.contains("NavigationSensor"));
+
+        // 2. YAML
+        let yaml = r#"
+            subsystems:
+              - FlightComputer
+              - GuidanceSystem
+            components:
+              - name: PowerDistributionUnit
+                id: PDU-01
+        "#;
+        let yaml_parts = UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(".yaml", yaml);
+        assert!(yaml_parts.contains("FlightComputer"));
+        assert!(yaml_parts.contains("GuidanceSystem"));
+        assert!(yaml_parts.contains("PowerDistributionUnit"));
+
+        // 3. JSON
+        let json = r#"
+            {
+                "schema_nodes": ["part:TelemetryTransceiver", "port:TX"],
+                "components": [
+                    {"name": "ThermalController", "id": "TCU"}
+                ]
+            }
+        "#;
+        let json_parts = UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(".json", json);
+        assert!(json_parts.contains("TelemetryTransceiver"));
+        assert!(json_parts.contains("ThermalController"));
+
+        // 4. Markdown architecture table
+        let md = r#"
+            # System Architecture
+
+            ### 4.3 Subsystem Architecture
+            | Subsystem | Function | Allocation |
+            |---|---|---|
+            | FlightManagementComputer | Core guidance | Segment A |
+            | ActuatorControllerUnit | Surface control | Segment B |
+        "#;
+        let md_parts = UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(".md", md);
+        assert!(md_parts.contains("FlightManagementComputer"));
+        assert!(md_parts.contains("ActuatorControllerUnit"));
+
+        // 5. Protobuf
+        let proto = r#"
+            syntax = "proto3";
+            package avionics;
+            service AutopilotService {
+                rpc GetState (Empty) returns (State);
+            }
+            message SensorData {
+                int64 timestamp = 1;
+            }
+        "#;
+        let proto_parts = UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(".proto", proto);
+        assert!(proto_parts.contains("AutopilotService"));
+        assert!(proto_parts.contains("SensorData"));
+
+        // 6. OMG IDL
+        let idl = r#"
+            module AvionicsBus {
+                interface BusController {
+                    void transmit();
+                };
+            };
+        "#;
+        let idl_parts = UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(".idl", idl);
+        assert!(idl_parts.contains("BusController"));
+        assert!(idl_parts.contains("AvionicsBus"));
+
+        // 7. ARXML
+        let arxml = r#"
+            <AUTOSAR>
+                <SW-COMPONENT-PROTOTYPE>
+                    <SHORT-NAME>EngineController</SHORT-NAME>
+                </SW-COMPONENT-PROTOTYPE>
+            </AUTOSAR>
+        "#;
+        let arxml_parts = UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(".arxml", arxml);
+        assert!(arxml_parts.contains("EngineController"));
     }
 }
 

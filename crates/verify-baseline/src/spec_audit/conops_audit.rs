@@ -973,7 +973,8 @@ pub fn validate_subsystem_architecture(content: &str, rel_path: &str) -> Vec<Spe
         || lower_doc.contains("ast_part_ref")
         || lower_doc.contains("ssot ground truth")
         || lower_doc.contains("subsystem part")
-        || lower_doc.contains("functional purpose");
+        || lower_doc.contains("functional purpose")
+        || lower_doc.contains("schema/");
 
     if !has_ast_binding {
         findings.push(SpecAuditFinding::new(

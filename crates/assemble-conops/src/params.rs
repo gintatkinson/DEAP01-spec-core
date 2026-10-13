@@ -118,47 +118,6 @@ fn find_first_package(text: &str) -> Option<&str> {
     None
 }
 
-fn find_all_part_defs(text: &str) -> Vec<&str> {
-    let mut results = Vec::new();
-    let bytes = text.as_bytes();
-    let mut i = 0;
-    while i < bytes.len() {
-        if let Some(pos) = text[i..].find("part") {
-            let start = i + pos;
-            let end = start + 4;
-            let left_ok = start == 0 || !is_ident_char(bytes[start - 1]);
-            let right_ok = end < bytes.len() && bytes[end].is_ascii_whitespace();
-            if left_ok && right_ok {
-                let mut j = end;
-                while j < bytes.len() && bytes[j].is_ascii_whitespace() {
-                    j += 1;
-                }
-                if text[j..].starts_with("def") {
-                    let def_end = j + 3;
-                    if def_end < bytes.len() && bytes[def_end].is_ascii_whitespace() {
-                        let mut k = def_end;
-                        while k < bytes.len() && bytes[k].is_ascii_whitespace() {
-                            k += 1;
-                        }
-                        let ident_start = k;
-                        while k < bytes.len() && is_ident_char(bytes[k]) {
-                            k += 1;
-                        }
-                        if k > ident_start {
-                            results.push(&text[ident_start..k]);
-                            i = k;
-                            continue;
-                        }
-                    }
-                }
-            }
-            i = end;
-        } else {
-            break;
-        }
-    }
-    results
-}
 
 fn find_all_attributes(text: &str) -> Vec<(&str, &str)> {
     let mut results = Vec::new();
@@ -550,7 +509,7 @@ impl SysMLParameterBindingEngine {
     }
 
     pub fn auto_detect_workspace_parameters(&mut self, search_dirs: &[PathBuf]) {
-        let supported_exts = [".sysml", ".yaml", ".yml", ".json", ".md", ".markdown"];
+        let supported_exts = deap_core::sysml_ast::UnifiedSchemaModelExtractor::SUPPORTED_EXTENSIONS;
 
         for sdir in search_dirs {
             // Check upstream guard
@@ -612,14 +571,84 @@ impl SysMLParameterBindingEngine {
 
         match ext.as_str() {
             "json" => self.ingest_json_file(path),
+            "yaml" | "yml" => self.ingest_yaml_file(path),
             "sysml" => self.ingest_sysml_file(path),
             "md" | "markdown" => self.ingest_markdown_file(path),
+            "proto" | "idl" | "arxml" => self.ingest_interface_schema_file(path),
             _ => false,
         }
     }
 
+    pub fn ingest_yaml_file(&mut self, path: &Path) -> bool {
+        if let Ok(content) = fs::read_to_string(path) {
+            let extracted_parts = deap_core::sysml_ast::UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(
+                ".yaml",
+                &content,
+            );
+            for p in extracted_parts {
+                self.ast_part_names.insert(p.clone());
+                self.explicit_keys.insert(p.clone());
+                self.explicit_keys.insert(p.to_uppercase());
+            }
+
+            for line in content.lines() {
+                let trimmed = line.trim();
+                if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with('-') {
+                    continue;
+                }
+                if let Some((k, v)) = trimmed.split_once(':') {
+                    let k_clean = k.trim().replace(['"', '\'', '`'], "").to_string();
+                    let v_clean = v.trim().trim_matches(['"', '\'', '`', ';']).trim().to_string();
+                    if !k_clean.is_empty()
+                        && !v_clean.is_empty()
+                        && !v_clean.starts_with('[')
+                        && !v_clean.starts_with('{')
+                    {
+                        self.parameter_bindings.insert(k_clean.clone(), v_clean.clone());
+                        self.parameter_bindings.insert(k_clean.to_uppercase(), v_clean.clone());
+                        self._map_semantic_aliases(&k_clean, &v_clean);
+                    }
+                }
+            }
+            return true;
+        }
+        false
+    }
+
+    pub fn ingest_interface_schema_file(&mut self, path: &Path) -> bool {
+        if let Ok(content) = fs::read_to_string(path) {
+            let ext = path
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("")
+                .to_lowercase();
+            let dot_ext = format!(".{}", ext);
+            let extracted_parts = deap_core::sysml_ast::UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(
+                &dot_ext,
+                &content,
+            );
+            for p in extracted_parts {
+                self.ast_part_names.insert(p.clone());
+                self.explicit_keys.insert(p.clone());
+                self.explicit_keys.insert(p.to_uppercase());
+            }
+            return true;
+        }
+        false
+    }
+
     pub fn ingest_json_file(&mut self, path: &Path) -> bool {
         if let Ok(content) = fs::read_to_string(path) {
+            let extracted_parts = deap_core::sysml_ast::UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(
+                ".json",
+                &content,
+            );
+            for p in extracted_parts {
+                self.ast_part_names.insert(p.clone());
+                self.explicit_keys.insert(p.clone());
+                self.explicit_keys.insert(p.to_uppercase());
+            }
+
             if let Ok(val) = serde_json::from_str::<Value>(&content) {
                 self.ingest_dictionary(&val);
                 return true;
@@ -768,7 +797,8 @@ impl SysMLParameterBindingEngine {
             }
         }
 
-        for p_name in find_all_part_defs(text) {
+        let parts = deap_core::sysml_ast::UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(".sysml", text);
+        for p_name in parts {
             let p_name = p_name.trim().to_string();
             self.ast_part_names.insert(p_name.clone());
             self.explicit_keys.insert(p_name.clone());
@@ -790,6 +820,16 @@ impl SysMLParameterBindingEngine {
 
     pub fn ingest_markdown_file(&mut self, path: &Path) -> bool {
         if let Ok(content) = fs::read_to_string(path) {
+            let extracted_parts = deap_core::sysml_ast::UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(
+                ".md",
+                &content,
+            );
+            for p in extracted_parts {
+                self.ast_part_names.insert(p.clone());
+                self.explicit_keys.insert(p.clone());
+                self.explicit_keys.insert(p.to_uppercase());
+            }
+
             for line in content.lines() {
                 let trimmed = line.trim();
                 if let Some(rest) = trimmed.strip_prefix('#') {
@@ -2007,6 +2047,41 @@ mod tests {
             (v_mit - 6.60).abs() < 0.1,
             "Mitigated terminal velocity must be dynamically derived from AST parameters: got {v_mit}"
         );
+    }
+
+    #[test]
+    fn test_defect_302_unified_schema_support_in_assemble_conops() {
+        let mut engine = SysMLParameterBindingEngine::new(None, None, None, false, None);
+
+        // 1. YAML schema ingestion
+        let yaml_content = "subsystems:\n  - FlightComputer\n  - NavigationUnit\nOPERATIONAL_RANGE_KM: 500\n";
+        let temp_yaml = std::env::temp_dir().join("test_schema_302.yaml");
+        std::fs::write(&temp_yaml, yaml_content).unwrap();
+        let ingested_yaml = engine.ingest_file(&temp_yaml);
+        std::fs::remove_file(&temp_yaml).ok();
+        assert!(ingested_yaml, "YAML schema ingestion must succeed");
+        assert!(engine.ast_part_names.contains("FlightComputer"));
+        assert!(engine.ast_part_names.contains("NavigationUnit"));
+        assert_eq!(engine.parameter_bindings.get("OPERATIONAL_RANGE_KM").map(|s| s.as_str()), Some("500"));
+
+        // 2. Markdown architecture table ingestion
+        let md_content = "# Specifications\n\n### 4.3 Subsystem Architecture\n| Subsystem | Function |\n|---|---|\n| GuidanceComputer | Navigation and guidance |\n| SensorPayload | High-res electro-optical |\n";
+        let temp_md = std::env::temp_dir().join("test_schema_302.md");
+        std::fs::write(&temp_md, md_content).unwrap();
+        let ingested_md = engine.ingest_file(&temp_md);
+        std::fs::remove_file(&temp_md).ok();
+        assert!(ingested_md, "Markdown architecture table ingestion must succeed");
+        assert!(engine.ast_part_names.contains("GuidanceComputer"));
+        assert!(engine.ast_part_names.contains("SensorPayload"));
+
+        // 3. Protobuf ingestion
+        let proto_content = "syntax = \"proto3\";\nservice TelemetryGateway {\n  rpc Stream();\n}\n";
+        let temp_proto = std::env::temp_dir().join("test_schema_302.proto");
+        std::fs::write(&temp_proto, proto_content).unwrap();
+        let ingested_proto = engine.ingest_file(&temp_proto);
+        std::fs::remove_file(&temp_proto).ok();
+        assert!(ingested_proto, "Protobuf schema ingestion must succeed");
+        assert!(engine.ast_part_names.contains("TelemetryGateway"));
     }
 }
 

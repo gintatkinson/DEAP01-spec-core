@@ -20,7 +20,7 @@ pub use sysml_ast::{
     parse_part_defs, parse_port_defs, parse_requirement_defs, parse_state_defs, parse_sysml,
     ActionDef, AttributeDef, CapabilityDef, ConnectionDef, ConstraintDef, FlowDef, HazardDef,
     ImportDef, InteractionDef, ItemDef, OperationDef, PackageDef, PartDef, PortDef, RequirementDef, RiskDef,
-    StateDef, SysmlModel, TestCaseDef, TransitionDef, UseCaseDef,
+    StateDef, SysmlModel, TestCaseDef, TransitionDef, UnifiedSchemaModelExtractor, UseCaseDef,
 };
 pub use workspace::{
     check_downstream_instructions_exist, check_gitignore_exists, check_no_ds_store_files,
