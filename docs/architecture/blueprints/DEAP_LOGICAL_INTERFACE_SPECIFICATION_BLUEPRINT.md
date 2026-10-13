@@ -380,43 +380,38 @@ Every signal entry in the Master Signal Dictionary must strictly adhere to the t
 
 ### 4.1 Multi-Phase Agentic Execution Pipeline
 
-Level 1C is integrated directly into the DEAP Orchestration lifecycle via a dedicated intermediate synthesis stage: **Phase 1.5 (Worker ICD - Logical Interface Engineer)**.
+Level 1C is integrated directly into the DEAP Orchestration lifecycle via a dedicated Systems Engineering baseline stage: **Worker 0D (Worker ICD - Logical Interface Engineer)** completing Pipeline 0 prior to Pipeline 1 Agile Backlog projection.
 
-The orchestrator enforces strict serialization and artifact immutability across five successive execution phases:
-- **Phase 0 (Front-End Systems & Safety Modeling):** Worker 0A, 0B, and 0C author `CONOPS.md`, `STPA_MATRIX.md`, and `DEAP_MODEL.sysml`.
-- **Phase 1 (Pre-Dispatch Schema Ingestion):** Computes cryptographic hash `schema-digest.json` and extracts `SchemaAST_Root`.
-- **Phase 1.5 (Worker ICD - Logical Interface Synthesis):** Ingests `SchemaAST_Root` and Phase 0 safety/operational models to generate `docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md` and `docs/interfaces/ICD_02_MASTER_SIGNAL_DICTIONARY.md`.
-- **Phase 2 (Agile Specification Backlog Generation):** Downstream Worker 2A, 2B, and 2C project Level 1C signals into Epics, Features, BDD User Stories, and UML Use Cases.
-- **Phase 3 (Feature-Driven Implementation):** Sub-implementers synthesize SPARK Ada, MISRA C, ROS2 C++, and Simulink models.
-- **Phase 4 (AST Parity Auditor & Verification Gates):** Executes **Gate 23 (ICDCompletenessValidator)** alongside Gates 1–22.
+The orchestrator enforces strict serialization and artifact immutability across successive execution phases:
+- **Phase 0 (Front-End Systems & Safety Modeling):** Worker 0A, 0B, 0C, and 0D author `CONOPS.md`, `STPA_MATRIX.md`, `DEAP_MODEL.sysml`, and Level 1C ICDs (`ICD_01` and `ICD_02`).
+- **Phase 1 (Agile Specification Backlog Generation - Pipeline 1):** Downstream Worker 1A, 1B, and 1C project frozen Level 1C interfaces and signals into Epics, Features, BDD User Stories, and UML Use Cases.
+- **Phase 2 (Work Breakdown Structure & Enterprise Realization):** Worker 1D synthesizes WBS and MBD work packages.
+- **Phase 3 (Feature-Driven Implementation - Pipeline 2):** Sub-implementers synthesize SPARK Ada, MISRA C, ROS2 C++, and Simulink models.
+- **Phase 4 (AST Parity Auditor & Verification Gates):** Executes **Gate 23/24 (ICD Completeness Validation)** alongside Gates 1–22.
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant Orchestrator as Master Orchestrator
-    participant Worker0 as Phase 0: Pre-Spec Safety Worker
-    participant SchemaEngine as Phase 1: Schema Ingestion Engine
-    participant WorkerICD as Phase 1.5: Worker ICD (Interface Eng)
-    participant WorkerAgile as Phase 2: Agile Spec Worker
-    participant Implementer as Phase 3: Code Synthesis Worker
-    participant Gate23 as Phase 4: Gate 23 (ICD Completeness)
+    participant Worker0 as Pipeline 0: Pre-Spec Safety & Model Author (Workers 0A-0C)
+    participant WorkerICD as Pipeline 0: Worker 0D (Interface Eng / Level 1C)
+    participant WorkerAgile as Pipeline 1: Agile Spec Workers (Workers 1A-1D)
+    participant Implementer as Pipeline 2: Code Synthesis Worker
+    participant Gate23 as Verification: Gate 23/24 (ICD Completeness)
 
-    Note over Orchestrator,Worker0: Phase 0 - Synthesize High-Level Safety and Operational Concepts
-    Orchestrator->>Worker0: Dispatch Front-End Safety Task
+    Note over Orchestrator,Worker0: Pipeline 0 - Synthesize High-Level Safety and Operational Concepts
+    Orchestrator->>Worker0: Dispatch Front-End Safety & SysML Model Authoring Task
     Worker0-->>Orchestrator: Return CONOPS.md, STPA_MATRIX.md, DEAP_MODEL.sysml
 
-    Note over Orchestrator,SchemaEngine: Phase 1 - Ingest Normative Schemas and Generate AST
-    Orchestrator->>SchemaEngine: Ingest Ground-Truth Schemas (YANG, SysML v2)
-    SchemaEngine-->>Orchestrator: Return schema-digest.json and SchemaAST_Root
-
-    Note over Orchestrator,WorkerICD: Phase 1.5 - Synthesize Level 1C Logical Interface Specifications
+    Note over Orchestrator,WorkerICD: Pipeline 0 - Synthesize Level 1C Logical Interface Specifications
     Orchestrator->>WorkerICD: Dispatch ICD Synthesis Task (SchemaAST + CONOPS + STPA)
     WorkerICD->>WorkerICD: Synthesize Subsystem Port Topological Connectivity Graph
     WorkerICD->>WorkerICD: Construct Canonical N2 Interface Interaction Matrix
     WorkerICD->>WorkerICD: Generate Master Signal Flow Dictionary (SIG-*)
+    WorkerICD->>WorkerICD: Finalize pipeline0_handoff_contract.json after Gate 23/24 PASS
     WorkerICD-->>Orchestrator: Write docs/interfaces/ICD_01 and ICD_02 Artifacts
 
-    Note over Orchestrator,WorkerAgile: Phase 2 - Decompose Level 1C into Agile Specifications
+    Note over Orchestrator,WorkerAgile: Pipeline 1 - Decompose Level 1C into Agile Specifications
     Orchestrator->>WorkerAgile: Dispatch Backlog Generation (Bind Stories to SIG-*)
     WorkerAgile-->>Orchestrator: Return Epics, Features, BDD User Stories, UML Use Cases
 
@@ -564,7 +559,7 @@ gantt
     Author Blueprint & Schema Metamodel           :done, 2026-09-01, 2026-09-05
     Synthesize ICD_01 & ICD_02 Templates          :active, 2026-09-06, 2026-09-12
     section Stage 2: Orchestration & Ingestion
-    Develop Phase 1.5 Worker ICD Subagent         :2026-09-13, 2026-09-20
+    Develop Pipeline 0 Worker 0D (ICD) Subagent   :2026-09-13, 2026-09-20
     Implement AST-to-ICD Projection Engine        :2026-09-21, 2026-09-28
     section Stage 3: Parity Auditor & Gates
     Implement Gate 23 ICDCompletenessValidator     :2026-09-29, 2026-10-06

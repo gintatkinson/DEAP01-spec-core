@@ -863,7 +863,7 @@ Formalize the CONOPS (`CONOPS.md`), STPA hazard matrices, FMECA ratings, and dom
 
 2. Output Requirements:
    - Generate canonical `DEAP_MODEL.sysml` under `schema/DEAP_MODEL.sysml` (or `.pipeline/schema.sysml`).
-   - Generate canonical `pipeline0_handoff_contract.json` under `.pipeline/contracts/pipeline0_handoff_contract.json` for downstream Pipeline 1 Agile projection and Pipeline 2 code generation.
+   - Generate initial model export under `.pipeline/contracts/` for downstream interface synthesis.
 
 PROCEED
 ```
@@ -891,7 +891,8 @@ Synthesize Level 1C Logical Interface Specifications and Signal Dictionaries fro
 2. Deliverable Generation & Quality Gate:
    - Generate `docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md` containing subsystem boundary graphs, N² communication matrix, and topological port bindings.
    - Generate `docs/interfaces/ICD_02_MASTER_SIGNAL_DICTIONARY.md` containing signal identifiers (`SIG-*`), data types, units, sampling frequencies, update rates, latency bounds, and fail-safe default values.
-   - Run Gate 24 Level 1C ICD completeness validation: `./target/release/verify-baseline . --gate 24` (or `./target/release/verify-baseline .`).
+   - Run Gate 23/24 Level 1C ICD completeness validation: `./target/release/verify-baseline . --spec-only`.
+   - Finalize `pipeline0_handoff_contract.json` under `.pipeline/contracts/pipeline0_handoff_contract.json` incorporating frozen interface matrices and signal flow dictionaries.
    - Register the ICD suite under the `icd` issue label using `gh issue create --title "<title>" --body-file "<file>" --label "icd"` (or `./target/release/reconcile-backlog`).
    - Verify published issue body integrity via live tracker inspection.
 

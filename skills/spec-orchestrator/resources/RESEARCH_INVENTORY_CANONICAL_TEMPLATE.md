@@ -51,13 +51,13 @@ All external additions, proprietary extensions, and domain-specific baselines MU
 | Population ID | Standard ID | Clause Citation | Clause Title / Requirement Excerpt | Specification Phase | Downstream Spec File / Tag |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | `OBL-01` | {{OBL_01_STANDARD_ID}} | {{OBL_01_CLAUSE_CITATION}} | {{OBL_01_CLAUSE_TITLE}} | Phase 1 (Structural) | `docs/features/{{OBL_01_FEATURE_SLUG}}.md` |
-| `OBL-02` | {{OBL_02_STANDARD_ID}} | {{OBL_02_CLAUSE_CITATION}} | {{OBL_02_CLAUSE_TITLE}} | Phase 1.5 (Interfaces) | `docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md` |
+| `OBL-02` | {{OBL_02_STANDARD_ID}} | {{OBL_02_CLAUSE_CITATION}} | {{OBL_02_CLAUSE_TITLE}} | Phase 0.85 (Interfaces) | `docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md` |
 | `SAF-01` | {{SAF_01_STANDARD_ID}} | {{SAF_01_CLAUSE_CITATION}} | {{SAF_01_CLAUSE_TITLE}} | Phase 2 (Behavioral) | `docs/user-stories/{{SAF_01_STORY_SLUG}}.md` |
 | `SAF-02` | {{SAF_02_STANDARD_ID}} | {{SAF_02_CLAUSE_CITATION}} | {{SAF_02_CLAUSE_TITLE}} | Phase 2 (Behavioral) | `docs/safety/STPA_SYSTEM_THEORETIC_PROCESS_ANALYSIS.md` |
 | `MET-01` | {{MET_01_STANDARD_ID}} | {{MET_01_CLAUSE_CITATION}} | {{MET_01_CLAUSE_TITLE}} | Phase 3 (Interaction) | `docs/use-cases/{{MET_01_USECASE_SLUG}}.md` |
 | `MET-02` | {{MET_02_STANDARD_ID}} | {{MET_02_CLAUSE_CITATION}} | {{MET_02_CLAUSE_TITLE}} | Phase 3 (Interaction) | `docs/conops/MISSION_INTENT.md` |
 | `CTL-01` | {{CTL_01_STANDARD_ID}} | {{CTL_01_CLAUSE_CITATION}} | {{CTL_01_CLAUSE_TITLE}} | Phase 1 / 2 | `docs/features/{{CTL_01_FEATURE_SLUG}}.md` |
-| `CTL-02` | {{CTL_02_STANDARD_ID}} | {{CTL_02_CLAUSE_CITATION}} | {{CTL_02_CLAUSE_TITLE}} | Phase 1.5 (Interfaces) | `docs/interfaces/ICD_02_MASTER_SIGNAL_DICTIONARY.md` |
+| `CTL-02` | {{CTL_02_STANDARD_ID}} | {{CTL_02_CLAUSE_CITATION}} | {{CTL_02_CLAUSE_TITLE}} | Phase 0.85 (Interfaces) | `docs/interfaces/ICD_02_MASTER_SIGNAL_DICTIONARY.md` |
 
 ## 6. Normative Completeness & Gap Analysis
 | Metric Parameter | Value | Target Threshold | Compliance Status |

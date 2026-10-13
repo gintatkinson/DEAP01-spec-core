@@ -16,7 +16,7 @@ metadata:
 
 This skill enables you to act as the **Master Orchestrator Agent**. You are responsible for executing an end-to-end "Digital Engineering Pipeline" that systematically transforms a protocol standard (e.g., IETF, 3GPP, IEEE, CAMARA) into a deterministic GitHub repository matrix using UML OOA/OOD methodologies.
 
-You will accomplish this by coordinating the sequential execution of specialized Worker skills across all specification phases (Phases 0.5, 0.75, 1, 1.5, 2, and 3).
+You will accomplish this by coordinating the sequential execution of specialized Worker skills across all specification phases (Phases 0.5, 0.75, 0.85, 1, 2, and 3).
 
 > [!NOTE]
 > This orchestrator handles **specification generation** (Phases 1-5). For **feature implementation**, use the separate `feature-driven-implementation` skill which provides subagent-driven TDD execution discipline.
@@ -79,14 +79,14 @@ Before beginning orchestration, verify you have:
 
 To prevent context drift, contamination, and confirmation bias, **every individual specification item (Epic, Feature, User Story, and Use Case) MUST be processed by a new, fresh subagent with an isolated context.**
 
-- **Mandatory Subagent Dispatch for Specification Phases**: The Master Orchestrator (Coordinator) MUST dispatch Phase Worker subagents (TypeName: `self`) for Step 0.0 (when starting from unstructured customer documentation), Phase 0.5, Phase 0.75, Phase 1, Phase 1.5, Phase 2, and Phase 3:
+- **Mandatory Subagent Dispatch for Specification Phases**: The Master Orchestrator (Coordinator) MUST dispatch Phase Worker subagents (TypeName: `self`) for Step 0.0 (when starting from unstructured customer documentation), Phase 0.5, Phase 0.75, Phase 0.85, Phase 1, Phase 2, and Phase 3:
   * Step 0.0: `OEM Ingestion & Model Synthesizer (Worker 00)`
   * Phase 0.5: `Normative Research Worker`
   * Phase 0.75: `ConOps & Mission Intent Tree Worker (Worker ConOps)`
-  * Phase 1: `Structural Spec Worker`
-  * Phase 1.5: `Interface Spec Worker (Worker ICD)`
-  * Phase 2: `Behavioral Spec Worker`
-  * Phase 3: `System Interaction Spec Worker`
+  * Phase 0.85: `Interface Spec Worker (Worker ICD / Worker 0D)`
+  * Phase 1: `Structural Spec Worker (Worker 1A)`
+  * Phase 2: `Behavioral Spec Worker (Worker 1B)`
+  * Phase 3: `System Interaction Spec Worker (Worker 1C)`
 - **Coordinator Direct Writing Lock**: The Coordinator is strictly forbidden from directly performing schema parsing, drafting, or issue uploads in its main conversation context. All such operations must be delegated to the Worker subagents.
 
 When executing a phase, the worker agent must follow this lifecycle:
@@ -152,10 +152,10 @@ sequenceDiagram
     participant SSOT as "SysML v2 SSOT"
     participant W_R as "Phase 0.5: Normative Research Worker"
     participant W_CO as "Phase 0.75: ConOps & Mission Intent Tree Worker"
-    participant W_A as "Phase 1: Structural Spec Worker"
-    participant W_ICD as "Phase 1.5: Interface Spec Worker"
-    participant W_B as "Phase 2: Behavioral Spec Worker"
-    participant W_C as "Phase 3: System Interaction Spec Worker"
+    participant W_ICD as "Phase 0.85: Interface Spec Worker (Worker 0D)"
+    participant W_A as "Phase 1: Structural Spec Worker (Worker 1A)"
+    participant W_B as "Phase 2: Behavioral Spec Worker (Worker 1B)"
+    participant W_C as "Phase 3: System Interaction Spec Worker (Worker 1C)"
     participant W_D as "Phase 4: Reconciliation & Verification"
 
     Note over Coord,SSOT: Phase 0 - Pre-Flight / Pre-computation
@@ -177,17 +177,17 @@ sequenceDiagram
     W_CO->>W_CO: Execute assemble-conops & Gate 26 Completeness Validation
     W_CO-->>Coord: Return Verified CONOPS.md & MISSION_INTENT.md (docs/conops/)
 
-    Note over Coord,W_A: Phase 1 - Structural Extraction
-    Coord->>W_A: Dispatch Schema Parsing Task (AST PartDef Manifest, FAILURE_MODE_REGISTRY.md, .pipeline/schema.sysml)
-    W_A->>W_A: Map Packages & PartDefs to Level 2 SyRS Epics & Features
-    W_A-->>Coord: Return Generated Epics & Features (docs/epics/, docs/features/)
-
-    Note over Coord,W_ICD: Phase 1.5 - Logical ICD Synthesis
+    Note over Coord,W_ICD: Phase 0.85 - Logical ICD Synthesis (Level 1C)
     Coord->>W_ICD: Dispatch Interface Extraction Task (.pipeline/schema.sysml)
     W_ICD->>W_ICD: Parse port def, connection, interface def & item flow nodes
     W_ICD->>W_ICD: Synthesize ICD_01_SYSTEM_INTERFACE_MATRIX.md & ICD_02_MASTER_SIGNAL_DICTIONARY.md
     W_ICD-->>Coord: Return Level 1C ICD Suite (docs/interfaces/)
     Note over Coord,W_ICD: Completes Level 1C Systems Engineering Baseline before Agile Backlog projection
+
+    Note over Coord,W_A: Phase 1 - Structural Extraction
+    Coord->>W_A: Dispatch Schema Parsing Task (AST PartDef Manifest, FAILURE_MODE_REGISTRY.md, .pipeline/schema.sysml)
+    W_A->>W_A: Map Packages & PartDefs to Level 2 SyRS Epics & Features
+    W_A-->>Coord: Return Generated Epics & Features (docs/epics/, docs/features/)
 
     Note over Coord,W_B: Phase 2 - Behavioral Extraction
     Coord->>W_B: Dispatch Behavioral Task (AST PartDef Slice, action def, state def, port def, FAILURE_MODE_REGISTRY.md)
@@ -207,7 +207,7 @@ sequenceDiagram
 
 ## Phase 0: Pre-Flight / Pre-computation
 1. **Step 0.0 Level 0 OEM Ground Truth Ingestion (Worker 00)**: For customer projects starting from unstructured OEM prose manuals, PDF documentation, markdown tables, or Bill of Materials (BOM) specifications, Worker 00 provides the sanctioned, deterministic entrypoint authorized under Check 23 (Factual Grounding & Numeric Provenance Gate). The worker ingests unstructured and semi-structured documentation located in `schema/` and `schema/extracted/`, extracting physical parameters, component hierarchies, mass and power budgets, and interface boundaries into machine-readable Markdown tables in `schema/extracted/`. The worker then synthesizes the initial canonical SysML v2 textual model in `schema/model.sysml` (or invokes `python3 skills/spec-orchestrator/scripts/sysmlv2_ingest.py --schema "schema/extracted/" --format markdown --out "schema/model.sysml"`). Completing Step 0.0 is the required precursor to running the Step 0 SysML Compilation Gate (`compile_sysml.py --compile`).
-2. **Step 0 SysML Compilation Gate**: Compile input models using `python3 scripts/compile_sysml.py --compile` to produce canonical `.pipeline/schema.sysml` and `.pipeline/schema-digest.json`. This generates formal AST nodes (`package`, `part def`, `item def`, `action def`, `state def`, `port def`, `requirement def`, and `use case def`) establishing the 100% Single Source of Truth across all downstream specification phases (Phase 0.5 Normative Research, Phase 0.75 ConOps, Phase 1 Epics and Features, Phase 1.5 ICD, Phase 2 User Stories, and Phase 3 Use Cases) per `rules/sysml-ssot-completeness.md`.
+2. **Step 0 SysML Compilation Gate**: Compile input models using `python3 scripts/compile_sysml.py --compile` to produce canonical `.pipeline/schema.sysml` and `.pipeline/schema-digest.json`. This generates formal AST nodes (`package`, `part def`, `item def`, `action def`, `state def`, `port def`, `requirement def`, and `use case def`) establishing the 100% Single Source of Truth across all downstream specification phases (Phase 0.5 Normative Research, Phase 0.75 ConOps, Phase 0.85 ICD, Phase 1 Epics and Features, Phase 2 User Stories, and Phase 3 Use Cases) per `rules/sysml-ssot-completeness.md`.
 3. **YANG Compilation (conditional)**: If `.yang` files are present in the schema directory, run the YANG-to-LUI compiler to generate the UI layout:
    ```bash
    python3 scripts/compile_yang.py --input schema/model.yang --output app_flutter/assets/logical-layout.json
@@ -253,9 +253,21 @@ sequenceDiagram
       ./target/release/assemble-conops --input-dir docs/conops/units/ --output-dir docs/conops/ --verify
       ./target/release/verify-baseline . --spec-only
       ```
-4. **Validation Gate**: Runs `parity_auditor/validators/conops_completeness_validator.py` (Gate 26), ensuring 100% ConOps and Mission Intent section completeness, boundary containment risk buffer calculation validity, 20% statutory Bingo energy reserve compliance, 7-row emergency decision matrix determinism, and verified Gate 24 operational allocation tags. Verify that ConOps-allocated obligations are witnessed in `RESEARCH_INVENTORY.md` (Gate 28 and Gate 29). Verify that ConOps and Mission Intent issues are created in GitHub/GitLab with fully populated bodies. Once this validation passes, **execute Phase 1 immediately without pausing for user approval.**
+4. **Validation Gate**: Runs `parity_auditor/validators/conops_completeness_validator.py` (Gate 26), ensuring 100% ConOps and Mission Intent section completeness, boundary containment risk buffer calculation validity, 20% statutory Bingo energy reserve compliance, 7-row emergency decision matrix determinism, and verified Gate 24 operational allocation tags. Verify that ConOps-allocated obligations are witnessed in `RESEARCH_INVENTORY.md` (Gate 28 and Gate 29). Verify that ConOps and Mission Intent issues are created in GitHub/GitLab with fully populated bodies. Once this validation passes, **execute Phase 0.85 immediately without pausing for user approval.**
 
-## Phase 1: Structural Extraction (Worker A)
+## Phase 0.85: Interface Extraction & Logical ICD Engineering (Worker ICD / Worker 0D)
+1. **Trigger / Dispatch**: The Coordinator MUST invoke a fresh subagent (TypeName: `self`, Role: `Interface Spec Worker`) with the `spec-icd-engineering` skill, `.pipeline/schema.sysml`, and the extracted AST `port def`, `connection`, `interface def`, and `item flow` manifest slices, appending the keyword `PROCEED` to authorize execution.
+2. **Execution**: The `Interface Spec Worker` subagent parses AST `port def`, `connection`, `interface def`, and `item flow` nodes from `.pipeline/schema.sysml`. Generates `docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md` (Topological graph and N² Matrix) and `docs/interfaces/ICD_02_MASTER_SIGNAL_DICTIONARY.md` (Signal Dictionary). Registers the ICD suite under the `icd` issue label using `./skills/spec-orchestrator/scripts/create_issue.sh "<local-md-file>" "icd" "<Extract_Title_From_YAML_Metadata>"`, runs immediate verification check (`gh issue view <ID> --json body`) to ensure its body is fully populated in the tracker, and commits/pushes the changes.
+3. **Wait & Verify**: The Coordinator waits for the subagent to report completion, reads its final report, and:
+   a. Query the `git diff` to identify the generated file paths in `docs/interfaces/`.
+   b. Run a file read check (`view_file`) on the newly generated ICD markdown files (`docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md` and `docs/interfaces/ICD_02_MASTER_SIGNAL_DICTIONARY.md`) to verify formatting compliance (such as Mermaid diagrams, N² Matrix, and Signal Flow tables).
+   c. Run the ICD completeness validator locally:
+      ```bash
+      ./target/release/verify-baseline . --spec-only
+      ```
+4. **Validation Gate**: Runs Gate 23/24 Level 1C ICD completeness verification, ensuring 100% port contract parity, zero dangling ports, and registers the ICD suite under the `icd` issue label. Verify that the ICD issues have been created in GitHub and that all port interfaces and signals are fully accounted for. Once this validation passes, **execute Phase 1 immediately without pausing for user approval.**
+
+## Phase 1: Structural Extraction (Worker 1A)
 1. **Trigger / Dispatch**: The Coordinator MUST invoke a fresh subagent (TypeName: `self`, Role: `Structural Spec Worker`) with the `schema-specification-engineering` skill, `.pipeline/schema.sysml`, the extracted AST `part def` / `item def` component manifest, and the path to the target structural schema files, appending the keyword `PROCEED` to authorize execution.
 2. **Execution**: The `Structural Spec Worker` subagent parses the SysML v2 AST model (`.pipeline/schema.sysml`) and raw schemas to identify all Epics (from subsystem `package`s) and Features (from `part def` and `item def` nodes). It dispatches a fresh context-isolated subagent for each Feature/Epic to draft its specification, injecting the mandatory AST package, part def, port, action, and constraint manifest slices. Before committing, pushing, or creating issues, it MUST execute the local validation check (`./target/release/verify-baseline . --spec-only --only "<spec_file>"`) and fix all reported errors until the linter passes with exit code 0. It registers Features first using `./skills/spec-orchestrator/scripts/create_issue.sh "<local-md-file>" "feature" "<Extract_Title_From_YAML_Metadata>"`, runs an immediate verification check (`gh issue view <ID> --json body`) to ensure the tracker is fully populated, then injects their Issue IDs into the Epic checklists, enforces the blocking registration gate (#223: zero assumed future issue numbers; 100% of child checklist items must resolve to live registered issues or state non-allocation before Epic creation), registers Epics using `./skills/spec-orchestrator/scripts/create_issue.sh "<local-md-file>" "epic" "<Extract_Title_From_YAML_Metadata>"`, verifies their bodies immediately, and commits/pushes the changes.
 3. **Wait & Verify**: The Coordinator waits for the subagent to report completion, reads its final report, and:
@@ -265,19 +277,7 @@ sequenceDiagram
       ```bash
       ./target/release/verify-baseline . --spec-only
       ```
-4. **Validation Gate**: You MUST wait for the Phase 1 execution to fully complete. The agent must successfully create all Feature issues FIRST, capture their IDs, inject them into the Epic markdown, and then create the Epic issue. Query GitHub (`gh issue list --limit 1000 --state all --json number,title,state,labels`) to verify the new Epics and Features exist and are properly interlinked. Once this validation passes, **execute Phase 1.5 immediately without pausing for user approval.**
-
-## Phase 1.5: Interface Extraction & Logical ICD Engineering (Worker ICD)
-1. **Trigger / Dispatch**: The Coordinator MUST invoke a fresh subagent (TypeName: `self`, Role: `Interface Spec Worker`) with the `spec-icd-engineering` skill, `.pipeline/schema.sysml`, and the extracted AST `port def`, `connection`, `interface def`, and `item flow` manifest slices, appending the keyword `PROCEED` to authorize execution.
-2. **Execution**: The `Interface Spec Worker` subagent parses AST `port def`, `connection`, `interface def`, and `item flow` nodes from `.pipeline/schema.sysml`. Generates `docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md` (Topological graph and N² Matrix) and `docs/interfaces/ICD_02_MASTER_SIGNAL_DICTIONARY.md` (Signal Dictionary). Registers the ICD suite under the `icd` issue label using `./skills/spec-orchestrator/scripts/create_issue.sh "<local-md-file>" "icd" "<Extract_Title_From_YAML_Metadata>"`, runs immediate verification check (`gh issue view <ID> --json body`) to ensure its body is fully populated in the tracker, and commits/pushes the changes.
-3. **Wait & Verify**: The Coordinator waits for the subagent to report completion, reads its final report, and:
-   a. Query the `git diff` to identify the generated file paths in `docs/interfaces/`.
-   b. Run a file read check (`view_file`) on the newly generated ICD markdown files (`docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md` and `docs/interfaces/ICD_02_MASTER_SIGNAL_DICTIONARY.md`) to verify formatting compliance (such as Mermaid diagrams, N² Matrix, and Signal Flow tables).
-   c. Run the ICD completeness validator locally:
-      ```bash
-      python3 skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/icd_completeness_validator.py
-      ```
-4. **Validation Gate**: Runs `parity_auditor/validators/icd_completeness_validator.py` (Gate 23) ensuring 100% port contract parity, zero dangling ports, and registers the ICD suite under the `icd` issue label. Verify that the ICD issues have been created in GitHub and that all port interfaces and signals are fully accounted for. Once this validation passes, **execute Phase 2 immediately without pausing for user approval.**
+4. **Validation Gate**: You MUST wait for the Phase 1 execution to fully complete. The agent must successfully create all Feature issues FIRST, capture their IDs, inject them into the Epic markdown, and then create the Epic issue. Query GitHub (`gh issue list --limit 1000 --state all --json number,title,state,labels`) to verify the new Epics and Features exist and are properly interlinked. Once this validation passes, **execute Phase 2 immediately without pausing for user approval.**
 
 ## Phase 2 `[P]`: Behavioral Extraction - User Stories (Worker B)
 1. **Trigger / Dispatch**: The Coordinator MUST invoke a fresh subagent (TypeName: `self`, Role: `Behavioral Spec Worker`) with the `spec-user-story-engineering` skill, `.pipeline/schema.sysml`, the extracted AST `part def` component manifest, `action def`, `port def`, complete `state def` state machine family slices, component failure modes from `docs/research/FAILURE_MODE_REGISTRY.md`, and the text/path of the target specification document, appending the keyword `PROCEED` to authorize execution.
