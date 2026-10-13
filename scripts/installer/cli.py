@@ -139,7 +139,7 @@ def build_parser() -> argparse.ArgumentParser:
         dest="gitlab_group",
         default="",
         metavar="GROUP",
-        help="GitLab namespace/group path (e.g. 'uas-safety', auto-detected from git remote if omitted)",
+        help="GitLab namespace/group path (e.g. 'systems-safety', auto-detected from git remote if omitted)",
     )
     parser.add_argument(
         "--github-org",
@@ -160,7 +160,7 @@ def build_parser() -> argparse.ArgumentParser:
         dest="jira_project",
         default="",
         metavar="PROJECT",
-        help="Jira project key code (e.g. 'UAS')",
+        help="Jira project key code (e.g. 'SYS')",
     )
     parser.add_argument(
         "--jira-email",
@@ -181,7 +181,7 @@ def build_parser() -> argparse.ArgumentParser:
         dest="domain_name",
         default="",
         metavar="NAME",
-        help="Domain template or project name (e.g. 'DEAP-uas-infrastructure-safety')",
+        help="Domain template or project name (e.g. 'DEAP-industrial-warehouse-agv')",
     )
     parser.add_argument(
         "-h",

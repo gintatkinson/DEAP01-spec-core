@@ -212,7 +212,7 @@ bash scripts/install_pipeline.sh [OPTIONS] <downstream_workspace_path>
   bash scripts/install_pipeline.sh \
     --provider gitlab \
     --gitlab-url https://gitlab.internal.enterprise.org \
-    --gitlab-group uas-flight-control \
+    --gitlab-group systems-engineering \
     /path/to/my-safety-system
   ```
 
@@ -221,7 +221,7 @@ bash scripts/install_pipeline.sh [OPTIONS] <downstream_workspace_path>
   bash scripts/install_pipeline.sh \
     --tracker jira \
     --jira-url https://my-org.atlassian.net \
-    --jira-project UAS \
+    --jira-project SYS \
     --jira-email ops-engineer@my-org.com \
     /path/to/my-safety-system
   ```

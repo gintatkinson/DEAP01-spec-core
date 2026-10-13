@@ -4619,7 +4619,7 @@ def main():
     parser.add_argument(
         "--jira-project",
         default=None,
-        help="Jira project key code (e.g. 'UAS' or JIRA_PROJECT_KEY environment variable).",
+        help="Jira project key code (e.g. 'SYS' or JIRA_PROJECT_KEY environment variable).",
     )
     parser.add_argument(
         "--jira-email",

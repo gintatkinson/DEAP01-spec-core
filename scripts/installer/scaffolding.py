@@ -119,8 +119,8 @@ def generate_env_template(dest_file: Path) -> None:
 # Base URL for Jira Cloud or Jira Data Center
 JIRA_SERVER_URL=https://your-domain.atlassian.net
 
-# Jira Project Key (e.g. UAS, SAFE, DEAP)
-JIRA_PROJECT_KEY=UAS
+# Jira Project Key (e.g. SYS, SAFE, DEAP)
+JIRA_PROJECT_KEY=SYS
 
 # Atlassian Account Email (required for Jira Cloud Basic Authentication)
 JIRA_EMAIL=engineer@your-domain.com
@@ -324,7 +324,7 @@ To verify that all repository issue tracker labels, baseline contracts, and safe
 python3 scripts/verify_downstream_baseline.py --no-domain
 ```
 
-For customer projects starting with unstructured OEM technical documentation, PDF flight manuals, or Bill of Materials (BOM) specifications, execute Level 0 OEM Ground Truth Ingestion (Step 0.0):
+For customer projects starting with unstructured OEM technical documentation, PDF technical manuals, or Bill of Materials (BOM) specifications, execute Level 0 OEM Ground Truth Ingestion (Step 0.0):
 
 ```bash
 # Run Level 0 OEM Ground Truth ingestion
@@ -418,7 +418,7 @@ Directive:
 Execute Level 0 OEM Ground Truth Ingestion and initial SysML v2 textual model synthesis for customer projects starting from unstructured OEM prose manuals, PDF documentation, markdown tables, or Bill of Materials (BOM) specifications:
 
 1. Unstructured & Semi-Structured Ingestion Scope:
-   - Ingest raw OEM technical documentation, flight/operating manuals, ICD tables, and BOM markdown tables located in `schema/` and `schema/extracted/`.
+   - Ingest raw OEM technical documentation, system/operating manuals, ICD tables, and BOM markdown tables located in `schema/` and `schema/extracted/`.
    - Authorized Under Check 23: Extract physical parameters, component hierarchies, mass/power budgets, port/pin interfaces, and operational envelopes into machine-readable Markdown tables in `schema/extracted/` (e.g., `schema/extracted/oem_bom.md`, `schema/extracted/interface_table.md`, `schema/extracted/parametric_limits.md`).
 
 2. Canonical SysML v2 Model Synthesis:
@@ -458,7 +458,7 @@ This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder 
 Directive:
 Execute front-end modular CONOPS and Tactical Mission Intent synthesis for the target cyber-physical system using Universal Multi-Document & Schema Ingestion:
 
-1. Ingestion & Pre-Flight Analysis:
+1. Ingestion & Baseline Analysis:
    - Ingest Normative Research Baselines: Ingest `docs/research/RESEARCH_INVENTORY.md` and `docs/research/FAILURE_MODE_REGISTRY.md` to map allocated obligations (`OBL-*`) and component failure modes.
    - Interface & Model Schema Ingestion: Ingest canonical SysML v2 AST model (`.pipeline/schema.sysml`), `schema/`, and `.pipeline/schema-digest.json`. Enforce 100% representation of declared `part def` nodes in Section 4 physical architecture. Scan `schema/` for pre-existing customer models and interface definitions (`*.sysml`, `*.proto`, `*.arxml`, `*.json`, `*.yaml`, `*.idl`).
    - Architectural Blueprint Ingestion: Scan `docs/architecture/` (and `docs/architecture/blueprints/`) for existing architectural specifications, network blueprints, and safety frameworks (`*.md`). Reconcile customer interface schemas and architectural blueprints with system boundaries and MATLAB / Simulink / Stateflow control law synthesis hooks.
@@ -737,7 +737,7 @@ Execute backlog reconciliation and model parity verification across your target 
 
 #### 4.4.2 Option B: GitLab Self-Managed / SCIF Air-Gapped Reconciliation
 ```bash
-./scripts/reconcile_backlog.py --provider gitlab --gitlab-url https://gitlab.internal.defense.gov --project uas-safety/uav-010
+./scripts/reconcile_backlog.py --provider gitlab --gitlab-url https://gitlab.internal.defense.gov --project systems-safety/project-001
 ```
 
 #### 4.4.3 Option C: GitHub Issues Reconciliation
