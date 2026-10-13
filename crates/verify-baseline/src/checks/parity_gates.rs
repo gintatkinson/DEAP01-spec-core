@@ -316,11 +316,104 @@ pub fn check_standards_measurement(
     Ok(ParityOutcome::Verified)
 }
 
+/// Extracts all connection identifiers (`CONN-01`..`CONN-N`) from text without regex.
+pub fn extract_connection_ids(text: &str) -> HashSet<String> {
+    let mut conns = HashSet::new();
+    let bytes = text.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if i + 5 <= bytes.len()
+            && (bytes[i..i + 5].eq_ignore_ascii_case(b"CONN-") || bytes[i..i + 5].eq_ignore_ascii_case(b"conn-"))
+        {
+            let start = i;
+            let mut end = i + 5;
+            while end < bytes.len() && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_' || bytes[end] == b'-') {
+                end += 1;
+            }
+            if end > start + 5 {
+                let id = text[start..end].to_ascii_uppercase();
+                conns.insert(id);
+            }
+            i = end;
+        } else {
+            i += 1;
+        }
+    }
+    conns
+}
+
+fn collect_connections_from_path(dir: &Path, conns: &mut HashSet<String>) {
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                collect_connections_from_path(&path, conns);
+            } else if path.is_file() && path.extension().map_or(false, |e| e == "md") {
+                if let Ok(content) = fs::read_to_string(&path) {
+                    conns.extend(extract_connection_ids(&content));
+                }
+            }
+        }
+    }
+}
+
 /// Check 27: Cross-Document Diagram Parity Gate (Gate 25B).
+///
+/// Mandates 1:1 bidirectional parity between ConOps SV-1 connection links (`CONN-01`..`CONN-N`)
+/// and Level 1C System Interface Matrix entries (`docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md`).
 pub fn check_cross_document_diagram_parity(repo_root: &Path) -> Result<ParityOutcome, Vec<String>> {
-    let _ = repo_root;
+    let mut conns_conops = HashSet::new();
+    let mut conns_icd = HashSet::new();
+
+    let conops_dir = repo_root.join("docs").join("conops");
+    if conops_dir.is_dir() {
+        collect_connections_from_path(&conops_dir, &mut conns_conops);
+    }
+    let conops_file = repo_root.join("docs").join("CONOPS.md");
+    if conops_file.is_file() {
+        if let Ok(c) = fs::read_to_string(&conops_file) {
+            conns_conops.extend(extract_connection_ids(&c));
+        }
+    }
+
+    let interfaces_dir = repo_root.join("docs").join("interfaces");
+    if interfaces_dir.is_dir() {
+        collect_connections_from_path(&interfaces_dir, &mut conns_icd);
+    }
+    let icd_dir = repo_root.join("docs").join("icd");
+    if icd_dir.is_dir() {
+        collect_connections_from_path(&icd_dir, &mut conns_icd);
+    }
+
+    if !conns_conops.is_empty() && !conns_icd.is_empty() {
+        let mut mismatches = Vec::new();
+
+        let mut missing_in_icd: Vec<_> = conns_conops.difference(&conns_icd).cloned().collect();
+        missing_in_icd.sort();
+        for conn in missing_in_icd {
+            mismatches.push(format!(
+                "ConOps SV-1 diagram declares connection '{}', but it is missing from Level 1C System Interface Matrix (mandating 1:1 bidirectional parity per refs #271)",
+                conn
+            ));
+        }
+
+        let mut missing_in_conops: Vec<_> = conns_icd.difference(&conns_conops).cloned().collect();
+        missing_in_conops.sort();
+        for conn in missing_in_conops {
+            mismatches.push(format!(
+                "Level 1C System Interface Matrix registers connection '{}', but it is missing from ConOps SV-1 diagram (mandating 1:1 bidirectional parity per refs #271)",
+                conn
+            ));
+        }
+
+        if !mismatches.is_empty() {
+            return Err(mismatches);
+        }
+    }
+
     Ok(ParityOutcome::Verified)
 }
+
 
 /// Check 28: ConOps & Mission Intent Completeness Gate (Gate 26).
 pub fn check_conops_and_mission_intent_completeness(
@@ -707,5 +800,66 @@ mod tests {
             assert!(res.is_ok(), "Check 28 must pass when conops schema contract is complete: {:?}", res);
         }
     }
+
+    #[test]
+    fn test_issue_271_conops_sv1_icd_parity_mismatch_fails() {
+        let tmp = TempDir::new("check27_conops_icd_mismatch");
+        let conops_dir = tmp.path.join("docs").join("conops");
+        let interfaces_dir = tmp.path.join("docs").join("interfaces");
+        fs::create_dir_all(&conops_dir).unwrap();
+        fs::create_dir_all(&interfaces_dir).unwrap();
+
+        let conops_content = r#"## 4. System Operational Architecture
+```mermaid
+flowchart TD
+    Operator -->|"CONN-01: Supervisory Command"| SupervisoryStation
+    SupervisoryStation -->|"CONN-02: System Datalink"| Controller
+```
+"#;
+        fs::write(conops_dir.join("04_SYSTEM_ARCHITECTURE.md"), conops_content).unwrap();
+
+        let icd_content = r#"# Level 1C: System Interface Matrix
+## 5. Connection Binding Roster Table
+| Connection ID | Source Port | Dest Port |
+| :--- | :--- | :--- |
+| `CONN-01` | PORT-SUP-CMD | PORT-CTRL-CMD |
+| `CONN-99` | PORT-ALT-CMD | PORT-CTRL-ALT |
+"#;
+        fs::write(interfaces_dir.join("ICD_01_SYSTEM_INTERFACE_MATRIX.md"), icd_content).unwrap();
+
+        let res = check_cross_document_diagram_parity(&tmp.path);
+        assert!(res.is_err(), "Check 27 must fail when ConOps SV-1 and Level 1C ICD connections mismatch");
+    }
+
+    #[test]
+    fn test_issue_271_conops_sv1_icd_parity_passes() {
+        let tmp = TempDir::new("check27_conops_icd_matching");
+        let conops_dir = tmp.path.join("docs").join("conops");
+        let interfaces_dir = tmp.path.join("docs").join("interfaces");
+        fs::create_dir_all(&conops_dir).unwrap();
+        fs::create_dir_all(&interfaces_dir).unwrap();
+
+        let conops_content = r#"## 4. System Operational Architecture
+```mermaid
+flowchart TD
+    Operator -->|"CONN-01: Supervisory Command"| SupervisoryStation
+    SupervisoryStation -->|"CONN-02: System Datalink"| Controller
+```
+"#;
+        fs::write(conops_dir.join("04_SYSTEM_ARCHITECTURE.md"), conops_content).unwrap();
+
+        let icd_content = r#"# Level 1C: System Interface Matrix
+## 5. Connection Binding Roster Table
+| Connection ID | Source Port | Dest Port |
+| :--- | :--- | :--- |
+| `CONN-01` | PORT-SUP-CMD | PORT-CTRL-CMD |
+| `CONN-02` | PORT-SUP-TLM | PORT-CTRL-TLM |
+"#;
+        fs::write(interfaces_dir.join("ICD_01_SYSTEM_INTERFACE_MATRIX.md"), icd_content).unwrap();
+
+        let res = check_cross_document_diagram_parity(&tmp.path);
+        assert_eq!(res, Ok(ParityOutcome::Verified));
+    }
 }
+
 
