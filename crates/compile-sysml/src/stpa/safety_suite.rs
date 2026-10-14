@@ -1036,9 +1036,9 @@ mod tests {
         pkg.name = "TestSystem".to_string();
 
         let mut p = PartDef::default();
-        p.name = "FlightComputer".to_string();
+        p.name = "PrimaryController".to_string();
         let mut act = ActionDef::default();
-        act.name = "CalculateGuidance".to_string();
+        act.name = "ExecuteProcess".to_string();
         p.actions.push(act);
         pkg.part_defs.push(p);
 
@@ -1063,7 +1063,7 @@ mod tests {
         // Verify closed-loop STPA control structure topology
         let topo = suite.get("01_LOSSES_HAZARDS_TOPOLOGY.md").unwrap();
         assert!(topo.contains("subgraph \"Hierarchical Safety Control Structure\""));
-        assert!(topo.contains("CompilerController[\"FlightComputer<br/>(Supervisory Controller)\"]"));
+        assert!(topo.contains("CompilerController[\"PrimaryController<br/>(Supervisory Controller)\"]"));
         assert!(topo.contains("ActuatorEngine[\"UniversalIngestionEngine<br/>(Actuator Engine)\"]"));
         assert!(topo.contains("ControlledProcess[\"DownstreamApplicationHost<br/>(Execution Environment)\"]"));
         assert!(topo.contains("DiagnosticSensors[\"CompilerAssuranceEngine<br/>(Diagnostic Sensors)\"]"));
@@ -1075,12 +1075,12 @@ mod tests {
         let md = r#"
 | UCA ID | Controller | Control Action | Guide Word | Context | Hazard | Safety Constraint | Severity | SAIL |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| UCA-001 | FlightComputer | DeployParachute | Not providing | In-flight | H-1 | SC-001 | High | IV |
+| UCA-001 | SafetyController | EngageActuator | Not providing | In-flight | H-1 | SC-001 | High | IV |
 "#;
         let pkg = compile_stpa_to_constraints(md, "SafetyConstraintsPackage");
         assert_eq!(pkg.name, "SafetyConstraintsPackage");
         assert_eq!(pkg.constraint_defs.len(), 1);
-        assert_eq!(pkg.constraint_defs[0].name, "SC_001_DeployParachute");
+        assert_eq!(pkg.constraint_defs[0].name, "SC_001_EngageActuator");
         assert!(pkg.constraint_defs[0].is_assertion);
     }
 

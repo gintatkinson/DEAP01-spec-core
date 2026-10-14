@@ -175,7 +175,7 @@ pub fn generate_fmeca_matrix(
     // Ensure >= 15 failure mode rows when parts exist by adding fine-grained sub-modes if needed
     let additional_modes = [
         ("Sensor Signal Drift / Biased Telemetry", FailureDimension::Interface, 7, 3, 4, "Kalman residual monitoring and zero-velocity update rejection"),
-        ("Asymmetric Control Surface Flap Jam", FailureDimension::Action, 9, 2, 2, "Cross-channel torque feedback and differential trim re-allocation"),
+        ("Actuator Mechanical Seizure / Channel Binding", FailureDimension::Action, 9, 2, 2, "Cross-channel feedback and dynamic torque re-allocation"),
         ("Single-Event Upset / Memory Bitflip", FailureDimension::State, 8, 2, 3, "ECC RAM scrub and triple modular redundant register voting"),
         ("Power Bus Transient Surge / Inrush Current", FailureDimension::Resource, 7, 2, 2, "TVS diode clamp and fast electronic circuit breaker isolation"),
     ];
@@ -249,9 +249,9 @@ mod tests {
     fn test_fmeca_matrix_generation_and_rpn() {
         let mut pkg = PackageDef::default();
         let mut p1 = PartDef::default();
-        p1.name = "Airframe".to_string();
+        p1.name = "CoreStructuralFrame".to_string();
         let mut p2 = PartDef::default();
-        p2.name = "FlightControlComputer".to_string();
+        p2.name = "PrimaryComputeSubsystem".to_string();
         pkg.part_defs.push(p1);
         pkg.part_defs.push(p2);
 
@@ -282,7 +282,7 @@ mod tests {
     fn test_fmeca_matrix_excludes_negated_recovery_components() {
         let mut pkg = PackageDef::default();
         let mut p1 = PartDef::default();
-        p1.name = "FlightControlComputer".to_string();
+        p1.name = "PrimaryComputeSubsystem".to_string();
         let mut p2 = PartDef::default();
         p2.name = "ParachuteRecoveryUnit".to_string();
         pkg.part_defs.push(p1);
@@ -302,7 +302,7 @@ mod tests {
 
         let rows = generate_fmeca_matrix(&pkg, None);
         let components: Vec<_> = rows.iter().map(|r| r.component.as_str()).collect();
-        assert!(components.contains(&"FlightControlComputer"));
+        assert!(components.contains(&"PrimaryComputeSubsystem"));
         assert!(!components.contains(&"ParachuteRecoveryUnit"), "Negated ParachuteRecoveryUnit must NOT be present in FMECA rows");
     }
 }

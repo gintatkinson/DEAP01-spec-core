@@ -495,7 +495,7 @@ mod tests {
     #[test]
     fn test_serialize_package_roundtrip() {
         let pkg = PackageDef {
-            name: "SimpleVehicle".to_string(),
+            name: "AutonomousPlatform".to_string(),
             doc: Some("Simple autonomous platform".to_string()),
             attribute_defs: vec![
                 AttributeDef {
@@ -507,7 +507,7 @@ mod tests {
             ],
             part_defs: vec![
                 PartDef {
-                    name: "Airframe".to_string(),
+                    name: "StructuralFrame".to_string(),
                     ports: vec![
                         PortDef {
                             name: "bus".to_string(),
@@ -523,10 +523,10 @@ mod tests {
         };
 
         let sysml_text = pkg.to_sysml(0);
-        assert!(sysml_text.contains("package SimpleVehicle {"));
+        assert!(sysml_text.contains("package AutonomousPlatform {"));
         assert!(sysml_text.contains("doc /* Simple autonomous platform */"));
         assert!(sysml_text.contains("attribute massKg : Real = 15.5;"));
-        assert!(sysml_text.contains("part def Airframe {"));
+        assert!(sysml_text.contains("part def StructuralFrame {"));
         assert!(sysml_text.contains("port out bus : CAN;"));
     }
 

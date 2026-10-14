@@ -123,8 +123,8 @@ mod tests {
             "1-scope--system-identification"
         );
         assert_eq!(
-            slugify("4.2 Primary Architecture (UAV)"),
-            "42-primary-architecture-uav"
+            slugify("4.2 Primary Architecture (Core)"),
+            "42-primary-architecture-core"
         );
     }
 

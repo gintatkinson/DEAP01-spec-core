@@ -486,17 +486,17 @@ mod tests {
     #[test]
     fn test_parse_frontmatter_extraction() {
         let md = r#"---
-title: "Feature 01: Airframe"
+title: "Feature 01: CoreSubsystem"
 type: feature
-part: Airframe
+part: CoreSubsystem
 ---
 
 # Content
 "#;
         let (fm, body) = parse_frontmatter(md);
-        assert_eq!(fm.get("title").map(|s| s.as_str()), Some("Feature 01: Airframe"));
+        assert_eq!(fm.get("title").map(|s| s.as_str()), Some("Feature 01: CoreSubsystem"));
         assert_eq!(fm.get("type").map(|s| s.as_str()), Some("feature"));
-        assert_eq!(fm.get("part").map(|s| s.as_str()), Some("Airframe"));
+        assert_eq!(fm.get("part").map(|s| s.as_str()), Some("CoreSubsystem"));
         assert!(body.contains("# Content"));
     }
 }

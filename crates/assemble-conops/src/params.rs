@@ -2736,12 +2736,12 @@ mod tests {
     #[test]
     fn test_parameter_substitution_and_inline_default() {
         let mut bindings = HashMap::new();
-        bindings.insert("SYSTEM_IDENTIFIER".to_string(), "SkyGuardian_UAV".to_string());
+        bindings.insert("SYSTEM_IDENTIFIER".to_string(), "AutonomousPlatform".to_string());
         let engine = SysMLParameterBindingEngine::new(Some(bindings), None, None, false, None);
 
         let input = "System: {{SYSTEM_IDENTIFIER}} with baud {{BAUD_RATE:57600}} and default {{UNKNOWN_KEY:FallbackValue}}";
         let output = engine.substitute(input);
-        assert!(output.contains("SkyGuardian_UAV"));
+        assert!(output.contains("AutonomousPlatform"));
         assert!(output.contains("FallbackValue"));
     }
 
@@ -2964,7 +2964,7 @@ mod tests {
 
     #[test]
     fn test_defect_316_synthesize_subsystem_architecture_provenance_columns() {
-        let sysml_code = r#"package DronePlatform {
+        let sysml_code = r#"package AutonomousPlatform {
     part def PrimaryOBC {
         doc /* Core onboard computer */
         inout port c2_link : C2Interface;
@@ -3009,7 +3009,7 @@ mod tests {
 
     #[test]
     fn test_extract_subsystem_parts_preserves_source_provenance() {
-        let sysml_code = r#"package DronePlatform {
+        let sysml_code = r#"package AutonomousPlatform {
     part def PrimaryOBC {
         doc /* Core onboard computer */
         inout port c2_link : C2Interface;
@@ -3017,11 +3017,11 @@ mod tests {
     }
 }
 "#;
-        let parts = extract_subsystem_parts_from_sysml(sysml_code, "schema/Drone.sysml");
+        let parts = extract_subsystem_parts_from_sysml(sysml_code, "schema/Platform.sysml");
         assert_eq!(parts.len(), 1);
         let obc = &parts[0];
         assert_eq!(obc.name, "PrimaryOBC");
-        assert_eq!(obc.source_file, "schema/Drone.sysml");
+        assert_eq!(obc.source_file, "schema/Platform.sysml");
         assert_eq!(obc.source_line, Some(2));
         assert_eq!(obc.epistemic_tier, "[TIER-1: OEM]");
         assert_eq!(obc.ports.len(), 2);
@@ -3033,6 +3033,51 @@ mod tests {
         assert_eq!(obc.ports[1].direction, "OUT");
         assert_eq!(obc.ports[1].source_line, Some(5));
         assert_eq!(obc.ports[1].epistemic_tier, "[TIER-1: OEM]");
+    }
+
+    #[test]
+    fn test_conops_scenarios_synthesize_from_ast_statechart() {
+        let sysml_model = r#"package MedicalInfusionPlatform {
+    part def InfusionPumpUnit {
+        doc /* Core infusion pump subsystem */
+        out port fluid_line : FlowInterface;
+    }
+    part def OcclusionSensor {
+        doc /* Upstream/downstream pressure monitoring */
+        in port pressure_tap : PressureInterface;
+    }
+    part def FlowController {
+        doc /* High-precision delivery controller */
+    }
+}
+"#;
+        let temp_sysml = std::env::temp_dir().join("test_schema_317.sysml");
+        std::fs::write(&temp_sysml, sysml_model).unwrap();
+        let mut engine = SysMLParameterBindingEngine::new(None, None, None, false, Some("medical"));
+        engine.ingest_file(&temp_sysml);
+        std::fs::remove_file(&temp_sysml).ok();
+
+        // Verify AST parts are ingested deterministically into engine part names
+        for part_name in &["InfusionPumpUnit", "OcclusionSensor", "FlowController"] {
+            assert!(
+                engine.ast_part_names.contains(*part_name),
+                "Engine must ingest AST component '{part_name}'"
+            );
+        }
+
+        // Verify zero synthetic drone combat mission phases or military terms are injected
+        assert!(!engine.ast_part_names.contains("Phase_Ingress_StationKeeping"));
+        assert!(!engine.ast_part_names.contains("Phase_PID_InterlockCheck"));
+        assert!(!engine.ast_part_names.contains("Phase_DualConsent_ArmingExecution"));
+        assert!(!engine.ast_part_names.contains("Phase_PostAction_AssessmentDump"));
+
+        // Verify medical domain sanitization replaces ungrounded kinetic/combat terms
+        let sample_text = "Operational execution under ROE-01 commands weapons release.";
+        let substituted = engine.substitute(sample_text);
+        assert!(!substituted.contains("ROE-01"));
+        assert!(!substituted.contains("weapons release"));
+        assert!(substituted.contains("INT-01"));
+        assert!(substituted.contains("high-consequence actuation"));
     }
 }
 

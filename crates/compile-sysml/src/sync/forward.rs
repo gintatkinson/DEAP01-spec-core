@@ -1810,7 +1810,7 @@ mod tests {
         pkg.name = "TestSystem".to_string();
 
         let mut p1 = PartDef::default();
-        p1.name = "Airframe".to_string();
+        p1.name = "StructuralSubsystem".to_string();
         pkg.part_defs.push(p1);
 
         let opts = ForwardSyncOptions {

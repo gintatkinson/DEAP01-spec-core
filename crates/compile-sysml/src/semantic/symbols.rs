@@ -538,10 +538,10 @@ mod tests {
     #[test]
     fn test_symbol_table_indexing_and_lookup() {
         let pkg = PackageDef {
-            name: "Vehicle_SSOT".to_string(),
+            name: "Platform_SSOT".to_string(),
             part_defs: vec![
                 PartDef {
-                    name: "FlightComputer".to_string(),
+                    name: "ComputeNode".to_string(),
                     ports: vec![
                         PortDef {
                             name: "bus_out".to_string(),
@@ -571,10 +571,10 @@ mod tests {
         };
 
         let table = SymbolTable::build_from_package(&pkg);
-        assert!(table.lookup("Vehicle_SSOT::FlightComputer").is_some());
-        assert!(table.lookup("Vehicle_SSOT::FlightComputer::bus_out").is_some());
+        assert!(table.lookup("Platform_SSOT::ComputeNode").is_some());
+        assert!(table.lookup("Platform_SSOT::ComputeNode::bus_out").is_some());
 
-        let port_sym = table.lookup_port("FlightComputer.bus_out", None).unwrap();
+        let port_sym = table.lookup_port("ComputeNode.bus_out", None).unwrap();
         assert_eq!(port_sym.name, "bus_out");
         assert_eq!(port_sym.direction.as_deref(), Some("out"));
     }

@@ -115,13 +115,13 @@ mod tests {
         pkg.name = "TestPackage".to_string();
 
         let mut controller = PartDef::default();
-        controller.name = "FlightComputer".to_string();
+        controller.name = "SystemController".to_string();
         let mut act1 = ActionDef::default();
-        act1.name = "DeployParachute".to_string();
+        act1.name = "EngageActuator".to_string();
         controller.actions.push(act1);
 
         let mut act2 = ActionDef::default();
-        act2.name = "IgniteRocket".to_string();
+        act2.name = "ReleaseSafetyLock".to_string();
         controller.actions.push(act2);
         pkg.part_defs.push(controller);
 
@@ -129,8 +129,8 @@ mod tests {
         // 2 actions * 4 guide words = 8 UCAs
         assert_eq!(ucas.len(), 8);
         assert_eq!(ucas[0].id, "UCA-001");
-        assert_eq!(ucas[0].controller, "FlightComputer");
-        assert_eq!(ucas[0].control_action, "DeployParachute");
+        assert_eq!(ucas[0].controller, "SystemController");
+        assert_eq!(ucas[0].control_action, "EngageActuator");
         assert_eq!(ucas[0].guide_word, "Not providing");
         assert_eq!(ucas[0].constraint, "SC-001");
         assert_eq!(ucas[0].hazard, "H-1");
@@ -139,7 +139,7 @@ mod tests {
         assert_eq!(ucas[2].guide_word, "Too early / Too late / Out of order");
         assert_eq!(ucas[3].guide_word, "Stopped too soon / Applied too long");
 
-        assert_eq!(ucas[4].control_action, "IgniteRocket");
+        assert_eq!(ucas[4].control_action, "ReleaseSafetyLock");
         assert_eq!(ucas[4].hazard, "H-2");
     }
 }

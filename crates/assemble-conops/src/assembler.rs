@@ -1241,5 +1241,50 @@ mod tests {
         assert!(!raw.contains('\u{2014}'), "Unit 10 must not contain Unicode em dash");
         assert!(!raw.contains('\u{2013}'), "Unit 10 must not contain Unicode en dash");
     }
+
+    #[test]
+    fn test_canonical_unit_09_scenarios_and_timelines_integrity() {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let repo_root = manifest_dir.parent().unwrap().parent().unwrap();
+        let unit_09_path = repo_root
+            .join("skills/spec-conops-engineering/resources/units/conops/09_SCENARIOS_AND_TIMELINES.md");
+
+        if !unit_09_path.is_file() {
+            return;
+        }
+
+        let engine = SysMLParameterBindingEngine::new(None, None, None, false, None);
+        let (is_valid, errors) = validate_unit_integrity(&[unit_09_path.clone()], Some(&engine));
+        assert!(is_valid, "Unit 09 integrity validation failed: {:?}", errors);
+        assert!(errors.is_empty());
+
+        let raw = fs::read_to_string(&unit_09_path).unwrap();
+
+        // Verify all 5 schema-driven scenario structures exist
+        assert!(raw.contains("### 9.1 Scenario SCN-01: Normal Operational Cycle"));
+        assert!(raw.contains("### 9.2 Scenario SCN-02: Boundary Excursion & Auto-Recovery"));
+        assert!(raw.contains("### 9.3 Scenario SCN-03: Degraded C2 Lost-Link & Autonomous Fallback Return"));
+        assert!(raw.contains("### 9.4 Scenario SCN-04: Emergency State Safing"));
+        assert!(raw.contains("### 9.5 Scenario SCN-05: Sensor Stream Correlation & State Synchronization"));
+
+        // Verify valid Mermaid sequence and state diagrams
+        assert!(raw.contains("sequenceDiagram"));
+        assert!(raw.contains("stateDiagram-v2"));
+
+        // Verify elimination of faulty prose-locking synthetic combat drone phases (fixes #317)
+        assert!(!raw.contains("Phase_Ingress_StationKeeping"), "Unit 09 must not contain Phase_Ingress_StationKeeping");
+        assert!(!raw.contains("Phase_PID_InterlockCheck"), "Unit 09 must not contain Phase_PID_InterlockCheck");
+        assert!(!raw.contains("Phase_DualConsent_ArmingExecution"), "Unit 09 must not contain Phase_DualConsent_ArmingExecution");
+        assert!(!raw.contains("Phase_PostAction_AssessmentDump"), "Unit 09 must not contain Phase_PostAction_AssessmentDump");
+
+        // Verify verified domain-agnostic state machine phases are present
+        assert!(raw.contains("Phase_Stream_Ingress"));
+        assert!(raw.contains("Phase_Feature_Correlation"));
+        assert!(raw.contains("Phase_State_Synchronization"));
+
+        // Strict punctuation invariants
+        assert!(!raw.contains('\u{2014}'), "Unit 09 must not contain Unicode em dash");
+        assert!(!raw.contains('\u{2013}'), "Unit 09 must not contain Unicode en dash");
+    }
 }
 
