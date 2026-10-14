@@ -133,6 +133,11 @@ pub fn verify_upstream_blueprint_domain_cleanliness(repo_root: &Path) -> Result<
         }
     }
 
+    // 3. Enforce zero MASTER_HANDOVER_CHECKPOINT.md at repository root or docs (refs #321)
+    if let Err(errs) = check_no_master_handover_checkpoint(repo_root) {
+        violations.extend(errs);
+    }
+
     if violations.is_empty() {
         Ok(())
     } else {
@@ -456,9 +461,89 @@ pub fn check_handoff_and_backlog_integrity(repo_root: &Path) -> Result<(), Vec<S
         }
     }
 
+    // 3. Ephemeral MASTER_HANDOVER_CHECKPOINT.md must not exist at root or docs (refs #321)
+    if let Err(errs) = check_no_master_handover_checkpoint(repo_root) {
+        violations.extend(errs);
+    }
+
     if violations.is_empty() {
         Ok(())
     } else {
+        Err(violations)
+    }
+}
+
+/// Check documentation and root artifact cleanliness (refs #321):
+/// Verifies that ephemeral/spurious handover checkpoints (`MASTER_HANDOVER_CHECKPOINT.md`)
+/// are strictly forbidden at the repository root and across `docs/`.
+pub fn check_no_master_handover_checkpoint(repo_root: &Path) -> Result<(), Vec<String>> {
+    let mut violations = Vec::new();
+
+    // 1. Root check: MASTER_HANDOVER_CHECKPOINT.md or variants
+    let root_checkpoint = repo_root.join("MASTER_HANDOVER_CHECKPOINT.md");
+    if root_checkpoint.exists() {
+        violations.push(
+            "Root MASTER_HANDOVER_CHECKPOINT.md detected: ephemeral/spurious handover checkpoint files containing hardcoded domain specifications are strictly forbidden at repository root (refs #321)."
+                .to_string(),
+        );
+    }
+
+    if let Ok(entries) = fs::read_dir(repo_root) {
+        for entry in entries.filter_map(|e| e.ok()) {
+            if entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
+                let fname = entry.file_name().to_string_lossy().to_string();
+                if fname != "MASTER_HANDOVER_CHECKPOINT.md"
+                    && fname.to_ascii_uppercase().starts_with("MASTER_HANDOVER_CHECKPOINT")
+                {
+                    violations.push(format!(
+                        "Root checkpoint variant detected: '{}' is strictly forbidden (refs #321).",
+                        fname
+                    ));
+                }
+            }
+        }
+    }
+
+    // 2. docs/ directory check: forbidden anywhere inside docs/
+    let docs_dir = repo_root.join("docs");
+    if docs_dir.is_dir() {
+        for entry in WalkDir::new(&docs_dir)
+            .into_iter()
+            .filter_entry(|e| {
+                if e.file_type().is_dir() {
+                    let name = e.file_name().to_string_lossy();
+                    !EXCLUDED_DIRS.iter().any(|&ex| name == ex)
+                } else {
+                    true
+                }
+            })
+            .filter_map(|e| e.ok())
+        {
+            if entry.file_type().is_file() {
+                let fname = entry.file_name().to_string_lossy();
+                if fname.to_ascii_uppercase() == "MASTER_HANDOVER_CHECKPOINT.MD"
+                    || fname.to_ascii_uppercase().starts_with("MASTER_HANDOVER_CHECKPOINT")
+                {
+                    let rel = entry
+                        .path()
+                        .strip_prefix(repo_root)
+                        .unwrap_or(entry.path())
+                        .display()
+                        .to_string();
+                    violations.push(format!(
+                        "Forbidden handover checkpoint file detected at '{}': ephemeral/spurious handover checkpoints containing domain specifications are strictly forbidden (refs #321).",
+                        rel
+                    ));
+                }
+            }
+        }
+    }
+
+    if violations.is_empty() {
+        Ok(())
+    } else {
+        violations.sort();
+        violations.dedup();
         Err(violations)
     }
 }
@@ -730,6 +815,89 @@ mod tests {
         assert!(
             res.is_err(),
             "Must reject listing resolved issues as outstanding work packages"
+        );
+    }
+
+    #[test]
+    fn test_reproduce_defect_321_root_master_handover_checkpoint_rejected() {
+        let tmp = TempDir::new("c321_root_rejection");
+        fs::create_dir_all(tmp.path.join(".pipeline/upstream")).unwrap();
+        let schema_dir = tmp.path.join("schema");
+        fs::create_dir_all(&schema_dir).unwrap();
+        File::create(schema_dir.join(".gitkeep")).unwrap();
+
+        let checkpoint = tmp.path.join("MASTER_HANDOVER_CHECKPOINT.md");
+        File::create(&checkpoint).unwrap();
+
+        let res_no_checkpoint = check_no_master_handover_checkpoint(&tmp.path);
+        assert!(res_no_checkpoint.is_err(), "Must reject root MASTER_HANDOVER_CHECKPOINT.md");
+
+        let res_upstream = verify_upstream_blueprint_domain_cleanliness(&tmp.path);
+        assert!(res_upstream.is_err(), "Upstream cleanliness must reject root MASTER_HANDOVER_CHECKPOINT.md");
+
+        let res_handoff = check_handoff_and_backlog_integrity(&tmp.path);
+        assert!(res_handoff.is_err(), "Handoff integrity must reject root MASTER_HANDOVER_CHECKPOINT.md");
+    }
+
+    #[test]
+    fn test_defect_321_docs_master_handover_checkpoint_rejected() {
+        let tmp = TempDir::new("c321_docs_rejection");
+        fs::create_dir_all(tmp.path.join(".pipeline/upstream")).unwrap();
+        let schema_dir = tmp.path.join("schema");
+        fs::create_dir_all(&schema_dir).unwrap();
+        File::create(schema_dir.join(".gitkeep")).unwrap();
+
+        let docs_dir = tmp.path.join("docs").join("architecture");
+        fs::create_dir_all(&docs_dir).unwrap();
+        let checkpoint = docs_dir.join("MASTER_HANDOVER_CHECKPOINT.md");
+        File::create(&checkpoint).unwrap();
+
+        let res_no_checkpoint = check_no_master_handover_checkpoint(&tmp.path);
+        assert!(res_no_checkpoint.is_err(), "Must reject docs/architecture/MASTER_HANDOVER_CHECKPOINT.md");
+
+        let res_upstream = verify_upstream_blueprint_domain_cleanliness(&tmp.path);
+        assert!(res_upstream.is_err(), "Upstream cleanliness must reject docs MASTER_HANDOVER_CHECKPOINT.md");
+
+        let res_handoff = check_handoff_and_backlog_integrity(&tmp.path);
+        assert!(res_handoff.is_err(), "Handoff integrity must reject docs MASTER_HANDOVER_CHECKPOINT.md");
+    }
+
+    #[test]
+    fn test_defect_321_root_checkpoint_variant_rejected() {
+        let tmp = TempDir::new("c321_variant_rejection");
+        let variant = tmp.path.join("MASTER_HANDOVER_CHECKPOINT_V2.md");
+        File::create(&variant).unwrap();
+
+        let res = check_no_master_handover_checkpoint(&tmp.path);
+        assert!(res.is_err(), "Must reject root checkpoint variant MASTER_HANDOVER_CHECKPOINT_V2.md");
+    }
+
+    #[test]
+    fn test_defect_321_current_repo_passes() {
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(|p| p.parent())
+            .expect("repo root");
+
+        let res_no_checkpoint = check_no_master_handover_checkpoint(repo_root);
+        assert!(
+            res_no_checkpoint.is_ok(),
+            "Current repo must pass check_no_master_handover_checkpoint: {:?}",
+            res_no_checkpoint.err()
+        );
+
+        let res_upstream = verify_upstream_blueprint_domain_cleanliness(repo_root);
+        assert!(
+            res_upstream.is_ok(),
+            "Current repo must pass verify_upstream_blueprint_domain_cleanliness: {:?}",
+            res_upstream.err()
+        );
+
+        let res_handoff = check_handoff_and_backlog_integrity(repo_root);
+        assert!(
+            res_handoff.is_ok(),
+            "Current repo must pass check_handoff_and_backlog_integrity: {:?}",
+            res_handoff.err()
         );
     }
 }
