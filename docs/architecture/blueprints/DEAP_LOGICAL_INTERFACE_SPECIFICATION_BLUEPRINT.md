@@ -383,7 +383,7 @@ Every signal entry in the Master Signal Dictionary must strictly adhere to the t
 Level 1C is integrated directly into the DEAP Orchestration lifecycle via a dedicated Systems Engineering baseline stage: **Worker 0D (Worker ICD - Logical Interface Engineer)** completing Pipeline 0 prior to Pipeline 1 Agile Backlog projection.
 
 The orchestrator enforces strict serialization and artifact immutability across successive execution phases:
-- **Phase 0 (Front-End Systems & Safety Modeling):** Worker 0A, 0B, 0C, and 0D author `CONOPS.md`, `STPA_MATRIX.md`, `DEAP_MODEL.sysml`, and Level 1C ICDs (`ICD_01` and `ICD_02`).
+- **Phase 0 (Front-End Systems & Safety Modeling):** Step 0 Model Ingestion & Compilation (`compile-sysml`) compiles the AST SSOT, Phase 0.5 executes Normative Research, Phase 0.75 (Worker 0A & 0B) authors `CONOPS.md` and `STPA_MATRIX.md`, and Phase 0.85 (Worker 0D) authors Level 1C ICDs (`ICD_01` and `ICD_02`).
 - **Phase 1 (Agile Specification Backlog Generation - Pipeline 1):** Downstream Worker 1A, 1B, and 1C project frozen Level 1C interfaces and signals into Epics, Features, BDD User Stories, and UML Use Cases.
 - **Phase 2 (Work Breakdown Structure & Enterprise Realization):** Worker 1D synthesizes WBS and MBD work packages.
 - **Phase 3 (Feature-Driven Implementation - Pipeline 2):** Sub-implementers synthesize SPARK Ada, MISRA C, ROS2 C++, and Simulink models.
@@ -393,15 +393,20 @@ The orchestrator enforces strict serialization and artifact immutability across 
 sequenceDiagram
     autonumber
     participant Orchestrator as Master Orchestrator
-    participant Worker0 as Pipeline 0: Pre-Spec Safety & Model Author (Workers 0A-0C)
+    participant Step0 as Pipeline 0: Step 0 Ingestion & Compilation Gate
+    participant Worker0 as Pipeline 0: Pre-Spec Safety & ConOps (Workers 0A-0B)
     participant WorkerICD as Pipeline 0: Worker 0D (Interface Eng / Level 1C)
     participant WorkerAgile as Pipeline 1: Agile Spec Workers (Workers 1A-1D)
     participant Implementer as Pipeline 2: Code Synthesis Worker
     participant Gate23 as Verification: Gate 23/24 (ICD Completeness)
 
+    Note over Orchestrator,Step0: Pipeline 0 - Step 0 Ingestion & Canonical AST Compilation Gate
+    Orchestrator->>Step0: Compile input models via compile-sysml --compile
+    Step0-->>Orchestrator: Canonical .pipeline/schema.sysml & schema-digest.json
+
     Note over Orchestrator,Worker0: Pipeline 0 - Synthesize High-Level Safety and Operational Concepts
-    Orchestrator->>Worker0: Dispatch Front-End Safety & SysML Model Authoring Task
-    Worker0-->>Orchestrator: Return CONOPS.md, STPA_MATRIX.md, DEAP_MODEL.sysml
+    Orchestrator->>Worker0: Dispatch Front-End Safety & ConOps Tasks (ingests compiled AST)
+    Worker0-->>Orchestrator: Return CONOPS.md & STPA_MATRIX.md
 
     Note over Orchestrator,WorkerICD: Pipeline 0 - Synthesize Level 1C Logical Interface Specifications
     Orchestrator->>WorkerICD: Dispatch ICD Synthesis Task (SchemaAST + CONOPS + STPA)

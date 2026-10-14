@@ -32,7 +32,7 @@ Level 1C operates as an immutable architectural bridge between high-level operat
 ## Execution Trigger & Pipeline Sequencing
 
 You should invoke this skill as **Worker 0D (Logical Interface Engineer)** in Pipeline 0 (Systems Engineering Baseline / Phase 0.85) within the Master Orchestrator lifecycle (`skills/spec-orchestrator/SKILL.md`):
-- **Preceding Phase**: Phase 0.75 (ConOps & Mission Intent Tree Worker) and Step 3 (SysML Model Author) have established operational concepts, safety constraints, and compiled the SysML v2 AST.
+- **Preceding Phase**: Step 0 (Model Ingestion & Compilation Gate) has compiled the canonical SysML v2 AST into `.pipeline/schema.sysml` and `.pipeline/schema-digest.json`, and Phase 0.75 (ConOps & Mission Intent Tree Worker) has established operational concepts and safety constraints.
 - **Succeeding Phases**: Pipeline 1 (Phase 1 Structural Spec Worker, Phase 2 Behavioral Spec Worker, and Phase 3 System Interaction Spec Worker) consume the frozen topological interface matrix (`docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md`), logical ports (`PORT-*`), and signal dictionary entries (`SIG-*`) defined here to parameterize Epics, Features, BDD User Stories, UML Sequence Lifelines, and Stateflow transitions.
 
 ---

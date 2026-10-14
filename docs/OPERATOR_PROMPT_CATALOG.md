@@ -34,7 +34,7 @@ Execute Level 0 OEM Ground Truth Ingestion and initial SysML v2 textual model sy
 
 2. Canonical SysML v2 Model Synthesis:
    - Execute the Level 0 ingestion translator:
-     python3 skills/spec-orchestrator/scripts/sysmlv2_ingest.py --schema "schema/extracted/" --format markdown --out "schema/model.sysml"
+     ./target/release/ingest-sysml --schema "schema/extracted/" --format markdown --out "schema/model.sysml"
    - Alternatively, synthesize a formal SysML v2 textual model `schema/model.sysml` directly, defining:
      * Root `package` matching the target cyber-physical system.
      * All component definitions as canonical `part def` elements with typed attributes (mass, power, dimensions, channel count, part numbers).
@@ -47,6 +47,44 @@ Execute Level 0 OEM Ground Truth Ingestion and initial SysML v2 textual model sy
      ./target/release/compile-sysml --compile
    - Ensure `.pipeline/schema.sysml` and `.pipeline/schema-digest.json` are successfully generated without compilation errors.
    - Verify Check 23 compliance (Factual Grounding & Numeric Provenance Gate): all physical parameters and component counts in `schema/model.sysml` strictly match the Level 0 OEM ground truth in `schema/extracted/`.
+
+Defect Filing Directive:
+If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `./target/release/verify-baseline check-defect` (or `./target/release/reconcile-backlog create-issue --label bug`). Issue auto-closing keywords or issue close commands are strictly forbidden.
+
+PROCEED
+```
+
+### Phase 0.5: Normative Research Worker (Worker Research)
+```text
+Execute `view_file` on `skills/spec-orchestrator/SKILL.md` as your very first step before taking any action.
+
+Repository Classification: UPSTREAM_SPEC_CORE_COMPILER (or DOWNSTREAM_CUSTOMER_PROJECT depending on execution context)
+
+Role: Normative Research Worker (Phase 0.5)
+
+Primary Commercial Toolchain Integration Context:
+This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
+
+Directive:
+Execute Phase 0.5 Normative-Completeness Research by ingesting the compiled SysML v2 AST model (`.pipeline/schema.sysml` and `.pipeline/schema-digest.json`), extracting all declared AST `part def` nodes, and systematically mapping regulatory standards, public clauses, and component failure modes across the 4 Universal Failure Dimensions (Interface, State, Action, Resource).
+
+1. Ingestion & Baseline Analysis:
+   - Ingest Canonical AST Model: Ingest `.pipeline/schema.sysml` and `.pipeline/schema-digest.json` produced by Step 0 Model Ingestion & Compilation Gate. Extract 100% of declared `part def` component nodes {P_1, P_2, ..., P_N}.
+   - Ingest Applicable Standards: Ingest all applicable regulatory, safety, and domain standards governing the target domain (e.g., ISO/IEC/IEEE 29148, NATO STANAG 4586, RTCA DO-178C / DO-254, SAE ARP4754A / ARP4761, MIL-STD-882E, JARUS SORA v2.5, ASTM F3269-17 / F3411-22a, RTCA DO-365B).
+   - Clause-Level Extraction: Map mandatory obligations (`OBL-*`), safety constraints (`SC-*`), control actions (`CTL-*`), and METL tasks (`MET-*`) directly to verifiable public clauses.
+
+2. Component Failure Mode Research Swarm:
+   - For every extracted AST `part def` component, evaluate the 4 Universal Failure Dimensions: Interface, State, Action, and Resource.
+   - Assign integer ratings: Severity ($S \in [1, 10]$), Occurrence ($O \in [1, 10]$), Detection ($D \in [1, 10]$), integer RPN ($RPN = S \times O \times D$), and explicit `SSOT` or `Derived` basis annotations.
+   - Enforce a minimum of 3 distinct failure modes per declared component across the universal failure dimensions.
+
+3. Output Deliverables:
+   - Cited Research Inventory (`docs/research/RESEARCH_INVENTORY.md`): Synthesize comprehensive inventory with full standard titles, revision baselines, formal references, and the Declared-Total Population Register with 100% public clause citations.
+   - Component Failure Mode Registry (`docs/research/FAILURE_MODE_REGISTRY.md`): Authoritative multi-mode component failure registry covering 100% of declared AST parts with >= 3 distinct failure modes per part.
+
+4. Validation Gate:
+   - Verify zero placeholder tokens (`{{...}}`).
+   - Verify 100% public clause citations and 100% AST component failure mode coverage.
 
 Defect Filing Directive:
 If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `./target/release/verify-baseline check-defect` (or `./target/release/reconcile-backlog create-issue --label bug`). Issue auto-closing keywords or issue close commands are strictly forbidden.
@@ -138,32 +176,9 @@ Perform STPA hazard analysis, FMECA failure mode criticality evaluation, and dom
 PROCEED
 ```
 
-### Worker 0C
-```text
-Execute `view_file` on `skills/spec-orchestrator/SKILL.md` as your very first step before taking any action.
+### Worker 0C (Superseded -- Model Compilation Precedes Research & ConOps)
 
-Repository Classification: UPSTREAM_SPEC_CORE_COMPILER (or DOWNSTREAM_CUSTOMER_PROJECT depending on execution context)
-
-Role: Worker 0C -- SysML v2 Architectural & Safety Model Author
-
-Primary Commercial Toolchain Integration Context:
-This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
-
-Directive:
-Formalize the CONOPS (`CONOPS.md`), STPA hazard matrices, FMECA ratings, and domain safety requirements (`STPA_MATRIX.md`) into a canonical SysML v2 textual model and serialized AST handoff contract based on the derived domain architecture.
-
-1. Model Engineering Mandate:
-   - Construct canonical `DEAP_MODEL.sysml` conforming to SysML v2 textual specification standards (`package`, `req`, `part`, `port`, `state`, `satisfy`, `verify`) based on the derived domain architecture.
-   - Define safety statecharts for Run-Time Assurance (RTA) switching logic, contingency operational modes, and fail-safe transitions.
-   - Establish MATLAB / Simulink / Stateflow export compatibility for safety-critical code synthesis.
-   - KaTeX / LaTeX Math Formatting Mandate: Ensure any statechart/mathematical transition guards and formal expressions follow standard escaping and valid KaTeX blocks (all multi-line aligned equations MUST be enclosed in `\begin{aligned} ... \end{aligned}` within `$$` delimiters on dedicated lines; bare alignment tabs `&` outside an alignment environment and `\begin{align*}` are strictly forbidden). Markdown Table Math Prohibition Rule: Strictly ban `$ ... $` and `$$ ... $$` LaTeX math delimiters inside table headers, rows, and cells; plain text and Unicode (e.g. `Initial S`, `ΔV`, `λ`, `°C`, `≥`, `≤`, `→`, `10⁻⁶`) must be used instead, with 1:1 column count match between header and delimiter rows.
-
-2. Output Requirements:
-   - Generate canonical `DEAP_MODEL.sysml` under `schema/DEAP_MODEL.sysml` (or `.pipeline/schema.sysml`).
-   - Generate initial model export under `.pipeline/contracts/` for downstream interface synthesis.
-
-PROCEED
-```
+> **Architectural Precedence Notice (refs #311):** Worker 0C (the legacy role scheduled to author SysML models after ConOps and STPA) is superseded and eliminated. In DEAP's pure schema-driven architecture, input schemas are ingested and compiled at **Step 0 / Phase 0: Model Ingestion & Compilation Gate** (`./target/release/compile-sysml --compile`), generating the canonical AST Single Source of Truth (`.pipeline/schema.sysml` and `.pipeline/schema-digest.json`) BEFORE Phase 0.5 (Normative Research), Phase 0.75 (ConOps / STPA), and Phase 0.85 (Logical ICDs). Pre-spec workers derive 100% of their structural architecture from the pre-compiled AST, eliminating the circular AST ingestion deadlock.
 
 ### Worker 0D
 ```text
@@ -228,7 +243,7 @@ Transform structural schemas and SysML v2 AST models into formal Agile Epics and
    - Register Epics via `./skills/spec-orchestrator/scripts/create_issue.sh "<file>" "epic" "<title>"`.
 
 Defect Filing Directive:
-If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `python3 scripts/file_defect.py`. Issue auto-closing keywords or issue close commands are strictly forbidden.
+If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `./target/release/verify-baseline check-defect` (or `./target/release/reconcile-backlog create-issue --label bug`). Issue auto-closing keywords or issue close commands are strictly forbidden.
 
 PROCEED
 ```
@@ -260,7 +275,7 @@ Extract Behavior-Driven Development (BDD) User Stories, UML Sequence Lifelines, 
    - Verify live published payload on the issue tracker (`gh issue view <ID> --json body` or `glab issue view <ID>`).
 
 Defect Filing Directive:
-If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `python3 scripts/file_defect.py`. Issue auto-closing keywords or issue close commands are strictly forbidden.
+If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `./target/release/verify-baseline check-defect` (or `./target/release/reconcile-backlog create-issue --label bug`). Issue auto-closing keywords or issue close commands are strictly forbidden.
 
 PROCEED
 ```
@@ -292,7 +307,7 @@ Derive formal UML System Use Cases directly from SysML v2 `use case def` AST blo
    - Verify live published payload on the issue tracker (`gh issue view <ID> --json body` or `glab issue view <ID>`).
 
 Defect Filing Directive:
-If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `python3 scripts/file_defect.py`. Issue auto-closing keywords or issue close commands are strictly forbidden.
+If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `./target/release/verify-baseline check-defect` (or `./target/release/reconcile-backlog create-issue --label bug`). Issue auto-closing keywords or issue close commands are strictly forbidden.
 
 PROCEED
 ```
@@ -315,7 +330,7 @@ Synthesize MIL-STD-881E Work Breakdown Structures (WBS), Technical Realization R
    - Ingest `.pipeline/schema.sysml`, `docs/conops/`, `docs/safety/`, `docs/epics/`, `docs/features/`, `docs/user-stories/`, and `docs/use-cases/`.
    - Synthesize the complete 5-tier WBS hierarchy and 7 concrete Model-Based Design (MBD) work packages per feature (`WP-xxx-SPEC`, `WP-xxx-MAT-PARAM`, `WP-xxx-SL-BLD`, `WP-xxx-PY-DOM`, `WP-xxx-PY-ENG`, `WP-xxx-TST`, `WP-xxx-REP`).
    - Construct the authoritative 7-Column End-to-End Traceability Matrix linking SysML components, Feature specs, User Stories, MATLAB/Simulink models, Python 250 Hz engines, Pytest verification suites, and DO-178C/DO-331 simulation evidence.
-   - Run the deterministic WBS suite generator: `python3 scripts/generate_wbs_suite.py`.
+   - Run the deterministic WBS suite generator: `./target/release/generate-wbs-suite`.
 
 2. Deliverable Generation & Issue Registration:
    - Generate `docs/management/WBS_DELIVERABLES_SUITE.md` with CommonMark metadata table.
@@ -325,7 +340,7 @@ Synthesize MIL-STD-881E Work Breakdown Structures (WBS), Technical Realization R
    - Verify published issue body integrity via live tracker inspection (`gh issue view <ID> --json body` or `glab issue view <ID>`).
 
 Defect Filing Directive:
-If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `python3 scripts/file_defect.py`. Issue auto-closing keywords or issue close commands are strictly forbidden.
+If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `./target/release/verify-baseline check-defect` (or `./target/release/reconcile-backlog create-issue --label bug`). Issue auto-closing keywords or issue close commands are strictly forbidden.
 
 PROCEED
 ```
@@ -356,7 +371,7 @@ Conduct a closed-world factual grounding audit across all generated specificatio
    - Verify that all cross-references between Epics, Features, User Stories, and Use Cases resolve cleanly with zero broken links.
 
 Defect Filing Directive:
-If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `python3 scripts/file_defect.py`. Issue auto-closing keywords or issue close commands are strictly forbidden.
+If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `./target/release/verify-baseline check-defect` (or `./target/release/reconcile-backlog create-issue --label bug`). Issue auto-closing keywords or issue close commands are strictly forbidden.
 
 PROCEED
 ```
@@ -511,7 +526,7 @@ Execute Two-Path (Dual-Track) Model-Based Design (MBD) simulation synthesis and 
    - Formal DO-331 Verification Report: Generate comprehensive verification report `docs/reports/simulink_results/<FEATURE-ID>_simulation_results.md` detailing MC/DC coverage mapping, transition truth tables, fault-injection scenarios, and numerical parity logs.
 
 Defect Filing Directive:
-If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `python3 scripts/file_defect.py`. Issue auto-closing keywords or issue close commands are strictly forbidden.
+If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `./target/release/verify-baseline check-defect` (or `./target/release/reconcile-backlog create-issue --label bug`). Issue auto-closing keywords or issue close commands are strictly forbidden.
 
 PROCEED
 ```

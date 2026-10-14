@@ -37,7 +37,7 @@ If any phase, worker, compiler, or validation gate fails during orchestration (w
      * **Offline Mermaid Syntax Verification**: Validates all generated architectural / sequence diagrams against the offline syntax gate (Check 7 offline syntax gate per `rules/platform-independence.md`) before filing.
      * **7-Section Defect Report**: Formats the finding strictly according to the canonical 7-section defect report skeleton (`## 1. Context and References`, `## 2. Root Cause Analysis (5 Whys)`, `## 3. Correctness Analysis`, `## 4. UML Diagrams`, `## 5. Affected Callers / Downstream Impact`, `## 6. Proposed Correction`, `## 7. Relationship to Existing Issues`, terminating with `## Audit Source`).
    - **Automated Defect Publication**: The subagent publishes the verified 7-section defect report to the issue tracker:
-     * `python3 scripts/file_defect.py --repo [REPO] --title "[AUDIT] [file.ext]: [description]" --body-file [payload_path] --label "bug"`
+     * `./target/release/reconcile-backlog create-issue --repo [REPO] --title "[AUDIT] [file.ext]: [description]" --body-file [payload_path] --label "bug"`
 
 3. **Remediation Dispatch via Debug Protocol (TDD RED-GREEN Fix)**:
    - Once the defect issue is registered on the tracker, the coordinator MUST dispatch a context-isolated subagent with Role `Micro-Task Implementer` (TypeName: `code_modifier_worker`) adopting `skills/debug-protocol/SKILL.md` to execute the systematic 8-step bug loop.
@@ -49,7 +49,7 @@ If any phase, worker, compiler, or validation gate fails during orchestration (w
 
 4. **Invariants & Escalation**:
    - **Never skip a validation gate.** If a gate cannot be satisfied, the pipeline remains halted until systematically resolved and verified.
-   - **Automated Upstream Reporting**: If the failure is due to a pipeline tooling bug in `DEAP01-spec-core` (linter, reconciler, or parser), file an upstream defect report (`python3 scripts/file_defect.py --repo gintatkinson/DEAP01-spec-core --title "Tooling Bug: [Command] failed" --body-file [payload_path] --label "bug"`) and escalate to the human operator with the issue URL.
+   - **Automated Upstream Reporting**: If the failure is due to a pipeline tooling bug in `DEAP01-spec-core` (linter, reconciler, or parser), file an upstream defect report (`./target/release/reconcile-backlog create-issue --repo gintatkinson/DEAP01-spec-core --title "Tooling Bug: [Command] failed" --body-file [payload_path] --label "bug"`) and escalate to the human operator with the issue URL.
    - **Commit Message Non-Closure Invariant**: Agents and automated scripts are strictly prohibited from using issue auto-closing keywords (`fix`, `fixes`, `fixed`, `close`, `closes`, `closed`, `resolve`, `resolves`, `resolved` preceding `#<id>`) in git commit messages. All commit messages referencing issues MUST use neutral citations: `(#<id>)` or `(refs #<id>)` to prevent server-side premature auto-closure (`.pipeline/constitution.md:266`, `rules/tracker-source-of-truth.md`).
 
 ## Pre-Flight Git Repository Verification
@@ -159,9 +159,9 @@ sequenceDiagram
     participant W_D as "Phase 4: Reconciliation & Verification"
 
     Note over Coord,SSOT: Phase 0 - Pre-Flight / Pre-computation
-    Coord->>W_00: Step 0.0: Ingest OEM Prose/PDF/BOM (sysmlv2_ingest.py --format markdown)
+    Coord->>W_00: Step 0.0: Ingest OEM Prose/PDF/BOM (ingest-sysml --format markdown)
     W_00->>SSOT: Extracts schema/extracted/ tables & synthesizes schema/model.sysml (Check 23)
-    Coord->>Comp: Step 0: Execute compile_sysml.py --compile on schema/
+    Coord->>Comp: Step 0: Execute compile-sysml --compile on schema/
     Comp->>SSOT: Establishes .pipeline/schema.sysml & schema-digest.json
 
     Note over Coord,W_R: Phase 0.5 - Normative-Completeness Research
@@ -200,17 +200,17 @@ sequenceDiagram
     W_C-->>Coord: Return Elaborated Use Cases
 
     Note over Coord,W_D: Phase 4 - Reconciliation & Parity Verification
-    Coord->>W_D: Trigger compile_sysml.py --reverse-sync
-    Coord->>W_D: Trigger reconcile_backlog.py & Gate 23 (ICD Completeness)
+    Coord->>W_D: Trigger compile-sysml --reverse-sync
+    Coord->>W_D: Trigger reconcile-backlog & Gate 23 (ICD Completeness)
     W_D-->>Coord: Verification PASS (100% Model Parity)
 ```
 
 ## Phase 0: Pre-Flight / Pre-computation
-1. **Step 0.0 Level 0 OEM Ground Truth Ingestion (Worker 00)**: For customer projects starting from unstructured OEM prose manuals, PDF documentation, markdown tables, or Bill of Materials (BOM) specifications, Worker 00 provides the sanctioned, deterministic entrypoint authorized under Check 23 (Factual Grounding & Numeric Provenance Gate). The worker ingests unstructured and semi-structured documentation located in `schema/` and `schema/extracted/`, extracting physical parameters, component hierarchies, mass and power budgets, and interface boundaries into machine-readable Markdown tables in `schema/extracted/`. The worker then synthesizes the initial canonical SysML v2 textual model in `schema/model.sysml` (or invokes `python3 skills/spec-orchestrator/scripts/sysmlv2_ingest.py --schema "schema/extracted/" --format markdown --out "schema/model.sysml"`). Completing Step 0.0 is the required precursor to running the Step 0 SysML Compilation Gate (`compile_sysml.py --compile`).
-2. **Step 0 SysML Compilation Gate**: Compile input models using `python3 scripts/compile_sysml.py --compile` to produce canonical `.pipeline/schema.sysml` and `.pipeline/schema-digest.json`. This generates formal AST nodes (`package`, `part def`, `item def`, `action def`, `state def`, `port def`, `requirement def`, and `use case def`) establishing the 100% Single Source of Truth across all downstream specification phases (Phase 0.5 Normative Research, Phase 0.75 ConOps, Phase 0.85 ICD, Phase 1 Epics and Features, Phase 2 User Stories, and Phase 3 Use Cases) per `rules/sysml-ssot-completeness.md`.
+1. **Step 0.0 Level 0 OEM Ground Truth Ingestion (Worker 00)**: For customer projects starting from unstructured OEM prose manuals, PDF documentation, markdown tables, or Bill of Materials (BOM) specifications, Worker 00 provides the sanctioned, deterministic entrypoint authorized under Check 23 (Factual Grounding & Numeric Provenance Gate). The worker ingests unstructured and semi-structured documentation located in `schema/` and `schema/extracted/`, extracting physical parameters, component hierarchies, mass and power budgets, and interface boundaries into machine-readable Markdown tables in `schema/extracted/`. The worker then synthesizes the initial canonical SysML v2 textual model in `schema/model.sysml` (or invokes `./target/release/ingest-sysml --schema "schema/extracted/" --format markdown --out "schema/model.sysml"`). Completing Step 0.0 is the required precursor to running the Step 0 SysML Compilation Gate (`./target/release/compile-sysml --compile`).
+2. **Step 0 SysML Compilation Gate**: Compile input models using `./target/release/compile-sysml --compile` to produce canonical `.pipeline/schema.sysml` and `.pipeline/schema-digest.json`. This generates formal AST nodes (`package`, `part def`, `item def`, `action def`, `state def`, `port def`, `requirement def`, and `use case def`) establishing the 100% Single Source of Truth across all downstream specification phases (Phase 0.5 Normative Research, Phase 0.75 ConOps, Phase 0.85 ICD, Phase 1 Epics and Features, Phase 2 User Stories, and Phase 3 Use Cases) per `rules/sysml-ssot-completeness.md`.
 3. **YANG Compilation (conditional)**: If `.yang` files are present in the schema directory, run the YANG-to-LUI compiler to generate the UI layout:
    ```bash
-   python3 scripts/compile_yang.py --input schema/model.yang --output app_flutter/assets/logical-layout.json
+   ./target/release/compile-yang --input schema/model.yang --output app_flutter/assets/logical-layout.json
    ```
    The compiler extracts hierarchy from `container`/`list` nesting, attributes from `leaf` definitions with type/range/enum constraints, and merges them into `logical-layout.json`. Detailed mapping reference is in `docs/operations/yang-compiler-guide.md`.
 
@@ -323,22 +323,22 @@ sequenceDiagram
 ## Phase 4: Reconciliation & Automated Verification (Worker D & Coverage Check)
 1. **Trigger Automated Closed-Loop Reverse Synchronization**: Run the reverse compilation engine to extract newly elaborated markdown components, state transitions, port contracts, and STPA/FMECA safety constraints into the SysML v2 SSOT:
    ```bash
-   python3 scripts/compile_sysml.py --reverse-sync
+   ./target/release/compile-sysml --reverse-sync
    ```
    This step parses all markdown specifications (`docs/epics`, `docs/features`, `docs/user-stories`, `docs/use-cases`), performs semantic AST delta-merging into `.pipeline/schema.sysml`, and recomputes the SHA-256 integrity hash in `.pipeline/schema-digest.json` per [`rules/sysml-ssot-completeness.md`](rules/sysml-ssot-completeness.md).
 2. **Trigger Backlog Reconciliation**: Run the automated backlog reconciliation script:
    ```bash
-   ./scripts/reconcile_backlog.py
+   ./target/release/reconcile-backlog
    ```
 
    *Multi-Provider & GitLab Usage Guidelines:*
    - **GitLab Reconciliation**: When reconciling against a GitLab project (or in GitLab CI/CD), supply `--provider gitlab`:
      ```bash
-     ./scripts/reconcile_backlog.py --provider gitlab
+     ./target/release/reconcile-backlog --provider gitlab
      ```
    - **Self-Hosted / SCIF GitLab Routing**: For custom GitLab instances or air-gapped SCIF environments, optionally specify `--gitlab-url` and `--project`:
      ```bash
-     ./scripts/reconcile_backlog.py --provider gitlab --gitlab-url https://gitlab.internal.defense.gov --project engineering-group/safety-critical-system
+     ./target/release/reconcile-backlog --provider gitlab --gitlab-url https://gitlab.internal.defense.gov --project engineering-group/safety-critical-system
      ```
    - **Environment Variables**: Provider detection automatically selects GitLab if `GITLAB_CI` or `CI_SERVER_URL` is set, resolving authentication from `GITLAB_TOKEN`, `GL_TOKEN`, or `CI_JOB_TOKEN`.
 3. **Trigger Model Coverage & 23-Gate Parity Lock Verification**: Run the automated UML compliance and coverage linter tool:
