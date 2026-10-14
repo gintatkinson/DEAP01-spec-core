@@ -458,6 +458,20 @@ pub fn assemble_document(
                         filenames.push("06_RULES_OF_ENGAGEMENT.md".to_string());
                     }
                 }
+            } else if item == "08_ENVIRONMENTAL_OPERATING_LIMITS.md"
+                || item == "08_ENVIRONMENTAL_MIL_STD_810H.md"
+            {
+                let unit8_handled = filenames.iter().any(|x: &String| {
+                    x == "08_ENVIRONMENTAL_OPERATING_LIMITS.md"
+                        || x == "08_ENVIRONMENTAL_MIL_STD_810H.md"
+                });
+                if !unit8_handled {
+                    if all_entries.contains(&"08_ENVIRONMENTAL_OPERATING_LIMITS.md".to_string()) {
+                        filenames.push("08_ENVIRONMENTAL_OPERATING_LIMITS.md".to_string());
+                    } else if all_entries.contains(&"08_ENVIRONMENTAL_MIL_STD_810H.md".to_string()) {
+                        filenames.push("08_ENVIRONMENTAL_MIL_STD_810H.md".to_string());
+                    }
+                }
             } else if all_entries.contains(&item.to_string()) && !filenames.contains(&item.to_string()) {
                 filenames.push(item.to_string());
             }
@@ -1285,6 +1299,64 @@ mod tests {
         // Strict punctuation invariants
         assert!(!raw.contains('\u{2014}'), "Unit 09 must not contain Unicode em dash");
         assert!(!raw.contains('\u{2013}'), "Unit 09 must not contain Unicode en dash");
+    }
+
+    #[test]
+    fn test_canonical_unit_08_environmental_integrity_and_decontamination() {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let repo_root = manifest_dir.parent().unwrap().parent().unwrap();
+        let conops_units_dir = repo_root.join("skills/spec-conops-engineering/resources/units/conops");
+        let unit_08_path = conops_units_dir.join("08_ENVIRONMENTAL_MIL_STD_810H.md");
+
+        if !unit_08_path.is_file() {
+            return;
+        }
+
+        let engine = SysMLParameterBindingEngine::new(None, None, None, false, None);
+        let (is_valid, errors) = validate_unit_integrity(&[unit_08_path.clone()], Some(&engine));
+        assert!(is_valid, "Unit 08 integrity validation failed: {:?}", errors);
+        assert!(errors.is_empty());
+
+        let raw = fs::read_to_string(&unit_08_path).unwrap();
+
+        // Enforce pure schema-driven compiler invariant: zero hardcoded military standards (refs #323)
+        assert!(!raw.contains("MIL-STD-810H"), "Unit 08 must not hardcode MIL-STD-810H (refs #323)");
+        assert!(!raw.contains("MIL-STD-461G"), "Unit 08 must not hardcode MIL-STD-461G (refs #323)");
+        assert!(!raw.contains("MIL-STD-1472H"), "Unit 08 must not hardcode MIL-STD-1472H (refs #323)");
+
+        // Enforce decontamination of tactical aviation / military hardware concepts (refs #323)
+        assert!(!raw.contains("Air Transport"), "Unit 08 must not contain aviation concept Air Transport");
+        assert!(!raw.contains("Air Carriage"), "Unit 08 must not contain aviation concept Air Carriage");
+        assert!(!raw.contains("Rapid Decompression"), "Unit 08 must not contain aviation concept Rapid Decompression");
+        assert!(!raw.contains("altitude ceiling"), "Unit 08 must not contain aviation concept altitude ceiling");
+        assert!(!raw.contains("cargo hold"), "Unit 08 must not contain aviation concept cargo hold");
+        assert!(!raw.contains("radome"), "Unit 08 must not contain aviation concept radome");
+        assert!(!raw.contains("telemetry mast"), "Unit 08 must not contain aviation concept telemetry mast");
+        assert!(!raw.contains("Ground Support Equipment"), "Unit 08 must not hardcode Ground Support Equipment");
+        assert!(!raw.contains("Red China Clay"), "Unit 08 must not contain military test dust Red China Clay");
+        assert!(!raw.contains("gunfire vibration"), "Unit 08 must not contain military gunfire vibration");
+
+        // Verify abstract standards citations
+        assert!(raw.contains("ISO/IEC/IEEE 15288:2023"), "Unit 08 must cite ISO/IEC/IEEE 15288:2023");
+        assert!(raw.contains("ISO/IEC/IEEE 29148:2018"), "Unit 08 must cite ISO/IEC/IEEE 29148:2018");
+        assert!(raw.contains("IEC 60529"), "Unit 08 must cite IEC 60529");
+
+        // Verify abstract qualification matrix rows exist
+        for env_id in &["ENV-01", "ENV-02", "ENV-03", "ENV-04", "ENV-05", "ENV-06", "ENV-07"] {
+            assert!(
+                raw.contains(&format!("**{}**", env_id)),
+                "Unit 08 must contain abstract environmental matrix row {}",
+                env_id
+            );
+        }
+
+        // Verify parameterization & substitution cleanliness
+        let substituted = engine.substitute(&raw);
+        assert!(!substituted.contains("{{"), "Unit 08 substituted output must contain zero unresolved placeholders");
+
+        // Strict punctuation invariants
+        assert!(!raw.contains('\u{2014}'), "Unit 08 must not contain Unicode em dash");
+        assert!(!raw.contains('\u{2013}'), "Unit 08 must not contain Unicode en dash");
     }
 }
 
