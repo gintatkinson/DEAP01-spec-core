@@ -66,7 +66,7 @@ The `Worker ConOps` ingests and synthesizes the following foundational inputs:
 
 3. **Safety & Risk Baselines (3-Tier Lifecycle Integration)**:
    - Ingest Tier 1 Functional Hazard Assessment (FHA per SAE ARP4761 §3) and Operational Hazard Analysis (OHA per MIL-STD-882E Task 202) covering declared mission functions (`Propel`, `Navigate`, `Communicate`, `Sense`, `Contain`).
-   - Ingest Tier 2 Functional FMECA & STPA (MIL-STD-1629A Method 101) failure modes, hazard rosters, and domain regulatory integrity level profiles (e.g. JARUS SORA Ground Risk Class (GRC) / Air Risk Class (ARC) or standard safety integrity levels derived from the active schema).
+   - Ingest Tier 2 Functional FMECA & STPA (MIL-STD-1629A Method 101) failure modes, hazard rosters, and domain regulatory integrity level profiles (e.g. ISO/IEC/IEEE 15026-3 / IEC 61508 SIL, ISO 26262 ASIL, or standard safety integrity levels derived from the active schema).
    - Extract containment boundaries, emergency failsafe states, and statutory energy reserve requirements.
    - Note: Tier 3 Piece-Part BOM FMECA (MIL-STD-1629A Method 102) is performed during detailed physical engineering (Run 3) and is not required for Run 1 concept formulation.
 
@@ -485,7 +485,7 @@ All analytical content across safety engineering deliverables (`docs/safety/STPA
 2. **Methodology Citation**: Authoritative governing methodology standard:
    - **Leveson STPA** for Losses (**L**), Hazards (**H**), Unsafe Control Actions (**UCA**), Loss Scenarios (**LS**), and Safety Constraints (**SC**).
    - **MIL-STD-1629A / SAE ARP4761** for FMECA Severity (**S**), Occurrence (**O**), Detection (**D**), and Criticality / Risk Priority Number (**RPN**).
-   - **Domain Regulatory Objectives & Integrity Level Mapping** (replacing hardcoded SORA/GRC/ARC requirement; e.g., JARUS SORA v2.5 SAIL/OSO-01..24, DO-178C DAL, ISO 26262 ASIL derived from the active schema).
+   - **Domain Regulatory Objectives & Integrity Level Mapping** (replacing hardcoded risk classification requirements; e.g., ISO/IEC/IEEE 15026-3 SIL, DO-178C DAL, ISO 26262 ASIL derived from the active schema).
    - **ASTM F3269-17** for Run-Time Assurance (RTA) Safety Net monitors and MATLAB / Simulink / Stateflow / Embedded Coder synthesis hooks.
 3. **Derivation Grade**: Explicit classification of analytical provenance:
    - `Directly Evidenced`: Direct empirical evidence from ingested SSOT schemas or normative requirements.

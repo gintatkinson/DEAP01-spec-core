@@ -900,6 +900,137 @@ mod tests {
     }
 
     #[test]
+    fn test_canonical_unit_05_non_si_aviation_units_and_alias_probe() {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let repo_root = manifest_dir.parent().unwrap().parent().unwrap();
+        let unit_05_path = repo_root
+            .join("skills/spec-conops-engineering/resources/units/conops/05_OPERATIONAL_STATE_SPACE_AND_RISK.md");
+
+        if !unit_05_path.is_file() {
+            return;
+        }
+
+        let raw_content = fs::read_to_string(&unit_05_path).unwrap();
+        let lower = raw_content.to_lowercase();
+
+        // 1. Assert canonical ConOps Unit 05 is strictly free of non-SI aviation units
+        let forbidden_non_si_units = [
+            "knots", "knot", "kts", "feet", "foot", "mph", "nautical mile",
+        ];
+        for unit in &forbidden_non_si_units {
+            assert!(
+                !lower.contains(unit),
+                "Unit 05 must not contain non-SI aviation unit '{}'",
+                unit
+            );
+        }
+
+        // Check for isolated "ft" or "nm" as units
+        for line in raw_content.lines() {
+            for word in line.split(|c: char| !c.is_alphanumeric() && c != '_') {
+                assert!(
+                    word != "ft" && word != "FT",
+                    "Unit 05 must not contain non-SI unit 'ft' in line: {}",
+                    line
+                );
+                assert!(
+                    word != "nm" && word != "NM",
+                    "Unit 05 must not contain non-SI aviation unit 'nm' in line: {}",
+                    line
+                );
+                assert!(
+                    !word.starts_with("FL") || word.len() < 4 || !word[2..].chars().all(|c| c.is_ascii_digit()),
+                    "Unit 05 must not contain flight level designations '{}' in line: {}",
+                    word,
+                    line
+                );
+            }
+        }
+
+        // 2. Assert canonical ConOps Unit 05 is free of hardcoded tactical aviation assumptions
+        let forbidden_aviation_concepts = [
+            "sora", "jarus", "bvlos", "vlos", "airspace",
+            "flight termination", "aerodynamic drag", "ballistic fall", "wind drift",
+        ];
+        for concept in &forbidden_aviation_concepts {
+            assert!(
+                !lower.contains(concept),
+                "Unit 05 must not contain hardcoded tactical aviation concept '{}'",
+                concept
+            );
+        }
+
+        // Check AGL and MSL
+        for line in raw_content.lines() {
+            for word in line.split(|c: char| !c.is_alphanumeric() && c != '_') {
+                assert!(
+                    word != "AGL" && word != "MSL",
+                    "Unit 05 must not contain altitude reference '{}' in line: {}",
+                    word,
+                    line
+                );
+            }
+        }
+
+        // 3. Verify ISO/IEC/IEEE 15288:2023 §6.4.4 and ISO/IEC/IEEE 15026-3 citations
+        assert!(
+            raw_content.contains("ISO/IEC/IEEE 15288:2023 §6.4.4"),
+            "Unit 05 must cite ISO/IEC/IEEE 15288:2023 §6.4.4"
+        );
+        assert!(
+            raw_content.contains("ISO/IEC/IEEE 15026-3"),
+            "Unit 05 must cite ISO/IEC/IEEE 15026-3"
+        );
+
+        // 4. Verify normalized SI units in parameter definitions
+        let expected_si_tokens = ["m/s", "m/s^2", "kg", "J", "s"];
+        for si in &expected_si_tokens {
+            assert!(
+                raw_content.contains(si),
+                "Unit 05 must define parameters with normalized SI unit '{}'",
+                si
+            );
+        }
+
+        // 5. Verify SKILL.md ConOps engineering skill is decontaminated of hardcoded SORA requirements
+        let skill_path = repo_root.join("skills/spec-conops-engineering/SKILL.md");
+        if skill_path.is_file() {
+            let skill_content = fs::read_to_string(&skill_path).unwrap();
+            assert!(
+                !skill_content.contains("JARUS SORA"),
+                "skills/spec-conops-engineering/SKILL.md must not contain hardcoded 'JARUS SORA'"
+            );
+        }
+
+        // 6. Verify backwards-compatible alias handling in assemble-conops
+        let temp_dir = std::env::temp_dir().join(format!("test_alias_05_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&temp_dir);
+        let conops_temp = temp_dir.join("conops");
+        fs::create_dir_all(&conops_temp).unwrap();
+
+        // Write historical alias file 05_AIRSPACE_AND_SORA_RISK.md
+        let alias_file = conops_temp.join("05_AIRSPACE_AND_SORA_RISK.md");
+        fs::write(&alias_file, "## 5. Operational State Space\n\nContent via historical alias.").unwrap();
+
+        let mut engine = SysMLParameterBindingEngine::new(None, None, None, false, None);
+        let (assembled_text, errors) = assemble_document(
+            &conops_temp,
+            Some("CONOPS"),
+            Some("1.0.0"),
+            Some("2026-10-14"),
+            &mut engine,
+            None,
+        );
+        assert!(errors.is_empty(), "Assembly with alias failed: {:?}", errors);
+        assert!(
+            assembled_text.contains("Content via historical alias"),
+            "assemble_document must include 05_AIRSPACE_AND_SORA_RISK.md as fallback alias for Unit 05"
+        );
+
+        fs::remove_dir_all(&temp_dir).unwrap();
+    }
+
+    #[test]
     fn test_canonical_unit_system_architecture_and_optx_decontamination() {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let repo_root = manifest_dir.parent().unwrap().parent().unwrap();
