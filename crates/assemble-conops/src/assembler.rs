@@ -1358,5 +1358,43 @@ mod tests {
         assert!(!raw.contains('\u{2014}'), "Unit 08 must not contain Unicode em dash");
         assert!(!raw.contains('\u{2013}'), "Unit 08 must not contain Unicode en dash");
     }
+
+    #[test]
+    fn test_governance_rule_conops_mission_intent_integrity_decontamination() {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let repo_root = manifest_dir.parent().unwrap().parent().unwrap();
+        let rule_path = repo_root.join("rules/conops-mission-intent-integrity.md");
+
+        assert!(rule_path.is_file(), "rules/conops-mission-intent-integrity.md must exist");
+        let content = fs::read_to_string(&rule_path).unwrap();
+
+        // Forbidden domain-specific aerospace concepts violating Pure Schema-Driven Compiler Invariant
+        let forbidden_concepts = [
+            "civil airborne",
+            "bird strike",
+            "mid-air",
+            "airframe limits",
+            "pitot probe",
+            "propeller delamination",
+            "pilot fatigue",
+            "DO-178C",
+            "ARP4761",
+            "ARP4754A",
+            "h_max",
+        ];
+
+        let mut found_violations = Vec::new();
+        for concept in &forbidden_concepts {
+            if content.to_lowercase().contains(&concept.to_lowercase()) {
+                found_violations.push(*concept);
+            }
+        }
+
+        assert!(
+            found_violations.is_empty(),
+            "rules/conops-mission-intent-integrity.md contains forbidden aerospace domain concepts: {:?}",
+            found_violations
+        );
+    }
 }
 

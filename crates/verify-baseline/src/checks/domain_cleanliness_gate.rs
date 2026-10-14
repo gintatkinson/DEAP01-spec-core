@@ -642,6 +642,43 @@ mod tests {
     }
 
     #[test]
+    fn test_check_19_conops_governance_rule_aerospace_decontamination() {
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(|p| p.parent())
+            .expect("repo root");
+        let rule_path = repo_root.join("rules/conops-mission-intent-integrity.md");
+        assert!(rule_path.is_file(), "rules/conops-mission-intent-integrity.md must exist");
+        let content = fs::read_to_string(&rule_path).unwrap();
+
+        let forbidden_terms = [
+            "civil airborne",
+            "bird strike",
+            "mid-air",
+            "airframe limits",
+            "pitot probe",
+            "propeller delamination",
+            "pilot fatigue",
+            "DO-178C",
+            "ARP4761",
+            "ARP4754A",
+            "h_max",
+        ];
+
+        let mut violations = Vec::new();
+        for term in &forbidden_terms {
+            if content.to_lowercase().contains(&term.to_lowercase()) {
+                violations.push(*term);
+            }
+        }
+        assert!(
+            violations.is_empty(),
+            "rules/conops-mission-intent-integrity.md contains forbidden aerospace domain concepts: {:?}",
+            violations
+        );
+    }
+
+    #[test]
     fn test_check_19_current_repo_passes() {
         let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()

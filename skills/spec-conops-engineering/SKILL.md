@@ -185,9 +185,9 @@ The `Worker ConOps` must strictly enforce the following repository rules:
 ### 4.2 Open Multi-Domain Threat Taxonomy
 The threat matrix (`04_MULTI_DOMAIN_THREAT_MATRIX.md`) must cover multi-domain threats across all canonical operational domains:
 1. **Kinetic**: Projectiles, collisions, interceptors, physical debris.
-2. **Mechanical**: Structural fatigue, actuator jamming, motor bearing seizure, propeller delamination.
-3. **Power / Thermal**: Battery thermal runaway, ESC over-temperature, power distribution rail collapse.
-4. **Environmental**: Severe turbulence, icing, icing-induced pitot freeze, lightning strike, volcanic ash.
+2. **Mechanical**: Structural fatigue, actuator jamming, motor bearing seizure, structural delamination or material fracture.
+3. **Power / Thermal**: Battery thermal runaway, power stage / motor driver over-temperature, power distribution rail collapse.
+4. **Environmental**: Severe dynamic environmental disturbances, moisture condensation, probe/sensor freeze and icing, lightning strike, toxic particulate.
 5. **EW / Cyber**: GNSS jamming/spoofing, RF link interception, telemetry injection, malicious firmware ingress.
 6. **Optical**: Laser blinding of electro-optical sensors, camera lens saturation, optical tracking denial.
 7. **Signature / Acoustic**: Acoustic emission harmonics, infrared signature, radar cross-section observability.
@@ -198,7 +198,7 @@ The threat matrix (`04_MULTI_DOMAIN_THREAT_MATRIX.md`) must cover multi-domain t
 Per [`rules/latex-katex-integrity.md`](../../rules/latex-katex-integrity.md):
 - **Display Math Blocks**: All mathematical formulations must be placed inside dedicated display blocks using `$$ \begin{aligned} ... \end{aligned} $$` on separate newlines.
 - **Pure Symbolic Math**: Do NOT embed physical unit macros (e.g. `\text{ m}`, `\text{ m/s}`, `\text{ J}`) inside LaTeX math blocks. Units must be defined in the accompanying parameter table.
-- **No Table Math Delimiters**: Never use `$ ... $` or `$$ ... $$` math delimiters inside Markdown table cells. Use standard plain text and Unicode characters (e.g., `h_max m`, `deg`, `m/s`, `J`, `tau_max ms`).
+- **No Table Math Delimiters**: Never use `$ ... $` or `$$ ... $$` math delimiters inside Markdown table cells. Use standard plain text and Unicode characters (e.g., `boundary_max m`, `deg`, `m/s`, `J`, `tau_max ms`).
 - **Parameter Definitions & Engineering Units Tables**: Display equations must be immediately followed by a parameter definition table specifying symbols, values, units, and engineering descriptions.
 
 - **Pure Schema-Driven Mathematical Formulation Invariant**:
