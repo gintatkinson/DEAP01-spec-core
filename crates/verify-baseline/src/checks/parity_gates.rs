@@ -3,7 +3,7 @@
 use deap_core::rules::EXCLUDED_DIRS;
 use deap_core::sysml_ast::{parse_action_defs, parse_part_defs, parse_port_defs};
 use deap_core::workspace::is_upstream_compiler;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
@@ -633,17 +633,112 @@ pub fn check_factual_grounding(
 }
 
 
+/// Helper: Extracts a declared port ID (e.g. `PORT-FC-GNSS_FIX_IN`) from text.
+fn extract_port_identifier(s: &str) -> Option<String> {
+    let trimmed = s.trim_matches(|c| c == '`' || c == ' ' || c == '*');
+    if let Some(pos) = trimmed.find("PORT-") {
+        let rest = &trimmed[pos..];
+        let end = rest
+            .find(|c: char| !c.is_ascii_alphanumeric() && c != '_' && c != '-')
+            .unwrap_or(rest.len());
+        if end > 5 {
+            return Some(rest[..end].to_ascii_uppercase());
+        }
+    }
+    None
+}
+
+/// Helper: Extracts connection ID (e.g. `CONN-05`) from text.
+fn extract_single_conn_id(s: &str) -> Option<String> {
+    let trimmed = s.trim_matches(|c| c == '`' || c == ' ' || c == '*');
+    let lower = trimmed.to_ascii_lowercase();
+    if let Some(pos) = lower.find("conn-") {
+        let rest = &trimmed[pos..];
+        let end = rest
+            .find(|c: char| !c.is_ascii_alphanumeric() && c != '_' && c != '-')
+            .unwrap_or(rest.len());
+        if end > 5 {
+            return Some(rest[..end].to_ascii_uppercase());
+        }
+    }
+    None
+}
+
+/// Helper: Extracts signal ID (e.g. `SIG-NS-FC-001`) from text.
+fn extract_single_signal_id(s: &str) -> Option<String> {
+    let trimmed = s.trim_matches(|c| c == '`' || c == ' ' || c == '*');
+    let lower = trimmed.to_ascii_lowercase();
+    if let Some(pos) = lower.find("sig-") {
+        let rest = &trimmed[pos..];
+        let end = rest
+            .find(|c: char| !c.is_ascii_alphanumeric() && c != '_' && c != '-')
+            .unwrap_or(rest.len());
+        if end > 4 {
+            return Some(rest[..end].to_ascii_uppercase());
+        }
+    }
+    None
+}
+
+/// Helper: Parses markdown table headers and rows under a section header containing `section_kw`.
+fn parse_markdown_table_rows<'a>(
+    content: &'a str,
+    section_kw: &str,
+) -> (Vec<String>, Vec<Vec<&'a str>>) {
+    let mut headers = Vec::new();
+    let mut rows = Vec::new();
+    let mut in_section = false;
+    let mut in_table = false;
+    let mut header_seen = false;
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('#') {
+            let lower = trimmed.to_lowercase();
+            if lower.contains(section_kw) {
+                in_section = true;
+                in_table = false;
+                header_seen = false;
+                continue;
+            } else if in_section {
+                break;
+            }
+        }
+
+        if in_section {
+            if trimmed.starts_with('|') {
+                let cols: Vec<&'a str> = trimmed.split('|').map(|c| c.trim()).collect();
+                let start = if trimmed.starts_with('|') && cols.len() > 1 { 1 } else { 0 };
+                let end = if trimmed.ends_with('|') && cols.len() > start { cols.len() - 1 } else { cols.len() };
+                let row_cols: Vec<&'a str> = cols[start..end].iter().copied().collect();
+
+                if !header_seen {
+                    headers = row_cols.iter().map(|s| s.to_lowercase()).collect();
+                    header_seen = true;
+                    continue;
+                }
+                if trimmed.contains("---") {
+                    in_table = true;
+                    continue;
+                }
+                if in_table {
+                    rows.push(row_cols);
+                }
+            } else if in_table && trimmed.is_empty() {
+                break;
+            }
+        }
+    }
+    (headers, rows)
+}
+
 /// Check 24: Level 1C ICD Completeness & Signal Flow Parity Gate.
 pub fn check_icd_completeness(repo_root: &Path) -> Result<ParityOutcome, Vec<String>> {
-    let model_text = discover_sysml_model_text(repo_root);
-    let schema_dir = repo_root.join("schema");
-    let has_extracted = schema_dir.join("extracted").is_dir();
-
-    if model_text.is_none() && !has_extracted {
-        return Ok(ParityOutcome::PendingOrClean);
+    let is_upstream = is_upstream_compiler(repo_root);
+    if is_upstream {
+        return Ok(ParityOutcome::Verified);
     }
 
-    let is_upstream = is_upstream_compiler(repo_root);
     let interfaces_dir = if repo_root.join("docs").join("interfaces").is_dir() {
         repo_root.join("docs").join("interfaces")
     } else if repo_root.join("docs").join("icd").is_dir() {
@@ -652,28 +747,306 @@ pub fn check_icd_completeness(repo_root: &Path) -> Result<ParityOutcome, Vec<Str
         repo_root.join("docs").join("interfaces")
     };
 
-    if !is_upstream {
-        if !interfaces_dir.is_dir() {
-            return Ok(ParityOutcome::InterfacesDirMissing);
+    let model_text = discover_sysml_model_text(repo_root);
+    let schema_dir = repo_root.join("schema");
+    let has_extracted = schema_dir.join("extracted").is_dir();
+
+    if !interfaces_dir.is_dir() {
+        if model_text.is_none() && !has_extracted {
+            return Ok(ParityOutcome::PendingOrClean);
         }
+        return Ok(ParityOutcome::InterfacesDirMissing);
+    }
 
-        let has_icd = fs::read_dir(&interfaces_dir)
-            .map(|entries| {
-                entries
-                    .filter_map(|e| e.ok())
-                    .any(|e| {
-                        let name = e.file_name().to_string_lossy().to_string();
-                        name.ends_with(".md") && name.contains("ICD")
-                    })
-            })
-            .unwrap_or(false);
+    // Discover ICD files
+    let mut icd01_path = None;
+    let mut icd02_path = None;
 
-        if !has_icd {
-            return Ok(ParityOutcome::IcdSpecsPending);
+    if let Ok(entries) = fs::read_dir(&interfaces_dir) {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.ends_with(".md") {
+                if name.contains("ICD_01") || name.contains("SYSTEM_INTERFACE_MATRIX") {
+                    icd01_path = Some(entry.path());
+                } else if name.contains("ICD_02") || name.contains("MASTER_SIGNAL_DICTIONARY") {
+                    icd02_path = Some(entry.path());
+                }
+            }
         }
     }
 
-    Ok(ParityOutcome::Verified)
+    if icd01_path.is_none() && icd02_path.is_none() {
+        if model_text.is_none() && !has_extracted {
+            return Ok(ParityOutcome::PendingOrClean);
+        }
+        return Ok(ParityOutcome::IcdSpecsPending);
+    }
+
+    let mut errors = Vec::new();
+
+    let icd01_file = match icd01_path {
+        Some(p) => p,
+        None => {
+            errors.push("Check 24 failed: System Interface Matrix 'docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md' is missing.".to_string());
+            return Err(errors);
+        }
+    };
+
+    let icd02_file = match icd02_path {
+        Some(p) => p,
+        None => {
+            errors.push("Check 24 failed: Master Signal Flow Dictionary 'docs/interfaces/ICD_02_MASTER_SIGNAL_DICTIONARY.md' is missing.".to_string());
+            return Err(errors);
+        }
+    };
+
+    let icd01_content = fs::read_to_string(&icd01_file).map_err(|e| vec![format!("Failed to read ICD_01: {}", e)])?;
+    let icd02_content = fs::read_to_string(&icd02_file).map_err(|e| vec![format!("Failed to read ICD_02: {}", e)])?;
+
+    // 1. Parse Section 4: Port Definition Roster Table
+    let (port_headers, port_rows) = parse_markdown_table_rows(&icd01_content, "port definition");
+    if port_rows.is_empty() {
+        errors.push("Check 24 failed: ICD_01 Port Definition Roster Table (Section 4) is missing or contains 0 rows.".to_string());
+    }
+
+    let port_id_idx = port_headers.iter().position(|h| h.contains("port id") || h.contains("id")).unwrap_or(0);
+    let subsys_idx = port_headers.iter().position(|h| h.contains("subsystem")).unwrap_or(1);
+    let port_name_idx = port_headers.iter().position(|h| h.contains("port name") || h.contains("name")).unwrap_or(2);
+    let dir_idx = port_headers.iter().position(|h| h.contains("direction")).unwrap_or(3);
+
+    struct PortMeta {
+        subsystem: String,
+        name: String,
+        direction: String,
+    }
+
+    let mut declared_ports: HashMap<String, PortMeta> = HashMap::new();
+    for row in &port_rows {
+        let raw_id = row.get(port_id_idx).copied().unwrap_or("");
+        let port_id = extract_port_identifier(raw_id).unwrap_or_else(|| {
+            raw_id.trim_matches(|c| c == '`' || c == ' ' || c == '*').to_string()
+        });
+        let subsys = row.get(subsys_idx).copied().unwrap_or("").trim_matches(|c| c == '`' || c == ' ' || c == '*').to_string();
+        let name = row.get(port_name_idx).copied().unwrap_or("").trim_matches(|c| c == '`' || c == ' ' || c == '*').to_string();
+        let dir = row.get(dir_idx).copied().unwrap_or("").trim_matches(|c| c == '`' || c == ' ' || c == '*').to_ascii_uppercase();
+
+        if port_id.is_empty() || !port_id.starts_with("PORT-") {
+            errors.push(format!("Check 24 failed: Invalid Port ID '{}' in Section 4 (must start with 'PORT-')", raw_id));
+        } else {
+            declared_ports.insert(port_id, PortMeta { subsystem: subsys, name, direction: dir });
+        }
+    }
+
+    // 2. Parse Section 5: Connection Binding Roster Table
+    let (conn_headers, conn_rows) = parse_markdown_table_rows(&icd01_content, "connection binding");
+    if conn_rows.is_empty() {
+        errors.push("Check 24 failed: ICD_01 Connection Binding Roster Table (Section 5) is missing or contains 0 rows.".to_string());
+    }
+
+    let conn_id_idx = conn_headers.iter().position(|h| h.contains("connection id") || h.contains("id")).unwrap_or(0);
+    let src_idx = conn_headers.iter().position(|h| h.contains("source")).unwrap_or(1);
+    let dst_idx = conn_headers.iter().position(|h| h.contains("dest")).unwrap_or(2);
+    let flows_idx = conn_headers.iter().position(|h| h.contains("item flow") || h.contains("flow")).unwrap_or(6);
+
+    let mut bound_ports = HashSet::new();
+    let mut valid_connections = HashSet::new();
+
+    for row in &conn_rows {
+        let raw_conn_id = row.get(conn_id_idx).copied().unwrap_or("");
+        let conn_id = extract_single_conn_id(raw_conn_id).unwrap_or_else(|| {
+            raw_conn_id.trim_matches(|c| c == '`' || c == ' ' || c == '*').to_string()
+        });
+        let src_raw = row.get(src_idx).copied().unwrap_or("");
+        let dst_raw = row.get(dst_idx).copied().unwrap_or("");
+        let flows_raw = row.get(flows_idx).copied().unwrap_or("");
+
+        if conn_id.is_empty() || !conn_id.starts_with("CONN-") {
+            errors.push(format!("Check 24 failed: Invalid Connection ID '{}' in Section 5 (must start with 'CONN-')", raw_conn_id));
+        }
+
+        let src_port_id = extract_port_identifier(src_raw);
+        let dst_port_id = extract_port_identifier(dst_raw);
+
+        if src_port_id.is_none() {
+            errors.push(format!(
+                "Check 24 failed: Connection '{}' source port '{}' lacks valid PORT-* identifier",
+                conn_id, src_raw
+            ));
+        }
+        if dst_port_id.is_none() {
+            errors.push(format!(
+                "Check 24 failed: Connection '{}' dest port '{}' lacks valid PORT-* identifier",
+                conn_id, dst_raw
+            ));
+        }
+
+        // Hierarchical qualification requirement for nested connections (e.g. GNSS fix)
+        let is_gnss = src_raw.to_lowercase().contains("gnss")
+            || dst_raw.to_lowercase().contains("gnss")
+            || flows_raw.to_lowercase().contains("gnss")
+            || conn_id.to_lowercase().contains("gnss");
+
+        if is_gnss {
+            let src_qualified = src_raw.contains('(') && src_raw.contains('.') && src_raw.contains(')');
+            let dst_qualified = dst_raw.contains('(') && dst_raw.contains('.') && dst_raw.contains(')');
+            if !src_qualified {
+                errors.push(format!(
+                    "Check 24 failed: Connection '{}' source port '{}' lacks hierarchical subsystem qualification for nested GNSS fix port (expected format 'PORT-ID (Subsystem.Path.port)')",
+                    conn_id, src_raw
+                ));
+            }
+            if !dst_qualified {
+                errors.push(format!(
+                    "Check 24 failed: Connection '{}' dest port '{}' lacks hierarchical subsystem qualification for nested GNSS fix port (expected format 'PORT-ID (Subsystem.Path.port)')",
+                    conn_id, dst_raw
+                ));
+            }
+        }
+
+        if let Some(ref sp_id) = src_port_id {
+            if let Some(port) = declared_ports.get(sp_id) {
+                if port.direction != "OUT" && port.direction != "INOUT" {
+                    errors.push(format!(
+                        "Check 24 failed: Connection '{}' binds port '{}' with direction '{}' as source (expected OUT or INOUT)",
+                        conn_id, sp_id, port.direction
+                    ));
+                }
+                bound_ports.insert(sp_id.clone());
+            } else {
+                errors.push(format!(
+                    "Check 24 failed: Connection '{}' references undeclared source port '{}'",
+                    conn_id, sp_id
+                ));
+            }
+        }
+
+        if let Some(ref dp_id) = dst_port_id {
+            if let Some(port) = declared_ports.get(dp_id) {
+                if port.direction != "IN" && port.direction != "INOUT" {
+                    errors.push(format!(
+                        "Check 24 failed: Connection '{}' binds port '{}' with direction '{}' as destination (expected IN or INOUT)",
+                        conn_id, dp_id, port.direction
+                    ));
+                }
+                bound_ports.insert(dp_id.clone());
+            } else {
+                errors.push(format!(
+                    "Check 24 failed: Connection '{}' references undeclared dest port '{}'",
+                    conn_id, dp_id
+                ));
+            }
+        }
+
+        if let (Some(s), Some(d)) = (src_port_id, dst_port_id) {
+            valid_connections.insert((s, d));
+        }
+    }
+
+    // 3. Dangling ports check
+    for (port_id, port) in &declared_ports {
+        if !bound_ports.contains(port_id) {
+            errors.push(format!(
+                "Check 24 failed: Dangling port detected: declared port '{}' ({}) in subsystem '{}' is not bound to any connection in Section 5",
+                port_id, port.name, port.subsystem
+            ));
+        }
+    }
+
+    // 4. Parse ICD_02: Master Signal Flow Dictionary (Section 2)
+    let (sig_headers, sig_rows) = parse_markdown_table_rows(&icd02_content, "signal flow dictionary");
+    if sig_rows.is_empty() {
+        errors.push("Check 24 failed: ICD_02 Master Signal Flow Dictionary Table (Section 2) is missing or contains 0 rows.".to_string());
+    }
+
+    let sig_id_idx = sig_headers.iter().position(|h| h.contains("signal id") || h.contains("id")).unwrap_or(0);
+    let name_idx = sig_headers.iter().position(|h| h.contains("signal name") || h.contains("name")).unwrap_or(1);
+    let src_port_idx = sig_headers.iter().position(|h| h.contains("source")).unwrap_or(2);
+    let dst_port_idx = sig_headers.iter().position(|h| h.contains("dest")).unwrap_or(3);
+    let type_idx = sig_headers.iter().position(|h| h.contains("data type") || h.contains("type")).unwrap_or(4);
+    let units_idx = sig_headers.iter().position(|h| h.contains("unit")).unwrap_or(5);
+    let range_idx = sig_headers.iter().position(|h| h.contains("range")).unwrap_or(6);
+    let rate_idx = sig_headers.iter().position(|h| h.contains("rate")).unwrap_or(7);
+    let default_idx = sig_headers.iter().position(|h| h.contains("default")).unwrap_or(8);
+    let citation_idx = sig_headers.iter().position(|h| h.contains("citation") || h.contains("schema") || h.contains("source")).unwrap_or(9);
+
+    let placeholders = [
+        "not declared in schema",
+        "declared assumption",
+        "tbd",
+        "unknown",
+        "todo",
+        "unspecified",
+    ];
+
+    for row in &sig_rows {
+        let raw_sig_id = row.get(sig_id_idx).copied().unwrap_or("");
+        let sig_id = extract_single_signal_id(raw_sig_id).unwrap_or_else(|| {
+            raw_sig_id.trim_matches(|c| c == '`' || c == ' ' || c == '*').to_string()
+        });
+        let sig_name = row.get(name_idx).copied().unwrap_or("").trim_matches(|c| c == '`' || c == ' ' || c == '*');
+        let src_raw = row.get(src_port_idx).copied().unwrap_or("");
+        let dst_raw = row.get(dst_port_idx).copied().unwrap_or("");
+        let src_port = extract_port_identifier(src_raw).unwrap_or_else(|| {
+            src_raw.trim_matches(|c| c == '`' || c == ' ' || c == '*').to_string()
+        });
+        let dst_port = extract_port_identifier(dst_raw).unwrap_or_else(|| {
+            dst_raw.trim_matches(|c| c == '`' || c == ' ' || c == '*').to_string()
+        });
+
+        if sig_id.is_empty() || !sig_id.starts_with("SIG-") {
+            errors.push(format!("Check 24 failed: Invalid Signal ID '{}' in Section 2 (must start with 'SIG-')", raw_sig_id));
+        }
+
+        // Check foreign keys to declared ports
+        if !declared_ports.contains_key(&src_port) {
+            errors.push(format!("Check 24 failed: Signal '{}' ({}) references undeclared source port '{}'", sig_id, sig_name, src_port));
+        }
+        if !declared_ports.contains_key(&dst_port) {
+            errors.push(format!("Check 24 failed: Signal '{}' ({}) references undeclared dest port '{}'", sig_id, sig_name, dst_port));
+        }
+
+        // Check mapping to active connection
+        let is_mapped = valid_connections.contains(&(src_port.clone(), dst_port.clone()));
+        if !is_mapped {
+            errors.push(format!(
+                "Check 24 failed: Unmapped signal '{}': no connection in ICD_01 connects source '{}' to dest '{}'",
+                sig_id, src_port, dst_port
+            ));
+        }
+
+        // Metrology completeness checks
+        let data_type = row.get(type_idx).copied().unwrap_or("").trim();
+        let si_units = row.get(units_idx).copied().unwrap_or("").trim();
+        let valid_range = row.get(range_idx).copied().unwrap_or("").trim();
+        let update_rate = row.get(rate_idx).copied().unwrap_or("").trim();
+        let safe_default = row.get(default_idx).copied().unwrap_or("").trim();
+        let citation = row.get(citation_idx).copied().unwrap_or("").trim();
+
+        let fields = [
+            ("data type", data_type),
+            ("SI units", si_units),
+            ("valid range", valid_range),
+            ("update rate", update_rate),
+            ("safe default value", safe_default),
+            ("schema citation", citation),
+        ];
+
+        for (fname, val) in &fields {
+            let lower = val.to_lowercase();
+            if val.is_empty() || placeholders.iter().any(|&ph| lower.contains(ph)) {
+                errors.push(format!(
+                    "Check 24 failed: Signal '{}' field '{}' has incomplete metrology or placeholder: '{}'",
+                    sig_id, fname, val
+                ));
+            }
+        }
+    }
+
+    if errors.is_empty() {
+        Ok(ParityOutcome::Verified)
+    } else {
+        Err(errors)
+    }
 }
 
 /// Check 25: Operational-to-Resource Allocation Gate (Gate 24).
@@ -1520,6 +1893,98 @@ flowchart TD
 
         let check17_res = check_safety_integrity(&tmp.path, false, true);
         assert!(check17_res.is_err(), "Check 17 failed to reject fraudulent safety citations to phantom files!");
+    }
+
+    #[test]
+    fn test_defect_333_icd_unqualified_nested_gnss_fix_fails() {
+        let tmp = TempDir::new("check24_unqualified_gnss_fix");
+        let interfaces_dir = tmp.path.join("docs").join("interfaces");
+        fs::create_dir_all(&interfaces_dir).unwrap();
+
+        let icd01_content = r#"| Attribute | Specification Detail |
+| :--- | :--- |
+| **Issue ID** | #333 |
+| **Title** | System Interface Matrix |
+| **Type** | icd |
+
+# Level 1C: System Interface Matrix
+
+## 4. Port Definition Roster Table
+| Port ID | Subsystem | Port Name | Direction | Port Type | Multiplicity | Protocol Profile |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `PORT-FC-GNSS_FIX_IN` | FlightController | gnssFixIn | IN | DataPort | 1 | PeriodicStream |
+| `PORT-NS-GNSS_FIX_OUT` | NavigationSensorSuite | gnssFixOut | OUT | DataPort | 1 | PeriodicStream |
+
+## 5. Connection Binding Roster Table
+| Connection ID | Source Port | Dest Port | Flow Behavior | Latency Max ms | Reliability Req | Item Flows Conveyed |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `CONN-05` | gnssFixOut | gnssFixIn | Periodic update (100 Hz) | 10.0 | High | GnssFix |
+"#;
+        fs::write(interfaces_dir.join("ICD_01_SYSTEM_INTERFACE_MATRIX.md"), icd01_content).unwrap();
+
+        let icd02_content = r#"| Attribute | Specification Detail |
+| :--- | :--- |
+| **Issue ID** | #333 |
+| **Title** | Master Signal Flow Dictionary |
+| **Type** | icd |
+
+# Level 1C: Master Signal Flow Dictionary
+
+## 2. Master Signal Flow Dictionary Table
+| Signal ID | Signal Name | Source Port | Dest Port | Data Type | SI Units | Valid Range | Update Rate | Safe Default Value | Schema Citation |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `SIG-NS-FC-001` | GnssFixData | `PORT-NS-GNSS_FIX_OUT` | `PORT-FC-GNSS_FIX_IN` | GnssFix | dimensionless | [0, 1] | 100 Hz | 0 | schema/model.sysml |
+"#;
+        fs::write(interfaces_dir.join("ICD_02_MASTER_SIGNAL_DICTIONARY.md"), icd02_content).unwrap();
+
+        let res = check_icd_completeness(&tmp.path);
+        assert!(res.is_err(), "Check 24 must fail when gnssFix connection lacks hierarchical qualification: {:?}", res);
+    }
+
+    #[test]
+    fn test_defect_333_icd_complete_level1c_suite_passes() {
+        let tmp = TempDir::new("check24_complete_level1c");
+        let interfaces_dir = tmp.path.join("docs").join("interfaces");
+        fs::create_dir_all(&interfaces_dir).unwrap();
+
+        let icd01_content = r#"| Attribute | Specification Detail |
+| :--- | :--- |
+| **Issue ID** | #333 |
+| **Title** | System Interface Matrix |
+| **Type** | icd |
+
+# Level 1C: System Interface Matrix
+
+## 4. Port Definition Roster Table
+| Port ID | Subsystem | Port Name | Direction | Port Type | Multiplicity | Protocol Profile |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `PORT-FC-GNSS_FIX_IN` | FlightController | gnssFixIn | IN | DataPort | 1 | PeriodicStream |
+| `PORT-NS-GNSS_FIX_OUT` | NavigationSensorSuite | gnssFixOut | OUT | DataPort | 1 | PeriodicStream |
+
+## 5. Connection Binding Roster Table
+| Connection ID | Source Port | Dest Port | Flow Behavior | Latency Max ms | Reliability Req | Item Flows Conveyed |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `CONN-05` | `PORT-NS-GNSS_FIX_OUT` (FlightController.NavigationSensorSuite.gnssFixOut) | `PORT-FC-GNSS_FIX_IN` (FlightController.gnssFixIn) | Periodic update (100 Hz) | 10.0 | High | GnssFix |
+"#;
+        fs::write(interfaces_dir.join("ICD_01_SYSTEM_INTERFACE_MATRIX.md"), icd01_content).unwrap();
+
+        let icd02_content = r#"| Attribute | Specification Detail |
+| :--- | :--- |
+| **Issue ID** | #333 |
+| **Title** | Master Signal Flow Dictionary |
+| **Type** | icd |
+
+# Level 1C: Master Signal Flow Dictionary
+
+## 2. Master Signal Flow Dictionary Table
+| Signal ID | Signal Name | Source Port | Dest Port | Data Type | SI Units | Valid Range | Update Rate | Safe Default Value | Schema Citation |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `SIG-NS-FC-001` | GnssFixData | `PORT-NS-GNSS_FIX_OUT` | `PORT-FC-GNSS_FIX_IN` | GnssFix | dimensionless | [0, 1] | 100 Hz | 0 | schema/model.sysml |
+"#;
+        fs::write(interfaces_dir.join("ICD_02_MASTER_SIGNAL_DICTIONARY.md"), icd02_content).unwrap();
+
+        let res = check_icd_completeness(&tmp.path);
+        assert_eq!(res, Ok(ParityOutcome::Verified), "Expected complete ICD suite to pass, but got: {:?}", res);
     }
 }
 

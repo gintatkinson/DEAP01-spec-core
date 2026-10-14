@@ -75,6 +75,7 @@ The Worker ICD synthesizes two primary Level 1C engineering artifacts in `docs/i
 
 2. **Connection Binding Matrix & Topological Graph**:
    - For every SysML `connection` node $c = \langle p_{\mathrm{src}}, p_{\mathrm{dst}}, \Sigma_{i \to j}, \tau_{\mathrm{latency}} \rangle$, extract the source port reference, destination port reference, maximum allowable latency bound $\tau_{\mathrm{latency}}$, and reliability requirement.
+   - **Mandatory Hierarchical Subsystem Qualification for Nested Ports**: When binding nested subsystem or subpackage ports (e.g. `FlightController.NavigationSensorSuite.gnssFixOut` to `FlightController.gnssFixIn`), connection bindings in `ICD_01_SYSTEM_INTERFACE_MATRIX.md` Section 5 MUST use hierarchical qualification in the port reference: `PORT-ID (Subsystem.Path.port)` (e.g. `PORT-NS-GNSS_FIX_OUT (FlightController.NavigationSensorSuite.gnssFixOut)`). Bare unqualified port names (e.g. `gnssFixOut`) are strictly prohibited and rejected by Check 24.
    - Synthesize the global subsystem topological connectivity flowchart using Mermaid `flowchart TD`.
    - Synthesize the canonical $N^2$ Subsystem Interface Matrix:
      - Subsystems $s_1, s_2, \dots, s_N$ occupy the main diagonal.
@@ -102,6 +103,7 @@ The Worker ICD synthesizes two primary Level 1C engineering artifacts in `docs/i
    - **Update Rate**: Periodic rate in plain text `f Hz` (e.g. `50 Hz`, `100 Hz`) or aperiodic timing bound `Aperiodic [tau_min, tau_max] ms`
    - **Safe Default Value**: Deterministic value during cold initialization, link loss, sensor fault, or emergency failsafe state (e.g. `0.0`, `false`, `DISARMED`, `101325.0`)
    - **Schema Citation**: Exact provenance pointer to Level 0 source model (`schema/extracted/sensor.yang#L45` or `models/system.sysml#L120`)
+   - **Exhaustive Signal Metrology Mandate (Zero Placeholders)**: All ten columns must contain concrete, verified engineering data. Uncharacterized placeholders such as `'Not declared in schema (Declared Assumption)'`, `'TBD'`, `'N/A'`, `'Unknown'`, or empty fields are strictly prohibited across all signals.
 
 3. **Safety Criticality & STPA Invariants**:
    - Identify all safety-critical signals impacting flight safety, system state machines, or hazard mitigation.
@@ -183,6 +185,7 @@ flowchart TD
 | Connection ID | Source Port | Dest Port | Flow Behavior | Latency Max ms | Reliability Req | Item Flows Conveyed |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | `CONN-01` | `PORT-SUBA-DATA_OUT` | `PORT-SUBB-DATA_IN` | Continuous Stream | 10.0 | High | TelemetryStatePacket |
+| `CONN-05` | `PORT-NS-GNSS_FIX_OUT` (FlightController.NavigationSensorSuite.gnssFixOut) | `PORT-FC-GNSS_FIX_IN` (FlightController.gnssFixIn) | Periodic update (100 Hz) | 10.0 | High | GnssFix |
 
 ## 6. Source References
 Structural Schema: `schema/model.sysml`
@@ -285,14 +288,10 @@ Per [`rules/platform-independence.md`](rules/platform-independence.md):
 
 ## Step 5: Parity Verification Gate 23 & Backlog Synchronization
 
-1. **Mandatory Local Verification Gate (Gate 23 - ICDCompletenessValidator)**:
-   Before committing or creating tracker issues, the Worker ICD MUST run local verification checks:
+1. **Mandatory Local Verification Gate (Gate 23 - ICD Completeness Gate)**:
+   Before committing or creating tracker issues, the Worker ICD MUST run native baseline verification:
    ```bash
-   python3 skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/icd_completeness_validator.py
-   ```
-   and the model coverage verifier:
-   ```bash
-   ./target/release/verify-baseline . --spec-only --only "<spec_file>"
+   ./target/release/verify-baseline . --spec-only
    ```
    - Asserts 100% port connection parity (zero dangling ports: $\mathcal{D}_{\mathrm{port}} = \emptyset$).
    - Asserts 100% signal dictionary coverage of schema interface leaves ($\Omega_{\mathrm{coverage}} = 1.0$).
@@ -328,7 +327,7 @@ Per [`rules/platform-independence.md`](rules/platform-independence.md):
      ```
    - Execute post-creation verification check:
      ```bash
-     gh issue view <ID> --json body | python3 -c "import sys,json; b=json.load(sys.stdin)['body']; assert 'Source References' in b or 'References' in b, 'Body is a stub'"
+     gh issue view <ID> | grep -E "(Source References|References)"
      ```
 
 5. **Commit & Return Control**:

@@ -1724,14 +1724,15 @@ Use case operational flows and lifecycle activity references:
         ));
     }
 
-    let stpa_content = format!(
-        r#"# STPA Safety & Failure Mode Tracking Matrix
-
-## 1. Formal Safety Constraints
-{sc_table}
-## 2. STPA Unsafe Control Actions (UCA) Matrix
-{uca_table}
-"#
+    let fmeca_rows = crate::stpa::fmeca::generate_fmeca_matrix(pkg, None);
+    let tokens = crate::stpa::safety_suite::collect_parameter_tokens(pkg);
+    let all_constraints = crate::stpa::safety_suite::collect_all_constraints(pkg);
+    let stpa_content = crate::stpa::safety_suite::render_unified_stpa_matrix(
+        pkg,
+        &ucas,
+        &all_constraints,
+        &fmeca_rows,
+        &tokens,
     );
     generated_files.insert("safety/STPA_MATRIX.md".to_string(), stpa_content);
 

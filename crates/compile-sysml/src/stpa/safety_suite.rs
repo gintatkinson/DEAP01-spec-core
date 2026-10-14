@@ -451,7 +451,10 @@ pub fn transpile_safety_suite(
     );
 
     // 8. STPA_MATRIX.md
-    artifacts.insert("STPA_MATRIX.md".to_string(), render_stpa_matrix(&ucas));
+    artifacts.insert(
+        "STPA_MATRIX.md".to_string(),
+        render_unified_stpa_matrix(pkg, &ucas, &constraints, &fmeca_rows, &tokens),
+    );
 
     // 9. HAZARD_LOG.md
     artifacts.insert("HAZARD_LOG.md".to_string(), render_hazard_log(pkg));
@@ -548,23 +551,31 @@ fn render_losses_hazards_topology(pkg: &PackageDef, ucas: &[UnsafeControlAction]
         }
     }
 
+    let primary_controller = if !controller_names.is_empty() {
+        controller_names.first().cloned().unwrap_or_else(|| "DEAPCompilerSystem".to_string())
+    } else {
+        "DEAPCompilerSystem".to_string()
+    };
+
     out.push_str("\n## System Hazards\n\n");
     out.push_str("| Hazard ID | Associated Control Action | Controller |\n");
     out.push_str("| :--- | :--- | :--- |\n");
+    let mut hazard_count = 0;
     for uca in ucas {
         if uca.id.ends_with("-001") || uca.guide_word == "Not providing" {
             out.push_str(&format!(
                 "| {} | {} | {} |\n",
                 uca.hazard, uca.control_action, uca.controller
             ));
+            hazard_count += 1;
         }
     }
-
-    let primary_controller = if !controller_names.is_empty() {
-        controller_names.first().cloned().unwrap_or_else(|| "DEAPCompilerSystem".to_string())
-    } else {
-        "DEAPCompilerSystem".to_string()
-    };
+    if hazard_count == 0 {
+        out.push_str(&format!(
+            "| H-1 | Hazardous state transition or containment breach | {} |\n",
+            primary_controller
+        ));
+    }
 
     out.push_str("\n## Hierarchical Control Structure Topology\n\n");
     out.push_str("```mermaid\n");
@@ -813,6 +824,106 @@ fn render_rta_architecture(tokens: &HashMap<String, String>) -> String {
     out
 }
 
+/// Renders the authoritative, single unified 8-pillar STPA Safety & Risk Analysis Matrix
+/// conforming to .pipeline/constitution.md:193-211 and Defect #333.
+pub fn render_unified_stpa_matrix(
+    pkg: &PackageDef,
+    ucas: &[UnsafeControlAction],
+    constraints: &[ConstraintDef],
+    fmeca_rows: &[FmecaRow],
+    tokens: &HashMap<String, String>,
+) -> String {
+    let mut out = String::new();
+    out.push_str("# Unified 8-Pillar STPA Safety & Risk Analysis Matrix\n\n");
+    out.push_str("> **Primary Commercial Toolchain Integration Context:** MATLAB / Simulink / Stateflow / Embedded Coder\n");
+    out.push_str("> **Safety Standards:** ISO/IEC/IEEE 15026-3 | ASTM F3269-17 RTA | MIL-STD-882E | SAE ARP4761 | SORA SAIL\n\n");
+    out.push_str("---\n\n");
+
+    // Pillar 1, 2, 3: System Losses, System Hazards, and Hierarchical Control Structure Topology
+    let losses_hazards_top = render_losses_hazards_topology(pkg, ucas);
+    let body_123 = if let Some(stripped) = losses_hazards_top.strip_prefix("# System Losses, Hazards & Control Structure Topology\n\n") {
+        stripped
+    } else {
+        &losses_hazards_top
+    };
+    out.push_str(body_123);
+    out.push_str("\n\n---\n\n");
+
+    // Pillar 4: Unsafe Control Actions (UCA-1..N)
+    out.push_str("## 4. Unsafe Control Actions (**UCA-1..N**)\n\n");
+    out.push_str("Systematic identification across the 4 STPA guide word / failure mode categories:\n\n");
+    out.push_str("1. **Not providing causes hazard**\n");
+    out.push_str("2. **Providing causes hazard**\n");
+    out.push_str("3. **Too early, too late, or out of order**\n");
+    out.push_str("4. **Stopped too soon or applied too long**\n\n");
+    let uca_doc = render_uca_matrix(ucas);
+    let uca_body = if let Some(stripped) = uca_doc.strip_prefix("# Unsafe Control Action Combinatorial Matrix\n\n") {
+        stripped
+    } else {
+        &uca_doc
+    };
+    out.push_str(uca_body);
+    out.push_str("\n\n---\n\n");
+
+    // Pillar 5: Loss Scenarios (LS-1..N) & Causal Factors
+    out.push_str("## 5. Loss Scenarios (**LS-1..N**) & Causal Factors\n\n");
+    let ls_doc = render_loss_scenarios(ucas);
+    let ls_body = if let Some(stripped) = ls_doc.strip_prefix("# Loss Scenarios & Causal Factors\n\n") {
+        stripped
+    } else {
+        &ls_doc
+    };
+    out.push_str(ls_body);
+    out.push_str("\n\n---\n\n");
+
+    // Pillar 6: Formal Safety Constraints (SC-1..N) & Stateflow Synthesis Hooks
+    out.push_str("## 6. Formal Safety Constraints (**SC-1..N**) & Stateflow Synthesis Hooks\n\n");
+    out.push_str("The formal safety constraints and Run-Time Assurance supervisory monitors (`RTA`) are synthesized directly into **MATLAB / Simulink / Stateflow** charts for envelope protection and SLDV verification.\n\n");
+    let sc_doc = render_safety_constraints(ucas, constraints);
+    let sc_body = if let Some(stripped) = sc_doc.strip_prefix("# Formal Safety Constraints\n\n") {
+        stripped
+    } else {
+        &sc_doc
+    };
+    out.push_str(sc_body);
+    out.push_str("\n\n---\n\n");
+
+    // Pillar 7: FMECA Criticality Matrix
+    out.push_str("## 7. FMECA Criticality Matrix\n\n");
+    let fmeca_doc = render_fmeca_matrix_doc(fmeca_rows);
+    let fmeca_body = if let Some(stripped) = fmeca_doc.strip_prefix("# FMECA Criticality Matrix\n\n") {
+        stripped
+    } else {
+        &fmeca_doc
+    };
+    out.push_str(fmeca_body);
+    out.push_str("\n\n---\n\n");
+
+    // Pillar 8: Domain Regulatory Objectives & SORA SAIL Risk Mitigations
+    out.push_str("## 8. Domain Regulatory Objectives & SORA SAIL Risk Mitigations\n\n");
+    let reg_doc = render_regulatory_objectives_assessment(tokens);
+    let reg_body = if let Some(stripped) = reg_doc.strip_prefix("# Domain Regulatory Objectives Assessment & Safety Objective Roster\n\n") {
+        stripped
+    } else {
+        &reg_doc
+    };
+    out.push_str(reg_body);
+    out.push_str("\n\n---\n\n");
+
+    // ASTM F3269-17 RTA Architecture & Toolchain Proof Hooks
+    out.push_str("## 9. ASTM F3269-17 Run-Time Assurance (RTA) Architecture & Toolchain Proof Hooks\n\n");
+    let rta_doc = render_rta_architecture(tokens);
+    let rta_body = if let Some(stripped) = rta_doc.strip_prefix("# Run-Time Assurance Architecture & Formal Proof Suite\n\n") {
+        stripped
+    } else {
+        &rta_doc
+    };
+    out.push_str(rta_body);
+
+    out
+}
+
+#[allow(dead_code)]
 fn render_stpa_matrix(ucas: &[UnsafeControlAction]) -> String {
     let mut out = String::new();
     out.push_str("# STPA Cross-Traceability Matrix\n\n");
@@ -1119,5 +1230,32 @@ Negative safety model invariant: chuteEnabled = 0, recoverySystem = "No"
         let con_names: Vec<String> = pkg.constraint_defs.iter().map(|c| c.name.clone()).collect();
         assert!(con_names.iter().any(|c| c.contains("FlightComputer")), "FlightComputer constraint must be present");
         assert!(!con_names.iter().any(|c| c.contains("PhantomSubsystem")), "PhantomSubsystem constraint must NOT be synthesized when missing from valid_parts");
+    }
+
+    #[test]
+    fn test_defect_333_stpa_matrix_embodies_unified_8_pillars() {
+        let mut pkg = PackageDef::default();
+        pkg.name = "AvengerSystemSafety".to_string();
+
+        let mut p = PartDef::default();
+        p.name = "FlightController".to_string();
+        let mut act = ActionDef::default();
+        act.name = "ExecuteProcess".to_string();
+        p.actions.push(act);
+        pkg.part_defs.push(p);
+
+        let suite = transpile_safety_suite(&pkg, None);
+        let stpa = suite.get("STPA_MATRIX.md").expect("STPA_MATRIX.md must be generated");
+
+        // Defect #333 RED probe: STPA_MATRIX.md must embody the unified 8 pillars
+        assert!(stpa.contains("System Losses"), "STPA_MATRIX.md must contain Pillar 1 (System Losses)");
+        assert!(stpa.contains("System Hazards"), "STPA_MATRIX.md must contain Pillar 2 (System Hazards)");
+        assert!(stpa.contains("Control Structure Topology") || stpa.contains("Hierarchical Safety Control Structure"), "STPA_MATRIX.md must contain Pillar 3 (Topology)");
+        assert!(stpa.contains("Unsafe Control Actions") || stpa.contains("UCA ID"), "STPA_MATRIX.md must contain Pillar 4 (UCAs)");
+        assert!(stpa.contains("Loss Scenarios"), "STPA_MATRIX.md must contain Pillar 5 (Loss Scenarios)");
+        assert!(stpa.contains("Safety Constraints"), "STPA_MATRIX.md must contain Pillar 6 (Safety Constraints)");
+        assert!(stpa.contains("FMECA Criticality Matrix") || stpa.contains("FMECA"), "STPA_MATRIX.md must contain Pillar 7 (FMECA Criticality Matrix)");
+        assert!(stpa.contains("Regulatory Objectives") || stpa.contains("SORA SAIL"), "STPA_MATRIX.md must contain Pillar 8 (Regulatory Objectives & Risk Mitigations)");
+        assert!(stpa.contains("ASTM F3269-17") || stpa.contains("Stateflow"), "STPA_MATRIX.md must contain ASTM F3269-17 RTA / Stateflow hooks");
     }
 }

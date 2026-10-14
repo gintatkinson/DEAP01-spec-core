@@ -571,6 +571,16 @@ pub fn check_safety_integrity(
         }
     }
 
+    let stpa_matrix_file = safety_dir.join("STPA_MATRIX.md");
+    if !stpa_matrix_file.is_file() {
+        return Err(vec!["Check 17 failed: Unified STPA matrix 'docs/safety/STPA_MATRIX.md' is missing.".to_string()]);
+    }
+
+    let stpa_content = match fs::read_to_string(&stpa_matrix_file) {
+        Ok(c) => c,
+        Err(e) => return Err(vec![format!("Check 17 failed: Failed to read {}: {}", stpa_matrix_file.display(), e)]),
+    };
+
     let mut combined_content = String::new();
     for sf in &safety_files {
         match fs::read_to_string(sf) {
@@ -647,82 +657,82 @@ pub fn check_safety_integrity(
         }
     }
 
-    let combined_lower = combined_content.to_lowercase();
+    let stpa_lower = stpa_content.to_lowercase();
 
     // Pillar 1: System Losses (L-1..N)
-    let has_loss = combined_lower.contains("loss") || combined_lower.contains("losses");
-    let has_l_id = has_stpa_id(&combined_lower, "l-");
+    let has_loss = stpa_lower.contains("loss") || stpa_lower.contains("losses");
+    let has_l_id = has_stpa_id(&stpa_lower, "l-");
     if !(has_loss && has_l_id) {
-        errors.push("Pillar 1 violation: Missing System Losses ($L-1..N$) identification.".to_string());
+        errors.push("Pillar 1 violation: Missing System Losses ($L-1..N$) identification in STPA_MATRIX.md.".to_string());
     }
 
     // Pillar 2: System Hazards (H-1..N)
-    let has_hazard = combined_lower.contains("hazard") || combined_lower.contains("hazards");
-    let has_h_id = has_stpa_id(&combined_lower, "h-");
+    let has_hazard = stpa_lower.contains("hazard") || stpa_lower.contains("hazards");
+    let has_h_id = has_stpa_id(&stpa_lower, "h-");
     if !(has_hazard && has_h_id) {
-        errors.push("Pillar 2 violation: Missing System Hazards ($H-1..N$) identification.".to_string());
+        errors.push("Pillar 2 violation: Missing System Hazards ($H-1..N$) identification in STPA_MATRIX.md.".to_string());
     }
 
     // Pillar 3: Control Structure Topology
-    let has_control_struct = combined_lower.contains("control structure");
-    let has_controller = combined_lower.contains("controller");
-    let has_actuator = combined_lower.contains("actuator");
+    let has_control_struct = stpa_lower.contains("control structure");
+    let has_controller = stpa_lower.contains("controller");
+    let has_actuator = stpa_lower.contains("actuator");
     if !(has_control_struct || (has_controller && has_actuator)) {
-        errors.push("Pillar 3 violation: Missing Hierarchical Control Structure Topology.".to_string());
+        errors.push("Pillar 3 violation: Missing Hierarchical Control Structure Topology in STPA_MATRIX.md.".to_string());
     }
 
     // Pillar 4: Unsafe Control Actions (UCA-1..N)
-    let has_uca_kw = combined_lower.contains("unsafe control action")
-        || combined_lower.contains("unsafe control actions");
-    let has_uca_id = has_stpa_id(&combined_lower, "uca-");
+    let has_uca_kw = stpa_lower.contains("unsafe control action")
+        || stpa_lower.contains("unsafe control actions");
+    let has_uca_id = has_stpa_id(&stpa_lower, "uca-");
     if !(has_uca_kw || has_uca_id) {
-        errors.push("Pillar 4 violation: Missing Unsafe Control Actions ($UCA-1..N$).".to_string());
+        errors.push("Pillar 4 violation: Missing Unsafe Control Actions ($UCA-1..N$) in STPA_MATRIX.md.".to_string());
     }
-    let missing_uca_cats = check_uca_categories(&combined_content);
+    let missing_uca_cats = check_uca_categories(&stpa_content);
     if !missing_uca_cats.is_empty() {
         errors.push(format!(
-            "Pillar 4 violation: Missing UCA failure mode categories: {}.",
+            "Pillar 4 violation: Missing UCA failure mode categories in STPA_MATRIX.md: {}.",
             missing_uca_cats.join(", ")
         ));
     }
 
     // Pillar 5: Loss Scenarios (LS-1..N)
-    let has_ls_kw = combined_lower.contains("loss scenario")
-        || combined_lower.contains("loss scenarios")
-        || combined_lower.contains("causal scenario")
-        || combined_lower.contains("causal scenarios");
-    let has_ls_id = has_stpa_id(&combined_lower, "ls-");
+    let has_ls_kw = stpa_lower.contains("loss scenario")
+        || stpa_lower.contains("loss scenarios")
+        || stpa_lower.contains("causal scenario")
+        || stpa_lower.contains("causal scenarios");
+    let has_ls_id = has_stpa_id(&stpa_lower, "ls-");
     if !(has_ls_kw && has_ls_id) {
-        errors.push("Pillar 5 violation: Missing Loss Scenarios ($LS-1..N$) & Causal Factors.".to_string());
+        errors.push("Pillar 5 violation: Missing Loss Scenarios ($LS-1..N$) & Causal Factors in STPA_MATRIX.md.".to_string());
     }
 
     // Pillar 6: Formal Safety Constraints (SC-1..N)
-    let has_sc_kw = combined_lower.contains("safety constraint")
-        || combined_lower.contains("safety constraints");
-    let has_sc_id = has_stpa_id(&combined_lower, "sc-");
+    let has_sc_kw = stpa_lower.contains("safety constraint")
+        || stpa_lower.contains("safety constraints");
+    let has_sc_id = has_stpa_id(&stpa_lower, "sc-");
     if !(has_sc_kw && has_sc_id) {
-        errors.push("Pillar 6 violation: Missing Formal Safety Constraints ($SC-1..N$).".to_string());
+        errors.push("Pillar 6 violation: Missing Formal Safety Constraints ($SC-1..N$) in STPA_MATRIX.md.".to_string());
     }
 
     // Pillar 7: FMECA Criticality Matrix
-    let has_fmeca = combined_lower.contains("fmeca") || combined_lower.contains("failure mode");
+    let has_fmeca = stpa_lower.contains("fmeca") || stpa_lower.contains("failure mode");
     if !has_fmeca {
-        errors.push("Pillar 7 violation: Missing FMECA Criticality Matrix.".to_string());
+        errors.push("Pillar 7 violation: Missing FMECA Criticality Matrix in STPA_MATRIX.md.".to_string());
     } else {
-        let fmeca = parse_fmeca_table(&combined_content);
+        let fmeca = parse_fmeca_table(&stpa_content);
         if fmeca.total_rows == 0 {
-            errors.push("Pillar 7 violation: FMECA Criticality Matrix contains 0 rows.".to_string());
+            errors.push("Pillar 7 violation: FMECA Criticality Matrix in STPA_MATRIX.md contains 0 rows.".to_string());
         } else if fmeca.total_rows < 15 {
             // Log notice or check row count >= 15 as declared in Pillar 7 baseline
             errors.push(format!(
-                "Pillar 7 violation: FMECA Criticality Matrix contains {} rows (minimum 15+ rows required).",
+                "Pillar 7 violation: FMECA Criticality Matrix in STPA_MATRIX.md contains {} rows (minimum 15+ rows required).",
                 fmeca.total_rows
             ));
         }
 
         let has_rpn = fmeca.has_rpn
-            || combined_lower.contains("risk priority number")
-            || matches_dimension_lower(&combined_lower, &["rpn"]);
+            || stpa_lower.contains("risk priority number")
+            || matches_dimension_lower(&stpa_lower, &["rpn"]);
         if !has_rpn {
             errors.push("Pillar 7 violation: FMECA table missing RPN (Risk Priority Number) calculation.".to_string());
         }
@@ -738,7 +748,7 @@ pub fn check_safety_integrity(
         }
 
         if fmeca.total_rows > 0 {
-            let missing_dims = check_failure_dimension_coverage(&combined_content, &fmeca);
+            let missing_dims = check_failure_dimension_coverage(&stpa_content, &fmeca);
             if !missing_dims.is_empty() {
                 errors.push(format!(
                     "Pillar 7 violation: FMECA table missing coverage for universal failure dimension(s): {} (expected Interface (Γ), State (Φ), Action (Ω), Resource (Ψ)).",
@@ -896,27 +906,27 @@ pub fn check_safety_integrity(
     }
 
     // Pillar 8: Regulatory Objectives & Risk Mitigations
-    let has_pillar_8_kw = combined_lower.contains("pillar 8")
-        || combined_lower.contains("regulatory objectives")
-        || combined_lower.contains("sora sail");
-    let has_heading_8 = combined_content.lines().any(|l| {
+    let has_pillar_8_kw = stpa_lower.contains("pillar 8")
+        || stpa_lower.contains("regulatory objectives")
+        || stpa_lower.contains("sora sail");
+    let has_heading_8 = stpa_content.lines().any(|l| {
         let trimmed = l.trim();
         let after_hashes = trimmed.trim_start_matches('#');
         let hash_count = trimmed.len() - after_hashes.len();
         (2..=4).contains(&hash_count) && after_hashes.trim_start().starts_with("8.")
     });
     if !(has_pillar_8_kw || has_heading_8) {
-        errors.push("Pillar 8 violation: Missing Pillar 8 (Domain Regulatory Objectives & Integrity Mapping / Regulatory Objectives & Risk Mitigations).".to_string());
+        errors.push("Pillar 8 violation: Missing Pillar 8 in STPA_MATRIX.md (Domain Regulatory Objectives & Integrity Mapping / Regulatory Objectives & Risk Mitigations).".to_string());
     }
 
     // Commercial Toolchain Hooks (MATLAB / Simulink / Stateflow)
-    let has_toolchain = combined_lower.contains("matlab")
-        || combined_lower.contains("simulink")
-        || combined_lower.contains("stateflow")
-        || combined_lower.contains("embedded coder")
-        || combined_lower.contains("sldv");
+    let has_toolchain = stpa_lower.contains("matlab")
+        || stpa_lower.contains("simulink")
+        || stpa_lower.contains("stateflow")
+        || stpa_lower.contains("embedded coder")
+        || stpa_lower.contains("sldv");
     if !has_toolchain {
-        errors.push("Commercial Toolchain violation: Missing MATLAB / Simulink / Stateflow / Embedded Coder integration hooks.".to_string());
+        errors.push("Commercial Toolchain violation: Missing MATLAB / Simulink / Stateflow / Embedded Coder integration hooks in STPA_MATRIX.md.".to_string());
     }
 
     if errors.is_empty() {
@@ -1415,5 +1425,40 @@ mod tests {
 
         let result = check_safety_integrity(&temp.path, false, true);
         assert!(result.is_ok(), "Expected Check 17 to pass with valid bidirectional AST closure, got: {:?}", result);
+    }
+
+    #[test]
+    fn test_defect_333_missing_stpa_matrix_rejected() {
+        let temp = TempDir::new("check17_missing_stpa");
+        let safety_dir = temp.path.join("docs").join("safety");
+        fs::create_dir_all(&safety_dir).unwrap();
+
+        // Fragmented safety files present, but unified STPA_MATRIX.md missing
+        fs::write(safety_dir.join("01_LOSSES.md"), "# Losses\nL-1: Loss\n").unwrap();
+        fs::write(safety_dir.join("05_FMECA.md"), "# FMECA\n| FM | Comp | Mode |\n").unwrap();
+
+        let result = check_safety_integrity(&temp.path, false, true);
+        assert!(result.is_err());
+        let errs = result.unwrap_err();
+        assert!(errs.iter().any(|e| e.contains("Unified STPA matrix 'docs/safety/STPA_MATRIX.md' is missing")));
+    }
+
+    #[test]
+    fn test_defect_333_hollow_stpa_matrix_rejected() {
+        let temp = TempDir::new("check17_hollow_stpa");
+        let safety_dir = temp.path.join("docs").join("safety");
+        fs::create_dir_all(&safety_dir).unwrap();
+
+        // STPA_MATRIX.md only contains UCA table, missing all other 7 pillars
+        let hollow_content = "# STPA Cross-Traceability Matrix\n\n\
+| UCA ID | Controller | Control Action | Guide Word |\n\
+|---|---|---|---|\n\
+| UCA-001 | Sys | Action | Not providing |\n";
+        fs::write(safety_dir.join("STPA_MATRIX.md"), hollow_content).unwrap();
+
+        let result = check_safety_integrity(&temp.path, false, true);
+        assert!(result.is_err());
+        let errs = result.unwrap_err();
+        assert!(errs.iter().any(|e| e.contains("Pillar 1 violation")));
     }
 }
