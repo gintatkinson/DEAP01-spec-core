@@ -16,9 +16,9 @@ pub use rules::{
 };
 pub use sysml_ast::{
     component_matches, has_negative_recovery_constraint, is_recovery_component,
-    parse_action_defs, parse_attribute_defs, parse_connection_defs, parse_constraint_defs,
+    parse_action_defs, parse_attribute_defs, parse_calc_defs, parse_connection_defs, parse_constraint_defs,
     parse_part_defs, parse_port_defs, parse_requirement_defs, parse_state_defs, parse_sysml,
-    ActionDef, AttributeDef, CapabilityDef, ConnectionDef, ConstraintDef, FlowDef, HazardDef,
+    ActionDef, AttributeDef, CalcDef, CapabilityDef, ConnectionDef, ConstraintDef, FlowDef, HazardDef,
     ImportDef, InteractionDef, ItemDef, OperationDef, PackageDef, PartDef, PortDef, RequirementDef, RiskDef,
     StateDef, SysmlModel, TestCaseDef, TransitionDef, UnifiedSchemaModelExtractor, UseCaseDef,
 };

@@ -149,6 +149,7 @@ pub fn write_defect_dossier(repo_root: &Path, check_name: &str, errors: &[String
 }
 
 /// Execute all baseline verification checks (Checks 10 through 34) and platform checks.
+#[allow(clippy::result_unit_err)]
 pub fn run(options: &BaselineOptions) -> Result<(), ()> {
     let repo_root = options
         .destination
@@ -558,8 +559,39 @@ pub fn run(options: &BaselineOptions) -> Result<(), ()> {
     }
 
     // Check 31: Coverage digest, obligation witness, architecture viewpoint diagrams, dual-schema parity
-    println!("Success: Check 28 verified (Coverage-Digest Population Gate passed -- zero phantom realizations).");
-    println!("Success: Check 29 verified (Obligation-Witness Registry Gate passed -- zero phantom witnesses).");
+    match check_coverage_digest(&repo_root) {
+        Ok(ParityOutcome::PendingOrClean) => {
+            println!("Success: Check 28 verified (Downstream repository detected -- coverage digest pending or landing zone clean).");
+        }
+        Ok(_) => {
+            println!("Success: Check 28 verified (Coverage-Digest Population Gate passed -- zero phantom realizations).");
+        }
+        Err(errs) => {
+            eprintln!("ERROR: Check 28 failed (Coverage-Digest Population Gate violations found):");
+            for e in &errs {
+                eprintln!("  - {}", e);
+            }
+            write_defect_dossier(&repo_root, "Check 28 (Coverage digest)", &errs);
+            return Err(());
+        }
+    }
+
+    match check_obligation_witness(&repo_root) {
+        Ok(ParityOutcome::PendingOrClean) => {
+            println!("Success: Check 29 verified (Downstream repository detected -- obligation witness pending or landing zone clean).");
+        }
+        Ok(_) => {
+            println!("Success: Check 29 verified (Obligation-Witness Registry Gate passed -- zero phantom witnesses).");
+        }
+        Err(errs) => {
+            eprintln!("ERROR: Check 29 failed (Obligation-Witness Registry Gate violations found):");
+            for e in &errs {
+                eprintln!("  - {}", e);
+            }
+            write_defect_dossier(&repo_root, "Check 29 (Obligation witness)", &errs);
+            return Err(());
+        }
+    }
 
     match check_architecture_viewpoint_diagrams(&repo_root, effective_allow_missing, is_strict) {
         Ok(ParityOutcome::PendingOrClean) => {

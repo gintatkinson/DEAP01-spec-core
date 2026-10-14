@@ -1,7 +1,7 @@
 //! Manifest rules and codebase configuration parsing.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::path::Path;
 
 /// Directories excluded from standard workspace scans.
@@ -40,11 +40,11 @@ pub struct CodebaseRules {
     #[serde(default)]
     pub validation_rules: Option<ValidationRules>,
     #[serde(default)]
-    pub backlog_directories: Option<HashMap<String, String>>,
+    pub backlog_directories: Option<BTreeMap<String, String>>,
     #[serde(default)]
-    pub target_directories: Option<HashMap<String, Option<String>>>,
+    pub target_directories: Option<BTreeMap<String, Option<String>>>,
     #[serde(flatten)]
-    pub extra: HashMap<String, serde_json::Value>,
+    pub extra: BTreeMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -68,7 +68,7 @@ pub struct MetaConfig {
     #[serde(default)]
     pub behavioral_triggers_path: Option<String>,
     #[serde(flatten)]
-    pub extra: HashMap<String, serde_json::Value>,
+    pub extra: BTreeMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -84,9 +84,9 @@ pub struct TrackerRules {
     #[serde(default)]
     pub numeric_prefix: Option<String>,
     #[serde(default)]
-    pub labels: Option<HashMap<String, String>>,
+    pub labels: Option<BTreeMap<String, String>>,
     #[serde(flatten)]
-    pub extra: HashMap<String, serde_json::Value>,
+    pub extra: BTreeMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -94,9 +94,9 @@ pub struct ValidationRules {
     #[serde(default)]
     pub no_domain: Option<bool>,
     #[serde(default)]
-    pub required_sections: Option<HashMap<String, serde_json::Value>>,
+    pub required_sections: Option<BTreeMap<String, serde_json::Value>>,
     #[serde(flatten)]
-    pub extra: HashMap<String, serde_json::Value>,
+    pub extra: BTreeMap<String, serde_json::Value>,
 }
 
 impl CodebaseRules {

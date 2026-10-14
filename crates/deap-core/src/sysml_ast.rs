@@ -297,6 +297,44 @@ pub struct ConnectionDef {
     pub is_flow: bool,
 }
 
+/// Represents a calculation or function definition in SysML v2 / KerML.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, ISO 26262 ASIL D, and ECSS-E-ST-40C safety-critical software
+/// engineering standards. Captures pure mathematical calculations, physics relationships,
+/// and safety function specifications directly from the SysML v2 AST, eliminating hardcoded domain
+/// formulas from the compiler toolchain.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - AST Determinism: Structurally represents an acyclic calculation definition with explicit input parameters and return type.
+/// - Value Semantics: Supports default value initialization and equality comparison without internal state mutability.
+///
+/// ## 3. Preconditions
+/// - `name` should represent a valid KerML / SysML v2 calculation identifier.
+///
+/// ## 4. Postconditions
+/// - Encapsulates typed input parameters, optional return type, and optional body expression for verification.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Construction & Cloning: $O(P + E)$ where $P$ is the parameter count and $E$ is expression byte length.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Missing parameters or expressions default gracefully to empty collections and `None`.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYSML-AST-SSOT-PARITY/CALC-DEF]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct CalcDef {
+    pub name: String,
+    pub doc: Option<String>,
+    #[serde(default)]
+    pub in_params: Vec<AttributeDef>,
+    #[serde(default)]
+    pub return_type: Option<String>,
+    #[serde(default)]
+    pub expression: Option<String>,
+}
+
 /// Represents a structural part definition or block in SysML v2.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PartDef {
@@ -337,6 +375,8 @@ pub struct PartDef {
     pub risks: Vec<RiskDef>,
     #[serde(default)]
     pub connections: Vec<ConnectionDef>,
+    #[serde(default)]
+    pub calcs: Vec<CalcDef>,
 }
 
 impl Default for PartDef {
@@ -362,6 +402,7 @@ impl Default for PartDef {
             hazards: Vec::new(),
             risks: Vec::new(),
             connections: Vec::new(),
+            calcs: Vec::new(),
         }
     }
 }
@@ -463,6 +504,8 @@ pub struct PackageDef {
     pub risk_defs: Vec<RiskDef>,
     #[serde(default)]
     pub connection_defs: Vec<ConnectionDef>,
+    #[serde(default)]
+    pub calc_defs: Vec<CalcDef>,
 }
 
 impl PackageDef {
@@ -556,6 +599,262 @@ impl PackageDef {
             }
         }
         result
+    }
+
+    /// Returns all calculation definitions declared across self and all nested packages and parts.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, ISO 26262 ASIL D, and ECSS-E-ST-40C standards. Mitigates calculation
+    /// omission hazards (HAZ-CALC-OMISSION) by recursively gathering all calculations across the complete
+    /// package and part containment tree.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Exhaustive Traversal: For all $p \in \text{packages}$ and all $pt \in \text{part\_defs}$,
+    ///   $\text{calcs}(p) \subseteq \text{result}$ and $\text{calcs}(pt) \subseteq \text{result}$.
+    /// - Deterministic Traversal Order: Traversal follows depth-first topological declaration order.
+    ///
+    /// ## 3. Preconditions
+    /// - None. Operates safely on empty, single-node, or multi-level hierarchical package trees.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns a vector containing clones of all calculation definitions declared in this hierarchy.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(N_{pkg} + N_{part} + N_{calc})$ where $N$ represents entity counts.
+    /// - Space Complexity: $O(N_{calc})$ for the output vector.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Returns an empty vector if no calculation definitions are present in the package tree without panicking.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYSML-AST-SSOT-PARITY/GET-ALL-CALCS]
+    pub fn get_all_calcs(&self) -> Vec<CalcDef> {
+        let mut result = Vec::new();
+        for pkg in self.get_all_packages() {
+            result.extend(pkg.calc_defs.clone());
+            for part in &pkg.part_defs {
+                collect_part_calcs(part, &mut result);
+            }
+        }
+        result
+    }
+
+    /// Returns all port definitions declared across self and all nested packages and parts.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, ISO 26262 ASIL D, and ECSS-E-ST-40C standards. Mitigates interface
+    /// omission hazards (HAZ-PORT-DISCONNECT) by providing a complete, authoritative symbol table of all
+    /// logical and physical ports across the SysML v2 model.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Exhaustive Aggregation: $\bigcup_{pkg} \text{ports}(pkg) \cup \bigcup_{part} \text{ports}(part) = \text{result}$.
+    /// - Stability: Traversal order is deterministic depth-first matching AST declaration sequence.
+    ///
+    /// ## 3. Preconditions
+    /// - None.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns a vector containing all declared `PortDef` elements in the package hierarchy.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(N_{pkg} + N_{part} + N_{port})$.
+    /// - Space Complexity: $O(N_{port})$ for the collected results.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Returns an empty vector if no ports are declared without modifying package state.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYSML-AST-SSOT-PARITY/GET-ALL-PORTS]
+    pub fn get_all_ports(&self) -> Vec<PortDef> {
+        let mut result = Vec::new();
+        for pkg in self.get_all_packages() {
+            result.extend(pkg.port_defs.clone());
+            for part in &pkg.part_defs {
+                collect_part_ports(part, &mut result);
+            }
+        }
+        result
+    }
+
+    /// Returns all safety hazard definitions declared across self and all nested packages and parts.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, ISO 26262 ASIL D, and MIL-STD-882E standards. Mitigates safety
+    /// analysis incompleteness (HAZ-STPA-INCOMPLETE) by gathering 100% of declared safety hazard AST nodes.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Complete Coverage: Every `HazardDef` in `self` or subordinate packages/parts is present in the return set.
+    /// - Acyclic Recursion: Traverses strictly directed acyclic package/part hierarchies.
+    ///
+    /// ## 3. Preconditions
+    /// - None.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns a vector containing clones of all `HazardDef` nodes in the tree.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(N_{pkg} + N_{part} + N_{hazard})$.
+    /// - Space Complexity: $O(N_{hazard})$.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Returns an empty vector if no hazards are declared without panicking.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYSML-AST-SSOT-PARITY/GET-ALL-HAZARDS]
+    pub fn get_all_hazards(&self) -> Vec<HazardDef> {
+        let mut result = Vec::new();
+        for pkg in self.get_all_packages() {
+            result.extend(pkg.hazard_defs.clone());
+            for part in &pkg.part_defs {
+                collect_part_hazards(part, &mut result);
+            }
+        }
+        result
+    }
+
+    /// Returns all safety risk definitions declared across self and all nested packages and parts.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, ISO 26262 ASIL D, and MIL-STD-882E standards. Mitigates risk
+    /// tracking divergence (HAZ-RISK-UNMITIGATED) by ensuring complete enumeration of all risk AST nodes.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Deterministic Aggregation: Traverses all package and part nodes in fixed depth-first order.
+    /// - Completeness: Returns every `RiskDef` registered in the AST hierarchy.
+    ///
+    /// ## 3. Preconditions
+    /// - None.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns a vector containing all declared `RiskDef` instances.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(N_{pkg} + N_{part} + N_{risk})$.
+    /// - Space Complexity: $O(N_{risk})$.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Returns an empty vector if no risks are present.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYSML-AST-SSOT-PARITY/GET-ALL-RISKS]
+    pub fn get_all_risks(&self) -> Vec<RiskDef> {
+        let mut result = Vec::new();
+        for pkg in self.get_all_packages() {
+            result.extend(pkg.risk_defs.clone());
+            for part in &pkg.part_defs {
+                collect_part_risks(part, &mut result);
+            }
+        }
+        result
+    }
+
+    /// Returns all state machine state definitions declared across self and all nested packages and parts.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, ISO 26262 ASIL D, and IEC 61508 standards. Mitigates state space
+    /// containment escape hazards (HAZ-STATE-ESCAPE) by surfacing all discrete operational states for verification.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Invariant State Topology: Accumulates all declared `StateDef` objects without mutating transition relations.
+    /// - Exhaustive Traversal: Evaluates all subpackages and part internal state definitions.
+    ///
+    /// ## 3. Preconditions
+    /// - None.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns a vector containing all declared `StateDef` instances.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(N_{pkg} + N_{part} + N_{state})$.
+    /// - Space Complexity: $O(N_{state})$.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Returns an empty vector if no states are defined.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYSML-AST-SSOT-PARITY/GET-ALL-STATES]
+    pub fn get_all_states(&self) -> Vec<StateDef> {
+        let mut result = Vec::new();
+        for pkg in self.get_all_packages() {
+            result.extend(pkg.state_defs.clone());
+            for part in &pkg.part_defs {
+                collect_part_states(part, &mut result);
+            }
+        }
+        result
+    }
+
+    /// Returns all connection definitions declared across self and all nested packages and parts.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, ISO 26262 ASIL D, and ECSS-E-ST-40C standards. Mitigates topological
+    /// connection ambiguity (HAZ-CONNECTION-AMBIGUITY) across Level 1B and Level 1C interfaces.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Topological Invariance: Gathers all directed flow edges and connection bindings across packages and parts.
+    /// - Deterministic Traversal: Orders connections by appearance in the AST hierarchy.
+    ///
+    /// ## 3. Preconditions
+    /// - None.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns a vector containing all declared `ConnectionDef` instances.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(N_{pkg} + N_{part} + N_{conn})$.
+    /// - Space Complexity: $O(N_{conn})$.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Returns an empty vector if no connections are present.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYSML-AST-SSOT-PARITY/GET-ALL-CONNECTIONS]
+    pub fn get_all_connections(&self) -> Vec<ConnectionDef> {
+        let mut result = Vec::new();
+        for pkg in self.get_all_packages() {
+            result.extend(pkg.connection_defs.clone());
+            for part in &pkg.part_defs {
+                collect_part_connections(part, &mut result);
+            }
+        }
+        result
+    }
+
+    /// Returns the set of all port names belonging to nested sub-parts across self and all subpackages.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, ISO 26262 ASIL D, and ECSS-E-ST-40C standards. Mitigates interface
+    /// misrouting hazards (HAZ-PORT-MISROUTING) by dynamically determining which port connections require
+    /// hierarchical subsystem qualification (`PORT-ID (Subsystem.Path.port)`).
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Hierarchical Isolation: A port $p$ is in `get_nested_ports()` if and only if $p$ is declared on a
+    ///   sub-part $p_{sub} \in \text{part.parts}$ for some top-level part.
+    /// - Set Purity: Returns a deterministic, sorted `BTreeSet<String>` with zero duplicate port identifiers.
+    ///
+    /// ## 3. Preconditions
+    /// - None.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns a `BTreeSet<String>` containing names of all nested sub-part ports.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(N_{parts\_nested} \log(N_{ports}))$.
+    /// - Space Complexity: $O(N_{nested\_ports})$.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Returns an empty `BTreeSet` if there are no nested sub-parts or no nested ports.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYSML-AST-SSOT-PARITY/GET-NESTED-PORTS]
+    pub fn get_nested_ports(&self) -> BTreeSet<String> {
+        let mut nested = BTreeSet::new();
+        for pkg in self.get_all_packages() {
+            for part in &pkg.part_defs {
+                collect_nested_ports_recursive(&part.parts, &mut nested);
+            }
+        }
+        nested
     }
 
     /// Checks whether this package or any nested subpackages/parts declare attributes or constraints negating recovery systems.
@@ -698,6 +997,57 @@ fn collect_part_attributes(part: &PartDef, result: &mut Vec<AttributeDef>) {
     }
 }
 
+fn collect_part_calcs(part: &PartDef, result: &mut Vec<CalcDef>) {
+    result.extend(part.calcs.clone());
+    for sub in &part.parts {
+        collect_part_calcs(sub, result);
+    }
+}
+
+fn collect_part_ports(part: &PartDef, result: &mut Vec<PortDef>) {
+    result.extend(part.ports.clone());
+    for sub in &part.parts {
+        collect_part_ports(sub, result);
+    }
+}
+
+fn collect_part_hazards(part: &PartDef, result: &mut Vec<HazardDef>) {
+    result.extend(part.hazards.clone());
+    for sub in &part.parts {
+        collect_part_hazards(sub, result);
+    }
+}
+
+fn collect_part_risks(part: &PartDef, result: &mut Vec<RiskDef>) {
+    result.extend(part.risks.clone());
+    for sub in &part.parts {
+        collect_part_risks(sub, result);
+    }
+}
+
+fn collect_part_states(part: &PartDef, result: &mut Vec<StateDef>) {
+    result.extend(part.states.clone());
+    for sub in &part.parts {
+        collect_part_states(sub, result);
+    }
+}
+
+fn collect_part_connections(part: &PartDef, result: &mut Vec<ConnectionDef>) {
+    result.extend(part.connections.clone());
+    for sub in &part.parts {
+        collect_part_connections(sub, result);
+    }
+}
+
+fn collect_nested_ports_recursive(parts: &[PartDef], nested: &mut BTreeSet<String>) {
+    for p in parts {
+        for port in &p.ports {
+            nested.insert(port.name.clone());
+        }
+        collect_nested_ports_recursive(&p.parts, nested);
+    }
+}
+
 /// Legacy and high-level SysML model container for backwards compatibility.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SysmlModel {
@@ -753,6 +1103,7 @@ impl From<SysmlModel> for PackageDef {
             hazard_defs: Vec::new(),
             risk_defs: Vec::new(),
             connection_defs: Vec::new(),
+            calc_defs: Vec::new(),
         }
     }
 }
@@ -1228,6 +1579,222 @@ pub fn parse_constraint_defs(content: &str) -> Vec<ConstraintDef> {
         });
     }
     constraints
+}
+
+fn extract_type_ident(s: &str) -> (&str, usize) {
+    let mut len = 0;
+    let bytes = s.as_bytes();
+    while len < bytes.len() {
+        if let Some(&b) = bytes.get(len) {
+            if is_ident_char(b) {
+                len += 1;
+            } else if s.get(len..).is_some_and(|rest| rest.starts_with("::")) {
+                len += 2;
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+    (s.get(..len).unwrap_or(""), len)
+}
+
+fn parse_calc_param(s: &str) -> Option<AttributeDef> {
+    let mut trimmed = s.trim().trim_end_matches(';').trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if trimmed.starts_with("in") && is_word_boundary_after(trimmed, 2) {
+        trimmed = trimmed.get(2..).unwrap_or("").trim_start();
+    }
+    if trimmed.starts_with("attribute") && is_word_boundary_after(trimmed, 9) {
+        trimmed = trimmed.get(9..).unwrap_or("").trim_start();
+    }
+    let (name, name_len) = extract_ident(trimmed);
+    if name.is_empty() {
+        return None;
+    }
+    let after_name = trimmed.get(name_len..).unwrap_or("").trim_start();
+    let mut type_name = "ScalarValues::Real".to_string();
+    let mut default_val = None;
+    if after_name.starts_with(':') {
+        let after_colon = after_name.get(1..).unwrap_or("").trim_start();
+        let (t_name, t_len) = extract_type_ident(after_colon);
+        if !t_name.is_empty() {
+            type_name = t_name.to_string();
+        }
+        let after_type = after_colon.get(t_len..).unwrap_or("").trim_start();
+        if after_type.starts_with('=') {
+            let val = after_type.get(1..).unwrap_or("").trim().trim_end_matches(';').trim();
+            if !val.is_empty() {
+                default_val = Some(val.to_string());
+            }
+        }
+    } else if after_name.starts_with('=') {
+        let val = after_name.get(1..).unwrap_or("").trim().trim_end_matches(';').trim();
+        if !val.is_empty() {
+            default_val = Some(val.to_string());
+        }
+    }
+    Some(AttributeDef {
+        name: name.to_string(),
+        type_name,
+        default_value: default_val,
+        doc: None,
+    })
+}
+
+/// Parse calculation definitions from SysML v2 / KerML source text.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, ISO 26262 ASIL D, and ECSS-E-ST-40C standards. Parses pure mathematical
+/// and physics calculations directly from the authoritative SysML AST, eliminating hardcoded domain formulas
+/// and blocklists from the compiler toolchain.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - AST Purity: Extracted `CalcDef` instances derive 100% and deterministically from AST text.
+/// - Determinism: Identical source text produces identical `CalcDef` vectors.
+///
+/// ## 3. Preconditions
+/// - `content` must be a valid UTF-8 string containing SysML v2 / KerML code.
+///
+/// ## 4. Postconditions
+/// - Returns a vector of all valid `CalcDef` declarations parsed from `content`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(N)$ where $N$ is the byte length of `content`.
+/// - Space Complexity: $O(M)$ where $M$ is the memory required for extracted AST structures.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Syntax irregularities or non-matching tokens are skipped gracefully without panicking.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYSML-AST-SSOT-PARITY/PARSE-CALC-DEFS]
+pub fn parse_calc_defs(content: &str) -> Vec<CalcDef> {
+    let masked = mask_string_literals(content);
+    let mut calcs = Vec::new();
+    let mut idx = 0;
+    while let Some(pos) = masked.get(idx..).and_then(|s| s.find("calc")) {
+        let calc_pos = idx + pos;
+        if !is_word_boundary_before(&masked, calc_pos) || !is_word_boundary_after(&masked, calc_pos + 4) {
+            idx = calc_pos + 4;
+            continue;
+        }
+        let doc = extract_doc_comment_before(content, calc_pos);
+        let mut curr = calc_pos + 4;
+        curr += skip_ws(masked.get(curr..).unwrap_or(""));
+        if masked.get(curr..).is_some_and(|s| s.starts_with("def") && is_word_boundary_after(s, 3)) {
+            curr += 3;
+            curr += skip_ws(masked.get(curr..).unwrap_or(""));
+        }
+        let (name, name_len) = extract_ident(masked.get(curr..).unwrap_or(""));
+        if name.is_empty() {
+            idx = calc_pos + 4;
+            continue;
+        }
+        curr += name_len;
+        curr += skip_ws(masked.get(curr..).unwrap_or(""));
+
+        let mut in_params = Vec::new();
+        if masked.get(curr..).is_some_and(|s| s.starts_with('(')) {
+            if let Some(close_paren) = masked.get(curr + 1..).and_then(|s| s.find(')')) {
+                let p_str = content.get(curr + 1..curr + 1 + close_paren).unwrap_or("");
+                for part in p_str.split(',') {
+                    if let Some(param) = parse_calc_param(part) {
+                        in_params.push(param);
+                    }
+                }
+                curr = curr + 1 + close_paren + 1;
+                curr += skip_ws(masked.get(curr..).unwrap_or(""));
+            } else {
+                idx = calc_pos + 4;
+                continue;
+            }
+        }
+
+        let mut return_type = None;
+        if masked.get(curr..).is_some_and(|s| s.starts_with(':')) {
+            curr += 1;
+            curr += skip_ws(masked.get(curr..).unwrap_or(""));
+            let (ret_t, ret_len) = extract_type_ident(masked.get(curr..).unwrap_or(""));
+            if !ret_t.is_empty() {
+                return_type = Some(ret_t.to_string());
+                curr += ret_len;
+                curr += skip_ws(masked.get(curr..).unwrap_or(""));
+            }
+        }
+
+        let (body, next_idx) = if masked.get(curr..).is_some_and(|s| s.starts_with('{')) {
+            let open_pos = curr;
+            let close_pos = find_matching_brace(content, open_pos);
+            let b = if let Some(cp) = close_pos {
+                content.get(open_pos + 1..cp).unwrap_or("")
+            } else {
+                ""
+            };
+            let next = close_pos.map(|cp| cp + 1).unwrap_or(open_pos + 1);
+            (Some(b), next)
+        } else if masked.get(curr..).is_some_and(|s| s.starts_with(';')) {
+            (None, curr + 1)
+        } else {
+            idx = calc_pos + 4;
+            continue;
+        };
+
+        idx = next_idx;
+
+        let mut expression = None;
+        if let Some(b) = body {
+            let mut expr_lines = Vec::new();
+            for line in b.lines() {
+                let trimmed = line.trim();
+                if trimmed.is_empty() {
+                    continue;
+                }
+                if (trimmed.starts_with("in ") || trimmed.starts_with("in\t") || trimmed.starts_with("attribute "))
+                    && !trimmed.contains('=') && !trimmed.contains('+') && !trimmed.contains('-') && !trimmed.contains('*') && !trimmed.contains('/')
+                {
+                    if let Some(param) = parse_calc_param(trimmed) {
+                        in_params.push(param);
+                    }
+                } else if trimmed.starts_with("return ") || trimmed.starts_with("return\t") || trimmed.starts_with("return:") {
+                    let rest = trimmed.trim_start_matches("return").trim();
+                    let is_math_expr = rest.contains('+') || rest.contains('-') || rest.contains('*') || rest.contains('/') || rest.contains('(');
+                    if return_type.is_none() && !is_math_expr && (rest.contains(':') || rest.starts_with("type ") || rest.split_whitespace().count() <= 2) {
+                        let type_part = if let Some(colon_pos) = rest.find(':') {
+                            rest.get(colon_pos + 1..).unwrap_or("").trim()
+                        } else {
+                            rest.trim_start_matches("type").trim()
+                        };
+                        let (t_ident, _) = extract_type_ident(type_part);
+                        if !t_ident.is_empty() {
+                            return_type = Some(t_ident.to_string());
+                            continue;
+                        }
+                    }
+                    let expr_candidate = rest.trim_start_matches(':').trim().trim_end_matches(';').trim();
+                    if !expr_candidate.is_empty() {
+                        expr_lines.push(expr_candidate);
+                    }
+                } else {
+                    expr_lines.push(trimmed.trim_end_matches(';').trim());
+                }
+            }
+            if !expr_lines.is_empty() {
+                expression = Some(expr_lines.join("\n"));
+            }
+        }
+
+        calcs.push(CalcDef {
+            name: name.to_string(),
+            doc,
+            in_params,
+            return_type,
+            expression,
+        });
+    }
+    calcs
 }
 
 /// Parse requirement definitions from SysML v2 source text.
@@ -1741,12 +2308,12 @@ pub fn parse_part_defs(content: &str) -> Vec<PartDef> {
         let doc = extract_doc_comment_before(content, part_pos);
         let mut curr = part_pos + 4;
         curr += skip_ws(&masked[curr..]);
-        if !masked[curr..].starts_with("def") || !is_word_boundary_after(&masked[curr..], 3) {
-            idx = part_pos + 4;
-            continue;
+        let mut is_def = false;
+        if masked[curr..].starts_with("def") && is_word_boundary_after(&masked[curr..], 3) {
+            is_def = true;
+            curr += 3;
+            curr += skip_ws(&masked[curr..]);
         }
-        curr += 3;
-        curr += skip_ws(&masked[curr..]);
         let (name, name_len) = extract_ident(&masked[curr..]);
         if name.is_empty() {
             idx = part_pos + 4;
@@ -1755,11 +2322,23 @@ pub fn parse_part_defs(content: &str) -> Vec<PartDef> {
         curr += name_len;
         curr += skip_ws(&masked[curr..]);
 
+        let mut type_name = None;
+        if masked[curr..].starts_with(':') {
+            curr += 1;
+            curr += skip_ws(&masked[curr..]);
+            let (t_name, t_len) = extract_type_ident(&masked[curr..]);
+            if !t_name.is_empty() {
+                type_name = Some(t_name.to_string());
+                curr += t_len;
+                curr += skip_ws(&masked[curr..]);
+            }
+        }
+
         let (body, next_idx) = if masked[curr..].starts_with('{') {
             let open_pos = curr;
             let close_pos = find_matching_brace(content, open_pos);
             let b = if let Some(cp) = close_pos {
-                &content[open_pos + 1..cp]
+                content.get(open_pos + 1..cp).unwrap_or("")
             } else {
                 ""
             };
@@ -1781,18 +2360,20 @@ pub fn parse_part_defs(content: &str) -> Vec<PartDef> {
         let requirements = parse_requirement_defs(body);
         let connections = parse_connection_defs(body);
         let states = parse_state_defs(body);
+        let calcs = parse_calc_defs(body);
+        let nested_parts = parse_part_defs(body);
 
         parts.push(PartDef {
             name: name.to_string(),
             doc,
-            is_def: true,
-            type_name: None,
+            is_def,
+            type_name,
             attributes,
             ports,
             actions,
             constraints,
             requirements,
-            parts: Vec::new(),
+            parts: nested_parts,
             operations: Vec::new(),
             capabilities: Vec::new(),
             interactions: Vec::new(),
@@ -1803,6 +2384,7 @@ pub fn parse_part_defs(content: &str) -> Vec<PartDef> {
             hazards: Vec::new(),
             risks: Vec::new(),
             connections,
+            calcs,
         });
     }
     parts
@@ -2963,6 +3545,176 @@ part def VehicleSystem {
         "#;
         let arxml_parts = UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(".arxml", arxml);
         assert!(arxml_parts.contains("EngineController"));
+    }
+
+    #[test]
+    fn test_parse_calc_defs_syntax_variants() {
+        let content = r#"
+            doc /* Calculates kinetic energy */
+            calc def KineticEnergy(in massKg : Real, in speedMps : Real) : Real {
+                0.5 * massKg * speedMps * speedMps
+            }
+
+            calc def VelocityCalc {
+                in v0 : Real;
+                in a : Real;
+                in t : Real;
+                return v : Real;
+                v0 + a * t;
+            }
+
+            calc MarginCalculation;
+        "#;
+
+        let calcs = parse_calc_defs(content);
+        assert_eq!(calcs.len(), 3);
+
+        let ke = &calcs[0];
+        assert_eq!(ke.name, "KineticEnergy");
+        assert_eq!(ke.doc.as_deref(), Some("Calculates kinetic energy"));
+        assert_eq!(ke.in_params.len(), 2);
+        assert_eq!(ke.in_params[0].name, "massKg");
+        assert_eq!(ke.in_params[0].type_name, "Real");
+        assert_eq!(ke.in_params[1].name, "speedMps");
+        assert_eq!(ke.in_params[1].type_name, "Real");
+        assert_eq!(ke.return_type.as_deref(), Some("Real"));
+        assert_eq!(ke.expression.as_deref(), Some("0.5 * massKg * speedMps * speedMps"));
+
+        let vc = &calcs[1];
+        assert_eq!(vc.name, "VelocityCalc");
+        assert_eq!(vc.in_params.len(), 3);
+        assert_eq!(vc.in_params[0].name, "v0");
+        assert_eq!(vc.in_params[1].name, "a");
+        assert_eq!(vc.in_params[2].name, "t");
+        assert_eq!(vc.return_type.as_deref(), Some("Real"));
+        assert_eq!(vc.expression.as_deref(), Some("v0 + a * t"));
+
+        let mc = &calcs[2];
+        assert_eq!(mc.name, "MarginCalculation");
+        assert_eq!(mc.in_params.len(), 0);
+        assert!(mc.return_type.is_none());
+        assert!(mc.expression.is_none());
+    }
+
+    #[test]
+    fn test_package_def_queries_and_nested_ports() {
+        let mut root = PackageDef {
+            name: "RootSystem".to_string(),
+            calc_defs: vec![
+                CalcDef {
+                    name: "RootCalc".to_string(),
+                    ..Default::default()
+                },
+            ],
+            port_defs: vec![
+                PortDef {
+                    name: "root_port".to_string(),
+                    ..Default::default()
+                },
+            ],
+            hazard_defs: vec![
+                HazardDef {
+                    name: "H-01".to_string(),
+                    severity: 3,
+                    ..Default::default()
+                },
+            ],
+            risk_defs: vec![
+                RiskDef {
+                    name: "R-01".to_string(),
+                    severity: 3,
+                    ..Default::default()
+                },
+            ],
+            state_defs: vec![
+                StateDef {
+                    name: "Nominal".to_string(),
+                    ..Default::default()
+                },
+            ],
+            connection_defs: vec![
+                ConnectionDef {
+                    name: "C-01".to_string(),
+                    source_port: "p1".to_string(),
+                    target_port: "p2".to_string(),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+
+        let sub_part = PartDef {
+            name: "NestedGps".to_string(),
+            ports: vec![
+                PortDef {
+                    name: "gps_pps_out".to_string(),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+
+        let top_part = PartDef {
+            name: "FlightComputer".to_string(),
+            ports: vec![
+                PortDef {
+                    name: "c2_bus".to_string(),
+                    ..Default::default()
+                },
+            ],
+            parts: vec![sub_part],
+            calcs: vec![
+                CalcDef {
+                    name: "InnerCalc".to_string(),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+
+        root.part_defs.push(top_part);
+
+        // Test get_all_calcs
+        let calcs = root.get_all_calcs();
+        assert_eq!(calcs.len(), 2);
+        let calc_names: Vec<&str> = calcs.iter().map(|c| c.name.as_str()).collect();
+        assert!(calc_names.contains(&"RootCalc"));
+        assert!(calc_names.contains(&"InnerCalc"));
+
+        // Test get_all_ports
+        let ports = root.get_all_ports();
+        assert_eq!(ports.len(), 3);
+        let port_names: Vec<&str> = ports.iter().map(|p| p.name.as_str()).collect();
+        assert!(port_names.contains(&"root_port"));
+        assert!(port_names.contains(&"c2_bus"));
+        assert!(port_names.contains(&"gps_pps_out"));
+
+        // Test get_all_hazards
+        let hazards = root.get_all_hazards();
+        assert_eq!(hazards.len(), 1);
+        assert_eq!(hazards[0].name, "H-01");
+
+        // Test get_all_risks
+        let risks = root.get_all_risks();
+        assert_eq!(risks.len(), 1);
+        assert_eq!(risks[0].name, "R-01");
+
+        // Test get_all_states
+        let states = root.get_all_states();
+        assert_eq!(states.len(), 1);
+        assert_eq!(states[0].name, "Nominal");
+
+        // Test get_all_connections
+        let conns = root.get_all_connections();
+        assert_eq!(conns.len(), 1);
+        assert_eq!(conns[0].name, "C-01");
+
+        // Test get_nested_ports: ONLY gps_pps_out is nested; c2_bus and root_port are top-level!
+        let nested_ports = root.get_nested_ports();
+        assert_eq!(nested_ports.len(), 1);
+        assert!(nested_ports.contains("gps_pps_out"));
+        assert!(!nested_ports.contains("c2_bus"));
+        assert!(!nested_ports.contains("root_port"));
     }
 }
 
