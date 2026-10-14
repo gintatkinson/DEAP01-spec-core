@@ -29,6 +29,8 @@ elif [ -x "./target/debug/verify-baseline" ]; then
     exec ./target/debug/verify-baseline check-commit-msg --msg-file "$MSG_FILE"
 elif [ -x "./target/debug/verify-baseline.exe" ]; then
     exec ./target/debug/verify-baseline.exe check-commit-msg --msg-file "$MSG_FILE"
+elif command -v verify-baseline >/dev/null 2>&1; then
+    exec verify-baseline check-commit-msg --msg-file "$MSG_FILE"
 elif command -v cargo >/dev/null 2>&1; then
     exec cargo run --quiet --bin verify-baseline -- check-commit-msg --msg-file "$MSG_FILE"
 else
