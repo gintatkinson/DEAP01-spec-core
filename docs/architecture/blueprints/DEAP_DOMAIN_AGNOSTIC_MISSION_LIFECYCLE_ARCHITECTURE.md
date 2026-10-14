@@ -152,9 +152,9 @@ The parameter binding engine projects the AST lifecycle contract into ten canoni
 | `{{LIFECYCLE_BINGO_SAFETY_ACTION}}` | Commander's Intent Key Task for Bingo Safety | Evaluated dynamically against R(t) <= R_threshold(t) |
 | `{{LIFECYCLE_END_STATE}}` | Commander's Intent Mission End State | Aligned with terminal containment archetype |
 | `{{LIFECYCLE_FAILSAFE_SEQUENCE}}` | PACE C2 and Emergency Matrix Fallback Mode | Deterministic transition latency t_resp <= tau_deadline |
-| `{{LIFECYCLE_POST_OP_STATE}}` | MET-08 Post-Operation Condition Statement | Cryptographic zeroization & safe de-energization |
+| `{{LIFECYCLE_POST_OP_STATE}}` | MET-08 Post-Operation Condition Statement | Secure memory sanitization & safe de-energization |
 | `{{PRIMARY_TERMINAL_TARGET}}` | Primary Nominal Destination Coordinate/Facility | Domain-specific recovery/containment node |
-| `{{SECONDARY_TERMINAL_TARGET}}` | Secondary Divert / Safe Ditching Target | Reachable under degraded energy envelope |
+| `{{SECONDARY_TERMINAL_TARGET}}` | Secondary Divert / Safe Containment Target | Reachable under degraded energy envelope |
 | `{{PRIMARY_RECOVERY_FACILITY}}` | Primary Maintenance / Recovery Depot | Conforms to domain infrastructure standards |
 | `{{SECONDARY_RECOVERY_FACILITY}}` | Alternate Staging / Demise Zone | Pre-cleared emergency boundary |
 | `{{LIFECYCLE_TRANSIT_MODE}}` | Guidance Controller Transit Operating Mode | Finite State Machine mode enumeration |

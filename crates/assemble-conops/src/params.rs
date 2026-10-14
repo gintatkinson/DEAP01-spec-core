@@ -1386,8 +1386,7 @@ impl SysMLParameterBindingEngine {
             || dom == "single_use"
             || dom == "expendable"
             || self.has_ast_component("expendable")
-            || self.has_ast_component("effector")
-            || self.has_ast_component("munition");
+            || self.has_ast_component("disposable");
 
         let selected_type = if let Some(lt) = self.parameter_bindings.get("LIFECYCLE_TYPE") {
             match lt.as_str() {
@@ -1414,19 +1413,19 @@ impl SysMLParameterBindingEngine {
 
         match selected_type {
             LifecycleType::ExpendableDisposal => {
-                self.parameter_bindings.entry("PRIMARY_TERMINAL_TARGET".to_string()).or_insert_with(|| "Designated Kinetic Intercept / Terminal Containment Zone".to_string());
-                self.parameter_bindings.entry("SECONDARY_TERMINAL_TARGET".to_string()).or_insert_with(|| "Safe Containment Ditching Zone LZ-DIVERT-ALPHA".to_string());
-                self.parameter_bindings.entry("PRIMARY_RECOVERY_FACILITY".to_string()).or_insert_with(|| "Safe Impact Containment Grid (No Vehicle Recovery)".to_string());
-                self.parameter_bindings.entry("SECONDARY_RECOVERY_FACILITY".to_string()).or_insert_with(|| "Secondary Safe Ditching Area (No Vehicle Recovery)".to_string());
-                self.parameter_bindings.entry("LIFECYCLE_TRANSIT_MODE".to_string()).or_insert_with(|| "Terminal_Engagement_Transit".to_string());
-                self.parameter_bindings.entry("LIFECYCLE_FAILSAFE_SEQUENCE".to_string()).or_insert_with(|| "autonomous terminal containment ditching and zeroization sequence".to_string());
-                self.parameter_bindings.entry("LIFECYCLE_END_STATE".to_string()).or_insert_with(|| "All assigned operational corridor waypoints fully traversed and verified; zero unauthorized state boundary excursions; zero unmitigated collision or interference hazards; and successful terminal impact or safe containment ditching in the designated containment zone with complete cryptographic zeroization.".to_string());
-                self.parameter_bindings.entry("LIFECYCLE_BINGO_SAFETY_ACTION".to_string()).or_insert_with(|| "Continuously compute closed-loop dynamic resource state and execute terminal target engagement or safe containment ditching with cryptographic zeroization upon reaching safety thresholds ($R(t) \\le R_{\\mathrm{threshold}}(t)$).".to_string());
-                self.parameter_bindings.entry("LIFECYCLE_POST_OP_STATE".to_string()).or_insert_with(|| "Terminal kinetic impact or safe containment ditching with complete cryptographic key zeroization, volatile memory purge, and structural containment verification".to_string());
-                self.parameter_bindings.entry("CONTAINMENT_MITIGATION_TYPE".to_string()).or_insert_with(|| "SAFE_IMPACT_ZEROIZATION".to_string());
+                self.parameter_bindings.entry("PRIMARY_TERMINAL_TARGET".to_string()).or_insert_with(|| "Designated Safe Terminal Containment Zone".to_string());
+                self.parameter_bindings.entry("SECONDARY_TERMINAL_TARGET".to_string()).or_insert_with(|| "Secondary Safe Containment Area LZ-DIVERT-ALPHA".to_string());
+                self.parameter_bindings.entry("PRIMARY_RECOVERY_FACILITY".to_string()).or_insert_with(|| "Designated Containment Area (Single-Use Disposal)".to_string());
+                self.parameter_bindings.entry("SECONDARY_RECOVERY_FACILITY".to_string()).or_insert_with(|| "Secondary Containment Area (Single-Use Disposal)".to_string());
+                self.parameter_bindings.entry("LIFECYCLE_TRANSIT_MODE".to_string()).or_insert_with(|| "Autonomous_Terminal_Containment_Transit".to_string());
+                self.parameter_bindings.entry("LIFECYCLE_FAILSAFE_SEQUENCE".to_string()).or_insert_with(|| "autonomous terminal containment and safe de-energization sequence".to_string());
+                self.parameter_bindings.entry("LIFECYCLE_END_STATE".to_string()).or_insert_with(|| "All assigned operational corridor waypoints fully traversed and verified; zero unauthorized state boundary excursions; zero unmitigated collision or interference hazards; and successful arrival in the designated terminal containment zone with complete power de-energization and safe disposal.".to_string());
+                self.parameter_bindings.entry("LIFECYCLE_BINGO_SAFETY_ACTION".to_string()).or_insert_with(|| "Continuously compute closed-loop dynamic resource state and execute safe terminal containment and power de-energization upon reaching safety thresholds ($R(t) \\le R_{\\mathrm{threshold}}(t)$).".to_string());
+                self.parameter_bindings.entry("LIFECYCLE_POST_OP_STATE".to_string()).or_insert_with(|| "Terminal safe containment and de-energization with complete power bus isolation, memory state purge, and structural containment verification".to_string());
+                self.parameter_bindings.entry("CONTAINMENT_MITIGATION_TYPE".to_string()).or_insert_with(|| "SAFE_TERMINAL_CONTAINMENT".to_string());
                 self.parameter_bindings.entry("RECOVERY_DEVICE_TERM".to_string()).or_insert_with(|| "containment".to_string());
                 self.parameter_bindings.entry("FAILSAFE_CONTAINMENT_SYSTEM".to_string()).or_insert_with(|| "autonomous containment watchdog and kinetic energy absorption".to_string());
-                self.parameter_bindings.entry("TIER4_CONTAINMENT_DESC".to_string()).or_insert_with(|| "autonomous terminal containment ditching or safe impact zeroization".to_string());
+                self.parameter_bindings.entry("TIER4_CONTAINMENT_DESC".to_string()).or_insert_with(|| "autonomous terminal containment and safe power isolation".to_string());
             }
             LifecycleType::ContinuousStationary => {
                 self.parameter_bindings.entry("PRIMARY_TERMINAL_TARGET".to_string()).or_insert_with(|| "Primary Sterile Field Docking Station".to_string());
@@ -1437,7 +1436,7 @@ impl SysMLParameterBindingEngine {
                 self.parameter_bindings.entry("LIFECYCLE_FAILSAFE_SEQUENCE".to_string()).or_insert_with(|| "electromechanical joint brake lock and sterile field safing sequence".to_string());
                 self.parameter_bindings.entry("LIFECYCLE_END_STATE".to_string()).or_insert_with(|| "All assigned operational trajectory segments fully traversed and verified; zero unauthorized workspace boundary excursions; and successful safe parking at the primary sterile console with residual power reserves strictly satisfying $R_{\\mathrm{reserve}} \\ge \\text{Ratio}_{\\text{reserve\\_min}} \\cdot R_{\\mathrm{capacity}}$.".to_string());
                 self.parameter_bindings.entry("LIFECYCLE_BINGO_SAFETY_ACTION".to_string()).or_insert_with(|| "Continuously compute closed-loop dynamic resource state and execute automated electromechanical joint brake locking and sterile field preservation upon reaching safety thresholds ($R(t) \\le R_{\\mathrm{threshold}}(t)$).".to_string());
-                self.parameter_bindings.entry("LIFECYCLE_POST_OP_STATE".to_string()).or_insert_with(|| "Post-operation stationary safe rest at sterile field console with engaged electromechanical joint brake locks, complete cryptographic key zeroization, and diagnostic log offloading".to_string());
+                self.parameter_bindings.entry("LIFECYCLE_POST_OP_STATE".to_string()).or_insert_with(|| "Post-operation stationary safe rest at sterile field console with engaged electromechanical joint brake locks, secure memory state purge, and diagnostic log offloading".to_string());
                 self.parameter_bindings.entry("CONTAINMENT_MITIGATION_TYPE".to_string()).or_insert_with(|| "ELECTROMECHANICAL_BRAKE_LOCK".to_string());
                 self.parameter_bindings.entry("RECOVERY_DEVICE_TERM".to_string()).or_insert_with(|| "failsafe joint brake".to_string());
                 self.parameter_bindings.entry("FAILSAFE_CONTAINMENT_SYSTEM".to_string()).or_insert_with(|| "electromechanical joint brake lock and sterile field interlocks".to_string());
@@ -1452,7 +1451,7 @@ impl SysMLParameterBindingEngine {
                 self.parameter_bindings.entry("LIFECYCLE_FAILSAFE_SEQUENCE".to_string()).or_insert_with(|| "controlled track deceleration and siding brake sequence".to_string());
                 self.parameter_bindings.entry("LIFECYCLE_END_STATE".to_string()).or_insert_with(|| "All assigned track blocks and route sections fully traversed and verified; zero unauthorized siding excursions; and successful controlled arrival at the primary maintenance siding or designated secondary spur with residual resources strictly satisfying $R_{\\mathrm{reserve}} \\ge \\text{Ratio}_{\\text{reserve\\_min}} \\cdot R_{\\mathrm{capacity}}$.".to_string());
                 self.parameter_bindings.entry("LIFECYCLE_BINGO_SAFETY_ACTION".to_string()).or_insert_with(|| "Continuously compute closed-loop dynamic resource state and execute controlled track deceleration or secondary maintenance siding divert upon reaching safety thresholds ($R(t) \\le R_{\\mathrm{threshold}}(t)$).".to_string());
-                self.parameter_bindings.entry("LIFECYCLE_POST_OP_STATE".to_string()).or_insert_with(|| "Post-operation stationary rest at rail siding with mechanical parking brakes engaged, pneumatic systems vented, cryptographic key zeroization, and diagnostic log offloading".to_string());
+                self.parameter_bindings.entry("LIFECYCLE_POST_OP_STATE".to_string()).or_insert_with(|| "Post-operation stationary rest at rail siding with mechanical parking brakes engaged, pneumatic systems vented, secure memory state purge, and diagnostic log offloading".to_string());
                 self.parameter_bindings.entry("CONTAINMENT_MITIGATION_TYPE".to_string()).or_insert_with(|| "TRACK_SIDING_BRAKE".to_string());
                 self.parameter_bindings.entry("RECOVERY_DEVICE_TERM".to_string()).or_insert_with(|| "pneumatic emergency brake".to_string());
                 self.parameter_bindings.entry("FAILSAFE_CONTAINMENT_SYSTEM".to_string()).or_insert_with(|| "pneumatic emergency brake and track siding deceleration system".to_string());
@@ -1467,7 +1466,7 @@ impl SysMLParameterBindingEngine {
                 self.parameter_bindings.entry("LIFECYCLE_FAILSAFE_SEQUENCE".to_string()).or_insert_with(|| "autonomous de-orbit disposal and passivation sequence".to_string());
                 self.parameter_bindings.entry("LIFECYCLE_END_STATE".to_string()).or_insert_with(|| "All assigned orbital mission phases fully executed and verified; zero unauthorized constellation slot excursions; zero unmitigated orbital debris collision hazards; and successful de-orbit disposal or transfer to graveyard orbit with residual propellant satisfying disposal containment standards.".to_string());
                 self.parameter_bindings.entry("LIFECYCLE_BINGO_SAFETY_ACTION".to_string()).or_insert_with(|| "Continuously compute closed-loop dynamic resource state and execute autonomous de-orbit disposal burn or graveyard orbit maneuver upon reaching safety thresholds ($R(t) \\le R_{\\mathrm{threshold}}(t)$).".to_string());
-                self.parameter_bindings.entry("LIFECYCLE_POST_OP_STATE".to_string()).or_insert_with(|| "Post-mission passivation and safe disposal state with reaction wheels desaturated, batteries passivated, cryptographic key zeroization, and final ephemeris offload".to_string());
+                self.parameter_bindings.entry("LIFECYCLE_POST_OP_STATE".to_string()).or_insert_with(|| "Post-mission passivation and safe disposal state with reaction wheels desaturated, batteries passivated, secure memory state purge, and final ephemeris offload".to_string());
                 self.parameter_bindings.entry("CONTAINMENT_MITIGATION_TYPE".to_string()).or_insert_with(|| "DEORBIT_DISPOSAL_BURN".to_string());
                 self.parameter_bindings.entry("RECOVERY_DEVICE_TERM".to_string()).or_insert_with(|| "autonomous de-orbit propulsion".to_string());
                 self.parameter_bindings.entry("FAILSAFE_CONTAINMENT_SYSTEM".to_string()).or_insert_with(|| "autonomous de-orbit propulsion and orbital passivation unit".to_string());
@@ -1515,7 +1514,7 @@ impl SysMLParameterBindingEngine {
                 self.parameter_bindings.entry("LIFECYCLE_TRANSIT_MODE".to_string()).or_insert_with(|| "Autonomous_RTB_Transit".to_string());
                 self.parameter_bindings.entry("LIFECYCLE_END_STATE".to_string()).or_insert_with(|| "All assigned operational corridor waypoints fully traversed and verified; zero unauthorized state boundary excursions; zero unmitigated collision or interference hazards; all state conditions positively identified and verified ($C_{\\mathrm{condition}} \\ge C_{\\mathrm{threshold}}$); and successful recovery at the primary base or designated secondary divert recovery site with residual resources strictly satisfying $R_{\\mathrm{reserve}} \\ge \\text{Ratio}_{\\text{reserve\\_min}} \\cdot R_{\\mathrm{capacity}}$.".to_string());
                 self.parameter_bindings.entry("LIFECYCLE_BINGO_SAFETY_ACTION".to_string()).or_insert_with(|| "Continuously compute closed-loop dynamic resource state and execute autonomous return-to-base (RTB) or secondary divert routing upon reaching safety thresholds ($R(t) \\le R_{\\mathrm{threshold}}(t)$).".to_string());
-                self.parameter_bindings.entry("LIFECYCLE_POST_OP_STATE".to_string()).or_insert_with(|| "Post-operation stationary rest at recovery site with actuator safe locking, cryptographic data zeroization, and diagnostic log offloading".to_string());
+                self.parameter_bindings.entry("LIFECYCLE_POST_OP_STATE".to_string()).or_insert_with(|| "Post-operation stationary rest at recovery site with actuator safe locking, secure memory state purge, and diagnostic log offloading".to_string());
             }
         }
     }
@@ -1672,9 +1671,101 @@ impl SysMLParameterBindingEngine {
             .insert("SEGMENT_ALLOCATION_MATRIX".to_string(), seg_lines.join("\n"));
 
         // 4. Port Taxonomy
-        let port_tax = "- **PORT-C2-INOUT (INOUT):** Bidirectional PACE command and control telemetry datalink interface.\n- **PORT-NAV-IN (IN):** Navigation, positioning, and reference frame telemetry input interface.\n- **PORT-ACT-OUT (OUT):** Deterministic actuator demand vector and containment control interface.\n- **PORT-PWR-IN (IN):** Regulated primary/auxiliary power bus distribution interface.";
+        let port_tax = "- **PORT-C2-INOUT (INOUT):** Bidirectional supervisory command and telemetry interface.\n- **PORT-NAV-IN (IN):** Navigation, positioning, and reference frame telemetry input interface.\n- **PORT-ACT-OUT (OUT):** Deterministic actuator demand vector and containment control interface.\n- **PORT-PWR-IN (IN):** Regulated primary/auxiliary power bus distribution interface.";
         self.parameter_bindings
             .insert("PORT_TAXONOMY_SECTION".to_string(), port_tax.to_string());
+
+        self._derive_supervisory_authority_handoff();
+    }
+
+    pub fn _derive_supervisory_authority_handoff(&mut self) {
+        let sys_id = self
+            .parameter_bindings
+            .get("SYSTEM_IDENTIFIER")
+            .or_else(|| self.inferred_system_identifier.as_ref())
+            .cloned()
+            .unwrap_or_else(|| "AutonomousSystem".to_string());
+
+        let target_display = if let Some(first_part) = self.ast_part_names.iter().next() {
+            sanitize_level_1b_operational_text(first_part)
+        } else {
+            format!("{sys_id} Core Controller")
+        };
+
+        let lines = vec![
+            "#### 4.5.1 Abstract Supervisory Authority Delegation Sequence Diagram".to_string(),
+            "In accordance with ISO/IEC 27001 (§A.9.4.2 Secure Log-on Procedures), ISO/IEC/IEEE 15288:2023 (§6.4.4 Architecture Definition Process), and generic SysML interface flows, supervisory control authority transfer between active and candidate supervisory stations enforces mutual authentication, session state transfer, and bounded delegation confirmation:".to_string(),
+            String::new(),
+            "```mermaid".to_string(),
+            "sequenceDiagram".to_string(),
+            "    autonumber".to_string(),
+            "    participant CandidateSupervisor as \"Candidate Supervisory Console (Standby)\"".to_string(),
+            "    participant AuthorizationAuthority as \"Security & Authorization Authority\"".to_string(),
+            format!("    participant SystemController as \"{target_display}\""),
+            "    participant PrimarySupervisor as \"Primary Supervisory Console (Active)\"".to_string(),
+            String::new(),
+            "    CandidateSupervisor->>AuthorizationAuthority: 1. Request Delegation Token (SessionID, Nonce_C, RoleCredentials)".to_string(),
+            "    AuthorizationAuthority-->>CandidateSupervisor: 2. Issue Signed Delegation Token (TokenID, RoleClaims, ValidWindow)".to_string(),
+            "    CandidateSupervisor->>SystemController: 3. Transmit Supervisory Delegation Request (TokenID, RoleClaims, Nonce_C)".to_string(),
+            "    SystemController->>AuthorizationAuthority: 4. Verify Delegation Token & Policy (TokenID, RoleClaims)".to_string(),
+            "    AuthorizationAuthority-->>SystemController: 5. Token Verification Confirmation (Status_Valid, Signature_Auth)".to_string(),
+            "    SystemController->>PrimarySupervisor: 6. Relinquish Active Supervisory Authority (TransferID, TargetRole)".to_string(),
+            "    PrimarySupervisor-->>SystemController: 7. Acknowledge Relinquish & State Digest (StateDigest, SyncAck)".to_string(),
+            "    SystemController->>CandidateSupervisor: 8. Grant Supervisory Authority (SessionID, StateInitVector)".to_string(),
+            "    CandidateSupervisor-->>SystemController: 9. Confirm Active Supervisory State (TelemetrySyncAck, Nonce_C)".to_string(),
+            "```".to_string(),
+            String::new(),
+            "The 9 discrete supervisory delegation protocol steps are defined as follows:".to_string(),
+            "1. **Step 1 (Delegation Token Request):** `CandidateSupervisor` transmits a delegation request containing its unique station identity, session nonce (`Nonce_C`), and certified operator credentials to `AuthorizationAuthority`.".to_string(),
+            "2. **Step 2 (Token Issuance):** `AuthorizationAuthority` validates access control privileges and issues a signed, time-stamped authorization token (`TokenID`, `RoleClaims`, `ValidWindow`) back to `CandidateSupervisor`.".to_string(),
+            "3. **Step 3 (Delegation Request Transmission):** `CandidateSupervisor` transmits the signed authorization token and session challenge nonce (`Nonce_C`) to `SystemController`.".to_string(),
+            "4. **Step 4 (Token Verification Request):** `SystemController` queries `AuthorizationAuthority` to verify the digital signature, token validity period, and operational authorization scope.".to_string(),
+            "5. **Step 5 (Verification Confirmation):** `AuthorizationAuthority` confirms cryptographic validity and returns `Status_Valid` with verification signature `Signature_Auth` to `SystemController`.".to_string(),
+            "6. **Step 6 (Relinquish Authority Command):** `SystemController` issues a formal command to `PrimarySupervisor` to relinquish active supervisory authority (`RelinquishAuthorityCommand(TransferID, TargetRole)`).".to_string(),
+            "7. **Step 7 (Relinquish Acknowledgment):** `PrimarySupervisor` returns an acknowledgment containing the latest state telemetry digest (`StateDigest`) and transitions to monitor-only standby state.".to_string(),
+            "8. **Step 8 (Supervisory Authority Grant):** `SystemController` transmits `GrantSupervisoryAuthority` with newly negotiated session parameters and state initialization vectors to `CandidateSupervisor`.".to_string(),
+            "9. **Step 9 (Confirmation & Committal):** `CandidateSupervisor` transmits `ConfirmActiveSupervisoryState` with telemetry synchronization confirmation (`TelemetrySyncAck`), committing active supervisory authority.".to_string(),
+            String::new(),
+            "#### 4.5.2 Bounded Timeout Recovery & Rejection Protocol".to_string(),
+            "To guarantee deterministic execution and prevent command deadlocks during supervisory control delegation, the protocol incorporates bounded timeout recovery and explicit rejection safety criteria:".to_string(),
+            String::new(),
+            "$$".to_string(),
+            "\\begin{aligned}".to_string(),
+            "\\tau_{\\mathrm{handoff}} &\\le \\tau_{\\mathrm{timeout}} = 5.0 \\\\".to_string(),
+            "t_{\\mathrm{RTT}} &\\le \\tau_{\\text{RTT\\_max}} = 100.0 \\\\".to_string(),
+            "P_{\\mathrm{loss}} &\\le P_{\\text{loss\\_max}} = 1.0".to_string(),
+            "\\end{aligned}".to_string(),
+            "$$".to_string(),
+            String::new(),
+            "- Parameter Definitions & Engineering Units:".to_string(),
+            "- tau_handoff: Total elapsed duration of the supervisory authority delegation sequence (s).".to_string(),
+            "- tau_timeout: Maximum allowable timeout window before automatic abort (tau_timeout = 5.0 s).".to_string(),
+            "- t_RTT: Round-trip transport latency between supervisory consoles and SystemController (ms).".to_string(),
+            "- tau_RTT_max: Maximum permissible round-trip time for supervisory transfer (tau_RTT_max = 100.0 ms).".to_string(),
+            "- P_loss: Measured packet loss rate on candidate supervisory transport channel (%).".to_string(),
+            "- P_loss_max: Maximum permissible packet loss rate threshold (P_loss_max = 1.0%).".to_string(),
+            String::new(),
+            "##### Bounded Timeout Recovery".to_string(),
+            "The timeout recovery mechanism guarantees bounded execution time and fail-safe state preservation:".to_string(),
+            "1. **Watchdog Timer Activation:** `SystemController` initializes a dedicated hardware watchdog timer with deadline $\\tau_{\\mathrm{timeout}} = 5.0\\text{ s}$ upon receipt of the initial transfer request (Step 3).".to_string(),
+            "2. **Deterministic Abort:** If the full 9-step delegation sequence fails to complete within $\\tau_{\\mathrm{timeout}} = 5.0\\text{ s}$, `SystemController` unconditionally aborts the transaction and drops pending session tokens.".to_string(),
+            "3. **Safe State Retention:** Active supervisory authority remains locked at `PrimarySupervisor`. If `PrimarySupervisor` has entered an unresponsive state, `SystemController` transitions to autonomous contingency failsafe mode.".to_string(),
+            "4. **Session Termination & Alerting:** All ephemeral session tokens, temporary state buffers, and uncommitted transaction contexts associated with the failed transfer are safely purged from volatile memory, and timeout alerts are dispatched across supervisory interfaces.".to_string(),
+            String::new(),
+            "##### Deterministic Rejection Safety Criteria".to_string(),
+            "The system deterministically rejects supervisory authority delegation requests upon meeting any of the four safety criteria specified below:".to_string(),
+            String::new(),
+            "| Rejection Criterion ID | Rejection Trigger Condition | Detection & Verification Mechanism | Deterministic System Action |".to_string(),
+            "| :--- | :--- | :--- | :--- |".to_string(),
+            "| **REJ-01** | Authentication Token Invalidation | Digital signature verification failure, expired token validity timestamp, or revoked credentials | Immediate transaction reject; security audit event logged; authority retained at PrimarySupervisor |".to_string(),
+            "| **REJ-02** | Telemetry / State Desynchronization | State parameter buffer discrepancy Delta_s > Delta_s_threshold between PrimarySupervisor and CandidateSupervisor | Immediate transaction reject; state re-synchronization alert dispatched; authority retained at PrimarySupervisor |".to_string(),
+            "| **REJ-03** | Active Contingency / Emergency State | System actively executing emergency containment procedures (EMG-01 through EMG-07) or operating in degraded containment mode | Interlock inhibition of handoff; transfer rejected; autonomous containment state machine takes precedence |".to_string(),
+            "| **REJ-04** | Transport Channel Quality Degradation | Candidate control link exceeds round-trip latency bound (t_RTT > tau_RTT_max) or packet loss threshold (P_loss > P_loss_max) | Immediate transaction reject; link quality alert dispatched; authority retained at PrimarySupervisor |".to_string(),
+        ];
+
+        let content = lines.join("\n");
+        self.parameter_bindings
+            .insert("SUPERVISORY_AUTHORITY_HANDOFF_SECTION".to_string(), content);
     }
 
     pub fn resolve_token(&self, token_name: &str, inline_default: Option<&str>) -> String {
@@ -2082,6 +2173,39 @@ mod tests {
         std::fs::remove_file(&temp_proto).ok();
         assert!(ingested_proto, "Protobuf schema ingestion must succeed");
         assert!(engine.ast_part_names.contains("TelemetryGateway"));
+    }
+
+    #[test]
+    fn test_defect_313_zero_weapon_crypto_zeroization_and_abstract_authority_handoff() {
+        let mut exp_bindings = HashMap::new();
+        exp_bindings.insert("IS_EXPENDABLE".to_string(), "true".to_string());
+        let exp_engine = SysMLParameterBindingEngine::new(Some(exp_bindings), None, None, false, None);
+
+        // 1. Must NOT contain weapon-system drone zeroization or ditching terms
+        let failsafe = exp_engine.resolve_token("LIFECYCLE_FAILSAFE_SEQUENCE", None);
+        assert!(!failsafe.contains("zeroization"), "LIFECYCLE_FAILSAFE_SEQUENCE must not contain zeroization: got '{failsafe}'");
+        assert!(!failsafe.contains("ditching"), "LIFECYCLE_FAILSAFE_SEQUENCE must not contain ditching: got '{failsafe}'");
+
+        let end_state = exp_engine.resolve_token("LIFECYCLE_END_STATE", None);
+        assert!(!end_state.contains("terminal impact"), "LIFECYCLE_END_STATE must not contain terminal impact: got '{end_state}'");
+        assert!(!end_state.contains("ditching"), "LIFECYCLE_END_STATE must not contain ditching: got '{end_state}'");
+        assert!(!end_state.contains("cryptographic zeroization"), "LIFECYCLE_END_STATE must not contain cryptographic zeroization: got '{end_state}'");
+
+        let post_op = exp_engine.resolve_token("LIFECYCLE_POST_OP_STATE", None);
+        assert!(!post_op.contains("kinetic impact"), "LIFECYCLE_POST_OP_STATE must not contain kinetic impact: got '{post_op}'");
+        assert!(!post_op.contains("zeroization"), "LIFECYCLE_POST_OP_STATE must not contain zeroization: got '{post_op}'");
+
+        let mit_type = exp_engine.resolve_token("CONTAINMENT_MITIGATION_TYPE", None);
+        assert!(!mit_type.contains("ZEROIZATION"), "CONTAINMENT_MITIGATION_TYPE must not contain ZEROIZATION: got '{mit_type}'");
+
+        // 2. Abstract supervisory authority delegation and generic interface security contract in Section 4.5
+        let engine = SysMLParameterBindingEngine::new(None, None, None, false, None);
+        let handoff_section = engine.resolve_token("SUPERVISORY_AUTHORITY_HANDOFF_SECTION", None);
+        assert_ne!(handoff_section, "N/A", "SUPERVISORY_AUTHORITY_HANDOFF_SECTION must be dynamically derived");
+        assert!(handoff_section.contains("sequenceDiagram"), "SUPERVISORY_AUTHORITY_HANDOFF_SECTION must contain Mermaid sequenceDiagram");
+        assert!(handoff_section.contains("ISO/IEC 27001"), "SUPERVISORY_AUTHORITY_HANDOFF_SECTION must cite ISO/IEC 27001 interface contract");
+        assert!(!handoff_section.contains("VehicleController"), "Must not contain hardcoded UAS VehicleController");
+        assert!(!handoff_section.contains("PrimaryConsole"), "Must not contain hardcoded PrimaryConsole");
     }
 }
 
