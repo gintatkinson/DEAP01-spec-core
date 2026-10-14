@@ -1872,6 +1872,12 @@ impl SysMLParameterBindingEngine {
             .entry("E_CONTINGENCY_JOULES".to_string())
             .or_insert_with(|| e_contingency.to_string());
         self.parameter_bindings
+            .entry("E_CRITICAL_JOULES".to_string())
+            .or_insert_with(|| e_bingo.to_string());
+        self.parameter_bindings
+            .entry("E_CRITICAL_THRESHOLD_JOULES".to_string())
+            .or_insert_with(|| e_bingo.to_string());
+        self.parameter_bindings
             .entry("E_BINGO_JOULES".to_string())
             .or_insert_with(|| e_bingo.to_string());
         self.parameter_bindings
@@ -1995,7 +2001,7 @@ impl SysMLParameterBindingEngine {
         match selected_type {
             LifecycleType::ExpendableDisposal => {
                 self.parameter_bindings.entry("PRIMARY_TERMINAL_TARGET".to_string()).or_insert_with(|| "Designated Safe Terminal Containment Zone".to_string());
-                self.parameter_bindings.entry("SECONDARY_TERMINAL_TARGET".to_string()).or_insert_with(|| "Secondary Safe Containment Area LZ-DIVERT-ALPHA".to_string());
+                self.parameter_bindings.entry("SECONDARY_TERMINAL_TARGET".to_string()).or_insert_with(|| "Secondary Safe Containment Area RS-DIVERT-ALPHA".to_string());
                 self.parameter_bindings.entry("PRIMARY_RECOVERY_FACILITY".to_string()).or_insert_with(|| "Designated Containment Area (Single-Use Disposal)".to_string());
                 self.parameter_bindings.entry("SECONDARY_RECOVERY_FACILITY".to_string()).or_insert_with(|| "Secondary Containment Area (Single-Use Disposal)".to_string());
                 self.parameter_bindings.entry("LIFECYCLE_TRANSIT_MODE".to_string()).or_insert_with(|| "Autonomous_Terminal_Containment_Transit".to_string());
@@ -2025,7 +2031,7 @@ impl SysMLParameterBindingEngine {
             }
             LifecycleType::TrackBoundGuided => {
                 self.parameter_bindings.entry("PRIMARY_TERMINAL_TARGET".to_string()).or_insert_with(|| "Primary Rail Maintenance Siding".to_string());
-                self.parameter_bindings.entry("SECONDARY_TERMINAL_TARGET".to_string()).or_insert_with(|| "Secondary Controlled Deceleration Spur LZ-DIVERT-ALPHA".to_string());
+                self.parameter_bindings.entry("SECONDARY_TERMINAL_TARGET".to_string()).or_insert_with(|| "Secondary Controlled Deceleration Spur RS-DIVERT-ALPHA".to_string());
                 self.parameter_bindings.entry("PRIMARY_RECOVERY_FACILITY".to_string()).or_insert_with(|| "Classification Yard Maintenance Depot".to_string());
                 self.parameter_bindings.entry("SECONDARY_RECOVERY_FACILITY".to_string()).or_insert_with(|| "Secondary Service Siding".to_string());
                 self.parameter_bindings.entry("LIFECYCLE_TRANSIT_MODE".to_string()).or_insert_with(|| "Autonomous_Track_Deceleration".to_string());
@@ -2040,7 +2046,7 @@ impl SysMLParameterBindingEngine {
             }
             LifecycleType::PersistentOrbital => {
                 self.parameter_bindings.entry("PRIMARY_TERMINAL_TARGET".to_string()).or_insert_with(|| "Designated De-Orbit Reentry Corridor / Graveyard Orbit".to_string());
-                self.parameter_bindings.entry("SECONDARY_TERMINAL_TARGET".to_string()).or_insert_with(|| "Secondary Disposal Orbit Node LZ-DIVERT-ALPHA".to_string());
+                self.parameter_bindings.entry("SECONDARY_TERMINAL_TARGET".to_string()).or_insert_with(|| "Secondary Disposal Orbit Node RS-DIVERT-ALPHA".to_string());
                 self.parameter_bindings.entry("PRIMARY_RECOVERY_FACILITY".to_string()).or_insert_with(|| "Designated Atmospheric Demise Footprint".to_string());
                 self.parameter_bindings.entry("SECONDARY_RECOVERY_FACILITY".to_string()).or_insert_with(|| "Stable Graveyard Disposal Orbit".to_string());
                 self.parameter_bindings.entry("LIFECYCLE_TRANSIT_MODE".to_string()).or_insert_with(|| "Autonomous_Disposal_Burn_Transit".to_string());
@@ -2089,7 +2095,7 @@ impl SysMLParameterBindingEngine {
                 }
 
                 self.parameter_bindings.entry("PRIMARY_TERMINAL_TARGET".to_string()).or_insert_with(|| "Primary Recovery Base".to_string());
-                self.parameter_bindings.entry("SECONDARY_TERMINAL_TARGET".to_string()).or_insert_with(|| "Secondary Divert Site LZ-DIVERT-ALPHA".to_string());
+                self.parameter_bindings.entry("SECONDARY_TERMINAL_TARGET".to_string()).or_insert_with(|| "Secondary Divert Site RS-DIVERT-ALPHA".to_string());
                 self.parameter_bindings.entry("PRIMARY_RECOVERY_FACILITY".to_string()).or_insert_with(|| "Primary Recovery Base".to_string());
                 self.parameter_bindings.entry("SECONDARY_RECOVERY_FACILITY".to_string()).or_insert_with(|| "Secondary Divert Base".to_string());
                 self.parameter_bindings.entry("LIFECYCLE_TRANSIT_MODE".to_string()).or_insert_with(|| "Autonomous_RTB_Transit".to_string());

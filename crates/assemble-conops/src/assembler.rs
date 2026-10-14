@@ -1396,5 +1396,112 @@ mod tests {
             found_violations
         );
     }
+
+    #[test]
+    fn test_canonical_mission_intent_unit_09_resource_math_decontamination() {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let repo_root = manifest_dir.parent().unwrap().parent().unwrap();
+        let unit_09_path = repo_root.join("skills/spec-conops-engineering/resources/units/mission_intent/09_BINGO_ENERGY_MATH.md");
+
+        assert!(unit_09_path.is_file(), "09_BINGO_ENERGY_MATH.md must exist on disk");
+
+        let engine = SysMLParameterBindingEngine::new(None, None, None, false, None);
+        let (is_valid, errors) = validate_unit_integrity(&[unit_09_path.clone()], Some(&engine));
+        assert!(is_valid, "Unit 09 integrity validation failed: {:?}", errors);
+        assert!(errors.is_empty());
+
+        let raw = fs::read_to_string(&unit_09_path).unwrap();
+
+        // Required headings and abstract MBSE mathematical standards (INCOSE SEH v5.0 §3.2)
+        assert!(
+            raw.contains("## 9. Critical Energy Threshold Mathematics & Secondary Divert Protocols"),
+            "Unit 09 must contain canonical Section 9 heading"
+        );
+        assert!(
+            raw.contains("### 9.1 Parametric Closed-Loop Resource Reserve Formulation"),
+            "Unit 09 must contain Section 9.1 heading"
+        );
+        assert!(
+            raw.contains("### 9.2 Secondary and Tertiary Divert Recovery Protocols"),
+            "Unit 09 must contain Section 9.2 heading"
+        );
+        assert!(
+            raw.contains("INCOSE Systems Engineering Handbook v5.0 (§3.2)") || raw.contains("INCOSE SEH v5.0 §3.2"),
+            "Unit 09 must cite INCOSE SEH v5.0 §3.2"
+        );
+        assert!(
+            raw.contains("R_{\\mathrm{threshold}}(t)"),
+            "Unit 09 must formulate dynamic resource threshold R_threshold(t)"
+        );
+        assert!(
+            raw.contains(r"\text{Ratio}_{\text{reserve\_min}}") || raw.contains(r"Ratio_{\text{reserve\_min}}"),
+            "Unit 09 must formulate statutory resource reserve ratio"
+        );
+
+        // Verification of zero forbidden tactical aviation jargon
+        let forbidden_jargon = [
+            "bingo",
+            "lz-primary",
+            "lz-divert",
+            "landing zone",
+            "elevation",
+            "obstacle clearance",
+            "flight level",
+            "flight ceiling",
+            "airfield",
+            "aerodrome",
+            "runway",
+            "airspeed",
+            "glide slope",
+        ];
+
+        let mut found_jargon = Vec::new();
+        for term in &forbidden_jargon {
+            if raw.to_lowercase().contains(term) {
+                found_jargon.push(*term);
+            }
+        }
+        assert!(
+            found_jargon.is_empty(),
+            "Unit 09 contains forbidden tactical aviation jargon: {:?}",
+            found_jargon
+        );
+
+        // Verification of zero non-SI aviation units
+        let forbidden_units = [
+            "knots",
+            "knot",
+            "kts",
+            "feet",
+            "nautical mile",
+            "fpm",
+        ];
+
+        let mut found_units = Vec::new();
+        for unit in &forbidden_units {
+            for line in raw.lines() {
+                let lower_line = line.to_lowercase();
+                for word in lower_line.split_whitespace() {
+                    let cleaned = word.trim_matches(|c: char| !c.is_alphanumeric());
+                    if cleaned == *unit {
+                        found_units.push(*unit);
+                    }
+                }
+            }
+        }
+        assert!(
+            found_units.is_empty(),
+            "Unit 09 contains forbidden non-SI aviation units: {:?}",
+            found_units
+        );
+
+        // Verification of zero Unicode em dash or en dash
+        assert!(!raw.contains('\u{2014}'), "Unit 09 must not contain Unicode em dash");
+        assert!(!raw.contains('\u{2013}'), "Unit 09 must not contain Unicode en dash");
+
+        // Verification of clean parameter substitution with zero unresolved tokens
+        let substituted = engine.substitute(&raw);
+        assert!(!substituted.contains("{{"), "Unit 09 substituted output must contain zero unresolved placeholders");
+    }
 }
 

@@ -93,7 +93,7 @@ The ConOps specification tree consists of 12 canonical modular units:
 | `06_UAF_OPERATIONAL_ACTIVITIES.md` | `## 6. OMG UAF Operational Activity Taxonomy` | `uaf_activities` | Open-ended UAF activity roster (`OA-01`..`OA-N`) with mandatory Gate 24 allocation tags (`/// OperationalAllocation: [OA-XX]`). |
 | `07_OPTX_EXCHANGES.md` | `## 7. Operational Information Exchange (Op-Tx) Matrix` | `optx_exchanges` | Information exchange roster (`OpTx-01`..`OpTx-N`) specifying source, destination, data rates, latency limits, criticality; captures high-level operational information exchanges (C2 Commands, Telemetry, Video, State Telemetry, Safety Interlock Authorization) and strictly excludes component-internal serial opcode reference tables; enforces 100% Op-Tx sequence parity where declared exchanges are partitioned across canonical operational interaction sequence diagrams (`Diagram 10.1` through `Diagram 10.4`) with zero uncovered Op-Tx exchanges. |
 | `08_ENVIRONMENTAL_OPERATING_LIMITS.md` / `08_ENVIRONMENTAL_MIL_STD_810H.md` | `## 8. Environmental Operating Limits & Stress Qualification` | `environmental_envelopes` | Ambient temperature, ingress protection (IP), electromagnetic/RF environment, spatial clearance envelopes. |
-| `09_SCENARIOS_AND_TIMELINES.md` | `## 9. Multi-Threaded Operational Scenarios & System Timelines` | `scenarios` | Nominal, degraded, and contingency scenario threads with sequential execution steps and exit criteria; enforces 100% scenario-to-diagram parity where 100% of declared operational scenarios (`SCN-01`..`SCN-N`) MUST include a dedicated `OV-6c` Mermaid sequence diagram (`sequenceDiagram`) detailing multi-threaded lifeline sequences across the canonical scenario spectrum spanning nominal sortie, GNSS-denied navigation, lost C2 link, tactical abort, bingo energy divert, and boundary containment / flight termination. |
+| `09_SCENARIOS_AND_TIMELINES.md` | `## 9. Multi-Threaded Operational Scenarios & System Timelines` | `scenarios` | Nominal, degraded, and contingency scenario threads with sequential execution steps and exit criteria; enforces 100% scenario-to-diagram parity where 100% of declared operational scenarios (`SCN-01`..`SCN-N`) MUST include a dedicated `OV-6c` Mermaid sequence diagram (`sequenceDiagram`) detailing multi-threaded lifeline sequences across the canonical scenario spectrum spanning nominal sortie, GNSS-denied navigation, lost C2 link, tactical abort, critical resource threshold divert, and boundary containment / flight termination. |
 | `10_MAINTENANCE_AND_GSE_SUPPORT.md` | `## 10. Maintenance & Sustainment Concepts (O/I/D Maintenance)` | `maintenance` | Three-tier maintenance model: Organizational (O-Level), Intermediate (I-Level), Depot (D-Level). |
 | `11_IMPACTS_AND_TRADE_STUDIES.md` | `## 11. Operational Impacts, System Limitations & Documented Trade Studies` | `proposed_capabilities` | Mission drivers, value propositions, engineering trade-off evaluations. |
 | `12_EMERGENCY_DECISION_MATRIX.md` | `## 12. 7-Row Emergency Decision & Contingency Matrix` | `emergency_matrix` | Canonical emergency triggers (`EMG-01`..`EMG-07`) with detection mechanisms, failsafe recovery states, max response times, and HITL authority roles. |
@@ -112,7 +112,7 @@ The Tactical Mission Intent specification tree consists of 10 canonical modular 
 | `06_SAFETY_INTERLOCKS.md` | `## 6. Safety Constraints & Subsystem Interlocks` | `safety_interlocks` | Safety constraints, interlock predicates, and subsystem state interlocks (`INT-01`..`INT-N`) derived from AST constraint and state definitions. |
 | `07_AIRSPACE_GEOZONES.md` | `## 7. Airspace Deconfliction & U-space Dynamic Geo-Zones` | `airspace_geozones` | Primary boundary perimeter, dynamic exclusion/keep-out zones, and horizontal/vertical separation minima. |
 | `08_GO_NO_GO_MATRIX.md` | `## 8. Go/No-Go Decision Matrix` | `go_no_go_matrix` | Operational phase checks (`GNG-01`..`GNG-N`), threshold conditions, sensors/mechanisms, and deterministic Go/No-Go actions. |
-| `09_BINGO_ENERGY_MATH.md` | `## 9. Bingo Energy Mathematics & Secondary Divert Protocols` | `bingo_energy_math` | Bingo energy dynamics formulation ($E_{\mathrm{bingo}}(t)$), statutory reserve ratio constraint ($\ge 20\%$), and energy parameter table. |
+| `09_BINGO_ENERGY_MATH.md` | `## 9. Critical Energy Threshold Mathematics & Secondary Divert Protocols` | `critical_energy_threshold_math` | Critical energy dynamics formulation ($E_{\mathrm{critical}}(t)$ or $R_{\mathrm{threshold}}(t)$), statutory reserve ratio constraint ($\ge 20\%$), and energy parameter table. |
 | `10_OPERATIONAL_ALLOCATION_TAGS.md` | `## 10. Gate 24 MissionTask Traceability Tags` | `allocation_tags` | Comprehensive listing of Gate 24 allocation tags (`/// OperationalAllocation: [MET-XX]`) for cross-model traceability. |
 
 ### 2.3 System Architecture Diagram Representation Standard (Option 3)
@@ -344,7 +344,7 @@ Per [`rules/sysml-ssot-completeness.md`](../../rules/sysml-ssot-completeness.md)
   2. **GNSS-Denied Navigation**: Resilient sensor fusion, optical flow, visual-inertial odometry, and dead-reckoning fallback under satellite navigation denial.
   3. **Lost C2 Link**: Tiered PACE communications failover hierarchy, heartbeat loss timeout, autonomous holding patterns, and deterministic lost-link return protocols.
   4. **Tactical Abort**: Dynamic threat avoidance, operator supervisory veto, and controlled ingress abort.
-  5. **Bingo Energy Divert**: Closed-loop energy margin evaluation, secondary recovery site selection, and statutory reserve preservation.
+  5. **Critical Resource Threshold Divert**: Closed-loop energy margin evaluation, secondary recovery site selection, and statutory reserve preservation.
   6. **Boundary Containment / Flight Termination**: Critical boundary excursion detection, boundary containment margin enforcement, and failsafe termination.
 - **Strict Prohibition of Autonomous High-Consequence Actuation**: Autonomous generation of irreversible physical actuation, high-energy discharge, or safety-critical effector commands without prior human operator authorization/consent is strictly prohibited across all specification tiers. Any sequence diagram attempting uncommanded or unauthorized physical actuation is immediately rejected under rule `factual-grounding-temporal-safety-violation`.
 - **Mandatory Temporal Precedence of Human Consent**:
@@ -379,7 +379,7 @@ sequenceDiagram
     FCS -->> GCS: Periodic_Heartbeat_and_Telemetry
 
     Note over Operator,Actuators: Phase 3: Nominal Egress & Safe Recovery
-    FCS ->> FCS: Evaluate_Bingo_Energy_Condition
+    FCS ->> FCS: Evaluate_Resource_Threshold_Condition
     FCS ->> Actuators: Command_Deceleration_Profile
     Actuators -->> FCS: Zero_Velocity_Rest_Confirmed
     FCS ->> Actuators: Isolate_Actuator_Power
@@ -531,7 +531,7 @@ Before completing Phase 0.75, the `Worker ConOps` must execute and pass all requ
    ```
    - Asserts all 12 mandatory sections exist in `CONOPS.md` and all 10 mandatory sections exist in `MISSION_INTENT.md`.
    - Validates boundary containment margin calculation ($R_{\mathrm{containment}} \ge R_{\mathrm{min}}$).
-   - Validates Bingo energy statutory reserve ratio ($E_{\mathrm{reserve}} / E_{\mathrm{capacity}} \ge 0.20$).
+   - Validates critical energy statutory reserve ratio ($E_{\mathrm{reserve}} / E_{\mathrm{capacity}} \ge 0.20$).
    - Validates 7-row emergency matrix determinism (`EMG-01`..`EMG-07`).
    - Validates METL task allocations.
 
