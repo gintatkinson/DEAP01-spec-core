@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2021"
 description = "Pure Rust Ground 0.0 SysML v2 Ingestion Engine"
 
+[lints]
+workspace = true
+
+
 [dependencies]
 deap-core = { path = "../deap-core" }
 compile-sysml = { path = "../compile-sysml" }

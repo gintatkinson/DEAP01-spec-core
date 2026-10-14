@@ -1,0 +1,5 @@
+disallowed-types = [
+    { path = "regex::Regex", reason = "Total regex eviction: use deap_core::sysml_ast or structural token parsing" },
+    { path = "std::collections::HashMap", reason = "Non-deterministic traversal: use std::collections::BTreeMap" },
+    { path = "std::collections::HashSet", reason = "Non-deterministic traversal: use std::collections::BTreeSet" },
+]

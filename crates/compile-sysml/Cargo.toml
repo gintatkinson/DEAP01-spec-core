@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2021"
 description = "SysML v2 / KerML compiler, STPA safety transpiler, and specification synchronization engine"
 
+[lints]
+workspace = true
+
+
 [dependencies]
 deap-core = { path = "../deap-core" }
 clap = { version = "4.4", features = ["derive"] }
