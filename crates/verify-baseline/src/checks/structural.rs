@@ -394,6 +394,75 @@ fn scan_rs_file(
     }
 }
 
+/// Check documentation and backlog integrity (refs #318):
+/// 1. Root `HANDOFF.md` must not exist in repository root (purged in commit 69c749c to eradicate documentation drift and stale backlog hallucinations).
+/// 2. If `docs/designs/feat-289-290-293-solution.md` is present, verify:
+///    - It cites Issue #318.
+///    - It correctly attributes commit 402d56c to refs #315 (not prompt quarantine).
+///    - It does not list issues #289, #290, #293 as unstarted/remaining work packages.
+///    - It does not cite invalid path `scripts/bootstrap_tracker_labels.py` without package scoping.
+///    - It contains zero Unicode em dashes.
+pub fn check_handoff_and_backlog_integrity(repo_root: &Path) -> Result<(), Vec<String>> {
+    let mut violations = Vec::new();
+
+    // 1. Root HANDOFF.md must not exist (prevent documentation drift and stale backlog hallucinations)
+    let root_handoff = repo_root.join("HANDOFF.md");
+    if root_handoff.exists() {
+        violations.push(
+            "Root HANDOFF.md detected: root handoff artifacts are forbidden per commit 69c749c to prevent documentation drift and stale backlog hallucinations."
+                .to_string(),
+        );
+    }
+
+    // 2. Validate docs/designs/feat-289-290-293-solution.md if present
+    let solution_doc = repo_root.join("docs").join("designs").join("feat-289-290-293-solution.md");
+    if solution_doc.is_file() {
+        if let Ok(content) = fs::read_to_string(&solution_doc) {
+            if !content.contains("318") {
+                violations.push(
+                    "feat-289-290-293-solution.md must cite Issue #318 resolving stale backlog hallucinations."
+                        .to_string(),
+                );
+            }
+            if content.contains("prompt quarantine across all skills") {
+                violations.push(
+                    "feat-289-290-293-solution.md contains stale attribution error: 402d56c delivered commit message non-closure rule (refs #315), not prompt quarantine."
+                        .to_string(),
+                );
+            }
+            if content.contains("Work Package B: Issue #293")
+                || content.contains("Work Package C: Issue #289")
+                || content.contains("Work Package D: Issue #290")
+            {
+                violations.push(
+                    "feat-289-290-293-solution.md lists resolved issues #289, #290, or #293 as outstanding work packages."
+                        .to_string(),
+                );
+            }
+            if content.contains("scripts/bootstrap_tracker_labels.py")
+                && !content.contains("skills/spec-orchestrator/scripts/bootstrap_tracker_labels.py")
+            {
+                violations.push(
+                    "feat-289-290-293-solution.md contains invalid path scripts/bootstrap_tracker_labels.py."
+                        .to_string(),
+                );
+            }
+            if content.contains('\u{2014}') {
+                violations.push(
+                    "feat-289-290-293-solution.md contains forbidden Unicode em dash (\\u2014)."
+                        .to_string(),
+                );
+            }
+        }
+    }
+
+    if violations.is_empty() {
+        Ok(())
+    } else {
+        Err(violations)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -609,4 +678,59 @@ mod tests {
         let res = check_zero_regex(repo_root);
         assert!(res.is_ok(), "Check 34 Zero Regex Invariant failed on repository root: {:?}", res.err());
     }
+
+    #[test]
+    fn test_reproduce_defect_318_stale_backlog_hallucinations_and_attribution_errors() {
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(|p| p.parent())
+            .expect("repo root");
+        let res = check_handoff_and_backlog_integrity(repo_root);
+        assert!(
+            res.is_ok(),
+            "Defect #318 integrity check failed on repository root: {:?}",
+            res.err()
+        );
+    }
+
+    #[test]
+    fn test_defect_318_mutation_rejects_stale_root_handoff() {
+        let tmp = TempDir::new("c318_root_handoff");
+        let handoff = tmp.path.join("HANDOFF.md");
+        File::create(&handoff).unwrap();
+        let res = check_handoff_and_backlog_integrity(&tmp.path);
+        assert!(res.is_err(), "Must reject existence of root HANDOFF.md");
+    }
+
+    #[test]
+    fn test_defect_318_mutation_rejects_stale_attribution_error() {
+        let tmp = TempDir::new("c318_stale_attr");
+        let designs = tmp.path.join("docs").join("designs");
+        fs::create_dir_all(&designs).unwrap();
+        let sol = designs.join("feat-289-290-293-solution.md");
+        let mut f = File::create(&sol).unwrap();
+        writeln!(
+            f,
+            "# Solution (refs #318)\nprompt quarantine across all skills"
+        )
+        .unwrap();
+        let res = check_handoff_and_backlog_integrity(&tmp.path);
+        assert!(res.is_err(), "Must reject stale attribution error");
+    }
+
+    #[test]
+    fn test_defect_318_mutation_rejects_stale_work_package_queue() {
+        let tmp = TempDir::new("c318_stale_queue");
+        let designs = tmp.path.join("docs").join("designs");
+        fs::create_dir_all(&designs).unwrap();
+        let sol = designs.join("feat-289-290-293-solution.md");
+        let mut f = File::create(&sol).unwrap();
+        writeln!(f, "# Solution (refs #318)\nWork Package B: Issue #293").unwrap();
+        let res = check_handoff_and_backlog_integrity(&tmp.path);
+        assert!(
+            res.is_err(),
+            "Must reject listing resolved issues as outstanding work packages"
+        );
+    }
 }
+
