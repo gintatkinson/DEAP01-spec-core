@@ -342,24 +342,48 @@ pub fn discover_schema_targets(
     Ok(("unknown".to_string(), Vec::new()))
 }
 
-/// Helper function to locate non-recursive files matching a target extension in a directory.
+/// Helper function to recursively locate files matching a target extension under a directory.
 ///
-/// ### Arguments:
-/// - `dir`: The directory to inspect.
-/// - `ext`: File extension without leading dot (case-insensitive).
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ECSS-E-ST-40C. Schema discovery is a safety-critical
+/// preprocessing gate: schemas placed in nested subdirectories of `schema/` (e.g. a YANG module
+/// tree) must be ingested rather than silently omitted from the compiled model.
 ///
-/// ### Returns:
-/// A vector of matching file `PathBuf` objects.
+/// ## 2. Invariants & Mathematical Properties
+/// - Traversal order is deterministic: entries are sorted by file name at every directory level
+///   (`WalkDir::sort_by_file_name`), so the result is identical across host filesystems.
+/// - Hidden entries (names beginning with `.`) below the root, and everything beneath hidden
+///   directories, are excluded. The root itself is always walked, even when named `.`.
+/// - Extension matching is ASCII case-insensitive.
+///
+/// ## 3. Preconditions
+/// - `dir` is a candidate directory path; `ext` is a file extension without leading dot.
+///
+/// ## 4. Postconditions
+/// - Returns every regular file (symlinks to files included) under `dir`, at any depth, whose
+///   extension equals `ext`, in deterministic walk order.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(F \log F)$ in visited entries $F$ (per-directory sorting). Space Complexity: $O(F)$.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - A non-existent or unreadable `dir`, and unreadable walk entries, yield no results for those
+///   entries without panicking; symlinked directories are not followed, preventing cycles.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-0001/find_files_with_ext_recursive]
 fn find_files_with_ext(dir: &Path, ext: &str) -> Vec<PathBuf> {
     let mut results = Vec::new();
-    if let Ok(entries) = fs::read_dir(dir) {
-        for entry in entries.flatten() {
-            let p = entry.path();
-            if p.is_file() {
-                if let Some(e) = p.extension() {
-                    if e.to_string_lossy().eq_ignore_ascii_case(ext) {
-                        results.push(p);
-                    }
+    let walker = walkdir::WalkDir::new(dir)
+        .sort_by_file_name()
+        .into_iter()
+        .filter_entry(|e| e.depth() == 0 || !e.file_name().to_string_lossy().starts_with('.'));
+    for entry in walker.flatten() {
+        let p = entry.path();
+        if p.is_file() {
+            if let Some(e) = p.extension() {
+                if e.to_string_lossy().eq_ignore_ascii_case(ext) {
+                    results.push(p.to_path_buf());
                 }
             }
         }
@@ -569,5 +593,59 @@ mod tests {
 
         // Cleanup
         let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    /// Self-removing temporary directory guard so fixtures are deleted even when an assertion panics.
+    struct TempDirGuard(PathBuf);
+
+    impl Drop for TempDirGuard {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn test_find_files_with_ext_recurses_nested_schema_dirs_deterministically() {
+        let root = std::env::temp_dir().join(format!(
+            "deap_yang_recursive_discovery_{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        let guard = TempDirGuard(root.clone());
+        let nested = guard.0.join("zeta").join("inner");
+        let sibling = guard.0.join("alpha");
+        let hidden = guard.0.join(".hidden_dir");
+        fs::create_dir_all(&nested).expect("create nested fixture dir");
+        fs::create_dir_all(&sibling).expect("create sibling fixture dir");
+        fs::create_dir_all(&hidden).expect("create hidden fixture dir");
+        let module_src = "module sample_module { prefix sm; container RootNode { leaf label { type string; } } }\n";
+        let nested_file = nested.join("deep_module.yang");
+        let sibling_file = sibling.join("side_module.YANG");
+        let top_file = guard.0.join("top_module.yang");
+        fs::write(&nested_file, module_src).expect("write nested yang");
+        fs::write(&sibling_file, module_src).expect("write sibling yang");
+        fs::write(&top_file, module_src).expect("write top yang");
+        fs::write(hidden.join("ignored_module.yang"), module_src).expect("write hidden yang");
+        fs::write(guard.0.join(".dot_module.yang"), module_src).expect("write hidden file");
+        fs::write(nested.join("notes.txt"), "not a schema").expect("write non-schema file");
+
+        let found = find_files_with_ext(&guard.0, "yang");
+        assert!(!found.is_empty(), "fixture guard: recursive discovery found zero .yang files");
+        assert_eq!(
+            found,
+            vec![sibling_file.clone(), top_file.clone(), nested_file.clone()],
+            "expected sorted recursive discovery excluding hidden entries"
+        );
+
+        let (fmt, files) = discover_schema_targets(Some(&guard.0), Some("auto"))
+            .expect("discover_schema_targets failed on nested yang fixture");
+        assert_eq!(fmt, "yang");
+        assert_eq!(files.len(), 3, "auto-discovery must include nested .yang files: {files:?}");
+        assert!(files.contains(&nested_file));
+
+        let (hint_fmt, hint_files) = discover_schema_targets(Some(&guard.0), Some("yang"))
+            .expect("discover_schema_targets failed with explicit yang hint");
+        assert_eq!(hint_fmt, "yang");
+        assert_eq!(hint_files.len(), 3);
     }
 }

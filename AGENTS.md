@@ -24,7 +24,7 @@ Immediately following installation and on EVERY new session startup, before acce
 2. **Load Project Skills**: Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` (and active skills under `skills/`) to initialize feature-driven implementation protocols and review gates.
 3. **Load Governance Rules**: Execute `view_file` on `.pipeline/ACTIVE_RULES_BUNDLE.md` to ingest the complete, consolidated suite of active governance rules in a single read.
 4. **Load Platform Profile**: Read the target platform execution profile (e.g., `.pipeline/profiles/flutter.md`, `.pipeline/profiles/react.md`, `.pipeline/profiles/ros2_cpp.md`, or `.pipeline/profiles/px4_module.md`) to establish platform-specific constraints.
-5. **Bootstrap Tracker Labels & Verify Baseline**: Verify that repository issue tracker labels and baseline conformance pass by running `python3 scripts/verify_downstream_baseline.py --no-domain`.
+5. **Bootstrap Tracker Labels & Verify Baseline**: Verify that repository issue tracker labels and baseline conformance pass by running the native Rust baseline verifier `./target/release/verify-baseline . --no-domain` (or `cargo run --release -p verify-baseline -- . --no-domain` if the release binary has not been built). The legacy Python and shell tooling (`scripts/verify_downstream_baseline.py`, `reconcile_backlog.py`, `parity_auditor`, `setup_git_hooks.sh`) is permanently retired per Check 32 and Check 33 and MUST NOT be invoked.
 
 ## Strict Planning Gate (No Execution Without Approved Plan)
 - You are strictly forbidden from creating, modifying, or deleting files in the workspace or dispatching any subagents unless that action is documented in an approved implementation plan.
@@ -42,10 +42,19 @@ Immediately following installation and on EVERY new session startup, before acce
   2. A blocking error or unresolvable requirement ambiguity is encountered.
   3. The initial implementation plan has not been approved.
 
-## Strict Prohibition of Unit Tests & Exclusive Semantic Acceptance Testing Mandate
-- **Unit Tests Strictly Forbidden**: Creating, maintaining, or executing unit test suites (`tests/`, `test_*.py`, `pytest`) is strictly forbidden across this repository. Coordinators and subagents must never create unit test files or invoke `pytest`.
-- **Exclusive Semantic Acceptance Testing**: All verification across the pipeline must be performed exclusively via end-to-end semantic acceptance testing against real schemas and domain specifications (`sysmlv2_ingest.py`, `scripts/verify_downstream_baseline.py`, and `scripts/e2e_acceptance_harness.py`).
-- **Forbidden Test Workspace Creation**: Creating mock test projects, mock repository directories, or test-runner scripts (such as `test_project/` or `run_tests.py`) directly inside the workspace is strictly forbidden.
+## Mandatory Native Rust TDD & Prohibition of Legacy Python/Pytest
+- **Legacy Python & Pytest Strictly Prohibited (Check 33)**: Creating, maintaining, or executing Python source files (`*.py`), Python test suites (`tests/`, `test_*.py`), `pytest`, or any other Python test runner is strictly forbidden across this repository. Check 33 (Zero Python Scripts Invariant) enforces this on disk; Check 32 (Zero Shell Scripts Invariant) equally forbids `*.sh` files.
+- **Native Rust Unit Tests Strictly Mandatory**: Native Rust `#[test]` unit tests, mutation tests (negative probes proving each gate can fail), and the RED-GREEN-REFACTOR TDD cycle are **strictly mandatory** across all Rust crates under `crates/`. Every fix or feature MUST ship a failing `#[test]` demonstrated RED before the implementation is written, then GREEN after it.
+- **Workspace Test Suite Gate**: `cargo test --workspace` MUST pass with zero failures before any work package is declared complete, alongside `./target/release/verify-baseline . --no-domain`.
+- **Semantic Acceptance Testing**: End-to-end semantic acceptance verification against real schemas and domain specifications is performed exclusively with the native Rust binaries:
+  - Baseline verification: `./target/release/verify-baseline . --no-domain` (or `cargo run --release -p verify-baseline -- . --no-domain`)
+  - Backlog reconciliation: `./target/release/reconcile-backlog`
+  - SysML compilation / sync / STPA: `./target/release/compile-sysml`
+  - Level 0 ingestion: `./target/release/ingest-sysml`
+  - ConOps assembly: `./target/release/assemble-conops`
+  - Workspace test suite: `cargo test --workspace`
+- **Retired Tooling**: `scripts/verify_downstream_baseline.py`, `sysmlv2_ingest.py`, `scripts/e2e_acceptance_harness.py`, `reconcile_backlog.py`, `parity_auditor`, and `setup_git_hooks.sh` are permanently retired and MUST NOT be referenced as active tooling or invoked.
+- **Forbidden Test Workspace Creation**: Creating mock test projects, mock repository directories, or test-runner scripts (such as `test_project/` or `run_tests.py`) directly inside the workspace is strictly forbidden. Rust tests requiring filesystem fixtures MUST create them in temporary directories that are removed on completion.
 
 ## Mandatory Workspace-Relative Paths Invariant
 - All source code, tests, configuration, documentation, scripts, and entitlements MUST use workspace-relative paths (`.`, `./...`) or environment-derived path resolution. Hardcoded workstation, environment-specific, or user-specific machine paths are strictly prohibited across all codebase tiers.
@@ -107,7 +116,7 @@ Immediately following installation and on EVERY new session startup, before acce
 - **Subagent Tool Locking**: Subagents must only execute tools within their explicit domain.
 
 ## Backlog Reconciliation Mandate
-- Before finalizing any implementation branch commit, merge, or PR, execute `python3 skills/spec-orchestrator/scripts/reconcile_backlog.py` to synchronize local specifications, checklists, and diagrams with the issue tracker.
+- Before finalizing any implementation branch commit, merge, or PR, execute `./target/release/reconcile-backlog` to synchronize local specifications, checklists, and diagrams with the issue tracker. The retired `reconcile_backlog.py` script MUST NOT be invoked.
 
 ## Mermaid Syntax & Diagram Integrity Rules
 - Every Mermaid diagram MUST have matching closing fences (```` ``` ```` on a new line). Leaking fences are forbidden.

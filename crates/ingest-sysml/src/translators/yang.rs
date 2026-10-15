@@ -452,6 +452,45 @@ fn map_yang_type(raw_type: &str, typedef_map: &HashMap<String, String>) -> Strin
     }
 }
 
+/// Renders a raw YANG `default` argument as a SysML v2 literal compatible with the mapped type.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ECSS-E-ST-40C and IETF RFC 6020 / RFC 7950 section 7.6.4
+/// (`default` statement). YANG carries every default as an unquoted lexical string, so emitting it
+/// verbatim produces invalid SysML (e.g. `= 00:00:00;` or `= ipv4;`) that breaks the
+/// ingest-sysml -> `schema/model.sysml` -> compile-sysml round trip.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Returned unquoted only when `sysml_type` is `Integer` or `Real` and `raw_def` parses as `f64`,
+///   or when `sysml_type` is `Boolean` and `raw_def` is exactly `true` or `false`.
+/// - Otherwise returns `"` + escaped(`raw_def`) + `"`, escaping `\` before `"` so the literal
+///   decodes back to exactly `raw_def`.
+///
+/// ## 3. Preconditions
+/// - `raw_def` is the already-unescaped YANG `default` argument; `sysml_type` is the output of
+///   `map_yang_type` for the owning leaf or typedef.
+///
+/// ## 4. Postconditions
+/// - Returns a single SysML v2 literal token: numeric, boolean, or double-quoted string.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(L) in the byte length L of `raw_def`. Space Complexity: O(L).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Fails safe: any value whose literal kind disagrees with the mapped type (e.g. `unbounded`
+///   for an `Integer`, `TRUE` for a `Boolean`) is quoted rather than emitted as a bare token.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-0015/YANG-DEFAULT-VALUE-SYSML-LITERAL]
+fn format_yang_default_value(raw_def: &str, sysml_type: &str) -> String {
+    if ((sysml_type == "Integer" || sysml_type == "Real") && raw_def.parse::<f64>().is_ok())
+        || (sysml_type == "Boolean" && matches!(raw_def, "true" | "false"))
+    {
+        return raw_def.to_string();
+    }
+    format!("\"{}\"", raw_def.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
 /// Deterministic translator converting RFC 6020 / RFC 7950 YANG specifications into SysML v2 ASTs.
 #[derive(Debug, Default, Clone)]
 pub struct YangTranslator;
@@ -530,7 +569,9 @@ impl YangTranslator {
                         .cloned()
                         .unwrap_or_else(|| "String".to_string());
                     let td_doc = stmt.get_arg("description").map(|d| d.to_string());
-                    let default_val = stmt.get_arg("default").map(|d| d.to_string());
+                    let default_val = stmt
+                        .get_arg("default")
+                        .map(|d| format_yang_default_value(d, &base_type));
 
                     // Attribute alias on package
                     pkg.attribute_defs.push(AttributeDef {
@@ -660,10 +701,14 @@ impl YangTranslator {
                                     .find_first("type")
                                     .and_then(|t| t.argument.as_deref())
                                     .unwrap_or("string");
+                                let p_type = map_yang_type(l_type, &typedef_map);
+                                let p_default = leaf
+                                    .get_arg("default")
+                                    .map(|d| format_yang_default_value(d, &p_type));
                                 in_params.push(AttributeDef {
                                     name: to_camel_case(l_name),
-                                    type_name: map_yang_type(l_type, &typedef_map),
-                                    default_value: leaf.get_arg("default").map(|d| d.to_string()),
+                                    type_name: p_type,
+                                    default_value: p_default,
                                     doc: leaf.get_arg("description").map(|d| d.to_string()),
                                 });
                             }
@@ -677,10 +722,14 @@ impl YangTranslator {
                                     .find_first("type")
                                     .and_then(|t| t.argument.as_deref())
                                     .unwrap_or("string");
+                                let p_type = map_yang_type(l_type, &typedef_map);
+                                let p_default = leaf
+                                    .get_arg("default")
+                                    .map(|d| format_yang_default_value(d, &p_type));
                                 out_params.push(AttributeDef {
                                     name: to_camel_case(l_name),
-                                    type_name: map_yang_type(l_type, &typedef_map),
-                                    default_value: leaf.get_arg("default").map(|d| d.to_string()),
+                                    type_name: p_type,
+                                    default_value: p_default,
                                     doc: leaf.get_arg("description").map(|d| d.to_string()),
                                 });
                             }
@@ -833,7 +882,9 @@ fn translate_container_or_grouping(
                 .and_then(|t| t.argument.as_deref())
                 .unwrap_or("string");
             let mapped_type = map_yang_type(l_type, typedef_map);
-            let default_val = leaf.get_arg("default").map(|d| d.to_string());
+            let default_val = leaf
+                .get_arg("default")
+                .map(|d| format_yang_default_value(d, &mapped_type));
             let l_doc = leaf.get_arg("description").map(|d| d.to_string());
 
             attributes.push(AttributeDef {
@@ -938,10 +989,14 @@ fn translate_container_or_grouping(
                         .find_first("type")
                         .and_then(|t| t.argument.as_deref())
                         .unwrap_or("string");
+                    let dl_type = map_yang_type(l_type, typedef_map);
+                    let dl_default = direct_leaf
+                        .get_arg("default")
+                        .map(|d| format_yang_default_value(d, &dl_type));
                     attributes.push(AttributeDef {
                         name: to_camel_case(dl_name),
-                        type_name: map_yang_type(l_type, typedef_map),
-                        default_value: direct_leaf.get_arg("default").map(|d| d.to_string()),
+                        type_name: dl_type,
+                        default_value: dl_default,
                         doc: direct_leaf.get_arg("description").map(|d| d.to_string()),
                     });
                 }
@@ -1036,5 +1091,196 @@ mod tests {
         assert!(container.parts.iter().any(|p| p.name == "a"));
         assert!(container.parts.iter().any(|p| p.name == "b"));
         assert!(container.constraints.iter().any(|c| c.name == "opt_mutex"));
+    }
+
+    /// Neutral YANG fixture exercising leaf-list, string defaults, typedef, container, list,
+    /// choice/case and rpc statements for the SysML round-trip tests.
+    const ROUND_TRIP_YANG: &str = r#"
+        module sample-module {
+            yang-version 1.1;
+            namespace "urn:example:sample-module";
+            prefix sm;
+            description "Neutral sample module for round-trip verification.";
+
+            typedef time-text {
+                type string;
+                default "00:00:00";
+                description "Clock text value.";
+            }
+
+            typedef ratio-value {
+                type decimal64 { fraction-digits 2; }
+                default "0.5";
+            }
+
+            container sample-root {
+                description "Root container.";
+                leaf start-time {
+                    type time-text;
+                    default "00:00:00";
+                }
+                leaf family {
+                    type string;
+                    default "ipv4";
+                }
+                leaf retries {
+                    type uint8;
+                    default "3";
+                }
+                leaf enabled {
+                    type boolean;
+                    default "true";
+                }
+                leaf quoted-text {
+                    type string;
+                    default "say \"hi\" \\ bye";
+                }
+                leaf-list tags {
+                    type string;
+                }
+                leaf-list counts {
+                    type uint32;
+                }
+                list entry {
+                    key "label";
+                    leaf label { type string; }
+                    leaf weight { type decimal64 { fraction-digits 1; } default "1.5"; }
+                }
+                choice mode {
+                    case first-mode {
+                        leaf first-value { type string; default "alpha"; }
+                    }
+                    case second-mode {
+                        leaf second-value { type uint16; }
+                    }
+                }
+            }
+
+            rpc reset-item {
+                description "Resets an item.";
+                input {
+                    leaf target { type string; default "all"; }
+                    leaf delay { type uint32; default "10"; }
+                }
+                output {
+                    leaf outcome { type string; default "ok"; }
+                    leaf done { type boolean; default "false"; }
+                }
+            }
+        }
+    "#;
+
+    #[test]
+    fn test_format_yang_default_value_literal_rules() {
+        assert_eq!(format_yang_default_value("42", "Integer"), "42");
+        assert_eq!(format_yang_default_value("-7", "Integer"), "-7");
+        assert_eq!(format_yang_default_value("0.25", "Real"), "0.25");
+        assert_eq!(format_yang_default_value("true", "Boolean"), "true");
+        assert_eq!(format_yang_default_value("false", "Boolean"), "false");
+        assert_eq!(format_yang_default_value("00:00:00", "String"), "\"00:00:00\"");
+        assert_eq!(format_yang_default_value("ipv4", "String"), "\"ipv4\"");
+        assert_eq!(format_yang_default_value("42", "String"), "\"42\"");
+        assert_eq!(format_yang_default_value("unbounded", "Integer"), "\"unbounded\"");
+        assert_eq!(format_yang_default_value("TRUE", "Boolean"), "\"TRUE\"");
+        assert_eq!(format_yang_default_value("true", "String"), "\"true\"");
+        assert_eq!(format_yang_default_value("", "String"), "\"\"");
+        assert_eq!(format_yang_default_value("a\"b\\c", "String"), "\"a\\\"b\\\\c\"");
+        assert_eq!(format_yang_default_value("3", "TimeText"), "\"3\"");
+    }
+
+    #[test]
+    fn test_yang_string_defaults_are_quoted_sysml_literals() {
+        let pkg = YangTranslator::new()
+            .translate(ROUND_TRIP_YANG, "SampleModule")
+            .expect("translate fixture");
+
+        let td_attr = pkg.attribute_defs.iter().find(|a| a.name == "timeText");
+        assert_eq!(td_attr.and_then(|a| a.default_value.as_deref()), Some("\"00:00:00\""));
+        let ratio_attr = pkg.attribute_defs.iter().find(|a| a.name == "ratioValue");
+        assert_eq!(ratio_attr.and_then(|a| a.default_value.as_deref()), Some("0.5"));
+        let td_part = pkg.part_defs.iter().find(|p| p.name == "TimeText");
+        let td_value = td_part.and_then(|p| p.attributes.iter().find(|a| a.name == "value"));
+        assert_eq!(td_value.and_then(|a| a.default_value.as_deref()), Some("\"00:00:00\""));
+
+        let root = pkg.part_defs.iter().find(|p| p.name == "SampleRoot").expect("SampleRoot");
+        let default_of = |name: &str| {
+            root.attributes
+                .iter()
+                .find(|a| a.name == name)
+                .and_then(|a| a.default_value.clone())
+        };
+        assert_eq!(default_of("startTime").as_deref(), Some("\"00:00:00\""));
+        assert_eq!(default_of("family").as_deref(), Some("\"ipv4\""));
+        assert_eq!(default_of("retries").as_deref(), Some("3"));
+        assert_eq!(default_of("enabled").as_deref(), Some("true"));
+        assert_eq!(default_of("quotedText").as_deref(), Some("\"say \\\"hi\\\" \\\\ bye\""));
+        assert_eq!(default_of("tags"), None);
+        let tags = root.attributes.iter().find(|a| a.name == "tags");
+        assert_eq!(tags.map(|a| a.type_name.as_str()), Some("String[]"));
+
+        let first_mode = pkg.part_defs.iter().find(|p| p.name == "FirstMode").expect("FirstMode");
+        let first_value = first_mode.attributes.iter().find(|a| a.name == "firstValue");
+        assert_eq!(first_value.and_then(|a| a.default_value.as_deref()), Some("\"alpha\""));
+
+        let rpc = pkg.action_defs.iter().find(|a| a.name == "ResetItem").expect("ResetItem");
+        let in_default = |name: &str| {
+            rpc.in_params
+                .iter()
+                .find(|a| a.name == name)
+                .and_then(|a| a.default_value.clone())
+        };
+        let out_default = |name: &str| {
+            rpc.out_params
+                .iter()
+                .find(|a| a.name == name)
+                .and_then(|a| a.default_value.clone())
+        };
+        assert_eq!(in_default("target").as_deref(), Some("\"all\""));
+        assert_eq!(in_default("delay").as_deref(), Some("10"));
+        assert_eq!(out_default("outcome").as_deref(), Some("\"ok\""));
+        assert_eq!(out_default("done").as_deref(), Some("false"));
+    }
+
+    #[test]
+    fn test_yang_to_sysml_round_trip_parses_and_validates_with_zero_errors() {
+        let pkg = YangTranslator::new()
+            .translate(ROUND_TRIP_YANG, "SampleModule")
+            .expect("translate fixture");
+        let sysml_text = compile_sysml::to_sysml(&pkg);
+        assert!(sysml_text.contains("String[]"), "leaf-list type missing:\n{sysml_text}");
+        assert!(sysml_text.contains("\"00:00:00\""), "quoted default missing:\n{sysml_text}");
+
+        let reparsed = compile_sysml::parse_sysml(&sysml_text);
+        assert!(
+            reparsed.is_ok(),
+            "round-trip parse failed: {:?}\n--- serialized SysML ---\n{}",
+            reparsed.as_ref().err(),
+            sysml_text
+        );
+        let reparsed = reparsed.unwrap_or_default();
+        let mut validator = compile_sysml::SemanticValidator::new(&reparsed);
+        let error_count = validator
+            .validate()
+            .iter()
+            .filter(|d| d.severity == compile_sysml::DiagnosticSeverity::Error)
+            .count();
+        assert_eq!(
+            error_count,
+            0,
+            "round-trip semantic errors: {:?}\n--- serialized SysML ---\n{}",
+            validator.errors(),
+            sysml_text
+        );
+
+        let root = reparsed
+            .part_defs
+            .iter()
+            .chain(reparsed.packages.iter().flat_map(|p| p.part_defs.iter()))
+            .find(|p| p.name == "SampleRoot")
+            .expect("SampleRoot survives round trip");
+        let tags = root.attributes.iter().find(|a| a.name == "tags");
+        assert_eq!(tags.map(|a| a.type_name.as_str()), Some("String[]"));
+        let start = root.attributes.iter().find(|a| a.name == "startTime");
+        assert_eq!(start.and_then(|a| a.default_value.as_deref()), Some("\"00:00:00\""));
     }
 }

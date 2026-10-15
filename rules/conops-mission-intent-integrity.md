@@ -22,9 +22,9 @@ This governance standard is aligned with:
 - **OMG UAF v1.2 / v2.0**: Unified Architecture Framework Operational Domain Views (Op-Pr, Op-Tx, Op-Is).
 
 Enforced offline by:
-- `parity_auditor/validators/conops_completeness_validator.py` (Gate 26)
-- `parity_auditor/validators/coverage_digest_validator.py` (Gate 28)
-- `parity_auditor/validators/obligation_witness_validator.py` (Gate 29)
+- `./target/release/verify-baseline` (superseding the retired Python validator `conops_completeness_validator.py`) (Gate 26)
+- `./target/release/verify-baseline` (superseding the retired Python validator `coverage_digest_validator.py`) (Gate 28)
+- `./target/release/verify-baseline` (superseding the retired Python validator `obligation_witness_validator.py`) (Gate 29)
 
 ### Architecture Hierarchy & Standards Governance (INCOSE SEH v5.0 §3.4.4 / ISO/IEC/IEEE 15288:2023 / ISO/IEC/IEEE 29148:2018 §6.4.2)
 

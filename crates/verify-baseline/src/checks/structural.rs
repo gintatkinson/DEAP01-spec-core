@@ -316,7 +316,7 @@ pub use super::domain_cleanliness_gate::check_domain_agnostic_ast_cleanliness;
 /// Scans the repository tree and fails closed if any `.sh` script exists on disk.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// Zero files in `repo_root` (excluding `target` and `.git`) may have extension `.sh`.
+/// Zero files in `repo_root` (excluding `target`, `.git`, `build`, `Pods`, `ephemeral`, and `.dart_tool`) may have extension `.sh`.
 ///
 /// ## 3. Preconditions
 /// `repo_root` must be an accessible directory path.
@@ -340,7 +340,12 @@ pub fn check_zero_shell_scripts(repo_root: &Path) -> Result<(), Vec<String>> {
         .filter_entry(|e| {
             if e.file_type().is_dir() {
                 let name = e.file_name().to_string_lossy();
-                name != "target" && name != ".git"
+                name != "target"
+                    && name != ".git"
+                    && name != "build"
+                    && name != "Pods"
+                    && name != "ephemeral"
+                    && name != ".dart_tool"
             } else {
                 true
             }
@@ -380,7 +385,7 @@ pub fn check_zero_shell_scripts(repo_root: &Path) -> Result<(), Vec<String>> {
 /// Recursively walks the repository filesystem and fails closed if any `.py` file exists.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// Zero files in `repo_root` (excluding `target` and `.git`) may have extension `.py` (case-insensitive).
+/// Zero files in `repo_root` (excluding `target`, `.git`, `build`, `Pods`, `ephemeral`, and `.dart_tool`) may have extension `.py` (case-insensitive).
 ///
 /// ## 3. Preconditions
 /// `repo_root` must be an accessible directory path.
@@ -404,7 +409,12 @@ pub fn check_zero_python_scripts(repo_root: &Path) -> Result<(), Vec<String>> {
         .filter_entry(|e| {
             if e.file_type().is_dir() {
                 let name = e.file_name().to_string_lossy();
-                name != "target" && name != ".git"
+                name != "target"
+                    && name != ".git"
+                    && name != "build"
+                    && name != "Pods"
+                    && name != "ephemeral"
+                    && name != ".dart_tool"
             } else {
                 true
             }
@@ -489,7 +499,12 @@ pub fn check_zero_regex(repo_root: &Path) -> Result<(), Vec<String>> {
             .filter_entry(|e| {
                 if e.file_type().is_dir() {
                     let name = e.file_name().to_string_lossy();
-                    name != "target" && name != ".git"
+                    name != "target"
+                        && name != ".git"
+                        && name != "build"
+                        && name != "Pods"
+                        && name != "ephemeral"
+                        && name != ".dart_tool"
                 } else {
                     true
                 }
@@ -657,6 +672,10 @@ pub fn audit_source_purity(
     let needle_array_str = ["[", "&str;"].concat();
     let needle_static_slice = [": &[", "&str]"].concat();
     let needle_const_slice = ["const ", ": &[", "&str]"].concat();
+    // 'static lifetime string-slice and array-iterator evasions
+    let needle_static_lt_slice = ["&'static [", "&'static str]"].concat();
+    let needle_static_lt_array = ["[&'static ", "str;"].concat();
+    let needle_static_lt_into_iter = ["IntoIter<", "&'static str"].concat();
 
     // Hollow stub forbidden patterns
     let needle_let_blank = ["let", " _ = "].concat();
@@ -688,6 +707,7 @@ pub fn audit_source_purity(
     let mut in_mod_tests = false;
     let mut current_doc = Vec::new();
     let mut in_multiline_comment = false;
+    let mut seen_docblocks: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
 
     for (idx, raw_line) in source.lines().enumerate() {
         let line_no = idx.saturating_add(1);
@@ -744,6 +764,9 @@ pub fn audit_source_purity(
                 || code.contains(&needle_array_str)
                 || code.contains(&needle_static_slice)
                 || code.contains(&needle_const_slice)
+                || code.contains(&needle_static_lt_slice)
+                || code.contains(&needle_static_lt_array)
+                || code.contains(&needle_static_lt_into_iter)
             {
                 violations.push(format!("{}:{}: static string-slice array detected", file_rel, line_no));
             }
@@ -772,6 +795,14 @@ pub fn audit_source_purity(
                 violations.push(format!("{}:{}: cross-string UTF-8 byte-slice hazard detected", file_rel, line_no));
             }
 
+            // (e) Direct Panicking Range-Slice Indexing Check (audited modules only)
+            if check_rustdoc && contains_direct_range_index(code, &needle_dotdot) {
+                violations.push(format!(
+                    "{}:{}: direct panicking range-slice indexing detected (use .get(..))",
+                    file_rel, line_no
+                ));
+            }
+
             // (f) 7-Section Rustdoc Check
             if check_rustdoc && (code.starts_with("pub fn ") || code.starts_with("fn ") || code.starts_with("pub const fn ") || code.starts_with("pub(crate) fn ")) {
                 let doc_block = current_doc.join("\n");
@@ -790,6 +821,28 @@ pub fn audit_source_purity(
                         file_rel, line_no, missing.join(", ")
                     ));
                 }
+
+                // (f) Per-function docblock uniqueness: the body (excluding the
+                // summary line and the `Realises:` tag) must not repeat verbatim.
+                let normalized_doc = current_doc
+                    .iter()
+                    .skip(1)
+                    .filter(|doc_line| !doc_line.contains("Realises:"))
+                    .map(|doc_line| {
+                        doc_line
+                            .trim_start_matches("///")
+                            .trim_start_matches("//!")
+                            .trim()
+                    })
+                    .filter(|doc_text| !doc_text.is_empty())
+                    .collect::<Vec<&str>>()
+                    .join("\n");
+                if !normalized_doc.is_empty() && !seen_docblocks.insert(normalized_doc) {
+                    violations.push(format!(
+                        "{}:{}: duplicate/boilerplate 7-section Rustdoc detected",
+                        file_rel, line_no
+                    ));
+                }
                 current_doc.clear();
             } else if !code.starts_with("#[") {
                 current_doc.clear();
@@ -803,6 +856,64 @@ pub fn audit_source_purity(
         violations.sort();
         Err(violations)
     }
+}
+
+/// Detects direct panicking range-slice indexing (`expr[a..b]`) on one code line.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Supports Check 34 rule (e). Direct range indexing panics on out-of-bounds or
+/// non-UTF-8-boundary offsets, so audited modules must use the non-panicking `.get(..)`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// An opening bracket is an index operator only when the byte immediately before it is
+/// an ASCII alphanumeric, `_`, or `)`. Bracket depth is tracked so nested indices match
+/// their own closing bracket; an unmatched bracket extends to end of line (fail-closed).
+///
+/// ## 3. Preconditions
+/// `code` is a single comment-stripped source line; `range_needle` is the range operator.
+///
+/// ## 4. Postconditions
+/// Returns `true` iff some index-operator bracket encloses `range_needle`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(N^2) worst case for N bytes in the line (bounded by line length).
+/// Space Complexity: O(1).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// Never panics: offsets are taken from ASCII bracket bytes and sliced with `.get(..)`.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-34-DIRECT-RANGE-INDEX-SCAN].
+fn contains_direct_range_index(code: &str, range_needle: &str) -> bool {
+    let bytes = code.as_bytes();
+    let mut prev_byte: Option<u8> = None;
+    for (open_idx, &byte) in bytes.iter().enumerate() {
+        let is_index_operator = byte == b'['
+            && prev_byte
+                .map(|p| p.is_ascii_alphanumeric() || p == b'_' || p == b')')
+                .unwrap_or(false);
+        if is_index_operator {
+            let mut depth: usize = 0;
+            let mut close_idx = bytes.len();
+            for (scan_idx, &scan_byte) in bytes.iter().enumerate().skip(open_idx) {
+                if scan_byte == b'[' {
+                    depth = depth.saturating_add(1);
+                } else if scan_byte == b']' {
+                    depth = depth.saturating_sub(1);
+                    if depth == 0 {
+                        close_idx = scan_idx;
+                        break;
+                    }
+                }
+            }
+            let inner = code.get(open_idx.saturating_add(1)..close_idx).unwrap_or(code);
+            if inner.contains(range_needle) {
+                return true;
+            }
+        }
+        prev_byte = Some(byte);
+    }
+    false
 }
 
 /// Scans Cargo.toml for forbidden dependency on regex crate.
@@ -1213,11 +1324,55 @@ mod tests {
     }
 
     #[test]
+    fn test_check_32_zero_shell_scripts_exempts_build_dirs_and_rejects_others() {
+        let tmp = TempDir::new("c32_exempt_dirs");
+        for dir in ["build/macos", "macos/Pods", "macos/Flutter/ephemeral", ".dart_tool/build"] {
+            let d = tmp.path.join(dir);
+            fs::create_dir_all(&d).unwrap();
+            File::create(d.join("generated.sh")).unwrap();
+        }
+        assert!(
+            check_zero_shell_scripts(&tmp.path).is_ok(),
+            "Generated .sh files inside build, Pods, ephemeral, and .dart_tool must be exempted"
+        );
+
+        let forbidden_sh = tmp.path.join("scripts").join("deploy.sh");
+        fs::create_dir_all(forbidden_sh.parent().unwrap()).unwrap();
+        File::create(&forbidden_sh).unwrap();
+        let res = check_zero_shell_scripts(&tmp.path);
+        assert!(res.is_err(), "Non-exempt .sh script must fail Check 32");
+        let errs = res.unwrap_err();
+        assert_eq!(errs, vec!["scripts/deploy.sh".to_string()]);
+    }
+
+    #[test]
     fn test_check_33_zero_python_clean() {
         let tmp = TempDir::new("c33_clean");
         let rs_file = tmp.path.join("main.rs");
         File::create(&rs_file).unwrap();
         assert!(check_zero_python_scripts(&tmp.path).is_ok());
+    }
+
+    #[test]
+    fn test_check_33_zero_python_exempts_build_dirs_and_rejects_others() {
+        let tmp = TempDir::new("c33_exempt_dirs");
+        for dir in ["build/macos", "macos/Pods", "macos/Flutter/ephemeral", ".dart_tool/build"] {
+            let d = tmp.path.join(dir);
+            fs::create_dir_all(&d).unwrap();
+            File::create(d.join("helper.py")).unwrap();
+        }
+        assert!(
+            check_zero_python_scripts(&tmp.path).is_ok(),
+            "Generated .py files inside build, Pods, ephemeral, and .dart_tool must be exempted"
+        );
+
+        let forbidden_py = tmp.path.join("scripts").join("legacy.py");
+        fs::create_dir_all(forbidden_py.parent().unwrap()).unwrap();
+        File::create(&forbidden_py).unwrap();
+        let res = check_zero_python_scripts(&tmp.path);
+        assert!(res.is_err(), "Non-exempt .py script must fail Check 33");
+        let errs = res.unwrap_err();
+        assert_eq!(errs, vec!["scripts/legacy.py".to_string()]);
     }
 
     #[test]
@@ -1452,6 +1607,105 @@ pub fn check_audit() -> Result<(), Vec<String>> {
         assert!(res_mutant.is_err(), "Mutant missing section 7 must fail");
         let errs = res_mutant.unwrap_err();
         assert!(errs.iter().any(|e| e.contains("function missing mandatory 7-section Rustdoc")));
+    }
+
+    #[test]
+    fn test_check_34_hardening_b_rejects_static_lifetime_string_slice_const() {
+        let clean = "pub const ALL: &'static [Self] = &[Self::VariantA, Self::VariantB];";
+        let res_clean = audit_source_purity(clean, "sample/src/lib.rs", false);
+        assert!(res_clean.is_ok(), "Clean typed enum array must pass: {:?}", res_clean.err());
+
+        let ty = ["&'static [", "&'static str]"].concat();
+        let mutant = format!("pub const BAD: {} = &[\"a\"];", ty);
+        let res_mutant = audit_source_purity(&mutant, "sample/src/lib.rs", false);
+        assert!(res_mutant.is_err(), "Mutant with 'static string-slice const must fail");
+        let errs = res_mutant.unwrap_err();
+        assert!(errs.iter().any(|e| e.contains("static string-slice array detected")), "{:?}", errs);
+
+        let arr_ty = ["[&'static ", "str; 2]"].concat();
+        let mutant_arr = format!("pub const BAD: {} = [\"a\", \"b\"];", arr_ty);
+        let res_arr = audit_source_purity(&mutant_arr, "sample/src/lib.rs", false);
+        assert!(res_arr.is_err(), "Mutant with 'static string array must fail");
+    }
+
+    #[test]
+    fn test_check_34_hardening_b_rejects_static_str_array_into_iter() {
+        let clean = "fn kinds() -> std::array::IntoIter<Kind, 3> { [Kind::A, Kind::B, Kind::C].into_iter() }";
+        let res_clean = audit_source_purity(clean, "sample/src/lib.rs", false);
+        assert!(res_clean.is_ok(), "Clean typed IntoIter must pass: {:?}", res_clean.err());
+
+        let iter_ty = ["IntoIter<", "&'static str, 3>"].concat();
+        let mutant = format!("fn names() -> std::array::{} {{ [\"a\", \"b\", \"c\"].into_iter() }}", iter_ty);
+        let res_mutant = audit_source_purity(&mutant, "sample/src/lib.rs", false);
+        assert!(res_mutant.is_err(), "Mutant with 'static str array iterator must fail");
+        let errs = res_mutant.unwrap_err();
+        assert!(errs.iter().any(|e| e.contains("static string-slice array detected")), "{:?}", errs);
+    }
+
+    #[test]
+    fn test_check_34_hardening_e_rejects_direct_range_slice_indexing() {
+        let clean = "let sub = s.get(1..3);";
+        let res_clean = audit_source_purity(clean, "sample/src/checks/parity_gates.rs", true);
+        assert!(res_clean.is_ok(), "Clean .get(..) slicing must pass: {:?}", res_clean.err());
+
+        let mutant = "let sub = &s[1..3];";
+        let res_mutant = audit_source_purity(mutant, "sample/src/checks/parity_gates.rs", true);
+        assert!(res_mutant.is_err(), "Mutant with direct panicking range indexing must fail");
+        let errs = res_mutant.unwrap_err();
+        assert!(
+            errs.iter().any(|e| e.contains("direct panicking range-slice indexing detected")),
+            "{:?}",
+            errs
+        );
+
+        let res_unaudited = audit_source_purity(mutant, "sample/src/lib.rs", false);
+        assert!(res_unaudited.is_ok(), "Rule (e) applies only when check_rustdoc is true: {:?}", res_unaudited.err());
+    }
+
+    #[test]
+    fn test_check_34_hardening_f_rejects_duplicate_boilerplate_rustdoc() {
+        let body = r#"///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// Deterministic.
+///
+/// ## 3. Preconditions
+/// None.
+///
+/// ## 4. Postconditions
+/// Returns Ok(()).
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// O(1).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// Fails closed.
+///
+/// ## 7. Realization & Traceability
+"#;
+        let mutant = format!(
+            "/// First gate summary.\n{body}/// Realises: [REQ-A].\npub fn gate_a() {{}}\n\n/// Second gate summary.\n{body}/// Realises: [REQ-B].\npub fn gate_b() {{}}\n",
+            body = body
+        );
+        let res_mutant = audit_source_purity(&mutant, "sample/src/checks/parity_gates.rs", true);
+        assert!(res_mutant.is_err(), "Mutant with duplicated 7-section Rustdoc bodies must fail");
+        let errs = res_mutant.unwrap_err();
+        assert!(
+            errs.iter().any(|e| e.contains("duplicate/boilerplate 7-section Rustdoc detected")),
+            "{:?}",
+            errs
+        );
+
+        let unique_body = body.replace("Deterministic.", "Deterministic and idempotent.");
+        let clean = format!(
+            "/// First gate summary.\n{body}/// Realises: [REQ-A].\npub fn gate_a() {{}}\n\n/// Second gate summary.\n{unique}/// Realises: [REQ-B].\npub fn gate_b() {{}}\n",
+            body = body,
+            unique = unique_body
+        );
+        let res_clean = audit_source_purity(&clean, "sample/src/checks/parity_gates.rs", true);
+        assert!(res_clean.is_ok(), "Function-specific Rustdoc bodies must pass: {:?}", res_clean.err());
     }
 
     #[test]

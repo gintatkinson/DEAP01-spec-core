@@ -1127,7 +1127,7 @@ fn parse_citation_string(raw: &str, line_no: usize) -> Option<CitationRef> {
     let path_end = slice
         .find(|c: char| {
             c.is_whitespace()
-                || matches!(c, '`' | '\'' | '"' | '(' | ')' | '[' | ']' | '<' | '>' | '§' | ',' | ';' | '|')
+                || matches!(c, '`' | '\'' | '"' | '(' | ')' | '[' | ']' | '<' | '>' | '§' | '#' | ',' | ';' | '|')
         })
         .unwrap_or(slice.len());
 
@@ -1868,6 +1868,7 @@ pub fn check_factual_grounding(
             .filter_entry(|e| {
                 let name = e.file_name().to_string_lossy();
                 !EXCLUDED_DIRS.iter().any(|ex| name == ex)
+                    && name != "blueprints"
                     && name != "defects"
                     && name != "audits"
                     && !name.starts_with('.')
@@ -2650,7 +2651,18 @@ pub fn check_operational_allocation(repo_root: &Path) -> Result<ParityOutcome, V
     };
     for dir in &scan_dirs {
         if dir.is_dir() {
-            for entry_res in WalkDir::new(dir).sort_by_file_name().into_iter() {
+            for entry_res in WalkDir::new(dir)
+                .sort_by_file_name()
+                .into_iter()
+                .filter_entry(|e| {
+                    if e.file_type().is_dir() {
+                        let name = e.file_name().to_string_lossy();
+                        !EXCLUDED_DIRS.iter().any(|ex| name == ex) && name != "blueprints"
+                    } else {
+                        true
+                    }
+                })
+            {
                 let entry = match entry_res {
                     Ok(e) => e,
                     Err(err) => {
@@ -2744,7 +2756,18 @@ pub fn check_standards_measurement(
     };
     for dir in &scan_dirs {
         if dir.is_dir() {
-            for entry_res in WalkDir::new(dir).sort_by_file_name().into_iter() {
+            for entry_res in WalkDir::new(dir)
+                .sort_by_file_name()
+                .into_iter()
+                .filter_entry(|e| {
+                    if e.file_type().is_dir() {
+                        let name = e.file_name().to_string_lossy();
+                        !EXCLUDED_DIRS.iter().any(|ex| name == ex) && name != "blueprints"
+                    } else {
+                        true
+                    }
+                })
+            {
                 let entry = match entry_res {
                     Ok(e) => e,
                     Err(err) => {

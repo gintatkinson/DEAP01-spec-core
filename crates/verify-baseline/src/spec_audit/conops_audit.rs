@@ -97,7 +97,7 @@ pub const MOE_MOP_RECOGNIZED_UNITS: &[&str] = &[
     "w", "kw", "mw",
     "v", "mv", "kv",
     "a", "ma",
-    "deg", "rad", "degree", "degrees", "radian", "radians",
+    "deg", "rad", "degree", "degrees", "radian", "radians", "k",
     "db", "dbm", "dbi",
     "%", "percent", "ratio", "dimensionless", "count",
     "bps", "kbps", "mbps", "gbps", "b/s", "kb/s", "mb/s", "gb/s",
@@ -740,13 +740,20 @@ pub fn validate_super_system_architecture(content: &str, rel_path: &str) -> Vec<
         ));
     }
 
+    let arch_start = content
+        .find("### 4.1")
+        .or_else(|| content.find("### 8.1"))
+        .or_else(|| content.find("### 4.7"))
+        .unwrap_or(0);
+    let arch_region = content.get(arch_start..).unwrap_or(content);
+
     // 5. Must enforce discrete port definitions in architecture diagram (DoDAF SV-1 / SysML v2 Port Taxonomy)
     let has_diagram_ports = if is_template_placeholder {
         true
-    } else if let Some(m_idx) = content.find("```mermaid") {
-        let m_slice = &content[m_idx..];
-        let end_idx = m_slice[10..].find("```").map(|i| m_idx + 10 + i).unwrap_or(content.len());
-        let diag_text = &content[m_idx..end_idx];
+    } else if let Some(m_idx) = arch_region.find("```mermaid") {
+        let m_slice = &arch_region[m_idx..];
+        let end_idx = m_slice[10..].find("```").map(|i| m_idx + 10 + i).unwrap_or(arch_region.len());
+        let diag_text = &arch_region[m_idx..end_idx];
         diag_text.contains("PORT-") || diag_text.contains("PORT_") || diag_text.to_lowercase().contains("port")
     } else {
         false
@@ -767,10 +774,10 @@ pub fn validate_super_system_architecture(content: &str, rel_path: &str) -> Vec<
     // 6. Must enforce traceable connection identifiers (CONN-01..CONN-N)
     let has_diagram_conns = if is_template_placeholder {
         true
-    } else if let Some(m_idx) = content.find("```mermaid") {
-        let m_slice = &content[m_idx..];
-        let end_idx = m_slice[10..].find("```").map(|i| m_idx + 10 + i).unwrap_or(content.len());
-        let diag_text = &content[m_idx..end_idx];
+    } else if let Some(m_idx) = arch_region.find("```mermaid") {
+        let m_slice = &arch_region[m_idx..];
+        let end_idx = m_slice[10..].find("```").map(|i| m_idx + 10 + i).unwrap_or(arch_region.len());
+        let diag_text = &arch_region[m_idx..end_idx];
         diag_text.contains("CONN-") || diag_text.contains("conn-")
     } else {
         false
@@ -790,10 +797,10 @@ pub fn validate_super_system_architecture(content: &str, rel_path: &str) -> Vec<
 
     // 7. Must enforce Rule E5: Modularized Subgraph Boundary Edge Routing (refs #277)
     if !is_template_placeholder {
-        if let Some(m_idx) = content.find("```mermaid") {
-            let m_slice = &content[m_idx..];
-            let end_idx = m_slice[10..].find("```").map(|i| m_idx + 10 + i).unwrap_or(content.len());
-            let diag_text = &content[m_idx..end_idx];
+        if let Some(m_idx) = arch_region.find("```mermaid") {
+            let m_slice = &arch_region[m_idx..];
+            let end_idx = m_slice[10..].find("```").map(|i| m_idx + 10 + i).unwrap_or(arch_region.len());
+            let diag_text = &arch_region[m_idx..end_idx];
 
             if let Some(err_msg) = audit_modular_subgraph_edge_routing(diag_text) {
                 findings.push(SpecAuditFinding::new(

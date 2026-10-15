@@ -4693,6 +4693,206 @@ pub fn is_valid_subsystem_identifier(s: &str) -> bool {
     s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
+/// Typed enumeration of every schema file extension recognised by multi-format schema discovery.
+/// Realises: [deap_core::sysml_ast::SupportedSchemaExtension]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum SupportedSchemaExtension {
+    /// SysML v2 textual notation (`.sysml`).
+    Sysml,
+    /// Structural YAML, long form (`.yaml`).
+    Yaml,
+    /// Structural YAML, short form (`.yml`).
+    Yml,
+    /// Structural JSON (`.json`).
+    Json,
+    /// Protocol Buffers interface definition (`.proto`).
+    Proto,
+    /// OMG Interface Definition Language (`.idl`).
+    Idl,
+    /// AUTOSAR XML (`.arxml`).
+    Arxml,
+    /// Markdown architecture tables, short form (`.md`).
+    Md,
+    /// Markdown architecture tables, long form (`.markdown`).
+    Markdown,
+    /// IETF RFC 6020 / RFC 7950 YANG data modeling language (`.yang`).
+    Yang,
+}
+
+impl SupportedSchemaExtension {
+    /// Canonical declaration-ordered table of all 10 supported schema file extensions.
+    pub const ALL: &'static [Self] = &[
+        Self::Sysml,
+        Self::Yaml,
+        Self::Yml,
+        Self::Json,
+        Self::Proto,
+        Self::Idl,
+        Self::Arxml,
+        Self::Md,
+        Self::Markdown,
+        Self::Yang,
+    ];
+
+    /// Projects a schema extension variant onto its dot-prefixed lowercase file suffix.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and ECSS-E-ST-40C. Binds every schema format accepted by
+    /// `UnifiedSchemaModelExtractor::discover_schema_files` to a typed variant, so the set of
+    /// ingestible model formats is closed and reviewable rather than an editable string list.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// Injective mapping from 10 variants to 10 distinct suffixes, each beginning with `.` followed
+    /// by lowercase ASCII letters; declaration order equals the legacy `SUPPORTED_EXTENSIONS` order
+    /// with `.yang` appended last.
+    ///
+    /// ## 3. Preconditions
+    /// `self` is one of the 10 `SupportedSchemaExtension` variants.
+    ///
+    /// ## 4. Postconditions
+    /// Returns a `'static` suffix such as `".sysml"` in the exact form produced by
+    /// `format!(".{}", ext.to_ascii_lowercase())` during discovery.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// Time Complexity: O(1) ten-arm `const` match. Space Complexity: O(1) static literal return.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// Exhaustive matching turns a forgotten suffix for a new format into a compile error, so
+    /// discovery cannot silently skip files of a declared schema format.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYSML-AST-SSOT-PARITY/SUPPORTED-SCHEMA-EXTENSION-AS-STR]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Sysml => ".sysml",
+            Self::Yaml => ".yaml",
+            Self::Yml => ".yml",
+            Self::Json => ".json",
+            Self::Proto => ".proto",
+            Self::Idl => ".idl",
+            Self::Arxml => ".arxml",
+            Self::Md => ".md",
+            Self::Markdown => ".markdown",
+            Self::Yang => ".yang",
+        }
+    }
+
+    /// Reference adapter yielding the dot-prefixed suffix for a borrowed schema extension variant.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and ECSS-E-ST-40C. Provides the `fn(&'static SupportedSchemaExtension)`
+    /// projection installed in `SupportedExtensionsCatalog::iter`, guaranteeing that schema-suffix
+    /// iteration reuses the one exhaustive mapping defined by `as_str`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// `x.as_str_ref() == x.as_str()` for all 10 schema extension variants (pure forwarding).
+    ///
+    /// ## 3. Preconditions
+    /// `self` borrows a valid `SupportedSchemaExtension`, typically an element of `SupportedSchemaExtension::ALL`.
+    ///
+    /// ## 4. Postconditions
+    /// Returns the same `'static` dot-prefixed suffix; the result does not borrow from `self`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// Time Complexity: O(1) dereference of a fieldless enum then const dispatch. Space Complexity: O(1).
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// Total and side-effect free; it performs no filesystem access even though its callers walk directories.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYSML-AST-SSOT-PARITY/SUPPORTED-SCHEMA-EXTENSION-AS-STR-REF]
+    pub fn as_str_ref(&self) -> &'static str {
+        self.as_str()
+    }
+}
+
+/// Zero-sized catalog providing iteration and membership queries over supported schema file extensions.
+/// Realises: [deap_core::sysml_ast::SupportedExtensionsCatalog]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SupportedExtensionsCatalog;
+
+impl SupportedExtensionsCatalog {
+    /// Checks whether a dot-prefixed, lowercased file suffix denotes a supported schema format.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and ECSS-E-ST-40C. Acts as the admission filter for schema
+    /// discovery in `discover_schema_files` and `assemble-conops` parameter auto-detection, so only
+    /// declared model formats ever reach the AST extractors.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// Returns `true` if and only if `*ext` exactly equals one of the 10 suffixes produced by
+    /// `SupportedSchemaExtension::as_str`; equivalent to `self.iter().any(|s| s == *ext)`.
+    ///
+    /// ## 3. Preconditions
+    /// `ext` references a string slice already normalised by the caller to `.` plus a lowercase
+    /// extension; matching is case-sensitive and does not add a missing leading dot.
+    ///
+    /// ## 4. Postconditions
+    /// Returns a boolean admission verdict; `".SYSML"`, `"sysml"` and `""` all evaluate to `false`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// Time Complexity: O(L) where L is the byte length of `*ext` (decisive within 9 bytes). Space Complexity: O(1).
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// Fails closed: any unrecognised or malformed suffix is rejected rather than ingested; never panics.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYSML-AST-SSOT-PARITY/SUPPORTED-EXTENSIONS-CONTAINS]
+    pub fn contains(&self, ext: &&str) -> bool {
+        matches!(
+            *ext,
+            ".sysml"
+                | ".yaml"
+                | ".yml"
+                | ".json"
+                | ".proto"
+                | ".idl"
+                | ".arxml"
+                | ".md"
+                | ".markdown"
+                | ".yang"
+        )
+    }
+
+    /// Returns a typed-enum-backed iterator over all 10 supported schema file suffixes.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and ECSS-E-ST-40C. Exposes the supported schema suffixes for
+    /// reporting and auditing by deriving each one from `SupportedSchemaExtension::ALL`, replacing
+    /// the former untyped string-slice constant on `UnifiedSchemaModelExtractor`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// Yields `".sysml"`, `".yaml"`, `".yml"`, `".json"`, `".proto"`, `".idl"`, `".arxml"`, `".md"`,
+    /// `".markdown"`, `".yang"` in that order; every yielded suffix satisfies `self.contains(&suffix)`.
+    ///
+    /// ## 3. Preconditions
+    /// `self` is a valid `SupportedExtensionsCatalog` reference (stateless, zero-sized).
+    ///
+    /// ## 4. Postconditions
+    /// Returns a `Map<slice::Iter<'static, SupportedSchemaExtension>, fn(&'static SupportedSchemaExtension) -> &'static str>`
+    /// with exact length 10, double-ended, and free of heap allocation.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// Time Complexity: O(1) construction, O(10) exhaustion. Space Complexity: O(1) slice cursor and projection pointer.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// Cannot fail or truncate: the backing slice is a `'static` constant table, so consumers always
+    /// observe the complete supported-format set.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYSML-AST-SSOT-PARITY/SUPPORTED-EXTENSIONS-ITER]
+    pub fn iter(
+        &self,
+    ) -> std::iter::Map<
+        std::slice::Iter<'static, SupportedSchemaExtension>,
+        fn(&'static SupportedSchemaExtension) -> &'static str,
+    > {
+        let project: fn(&'static SupportedSchemaExtension) -> &'static str =
+            SupportedSchemaExtension::as_str_ref;
+        SupportedSchemaExtension::ALL.iter().map(project)
+    }
+}
+
 /// Centralized schema discovery and AST part extractor shared across compiler and validators.
 ///
 /// Supports multi-schema formats:
@@ -4703,14 +4903,13 @@ pub fn is_valid_subsystem_identifier(s: &str) -> bool {
 /// - OMG IDL (`.idl`)
 /// - AUTOSAR (`.arxml`)
 /// - Markdown architecture tables (`.md`, `.markdown`)
+/// - IETF YANG (`.yang`)
 #[derive(Debug, Clone, Default)]
 pub struct UnifiedSchemaModelExtractor;
 
 impl UnifiedSchemaModelExtractor {
     /// Supported schema extensions across all pipeline tools.
-    pub const SUPPORTED_EXTENSIONS: &'static [&'static str] = &[
-        ".sysml", ".yaml", ".yml", ".json", ".proto", ".idl", ".arxml", ".md", ".markdown",
-    ];
+    pub const SUPPORTED_EXTENSIONS: SupportedExtensionsCatalog = SupportedExtensionsCatalog;
 
     /// Recursively discovers all supported schema files across the provided search directories.
     /// Excludes hidden entries (`.`), editor swap files (`#`), and `README.md`.
@@ -4820,7 +5019,8 @@ impl UnifiedSchemaModelExtractor {
     ///
     /// ## 1. Safety Intent & Regulatory Scope
     /// Conforms to DO-178C Level A and ECSS-E-ST-40C. Dispatches format-specific structural extraction
-    /// across `.sysml`, `.yaml`/`.yml`/`.json`, `.md`/`.markdown`, `.proto`, `.idl`, and `.arxml`.
+    /// across `.sysml`, `.yaml`/`.yml`/`.json`, `.md`/`.markdown`, `.proto`, `.idl`, `.arxml`, and
+    /// `.yang` (line-leading `container`, `grouping`, and `list` statements).
     ///
     /// ## 2. Invariants & Mathematical Properties
     /// - Every inserted identifier satisfies `is_valid_subsystem_identifier` (or is a parsed SysML `PartDef` name).
@@ -4837,6 +5037,7 @@ impl UnifiedSchemaModelExtractor {
     ///
     /// ## 6. Failure Modes & Fault Tolerance
     /// - Non-panicking bounds-checked `.get(..)` slicing; unknown extensions return an empty `BTreeSet`.
+    /// - YANG identifiers containing `-` or `.` are rejected whole rather than truncated to a misleading prefix.
     ///
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SYSML-AST-SSOT-PARITY/EXTRACT-SUBSYSTEM-PARTS-TEXT]
@@ -4971,6 +5172,24 @@ impl UnifiedSchemaModelExtractor {
                             if is_valid_subsystem_identifier(ident) {
                                 part_names.insert(ident.to_string());
                             }
+                        }
+                    }
+                }
+            }
+        } else if norm_ext == ".yang" {
+            for line in content.lines() {
+                let trimmed = line.trim();
+                for kw in &["container ", "grouping ", "list "] {
+                    if let Some(rest) = trimmed.strip_prefix(kw) {
+                        // Capture the full RFC 7950 identifier token (which may contain `-` or `.`)
+                        // so a non-conforming name is rejected whole instead of truncated.
+                        let ident: String = rest
+                            .trim_start()
+                            .chars()
+                            .take_while(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-' || *c == '.')
+                            .collect();
+                        if !ident.is_empty() && is_valid_subsystem_identifier(&ident) {
+                            part_names.insert(ident);
                         }
                     }
                 }
@@ -5806,6 +6025,37 @@ package SystemModel_SSOT {
     }
 
     #[test]
+    fn test_unified_schema_model_extractor_yang_container_grouping_list() {
+        let yang = r#"
+            module sample_module {
+                yang-version 1.1;
+                prefix sm;
+                grouping EndpointSettings {
+                    leaf label { type string; }
+                }
+                container NodeRegistry {
+                    list NodeEntry {
+                        key "label";
+                        uses EndpointSettings;
+                    }
+                }
+                typedef counter_kind { type uint32; }
+                container access-table { leaf size { type uint32; } }
+            }
+        "#;
+        let yang_parts = UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(".yang", yang);
+        assert!(yang_parts.contains("EndpointSettings"), "parts: {yang_parts:?}");
+        assert!(yang_parts.contains("NodeRegistry"), "parts: {yang_parts:?}");
+        assert!(yang_parts.contains("NodeEntry"), "parts: {yang_parts:?}");
+        assert!(!yang_parts.contains("sample_module"), "parts: {yang_parts:?}");
+        assert!(!yang_parts.contains("counter_kind"), "parts: {yang_parts:?}");
+        assert!(!yang_parts.contains("label"), "parts: {yang_parts:?}");
+        let upper = UnifiedSchemaModelExtractor::extract_subsystem_parts_from_text(".YANG", yang);
+        assert_eq!(upper, yang_parts);
+        assert!(UnifiedSchemaModelExtractor::SUPPORTED_EXTENSIONS.contains(&".yang"));
+    }
+
+    #[test]
     fn test_parse_calc_defs_syntax_variants() -> Result<(), Box<dyn std::error::Error>> {
         let content = r#"
             doc /* Calculates kinetic energy */
@@ -6065,5 +6315,48 @@ package SystemModel_SSOT {
             }
         }
         assert!(violations.is_empty(), "Purity violations:\n{}", violations.join("\n"));
+    }
+
+    #[test]
+    fn test_supported_schema_extension_enum_cardinality_order_and_catalog_parity() {
+        let expected = vec![
+            ".sysml", ".yaml", ".yml", ".json", ".proto", ".idl", ".arxml", ".md", ".markdown",
+            ".yang",
+        ];
+        assert_eq!(SupportedSchemaExtension::ALL.len(), 10);
+        let via_enum: Vec<&'static str> =
+            SupportedSchemaExtension::ALL.iter().map(|x| x.as_str()).collect();
+        assert_eq!(via_enum, expected);
+        let catalog = UnifiedSchemaModelExtractor::SUPPORTED_EXTENSIONS;
+        let via_catalog: Vec<&'static str> = catalog.iter().collect();
+        assert_eq!(via_catalog, expected);
+        for x in SupportedSchemaExtension::ALL {
+            assert_eq!(x.as_str_ref(), x.as_str());
+            assert!(catalog.contains(&x.as_str()));
+        }
+        let owned = String::from(".yaml");
+        assert!(catalog.contains(&owned.as_str()));
+        assert!(!catalog.contains(&".txt"));
+        assert!(!catalog.contains(&"sysml"));
+        assert!(!catalog.contains(&".SYSML"));
+        assert!(!catalog.contains(&""));
+    }
+
+    #[test]
+    fn test_sysml_ast_supported_extensions_free_of_static_str_slice_evasion() {
+        let source = include_str!("sysml_ast.rs");
+        let needle_into_iter = ["IntoIter<&'static", " str"].concat();
+        let needle_static_slice = ["&'static [&'static", " str]"].concat();
+        let hits: Vec<String> = source
+            .lines()
+            .enumerate()
+            .filter(|(_, l)| l.contains(&needle_into_iter) || l.contains(&needle_static_slice))
+            .map(|(i, l)| format!("line {}: {}", i + 1, l.trim()))
+            .collect();
+        assert!(
+            hits.is_empty(),
+            "sysml_ast.rs still carries untyped string-slice catalog evasions:\n{}",
+            hits.join("\n")
+        );
     }
 }

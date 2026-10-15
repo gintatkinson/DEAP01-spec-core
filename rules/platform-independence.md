@@ -53,7 +53,7 @@ To guarantee diagram readability, visual ergonomics, and prevent extreme horizon
 ## Document integrity constraints
 
 These are the non-Mermaid constraints on the same corpus, enforced offline by
-`parity_auditor/validators/docs.py`. They are stated here because each one exists to keep
+`./target/release/verify-baseline` (superseding the retired Python validator `docs.py`). They are stated here because each one exists to keep
 a Tier 1 document functional and standard-agnostic, or to keep it parseable by the tools
 that read it -- the same subject as the rules above. The three fence rules are deliberately
 **distinct** from `mermaid-fence-must-be-closed` in the Mermaid syntax checker: that rule
@@ -94,7 +94,7 @@ to say which checker fired.
 
 **This file is the single normative home for Mermaid syntax constraints.** Skills that emit Mermaid MUST reference this section rather than restating their own subset. These rules were previously fragmented across four files with disjoint subsets, so an author working from one file could breach a constraint documented in another -- see issue #289.
 
-These rules are mechanically enforced, offline, by `parity_auditor/validators/mermaid_syntax_validator.py`. That checker is a rule checker, not a full Mermaid grammar parser: a clean result means no documented rule was violated, which is not proof that a diagram renders. Blocking gates must not call remote renderers -- see `.pipeline/upstream/pipeline-tooling.md` § *Validation Gates*.
+These rules are mechanically enforced, offline, by `./target/release/verify-baseline` (superseding the retired Python validator `mermaid_syntax_validator.py`). That checker is a rule checker, not a full Mermaid grammar parser: a clean result means no documented rule was violated, which is not proof that a diagram renders. Blocking gates must not call remote renderers -- see `.pipeline/upstream/pipeline-tooling.md` § *Validation Gates*.
 
 
 

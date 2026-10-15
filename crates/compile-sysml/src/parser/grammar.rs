@@ -556,6 +556,12 @@ impl<'a> SysmlParser<'a> {
         if self.check(&TokenKind::Colon) {
             self.advance();
             type_name = self.expect_ident()?;
+            // Array-valued attribute types (`Type[]`), e.g. YANG `leaf-list` lowering.
+            if self.check(&TokenKind::OpenBracket) {
+                self.advance();
+                self.expect(&TokenKind::CloseBracket)?;
+                type_name.push_str("[]");
+            }
         }
 
         if self.check(&TokenKind::Eq) || self.check(&TokenKind::ColonEq) {
@@ -2748,6 +2754,40 @@ package AutonomousSystem {
         assert_eq!(tc.verified_requirements.first().ok_or("missing first element of tc.verified_requirements")?, "Assert_UCA_33");
         assert_eq!(tc.verified_requirements.get(1).ok_or("missing element 1 of tc.verified_requirements")?, "Assert_UCA_34");
         Ok(())
+    }
+
+    #[test]
+    fn test_parse_attribute_decl_accepts_array_bracket_type_suffix() {
+        let source = r#"
+package ArrayModel {
+    attribute labelSet : String[];
+    attribute scalarValue : Integer = 3;
+    part def Holder {
+        attribute counts : Integer[];
+        attribute weight : Real = 1.5;
+    }
+}
+"#;
+        let parsed = SysmlParser::parse_source(source, "ArrayModel");
+        assert!(parsed.is_ok(), "Type[] attribute failed to parse: {:?}", parsed.err());
+        let pkg = parsed.unwrap_or_default();
+        let label_set = pkg.attribute_defs.iter().find(|a| a.name == "labelSet");
+        assert_eq!(label_set.map(|a| a.type_name.as_str()), Some("String[]"));
+        assert_eq!(label_set.and_then(|a| a.default_value.clone()), None);
+        let scalar = pkg.attribute_defs.iter().find(|a| a.name == "scalarValue");
+        assert_eq!(scalar.map(|a| a.type_name.as_str()), Some("Integer"));
+        let holder = pkg.part_defs.iter().find(|p| p.name == "Holder");
+        let counts = holder.and_then(|p| p.attributes.iter().find(|a| a.name == "counts"));
+        assert_eq!(counts.map(|a| a.type_name.as_str()), Some("Integer[]"));
+        let weight = holder.and_then(|p| p.attributes.iter().find(|a| a.name == "weight"));
+        assert_eq!(weight.map(|a| a.type_name.as_str()), Some("Real"));
+    }
+
+    #[test]
+    fn test_parse_attribute_decl_rejects_unclosed_array_bracket() {
+        let source = "package BadArray {\n    attribute labelSet : String[;\n}\n";
+        let parsed = SysmlParser::parse_source(source, "BadArray");
+        assert!(parsed.is_err(), "unclosed '[' must be a parse error, got {:?}", parsed.ok());
     }
 }
 

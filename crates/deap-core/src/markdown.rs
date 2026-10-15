@@ -1,5 +1,144 @@
 //! Markdown token scanner, KaTeX, and math block parser.
 
+/// Typed enumeration of every KaTeX environment in which bare `&` alignment operators are permitted.
+/// Realises: [deap_core::markdown::AllowedAlignmentEnv]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum AllowedAlignmentEnv {
+    /// Multi-line aligned equations (`aligned`).
+    Aligned,
+    /// Aligned equations with explicit column count (`alignedat`).
+    AlignedAt,
+    /// Undelimited matrix (`matrix`).
+    Matrix,
+    /// Parenthesis-delimited matrix (`pmatrix`).
+    ParenMatrix,
+    /// Square-bracket-delimited matrix (`bmatrix`).
+    BracketMatrix,
+    /// Curly-brace-delimited matrix (`Bmatrix`).
+    BraceMatrix,
+    /// Single-vertical-bar-delimited matrix (`vmatrix`).
+    VertMatrix,
+    /// Double-vertical-bar-delimited matrix (`Vmatrix`).
+    DoubleVertMatrix,
+    /// Piecewise definition (`cases`).
+    Cases,
+    /// Display-style piecewise definition (`dcases`).
+    DisplayCases,
+    /// Right-braced piecewise definition (`rcases`).
+    RightCases,
+    /// General tabular array (`array`).
+    Array,
+    /// Single equation split across lines (`split`).
+    Split,
+    /// Centered gathered block inside display math (`gathered`).
+    Gathered,
+    /// Centered gathered equations (`gather`).
+    Gather,
+    /// Compact sub-array for limits (`subarray`).
+    Subarray,
+    /// Inline-sized matrix (`smallmatrix`).
+    SmallMatrix,
+}
+
+impl AllowedAlignmentEnv {
+    /// Canonical declaration-ordered table of all 17 permitted KaTeX alignment environments.
+    pub const ALL: &'static [Self] = &[
+        Self::Aligned,
+        Self::AlignedAt,
+        Self::Matrix,
+        Self::ParenMatrix,
+        Self::BracketMatrix,
+        Self::BraceMatrix,
+        Self::VertMatrix,
+        Self::DoubleVertMatrix,
+        Self::Cases,
+        Self::DisplayCases,
+        Self::RightCases,
+        Self::Array,
+        Self::Split,
+        Self::Gathered,
+        Self::Gather,
+        Self::Subarray,
+        Self::SmallMatrix,
+    ];
+
+    /// Projects an alignment environment variant onto the exact `\begin{...}` identifier KaTeX expects.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and ECSS-E-ST-40C. Pins every whitelisted LaTeX alignment
+    /// environment name to a typed variant so the KaTeX bare-`&` gate in `check_latex_katex_syntax`
+    /// compares against case-exact identifiers (`bmatrix` vs `Bmatrix` are distinct environments).
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// Injective, case-sensitive mapping from 17 variants to 17 distinct ASCII environment names
+    /// of at most 11 bytes; declaration order equals the legacy catalog order.
+    ///
+    /// ## 3. Preconditions
+    /// `self` is one of the 17 `AllowedAlignmentEnv` variants.
+    ///
+    /// ## 4. Postconditions
+    /// Returns the `'static` environment identifier without the `\begin{` / `}` wrapper.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// Time Complexity: O(1) seventeen-arm `const` match lowered to a lookup. Space Complexity: O(1).
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// Exhaustive match prevents a new environment variant from compiling without its identifier,
+    /// so the KaTeX gate cannot silently accept `&` in an unnamed environment.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-MD-KATEX-ALIGN-ENV-AS-STR]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Aligned => "aligned",
+            Self::AlignedAt => "alignedat",
+            Self::Matrix => "matrix",
+            Self::ParenMatrix => "pmatrix",
+            Self::BracketMatrix => "bmatrix",
+            Self::BraceMatrix => "Bmatrix",
+            Self::VertMatrix => "vmatrix",
+            Self::DoubleVertMatrix => "Vmatrix",
+            Self::Cases => "cases",
+            Self::DisplayCases => "dcases",
+            Self::RightCases => "rcases",
+            Self::Array => "array",
+            Self::Split => "split",
+            Self::Gathered => "gathered",
+            Self::Gather => "gather",
+            Self::Subarray => "subarray",
+            Self::SmallMatrix => "smallmatrix",
+        }
+    }
+
+    /// Reference-taking adapter yielding the KaTeX environment identifier for a borrowed variant.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and ECSS-E-ST-40C. Supplies the `fn(&'static AllowedAlignmentEnv)`
+    /// pointer used by `AllowedAlignmentEnvsCatalog::iter`, so iteration over permitted alignment
+    /// environments shares the single exhaustive projection in `as_str`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// Pointwise equality `e.as_str_ref() == e.as_str()` holds for all 17 variants.
+    ///
+    /// ## 3. Preconditions
+    /// `self` is a shared borrow of an `AllowedAlignmentEnv`, typically from `AllowedAlignmentEnv::ALL`.
+    ///
+    /// ## 4. Postconditions
+    /// Returns the same `'static` identifier as `as_str`, independent of the borrow's lifetime.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// Time Complexity: O(1) discriminant load and lookup. Space Complexity: O(1) stack only.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// Non-panicking and allocation-free; there is no error channel because no input is invalid.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-MD-KATEX-ALIGN-ENV-AS-STR-REF]
+    pub fn as_str_ref(&self) -> &'static str {
+        self.as_str()
+    }
+}
+
 /// Zero-sized catalog of allowed LaTeX environments where bare `&` alignment operators are permitted.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct AllowedAlignmentEnvsCatalog;
@@ -57,50 +196,185 @@ impl AllowedAlignmentEnvsCatalog {
         )
     }
 
-    /// Returns a fixed-size value iterator over all 17 allowed KaTeX alignment environment names.
+    /// Returns a typed-enum-backed iterator over all 17 allowed KaTeX alignment environment names.
     ///
     /// ## 1. Safety Intent & Regulatory Scope
     /// Conforms to DO-178C Level A and ECSS-E-ST-40C. Provides deterministic, allocation-free
-    /// traversal over the permitted LaTeX alignment environments.
+    /// traversal over the permitted LaTeX alignment environments, each derived from a typed
+    /// `AllowedAlignmentEnv` variant rather than an untyped string array.
     ///
     /// ## 2. Invariants & Mathematical Properties
-    /// Yields exactly 17 unique `'static` ASCII string literals in canonical declaration order.
+    /// Yields exactly 17 unique `'static` ASCII string literals in canonical declaration order,
+    /// equal element-wise to `AllowedAlignmentEnv::ALL` projected through `AllowedAlignmentEnv::as_str`.
     ///
     /// ## 3. Preconditions
     /// `self` is a valid reference to `AllowedAlignmentEnvsCatalog`.
     ///
     /// ## 4. Postconditions
-    /// Returns a freshly initialized `std::array::IntoIter<&'static str, 17>` positioned at index 0.
+    /// Returns a `Map<slice::Iter<'static, AllowedAlignmentEnv>, fn(&'static AllowedAlignmentEnv) -> &'static str>`
+    /// positioned at the first environment (`aligned`) with an exact remaining length of 17.
     ///
     /// ## 5. Algorithmic Complexity Bounds
-    /// Time Complexity: O(1) iterator construction. Space Complexity: O(1) fixed stack frame.
+    /// Time Complexity: O(1) iterator construction, O(17) traversal. Space Complexity: O(1) slice cursor plus fn pointer.
     ///
     /// ## 6. Failure Modes & Fault Tolerance
-    /// Infallible total function with zero dynamic allocation or panic paths.
+    /// Infallible total function with zero dynamic allocation or panic paths; the backing table
+    /// is a `'static` constant, so the iterator can never dangle.
     ///
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-MD-KATEX-ALIGN-ITER]
-    pub fn iter(&self) -> std::array::IntoIter<&'static str, 17> {
-        [
-            "aligned",
-            "alignedat",
-            "matrix",
-            "pmatrix",
-            "bmatrix",
-            "Bmatrix",
-            "vmatrix",
-            "Vmatrix",
-            "cases",
-            "dcases",
-            "rcases",
-            "array",
-            "split",
-            "gathered",
-            "gather",
-            "subarray",
-            "smallmatrix",
-        ]
-        .into_iter()
+    pub fn iter(
+        &self,
+    ) -> std::iter::Map<
+        std::slice::Iter<'static, AllowedAlignmentEnv>,
+        fn(&'static AllowedAlignmentEnv) -> &'static str,
+    > {
+        let project: fn(&'static AllowedAlignmentEnv) -> &'static str = AllowedAlignmentEnv::as_str_ref;
+        AllowedAlignmentEnv::ALL.iter().map(project)
+    }
+}
+
+/// Typed enumeration of every Mermaid diagram type header accepted as the first non-comment line of a block.
+/// Realises: [deap_core::markdown::ValidMermaidHeader]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ValidMermaidHeader {
+    /// Legacy graph diagram (`graph`).
+    Graph,
+    /// Flowchart diagram (`flowchart`).
+    Flowchart,
+    /// Sequence diagram (`sequencediagram`).
+    SequenceDiagram,
+    /// Legacy state diagram (`statediagram`).
+    StateDiagram,
+    /// Version 2 state diagram (`statediagram-v2`).
+    StateDiagramV2,
+    /// Class diagram (`classdiagram`).
+    ClassDiagram,
+    /// Entity-relationship diagram (`erdiagram`).
+    ErDiagram,
+    /// Gantt chart (`gantt`).
+    Gantt,
+    /// Pie chart (`pie`).
+    Pie,
+    /// Git graph (`gitgraph`).
+    GitGraph,
+    /// C4 context diagram (`c4context`).
+    C4Context,
+    /// User journey diagram (`journey`).
+    Journey,
+    /// Quadrant chart (`quadrantchart`).
+    QuadrantChart,
+    /// XY chart beta (`xychart-beta`).
+    XyChartBeta,
+    /// Mind map (`mindmap`).
+    Mindmap,
+    /// Timeline diagram (`timeline`).
+    Timeline,
+    /// Sankey diagram beta (`sankey-beta`).
+    SankeyBeta,
+    /// Requirement diagram (`requirementdiagram`).
+    RequirementDiagram,
+}
+
+impl ValidMermaidHeader {
+    /// Canonical declaration-ordered table of all 18 accepted Mermaid diagram headers.
+    pub const ALL: &'static [Self] = &[
+        Self::Graph,
+        Self::Flowchart,
+        Self::SequenceDiagram,
+        Self::StateDiagram,
+        Self::StateDiagramV2,
+        Self::ClassDiagram,
+        Self::ErDiagram,
+        Self::Gantt,
+        Self::Pie,
+        Self::GitGraph,
+        Self::C4Context,
+        Self::Journey,
+        Self::QuadrantChart,
+        Self::XyChartBeta,
+        Self::Mindmap,
+        Self::Timeline,
+        Self::SankeyBeta,
+        Self::RequirementDiagram,
+    ];
+
+    /// Projects a Mermaid header variant onto its lowercase header keyword.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and ECSS-E-ST-40C. Fixes each whitelisted Mermaid diagram type
+    /// to the lowercase keyword that `check_mermaid_syntax` prefix-matches against the lowered first
+    /// non-comment line, so diagram-header enforcement is driven by a typed, closed set.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// Injective mapping from 18 variants to 18 distinct lowercase ASCII keywords (hyphen allowed);
+    /// declaration order preserves the legacy order, keeping `statediagram` ahead of `statediagram-v2`.
+    ///
+    /// ## 3. Preconditions
+    /// `self` is one of the 18 `ValidMermaidHeader` variants.
+    ///
+    /// ## 4. Postconditions
+    /// Returns an all-lowercase `'static` keyword with no surrounding whitespace or direction suffix
+    /// (for example `"flowchart"`, never `"flowchart TD"`).
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// Time Complexity: O(1) eighteen-arm `const` match. Space Complexity: O(1), returns a borrowed literal.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// A variant added without a keyword fails exhaustiveness checking at compile time, so the
+    /// Mermaid gate can never treat an unnamed header as valid.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-MD-MERMAID-HDR-AS-STR]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Graph => "graph",
+            Self::Flowchart => "flowchart",
+            Self::SequenceDiagram => "sequencediagram",
+            Self::StateDiagram => "statediagram",
+            Self::StateDiagramV2 => "statediagram-v2",
+            Self::ClassDiagram => "classdiagram",
+            Self::ErDiagram => "erdiagram",
+            Self::Gantt => "gantt",
+            Self::Pie => "pie",
+            Self::GitGraph => "gitgraph",
+            Self::C4Context => "c4context",
+            Self::Journey => "journey",
+            Self::QuadrantChart => "quadrantchart",
+            Self::XyChartBeta => "xychart-beta",
+            Self::Mindmap => "mindmap",
+            Self::Timeline => "timeline",
+            Self::SankeyBeta => "sankey-beta",
+            Self::RequirementDiagram => "requirementdiagram",
+        }
+    }
+
+    /// Borrow-based adapter returning the lowercase Mermaid keyword for a referenced header variant.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and ECSS-E-ST-40C. Furnishes the `fn(&'static ValidMermaidHeader)`
+    /// pointer consumed by `ValidMermaidHeadersCatalog::iter`, so header prefix search and the
+    /// by-value projection cannot drift apart.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// `h.as_str_ref() == h.as_str()` for each of the 18 variants; delegation is the entire body.
+    ///
+    /// ## 3. Preconditions
+    /// `self` is a shared reference to a `ValidMermaidHeader`, usually yielded by `ValidMermaidHeader::ALL.iter()`.
+    ///
+    /// ## 4. Postconditions
+    /// Returns the identical lowercase `'static` keyword; no borrow of `self` escapes.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// Time Complexity: O(1) single indirection then const lookup. Space Complexity: O(1) register-resident.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// Has no failure surface: total over its domain, no I/O, no allocation, no panic.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-MD-MERMAID-HDR-AS-STR-REF]
+    pub fn as_str_ref(&self) -> &'static str {
+        self.as_str()
     }
 }
 
@@ -112,51 +386,41 @@ pub struct ValidMermaidHeadersCatalog;
 pub const VALID_MERMAID_HEADERS: ValidMermaidHeadersCatalog = ValidMermaidHeadersCatalog;
 
 impl ValidMermaidHeadersCatalog {
-    /// Returns a fixed-size value iterator over all 18 canonical Mermaid diagram type headers.
+    /// Returns a typed-enum-backed iterator over all 18 canonical Mermaid diagram type headers.
     ///
     /// ## 1. Safety Intent & Regulatory Scope
     /// Conforms to DO-178C Level A and ECSS-E-ST-40C compiler purity rules by providing
-    /// deterministic header enumeration without untyped global string-slice arrays.
+    /// deterministic header enumeration sourced from the typed `ValidMermaidHeader` enumeration
+    /// instead of untyped global string-slice arrays.
     ///
     /// ## 2. Invariants & Mathematical Properties
-    /// Yields all 18 lowercase Mermaid diagram header prefixes in fixed declaration order.
+    /// Yields all 18 lowercase Mermaid diagram header prefixes in fixed declaration order, equal
+    /// element-wise to `ValidMermaidHeader::ALL` mapped through `ValidMermaidHeader::as_str`.
     ///
     /// ## 3. Preconditions
     /// `self` is a valid reference to `ValidMermaidHeadersCatalog`.
     ///
     /// ## 4. Postconditions
-    /// Returns a freshly initialized `std::array::IntoIter<&'static str, 18>` without heap allocation.
+    /// Returns a `Map<slice::Iter<'static, ValidMermaidHeader>, fn(&'static ValidMermaidHeader) -> &'static str>`
+    /// suitable for first-match prefix search via `find`, without heap allocation.
     ///
     /// ## 5. Algorithmic Complexity Bounds
-    /// Time Complexity: O(1) iterator construction. Space Complexity: O(1) fixed stack frame.
+    /// Time Complexity: O(1) to construct, O(18) worst-case `find`. Space Complexity: O(1) borrowed cursor state.
     ///
     /// ## 6. Failure Modes & Fault Tolerance
-    /// Infallible total function; never panics.
+    /// Infallible total function; never panics, and the stable order guarantees deterministic
+    /// header kind selection across runs.
     ///
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-MD-MERMAID-HDR-ITER]
-    pub fn iter(&self) -> std::array::IntoIter<&'static str, 18> {
-        [
-            "graph",
-            "flowchart",
-            "sequencediagram",
-            "statediagram",
-            "statediagram-v2",
-            "classdiagram",
-            "erdiagram",
-            "gantt",
-            "pie",
-            "gitgraph",
-            "c4context",
-            "journey",
-            "quadrantchart",
-            "xychart-beta",
-            "mindmap",
-            "timeline",
-            "sankey-beta",
-            "requirementdiagram",
-        ]
-        .into_iter()
+    pub fn iter(
+        &self,
+    ) -> std::iter::Map<
+        std::slice::Iter<'static, ValidMermaidHeader>,
+        fn(&'static ValidMermaidHeader) -> &'static str,
+    > {
+        let project: fn(&'static ValidMermaidHeader) -> &'static str = ValidMermaidHeader::as_str_ref;
+        ValidMermaidHeader::ALL.iter().map(project)
     }
 
     /// Checks whether a lowercase header token matches one of the 18 valid Mermaid diagram types.
@@ -1076,5 +1340,92 @@ q_i \le 0 &\vee (\mathbf{d}(Q_1) \ne \mathbf{d}(Q_2) \wedge Q_1 \pm Q_2) \implie
         assert!(mermaid_catalog.contains("sequencediagram"));
         assert!(!mermaid_catalog.contains("invalid"));
         assert_eq!(mermaid_catalog.iter().count(), 18);
+    }
+
+    #[test]
+    fn test_allowed_alignment_env_enum_cardinality_order_and_catalog_parity() {
+        let expected = vec![
+            "aligned",
+            "alignedat",
+            "matrix",
+            "pmatrix",
+            "bmatrix",
+            "Bmatrix",
+            "vmatrix",
+            "Vmatrix",
+            "cases",
+            "dcases",
+            "rcases",
+            "array",
+            "split",
+            "gathered",
+            "gather",
+            "subarray",
+            "smallmatrix",
+        ];
+        assert_eq!(AllowedAlignmentEnv::ALL.len(), 17);
+        let via_enum: Vec<&'static str> = AllowedAlignmentEnv::ALL.iter().map(|e| e.as_str()).collect();
+        assert_eq!(via_enum, expected);
+        let via_catalog: Vec<&'static str> = ALLOWED_ALIGNMENT_ENVS.iter().collect();
+        assert_eq!(via_catalog, expected);
+        for e in AllowedAlignmentEnv::ALL {
+            assert_eq!(e.as_str_ref(), e.as_str());
+            assert!(ALLOWED_ALIGNMENT_ENVS.contains(&e.as_str()));
+        }
+        assert!(!ALLOWED_ALIGNMENT_ENVS.contains(&"align"));
+        assert!(!ALLOWED_ALIGNMENT_ENVS.contains(&"ALIGNED"));
+    }
+
+    #[test]
+    fn test_valid_mermaid_header_enum_cardinality_order_and_catalog_parity() {
+        let expected = vec![
+            "graph",
+            "flowchart",
+            "sequencediagram",
+            "statediagram",
+            "statediagram-v2",
+            "classdiagram",
+            "erdiagram",
+            "gantt",
+            "pie",
+            "gitgraph",
+            "c4context",
+            "journey",
+            "quadrantchart",
+            "xychart-beta",
+            "mindmap",
+            "timeline",
+            "sankey-beta",
+            "requirementdiagram",
+        ];
+        assert_eq!(ValidMermaidHeader::ALL.len(), 18);
+        let via_enum: Vec<&'static str> = ValidMermaidHeader::ALL.iter().map(|h| h.as_str()).collect();
+        assert_eq!(via_enum, expected);
+        let via_catalog: Vec<&'static str> = VALID_MERMAID_HEADERS.iter().collect();
+        assert_eq!(via_catalog, expected);
+        for h in ValidMermaidHeader::ALL {
+            assert_eq!(h.as_str_ref(), h.as_str());
+            assert!(VALID_MERMAID_HEADERS.contains(h.as_str()));
+        }
+        assert!(!VALID_MERMAID_HEADERS.contains("sequenceDiagram"));
+        assert!(!VALID_MERMAID_HEADERS.contains("architecture-beta"));
+    }
+
+    #[test]
+    fn test_markdown_catalogs_free_of_static_str_iter_evasion() {
+        let source = include_str!("markdown.rs");
+        let needle_into_iter = ["IntoIter<&'static", " str"].concat();
+        let needle_static_slice = ["&'static [&'static", " str]"].concat();
+        let hits: Vec<String> = source
+            .lines()
+            .enumerate()
+            .filter(|(_, l)| l.contains(&needle_into_iter) || l.contains(&needle_static_slice))
+            .map(|(i, l)| format!("line {}: {}", i + 1, l.trim()))
+            .collect();
+        assert!(
+            hits.is_empty(),
+            "markdown.rs still carries untyped string-array catalog evasions:\n{}",
+            hits.join("\n")
+        );
     }
 }
