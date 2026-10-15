@@ -30,7 +30,7 @@ use serde::{Deserialize, Serialize};
 /// If any of these tokens appear in ingestion payloads outside formal string literals,
 /// the verification gate halts compilation with diagnostic error code `E0100`.
 pub const TRUNCATION_TOKENS: &[&str] = &[
-    "...",
+    "... [truncated]",
     "<truncated",
     "[truncated]",
     "summarized",
@@ -373,12 +373,12 @@ mod tests {
 
     #[test]
     fn test_scan_truncation() {
-        let clean = "# Package_0\n## Classifier_Alpha\nPure clean specification content.";
+        let clean = "# Package_0\n## Classifier_Alpha\nPure clean specification content with normal ellipsis... and 1..10 range.";
         assert!(scan_truncation(clean).is_empty());
 
-        let truncated = "# Package_0\n... truncated content";
+        let truncated = "# Package_0\n... [truncated] truncated content";
         let detected = scan_truncation(truncated);
-        assert!(detected.contains(&"...".to_string()));
+        assert!(detected.contains(&"... [truncated]".to_string()));
         assert!(detected.contains(&"truncated content".to_string()));
     }
 

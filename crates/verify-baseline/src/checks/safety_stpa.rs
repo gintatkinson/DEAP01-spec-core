@@ -498,7 +498,7 @@ pub fn check_safety_integrity(
                 .filter_entry(|e| {
                     if e.file_type().is_dir() {
                         let name = e.file_name().to_string_lossy();
-                        !EXCLUDED_DIRS.iter().any(|&ex| name == ex)
+                        !EXCLUDED_DIRS.iter().any(|ex| name == ex)
                     } else {
                         true
                     }
@@ -545,7 +545,7 @@ pub fn check_safety_integrity(
         .filter_entry(|e| {
             if e.file_type().is_dir() {
                 let name = e.file_name().to_string_lossy();
-                !EXCLUDED_DIRS.iter().any(|&ex| name == ex)
+                !EXCLUDED_DIRS.iter().any(|ex| name == ex)
                     && name != "defects"
                     && name != "audits"
                     && name != "decisions"
@@ -599,7 +599,7 @@ pub fn check_safety_integrity(
     // Citation and protocol validation in safety files
     let slicer = crate::checks::parity_gates::SectionSlicer::new(repo_root);
     let model_text = crate::checks::parity_gates::discover_sysml_model_text(repo_root);
-    let model_lower = model_text.unwrap_or_default().to_lowercase();
+    let model_str = model_text.unwrap_or_default();
 
     for sf in &safety_files {
         let rel_path = sf
@@ -608,52 +608,13 @@ pub fn check_safety_integrity(
             .to_string_lossy()
             .to_string();
         if let Ok(c) = fs::read_to_string(sf) {
-            for (idx, line) in c.lines().enumerate() {
-                let line_no = idx + 1;
-                let trimmed = line.trim();
-                if trimmed.starts_with("```") || trimmed.is_empty() {
-                    continue;
-                }
-                let citations =
-                    crate::checks::parity_gates::extract_citations_from_line(trimmed, line_no);
-                for cit in &citations {
-                    if slicer.resolve_path(&cit.target_file).is_none() {
-                        errors.push(format!(
-                            "Check 17 Pillar violation: Citation fraud in '{}': cited source file '{}' does not exist in workspace.",
-                            rel_path, cit.target_file
-                        ));
-                        continue;
-                    }
-                    if let Some(ref sec) = cit.section {
-                        if slicer.extract_section(&cit.target_file, sec).is_none() {
-                            errors.push(format!(
-                                "Check 17 Pillar violation: Citation fraud in '{}': cited section '§{}' does not exist in '{}'.",
-                                rel_path, sec, cit.target_file
-                            ));
-                        }
-                    }
-                }
-                let lower_line = trimmed.to_lowercase();
-                if lower_line.contains("dshot") || lower_line.contains("dshot600") {
-                    let in_model = model_lower.contains("dshot");
-                    let in_cited_sec = citations.iter().any(|c| {
-                        if let Some(ref sec) = c.section {
-                            slicer
-                                .extract_section(&c.target_file, sec)
-                                .map(|t| t.to_lowercase().contains("dshot"))
-                                .unwrap_or(false)
-                        } else {
-                            false
-                        }
-                    });
-                    if !in_model && !in_cited_sec {
-                        errors.push(format!(
-                            "Check 17 Pillar violation: Ungrounded protocol in '{}': protocol 'DShot600' is not declared in SysML model or cited schema source.",
-                            rel_path
-                        ));
-                    }
-                }
-            }
+            crate::checks::parity_gates::audit_spec_citations_and_protocols(
+                &c,
+                &rel_path,
+                &slicer,
+                &model_str,
+                &mut errors,
+            );
         }
     }
 
@@ -867,16 +828,14 @@ pub fn check_safety_integrity(
                     }
 
                     // 3. Negative safety model constraints enforcement
-                    let is_negated_recovery = deap_core::sysml_ast::has_negative_recovery_constraint(text)
-                        || deap_core::sysml_ast::has_negative_recovery_constraint(&combined_content);
-                    if is_negated_recovery {
-                        for c in &table_components {
-                            if deap_core::sysml_ast::is_recovery_component(c) {
-                                errors.push(format!(
-                                    "Pillar 7 violation: FMECA table references recovery component '{}' contradicted by negative AST model constraint.",
-                                    c
-                                ));
-                            }
+                    for c in &table_components {
+                        if deap_core::sysml_ast::is_component_negated(c, text)
+                            || deap_core::sysml_ast::is_component_negated(c, &combined_content)
+                        {
+                            errors.push(format!(
+                                "Pillar 7 violation: FMECA table references component '{}' contradicted by negative AST model constraint.",
+                                c
+                            ));
                         }
                     }
                 }
@@ -1274,54 +1233,56 @@ mod tests {
     }
 
     #[test]
-    fn test_issue_249_check17_rejects_fmeca_with_undeclared_or_negated_recovery_component() {
+    fn test_issue_249_check17_rejects_fmeca_with_undeclared_or_negated_component() {
         let temp = TempDir::new("check17_issue249");
         let safety_dir = temp.path.join("docs").join("safety");
         let schema_dir = temp.path.join("schema");
         fs::create_dir_all(&safety_dir).unwrap();
         fs::create_dir_all(&schema_dir).unwrap();
 
-        // Model declares FlightComputer and SensorUnit, and negates recovery: chuteEnabled = 0; recoverySystem = "No";
+        // Model declares PrimaryProcessor and SensorUnit, and negates the backup unit: backupEnabled = 0; backupSystem = "No";
         let model_text = r#"package SystemSSOT {
-    part def FlightComputer;
+    part def PrimaryProcessor;
     part def SensorUnit;
-    attribute chuteEnabled = 0;
-    attribute recoverySystem = "No";
+    attribute backupEnabled = 0;
+    attribute backupSystem = "No";
 }
 "#;
         fs::write(schema_dir.join("model.sysml"), model_text).unwrap();
 
-        // FMECA table includes undeclared / negated ParachuteRecovery
+        // FMECA table includes undeclared / negated AuxiliaryBackupUnit
         let mut content = String::from("# System Safety & STPA Matrix\n\n");
-        content.push_str("## 1. System Losses ($L-1..N$)\n- Loss L-1: Loss of Vehicle\n\n");
+        content.push_str("## 1. System Losses ($L-1..N$)\n- Loss L-1: Loss of System Function\n\n");
         content.push_str("## 2. System Hazards ($H-1..N$)\n- Hazard H-1: Loss of Control\n\n");
         content.push_str("## 3. Control Structure Topology\n```mermaid\ngraph TD\n  A --> B\n```\n\n");
-        content.push_str("## 4. Unsafe Control Actions ($UCA-1..N$)\n- UCA-1: Providing Land command too late\n- UCA-2: Not providing Land command\n- UCA-3: Stopped too soon\n- UCA-4: Applied too long\n\n");
+        content.push_str("## 4. Unsafe Control Actions ($UCA-1..N$)\n- UCA-1: Providing Halt command too late\n- UCA-2: Not providing Halt command\n- UCA-3: Stopped too soon\n- UCA-4: Applied too long\n\n");
         content.push_str("## 5. Loss Scenarios ($LS-1..N$)\n- Scenario LS-1: Sensor failure causes loss\n\n");
-        content.push_str("## 6. Formal Safety Constraints ($SC-1..N$)\n- SC-01: Vehicle shall remain in safe corridor\n\n");
+        content.push_str("## 6. Formal Safety Constraints ($SC-1..N$)\n- SC-01: System shall remain within safe operating envelope\n\n");
         content.push_str("## 7. FMECA Criticality Matrix\n\n");
         content.push_str("| FMECA ID | Component | Failure Mode | Potential Effect | Severity (S) | Occurrence (O) | Detection (D) | RPN (S x O x D) | Mitigation | Derivation Basis |\n");
         content.push_str("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n");
-        // 14 rows of FlightComputer / SensorUnit
+        // 14 rows of PrimaryProcessor / SensorUnit
         for i in 1..=8 {
-            content.push_str(&format!("| FMECA-{:03} | FlightComputer | Mode {} (Interface Γ, State Φ) | Effect | 5 | 2 | 2 | 20 | Mit | SSOT |\n", i, i));
+            content.push_str(&format!("| FMECA-{:03} | PrimaryProcessor | Mode {} (Interface Γ, State Φ) | Effect | 5 | 2 | 2 | 20 | Mit | SSOT |\n", i, i));
         }
         for i in 9..=14 {
             content.push_str(&format!("| FMECA-{:03} | SensorUnit | Mode {} (Action Ω, Resource Ψ) | Effect | 5 | 2 | 2 | 20 | Mit | SSOT |\n", i, i));
         }
-        // Rows 15 & 16: ParachuteRecovery (undeclared & negated by model, 2 distinct modes)
-        content.push_str("| FMECA-015 | ParachuteRecovery | Deployment Jam (Action Ω) | Crash | 10 | 2 | 2 | 40 | Cutter | Derived |\n");
-        content.push_str("| FMECA-016 | ParachuteRecovery | Pyrotechnic Misfire (Resource Ψ) | Crash | 10 | 2 | 2 | 40 | Dual Igniter | Derived |\n\n");
-        content.push_str("## 8. Domain Regulatory Objectives & Integrity Mapping\n- Pillar 8 SORA SAIL II objectives\n\n");
+        // Rows 15 & 16: AuxiliaryBackupUnit (undeclared & negated by model, 2 distinct modes)
+        content.push_str("| FMECA-015 | AuxiliaryBackupUnit | Activation Failure (Action Ω) | Loss of redundancy | 10 | 2 | 2 | 40 | Watchdog | Derived |\n");
+        content.push_str("| FMECA-016 | AuxiliaryBackupUnit | Supply Depletion (Resource Ψ) | Loss of redundancy | 10 | 2 | 2 | 40 | Dual Supply | Derived |\n\n");
+        content.push_str("## 8. Domain Regulatory Objectives & Integrity Mapping\n- Pillar 8 SafetyIntegrityLevel_2 objectives\n\n");
         content.push_str("## Commercial Toolchain Hooks\n- MATLAB / Simulink / Stateflow hooks\n");
 
         fs::write(safety_dir.join("STPA_MATRIX.md"), content).unwrap();
 
         let result = check_safety_integrity(&temp.path, false, true);
-        assert!(result.is_err(), "Expected Check 17 to fail when FMECA references undeclared/negated ParachuteRecovery");
+        assert!(result.is_err(), "Expected Check 17 to fail when FMECA references undeclared/negated AuxiliaryBackupUnit");
         let errs = result.unwrap_err();
-        assert!(errs.iter().any(|e| e.contains("Pillar 7 violation") && (e.contains("ParachuteRecovery") || e.contains("undeclared") || e.contains("negated") || e.contains("negative"))),
-            "Expected Pillar 7 error referencing ParachuteRecovery/undeclared/negative, got: {:?}", errs);
+        assert!(errs.iter().any(|e| e.contains("Pillar 7 violation") && e.contains("'AuxiliaryBackupUnit' contradicted by negative AST model constraint")),
+            "Expected Pillar 7 negation error referencing AuxiliaryBackupUnit, got: {:?}", errs);
+        assert!(!errs.iter().any(|e| e.contains("contradicted by negative AST model constraint") && (e.contains("'PrimaryProcessor'") || e.contains("'SensorUnit'"))),
+            "Declared, non-negated components must not be flagged as negated, got: {:?}", errs);
     }
 
     #[test]

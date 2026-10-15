@@ -182,9 +182,8 @@ impl SymbolTable {
     pub fn lookup_port(&self, port_ref: &str, current_part: Option<&str>) -> Option<&Symbol> {
         if port_ref.contains('.') {
             let parts: Vec<&str> = port_ref.split('.').collect();
-            if parts.len() == 2 {
-                let part_name = parts[0];
-                let port_name = parts[1];
+            if let [part_name, port_name] = parts.as_slice() {
+                let (part_name, port_name) = (*part_name, *port_name);
 
                 // Find candidate part
                 if let Some(part_qnames) = self.by_name.get(part_name) {
@@ -536,7 +535,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_symbol_table_indexing_and_lookup() {
+    fn test_symbol_table_indexing_and_lookup() -> Result<(), Box<dyn std::error::Error>> {
         let pkg = PackageDef {
             name: "Platform_SSOT".to_string(),
             part_defs: vec![
@@ -574,13 +573,14 @@ mod tests {
         assert!(table.lookup("Platform_SSOT::ComputeNode").is_some());
         assert!(table.lookup("Platform_SSOT::ComputeNode::bus_out").is_some());
 
-        let port_sym = table.lookup_port("ComputeNode.bus_out", None).unwrap();
+        let port_sym = table.lookup_port("ComputeNode.bus_out", None).ok_or("expected value is absent")?;
         assert_eq!(port_sym.name, "bus_out");
         assert_eq!(port_sym.direction.as_deref(), Some("out"));
+        Ok(())
     }
 
     #[test]
-    fn test_symbol_table_cross_package_import_lookup() {
+    fn test_symbol_table_cross_package_import_lookup() -> Result<(), Box<dyn std::error::Error>> {
         let pkg_competing = PackageDef {
             name: "AAA_Other".to_string(),
             part_defs: vec![
@@ -635,14 +635,14 @@ mod tests {
 
         // Verify package_imports records the imports for Subsystem_B
         assert!(table.package_imports.contains_key("Subsystem_B"));
-        assert_eq!(table.package_imports.get("Subsystem_B").unwrap().len(), 1);
+        assert_eq!(table.package_imports.get("Subsystem_B").ok_or("expected value is absent")?.len(), 1);
 
         // Verify that lookup_in_scope("Subsystem_B", "EngineA") resolves to Subsystem_A::EngineA
         // rather than AAA_Other::EngineA or failing.
         let resolved = table.lookup_in_scope("Subsystem_B", "EngineA");
         assert!(resolved.is_some(), "EngineA should resolve via import in Subsystem_B");
         assert_eq!(
-            resolved.unwrap().qualified_name,
+            resolved.ok_or("expected value is absent")?.qualified_name,
             "Subsystem_A::EngineA",
             "Import scoping should take precedence over unqualified fallback"
         );
@@ -676,6 +676,7 @@ mod tests {
         let table_d = SymbolTable::build_from_package(&root_with_d);
         let resolved_d = table_d.lookup_in_scope("Root::Subsystem_D", "EngineA");
         assert!(resolved_d.is_some(), "EngineA should resolve via explicit import in Root::Subsystem_D");
-        assert_eq!(resolved_d.unwrap().qualified_name, "Root::Subsystem_A::EngineA");
+        assert_eq!(resolved_d.ok_or("expected value is absent")?.qualified_name, "Root::Subsystem_A::EngineA");
+        Ok(())
     }
 }

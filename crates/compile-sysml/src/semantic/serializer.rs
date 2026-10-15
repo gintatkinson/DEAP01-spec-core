@@ -15,13 +15,17 @@ pub fn format_doc_comment(doc: &Option<String>, indent: usize) -> String {
 
     if lines.len() <= 1 {
         format!("{}doc /* {} */\n", pad, sanitized)
-    } else {
-        let mut out = format!("{}doc /* {}\n", pad, lines[0]);
-        for line in &lines[1..lines.len() - 1] {
-            out.push_str(&format!("{}       {}\n", pad, line));
+    } else if let Some((first, rest)) = lines.split_first() {
+        let mut out = format!("{}doc /* {}\n", pad, first);
+        if let Some((last, middle)) = rest.split_last() {
+            for line in middle {
+                out.push_str(&format!("{}       {}\n", pad, line));
+            }
+            out.push_str(&format!("{}       {} */\n", pad, last));
         }
-        out.push_str(&format!("{}       {} */\n", pad, lines[lines.len() - 1]));
         out
+    } else {
+        format!("{}doc /* {} */\n", pad, sanitized)
     }
 }
 
@@ -358,6 +362,139 @@ impl SysmlSerializable for UseCaseDef {
     }
 }
 
+impl SysmlSerializable for CalcDef {
+    fn to_sysml(&self, indent: usize) -> String {
+        let pad = " ".repeat(indent);
+        let doc = format_doc_comment(&self.doc, indent);
+        let mut lines = Vec::new();
+        if !doc.is_empty() {
+            lines.push(doc.trim_end().to_string());
+        }
+        let ret_annot = self
+            .return_type
+            .as_ref()
+            .map(|r| format!(" : {}", r))
+            .unwrap_or_default();
+        lines.push(format!("{}calc def {}{} {{", pad, self.name, ret_annot));
+        for p in &self.in_params {
+            let def_val = p
+                .default_value
+                .as_ref()
+                .map(|v| format!(" = {}", v))
+                .unwrap_or_default();
+            lines.push(format!("{}    in {} : {}{};", pad, p.name, p.type_name, def_val));
+        }
+        if let Some(expr) = &self.expression {
+            for expr_line in expr.lines() {
+                let trimmed = expr_line.trim();
+                if !trimmed.is_empty() {
+                    lines.push(format!("{}    return {};", pad, trimmed.trim_end_matches(';')));
+                }
+            }
+        }
+        lines.push(format!("{}}}", pad));
+        lines.join("\n")
+    }
+}
+
+impl SysmlSerializable for CapabilityDef {
+    fn to_sysml(&self, indent: usize) -> String {
+        let pad = " ".repeat(indent);
+        let doc = format_doc_comment(&self.doc, indent);
+        let mut lines = Vec::new();
+        if !doc.is_empty() {
+            lines.push(doc.trim_end().to_string());
+        }
+        if let Some(sub) = &self.subsystem {
+            lines.push(format!("{}capability def {} {{", pad, self.name));
+            lines.push(format!("{}    subsystem {};", pad, sub));
+            lines.push(format!("{}}}", pad));
+        } else {
+            lines.push(format!("{}capability def {};", pad, self.name));
+        }
+        lines.join("\n")
+    }
+}
+
+impl SysmlSerializable for OperationDef {
+    fn to_sysml(&self, indent: usize) -> String {
+        let pad = " ".repeat(indent);
+        let doc = format_doc_comment(&self.doc, indent);
+        let params: Vec<String> = self
+            .parameters
+            .iter()
+            .map(|p| {
+                let dir = p.default_value.as_deref().unwrap_or("in");
+                format!("{} {} : {}", dir, p.name, p.type_name)
+            })
+            .collect();
+        let param_str = if params.is_empty() {
+            String::new()
+        } else {
+            format!("({})", params.join(", "))
+        };
+        let ret_str = self
+            .return_type
+            .as_ref()
+            .map(|r| format!(" : {}", r))
+            .unwrap_or_default();
+        format!("{}{}operation def {}{}{};", doc, pad, self.name, param_str, ret_str)
+    }
+}
+
+impl SysmlSerializable for InteractionDef {
+    fn to_sysml(&self, indent: usize) -> String {
+        let pad = " ".repeat(indent);
+        let doc = format_doc_comment(&self.doc, indent);
+        let mut lines = Vec::new();
+        if !doc.is_empty() {
+            lines.push(doc.trim_end().to_string());
+        }
+        lines.push(format!("{}interaction def {} {{", pad, self.name));
+        for l in &self.lifelines {
+            lines.push(format!("{}    lifeline {};", pad, l));
+        }
+        for m in &self.messages {
+            lines.push(format!("{}    message {};", pad, m));
+        }
+        for t in &self.triggers {
+            lines.push(format!("{}    trigger {};", pad, t));
+        }
+        lines.push(format!("{}}}", pad));
+        lines.join("\n")
+    }
+}
+
+impl SysmlSerializable for TestCaseDef {
+    fn to_sysml(&self, indent: usize) -> String {
+        let pad = " ".repeat(indent);
+        let doc = format_doc_comment(&self.doc, indent);
+        let mut lines = Vec::new();
+        if !doc.is_empty() {
+            lines.push(doc.trim_end().to_string());
+        }
+        lines.push(format!("{}test case def {} {{", pad, self.name));
+        if let Some(subj) = &self.subject_part {
+            lines.push(format!("{}    subject {};", pad, subj));
+        }
+        if !self.verified_requirements.is_empty() {
+            lines.push(format!(
+                "{}    verify requirement {};",
+                pad,
+                self.verified_requirements.join(", ")
+            ));
+        }
+        if let Some(obj) = &self.objective {
+            lines.push(format!("{}    objective {};", pad, obj));
+        }
+        for step in &self.test_steps {
+            lines.push(format!("{}    step {};", pad, step));
+        }
+        lines.push(format!("{}}}", pad));
+        lines.join("\n")
+    }
+}
+
 impl SysmlSerializable for PartDef {
     fn to_sysml(&self, indent: usize) -> String {
         let pad = " ".repeat(indent);
@@ -387,6 +524,9 @@ impl SysmlSerializable for PartDef {
         for con in &self.constraints {
             lines.push(con.to_sysml(indent + 4));
         }
+        for c in &self.calcs {
+            lines.push(c.to_sysml(indent + 4));
+        }
         for req in &self.requirements {
             lines.push(req.to_sysml(indent + 4));
         }
@@ -396,8 +536,29 @@ impl SysmlSerializable for PartDef {
         for conn in &self.connections {
             lines.push(conn.to_sysml(indent + 4));
         }
+        for uc in &self.use_cases {
+            lines.push(uc.to_sysml(indent + 4));
+        }
         for item in &self.item_defs {
             lines.push(item.to_sysml(indent + 4));
+        }
+        for hz in &self.hazards {
+            lines.push(hz.to_sysml(indent + 4));
+        }
+        for rk in &self.risks {
+            lines.push(rk.to_sysml(indent + 4));
+        }
+        for tc in &self.test_cases {
+            lines.push(tc.to_sysml(indent + 4));
+        }
+        for cap in &self.capabilities {
+            lines.push(cap.to_sysml(indent + 4));
+        }
+        for op in &self.operations {
+            lines.push(op.to_sysml(indent + 4));
+        }
+        for inter in &self.interactions {
+            lines.push(inter.to_sysml(indent + 4));
         }
         for sub in &self.parts {
             lines.push(sub.to_sysml(indent + 4));
@@ -455,6 +616,9 @@ impl SysmlSerializable for PackageDef {
         for con in &self.constraint_defs {
             lines.push(con.to_sysml(indent + 4));
         }
+        for c in &self.calc_defs {
+            lines.push(c.to_sysml(indent + 4));
+        }
         for req in &self.requirement_defs {
             lines.push(req.to_sysml(indent + 4));
         }
@@ -475,6 +639,18 @@ impl SysmlSerializable for PackageDef {
         }
         for rk in &self.risk_defs {
             lines.push(rk.to_sysml(indent + 4));
+        }
+        for tc in &self.test_case_defs {
+            lines.push(tc.to_sysml(indent + 4));
+        }
+        for cap in &self.capability_defs {
+            lines.push(cap.to_sysml(indent + 4));
+        }
+        for op in &self.operation_defs {
+            lines.push(op.to_sysml(indent + 4));
+        }
+        for inter in &self.interaction_defs {
+            lines.push(inter.to_sysml(indent + 4));
         }
         for part in &self.part_defs {
             lines.push(part.to_sysml(indent + 4));

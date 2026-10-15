@@ -41,7 +41,7 @@ pub fn has_concrete_specifications(repo_root: &Path) -> bool {
                 .filter_entry(|e| {
                     if e.file_type().is_dir() {
                         let name = e.file_name().to_string_lossy();
-                        !EXCLUDED_DIRS.iter().any(|&ex| name == ex)
+                        !EXCLUDED_DIRS.iter().any(|ex| name == ex)
                     } else {
                         true
                     }
@@ -75,7 +75,7 @@ pub fn has_clean_landing_zones(repo_root: &Path) -> bool {
             .filter_entry(|e| {
                 if e.file_type().is_dir() {
                     let name = e.file_name().to_string_lossy();
-                    !EXCLUDED_DIRS.iter().any(|&ex| name == ex)
+                    !EXCLUDED_DIRS.iter().any(|ex| name == ex)
                 } else {
                     true
                 }
@@ -462,14 +462,14 @@ pub fn run(options: &BaselineOptions) -> Result<(), ()> {
     // Check 25: Operational allocation
     match check_operational_allocation(&repo_root) {
         Ok(_) => {
-            println!("Success: Check 24 verified (Operational-to-Resource Allocation passed -- zero orphan activities or phantom allocation tags).");
+            println!("Success: Check 25 verified (Operational-to-Resource Allocation passed -- zero orphan activities or phantom allocation tags).");
         }
         Err(errs) => {
-            eprintln!("ERROR: Check 24 failed (Operational-to-Resource Allocation violations found):");
+            eprintln!("ERROR: Check 25 failed (Operational-to-Resource Allocation violations found):");
             for e in &errs {
                 eprintln!("  - {}", e);
             }
-            write_defect_dossier(&repo_root, "Check 24 (Operational allocation)", &errs);
+            write_defect_dossier(&repo_root, "Check 25 (Operational allocation)", &errs);
             return Err(());
         }
     }
@@ -477,14 +477,14 @@ pub fn run(options: &BaselineOptions) -> Result<(), ()> {
     // Check 26: Standards measurement
     match check_standards_measurement(&repo_root, effective_allow_missing, is_strict) {
         Ok(_) => {
-            println!("Success: Check 25 verified (Standards & SI 7D Parameter Metrology passed -- all parameter dimensions, units, and SDO baselines valid).");
+            println!("Success: Check 26 verified (Standards & SI 7D Parameter Metrology passed -- all parameter dimensions, units, and SDO baselines valid).");
         }
         Err(errs) => {
-            eprintln!("ERROR: Check 25 failed (Standards & SI 7D Parameter Metrology violations found):");
+            eprintln!("ERROR: Check 26 failed (Standards & SI 7D Parameter Metrology violations found):");
             for e in &errs {
                 eprintln!("  - {}", e);
             }
-            write_defect_dossier(&repo_root, "Check 25 (Standards measurement)", &errs);
+            write_defect_dossier(&repo_root, "Check 26 (Standards measurement)", &errs);
             return Err(());
         }
     }
@@ -492,14 +492,14 @@ pub fn run(options: &BaselineOptions) -> Result<(), ()> {
     // Check 27: Cross-document diagram parity
     match check_cross_document_diagram_parity(&repo_root) {
         Ok(_) => {
-            println!("Success: Check 25 verified (Cross-Document Diagram Parity Gate passed -- zero disparity in subgraphs, nodes, ports, or connections).");
+            println!("Success: Check 27 verified (Cross-Document Diagram Parity Gate passed -- zero disparity in subgraphs, nodes, ports, or connections).");
         }
         Err(errs) => {
-            eprintln!("ERROR: Check 25 failed (Cross-Document Diagram Parity Gate violations found):");
+            eprintln!("ERROR: Check 27 failed (Cross-Document Diagram Parity Gate violations found):");
             for e in &errs {
                 eprintln!("  - {}", e);
             }
-            write_defect_dossier(&repo_root, "Check 25B (Cross-document diagram parity)", &errs);
+            write_defect_dossier(&repo_root, "Check 27 (Cross-document diagram parity)", &errs);
             return Err(());
         }
     }
@@ -507,20 +507,20 @@ pub fn run(options: &BaselineOptions) -> Result<(), ()> {
     // Check 28: ConOps and Mission Intent completeness
     match check_conops_and_mission_intent_completeness(&repo_root, effective_allow_missing, is_strict) {
         Ok(ParityOutcome::ConopsDirMissing) => {
-            println!("Success: Check 26 verified (Downstream repository detected -- docs/conops/ directory not present).");
+            println!("Success: Check 28 verified (Downstream repository detected -- docs/conops/ directory not present).");
         }
         Ok(ParityOutcome::PendingOrClean) => {
-            println!("Success: Check 26 verified (Downstream repository detected -- ConOps & Mission Intent pending or clean).");
+            println!("Success: Check 28 verified (Downstream repository detected -- ConOps & Mission Intent pending or clean).");
         }
         Ok(_) => {
-            println!("Success: Check 26 verified (ConOps & Mission Intent Completeness passed -- all mandatory sections, tables, and METL rosters valid).");
+            println!("Success: Check 28 verified (ConOps & Mission Intent Completeness passed -- all mandatory sections, tables, and METL rosters valid).");
         }
         Err(errs) => {
-            eprintln!("ERROR: Check 26 failed (ConOps & Mission Intent Completeness violations found):");
+            eprintln!("ERROR: Check 28 failed (ConOps & Mission Intent Completeness violations found):");
             for e in &errs {
                 eprintln!("  - {}", e);
             }
-            write_defect_dossier(&repo_root, "Check 26 (ConOps & Mission Intent)", &errs);
+            write_defect_dossier(&repo_root, "Check 28 (ConOps & Mission Intent)", &errs);
             return Err(());
         }
     }
@@ -528,17 +528,17 @@ pub fn run(options: &BaselineOptions) -> Result<(), ()> {
     // Check 29: Research inventory
     match check_research_inventory(&repo_root, effective_allow_missing, is_strict) {
         Ok(ParityOutcome::PendingOrClean) => {
-            println!("Success: Check 27 verified (Downstream repository detected -- research inventory pending or landing zone clean).");
+            println!("Success: Check 29 verified (Downstream repository detected -- research inventory pending or landing zone clean).");
         }
         Ok(_) => {
-            println!("Success: Check 27 verified (Cited Research Inventory & Declared-Total Population Register passed).");
+            println!("Success: Check 29 verified (Cited Research Inventory & Declared-Total Population Register passed).");
         }
         Err(errs) => {
-            eprintln!("ERROR: Check 27 failed (Cited Research Inventory violations found):");
+            eprintln!("ERROR: Check 29 failed (Cited Research Inventory violations found):");
             for e in &errs {
                 eprintln!("  - {}", e);
             }
-            write_defect_dossier(&repo_root, "Check 27 (Research inventory)", &errs);
+            write_defect_dossier(&repo_root, "Check 29 (Research inventory)", &errs);
             return Err(());
         }
     }
@@ -546,14 +546,14 @@ pub fn run(options: &BaselineOptions) -> Result<(), ()> {
     // Check 30: Executive deliverable traceability
     match check_executive_deliverable_traceability(&repo_root) {
         Ok(_) => {
-            println!("Success: Check 27 verified (Executive Deliverable Traceability Gate passed -- all tables and diagrams anchored to SSOT).");
+            println!("Success: Check 30 verified (Executive Deliverable Traceability Gate passed -- all tables and diagrams anchored to SSOT).");
         }
         Err(errs) => {
-            eprintln!("ERROR: Check 27 failed (Executive Deliverable Traceability Gate violations found):");
+            eprintln!("ERROR: Check 30 failed (Executive Deliverable Traceability Gate violations found):");
             for e in &errs {
                 eprintln!("  - {}", e);
             }
-            write_defect_dossier(&repo_root, "Check 27B (Executive deliverable traceability)", &errs);
+            write_defect_dossier(&repo_root, "Check 30 (Executive deliverable traceability)", &errs);
             return Err(());
         }
     }
@@ -662,6 +662,17 @@ pub fn run(options: &BaselineOptions) -> Result<(), ()> {
         return Err(());
     }
     println!("Success: Check 34 verified (Zero Regex Invariant passed -- zero regex occurrences exist across crates).");
+
+    // Check 35: Handoff & Backlog Integrity
+    if let Err(errs) = check_handoff_and_backlog_integrity(&repo_root) {
+        eprintln!("ERROR: Check 35 failed (Handoff & Backlog Integrity violated):");
+        for e in &errs {
+            eprintln!("  - {}", e);
+        }
+        write_defect_dossier(&repo_root, "Check 35 (Handoff & Backlog Integrity)", &errs);
+        return Err(());
+    }
+    println!("Success: Check 35 verified (Handoff & Backlog Integrity passed).");
 
     // Platform Checks
     let dest = &options.destination;

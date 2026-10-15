@@ -223,7 +223,7 @@ pub fn check_title_anti_stutter(title: &str) -> Option<String> {
         return None;
     }
 
-    let lower = trimmed.to_lowercase();
+    let lower = trimmed.to_ascii_lowercase();
 
     // 1. Placeholder or stutter tokens like "uc_xx_", "uc-xx-", "ucxx_"
     if lower.contains("uc_xx_")
@@ -240,10 +240,9 @@ pub fn check_title_anti_stutter(title: &str) -> Option<String> {
     }
 
     // 2. Starts with raw stutter prefix like "uc_" followed by digits and underscore
-    if lower.starts_with("uc_") {
-        let rest = &lower[3..];
-        let digits_count = rest.chars().take_while(|c| c.is_ascii_digit()).count();
-        if digits_count > 0 && rest[digits_count..].starts_with('_') {
+    if let Some(rest) = lower.strip_prefix("uc_") {
+        let digits_len = rest.bytes().take_while(|b| b.is_ascii_digit()).count();
+        if digits_len > 0 && rest.get(digits_len..).is_some_and(|s| s.starts_with('_')) {
             return Some(format!(
                 "Specification title contains raw stuttering prefix 'UC_XX_': '{}'",
                 trimmed
@@ -253,8 +252,8 @@ pub fn check_title_anti_stutter(title: &str) -> Option<String> {
 
     // 3. Stutter after standard prefix "Use Case XX:", "UC XX:", "Epic XX:", "Feature XX:", "User Story XX:"
     if let Some(colon_pos) = lower.find(':') {
-        let prefix_part = lower[..colon_pos].trim();
-        let after_colon = lower[colon_pos + 1..].trim();
+        let prefix_part = lower.get(..colon_pos).unwrap_or("").trim();
+        let after_colon = lower.get(colon_pos + 1..).unwrap_or("").trim();
 
         let is_spec_prefix = prefix_part.starts_with("use case")
             || prefix_part.starts_with("use_case")
@@ -270,10 +269,9 @@ pub fn check_title_anti_stutter(title: &str) -> Option<String> {
         if is_spec_prefix {
             let redundant_sub_prefixes = ["uc", "epic", "feat", "us"];
             for sub in &redundant_sub_prefixes {
-                if after_colon.starts_with(sub) {
-                    let rem = &after_colon[sub.len()..];
+                if let Some(rem) = after_colon.strip_prefix(sub) {
                     let rem_clean = rem.trim_start_matches(|c: char| c == ' ' || c == '-' || c == '_');
-                    let digit_count = rem_clean.chars().take_while(|c| c.is_ascii_digit()).count();
+                    let digit_count = rem_clean.bytes().take_while(|b| b.is_ascii_digit()).count();
                     if digit_count > 0 {
                         return Some(format!(
                             "Specification title contains stuttering prefix after colon (e.g. 'Use Case XX: UC XX'): '{}'",
@@ -289,7 +287,7 @@ pub fn check_title_anti_stutter(title: &str) -> Option<String> {
                 || after_colon.starts_with("user story")
             {
                 let rem_after = after_colon.trim_start_matches(|c: char| !c.is_ascii_digit());
-                let digit_count = rem_after.chars().take_while(|c| c.is_ascii_digit()).count();
+                let digit_count = rem_after.bytes().take_while(|b| b.is_ascii_digit()).count();
                 if digit_count > 0 {
                     return Some(format!(
                         "Specification title contains repeating title prefix: '{}'",
@@ -310,9 +308,9 @@ pub fn check_title_anti_stutter(title: &str) -> Option<String> {
 /// Postconditions: Returns Some(diagnostic_message) if filename contains stuttering prefix.
 /// Algorithmic Complexity: O(F) where F is filename character count.
 pub fn check_filename_anti_stutter(filename: &str) -> Option<String> {
-    let lower = filename.to_lowercase();
+    let lower = filename.to_ascii_lowercase();
     let basename = match lower.rfind('/') {
-        Some(idx) => &lower[idx + 1..],
+        Some(idx) => lower.get(idx + 1..).unwrap_or(&lower),
         None => &lower,
     };
     let stem = match basename.strip_suffix(".md") {
@@ -335,10 +333,9 @@ pub fn check_filename_anti_stutter(filename: &str) -> Option<String> {
     }
 
     // 2. Starts with raw stutter prefix like "uc_01_"
-    if stem.starts_with("uc_") {
-        let rest = &stem[3..];
-        let digits_count = rest.chars().take_while(|c| c.is_ascii_digit()).count();
-        if digits_count > 0 && rest[digits_count..].starts_with('_') {
+    if let Some(rest) = stem.strip_prefix("uc_") {
+        let digits_len = rest.bytes().take_while(|b| b.is_ascii_digit()).count();
+        if digits_len > 0 && rest.get(digits_len..).is_some_and(|s| s.starts_with('_')) {
             return Some(format!(
                 "Specification filename contains raw stuttering prefix 'UC_XX_': '{}'",
                 filename
@@ -350,13 +347,12 @@ pub fn check_filename_anti_stutter(filename: &str) -> Option<String> {
     let prefixes = ["uc", "epic", "feat", "us"];
     for p in &prefixes {
         let pattern = format!("{}-", p);
-        if stem.starts_with(&pattern) {
-            let after_p = &stem[pattern.len()..];
-            let digit_count = after_p.chars().take_while(|c| c.is_ascii_digit()).count();
-            if digit_count > 0 {
-                let after_ord = &after_p[digit_count..];
+        if let Some(after_p) = stem.strip_prefix(&pattern) {
+            let digit_len = after_p.bytes().take_while(|b| b.is_ascii_digit()).count();
+            if digit_len > 0 {
+                let after_ord = after_p.get(digit_len..).unwrap_or("");
                 if after_ord.starts_with('-') || after_ord.starts_with('_') {
-                    let slug = &after_ord[1..];
+                    let slug = after_ord.get(1..).unwrap_or("");
                     let stutter1 = format!("{}_", p);
                     let stutter2 = format!("{}-", p);
                     if slug.starts_with(&stutter1) || slug.starts_with(&stutter2) {
@@ -365,10 +361,9 @@ pub fn check_filename_anti_stutter(filename: &str) -> Option<String> {
                             filename
                         ));
                     }
-                    if slug.starts_with(p) {
-                        let rem_slug = &slug[p.len()..];
+                    if let Some(rem_slug) = slug.strip_prefix(p) {
                         let rem_clean = rem_slug.trim_start_matches(|c: char| c == '_' || c == '-');
-                        let slug_digits = rem_clean.chars().take_while(|c| c.is_ascii_digit()).count();
+                        let slug_digits = rem_clean.bytes().take_while(|b| b.is_ascii_digit()).count();
                         if slug_digits > 0 {
                             return Some(format!(
                                 "Specification filename contains stuttering prefix (e.g. 'UC-01-UC01'): '{}'",
@@ -395,7 +390,7 @@ pub fn normalize_title(title: &str) -> String {
         return String::new();
     }
 
-    let lower = trimmed.to_lowercase();
+    let lower = trimmed.to_ascii_lowercase();
     const PREFIX_KEYWORDS: &[&str] = &[
         "user-story", "user story", "user_story",
         "use-case", "use case", "use_case",
@@ -406,22 +401,20 @@ pub fn normalize_title(title: &str) -> String {
 
     let mut matched_len = 0;
     for kw in PREFIX_KEYWORDS {
-        if lower.starts_with(kw) {
-            let mut rem = &lower[kw.len()..];
+        if let Some(mut rem) = lower.strip_prefix(kw) {
             let mut consumed = kw.len();
 
             // Optional 's' plural
-            if rem.starts_with('s') {
-                rem = &rem[1..];
+            if let Some(r) = rem.strip_prefix('s') {
+                rem = r;
                 consumed += 1;
             }
 
             // Case A: followed by ':'
-            if rem.starts_with(':') {
-                rem = &rem[1..];
+            if let Some(mut r) = rem.strip_prefix(':') {
                 consumed += 1;
-                while rem.starts_with(' ') || rem.starts_with('\t') {
-                    rem = &rem[1..];
+                while r.starts_with(' ') || r.starts_with('\t') {
+                    r = r.get(1..).unwrap_or("");
                     consumed += 1;
                 }
                 matched_len = consumed;
@@ -432,21 +425,21 @@ pub fn normalize_title(title: &str) -> String {
             let mut temp_rem = rem;
             let mut temp_consumed = consumed;
             while temp_rem.starts_with('-') || temp_rem.starts_with(' ') || temp_rem.starts_with('_') {
-                temp_rem = &temp_rem[1..];
+                temp_rem = temp_rem.get(1..).unwrap_or("");
                 temp_consumed += 1;
             }
 
-            let digit_count = temp_rem.chars().take_while(|c| c.is_ascii_digit()).count();
-            if digit_count > 0 {
-                temp_rem = &temp_rem[digit_count..];
-                temp_consumed += digit_count;
+            let digit_len = temp_rem.bytes().take_while(|b| b.is_ascii_digit()).count();
+            if digit_len > 0 {
+                temp_rem = temp_rem.get(digit_len..).unwrap_or("");
+                temp_consumed += digit_len;
 
                 // Skip optional trailing space, ':', or '-'
                 while temp_rem.starts_with(' ')
                     || temp_rem.starts_with(':')
                     || temp_rem.starts_with('-')
                 {
-                    temp_rem = &temp_rem[1..];
+                    temp_rem = temp_rem.get(1..).unwrap_or("");
                     temp_consumed += 1;
                 }
                 matched_len = temp_consumed;
@@ -456,7 +449,7 @@ pub fn normalize_title(title: &str) -> String {
     }
 
     let stripped = if matched_len > 0 {
-        &trimmed[matched_len..]
+        trimmed.get(matched_len..).unwrap_or(trimmed)
     } else {
         trimmed
     };

@@ -11,7 +11,7 @@ use checklist::{clean_unpopulated_placeholders, contains_unpopulated_placeholder
 use frontmatter::{parse_frontmatter, update_frontmatter_issue_id, SpecFrontmatter};
 use tracker::{IssueIndex, TrackerClient};
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -73,7 +73,7 @@ pub fn load_specifications(workspace_root: &Path) -> Vec<LoadedSpec> {
             continue;
         }
 
-        for entry in WalkDir::new(&dir).into_iter().filter_map(|e| e.ok()) {
+        for entry in WalkDir::new(&dir).sort_by_file_name().into_iter().filter_map(|e| e.ok()) {
             let path = entry.path();
             if path.is_file() && path.extension().map(|ext| ext == "md").unwrap_or(false) {
                 if let Ok(content) = fs::read_to_string(path) {
@@ -164,7 +164,7 @@ pub fn run_reconciliation<T: TrackerClient>(
 
     // Step 4: Remote sync if enabled with relative link projection
     if options.sync_bodies && !options.offline && !options.dry_run {
-        let mut spec_path_to_issue: HashMap<String, u64> = HashMap::new();
+        let mut spec_path_to_issue: BTreeMap<String, u64> = BTreeMap::new();
         for spec in &specs {
             if let Some(issue_id) = spec.frontmatter.issue_id {
                 spec_path_to_issue.insert(spec.rel_path.clone(), issue_id);
@@ -261,7 +261,7 @@ pub fn parse_repo_from_remote_url(url: &str) -> Option<String> {
     let cleaned = clean_repo_name(url);
     if cleaned.contains('/') && !cleaned.contains(' ') {
         let parts: Vec<&str> = cleaned.split('/').collect();
-        if parts.len() == 2 && !parts[0].is_empty() && !parts[1].is_empty() {
+        if matches!(parts.as_slice(), [owner, repo] if !owner.is_empty() && !repo.is_empty()) {
             return Some(cleaned);
         }
     }
@@ -326,7 +326,7 @@ pub fn project_body_for_tracker(
     body: &str,
     repo: Option<&str>,
     default_branch: &str,
-    spec_path_to_issue: &HashMap<String, u64>,
+    spec_path_to_issue: &BTreeMap<String, u64>,
 ) -> String {
     let mut projected = body.to_string();
 
@@ -366,7 +366,7 @@ pub fn project_body_for_tracker(
     }
 
     // Sort by pattern length descending to avoid partial matches
-    replacements.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
+    replacements.sort_by_key(|r| std::cmp::Reverse(r.0.len()));
     replacements.dedup_by(|a, b| a.0 == b.0);
 
     for (pattern, replacement) in replacements {
@@ -404,12 +404,12 @@ mod tests {
     use std::fs;
 
     #[test]
-    fn test_relative_links_in_projected_issue_bodies_red_probe() {
+    fn test_relative_links_in_projected_issue_bodies_red_probe() -> Result<(), Box<dyn std::error::Error>> {
         let temp_dir = std::env::temp_dir().join(format!("reconcile_red_probe_{}", chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)));
         let epics_dir = temp_dir.join("docs/epics");
         let stories_dir = temp_dir.join("docs/user-stories");
-        fs::create_dir_all(&epics_dir).unwrap();
-        fs::create_dir_all(&stories_dir).unwrap();
+        fs::create_dir_all(&epics_dir)?;
+        fs::create_dir_all(&stories_dir)?;
 
         let epic_content = r#"---
 issue_id: 80
@@ -418,7 +418,7 @@ type: epic
 ---
 # Epic 03: System Vision
 "#;
-        fs::write(epics_dir.join("EPIC-03-SystemVision.md"), epic_content).unwrap();
+        fs::write(epics_dir.join("EPIC-03-SystemVision.md"), epic_content)?;
 
         let story_content = r#"---
 issue_id: 89
@@ -434,7 +434,7 @@ type: user-story
 ## Required Features
 - [ ] [Feature 01: [ConOps] Human Engineer Interface](../features/FEAT-01-HumanEngineer.md)
 "#;
-        fs::write(stories_dir.join("US-01-BootstrapSystemVisionAction.md"), story_content).unwrap();
+        fs::write(stories_dir.join("US-01-BootstrapSystemVisionAction.md"), story_content)?;
 
         let issues = vec![
             TrackerIssue {
@@ -466,12 +466,12 @@ type: user-story
             default_branch: Some("main".to_string()),
         };
 
-        let summary = run_reconciliation(&tracker, &options).unwrap();
+        let summary = run_reconciliation(&tracker, &options)?;
         assert_eq!(summary.remote_issues_synced, 2);
 
-        let synced_issues = tracker.fetch_all_issues().unwrap();
-        let synced_story = synced_issues.iter().find(|i| i.number == 89).unwrap();
-        let body = synced_story.body.as_ref().expect("Body should have been synced");
+        let synced_issues = tracker.fetch_all_issues()?;
+        let synced_story = synced_issues.iter().find(|i| i.number == 89).ok_or("synced story #89 missing")?;
+        let body = synced_story.body.as_ref().ok_or("Body should have been synced")?;
 
         // The probe: Projected body must NOT contain relative filesystem links that 404 on the remote tracker!
         assert!(
@@ -494,6 +494,7 @@ type: user-story
         );
 
         let _ = fs::remove_dir_all(&temp_dir);
+        Ok(())
     }
 
     #[test]
@@ -509,7 +510,7 @@ type: user-story
 ## Design Docs
 - [Architecture Blueprint](../../docs/architecture/DEAP_MASTER_ARCHITECTURE.md)
 "#;
-        let mut spec_to_issue = HashMap::new();
+        let mut spec_to_issue = BTreeMap::new();
         spec_to_issue.insert("docs/epics/EPIC-03-SystemVision.md".to_string(), 80);
         spec_to_issue.insert("features/FEAT-01-HumanEngineer.md".to_string(), 75);
         spec_to_issue.insert("docs/features/FEAT-02-Verifier.md".to_string(), 76);
@@ -558,7 +559,7 @@ type: user-story
     #[test]
     fn test_project_body_for_tracker_without_repo() {
         let raw_body = "[EPIC-01](../epics/EPIC-01.md) and [schema](../../schema/model.sysml)";
-        let mut map = HashMap::new();
+        let mut map = BTreeMap::new();
         map.insert("epics/EPIC-01.md".to_string(), 10);
 
         let projected = project_body_for_tracker(raw_body, None, "main", &map);
@@ -566,7 +567,7 @@ type: user-story
     }
 
     #[test]
-    fn test_publish_gate_blocks_unregistered_checklist_issue_numbers() {
+    fn test_publish_gate_blocks_unregistered_checklist_issue_numbers() -> Result<(), Box<dyn std::error::Error>> {
         let content = r#"# Epic: Test
 ## 2. Requirements & Checklist
 - [ ] #999 - Feature 99: Ghost Feature (justification)
@@ -586,20 +587,24 @@ type: user-story
         );
 
         let err = validate_checklist_publish_integrity("docs/epics/EPIC-01.md", content, &issue_index)
-            .unwrap_err();
+            .err()
+            .ok_or("expected publish gate to reject unregistered issue #999")?;
         assert!(err.contains("contains unresolvable checklist issue reference '#999'"));
+        Ok(())
     }
 
     #[test]
-    fn test_publish_gate_blocks_placeholder_checklist_tokens() {
+    fn test_publish_gate_blocks_placeholder_checklist_tokens() -> Result<(), Box<dyn std::error::Error>> {
         let content = r#"# Epic: Test
 ## 2. Requirements & Checklist
 - [ ] #[IssueID] - Feature 01: Test Feature (justification)
 "#;
         let issue_index = IssueIndex::default();
         let err = validate_checklist_publish_integrity("docs/epics/EPIC-01.md", content, &issue_index)
-            .unwrap_err();
+            .err()
+            .ok_or("expected publish gate to reject placeholder token")?;
         assert!(err.contains("contains unresolved checklist placeholder token"));
+        Ok(())
     }
 
     #[test]

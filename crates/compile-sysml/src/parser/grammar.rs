@@ -8,6 +8,17 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
+// Sentinel returned when the token stream is empty; never indexed, never mutated.
+static GRAMMAR_EOF_TOKEN: Token = Token {
+    kind: TokenKind::Eof,
+    span: Span {
+        start: 0,
+        end: 0,
+        line: 0,
+        col: 0,
+    },
+};
+
 /// Diagnostic error with source location span.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ParseError {
@@ -341,6 +352,14 @@ impl<'a> SysmlParser<'a> {
                     pkg.interaction_defs.push(inter);
                 }
             }
+            TokenKind::Calc => {
+                let c = self.parse_calc_decl(doc)?;
+                if let Some(parent) = parent_part {
+                    parent.calcs.push(c);
+                } else {
+                    pkg.calc_defs.push(c);
+                }
+            }
             _ => {
                 // Skip unknown statement or delimiter to maintain fault tolerance
                 self.skip_until_semi_or_brace();
@@ -351,11 +370,7 @@ impl<'a> SysmlParser<'a> {
     }
 
     fn peek_next_is_port(&self) -> bool {
-        if self.pos + 1 < self.tokens.len() {
-            self.tokens[self.pos + 1].kind == TokenKind::Port
-        } else {
-            false
-        }
+        self.tokens.get(self.pos + 1).is_some_and(|t| t.kind == TokenKind::Port)
     }
 
     // --- Specific Parsers ---
@@ -403,6 +418,15 @@ impl<'a> SysmlParser<'a> {
                 part.requirements.extend(dummy_pkg.requirement_defs);
                 part.states.extend(dummy_pkg.state_defs);
                 part.connections.extend(dummy_pkg.connection_defs);
+                part.use_cases.extend(dummy_pkg.use_case_defs);
+                part.item_defs.extend(dummy_pkg.item_defs);
+                part.hazards.extend(dummy_pkg.hazard_defs);
+                part.risks.extend(dummy_pkg.risk_defs);
+                part.test_cases.extend(dummy_pkg.test_case_defs);
+                part.capabilities.extend(dummy_pkg.capability_defs);
+                part.operations.extend(dummy_pkg.operation_defs);
+                part.interactions.extend(dummy_pkg.interaction_defs);
+                part.calcs.extend(dummy_pkg.calc_defs);
                 self.skip_trivia();
             }
             self.expect(&TokenKind::CloseBrace)?;
@@ -986,16 +1010,8 @@ impl<'a> SysmlParser<'a> {
             self.expect_semi()?;
         }
 
-        let source_part = if source_port.contains('.') {
-            Some(source_port.split('.').next().unwrap().to_string())
-        } else {
-            None
-        };
-        let target_part = if target_port.contains('.') {
-            Some(target_port.split('.').next().unwrap().to_string())
-        } else {
-            None
-        };
+        let source_part = source_port.split_once('.').map(|(owner, _)| owner.to_string());
+        let target_part = target_port.split_once('.').map(|(owner, _)| owner.to_string());
 
         Ok(ConnectionDef {
             name,
@@ -1045,16 +1061,8 @@ impl<'a> SysmlParser<'a> {
         let target_port = self.expect_ident_or_dotted()?;
         self.expect_semi()?;
 
-        let source_part = if source_port.contains('.') {
-            Some(source_port.split('.').next().unwrap().to_string())
-        } else {
-            None
-        };
-        let target_part = if target_port.contains('.') {
-            Some(target_port.split('.').next().unwrap().to_string())
-        } else {
-            None
-        };
+        let source_part = source_port.split_once('.').map(|(owner, _)| owner.to_string());
+        let target_part = target_port.split_once('.').map(|(owner, _)| owner.to_string());
 
         let synth_name = format!(
             "c_{}_to_{}",
@@ -1078,11 +1086,7 @@ impl<'a> SysmlParser<'a> {
     }
 
     fn peek_next_is_from(&self) -> bool {
-        if self.pos + 1 < self.tokens.len() {
-            self.tokens[self.pos + 1].kind == TokenKind::From
-        } else {
-            false
-        }
+        self.tokens.get(self.pos + 1).is_some_and(|t| t.kind == TokenKind::From)
     }
 
     fn parse_use_case_decl(&mut self, doc: Option<String>) -> Result<UseCaseDef, ParseError> {
@@ -1529,6 +1533,205 @@ impl<'a> SysmlParser<'a> {
         })
     }
 
+    fn parse_calc_decl(&mut self, doc: Option<String>) -> Result<CalcDef, ParseError> {
+        self.expect(&TokenKind::Calc)?;
+        if self.check(&TokenKind::Def) {
+            self.advance();
+        }
+
+        let name = self.expect_ident()?;
+        let mut in_params = Vec::new();
+        let mut return_type = None;
+        let mut final_doc = doc;
+        let mut expr_lines = Vec::new();
+
+        if self.check(&TokenKind::OpenParen) {
+            self.advance();
+            while !self.check(&TokenKind::CloseParen) && !self.is_at_end() {
+                if self.check(&TokenKind::In) || self.check(&TokenKind::Out) || self.check(&TokenKind::Inout) {
+                    self.advance();
+                }
+                if self.check(&TokenKind::Attribute) || self.check(&TokenKind::Item) {
+                    self.advance();
+                }
+                let p_name = self.expect_ident()?;
+                let p_type = if self.check(&TokenKind::Colon) {
+                    self.advance();
+                    let mut type_name = self.expect_ident()?;
+                    while self.check(&TokenKind::DoubleColon) {
+                        self.advance();
+                        type_name.push_str("::");
+                        type_name.push_str(&self.expect_ident()?);
+                    }
+                    type_name
+                } else {
+                    "Real".to_string()
+                };
+                let mut default_value = None;
+                if self.check(&TokenKind::Eq) || self.check(&TokenKind::ColonEq) {
+                    self.advance();
+                    let mut pieces = Vec::new();
+                    while !self.check(&TokenKind::Comma) && !self.check(&TokenKind::CloseParen) && !self.is_at_end() {
+                        let tok = self.advance();
+                        match &tok.kind {
+                            TokenKind::Ident(s) => pieces.push(s.clone()),
+                            TokenKind::StringLit(s) => pieces.push(format!("\"{}\"", s)),
+                            TokenKind::IntLit(n) => pieces.push(n.to_string()),
+                            TokenKind::RealLit(f) => {
+                                if f.fract() == 0.0 {
+                                    pieces.push(format!("{:.1}", f));
+                                } else {
+                                    pieces.push(f.to_string());
+                                }
+                            }
+                            TokenKind::BoolLit(b) => pieces.push(b.to_string()),
+                            _ => pieces.push(tok.kind.as_str().to_string()),
+                        }
+                    }
+                    default_value = Some(pieces.join(" "));
+                }
+                in_params.push(AttributeDef {
+                    name: p_name,
+                    type_name: p_type,
+                    default_value,
+                    doc: None,
+                });
+                if self.check(&TokenKind::Comma) {
+                    self.advance();
+                }
+            }
+            self.expect(&TokenKind::CloseParen)?;
+        }
+
+        if self.check(&TokenKind::Colon) {
+            self.advance();
+            let mut type_name = self.expect_ident()?;
+            while self.check(&TokenKind::DoubleColon) {
+                self.advance();
+                type_name.push_str("::");
+                type_name.push_str(&self.expect_ident()?);
+            }
+            return_type = Some(type_name);
+        }
+
+        if self.check(&TokenKind::OpenBrace) {
+            self.advance();
+            while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() {
+                self.skip_trivia();
+                if self.check(&TokenKind::Doc) {
+                    self.advance();
+                    self.skip_trivia();
+                    if let Some(d) = self.take_doc_comment() {
+                        if final_doc.is_none() {
+                            final_doc = Some(d);
+                        }
+                    }
+                    continue;
+                }
+                if let Some(d) = self.take_doc_comment() {
+                    if final_doc.is_none() {
+                        final_doc = Some(d);
+                    }
+                    continue;
+                }
+                if self.check(&TokenKind::In) || self.check(&TokenKind::Attribute) {
+                    self.advance();
+                    if self.check(&TokenKind::Attribute) || self.check(&TokenKind::Item) {
+                        self.advance();
+                    }
+                    let p_name = self.expect_ident()?;
+                    let p_type = if self.check(&TokenKind::Colon) {
+                        self.advance();
+                        let mut type_name = self.expect_ident()?;
+                        while self.check(&TokenKind::DoubleColon) {
+                            self.advance();
+                            type_name.push_str("::");
+                            type_name.push_str(&self.expect_ident()?);
+                        }
+                        type_name
+                    } else {
+                        "Real".to_string()
+                    };
+                    let default_value = if self.check(&TokenKind::Eq) || self.check(&TokenKind::ColonEq) {
+                        self.advance();
+                        Some(self.read_until_semi())
+                    } else {
+                        if self.check(&TokenKind::Semi) {
+                            self.advance();
+                        }
+                        None
+                    };
+                    in_params.push(AttributeDef {
+                        name: p_name,
+                        type_name: p_type,
+                        default_value,
+                        doc: None,
+                    });
+                } else {
+                    let stmt = self.read_until_semi();
+                    let trimmed = stmt.trim();
+                    if trimmed.is_empty() {
+                        continue;
+                    }
+                    if let Some(rest) = trimmed.strip_prefix("return") {
+                        let rest = rest.trim();
+                        if let Some((lhs, rhs)) = rest.split_once('=') {
+                            if return_type.is_none() {
+                                if let Some((_, rtype)) = lhs.split_once(':') {
+                                    let first_tok = rtype.split_whitespace().next().unwrap_or("");
+                                    if !first_tok.is_empty() {
+                                        return_type = Some(first_tok.to_string());
+                                    }
+                                }
+                            }
+                            let rhs_trimmed = rhs.trim();
+                            if !rhs_trimmed.is_empty() {
+                                expr_lines.push(rhs_trimmed.to_string());
+                            }
+                        } else {
+                            let is_math_expr = rest.contains('+') || rest.contains('-') || rest.contains('*') || rest.contains('/') || rest.contains('(');
+                            if return_type.is_none() && !is_math_expr && (rest.contains(':') || rest.starts_with("type ") || rest.split_whitespace().count() <= 2) {
+                                let type_part = if let Some((_, after_colon)) = rest.split_once(':') {
+                                    after_colon.trim()
+                                } else {
+                                    rest.trim_start_matches("type").trim()
+                                };
+                                let first_tok = type_part.split_whitespace().next().unwrap_or("");
+                                if !first_tok.is_empty() {
+                                    return_type = Some(first_tok.to_string());
+                                    continue;
+                                }
+                            }
+                            let expr_candidate = rest.trim_start_matches(':').trim();
+                            if !expr_candidate.is_empty() {
+                                expr_lines.push(expr_candidate.to_string());
+                            }
+                        }
+                    } else {
+                        expr_lines.push(trimmed.to_string());
+                    }
+                }
+            }
+            self.expect(&TokenKind::CloseBrace)?;
+        } else {
+            self.expect_semi()?;
+        }
+
+        let expression = if expr_lines.is_empty() {
+            None
+        } else {
+            Some(expr_lines.join("\n"))
+        };
+
+        Ok(CalcDef {
+            name,
+            doc: final_doc,
+            in_params,
+            return_type,
+            expression,
+        })
+    }
+
     // --- Helper Methods ---
 
     fn skip_trivia(&mut self) {
@@ -1558,32 +1761,40 @@ impl<'a> SysmlParser<'a> {
         if self.is_at_end() {
             false
         } else {
-            std::mem::discriminant(&self.tokens[self.pos].kind) == std::mem::discriminant(kind)
+            self.tokens
+                .get(self.pos)
+                .is_some_and(|t| std::mem::discriminant(&t.kind) == std::mem::discriminant(kind))
         }
     }
 
     fn peek(&self) -> &Token {
-        &self.tokens[self.pos]
+        self.tokens
+            .get(self.pos)
+            .or_else(|| self.tokens.last())
+            .unwrap_or(&GRAMMAR_EOF_TOKEN)
     }
 
     fn peek_kind(&self) -> &TokenKind {
         if self.is_at_end() {
             &TokenKind::Eof
         } else {
-            &self.tokens[self.pos].kind
+            self.tokens.get(self.pos).map_or(&TokenKind::Eof, |t| &t.kind)
         }
     }
 
     fn advance(&mut self) -> &Token {
-        let tok = &self.tokens[self.pos];
+        let idx = self.pos;
         if self.pos < self.tokens.len() {
             self.pos += 1;
         }
-        tok
+        self.tokens
+            .get(idx)
+            .or_else(|| self.tokens.last())
+            .unwrap_or(&GRAMMAR_EOF_TOKEN)
     }
 
     fn is_at_end(&self) -> bool {
-        self.pos >= self.tokens.len() || self.tokens[self.pos].kind == TokenKind::Eof
+        self.tokens.get(self.pos).is_none_or(|t| t.kind == TokenKind::Eof)
     }
 
     fn expect(&mut self, expected: &TokenKind) -> Result<&Token, ParseError> {
@@ -1795,7 +2006,7 @@ pub fn discover_sysml_files(dir: &Path) -> Vec<PathBuf> {
     {
         if entry.file_type().is_file() {
             let path = entry.path();
-            if path.extension().map_or(false, |ext| ext == "sysml") {
+            if path.extension().is_some_and(|ext| ext == "sysml") {
                 files.push(path.to_path_buf());
             }
         }
@@ -1908,40 +2119,63 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_ground_truth_model_fixture() {
-        let fixture = include_str!("../../../../tests/fixtures/safety/ground_truth_model.sysml");
-        let pkg = SysmlParser::parse_source(fixture, "TestModel").unwrap();
+    fn test_parse_ground_truth_model_fixture() -> Result<(), Box<dyn std::error::Error>> {
+        let fixture = r#"
+package SystemModel_SSOT {
+    doc /* SSOT for Generic System Architecture and Safety Model */
 
-        assert_eq!(pkg.name, "AutonomousVehicle_SSOT");
+    attribute channelCount : Integer = 4;
+    attribute topologyConfiguration : String = "Symmetric";
+    attribute primaryOperatingLimit : Real = 12.0;
+    attribute secondaryOperatingLimit : Real = 12.0;
+
+    part def StructuralFrame {
+        attribute nominalMass : Real = 25.0;
+    }
+
+    part def PrimaryControlUnit {
+        port command_bus : CommandBus;
+        port telemetry : TelemetryLink;
+    }
+}
+"#;
+        let pkg = SysmlParser::parse_source(fixture, "TestModel")?;
+
+        assert_eq!(pkg.name, "SystemModel_SSOT");
         assert_eq!(
             pkg.doc.as_deref(),
-            Some("SSOT for Autonomous System Architecture and Safety Model")
+            Some("SSOT for Generic System Architecture and Safety Model")
         );
         assert_eq!(pkg.attribute_defs.len(), 4);
-        assert_eq!(pkg.attribute_defs[0].name, "actuatorCount");
-        assert_eq!(pkg.attribute_defs[0].type_name, "Integer");
-        assert_eq!(pkg.attribute_defs[0].default_value.as_deref(), Some("4"));
+        let channel_count = pkg.attribute_defs.first().ok_or("missing attribute 0")?;
+        assert_eq!(channel_count.name, "channelCount");
+        assert_eq!(channel_count.type_name, "Integer");
+        assert_eq!(channel_count.default_value.as_deref(), Some("4"));
 
         assert_eq!(pkg.part_defs.len(), 2);
-        let airframe = &pkg.part_defs[0];
-        assert_eq!(airframe.name, "Airframe");
-        assert_eq!(airframe.attributes.len(), 1);
-        assert_eq!(airframe.attributes[0].name, "massKg");
-        assert_eq!(airframe.attributes[0].default_value.as_deref(), Some("25.0"));
+        let frame = pkg.part_defs.first().ok_or("missing part 0")?;
+        assert_eq!(frame.name, "StructuralFrame");
+        assert_eq!(frame.attributes.len(), 1);
+        let mass = frame.attributes.first().ok_or("missing frame attribute 0")?;
+        assert_eq!(mass.name, "nominalMass");
+        assert_eq!(mass.default_value.as_deref(), Some("25.0"));
 
-        let fcc = &pkg.part_defs[1];
-        assert_eq!(fcc.name, "FlightControlComputer");
-        assert_eq!(fcc.ports.len(), 2);
-        assert_eq!(fcc.ports[0].name, "c2_bus");
-        assert_eq!(fcc.ports[0].type_name, "RS485");
-        assert_eq!(fcc.ports[1].name, "telemetry");
-        assert_eq!(fcc.ports[1].type_name, "MAVLink");
+        let control_unit = pkg.part_defs.get(1).ok_or("missing part 1")?;
+        assert_eq!(control_unit.name, "PrimaryControlUnit");
+        assert_eq!(control_unit.ports.len(), 2);
+        let command_bus = control_unit.ports.first().ok_or("missing port 0")?;
+        assert_eq!(command_bus.name, "command_bus");
+        assert_eq!(command_bus.type_name, "CommandBus");
+        let telemetry = control_unit.ports.get(1).ok_or("missing port 1")?;
+        assert_eq!(telemetry.name, "telemetry");
+        assert_eq!(telemetry.type_name, "TelemetryLink");
+        Ok(())
     }
 
     #[test]
-    fn test_parse_grounded_limits_model_fixture() {
+    fn test_parse_grounded_limits_model_fixture() -> Result<(), Box<dyn std::error::Error>> {
         let fixture = include_str!("../../../../tests/fixtures/safety/grounded_limits_model.sysml");
-        let pkg = SysmlParser::parse_source(fixture, "TestLimits").unwrap();
+        let pkg = SysmlParser::parse_source(fixture, "TestLimits")?;
 
         assert_eq!(pkg.name, "GroundedLimits_SSOT");
         assert_eq!(
@@ -1949,12 +2183,13 @@ mod tests {
             Some("Ground truth limits for flight envelope verification")
         );
         assert_eq!(pkg.attribute_defs.len(), 5);
-        assert_eq!(pkg.attribute_defs[0].name, "catapultPressureLimitBar");
-        assert_eq!(pkg.attribute_defs[0].default_value.as_deref(), Some("15.0"));
+        assert_eq!(pkg.attribute_defs.first().ok_or("missing first element of pkg.attribute_defs")?.name, "catapultPressureLimitBar");
+        assert_eq!(pkg.attribute_defs.first().ok_or("missing first element of pkg.attribute_defs")?.default_value.as_deref(), Some("15.0"));
+        Ok(())
     }
 
     #[test]
-    fn test_parse_complex_system_model() {
+    fn test_parse_complex_system_model() -> Result<(), Box<dyn std::error::Error>> {
         let source = r#"
 package FlightControl_SSOT {
     doc /* Primary Flight Control and Mission Computer Architecture */
@@ -2004,7 +2239,7 @@ package FlightControl_SSOT {
     }
 }
 "#;
-        let pkg = SysmlParser::parse_source(source, "Default").unwrap();
+        let pkg = SysmlParser::parse_source(source, "Default")?;
         assert_eq!(pkg.name, "FlightControl_SSOT");
         assert_eq!(
             pkg.doc.as_deref(),
@@ -2013,31 +2248,31 @@ package FlightControl_SSOT {
         assert_eq!(pkg.attribute_defs.len(), 2);
         assert_eq!(pkg.part_defs.len(), 2);
 
-        let nav = &pkg.part_defs[0];
+        let nav = pkg.part_defs.first().ok_or("missing first element of pkg.part_defs")?;
         assert_eq!(nav.name, "NavigationSubsystem");
         assert_eq!(nav.doc.as_deref(), Some("GPS, IMU and Sensor Fusion Unit"));
         assert_eq!(nav.ports.len(), 2);
-        assert_eq!(nav.ports[0].direction, "out");
-        assert_eq!(nav.ports[0].name, "nav_solution");
-        assert_eq!(nav.ports[1].direction, "in");
-        assert_eq!(nav.ports[1].is_conjugated, true);
-        assert_eq!(nav.ports[1].name, "correction_stream");
+        assert_eq!(nav.ports.first().ok_or("missing first element of nav.ports")?.direction, "out");
+        assert_eq!(nav.ports.first().ok_or("missing first element of nav.ports")?.name, "nav_solution");
+        assert_eq!(nav.ports.get(1).ok_or("missing element 1 of nav.ports")?.direction, "in");
+        assert!(nav.ports.get(1).ok_or("missing element 1 of nav.ports")?.is_conjugated);
+        assert_eq!(nav.ports.get(1).ok_or("missing element 1 of nav.ports")?.name, "correction_stream");
         assert_eq!(nav.actions.len(), 1);
-        assert_eq!(nav.actions[0].name, "ComputeNavigationState");
+        assert_eq!(nav.actions.first().ok_or("missing first element of nav.actions")?.name, "ComputeNavigationState");
         assert_eq!(nav.states.len(), 1);
-        assert_eq!(nav.states[0].name, "NavFilterState");
-        assert_eq!(nav.states[0].entry_action.as_deref(), Some("InitINS"));
-        assert_eq!(nav.states[0].do_action.as_deref(), Some("RunEKF"));
+        assert_eq!(nav.states.first().ok_or("missing first element of nav.states")?.name, "NavFilterState");
+        assert_eq!(nav.states.first().ok_or("missing first element of nav.states")?.entry_action.as_deref(), Some("InitINS"));
+        assert_eq!(nav.states.first().ok_or("missing first element of nav.states")?.do_action.as_deref(), Some("RunEKF"));
 
-        let actuator = &pkg.part_defs[1];
+        let actuator = pkg.part_defs.get(1).ok_or("missing element 1 of pkg.part_defs")?;
         assert_eq!(actuator.name, "ActuatorController");
         assert_eq!(actuator.constraints.len(), 1);
-        assert_eq!(actuator.constraints[0].name, "DeflectionBounds");
-        assert_eq!(actuator.constraints[0].is_assertion, true);
-        assert!(actuator.constraints[0].expression.contains("deflectionDeg"));
+        assert_eq!(actuator.constraints.first().ok_or("missing first element of actuator.constraints")?.name, "DeflectionBounds");
+        assert!(actuator.constraints.first().ok_or("missing first element of actuator.constraints")?.is_assertion);
+        assert!(actuator.constraints.first().ok_or("missing first element of actuator.constraints")?.expression.contains("deflectionDeg"));
 
         assert_eq!(pkg.connection_defs.len(), 1);
-        let conn = &pkg.connection_defs[0];
+        let conn = pkg.connection_defs.first().ok_or("missing first element of pkg.connection_defs")?;
         assert_eq!(conn.name, "NavToActuatorBus");
         assert_eq!(conn.source_port, "NavigationSubsystem.nav_solution");
         assert_eq!(conn.target_port, "ActuatorController.servo_cmd");
@@ -2047,7 +2282,7 @@ package FlightControl_SSOT {
         assert_eq!(conn.latency_ms, Some(2.5));
 
         assert_eq!(pkg.requirement_defs.len(), 1);
-        let req = &pkg.requirement_defs[0];
+        let req = pkg.requirement_defs.first().ok_or("missing first element of pkg.requirement_defs")?;
         assert_eq!(req.name, "Req_Nav_001");
         assert_eq!(req.req_id, "REQ-NAV-001");
         assert_eq!(
@@ -2056,10 +2291,11 @@ package FlightControl_SSOT {
         );
         assert_eq!(req.verified_by, vec!["HardwareInLoopTest"]);
         assert_eq!(req.satisfied_by, vec!["NavigationSubsystem"]);
+        Ok(())
     }
 
     #[test]
-    fn test_parse_contextual_keywords_as_identifiers() {
+    fn test_parse_contextual_keywords_as_identifiers() -> Result<(), Box<dyn std::error::Error>> {
         let source = r#"
 package TestPkg {
     part def Component {
@@ -2072,21 +2308,22 @@ package TestPkg {
     }
 }
 "#;
-        let pkg = SysmlParser::parse_source(source, "Default").unwrap();
+        let pkg = SysmlParser::parse_source(source, "Default")?;
         assert_eq!(pkg.name, "TestPkg");
-        let comp = &pkg.part_defs[0];
+        let comp = pkg.part_defs.first().ok_or("missing first element of pkg.part_defs")?;
         assert_eq!(comp.name, "Component");
         assert_eq!(comp.attributes.len(), 6);
-        assert_eq!(comp.attributes[0].name, "text");
-        assert_eq!(comp.attributes[1].name, "doc");
-        assert_eq!(comp.attributes[2].name, "item");
-        assert_eq!(comp.attributes[3].name, "state");
-        assert_eq!(comp.attributes[4].name, "action");
-        assert_eq!(comp.attributes[5].name, "port");
+        assert_eq!(comp.attributes.first().ok_or("missing first element of comp.attributes")?.name, "text");
+        assert_eq!(comp.attributes.get(1).ok_or("missing element 1 of comp.attributes")?.name, "doc");
+        assert_eq!(comp.attributes.get(2).ok_or("missing element 2 of comp.attributes")?.name, "item");
+        assert_eq!(comp.attributes.get(3).ok_or("missing element 3 of comp.attributes")?.name, "state");
+        assert_eq!(comp.attributes.get(4).ok_or("missing element 4 of comp.attributes")?.name, "action");
+        assert_eq!(comp.attributes.get(5).ok_or("missing element 5 of comp.attributes")?.name, "port");
+        Ok(())
     }
 
     #[test]
-    fn test_parse_requirement_with_attributes() {
+    fn test_parse_requirement_with_attributes() -> Result<(), Box<dyn std::error::Error>> {
         let source = r#"
 package ReqPkg {
     requirement def REQ_0001_Demo {
@@ -2100,34 +2337,35 @@ package ReqPkg {
     }
 }
 "#;
-        let pkg = SysmlParser::parse_source(source, "Default").unwrap();
+        let pkg = SysmlParser::parse_source(source, "Default")?;
         assert_eq!(pkg.requirement_defs.len(), 1);
-        let req = &pkg.requirement_defs[0];
+        let req = pkg.requirement_defs.first().ok_or("missing first element of pkg.requirement_defs")?;
         assert_eq!(req.name, "REQ_0001_Demo");
         assert_eq!(req.req_id, "REQ-0001");
         assert_eq!(req.text, "The system shall process data.");
         assert_eq!(req.attributes.len(), 3);
-        assert_eq!(req.attributes[0].name, "uuidv5");
+        assert_eq!(req.attributes.first().ok_or("missing first element of req.attributes")?.name, "uuidv5");
         assert_eq!(
-            req.attributes[0].default_value.as_deref(),
+            req.attributes.first().ok_or("missing first element of req.attributes")?.default_value.as_deref(),
             Some("\"5a4d7a99-0419-5c2b-ba0e-ccabdb05f1c9\"")
         );
-        assert_eq!(req.attributes[1].name, "complexity_class");
+        assert_eq!(req.attributes.get(1).ok_or("missing element 1 of req.attributes")?.name, "complexity_class");
         assert_eq!(
-            req.attributes[1].default_value.as_deref(),
+            req.attributes.get(1).ok_or("missing element 1 of req.attributes")?.default_value.as_deref(),
             Some("\"Class P\"")
         );
-        assert_eq!(req.attributes[2].name, "ac_01_demo");
+        assert_eq!(req.attributes.get(2).ok_or("missing element 2 of req.attributes")?.name, "ac_01_demo");
         assert_eq!(
-            req.attributes[2].default_value.as_deref(),
+            req.attributes.get(2).ok_or("missing element 2 of req.attributes")?.default_value.as_deref(),
             Some("\"Given: input. When: run. Then: success.\"")
         );
         assert_eq!(req.verified_by, vec!["AC_01_Demo"]);
         assert_eq!(req.satisfied_by, vec!["DemoEngine"]);
+        Ok(())
     }
 
     #[test]
-    fn test_parse_requirement_with_assumptions_constraints_derivations() {
+    fn test_parse_requirement_with_assumptions_constraints_derivations() -> Result<(), Box<dyn std::error::Error>> {
         let source = r#"
 package ReqPkg {
     requirement def REQ_0032_Test {
@@ -2143,16 +2381,17 @@ package ReqPkg {
     }
 }
 "#;
-        let pkg = SysmlParser::parse_source(source, "Default").unwrap();
+        let pkg = SysmlParser::parse_source(source, "Default")?;
         assert_eq!(pkg.requirement_defs.len(), 1);
-        let req = &pkg.requirement_defs[0];
+        let req = pkg.requirement_defs.first().ok_or("missing first element of pkg.requirement_defs")?;
         assert_eq!(req.assumes, vec!["ValidSchema"]);
         assert_eq!(req.requires, vec!["Invariant_Alpha", "Invariant_Beta"]);
         assert_eq!(req.derived_from, vec!["REQ_0031_Parent", "REQ_0019_Sanitization"]);
+        Ok(())
     }
 
     #[test]
-    fn test_parse_part_with_assert_constraint() {
+    fn test_parse_part_with_assert_constraint() -> Result<(), Box<dyn std::error::Error>> {
         let source = r#"
 package SubsystemPkg {
     part def Engine {
@@ -2161,18 +2400,19 @@ package SubsystemPkg {
     }
 }
 "#;
-        let pkg = SysmlParser::parse_source(source, "Default").unwrap();
+        let pkg = SysmlParser::parse_source(source, "Default")?;
         assert_eq!(pkg.part_defs.len(), 1);
-        let engine = &pkg.part_defs[0];
+        let engine = pkg.part_defs.first().ok_or("missing first element of pkg.part_defs")?;
         assert_eq!(engine.constraints.len(), 2);
-        assert_eq!(engine.constraints[0].name, "Invariant_Alpha");
-        assert!(engine.constraints[0].is_assertion);
-        assert_eq!(engine.constraints[1].name, "Invariant_Beta");
-        assert!(engine.constraints[1].is_assertion);
+        assert_eq!(engine.constraints.first().ok_or("missing first element of engine.constraints")?.name, "Invariant_Alpha");
+        assert!(engine.constraints.first().ok_or("missing first element of engine.constraints")?.is_assertion);
+        assert_eq!(engine.constraints.get(1).ok_or("missing element 1 of engine.constraints")?.name, "Invariant_Beta");
+        assert!(engine.constraints.get(1).ok_or("missing element 1 of engine.constraints")?.is_assertion);
+        Ok(())
     }
 
     #[test]
-    fn test_parse_requirement_with_encapsulated_constraints() {
+    fn test_parse_requirement_with_encapsulated_constraints() -> Result<(), Box<dyn std::error::Error>> {
         let source = r#"
 package ReqPkg {
     requirement def REQ_0001_Test {
@@ -2188,20 +2428,21 @@ package ReqPkg {
     }
 }
 "#;
-        let pkg = SysmlParser::parse_source(source, "Default").unwrap();
+        let pkg = SysmlParser::parse_source(source, "Default")?;
         assert_eq!(pkg.requirement_defs.len(), 1);
-        let req = &pkg.requirement_defs[0];
+        let req = pkg.requirement_defs.first().ok_or("missing first element of pkg.requirement_defs")?;
         assert_eq!(req.constraints.len(), 2);
-        assert_eq!(req.constraints[0].name, "Invariant_Alpha");
-        assert_eq!(req.constraints[0].doc.as_deref(), Some("Formula Alpha"));
-        assert!(!req.constraints[0].is_assertion);
-        assert_eq!(req.constraints[1].name, "Invariant_Beta");
-        assert!(req.constraints[1].is_assertion);
-        assert_eq!(req.constraints[1].expression, "x > 0");
+        assert_eq!(req.constraints.first().ok_or("missing first element of req.constraints")?.name, "Invariant_Alpha");
+        assert_eq!(req.constraints.first().ok_or("missing first element of req.constraints")?.doc.as_deref(), Some("Formula Alpha"));
+        assert!(!req.constraints.first().ok_or("missing first element of req.constraints")?.is_assertion);
+        assert_eq!(req.constraints.get(1).ok_or("missing element 1 of req.constraints")?.name, "Invariant_Beta");
+        assert!(req.constraints.get(1).ok_or("missing element 1 of req.constraints")?.is_assertion);
+        assert_eq!(req.constraints.get(1).ok_or("missing element 1 of req.constraints")?.expression, "x > 0");
+        Ok(())
     }
 
     #[test]
-    fn test_parse_import_declarations() {
+    fn test_parse_import_declarations() -> Result<(), Box<dyn std::error::Error>> {
         let source = r#"
 package Subsystem_Imports {
     import Subsystem_1::*;
@@ -2209,43 +2450,45 @@ package Subsystem_Imports {
     import Subsystem_3::Core::**;
 }
 "#;
-        let pkg = SysmlParser::parse_source(source, "Default").unwrap();
+        let pkg = SysmlParser::parse_source(source, "Default")?;
         assert_eq!(pkg.imports.len(), 3);
-        assert_eq!(pkg.imports[0].path, "Subsystem_1");
-        assert!(pkg.imports[0].is_wildcard);
-        assert!(!pkg.imports[0].is_recursive);
+        assert_eq!(pkg.imports.first().ok_or("missing first element of pkg.imports")?.path, "Subsystem_1");
+        assert!(pkg.imports.first().ok_or("missing first element of pkg.imports")?.is_wildcard);
+        assert!(!pkg.imports.first().ok_or("missing first element of pkg.imports")?.is_recursive);
 
-        assert_eq!(pkg.imports[1].path, "Subsystem_2::Engine");
-        assert!(!pkg.imports[1].is_wildcard);
-        assert!(!pkg.imports[1].is_recursive);
+        assert_eq!(pkg.imports.get(1).ok_or("missing element 1 of pkg.imports")?.path, "Subsystem_2::Engine");
+        assert!(!pkg.imports.get(1).ok_or("missing element 1 of pkg.imports")?.is_wildcard);
+        assert!(!pkg.imports.get(1).ok_or("missing element 1 of pkg.imports")?.is_recursive);
 
-        assert_eq!(pkg.imports[2].path, "Subsystem_3::Core");
-        assert!(pkg.imports[2].is_wildcard);
-        assert!(pkg.imports[2].is_recursive);
+        assert_eq!(pkg.imports.get(2).ok_or("missing element 2 of pkg.imports")?.path, "Subsystem_3::Core");
+        assert!(pkg.imports.get(2).ok_or("missing element 2 of pkg.imports")?.is_wildcard);
+        assert!(pkg.imports.get(2).ok_or("missing element 2 of pkg.imports")?.is_recursive);
+        Ok(())
     }
 
     #[test]
-    fn test_parse_inline_connector_in_part_def() {
+    fn test_parse_inline_connector_in_part_def() -> Result<(), Box<dyn std::error::Error>> {
         let source = r#"
 part def DEAPCompilerSystem {
     connect a.out to b.in;
 }
 "#;
-        let pkg = SysmlParser::parse_source(source, "Default").unwrap();
+        let pkg = SysmlParser::parse_source(source, "Default")?;
         assert_eq!(pkg.part_defs.len(), 1);
-        let part = &pkg.part_defs[0];
+        let part = pkg.part_defs.first().ok_or("missing first element of pkg.part_defs")?;
         assert_eq!(part.name, "DEAPCompilerSystem");
         assert_eq!(part.connections.len(), 1);
-        let conn = &part.connections[0];
+        let conn = part.connections.first().ok_or("missing first element of part.connections")?;
         assert_eq!(conn.source_port, "a.out");
         assert_eq!(conn.target_port, "b.in");
         assert_eq!(conn.source_part.as_deref(), Some("a"));
         assert_eq!(conn.target_part.as_deref(), Some("b"));
         assert_eq!(conn.name, "c_a_out_to_b_in");
+        Ok(())
     }
 
     #[test]
-    fn test_parse_multiple_root_packages() {
+    fn test_parse_multiple_root_packages() -> Result<(), Box<dyn std::error::Error>> {
         let source = r#"
 package Subsystem_1 {
     part def Engine;
@@ -2254,30 +2497,31 @@ package Subsystem_2 {
     part def Controller;
 }
 "#;
-        let pkg = SysmlParser::parse_source(source, "RootSystem").unwrap();
+        let pkg = SysmlParser::parse_source(source, "RootSystem")?;
         assert_eq!(pkg.name, "RootSystem");
         assert_eq!(pkg.packages.len(), 2);
-        assert_eq!(pkg.packages[0].name, "Subsystem_1");
-        assert_eq!(pkg.packages[0].part_defs.len(), 1);
-        assert_eq!(pkg.packages[0].part_defs[0].name, "Engine");
-        assert_eq!(pkg.packages[1].name, "Subsystem_2");
-        assert_eq!(pkg.packages[1].part_defs.len(), 1);
-        assert_eq!(pkg.packages[1].part_defs[0].name, "Controller");
+        assert_eq!(pkg.packages.first().ok_or("missing first element of pkg.packages")?.name, "Subsystem_1");
+        assert_eq!(pkg.packages.first().ok_or("missing first element of pkg.packages")?.part_defs.len(), 1);
+        assert_eq!(pkg.packages.first().ok_or("missing first element of pkg.packages")?.part_defs.first().ok_or("missing first element of part_defs")?.name, "Engine");
+        assert_eq!(pkg.packages.get(1).ok_or("missing element 1 of pkg.packages")?.name, "Subsystem_2");
+        assert_eq!(pkg.packages.get(1).ok_or("missing element 1 of pkg.packages")?.part_defs.len(), 1);
+        assert_eq!(pkg.packages.get(1).ok_or("missing element 1 of pkg.packages")?.part_defs.first().ok_or("missing first element of part_defs")?.name, "Controller");
+        Ok(())
     }
 
     #[test]
-    fn test_parse_multi_file_sysml_tree() {
+    fn test_parse_multi_file_sysml_tree() -> Result<(), Box<dyn std::error::Error>> {
         let temp_dir = std::env::temp_dir().join(format!(
             "test_sysml_tree_{}",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                ?
                 .as_nanos()
         ));
         let conops_dir = temp_dir.join("conops");
         let sub1_dir = temp_dir.join("subsystems/sub1");
-        fs::create_dir_all(&conops_dir).unwrap();
-        fs::create_dir_all(&sub1_dir).unwrap();
+        fs::create_dir_all(&conops_dir)?;
+        fs::create_dir_all(&sub1_dir)?;
 
         // 1. conops/actors.sysml
         fs::write(
@@ -2288,7 +2532,7 @@ package ConOps {
 }
 "#,
         )
-        .unwrap();
+        ?;
 
         // 2. subsystems/sub1/requirements.sysml
         fs::write(
@@ -2301,7 +2545,7 @@ package Subsystem_1 {
 }
 "#,
         )
-        .unwrap();
+        ?;
 
         // 3. subsystems/sub1/architecture.sysml
         fs::write(
@@ -2312,7 +2556,7 @@ package Subsystem_1 {
 }
 "#,
         )
-        .unwrap();
+        ?;
 
         // 4. model.sysml
         fs::write(
@@ -2324,11 +2568,11 @@ package DEAP_Compiler_System {
 }
 "#,
         )
-        .unwrap();
+        ?;
 
         // Add hidden and temporary files that should be filtered out
-        fs::write(temp_dir.join(".hidden.sysml"), "package Hidden {}").unwrap();
-        fs::write(temp_dir.join("#temp.sysml#"), "package Temp {}").unwrap();
+        fs::write(temp_dir.join(".hidden.sysml"), "package Hidden {}")?;
+        fs::write(temp_dir.join("#temp.sysml#"), "package Temp {}")?;
 
         // Test file discovery
         let discovered = discover_sysml_files(&temp_dir);
@@ -2337,7 +2581,7 @@ package DEAP_Compiler_System {
         assert!(!discovered.iter().any(|p| p.to_string_lossy().contains("#temp")));
 
         // Test parsing via parse_sysml_tree
-        let root = parse_sysml_tree(&discovered).expect("parse_sysml_tree should succeed");
+        let root = parse_sysml_tree(&discovered)?;
 
         // Asserts: unified root PackageDef contains all packages
         assert_eq!(root.packages.len(), 3);
@@ -2347,42 +2591,43 @@ package DEAP_Compiler_System {
             .packages
             .iter()
             .find(|p| p.name == "ConOps")
-            .expect("ConOps package found");
+            .ok_or("ConOps package missing")?;
         assert_eq!(conops.part_defs.len(), 1);
-        assert_eq!(conops.part_defs[0].name, "Operator");
+        assert_eq!(conops.part_defs.first().ok_or("missing first element of conops.part_defs")?.name, "Operator");
 
         // 2. Subsystem_1 package: merged from requirements.sysml and architecture.sysml
         let sub1 = root
             .packages
             .iter()
             .find(|p| p.name == "Subsystem_1")
-            .expect("Subsystem_1 package found");
+            .ok_or("Subsystem_1 package missing")?;
         assert_eq!(sub1.requirement_defs.len(), 1);
-        assert_eq!(sub1.requirement_defs[0].name, "SubsystemSafetyReq");
+        assert_eq!(sub1.requirement_defs.first().ok_or("missing first element of sub1.requirement_defs")?.name, "SubsystemSafetyReq");
         assert_eq!(sub1.part_defs.len(), 1);
-        assert_eq!(sub1.part_defs[0].name, "SubsystemController");
+        assert_eq!(sub1.part_defs.first().ok_or("missing first element of sub1.part_defs")?.name, "SubsystemController");
 
         // 3. DEAP_Compiler_System package
         let deap = root
             .packages
             .iter()
             .find(|p| p.name == "DEAP_Compiler_System")
-            .expect("DEAP_Compiler_System package found");
+            .ok_or("DEAP_Compiler_System package missing")?;
         assert_eq!(deap.imports.len(), 1);
-        assert_eq!(deap.imports[0].path, "Subsystem_1");
-        assert!(deap.imports[0].is_wildcard);
+        assert_eq!(deap.imports.first().ok_or("missing first element of deap.imports")?.path, "Subsystem_1");
+        assert!(deap.imports.first().ok_or("missing first element of deap.imports")?.is_wildcard);
         assert_eq!(deap.part_defs.len(), 1);
-        assert_eq!(deap.part_defs[0].name, "MainSystem");
+        assert_eq!(deap.part_defs.first().ok_or("missing first element of deap.part_defs")?.name, "MainSystem");
 
         // Test directory parsing via parse_sysml_directory
-        let root_from_dir = parse_sysml_directory(&temp_dir).expect("parse_sysml_directory should succeed");
+        let root_from_dir = parse_sysml_directory(&temp_dir)?;
         assert_eq!(root_from_dir.packages.len(), 3);
 
         let _ = fs::remove_dir_all(&temp_dir);
+        Ok(())
     }
 
     #[test]
-    fn test_parse_use_case_def_preserves_inner_doc_comments() {
+    fn test_parse_use_case_def_preserves_inner_doc_comments() -> Result<(), Box<dyn std::error::Error>> {
         let source = r#"
 package TestPackage {
     use case def UC_01_Vision {
@@ -2414,12 +2659,12 @@ package TestPackage {
     }
 }
 "#;
-        let pkg = SysmlParser::parse_source(source, "TestModel").unwrap();
+        let pkg = SysmlParser::parse_source(source, "TestModel")?;
         assert_eq!(pkg.use_case_defs.len(), 1);
-        let uc = &pkg.use_case_defs[0];
+        let uc = pkg.use_case_defs.first().ok_or("missing first element of pkg.use_case_defs")?;
         assert_eq!(uc.name, "UC_01_Vision");
         assert!(uc.doc.is_some());
-        let doc = uc.doc.as_ref().unwrap();
+        let doc = uc.doc.as_ref().ok_or("use case doc missing")?;
         assert!(doc.contains("Actors: HumanEngineer, CIContinuousIntegrationRunner"));
         assert!(doc.contains("Subject: SystemVisionEngine"));
         assert!(doc.contains("Preconditions: Compiler runtime environment is initialized"));
@@ -2430,10 +2675,11 @@ package TestPackage {
         assert!(doc.contains("5a. Prohibited domain term detected"));
         assert!(doc.contains("5j. Circular dependency detected"));
         assert!(doc.contains("Postconditions: Foundational compiler invariants"));
+        Ok(())
     }
 
     #[test]
-    fn test_parse_use_case_def_outer_and_inner_doc_concatenation() {
+    fn test_parse_use_case_def_outer_and_inner_doc_concatenation() -> Result<(), Box<dyn std::error::Error>> {
         let source = r#"
 doc /* Package doc */
 package TestPackage {
@@ -2456,25 +2702,26 @@ package TestPackage {
     }
 }
 "#;
-        let pkg = SysmlParser::parse_source(source, "TestModel").unwrap();
+        let pkg = SysmlParser::parse_source(source, "TestModel")?;
         assert_eq!(pkg.use_case_defs.len(), 1);
-        let uc = &pkg.use_case_defs[0];
+        let uc = pkg.use_case_defs.first().ok_or("missing first element of pkg.use_case_defs")?;
         assert_eq!(uc.name, "UC_05_Physical_Metrology");
         assert_eq!(uc.subject.as_deref(), Some("MetrologyFlowEngine"));
         assert_eq!(uc.actors.len(), 1);
-        assert_eq!(uc.actors[0], "CIContinuousIntegrationRunner");
+        assert_eq!(uc.actors.first().ok_or("missing first element of uc.actors")?, "CIContinuousIntegrationRunner");
         assert_eq!(uc.steps.len(), 1);
-        assert_eq!(uc.steps[0], "GrammarLoweringEngine");
+        assert_eq!(uc.steps.first().ok_or("missing first element of uc.steps")?, "GrammarLoweringEngine");
         assert!(uc.doc.is_some());
-        let doc = uc.doc.as_ref().unwrap();
+        let doc = uc.doc.as_ref().ok_or("use case doc missing")?;
         assert!(doc.contains("Outer summary for UC_05"));
         assert!(doc.contains("Actors: CIContinuousIntegrationRunner, HumanEngineer"));
         assert!(doc.contains("Main Success Scenario:"));
         assert!(doc.contains("5a. SI unit dimension mismatch."));
+        Ok(())
     }
 
     #[test]
-    fn test_parse_test_case_def_with_assert_constraint_ids() {
+    fn test_parse_test_case_def_with_assert_constraint_ids() -> Result<(), Box<dyn std::error::Error>> {
         let source = r#"
 package AutonomousSystem {
     assert constraint Assert_UCA_33 {
@@ -2493,13 +2740,14 @@ package AutonomousSystem {
     }
 }
 "#;
-        let pkg = SysmlParser::parse_source(source, "TestModel").unwrap();
+        let pkg = SysmlParser::parse_source(source, "TestModel")?;
         assert_eq!(pkg.test_case_defs.len(), 1);
-        let tc = &pkg.test_case_defs[0];
+        let tc = pkg.test_case_defs.first().ok_or("missing first element of pkg.test_case_defs")?;
         assert_eq!(tc.name, "TC_UCA_33_Verification");
         assert_eq!(tc.verified_requirements.len(), 2);
-        assert_eq!(tc.verified_requirements[0], "Assert_UCA_33");
-        assert_eq!(tc.verified_requirements[1], "Assert_UCA_34");
+        assert_eq!(tc.verified_requirements.first().ok_or("missing first element of tc.verified_requirements")?, "Assert_UCA_33");
+        assert_eq!(tc.verified_requirements.get(1).ok_or("missing element 1 of tc.verified_requirements")?, "Assert_UCA_34");
+        Ok(())
     }
 }
 

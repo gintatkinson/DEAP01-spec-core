@@ -2,7 +2,7 @@
 
 use deap_core::sysml_ast::*;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -132,6 +132,29 @@ pub fn generate_digest(pkg: &PackageDef, sysml_text: &str) -> SchemaDigest {
     SchemaDigest::compute(pkg, sysml_text)
 }
 
+fn count_part_structural_elements(part: &PartDef) -> usize {
+    let direct = part.parts.len()
+        + part.attributes.len()
+        + part.ports.len()
+        + part.actions.len()
+        + part.operations.len()
+        + part.capabilities.len()
+        + part.interactions.len()
+        + part.constraints.len()
+        + part.calcs.len()
+        + part.test_cases.len()
+        + part.requirements.len()
+        + part.connections.len()
+        + part.states.len()
+        + part.use_cases.len()
+        + part.item_defs.len()
+        + part.hazards.len()
+        + part.risks.len();
+
+    let nested: usize = part.parts.iter().map(count_part_structural_elements).sum();
+    direct + nested
+}
+
 /// Count structural AST definitions within a PackageDef.
 pub fn count_structural_elements(pkg: &PackageDef) -> usize {
     let direct = pkg.part_defs.len()
@@ -142,6 +165,7 @@ pub fn count_structural_elements(pkg: &PackageDef) -> usize {
         + pkg.capability_defs.len()
         + pkg.interaction_defs.len()
         + pkg.constraint_defs.len()
+        + pkg.calc_defs.len()
         + pkg.test_case_defs.len()
         + pkg.requirement_defs.len()
         + pkg.connection_defs.len()
@@ -151,8 +175,9 @@ pub fn count_structural_elements(pkg: &PackageDef) -> usize {
         + pkg.hazard_defs.len()
         + pkg.risk_defs.len();
 
+    let part_nested: usize = pkg.part_defs.iter().map(count_part_structural_elements).sum();
     let nested: usize = pkg.packages.iter().map(count_structural_elements).sum();
-    direct + nested
+    direct + part_nested + nested
 }
 
 /// Compute a file manifest for a slice of SysML files.
@@ -250,15 +275,21 @@ pub fn compute_sha256(bytes: &[u8]) -> String {
     }
     msg.extend_from_slice(&bit_len.to_be_bytes());
 
-    for chunk in msg.chunks_exact(64) {
+    for chunk in msg.as_chunks::<64>().0 {
         let mut w = [0u32; 64];
-        for (i, part) in chunk.chunks_exact(4).enumerate() {
-            w[i] = u32::from_be_bytes([part[0], part[1], part[2], part[3]]);
+        for (slot, part) in w.iter_mut().zip(chunk.as_chunks::<4>().0) {
+            *slot = u32::from_be_bytes(*part);
         }
         for i in 16..64 {
-            let s0 = w[i - 15].rotate_right(7) ^ w[i - 15].rotate_right(18) ^ (w[i - 15] >> 3);
-            let s1 = w[i - 2].rotate_right(17) ^ w[i - 2].rotate_right(19) ^ (w[i - 2] >> 10);
-            w[i] = w[i - 16].wrapping_add(s0).wrapping_add(w[i - 7]).wrapping_add(s1);
+            let (w15, w2, w16, w7) = match (w.get(i - 15), w.get(i - 2), w.get(i - 16), w.get(i - 7)) {
+                (Some(&w15), Some(&w2), Some(&w16), Some(&w7)) => (w15, w2, w16, w7),
+                _ => continue,
+            };
+            let s0 = w15.rotate_right(7) ^ w15.rotate_right(18) ^ (w15 >> 3);
+            let s1 = w2.rotate_right(17) ^ w2.rotate_right(19) ^ (w2 >> 10);
+            if let Some(slot) = w.get_mut(i) {
+                *slot = w16.wrapping_add(s0).wrapping_add(w7).wrapping_add(s1);
+            }
         }
 
         let mut a = h0;
@@ -270,14 +301,14 @@ pub fn compute_sha256(bytes: &[u8]) -> String {
         let mut g = h6;
         let mut h = h7;
 
-        for i in 0..64 {
+        for (&k, &wi) in K.iter().zip(w.iter()) {
             let s1 = e.rotate_right(6) ^ e.rotate_right(11) ^ e.rotate_right(25);
             let ch = (e & f) ^ ((!e) & g);
             let temp1 = h
                 .wrapping_add(s1)
                 .wrapping_add(ch)
-                .wrapping_add(K[i])
-                .wrapping_add(w[i]);
+                .wrapping_add(k)
+                .wrapping_add(wi);
             let s0 = a.rotate_right(2) ^ a.rotate_right(13) ^ a.rotate_right(22);
             let maj = (a & b) ^ (a & c) ^ (b & c);
             let temp2 = s0.wrapping_add(maj);
@@ -319,6 +350,7 @@ fn compute_node_counts(pkg: &PackageDef) -> BTreeMap<String, usize> {
     counts.insert("operation_defs".to_string(), 0);
     counts.insert("interaction_defs".to_string(), 0);
     counts.insert("constraint_defs".to_string(), 0);
+    counts.insert("calc_defs".to_string(), 0);
     counts.insert("test_case_defs".to_string(), 0);
     counts.insert("requirement_defs".to_string(), 0);
     counts.insert("state_defs".to_string(), 0);
@@ -348,51 +380,57 @@ fn compute_node_counts(pkg: &PackageDef) -> BTreeMap<String, usize> {
     counts
 }
 
+fn bump_count(counts: &mut BTreeMap<String, usize>, key: &str, n: usize) {
+    *counts.entry(key.to_string()).or_insert(0) += n;
+}
+
 fn accumulate_package_counts(pkg: &PackageDef, counts: &mut BTreeMap<String, usize>) {
-    *counts.get_mut("attribute_defs").unwrap() += pkg.attribute_defs.len();
-    *counts.get_mut("port_defs").unwrap() += pkg.port_defs.len();
-    *counts.get_mut("action_defs").unwrap() += pkg.action_defs.len();
-    *counts.get_mut("capability_defs").unwrap() += pkg.capability_defs.len();
-    *counts.get_mut("operation_defs").unwrap() += pkg.operation_defs.len();
-    *counts.get_mut("interaction_defs").unwrap() += pkg.interaction_defs.len();
-    *counts.get_mut("constraint_defs").unwrap() += pkg.constraint_defs.len();
-    *counts.get_mut("test_case_defs").unwrap() += pkg.test_case_defs.len();
-    *counts.get_mut("requirement_defs").unwrap() += pkg.requirement_defs.len();
-    *counts.get_mut("state_defs").unwrap() += pkg.state_defs.len();
-    *counts.get_mut("use_case_defs").unwrap() += pkg.use_case_defs.len();
-    *counts.get_mut("item_defs").unwrap() += pkg.item_defs.len();
-    *counts.get_mut("hazard_defs").unwrap() += pkg.hazard_defs.len();
-    *counts.get_mut("risk_defs").unwrap() += pkg.risk_defs.len();
-    *counts.get_mut("connection_defs").unwrap() += pkg.connection_defs.len();
-    *counts.get_mut("part_defs").unwrap() += pkg.part_defs.len();
+    bump_count(counts, "attribute_defs", pkg.attribute_defs.len());
+    bump_count(counts, "port_defs", pkg.port_defs.len());
+    bump_count(counts, "action_defs", pkg.action_defs.len());
+    bump_count(counts, "capability_defs", pkg.capability_defs.len());
+    bump_count(counts, "operation_defs", pkg.operation_defs.len());
+    bump_count(counts, "interaction_defs", pkg.interaction_defs.len());
+    bump_count(counts, "constraint_defs", pkg.constraint_defs.len());
+    bump_count(counts, "calc_defs", pkg.calc_defs.len());
+    bump_count(counts, "test_case_defs", pkg.test_case_defs.len());
+    bump_count(counts, "requirement_defs", pkg.requirement_defs.len());
+    bump_count(counts, "state_defs", pkg.state_defs.len());
+    bump_count(counts, "use_case_defs", pkg.use_case_defs.len());
+    bump_count(counts, "item_defs", pkg.item_defs.len());
+    bump_count(counts, "hazard_defs", pkg.hazard_defs.len());
+    bump_count(counts, "risk_defs", pkg.risk_defs.len());
+    bump_count(counts, "connection_defs", pkg.connection_defs.len());
+    bump_count(counts, "part_defs", pkg.part_defs.len());
 
     for part in &pkg.part_defs {
         accumulate_part_counts(part, counts);
     }
 
     for subpkg in &pkg.packages {
-        *counts.get_mut("packages").unwrap() += 1;
+        bump_count(counts, "packages", 1);
         accumulate_package_counts(subpkg, counts);
     }
 }
 
 fn accumulate_part_counts(part: &PartDef, counts: &mut BTreeMap<String, usize>) {
-    *counts.get_mut("attribute_defs").unwrap() += part.attributes.len();
-    *counts.get_mut("port_defs").unwrap() += part.ports.len();
-    *counts.get_mut("action_defs").unwrap() += part.actions.len();
-    *counts.get_mut("capability_defs").unwrap() += part.capabilities.len();
-    *counts.get_mut("operation_defs").unwrap() += part.operations.len();
-    *counts.get_mut("interaction_defs").unwrap() += part.interactions.len();
-    *counts.get_mut("constraint_defs").unwrap() += part.constraints.len();
-    *counts.get_mut("test_case_defs").unwrap() += part.test_cases.len();
-    *counts.get_mut("requirement_defs").unwrap() += part.requirements.len();
-    *counts.get_mut("state_defs").unwrap() += part.states.len();
-    *counts.get_mut("use_case_defs").unwrap() += part.use_cases.len();
-    *counts.get_mut("item_defs").unwrap() += part.item_defs.len();
-    *counts.get_mut("hazard_defs").unwrap() += part.hazards.len();
-    *counts.get_mut("risk_defs").unwrap() += part.risks.len();
-    *counts.get_mut("connection_defs").unwrap() += part.connections.len();
-    *counts.get_mut("part_defs").unwrap() += part.parts.len();
+    bump_count(counts, "attribute_defs", part.attributes.len());
+    bump_count(counts, "port_defs", part.ports.len());
+    bump_count(counts, "action_defs", part.actions.len());
+    bump_count(counts, "capability_defs", part.capabilities.len());
+    bump_count(counts, "operation_defs", part.operations.len());
+    bump_count(counts, "interaction_defs", part.interactions.len());
+    bump_count(counts, "constraint_defs", part.constraints.len());
+    bump_count(counts, "calc_defs", part.calcs.len());
+    bump_count(counts, "test_case_defs", part.test_cases.len());
+    bump_count(counts, "requirement_defs", part.requirements.len());
+    bump_count(counts, "state_defs", part.states.len());
+    bump_count(counts, "use_case_defs", part.use_cases.len());
+    bump_count(counts, "item_defs", part.item_defs.len());
+    bump_count(counts, "hazard_defs", part.hazards.len());
+    bump_count(counts, "risk_defs", part.risks.len());
+    bump_count(counts, "connection_defs", part.connections.len());
+    bump_count(counts, "part_defs", part.parts.len());
 
     for sub in &part.parts {
         accumulate_part_counts(sub, counts);
@@ -400,7 +438,7 @@ fn accumulate_part_counts(part: &PartDef, counts: &mut BTreeMap<String, usize>) 
 }
 
 fn collect_schema_nodes(pkg: &PackageDef) -> Vec<String> {
-    let mut nodes = HashSet::new();
+    let mut nodes = BTreeSet::new();
     nodes.insert(pkg.name.clone());
 
     for a in &pkg.attribute_defs {
@@ -412,8 +450,23 @@ fn collect_schema_nodes(pkg: &PackageDef) -> Vec<String> {
     for act in &pkg.action_defs {
         nodes.insert(act.name.clone());
     }
+    for cap in &pkg.capability_defs {
+        nodes.insert(cap.name.clone());
+    }
+    for op in &pkg.operation_defs {
+        nodes.insert(op.name.clone());
+    }
+    for inter in &pkg.interaction_defs {
+        nodes.insert(inter.name.clone());
+    }
     for c in &pkg.constraint_defs {
         nodes.insert(c.name.clone());
+    }
+    for calc in &pkg.calc_defs {
+        nodes.insert(calc.name.clone());
+    }
+    for tc in &pkg.test_case_defs {
+        nodes.insert(tc.name.clone());
     }
     for r in &pkg.requirement_defs {
         nodes.insert(r.name.clone());
@@ -446,12 +499,10 @@ fn collect_schema_nodes(pkg: &PackageDef) -> Vec<String> {
         nodes.extend(sub_nodes);
     }
 
-    let mut result: Vec<String> = nodes.into_iter().collect();
-    result.sort();
-    result
+    nodes.into_iter().collect()
 }
 
-fn collect_part_nodes(part: &PartDef, nodes: &mut HashSet<String>) {
+fn collect_part_nodes(part: &PartDef, nodes: &mut BTreeSet<String>) {
     nodes.insert(part.name.clone());
     for a in &part.attributes {
         nodes.insert(a.name.clone());
@@ -462,8 +513,23 @@ fn collect_part_nodes(part: &PartDef, nodes: &mut HashSet<String>) {
     for act in &part.actions {
         nodes.insert(act.name.clone());
     }
+    for cap in &part.capabilities {
+        nodes.insert(cap.name.clone());
+    }
+    for op in &part.operations {
+        nodes.insert(op.name.clone());
+    }
+    for inter in &part.interactions {
+        nodes.insert(inter.name.clone());
+    }
     for c in &part.constraints {
         nodes.insert(c.name.clone());
+    }
+    for calc in &part.calcs {
+        nodes.insert(calc.name.clone());
+    }
+    for tc in &part.test_cases {
+        nodes.insert(tc.name.clone());
     }
     for r in &part.requirements {
         nodes.insert(r.name.clone());
@@ -474,8 +540,17 @@ fn collect_part_nodes(part: &PartDef, nodes: &mut HashSet<String>) {
     for conn in &part.connections {
         nodes.insert(conn.name.clone());
     }
+    for uc in &part.use_cases {
+        nodes.insert(uc.name.clone());
+    }
     for item in &part.item_defs {
         nodes.insert(item.name.clone());
+    }
+    for hz in &part.hazards {
+        nodes.insert(hz.name.clone());
+    }
+    for rk in &part.risks {
+        nodes.insert(rk.name.clone());
     }
     for sub in &part.parts {
         collect_part_nodes(sub, nodes);
@@ -486,27 +561,29 @@ fn extract_operational_activities(pkg: &PackageDef) -> Vec<OperationalActivity> 
     let mut activities = Vec::new();
     let mut idx = 1;
 
-    for act in &pkg.action_defs {
-        activities.push(OperationalActivity {
-            id: format!("OA-{:02}", idx),
-            name: act.name.clone(),
-            doc: act.doc.clone().unwrap_or_default(),
-            performer: act.performer.clone().unwrap_or_default(),
-            inputs: act.in_params.iter().map(|p| p.name.clone()).collect(),
-            outputs: act.out_params.iter().map(|p| p.name.clone()).collect(),
-        });
-        idx += 1;
+    for p in pkg.get_all_packages() {
+        for act in &p.action_defs {
+            activities.push(OperationalActivity {
+                id: format!("OA-{:02}", idx),
+                name: act.name.clone(),
+                doc: act.doc.clone().unwrap_or_default(),
+                performer: act.performer.clone().unwrap_or_default(),
+                inputs: act.in_params.iter().map(|param| param.name.clone()).collect(),
+                outputs: act.out_params.iter().map(|param| param.name.clone()).collect(),
+            });
+            idx += 1;
+        }
     }
 
-    for part in &pkg.part_defs {
+    for part in pkg.get_all_parts() {
         for act in &part.actions {
             activities.push(OperationalActivity {
                 id: format!("OA-{:02}", idx),
                 name: act.name.clone(),
                 doc: act.doc.clone().unwrap_or_default(),
                 performer: act.performer.clone().unwrap_or_else(|| part.name.clone()),
-                inputs: act.in_params.iter().map(|p| p.name.clone()).collect(),
-                outputs: act.out_params.iter().map(|p| p.name.clone()).collect(),
+                inputs: act.in_params.iter().map(|param| param.name.clone()).collect(),
+                outputs: act.out_params.iter().map(|param| param.name.clone()).collect(),
             });
             idx += 1;
         }
@@ -519,20 +596,22 @@ fn extract_operational_exchanges(pkg: &PackageDef) -> Vec<OperationalExchange> {
     let mut exchanges = Vec::new();
     let mut idx = 1;
 
-    for conn in &pkg.connection_defs {
-        exchanges.push(OperationalExchange {
-            id: format!("OpTx-{:02}", idx),
-            name: conn.name.clone(),
-            source_port: conn.source_port.clone(),
-            target_port: conn.target_port.clone(),
-            source_part: conn.source_part.clone().unwrap_or_default(),
-            target_part: conn.target_part.clone().unwrap_or_default(),
-            protocol: conn.protocol.clone().unwrap_or_default(),
-        });
-        idx += 1;
+    for p in pkg.get_all_packages() {
+        for conn in &p.connection_defs {
+            exchanges.push(OperationalExchange {
+                id: format!("OpTx-{:02}", idx),
+                name: conn.name.clone(),
+                source_port: conn.source_port.clone(),
+                target_port: conn.target_port.clone(),
+                source_part: conn.source_part.clone().unwrap_or_default(),
+                target_part: conn.target_part.clone().unwrap_or_default(),
+                protocol: conn.protocol.clone().unwrap_or_default(),
+            });
+            idx += 1;
+        }
     }
 
-    for part in &pkg.part_defs {
+    for part in pkg.get_all_parts() {
         for conn in &part.connections {
             exchanges.push(OperationalExchange {
                 id: format!("OpTx-{:02}", idx),
@@ -552,9 +631,8 @@ fn extract_operational_exchanges(pkg: &PackageDef) -> Vec<OperationalExchange> {
 
 fn extract_operational_scenarios(pkg: &PackageDef) -> Vec<OperationalScenario> {
     let mut scenarios = Vec::new();
-    let mut idx = 1;
 
-    for uc in &pkg.use_case_defs {
+    for (idx, uc) in (1..).zip(pkg.get_all_use_cases()) {
         scenarios.push(OperationalScenario {
             id: format!("SCN-{:02}", idx),
             name: uc.name.clone(),
@@ -562,7 +640,6 @@ fn extract_operational_scenarios(pkg: &PackageDef) -> Vec<OperationalScenario> {
             objective: uc.objective.clone().unwrap_or_default(),
             steps: uc.steps.clone(),
         });
-        idx += 1;
     }
 
     scenarios
@@ -571,7 +648,7 @@ fn extract_operational_scenarios(pkg: &PackageDef) -> Vec<OperationalScenario> {
 fn extract_operational_nodes(pkg: &PackageDef) -> Vec<OperationalNode> {
     let mut nodes = Vec::new();
 
-    for part in &pkg.part_defs {
+    for part in pkg.get_all_parts() {
         nodes.push(OperationalNode {
             name: part.name.clone(),
             node_type: "Part".to_string(),
@@ -588,7 +665,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_compute_digest_counts_and_hash() {
+    fn test_compute_digest_counts_and_hash() -> Result<(), Box<dyn std::error::Error>> {
         let pkg = PackageDef {
             name: "DigestTest".to_string(),
             attribute_defs: vec![
@@ -621,26 +698,27 @@ mod tests {
 
         assert_eq!(digest.total_lines, 3);
         assert!(!digest.sha256.is_empty());
-        assert_eq!(*digest.node_counts.get("packages").unwrap(), 1);
-        assert_eq!(*digest.node_counts.get("part_defs").unwrap(), 1);
-        assert_eq!(*digest.node_counts.get("port_defs").unwrap(), 1);
-        assert_eq!(*digest.node_counts.get("attribute_defs").unwrap(), 1);
+        assert_eq!(*digest.node_counts.get("packages").ok_or("expected value is absent")?, 1);
+        assert_eq!(*digest.node_counts.get("part_defs").ok_or("expected value is absent")?, 1);
+        assert_eq!(*digest.node_counts.get("port_defs").ok_or("expected value is absent")?, 1);
+        assert_eq!(*digest.node_counts.get("attribute_defs").ok_or("expected value is absent")?, 1);
         assert!(digest.schema_nodes.contains(&"DigestTest".to_string()));
         assert!(digest.schema_nodes.contains(&"ComponentA".to_string()));
         assert!(digest.schema_nodes.contains(&"p1".to_string()));
+        Ok(())
     }
 
     #[test]
-    fn test_schema_digest_multi_file_manifest() {
+    fn test_schema_digest_multi_file_manifest() -> Result<(), Box<dyn std::error::Error>> {
         let temp_dir = std::env::temp_dir().join(format!(
             "compile_sysml_manifest_test_{}_{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                ?
                 .as_nanos()
         ));
-        fs::create_dir_all(&temp_dir).unwrap();
+        fs::create_dir_all(&temp_dir)?;
 
         let file1 = temp_dir.join("subsystem_a.sysml");
         let file2 = temp_dir.join("subsystem_b.sysml");
@@ -648,35 +726,36 @@ mod tests {
         let content1 = "package SubsystemA {\n    part def ComponentA;\n    attribute mass : Real = 10.0;\n}\n";
         let content2 = "package SubsystemB {\n    part def ComponentB;\n}\n";
 
-        fs::write(&file1, content1).unwrap();
-        fs::write(&file2, content2).unwrap();
+        fs::write(&file1, content1)?;
+        fs::write(&file2, content2)?;
 
         let manifest = compute_file_manifest(&[file1.clone(), file2.clone()]);
         assert_eq!(manifest.len(), 2);
 
         // Entry 1 verification
-        assert_eq!(manifest[0].path, file1.to_string_lossy().to_string());
-        assert_eq!(manifest[0].sha256, compute_sha256(content1.as_bytes()));
-        assert_eq!(manifest[0].bytes, content1.len() as u64);
-        assert_eq!(manifest[0].lines, content1.lines().count());
-        assert_eq!(manifest[0].entities, 2); // ComponentA and mass
+        assert_eq!(manifest.first().ok_or("missing first element of manifest")?.path, file1.to_string_lossy().to_string());
+        assert_eq!(manifest.first().ok_or("missing first element of manifest")?.sha256, compute_sha256(content1.as_bytes()));
+        assert_eq!(manifest.first().ok_or("missing first element of manifest")?.bytes, content1.len() as u64);
+        assert_eq!(manifest.first().ok_or("missing first element of manifest")?.lines, content1.lines().count());
+        assert_eq!(manifest.first().ok_or("missing first element of manifest")?.entities, 2); // ComponentA and mass
 
         // Entry 2 verification
-        assert_eq!(manifest[1].path, file2.to_string_lossy().to_string());
-        assert_eq!(manifest[1].sha256, compute_sha256(content2.as_bytes()));
-        assert_eq!(manifest[1].bytes, content2.len() as u64);
-        assert_eq!(manifest[1].lines, content2.lines().count());
-        assert_eq!(manifest[1].entities, 1); // ComponentB
+        assert_eq!(manifest.get(1).ok_or("missing element 1 of manifest")?.path, file2.to_string_lossy().to_string());
+        assert_eq!(manifest.get(1).ok_or("missing element 1 of manifest")?.sha256, compute_sha256(content2.as_bytes()));
+        assert_eq!(manifest.get(1).ok_or("missing element 1 of manifest")?.bytes, content2.len() as u64);
+        assert_eq!(manifest.get(1).ok_or("missing element 1 of manifest")?.lines, content2.lines().count());
+        assert_eq!(manifest.get(1).ok_or("missing element 1 of manifest")?.entities, 1); // ComponentB
 
         // Verify SchemaDigest integration and serialization round-trip
         let digest = SchemaDigest::default().with_file_manifest(manifest.clone());
         assert_eq!(digest.file_manifest, manifest);
 
-        let json = serde_json::to_string_pretty(&digest).expect("Failed to serialize SchemaDigest");
+        let json = serde_json::to_string_pretty(&digest)?;
         let deserialized: SchemaDigest =
-            serde_json::from_str(&json).expect("Failed to deserialize SchemaDigest");
+            serde_json::from_str(&json)?;
         assert_eq!(deserialized.file_manifest, manifest);
 
         let _ = fs::remove_dir_all(&temp_dir);
+        Ok(())
     }
 }

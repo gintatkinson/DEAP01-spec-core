@@ -2,7 +2,7 @@
 
 use super::symbols::{Symbol, SymbolKind, SymbolTable};
 use deap_core::sysml_ast::*;
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
 /// Severity level of semantic diagnostics.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -83,15 +83,40 @@ impl<'a> SemanticValidator<'a> {
     // --- Validation Rules ---
 
     fn validate_part_hierarchy(&mut self) {
-        let mut seen_parts = HashSet::new();
-        self.check_parts_recursive(&self.pkg.part_defs, "", &mut seen_parts);
+        let mut seen_parts = BTreeSet::new();
+        self.validate_pkg_part_hierarchy(self.pkg, "", &mut seen_parts);
+    }
+
+    fn validate_pkg_part_hierarchy(
+        &mut self,
+        pkg: &PackageDef,
+        parent_scope: &str,
+        seen: &mut BTreeSet<String>,
+    ) {
+        let pkg_scope = if parent_scope.is_empty() {
+            if std::ptr::eq(pkg, self.pkg) {
+                String::new()
+            } else {
+                pkg.name.clone()
+            }
+        } else if pkg.name.is_empty() {
+            parent_scope.to_string()
+        } else {
+            format!("{}::{}", parent_scope, pkg.name)
+        };
+
+        self.check_parts_recursive(&pkg.part_defs, &pkg_scope, seen);
+
+        for subpkg in &pkg.packages {
+            self.validate_pkg_part_hierarchy(subpkg, &pkg_scope, seen);
+        }
     }
 
     fn check_parts_recursive(
         &mut self,
         parts: &[PartDef],
         scope: &str,
-        seen: &mut HashSet<String>,
+        seen: &mut BTreeSet<String>,
     ) {
         for part in parts {
             let part_key = if scope.is_empty() {
@@ -108,7 +133,7 @@ impl<'a> SemanticValidator<'a> {
             }
 
             // Check duplicate ports on this part
-            let mut seen_ports = HashSet::new();
+            let mut seen_ports = BTreeSet::new();
             for port in &part.ports {
                 if !seen_ports.insert(port.name.clone()) {
                     self.diagnostics.push(SemanticDiagnostic::error(
@@ -230,14 +255,14 @@ impl<'a> SemanticValidator<'a> {
     }
 
     fn validate_referential_integrity(&mut self) {
-        let known_constraints: HashSet<String> = self
+        let known_constraints: BTreeSet<String> = self
             .symbols
             .all_of_kind(SymbolKind::Constraint)
             .into_iter()
             .map(|s| normalize_id(&s.name))
             .collect();
 
-        let known_hazards: HashSet<String> = self
+        let known_hazards: BTreeSet<String> = self
             .symbols
             .all_of_kind(SymbolKind::Hazard)
             .into_iter()
@@ -246,23 +271,17 @@ impl<'a> SemanticValidator<'a> {
 
         let extract_annotation_targets = |text: &str, tag: &str| -> Vec<Vec<String>> {
             let mut results = Vec::new();
-            let lower_text = text.to_lowercase();
-            let lower_tag = tag.to_lowercase();
+            let lower_text = text.to_ascii_lowercase();
+            let lower_tag = tag.to_ascii_lowercase();
             let mut search_idx = 0;
             while let Some(pos) = lower_text[search_idx..].find(&lower_tag) {
                 let tag_start = search_idx + pos;
                 let idx = tag_start + tag.len();
                 let rest = &text[idx..];
-                let mut chars = rest.char_indices();
-                let mut ws_end = rest.len();
-                let mut next_char = None;
-                while let Some((c_idx, c)) = chars.next() {
-                    if !c.is_whitespace() {
-                        ws_end = c_idx;
-                        next_char = Some(c);
-                        break;
-                    }
-                }
+                let (ws_end, next_char) = rest
+                    .char_indices()
+                    .find(|(_, c)| !c.is_whitespace())
+                    .map_or((rest.len(), None), |(c_idx, c)| (c_idx, Some(c)));
                 match next_char {
                     Some('(') => {
                         let inside_start = idx + ws_end + 1;
@@ -280,14 +299,10 @@ impl<'a> SemanticValidator<'a> {
                     }
                     Some(':') => {
                         let after_colon = &rest[ws_end + 1..];
-                        let mut colon_chars = after_colon.char_indices();
-                        let mut id_start = after_colon.len();
-                        while let Some((c_idx, c)) = colon_chars.next() {
-                            if !c.is_whitespace() {
-                                id_start = c_idx;
-                                break;
-                            }
-                        }
+                        let id_start = after_colon
+                            .char_indices()
+                            .find(|(_, c)| !c.is_whitespace())
+                            .map_or(after_colon.len(), |(c_idx, _)| c_idx);
                         let id_rest = &after_colon[id_start..];
                         let id_len = id_rest
                             .chars()
@@ -310,9 +325,11 @@ impl<'a> SemanticValidator<'a> {
         };
 
         let mut req_texts = Vec::new();
-        self.collect_requirement_texts(&self.pkg.requirement_defs, &mut req_texts);
-        for part in &self.pkg.part_defs {
-            self.collect_part_requirement_texts(part, &mut req_texts);
+        for p in self.pkg.get_all_packages() {
+            self.collect_requirement_texts(&p.requirement_defs, &mut req_texts);
+            for part in &p.part_defs {
+                self.collect_part_requirement_texts(part, &mut req_texts);
+            }
         }
 
         for (req_name, text_corpus) in req_texts {
@@ -562,7 +579,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_valid_connection_passes() {
+    fn test_valid_connection_passes() -> Result<(), Box<dyn std::error::Error>> {
         let pkg = PackageDef {
             name: "TestSys".to_string(),
             part_defs: vec![
@@ -605,10 +622,11 @@ mod tests {
         let mut validator = SemanticValidator::new(&pkg);
         validator.validate();
         assert!(!validator.has_errors(), "Expected no errors, got: {:?}", validator.errors());
+        Ok(())
     }
 
     #[test]
-    fn test_mismatched_connection_direction_fails() {
+    fn test_mismatched_connection_direction_fails() -> Result<(), Box<dyn std::error::Error>> {
         let pkg = PackageDef {
             name: "TestSys".to_string(),
             part_defs: vec![
@@ -653,11 +671,12 @@ mod tests {
         assert!(validator.has_errors());
         let errors = validator.errors();
         assert_eq!(errors.len(), 1);
-        assert!(errors[0].message.contains("Inverted flow direction"));
+        assert!(errors.first().ok_or("missing first element of errors")?.message.contains("Inverted flow direction"));
+        Ok(())
     }
 
     #[test]
-    fn test_dangling_safety_realises_fails() {
+    fn test_dangling_safety_realises_fails() -> Result<(), Box<dyn std::error::Error>> {
         let pkg = PackageDef {
             name: "SafetySys".to_string(),
             requirement_defs: vec![
@@ -681,11 +700,12 @@ mod tests {
         validator.validate();
         assert!(validator.has_errors());
         let errors = validator.errors();
-        assert!(errors[0].message.contains("references undefined constraint/UCA 'UCA-99'"));
+        assert!(errors.first().ok_or("missing first element of errors")?.message.contains("references undefined constraint/UCA 'UCA-99'"));
+        Ok(())
     }
 
     #[test]
-    fn test_validate_part_defs_with_cross_package_import() {
+    fn test_validate_part_defs_with_cross_package_import() -> Result<(), Box<dyn std::error::Error>> {
         let pkg_a = PackageDef {
             name: "Subsystem_1".to_string(),
             part_defs: vec![
@@ -731,10 +751,11 @@ mod tests {
             "Expected no validation errors with imported type, got: {:?}",
             validator.errors()
         );
+        Ok(())
     }
 
     #[test]
-    fn test_validate_part_defs_missing_type_fails() {
+    fn test_validate_part_defs_missing_type_fails() -> Result<(), Box<dyn std::error::Error>> {
         let pkg = PackageDef {
             name: "Subsystem_2".to_string(),
             part_defs: vec![
@@ -755,10 +776,11 @@ mod tests {
         assert!(errors
             .iter()
             .any(|e| e.message.contains("references undefined type 'SystemVisionEngine'")));
+        Ok(())
     }
 
     #[test]
-    fn test_validate_requirements_with_cross_package_import() {
+    fn test_validate_requirements_with_cross_package_import() -> Result<(), Box<dyn std::error::Error>> {
         let pkg_a = PackageDef {
             name: "Subsystem_1".to_string(),
             part_defs: vec![
@@ -804,10 +826,11 @@ mod tests {
             "Expected no validation errors, got: {:?}",
             validator.errors()
         );
+        Ok(())
     }
 
     #[test]
-    fn test_subpackage_connections_validated_for_dangling_ports() {
+    fn test_subpackage_connections_validated_for_dangling_ports() -> Result<(), Box<dyn std::error::Error>> {
         let subpkg = PackageDef {
             name: "NestedSubsystem".to_string(),
             part_defs: vec![
@@ -866,6 +889,7 @@ mod tests {
             "Expected error for UndefinedPart.in_stream, got: {:?}",
             errors
         );
+        Ok(())
     }
 }
 

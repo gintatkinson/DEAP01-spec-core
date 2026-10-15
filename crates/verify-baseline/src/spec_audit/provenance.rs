@@ -254,7 +254,7 @@ pub fn extract_scalar_numeric_claim(val: &str) -> Option<(f64, Option<String>)> 
 /// Postconditions: Returns the matched engineering parameter keyword if found.
 /// Algorithmic Complexity: O(P * K) where P is parameters count and K is line length.
 pub fn find_engineering_parameter(line: &str) -> Option<&'static str> {
-    let lower = line.to_lowercase();
+    let lower = line.to_ascii_lowercase();
     for &param in ENGINEERING_PARAMETER_TERMS {
         if let Some(pos) = lower.find(param) {
             let before_ok = if pos == 0 {
@@ -439,7 +439,7 @@ pub fn is_assertion_grounded(
     constraints: &[ConstraintDef],
     attributes: &[AttributeDef],
 ) -> bool {
-    let lower_line = line.to_lowercase();
+    let lower_line = line.to_ascii_lowercase();
 
     // 1. Check for normative standards citation (ISO, IEC, IEEE, DO-178C, MIL-STD, etc.)
     for &std in NORMATIVE_STANDARDS {
@@ -449,14 +449,13 @@ pub fn is_assertion_grounded(
     }
 
     // 2. Check for explicit schema path or clause citations (schema/, .sysml, §)
-    if !lower_line.contains("dshot")
-        && (lower_line.contains("schema/")
-            || lower_line.contains(".sysml")
-            || lower_line.contains("§")
-            || lower_line.contains("ssot")
-            || lower_line.contains("grounding:")
-            || lower_line.contains("source:")
-            || lower_line.contains("ref:"))
+    if lower_line.contains("schema/")
+        || lower_line.contains(".sysml")
+        || lower_line.contains("§")
+        || lower_line.contains("ssot")
+        || lower_line.contains("grounding:")
+        || lower_line.contains("source:")
+        || lower_line.contains("ref:")
     {
         return true;
     }
@@ -464,22 +463,22 @@ pub fn is_assertion_grounded(
     // 3. Check against SysML Symbol Index
     if let Some(idx) = symbol_index {
         for attr in &idx.attribute_names {
-            if lower_line.contains(&attr.to_lowercase()) {
+            if lower_line.contains(&attr.to_ascii_lowercase()) {
                 return true;
             }
         }
         for part in &idx.part_names {
-            if lower_line.contains(&part.to_lowercase()) {
+            if lower_line.contains(&part.to_ascii_lowercase()) {
                 return true;
             }
         }
         for act in &idx.action_names {
-            if lower_line.contains(&act.to_lowercase()) {
+            if lower_line.contains(&act.to_ascii_lowercase()) {
                 return true;
             }
         }
         for port in &idx.port_names {
-            if lower_line.contains(&port.to_lowercase()) {
+            if lower_line.contains(&port.to_ascii_lowercase()) {
                 return true;
             }
         }
@@ -487,29 +486,26 @@ pub fn is_assertion_grounded(
 
     // 4. Check against concrete ConstraintDef and AttributeDef slices
     for c in constraints {
-        if !c.name.is_empty() && lower_line.contains(&c.name.to_lowercase()) {
+        if !c.name.is_empty() && lower_line.contains(&c.name.to_ascii_lowercase()) {
             return true;
         }
     }
     for a in attributes {
-        if !a.name.is_empty() && lower_line.contains(&a.name.to_lowercase()) {
+        if !a.name.is_empty() && lower_line.contains(&a.name.to_ascii_lowercase()) {
             return true;
         }
     }
 
     // 5. Document-level normative grounding fallback:
     // If the document body contains an authoritative Source References section citing normative standards
-    // or schema baselines, standard engineering parameters inherit document-level grounding,
-    // UNLESS the assertion claims an ungrounded protocol (e.g. DShot, STANAG).
-    if !lower_line.contains("dshot") && !lower_line.contains("stanag") {
-        let lower_doc = _content.to_lowercase();
-        if lower_doc.contains("## source references") || lower_doc.contains("## 6. source references") {
-            if lower_doc.contains("schema/")
-                || lower_doc.contains(".sysml")
-                || NORMATIVE_STANDARDS.iter().any(|&std| lower_doc.contains(std))
-            {
-                return true;
-            }
+    // or schema baselines, standard engineering parameters inherit document-level grounding.
+    let lower_doc = _content.to_ascii_lowercase();
+    if lower_doc.contains("## source references") || lower_doc.contains("## 6. source references") {
+        if lower_doc.contains("schema/")
+            || lower_doc.contains(".sysml")
+            || NORMATIVE_STANDARDS.iter().any(|&std| lower_doc.contains(std))
+        {
+            return true;
         }
     }
 

@@ -689,7 +689,7 @@ pub fn check_semantic_diagram_ast_parity(repo_root: &Path) -> Result<ParityOutco
             .filter_entry(|e| {
                 if e.file_type().is_dir() {
                     let name = e.file_name().to_string_lossy();
-                    !EXCLUDED_DIRS.iter().any(|&ex| name == ex) && name != "blueprints"
+                    !EXCLUDED_DIRS.iter().any(|ex| name == ex) && name != "blueprints"
                 } else {
                     true
                 }
@@ -882,7 +882,6 @@ pub fn check_semantic_prose_invariants(repo_root: &Path) -> Result<ParityOutcome
                                             if let Some(inv_id) = slice.get(..end) {
                                                 if !declared_constraints.is_empty()
                                                     && !declared_constraints.contains(inv_id)
-                                                    && inv_id.contains("UNDECLARED")
                                                 {
                                                     errors.push(format!(
                                                         "Check 22 failed: Prose invariant assertion '{}' on line {} in '{}' is ungrounded in SysML model.",
@@ -1252,18 +1251,437 @@ pub fn extract_citations_from_line(line: &str, line_no: usize) -> Vec<CitationRe
     citations
 }
 
-/// Audits citations and protocols in a specification file to eliminate citation fraud and ungrounded claims.
+/// Determines whether a lexical token has the structural morphology of a technical protocol identifier
+/// (e.g., all-caps acronym `PWM`, `CAN`, mixed-case `DShot`, `MAVLink`, or alphanumeric/hyphenated `DShot600`, `RS-485`)
+/// rather than an ordinary Titlecase or lowercase prose word.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A. Prevents ungrounded protocol injection using pure lexical morphology
+/// without relying on hardcoded English stopword lists.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Token length must be at least 3 characters.
+/// - Token must begin with an ASCII uppercase character.
+/// - At least one hyphen-delimited segment must either be pure digits or contain an uppercase character
+///   or digit after its first character (rejecting ordinary hyphenated Titlecase prose like `Auto-Reconnection`).
+///
+/// ## 3. Preconditions
+/// `token` is a whitespace-delimited, punctuation-trimmed lexical slice.
+///
+/// ## 4. Postconditions
+/// Returns `true` iff `token` exhibits non-prose protocol identifier structure.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(K) where K is token character length.
+/// Space Complexity: O(1).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// Pure character-level inspection; never panics on arbitrary UTF-8 input.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-PROTOCOL-TOKEN-EXTRACTION].
+fn is_structural_protocol_token(token: &str) -> bool {
+    if token.len() < 3 || !token.starts_with(|c: char| c.is_ascii_uppercase()) {
+        return false;
+    }
+    token.split('-').any(|seg| {
+        (!seg.is_empty() && seg.chars().all(|c| c.is_ascii_digit()))
+            || (seg.len() >= 2
+                && seg
+                    .get(1..)
+                    .is_some_and(|rest| rest.chars().any(|c| c.is_ascii_uppercase() || c.is_ascii_digit())))
+    })
+}
+
+/// Normalizes a protocol or AST identifier to lowercase ASCII alphanumeric characters for AST matching
+/// (so e.g. `RS-485` and `RS485` normalize to `"rs485"`).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A. Enables canonical equivalence matching between prose protocol tokens
+/// and SysML v2 AST identifier declarations.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Filters to `is_ascii_alphanumeric()` and maps to ASCII lowercase.
+///
+/// ## 3. Preconditions
+/// `token` must be valid UTF-8.
+///
+/// ## 4. Postconditions
+/// Returns normalized lowercase alphanumeric string.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(K) where K is token length.
+/// Space Complexity: O(K).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// Total function; never panics.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-AST-SYMBOL-NORMALIZATION].
+fn normalize_ast_protocol_symbol(token: &str) -> String {
+    token
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .map(|c| c.to_ascii_lowercase())
+        .collect()
+}
+
+/// Recursively harvests AST symbols (parts, ports, port types, protocol families, item flows,
+/// electrical attributes, and attributes) from a slice of `PartDef` nodes.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A. Extracts hierarchical SysML v2 AST ground truth for Check 23.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Traverses nested `PartDef` hierarchies arbitrarily deep.
+///
+/// ## 3. Preconditions
+/// `parts` is a slice of parsed `PartDef` AST nodes.
+///
+/// ## 4. Postconditions
+/// Populates `symbols` and `claims` with all AST-grounded tokens and quantitative claims.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(N) where N is total AST node count.
+/// Space Complexity: O(N).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// Pure AST traversal; never panics.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-AST-GROUND-TRUTH-EXTRACTION].
+fn harvest_ast_parts_ground_truth(
+    parts: &[deap_core::sysml_ast::PartDef],
+    symbols: &mut BTreeSet<String>,
+    claims: &mut BTreeSet<String>,
+) {
+    for part in parts {
+        if !part.name.is_empty() {
+            symbols.insert(part.name.to_ascii_lowercase());
+            symbols.insert(normalize_ast_protocol_symbol(&part.name));
+        }
+        for port in &part.ports {
+            harvest_ast_port_ground_truth(port, symbols, claims);
+        }
+        for attr in &part.attributes {
+            harvest_ast_attribute_ground_truth(attr, symbols, claims);
+        }
+        for c in &part.constraints {
+            if !c.name.is_empty() {
+                symbols.insert(c.name.to_ascii_lowercase());
+                symbols.insert(normalize_ast_protocol_symbol(&c.name));
+            }
+            for q in extract_quantitative_unit_claims(&c.expression) {
+                claims.insert(q);
+            }
+        }
+        harvest_ast_parts_ground_truth(&part.parts, symbols, claims);
+    }
+}
+
+/// Harvests AST symbols and quantitative claims from a single `PortDef` node.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A. Extracts port type, protocol family, item flows, and electrical attributes.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Indexes both raw lowercase and normalized alphanumeric forms.
+///
+/// ## 3. Preconditions
+/// `port` is a valid `PortDef`.
+///
+/// ## 4. Postconditions
+/// Inserts port ground-truth tokens into `symbols` and `claims`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(P) where P is port attribute count.
+/// Space Complexity: O(P).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// Total function; never panics.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-AST-GROUND-TRUTH-EXTRACTION].
+fn harvest_ast_port_ground_truth(
+    port: &deap_core::sysml_ast::PortDef,
+    symbols: &mut BTreeSet<String>,
+    claims: &mut BTreeSet<String>,
+) {
+    if !port.name.is_empty() {
+        symbols.insert(port.name.to_ascii_lowercase());
+        symbols.insert(normalize_ast_protocol_symbol(&port.name));
+    }
+    if !port.type_name.is_empty() {
+        symbols.insert(port.type_name.to_ascii_lowercase());
+        symbols.insert(normalize_ast_protocol_symbol(&port.type_name));
+    }
+    if !port.protocol_family.is_empty() {
+        symbols.insert(port.protocol_family.to_ascii_lowercase());
+        symbols.insert(normalize_ast_protocol_symbol(&port.protocol_family));
+    }
+    if !port.port_category.is_empty() {
+        symbols.insert(port.port_category.to_ascii_lowercase());
+        symbols.insert(normalize_ast_protocol_symbol(&port.port_category));
+    }
+    for flow in &port.item_flows {
+        if !flow.name.is_empty() {
+            symbols.insert(flow.name.to_ascii_lowercase());
+            symbols.insert(normalize_ast_protocol_symbol(&flow.name));
+        }
+        if !flow.item_type.is_empty() {
+            symbols.insert(flow.item_type.to_ascii_lowercase());
+            symbols.insert(normalize_ast_protocol_symbol(&flow.item_type));
+        }
+    }
+    for (k, v) in &port.electrical_attributes {
+        symbols.insert(k.to_ascii_lowercase());
+        symbols.insert(v.to_ascii_lowercase());
+        symbols.insert(normalize_ast_protocol_symbol(v));
+        for q in extract_quantitative_unit_claims(v) {
+            claims.insert(q);
+        }
+    }
+}
+
+/// Harvests AST symbols and quantitative claims from a single `AttributeDef` node.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A. Extracts attribute names, types, and default values.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Indexes attribute identifiers and default values.
+///
+/// ## 3. Preconditions
+/// `attr` is a valid `AttributeDef`.
+///
+/// ## 4. Postconditions
+/// Inserts attribute ground-truth tokens into `symbols` and `claims`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(A) where A is attribute string length.
+/// Space Complexity: O(A).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// Total function; never panics.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-AST-GROUND-TRUTH-EXTRACTION].
+fn harvest_ast_attribute_ground_truth(
+    attr: &deap_core::sysml_ast::AttributeDef,
+    symbols: &mut BTreeSet<String>,
+    claims: &mut BTreeSet<String>,
+) {
+    if !attr.name.is_empty() {
+        symbols.insert(attr.name.to_ascii_lowercase());
+        symbols.insert(normalize_ast_protocol_symbol(&attr.name));
+    }
+    if !attr.type_name.is_empty() {
+        symbols.insert(attr.type_name.to_ascii_lowercase());
+        symbols.insert(normalize_ast_protocol_symbol(&attr.type_name));
+    }
+    if let Some(ref dv) = attr.default_value {
+        let clean = dv.trim_matches('"').trim();
+        symbols.insert(clean.to_ascii_lowercase());
+        symbols.insert(normalize_ast_protocol_symbol(clean));
+        for q in extract_quantitative_unit_claims(clean) {
+            claims.insert(q);
+        }
+    }
+}
+
+/// Parses SysML model text with the AST parser (`parse_part_defs`, `parse_port_defs`,
+/// `parse_attribute_defs`, `parse_constraint_defs`) to construct ground-truth symbol and claim sets.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ISO 26262 ASIL D. Grounds specification protocol and quantitative
+/// assertions against the parsed SysML v2 AST.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Combines AST-extracted port, part, attribute, and constraint declarations into deterministic `BTreeSet`s.
+///
+/// ## 3. Preconditions
+/// `model_str` is valid UTF-8 SysML text (may be empty if no model exists).
+///
+/// ## 4. Postconditions
+/// Returns `(ast_symbols, ast_quantitative_claims)`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(M) where M is model byte length.
+/// Space Complexity: O(S) where S is extracted symbol count.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// Total function; returns empty sets for empty input.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-AST-GROUND-TRUTH-EXTRACTION].
+fn build_ast_model_ground_truth(model_str: &str) -> (BTreeSet<String>, BTreeSet<String>) {
+    let mut symbols = BTreeSet::new();
+    let mut claims = BTreeSet::new();
+    if model_str.trim().is_empty() {
+        return (symbols, claims);
+    }
+
+    let parts = parse_part_defs(model_str);
+    harvest_ast_parts_ground_truth(&parts, &mut symbols, &mut claims);
+
+    for port in parse_port_defs(model_str) {
+        harvest_ast_port_ground_truth(&port, &mut symbols, &mut claims);
+    }
+    for attr in deap_core::sysml_ast::parse_attribute_defs(model_str) {
+        harvest_ast_attribute_ground_truth(&attr, &mut symbols, &mut claims);
+    }
+    for c in parse_constraint_defs(model_str) {
+        if !c.name.is_empty() {
+            symbols.insert(c.name.to_ascii_lowercase());
+            symbols.insert(normalize_ast_protocol_symbol(&c.name));
+        }
+        for q in extract_quantitative_unit_claims(&c.expression) {
+            claims.insert(q);
+        }
+    }
+    for q in extract_quantitative_unit_claims(model_str) {
+        claims.insert(q);
+    }
+
+    (symbols, claims)
+}
+
+/// Extracts candidate communication protocol or hardware interface identifiers from a line.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A. Identifies interface and bus protocol assertions in prose
+/// to verify grounding against the authoritative SysML AST and cited sections.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Scans structural protocol tokens following `over` / `via` prepositions or preceding `protocol` / `interface` / `bus`.
+/// - Uses pure morphological token classification (`is_structural_protocol_token`) with zero hardcoded word lists.
+///
+/// ## 3. Preconditions
+/// `line` must be a valid UTF-8 string slice.
+///
+/// ## 4. Postconditions
+/// Returns a vector of candidate protocol tokens found on `line`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(W) where W is word count on the line.
+/// Space Complexity: O(W).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// Pure token analysis; never panics.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-PROTOCOL-TOKEN-EXTRACTION].
+fn extract_candidate_protocol_tokens(line: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let lower_full = line.to_ascii_lowercase();
+    if lower_full.contains("[tier-3:") || lower_full.contains("[tier-4:") {
+        return out;
+    }
+
+    for segment in line.split('|') {
+        let words: Vec<&str> = segment
+            .split_whitespace()
+            .map(|w| w.trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '-'))
+            .filter(|w| !w.is_empty())
+            .collect();
+
+        for (i, &w) in words.iter().enumerate() {
+            let wl = w.to_ascii_lowercase();
+            if wl == "over" || wl == "via" {
+                for j in i.saturating_add(1)..words.len() {
+                    if let Some(&cand_w) = words.get(j) {
+                        if is_valid_si_unit(cand_w) {
+                            continue;
+                        }
+                        if is_structural_protocol_token(cand_w) {
+                            let combined = if let Some(&next_num) = words.get(j.saturating_add(1)) {
+                                if !next_num.is_empty() && next_num.chars().all(|c| c.is_ascii_digit()) {
+                                    format!("{} {}", cand_w, next_num)
+                                } else {
+                                    cand_w.to_string()
+                                }
+                            } else {
+                                cand_w.to_string()
+                            };
+                            if !out.iter().any(|existing: &String| existing.eq_ignore_ascii_case(&combined)) {
+                                out.push(combined);
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+            if (wl == "protocol" || wl == "interface" || wl == "bus") && i > 0 {
+                if let Some(&prev_w) = words.get(i.saturating_sub(1)) {
+                    if is_structural_protocol_token(prev_w)
+                        && !is_valid_si_unit(prev_w)
+                        && !out.iter().any(|existing: &String| existing.eq_ignore_ascii_case(prev_w))
+                    {
+                        out.push(prev_w.to_string());
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Extracts numeric-unit pairs (such as `50 Hz` or `100 ms`) from a specification line.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A. Extracts quantitative physical claims to verify grounding
+/// against cited source sections and SysML models.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Identifies adjacent `<number> <SI-unit>` token pairs.
+///
+/// ## 3. Preconditions
+/// `line` must be valid UTF-8 text.
+///
+/// ## 4. Postconditions
+/// Returns a list of normalized lowercase `<number> <unit>` strings.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(W) where W is word count on the line.
+/// Space Complexity: O(W).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// Pure token inspection; never panics.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-QUANTITATIVE-CLAIM-EXTRACTION].
+fn extract_quantitative_unit_claims(line: &str) -> Vec<String> {
+    let words: Vec<&str> = line
+        .split_whitespace()
+        .map(|w| w.trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '.' && c != '/' && c != '^' && c != '%'))
+        .filter(|w| !w.is_empty())
+        .collect();
+    let mut claims = Vec::new();
+    for i in 0..words.len() {
+        if let (Some(&num_w), Some(&unit_w)) = (words.get(i), words.get(i.saturating_add(1))) {
+            let is_num = !num_w.is_empty()
+                && num_w.chars().all(|c| c.is_ascii_digit() || c == '.')
+                && num_w.chars().any(|c| c.is_ascii_digit());
+            if is_num && is_valid_si_unit(unit_w) {
+                claims.push(format!("{} {}", num_w.to_ascii_lowercase(), unit_w.to_ascii_lowercase()));
+            }
+        }
+    }
+    claims
+}
+
+/// Audits citations and protocols in a specification file against the cited sections and parsed SysML AST.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A and ISO 26262 ASIL D. Eliminates fraudulent source citations
-/// and ungrounded quantitative assertions across safety artifacts.
+/// and ungrounded quantitative or protocol assertions across safety and engineering artifacts.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Every cited file and section must exist on disk.
-/// - Every quantitative claim and protocol in cited text must exist in cited section or SysML model.
+/// - Every quantitative claim and protocol in cited text must exist in the cited section or parsed SysML AST.
 ///
 /// ## 3. Preconditions
-/// Input content, path, and slicer must be valid.
+/// Input content, path, slicer, and SysML model string must be valid UTF-8.
 ///
 /// ## 4. Postconditions
 /// Appends structured defect diagnostics to `errors` upon citation fraud or ungrounded claims.
@@ -1281,18 +1699,24 @@ pub fn audit_spec_citations_and_protocols(
     content: &str,
     rel_path: &str,
     slicer: &SectionSlicer,
-    model_lower: &str,
+    model_str: &str,
     errors: &mut Vec<String>,
 ) {
-    for (idx, line) in content.lines().enumerate() {
+    let lines: Vec<&str> = content.lines().collect();
+    let mut active_citations: Vec<CitationRef> = Vec::new();
+    let (ast_symbols, ast_claims) = build_ast_model_ground_truth(model_str);
+    let model_lower = model_str.to_ascii_lowercase();
+    let has_model = !model_str.trim().is_empty();
+
+    for (idx, &line) in lines.iter().enumerate() {
         let line_no = idx.saturating_add(1);
         let trimmed = line.trim();
         if trimmed.starts_with("```") || trimmed.is_empty() {
             continue;
         }
 
-        let citations = extract_citations_from_line(trimmed, line_no);
-        for cit in &citations {
+        let line_citations = extract_citations_from_line(trimmed, line_no);
+        for cit in &line_citations {
             if slicer.resolve_path(&cit.target_file).is_none() {
                 errors.push(format!(
                     "Check 23 failed: Citation fraud detected in '{}': cited source file '{}' does not exist in workspace.",
@@ -1309,52 +1733,72 @@ pub fn audit_spec_citations_and_protocols(
                         rel_path, sec, cit.target_file
                     ));
                 } else if let Some(ref sec_text) = sec_extracted {
-                    let lower_line = trimmed.to_ascii_lowercase();
                     let lower_sec = sec_text.to_ascii_lowercase();
+                    let next_line = lines.get(idx.saturating_add(1)).copied().unwrap_or("");
+                    let combined_claim = if trimmed.starts_with("<!--") {
+                        next_line
+                    } else {
+                        trimmed
+                    };
 
-                    if lower_line.contains("pwm") && !lower_sec.contains("pwm") && !model_lower.contains("pwm") {
-                        errors.push(format!(
-                            "Check 23 failed: Citation fraud detected in '{}' on line {}: cited section '§{}' in '{}' does not substantiate PWM interface claim.",
-                            rel_path, line_no, sec, cit.target_file
-                        ));
+                    for q_claim in extract_quantitative_unit_claims(combined_claim) {
+                        let in_ast = ast_claims.contains(&q_claim) || model_lower.contains(&q_claim);
+                        if !lower_sec.contains(&q_claim) && !in_ast {
+                            errors.push(format!(
+                                "Check 23 failed: Citation fraud detected in '{}' on line {}: cited section '§{}' in '{}' does not substantiate '{}' claim.",
+                                rel_path, line_no, sec, cit.target_file, q_claim
+                            ));
+                        }
                     }
-                    if lower_line.contains("50 hz") && !lower_sec.contains("50 hz") && !model_lower.contains("50 hz") {
-                        errors.push(format!(
-                            "Check 23 failed: Citation fraud detected in '{}' on line {}: cited section '§{}' in '{}' does not substantiate 50 Hz claim.",
-                            rel_path, line_no, sec, cit.target_file
-                        ));
+
+                    for proto_tok in extract_candidate_protocol_tokens(combined_claim) {
+                        let proto_lower = proto_tok.to_ascii_lowercase();
+                        let proto_norm = normalize_ast_protocol_symbol(&proto_tok);
+                        let in_ast = ast_symbols.contains(&proto_lower)
+                            || ast_symbols.contains(&proto_norm)
+                            || model_lower.contains(&proto_lower);
+                        if !lower_sec.contains(&proto_lower) && !in_ast {
+                            errors.push(format!(
+                                "Check 23 failed: Citation fraud detected in '{}' on line {}: cited section '§{}' in '{}' does not substantiate '{}' interface claim.",
+                                rel_path, line_no, sec, cit.target_file, proto_tok
+                            ));
+                        }
                     }
                 }
             }
         }
 
-        let lower_line = trimmed.to_ascii_lowercase();
-        if lower_line.contains("dshot") || lower_line.contains("dshot600") {
-            let in_model = model_lower.contains("dshot");
-            let in_cited_sec = citations.iter().any(|c| {
-                if let Some(ref sec) = c.section {
-                    slicer
-                        .extract_section(&c.target_file, sec)
-                        .is_some_and(|t| t.to_ascii_lowercase().contains("dshot"))
-                } else {
-                    false
-                }
-            });
-            if !in_model && !in_cited_sec {
-                errors.push(format!(
-                    "Check 23 failed: Ungrounded protocol detected in '{}' on line {}: protocol 'DShot600' is not declared in SysML model or cited source section.",
-                    rel_path, line_no
-                ));
-            }
+        if !line_citations.is_empty() {
+            active_citations = line_citations.clone();
         }
 
-        if lower_line.contains("stanag 4586") || lower_line.contains("stanag4586") {
-            let in_model = model_lower.contains("stanag");
-            if !in_model {
-                errors.push(format!(
-                    "Check 23 failed: Ungrounded protocol detected in '{}' on line {}: protocol 'STANAG 4586' is not declared in SysML model or cited source section.",
-                    rel_path, line_no
-                ));
+        if has_model || !active_citations.is_empty() {
+            for proto_tok in extract_candidate_protocol_tokens(trimmed) {
+                let proto_lower = proto_tok.to_ascii_lowercase();
+                let proto_norm = normalize_ast_protocol_symbol(&proto_tok);
+                let in_model = has_model
+                    && (ast_symbols.contains(&proto_lower)
+                        || ast_symbols.contains(&proto_norm)
+                        || model_lower.contains(&proto_lower));
+                let in_cited_sec = active_citations.iter().any(|c| {
+                    if let Some(ref sec) = c.section {
+                        slicer
+                            .extract_section(&c.target_file, sec)
+                            .is_some_and(|t| {
+                                let tl = t.to_ascii_lowercase();
+                                tl.contains(&proto_lower)
+                                    || normalize_ast_protocol_symbol(&tl).contains(&proto_norm)
+                            })
+                    } else {
+                        false
+                    }
+                });
+                if !in_model && !in_cited_sec {
+                    errors.push(format!(
+                        "Check 23 failed: Ungrounded protocol detected in '{}' on line {}: protocol '{}' is not declared in SysML AST or cited source section.",
+                        rel_path, line_no, proto_tok
+                    ));
+                }
             }
         }
     }
@@ -1412,7 +1856,6 @@ pub fn check_factual_grounding(
     let mut errors = Vec::new();
     let slicer = SectionSlicer::new(repo_root);
     let model_str = model_text.unwrap_or_default();
-    let model_lower = model_str.to_ascii_lowercase();
 
     for scan_dir in TargetScanDir::ALL.iter().copied().filter(|d| d.requires_factual_grounding()) {
         let dir = scan_dir.resolve(repo_root);
@@ -1424,7 +1867,7 @@ pub fn check_factual_grounding(
             .into_iter()
             .filter_entry(|e| {
                 let name = e.file_name().to_string_lossy();
-                !EXCLUDED_DIRS.iter().any(|&ex| name == ex)
+                !EXCLUDED_DIRS.iter().any(|ex| name == ex)
                     && name != "defects"
                     && name != "audits"
                     && !name.starts_with('.')
@@ -1458,7 +1901,7 @@ pub fn check_factual_grounding(
                         &content,
                         &rel_path,
                         &slicer,
-                        &model_lower,
+                        &model_str,
                         &mut errors,
                     );
                 }
@@ -1722,6 +2165,62 @@ struct PortMeta {
     direction: String,
 }
 
+/// Recursively collects nested subsystem and port identifiers from parsed SysML `PartDef` AST nodes.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A. Extracts hierarchical nesting structure from the SysML v2 AST
+/// so Check 24 enforces qualified port paths (`PORT-ID (Subsystem.Path.port)`) for nested AST components.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Any child `PartDef` inside a parent `PartDef.parts` (depth >= 1) and its declared `ports`
+///   are recorded as nested AST elements.
+///
+/// ## 3. Preconditions
+/// `parts` is a slice of parsed `PartDef` nodes.
+///
+/// ## 4. Postconditions
+/// Populates `nested_subsystems` and `nested_ports` with lowercase AST names.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(N) where N is total AST part/port count.
+/// Space Complexity: O(N).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// Pure AST traversal; never panics.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-PARITY-GATE-24].
+fn collect_ast_nested_subsystems_and_ports(
+    parts: &[deap_core::sysml_ast::PartDef],
+    is_nested: bool,
+    nested_subsystems: &mut BTreeSet<String>,
+    nested_ports: &mut BTreeSet<String>,
+) {
+    for part in parts {
+        if is_nested {
+            if !part.name.is_empty() {
+                nested_subsystems.insert(part.name.to_ascii_lowercase());
+            }
+            for port in &part.ports {
+                if !port.name.is_empty() {
+                    nested_ports.insert(port.name.to_ascii_lowercase());
+                }
+            }
+        }
+        if !part.parts.is_empty() {
+            if !part.name.is_empty() {
+                nested_subsystems.insert(part.name.to_ascii_lowercase());
+            }
+            collect_ast_nested_subsystems_and_ports(
+                &part.parts,
+                true,
+                nested_subsystems,
+                nested_ports,
+            );
+        }
+    }
+}
+
 /// Check 24: Level 1C ICD Completeness & Signal Flow Parity Gate.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -1824,6 +2323,18 @@ pub fn check_icd_completeness(repo_root: &Path) -> Result<ParityOutcome, Vec<Str
     let icd02_content = fs::read_to_string(&icd02_file)
         .map_err(|e| vec![format!("Check 24 failed: Failed to read ICD_02: {}", e)])?;
 
+    let mut ast_nested_subsystems = BTreeSet::new();
+    let mut ast_nested_ports = BTreeSet::new();
+    if let Some(ref mtext) = model_text {
+        let ast_parts = parse_part_defs(mtext);
+        collect_ast_nested_subsystems_and_ports(
+            &ast_parts,
+            false,
+            &mut ast_nested_subsystems,
+            &mut ast_nested_ports,
+        );
+    }
+
     let (port_headers, port_rows) = parse_markdown_table_rows(&icd01_content, "port definition");
     if port_rows.is_empty() {
         errors.push("Check 24 failed: ICD_01 Port Definition Roster Table (Section 4) is missing or contains 0 rows.".to_string());
@@ -1906,14 +2417,40 @@ pub fn check_icd_completeness(repo_root: &Path) -> Result<ParityOutcome, Vec<Str
             ));
         }
 
-        let is_nested_connection = src_raw.contains('.')
+        let src_subsys = src_port_id
+            .as_ref()
+            .and_then(|id| declared_ports.get(id))
+            .map(|p| p.subsystem.as_str())
+            .unwrap_or("");
+        let dst_subsys = dst_port_id
+            .as_ref()
+            .and_then(|id| declared_ports.get(id))
+            .map(|p| p.subsystem.as_str())
+            .unwrap_or("");
+        let src_port_name = src_port_id
+            .as_ref()
+            .and_then(|id| declared_ports.get(id))
+            .map(|p| p.name.as_str())
+            .unwrap_or(src_raw);
+        let dst_port_name = dst_port_id
+            .as_ref()
+            .and_then(|id| declared_ports.get(id))
+            .map(|p| p.name.as_str())
+            .unwrap_or(dst_raw);
+        let has_multi_subsystems = !src_subsys.is_empty()
+            && !dst_subsys.is_empty()
+            && src_subsys != dst_subsys;
+        let is_ast_nested = ast_nested_subsystems.contains(&src_subsys.to_ascii_lowercase())
+            || ast_nested_subsystems.contains(&dst_subsys.to_ascii_lowercase())
+            || ast_nested_ports.contains(&src_port_name.to_ascii_lowercase())
+            || ast_nested_ports.contains(&dst_port_name.to_ascii_lowercase());
+
+        let is_nested_connection = is_ast_nested
+            || src_raw.contains('.')
             || dst_raw.contains('.')
-            || declared_ports.get(&src_port_id.clone().unwrap_or_default()).is_some_and(|p| p.subsystem.contains('.') || p.subsystem != "FlightController" && p.subsystem != "System")
-            || declared_ports.get(&dst_port_id.clone().unwrap_or_default()).is_some_and(|p| p.subsystem.contains('.') || p.subsystem != "FlightController" && p.subsystem != "System")
-            || src_port_id.as_deref().unwrap_or("").contains("GNSS")
-            || dst_port_id.as_deref().unwrap_or("").contains("GNSS")
-            || src_port_id.as_deref().unwrap_or("").contains("IMU")
-            || dst_port_id.as_deref().unwrap_or("").contains("IMU");
+            || src_subsys.contains('.')
+            || dst_subsys.contains('.')
+            || has_multi_subsystems;
 
         if is_nested_connection {
             let src_qualified = src_raw.contains('(') && src_raw.contains('.') && src_raw.contains(')');
@@ -2100,13 +2637,18 @@ pub fn check_operational_allocation(repo_root: &Path) -> Result<ParityOutcome, V
     let conops_dir = TargetScanDir::Conops.resolve(repo_root);
     let arch_dir = TargetScanDir::Architecture.resolve(repo_root);
 
-    if is_upstream && (!conops_dir.is_dir() && !arch_dir.is_dir()) {
+    if is_upstream && !conops_dir.is_dir() {
         return Ok(ParityOutcome::PendingOrClean);
     }
 
     let mut errors = Vec::new();
     let mut target_files = Vec::new();
-    for dir in &[&conops_dir, &arch_dir] {
+    let scan_dirs = if is_upstream {
+        vec![conops_dir]
+    } else {
+        vec![conops_dir, arch_dir]
+    };
+    for dir in &scan_dirs {
         if dir.is_dir() {
             for entry_res in WalkDir::new(dir).sort_by_file_name().into_iter() {
                 let entry = match entry_res {
@@ -2186,6 +2728,8 @@ pub fn check_standards_measurement(
     let is_upstream = is_upstream_compiler(repo_root);
     let iface_dir = TargetScanDir::Interfaces.resolve(repo_root);
     let feat_dir = TargetScanDir::Features.resolve(repo_root);
+    let conops_dir = TargetScanDir::Conops.resolve(repo_root);
+    let arch_dir = TargetScanDir::Architecture.resolve(repo_root);
 
     if is_upstream && (!iface_dir.is_dir() && !feat_dir.is_dir()) {
         return Ok(ParityOutcome::PendingOrClean);
@@ -2193,7 +2737,12 @@ pub fn check_standards_measurement(
 
     let mut errors = Vec::new();
     let mut target_files = Vec::new();
-    for dir in &[&iface_dir, &feat_dir] {
+    let scan_dirs = if is_upstream {
+        vec![iface_dir, feat_dir]
+    } else {
+        vec![iface_dir, feat_dir, conops_dir, arch_dir]
+    };
+    for dir in &scan_dirs {
         if dir.is_dir() {
             for entry_res in WalkDir::new(dir).sort_by_file_name().into_iter() {
                 let entry = match entry_res {
@@ -2231,16 +2780,18 @@ pub fn check_standards_measurement(
             }
         };
 
-        let (headers, rows) = parse_markdown_table_rows(&content, "signal");
-        if let Some(unit_col) = headers.iter().position(|h| h.contains("unit")) {
-            for row in &rows {
-                if let Some(unit_val) = row.get(unit_col) {
-                    let clean = unit_val.trim();
-                    if clean.is_empty() || is_metrology_placeholder(clean) || !is_valid_si_unit(clean) {
-                        errors.push(format!(
-                            "Check 26 failed: Invalid or missing SI dimensional unit '{}' in '{}'",
-                            clean, rel
-                        ));
+        for table_kind in ["signal", "parameter", "metric"] {
+            let (headers, rows) = parse_markdown_table_rows(&content, table_kind);
+            if let Some(unit_col) = headers.iter().position(|h| h.contains("unit")) {
+                for row in &rows {
+                    if let Some(unit_val) = row.get(unit_col) {
+                        let clean = unit_val.trim().trim_matches(|c| c == '`' || c == '*');
+                        if clean.is_empty() || is_metrology_placeholder(clean) || !is_valid_si_unit(clean) {
+                            errors.push(format!(
+                                "Check 26 failed: Invalid or missing SI dimensional unit '{}' in '{}'",
+                                clean, rel
+                            ));
+                        }
                     }
                 }
             }
@@ -2848,6 +3399,46 @@ pub fn check_executive_deliverable_traceability(repo_root: &Path) -> Result<Pari
         return Ok(ParityOutcome::PendingOrClean);
     }
 
+    let mut ssot_conns = BTreeSet::new();
+    let views_dir = repo_root.join("docs").join("architecture").join("views");
+    if views_dir.is_dir() {
+        for entry_res in WalkDir::new(&views_dir).sort_by_file_name().into_iter() {
+            if let Ok(entry) = entry_res {
+                if entry.file_type().is_file() {
+                    if let Ok(vc) = fs::read_to_string(entry.path()) {
+                        for cid in extract_connection_ids(&vc) {
+                            ssot_conns.insert(cid);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let icd_file = TargetScanDir::Interfaces
+        .resolve(repo_root)
+        .join("ICD_01_SYSTEM_INTERFACE_MATRIX.md");
+    if icd_file.is_file() {
+        if let Ok(ic) = fs::read_to_string(&icd_file) {
+            for cid in extract_connection_ids(&ic) {
+                ssot_conns.insert(cid);
+            }
+        }
+    }
+    let conops_dir = TargetScanDir::Conops.resolve(repo_root);
+    if conops_dir.is_dir() {
+        for entry_res in WalkDir::new(&conops_dir).sort_by_file_name().into_iter() {
+            if let Ok(entry) = entry_res {
+                if entry.file_type().is_file() && entry.path().extension().is_some_and(|ext| ext == "md") {
+                    if let Ok(cc) = fs::read_to_string(entry.path()) {
+                        for cid in extract_connection_ids(&cc) {
+                            ssot_conns.insert(cid);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     for path in report_files {
         let rel = path.strip_prefix(repo_root).unwrap_or(&path).display().to_string();
         let content = match fs::read_to_string(&path) {
@@ -2860,7 +3451,10 @@ pub fn check_executive_deliverable_traceability(repo_root: &Path) -> Result<Pari
 
         let conns = extract_connection_ids(&content);
         for conn in conns {
-            if conn.contains("DIVERGENT") || conn.contains("PHANTOM") {
+            let digits_only = conn
+                .strip_prefix("CONN-")
+                .is_some_and(|rest| !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit()));
+            if !digits_only || (!ssot_conns.is_empty() && !ssot_conns.contains(&conn)) {
                 errors.push(format!(
                     "Check 30 failed: Report '{}' references ungrounded connection '{}'",
                     rel, conn
@@ -2880,16 +3474,16 @@ pub fn check_executive_deliverable_traceability(repo_root: &Path) -> Result<Pari
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A and ISO 26262 ASIL D. Verifies that requirement and test
-/// coverage matrices reference valid existing specification and test items without phantom entries.
+/// coverage matrices reference valid existing specification items (`FEAT-*`, `UC-*`, `US-*`) without phantom entries.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// Realized feature set in coverage digests must be a strict subset of declared features.
+/// Every referenced `FEAT-*.md`, `UC-*.md`, and `US-*.md` specification file across reports and specs must exist on disk.
 ///
 /// ## 3. Preconditions
 /// `repo_root` must be a directory.
 ///
 /// ## 4. Postconditions
-/// Returns `Ok(ParityOutcome::Verified)` when zero phantom realizations exist.
+/// Returns `Ok(ParityOutcome::Verified)` when zero phantom specification file references exist.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// Time Complexity: O(M * L). Space Complexity: O(F).
@@ -2906,21 +3500,31 @@ pub fn check_coverage_digest(repo_root: &Path) -> Result<ParityOutcome, Vec<Stri
     }
 
     let mut errors = Vec::new();
-    let mut declared_features = BTreeSet::new();
-    let features_dir = TargetScanDir::Features.resolve(repo_root);
-    if features_dir.is_dir() {
-        for entry_res in WalkDir::new(&features_dir).into_iter() {
-            let entry = match entry_res {
-                Ok(e) => e,
-                Err(err) => {
-                    errors.push(format!("Check 28 failed: I/O error walking directory '{}': {}", features_dir.display(), err));
-                    continue;
-                }
-            };
-            if entry.file_type().is_file() {
-                let name = entry.file_name().to_string_lossy().to_string();
-                if name.ends_with(".md") && name != "README.md" {
-                    declared_features.insert(name);
+    let mut declared_specs = BTreeSet::new();
+    for spec_dir_kind in [
+        TargetScanDir::Features,
+        TargetScanDir::UseCases,
+        TargetScanDir::UserStories,
+    ] {
+        let dir = spec_dir_kind.resolve(repo_root);
+        if dir.is_dir() {
+            for entry_res in WalkDir::new(&dir).sort_by_file_name().into_iter() {
+                let entry = match entry_res {
+                    Ok(e) => e,
+                    Err(err) => {
+                        errors.push(format!(
+                            "Check 28 failed: I/O error walking directory '{}': {}",
+                            dir.display(),
+                            err
+                        ));
+                        continue;
+                    }
+                };
+                if entry.file_type().is_file() {
+                    let name = entry.file_name().to_string_lossy().to_string();
+                    if name.ends_with(".md") && name != "README.md" {
+                        declared_specs.insert(name.to_ascii_lowercase());
+                    }
                 }
             }
         }
@@ -2929,33 +3533,141 @@ pub fn check_coverage_digest(repo_root: &Path) -> Result<ParityOutcome, Vec<Stri
         return Err(errors);
     }
 
-    if declared_features.is_empty() {
+    if declared_specs.is_empty() {
         return Ok(ParityOutcome::PendingOrClean);
     }
 
-    Ok(ParityOutcome::Verified)
+    for scan_dir_kind in [
+        TargetScanDir::Reports,
+        TargetScanDir::Epics,
+        TargetScanDir::Features,
+        TargetScanDir::UseCases,
+        TargetScanDir::UserStories,
+    ] {
+        let dir = scan_dir_kind.resolve(repo_root);
+        if !dir.is_dir() {
+            continue;
+        }
+        for entry_res in WalkDir::new(&dir).sort_by_file_name().into_iter() {
+            let entry = match entry_res {
+                Ok(e) => e,
+                Err(err) => {
+                    errors.push(format!(
+                        "Check 28 failed: I/O error walking directory '{}': {}",
+                        dir.display(),
+                        err
+                    ));
+                    continue;
+                }
+            };
+            if entry.file_type().is_file() && entry.path().extension().is_some_and(|ext| ext == "md") {
+                let fname = entry.file_name().to_string_lossy();
+                if fname == "README.md" {
+                    continue;
+                }
+                let rel = entry
+                    .path()
+                    .strip_prefix(repo_root)
+                    .unwrap_or(entry.path())
+                    .display()
+                    .to_string();
+                let content = match fs::read_to_string(entry.path()) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        errors.push(format!("Check 28 failed: Unable to read '{}': {}", rel, e));
+                        continue;
+                    }
+                };
+                for word in content.split_whitespace() {
+                    for part in word.split(['(', ')', '[', ']', '`', '"', '\'']) {
+                        let clean = part.trim_matches(|c: char| {
+                            !c.is_ascii_alphanumeric() && c != '-' && c != '_' && c != '.' && c != '/'
+                        });
+                        let basename = clean.rsplit('/').next().unwrap_or(clean);
+                        let bl = basename.to_ascii_lowercase();
+                        if (bl.starts_with("feat-") || bl.starts_with("uc-") || bl.starts_with("us-"))
+                            && bl.ends_with(".md")
+                            && !declared_specs.contains(&bl)
+                        {
+                            errors.push(format!(
+                                "Check 28 failed: Coverage digest or specification '{}' references undeclared specification file '{}'",
+                                rel, basename
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if errors.is_empty() {
+        Ok(ParityOutcome::Verified)
+    } else {
+        Err(errors)
+    }
+}
+
+/// Extracts canonical STPA identifiers with a given prefix (e.g., `H-` or `SC-`) from a line,
+/// normalizing numeric suffixes so `H-01` and `H-1` map to `"H-1"`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and MIL-STD-882E. Enables general STPA hazard and safety constraint
+/// obligation extraction without hardcoded identifier literals.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Prefix must be followed by one or more ASCII digits.
+/// - Leading zeros on the numeric suffix are normalized (`01` -> `1`).
+///
+/// ## 3. Preconditions
+/// `line` and `prefix` must be valid UTF-8 strings (`prefix` uppercase, ending in `-`).
+///
+/// ## 4. Postconditions
+/// Returns a sorted `BTreeSet<String>` of canonical STPA identifiers found on `line`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(W) where W is token count on the line.
+/// Space Complexity: O(W).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// Total function; never panics.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-OBLIGATION-WITNESS-GATE].
+fn extract_stpa_prefixed_ids(line: &str, prefix: &str) -> BTreeSet<String> {
+    let mut ids = BTreeSet::new();
+    for raw_tok in line.split(|c: char| !c.is_ascii_alphanumeric() && c != '-') {
+        let upper = raw_tok.to_ascii_uppercase();
+        if let Some(rest) = upper.strip_prefix(prefix) {
+            if !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit()) {
+                let normalized_num = rest.trim_start_matches('0');
+                let num_str = if normalized_num.is_empty() { "0" } else { normalized_num };
+                ids.insert(format!("{}{}", prefix, num_str));
+            }
+        }
+    }
+    ids
 }
 
 /// Gate 29: Obligation-Witness Registry Gate.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A, ISO 26262 ASIL D, and STPA safety engineering. Verifies
-/// that every declared hazard and safety constraint in `docs/safety/` has an active witness obligation.
+/// that every declared hazard (`H-*`) in `docs/safety/` is witnessed by a declared safety constraint (`SC-*`).
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// Hazard set must be completely covered by verification witnesses.
+/// Every declared hazard `H-*` must be witnessed by at least one safety constraint `SC-*`.
 ///
 /// ## 3. Preconditions
 /// `repo_root` must be a directory.
 ///
 /// ## 4. Postconditions
-/// Returns `Ok(ParityOutcome::Verified)` when zero phantom witnesses or orphan hazards exist.
+/// Returns `Ok(ParityOutcome::Verified)` when zero orphan hazards exist.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// Time Complexity: O(H). Space Complexity: O(H) where H is hazard count.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// Fails closed on orphan safety constraints.
+/// Fails closed on unwitnessed hazards or missing safety constraints.
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-OBLIGATION-WITNESS-GATE].
@@ -2983,7 +3695,10 @@ pub fn check_obligation_witness(repo_root: &Path) -> Result<ParityOutcome, Vec<S
         if entry.file_type().is_file() {
             let path = entry.path().to_path_buf();
             if path.extension().is_some_and(|ext| ext == "md") {
-                stpa_files.push(path);
+                let fname = entry.file_name().to_string_lossy();
+                if fname != "README.md" {
+                    stpa_files.push(path);
+                }
             }
         }
     }
@@ -2995,7 +3710,59 @@ pub fn check_obligation_witness(repo_root: &Path) -> Result<ParityOutcome, Vec<S
         return Ok(ParityOutcome::PendingOrClean);
     }
 
-    Ok(ParityOutcome::Verified)
+    let mut declared_hazards = BTreeSet::new();
+    let mut declared_constraints = BTreeSet::new();
+    let mut witnessed_hazards = BTreeSet::new();
+    let mut has_explicit_uca_bindings = false;
+
+    for path in &stpa_files {
+        let rel = path.strip_prefix(repo_root).unwrap_or(path).display().to_string();
+        let content = match fs::read_to_string(path) {
+            Ok(c) => c,
+            Err(e) => {
+                errors.push(format!("Check 29 failed: Unable to read '{}': {}", rel, e));
+                continue;
+            }
+        };
+        for line in content.lines() {
+            let line_h = extract_stpa_prefixed_ids(line, "H-");
+            let line_sc = extract_stpa_prefixed_ids(line, "SC-");
+            if !line_h.is_empty() && !line_sc.is_empty() {
+                has_explicit_uca_bindings = true;
+                for h in &line_h {
+                    witnessed_hazards.insert(h.clone());
+                }
+            }
+            for h in line_h {
+                declared_hazards.insert(h);
+            }
+            for sc in line_sc {
+                declared_constraints.insert(sc);
+            }
+        }
+    }
+
+    if !declared_hazards.is_empty() && declared_constraints.is_empty() {
+        errors.push(format!(
+            "Check 29 failed: Safety specifications declare hazards ({:?}) without any witnessing safety constraint (SC-*).",
+            declared_hazards
+        ));
+    } else if has_explicit_uca_bindings {
+        for h in &declared_hazards {
+            if !witnessed_hazards.contains(h) {
+                errors.push(format!(
+                    "Check 29 failed: Declared hazard '{}' in safety specifications is not witnessed by any safety constraint (SC-*) binding.",
+                    h
+                ));
+            }
+        }
+    }
+
+    if errors.is_empty() {
+        Ok(ParityOutcome::Verified)
+    } else {
+        Err(errors)
+    }
 }
 
 /// Gate 30: Architecture Viewpoint & Diagram Completeness Gate.
@@ -3833,5 +4600,115 @@ flowchart TD
         assert!(TargetScanDir::UseCases.requires_factual_grounding());
         assert!(TargetScanDir::Reports.requires_factual_grounding());
         assert!(!TargetScanDir::Management.requires_factual_grounding());
+    }
+
+    #[test]
+    fn test_workspace_integrity_no_fake_predicates_or_fixture_hardcoding() -> Result<(), Box<dyn std::error::Error>> {
+        let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let root = manifest_dir
+            .parent()
+            .and_then(|p| p.parent())
+            .ok_or("missing workspace root")?;
+        let crates_dir = root.join("crates");
+
+        let global_forbidden = vec![
+            ["\"UNDEC", "LARED\""].concat(),
+            ["\"DIVER", "GENT\""].concat(),
+            ["\"PHAN", "TOM\""].concat(),
+            ["let _ =", " repo_root"].concat(),
+            ["\"VTOL", "Motor\""].concat(),
+            ["\"dshot", "600\""].concat(),
+            ["\"50 ", "hz\""].concat(),
+            ["\"stanag ", "4586\""].concat(),
+            ["\"stanag", "4586\""].concat(),
+        ];
+
+        let gate_specific_forbidden = vec![
+            ["\"dsh", "ot\""].concat(),
+            ["\"GN", "SS\""].concat(),
+            ["\"IM", "U\""].concat(),
+            ["\"Flight", "Controller\""].concat(),
+        ];
+
+        let corrupted_space_entry = ["\"", " ", "\","].concat();
+
+        let mut violations = Vec::new();
+
+        for entry_res in WalkDir::new(&crates_dir).sort_by_file_name().into_iter() {
+            let entry = entry_res?;
+            if !entry.file_type().is_file() {
+                continue;
+            }
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("rs") {
+                continue;
+            }
+            let rel = path.strip_prefix(root).unwrap_or(path).to_string_lossy().to_string();
+            if !rel.contains("/src/") {
+                continue;
+            }
+
+            let content = fs::read_to_string(path)?;
+            let prod = content.split("#[cfg(test)]").next().unwrap_or(&content);
+
+            for (idx, line) in prod.lines().enumerate() {
+                let line_no = idx + 1;
+                let code = line.split("//").next().unwrap_or(line);
+
+                for needle in &global_forbidden {
+                    if code.contains(needle) {
+                        violations.push(format!(
+                            "{}:{}: contains forbidden predicate or fixture literal {}",
+                            rel, line_no, needle
+                        ));
+                    }
+                }
+
+                if rel.ends_with("parity_gates.rs")
+                    || rel.ends_with("safety_stpa.rs")
+                    || rel.ends_with("provenance.rs")
+                {
+                    for needle in &gate_specific_forbidden {
+                        if code.contains(needle) {
+                            violations.push(format!(
+                                "{}:{}: contains hardcoded fixture literal {}",
+                                rel, line_no, needle
+                            ));
+                        }
+                    }
+                }
+            }
+
+            if rel.ends_with("safety_stpa.rs") {
+                for kw_const in [
+                    "INTERFACE_KEYWORDS",
+                    "STATE_KEYWORDS",
+                    "ACTION_KEYWORDS",
+                    "RESOURCE_KEYWORDS",
+                ] {
+                    if let Some(pos) = prod.find(kw_const) {
+                        if let Some(after) = prod.get(pos..) {
+                            if let Some(end_semi) = after.find("];") {
+                                let block = &after[..end_semi];
+                                if block.contains(&corrupted_space_entry) {
+                                    violations.push(format!(
+                                        "{}: {} contains corrupted single-space entry",
+                                        rel, kw_const
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        assert!(
+            violations.is_empty(),
+            "Workspace integrity violations found ({}):\n{}",
+            violations.len(),
+            violations.join("\n")
+        );
+        Ok(())
     }
 }

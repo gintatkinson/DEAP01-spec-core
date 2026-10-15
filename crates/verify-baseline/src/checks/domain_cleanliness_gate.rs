@@ -358,7 +358,7 @@ pub fn check_domain_agnostic_ast_cleanliness(repo_root: &Path) -> Result<(), Vec
             .filter_entry(|e| {
                 if e.file_type().is_dir() {
                     let name = e.file_name().to_string_lossy();
-                    name != "target" && name != ".git" && !EXCLUDED_DIRS.iter().any(|&ex| name == ex)
+                    name != "target" && name != ".git" && !EXCLUDED_DIRS.iter().any(|ex| name == ex)
                 } else {
                     true
                 }
@@ -425,7 +425,7 @@ pub fn check_domain_agnostic_ast_cleanliness(repo_root: &Path) -> Result<(), Vec
             .filter_entry(|e| {
                 if e.file_type().is_dir() {
                     let name = e.file_name().to_string_lossy();
-                    !EXCLUDED_DIRS.iter().any(|&ex| name == ex)
+                    !EXCLUDED_DIRS.iter().any(|ex| name == ex)
                 } else {
                     true
                 }

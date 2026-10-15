@@ -331,11 +331,11 @@ pub fn detect_dom_leaks(content: &str, rel_path: &str) -> Vec<SpecAuditFinding> 
             continue;
         }
 
-        let lower = line.to_lowercase();
+        let lower = line.to_ascii_lowercase();
 
         // 1. Check aria-* attributes
         if let Some(pos) = lower.find("aria-") {
-            let rem = &lower[pos + 5..];
+            let rem = lower.get(pos + 5..).unwrap_or("");
             if rem.chars().next().is_some_and(|c| c.is_ascii_alphabetic()) {
                 findings.push(SpecAuditFinding::new(
                     "platform-independence-dom-attribute-leak",
@@ -351,7 +351,7 @@ pub fn detect_dom_leaks(content: &str, rel_path: &str) -> Vec<SpecAuditFinding> 
 
         // 2. Check role="..." attributes
         if let Some(pos) = lower.find("role") {
-            let rem = lower[pos + 4..].trim_start();
+            let rem = lower.get(pos + 4..).unwrap_or("").trim_start();
             if let Some(after_eq) = rem.strip_prefix('=') {
                 let after_eq_trimmed = after_eq.trim_start();
                 if after_eq_trimmed.starts_with('"') || after_eq_trimmed.starts_with('\'') {
@@ -370,7 +370,7 @@ pub fn detect_dom_leaks(content: &str, rel_path: &str) -> Vec<SpecAuditFinding> 
 
         // 3. Check tabindex= attributes
         if let Some(pos) = lower.find("tabindex") {
-            let rem = lower[pos + 8..].trim_start();
+            let rem = lower.get(pos + 8..).unwrap_or("").trim_start();
             if rem.starts_with('=') {
                 findings.push(SpecAuditFinding::new(
                     "platform-independence-dom-attribute-leak",
@@ -403,7 +403,10 @@ pub fn detect_dom_leaks(content: &str, rel_path: &str) -> Vec<SpecAuditFinding> 
         // 5. Check forbidden HTML tags
         for tag in FORBIDDEN_DOM_TAGS {
             let mut search_from = 0;
-            while let Some(pos) = lower[search_from..].find(tag) {
+            while let Some(slice) = lower.get(search_from..) {
+                let Some(pos) = slice.find(tag) else {
+                    break;
+                };
                 let abs_pos = search_from + pos;
                 let end_pos = abs_pos + tag.len();
                 let is_tag_boundary = if end_pos >= lower.len() {

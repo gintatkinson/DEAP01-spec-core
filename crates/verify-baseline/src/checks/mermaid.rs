@@ -21,7 +21,7 @@ pub fn check_mermaid_syntax(repo_root: &Path) -> Result<(), Vec<String>> {
         .filter_entry(|e| {
             if e.file_type().is_dir() {
                 let name = e.file_name().to_string_lossy();
-                !EXCLUDED_DIRS.iter().any(|&ex| name == ex)
+                !EXCLUDED_DIRS.iter().any(|ex| name == ex)
             } else {
                 true
             }

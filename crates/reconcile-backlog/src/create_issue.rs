@@ -84,13 +84,10 @@ impl CreateIssueArgs {
             return Err("Missing required title. Specify via --title <TITLE> or positional argument <title>".to_string());
         };
 
-        let repo = if let Some(ref r) = self.repo {
-            Some(r.clone())
-        } else if let Some(p) = self.positional.get(pos_idx) {
-            Some(p.clone())
-        } else {
-            None
-        };
+        let repo = self
+            .repo
+            .clone()
+            .or_else(|| self.positional.get(pos_idx).cloned());
 
         Ok(ResolvedCreateIssueParams {
             body_file,
@@ -138,18 +135,17 @@ pub fn validate_body_file(body_file: &str) -> Result<String, String> {
     // Check for unreplaced checklist placeholder tokens (Issue #223 blocking registration gate)
     for line in content.lines() {
         let trimmed = line.trim_start();
-        if trimmed.starts_with("- [ ]") || trimmed.starts_with("- [x]") || trimmed.starts_with("- [X]") {
-            if trimmed.contains("#[IssueID]")
+        if (trimmed.starts_with("- [ ]") || trimmed.starts_with("- [x]") || trimmed.starts_with("- [X]"))
+            && (trimmed.contains("#[IssueID]")
                 || trimmed.contains("#[FeatureIssueID]")
                 || trimmed.contains("#[UseCaseIssueID]")
                 || trimmed.contains("#[StoryIssueID]")
-                || trimmed.contains("#[EpicIssueID]")
-            {
-                return Err(format!(
-                    "FATAL: Unresolved checklist placeholder token detected in: {}. Sibling specifications must be registered on the tracker before publishing.",
-                    body_file
-                ));
-            }
+                || trimmed.contains("#[EpicIssueID]"))
+        {
+            return Err(format!(
+                "FATAL: Unresolved checklist placeholder token detected in: {}. Sibling specifications must be registered on the tracker before publishing.",
+                body_file
+            ));
         }
     }
 
@@ -240,7 +236,7 @@ pub fn run_create_issue<T: TrackerClient>(
             &body_content,
             params.repo.as_deref(),
             "main",
-            &std::collections::HashMap::new(),
+            &std::collections::BTreeMap::new(),
         );
         let (number, url) = tracker.create_issue(
             &params.title,
@@ -307,12 +303,16 @@ mod tests {
     }
 
     impl TempFile {
-        fn new(name: &str, content: &str) -> Self {
+        fn new(name: &str, content: &str) -> Result<Self, Box<dyn std::error::Error>> {
             let rand_id = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
             let path = std::env::temp_dir().join(format!("{}_{}.md", name, rand_id));
-            let mut file = fs::File::create(&path).unwrap();
-            file.write_all(content.as_bytes()).unwrap();
-            Self { path }
+            let mut file = fs::File::create(&path)?;
+            file.write_all(content.as_bytes())?;
+            Ok(Self { path })
+        }
+
+        fn path_str(&self) -> Result<&str, Box<dyn std::error::Error>> {
+            Ok(self.path.to_str().ok_or("temp file path is not valid UTF-8")?)
         }
     }
 
@@ -323,7 +323,7 @@ mod tests {
     }
 
     #[test]
-    fn test_args_resolution_flags_and_positional() {
+    fn test_args_resolution_flags_and_positional() -> Result<(), Box<dyn std::error::Error>> {
         // Flag-based
         let args_flags = CreateIssueArgs {
             body_file: Some("body.md".to_string()),
@@ -334,7 +334,7 @@ mod tests {
             provider: "github".to_string(),
             positional: Vec::new(),
         };
-        let resolved = args_flags.resolve().unwrap();
+        let resolved = args_flags.resolve()?;
         assert_eq!(resolved.body_file, "body.md");
         assert_eq!(resolved.label, "bug");
         assert_eq!(resolved.title, "My Title");
@@ -355,48 +355,50 @@ mod tests {
                 "pos/repo".to_string(),
             ],
         };
-        let resolved_pos = args_pos.resolve().unwrap();
+        let resolved_pos = args_pos.resolve()?;
         assert_eq!(resolved_pos.body_file, "pos_body.md");
         assert_eq!(resolved_pos.label, "feature");
         assert_eq!(resolved_pos.title, "Pos Title");
         assert_eq!(resolved_pos.repo, Some("pos/repo".to_string()));
+        Ok(())
     }
 
     #[test]
-    fn test_validate_body_file_errors() {
+    fn test_validate_body_file_errors() -> Result<(), Box<dyn std::error::Error>> {
         // Empty file
-        let empty_tf = TempFile::new("empty", "");
-        let err = validate_body_file(empty_tf.path.to_str().unwrap()).unwrap_err();
+        let empty_tf = TempFile::new("empty", "")?;
+        let err = validate_body_file(empty_tf.path_str()?).err().ok_or("expected empty-file rejection")?;
         assert!(err.contains("empty"));
 
         // Unbalanced fences
-        let fence_tf = TempFile::new("fence", "```rust\nlet a = 1;");
-        let err = validate_body_file(fence_tf.path.to_str().unwrap()).unwrap_err();
+        let fence_tf = TempFile::new("fence", "```rust\nlet a = 1;")?;
+        let err = validate_body_file(fence_tf.path_str()?).err().ok_or("expected unbalanced-fence rejection")?;
         assert!(err.contains("Unbalanced code fences"));
 
         // Unreplaced token
-        let token_tf = TempFile::new("token", "Sample {{REQUIRED_FOO}} here\n```\nblock\n```\n");
-        let err = validate_body_file(token_tf.path.to_str().unwrap()).unwrap_err();
+        let token_tf = TempFile::new("token", "Sample {{REQUIRED_FOO}} here\n```\nblock\n```\n")?;
+        let err = validate_body_file(token_tf.path_str()?).err().ok_or("expected unreplaced-token rejection")?;
         assert!(err.contains("Unreplaced {{REQUIRED_*}} escape token"));
 
         // Unresolved checklist placeholder token probe (Issue #223 RED phase)
         let ph_tf = TempFile::new(
             "placeholder_checklist",
             "# Epic\n## 2. Requirements & Checklist\n- [ ] #[IssueID] - Feature 01\n```\nblock\n```\n",
-        );
-        let err = validate_body_file(ph_tf.path.to_str().unwrap()).unwrap_err();
+        )?;
+        let err = validate_body_file(ph_tf.path_str()?).err().ok_or("expected placeholder-token rejection")?;
         assert!(err.contains("Unresolved checklist placeholder token"));
 
         // Valid file
-        let valid_tf = TempFile::new("valid", "# Valid\n```rust\nlet a = 1;\n```\nAll good.");
-        let content = validate_body_file(valid_tf.path.to_str().unwrap()).unwrap();
+        let valid_tf = TempFile::new("valid", "# Valid\n```rust\nlet a = 1;\n```\nAll good.")?;
+        let content = validate_body_file(valid_tf.path_str()?)?;
         assert!(content.contains("# Valid"));
+        Ok(())
     }
 
     #[test]
-    fn test_run_create_issue_workflow_offline() {
-        let body_tf = TempFile::new("body", "# Issue Content\n```rust\nfn test() {}\n```\n");
-        let analysis_tf = TempFile::new("analysis", "Reopen rationale with details");
+    fn test_run_create_issue_workflow_offline() -> Result<(), Box<dyn std::error::Error>> {
+        let body_tf = TempFile::new("body", "# Issue Content\n```rust\nfn test() {}\n```\n")?;
+        let analysis_tf = TempFile::new("analysis", "Reopen rationale with details")?;
 
         let existing_closed = TrackerIssue {
             number: 10,
@@ -420,14 +422,14 @@ mod tests {
 
         // 1. Reopen closed issue with analysis
         let reopen_params = ResolvedCreateIssueParams {
-            body_file: body_tf.path.to_str().unwrap().to_string(),
+            body_file: body_tf.path_str()?.to_string(),
             label: "feature".to_string(),
             title: "Feature: Core Ingest Pipeline".to_string(), // normalizes to "core ingest pipeline"
             repo: Some("org/repo".to_string()),
-            reopen_with_analysis: Some(analysis_tf.path.to_str().unwrap().to_string()),
+            reopen_with_analysis: Some(analysis_tf.path_str()?.to_string()),
             provider: "offline".to_string(),
         };
-        let outcome = run_create_issue(&tracker, &reopen_params).unwrap();
+        let outcome = run_create_issue(&tracker, &reopen_params)?;
         assert_eq!(
             outcome,
             IssueActionOutcome::Reopened {
@@ -438,14 +440,14 @@ mod tests {
 
         // 2. Open issue idempotency
         let open_params = ResolvedCreateIssueParams {
-            body_file: body_tf.path.to_str().unwrap().to_string(),
+            body_file: body_tf.path_str()?.to_string(),
             label: "feature".to_string(),
             title: "Feature 02: Baseline Verifier".to_string(),
             repo: Some("org/repo".to_string()),
             reopen_with_analysis: None,
             provider: "offline".to_string(),
         };
-        let outcome = run_create_issue(&tracker, &open_params).unwrap();
+        let outcome = run_create_issue(&tracker, &open_params)?;
         assert_eq!(
             outcome,
             IssueActionOutcome::AlreadyOpen {
@@ -456,14 +458,14 @@ mod tests {
 
         // 3. Create brand new issue
         let new_params = ResolvedCreateIssueParams {
-            body_file: body_tf.path.to_str().unwrap().to_string(),
+            body_file: body_tf.path_str()?.to_string(),
             label: "bug".to_string(),
             title: "Bug 03: Brittle Shell Sprawl".to_string(),
             repo: Some("org/repo".to_string()),
             reopen_with_analysis: None,
             provider: "offline".to_string(),
         };
-        let outcome = run_create_issue(&tracker, &new_params).unwrap();
+        let outcome = run_create_issue(&tracker, &new_params)?;
         assert_eq!(
             outcome,
             IssueActionOutcome::Created {
@@ -471,6 +473,7 @@ mod tests {
                 url: "https://github.com/org/repo/issues/21".to_string(),
             }
         );
+        Ok(())
     }
 }
 

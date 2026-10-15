@@ -110,36 +110,45 @@ mod tests {
     use deap_core::sysml_ast::{ActionDef, PartDef};
 
     #[test]
-    fn test_uca_cartesian_expansion_all_guide_words() {
-        let mut pkg = PackageDef::default();
-        pkg.name = "TestPackage".to_string();
+    fn test_uca_cartesian_expansion_all_guide_words() -> Result<(), Box<dyn std::error::Error>> {
+        let mut pkg = PackageDef {
+            name: "TestPackage".to_string(),
+            ..Default::default()
+        };
 
-        let mut controller = PartDef::default();
-        controller.name = "SystemController".to_string();
-        let mut act1 = ActionDef::default();
-        act1.name = "EngageActuator".to_string();
+        let mut controller = PartDef {
+            name: "SystemController".to_string(),
+            ..Default::default()
+        };
+        let act1 = ActionDef {
+            name: "EngageActuator".to_string(),
+            ..Default::default()
+        };
         controller.actions.push(act1);
 
-        let mut act2 = ActionDef::default();
-        act2.name = "ReleaseSafetyLock".to_string();
+        let act2 = ActionDef {
+            name: "ReleaseSafetyLock".to_string(),
+            ..Default::default()
+        };
         controller.actions.push(act2);
         pkg.part_defs.push(controller);
 
         let ucas = expand_cartesian_stpa(&pkg);
         // 2 actions * 4 guide words = 8 UCAs
         assert_eq!(ucas.len(), 8);
-        assert_eq!(ucas[0].id, "UCA-001");
-        assert_eq!(ucas[0].controller, "SystemController");
-        assert_eq!(ucas[0].control_action, "EngageActuator");
-        assert_eq!(ucas[0].guide_word, "Not providing");
-        assert_eq!(ucas[0].constraint, "SC-001");
-        assert_eq!(ucas[0].hazard, "H-1");
+        assert_eq!(ucas.first().ok_or("missing first element of ucas")?.id, "UCA-001");
+        assert_eq!(ucas.first().ok_or("missing first element of ucas")?.controller, "SystemController");
+        assert_eq!(ucas.first().ok_or("missing first element of ucas")?.control_action, "EngageActuator");
+        assert_eq!(ucas.first().ok_or("missing first element of ucas")?.guide_word, "Not providing");
+        assert_eq!(ucas.first().ok_or("missing first element of ucas")?.constraint, "SC-001");
+        assert_eq!(ucas.first().ok_or("missing first element of ucas")?.hazard, "H-1");
 
-        assert_eq!(ucas[1].guide_word, "Providing");
-        assert_eq!(ucas[2].guide_word, "Too early / Too late / Out of order");
-        assert_eq!(ucas[3].guide_word, "Stopped too soon / Applied too long");
+        assert_eq!(ucas.get(1).ok_or("missing element 1 of ucas")?.guide_word, "Providing");
+        assert_eq!(ucas.get(2).ok_or("missing element 2 of ucas")?.guide_word, "Too early / Too late / Out of order");
+        assert_eq!(ucas.get(3).ok_or("missing element 3 of ucas")?.guide_word, "Stopped too soon / Applied too long");
 
-        assert_eq!(ucas[4].control_action, "ReleaseSafetyLock");
-        assert_eq!(ucas[4].hazard, "H-2");
+        assert_eq!(ucas.get(4).ok_or("missing element 4 of ucas")?.control_action, "ReleaseSafetyLock");
+        assert_eq!(ucas.get(4).ok_or("missing element 4 of ucas")?.hazard, "H-2");
+        Ok(())
     }
 }

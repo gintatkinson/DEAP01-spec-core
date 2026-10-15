@@ -12,7 +12,7 @@
 //! 9. HAZARD_LOG.md
 //! 10. SLDV_FORMAL_PROOFS.m
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
 
@@ -294,8 +294,8 @@ pub const PROOF_TEMPLATES: [ProofTemplate; 10] = [
 ];
 
 /// Collects symbolic parameter tokens from AST attribute defaults and constraint expressions.
-pub fn collect_parameter_tokens(pkg: &PackageDef) -> HashMap<String, String> {
-    let mut tokens = HashMap::new();
+pub fn collect_parameter_tokens(pkg: &PackageDef) -> BTreeMap<String, String> {
+    let mut tokens = BTreeMap::new();
 
     for p in pkg.get_all_packages() {
         for attr in &p.attribute_defs {
@@ -328,7 +328,7 @@ pub fn collect_parameter_tokens(pkg: &PackageDef) -> HashMap<String, String> {
     tokens
 }
 
-fn extract_constraint_tokens(expr: &str, tokens: &mut HashMap<String, String>) {
+fn extract_constraint_tokens(expr: &str, tokens: &mut BTreeMap<String, String>) {
     let operators = ["<=", ">=", "<", ">", "="];
     let mut idx = 0;
     while idx < expr.len() {
@@ -342,7 +342,7 @@ fn extract_constraint_tokens(expr: &str, tokens: &mut HashMap<String, String>) {
                 .unwrap_or(0);
             let key = &before_trimmed[id_start..];
             let key_valid = !key.is_empty()
-                && (key.as_bytes()[0].is_ascii_alphabetic() || key.as_bytes()[0] == b'_')
+                && key.as_bytes().first().is_some_and(|b| b.is_ascii_alphabetic() || *b == b'_')
                 && key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
 
             let after = &expr[idx + op.len()..];
@@ -364,7 +364,7 @@ fn extract_constraint_tokens(expr: &str, tokens: &mut HashMap<String, String>) {
     }
 }
 
-fn resolve_template(text: &str, tokens: &HashMap<String, String>) -> String {
+fn resolve_template(text: &str, tokens: &BTreeMap<String, String>) -> String {
     let mut result = String::with_capacity(text.len());
     let mut idx = 0;
     while let Some(start) = text[idx..].find("%%") {
@@ -399,8 +399,8 @@ pub fn collect_all_constraints(pkg: &PackageDef) -> Vec<ConstraintDef> {
 pub fn transpile_safety_suite(
     pkg: &PackageDef,
     scoring_config: Option<&FmecaScoringConfig>,
-) -> HashMap<String, String> {
-    let mut artifacts = HashMap::new();
+) -> BTreeMap<String, String> {
+    let mut artifacts = BTreeMap::new();
     let tokens = collect_parameter_tokens(pkg);
     let ucas = expand_cartesian_stpa(pkg);
     let constraints = collect_all_constraints(pkg);
@@ -447,7 +447,7 @@ pub fn transpile_safety_suite(
     // 7. 07_RTA_ARCHITECTURE.md
     artifacts.insert(
         "07_RTA_ARCHITECTURE.md".to_string(),
-        render_rta_architecture(&tokens),
+        render_rta_architecture(pkg, &tokens),
     );
 
     // 8. STPA_MATRIX.md
@@ -462,7 +462,7 @@ pub fn transpile_safety_suite(
     // 10. SLDV_FORMAL_PROOFS.m
     artifacts.insert(
         "SLDV_FORMAL_PROOFS.m".to_string(),
-        render_sldv_script(&constraints, &tokens),
+        render_sldv_script(pkg, &constraints, &tokens),
     );
 
     artifacts
@@ -492,7 +492,7 @@ fn sanitize_mermaid_id(id: &str) -> String {
         .chars()
         .filter(|c| c.is_alphanumeric() || *c == '_')
         .collect();
-    if clean.is_empty() || clean.chars().next().map_or(false, |c| c.is_numeric()) {
+    if clean.is_empty() || clean.chars().next().is_some_and(|c| c.is_numeric()) {
         format!("Node_{}", clean)
     } else {
         clean
@@ -551,11 +551,33 @@ fn render_losses_hazards_topology(pkg: &PackageDef, ucas: &[UnsafeControlAction]
         }
     }
 
-    let primary_controller = if !controller_names.is_empty() {
-        controller_names.first().cloned().unwrap_or_else(|| "DEAPCompilerSystem".to_string())
+    let base_pkg = if pkg.name.is_empty() {
+        "System"
     } else {
-        "DEAPCompilerSystem".to_string()
+        pkg.name.as_str()
     };
+    let default_ctrl = format!("{}_Controller", base_pkg);
+    let default_act = format!("{}_Actuator", base_pkg);
+    let default_proc = format!("{}_Process", base_pkg);
+    let default_sens = format!("{}_Sensors", base_pkg);
+
+    let primary_controller = controller_names
+        .first()
+        .cloned()
+        .unwrap_or(default_ctrl);
+
+    let actuator_name = all_parts
+        .get(1)
+        .map(|p| p.name.as_str())
+        .unwrap_or(default_act.as_str());
+    let process_name = all_parts
+        .get(2)
+        .map(|p| p.name.as_str())
+        .unwrap_or(default_proc.as_str());
+    let sensor_name = all_parts
+        .get(3)
+        .map(|p| p.name.as_str())
+        .unwrap_or(default_sens.as_str());
 
     out.push_str("\n## System Hazards\n\n");
     out.push_str("| Hazard ID | Associated Control Action | Controller |\n");
@@ -586,13 +608,33 @@ fn render_losses_hazards_topology(pkg: &PackageDef, ucas: &[UnsafeControlAction]
         "        CompilerController[\"{}<br/>(Supervisory Controller)\"]\n",
         primary_controller
     ));
-    out.push_str("        ActuatorEngine[\"UniversalIngestionEngine<br/>(Actuator Engine)\"]\n");
-    out.push_str("        ControlledProcess[\"DownstreamApplicationHost<br/>(Execution Environment)\"]\n");
-    out.push_str("        DiagnosticSensors[\"CompilerAssuranceEngine<br/>(Diagnostic Sensors)\"]\n\n");
+    out.push_str(&format!(
+        "        ActuatorEngine[\"{}<br/>(Actuator Engine)\"]\n",
+        actuator_name
+    ));
+    out.push_str(&format!(
+        "        ControlledProcess[\"{}<br/>(Execution Environment)\"]\n",
+        process_name
+    ));
+    out.push_str(&format!(
+        "        DiagnosticSensors[\"{}<br/>(Diagnostic Sensors)\"]\n\n",
+        sensor_name
+    ));
     out.push_str("        CompilerController -->|\"supervisory dispatch: trigger_lowering - invoke_codegen\"| ActuatorEngine\n");
     out.push_str("        ActuatorEngine -->|\"artifact synthesis: lower_ast - write_binaries\"| ControlledProcess\n");
     out.push_str("        ControlledProcess -->|\"compilation artifacts and execution traces\"| DiagnosticSensors\n");
     out.push_str("        DiagnosticSensors -->|\"sensor feedback: diagnostic_errors - verification_metrics\"| CompilerController\n");
+    for conn in pkg.get_all_connections() {
+        if let (Some(src), Some(tgt)) = (&conn.source_part, &conn.target_part) {
+            let src_id = sanitize_mermaid_id(src);
+            let tgt_id = sanitize_mermaid_id(tgt);
+            let label = conn.protocol.as_deref().unwrap_or(&conn.name);
+            out.push_str(&format!(
+                "        {}[\"{}\"] -->|\"{}\"| {}[\"{}\"]\n",
+                src_id, src, label, tgt_id, tgt
+            ));
+        }
+    }
     out.push_str("    end\n");
     out.push_str("```\n\n");
 
@@ -695,7 +737,7 @@ fn render_fmeca_matrix_doc(rows: &[FmecaRow]) -> String {
     out
 }
 
-fn render_regulatory_objectives_assessment(tokens: &HashMap<String, String>) -> String {
+fn render_regulatory_objectives_assessment(tokens: &BTreeMap<String, String>) -> String {
     let prefix = tokens
         .get("REGULATORY_OBJECTIVE_PREFIX")
         .cloned()
@@ -770,7 +812,37 @@ fn render_regulatory_objectives_assessment(tokens: &HashMap<String, String>) -> 
 
 /// Renders the Run-Time Assurance (RTA) simplex architecture diagram and formal
 /// proof suite derivations anchored to AST declared system elements.
-fn render_rta_architecture(tokens: &HashMap<String, String>) -> String {
+fn render_rta_architecture(pkg: &PackageDef, tokens: &BTreeMap<String, String>) -> String {
+    let all_parts = pkg.get_all_parts();
+    let base_pkg = if pkg.name.is_empty() {
+        "System"
+    } else {
+        pkg.name.as_str()
+    };
+    let default_high = format!("{}_AssuranceController", base_pkg);
+    let default_mon = format!("{}_MonitorSwitch", base_pkg);
+    let default_rec = format!("{}_RecoveryChannel", base_pkg);
+
+    let high_assurance = all_parts
+        .iter()
+        .find(|p| p.name.contains("Assurance") || p.name.contains("Controller"))
+        .or_else(|| all_parts.first())
+        .map(|p| p.name.as_str())
+        .unwrap_or(default_high.as_str());
+    let monitor_switch = all_parts
+        .iter()
+        .find(|p| p.name.contains("Solver") || p.name.contains("Monitor"))
+        .or_else(|| all_parts.get(1))
+        .map(|p| p.name.as_str())
+        .unwrap_or(default_mon.as_str());
+    let recovery_chan = all_parts
+        .iter()
+        .find(|p| p.name.contains("Safety") || p.name.contains("Recovery"))
+        .or_else(|| all_parts.get(2))
+        .map(|p| p.name.as_str())
+        .unwrap_or(default_rec.as_str());
+    let sys_under_assurance = base_pkg;
+
     let mut out = String::new();
     out.push_str("# Run-Time Assurance Architecture & Formal Proof Suite\n\n");
     out.push_str("## Simplex Run-Time Assurance Topology\n\n");
@@ -778,47 +850,175 @@ fn render_rta_architecture(tokens: &HashMap<String, String>) -> String {
     out.push_str("graph TD\n");
     out.push_str("    subgraph \"Run-Time Assurance Architecture\"\n");
     out.push_str("        direction TB\n");
-    out.push_str("        CompilerAssuranceEngine[\"High Assurance Channel<br/>(CompilerAssuranceEngine)\"] --> StateMachineSolverEngine[\"Safety Monitor Switch<br/>(StateMachineSolverEngine)\"]\n");
-    out.push_str("        SafetyAssuranceEngine[\"Recovery Channel<br/>(SafetyAssuranceEngine)\"] --> StateMachineSolverEngine\n");
-    out.push_str("        StateMachineSolverEngine --> DEAPCompilerSystem[\"System Under Assurance<br/>(DEAPCompilerSystem)\"]\n");
+    out.push_str(&format!(
+        "        HighAssuranceChannel[\"High Assurance Channel<br/>({})\"] --> SafetyMonitorSwitch[\"Safety Monitor Switch<br/>({})\"]\n",
+        high_assurance, monitor_switch
+    ));
+    out.push_str(&format!(
+        "        RecoveryChannel[\"Recovery Channel<br/>({})\"] --> SafetyMonitorSwitch\n",
+        recovery_chan
+    ));
+    out.push_str(&format!(
+        "        SafetyMonitorSwitch --> SystemUnderAssurance[\"System Under Assurance<br/>({})\"]\n",
+        sys_under_assurance
+    ));
     out.push_str("    end\n");
     out.push_str("```\n\n");
 
     out.push_str("## Formal Proof Suite\n\n");
 
-    for tmpl in &PROOF_TEMPLATES {
-        out.push_str(&format!("## Theorem {} -- {}\n\n", tmpl.id, tmpl.name));
-        out.push_str("### Formal Theorem Statement\n\n");
-        out.push_str(tmpl.statement);
-        out.push_str("\n\n### Symbolic Derivation\n\n");
-        out.push_str("$$\n\\begin{aligned}\n");
-        for line in tmpl.derivation {
-            out.push_str(&format!("    {} \\\\\n", line));
-        }
-        out.push_str("\\end{aligned}\n$$\n\n");
+    let all_calcs = pkg.get_all_calcs();
+    let all_constraints = pkg.get_all_constraints();
 
-        out.push_str("### Parameter Definitions & Engineering Units Table\n\n");
-        out.push_str("| Symbol | Description | Value | Engineering Unit |\n");
-        out.push_str("| :--- | :--- | :--- | :--- |\n");
-        for (key, symbol, desc, unit) in tmpl.params {
-            let val = tokens
-                .get(*key)
-                .cloned()
-                .unwrap_or_else(|| PENDING_PARAMETER.to_string());
-            out.push_str(&format!("| {} | {} | {} | {} |\n", symbol, desc, val, unit));
+    if !all_calcs.is_empty() || !all_constraints.is_empty() {
+        for (idx, calc) in all_calcs.iter().enumerate() {
+            let tid = format!("T-{:02}", idx + 1);
+            let expr = calc.expression.as_deref().unwrap_or("true");
+            out.push_str(&format!("## Theorem {} -- {}\n\n", tid, calc.name));
+            out.push_str("### Formal Theorem Statement\n\n");
+            out.push_str(&format!(
+                "$$\n\\begin{{aligned}}\n    \\mathrm{{{}}} &: {}\n\\end{{aligned}}\n$$\n\n",
+                calc.name.replace('_', "\\_"),
+                expr.replace('_', "\\_")
+            ));
+            out.push_str("### Symbolic Derivation\n\n");
+            out.push_str(&format!(
+                "$$\n\\begin{{aligned}}\n    \\mathrm{{{}}} &= {} \\\\\n\\end{{aligned}}\n$$\n\n",
+                calc.name.replace('_', "\\_"),
+                expr.replace('_', "\\_")
+            ));
+            out.push_str("### Parameter Definitions & Engineering Units Table\n\n");
+            out.push_str("| Symbol | Description | Value | Engineering Unit |\n");
+            out.push_str("| :--- | :--- | :--- | :--- |\n");
+            if calc.in_params.is_empty() {
+                out.push_str(&format!(
+                    "| `{}` | AST Calc Expression | `{}` | dimensionless |\n",
+                    calc.name, expr
+                ));
+            } else {
+                for param in &calc.in_params {
+                    let val = param
+                        .default_value
+                        .as_deref()
+                        .or_else(|| tokens.get(&param.name).map(|s| s.as_str()))
+                        .unwrap_or(PENDING_PARAMETER);
+                    out.push_str(&format!(
+                        "| {} | AST Calc Input | {} | {} |\n",
+                        param.name, val, param.type_name
+                    ));
+                }
+            }
+            out.push_str("\n### Step-by-Step Numerical Proof Evaluation\n\n");
+            out.push_str(&format!(
+                "$$\n\\begin{{aligned}}\n    \\mathrm{{{}}} &= {} \\\\\n\\end{{aligned}}\n$$\n\n",
+                calc.name.replace('_', "\\_"),
+                expr.replace('_', "\\_")
+            ));
+            out.push_str("### SLDV Temporal Assertion Binding\n\n");
+            out.push_str("```matlab\n");
+            out.push_str(&format!(
+                "sldv.assert( ({}), 'Bind_{}_CALC' );\n",
+                expr,
+                calc.name.to_uppercase().replace('-', "_")
+            ));
+            out.push_str("```\n\n");
         }
-        out.push_str("\n### Step-by-Step Numerical Proof Evaluation\n\n");
-        out.push_str("$$\n\\begin{aligned}\n");
-        for line in tmpl.numeric {
-            let resolved = resolve_template(line, tokens);
-            out.push_str(&format!("    {} \\\\\n", resolved));
-        }
-        out.push_str("\\end{aligned}\n$$\n\n");
 
-        out.push_str("### SLDV Temporal Assertion Binding\n\n");
-        out.push_str("```matlab\n");
-        out.push_str(&resolve_template(tmpl.sldv, tokens));
-        out.push_str("\n```\n\n");
+        let offset = all_calcs.len();
+        for (idx, c) in all_constraints.iter().enumerate() {
+            let tid = format!("T-{:02}", offset + idx + 1);
+            let expr = if c.expression.is_empty() {
+                "true"
+            } else {
+                c.expression.as_str()
+            };
+            out.push_str(&format!("## Theorem {} -- {}\n\n", tid, c.name));
+            out.push_str("### Formal Theorem Statement\n\n");
+            out.push_str(&format!(
+                "$$\n\\begin{{aligned}}\n    \\mathrm{{{}}} &: {}\n\\end{{aligned}}\n$$\n\n",
+                c.name.replace('_', "\\_"),
+                expr.replace('_', "\\_")
+            ));
+            out.push_str("### Symbolic Derivation\n\n");
+            out.push_str(&format!(
+                "$$\n\\begin{{aligned}}\n    \\mathrm{{{}}} &\\iff {} \\\\\n\\end{{aligned}}\n$$\n\n",
+                c.name.replace('_', "\\_"),
+                expr.replace('_', "\\_")
+            ));
+            out.push_str("### Parameter Definitions & Engineering Units Table\n\n");
+            out.push_str("| Symbol | Description | Value | Engineering Unit |\n");
+            out.push_str("| :--- | :--- | :--- | :--- |\n");
+            if c.parameters.is_empty() {
+                out.push_str(&format!(
+                    "| `{}` | AST Constraint Invariant | `{}` | boolean |\n",
+                    c.name, expr
+                ));
+            } else {
+                for param in &c.parameters {
+                    let (p_name, p_type) = match param.split_once(':') {
+                        Some((n, t)) => (n.trim(), t.trim()),
+                        None => (param.as_str(), "scalar"),
+                    };
+                    let val = tokens
+                        .get(p_name)
+                        .map(|s| s.as_str())
+                        .unwrap_or(PENDING_PARAMETER);
+                    out.push_str(&format!(
+                        "| {} | AST Constraint Parameter | {} | {} |\n",
+                        p_name, val, p_type
+                    ));
+                }
+            }
+            out.push_str("\n### Step-by-Step Numerical Proof Evaluation\n\n");
+            out.push_str(&format!(
+                "$$\n\\begin{{aligned}}\n    \\mathrm{{{}}} &\\implies {} \\\\\n\\end{{aligned}}\n$$\n\n",
+                c.name.replace('_', "\\_"),
+                expr.replace('_', "\\_")
+            ));
+            out.push_str("### SLDV Temporal Assertion Binding\n\n");
+            out.push_str("```matlab\n");
+            out.push_str(&format!(
+                "sldv.assert( ({}), 'Bind_{}_ASSERTION' );\n",
+                expr,
+                c.name.to_uppercase().replace('-', "_")
+            ));
+            out.push_str("```\n\n");
+        }
+    } else {
+        for tmpl in &PROOF_TEMPLATES {
+            out.push_str(&format!("## Theorem {} -- {}\n\n", tmpl.id, tmpl.name));
+            out.push_str("### Formal Theorem Statement\n\n");
+            out.push_str(tmpl.statement);
+            out.push_str("\n\n### Symbolic Derivation\n\n");
+            out.push_str("$$\n\\begin{aligned}\n");
+            for line in tmpl.derivation {
+                out.push_str(&format!("    {} \\\\\n", line));
+            }
+            out.push_str("\\end{aligned}\n$$\n\n");
+
+            out.push_str("### Parameter Definitions & Engineering Units Table\n\n");
+            out.push_str("| Symbol | Description | Value | Engineering Unit |\n");
+            out.push_str("| :--- | :--- | :--- | :--- |\n");
+            for (key, symbol, desc, unit) in tmpl.params {
+                let val = tokens
+                    .get(*key)
+                    .cloned()
+                    .unwrap_or_else(|| PENDING_PARAMETER.to_string());
+                out.push_str(&format!("| {} | {} | {} | {} |\n", symbol, desc, val, unit));
+            }
+            out.push_str("\n### Step-by-Step Numerical Proof Evaluation\n\n");
+            out.push_str("$$\n\\begin{aligned}\n");
+            for line in tmpl.numeric {
+                let resolved = resolve_template(line, tokens);
+                out.push_str(&format!("    {} \\\\\n", resolved));
+            }
+            out.push_str("\\end{aligned}\n$$\n\n");
+
+            out.push_str("### SLDV Temporal Assertion Binding\n\n");
+            out.push_str("```matlab\n");
+            out.push_str(&resolve_template(tmpl.sldv, tokens));
+            out.push_str("\n```\n\n");
+        }
     }
 
     out
@@ -831,7 +1031,7 @@ pub fn render_unified_stpa_matrix(
     ucas: &[UnsafeControlAction],
     constraints: &[ConstraintDef],
     fmeca_rows: &[FmecaRow],
-    tokens: &HashMap<String, String>,
+    tokens: &BTreeMap<String, String>,
 ) -> String {
     let mut out = String::new();
     out.push_str("# Unified 8-Pillar STPA Safety & Risk Analysis Matrix\n\n");
@@ -912,7 +1112,7 @@ pub fn render_unified_stpa_matrix(
 
     // ASTM F3269-17 RTA Architecture & Toolchain Proof Hooks
     out.push_str("## 9. ASTM F3269-17 Run-Time Assurance (RTA) Architecture & Toolchain Proof Hooks\n\n");
-    let rta_doc = render_rta_architecture(tokens);
+    let rta_doc = render_rta_architecture(pkg, tokens);
     let rta_body = if let Some(stripped) = rta_doc.strip_prefix("# Run-Time Assurance Architecture & Formal Proof Suite\n\n") {
         stripped
     } else {
@@ -946,8 +1146,8 @@ fn render_stpa_matrix(ucas: &[UnsafeControlAction]) -> String {
 }
 
 fn render_hazard_log(pkg: &PackageDef) -> String {
-    let controllers: Vec<_> = pkg
-        .part_defs
+    let all_parts = pkg.get_all_parts();
+    let controllers: Vec<_> = all_parts
         .iter()
         .filter(|part| !part.actions.is_empty())
         .collect();
@@ -958,7 +1158,7 @@ fn render_hazard_log(pkg: &PackageDef) -> String {
     out.push_str("| :--- | :--- | :--- | :--- | :--- |\n");
 
     if controllers.is_empty() {
-        for (i, p) in pkg.part_defs.iter().enumerate() {
+        for (i, p) in all_parts.iter().enumerate() {
             out.push_str(&format!(
                 "| L-{} | Loss | {} | Open | Skeleton loss entry |\n",
                 i + 1,
@@ -990,7 +1190,11 @@ fn render_hazard_log(pkg: &PackageDef) -> String {
     out
 }
 
-fn render_sldv_script(constraints: &[ConstraintDef], tokens: &HashMap<String, String>) -> String {
+fn render_sldv_script(
+    pkg: &PackageDef,
+    constraints: &[ConstraintDef],
+    tokens: &BTreeMap<String, String>,
+) -> String {
     let mut out = String::new();
     out.push_str("% SLDV Formal Proof Script\n");
     out.push_str("% Schema constraint bindings\n");
@@ -1008,10 +1212,29 @@ fn render_sldv_script(constraints: &[ConstraintDef], tokens: &HashMap<String, St
     }
 
     out.push_str("\n% Theorem proof bindings\n");
-    for tmpl in &PROOF_TEMPLATES {
-        out.push_str(&format!("% {} {}\n", tmpl.id, tmpl.name));
-        out.push_str(&resolve_template(tmpl.sldv, tokens));
-        out.push_str("\n\n");
+    let all_calcs = pkg.get_all_calcs();
+    if all_calcs.is_empty() && constraints.is_empty() {
+        for tmpl in &PROOF_TEMPLATES {
+            out.push_str(&format!("% {} {}\n", tmpl.id, tmpl.name));
+            out.push_str(&resolve_template(tmpl.sldv, tokens));
+            out.push_str("\n\n");
+        }
+    } else {
+        for (idx, calc) in all_calcs.iter().enumerate() {
+            let thm_id = format!("THM-{:03}", idx + 1);
+            let expr = calc
+                .expression
+                .as_deref()
+                .filter(|s| !s.trim().is_empty())
+                .unwrap_or("true");
+            out.push_str(&format!("% {} {}\n", thm_id, calc.name));
+            out.push_str(&format!(
+                "sldv.assert( ({}), 'Proof_{}_{}' );\n\n",
+                expr,
+                thm_id.replace('-', "_"),
+                calc.name.replace('-', "_")
+            ));
+        }
     }
 
     out
@@ -1027,28 +1250,29 @@ pub fn compile_stpa_to_constraints(content: &str, package_name: &str) -> Package
 pub fn compile_stpa_to_constraints_filtered(
     content: &str,
     package_name: &str,
-    valid_parts: Option<&std::collections::HashSet<String>>,
+    valid_parts: Option<&BTreeSet<String>>,
     model: Option<&PackageDef>,
 ) -> PackageDef {
-    let mut pkg = PackageDef::default();
-    pkg.name = package_name.to_string();
-    pkg.doc = Some("STPA and FMECA Safety Invariants compiled for Run-Time Assurance (RTA) & SLDV Verification".to_string());
+    let mut pkg = PackageDef {
+        name: package_name.to_string(),
+        doc: Some("STPA and FMECA Safety Invariants compiled for Run-Time Assurance (RTA) & SLDV Verification".to_string()),
+        ..Default::default()
+    };
 
-    let is_negated_recovery = deap_core::sysml_ast::has_negative_recovery_constraint(content)
-        || model.map_or(false, |m| {
-            let sysml = crate::semantic::serializer::to_sysml(m);
-            deap_core::sysml_ast::has_negative_recovery_constraint(&sysml)
-        });
+    let mut negated_components = deap_core::sysml_ast::extract_negated_components(content);
+    if let Some(m) = model {
+        let sysml = crate::semantic::serializer::to_sysml(m);
+        negated_components.extend(deap_core::sysml_ast::extract_negated_components(&sysml));
+        negated_components.extend(m.extract_negated_components());
+    }
 
-    let model_part_set: Option<std::collections::HashSet<String>> = model.map(|m| {
+    let model_part_set: Option<BTreeSet<String>> = model.map(|m| {
         m.get_all_parts()
             .into_iter()
             .map(|p| p.name)
             .filter(|n| !n.starts_with('_'))
             .collect()
     });
-
-    let effective_valid_parts = valid_parts.or(model_part_set.as_ref());
 
     // Match UCA table rows: | UCA-### | Controller | Action | Guide Word | ... | Hazard | Constraint | ...
     for line in content.lines() {
@@ -1057,12 +1281,13 @@ pub fn compile_stpa_to_constraints_filtered(
             continue;
         }
         let cols: Vec<&str> = trimmed.split('|').map(|s| s.trim()).collect();
-        if cols.len() >= 8 && cols[1].starts_with("UCA-") && cols[1]["UCA-".len()..].chars().all(|c| c.is_ascii_digit()) && !cols[1]["UCA-".len()..].is_empty() {
-            let uca_id = cols[1];
-            let _controller = cols[2];
-            let action = cols[3];
-            let guide_word = cols[4];
-            let sc_col = cols[7];
+        if let &[_, uca_id, _controller, action, guide_word, _, _, sc_col, ..] = cols.as_slice() {
+            if !uca_id
+                .strip_prefix("UCA-")
+                .is_some_and(|digits| !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit()))
+            {
+                continue;
+            }
             let sc_id = if let Some(pos) = sc_col.find("SC-") {
                 let rest = &sc_col[pos + 3..];
                 let digit_len = rest.chars().take_while(|c| c.is_ascii_digit()).count();
@@ -1098,21 +1323,36 @@ pub fn compile_stpa_to_constraints_filtered(
             continue;
         }
         let cols: Vec<&str> = trimmed.split('|').map(|s| s.trim()).collect();
-        if cols.len() >= 5 && cols[1].starts_with("FMECA-") && cols[1]["FMECA-".len()..].chars().all(|c| c.is_ascii_digit()) && !cols[1]["FMECA-".len()..].is_empty() {
-            let fmeca_id = cols[1];
-            let component = cols[2];
-            let failure_mode = cols[3];
+        if let &[_, fmeca_id, component, failure_mode, _, ..] = cols.as_slice() {
+            if !fmeca_id
+                .strip_prefix("FMECA-")
+                .is_some_and(|digits| !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit()))
+            {
+                continue;
+            }
 
             if !component.is_empty() && !failure_mode.is_empty() {
                 let comp_clean = component.trim_matches(|c| c == '`' || c == '*').trim();
 
-                // If negative AST constraints negate recovery, forbid synthesis of recovery components
-                if is_negated_recovery && deap_core::sysml_ast::is_recovery_component(comp_clean) {
+                let comp_alnum: String = comp_clean
+                    .chars()
+                    .filter(|c| c.is_alphanumeric())
+                    .collect::<String>()
+                    .to_ascii_lowercase();
+
+                // If negative AST constraints negate the component, forbid synthesis
+                if negated_components.iter().any(|neg| {
+                    comp_alnum.contains(neg.as_str()) || deap_core::sysml_ast::component_matches(comp_clean, neg)
+                }) {
                     continue;
                 }
 
                 // If valid parts are provided or derived from model, verify component existence in AST
-                if let Some(parts) = effective_valid_parts {
+                if let Some(parts) = valid_parts {
+                    if !parts.iter().any(|p| deap_core::sysml_ast::component_matches(comp_clean, p)) {
+                        continue;
+                    }
+                } else if let Some(ref parts) = model_part_set {
                     if !parts.iter().any(|p| deap_core::sysml_ast::component_matches(comp_clean, p)) {
                         continue;
                     }
@@ -1142,14 +1382,20 @@ mod tests {
     use deap_core::sysml_ast::{ActionDef, PartDef};
 
     #[test]
-    fn test_transpile_safety_suite_produces_all_10_artifacts() {
-        let mut pkg = PackageDef::default();
-        pkg.name = "TestSystem".to_string();
+    fn test_transpile_safety_suite_produces_all_10_artifacts() -> Result<(), Box<dyn std::error::Error>> {
+        let mut pkg = PackageDef {
+            name: "TestSystem".to_string(),
+            ..Default::default()
+        };
 
-        let mut p = PartDef::default();
-        p.name = "PrimaryController".to_string();
-        let mut act = ActionDef::default();
-        act.name = "ExecuteProcess".to_string();
+        let mut p = PartDef {
+            name: "PrimaryController".to_string(),
+            ..Default::default()
+        };
+        let act = ActionDef {
+            name: "ExecuteProcess".to_string(),
+            ..Default::default()
+        };
         p.actions.push(act);
         pkg.part_defs.push(p);
 
@@ -1167,85 +1413,95 @@ mod tests {
         assert!(suite.contains_key("SLDV_FORMAL_PROOFS.m"));
 
         // Verify RTA architecture contains KaTeX aligned math
-        let rta = suite.get("07_RTA_ARCHITECTURE.md").unwrap();
+        let rta = suite.get("07_RTA_ARCHITECTURE.md").ok_or("expected value is absent")?;
         assert!(rta.contains("$$\n\\begin{aligned}"));
         assert!(rta.contains("\\end{aligned}\n$$"));
 
         // Verify closed-loop STPA control structure topology
-        let topo = suite.get("01_LOSSES_HAZARDS_TOPOLOGY.md").unwrap();
+        let topo = suite.get("01_LOSSES_HAZARDS_TOPOLOGY.md").ok_or("expected value is absent")?;
         assert!(topo.contains("subgraph \"Hierarchical Safety Control Structure\""));
         assert!(topo.contains("CompilerController[\"PrimaryController<br/>(Supervisory Controller)\"]"));
-        assert!(topo.contains("ActuatorEngine[\"UniversalIngestionEngine<br/>(Actuator Engine)\"]"));
-        assert!(topo.contains("ControlledProcess[\"DownstreamApplicationHost<br/>(Execution Environment)\"]"));
-        assert!(topo.contains("DiagnosticSensors[\"CompilerAssuranceEngine<br/>(Diagnostic Sensors)\"]"));
+        assert!(topo.contains("ActuatorEngine[\"TestSystem_Actuator<br/>(Actuator Engine)\"]"));
+        assert!(topo.contains("ControlledProcess[\"TestSystem_Process<br/>(Execution Environment)\"]"));
+        assert!(topo.contains("DiagnosticSensors[\"TestSystem_Sensors<br/>(Diagnostic Sensors)\"]"));
         assert!(topo.contains("DiagnosticSensors -->|\"sensor feedback: diagnostic_errors - verification_metrics\"| CompilerController"));
+        Ok(())
     }
 
     #[test]
-    fn test_compile_stpa_markdown_to_constraints() {
+    fn test_compile_stpa_markdown_to_constraints() -> Result<(), Box<dyn std::error::Error>> {
         let md = r#"
 | UCA ID | Controller | Control Action | Guide Word | Context | Hazard | Safety Constraint | Severity | SAIL |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| UCA-001 | SafetyController | EngageActuator | Not providing | In-flight | H-1 | SC-001 | High | IV |
+| UCA-001 | PrimaryProcessor | ComputeControlOutput | Not providing | Operational | H-1 | SC-001 | High | IV |
 "#;
         let pkg = compile_stpa_to_constraints(md, "SafetyConstraintsPackage");
         assert_eq!(pkg.name, "SafetyConstraintsPackage");
         assert_eq!(pkg.constraint_defs.len(), 1);
-        assert_eq!(pkg.constraint_defs[0].name, "SC_001_EngageActuator");
-        assert!(pkg.constraint_defs[0].is_assertion);
+        assert_eq!(pkg.constraint_defs.first().ok_or("missing first element of pkg.constraint_defs")?.name, "SC_001_ComputeControlOutput");
+        assert!(pkg.constraint_defs.first().ok_or("missing first element of pkg.constraint_defs")?.is_assertion);
+        Ok(())
     }
 
     #[test]
-    fn test_issue_249_compile_stpa_rejects_phantom_recovery_when_negated() {
+    fn test_issue_249_compile_stpa_rejects_phantom_component_when_negated() -> Result<(), Box<dyn std::error::Error>> {
         let md = r#"
 | UCA ID | Controller | Control Action | Guide Word | Context | Hazard | Safety Constraint | Severity | SAIL |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| UCA-001 | FlightComputer | CalculateGuidance | Not providing | In-flight | H-1 | SC-001 | High | IV |
+| UCA-001 | PrimaryProcessor | ComputeControlOutput | Not providing | Operational | H-1 | SC-001 | High | IV |
 
-Negative safety model invariant: chuteEnabled = 0, recoverySystem = "No"
+Negative safety model invariant: backupEnabled = 0, backupSystem = "No"
 
 | FMECA ID | Component | Failure Mode | Potential Effect | Severity (S) | Occurrence (O) | Detection (D) | RPN (S x O x D) | Mitigation | Derivation Basis |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| FMECA-001 | FlightComputer | CPU Lockup | Loss of Guidance | 8 | 2 | 2 | 32 | Dual redundant voting | SSOT |
-| FMECA-002 | ParachuteRecovery | Deployment Jam | Hard Impact | 9 | 2 | 3 | 54 | Redundant pyrotechnic cutter | Derived |
+| FMECA-001 | PrimaryProcessor | ActuationFault | Loss of Control Output | 8 | 2 | 2 | 32 | Hardware interlock | SSOT |
+| FMECA-002 | AuxiliaryBackupUnit | ActuationFault | Loss of Redundancy | 9 | 2 | 3 | 54 | Hardware interlock | Derived |
 "#;
         let pkg = compile_stpa_to_constraints(md, "SafetyConstraintsPackage");
         let con_names: Vec<String> = pkg.constraint_defs.iter().map(|c| c.name.clone()).collect();
-        assert!(con_names.iter().any(|c| c.contains("FlightComputer")), "FlightComputer constraint must be present");
-        assert!(!con_names.iter().any(|c| c.contains("ParachuteRecovery")), "ParachuteRecovery constraint must NOT be synthesized when negated by negative AST constraints");
+        assert!(con_names.iter().any(|c| c.contains("PrimaryProcessor")), "PrimaryProcessor constraint must be present");
+        assert!(!con_names.iter().any(|c| c.contains("AuxiliaryBackupUnit")), "AuxiliaryBackupUnit constraint must NOT be synthesized when negated by negative AST constraints");
+        Ok(())
     }
 
     #[test]
-    fn test_issue_249_compile_stpa_filtered_by_valid_parts() {
+    fn test_issue_249_compile_stpa_filtered_by_valid_parts() -> Result<(), Box<dyn std::error::Error>> {
         let md = r#"
 | FMECA ID | Component | Failure Mode | Potential Effect | Severity (S) | Occurrence (O) | Detection (D) | RPN (S x O x D) | Mitigation | Derivation Basis |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| FMECA-001 | FlightComputer | CPU Lockup | Loss of Guidance | 8 | 2 | 2 | 32 | Dual redundant voting | SSOT |
+| FMECA-001 | PrimaryProcessor | ActuationFault | Loss of Control Output | 8 | 2 | 2 | 32 | Hardware interlock | SSOT |
 | FMECA-002 | PhantomSubsystem | Ghost Logic Fail | None | 5 | 2 | 2 | 20 | None | Derived |
 "#;
-        let mut valid_parts = std::collections::HashSet::new();
-        valid_parts.insert("FlightComputer".to_string());
+        let mut valid_parts = BTreeSet::new();
+        valid_parts.insert("PrimaryProcessor".to_string());
 
         let pkg = compile_stpa_to_constraints_filtered(md, "SafetyConstraintsPackage", Some(&valid_parts), None);
         let con_names: Vec<String> = pkg.constraint_defs.iter().map(|c| c.name.clone()).collect();
-        assert!(con_names.iter().any(|c| c.contains("FlightComputer")), "FlightComputer constraint must be present");
+        assert!(con_names.iter().any(|c| c.contains("PrimaryProcessor")), "PrimaryProcessor constraint must be present");
         assert!(!con_names.iter().any(|c| c.contains("PhantomSubsystem")), "PhantomSubsystem constraint must NOT be synthesized when missing from valid_parts");
+        Ok(())
     }
 
     #[test]
-    fn test_defect_333_stpa_matrix_embodies_unified_8_pillars() {
-        let mut pkg = PackageDef::default();
-        pkg.name = "AvengerSystemSafety".to_string();
+    fn test_defect_333_stpa_matrix_embodies_unified_8_pillars() -> Result<(), Box<dyn std::error::Error>> {
+        let mut pkg = PackageDef {
+            name: "AvengerSystemSafety".to_string(),
+            ..Default::default()
+        };
 
-        let mut p = PartDef::default();
-        p.name = "FlightController".to_string();
-        let mut act = ActionDef::default();
-        act.name = "ExecuteProcess".to_string();
+        let mut p = PartDef {
+            name: "FlightController".to_string(),
+            ..Default::default()
+        };
+        let act = ActionDef {
+            name: "ExecuteProcess".to_string(),
+            ..Default::default()
+        };
         p.actions.push(act);
         pkg.part_defs.push(p);
 
         let suite = transpile_safety_suite(&pkg, None);
-        let stpa = suite.get("STPA_MATRIX.md").expect("STPA_MATRIX.md must be generated");
+        let stpa = suite.get("STPA_MATRIX.md").ok_or("expected value is absent")?;
 
         // Defect #333 RED probe: STPA_MATRIX.md must embody the unified 8 pillars
         assert!(stpa.contains("System Losses"), "STPA_MATRIX.md must contain Pillar 1 (System Losses)");
@@ -1257,5 +1513,6 @@ Negative safety model invariant: chuteEnabled = 0, recoverySystem = "No"
         assert!(stpa.contains("FMECA Criticality Matrix") || stpa.contains("FMECA"), "STPA_MATRIX.md must contain Pillar 7 (FMECA Criticality Matrix)");
         assert!(stpa.contains("Regulatory Objectives") || stpa.contains("SORA SAIL"), "STPA_MATRIX.md must contain Pillar 8 (Regulatory Objectives & Risk Mitigations)");
         assert!(stpa.contains("ASTM F3269-17") || stpa.contains("Stateflow"), "STPA_MATRIX.md must contain ASTM F3269-17 RTA / Stateflow hooks");
+        Ok(())
     }
 }

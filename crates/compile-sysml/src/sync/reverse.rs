@@ -33,7 +33,7 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-SYSML-REVERSE-SYNC-ENGINE]
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 
@@ -56,11 +56,10 @@ pub struct ReverseSyncOptions {
 }
 
 /// Helper to parse metadata from YAML frontmatter or CommonMark table from a markdown string.
-fn parse_frontmatter(content: &str) -> (HashMap<String, String>, &str) {
-    let mut fm = HashMap::new();
+fn parse_frontmatter(content: &str) -> (BTreeMap<String, String>, &str) {
+    let mut fm = BTreeMap::new();
     let trimmed = content.trim_start();
-    if trimmed.starts_with("---") {
-        let rest = &trimmed[3..];
+    if let Some(rest) = trimmed.strip_prefix("---") {
         if let Some(end_idx) = rest.find("\n---") {
             let fm_block = &rest[..end_idx];
             let body = &rest[end_idx + 4..];
@@ -88,16 +87,16 @@ fn parse_frontmatter(content: &str) -> (HashMap<String, String>, &str) {
         if line_trimmed.starts_with('|') && line_trimmed.ends_with('|') {
             let inner = line_trimmed.trim_matches('|');
             let parts: Vec<&str> = inner.split('|').map(|s| s.trim()).collect();
-            if parts.len() >= 2 {
+            if let [key_cell, value_cell, ..] = parts.as_slice() {
                 let mut key = String::new();
-                for c in parts[0].chars() {
+                for c in key_cell.chars() {
                     if !matches!(c, '*' | '`' | '_' | ':' | '#') {
                         key.push(c);
                     }
                 }
-                let key = key.trim().to_lowercase().replace(' ', "_").replace('-', "_");
+                let key = key.trim().to_lowercase().replace([' ', '-'], "_");
                 if !key.is_empty() && key != "attribute" && key != "key" {
-                    let val = parts[1]
+                    let val = value_cell
                         .trim()
                         .trim_matches(|c| c == '`' || c == '"' || c == '\'');
                     fm.insert(key.clone(), val.to_string());
@@ -218,14 +217,15 @@ pub fn reverse_sync_specs_to_sysml(
     }
 
     let mut pkg = base_pkg.cloned().unwrap_or_else(|| {
-        let mut p = PackageDef::default();
-        p.name = "System_SSOT".to_string();
-        p.doc = Some("Single Source of Truth for System Architecture and Safety Model".to_string());
-        p
+        PackageDef {
+            name: "System_SSOT".to_string(),
+            doc: Some("Single Source of Truth for System Architecture and Safety Model".to_string()),
+            ..Default::default()
+        }
     });
 
     let mut extracted_capabilities = Vec::new();
-    let mut extracted_parts: HashMap<String, PartDef> = HashMap::new();
+    let mut extracted_parts: BTreeMap<String, PartDef> = BTreeMap::new();
     let mut extracted_interactions = Vec::new();
     let mut extracted_use_cases = Vec::new();
     let mut extracted_constraints = Vec::new();
@@ -236,6 +236,7 @@ pub fn reverse_sync_specs_to_sysml(
     }
 
     for entry in WalkDir::new(&opts.docs_dir)
+        .sort_by_file_name()
         .into_iter()
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_file())
@@ -251,7 +252,7 @@ pub fn reverse_sync_specs_to_sysml(
             match doc_type {
                 "epic" => {
                     let title = fm.get("title").cloned().unwrap_or_else(|| {
-                        path.file_stem().unwrap().to_string_lossy().to_string()
+                        path.file_stem().unwrap_or_default().to_string_lossy().to_string()
                     });
                     let subsys = fm.get("subsystem").cloned().unwrap_or_default();
                     let name = to_pascal_case(&title);
@@ -270,7 +271,7 @@ pub fn reverse_sync_specs_to_sysml(
                         .map(|s| {
                             // If already a valid KerML identifier, preserve it directly
                             if !s.is_empty()
-                                && (s.starts_with('_') || s.chars().next().unwrap().is_alphabetic())
+                                && (s.starts_with('_') || s.chars().next().is_some_and(|c| c.is_alphabetic()))
                                 && s.chars().all(|c| c.is_alphanumeric() || c == '_')
                             {
                                 s.clone()
@@ -279,31 +280,31 @@ pub fn reverse_sync_specs_to_sysml(
                             }
                         })
                         .unwrap_or_else(|| {
-                            to_pascal_case(&path.file_stem().unwrap().to_string_lossy())
+                            to_pascal_case(&path.file_stem().unwrap_or_default().to_string_lossy())
                         });
 
                     if !part_name.is_empty() {
                         let entry = extracted_parts.entry(part_name.clone()).or_insert_with(|| {
-                            let mut p = PartDef::default();
-                            p.name = part_name.clone();
-                            p
+                            PartDef {
+                                name: part_name.clone(),
+                                ..Default::default()
+                            }
                         });
 
                         // Extract operations/actions from markdown lists: - `+ActionName() : void`
                         let default_act = format!("execute_{}", part_name.to_lowercase());
                         for line in body.lines() {
                             let trimmed = line.trim();
-                            if trimmed.starts_with('-') {
-                                let after_dash = trimmed[1..].trim_start();
-                                if after_dash.starts_with("`+") {
-                                    let rest = &after_dash[2..];
+                            if let Some(after_dash) = trimmed.strip_prefix('-') {
+                                let after_dash = after_dash.trim_start();
+                                if let Some(rest) = after_dash.strip_prefix("`+") {
                                     if let Some(paren_open) = rest.find('(') {
                                         let act_name = rest[..paren_open].trim();
                                         if !act_name.is_empty() && act_name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
                                             if let Some(paren_close) = rest[paren_open..].find(')') {
                                                 let after_paren = rest[paren_open + paren_close + 1..].trim_start();
-                                                if after_paren.starts_with(':') {
-                                                    let after_colon = after_paren[1..].trim();
+                                                if let Some(after_colon) = after_paren.strip_prefix(':') {
+                                                    let after_colon = after_colon.trim();
                                                     if after_colon.ends_with('`') {
                                                         let ret_type = after_colon.trim_end_matches('`').trim();
                                                         if !ret_type.is_empty() && ret_type.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
@@ -313,9 +314,10 @@ pub fn reverse_sync_specs_to_sysml(
                                                                 continue;
                                                             }
                                                             if !entry.actions.iter().any(|a| a.name == act_name_str) {
-                                                                let mut a = ActionDef::default();
-                                                                a.name = act_name_str;
-                                                                entry.actions.push(a);
+                                                                entry.actions.push(ActionDef {
+                                                                    name: act_name_str,
+                                                                    ..Default::default()
+                                                                });
                                                             }
                                                         }
                                                     }
@@ -334,18 +336,27 @@ pub fn reverse_sync_specs_to_sysml(
                         .or_else(|| fm.get("interaction_def"))
                         .map(|s| to_pascal_case(s))
                         .unwrap_or_else(|| {
-                            to_pascal_case(&path.file_stem().unwrap().to_string_lossy())
+                            to_pascal_case(&path.file_stem().unwrap_or_default().to_string_lossy())
                         });
-                    let subject = fm.get("subject").cloned().unwrap_or_default();
+                    let default_actor = fm
+                        .get("actors")
+                        .or_else(|| fm.get("primary_actor"))
+                        .map(|s| to_pascal_case(s))
+                        .or_else(|| pkg.use_case_defs.first().and_then(|u| u.actors.first().cloned()))
+                        .unwrap_or_else(|| "SystemActor".to_string());
+                    let default_subject = fm
+                        .get("subject")
+                        .or_else(|| fm.get("subsystem"))
+                        .or_else(|| fm.get("part"))
+                        .map(|s| to_pascal_case(s))
+                        .filter(|s| !s.is_empty())
+                        .or_else(|| pkg.part_defs.first().map(|p| p.name.clone()))
+                        .unwrap_or_else(|| to_pascal_case(&pkg.name));
 
                     extracted_interactions.push(InteractionDef {
                         name: inter_name,
                         doc: Some(format!("Interaction from {}", path.display())),
-                        lifelines: if subject.is_empty() {
-                            vec!["OperatorConsole".to_string(), "CoreController".to_string()]
-                        } else {
-                            vec!["OperatorConsole".to_string(), subject]
-                        },
+                        lifelines: vec![default_actor, default_subject],
                         messages: vec!["ExecuteTask".to_string()],
                         triggers: vec!["OperationalTrigger".to_string()],
                     });
@@ -356,16 +367,29 @@ pub fn reverse_sync_specs_to_sysml(
                         .or_else(|| fm.get("use_case_def"))
                         .map(|s| to_pascal_case(s))
                         .unwrap_or_else(|| {
-                            to_pascal_case(&path.file_stem().unwrap().to_string_lossy())
+                            to_pascal_case(&path.file_stem().unwrap_or_default().to_string_lossy())
                         });
-                    let subject = fm.get("subject").cloned().unwrap_or_default();
+                    let default_actor = fm
+                        .get("actors")
+                        .or_else(|| fm.get("primary_actor"))
+                        .map(|s| to_pascal_case(s))
+                        .or_else(|| pkg.use_case_defs.first().and_then(|u| u.actors.first().cloned()))
+                        .unwrap_or_else(|| "SystemActor".to_string());
+                    let subject = fm
+                        .get("subject")
+                        .or_else(|| fm.get("subsystem"))
+                        .or_else(|| fm.get("part"))
+                        .map(|s| to_pascal_case(s))
+                        .filter(|s| !s.is_empty())
+                        .or_else(|| pkg.part_defs.first().map(|p| p.name.clone()))
+                        .unwrap_or_else(|| to_pascal_case(&pkg.name));
                     let objective = fm.get("objective").cloned().unwrap_or_default();
 
                     extracted_use_cases.push(UseCaseDef {
                         name: uc_name,
                         doc: Some(objective.clone()),
-                        actors: vec!["OperatorConsole".to_string()],
-                        subject: if subject.is_empty() { Some("CoreController".to_string()) } else { Some(subject) },
+                        actors: vec![default_actor],
+                        subject: Some(subject),
                         objective: Some(objective),
                         ..Default::default()
                     });
@@ -379,13 +403,13 @@ pub fn reverse_sync_specs_to_sysml(
                                 continue;
                             }
                             let cols: Vec<&str> = trimmed.split('|').map(|s| s.trim()).collect();
-                            if cols.len() >= 4 {
-                                let raw_sc = cols[1].trim_matches('*').trim();
-                                if raw_sc.starts_with("SC-")
-                                    && !raw_sc["SC-".len()..].is_empty()
-                                    && raw_sc["SC-".len()..].chars().all(|c| c.is_ascii_digit())
+                            if let &[_, sc_cell, stmt_cell, _, ..] = cols.as_slice() {
+                                let raw_sc = sc_cell.trim_matches('*').trim();
+                                if raw_sc
+                                    .strip_prefix("SC-")
+                                    .is_some_and(|digits| !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit()))
                                 {
-                                    let stmt = cols[2].trim();
+                                    let stmt = stmt_cell.trim();
                                     if !stmt.is_empty() {
                                         let sc_id = raw_sc.replace('-', "_");
                                         extracted_constraints.push(ConstraintDef {

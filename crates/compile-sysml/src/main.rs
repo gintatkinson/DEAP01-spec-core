@@ -179,7 +179,7 @@ fn main() {
         let pkg = compile_stpa_to_constraints_filtered(&content, "System_SafetyConstraints", None, base_model.as_ref());
         let sysml_code = to_sysml(&pkg);
 
-        if cli.out != PathBuf::from(".pipeline/schema.sysml") {
+        if cli.out.as_path() != Path::new(".pipeline/schema.sysml") {
             if let Some(parent) = cli.out.parent() {
                 let _ = fs::create_dir_all(parent);
             }
@@ -428,8 +428,8 @@ pub fn resolve_schema_targets(explicit_path: Option<PathBuf>) -> Result<SchemaTa
             if files.is_empty() {
                 return Err(format!("Error: No .sysml files found in directory: {}", path.display()));
             }
-            if files.len() == 1 {
-                return Ok(SchemaTarget::SingleFile(files[0].clone()));
+            if let [only] = files.as_slice() {
+                return Ok(SchemaTarget::SingleFile(only.clone()));
             }
             return Ok(SchemaTarget::Directory(path, files));
         }
@@ -441,8 +441,8 @@ pub fn resolve_schema_targets(explicit_path: Option<PathBuf>) -> Result<SchemaTa
     if schema_dir.is_dir() {
         let files = discover_sysml_files(schema_dir);
         if !files.is_empty() {
-            if files.len() == 1 {
-                return Ok(SchemaTarget::SingleFile(files[0].clone()));
+            if let [only] = files.as_slice() {
+                return Ok(SchemaTarget::SingleFile(only.clone()));
             }
             return Ok(SchemaTarget::Directory(schema_dir.to_path_buf(), files));
         }
@@ -456,10 +456,10 @@ pub fn resolve_schema_file(explicit_path: Option<PathBuf>) -> Result<PathBuf, St
     match resolve_schema_targets(explicit_path)? {
         SchemaTarget::SingleFile(p) => Ok(p),
         SchemaTarget::Directory(_, files) => {
-            if let Some(model) = files.iter().find(|p| p.file_name().map_or(false, |n| n == "model.sysml")) {
+            if let Some(model) = files.iter().find(|p| p.file_name().is_some_and(|n| n == "model.sysml")) {
                 Ok(model.clone())
             } else {
-                Ok(files[0].clone())
+                files.first().cloned().ok_or_else(|| SCHEMA_REMEDIATION_MESSAGE.to_string())
             }
         }
     }

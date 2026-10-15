@@ -241,7 +241,7 @@ sequenceDiagram
     User->>Compiler: Ingest schema/model.sysml
     Compiler->>Storage: Atomic write to .pipeline/schema.sysml
     Compiler->>Storage: Generate .pipeline/schema-digest.json
-    Compiler->>Agent: Dispatch token-bounded AST slice (<= 4,096 tokens)
+    Compiler->>Agent: Dispatch token-bounded AST slice (max 4,096 tokens)
     Agent->>Storage: Stream CoT to .pipeline/diagnostics/cot_audit_log.json
     Agent->>Storage: Synthesize docs/epics/, docs/features/
     Agent->>Git: Stage and commit all generated files

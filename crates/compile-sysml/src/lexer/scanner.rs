@@ -504,120 +504,133 @@ fn is_ident_continue(c: char) -> bool {
 mod tests {
     use super::*;
 
+    fn kind_at(tokens: &[Token], idx: usize) -> Result<TokenKind, String> {
+        tokens
+            .get(idx)
+            .map(|t| t.kind.clone())
+            .ok_or_else(|| format!("missing token at index {idx}"))
+    }
+
     #[test]
-    fn test_scan_keywords_and_symbols() {
+    fn test_scan_keywords_and_symbols() -> Result<(), Box<dyn std::error::Error>> {
         let src = "package Foo { part def Bar :> Base { port in p : RS485; } }";
         let mut scanner = Scanner::new(src);
-        let tokens = scanner.scan_all().unwrap();
+        let tokens = scanner.scan_all()?;
 
-        assert_eq!(tokens[0].kind, TokenKind::Package);
-        assert_eq!(tokens[1].kind, TokenKind::Ident("Foo".to_string()));
-        assert_eq!(tokens[2].kind, TokenKind::OpenBrace);
-        assert_eq!(tokens[3].kind, TokenKind::Part);
-        assert_eq!(tokens[4].kind, TokenKind::Def);
-        assert_eq!(tokens[5].kind, TokenKind::Ident("Bar".to_string()));
-        assert_eq!(tokens[6].kind, TokenKind::ColonGt);
-        assert_eq!(tokens[7].kind, TokenKind::Ident("Base".to_string()));
+        assert_eq!(kind_at(&tokens, 0)?, TokenKind::Package);
+        assert_eq!(kind_at(&tokens, 1)?, TokenKind::Ident("Foo".to_string()));
+        assert_eq!(kind_at(&tokens, 2)?, TokenKind::OpenBrace);
+        assert_eq!(kind_at(&tokens, 3)?, TokenKind::Part);
+        assert_eq!(kind_at(&tokens, 4)?, TokenKind::Def);
+        assert_eq!(kind_at(&tokens, 5)?, TokenKind::Ident("Bar".to_string()));
+        assert_eq!(kind_at(&tokens, 6)?, TokenKind::ColonGt);
+        assert_eq!(kind_at(&tokens, 7)?, TokenKind::Ident("Base".to_string()));
+        Ok(())
     }
 
     #[test]
-    fn test_scan_doc_comment() {
+    fn test_scan_doc_comment() -> Result<(), Box<dyn std::error::Error>> {
         let src = "doc /* SSOT for Autonomous Vehicle */ part def FCC;";
         let mut scanner = Scanner::new(src);
-        let tokens = scanner.scan_all().unwrap();
+        let tokens = scanner.scan_all()?;
 
         assert_eq!(
-            tokens[0].kind,
+            kind_at(&tokens, 0)?,
             TokenKind::DocComment("SSOT for Autonomous Vehicle".to_string())
         );
-        assert_eq!(tokens[1].kind, TokenKind::Part);
-        assert_eq!(tokens[2].kind, TokenKind::Def);
-        assert_eq!(tokens[3].kind, TokenKind::Ident("FCC".to_string()));
-        assert_eq!(tokens[4].kind, TokenKind::Semi);
+        assert_eq!(kind_at(&tokens, 1)?, TokenKind::Part);
+        assert_eq!(kind_at(&tokens, 2)?, TokenKind::Def);
+        assert_eq!(kind_at(&tokens, 3)?, TokenKind::Ident("FCC".to_string()));
+        assert_eq!(kind_at(&tokens, 4)?, TokenKind::Semi);
+        Ok(())
     }
 
     #[test]
-    fn test_scan_numbers_and_operators() {
+    fn test_scan_numbers_and_operators() -> Result<(), Box<dyn std::error::Error>> {
         let src = "v <= 60.0; count := 42; is_valid == true;";
         let mut scanner = Scanner::new(src);
-        let tokens = scanner.scan_all().unwrap();
+        let tokens = scanner.scan_all()?;
 
-        assert_eq!(tokens[0].kind, TokenKind::Ident("v".to_string()));
-        assert_eq!(tokens[1].kind, TokenKind::LtEq);
-        assert_eq!(tokens[2].kind, TokenKind::RealLit(60.0));
-        assert_eq!(tokens[3].kind, TokenKind::Semi);
+        assert_eq!(kind_at(&tokens, 0)?, TokenKind::Ident("v".to_string()));
+        assert_eq!(kind_at(&tokens, 1)?, TokenKind::LtEq);
+        assert_eq!(kind_at(&tokens, 2)?, TokenKind::RealLit(60.0));
+        assert_eq!(kind_at(&tokens, 3)?, TokenKind::Semi);
 
-        assert_eq!(tokens[4].kind, TokenKind::Ident("count".to_string()));
-        assert_eq!(tokens[5].kind, TokenKind::ColonEq);
-        assert_eq!(tokens[6].kind, TokenKind::IntLit(42));
-        assert_eq!(tokens[7].kind, TokenKind::Semi);
+        assert_eq!(kind_at(&tokens, 4)?, TokenKind::Ident("count".to_string()));
+        assert_eq!(kind_at(&tokens, 5)?, TokenKind::ColonEq);
+        assert_eq!(kind_at(&tokens, 6)?, TokenKind::IntLit(42));
+        assert_eq!(kind_at(&tokens, 7)?, TokenKind::Semi);
 
-        assert_eq!(tokens[8].kind, TokenKind::Ident("is_valid".to_string()));
-        assert_eq!(tokens[9].kind, TokenKind::EqEq);
-        assert_eq!(tokens[10].kind, TokenKind::BoolLit(true));
-        assert_eq!(tokens[11].kind, TokenKind::Semi);
+        assert_eq!(kind_at(&tokens, 8)?, TokenKind::Ident("is_valid".to_string()));
+        assert_eq!(kind_at(&tokens, 9)?, TokenKind::EqEq);
+        assert_eq!(kind_at(&tokens, 10)?, TokenKind::BoolLit(true));
+        assert_eq!(kind_at(&tokens, 11)?, TokenKind::Semi);
+        Ok(())
     }
 
     #[test]
-    fn test_lexer_tokenizes_import_statement() {
+    fn test_lexer_tokenizes_import_statement() -> Result<(), Box<dyn std::error::Error>> {
         let src = "import Foo::*; import Bar::Baz; import Sys::**;";
         let mut scanner = Scanner::new(src);
-        let tokens = scanner.scan_all().unwrap();
+        let tokens = scanner.scan_all()?;
 
-        assert_eq!(tokens[0].kind, TokenKind::Import);
-        assert_eq!(tokens[1].kind, TokenKind::Ident("Foo".to_string()));
-        assert_eq!(tokens[2].kind, TokenKind::DoubleColon);
-        assert_eq!(tokens[3].kind, TokenKind::Star);
-        assert_eq!(tokens[4].kind, TokenKind::Semi);
+        assert_eq!(kind_at(&tokens, 0)?, TokenKind::Import);
+        assert_eq!(kind_at(&tokens, 1)?, TokenKind::Ident("Foo".to_string()));
+        assert_eq!(kind_at(&tokens, 2)?, TokenKind::DoubleColon);
+        assert_eq!(kind_at(&tokens, 3)?, TokenKind::Star);
+        assert_eq!(kind_at(&tokens, 4)?, TokenKind::Semi);
 
-        assert_eq!(tokens[5].kind, TokenKind::Import);
-        assert_eq!(tokens[6].kind, TokenKind::Ident("Bar".to_string()));
-        assert_eq!(tokens[7].kind, TokenKind::DoubleColon);
-        assert_eq!(tokens[8].kind, TokenKind::Ident("Baz".to_string()));
-        assert_eq!(tokens[9].kind, TokenKind::Semi);
+        assert_eq!(kind_at(&tokens, 5)?, TokenKind::Import);
+        assert_eq!(kind_at(&tokens, 6)?, TokenKind::Ident("Bar".to_string()));
+        assert_eq!(kind_at(&tokens, 7)?, TokenKind::DoubleColon);
+        assert_eq!(kind_at(&tokens, 8)?, TokenKind::Ident("Baz".to_string()));
+        assert_eq!(kind_at(&tokens, 9)?, TokenKind::Semi);
 
-        assert_eq!(tokens[10].kind, TokenKind::Import);
-        assert_eq!(tokens[11].kind, TokenKind::Ident("Sys".to_string()));
-        assert_eq!(tokens[12].kind, TokenKind::DoubleColon);
-        assert_eq!(tokens[13].kind, TokenKind::Star);
-        assert_eq!(tokens[14].kind, TokenKind::Star);
-        assert_eq!(tokens[15].kind, TokenKind::Semi);
+        assert_eq!(kind_at(&tokens, 10)?, TokenKind::Import);
+        assert_eq!(kind_at(&tokens, 11)?, TokenKind::Ident("Sys".to_string()));
+        assert_eq!(kind_at(&tokens, 12)?, TokenKind::DoubleColon);
+        assert_eq!(kind_at(&tokens, 13)?, TokenKind::Star);
+        assert_eq!(kind_at(&tokens, 14)?, TokenKind::Star);
+        assert_eq!(kind_at(&tokens, 15)?, TokenKind::Semi);
+        Ok(())
     }
 
     #[test]
-    fn test_lexer_nested_block_comments() {
+    fn test_lexer_nested_block_comments() -> Result<(), Box<dyn std::error::Error>> {
         let src = "/* outer /* nested */ still outer */ part def FCC;";
         let mut scanner = Scanner::new(src);
-        let tokens = scanner.scan_all().unwrap();
+        let tokens = scanner.scan_all()?;
 
         assert_eq!(
-            tokens[0].kind,
+            kind_at(&tokens, 0)?,
             TokenKind::DocComment("outer /* nested */ still outer".to_string())
         );
-        assert_eq!(tokens[1].kind, TokenKind::Part);
-        assert_eq!(tokens[2].kind, TokenKind::Def);
-        assert_eq!(tokens[3].kind, TokenKind::Ident("FCC".to_string()));
-        assert_eq!(tokens[4].kind, TokenKind::Semi);
+        assert_eq!(kind_at(&tokens, 1)?, TokenKind::Part);
+        assert_eq!(kind_at(&tokens, 2)?, TokenKind::Def);
+        assert_eq!(kind_at(&tokens, 3)?, TokenKind::Ident("FCC".to_string()));
+        assert_eq!(kind_at(&tokens, 4)?, TokenKind::Semi);
+        Ok(())
     }
 
     #[test]
-    fn test_lexer_unrestricted_single_quoted_identifier() {
+    fn test_lexer_unrestricted_single_quoted_identifier() -> Result<(), Box<dyn std::error::Error>> {
         let src = "part def 'Flight Control Computer' :> 'Avionics System';";
         let mut scanner = Scanner::new(src);
-        let tokens = scanner.scan_all().unwrap();
+        let tokens = scanner.scan_all()?;
 
-        assert_eq!(tokens[0].kind, TokenKind::Part);
-        assert_eq!(tokens[1].kind, TokenKind::Def);
+        assert_eq!(kind_at(&tokens, 0)?, TokenKind::Part);
+        assert_eq!(kind_at(&tokens, 1)?, TokenKind::Def);
         assert_eq!(
-            tokens[2].kind,
+            kind_at(&tokens, 2)?,
             TokenKind::Ident("Flight Control Computer".to_string())
         );
-        assert_eq!(tokens[3].kind, TokenKind::ColonGt);
+        assert_eq!(kind_at(&tokens, 3)?, TokenKind::ColonGt);
         assert_eq!(
-            tokens[4].kind,
+            kind_at(&tokens, 4)?,
             TokenKind::Ident("Avionics System".to_string())
         );
-        assert_eq!(tokens[5].kind, TokenKind::Semi);
+        assert_eq!(kind_at(&tokens, 5)?, TokenKind::Semi);
+        Ok(())
     }
 }
 

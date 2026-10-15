@@ -231,11 +231,14 @@ pub fn contains_token_with_word_boundary(content: &str, target: &str) -> bool {
     if target.is_empty() || content.is_empty() {
         return false;
     }
-    let lower_content = content.to_lowercase();
-    let lower_target = target.to_lowercase();
+    let lower_content = content.to_ascii_lowercase();
+    let lower_target = target.to_ascii_lowercase();
 
     let mut start = 0;
-    while let Some(pos) = lower_content[start..].find(&lower_target) {
+    while let Some(slice) = lower_content.get(start..) {
+        let Some(pos) = slice.find(&lower_target) else {
+            break;
+        };
         let abs_pos = start + pos;
         let end_pos = abs_pos + lower_target.len();
 
@@ -257,7 +260,12 @@ pub fn contains_token_with_word_boundary(content: &str, target: &str) -> bool {
             return true;
         }
 
-        start = abs_pos + 1;
+        let step = lower_content
+            .get(abs_pos..)
+            .and_then(|s| s.chars().next())
+            .map(|c| c.len_utf8())
+            .unwrap_or(1);
+        start = abs_pos + step;
         if start >= lower_content.len() {
             break;
         }

@@ -238,7 +238,7 @@ pub fn validate_emergency_decision_matrix(content: &str, rel_path: &str) -> Vec<
 
     // Extract all EMG-XX triggers mentioned
     let mut found_triggers = HashSet::new();
-    let upper_doc = content.to_uppercase();
+    let upper_doc = content.to_ascii_uppercase();
 
     for &canonical in CANONICAL_EMERGENCY_TRIGGERS {
         if upper_doc.contains(canonical) {
@@ -248,17 +248,22 @@ pub fn validate_emergency_decision_matrix(content: &str, rel_path: &str) -> Vec<
 
     // Also scan for any other EMG-XX triggers
     let mut search_from = 0;
-    while let Some(pos) = upper_doc[search_from..].find("EMG-") {
+    while let Some(slice) = upper_doc.get(search_from..) {
+        let Some(pos) = slice.find("EMG-") else {
+            break;
+        };
         let abs_pos = search_from + pos;
-        let suffix = &upper_doc[abs_pos + 4..];
+        let suffix = upper_doc.get(abs_pos + 4..).unwrap_or("");
         let mut num_end = 0;
         let bytes = suffix.as_bytes();
         while num_end < bytes.len() && bytes[num_end].is_ascii_digit() {
             num_end += 1;
         }
         if num_end > 0 {
-            let trigger_id = format!("EMG-{}", &suffix[..num_end]);
-            found_triggers.insert(trigger_id);
+            if let Some(digits) = suffix.get(..num_end) {
+                let trigger_id = format!("EMG-{}", digits);
+                found_triggers.insert(trigger_id);
+            }
         }
         search_from = abs_pos + 4;
     }
@@ -558,45 +563,55 @@ pub fn validate_operational_allocation_tags(content: &str, rel_path: &str) -> Ve
         }
 
         // Extract OA-XX and MET-XX declarations from tables or list items
-        let upper_line = trimmed.to_uppercase();
+        let upper_line = trimmed.to_ascii_uppercase();
 
         // Check for OA-XX tokens
         let mut search_from = 0;
-        while let Some(pos) = upper_line[search_from..].find("OA-") {
+        while let Some(slice) = upper_line.get(search_from..) {
+            let Some(pos) = slice.find("OA-") else {
+                break;
+            };
             let abs_pos = search_from + pos;
-            let suffix = &upper_line[abs_pos + 3..];
+            let suffix = upper_line.get(abs_pos + 3..).unwrap_or("");
             let mut num_end = 0;
             let bytes = suffix.as_bytes();
             while num_end < bytes.len() && bytes[num_end].is_ascii_digit() {
                 num_end += 1;
             }
             if num_end > 0 {
-                let id = format!("OA-{}", &suffix[..num_end]);
-                declared_oa_tasks.insert(id);
+                if let Some(digits) = suffix.get(..num_end) {
+                    let id = format!("OA-{}", digits);
+                    declared_oa_tasks.insert(id);
+                }
             }
             search_from = abs_pos + 3;
         }
 
         // Check for MET-XX tokens
         let mut search_from_met = 0;
-        while let Some(pos) = upper_line[search_from_met..].find("MET-") {
+        while let Some(slice) = upper_line.get(search_from_met..) {
+            let Some(pos) = slice.find("MET-") else {
+                break;
+            };
             let abs_pos = search_from_met + pos;
-            let suffix = &upper_line[abs_pos + 4..];
+            let suffix = upper_line.get(abs_pos + 4..).unwrap_or("");
             let mut num_end = 0;
             let bytes = suffix.as_bytes();
             while num_end < bytes.len() && bytes[num_end].is_ascii_digit() {
                 num_end += 1;
             }
             if num_end > 0 {
-                let id = format!("MET-{}", &suffix[..num_end]);
-                declared_met_tasks.insert(id);
+                if let Some(digits) = suffix.get(..num_end) {
+                    let id = format!("MET-{}", digits);
+                    declared_met_tasks.insert(id);
+                }
             }
             search_from_met = abs_pos + 4;
         }
     }
 
     // 2. Verify that each declared OA or MET task has an OperationalAllocation tag
-    let upper_content = content.to_uppercase();
+    let upper_content = content.to_ascii_uppercase();
 
     for oa_id in declared_oa_tasks {
         let expected_tag = format!("[{}]", oa_id);
@@ -1492,12 +1507,17 @@ pub fn validate_conops_workspace(repo_root: &Path) -> Result<Vec<SpecAuditFindin
             Err(e) => return Err(SpecAuditError::IoError(e.to_string())),
         };
 
+        let mut paths = Vec::new();
         for entry in entries {
             let entry = match entry {
                 Ok(e) => e,
                 Err(e) => return Err(SpecAuditError::IoError(e.to_string())),
             };
-            let path = entry.path();
+            paths.push(entry.path());
+        }
+        paths.sort();
+
+        for path in paths {
             if path.is_dir() {
                 scan_dir(&path, repo_root, findings)?;
             } else if path.is_file() && path.extension().map_or(false, |ext| ext == "md") {

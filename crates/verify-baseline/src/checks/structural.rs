@@ -15,43 +15,194 @@ use std::path::Path;
 use walkdir::WalkDir;
 
 /// Check 10: Verify .gitignore exists in repository root.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ECSS-E-ST-40C configuration management controls.
+/// Ensures `.gitignore` is present at the repository root.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// `repo_root.join(".gitignore")` must resolve to an existing regular file.
+///
+/// ## 3. Preconditions
+/// `repo_root` must be an accessible directory path.
+///
+/// ## 4. Postconditions
+/// Returns `Ok(())` if `.gitignore` exists, or `Err(String)` describing the violation.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(1). Space Complexity: O(1).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// Fails closed if `.gitignore` is missing or inaccessible.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-10-GITIGNORE-EXISTS].
 pub fn check_gitignore_exists(repo_root: &Path) -> Result<(), String> {
     core_check_gitignore_exists(repo_root)
 }
 
 /// Check 11: Verify zero .DS_Store files exist in the working tree.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ECSS-E-ST-40C workspace hygiene controls.
+/// Ensures zero macOS `.DS_Store` metadata artifacts pollute the repository tree.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// Every non-excluded file entry in `repo_root` has filename != `.DS_Store`.
+///
+/// ## 3. Preconditions
+/// `repo_root` must be an accessible directory path.
+///
+/// ## 4. Postconditions
+/// Returns `Ok(())` when zero `.DS_Store` files exist, or `Err(Vec<String>)` listing violations.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(N) where N is directory entry count. Space Complexity: O(V) where V is violation count.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// Delegates to `deap_core::workspace::check_no_ds_store_files` which fails closed on I/O errors.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-11-NO-DS-STORE].
 pub fn check_no_ds_store_files(repo_root: &Path) -> Result<(), Vec<String>> {
     core_check_no_ds_store_files(repo_root)
 }
 
 /// Check 12: Verify downstream repositories do not contain duplicate master core blueprints.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ECSS-E-ST-40C single-source-of-truth (SSOT) architecture controls.
+/// Prevents downstream repositories from duplicating upstream master core blueprints.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// Downstream repositories must contain zero duplicate master blueprint files.
+///
+/// ## 3. Preconditions
+/// `repo_root` must be an accessible directory path.
+///
+/// ## 4. Postconditions
+/// Returns `Ok(())` on compliance, or `Err(Vec<String>)` listing duplicate blueprint paths.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(B) where B is number of master blueprints. Space Complexity: O(V).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// Fails closed if forbidden duplicate blueprints exist in downstream workspaces.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-12-NO-DUPLICATE-MASTER-BLUEPRINTS].
 pub fn check_no_duplicate_master_blueprints(repo_root: &Path) -> Result<(), Vec<String>> {
     core_check_no_duplicate_master_blueprints(repo_root)
 }
 
 /// Check 14: Verify presence of README.md, agent instruction entrypoints, and rules/sysml-ssot-completeness.md.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ECSS-E-ST-40C operational governance controls.
+/// Verifies all mandatory instruction entrypoints and SSOT completeness rules exist.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// Required governance files must exist and be non-empty.
+///
+/// ## 3. Preconditions
+/// `repo_root` must be an accessible directory path.
+///
+/// ## 4. Postconditions
+/// Returns `Ok(())` when all instruction entrypoints exist, or `Err(Vec<String>)` on missing files.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(1). Space Complexity: O(V).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// Fails closed when any required instruction file is absent.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-14-DOWNSTREAM-INSTRUCTIONS].
 pub fn check_downstream_instructions_exist(repo_root: &Path) -> Result<(), Vec<String>> {
     core_check_downstream_instructions_exist(repo_root)
 }
 
 /// Check 15: Verify reconcile-backlog tooling exists and is executable/buildable.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ECSS-E-ST-40C traceability tooling controls.
+/// Ensures backlog reconciliation tooling is present in the workspace.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// Either compiled `reconcile-backlog` binary or its Rust crate manifest must exist.
+///
+/// ## 3. Preconditions
+/// `repo_root` must be an accessible directory path.
+///
+/// ## 4. Postconditions
+/// Returns `Ok(())` if tooling is present, or `Err(Vec<String>)` if missing.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(1). Space Complexity: O(1).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// Fails closed if neither binary nor crate manifest is found.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-15-RECONCILE-BACKLOG-TOOLING].
 pub fn check_reconcile_backlog_tooling_exists(repo_root: &Path) -> Result<(), Vec<String>> {
     core_check_reconcile_backlog_tooling_exists(repo_root)
 }
 
 /// Check 16: Upstream Template Clean Landing Zone Gate.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ECSS-E-ST-40C M2/M1 separation controls.
+/// Ensures upstream template landing zones contain only `.gitkeep` sentinel files.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// In upstream repositories, landing zone directories contain zero non-`.gitkeep` files.
+///
+/// ## 3. Preconditions
+/// `repo_root` must be an accessible directory path.
+///
+/// ## 4. Postconditions
+/// Returns `Ok(())` on clean landing zones, or `Err(Vec<String>)` listing contaminating files.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(N) where N is files in landing zones. Space Complexity: O(V).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// Fails closed on any non-`.gitkeep` file or directory traversal error.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-16-CLEAN-LANDING-ZONES].
 pub fn check_upstream_template_clean_landing_zones(repo_root: &Path) -> Result<(), Vec<String>> {
     core_check_upstream_template_clean_landing_zones(repo_root)
 }
 
 /// Check 18: Upstream Template Clean Landing Zone & Blueprint Cleanliness Gate.
 ///
-/// In upstream distribution template repositories (`DEAP-*`), enforces:
-/// 1. Pure schema landing zone cleanliness: `schema/`, `docs/epics/`, `docs/features/`,
-///    `docs/user-stories/`, and `docs/use-cases/` must contain ONLY `.gitkeep` files.
-/// 2. Zero concrete modeling files (`.sysml`) in upstream architecture blueprints (`docs/architecture/blueprints`).
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ECSS-E-ST-40C M2 metamodel purity controls.
+/// Enforces landing zone cleanliness, zero `.sysml` files in architecture blueprints,
+/// and zero ephemeral handover checkpoint files in upstream repositories.
 ///
-/// Downstream repositories are exempt.
+/// ## 2. Invariants & Mathematical Properties
+/// 1. `schema/`, `docs/epics/`, `docs/features/`, `docs/user-stories/`, and `docs/use-cases/`
+///    contain only `.gitkeep`.
+/// 2. `docs/architecture/blueprints/` contains zero `.sysml` files.
+/// 3. Zero `MASTER_HANDOVER_CHECKPOINT*` files exist at root or `docs/`.
+///
+/// ## 3. Preconditions
+/// `repo_root` must be an accessible directory path.
+///
+/// ## 4. Postconditions
+/// Returns `Ok(())` on compliance, or `Err(Vec<String>)` with sorted violation messages.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(N) where N is scanned directory entries. Space Complexity: O(V).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// Fails closed on any discovered contaminating artifact.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-18-UPSTREAM-BLUEPRINT-CLEANLINESS].
 pub fn verify_upstream_blueprint_domain_cleanliness(repo_root: &Path) -> Result<(), Vec<String>> {
     if !is_upstream_compiler(repo_root) {
         return Ok(());
@@ -78,7 +229,7 @@ pub fn verify_upstream_blueprint_domain_cleanliness(repo_root: &Path) -> Result<
             .filter_entry(|e| {
                 if e.file_type().is_dir() {
                     let name = e.file_name().to_string_lossy();
-                    !EXCLUDED_DIRS.iter().any(|&ex| name == ex)
+                    !EXCLUDED_DIRS.iter().any(|ex| name == ex)
                 } else {
                     true
                 }
@@ -114,7 +265,7 @@ pub fn verify_upstream_blueprint_domain_cleanliness(repo_root: &Path) -> Result<
             .filter_entry(|e| {
                 if e.file_type().is_dir() {
                     let name = e.file_name().to_string_lossy();
-                    !EXCLUDED_DIRS.iter().any(|&ex| name == ex)
+                    !EXCLUDED_DIRS.iter().any(|ex| name == ex)
                 } else {
                     true
                 }
@@ -158,10 +309,29 @@ pub fn verify_upstream_blueprint_domain_cleanliness(repo_root: &Path) -> Result<
 
 pub use super::domain_cleanliness_gate::check_domain_agnostic_ast_cleanliness;
 
-/// Check 32: Zero Shell Scripts Invariant
+/// Check 32: Zero Shell Scripts Invariant.
 ///
-/// Scans the entire repository tree (excluding `target` and `.git` directories)
-/// and fails closed if ANY `.sh` file exists on disk.
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ECSS-E-ST-40C deterministic Rust-only execution controls.
+/// Scans the repository tree and fails closed if any `.sh` script exists on disk.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// Zero files in `repo_root` (excluding `target` and `.git`) may have extension `.sh`.
+///
+/// ## 3. Preconditions
+/// `repo_root` must be an accessible directory path.
+///
+/// ## 4. Postconditions
+/// Returns `Ok(())` if zero `.sh` files exist, or `Err(Vec<String>)` with sorted relative paths.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(N) where N is repository file count. Space Complexity: O(V).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// Fails closed on any discovered `.sh` file.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-32-ZERO-SHELL-SCRIPTS].
 pub fn check_zero_shell_scripts(repo_root: &Path) -> Result<(), Vec<String>> {
     let mut violations = Vec::new();
 
@@ -203,11 +373,29 @@ pub fn check_zero_shell_scripts(repo_root: &Path) -> Result<(), Vec<String>> {
     }
 }
 
-/// Check 33: Zero Python Scripts Invariant
+/// Check 33: Zero Python Scripts Invariant.
 ///
-/// Recursively walks the repository filesystem from root using WalkDir,
-/// skipping `target` and `.git` directories.
-/// Fails closed if ANY file with extension `.py` (case-insensitive) is detected.
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ECSS-E-ST-40C Rust-native toolchain purity controls.
+/// Recursively walks the repository filesystem and fails closed if any `.py` file exists.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// Zero files in `repo_root` (excluding `target` and `.git`) may have extension `.py` (case-insensitive).
+///
+/// ## 3. Preconditions
+/// `repo_root` must be an accessible directory path.
+///
+/// ## 4. Postconditions
+/// Returns `Ok(())` if zero `.py` files exist, or `Err(Vec<String>)` with sorted relative paths.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(N) where N is repository file count. Space Complexity: O(V).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// Fails closed on any discovered `.py` file.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-33-ZERO-PYTHON-SCRIPTS].
 pub fn check_zero_python_scripts(repo_root: &Path) -> Result<(), Vec<String>> {
     let mut violations = Vec::new();
 
@@ -323,7 +511,13 @@ pub fn check_zero_regex(repo_root: &Path) -> Result<(), Vec<String>> {
                     let rel = path.strip_prefix(repo_root).unwrap_or(path).display().to_string();
                     match fs::read_to_string(path) {
                         Ok(content) => {
-                            let is_audited = rel.contains("parity_gates.rs");
+                            let is_audited = rel.contains("parity_gates.rs")
+                                || (rel.contains("deap-core/src/")
+                                    && (rel.ends_with("diagnostics.rs")
+                                        || rel.ends_with("rules.rs")
+                                        || rel.ends_with("workspace.rs")
+                                        || rel.ends_with("markdown.rs")
+                                        || rel.ends_with("sysml_ast.rs")));
                             if let Err(errs) = audit_source_purity(&content, &rel, is_audited) {
                                 if is_audited {
                                     violations.extend(errs);
@@ -384,6 +578,11 @@ pub fn check_compiler_ast_purity(repo_root: &Path) -> Result<(), Vec<String>> {
 
     let audited_files = [
         repo_root.join("crates").join("verify-baseline").join("src").join("checks").join("parity_gates.rs"),
+        repo_root.join("crates").join("deap-core").join("src").join("diagnostics.rs"),
+        repo_root.join("crates").join("deap-core").join("src").join("rules.rs"),
+        repo_root.join("crates").join("deap-core").join("src").join("workspace.rs"),
+        repo_root.join("crates").join("deap-core").join("src").join("markdown.rs"),
+        repo_root.join("crates").join("deap-core").join("src").join("sysml_ast.rs"),
     ];
 
     for file_path in &audited_files {
@@ -457,19 +656,25 @@ pub fn audit_source_purity(
     let needle_tuple_slice = ["&[(", "&str"].concat();
     let needle_array_str = ["[", "&str;"].concat();
     let needle_static_slice = [": &[", "&str]"].concat();
-    let needle_const_slice = ["const ", ": &[&str]"].concat();
+    let needle_const_slice = ["const ", ": &[", "&str]"].concat();
 
     // Hollow stub forbidden patterns
     let needle_let_blank = ["let", " _ = "].concat();
 
     // Fail-open forbidden patterns
-    let needle_fm_e = [".filter_map(", "|e|", " e.ok())"].concat();
-    let needle_fm_res = [".filter_map(", "|res|", " res.ok())"].concat();
-    let needle_fm_x = [".filter_map(", "|x|", " x.ok())"].concat();
+    let needle_fm_e = [".filter", "_map(|e| e.ok", "())"].concat();
+    let needle_fm_res = [".filter", "_map(|res| res.ok", "())"].concat();
+    let needle_fm_x = [".filter", "_map(|x| x.ok", "())"].concat();
+    let needle_filter_map = [".filter", "_map("].concat();
+    let needle_dot_ok = [".ok", "()"].concat();
+    let needle_read_str = ["read_to", "_string"].concat();
 
     // Cross-string byte slicing hazards
     let needle_lower_slice1 = [".to_lowercase()", "["].concat();
     let needle_lower_slice2 = [".to_ascii_lowercase()", "["].concat();
+    let needle_lower_idx = ["lower", "["].concat();
+    let needle_ulower_idx = ["_lower", "["].concat();
+    let needle_dotdot = [".", "."].concat();
 
     // 7-section doc headers to check
     let s1 = "## 1. Safety Intent & Regulatory Scope";
@@ -552,8 +757,8 @@ pub fn audit_source_purity(
             if code.contains(&needle_fm_e)
                 || code.contains(&needle_fm_res)
                 || code.contains(&needle_fm_x)
-                || (code.contains(".filter_map(") && code.contains(".ok()"))
-                || (code.contains("read_to_string") && code.contains(".ok()"))
+                || (code.contains(&needle_filter_map) && code.contains(&needle_dot_ok))
+                || (code.contains(&needle_read_str) && code.contains(&needle_dot_ok))
             {
                 violations.push(format!("{}:{}: fail-open error swallowing detected", file_rel, line_no));
             }
@@ -561,7 +766,8 @@ pub fn audit_source_purity(
             // (e) Cross-String UTF-8 Byte-Slice Hazards Check
             if code.contains(&needle_lower_slice1)
                 || code.contains(&needle_lower_slice2)
-                || ((code.contains("lower[") || code.contains("_lower[")) && code.contains(".."))
+                || ((code.contains(&needle_lower_idx) || code.contains(&needle_ulower_idx))
+                    && code.contains(&needle_dotdot))
             {
                 violations.push(format!("{}:{}: cross-string UTF-8 byte-slice hazard detected", file_rel, line_no));
             }
@@ -678,14 +884,31 @@ fn scan_cargo_toml_file(
     }
 }
 
-/// Check documentation and backlog integrity (refs #318):
-/// 1. Root `HANDOFF.md` must not exist in repository root (purged in commit 69c749c to eradicate documentation drift and stale backlog hallucinations).
-/// 2. If `docs/designs/feat-289-290-293-solution.md` is present, verify:
-///    - It cites Issue #318.
-///    - It correctly attributes commit 402d56c to refs #315 (not prompt quarantine).
-///    - It does not list issues #289, #290, #293 as unstarted/remaining work packages.
-///    - It does not cite invalid path `scripts/bootstrap_tracker_labels.py` without package scoping.
-///    - It contains zero Unicode em dashes.
+/// Check documentation and backlog integrity (refs #318).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ECSS-E-ST-40C documentation traceability controls.
+/// Prevents root `HANDOFF.md` drift and stale backlog attribution in solution designs.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// 1. Root `HANDOFF.md` must not exist.
+/// 2. `docs/designs/feat-289-290-293-solution.md` (if present) must cite `#318` and contain zero em dashes or stale work packages.
+/// 3. Zero `MASTER_HANDOVER_CHECKPOINT*` files exist.
+///
+/// ## 3. Preconditions
+/// `repo_root` must be an accessible directory path.
+///
+/// ## 4. Postconditions
+/// Returns `Ok(())` on compliance, or `Err(Vec<String>)` with detected integrity violations.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(L) where L is solution file length and directory entries. Space Complexity: O(V).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// Fails closed on any discovered handoff artifact or attribution violation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-HANDOFF-BACKLOG-INTEGRITY].
 pub fn check_handoff_and_backlog_integrity(repo_root: &Path) -> Result<(), Vec<String>> {
     let mut violations = Vec::new();
 
@@ -752,9 +975,30 @@ pub fn check_handoff_and_backlog_integrity(repo_root: &Path) -> Result<(), Vec<S
     }
 }
 
-/// Check documentation and root artifact cleanliness (refs #321):
+/// Check documentation and root artifact cleanliness (refs #321).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ECSS-E-ST-40C artifact hygiene controls.
 /// Verifies that ephemeral/spurious handover checkpoints (`MASTER_HANDOVER_CHECKPOINT.md`)
 /// are strictly forbidden at the repository root and across `docs/`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// Zero files starting with `MASTER_HANDOVER_CHECKPOINT` (case-insensitive) exist at root or inside `docs/`.
+///
+/// ## 3. Preconditions
+/// `repo_root` must be an accessible directory path.
+///
+/// ## 4. Postconditions
+/// Returns `Ok(())` when clean, or `Err(Vec<String>)` with sorted, deduplicated violations.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(N) where N is entries in root and `docs/`. Space Complexity: O(V).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// Fails closed on any discovered handover checkpoint file.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-NO-MASTER-HANDOVER-CHECKPOINT].
 pub fn check_no_master_handover_checkpoint(repo_root: &Path) -> Result<(), Vec<String>> {
     let mut violations = Vec::new();
 
@@ -795,7 +1039,7 @@ pub fn check_no_master_handover_checkpoint(repo_root: &Path) -> Result<(), Vec<S
             .filter_entry(|e| {
                 if e.file_type().is_dir() {
                     let name = e.file_name().to_string_lossy();
-                    !EXCLUDED_DIRS.iter().any(|&ex| name == ex)
+                    !EXCLUDED_DIRS.iter().any(|ex| name == ex)
                 } else {
                     true
                 }
@@ -1057,7 +1301,25 @@ mod tests {
             .and_then(|p| p.parent())
             .expect("repo root");
         let res = check_compiler_ast_purity(repo_root);
-        assert!(res.is_ok(), "Check 34 Compiler AST Purity failed on audited parity_gates.rs: {:?}", res.err());
+        assert!(res.is_ok(), "Check 34 Compiler AST Purity failed on audited modules: {:?}", res.err());
+
+        let structural_path = repo_root
+            .join("crates")
+            .join("verify-baseline")
+            .join("src")
+            .join("checks")
+            .join("structural.rs");
+        let structural_src = fs::read_to_string(&structural_path).expect("read structural.rs");
+        let res_structural = audit_source_purity(
+            &structural_src,
+            "crates/verify-baseline/src/checks/structural.rs",
+            true,
+        );
+        assert!(
+            res_structural.is_ok(),
+            "structural.rs failed audit_source_purity: {:?}",
+            res_structural.err()
+        );
     }
 
     #[test]

@@ -3,7 +3,7 @@
 //! Realises: [Issue Tracker as Canonical SSOT, Closed-Loop Payload Verification]
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::process::Command;
 
 /// Representation of an issue from GitHub or GitLab.
@@ -58,7 +58,7 @@ impl TrackerIssue {
 /// Normalizes issue labels for robust matching.
 pub fn normalize_label(label: &str) -> String {
     let lower = label.trim().to_lowercase();
-    lower.replace('_', "-").replace(' ', "-")
+    lower.replace(['_', ' '], "-")
 }
 
 /// Canonical title normalization matching Python `reconcile_backlog.py` and `metadata.rs`.
@@ -68,7 +68,7 @@ pub fn normalize_title(title: &str) -> String {
         return String::new();
     }
 
-    let lower = trimmed.to_lowercase();
+    let lower = trimmed.to_ascii_lowercase();
     const PREFIX_KEYWORDS: &[&str] = &[
         "user-story", "user story", "user_story",
         "use-case", "use case", "use_case",
@@ -79,8 +79,8 @@ pub fn normalize_title(title: &str) -> String {
 
     let mut matched_len = 0;
     for kw in PREFIX_KEYWORDS {
-        if lower.starts_with(kw) {
-            let mut rem = &lower[kw.len()..];
+        if let Some(kw_rest) = lower.strip_prefix(kw) {
+            let mut rem = kw_rest;
             let mut consumed = kw.len();
 
             if rem.starts_with('s') {
@@ -194,6 +194,13 @@ impl OfflineTracker {
     }
 }
 
+impl Default for OfflineTracker {
+    /// Constructs an empty offline tracker; equivalent to [`OfflineTracker::new`].
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TrackerClient for OfflineTracker {
     fn fetch_all_issues(&self) -> Result<Vec<TrackerIssue>, String> {
         let guard = self.state.lock().map_err(|e| e.to_string())?;
@@ -266,6 +273,13 @@ impl GitHubTracker {
 
     pub fn with_repo(repo: impl Into<String>) -> Self {
         Self { repo: Some(repo.into()) }
+    }
+}
+
+impl Default for GitHubTracker {
+    /// Constructs a tracker bound to the current repository; equivalent to [`GitHubTracker::new`].
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -361,8 +375,7 @@ impl TrackerClient for GitHubTracker {
         let url_line = output_str
             .lines()
             .map(|l| l.trim())
-            .filter(|l| l.starts_with("http"))
-            .last()
+            .rfind(|l| l.starts_with("http"))
             .unwrap_or_else(|| output_str.trim());
 
         let url = url_line.to_string();
@@ -481,9 +494,13 @@ impl std::io::Write for TempFileNamed {
     }
 }
 
+static TEMP_FILE_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 fn tempfile_named() -> Result<TempFileNamed, String> {
-    let rand_id = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
-    let path = std::env::temp_dir().join(format!("reconcile_body_{}.md", rand_id));
+    let nanos = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
+    let pid = std::process::id();
+    let seq = TEMP_FILE_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let path = std::env::temp_dir().join(format!("reconcile_body_{}_{}_{}.md", pid, nanos, seq));
     let path_str = path.display().to_string();
     let file = std::fs::File::create(&path)
         .map_err(|e| format!("Unable to create temp file {}: {}", path_str, e))?;
@@ -493,14 +510,14 @@ fn tempfile_named() -> Result<TempFileNamed, String> {
 /// Indexes issues by number and normalized title.
 #[derive(Debug, Default)]
 pub struct IssueIndex {
-    pub by_number: HashMap<u64, TrackerIssue>,
-    pub by_normalized_title: HashMap<String, TrackerIssue>,
+    pub by_number: BTreeMap<u64, TrackerIssue>,
+    pub by_normalized_title: BTreeMap<String, TrackerIssue>,
 }
 
 impl IssueIndex {
     pub fn build(issues: Vec<TrackerIssue>) -> Self {
-        let mut by_number = HashMap::new();
-        let mut by_normalized_title = HashMap::new();
+        let mut by_number = BTreeMap::new();
+        let mut by_normalized_title = BTreeMap::new();
 
         for issue in issues {
             let norm = normalize_title(&issue.title);

@@ -1,6 +1,17 @@
 //! Mathematical, logical, and formal KaTeX expression parser for SysML v2 constraints.
 
-use crate::lexer::token::{Token, TokenKind};
+use crate::lexer::token::{Span, Token, TokenKind};
+
+// Sentinel returned when the token stream is empty; never indexed, never mutated.
+static EXPR_EOF_TOKEN: Token = Token {
+    kind: TokenKind::Eof,
+    span: Span {
+        start: 0,
+        end: 0,
+        line: 0,
+        col: 0,
+    },
+};
 
 /// Binary operations supported in SysML v2 constraints and expressions.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -251,27 +262,33 @@ impl<'a> ExpressionParser<'a> {
     }
 
     fn peek(&self) -> &Token {
-        &self.tokens[self.pos]
+        self.tokens
+            .get(self.pos)
+            .or_else(|| self.tokens.last())
+            .unwrap_or(&EXPR_EOF_TOKEN)
     }
 
     fn peek_kind(&self) -> Option<&TokenKind> {
         if self.is_at_end() {
             None
         } else {
-            Some(&self.tokens[self.pos].kind)
+            self.tokens.get(self.pos).map(|t| &t.kind)
         }
     }
 
     fn advance(&mut self) -> &Token {
-        let tok = &self.tokens[self.pos];
+        let idx = self.pos;
         if self.pos < self.tokens.len() {
             self.pos += 1;
         }
-        tok
+        self.tokens
+            .get(idx)
+            .or_else(|| self.tokens.last())
+            .unwrap_or(&EXPR_EOF_TOKEN)
     }
 
     fn is_at_end(&self) -> bool {
-        self.pos >= self.tokens.len() || self.tokens[self.pos].kind == TokenKind::Eof
+        self.tokens.get(self.pos).is_none_or(|t| t.kind == TokenKind::Eof)
     }
 
     fn peek_binary_op(&self) -> Option<BinaryOp> {
@@ -322,10 +339,10 @@ mod tests {
     use crate::lexer::scanner::Scanner;
 
     #[test]
-    fn test_parse_inequality_constraint() {
+    fn test_parse_inequality_constraint() -> Result<(), Box<dyn std::error::Error>> {
         let mut scanner = Scanner::new("v <= 60.0");
-        let tokens = scanner.scan_all().unwrap();
-        let expr = parse_expression(&tokens).unwrap();
+        let tokens = scanner.scan_all()?;
+        let expr = parse_expression(&tokens)?;
 
         assert_eq!(
             expr,
@@ -336,13 +353,14 @@ mod tests {
             }
         );
         assert_eq!(expr.to_string_repr(), "v <= 60.0");
+        Ok(())
     }
 
     #[test]
-    fn test_parse_nested_logical_expression() {
+    fn test_parse_nested_logical_expression() -> Result<(), Box<dyn std::error::Error>> {
         let mut scanner = Scanner::new("alt >= 10.0 && alt <= 120.0");
-        let tokens = scanner.scan_all().unwrap();
-        let expr = parse_expression(&tokens).unwrap();
+        let tokens = scanner.scan_all()?;
+        let expr = parse_expression(&tokens)?;
 
         match expr {
             Expr::Binary { op, left, right } => {
@@ -350,16 +368,18 @@ mod tests {
                 assert_eq!(left.to_string_repr(), "alt >= 10.0");
                 assert_eq!(right.to_string_repr(), "alt <= 120.0");
             }
-            _ => panic!("Expected binary AND"),
+            _ => return Err("Expected binary AND".into()),
         }
+        Ok(())
     }
 
     #[test]
-    fn test_parse_member_and_function_call() {
+    fn test_parse_member_and_function_call() -> Result<(), Box<dyn std::error::Error>> {
         let mut scanner = Scanner::new("abs(fcc.speed) <= limits.max");
-        let tokens = scanner.scan_all().unwrap();
-        let expr = parse_expression(&tokens).unwrap();
+        let tokens = scanner.scan_all()?;
+        let expr = parse_expression(&tokens)?;
 
         assert_eq!(expr.to_string_repr(), "abs(fcc.speed) <= limits.max");
+        Ok(())
     }
 }

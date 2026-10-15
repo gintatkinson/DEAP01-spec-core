@@ -118,46 +118,126 @@ pub fn generate_fmeca_matrix(
     scoring_config: Option<&FmecaScoringConfig>,
 ) -> Vec<FmecaRow> {
     let pkg_sysml = crate::semantic::serializer::to_sysml(pkg);
-    let is_negated_recovery = pkg.has_negative_recovery_constraint()
-        || deap_core::sysml_ast::has_negative_recovery_constraint(&pkg_sysml);
 
     let mut rows = Vec::new();
     let all_parts = pkg.get_all_parts();
-    let mut parts: Vec<&str> = all_parts
+    let is_part_negated = |name: &str| -> bool {
+        pkg.is_component_negated(name) || deap_core::sysml_ast::is_component_negated(name, &pkg_sysml)
+    };
+
+    let mut filtered_parts: Vec<&deap_core::sysml_ast::PartDef> = all_parts
         .iter()
-        .map(|p| p.name.as_str())
-        .filter(|name| !name.starts_with('_'))
-        .filter(|name| !(is_negated_recovery && deap_core::sysml_ast::is_recovery_component(name)))
+        .filter(|p| !p.name.starts_with('_'))
+        .filter(|p| !is_part_negated(&p.name))
         .collect();
 
-    if parts.is_empty() {
-        parts = all_parts
+    if filtered_parts.is_empty() {
+        filtered_parts = all_parts
             .iter()
-            .map(|p| p.name.as_str())
-            .filter(|name| !(is_negated_recovery && deap_core::sysml_ast::is_recovery_component(name)))
+            .filter(|p| !is_part_negated(&p.name))
             .collect();
     }
 
-    if parts.is_empty() {
+    if filtered_parts.is_empty() {
         return rows;
     }
 
+    let all_hazards = pkg.get_all_hazards();
     let mut row_counter = 0;
 
-    // First pass: generate 4 universal dimensions for each part def
-    for (part_idx, part_name) in parts.iter().enumerate() {
+    // First pass: generate 4 universal dimensions for each part def grounded in its AST members
+    for (part_idx, part) in filtered_parts.iter().enumerate() {
+        let part_name = part.name.as_str();
         for (dim_idx, tmpl) in DIMENSION_TEMPLATES.iter().enumerate() {
             row_counter += 1;
             let (s, o, d, s_cell, o_cell, d_cell) =
                 resolve_scores(scoring_config, part_idx * 4 + dim_idx, tmpl);
             let rpn = s * o * d;
 
+            let (mode_str, effect_str, mit_str, basis_str) = match tmpl.dimension {
+                FailureDimension::Interface => {
+                    if let Some(port) = part.ports.first() {
+                        (
+                            format!("{} Port '{}' {}", part_name, port.name, tmpl.mode_suffix),
+                            format!("{}: {} on port '{}'", part_name, tmpl.effect_template, port.name),
+                            format!("{}: {} for port '{}'", part_name, tmpl.mitigation_template, port.name),
+                            "SSOT".to_string(),
+                        )
+                    } else {
+                        (
+                            format!("{} {}", part_name, tmpl.mode_suffix),
+                            format!("{}: {}", part_name, tmpl.effect_template),
+                            format!("{}: {}", part_name, tmpl.mitigation_template),
+                            "Derived".to_string(),
+                        )
+                    }
+                }
+                FailureDimension::State => {
+                    if let Some(st) = part.states.first() {
+                        (
+                            format!("{} State '{}' {}", part_name, st.name, tmpl.mode_suffix),
+                            format!("{}: {} in state '{}'", part_name, tmpl.effect_template, st.name),
+                            format!("{}: {} for state '{}'", part_name, tmpl.mitigation_template, st.name),
+                            "SSOT".to_string(),
+                        )
+                    } else {
+                        (
+                            format!("{} {}", part_name, tmpl.mode_suffix),
+                            format!("{}: {}", part_name, tmpl.effect_template),
+                            format!("{}: {}", part_name, tmpl.mitigation_template),
+                            "Derived".to_string(),
+                        )
+                    }
+                }
+                FailureDimension::Action => {
+                    if let Some(act) = part.actions.first() {
+                        (
+                            format!("{} Action '{}' {}", part_name, act.name, tmpl.mode_suffix),
+                            format!("{}: {} during '{}'", part_name, tmpl.effect_template, act.name),
+                            format!("{}: {} for action '{}'", part_name, tmpl.mitigation_template, act.name),
+                            "SSOT".to_string(),
+                        )
+                    } else if let Some(op) = part.operations.first() {
+                        (
+                            format!("{} Operation '{}' {}", part_name, op.name, tmpl.mode_suffix),
+                            format!("{}: {} during '{}'", part_name, tmpl.effect_template, op.name),
+                            format!("{}: {} for operation '{}'", part_name, tmpl.mitigation_template, op.name),
+                            "SSOT".to_string(),
+                        )
+                    } else {
+                        (
+                            format!("{} {}", part_name, tmpl.mode_suffix),
+                            format!("{}: {}", part_name, tmpl.effect_template),
+                            format!("{}: {}", part_name, tmpl.mitigation_template),
+                            "Derived".to_string(),
+                        )
+                    }
+                }
+                FailureDimension::Resource => {
+                    if let Some(attr) = part.attributes.first() {
+                        (
+                            format!("{} Attribute '{}' {}", part_name, attr.name, tmpl.mode_suffix),
+                            format!("{}: {} affecting '{}'", part_name, tmpl.effect_template, attr.name),
+                            format!("{}: {} for attribute '{}'", part_name, tmpl.mitigation_template, attr.name),
+                            "SSOT".to_string(),
+                        )
+                    } else {
+                        (
+                            format!("{} {}", part_name, tmpl.mode_suffix),
+                            format!("{}: {}", part_name, tmpl.effect_template),
+                            format!("{}: {}", part_name, tmpl.mitigation_template),
+                            "Derived".to_string(),
+                        )
+                    }
+                }
+            };
+
             rows.push(FmecaRow {
                 id: format!("FMECA-{:03}", row_counter),
-                component: (*part_name).to_string(),
+                component: part_name.to_string(),
                 dimension: tmpl.dimension.as_str().to_string(),
-                failure_mode: format!("{} {}", part_name, tmpl.mode_suffix),
-                effect: format!("{}: {}", part_name, tmpl.effect_template),
+                failure_mode: mode_str,
+                effect: effect_str,
                 severity: s,
                 occurrence: o,
                 detection: d,
@@ -166,33 +246,73 @@ pub fn generate_fmeca_matrix(
                 occurrence_cell: o_cell,
                 detection_cell: d_cell,
                 rpn_cell: format!("{}", rpn),
-                mitigation: format!("{}: {}", part_name, tmpl.mitigation_template),
-                basis: "Derived".to_string(),
+                mitigation: mit_str,
+                basis: basis_str,
             });
         }
     }
 
-    // Ensure >= 15 failure mode rows when parts exist by adding fine-grained sub-modes if needed
-    let additional_modes = [
-        ("Sensor Signal Drift / Biased Telemetry", FailureDimension::Interface, 7, 3, 4, "Kalman residual monitoring and zero-velocity update rejection"),
-        ("Actuator Mechanical Seizure / Channel Binding", FailureDimension::Action, 9, 2, 2, "Cross-channel feedback and dynamic torque re-allocation"),
-        ("Single-Event Upset / Memory Bitflip", FailureDimension::State, 8, 2, 3, "ECC RAM scrub and triple modular redundant register voting"),
-        ("Power Bus Transient Surge / Inrush Current", FailureDimension::Resource, 7, 2, 2, "TVS diode clamp and fast electronic circuit breaker isolation"),
+    // Ensure >= 15 failure mode rows when parts exist by deriving sub-modes from declared hazards/members or generic structural dimensions
+    let generic_sub_modes = [
+        (
+            "Interface Protocol Desynchronization / Schema Mismatch",
+            FailureDimension::Interface,
+            7,
+            3,
+            4,
+            "Strict schema contract validation and frame sequence verification",
+        ),
+        (
+            "Execution Pipeline Stall / Unbounded Loop",
+            FailureDimension::Action,
+            9,
+            2,
+            2,
+            "Deterministic execution deadline enforcement and fallback abort",
+        ),
+        (
+            "Internal State Invariant Corruption",
+            FailureDimension::State,
+            8,
+            2,
+            3,
+            "Cryptographic state digest verification and atomic rollback",
+        ),
+        (
+            "Resource Quota Exhaustion / Buffer Saturation",
+            FailureDimension::Resource,
+            7,
+            2,
+            2,
+            "Bounded memory allocation and backpressure flow control",
+        ),
     ];
 
-    let mut add_idx = 0;
+    let mut add_idx: usize = 0;
     while rows.len() < 15 {
-        let (mode_desc, dim, s, o, d, mit) = additional_modes[add_idx % additional_modes.len()];
-        let part_name = parts[add_idx % parts.len()];
+        let sub_mode = add_idx
+            .checked_rem(generic_sub_modes.len())
+            .and_then(|i| generic_sub_modes.get(i));
+        let part = add_idx.checked_rem(filtered_parts.len()).and_then(|i| filtered_parts.get(i));
+        let (Some(&(mode_desc, dim, s, o, d, mit)), Some(&part)) = (sub_mode, part) else {
+            break;
+        };
+        let part_name = part.name.as_str();
         row_counter += 1;
         let rpn = s * o * d;
+
+        let effect_str = if let Some(haz) = all_hazards.get(add_idx) {
+            format!("{}: {} ({})", part_name, haz.doc.as_deref().unwrap_or(&haz.name), haz.name)
+        } else {
+            format!("{}: Compound functional degradation", part_name)
+        };
 
         rows.push(FmecaRow {
             id: format!("FMECA-{:03}", row_counter),
             component: part_name.to_string(),
             dimension: dim.as_str().to_string(),
             failure_mode: format!("{} {}", part_name, mode_desc),
-            effect: format!("{}: Compound functional degradation", part_name),
+            effect: effect_str,
             severity: s,
             occurrence: o,
             detection: d,
@@ -217,11 +337,10 @@ fn resolve_scores(
 ) -> (u32, u32, u32, String, String, String) {
     if let Some(cfg) = scoring_config {
         let pick = |scale: &[ScoringScaleEntry], offset: usize| -> (u32, String) {
-            if scale.is_empty() {
-                return (tmpl.default_s, format!("{}", tmpl.default_s));
+            match (index + offset).checked_rem(scale.len()).and_then(|i| scale.get(i)) {
+                Some(entry) => (entry.score, format!("{} ({})", entry.label, entry.score)),
+                None => (tmpl.default_s, format!("{}", tmpl.default_s)),
             }
-            let entry = &scale[(index + offset) % scale.len()];
-            (entry.score, format!("{} ({})", entry.label, entry.score))
         };
 
         let (s, s_cell) = pick(&cfg.severity_scale, 0);
@@ -246,12 +365,16 @@ mod tests {
     use deap_core::sysml_ast::PartDef;
 
     #[test]
-    fn test_fmeca_matrix_generation_and_rpn() {
+    fn test_fmeca_matrix_generation_and_rpn() -> Result<(), Box<dyn std::error::Error>> {
         let mut pkg = PackageDef::default();
-        let mut p1 = PartDef::default();
-        p1.name = "CoreStructuralFrame".to_string();
-        let mut p2 = PartDef::default();
-        p2.name = "PrimaryComputeSubsystem".to_string();
+        let p1 = PartDef {
+            name: "CoreStructuralFrame".to_string(),
+            ..Default::default()
+        };
+        let p2 = PartDef {
+            name: "PrimaryComputeSubsystem".to_string(),
+            ..Default::default()
+        };
         pkg.part_defs.push(p1);
         pkg.part_defs.push(p2);
 
@@ -276,26 +399,31 @@ mod tests {
         assert!(dims.contains(&"State"));
         assert!(dims.contains(&"Action"));
         assert!(dims.contains(&"Resource"));
+        Ok(())
     }
 
     #[test]
-    fn test_fmeca_matrix_excludes_negated_recovery_components() {
+    fn test_fmeca_matrix_excludes_negated_components() -> Result<(), Box<dyn std::error::Error>> {
         let mut pkg = PackageDef::default();
-        let mut p1 = PartDef::default();
-        p1.name = "PrimaryComputeSubsystem".to_string();
-        let mut p2 = PartDef::default();
-        p2.name = "ParachuteRecoveryUnit".to_string();
+        let p1 = PartDef {
+            name: "PrimaryComputeSubsystem".to_string(),
+            ..Default::default()
+        };
+        let p2 = PartDef {
+            name: "AuxiliaryBackupUnit".to_string(),
+            ..Default::default()
+        };
         pkg.part_defs.push(p1);
         pkg.part_defs.push(p2);
 
-        // Explicit negative constraint: chuteEnabled = 0; recoverySystem = "No";
+        // Explicit negative constraint: backupEnabled = 0; backupSystem = "No";
         pkg.attribute_defs.push(deap_core::sysml_ast::AttributeDef {
-            name: "chuteEnabled".to_string(),
+            name: "backupEnabled".to_string(),
             default_value: Some("0".to_string()),
             ..Default::default()
         });
         pkg.attribute_defs.push(deap_core::sysml_ast::AttributeDef {
-            name: "recoverySystem".to_string(),
+            name: "backupSystem".to_string(),
             default_value: Some("\"No\"".to_string()),
             ..Default::default()
         });
@@ -303,6 +431,7 @@ mod tests {
         let rows = generate_fmeca_matrix(&pkg, None);
         let components: Vec<_> = rows.iter().map(|r| r.component.as_str()).collect();
         assert!(components.contains(&"PrimaryComputeSubsystem"));
-        assert!(!components.contains(&"ParachuteRecoveryUnit"), "Negated ParachuteRecoveryUnit must NOT be present in FMECA rows");
+        assert!(!components.contains(&"AuxiliaryBackupUnit"), "Negated AuxiliaryBackupUnit must NOT be present in FMECA rows");
+        Ok(())
     }
 }

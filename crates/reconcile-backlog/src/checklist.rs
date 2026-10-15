@@ -44,10 +44,11 @@ fn parse_checklist_line(line: &str) -> Option<ParsedCheckline<'_>> {
             (true, rest)
         } else if let Some(rest) = after_dash_trimmed.strip_prefix("[ ]") {
             (false, rest)
-        } else if let Some(rest) = after_dash_trimmed.strip_prefix("[x]").or_else(|| after_dash_trimmed.strip_prefix("[X]")) {
-            (true, rest)
         } else {
-            return None;
+            let rest = after_dash_trimmed
+                .strip_prefix("[x]")
+                .or_else(|| after_dash_trimmed.strip_prefix("[X]"))?;
+            (true, rest)
         }
     };
 
@@ -104,27 +105,15 @@ pub fn clean_unpopulated_placeholders(content: &str) -> String {
     while let Some(pos) = rest.to_ascii_lowercase().find(target) {
         // Look backwards from pos in rest for optional whitespace and optional '*'
         let before = &rest[..pos];
-        let bytes_before = before.as_bytes();
-        let mut idx = pos;
-        while idx > 0 && bytes_before[idx - 1].is_ascii_whitespace() {
-            idx -= 1;
-        }
-        if idx > 0 && bytes_before[idx - 1] == b'*' {
-            idx -= 1;
-        }
-        let start_idx = idx;
+        let before_ws = before.trim_end_matches(|c: char| c.is_ascii_whitespace());
+        let start_idx = before_ws.strip_suffix('*').unwrap_or(before_ws).len();
 
         // Look forwards from pos + target.len() in rest for optional whitespace and optional '*'
         let after_pos = pos + target.len();
         let after = &rest[after_pos..];
-        let bytes_after = after.as_bytes();
-        let mut end_offset = 0;
-        while end_offset < bytes_after.len() && bytes_after[end_offset].is_ascii_whitespace() {
-            end_offset += 1;
-        }
-        if end_offset < bytes_after.len() && bytes_after[end_offset] == b'*' {
-            end_offset += 1;
-        }
+        let after_ws = after.trim_start_matches(|c: char| c.is_ascii_whitespace());
+        let after_star = after_ws.strip_prefix('*').unwrap_or(after_ws);
+        let end_offset = after.len() - after_star.len();
         let end_idx = after_pos + end_offset;
 
         result.push_str(&rest[..start_idx]);
@@ -188,7 +177,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_checklists() {
+    fn test_parse_checklists() -> Result<(), Box<dyn std::error::Error>> {
         let md = r#"
 ## 2. Requirements & Checklist
 - [ ] #10 - Feature 01: [ConOps] Human Engineer Interface
@@ -197,12 +186,16 @@ mod tests {
 "#;
         let items = parse_checklists(md);
         assert_eq!(items.len(), 3);
-        assert_eq!(items[0].checked, false);
-        assert_eq!(items[0].issue_number, Some(10));
-        assert_eq!(items[1].checked, true);
-        assert_eq!(items[1].issue_number, Some(11));
-        assert_eq!(items[2].checked, false);
-        assert_eq!(items[2].issue_number, None);
+        let first = items.first().ok_or("missing checklist item 0")?;
+        assert!(!first.checked);
+        assert_eq!(first.issue_number, Some(10));
+        let second = items.get(1).ok_or("missing checklist item 1")?;
+        assert!(second.checked);
+        assert_eq!(second.issue_number, Some(11));
+        let third = items.get(2).ok_or("missing checklist item 2")?;
+        assert!(!third.checked);
+        assert_eq!(third.issue_number, None);
+        Ok(())
     }
 
     #[test]

@@ -365,9 +365,13 @@ fn clean_normative_text(raw: &str) -> String {
     cleaned = cleaned.replace('"', "\\\"");
 
     if cleaned.len() > 300 {
-        let truncate_pos = match cleaned[..300].rfind(' ') {
+        let mut bound_300 = 300;
+        while bound_300 > 0 && !cleaned.is_char_boundary(bound_300) {
+            bound_300 -= 1;
+        }
+        let truncate_pos = match cleaned[..bound_300].rfind(' ') {
             Some(pos) if pos > 200 => pos,
-            _ => 300,
+            _ => bound_300,
         };
         let mut s = cleaned[..truncate_pos].trim_end().to_string();
         if s.ends_with('\\') {
@@ -588,9 +592,13 @@ fn extract_acceptance_criteria(content: &str) -> Vec<(String, String, String)> {
             };
 
             if bdd_text.len() > 600 {
-                let truncate_pos = match bdd_text[..600].rfind(' ') {
+                let mut bound_600 = 600;
+                while bound_600 > 0 && !bdd_text.is_char_boundary(bound_600) {
+                    bound_600 -= 1;
+                }
+                let truncate_pos = match bdd_text[..bound_600].rfind(' ') {
                     Some(pos) if pos > 400 => pos,
-                    _ => 600,
+                    _ => bound_600,
                 };
                 let mut s = bdd_text[..truncate_pos].trim_end().to_string();
                 if s.ends_with('\\') {
@@ -1171,7 +1179,14 @@ impl MarkdownTranslator {
         if let Some(ref req_id) = frontmatter.id {
             if req_id.starts_with("REQ-") || req_id.starts_with("REQ_") {
                 let sub_str = frontmatter.subsystem.as_deref().unwrap_or("");
+                let sub_lower = sub_str.to_ascii_lowercase();
+                let is_deap_sub = sub_str.is_empty()
+                    || sub_lower.contains("subsystem ")
+                    || sub_lower.contains("deap_compiler_system");
                 let sub_meta = map_subsystem(sub_str, req_id);
+                if !is_deap_sub {
+                    pkg.parent_package = Some(sanitize_identifier(sub_str, "Customer_Subsystem"));
+                }
                 let normative_text = extract_normative_statement(content);
                 let (uuid, complexity, standard, diagnostics) =
                     extract_req_metadata(content, &frontmatter);
@@ -1250,6 +1265,20 @@ impl MarkdownTranslator {
                 // Requirement cross-reference derivations
                 let derived_from = extract_requirement_cross_references(content, req_id);
 
+                let satisfied_by_target = if is_deap_sub {
+                    sub_meta.engine_name
+                } else {
+                    pkg.part_defs
+                        .first()
+                        .map(|p| p.name.clone())
+                        .unwrap_or_else(|| {
+                            format!(
+                                "{}Controller",
+                                sanitize_identifier(sub_str, "CustomerSubsystem")
+                            )
+                        })
+                };
+
                 let req_def = RequirementDef {
                     name: req_name,
                     req_id: req_id.clone(),
@@ -1260,7 +1289,7 @@ impl MarkdownTranslator {
                     requires,
                     derived_from,
                     verified_by,
-                    satisfied_by: vec![sub_meta.engine_name],
+                    satisfied_by: vec![satisfied_by_target],
                     ..Default::default()
                 };
 
@@ -1306,8 +1335,13 @@ impl MarkdownTranslator {
 
         // Check if any translated sub-packages contain requirement definitions
         let has_requirements = sub_packages.iter().any(|p| !p.requirement_defs.is_empty());
+        let is_deap_compiler_corpus = default_name == "DEAP_Compiler_System"
+            || sub_packages
+                .iter()
+                .filter(|p| !p.requirement_defs.is_empty())
+                .any(|p| p.parent_package.is_none());
 
-        if has_requirements {
+        if has_requirements && is_deap_compiler_corpus {
             // Group requirement definitions and parts into the 12 canonical subsystems
             let mut subsystem_reqs: BTreeMap<usize, Vec<RequirementDef>> = BTreeMap::new();
             let mut subsystem_parts: BTreeMap<usize, BTreeMap<String, PartDef>> = BTreeMap::new();
@@ -1477,6 +1511,56 @@ impl MarkdownTranslator {
             };
 
             return Ok(combined_pkg);
+        } else if has_requirements {
+            // Downstream customer requirement corpus: group dynamically by frontmatter.subsystem (parent_package)
+            let root_name = sanitize_identifier(default_name, "Customer_System_Model");
+            let mut subsys_map: BTreeMap<String, PackageDef> = BTreeMap::new();
+
+            for sub_pkg in sub_packages {
+                let sub_name = sub_pkg
+                    .parent_package
+                    .clone()
+                    .unwrap_or_else(|| sub_pkg.name.clone());
+                let entry = subsys_map.entry(sub_name.clone()).or_insert_with(|| PackageDef {
+                    name: sub_name.clone(),
+                    doc: Some(format!("Subsystem package for {}", sub_name)),
+                    parent_package: Some(root_name.clone()),
+                    ..Default::default()
+                });
+                for req in sub_pkg.requirement_defs {
+                    if !entry.requirement_defs.iter().any(|r| r.req_id == req.req_id) {
+                        entry.requirement_defs.push(req);
+                    }
+                }
+                for part in sub_pkg.part_defs {
+                    if !part.name.starts_with("AC_")
+                        && !part.name.starts_with("ac_")
+                        && !entry.part_defs.iter().any(|p| p.name == part.name)
+                    {
+                        entry.part_defs.push(part);
+                    }
+                }
+            }
+
+            let mut packages: Vec<PackageDef> = subsys_map.into_values().collect();
+            for p in &mut packages {
+                p.requirement_defs.sort_by(|a, b| a.req_id.cmp(&b.req_id));
+                if p.part_defs.is_empty() {
+                    p.part_defs.push(PartDef {
+                        name: format!("{}Controller", p.name),
+                        doc: Some(format!("Primary controller for {}", p.name)),
+                        is_def: true,
+                        ..Default::default()
+                    });
+                }
+            }
+
+            return Ok(PackageDef {
+                name: root_name,
+                doc: Some("Consolidated Customer System Architecture".to_string()),
+                packages,
+                ..Default::default()
+            });
         }
 
         let mut combined_pkg = PackageDef {

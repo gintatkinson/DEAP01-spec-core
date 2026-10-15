@@ -7,7 +7,7 @@
 //! - Use Cases (docs/use-cases/UC-*.md) from UseCaseDef
 //! - Safety Matrix (docs/safety/STPA_MATRIX.md) from ConstraintDef & STPA Generator
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -112,16 +112,16 @@ fn resolve_date(target_out_dir: &Path, rel_path: &str, fallback_iso: &str) -> St
             } else if trimmed.starts_with('|') && trimmed.ends_with('|') {
                 let inner = trimmed.trim_matches('|');
                 let parts: Vec<&str> = inner.split('|').map(|s| s.trim()).collect();
-                if parts.len() >= 2 {
+                if let [key_cell, value_cell, ..] = parts.as_slice() {
                     let mut key = String::new();
-                    for c in parts[0].chars() {
+                    for c in key_cell.chars() {
                         if !matches!(c, '*' | '`' | '_' | ':' | '#') {
                             key.push(c);
                         }
                     }
                     let key = key.trim().to_lowercase().replace(' ', "_");
                     if key == "date" {
-                        let d = parts[1]
+                        let d = value_cell
                             .trim()
                             .trim_matches('*')
                             .trim_matches('`')
@@ -157,16 +157,16 @@ fn parse_issue_id_from_content(content: &str) -> Option<usize> {
         } else if trimmed.starts_with('|') && trimmed.ends_with('|') {
             let inner = trimmed.trim_matches('|');
             let parts: Vec<&str> = inner.split('|').map(|s| s.trim()).collect();
-            if parts.len() >= 2 {
+            if let [key_cell, value_cell, ..] = parts.as_slice() {
                 let mut key = String::new();
-                for c in parts[0].chars() {
+                for c in key_cell.chars() {
                     if !matches!(c, '*' | '`' | '_' | ':' | '#') {
                         key.push(c);
                     }
                 }
-                let key = key.trim().to_lowercase().replace(' ', "_").replace('-', "_");
+                let key = key.trim().to_lowercase().replace([' ', '-'], "_");
                 if key == "issue_id" || key == "issue" || key == "id" {
-                    let d = parts[1]
+                    let d = value_cell
                         .trim()
                         .trim_matches('*')
                         .trim_matches('`')
@@ -292,7 +292,7 @@ fn generate_feature_bdd(part: &PartDef, reqs: &[&RequirementDef]) -> String {
 
     // Pattern B: Invariant / Constraint verification
     let mut constraint_names: Vec<String> = Vec::new();
-    let mut seen_names = HashSet::new();
+    let mut seen_names = BTreeSet::new();
 
     for c in &part.constraints {
         let name = c.name.trim();
@@ -452,8 +452,8 @@ fn generate_epic_statechart(p: &PackageDef) -> String {
     if let Some(st_def) = p.state_defs.first() {
         let mut lines = Vec::new();
         lines.push("stateDiagram-v2".to_string());
-        let mut source_states = HashSet::new();
-        let mut target_states = HashSet::new();
+        let mut source_states = BTreeSet::new();
+        let mut target_states = BTreeSet::new();
 
         for trans in &st_def.transitions {
             let t_name = trans.name.as_deref().unwrap_or("");
@@ -496,6 +496,43 @@ fn generate_epic_statechart(p: &PackageDef) -> String {
     ValidateModelSemantics --> SynthesizeICDInterconnects : semantics_verified
     SynthesizeICDInterconnects --> EmitDownstreamArtifacts : icd_synthesized
     EmitDownstreamArtifacts --> [*]"#.to_string();
+    }
+
+    let pkg_prefix = sanitize_id(&p.name);
+    if !pkg_prefix.is_empty() && p.name != "DEAP_Compiler_System" && (!p.part_defs.is_empty() || !p.action_defs.is_empty()) {
+        let primary_part = p
+            .part_defs
+            .first()
+            .map(|pt| sanitize_id(&pt.name))
+            .unwrap_or_else(|| pkg_prefix.clone());
+        let primary_action = p
+            .action_defs
+            .first()
+            .map(|act| sanitize_id(&act.name))
+            .or_else(|| {
+                p.part_defs
+                    .iter()
+                    .flat_map(|pt| pt.actions.iter())
+                    .next()
+                    .map(|act| sanitize_id(&act.name))
+            })
+            .unwrap_or_else(|| format!("Execute{}", primary_part));
+
+        return format!(
+            "stateDiagram-v2\n\
+             \x20   [*] --> {pkg_prefix}Initialization\n\
+             \x20   {pkg_prefix}Initialization --> {primary_part}Ready : configure_{subsys}\n\
+             \x20   {primary_part}Ready --> {primary_action}Active : dispatch_{subsys}\n\
+             \x20   {primary_action}Active --> {pkg_prefix}Verification : validate_invariants\n\
+             \x20   {pkg_prefix}Verification --> {pkg_prefix}NominalComplete : invariants_satisfied\n\
+             \x20   {pkg_prefix}Verification --> {pkg_prefix}SafeFallback : constraint_violation\n\
+             \x20   {pkg_prefix}NominalComplete --> [*]\n\
+             \x20   {pkg_prefix}SafeFallback --> [*]",
+            pkg_prefix = pkg_prefix,
+            primary_part = primary_part,
+            primary_action = primary_action,
+            subsys = to_snake_case(&p.name),
+        );
     }
 
     // Default canonical lifecycle state machine for root / system
@@ -681,14 +718,14 @@ struct PartContext<'a> {
 pub fn forward_sync_sysml_to_specs(
     pkg: &PackageDef,
     opts: &ForwardSyncOptions,
-) -> Result<HashMap<String, String>, String> {
+) -> Result<BTreeMap<String, String>, String> {
     let target_out_dir = opts
         .out_dir
         .as_ref()
         .cloned()
         .unwrap_or_else(|| opts.docs_dir.clone());
 
-    let mut generated_files = HashMap::new();
+    let mut generated_files = BTreeMap::new();
     let today_iso = Utc::now().format("%Y-%m-%d").to_string();
 
     let all_packages = pkg.get_all_packages();
@@ -701,27 +738,11 @@ pub fn forward_sync_sysml_to_specs(
     let mut part_contexts: Vec<PartContext> = Vec::new();
     let mut ordered_packages: Vec<&PackageDef> = Vec::new();
 
-    // Canonical ordering of subsystems
-    const SUBSYSTEM_ORDER: &[&str] = &[
-        "SystemVision",
-        "UniversalSchemaIngestion",
-        "CoreMetamodelNodeArena",
-        "SysmlGrammarLowering",
-        "PhysicalMetrologyFlows",
-        "SpatioTemporalStateSolvers",
-        "FormalSafetyTraceability",
-        "InterconnectContracts",
-        "DownstreamAgileProjections",
-        "MultiTargetCodegen",
-        "DiagnosticErrorCatalog",
-        "CompilerAssurance",
-    ];
-
-    // Collect ordered packages: Root first (DEAP_Compiler_System), then ConOps, then 12 subsystems
+    // Collect ordered packages: Root first, then ConOps, then imported packages in AST order, then remaining packages
     let root_pkg = all_packages
         .iter()
-        .find(|p| p.name == "DEAP_Compiler_System")
-        .or_else(|| all_packages.iter().find(|p| p.name != "SysML_Model" && p.name == pkg.name))
+        .find(|p| p.name != "SysML_Model" && p.name == pkg.name)
+        .or_else(|| all_packages.iter().find(|p| p.name == "DEAP_Compiler_System"))
         .or_else(|| all_packages.iter().find(|p| p.name == "SysML_Model"));
 
     let conops_pkg = all_packages.iter().find(|p| p.name == "ConOps");
@@ -730,43 +751,47 @@ pub fn forward_sync_sysml_to_specs(
         ordered_packages.push(rp);
     }
     if let Some(cp) = conops_pkg {
-        if !ordered_packages.contains(&cp) {
+        if !ordered_packages.contains(cp) {
             ordered_packages.push(cp);
         }
     }
-    for sub_name in SUBSYSTEM_ORDER {
-        if let Some(sp) = all_packages.iter().find(|p| p.name == *sub_name) {
-            if !ordered_packages.contains(&sp) {
-                ordered_packages.push(sp);
+    if let Some(rp) = root_pkg {
+        for imp in &rp.imports {
+            let imp_pkg = imp
+                .path
+                .trim_end_matches("::**")
+                .trim_end_matches("::*")
+                .split("::")
+                .next()
+                .unwrap_or("");
+            if !imp_pkg.is_empty() {
+                if let Some(sp) = all_packages.iter().find(|p| p.name == imp_pkg) {
+                    if !ordered_packages.contains(sp) {
+                        ordered_packages.push(sp);
+                    }
+                }
             }
         }
     }
     for p in &all_packages {
-        if p.name != "SysML_Model" && !ordered_packages.contains(&p) {
+        if p.name != "SysML_Model" && !ordered_packages.contains(p) {
             ordered_packages.push(p);
         }
     }
 
-    // Map each package to its parts: ConOps first (FEAT-01..04), then DEAPCompilerSystem (FEAT-05), then 12 subsystems (FEAT-06..53)
+    // Map each package to its parts: ConOps first, then Root, then subsystems in ordered_packages order
     let mut part_packages: Vec<&PackageDef> = Vec::new();
     if let Some(cp) = conops_pkg {
         part_packages.push(cp);
     }
     if let Some(rp) = root_pkg {
-        if !part_packages.contains(&rp) {
+        if !part_packages.contains(rp) {
             part_packages.push(rp);
         }
     }
-    for sub_name in SUBSYSTEM_ORDER {
-        if let Some(sp) = all_packages.iter().find(|p| p.name == *sub_name) {
-            if !part_packages.contains(&sp) {
-                part_packages.push(sp);
-            }
-        }
-    }
-    for p in &all_packages {
-        if p.name != "SysML_Model" && !part_packages.contains(&p) {
-            part_packages.push(p);
+    for p in &ordered_packages {
+        if p.name != "SysML_Model" && !part_packages.contains(p) {
+            part_packages.push(*p);
         }
     }
 
@@ -839,18 +864,15 @@ pub fn forward_sync_sysml_to_specs(
 
         if let Some(inter) = p.interaction_defs.first() {
             interaction_name = inter.name.clone();
-            if inter.lifelines.len() >= 2 {
-                let l0 = &inter.lifelines[0];
+            if let [l0, l1, ..] = inter.lifelines.as_slice() {
                 if let Some((_, type_name)) = l0.split_once(':') {
                     caller_engine = type_name.trim().to_string();
                 }
-                let l1 = &inter.lifelines[1];
                 if let Some((_, type_name)) = l1.split_once(':') {
                     target_engine = type_name.trim().to_string();
                 }
             }
-            if inter.messages.len() >= 2 {
-                let m1 = &inter.messages[1];
+            if let Some(m1) = inter.messages.get(1) {
                 if let Some(first_word) = m1.split_whitespace().next() {
                     reply_msg = first_word.to_string();
                 }
@@ -1498,6 +1520,13 @@ Operational concept definitions and system sequence interaction models:
                 .map(|p| format!("- {}", p))
                 .collect::<Vec<_>>()
                 .join("\n")
+        } else if !uc_m.uc.preconditions.is_empty() {
+            uc_m.uc
+                .preconditions
+                .iter()
+                .map(|p| format!("- {}", p))
+                .collect::<Vec<_>>()
+                .join("\n")
         } else {
             "- The compiler execution environment is initialized in nominal operational state.\n- Authoritative input schema files exist with read access."
                 .to_string()
@@ -1505,18 +1534,40 @@ Operational concept definitions and system sequence interaction models:
 
         let trigger = if !parsed_doc.trigger.is_empty() {
             format!("- {}", parsed_doc.trigger)
+        } else if let Some(ref obj) = uc_m.uc.objective {
+            format!("- {}", obj.trim_matches('"'))
         } else {
             format!("- Operational workflow command dispatched for {}.", to_display_name(clean_name))
         };
 
-        let main_scenario = if !parsed_doc.main_scenario.is_empty() {
-            parsed_doc.main_scenario.join("\n")
+        let resolved_scenario_steps: Vec<String> = if !parsed_doc.main_scenario.is_empty() {
+            parsed_doc.main_scenario.clone()
+        } else if !uc_m.uc.steps.is_empty() {
+            uc_m.uc
+                .steps
+                .iter()
+                .enumerate()
+                .map(|(i, s)| {
+                    let trimmed = s.trim().trim_matches('"');
+                    if trimmed.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+                        trimmed.to_string()
+                    } else {
+                        format!("{}. {}", i + 1, trimmed)
+                    }
+                })
+                .collect()
         } else {
-            format!(
-                "1. Actor `{}` initiates workflow execution.\n2. System `DEAPCompilerSystem` parses input model definitions and dispatches task to `{}`.\n3. Component `{}` processes structural elements and validates semantic constraints.\n4. System verifies invariant satisfaction and completes workflow execution.",
-                primary_actor, subject, subject
-            )
+            let clean_display = to_display_name(clean_name);
+            vec![
+                format!("1. Actor `{}` submits input payload for `{}` to `{}`.", primary_actor, clean_display, subject),
+                format!("2. `{}` validates input schema structure and precondition guards for `{}`.", subject, clean_display),
+                format!("3. `{}` executes core domain transformation and state transition logic for `{}`.", subject, clean_display),
+                format!("4. `{}` evaluates formal postcondition assertions and structural invariants.", subject),
+                format!("5. `{}` commits verified output state and emits completion telemetry to `{}`.", subject, primary_actor),
+            ]
         };
+
+        let main_scenario = resolved_scenario_steps.join("\n");
 
         let alternate_flows = if !parsed_doc.alternate_flows.is_empty() {
             parsed_doc
@@ -1526,12 +1577,30 @@ Operational concept definitions and system sequence interaction models:
                 .collect::<Vec<_>>()
                 .join("\n")
         } else {
-            "- 5a. Syntax or semantic parsing error detected:\n  - System captures error location and emits structured diagnostic error catalog entries.\n  - Execution halts gracefully without crashing or corrupting working tree state."
-                .to_string()
+            format!(
+                "- 5a. Input schema or precondition validation failure in `{subject}`:\n\
+                 \x20 - `{subject}` rejects the malformed request and records a structured diagnostic event.\n\
+                 \x20 - System preserves prior verified state without partial mutation.\n\
+                 - 5b. Formal invariant or constraint violation detected during `{clean_name}` execution:\n\
+                 \x20 - `{subject}` aborts the active transaction and transitions to safe fallback mode.\n\
+                 \x20 - Diagnostic telemetry is emitted to `{primary_actor}`.\n\
+                 - 5c. Downstream resource timeout or communication fault in `{subject}`:\n\
+                 \x20 - `{subject}` halts execution cleanly and reports deterministic fault status.",
+                subject = subject,
+                clean_name = to_display_name(clean_name),
+                primary_actor = primary_actor,
+            )
         };
 
         let postconditions = if !parsed_doc.postconditions.is_empty() {
             parsed_doc
+                .postconditions
+                .iter()
+                .map(|p| format!("- {}", p))
+                .collect::<Vec<_>>()
+                .join("\n")
+        } else if !uc_m.uc.postconditions.is_empty() {
+            uc_m.uc
                 .postconditions
                 .iter()
                 .map(|p| format!("- {}", p))
@@ -1586,7 +1655,7 @@ Operational concept definitions and system sequence interaction models:
         );
 
         let clean_title_display = to_display_name(clean_name);
-        let uc_diagram = generate_use_case_diagram(&primary_actor, subject, &clean_title_display, &parsed_doc.main_scenario);
+        let uc_diagram = generate_use_case_diagram(&primary_actor, subject, &clean_title_display, &resolved_scenario_steps);
 
         let spec_source = if uc_m.subsys_dir == "conops" {
             "[schema/conops/activities.sysml](../../schema/conops/activities.sysml)".to_string()
@@ -1770,10 +1839,10 @@ Use case operational flows and lifecycle activity references:
 /// Removes stale or obsolete generated specification files that are no longer part of the AST.
 fn clean_stale_specifications(
     target_out_dir: &Path,
-    active_specs: &HashMap<String, String>,
+    active_specs: &BTreeMap<String, String>,
 ) -> Result<(), String> {
     let subdirs = ["epics", "features", "user-stories", "use-cases"];
-    let active_keys: HashSet<String> = active_specs.keys().cloned().collect();
+    let active_keys: BTreeSet<String> = active_specs.keys().cloned().collect();
 
     for subdir in &subdirs {
         let dir_path = target_out_dir.join(subdir);
@@ -1781,7 +1850,11 @@ fn clean_stale_specifications(
             continue;
         }
 
-        for entry in WalkDir::new(&dir_path).into_iter().filter_map(|e| e.ok()) {
+        for entry in WalkDir::new(&dir_path)
+            .sort_by_file_name()
+            .into_iter()
+            .filter_map(|e| e.ok())
+        {
             if !entry.file_type().is_file() {
                 continue;
             }
@@ -1806,12 +1879,16 @@ mod tests {
     use deap_core::sysml_ast::PartDef;
 
     #[test]
-    fn test_forward_sync_generates_expected_files() {
-        let mut pkg = PackageDef::default();
-        pkg.name = "TestSystem".to_string();
+    fn test_forward_sync_generates_expected_files() -> Result<(), Box<dyn std::error::Error>> {
+        let mut pkg = PackageDef {
+            name: "TestSystem".to_string(),
+            ..Default::default()
+        };
 
-        let mut p1 = PartDef::default();
-        p1.name = "StructuralSubsystem".to_string();
+        let p1 = PartDef {
+            name: "StructuralSubsystem".to_string(),
+            ..Default::default()
+        };
         pkg.part_defs.push(p1);
 
         let opts = ForwardSyncOptions {
@@ -1822,14 +1899,15 @@ mod tests {
             force: true,
         };
 
-        let generated = forward_sync_sysml_to_specs(&pkg, &opts).unwrap();
+        let generated = forward_sync_sysml_to_specs(&pkg, &opts)?;
         assert!(generated.keys().any(|k| k.starts_with("epics/")));
         assert!(generated.keys().any(|k| k.starts_with("features/")));
         assert!(generated.contains_key("safety/STPA_MATRIX.md"));
+        Ok(())
     }
 
     #[test]
-    fn test_recursive_package_traversal_picks_up_subpackage_elements() {
+    fn test_recursive_package_traversal_picks_up_subpackage_elements() -> Result<(), Box<dyn std::error::Error>> {
         let mut root = PackageDef {
             name: "DEAP_Compiler_System".to_string(),
             ..Default::default()
@@ -1861,15 +1939,16 @@ mod tests {
             force: true,
         };
 
-        let generated = forward_sync_sysml_to_specs(&root, &opts).unwrap();
+        let generated = forward_sync_sysml_to_specs(&root, &opts)?;
         assert!(generated.keys().any(|k| k.contains("Subsystem_Alpha")), "Subpackage must generate Epic");
         assert!(generated.keys().any(|k| k.contains("AlphaPart")), "Subpackage part must generate Feature");
         assert!(generated.keys().any(|k| k.contains("AlphaUseCase")), "Subpackage use case must generate Use Case");
         assert!(generated.keys().any(|k| k.contains("AlphaAction")), "Subpackage action must generate User Story");
+        Ok(())
     }
 
     #[test]
-    fn test_zero_hardcoded_domain_strings_exist_in_output_specifications() {
+    fn test_zero_hardcoded_domain_strings_exist_in_output_specifications() -> Result<(), Box<dyn std::error::Error>> {
         let mut pkg = PackageDef {
             name: "GenericCompiler".to_string(),
             ..Default::default()
@@ -1892,7 +1971,7 @@ mod tests {
             force: true,
         };
 
-        let generated = forward_sync_sysml_to_specs(&pkg, &opts).unwrap();
+        let generated = forward_sync_sysml_to_specs(&pkg, &opts)?;
         let forbidden = [
             "CoreController",
             "TelemetrySync",
@@ -1914,10 +1993,11 @@ mod tests {
                 );
             }
         }
+        Ok(())
     }
 
     #[test]
-    fn test_empty_collections_do_not_emit_phantom_specifications() {
+    fn test_empty_collections_do_not_emit_phantom_specifications() -> Result<(), Box<dyn std::error::Error>> {
         let mut pkg = PackageDef {
             name: "CleanSystem".to_string(),
             ..Default::default()
@@ -1935,7 +2015,7 @@ mod tests {
             force: true,
         };
 
-        let generated = forward_sync_sysml_to_specs(&pkg, &opts).unwrap();
+        let generated = forward_sync_sysml_to_specs(&pkg, &opts)?;
         assert!(
             !generated.keys().any(|k| k.starts_with("use-cases/")),
             "Empty use cases must not emit phantom use-case files"
@@ -1944,10 +2024,11 @@ mod tests {
             !generated.keys().any(|k| k.starts_with("user-stories/")),
             "Empty interactions must not emit phantom user-story files"
         );
+        Ok(())
     }
 
     #[test]
-    fn test_use_case_realization_matrix_traceability_alignment() {
+    fn test_use_case_realization_matrix_traceability_alignment() -> Result<(), Box<dyn std::error::Error>> {
         let mut root = PackageDef {
             name: "DEAP_Compiler_System".to_string(),
             ..Default::default()
@@ -2015,23 +2096,23 @@ mod tests {
             force: true,
         };
 
-        let generated = forward_sync_sysml_to_specs(&root, &opts).unwrap();
+        let generated = forward_sync_sysml_to_specs(&root, &opts)?;
 
         let alpha_uc = generated
             .iter()
             .find(|(k, _)| k.contains("UC_Alpha_Workflow"))
             .map(|(_, v)| v)
-            .expect("Alpha UC must be generated");
+            .ok_or("expected value is absent")?;
         let beta_uc = generated
             .iter()
             .find(|(k, _)| k.contains("UC_Beta_Workflow"))
             .map(|(_, v)| v)
-            .expect("Beta UC must be generated");
+            .ok_or("expected value is absent")?;
         let gamma_uc = generated
             .iter()
             .find(|(k, _)| k.contains("UC_Gamma_Workflow"))
             .map(|(_, v)| v)
-            .expect("Gamma UC must be generated");
+            .ok_or("expected value is absent")?;
 
         // Alpha UC checks
         assert!(alpha_uc.contains("AlphaAction"), "Alpha UC must link to AlphaAction user story");
@@ -2049,14 +2130,17 @@ mod tests {
         assert!(gamma_uc.contains("GammaEngine"), "Gamma UC must link to GammaEngine feature");
         assert!(!gamma_uc.contains("AlphaAction"), "Gamma UC must NOT cross-wire to AlphaAction");
         assert!(!gamma_uc.contains("BetaAction"), "Gamma UC must NOT cross-wire to BetaAction");
+        Ok(())
     }
 
     #[test]
-    fn test_feature_bdd_derived_from_constraints_and_requirements() {
+    fn test_feature_bdd_derived_from_constraints_and_requirements() -> Result<(), Box<dyn std::error::Error>> {
         use deap_core::sysml_ast::{ConstraintDef, RequirementDef};
 
-        let mut part = PartDef::default();
-        part.name = "TelemetryProcessor".to_string();
+        let mut part = PartDef {
+            name: "TelemetryProcessor".to_string(),
+            ..Default::default()
+        };
         part.constraints.push(ConstraintDef {
             name: "FrameRateLimit".to_string(),
             expression: "frame_rate <= 60".to_string(),
@@ -2109,10 +2193,11 @@ mod tests {
             "Criteria count must be between 3 and 10, got: {}",
             lines.len()
         );
+        Ok(())
     }
 
     #[test]
-    fn test_strip_use_case_prefix_variations() {
+    fn test_strip_use_case_prefix_variations() -> Result<(), Box<dyn std::error::Error>> {
         assert_eq!(
             strip_use_case_prefix("UC_01_System_Vision_and_Foundational_Invariants"),
             "System_Vision_and_Foundational_Invariants"
@@ -2129,10 +2214,11 @@ mod tests {
             strip_use_case_prefix("UC_Alpha_Workflow"),
             "UC_Alpha_Workflow"
         );
+        Ok(())
     }
 
     #[test]
-    fn test_generate_use_case_diagram_model_integrity() {
+    fn test_generate_use_case_diagram_model_integrity() -> Result<(), Box<dyn std::error::Error>> {
         let scenario = vec![
             "1. Actor initiates task".to_string(),
             "2. Engine validates model".to_string(),
@@ -2152,10 +2238,11 @@ mod tests {
         assert!(diag.contains("end"));
         assert!(diag.contains("CIContinuousIntegrationRunner((\"CIContinuousIntegrationRunner\")) --- UC_Main"));
         assert!(diag.contains("UC_Main -. \"&lt;&lt;include&gt;&gt;\" .-> UC_Step01"));
+        Ok(())
     }
 
     #[test]
-    fn test_epic_statechart_and_class_diagram_generation() {
+    fn test_epic_statechart_and_class_diagram_generation() -> Result<(), Box<dyn std::error::Error>> {
         use deap_core::sysml_ast::{AttributeDef, PortDef, StateDef, TransitionDef};
 
         let mut pkg = PackageDef {
@@ -2212,10 +2299,11 @@ mod tests {
         assert!(class_diag.contains("+Integer recursion_depth"));
         assert!(class_diag.contains("DEAPCompilerSystem --> StateMachineSolverEngine : contains"));
         assert!(class_diag.contains("StateMachineSolverEngine --> StateHierarchyFlattener : coordinates"));
+        Ok(())
     }
 
     #[test]
-    fn test_user_story_subsystem_parent_epic_and_dynamic_spec_source() {
+    fn test_user_story_subsystem_parent_epic_and_dynamic_spec_source() -> Result<(), Box<dyn std::error::Error>> {
         use deap_core::sysml_ast::{ActionDef, InteractionDef};
 
         let mut root = PackageDef {
@@ -2256,12 +2344,12 @@ mod tests {
             force: true,
         };
 
-        let generated = forward_sync_sysml_to_specs(&root, &opts).unwrap();
+        let generated = forward_sync_sysml_to_specs(&root, &opts)?;
         let us = generated
             .iter()
             .find(|(k, _)| k.contains("US-") && k.contains("SolveStateDynamicsAction"))
             .map(|(_, v)| v)
-            .expect("User story must be generated");
+            .ok_or("expected value is absent")?;
 
         assert!(
             us.contains("[schema/subsystems/spatio_temporal_state_solvers/behavior.sysml]"),
@@ -2279,6 +2367,7 @@ mod tests {
             us.contains("`StateSolverInteraction`"),
             "SysML Interaction must match interaction name"
         );
+        Ok(())
     }
 }
 

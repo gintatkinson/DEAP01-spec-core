@@ -2,7 +2,7 @@
 //!
 //! Realises: [Zero-Placeholder Invariant, Strict Schema-Driven Spec Frontmatter]
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// Parsed metadata from a specification file.
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -15,7 +15,7 @@ pub struct SpecFrontmatter {
     pub part: Option<String>,
     pub version: Option<String>,
     pub date: Option<String>,
-    pub raw_fields: HashMap<String, String>,
+    pub raw_fields: BTreeMap<String, String>,
 }
 
 /// Extracts a normalized key from a table cell (e.g. `**Issue ID**` -> `"issue_id"`).
@@ -26,7 +26,7 @@ fn normalize_table_key(cell: &str) -> String {
             key.push(c);
         }
     }
-    key.trim().to_lowercase().replace(' ', "_").replace('-', "_")
+    key.trim().to_lowercase().replace([' ', '-'], "_")
 }
 
 /// Parses a 2-column table row if valid.
@@ -40,7 +40,7 @@ fn parse_table_row(line: &str) -> Option<(String, String)> {
     if parts.len() < 2 {
         return None;
     }
-    let key = normalize_table_key(parts[0]);
+    let key = normalize_table_key(parts.first()?);
     if key.is_empty()
         || key == "attribute"
         || key == "metadata"
@@ -56,7 +56,8 @@ fn parse_table_row(line: &str) -> Option<(String, String)> {
     {
         return None;
     }
-    let val = parts[1]
+    let val = parts
+        .get(1)?
         .trim()
         .trim_matches(|c| c == '`' || c == '"' || c == '\'');
     Some((key, val.to_string()))
@@ -64,7 +65,7 @@ fn parse_table_row(line: &str) -> Option<(String, String)> {
 
 /// Extracts metadata from native CommonMark 2-column table or YAML frontmatter.
 pub fn parse_frontmatter(content: &str) -> Option<SpecFrontmatter> {
-    let mut raw_fields = HashMap::new();
+    let mut raw_fields = BTreeMap::new();
     let mut title = String::new();
     let mut spec_type = String::new();
     let mut issue_id = None;
@@ -106,8 +107,8 @@ pub fn parse_frontmatter(content: &str) -> Option<SpecFrontmatter> {
                             .trim_matches('`')
                             .trim_matches('"')
                             .trim_matches('\'')
-                            .trim_start_matches(|c| c == '#' || c == '[' || c == ']')
-                            .trim_end_matches(|c| c == ']' || c == ')')
+                            .trim_start_matches(['#', '[', ']'])
+                            .trim_end_matches([']', ')'])
                             .trim();
                         if let Ok(id) = cleaned.parse::<u64>() {
                             issue_id = Some(id);
@@ -196,7 +197,7 @@ pub fn parse_frontmatter(content: &str) -> Option<SpecFrontmatter> {
                                 "type" => spec_type = val.clone(),
                                 "issue_id" => {
                                     let cleaned = val
-                                        .trim_start_matches(|c| c == '#' || c == '[' || c == ']')
+                                        .trim_start_matches(['#', '[', ']'])
                                         .trim();
                                     if let Ok(id) = cleaned.parse::<u64>() {
                                         issue_id = Some(id);
@@ -283,8 +284,8 @@ pub fn update_frontmatter_issue_id(content: &str, issue_id: u64) -> String {
             }
         }
 
-        if let Some(idx) = yaml_issue_id_idx {
-            lines[idx] = format!("issue_id: {}", issue_id);
+        if let Some(line) = yaml_issue_id_idx.and_then(|idx| lines.get_mut(idx)) {
+            *line = format!("issue_id: {}", issue_id);
         } else if let Some(idx) = yaml_closing_idx {
             lines.insert(idx, format!("issue_id: {}", issue_id));
         }
@@ -300,14 +301,19 @@ pub fn update_frontmatter_issue_id(content: &str, issue_id: u64) -> String {
     let mut in_table = false;
 
     let scan_limit = (search_start + 25).min(lines.len());
-    for idx in search_start..scan_limit {
-        let line_trimmed = lines[idx].trim();
+    for (idx, line) in lines
+        .iter()
+        .enumerate()
+        .skip(search_start)
+        .take(scan_limit.saturating_sub(search_start))
+    {
+        let line_trimmed = line.trim();
         if line_trimmed.starts_with('|') && line_trimmed.ends_with('|') {
             in_table = true;
             let inner = line_trimmed.trim_matches('|');
             let parts: Vec<&str> = inner.split('|').map(|s| s.trim()).collect();
             if parts.len() >= 2 {
-                let key = normalize_table_key(parts[0]);
+                let key = normalize_table_key(parts.first().copied().unwrap_or_default());
                 if key == "attribute" || key == "metadata" || key == "property" || key == "field" {
                     table_header_idx = Some(idx);
                 } else if parts.iter().all(|p| !p.is_empty() && p.chars().all(|c| c == '-' || c == ':')) {
@@ -324,8 +330,8 @@ pub fn update_frontmatter_issue_id(content: &str, issue_id: u64) -> String {
 
     let target_issue_row = format!("| **Issue ID** | #{} |", issue_id);
 
-    if let Some(idx) = table_issue_id_idx {
-        lines[idx] = target_issue_row;
+    if let Some(line) = table_issue_id_idx.and_then(|idx| lines.get_mut(idx)) {
+        *line = target_issue_row;
     } else if let Some(delim_idx) = table_delim_idx {
         lines.insert(delim_idx + 1, target_issue_row);
     } else if let Some(header_idx) = table_header_idx {
@@ -355,7 +361,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_frontmatter_commonmark_epic() {
+    fn test_parse_frontmatter_commonmark_epic() -> Result<(), Box<dyn std::error::Error>> {
         let content = r#"| Attribute | Specification Detail |
 | :--- | :--- |
 | **Issue ID** | #101 |
@@ -368,15 +374,16 @@ mod tests {
 
 # Epic 01: System Architecture and Compiler Primacy
 "#;
-        let fm = parse_frontmatter(content).expect("Parsed CommonMark table");
+        let fm = parse_frontmatter(content).ok_or("Parsed CommonMark table")?;
         assert_eq!(fm.title, "Epic 01: System Architecture and Compiler Primacy");
         assert_eq!(fm.spec_type, "epic");
         assert_eq!(fm.issue_id, Some(101));
         assert_eq!(fm.subsystem.as_deref(), Some("System Architecture"));
+        Ok(())
     }
 
     #[test]
-    fn test_parse_frontmatter_commonmark_feature() {
+    fn test_parse_frontmatter_commonmark_feature() -> Result<(), Box<dyn std::error::Error>> {
         let content = r#"| Attribute | Specification Detail |
 | :--- | :--- |
 | **Issue ID** | #10 |
@@ -390,15 +397,16 @@ mod tests {
 
 # Feature 01: [Con Ops] HumanEngineer
 "#;
-        let fm = parse_frontmatter(content).expect("Parsed CommonMark table");
+        let fm = parse_frontmatter(content).ok_or("Parsed CommonMark table")?;
         assert_eq!(fm.title, "Feature 01: [Con Ops] HumanEngineer");
         assert_eq!(fm.spec_type, "feature");
         assert_eq!(fm.issue_id, Some(10));
         assert_eq!(fm.part.as_deref(), Some("HumanEngineer"));
+        Ok(())
     }
 
     #[test]
-    fn test_commonmark_2column_metadata_table_parser_red_probe() {
+    fn test_commonmark_2column_metadata_table_parser_red_probe() -> Result<(), Box<dyn std::error::Error>> {
         let content = r#"| Attribute | Specification Detail |
 | :--- | :--- |
 | **Issue ID** | #430 |
@@ -413,7 +421,7 @@ mod tests {
 # Feature 42: CommonMark 2-Column Metadata Parser
 "#;
         let fm = parse_frontmatter(content)
-            .expect("RED PROBE FAILED: parse_frontmatter returned None for CommonMark 2-column table");
+            .ok_or("RED PROBE FAILED: parse_frontmatter returned None for CommonMark 2-column table")?;
         assert_eq!(fm.issue_id, Some(430));
         assert_eq!(fm.title, "Feature 42: CommonMark 2-Column Metadata Parser");
         assert_eq!(fm.spec_type, "feature");
@@ -427,6 +435,7 @@ mod tests {
         assert!(updated.contains("| **Issue ID** | #999 |"));
         assert!(!updated.contains("#430"));
         assert!(!updated.lines().any(|l| l.trim() == "---"));
+        Ok(())
     }
 
     #[test]
@@ -454,7 +463,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_frontmatter_epic() {
+    fn test_parse_frontmatter_epic() -> Result<(), Box<dyn std::error::Error>> {
         let content = r#"---
 title: "Epic 01: System Architecture"
 version: "1.0.0"
@@ -468,11 +477,12 @@ generation_mode: subagent
 
 # Epic 01: System Architecture
 "#;
-        let fm = parse_frontmatter(content).expect("Parsed frontmatter");
+        let fm = parse_frontmatter(content).ok_or("Parsed frontmatter")?;
         assert_eq!(fm.title, "Epic 01: System Architecture");
         assert_eq!(fm.spec_type, "epic");
         assert_eq!(fm.issue_id, Some(101));
         assert_eq!(fm.subsystem.as_deref(), Some("System Architecture"));
+        Ok(())
     }
 
     #[test]

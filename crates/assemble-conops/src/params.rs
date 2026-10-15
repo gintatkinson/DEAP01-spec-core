@@ -123,9 +123,6 @@ pub static DEFAULT_CONOPS_PARAMS: &[(&str, &str)] = &[
     ("DISTURBANCE_LIMIT_NOMINAL_MPS", "12.0"),
 ];
 
-pub static PLACEHOLDER_PATTERN: &str = r"\{\{([A-Za-z0-9_]+)(?::([^\}]*))?\}\}";
-pub static RAW_TOKEN_FINDER: &str = r"\{\{[A-Za-z0-9_]+(?::[^\}]*)?\}\}";
-
 /// Formal lifecycle archetypes for cyber-physical mission systems.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LifecycleType {
@@ -591,16 +588,43 @@ pub fn extract_subsystem_parts_from_sysml(content: &str, filepath: &str) -> Vec<
                 Vec::new()
             };
 
+            let mut attributes = HashMap::new();
+            let mut mass_kg = None;
+            let mut power_w = None;
+            let mut actions = Vec::new();
+            if !body.is_empty() {
+                for (attr_name, raw_val) in find_all_attributes(body) {
+                    attributes.insert(attr_name.to_string(), raw_val.to_string());
+                    let lower_attr = attr_name.to_ascii_lowercase();
+                    if let Some(num_str) = extract_numeric_substring(raw_val) {
+                        if let Ok(val_f64) = num_str.parse::<f64>() {
+                            if (lower_attr.contains("mass") || lower_attr.contains("weight"))
+                                && mass_kg.is_none()
+                            {
+                                mass_kg = Some(val_f64);
+                            } else if (lower_attr.contains("power") || lower_attr.contains("watt"))
+                                && power_w.is_none()
+                            {
+                                power_w = Some(val_f64);
+                            }
+                        }
+                    }
+                }
+                for act in deap_core::sysml_ast::parse_action_defs(body) {
+                    actions.push(act.name);
+                }
+            }
+
             if !seen.contains(&name) {
                 seen.insert(name.clone());
                 parts.push(SubsystemPart {
                     name,
                     doc,
                     ports,
-                    mass_kg: None,
-                    power_w: None,
-                    actions: Vec::new(),
-                    attributes: HashMap::new(),
+                    mass_kg,
+                    power_w,
+                    actions,
+                    attributes,
                     constraints: Vec::new(),
                     source_file: filepath.to_string(),
                     source_line: part_line,
@@ -829,8 +853,8 @@ where
 }
 
 fn replace_word_case_insensitive(text: &str, target_word: &str, replacement: &str) -> String {
-    let lower_text = text.to_lowercase();
-    let lower_target = target_word.to_lowercase();
+    let lower_text = text.to_ascii_lowercase();
+    let lower_target = target_word.to_ascii_lowercase();
     let target_len = lower_target.len();
     let bytes = text.as_bytes();
 
@@ -863,7 +887,7 @@ fn replace_word_case_insensitive(text: &str, target_word: &str, replacement: &st
 }
 
 fn replace_altitude_agl(text: &str, replacement: &str) -> String {
-    let lower = text.to_lowercase();
+    let lower = text.to_ascii_lowercase();
     let bytes = text.as_bytes();
     let mut result = String::with_capacity(text.len());
     let mut last_idx = 0;
@@ -906,7 +930,7 @@ fn replace_altitude_agl(text: &str, replacement: &str) -> String {
 }
 
 fn replace_astm_f3411(text: &str, replacement: &str) -> String {
-    let lower = text.to_lowercase();
+    let lower = text.to_ascii_lowercase();
     let bytes = text.as_bytes();
     let mut result = String::with_capacity(text.len());
     let mut last_idx = 0;
@@ -943,7 +967,7 @@ fn replace_astm_f3411(text: &str, replacement: &str) -> String {
 }
 
 fn replace_roe_phrase(text: &str) -> String {
-    let lower = text.to_lowercase();
+    let lower = text.to_ascii_lowercase();
     let bytes = text.as_bytes();
     let mut result = String::with_capacity(text.len());
     let mut last_idx = 0;
@@ -1091,7 +1115,11 @@ impl SysMLParameterBindingEngine {
             for rel_dir in &["schema", "docs/architecture", "docs/research"] {
                 let cdir = sdir.join(rel_dir);
                 if cdir.is_dir() {
-                    for entry in walkdir::WalkDir::new(&cdir).into_iter().filter_map(|e| e.ok()) {
+                    for entry in walkdir::WalkDir::new(&cdir)
+                        .sort_by_file_name()
+                        .into_iter()
+                        .filter_map(|e| e.ok())
+                    {
                         let path = entry.path();
                         if path.is_file() {
                             let fname = path.file_name().and_then(|n| n.to_str()).unwrap_or("");

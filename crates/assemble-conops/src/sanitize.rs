@@ -14,7 +14,7 @@ fn match_token(lower: &str, mut idx: usize, token: &str) -> Option<usize> {
 }
 
 fn strip_poly_equation(text: &str) -> String {
-    let lower = text.to_lowercase();
+    let lower = text.to_ascii_lowercase();
     let mut result = String::with_capacity(text.len());
     let mut last_idx = 0;
     let mut i = 0;
@@ -52,7 +52,7 @@ fn strip_poly_equation(text: &str) -> String {
 }
 
 fn strip_poly_hex(text: &str) -> String {
-    let lower = text.to_lowercase();
+    let lower = text.to_ascii_lowercase();
     let bytes = text.as_bytes();
     let mut result = String::with_capacity(text.len());
     let mut last_idx = 0;
@@ -82,7 +82,7 @@ fn strip_poly_hex(text: &str) -> String {
 }
 
 fn replace_crc16(text: &str) -> String {
-    let lower = text.to_lowercase();
+    let lower = text.to_ascii_lowercase();
     let bytes = text.as_bytes();
     let mut result = String::with_capacity(text.len());
     let mut last_idx = 0;
@@ -163,7 +163,7 @@ fn replace_crc16(text: &str) -> String {
 }
 
 fn replace_polynomial_equation(text: &str) -> String {
-    let lower = text.to_lowercase();
+    let lower = text.to_ascii_lowercase();
     let bytes = text.as_bytes();
     let mut result = String::with_capacity(text.len());
     let mut last_idx = 0;
@@ -201,7 +201,7 @@ fn replace_polynomial_equation(text: &str) -> String {
 }
 
 fn strip_baud_rates(text: &str) -> String {
-    let lower = text.to_lowercase();
+    let lower = text.to_ascii_lowercase();
     let bytes = text.as_bytes();
     let mut result = String::with_capacity(text.len());
     let mut last_idx = 0;
@@ -287,7 +287,7 @@ fn strip_baud_rates(text: &str) -> String {
 }
 
 fn strip_opcodes(text: &str) -> String {
-    let lower = text.to_lowercase();
+    let lower = text.to_ascii_lowercase();
     let bytes = text.as_bytes();
     let mut result = String::with_capacity(text.len());
     let mut last_idx = 0;
@@ -371,7 +371,7 @@ fn strip_opcodes(text: &str) -> String {
 }
 
 fn strip_use_cases(text: &str) -> String {
-    let lower = text.to_lowercase();
+    let lower = text.to_ascii_lowercase();
     let bytes = text.as_bytes();
     let mut result = String::with_capacity(text.len());
     let mut last_idx = 0;
@@ -727,7 +727,7 @@ pub fn wrap_mermaid_label(text: &str, max_width: usize) -> String {
     let mut out_parts = Vec::new();
     let mut last_idx = 0;
     let bytes = text.as_bytes();
-    let lower = text.to_lowercase();
+    let lower = text.to_ascii_lowercase();
     let mut i = 0;
 
     while i < bytes.len() {
@@ -801,7 +801,10 @@ fn process_segment(
                 }
                 let mut c_idx = 0;
                 while c_idx < w.len() {
-                    let end_idx = (c_idx + max_width).min(w.len());
+                    let mut end_idx = (c_idx + max_width).min(w.len());
+                    while end_idx < w.len() && !w.is_char_boundary(end_idx) {
+                        end_idx += 1;
+                    }
                     lines.push(w[c_idx..end_idx].to_string());
                     c_idx = end_idx;
                 }
