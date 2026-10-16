@@ -415,7 +415,7 @@ For each Bounded Context, partition its subtree into cohesive functional feature
      - The specific target layout container ID in `logical-layout.json` or API endpoint path, or `Unbound (Deferred to Implementation Profile)`.
      - The data source bindings. **CRITICAL PATH DERIVATION RULE**: You are strictly forbidden from copy-pasting generic template or placeholder namespaces (such as `schema:generic-topology`). You MUST derive the data source path directly from the exact, authoritative schema path locator of the target schema container augmented in the network inventory model (e.g. `/nwi:network-inventory/nil:locations/nil:location/nil:geo-location/nil:reference-frame` or `/nwi:network-inventory/nil:locations/nil:racks/nil:rack`), or state `Unbound (Deferred to Implementation Profile)`. Literal placeholder strings (`#X`, `Task Y`) are strictly prohibited.
    - **Logical UI & Interface Binding Validation Rules**: the bindings block is checked mechanically
-     by `parity_auditor/validators/logical_ui_validator.py`.
+     by `./target/release/verify-baseline . --spec-only`.
      - **Interface Bindings Section Required**: every Feature MUST carry the
        `## Logical UI & Interface Bindings` section. A Feature is exempt only if its
        metadata table declares non-UI interface types (`config`, `persistence`, `gate`, `cli`, `backend`).

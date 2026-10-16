@@ -32,7 +32,7 @@ The DEAP framework strictly enforces a clean three-tier architecture separating 
 +-----------------------------------------------------------------------------------+
                                          |
                                          |  Compiler Tooling Propagation (Maintainers)
-                                         |  scripts/install_pipeline.sh
+                                         |  Template Distribution & verify-baseline setup-hooks
                                          v
 +-----------------------------------------------------------------------------------+
 | Tier 2: Domain Distribution Templates (Canonical Cyber-Physical Sectors)         |
@@ -241,24 +241,25 @@ Verify all 30 abstract MBSE compiler baseline checks:
 This workflow is for **DEAP platform maintainers** propagating compiler tooling, governance rules, and verification scripts from `DEAP01-spec-core` to the canonical domain distribution template repositories (`DEAP-*`).
 
 #### Local Propagation
-When maintaining a local domain template checkout alongside `DEAP01-spec-core`, run the installer from the root of `DEAP01-spec-core` and specify the destination path:
+When maintaining a local domain template checkout alongside `DEAP01-spec-core`, build the pure-Rust compiler binaries and install git hooks:
 ```bash
-# Run from the root of DEAP01-spec-core
-bash scripts/install_pipeline.sh "<path-to-domain-template>"
+cargo build --release --workspace
+./target/release/verify-baseline setup-hooks
 ```
 
 #### Remote Bootstrap Propagation
-To bootstrap or synchronize a domain distribution template directly from the upstream compiler repository without a pre-existing local compiler clone:
+To bootstrap or synchronize a domain distribution template directly from the upstream compiler repository:
 ```bash
-# Run from the root of the target domain distribution template
-git clone https://github.com/gintatkinson/DEAP01-spec-core.git /tmp/deap_compiler && bash /tmp/deap_compiler/scripts/install_pipeline.sh . && rm -rf /tmp/deap_compiler
+git clone https://github.com/gintatkinson/DEAP01-spec-core.git
+cargo build --release --workspace
+./target/release/verify-baseline setup-hooks
 ```
 
-#### In-Place Governance & Script Updates
-Inside an already-installed domain template repository, update the pipeline and governance rules in-place at any time:
+#### In-Place Governance & Tooling Updates
+Inside an already-installed domain template repository, update git hooks and run baseline verification:
 ```bash
-# Run from the root of the target repository
-bash scripts/install_pipeline.sh .
+./target/release/verify-baseline setup-hooks
+./target/release/verify-baseline .
 ```
 
 ---
@@ -277,7 +278,7 @@ The DEAP three-tier architecture strictly decouples compiler tooling propagation
 | DEAP01-spec-core (UPSTREAM_SPEC_CORE_COMPILER)                                     |
 +-----------------------------------------------------------------------------------+
                                          │
-                                         │  bash scripts/install_pipeline.sh "<path-to-domain-template>"
+                                         │  cargo build --release && verify-baseline setup-hooks
                                          ▼
 +-----------------------------------------------------------------------------------+
 | Tier 2: Domain Distribution Templates                                             |
@@ -309,7 +310,7 @@ Google Antigravity automatically discovers workspace customizations, governance 
 
 ### 5.6 Universal Agent Governance & Initialization Sequence (AGENTS.md)
 
-When propagating via `scripts/install_pipeline.sh`, the installer automatically configures `AGENTS.md` with the appropriate role classifications and governance rules for the target repository tier:
+When configuring repositories, the governance configuration defines `AGENTS.md` with the appropriate role classifications and governance rules for the target repository tier:
 - **Upstream Compiler (`DEAP01-spec-core`):** `UPSTREAM_SPEC_CORE_COMPILER` (abstract MBSE compiler, zero hardcoded domain concepts).
 - **Domain Distribution Templates (`DEAP-*`):** `DOMAIN_DISTRIBUTION_TEMPLATE` (domain SysML schemas, sector blueprints).
 - **Customer Application Workspaces:** `DOWNSTREAM_CUSTOMER_PROJECT` (proprietary application code, ROS2 nodes, embedded software).
@@ -478,13 +479,13 @@ This platform explicitly declares **MATLAB / Simulink / Stateflow / Embedded Cod
 - **Formal Invariant Proving:** SysML `assert constraint` formulations translate to Simulink Design Verifier (SLDV) proof objectives for automated reachability and dead-lock free verification.
 - **Safety-Critical Code Synthesis:** Embedded Coder generates MISRA C / DO-178C qualified C code and SPARK Ada kernels for deployment to Pixhawk and ROS2 real-time hardware.
 
-### 7.4 Work Breakdown Structure & Enterprise Realization Tooling (`generate-wbs-suite`)
+### 7.4 Work Breakdown Structure & Enterprise Realization Tooling
 
-The platform includes a deterministic Work Breakdown Structure (WBS) & Enterprise Realization generator synthesizing MIL-STD-881E decomposition hierarchies, traceability matrices, and multi-platform enterprise project management exports:
+The platform includes deterministic Work Breakdown Structure (WBS) & Enterprise Realization synthesis conforming to MIL-STD-881E decomposition hierarchies, traceability matrices, and multi-platform enterprise project management exports:
 - **Purpose**: Synthesizes MIL-STD-881E Work Breakdown Structures (WBS), 7-column end-to-end traceability matrix, multi-platform CSV export (Jira, Monday.com, MS Project), and hierarchical JSON AST from SysML AST, ConOps, Safety matrices, and Agile Backlog items.
-- **CLI Usage**:
+- **Verification & Compliance**:
   ```bash
-  ./target/release/generate-wbs-suite [--workspace PATH] [--output-dir PATH]
+  ./target/release/verify-baseline . --strict
   ```
 - **Synthesized Deliverables**:
   1. `docs/management/WBS_DELIVERABLES_SUITE.md`: Authoritative markdown specification suite with CommonMark metadata table and 7-column end-to-end traceability matrix.
@@ -949,10 +950,10 @@ Transform structural schemas and SysML v2 AST models into formal Agile Epics and
 
 2. Local Validation & Issue Registration:
    - Execute the local model coverage linter: `./target/release/verify-baseline . --spec-only --only "<spec_file>"`.
-   - Register Features first via `./skills/spec-orchestrator/scripts/create_issue.sh "<file>" "feature" "<title>"`.
+   - Register Features first via `./target/release/reconcile-backlog create-issue --body-file "<file>" --label "feature" --title "<title>"`.
    - Verify live published payload on the issue tracker (`gh issue view <ID> --json body` or `glab issue view <ID>`).
    - Inject verified Feature Issue IDs into Epic tasklists.
-   - Register Epics via `./skills/spec-orchestrator/scripts/create_issue.sh "<file>" "epic" "<title>"`.
+   - Register Epics via `./target/release/reconcile-backlog create-issue --body-file "<file>" --label "epic" --title "<title>"`.
 
 Defect Filing Directive:
 If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `./target/release/verify-baseline check-defect` (or `./target/release/reconcile-backlog create-issue --label bug`). Issue auto-closing keywords or issue close commands are strictly forbidden.
@@ -984,7 +985,7 @@ Extract Behavior-Driven Development (BDD) User Stories, UML Sequence Lifelines, 
 2. Deliverable Generation & Issue Registration:
    - Dispatch fresh context-isolated subagents per User Story (`docs/user-stories/us-*.md`) with YAML frontmatter (`generation_mode: "subagent"`).
    - Execute local model coverage linter: `./target/release/verify-baseline . --spec-only --only "<spec_file>"`.
-   - Register User Stories via `./skills/spec-orchestrator/scripts/create_issue.sh "<file>" "user-story" "<title>"`.
+   - Register User Stories via `./target/release/reconcile-backlog create-issue --body-file "<file>" --label "user-story" --title "<title>"`.
    - Verify live published payload on the issue tracker (`gh issue view <ID> --json body` or `glab issue view <ID>`).
 
 Defect Filing Directive:
@@ -1017,7 +1018,7 @@ Derive formal UML System Use Cases directly from SysML v2 `use case def` AST blo
 2. Realization Matrix & Registration:
    - Construct `## Realization Matrix` resolving specific, unique tracker Issue IDs for each intersecting User Story and Feature.
    - Execute local model coverage check: `./target/release/verify-baseline . --spec-only --only "<spec_file>"`.
-   - Register Use Cases via `./skills/spec-orchestrator/scripts/create_issue.sh "<file>" "use-case" "<title>"`.
+   - Register Use Cases via `./target/release/reconcile-backlog create-issue --body-file "<file>" --label "use-case" --title "<title>"`.
    - Verify live published payload on the issue tracker (`gh issue view <ID> --json body` or `glab issue view <ID>`).
 
 Defect Filing Directive:
@@ -1043,15 +1044,15 @@ Synthesize MIL-STD-881E Work Breakdown Structures (WBS), Technical Realization R
 
 1. WBS & Enterprise Realization Synthesis:
    - Ingest `.pipeline/schema.sysml`, `docs/conops/`, `docs/safety/`, `docs/epics/`, `docs/features/`, `docs/user-stories/`, and `docs/use-cases/`.
-   - Synthesize the complete 5-tier WBS hierarchy and 7 concrete Model-Based Design (MBD) work packages per feature (`WP-xxx-SPEC`, `WP-xxx-MAT-PARAM`, `WP-xxx-SL-BLD`, `WP-xxx-PY-DOM`, `WP-xxx-PY-ENG`, `WP-xxx-TST`, `WP-xxx-REP`).
-   - Construct the authoritative 7-Column End-to-End Traceability Matrix linking SysML components, Feature specs, User Stories, MATLAB/Simulink models, Python 250 Hz engines, semantic acceptance verification suites, and DO-178C/DO-331 simulation evidence.
-   - Run the deterministic WBS suite generator: `./target/release/generate-wbs-suite`.
+   - Synthesize the complete 5-tier WBS hierarchy and concrete Model-Based Design (MBD) work packages per feature.
+   - Construct the authoritative 7-Column End-to-End Traceability Matrix linking SysML components, Feature specs, User Stories, MATLAB/Simulink models, native simulation engines, and DO-178C/DO-331 verification evidence.
+   - Verify deliverable integrity: `./target/release/verify-baseline . --strict`.
 
 2. Deliverable Generation & Issue Registration:
    - Generate `docs/management/WBS_DELIVERABLES_SUITE.md` with CommonMark metadata table.
    - Generate multi-platform export `docs/management/wbs_export_jira_monday_ms_project.csv` (RFC 4180 compliant with Jira, Monday.com, and MS Project field mappings).
    - Generate validated machine-readable JSON AST `docs/management/wbs_export.json`.
-   - Register the WBS suite under the `wbs` issue label using `./skills/spec-orchestrator/scripts/create_issue.sh "docs/management/WBS_DELIVERABLES_SUITE.md" "wbs" "<title>"`.
+   - Register the WBS suite under the `wbs` issue label using `./target/release/reconcile-backlog create-issue --body-file "docs/management/WBS_DELIVERABLES_SUITE.md" --label "wbs" --title "<title>"`.
    - Verify published issue body integrity via live tracker inspection (`gh issue view <ID> --json body` or `glab issue view <ID>`).
 
 Defect Filing Directive:

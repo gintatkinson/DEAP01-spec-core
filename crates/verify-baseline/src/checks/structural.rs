@@ -1079,6 +1079,11 @@ pub fn check_handoff_and_backlog_integrity(repo_root: &Path) -> Result<(), Vec<S
         violations.extend(errs);
     }
 
+    // 4. Check zero retired script references in documentation (refs #441)
+    if let Err(errs) = check_zero_retired_scripts_in_documentation(repo_root) {
+        violations.extend(errs);
+    }
+
     if violations.is_empty() {
         Ok(())
     } else {
@@ -1175,6 +1180,121 @@ pub fn check_no_master_handover_checkpoint(repo_root: &Path) -> Result<(), Vec<S
                         "Forbidden handover checkpoint file detected at '{}': ephemeral/spurious handover checkpoints containing domain specifications are strictly forbidden (refs #321).",
                         rel
                     ));
+                }
+            }
+        }
+    }
+
+    if violations.is_empty() {
+        Ok(())
+    } else {
+        violations.sort();
+        violations.dedup();
+        Err(violations)
+    }
+}
+
+/// Check documentation for references to retired Python and shell scripts (refs #441).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ECSS-E-ST-40C documentation integrity controls.
+/// Enforces Pure-Rust Toolchain Invariant by preventing documentation drift that references
+/// deleted Python or shell scripts or non-existent binaries.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// Documentation markdown files under `docs/`, `skills/`, and `README.md` must contain zero
+/// references to retired scripts: `create_issue.sh`, `verify_downstream_baseline.py`,
+/// `install_pipeline.sh`, `generate-wbs-suite`, `compile_yang.py`, `compile_sysml.py`,
+/// `assemble_conops.py`, `parity_auditor`, `setup_git_hooks.py`, `file_defect.py`,
+/// `verify_commit_messages.py`, `verify_subagent_output.py`, `reconcile_backlog.py`.
+///
+/// ## 3. Preconditions
+/// `repo_root` must be an accessible directory path.
+///
+/// ## 4. Postconditions
+/// Returns `Ok(())` on compliance, or `Err(Vec<String>)` with sorted detected violations.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(N * L) where N is file count and L is line count. Space Complexity: O(V).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// Fails closed on any discovered reference to retired scripts.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-ZERO-RETIRED-SCRIPTS-IN-DOCS].
+pub fn check_zero_retired_scripts_in_documentation(repo_root: &Path) -> Result<(), Vec<String>> {
+    let mut violations = Vec::new();
+
+    let mut retired_needles: Vec<String> = Vec::new();
+    retired_needles.push("create_issue.sh".to_string());
+    retired_needles.push("verify_downstream_baseline.py".to_string());
+    retired_needles.push("install_pipeline.sh".to_string());
+    retired_needles.push("generate-wbs-suite".to_string());
+    retired_needles.push("compile_yang.py".to_string());
+    retired_needles.push("compile_sysml.py".to_string());
+    retired_needles.push("assemble_conops.py".to_string());
+    retired_needles.push("parity_auditor".to_string());
+    retired_needles.push("setup_git_hooks.py".to_string());
+    retired_needles.push("file_defect.py".to_string());
+    retired_needles.push("verify_commit_messages.py".to_string());
+    retired_needles.push("verify_subagent_output.py".to_string());
+    retired_needles.push("reconcile_backlog.py".to_string());
+
+    let target_dirs = vec![repo_root.join("docs"), repo_root.join("skills")];
+
+    for dir in &target_dirs {
+        if !dir.is_dir() {
+            continue;
+        }
+        for entry_res in WalkDir::new(dir)
+            .into_iter()
+            .filter_entry(|e| {
+                if e.file_type().is_dir() {
+                    let name = e.file_name().to_string_lossy();
+                    !EXCLUDED_DIRS.iter().any(|ex| name == ex)
+                        && name != "designs"
+                        && name != "audits"
+                        && name != "blueprints"
+                        && name != "decisions"
+                } else {
+                    true
+                }
+            })
+        {
+            let entry = match entry_res {
+                Ok(e) => e,
+                Err(_) => continue,
+            };
+            if entry.file_type().is_file() {
+                let path = entry.path();
+                let is_md = path.extension().map(|ext| ext == "md").unwrap_or(false);
+                if is_md {
+                    let rel = path.strip_prefix(repo_root).unwrap_or(path).display().to_string();
+                    if rel.ends_with("_HANDOFF.md") || rel.ends_with("_HANDOVER.md") {
+                        continue;
+                    }
+                    if let Ok(content) = fs::read_to_string(path) {
+                        for (idx, line) in content.lines().enumerate() {
+                            for needle in &retired_needles {
+                                if line.contains(needle) {
+                                    violations.push(format!("{}:{}: references retired script '{}'", rel, idx + 1, needle));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let readme = repo_root.join("README.md");
+    if readme.is_file() {
+        if let Ok(content) = fs::read_to_string(&readme) {
+            for (idx, line) in content.lines().enumerate() {
+                for needle in &retired_needles {
+                    if line.contains(needle) {
+                        violations.push(format!("README.md:{}: references retired script '{}'", idx + 1, needle));
+                    }
                 }
             }
         }
@@ -1844,5 +1964,36 @@ pub fn check_audit() -> Result<(), Vec<String>> {
             res_handoff.err()
         );
     }
+
+    #[test]
+    fn test_issue_441_documentation_contains_no_retired_script_references() {
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(|p| p.parent())
+            .expect("repo root");
+        let res = check_zero_retired_scripts_in_documentation(repo_root);
+        assert!(
+            res.is_ok(),
+            "Documentation must not reference retired scripts (refs #441): {:?}",
+            res.err()
+        );
+    }
+
+    #[test]
+    fn test_defect_441_mutation_rejects_retired_script_in_markdown() {
+        let tmp = TempDir::new("c441_script_rejection");
+        let docs = tmp.path.join("docs").join("operations");
+        fs::create_dir_all(&docs).unwrap();
+        let guide = docs.join("install-guide.md");
+        let mut f = File::create(&guide).unwrap();
+        let needle = "create_issue.sh";
+        writeln!(f, "# Guide\nRun {needle} now").unwrap();
+
+        let res = check_zero_retired_scripts_in_documentation(&tmp.path);
+        assert!(res.is_err(), "Must reject retired script reference in docs");
+        let errs = res.err().unwrap();
+        assert!(errs.iter().any(|e| e.contains(needle)));
+    }
 }
+
 

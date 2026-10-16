@@ -237,10 +237,10 @@ Transform structural schemas and SysML v2 AST models into formal Agile Epics and
 
 2. Local Validation & Issue Registration:
    - Execute the local model coverage linter: `./target/release/verify-baseline . --spec-only --only "<spec_file>"`.
-   - Register Features first via `./skills/spec-orchestrator/scripts/create_issue.sh "<file>" "feature" "<title>"`.
+   - Register Features first via `./target/release/reconcile-backlog create-issue --body-file "<file>" --label "feature" --title "<title>"`.
    - Verify live published payload on the issue tracker (`gh issue view <ID> --json body` or `glab issue view <ID>`).
    - Inject verified Feature Issue IDs into Epic tasklists.
-   - Register Epics via `./skills/spec-orchestrator/scripts/create_issue.sh "<file>" "epic" "<title>"`.
+   - Register Epics via `./target/release/reconcile-backlog create-issue --body-file "<file>" --label "epic" --title "<title>"`.
 
 Defect Filing Directive:
 If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `./target/release/verify-baseline check-defect` (or `./target/release/reconcile-backlog create-issue --label bug`). Issue auto-closing keywords or issue close commands are strictly forbidden.
@@ -271,7 +271,7 @@ Extract Behavior-Driven Development (BDD) User Stories, UML Sequence Lifelines, 
 2. Deliverable Generation & Issue Registration:
    - Dispatch fresh context-isolated subagents per User Story (`docs/user-stories/us-*.md`) with YAML frontmatter (`generation_mode: "subagent"`).
    - Execute local model coverage linter: `./target/release/verify-baseline . --spec-only --only "<spec_file>"`.
-   - Register User Stories via `./skills/spec-orchestrator/scripts/create_issue.sh "<file>" "user-story" "<title>"`.
+   - Register User Stories via `./target/release/reconcile-backlog create-issue --body-file "<file>" --label "user-story" --title "<title>"`.
    - Verify live published payload on the issue tracker (`gh issue view <ID> --json body` or `glab issue view <ID>`).
 
 Defect Filing Directive:
@@ -303,7 +303,7 @@ Derive formal UML System Use Cases directly from SysML v2 `use case def` AST blo
 2. Realization Matrix & Registration:
    - Construct `## Realization Matrix` resolving specific, unique tracker Issue IDs for each intersecting User Story and Feature.
    - Execute local model coverage check: `./target/release/verify-baseline . --spec-only --only "<spec_file>"`.
-   - Register Use Cases via `./skills/spec-orchestrator/scripts/create_issue.sh "<file>" "use-case" "<title>"`.
+   - Register Use Cases via `./target/release/reconcile-backlog create-issue --body-file "<file>" --label "use-case" --title "<title>"`.
    - Verify live published payload on the issue tracker (`gh issue view <ID> --json body` or `glab issue view <ID>`).
 
 Defect Filing Directive:
@@ -328,15 +328,15 @@ Synthesize MIL-STD-881E Work Breakdown Structures (WBS), Technical Realization R
 
 1. WBS & Enterprise Realization Synthesis:
    - Ingest `.pipeline/schema.sysml`, `docs/conops/`, `docs/safety/`, `docs/epics/`, `docs/features/`, `docs/user-stories/`, and `docs/use-cases/`.
-   - Synthesize the complete 5-tier WBS hierarchy and 7 concrete Model-Based Design (MBD) work packages per feature (`WP-xxx-SPEC`, `WP-xxx-MAT-PARAM`, `WP-xxx-SL-BLD`, `WP-xxx-PY-DOM`, `WP-xxx-PY-ENG`, `WP-xxx-TST`, `WP-xxx-REP`).
-   - Construct the authoritative 7-Column End-to-End Traceability Matrix linking SysML components, Feature specs, User Stories, MATLAB/Simulink models, Python 250 Hz engines, Pytest verification suites, and DO-178C/DO-331 simulation evidence.
-   - Run the deterministic WBS suite generator: `./target/release/generate-wbs-suite`.
+   - Synthesize the complete 5-tier WBS hierarchy and concrete Model-Based Design (MBD) work packages per feature.
+   - Construct the authoritative 7-Column End-to-End Traceability Matrix linking SysML components, Feature specs, User Stories, MATLAB/Simulink models, native simulation engines, and DO-178C/DO-331 verification evidence.
+   - Verify deliverable integrity: `./target/release/verify-baseline . --strict`.
 
 2. Deliverable Generation & Issue Registration:
    - Generate `docs/management/WBS_DELIVERABLES_SUITE.md` with CommonMark metadata table.
    - Generate multi-platform export `docs/management/wbs_export_jira_monday_ms_project.csv` (RFC 4180 compliant with Jira, Monday.com, and MS Project field mappings).
    - Generate validated machine-readable JSON AST `docs/management/wbs_export.json`.
-   - Register the WBS suite under the `wbs` issue label using `./skills/spec-orchestrator/scripts/create_issue.sh "docs/management/WBS_DELIVERABLES_SUITE.md" "wbs" "<title>"`.
+   - Register the WBS suite under the `wbs` issue label using `./target/release/reconcile-backlog create-issue --body-file "docs/management/WBS_DELIVERABLES_SUITE.md" --label "wbs" --title "<title>"`.
    - Verify published issue body integrity via live tracker inspection (`gh issue view <ID> --json body` or `glab issue view <ID>`).
 
 Defect Filing Directive:
@@ -518,8 +518,8 @@ Execute Two-Path (Dual-Track) Model-Based Design (MBD) simulation synthesis and 
    - Solver & Synthesis Baseline: Configure models for deterministic fixed-step discrete solvers (`FixedStepDiscrete`, dt = 0.004 s / 250 Hz) and Embedded Coder DO-178C C / SPARK Ada code synthesis.
 
 2. Track B (Headless CI Digital Twin Engine):
-   - License-Free Discrete Execution Engine: Deliver standalone Python simulation engine (`models/python/<feature_slug>_domain.py` and `models/python/<feature_slug>_engine.py`) executing at identical discrete loop rate (dt) with exact transition guards, polynomial transfer curves, and 6-DOF kinematics.
-   - Zero License Blocker CI Harness: Deliver automated regression test suite `tests/test_<feature_slug>_simulation.py` running 100% offline in containerized CI environments without MathWorks licenses.
+   - License-Free Discrete Execution Engine: Deliver standalone native simulation engine in Rust (`crates/`) or target platform profile (`app_flutter/` or `web_react/`) executing at identical discrete loop rate (dt) with exact transition guards, polynomial transfer curves, and 6-DOF kinematics, adhering to Check 33 (Zero Python Scripts Invariant).
+   - Zero License Blocker CI Harness: Deliver automated regression test suite running 100% offline in containerized CI environments without MathWorks licenses.
 
 3. Mathematical & Discrete Equivalence Mandate:
    - Numerical Tolerance Verification: Guarantee state vector and output trajectory error between Track A reference and Track B digital twin satisfies error <= 10^-6.
@@ -539,15 +539,12 @@ Every feature containing control laws, operating dynamics, physical plant estima
 models/
 ├── scripts/
 │   └── build_<feature_slug>_model.m        # Track A: Programmatic Simulink/Stateflow builder script
-├── matlab/
-│   ├── <feature_slug>_params.m            # Track A: MATLAB physical plant & control parameters
-│   └── <feature_slug>_data.sldd           # Track A: Simulink Data Dictionary (data types & signals)
-└── python/
-    ├── <feature_slug>_domain.py           # Track B: Strongly-typed domain models & state vectors
-    └── <feature_slug>_engine.py           # Track B: Standalone discrete-time simulation engine
+└── matlab/
+    ├── <feature_slug>_params.m            # Track A: MATLAB physical plant & control parameters
+    └── <feature_slug>_data.sldd           # Track A: Simulink Data Dictionary (data types & signals)
 
-tests/
-└── test_<feature_slug>_simulation.py      # Automated CI regression suite for Track B engine
+crates/ (or target platform profile)
+└── simulation/                             # Track B: Standalone discrete-time simulation engine & tests
 
 docs/reports/simulink_results/
 └── <FEATURE-ID>_simulation_results.md     # Formal DO-331 simulation & numerical parity report
@@ -561,11 +558,11 @@ docs/reports/simulink_results/
 2. **`models/matlab/<feature_slug>_params.m` & `.sldd` (Track A Dictionaries)**:
    Declares physical plant constants, control gains, rate limits, sensor noise variances, and discrete sample time (dt = 0.004 s / 250 Hz) in typed MATLAB structures and Simulink Data Dictionaries.
 
-3. **`models/python/<feature_slug>_domain.py` & `_engine.py` (Track B Digital Twin)**:
-   Pure Python, license-free, headless discrete simulation engine executing identical algebraic formulations, cubic polynomial blending curves, and safety transition guards. Exposes typed state vectors and `step(dt, inputs) -> outputs` execution interface.
+3. **Native Digital Twin (Track B)**:
+   License-free, headless discrete simulation engine executing identical algebraic formulations, cubic polynomial blending curves, and safety transition guards. Exposes typed state vectors and `step(dt, inputs) -> outputs` execution interface.
 
-4. **`tests/test_<feature_slug>_simulation.py` (Automated CI Verification Suite)**:
-   Pytest / Unittest test suite executing offline in CI/CD runners without MathWorks license blockers. Validates nominal control tracks, fault-injection responses, emergency safety transitions, and state invariants.
+4. **Automated CI Verification Suite**:
+   Native test suite executing offline in CI/CD runners without MathWorks license blockers. Validates nominal control tracks, fault-injection responses, emergency safety transitions, and state invariants.
 
 5. **`docs/reports/simulink_results/<FEATURE-ID>_simulation_results.md` (DO-331 Verification Report)**:
    Formal DO-178C / DO-331 verification deliverable documenting mathematical equivalence, step-by-step state transition logs, fault injection test results, and numerical tolerance parity (<= 10^-6).
@@ -585,7 +582,7 @@ To implement features and verify simulations end-to-end using context-isolated s
    - **Stage 2 (Code Quality Review - Reviewer 2)**: Verify strict typing, public member docstrings (DartDoc `///`), UML traceability tags (`/// Realises: [...]`), immutability, value equality, and zero `dynamic`.
 
 4. **Dual-Track Simulation Synthesis & Parity (Worker 2B)**:
-   For features involving control laws or operating dynamics, dispatch Worker 2B to synthesize Track A (native Simulink builder `models/scripts/build_<feature_slug>_model.m` and data dictionaries) and Track B (license-free Python discrete twin engine `models/python/<feature_slug>_engine.py`). Run offline regression suite (`tests/test_<feature_slug>_simulation.py`) and verify numerical parity (<= 10^-6).
+   For features involving control laws or operating dynamics, dispatch Worker 2B to synthesize Track A (native Simulink builder `models/scripts/build_<feature_slug>_model.m` and data dictionaries) and Track B (license-free native discrete twin engine under `crates/` or platform profile). Run offline regression suite and verify numerical parity (<= 10^-6).
 
 5. **Cumulative Solution Walkthrough & Epic Resolution**:
    Author the cumulative solution walkthrough at `docs/designs/feat-<Issue_Number>-solution.md`. Run backlog reconciliation (`./target/release/reconcile-backlog`). Apply `status:fixed-resolved` label to the feature issue and post verification comment with the walkthrough link. Update parent Epic checklist; when all features are resolved, update Epic issue body and mark Epic `status:fixed-resolved`.

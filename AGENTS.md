@@ -13,7 +13,7 @@
 ## Upstream Distribution Template Clean Landing Zone Invariant
 - **Clean Landing Zone Mandate**: In upstream distribution template repositories (`DEAP-*`), the directories `schema/`, `docs/epics/`, `docs/features/`, `docs/user-stories/`, and `docs/use-cases/` must remain clean landing zones with ONLY `.gitkeep` files.
 - **Strict Prohibition of Concrete Specifications**: Committing concrete downstream project specifications, models, or code to upstream distribution templates is strictly forbidden.
-- **Downstream Workspace Boundary**: Concrete project schemas and specifications reside exclusively in downstream application workspaces installed via `scripts/install_pipeline.sh`.
+- **Downstream Workspace Boundary**: Concrete project schemas and specifications reside exclusively in downstream application workspaces initialized from domain distribution templates.
 
 ## Mandatory Session Initialization Gate (CRITICAL FIRST STEP)
 Immediately following installation and on EVERY new session startup, before accepting ANY user directives, responding to inquiries, or executing task implementations, the agent MUST execute the following 6-step sequence in Turn 1:

@@ -76,3 +76,38 @@ Root causes:
 - Post verification evidence comment on Issue #333 with raw terminal outputs.
 - Apply `status:fixed-resolved` label to Issue #333.
 - Write `handoff.md`.
+
+
+---
+
+# Implementation Plan: Teamwork Recursive Debugging Protocol for Issues #439 to #449
+
+## 1. Executive Summary & Objective
+
+This implementation plan governs the execution of the 8-step Recursive Debugging Protocol (`skills/debug-protocol/SKILL.md`) across issues `#439` through `#449` in `DEAP01-spec-core` (`UPSTREAM_SPEC_CORE_COMPILER`), delegated via the `teamwork_preview` multi-agent system.
+
+## 2. Work Packages
+
+### WP-01: Teamwork Multi-Agent Delegation (`teamwork_preview`)
+- **Action**: Invoke `teamwork_preview` subagent with the approved prompt from `prompt_draft.md` (including mandatory `view_file` directive on `skills/debug-protocol/SKILL.md`, repository classification `UPSTREAM_SPEC_CORE_COMPILER`, and `PROCEED` authorization token).
+- **Scope**: Sequential execution of `skills/debug-protocol/SKILL.md` (Steps 0 through 8) across issues `#439`, `#440`, `#441`, `#442`, `#443`, `#444`, `#445`, `#446`, `#447`, `#448`, and `#449` in `.`.
+
+### WP-02: Per-Issue TDD Remediation & Verification Loop (Issues #439 to #449)
+For each issue `#439`..`#449`:
+1. **Step 0 (Defect Gate)**: Inspect issue via `gh issue view <ID>`. Confirm defect status (or reclassify per `skills/debug-protocol/SKILL.md` Step 8 if non-defect).
+2. **Steps 1-5 (Reproduction, Hypothesis, Investigation, Evidence, Root Cause)**: Isolate root cause in `crates/`, `skills/`, `rules/`, or `.pipeline/` with exact file and line citations.
+3. **Step 6 (Fix & Native Rust TDD)**:
+   - Write failing Rust unit/mutation test (`#[test]`) demonstrating RED before applying the fix.
+   - Implement minimal fix to achieve GREEN.
+   - Run `cargo test --workspace` and `./target/release/verify-baseline . --no-domain`.
+   - Commit using neutral issue citations `(refs #<id>)` or `(#<id>)` (zero auto-closing keywords, zero em dashes) and push to remote.
+4. **Step 7 (Verification & Tracker Transition)**:
+   - Verify fix presence via grep, full test suite raw output, and `git diff`.
+   - Post evidence comment to GitHub issue `#<id>` and apply label `status:fixed-resolved` (leaving issue OPEN).
+   - Verify live published payload via `gh issue view <ID>`.
+
+### WP-03: Final Coordinator Audit & Remote Synchronization Verification
+- Verify `cargo test --workspace` passes (exit code 0).
+- Verify `./target/release/verify-baseline . --no-domain` passes (exit code 0).
+- Verify `git status --short` and `git diff origin/<branch>` are empty.
+- Verify all issues `#439`..`#449` carry `status:fixed-resolved` (or reclassification) via `gh issue view`.

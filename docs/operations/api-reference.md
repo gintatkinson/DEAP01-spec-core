@@ -41,11 +41,13 @@
    - [6.4 BreadcrumbOverflow & Navigation](#64-breadcrumboverflow--navigation)
    - [6.5 Specialized Domain Widgets](#65-specialized-domain-widgets)
 7. [Core Compiler APIs](#7-core-compiler-apis)
-   - [7.1 SysML v2 AST Parser (sysmlv2_ast.py)](#71-sysml-v2-ast-parser-sysmlv2_astpy)
-   - [7.2 SysML Compiler & STPA Transpiler (compile_sysml.py)](#72-sysml-compiler--stpa-transpiler-compile_sysmlpy)
-   - [7.3 ConOps & Mission Intent Assembly Engine (assemble_conops.py)](#73-conops--mission-intent-assembly-engine-assemble_conopspy)
-8. [Parity Auditor Gates & Quality Validators](#8-parity-auditor-gates--quality-validators)
-   - [8.1 Base Auditor Interfaces (IValidator, WorkspaceRepository, Finding)](#81-base-auditor-interfaces-ivalidator-workspacerepository-finding)
+   - [7.1 SysML v2 AST Metamodel (crates/deap-core)](#71-sysml-v2-ast-metamodel-cratesdeap-core)
+   - [7.2 SysML Compiler & STPA Transpiler (crates/compile-sysml)](#72-sysml-compiler--stpa-transpiler-cratescompile-sysml)
+   - [7.3 ConOps & Mission Intent Assembly Engine (crates/assemble-conops)](#73-conops--mission-intent-assembly-engine-cratesassemble-conops)
+   - [7.4 Mechanical Baseline Verifier (crates/verify-baseline)](#74-mechanical-baseline-verifier-cratesverify-baseline)
+   - [7.5 Backlog Reconciler Engine (crates/reconcile-backlog)](#75-backlog-reconciler-engine-cratesreconcile-backlog)
+8. [Native Baseline Quality Gates & Invariant Validators (crates/verify-baseline)](#8-native-baseline-quality-gates--invariant-validators-cratesverify-baseline)
+   - [8.1 Baseline Verification Architecture](#81-baseline-verification-architecture)
    - [8.2 Gate 21: SemanticDiagramASTValidator](#82-gate-21-semanticdiagramastvalidator)
    - [8.3 Gate 22: SemanticProseInvariantValidator](#83-gate-22-semanticproseinvariantvalidator)
    - [8.4 Gate 23: FactualGroundingValidator](#84-gate-23-factualgroundingvalidator)
@@ -370,131 +372,104 @@ class ComponentFactory {
 
 ## 7. Core Compiler APIs
 
-### 7.1 SysML v2 AST Parser (sysmlv2_ast.py)
+### 7.1 SysML v2 AST Metamodel (crates/deap-core)
 
-**File:** `skills/spec-orchestrator/scripts/sysmlv2_ast.py`
+**Crate:** `crates/deap-core` (`deap_core::sysml_ast`)
 
 The canonical parser and metamodel for textual SysML v2 and KerML specification models.
 
-#### Core Classes & Signatures:
+#### Core Rust Structs:
 
-```python
-class SysMLParser:
-    """Parser for Canonical SysML v2 textual models."""
-
-    @classmethod
-    def parse_file(cls, filepath: str) -> SysMLPackage:
-        """Parses a SysML v2 source file into a canonical SysMLPackage AST."""
-        ...
-
-    @classmethod
-    def parse_text(cls, content: str, default_name: str = "SysML_Model") -> SysMLPackage:
-        """Parses textual SysML declarations into a SysMLPackage AST."""
-        ...
-
-    @classmethod
-    def parse_to_dict(cls, content: str, default_name: str = "SysML_Model") -> Dict[str, Any]:
-        """Parses textual SysML into a JSON-serializable dictionary."""
-        ...
-```
-
-#### Canonical AST Metamodel Dataclasses:
-
-| Class | Attributes | Description |
+| Struct | Fields | Description |
 | :--- | :--- | :--- |
-| `AttributeDef` | `name: str`, `type_name: str`, `doc: str`, `default_value: Optional[str]` | Primitive data attribute definition. |
-| `PortDef` | `name: str`, `type_name: str`, `direction: str`, `is_conjugated: bool`, `port_category: str`, `protocol_family: str`, `electrical_attributes: Dict`, `item_flows: List[ItemFlowDef]` | Physical or logical port with protocol bindings. |
-| `ItemFlowDef` | `name: str`, `direction: str`, `item_type: str`, `rate_hz: Optional[float]`, `unit: str`, `valid_range: str`, `default_value: Optional[str]` | Directed data flow or item stream across ports. |
-| `ActionDef` | `name: str`, `doc: str`, `params: List[AttributeDef]`, `return_type: str` | Discrete action or functional method. |
-| `SysMLOperationDef` | `name: str`, `doc: str`, `parameters: List[AttributeDef]`, `return_type: str`, `direction: str`, `visibility: str` | Operation signature with directional parameters. |
-| `SysMLCapabilityDef` | `name: str`, `doc: str`, `capability_id: str`, `inputs: List[PortDef]`, `outputs: List[PortDef]`, `preconditions: List[str]`, `postconditions: List[str]` | High-level system operational capability. |
-| `SysMLInteractionDef` | `name: str`, `doc: str`, `lifelines: List[str]`, `messages: List[Dict]`, `triggers: List[str]` | Scenario sequence diagram and messaging lifeline. |
-| `SysMLConstraintDef` | `name: str`, `expression: str`, `constraint_type: str`, `parameters: List[str]`, `doc: str` | Formal safety assertion or mathematical invariant. |
-| `SysMLTestCaseDef` | `name: str`, `doc: str`, `test_id: str`, `subject: str`, `verification_links: List[str]` | Formal verification test case definition. |
-| `RequirementDef` / `SysMLRequirementDef` | `name: str`, `req_id: str`, `text: str`, `doc: str`, `parent_id: Optional[str]`, `derived_from: List[str]` | Traceable engineering requirement. |
-| `StateDef` / `SysMLStateDef` | `name: str`, `doc: str`, `entry_actions: List[str]`, `exit_actions: List[str]`, `transitions: List[Dict]` | Formal state machine / statechart classifier. |
-| `UseCaseDef` / `SysMLUseCaseDef` | `name: str`, `doc: str`, `actors: List[str]`, `includes: List[str]`, `extends: List[str]`, `description: str` | Formal use case specification. |
-| `ItemDef` / `SysMLItemDef` | `name: str`, `doc: str`, `properties: List[AttributeDef]` | Data payload or message structure definition. |
-| `HazardDef` / `SysMLHazardDef` | `name: str`, `doc: str`, `hazard_id: str`, `severity: str`, `port_bindings: List[str]` | STPA hazard definition with severity and bindings. |
-| `ConnectionDef` / `SysMLConnectionDef` | `name: str`, `source_port: str`, `target_port: str`, `doc: str` | Topological connection linking two ports. |
-| `PartDef` / `SysMLPart` | `name: str`, `doc: str`, `parts: List[PartDef]`, `ports: List[PortDef]`, `attributes: List[AttributeDef]`, `actions: List[ActionDef]`, `operations: List[SysMLOperationDef]`, `constraints: List[SysMLConstraintDef]`, `requirements: List[RequirementDef]` | Structural subsystem part or block classifier. |
-| `SysMLPackage` | `name: str`, `doc: str`, `parts: List[PartDef]`, `sub_packages: List[SysMLPackage]`, `connections: List[ConnectionDef]`, `requirements: List[RequirementDef]`, `constraints: List[SysMLConstraintDef]` | Top-level or nested package container. |
+| `AttributeDef` | `name: String`, `type_name: String`, `doc: Option<String>`, `default_value: Option<String>` | Primitive data attribute definition. |
+| `PortDef` | `name: String`, `type_name: String`, `direction: String`, `is_conjugated: bool`, `port_category: String`, `protocol_family: String`, `flow_defs: Vec<FlowDef>` | Physical or logical port with protocol bindings. |
+| `FlowDef` | `name: String`, `direction: String`, `item_type: String`, `rate_hz: Option<f64>`, `unit: String`, `valid_range: Option<String>` | Directed data flow or item stream across ports. |
+| `ActionDef` | `name: String`, `doc: Option<String>`, `params: Vec<AttributeDef>`, `return_type: Option<String>` | Discrete action or functional method. |
+| `OperationDef` | `name: String`, `doc: Option<String>`, `parameters: Vec<AttributeDef>`, `return_type: Option<String>`, `direction: String` | Operation signature with directional parameters. |
+| `CapabilityDef` | `name: String`, `doc: Option<String>`, `capability_id: String`, `inputs: Vec<PortDef>`, `outputs: Vec<PortDef>` | High-level system operational capability. |
+| `InteractionDef` | `name: String`, `doc: Option<String>`, `lifelines: Vec<String>`, `messages: Vec<InteractionMessage>` | Scenario sequence diagram and messaging lifeline. |
+| `ConstraintDef` | `name: String`, `expression: String`, `constraint_type: String`, `doc: Option<String>` | Formal safety assertion or mathematical invariant. |
+| `TestCaseDef` | `name: String`, `doc: Option<String>`, `test_id: String`, `subject: String`, `verification_links: Vec<String>` | Formal verification test case definition. |
+| `RequirementDef` | `name: String`, `req_id: String`, `text: String`, `doc: Option<String>`, `derived_from: Vec<String>` | Traceable engineering requirement. |
+| `StateDef` | `name: String`, `doc: Option<String>`, `entry_actions: Vec<String>`, `exit_actions: Vec<String>`, `transitions: Vec<TransitionDef>` | Formal state machine / statechart classifier. |
+| `UseCaseDef` | `name: String`, `doc: Option<String>`, `actors: Vec<String>`, `includes: Vec<String>`, `extends: Vec<String>` | Formal use case specification. |
+| `ItemDef` | `name: String`, `doc: Option<String>`, `properties: Vec<AttributeDef>` | Data payload or message structure definition. |
+| `HazardDef` | `name: String`, `doc: Option<String>`, `hazard_id: String`, `severity: String`, `port_bindings: Vec<String>` | STPA hazard definition with severity and bindings. |
+| `ConnectionDef` | `name: String`, `source_port: String`, `target_port: String`, `doc: Option<String>` | Topological connection linking two ports. |
+| `PartDef` | `name: String`, `doc: Option<String>`, `parts: Vec<PartDef>`, `ports: Vec<PortDef>`, `attributes: Vec<AttributeDef>`, `actions: Vec<ActionDef>`, `operations: Vec<OperationDef>`, `constraints: Vec<ConstraintDef>`, `requirements: Vec<RequirementDef>` | Structural subsystem part or block classifier. |
+| `PackageDef` | `name: String`, `doc: Option<String>`, `parts: Vec<PartDef>`, `sub_packages: Vec<PackageDef>`, `connections: Vec<ConnectionDef>`, `requirements: Vec<RequirementDef>`, `constraints: Vec<ConstraintDef>` | Top-level or nested package container. |
 
-### 7.2 SysML Compiler & STPA Transpiler (compile_sysml.py)
+### 7.2 SysML Compiler & STPA Transpiler (crates/compile-sysml)
 
-**File:** `scripts/compile_sysml.py`
+**Crate:** `crates/compile-sysml`
 
 Compiles SysML v2 models into structured ASTs, transpiles STPA/FMECA safety tables into formal `constraint def` expressions, and performs bidirectional closed-loop synchronization.
 
 #### Key Functions:
 
-- `parse_stpa_ucas(content: str) -> List[Dict[str, Any]]`: Parses STPA Unsafe Control Actions from markdown tables into structured dictionaries containing `id`, `controller`, `control_action`, `category`, `context`, `hazard`, `constraint`, and `severity`.
-- `parse_fmeca_modes(content: str) -> List[Dict[str, Any]]`: Parses FMECA failure modes, effects, and criticality numbers into failure analysis structures.
-- `compile_uca_to_constraint(uca: Dict[str, Any]) -> SysMLConstraintDef`: Transforms an STPA UCA into a formal SysML v2 `constraint def` and `assert constraint` expression configured for Run-Time Assurance (RTA) mathematical proving.
-- `compile_fmeca_to_constraint(fmeca: Dict[str, Any], valid_parts: Optional[Set[str]]) -> Optional[SysMLConstraintDef]`: Synthesizes formal fault containment constraints from FMECA failure modes.
-- `extract_safety_constraints_to_requirements(content: str) -> List[RequirementDef]`: Translates safety constraints into formal traceable SysML requirement blocks.
-- `compile_stpa_to_ast(content: str) -> SysMLPackage`: Ingests STPA hazard analysis and compiles an entire safety metamodel package.
-- `compile_stpa_to_sysml(content: str) -> str`: Serializes compiled safety constraints directly to textual SysML v2 syntax.
-- `reverse_sync_specs_to_sysml(docs_dir: str, schema_path: str, output_path: str, digest_path: str) -> bool`: Closed-loop reverse synchronization extracting ConOps, Use Cases, User Stories, Features, Epics, and Safety Matrices into SysML AST nodes.
-- `parse_sysml(content: str) -> Dict[str, List[str]]`: High-level parser extracting components, operations, attributes, and constraints.
-- `enforce_pipeline0_compilation_gate(schema_path, output_path, digest_path) -> int`: Executes the Pipeline-0 compilation quality gate ensuring zero-loss schema compilation.
+- `parse_sysml(source: &str) -> Result<PackageDef, ParseError>`: Parses textual SysML v2 source into a strongly-typed `PackageDef` AST.
+- `to_sysml(package: &PackageDef) -> String`: Serializes compiled AST structures directly to canonical SysML v2 syntax.
+- `compile_stpa_to_constraints(uca: &UnsafeControlAction) -> ConstraintDef`: Transforms an STPA UCA into a formal SysML v2 `constraint def` and `assert constraint` expression.
+- `generate_fmeca_matrix(content: &str, config: &FmecaScoringConfig) -> Vec<FmecaRow>`: Synthesizes formal fault containment constraints from FMECA failure modes.
+- `forward_sync_sysml_to_specs(options: &ForwardSyncOptions) -> Result<(), SyncError>`: Projects SysML v2 model definitions into downstream specification units.
+- `reverse_sync_specs_to_sysml(options: &ReverseSyncOptions) -> Result<(), SyncError>`: Closed-loop reverse synchronization extracting ConOps, Use Cases, User Stories, Features, Epics, and Safety Matrices into SysML AST nodes.
 
-### 7.3 ConOps & Mission Intent Assembly Engine (assemble_conops.py)
+### 7.3 ConOps & Mission Intent Assembly Engine (crates/assemble-conops)
 
-**File:** `scripts/assemble_conops.py`
+**Crate:** `crates/assemble-conops`
 
 Assembles modular ConOps and Mission Intent units into canonical systems engineering specifications conforming to ISO/IEC/IEEE 29148, ISO/IEC/IEEE 15288, and OMG UAF.
 
 #### Core Contracts & Functions:
 
-```python
-class LifecycleType(str, Enum):
-    REUSABLE_RECOVERY = "REUSABLE_RECOVERY"
-    EXPENDABLE_DISPOSAL = "EXPENDABLE_DISPOSAL"
-    CONTINUOUS_STATIONARY = "CONTINUOUS_STATIONARY"
-    PERSISTENT_ORBITAL = "PERSISTENT_ORBITAL"
-    TRACK_BOUND_GUIDED = "TRACK_BOUND_GUIDED"
+```rust
+pub struct SubsystemPart {
+    pub name: String,
+    pub doc: Option<String>,
+    pub ports: Vec<SubsystemPort>,
+}
 
-class ContainmentActionType(str, Enum):
-    CONTROLLED_RECOVERY_LANDING = "CONTROLLED_RECOVERY_LANDING"
-    CONTROLLED_DECOMMISSIONING_DISPOSAL = "CONTROLLED_DECOMMISSIONING_DISPOSAL"
-    ELECTROMECHANICAL_BRAKE_LOCK = "ELECTROMECHANICAL_BRAKE_LOCK"
-    DEORBIT_DISPOSAL_BURN = "DEORBIT_DISPOSAL_BURN"
-    TRACK_SIDING_BRAKE = "TRACK_SIDING_BRAKE"
-
-@dataclass
-class LifecycleContract:
-    lifecycle_type: LifecycleType
-    containment_action: ContainmentActionType
-    bingo_safety_action: str
-    end_state: str
-    failsafe_sequence: str
-    post_op_state: str
-    primary_terminal_target: str
-    secondary_terminal_target: str
-    primary_recovery_facility: str
-    secondary_recovery_facility: str
-    lifecycle_transit_mode: str
+pub struct SubsystemPort {
+    pub name: String,
+    pub port_type: String,
+    pub direction: String,
+}
 ```
 
-- `assemble_document(units_dir: str, doc_title: Optional[str] = None, doc_version: Optional[str] = None, doc_date: Optional[str] = None, params: Optional[Any] = None, canonical_whitelist: Optional[List[str]] = None) -> Tuple[str, List[str]]`: Compiles modular markdown units into a unified document with automated AST parameter substitution, TOC generation, and anchor validation.
-- `assemble_conops(input_dir: str, output_dir: str, verify_only: bool = False, params: Optional[Any] = None, domain: Optional[str] = None, workspace_dir: Optional[str] = None) -> bool`: Orchestrates end-to-end assembly, validation, and domain-aware routing of `CONOPS.md` and `MISSION_INTENT.md`.
+- `assemble_document(units_dir: &Path, doc_title: Option<&str>, doc_version: Option<&str>, doc_date: Option<&str>, params: Option<&ConopsParams>, canonical_whitelist: Option<&[&str]>) -> Result<String, AssembleError>`: Compiles modular markdown units into a unified document with automated AST parameter substitution, TOC generation, and anchor validation.
+- `assemble_conops(input_dir: &Path, output_dir: &Path, verify_only: bool, params: Option<&ConopsParams>) -> Result<(), AssembleError>`: Orchestrates end-to-end assembly, validation, and domain-aware routing of `CONOPS.md` and `MISSION_INTENT.md`.
+
+### 7.4 Mechanical Baseline Verifier (crates/verify-baseline)
+
+**Crate:** `crates/verify-baseline`
+
+Native Rust baseline validation engine executing Checks 10 through 35 to guarantee fail-closed governance, structural integrity, and zero script drift.
+
+### 7.5 Backlog Reconciler Engine (crates/reconcile-backlog)
+
+**Crate:** `crates/reconcile-backlog`
+
+Synchronizes local specification frontmatter, checklists, and diagram traceability matrices with remote issue trackers (GitHub Issues / GitLab Work Items).
 
 ---
 
-## 8. Parity Auditor Gates & Quality Validators
+## 8. Native Baseline Quality Gates & Invariant Validators (crates/verify-baseline)
 
-The Parity Auditor engine (`skills/spec-orchestrator/parity_auditor`) executes a comprehensive suite of static quality gates enforcing architectural parity, metrology invariants, and traceability.
+The native Rust baseline verifier (`crates/verify-baseline`) executes a comprehensive suite of static quality gates enforcing architectural parity, metrology invariants, and traceability.
 
-### 8.1 Base Auditor Interfaces (IValidator, WorkspaceRepository, Finding)
+### 8.1 Baseline Verification Architecture
 
-- **`IValidator`** (`parity_auditor/validators/base.py`): Abstract base class defining `name`, `description`, and `validate(repo: WorkspaceRepository) -> List[Finding]`.
-- **`WorkspaceRepository`** (`parity_auditor/core/workspace.py`): Repository abstraction providing cached file readers for markdown documents, SysML models, and configuration files.
-- **`Finding`** (`parity_auditor/core/findings.py`): Standardized diagnostic record containing `rule_id`, `message`, `path`, `line_number`, and `severity`.
+The verification suite is organized into modular check suites under `crates/verify-baseline/src/checks/`:
+- **`hygiene.rs`**: Checks 10, 11 (Gitignore, zero `.DS_Store` or artifact drift).
+- **`structural.rs`**: Checks 12-19, 31-35 (Blueprint cleanliness, schema clean landing zones, zero shell scripts, zero python scripts, zero regex, handoff integrity).
+- **`wbs.rs`**: Checks 20-23 (WBS hierarchy and SysML AST element coverage).
+- **`conops.rs`**: Checks 24, 26, 27 (Operational allocation, ConOps/Mission Intent completeness, research inventory grounding).
+- **`metrology.rs`**: Checks 25, 28, 29, 30 (SI 7D metrology, coverage digest, obligation witness registry, architecture viewpoints).
 
 ### 8.2 Gate 21: SemanticDiagramASTValidator
 
-**File:** `skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/semantic_diagram_ast_validator.py`
+**Module:** `crates/verify-baseline/src/checks/metrology.rs`
 
 Enforces 1:1 topological alignment between Mermaid class/component diagrams and SysML v2 AST nodes:
 - Validates that every class, subsystem block, or component rendered in Mermaid diagrams resolves to a defined AST `PartDef`.
@@ -502,13 +477,13 @@ Enforces 1:1 topological alignment between Mermaid class/component diagrams and 
 
 ### 8.3 Gate 22: SemanticProseInvariantValidator
 
-**File:** `skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/semantic_prose_invariant_validator.py`
+**Module:** `crates/verify-baseline/src/checks/conops.rs`
 
 Validates that physical invariants and safety constraints described in natural language prose adhere to unambiguous modal verbs (RFC 2119 / ISO 29148) and maintain mathematical alignment with formal safety rules.
 
 ### 8.4 Gate 23: FactualGroundingValidator
 
-**File:** `skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/factual_grounding_validator.py`
+**Module:** `crates/verify-baseline/src/checks/structural.rs`
 
 Enforces factual grounding and parametric Single Source of Truth (SSOT) integrity against SysML v2 AST models and OEM Level 0 schemas:
 - **Structural Descriptors & Counts**: Verifies component counts against schema ground truth (`factual-grounding-numeric-drift`).
@@ -518,7 +493,7 @@ Enforces factual grounding and parametric Single Source of Truth (SSOT) integrit
 
 ### 8.5 Gate 24: OperationalAllocationValidator
 
-**File:** `skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/operational_allocation_validator.py`
+**Module:** `crates/verify-baseline/src/checks/conops.rs`
 
 Verifies the operational-to-resource allocation matrix:
 - Ensures every operational activity defined in Operational Views (OV-5b / ConOps) is allocated to at least one structural subsystem resource in System Views (SV-1).
@@ -526,43 +501,43 @@ Verifies the operational-to-resource allocation matrix:
 
 ### 8.6 Gate 25: StandardsAndMeasurementValidator
 
-**File:** `skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/standards_measurement_validator.py`
+**Module:** `crates/verify-baseline/src/checks/metrology.rs`
 
 Enforces dimensional metrology and standards taxonomy lattice compliance:
-- **SI 7-Dimensional Exponent Vectors**: Represents physical quantities in $\\mathbb{Z}^7$:
+- **SI 7-Dimensional Exponent Vectors**: Represents physical quantities in $\mathbb{Z}^7$:
   $$D(Q) = [d_L, d_M, d_T, d_I, d_{\Theta}, d_N, d_J] \in \mathbb{Z}^7$$
 - **Theorem 3 (Dimensional Homogeneity)**: Asserts that for every port connection $c = (p_{src}, p_{dst})$, the dimensional vectors match: $D(e_{src}) = D(e_{dst})$.
-- **Nyquist-Shannon Sampling Frequency**: Enforces sampling rate bounds: $f_{sample} \\ge 2 \\cdot f_{max}$.
+- **Nyquist-Shannon Sampling Frequency**: Enforces sampling rate bounds: $f_{sample} \ge 2 \cdot f_{max}$.
 - **OMG UAF Standards Lattice**: Validates standard authority bodies (RTCA, SAE, ISO, IEC, ASTM) and monotonic assurance levels (DAL-A..E, ASIL-A..D, SAIL I..VI, SIL 1..4).
 
 ### 8.7 Gate 26: ConopsCompletenessValidator & MissionIntentCompletenessValidator
 
-**File:** `skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/conops_completeness_validator.py`
+**Module:** `crates/verify-baseline/src/checks/conops.rs`
 
 Verifies that Concept of Operations and Mission Intent specifications contain all mandatory structural sections, Mission Essential Task Lists (METL), environmental envelopes, and tactical Go/No-Go decision matrices.
 
 ### 8.8 Gate 27: ResearchInventoryValidator
 
-**File:** `skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/research_inventory_validator.py`
+**Module:** `crates/verify-baseline/src/checks/conops.rs`
 
 Enforces 100% citation grounding for technical, regulatory, and architectural claims against declared research inventories under `docs/research/`.
 
 ### 8.9 Gate 28: CoverageDigestValidator
 
-**File:** `skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/coverage_digest_validator.py`
+**Module:** `crates/verify-baseline/src/checks/metrology.rs`
 
 Validates that `.pipeline/schema-digest.json` accounts for 100% of input schema nodes and confirms bidirectional mapping to downstream specifications.
 
 ### 8.10 Gate 29: ObligationWitnessValidator
 
-**File:** `skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/obligation_witness_validator.py`
+**Module:** `crates/verify-baseline/src/checks/metrology.rs`
 
 Enforces the obligation-witness registry invariant:
 - Asserts that every contractual requirement, safety constraint, and interface obligation is linked to an empirical verification witness (unit test, simulation model, or inspection test).
 
 ### 8.11 Gate 30: ArchitectureViewpointValidator
 
-**File:** `skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/architecture_viewpoint_validator.py`
+**Module:** `crates/verify-baseline/src/checks/metrology.rs`
 
 Enforces fail-closed verification of the 11 canonical architecture diagrams across 5 viewpoints:
 1. **Operational Viewpoint (OV)**:

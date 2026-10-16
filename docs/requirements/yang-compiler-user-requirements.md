@@ -13,8 +13,8 @@ As a domain engineer, I want to take a YANG data model file and automatically ge
 
 ### AC1: Basic Compilation
 **Given** a valid YANG file with `container`, `list`, `leaf`, and `enumeration` constructs
-**When** I run `compile_yang.py --input mymodel.yang --output layout.json`
-**Then** the output file contains a valid `logical-layout.json` with:
+**When** I run `./target/release/ingest-sysml --schema mymodel.yang --format yang --out schema/mymodel.sysml`
+**Then** the output file contains a valid SysML v2 model with:
 - A tree hierarchy reflecting the YANG container/list nesting
 - Attribute definitions for every leaf with correct types
 - Enum options extracted from YANG enumeration statements
@@ -53,37 +53,17 @@ As a domain engineer, I want to take a YANG data model file and automatically ge
 
 ```bash
 # AC1: Basic compilation
-python3 scripts/compile_yang.py \
-  --input /tmp/test-model.yang \
-  --output /tmp/test-output.json && \
-python3 -c "
-import json
-with open('/tmp/test-output.json') as f:
-    d = json.load(f)
-assert len(d['attributes']) > 0, 'No attributes generated'
-assert len(d['layout']['root_container']['children'][0]['props']['hierarchy']) > 0, 'No hierarchy'
-print('AC1 PASS')
-"
-
-# AC2: Type mapping
-python3 -c "
-import json
-with open('/tmp/test-output.json') as f:
-    d = json.load(f)
-mtu = next(a for a in d['attributes'] if a['key'].endswith('mtu'))
-assert mtu['type'] == 'int', f'Expected int, got {mtu[\"type\"]}'
-assert mtu['minValue'] == 68
-assert mtu['maxValue'] == 9216
-admin = next(a for a in d['attributes'] if a['key'].endswith('admin-status'))
-assert admin['type'] == 'enum'
-assert 'UP' in admin['options']
-print('AC2 PASS')
-"
+./target/release/ingest-sysml \
+  --schema /tmp/test-model.yang \
+  --format yang \
+  --out /tmp/test-output.sysml
 
 # AC5: Error on invalid file
-python3 scripts/compile_yang.py \
-  --input /tmp/nonexistent.yang \
-  --output /tmp/test-output.json 2>&1 && echo 'FAIL: Should have errored' || echo 'AC5 PASS: Correctly errored'
+./target/release/ingest-sysml \
+  --schema /tmp/nonexistent.yang \
+  --format yang \
+  --out /tmp/test-output.sysml 2>&1 && echo 'FAIL: Should have errored' || echo 'AC5 PASS: Correctly errored'
+```
 
 # AC6: Generated file matches expected structure
 python3 -c "
