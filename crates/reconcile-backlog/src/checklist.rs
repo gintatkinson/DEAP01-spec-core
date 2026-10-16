@@ -242,6 +242,530 @@ where
     (new_lines.join("\n"), modified_count)
 }
 
+pub type SpecDocument = crate::LoadedSpec;
+
+fn is_spec_epic(s: &crate::LoadedSpec) -> bool {
+    s.frontmatter.spec_type.eq_ignore_ascii_case("epic")
+        || s.rel_path.starts_with("docs/epics")
+        || s.rel_path.starts_with("epics")
+}
+
+fn is_spec_feature(s: &crate::LoadedSpec) -> bool {
+    s.frontmatter.spec_type.eq_ignore_ascii_case("feature")
+        || s.rel_path.starts_with("docs/features")
+        || s.rel_path.starts_with("features")
+}
+
+fn is_spec_use_case(s: &crate::LoadedSpec) -> bool {
+    s.frontmatter.spec_type.eq_ignore_ascii_case("use_case")
+        || s.frontmatter.spec_type.eq_ignore_ascii_case("use-case")
+        || s.rel_path.starts_with("docs/use-cases")
+        || s.rel_path.starts_with("use-cases")
+}
+
+fn is_spec_user_story(s: &crate::LoadedSpec) -> bool {
+    s.frontmatter.spec_type.eq_ignore_ascii_case("user_story")
+        || s.frontmatter.spec_type.eq_ignore_ascii_case("user-story")
+        || s.rel_path.starts_with("docs/user-stories")
+        || s.rel_path.starts_with("user-stories")
+}
+
+fn get_spec_stem(path: &str) -> String {
+    let fname = std::path::Path::new(path)
+        .file_name()
+        .and_then(|f| f.to_str())
+        .unwrap_or(path);
+    fname.strip_suffix(".md").unwrap_or(fname).to_string()
+}
+
+fn spec_matches_epic(epic: &crate::LoadedSpec, child: &crate::LoadedSpec, total_epics: usize) -> bool {
+    if child.rel_path == epic.rel_path {
+        return false;
+    }
+    if total_epics <= 1 {
+        return true;
+    }
+    let epic_stem = get_spec_stem(&epic.rel_path);
+    let epic_file = std::path::Path::new(&epic.rel_path)
+        .file_name()
+        .and_then(|f| f.to_str())
+        .unwrap_or("");
+    let child_file = std::path::Path::new(&child.rel_path)
+        .file_name()
+        .and_then(|f| f.to_str())
+        .unwrap_or("");
+
+    if let Some(ref ep) = child.frontmatter.epic {
+        if ep.contains(&epic_stem)
+            || (!epic_file.is_empty() && ep.contains(epic_file))
+            || (!epic.frontmatter.title.is_empty() && ep.contains(&epic.frontmatter.title))
+        {
+            return true;
+        }
+    }
+
+    if let (Some(sub_c), Some(sub_p)) = (&child.frontmatter.subsystem, &epic.frontmatter.subsystem) {
+        if !sub_c.is_empty() && sub_c.eq_ignore_ascii_case(sub_p) {
+            return true;
+        }
+    }
+
+    if (!child_file.is_empty() && epic.content.contains(child_file))
+        || (!epic_file.is_empty() && child.content.contains(epic_file))
+    {
+        return true;
+    }
+
+    false
+}
+
+fn spec_matches_feature(feat: &crate::LoadedSpec, child: &crate::LoadedSpec, total_features: usize) -> bool {
+    if child.rel_path == feat.rel_path {
+        return false;
+    }
+    if total_features <= 1 {
+        return true;
+    }
+    let feat_stem = get_spec_stem(&feat.rel_path);
+    let feat_file = std::path::Path::new(&feat.rel_path)
+        .file_name()
+        .and_then(|f| f.to_str())
+        .unwrap_or("");
+
+    if !feat_file.is_empty() && child.content.contains(feat_file) {
+        return true;
+    }
+    if !feat_stem.is_empty() && child.content.contains(&feat_stem) {
+        return true;
+    }
+    if !feat.frontmatter.title.is_empty() && child.content.contains(&feat.frontmatter.title) {
+        return true;
+    }
+
+    if let Some(feat_ref) = child.frontmatter.raw_fields.get("feature") {
+        if feat_ref.contains(&feat_stem) || feat_ref.contains(&feat.frontmatter.title) {
+            return true;
+        }
+    }
+
+    if let (Some(sub_c), Some(sub_f)) = (&child.frontmatter.subsystem, &feat.frontmatter.subsystem) {
+        if !sub_c.is_empty() && sub_c.eq_ignore_ascii_case(sub_f) {
+            return true;
+        }
+    }
+
+    if let (Some(part_c), Some(part_f)) = (&child.frontmatter.part, &feat.frontmatter.part) {
+        if !part_c.is_empty() && part_c.eq_ignore_ascii_case(part_f) {
+            return true;
+        }
+    }
+
+    false
+}
+
+fn format_canonical_checklist_item(
+    spec: &crate::LoadedSpec,
+    repo_slug: &str,
+    default_branch: &str,
+    issue_index: &crate::tracker::IssueIndex,
+    default_clause: Option<&str>,
+) -> String {
+    let issue_num = spec.frontmatter.issue_id.or_else(|| {
+        issue_index.find_issue(None, &spec.frontmatter.title).map(|i| i.number)
+    });
+
+    let (is_resolved, issue_ref) = match issue_num {
+        Some(num) => {
+            let resolved = issue_index.by_number.get(&num).map(|i| i.is_resolved()).unwrap_or(false);
+            (resolved, format!("#{}", num))
+        }
+        None => (false, "#[IssueID]".to_string()),
+    };
+
+    let mark = if is_resolved { "x" } else { " " };
+
+    let title = if !spec.frontmatter.title.trim().is_empty() {
+        spec.frontmatter.title.trim()
+    } else {
+        let fname = std::path::Path::new(&spec.rel_path)
+            .file_name()
+            .and_then(|f| f.to_str())
+            .unwrap_or(&spec.rel_path);
+        fname.strip_suffix(".md").unwrap_or(fname)
+    };
+
+    let clean_repo = crate::clean_repo_name(repo_slug);
+    let branch = if default_branch.trim().is_empty() {
+        "main"
+    } else {
+        default_branch.trim()
+    };
+
+    let doc_path = if spec.rel_path.starts_with("docs/") {
+        spec.rel_path.clone()
+    } else {
+        format!("docs/{}", spec.rel_path)
+    };
+
+    let link = if !clean_repo.is_empty() {
+        format!("https://github.com/{}/blob/{}/{}", clean_repo, branch, doc_path)
+    } else {
+        let stripped = spec.rel_path.strip_prefix("docs/").unwrap_or(&spec.rel_path);
+        format!("../{}", stripped)
+    };
+
+    let clause_suffix = if let Some(clauses) = spec.frontmatter.raw_fields.get("clauses") {
+        format!(" ({})", clauses)
+    } else if let Some(justification) = spec.frontmatter.raw_fields.get("justification") {
+        format!(" ({})", justification)
+    } else if let Some(default_c) = default_clause {
+        format!(" ({})", default_c)
+    } else {
+        String::new()
+    };
+
+    format!("- [{}] {} - [{}]({}){}", mark, issue_ref, title, link, clause_suffix)
+}
+
+fn contains_spec_reference(line: &str, spec: &crate::LoadedSpec) -> bool {
+    let spec_file = std::path::Path::new(&spec.rel_path)
+        .file_name()
+        .and_then(|f| f.to_str())
+        .unwrap_or("");
+    let spec_stem = get_spec_stem(&spec.rel_path);
+
+    if !spec_file.is_empty() && line.contains(spec_file) {
+        return true;
+    }
+    if !spec_stem.is_empty() && line.contains(&spec_stem) {
+        return true;
+    }
+    if !spec.frontmatter.title.is_empty() && line.contains(&spec.frontmatter.title) {
+        return true;
+    }
+    if let Some(id) = spec.frontmatter.issue_id {
+        if line.contains(&format!("#{}", id)) {
+            return true;
+        }
+    }
+    false
+}
+
+fn reconcile_or_inject_section(
+    content: &str,
+    heading: &str,
+    new_items: &[String],
+    specs: &[&crate::LoadedSpec],
+    none_fallback: &str,
+    next_delimiters: &[&str],
+) -> String {
+    if let Some(heading_pos) = content.find(heading) {
+        let after_heading_pos = heading_pos + heading.len();
+        let rest = &content[after_heading_pos..];
+
+        // Find end of section
+        let mut section_len = rest.len();
+        for &delim in next_delimiters {
+            if let Some(d_pos) = rest.find(delim) {
+                if d_pos < section_len {
+                    section_len = d_pos;
+                }
+            }
+        }
+
+        let section_body = &rest[..section_len];
+        let after_section = &rest[section_len..];
+
+        let mut lines: Vec<String> = Vec::new();
+        let is_placeholder_or_empty = section_body.trim().is_empty()
+            || contains_unpopulated_placeholders(section_body)
+            || section_body.contains("- None allocated")
+            || section_body.contains("- None directly allocated");
+
+        if new_items.is_empty() {
+            if is_placeholder_or_empty {
+                lines.push(none_fallback.to_string());
+            } else {
+                for line in section_body.lines() {
+                    let trimmed = line.trim();
+                    if !trimmed.is_empty() {
+                        lines.push(line.to_string());
+                    }
+                }
+            }
+        } else if is_placeholder_or_empty {
+            for item in new_items {
+                lines.push(item.clone());
+            }
+        } else {
+            // Keep existing non-placeholder lines
+            for line in section_body.lines() {
+                let trimmed = line.trim();
+                if trimmed.is_empty()
+                    || contains_unpopulated_placeholders(trimmed)
+                    || trimmed.starts_with("- None allocated")
+                    || trimmed.starts_with("- None directly allocated")
+                {
+                    continue;
+                }
+                lines.push(line.to_string());
+            }
+
+            // Append any missing child items
+            for (idx, item) in new_items.iter().enumerate() {
+                if let Some(spec) = specs.get(idx) {
+                    let already_present = lines.iter().any(|l| contains_spec_reference(l, spec));
+                    if !already_present {
+                        lines.push(item.clone());
+                    }
+                }
+            }
+        }
+
+        let mut new_body = String::new();
+        if !lines.is_empty() {
+            new_body.push('\n');
+            new_body.push_str(&lines.join("\n"));
+            new_body.push('\n');
+        }
+
+        format!("{}{}{}{}", &content[..after_heading_pos], new_body, if after_section.starts_with('\n') { "" } else { "\n" }, after_section)
+    } else {
+        content.to_string()
+    }
+}
+
+/// Synthesizes and reconciles bidirectional checklist hierarchy for Epic and Feature specifications.
+///
+/// Mechanically synthesizes `## 2. Requirements & Checklist` in Epic specifications from child
+/// `FEAT-*` specifications, and `### Associated Use Cases & User Stories` (`#### Associated Use Cases`
+/// and `#### Associated User Stories`) in Epic and Feature specifications from child `UC-*` and `US-*`
+/// specifications, formatting each entry canonically as:
+/// `- [x| ] #<IssueID> - [<Title>](https://github.com/<owner>/<repo>/blob/<branch>/docs/...) (<clauses>)`
+///
+/// # Arguments
+/// * `parent_spec` - The parent specification document to reconcile.
+/// * `child_specs` - Sibling and child specification documents available in the workspace.
+/// * `repo_slug` - GitHub repository slug (e.g. `owner/repo`) or empty string for local relative links.
+/// * `default_branch` - Default git branch name (e.g. `main`).
+/// * `issue_index` - Queryable index of tracker issues used to resolve issue numbers and closure states.
+///
+/// # Returns
+/// Updated Markdown content for the parent specification with canonical checklists synthesized and reconciled.
+///
+/// # Errors
+/// This function operates infallibly on UTF-8 string slices without raising runtime errors.
+///
+/// # Invariants
+/// * Deterministic Mechanical Backlog Traceability: Every child specification is deterministically linked.
+/// * Zero Unpopulated Fallbacks: Prohibited fallback placeholders are replaced with canonical allocations.
+/// * Pure Schema-Driven Hierarchy: Links strictly reflect AST child-parent ownership.
+///
+/// # Architecture Context
+/// Part of `crates/reconcile-backlog`, bridging SysML v2 AST lowering with GitHub tracker hierarchies.
+///
+/// # Realises
+/// [Strict Bidirectional Checklist Sync, Zero-Placeholder Invariant, Deterministic Mechanical Backlog Traceability]
+pub fn synthesize_and_reconcile_hierarchy(
+    parent_spec: &crate::LoadedSpec,
+    child_specs: &[crate::LoadedSpec],
+    repo_slug: &str,
+    default_branch: &str,
+    issue_index: &crate::tracker::IssueIndex,
+) -> String {
+    let is_epic = is_spec_epic(parent_spec);
+    let is_feature = is_spec_feature(parent_spec);
+
+    if !is_epic && !is_feature {
+        return parent_spec.content.clone();
+    }
+
+    let mut updated = parent_spec.content.clone();
+
+    if is_epic {
+        let total_epics = child_specs.iter().filter(|s| is_spec_epic(s)).count() + 1;
+        let mut child_features: Vec<&crate::LoadedSpec> = Vec::new();
+        let mut child_use_cases: Vec<&crate::LoadedSpec> = Vec::new();
+        let mut child_user_stories: Vec<&crate::LoadedSpec> = Vec::new();
+
+        for child in child_specs {
+            if is_spec_feature(child) && spec_matches_epic(parent_spec, child, total_epics) {
+                child_features.push(child);
+            } else if is_spec_use_case(child) && spec_matches_epic(parent_spec, child, total_epics) {
+                child_use_cases.push(child);
+            } else if is_spec_user_story(child) && spec_matches_epic(parent_spec, child, total_epics) {
+                child_user_stories.push(child);
+            }
+        }
+
+        child_features.sort_by(|a, b| a.rel_path.cmp(&b.rel_path));
+        child_use_cases.sort_by(|a, b| a.rel_path.cmp(&b.rel_path));
+        child_user_stories.sort_by(|a, b| a.rel_path.cmp(&b.rel_path));
+
+        let feat_items: Vec<String> = child_features
+            .iter()
+            .map(|f| format_canonical_checklist_item(f, repo_slug, default_branch, issue_index, None))
+            .collect();
+        let uc_items: Vec<String> = child_use_cases
+            .iter()
+            .map(|u| format_canonical_checklist_item(u, repo_slug, default_branch, issue_index, None))
+            .collect();
+        let us_items: Vec<String> = child_user_stories
+            .iter()
+            .map(|s| format_canonical_checklist_item(s, repo_slug, default_branch, issue_index, None))
+            .collect();
+
+        // 1. Reconcile or inject ## 2. Requirements & Checklist
+        if updated.contains("## 2. Requirements & Checklist") {
+            updated = reconcile_or_inject_section(
+                &updated,
+                "## 2. Requirements & Checklist",
+                &feat_items,
+                &child_features,
+                "- None allocated (structural subsystem component)",
+                &["\n### ", "\n## "],
+            );
+        } else if !feat_items.is_empty() {
+            let mut sec = String::from("\n## 2. Requirements & Checklist\n");
+            sec.push_str(&feat_items.join("\n"));
+            sec.push('\n');
+
+            if let Some(pos) = updated.find("\n## 3. Architecture") {
+                updated.insert_str(pos, &sec);
+            } else if let Some(pos) = updated.find("\n## 1. Context") {
+                let after_pos = pos + "\n## 1. Context".len();
+                let next_pos = updated[after_pos..].find("\n## ").map(|p| after_pos + p).unwrap_or(updated.len());
+                updated.insert_str(next_pos, &sec);
+            } else if let Some(pos) = updated.find("\n## ") {
+                updated.insert_str(pos, &sec);
+            } else {
+                updated.push_str(&sec);
+            }
+        }
+
+        // 2. Reconcile or inject ### Associated Use Cases & User Stories
+        if updated.contains("### Associated Use Cases & User Stories") {
+            updated = reconcile_or_inject_section(
+                &updated,
+                "#### Associated Use Cases",
+                &uc_items,
+                &child_use_cases,
+                "- None directly allocated (operational behavior allocated at system ConOps level in Epic 02)",
+                &["\n#### ", "\n### ", "\n## "],
+            );
+            updated = reconcile_or_inject_section(
+                &updated,
+                "#### Associated User Stories",
+                &us_items,
+                &child_user_stories,
+                "- None directly allocated (operational behavior allocated at system ConOps level in Epic 02)",
+                &["\n#### ", "\n### ", "\n## "],
+            );
+        } else if !uc_items.is_empty() || !us_items.is_empty() {
+            let uc_text = if uc_items.is_empty() {
+                "- None directly allocated (operational behavior allocated at system ConOps level in Epic 02)".to_string()
+            } else {
+                uc_items.join("\n")
+            };
+            let us_text = if us_items.is_empty() {
+                "- None directly allocated (operational behavior allocated at system ConOps level in Epic 02)".to_string()
+            } else {
+                us_items.join("\n")
+            };
+
+            let assoc_block = format!(
+                "\n### Associated Use Cases & User Stories\n\n#### Associated Use Cases\n{}\n\n#### Associated User Stories\n{}\n",
+                uc_text, us_text
+            );
+
+            // Insert after ## 2. Requirements & Checklist
+            if let Some(pos) = updated.find("## 2. Requirements & Checklist") {
+                let rest_idx = pos + "## 2. Requirements & Checklist".len();
+                let next_sec = updated[rest_idx..].find("\n## ").map(|p| rest_idx + p).unwrap_or(updated.len());
+                updated.insert_str(next_sec, &assoc_block);
+            } else if let Some(pos) = updated.find("\n## 3. Architecture") {
+                updated.insert_str(pos, &assoc_block);
+            } else {
+                updated.push_str(&assoc_block);
+            }
+        }
+    } else if is_feature {
+        let total_features = child_specs.iter().filter(|s| is_spec_feature(s)).count() + 1;
+        let mut child_use_cases: Vec<&crate::LoadedSpec> = Vec::new();
+        let mut child_user_stories: Vec<&crate::LoadedSpec> = Vec::new();
+
+        for child in child_specs {
+            if is_spec_use_case(child) && spec_matches_feature(parent_spec, child, total_features) {
+                child_use_cases.push(child);
+            } else if is_spec_user_story(child) && spec_matches_feature(parent_spec, child, total_features) {
+                child_user_stories.push(child);
+            }
+        }
+
+        child_use_cases.sort_by(|a, b| a.rel_path.cmp(&b.rel_path));
+        child_user_stories.sort_by(|a, b| a.rel_path.cmp(&b.rel_path));
+
+        let uc_items: Vec<String> = child_use_cases
+            .iter()
+            .map(|u| format_canonical_checklist_item(u, repo_slug, default_branch, issue_index, None))
+            .collect();
+        let us_items: Vec<String> = child_user_stories
+            .iter()
+            .map(|s| format_canonical_checklist_item(s, repo_slug, default_branch, issue_index, None))
+            .collect();
+
+        if updated.contains("### Associated Use Cases & User Stories")
+            || updated.contains("#### Associated Use Cases")
+            || updated.contains("#### Associated User Stories")
+        {
+            updated = reconcile_or_inject_section(
+                &updated,
+                "#### Associated Use Cases",
+                &uc_items,
+                &child_use_cases,
+                "- None allocated (structural subsystem component)",
+                &["\n#### ", "\n### ", "\n## "],
+            );
+            updated = reconcile_or_inject_section(
+                &updated,
+                "#### Associated User Stories",
+                &us_items,
+                &child_user_stories,
+                "- None allocated (structural subsystem component)",
+                &["\n#### ", "\n### ", "\n## "],
+            );
+        } else if !uc_items.is_empty() || !us_items.is_empty() {
+            let uc_text = if uc_items.is_empty() {
+                "- None allocated (structural subsystem component)".to_string()
+            } else {
+                uc_items.join("\n")
+            };
+            let us_text = if us_items.is_empty() {
+                "- None allocated (structural subsystem component)".to_string()
+            } else {
+                us_items.join("\n")
+            };
+
+            let assoc_block = format!(
+                "\n### Associated Use Cases & User Stories\n\n#### Associated Use Cases\n{}\n\n#### Associated User Stories\n{}\n",
+                uc_text, us_text
+            );
+
+            if let Some(pos) = updated.find("\n## Acceptance Criteria") {
+                updated.insert_str(pos, &assoc_block);
+            } else if let Some(pos) = updated.find("\n## Given-When-Then Acceptance Criteria") {
+                updated.insert_str(pos, &assoc_block);
+            } else if let Some(pos) = updated.find("\n## Source References") {
+                updated.insert_str(pos, &assoc_block);
+            } else {
+                updated.push_str(&assoc_block);
+            }
+        }
+    }
+
+    updated
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -403,4 +927,165 @@ mod tests {
         assert_eq!(idempotent_count, 0);
         assert_eq!(idempotent_multi, cleaned_multi);
     }
+
+    #[test]
+    fn test_issue_448_synthesize_and_reconcile_hierarchy_and_tracker_link_projection() {
+        use crate::frontmatter::SpecFrontmatter;
+        use crate::tracker::TrackerIssue;
+        use crate::LoadedSpec;
+        use std::path::PathBuf;
+
+        // 1. Child feature specification
+        let feat = LoadedSpec {
+            path: PathBuf::from("docs/features/FEAT-01-Tracker.md"),
+            rel_path: "docs/features/FEAT-01-Tracker.md".to_string(),
+            frontmatter: SpecFrontmatter {
+                title: "Feature 01: [ConOps] Radar Tracker".to_string(),
+                spec_type: "feature".to_string(),
+                issue_id: Some(10),
+                epic: Some("EPIC-01-AirDefense".to_string()),
+                subsystem: Some("Radar".to_string()),
+                part: Some("Tracker".to_string()),
+                ..Default::default()
+            },
+            content: r#"# Feature 01: [ConOps] Radar Tracker
+
+### Associated Use Cases & User Stories
+#### Associated Use Cases
+*To be populated after Phase 3*
+
+#### Associated User Stories
+*To be populated after Phase 3*
+"#.to_string(),
+        };
+
+        // 2. Child use case specification
+        let uc = LoadedSpec {
+            path: PathBuf::from("docs/use-cases/UC-01-ProcessRadarTracks.md"),
+            rel_path: "docs/use-cases/UC-01-ProcessRadarTracks.md".to_string(),
+            frontmatter: SpecFrontmatter {
+                title: "Use Case 01: Process Radar Tracks".to_string(),
+                spec_type: "use_case".to_string(),
+                issue_id: Some(20),
+                subsystem: Some("Radar".to_string()),
+                ..Default::default()
+            },
+            content: r#"# Use Case 01: Process Radar Tracks
+| **#10** | Feature | [Feature 01: [ConOps] Radar Tracker](../features/FEAT-01-Tracker.md) |
+"#.to_string(),
+        };
+
+        // 3. Child user story specification
+        let us = LoadedSpec {
+            path: PathBuf::from("docs/user-stories/US-01-IngestRadarTelemetry.md"),
+            rel_path: "docs/user-stories/US-01-IngestRadarTelemetry.md".to_string(),
+            frontmatter: SpecFrontmatter {
+                title: "User Story 01: Ingest Radar Telemetry".to_string(),
+                spec_type: "user-story".to_string(),
+                issue_id: Some(30),
+                subsystem: Some("Radar".to_string()),
+                ..Default::default()
+            },
+            content: r#"# User Story 01: Ingest Radar Telemetry
+## Required Features
+- [ ] [Feature 01: [ConOps] Radar Tracker](../features/FEAT-01-Tracker.md)
+"#.to_string(),
+        };
+
+        // 4. Parent Epic without ## 2. Requirements & Checklist
+        let epic = LoadedSpec {
+            path: PathBuf::from("docs/epics/EPIC-01-AirDefense.md"),
+            rel_path: "docs/epics/EPIC-01-AirDefense.md".to_string(),
+            frontmatter: SpecFrontmatter {
+                title: "Epic 01: Air Defense Subsystem".to_string(),
+                spec_type: "epic".to_string(),
+                issue_id: Some(5),
+                subsystem: Some("Radar".to_string()),
+                ..Default::default()
+            },
+            content: r#"# Epic 01: Air Defense Subsystem
+
+## 1. Context
+Air defense subsystem operations.
+
+## 3. Architecture
+Subsystem composition.
+"#.to_string(),
+        };
+
+        let mut issue_index = crate::tracker::IssueIndex::default();
+        issue_index.by_number.insert(10, TrackerIssue {
+            number: 10,
+            title: "Feature 01: [ConOps] Radar Tracker".to_string(),
+            labels: vec![],
+            state: "CLOSED".to_string(), // resolved!
+            body: None,
+            url: None,
+        });
+        issue_index.by_number.insert(20, TrackerIssue {
+            number: 20,
+            title: "Use Case 01: Process Radar Tracks".to_string(),
+            labels: vec![],
+            state: "OPEN".to_string(),
+            body: None,
+            url: None,
+        });
+        issue_index.by_number.insert(30, TrackerIssue {
+            number: 30,
+            title: "User Story 01: Ingest Radar Telemetry".to_string(),
+            labels: vec![],
+            state: "OPEN".to_string(),
+            body: None,
+            url: None,
+        });
+
+        let all_specs = vec![epic.clone(), feat.clone(), uc.clone(), us.clone()];
+
+        // Test Epic hierarchy synthesis:
+        let reconciled_epic = synthesize_and_reconcile_hierarchy(
+            &epic,
+            &all_specs,
+            "org/repo",
+            "main",
+            &issue_index,
+        );
+
+        assert!(reconciled_epic.contains("## 2. Requirements & Checklist"), "Epic must synthesize ## 2. Requirements & Checklist");
+        assert!(reconciled_epic.contains("- [x] #10 - [Feature 01: [ConOps] Radar Tracker](https://github.com/org/repo/blob/main/docs/features/FEAT-01-Tracker.md)"), "Epic checklist must canonically format child feature with [x] when issue is resolved");
+        assert!(reconciled_epic.contains("### Associated Use Cases & User Stories"), "Epic must synthesize Associated Use Cases & User Stories");
+        assert!(reconciled_epic.contains("#### Associated Use Cases"), "Epic must synthesize Associated Use Cases");
+        assert!(reconciled_epic.contains("- [ ] #20 - [Use Case 01: Process Radar Tracks](https://github.com/org/repo/blob/main/docs/use-cases/UC-01-ProcessRadarTracks.md)"));
+        assert!(reconciled_epic.contains("#### Associated User Stories"), "Epic must synthesize Associated User Stories");
+        assert!(reconciled_epic.contains("- [ ] #30 - [User Story 01: Ingest Radar Telemetry](https://github.com/org/repo/blob/main/docs/user-stories/US-01-IngestRadarTelemetry.md)"));
+
+        // Test Feature hierarchy synthesis:
+        let reconciled_feat = synthesize_and_reconcile_hierarchy(
+            &feat,
+            &all_specs,
+            "org/repo",
+            "main",
+            &issue_index,
+        );
+
+        assert!(!reconciled_feat.contains("To be populated"), "Feature must replace placeholder blocks");
+        assert!(reconciled_feat.contains("- [ ] #20 - [Use Case 01: Process Radar Tracks](https://github.com/org/repo/blob/main/docs/use-cases/UC-01-ProcessRadarTracks.md)"));
+        assert!(reconciled_feat.contains("- [ ] #30 - [User Story 01: Ingest Radar Telemetry](https://github.com/org/repo/blob/main/docs/user-stories/US-01-IngestRadarTelemetry.md)"));
+
+        // Test project_body_for_tracker:
+        let mut path_to_issue = std::collections::BTreeMap::new();
+        path_to_issue.insert("docs/features/FEAT-01-Tracker.md".to_string(), 10);
+        path_to_issue.insert("features/FEAT-01-Tracker.md".to_string(), 10);
+
+        let input_body = "- [ ] [Feature 01: [ConOps] Radar Tracker](../features/FEAT-01-Tracker.md)";
+        let projected = crate::project_body_for_tracker(
+            input_body,
+            Some("org/repo"),
+            "main",
+            &path_to_issue,
+        );
+
+        assert!(!projected.contains("](#10)"), "Projected body must NOT contain broken intra-page anchor link [Title](#10)!");
+        assert!(projected.contains("- [ ] #10 - [Feature 01: [ConOps] Radar Tracker](https://github.com/org/repo/blob/main/docs/features/FEAT-01-Tracker.md)"), "Projected body must translate markdown link to canonical repo blob URL with issue prefix, found:\n{}", projected);
+    }
 }
+

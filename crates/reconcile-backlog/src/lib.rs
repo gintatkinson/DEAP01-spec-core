@@ -8,6 +8,7 @@ pub mod frontmatter;
 pub mod tracker;
 
 use checklist::{clean_unpopulated_placeholders_counted, contains_unpopulated_placeholders, reconcile_checklist_content};
+pub use checklist::{synthesize_and_reconcile_hierarchy, SpecDocument};
 use frontmatter::{parse_frontmatter, update_frontmatter_issue_id, SpecFrontmatter};
 use tracker::{IssueIndex, TrackerClient};
 
@@ -115,9 +116,31 @@ pub fn run_reconciliation<T: TrackerClient>(
     };
     let issue_index = IssueIndex::build(issues);
 
-    // Step 2: Frontmatter reconciliation and placeholder purge
+    // Step 2: Hierarchy synthesis, frontmatter reconciliation, and placeholder purge
+    let repo_slug = options.repo.clone()
+        .or_else(|| detect_git_repo(&options.workspace_root))
+        .unwrap_or_default();
+    let default_branch = options.default_branch.clone()
+        .or_else(|| detect_git_branch(&options.workspace_root))
+        .unwrap_or_else(|| "main".to_string());
+
+    let all_specs_snapshot = specs.clone();
+
     for spec in &mut specs {
         let mut modified = false;
+
+        let synthesized = checklist::synthesize_and_reconcile_hierarchy(
+            spec,
+            &all_specs_snapshot,
+            &repo_slug,
+            &default_branch,
+            &issue_index,
+        );
+        if synthesized != spec.content {
+            spec.content = synthesized;
+            modified = true;
+            summary.checklists_updated += 1;
+        }
 
         // Check for prohibited unpopulated placeholders
         if contains_unpopulated_placeholders(&spec.content) {
@@ -321,8 +344,146 @@ pub fn detect_git_branch(workspace_root: &Path) -> Option<String> {
     None
 }
 
+fn rewrite_projected_links(
+    body: &str,
+    repo: Option<&str>,
+    default_branch: &str,
+    spec_path_to_issue: &BTreeMap<String, u64>,
+) -> String {
+    let mut result = String::with_capacity(body.len());
+    let mut rest = body;
+
+    while let Some(sep_idx) = rest.find("](") {
+        // Scan backwards from sep_idx to find matching opening '['
+        let before_sep = &rest[..sep_idx];
+        let mut depth = 1;
+        let mut open_b = None;
+
+        for (idx, ch) in before_sep.char_indices().rev() {
+            if ch == ']' {
+                depth += 1;
+            } else if ch == '[' {
+                depth -= 1;
+                if depth == 0 {
+                    open_b = Some(idx);
+                    break;
+                }
+            } else if ch == '\n' {
+                // Do not span across lines for a single link
+                break;
+            }
+        }
+
+        if let Some(open_idx) = open_b {
+            let after_paren = &rest[sep_idx + 2..];
+            if let Some(close_p_rel) = after_paren.find(')') {
+                let target = &after_paren[..close_p_rel];
+                let text = &rest[open_idx + 1..sep_idx];
+                let total_end = sep_idx + 2 + close_p_rel + 1;
+
+                result.push_str(&rest[..open_idx]);
+
+                if target.starts_with("http://") || target.starts_with("https://") {
+                    result.push_str(&rest[open_idx..total_end]);
+                    rest = &rest[total_end..];
+                    continue;
+                }
+
+                let fname = Path::new(target).file_name().and_then(|f| f.to_str()).unwrap_or("");
+                let stripped = target.trim_start_matches('.').trim_start_matches('/');
+
+                let matching_issue = spec_path_to_issue.get(target)
+                    .or_else(|| spec_path_to_issue.get(stripped))
+                    .or_else(|| {
+                        if !fname.is_empty() {
+                            spec_path_to_issue.get(fname)
+                        } else {
+                            None
+                        }
+                    })
+                    .or_else(|| {
+                        if !fname.is_empty() {
+                            spec_path_to_issue.iter().find_map(|(k, v)| {
+                                if k.ends_with(fname) {
+                                    Some(v)
+                                } else {
+                                    None
+                                }
+                            })
+                        } else {
+                            None
+                        }
+                    })
+                    .copied();
+
+                if let Some(issue_num) = matching_issue {
+                    let cur_line_start = result.rfind('\n').map(|idx| idx + 1).unwrap_or(0);
+                    let cur_line_prefix = &result[cur_line_start..];
+                    let already_has_issue = cur_line_prefix.contains(&format!("#{}", issue_num));
+
+                    let canonical_target = if let Some(r) = repo {
+                        let clean_repo = clean_repo_name(r);
+                        let branch = if default_branch.trim().is_empty() { "main" } else { default_branch.trim() };
+                        let doc_path = if target.contains("docs/") {
+                            target[target.find("docs/").unwrap()..].to_string()
+                        } else if target.contains("epics/") {
+                            format!("docs/epics/{}", fname)
+                        } else if target.contains("features/") {
+                            format!("docs/features/{}", fname)
+                        } else if target.contains("user-stories/") {
+                            format!("docs/user-stories/{}", fname)
+                        } else if target.contains("use-cases/") {
+                            format!("docs/use-cases/{}", fname)
+                        } else {
+                            format!("docs/{}", stripped)
+                        };
+                        format!("https://github.com/{}/blob/{}/{}", clean_repo, branch, doc_path)
+                    } else {
+                        target.to_string()
+                    };
+
+                    if already_has_issue {
+                        result.push_str(&format!("[{}]({})", text, canonical_target));
+                    } else {
+                        result.push_str(&format!("#{} - [{}]({})", issue_num, text, canonical_target));
+                    }
+
+                    rest = &rest[total_end..];
+                    continue;
+                } else if let Some(r) = repo {
+                    let clean_repo = clean_repo_name(r);
+                    let branch = if default_branch.trim().is_empty() { "main" } else { default_branch.trim() };
+                    if target.contains("schema/") {
+                        let s_path = &target[target.find("schema/").unwrap()..];
+                        let blob = format!("https://github.com/{}/blob/{}/{}", clean_repo, branch, s_path);
+                        result.push_str(&format!("[{}]({})", text, blob));
+                        rest = &rest[total_end..];
+                        continue;
+                    } else if target.contains("docs/") {
+                        let d_path = &target[target.find("docs/").unwrap()..];
+                        let blob = format!("https://github.com/{}/blob/{}/{}", clean_repo, branch, d_path);
+                        result.push_str(&format!("[{}]({})", text, blob));
+                        rest = &rest[total_end..];
+                        continue;
+                    }
+                }
+
+                result.push_str(&rest[open_idx..total_end]);
+                rest = &rest[total_end..];
+                continue;
+            }
+        }
+
+        result.push_str(&rest[..sep_idx + 2]);
+        rest = &rest[sep_idx + 2..];
+    }
+
+    result.push_str(rest);
+    result
+}
+
 /// Translates relative filesystem markdown links in a spec body to tracker-compatible links:
-/// - Relative spec links (`../epics/EPIC-03-*.md`) -> Issue references (`#<id>` or canonical issue links)
+/// - Relative spec links (`../epics/EPIC-03-*.md`) -> Canonical repo blob URLs prefixed by `#<id>` without intra-page anchors
 /// - Relative schema links (`../../schema/...`) -> GitHub blob URLs (`https://github.com/<repo>/blob/<branch>/schema/...`)
 /// - Relative docs links (`../../docs/...`) -> GitHub blob URLs (`https://github.com/<repo>/blob/<branch>/docs/...`)
 pub fn project_body_for_tracker(
@@ -331,52 +492,9 @@ pub fn project_body_for_tracker(
     default_branch: &str,
     spec_path_to_issue: &BTreeMap<String, u64>,
 ) -> String {
-    let mut projected = body.to_string();
+    let mut projected = rewrite_projected_links(body, repo, default_branch, spec_path_to_issue);
 
-    // 1. Translate relative spec links to issue citations
-    let mut replacements: Vec<(String, String)> = Vec::new();
-
-    for (spec_path, issue_num) in spec_path_to_issue {
-        let issue_ref = format!("#{}", issue_num);
-
-        let file_name = Path::new(spec_path)
-            .file_name()
-            .and_then(|f| f.to_str())
-            .unwrap_or("");
-
-        replacements.push((format!("../../{}", spec_path), issue_ref.clone()));
-        replacements.push((format!("../{}", spec_path), issue_ref.clone()));
-
-        if let Some(stripped) = spec_path.strip_prefix("docs/") {
-            replacements.push((format!("../../{}", stripped), issue_ref.clone()));
-            replacements.push((format!("../{}", stripped), issue_ref.clone()));
-        } else {
-            replacements.push((format!("../../docs/{}", spec_path), issue_ref.clone()));
-            replacements.push((format!("../docs/{}", spec_path), issue_ref.clone()));
-        }
-
-        if !file_name.is_empty() {
-            replacements.push((format!("../epics/{}", file_name), issue_ref.clone()));
-            replacements.push((format!("../features/{}", file_name), issue_ref.clone()));
-            replacements.push((format!("../user-stories/{}", file_name), issue_ref.clone()));
-            replacements.push((format!("../use-cases/{}", file_name), issue_ref.clone()));
-            replacements.push((format!("../../epics/{}", file_name), issue_ref.clone()));
-            replacements.push((format!("../../features/{}", file_name), issue_ref.clone()));
-            replacements.push((format!("../../user-stories/{}", file_name), issue_ref.clone()));
-            replacements.push((format!("../../use-cases/{}", file_name), issue_ref.clone()));
-            replacements.push((format!("./{}", file_name), issue_ref.clone()));
-        }
-    }
-
-    // Sort by pattern length descending to avoid partial matches
-    replacements.sort_by_key(|r| std::cmp::Reverse(r.0.len()));
-    replacements.dedup_by(|a, b| a.0 == b.0);
-
-    for (pattern, replacement) in replacements {
-        projected = projected.replace(&pattern, &replacement);
-    }
-
-    // 2. Translate relative schema and docs links to absolute GitHub blob URLs
+    // Translate any remaining relative schema and docs links outside markdown link targets to absolute GitHub blob URLs
     if let Some(r) = repo {
         let clean_repo = clean_repo_name(r);
         if !clean_repo.is_empty() {
@@ -486,8 +604,12 @@ type: user-story
             "Projected issue body still contains relative filesystem link '../../schema/model.sysml'!"
         );
         assert!(
-            body.contains("[EPIC-03-SystemVision](#80)"),
-            "Projected body should contain translated citation '[EPIC-03-SystemVision](#80)', found:\n{}",
+            !body.contains("](#80)"),
+            "Projected body must NOT contain broken intra-page anchor link '](#80)'!"
+        );
+        assert!(
+            body.contains("#80 - [EPIC-03-SystemVision](https://github.com/gintatkinson/dumpiler-01/blob/main/docs/epics/EPIC-03-SystemVision.md)"),
+            "Projected body should contain translated citation '#80 - [EPIC-03-SystemVision](...)', found:\n{}",
             body
         );
         assert!(
@@ -531,9 +653,12 @@ type: user-story
         assert!(!projected.contains("../../docs/features/FEAT-02-Verifier.md"));
         assert!(!projected.contains("../../docs/architecture/"));
 
-        assert!(projected.contains("[EPIC-03-SystemVision](#80)"));
-        assert!(projected.contains("[Feature 01: [ConOps] Human Engineer Interface](#75)"));
-        assert!(projected.contains("[Feature 02: [Core] Baseline Verifier](#76)"));
+        assert!(!projected.contains("](#80)"));
+        assert!(!projected.contains("](#75)"));
+        assert!(!projected.contains("](#76)"));
+        assert!(projected.contains("#80 - [EPIC-03-SystemVision](https://github.com/gintatkinson/dumpiler-01/blob/main/docs/epics/EPIC-03-SystemVision.md)"));
+        assert!(projected.contains("#75 - [Feature 01: [ConOps] Human Engineer Interface](https://github.com/gintatkinson/dumpiler-01/blob/main/docs/features/FEAT-01-HumanEngineer.md)"));
+        assert!(projected.contains("#76 - [Feature 02: [Core] Baseline Verifier](https://github.com/gintatkinson/dumpiler-01/blob/main/docs/features/FEAT-02-Verifier.md)"));
         assert!(projected.contains("https://github.com/gintatkinson/dumpiler-01/blob/main/schema/subsystems/system_vision/behavior.sysml"));
         assert!(projected.contains("https://github.com/gintatkinson/dumpiler-01/blob/main/docs/architecture/DEAP_MASTER_ARCHITECTURE.md"));
     }
@@ -566,7 +691,7 @@ type: user-story
         map.insert("epics/EPIC-01.md".to_string(), 10);
 
         let projected = project_body_for_tracker(raw_body, None, "main", &map);
-        assert_eq!(projected, "[EPIC-01](#10) and [schema](../../schema/model.sysml)");
+        assert_eq!(projected, "#10 - [EPIC-01](../epics/EPIC-01.md) and [schema](../../schema/model.sysml)");
     }
 
     #[test]
