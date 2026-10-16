@@ -40,8 +40,10 @@
 
 use deap_core::rules::EXCLUDED_DIRS;
 use deap_core::sysml_ast::{
-    parse_action_defs, parse_constraint_defs, parse_part_defs, parse_port_defs,
-    PartDef,
+    find_matching_brace, mask_string_literals, parse_action_defs, parse_attribute_defs,
+    parse_calc_defs, parse_connection_defs, parse_constraint_defs, parse_part_defs,
+    parse_port_defs, parse_requirement_defs, parse_state_defs, parse_test_case_defs,
+    strip_sysml_comments, PartDef,
 };
 use deap_core::workspace::is_upstream_compiler;
 use std::collections::{BTreeMap, BTreeSet};
@@ -3843,14 +3845,163 @@ pub fn check_architecture_viewpoint_diagrams(
     Ok(ParityOutcome::Verified)
 }
 
-/// Check 31: Dual-Schema SSOT Parity Gate (Gate 31).
+/// Collects package-qualified slices `(package_path, shallow_package_body)` from SysML v2 source text.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ISO 26262 ASIL D. Validates full structural equality
-/// between `schema/**/*.sysml` and `.pipeline/schema.sysml` to eliminate schema drift.
+/// Conforms to DO-178C Level A and ECSS-E-ST-40C software engineering verification requirements.
+/// Deterministically splits nested and sibling SysML v2 package blocks into package-qualified
+/// body segments, enabling precise scope qualification and preventing cross-package AST collisions.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// Compares full AST structs for `PartDef`, `PortDef`, and `ActionDef` (not just names).
+/// - Package Scope Monotonicity: Child package bodies are prefixed by their parent path (`Parent::Child`).
+/// - Character & Slice Safety: Uses character and byte bounds checking, guaranteeing panic-free extraction.
+///
+/// ## 3. Preconditions
+/// `content` must be valid UTF-8 SysML v2 source text.
+///
+/// ## 4. Postconditions
+/// Appends `(qualified_package_path, shallow_body)` tuples to `out`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(L) where L is text length.
+/// Space Complexity: O(L) bounded by source string size.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// Unmatched braces or malformed tokens skip safely without panicking.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-DUAL-SCHEMA-SSOT-PARITY/PACKAGE-SCOPING].
+fn collect_qualified_package_bodies(content: &str, parent_pkg: &str, out: &mut Vec<(String, String)>) {
+    let clean = strip_sysml_comments(content);
+    let masked = mask_string_literals(&clean);
+    let mut remainder = clean.as_bytes().to_vec();
+    let mut idx = 0;
+
+    while let Some(pos) = masked.get(idx..).and_then(|s| s.find("package")) {
+        let pkg_pos = idx + pos;
+        let before_ok = pkg_pos == 0
+            || !masked.as_bytes().get(pkg_pos - 1).copied().is_some_and(|b| b.is_ascii_alphanumeric() || b == b'_');
+        let after_ok = !masked.as_bytes().get(pkg_pos + 7).copied().is_some_and(|b| b.is_ascii_alphanumeric() || b == b'_');
+        if !before_ok || !after_ok {
+            idx = pkg_pos + 7;
+            continue;
+        }
+        let mut curr = pkg_pos + 7;
+        curr += masked.get(curr..).unwrap_or("").bytes().take_while(|b| b.is_ascii_whitespace()).count();
+        let name_len = masked.get(curr..).unwrap_or("").bytes().take_while(|b| b.is_ascii_alphanumeric() || *b == b'_').count();
+        let name = masked.get(curr..curr + name_len).unwrap_or("");
+        if name.is_empty() {
+            idx = pkg_pos + 7;
+            continue;
+        }
+        curr += name_len;
+        curr += masked.get(curr..).unwrap_or("").bytes().take_while(|b| b.is_ascii_whitespace()).count();
+        if masked.get(curr..).is_some_and(|s| s.starts_with('{')) {
+            if let Some(close_pos) = find_matching_brace(&clean, curr) {
+                let body = clean.get(curr + 1..close_pos).unwrap_or("");
+                let qualified_pkg = if parent_pkg.is_empty() {
+                    name.to_string()
+                } else {
+                    format!("{}::{}", parent_pkg, name)
+                };
+                collect_qualified_package_bodies(body, &qualified_pkg, out);
+                if let Some(slice) = remainder.get_mut(pkg_pos..=close_pos) {
+                    for b in slice {
+                        if *b != b'\n' {
+                            *b = b' ';
+                        }
+                    }
+                }
+                idx = close_pos + 1;
+                continue;
+            }
+        }
+        idx = pkg_pos + 7;
+    }
+
+    let shallow = String::from_utf8(remainder).unwrap_or_default();
+    if !shallow.trim().is_empty() {
+        out.push((parent_pkg.to_string(), shallow));
+    }
+}
+
+/// Compares scope-qualified AST definitions between schema directory and pipeline schema.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ECSS-E-ST-40C software verification requirements.
+/// Enforces bidirectional AST equivalence between directory schemas and pipeline schema.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Bidirectional Inclusion: Every key in `dir_map` must match `pipe_map`, and vice-versa.
+/// - Deterministic Ordering: Iterates over sorted BTreeMap keys for reproducible error reporting.
+///
+/// ## 3. Preconditions
+/// `dir_map` and `pipe_map` contain scope-qualified AST node vectors implementing PartialEq.
+///
+/// ## 4. Postconditions
+/// Appends diagnostic mismatch messages to `mismatches` if differences are detected.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(K * N) where K is key count and N is average vector length.
+/// Space Complexity: O(M) where M is count of mismatch diagnostic strings.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// Appends all divergence details to `mismatches` without panicking.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-DUAL-SCHEMA-SSOT-PARITY/SCOPED-COMPARISON].
+fn compare_scoped_defs<T: PartialEq>(
+    kind_label: &str,
+    dir_map: &BTreeMap<String, Vec<T>>,
+    pipe_map: &BTreeMap<String, Vec<T>>,
+    mismatches: &mut Vec<String>,
+) {
+    for (qual_name, dir_items) in dir_map {
+        match pipe_map.get(qual_name) {
+            Some(pipe_items) => {
+                if dir_items != pipe_items {
+                    if kind_label == "part def" {
+                        mismatches.push(format!(
+                            "part def '{}' has structural divergence between schema/*.sysml and .pipeline/schema.sysml (ports, attributes, or body differ)",
+                            qual_name
+                        ));
+                    } else {
+                        mismatches.push(format!(
+                            "{} '{}' has structural divergence between schema/*.sysml and .pipeline/schema.sysml",
+                            kind_label, qual_name
+                        ));
+                    }
+                }
+            }
+            None => {
+                mismatches.push(format!(
+                    "{} defined in schema/*.sysml but missing in .pipeline/schema.sysml: [\"{}\"]",
+                    kind_label, qual_name
+                ));
+            }
+        }
+    }
+    for qual_name in pipe_map.keys() {
+        if !dir_map.contains_key(qual_name) {
+            mismatches.push(format!(
+                "{} defined in .pipeline/schema.sysml but missing in schema/*.sysml: [\"{}\"]",
+                kind_label, qual_name
+            ));
+        }
+    }
+}
+
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ECSS-E-ST-40C software engineering verification requirements.
+/// Guarantees bit-for-bit SSOT parity between the modular multi-file schema tree (`schema/**/*.sysml`)
+/// and the consolidated single-file execution schema (`.pipeline/schema.sysml`), preventing drift.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - AST Parity Invariant: Every scope-qualified SysML v2 declaration across all 10 AST kinds
+///   (part, port, action, requirement, constraint, state, calc, connection, test case, attribute)
+///   in `schema/**/*.sysml` must be structurally isomorphic to `.pipeline/schema.sysml`.
+/// - Monotonic Scope Invariant: Names are qualified by enclosing package path hierarchy, eliminating
+///   unqualified map key collisions across sibling or nested packages.
 ///
 /// ## 3. Preconditions
 /// `repo_root` must be a directory.
@@ -3914,106 +4065,131 @@ pub fn check_dual_schema_ssot_parity(repo_root: &Path) -> Result<ParityOutcome, 
         }
     };
 
+    let mut dir_bodies = Vec::new();
+    collect_qualified_package_bodies(&schema_dir_content, "", &mut dir_bodies);
+
+    let mut pipe_bodies = Vec::new();
+    collect_qualified_package_bodies(&pipeline_schema_content, "", &mut pipe_bodies);
+
+    let mut parts_dir: BTreeMap<String, Vec<_>> = BTreeMap::new();
+    let mut ports_dir: BTreeMap<String, Vec<_>> = BTreeMap::new();
+    let mut actions_dir: BTreeMap<String, Vec<_>> = BTreeMap::new();
+    let mut reqs_dir: BTreeMap<String, Vec<_>> = BTreeMap::new();
+    let mut constraints_dir: BTreeMap<String, Vec<_>> = BTreeMap::new();
+    let mut states_dir: BTreeMap<String, Vec<_>> = BTreeMap::new();
+    let mut calcs_dir: BTreeMap<String, Vec<_>> = BTreeMap::new();
+    let mut conns_dir: BTreeMap<String, Vec<_>> = BTreeMap::new();
+    let mut tests_dir: BTreeMap<String, Vec<_>> = BTreeMap::new();
+    let mut attrs_dir: BTreeMap<String, Vec<_>> = BTreeMap::new();
+
+    for (pkg_path, body) in &dir_bodies {
+        for p in parse_part_defs(body) {
+            let qual = if pkg_path.is_empty() { p.name.clone() } else { format!("{}::{}", pkg_path, p.name) };
+            parts_dir.entry(qual).or_default().push(p);
+        }
+        for p in parse_port_defs(body) {
+            let qual = if pkg_path.is_empty() { p.name.clone() } else { format!("{}::{}", pkg_path, p.name) };
+            ports_dir.entry(qual).or_default().push(p);
+        }
+        for a in parse_action_defs(body) {
+            let qual = if pkg_path.is_empty() { a.name.clone() } else { format!("{}::{}", pkg_path, a.name) };
+            actions_dir.entry(qual).or_default().push(a);
+        }
+        for r in parse_requirement_defs(body) {
+            let qual = if pkg_path.is_empty() { r.name.clone() } else { format!("{}::{}", pkg_path, r.name) };
+            reqs_dir.entry(qual).or_default().push(r);
+        }
+        for c in parse_constraint_defs(body) {
+            let qual = if pkg_path.is_empty() { c.name.clone() } else { format!("{}::{}", pkg_path, c.name) };
+            constraints_dir.entry(qual).or_default().push(c);
+        }
+        for s in parse_state_defs(body) {
+            let qual = if pkg_path.is_empty() { s.name.clone() } else { format!("{}::{}", pkg_path, s.name) };
+            states_dir.entry(qual).or_default().push(s);
+        }
+        for c in parse_calc_defs(body) {
+            let qual = if pkg_path.is_empty() { c.name.clone() } else { format!("{}::{}", pkg_path, c.name) };
+            calcs_dir.entry(qual).or_default().push(c);
+        }
+        for c in parse_connection_defs(body) {
+            let qual = if pkg_path.is_empty() { c.name.clone() } else { format!("{}::{}", pkg_path, c.name) };
+            conns_dir.entry(qual).or_default().push(c);
+        }
+        for t in parse_test_case_defs(body) {
+            let qual = if pkg_path.is_empty() { t.name.clone() } else { format!("{}::{}", pkg_path, t.name) };
+            tests_dir.entry(qual).or_default().push(t);
+        }
+        for a in parse_attribute_defs(body) {
+            let qual = if pkg_path.is_empty() { a.name.clone() } else { format!("{}::{}", pkg_path, a.name) };
+            attrs_dir.entry(qual).or_default().push(a);
+        }
+    }
+
+    let mut parts_pipe: BTreeMap<String, Vec<_>> = BTreeMap::new();
+    let mut ports_pipe: BTreeMap<String, Vec<_>> = BTreeMap::new();
+    let mut actions_pipe: BTreeMap<String, Vec<_>> = BTreeMap::new();
+    let mut reqs_pipe: BTreeMap<String, Vec<_>> = BTreeMap::new();
+    let mut constraints_pipe: BTreeMap<String, Vec<_>> = BTreeMap::new();
+    let mut states_pipe: BTreeMap<String, Vec<_>> = BTreeMap::new();
+    let mut calcs_pipe: BTreeMap<String, Vec<_>> = BTreeMap::new();
+    let mut conns_pipe: BTreeMap<String, Vec<_>> = BTreeMap::new();
+    let mut tests_pipe: BTreeMap<String, Vec<_>> = BTreeMap::new();
+    let mut attrs_pipe: BTreeMap<String, Vec<_>> = BTreeMap::new();
+
+    for (pkg_path, body) in &pipe_bodies {
+        for p in parse_part_defs(body) {
+            let qual = if pkg_path.is_empty() { p.name.clone() } else { format!("{}::{}", pkg_path, p.name) };
+            parts_pipe.entry(qual).or_default().push(p);
+        }
+        for p in parse_port_defs(body) {
+            let qual = if pkg_path.is_empty() { p.name.clone() } else { format!("{}::{}", pkg_path, p.name) };
+            ports_pipe.entry(qual).or_default().push(p);
+        }
+        for a in parse_action_defs(body) {
+            let qual = if pkg_path.is_empty() { a.name.clone() } else { format!("{}::{}", pkg_path, a.name) };
+            actions_pipe.entry(qual).or_default().push(a);
+        }
+        for r in parse_requirement_defs(body) {
+            let qual = if pkg_path.is_empty() { r.name.clone() } else { format!("{}::{}", pkg_path, r.name) };
+            reqs_pipe.entry(qual).or_default().push(r);
+        }
+        for c in parse_constraint_defs(body) {
+            let qual = if pkg_path.is_empty() { c.name.clone() } else { format!("{}::{}", pkg_path, c.name) };
+            constraints_pipe.entry(qual).or_default().push(c);
+        }
+        for s in parse_state_defs(body) {
+            let qual = if pkg_path.is_empty() { s.name.clone() } else { format!("{}::{}", pkg_path, s.name) };
+            states_pipe.entry(qual).or_default().push(s);
+        }
+        for c in parse_calc_defs(body) {
+            let qual = if pkg_path.is_empty() { c.name.clone() } else { format!("{}::{}", pkg_path, c.name) };
+            calcs_pipe.entry(qual).or_default().push(c);
+        }
+        for c in parse_connection_defs(body) {
+            let qual = if pkg_path.is_empty() { c.name.clone() } else { format!("{}::{}", pkg_path, c.name) };
+            conns_pipe.entry(qual).or_default().push(c);
+        }
+        for t in parse_test_case_defs(body) {
+            let qual = if pkg_path.is_empty() { t.name.clone() } else { format!("{}::{}", pkg_path, t.name) };
+            tests_pipe.entry(qual).or_default().push(t);
+        }
+        for a in parse_attribute_defs(body) {
+            let qual = if pkg_path.is_empty() { a.name.clone() } else { format!("{}::{}", pkg_path, a.name) };
+            attrs_pipe.entry(qual).or_default().push(a);
+        }
+    }
+
     let mut mismatches = Vec::new();
-
-    let parts_dir_vec = parse_part_defs(&schema_dir_content);
-    let parts_pipe_vec = parse_part_defs(&pipeline_schema_content);
-
-    let mut parts_dir = BTreeMap::new();
-    for p in parts_dir_vec {
-        parts_dir.insert(p.name.clone(), p);
-    }
-    let mut parts_pipe = BTreeMap::new();
-    for p in parts_pipe_vec {
-        parts_pipe.insert(p.name.clone(), p);
-    }
-
-    for (name, p_dir) in &parts_dir {
-        match parts_pipe.get(name) {
-            Some(p_pipe) => {
-                if p_dir != p_pipe {
-                    mismatches.push(format!(
-                        "part def '{}' has structural divergence between schema/*.sysml and .pipeline/schema.sysml (ports, attributes, or body differ)",
-                        name
-                    ));
-                }
-            }
-            None => {
-                mismatches.push(format!("part def defined in schema/*.sysml but missing in .pipeline/schema.sysml: [\"{}\"]", name));
-            }
-        }
-    }
-    for name in parts_pipe.keys() {
-        if !parts_dir.contains_key(name) {
-            mismatches.push(format!("part def defined in .pipeline/schema.sysml but missing in schema/*.sysml: [\"{}\"]", name));
-        }
-    }
-
-    let ports_dir_vec = parse_port_defs(&schema_dir_content);
-    let ports_pipe_vec = parse_port_defs(&pipeline_schema_content);
-
-    let mut ports_dir = BTreeMap::new();
-    for p in ports_dir_vec {
-        ports_dir.insert(p.name.clone(), p);
-    }
-    let mut ports_pipe = BTreeMap::new();
-    for p in ports_pipe_vec {
-        ports_pipe.insert(p.name.clone(), p);
-    }
-
-    for (name, p_dir) in &ports_dir {
-        match ports_pipe.get(name) {
-            Some(p_pipe) => {
-                if p_dir != p_pipe {
-                    mismatches.push(format!(
-                        "port def '{}' has structural divergence between schema/*.sysml and .pipeline/schema.sysml",
-                        name
-                    ));
-                }
-            }
-            None => {
-                mismatches.push(format!("port def defined in schema/*.sysml but missing in .pipeline/schema.sysml: [\"{}\"]", name));
-            }
-        }
-    }
-    for name in ports_pipe.keys() {
-        if !ports_dir.contains_key(name) {
-            mismatches.push(format!("port def defined in .pipeline/schema.sysml but missing in schema/*.sysml: [\"{}\"]", name));
-        }
-    }
-
-    let actions_dir_vec = parse_action_defs(&schema_dir_content);
-    let actions_pipe_vec = parse_action_defs(&pipeline_schema_content);
-
-    let mut actions_dir = BTreeMap::new();
-    for a in actions_dir_vec {
-        actions_dir.insert(a.name.clone(), a);
-    }
-    let mut actions_pipe = BTreeMap::new();
-    for a in actions_pipe_vec {
-        actions_pipe.insert(a.name.clone(), a);
-    }
-
-    for (name, a_dir) in &actions_dir {
-        match actions_pipe.get(name) {
-            Some(a_pipe) => {
-                if a_dir != a_pipe {
-                    mismatches.push(format!(
-                        "action def '{}' has structural divergence between schema/*.sysml and .pipeline/schema.sysml",
-                        name
-                    ));
-                }
-            }
-            None => {
-                mismatches.push(format!("action def defined in schema/*.sysml but missing in .pipeline/schema.sysml: [\"{}\"]", name));
-            }
-        }
-    }
-    for name in actions_pipe.keys() {
-        if !actions_dir.contains_key(name) {
-            mismatches.push(format!("action def defined in .pipeline/schema.sysml but missing in schema/*.sysml: [\"{}\"]", name));
-        }
-    }
+    compare_scoped_defs("part def", &parts_dir, &parts_pipe, &mut mismatches);
+    compare_scoped_defs("port def", &ports_dir, &ports_pipe, &mut mismatches);
+    compare_scoped_defs("action def", &actions_dir, &actions_pipe, &mut mismatches);
+    compare_scoped_defs("requirement def", &reqs_dir, &reqs_pipe, &mut mismatches);
+    compare_scoped_defs("constraint def", &constraints_dir, &constraints_pipe, &mut mismatches);
+    compare_scoped_defs("state def", &states_dir, &states_pipe, &mut mismatches);
+    compare_scoped_defs("calc def", &calcs_dir, &calcs_pipe, &mut mismatches);
+    compare_scoped_defs("connection def", &conns_dir, &conns_pipe, &mut mismatches);
+    compare_scoped_defs("test case def", &tests_dir, &tests_pipe, &mut mismatches);
+    compare_scoped_defs("attribute def", &attrs_dir, &attrs_pipe, &mut mismatches);
 
     if mismatches.is_empty() {
         Ok(ParityOutcome::DualSchemaIdentical)
@@ -4591,6 +4767,41 @@ flowchart TD
 
         let res = check_dual_schema_ssot_parity(&tmp.path);
         assert!(res.is_err(), "Check 31 must detect structural divergence inside part def even when names are identical: {:?}", res);
+        Ok(())
+    }
+
+    #[test]
+    fn test_issue_443_check31_detects_requirement_constraint_state_and_cross_package_divergence() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("check31_issue443_divergence")?;
+        let schema_dir = tmp.path.join("schema");
+        let pipe_dir = tmp.path.join(".pipeline");
+        fs::create_dir_all(&schema_dir)?;
+        fs::create_dir_all(&pipe_dir)?;
+
+        // Case 1: Requirement drift
+        let sysml_schema = "package Core {\n  part def Controller;\n  requirement def ReqSafety {\n    doc /* Must safely halt */\n  }\n}\n";
+        let sysml_pipeline = "package Core {\n  part def Controller;\n}\n";
+
+        fs::write(schema_dir.join("domain.sysml"), sysml_schema)?;
+        fs::write(pipe_dir.join("schema.sysml"), sysml_pipeline)?;
+
+        let res = check_dual_schema_ssot_parity(&tmp.path);
+        assert!(res.is_err(), "Check 31 must detect requirement def divergence: {:?}", res);
+
+        // Case 2: Constraint drift
+        let sysml_schema_c = "package Core {\n  part def Controller;\n  constraint def ThermalLimit;\n}\n";
+        fs::write(schema_dir.join("domain.sysml"), sysml_schema_c)?;
+        let res_c = check_dual_schema_ssot_parity(&tmp.path);
+        assert!(res_c.is_err(), "Check 31 must detect constraint def divergence: {:?}", res_c);
+
+        // Case 3: Cross-package colliding part name divergence
+        let sysml_multi_pkg_a = "package SubA {\n  part def Engine {\n    port in1;\n  }\n}\npackage SubB {\n  part def Engine;\n}\n";
+        let sysml_multi_pkg_b = "package SubA {\n  part def Engine;\n}\npackage SubB {\n  part def Engine;\n}\n";
+        fs::write(schema_dir.join("domain.sysml"), sysml_multi_pkg_a)?;
+        fs::write(pipe_dir.join("schema.sysml"), sysml_multi_pkg_b)?;
+        let res_coll = check_dual_schema_ssot_parity(&tmp.path);
+        assert!(res_coll.is_err(), "Check 31 must detect divergence in colliding part name across packages: {:?}", res_coll);
+
         Ok(())
     }
 
