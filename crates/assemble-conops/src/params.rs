@@ -3113,6 +3113,86 @@ mod tests {
         assert!(substituted.contains("INT-01"));
         assert!(substituted.contains("high-consequence actuation"));
     }
+
+    #[test]
+    fn test_cuas_coa_physical_limits_sysml_provenance_and_zero_placeholder_output() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "deap_test_params_provenance_{}",
+            std::process::id()
+        ));
+        let schema_dir = temp_root.join("schema");
+        let unit_dir = temp_root.join("docs/conops/units/conops");
+        std::fs::create_dir_all(&schema_dir).unwrap();
+        std::fs::create_dir_all(&unit_dir).unwrap();
+
+        let schema_path = schema_dir.join("test_platform.sysml");
+        let sysml_content = r#"package AutonomousPlatform {
+    attribute TOTAL_MTOW_KG = 25.0;
+    attribute V_MAX_MPS = 35.0;
+    attribute V_CRUISE_NOMINAL_MPS = 20.0;
+    attribute OPERATING_TEMPERATURE_MIN_C = -20.0;
+    attribute OPERATING_TEMPERATURE_MAX_C = +55.0;
+
+    part def GuidanceController {
+        doc /* Primary guidance and control computer */
+        inout port c2_bus : C2TelemetryPort;
+        out port actuator_cmd : ActuatorCommandPort;
+    }
+}
+"#;
+        std::fs::write(&schema_path, sysml_content).unwrap();
+
+        let unit_path = unit_dir.join("01_METADATA_AND_OVERVIEW.md");
+        let unit_template = r#"# 1. Metadata and Operational Overview
+- **System Identifier:** {{SYSTEM_IDENTIFIER}}
+- **Maximum Mass Envelope:** {{TOTAL_MTOW_KG}} kg
+- **Maximum Velocity Limit:** {{V_MAX_MPS}} m/s
+- **Nominal Cruise Velocity:** {{V_CRUISE_NOMINAL_MPS}} m/s
+- **Thermal Operating Envelope:** {{OPERATING_TEMPERATURE_MIN_C}} deg C to {{OPERATING_TEMPERATURE_MAX_C}} deg C
+
+{{SUBSYSTEM_ARCHITECTURE_SECTION}}
+"#;
+        std::fs::write(&unit_path, unit_template).unwrap();
+
+        let mut engine = SysMLParameterBindingEngine::new(
+            None,
+            Some(schema_path.as_path()),
+            Some(temp_root.as_path()),
+            true,
+            None,
+        );
+        engine.ingest_file(&schema_path);
+
+        assert_eq!(
+            engine.parameter_bindings.get("TOTAL_MTOW_KG").map(String::as_str),
+            Some("25.0")
+        );
+        assert_eq!(
+            engine.parameter_bindings.get("V_MAX_MPS").map(String::as_str),
+            Some("35.0")
+        );
+        assert_eq!(
+            engine.resolve_token("SYSTEM_IDENTIFIER", None),
+            "AutonomousPlatform"
+        );
+
+        let raw_unit = std::fs::read_to_string(&unit_path).unwrap();
+        let rendered = engine.substitute(&raw_unit);
+        std::fs::remove_dir_all(&temp_root).ok();
+
+        assert!(
+            !rendered.contains("{{"),
+            "Rendered ConOps unit must contain zero unresolved '{{{{' placeholders: got:\n{rendered}"
+        );
+        assert!(
+            rendered.contains("[GuidanceController]("),
+            "Rendered ConOps unit must preserve SysML source provenance citation"
+        );
+        assert!(
+            rendered.contains("[TIER-1: OEM]"),
+            "Rendered ConOps unit must preserve [TIER-1: OEM] epistemic provenance tag"
+        );
+    }
 }
 
 
