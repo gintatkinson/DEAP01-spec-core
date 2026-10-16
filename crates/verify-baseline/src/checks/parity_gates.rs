@@ -3312,7 +3312,7 @@ pub fn check_research_inventory(
                 let entry = match entry_res {
                     Ok(e) => e,
                     Err(err) => {
-                        errors.push(format!("Check 28 failed: I/O error walking directory '{}': {}", dir.display(), err));
+                        errors.push(format!("Check 29 failed: I/O error walking directory '{}': {}", dir.display(), err));
                         continue;
                     }
                 };
@@ -3493,7 +3493,7 @@ pub fn check_executive_deliverable_traceability(repo_root: &Path) -> Result<Pari
     }
 }
 
-/// Gate 28: Coverage-Digest Population Gate.
+/// Check 30A: Coverage-Digest Population Gate (Gate 28).
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A and ISO 26262 ASIL D. Verifies that requirement and test
@@ -3536,7 +3536,7 @@ pub fn check_coverage_digest(repo_root: &Path) -> Result<ParityOutcome, Vec<Stri
                     Ok(e) => e,
                     Err(err) => {
                         errors.push(format!(
-                            "Check 28 failed: I/O error walking directory '{}': {}",
+                            "Check 30A failed: I/O error walking directory '{}': {}",
                             dir.display(),
                             err
                         ));
@@ -3576,7 +3576,7 @@ pub fn check_coverage_digest(repo_root: &Path) -> Result<ParityOutcome, Vec<Stri
                 Ok(e) => e,
                 Err(err) => {
                     errors.push(format!(
-                        "Check 28 failed: I/O error walking directory '{}': {}",
+                        "Check 30A failed: I/O error walking directory '{}': {}",
                         dir.display(),
                         err
                     ));
@@ -3597,7 +3597,7 @@ pub fn check_coverage_digest(repo_root: &Path) -> Result<ParityOutcome, Vec<Stri
                 let content = match fs::read_to_string(entry.path()) {
                     Ok(c) => c,
                     Err(e) => {
-                        errors.push(format!("Check 28 failed: Unable to read '{}': {}", rel, e));
+                        errors.push(format!("Check 30A failed: Unable to read '{}': {}", rel, e));
                         continue;
                     }
                 };
@@ -3613,7 +3613,7 @@ pub fn check_coverage_digest(repo_root: &Path) -> Result<ParityOutcome, Vec<Stri
                             && !declared_specs.contains(&bl)
                         {
                             errors.push(format!(
-                                "Check 28 failed: Coverage digest or specification '{}' references undeclared specification file '{}'",
+                                "Check 30A failed: Coverage digest or specification '{}' references undeclared specification file '{}'",
                                 rel, basename
                             ));
                         }
@@ -3671,7 +3671,7 @@ fn extract_stpa_prefixed_ids(line: &str, prefix: &str) -> BTreeSet<String> {
     ids
 }
 
-/// Gate 29: Obligation-Witness Registry Gate.
+/// Check 30B: Obligation-Witness Registry Gate (Gate 29).
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A, ISO 26262 ASIL D, and STPA safety engineering. Verifies
@@ -3711,7 +3711,7 @@ pub fn check_obligation_witness(repo_root: &Path) -> Result<ParityOutcome, Vec<S
         let entry = match entry_res {
             Ok(e) => e,
             Err(err) => {
-                errors.push(format!("Check 29 failed: I/O error walking directory '{}': {}", safety_dir.display(), err));
+                errors.push(format!("Check 30B failed: I/O error walking directory '{}': {}", safety_dir.display(), err));
                 continue;
             }
         };
@@ -3743,7 +3743,7 @@ pub fn check_obligation_witness(repo_root: &Path) -> Result<ParityOutcome, Vec<S
         let content = match fs::read_to_string(path) {
             Ok(c) => c,
             Err(e) => {
-                errors.push(format!("Check 29 failed: Unable to read '{}': {}", rel, e));
+                errors.push(format!("Check 30B failed: Unable to read '{}': {}", rel, e));
                 continue;
             }
         };
@@ -3767,14 +3767,14 @@ pub fn check_obligation_witness(repo_root: &Path) -> Result<ParityOutcome, Vec<S
 
     if !declared_hazards.is_empty() && declared_constraints.is_empty() {
         errors.push(format!(
-            "Check 29 failed: Safety specifications declare hazards ({:?}) without any witnessing safety constraint (SC-*).",
+            "Check 30B failed: Safety specifications declare hazards ({:?}) without any witnessing safety constraint (SC-*).",
             declared_hazards
         ));
     } else if has_explicit_uca_bindings {
         for h in &declared_hazards {
             if !witnessed_hazards.contains(h) {
                 errors.push(format!(
-                    "Check 29 failed: Declared hazard '{}' in safety specifications is not witnessed by any safety constraint (SC-*) binding.",
+                    "Check 30B failed: Declared hazard '{}' in safety specifications is not witnessed by any safety constraint (SC-*) binding.",
                     h
                 ));
             }
@@ -3788,7 +3788,7 @@ pub fn check_obligation_witness(repo_root: &Path) -> Result<ParityOutcome, Vec<S
     }
 }
 
-/// Gate 30: Architecture Viewpoint & Diagram Completeness Gate.
+/// Check 30C: Architecture Viewpoint & Diagram Completeness Gate (Gate 30).
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A and ISO 26262 ASIL D. Validates that mandatory architecture
@@ -3821,12 +3821,12 @@ pub fn check_architecture_viewpoint_diagrams(
         let arch_views_dir = TargetScanDir::Architecture.resolve(repo_root).join("views");
         if !arch_views_dir.is_dir() {
             return Err(vec![
-                "Gate 30 failed: Canonical SSOT Architecture Views Library (docs/architecture/views/) is missing in upstream compiler workspace (refs #276)".to_string(),
+                "Check 30C failed: Canonical SSOT Architecture Views Library (docs/architecture/views/) is missing in upstream compiler workspace (refs #276)".to_string(),
             ]);
         }
         if !arch_views_dir.join("sv1_super_system.mmd").is_file() {
             return Err(vec![
-                "Gate 30 failed: Canonical SSOT Architecture Views Library is missing required view sv1_super_system.mmd (refs #276)".to_string(),
+                "Check 30C failed: Canonical SSOT Architecture Views Library is missing required view sv1_super_system.mmd (refs #276)".to_string(),
             ]);
         }
     } else {
@@ -4734,4 +4734,130 @@ flowchart TD
         );
         Ok(())
     }
+
+    #[test]
+    fn test_issue_440_research_inventory_io_error_formats_as_check_29() -> Result<(), Box<dyn std::error::Error>> {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let tmp = TempDir::new("res_inv_io")?;
+            let epics_dir = tmp.path.join("docs").join("epics");
+            fs::create_dir_all(&epics_dir)?;
+            fs::write(epics_dir.join("EPIC-001.md"), "# Epic 1\n")?;
+            let unreadable = epics_dir.join("forbidden");
+            fs::create_dir(&unreadable)?;
+            let mut perms = fs::metadata(&unreadable)?.permissions();
+            perms.set_mode(0o000);
+            fs::set_permissions(&unreadable, perms)?;
+
+            let res = check_research_inventory(&tmp.path, false, false);
+
+            let mut restore_perms = fs::metadata(&unreadable)?.permissions();
+            restore_perms.set_mode(0o755);
+            let _ = fs::set_permissions(&unreadable, restore_perms);
+
+            let errs = res.expect_err("WalkDir on unreadable directory should produce errors");
+            assert!(!errs.is_empty(), "Expected I/O errors for unreadable directory");
+            let io_err = errs
+                .iter()
+                .find(|e| e.contains("I/O error walking directory"))
+                .expect("Expected directory traversal I/O error in error list");
+            assert!(
+                io_err.starts_with("Check 29 failed:"),
+                "I/O error must be formatted as Check 29 failed, got: {}",
+                io_err
+            );
+            assert!(
+                !io_err.contains("Check 28 failed"),
+                "I/O error must not contain legacy 'Check 28 failed': {}",
+                io_err
+            );
+        }
+        Ok(())
+    }
+
+
+    #[test]
+    fn test_issue_440_coverage_digest_errors_format_as_check_30a() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("cov_digest")?;
+        let feat_dir = tmp.path.join("docs").join("features");
+        fs::create_dir_all(&feat_dir)?;
+        fs::write(feat_dir.join("FEAT-001.md"), "# Feature 1\n")?;
+
+        let reports_dir = tmp.path.join("docs").join("reports");
+        fs::create_dir_all(&reports_dir)?;
+        fs::write(
+            reports_dir.join("coverage.md"),
+            "# Coverage\nReferences FEAT-999.md here.\n",
+        )?;
+
+        let res = check_coverage_digest(&tmp.path);
+        let errs = res.expect_err("Undeclared spec reference should trigger errors");
+        assert!(!errs.is_empty(), "Expected errors for undeclared spec");
+        for err in &errs {
+            assert!(
+                err.starts_with("Check 30A failed:"),
+                "Coverage digest error must be formatted as Check 30A failed, got: {}",
+                err
+            );
+            assert!(
+                !err.contains("Check 28 failed"),
+                "Coverage digest error must not contain Check 28 failed: {}",
+                err
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_issue_440_obligation_witness_errors_format_as_check_30b() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("ob_witness")?;
+        let safety_dir = tmp.path.join("docs").join("safety");
+        fs::create_dir_all(&safety_dir)?;
+        fs::write(
+            safety_dir.join("hazard_analysis.md"),
+            "# Hazard Analysis\nDeclared hazard H-001 with no safety constraint.\n",
+        )?;
+
+        let res = check_obligation_witness(&tmp.path);
+        let errs = res.expect_err("Orphan hazard should trigger errors");
+        assert!(!errs.is_empty(), "Expected errors for unwitnessed hazard");
+        for err in &errs {
+            assert!(
+                err.starts_with("Check 30B failed:"),
+                "Obligation witness error must be formatted as Check 30B failed, got: {}",
+                err
+            );
+            assert!(
+                !err.contains("Check 29 failed"),
+                "Obligation witness error must not contain Check 29 failed: {}",
+                err
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_issue_440_architecture_viewpoint_errors_format_as_check_30c() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = TempDir::new("arch_views")?;
+        fs::create_dir_all(tmp.path.join(".pipeline").join("upstream"))?;
+
+        let res = check_architecture_viewpoint_diagrams(&tmp.path, false, true);
+        let errs = res.expect_err("Missing architecture views library in upstream should trigger error");
+        assert!(!errs.is_empty(), "Expected error for missing arch views");
+        for err in &errs {
+            assert!(
+                err.starts_with("Check 30C failed:"),
+                "Architecture viewpoint error must be formatted as Check 30C failed, got: {}",
+                err
+            );
+            assert!(
+                !err.contains("Gate 30 failed") && !err.contains("Check 30 failed"),
+                "Architecture viewpoint error must not contain Gate/Check 30 failed: {}",
+                err
+            );
+        }
+        Ok(())
+    }
 }
+

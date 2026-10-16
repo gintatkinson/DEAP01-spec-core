@@ -558,54 +558,54 @@ pub fn run(options: &BaselineOptions) -> Result<(), ()> {
         }
     }
 
-    // Check 31: Coverage digest, obligation witness, architecture viewpoint diagrams, dual-schema parity
+    // Checks 30A-30C and 31: Coverage digest (30A), obligation witness (30B), architecture viewpoint diagrams (30C), dual-schema parity (31)
     match check_coverage_digest(&repo_root) {
         Ok(ParityOutcome::PendingOrClean) => {
-            println!("Success: Check 28 verified (Downstream repository detected -- coverage digest pending or landing zone clean).");
+            println!("Success: Check 30A verified (Downstream repository detected -- coverage digest pending or landing zone clean).");
         }
         Ok(_) => {
-            println!("Success: Check 28 verified (Coverage-Digest Population Gate passed -- zero phantom realizations).");
+            println!("Success: Check 30A verified (Coverage-Digest Population Gate passed -- zero phantom realizations).");
         }
         Err(errs) => {
-            eprintln!("ERROR: Check 28 failed (Coverage-Digest Population Gate violations found):");
+            eprintln!("ERROR: Check 30A failed (Coverage-Digest Population Gate violations found):");
             for e in &errs {
                 eprintln!("  - {}", e);
             }
-            write_defect_dossier(&repo_root, "Check 28 (Coverage digest)", &errs);
+            write_defect_dossier(&repo_root, "Check 30A (Coverage digest)", &errs);
             return Err(());
         }
     }
 
     match check_obligation_witness(&repo_root) {
         Ok(ParityOutcome::PendingOrClean) => {
-            println!("Success: Check 29 verified (Downstream repository detected -- obligation witness pending or landing zone clean).");
+            println!("Success: Check 30B verified (Downstream repository detected -- obligation witness pending or landing zone clean).");
         }
         Ok(_) => {
-            println!("Success: Check 29 verified (Obligation-Witness Registry Gate passed -- zero phantom witnesses).");
+            println!("Success: Check 30B verified (Obligation-Witness Registry Gate passed -- zero phantom witnesses).");
         }
         Err(errs) => {
-            eprintln!("ERROR: Check 29 failed (Obligation-Witness Registry Gate violations found):");
+            eprintln!("ERROR: Check 30B failed (Obligation-Witness Registry Gate violations found):");
             for e in &errs {
                 eprintln!("  - {}", e);
             }
-            write_defect_dossier(&repo_root, "Check 29 (Obligation witness)", &errs);
+            write_defect_dossier(&repo_root, "Check 30B (Obligation witness)", &errs);
             return Err(());
         }
     }
 
     match check_architecture_viewpoint_diagrams(&repo_root, effective_allow_missing, is_strict) {
         Ok(ParityOutcome::PendingOrClean) => {
-            println!("Success: Check 30 verified (Downstream repository detected -- architecture diagrams pending or landing zone clean).");
+            println!("Success: Check 30C verified (Downstream repository detected -- architecture diagrams pending or landing zone clean).");
         }
         Ok(_) => {
-            println!("Success: Check 30 verified (Architecture Viewpoint & Diagram Completeness Gate passed -- all 11 canonical diagrams verified).");
+            println!("Success: Check 30C verified (Architecture Viewpoint & Diagram Completeness Gate passed -- all 11 canonical diagrams verified).");
         }
         Err(errs) => {
-            eprintln!("ERROR: Check 30 failed (Architecture Viewpoint & Diagram Completeness violations found):");
+            eprintln!("ERROR: Check 30C failed (Architecture Viewpoint & Diagram Completeness violations found):");
             for e in &errs {
                 eprintln!("  - {}", e);
             }
-            write_defect_dossier(&repo_root, "Check 30 (Architecture viewpoint diagrams)", &errs);
+            write_defect_dossier(&repo_root, "Check 30C (Architecture viewpoint diagrams)", &errs);
             return Err(());
         }
     }
@@ -851,4 +851,77 @@ mod tests {
         let res = check_zero_regex(repo_root);
         assert!(res.is_ok(), "Check 34 Zero Regex Invariant failed on repo: {:?}", res.err());
     }
+
+    #[test]
+    fn test_issue_440_runner_check_identifiers_unique() {
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(|p| p.parent())
+            .expect("repo root");
+        let runner_src = fs::read_to_string(repo_root.join("crates/verify-baseline/src/runner.rs"))
+            .expect("read runner.rs");
+
+        let mut check_identifiers = Vec::new();
+        for line in runner_src.lines() {
+            if let Some(pos) = line.find("write_defect_dossier(") {
+                let rest = &line[pos..];
+                if let Some(first_quote) = rest.find('"') {
+                    let after_first = &rest[first_quote + 1..];
+                    if let Some(second_quote) = after_first.find('"') {
+                        let full_check_name = &after_first[..second_quote];
+                        if let Some(paren) = full_check_name.find(" (") {
+                            let check_id = &full_check_name[..paren];
+                            check_identifiers.push(check_id.to_string());
+                        }
+                    }
+                }
+            }
+        }
+
+        let post_27: Vec<&String> = check_identifiers
+            .iter()
+            .skip_while(|id| *id != "Check 28")
+            .take_while(|id| *id != "Check 35")
+            .collect();
+
+        let mut seen = std::collections::HashSet::new();
+        let mut duplicates = Vec::new();
+        for id in &post_27 {
+            if !seen.insert(*id) {
+                duplicates.push((*id).clone());
+            }
+        }
+
+        assert!(
+            duplicates.is_empty(),
+            "Duplicate check identifiers found in runner.rs write_defect_dossier calls: {:?}",
+            duplicates
+        );
+
+        assert!(
+            !runner_src.contains("\"Check 28 (Coverage digest)\""),
+            "runner.rs must not label Coverage Digest as Check 28"
+        );
+        assert!(
+            !runner_src.contains("\"Check 29 (Obligation witness)\""),
+            "runner.rs must not label Obligation Witness as Check 29"
+        );
+        assert!(
+            !runner_src.contains("\"Check 30 (Architecture viewpoint diagrams)\""),
+            "runner.rs must not label Architecture Viewpoint as Check 30"
+        );
+        assert!(
+            runner_src.contains("\"Check 30A (Coverage digest)\""),
+            "runner.rs must label Coverage Digest as Check 30A"
+        );
+        assert!(
+            runner_src.contains("\"Check 30B (Obligation witness)\""),
+            "runner.rs must label Obligation Witness as Check 30B"
+        );
+        assert!(
+            runner_src.contains("\"Check 30C (Architecture viewpoint diagrams)\""),
+            "runner.rs must label Architecture Viewpoint as Check 30C"
+        );
+    }
 }
+
