@@ -1130,10 +1130,104 @@ pub fn validate_source_reference_clause_integrity(
     Ok(findings)
 }
 
+/// Validates whether a line matches the canonical Epic feature checklist grammar.
+///
+/// Ensures the line conforms strictly to:
+/// `- [x| ] #<IssueID> - [<Title>](<url>) (<mapped requirements/clauses>)`
+/// rejecting unlinked backtick items or items missing tracker issue IDs or parenthetical clauses.
+///
+/// # Arguments
+/// * `line` - A line from the specification markdown content.
+///
+/// # Returns
+/// `true` if the line strictly satisfies the canonical Epic feature checklist grammar; `false` otherwise.
+///
+/// # Errors
+/// Operates infallibly on string slices.
+///
+/// # Invariants
+/// * Strict Link Grammar: Features must be hyperlinked with canonical brackets and parentheses.
+/// * Issue ID Attribution: Checklist items must reference `#<IssueID>` or `#[IssueID]`.
+/// * Traceability Parenthetical: Items must declare mapped requirements/clauses in trailing parentheses.
+///
+/// # Architecture Context
+/// Part of `crates/verify-baseline::spec_audit::provenance`, verifying AST-lowered Epic feature traceability.
+///
+/// # Realises
+/// [Strict Bidirectional Checklist Sync, Semantic Traceability Closure, Zero Unlinked Backtick Features]
+pub fn is_valid_epic_feature_checklist_item(line: &str) -> bool {
+    let trimmed = line.trim();
+    let after_box = if let Some(rest) = trimmed.strip_prefix("- [ ] ") {
+        rest
+    } else if let Some(rest) = trimmed.strip_prefix("- [x] ").or_else(|| trimmed.strip_prefix("- [X] ")) {
+        rest
+    } else if let Some(rest) = trimmed.strip_prefix("* [ ] ") {
+        rest
+    } else if let Some(rest) = trimmed.strip_prefix("* [x] ").or_else(|| trimmed.strip_prefix("* [X] ")) {
+        rest
+    } else {
+        return false;
+    };
+
+    let after_ws = after_box.trim_start();
+
+    // 2. Must contain #<IssueID> or #[IssueID]
+    let after_issue = if let Some(rest) = after_ws.strip_prefix("#[issueid]")
+        .or_else(|| after_ws.strip_prefix("#[IssueID]"))
+        .or_else(|| after_ws.strip_prefix("#[issue_id]"))
+    {
+        rest
+    } else if let Some(rest) = after_ws.strip_prefix('#') {
+        let digits_len = rest.chars().take_while(|c| c.is_ascii_digit()).count();
+        if digits_len == 0 {
+            return false;
+        }
+        &rest[digits_len..]
+    } else {
+        return false;
+    };
+
+    let after_sep = after_issue.trim_start().trim_start_matches('-').trim_start_matches(':').trim_start();
+
+    // 3. Must contain markdown link [<Title>](<target>)
+    if !after_sep.starts_with('[') {
+        return false;
+    }
+    let sep_pos = match after_sep.find("](") {
+        Some(pos) => pos,
+        None => return false,
+    };
+    let after_target_open = &after_sep[sep_pos + 2..];
+    let close_paren_rel = match after_target_open.find(')') {
+        Some(pos) => pos,
+        None => return false,
+    };
+    let target = &after_target_open[..close_paren_rel];
+    let title = &after_sep[1..sep_pos];
+
+    let lower_title = title.to_lowercase();
+    let lower_target = target.to_lowercase();
+    if !lower_title.contains("feat-")
+        && !lower_title.contains("feature")
+        && !lower_target.contains("feat-")
+        && !lower_target.contains("features/")
+    {
+        return false;
+    }
+
+    // 4. Must contain trailing parenthetical (<clauses>)
+    let after_link = after_target_open[close_paren_rel + 1..].trim();
+    if !after_link.starts_with('(') || !after_link.ends_with(')') || after_link.len() < 3 {
+        return false;
+    }
+
+    true
+}
+
 /// Counts referenced features in an Epic specification.
 ///
 /// Preconditions: None.
-/// Postconditions: Returns count of features declared or referenced in the Epic.
+/// Postconditions: Returns count of features declared or referenced in the Epic conforming to canonical checklist grammar.
 /// Algorithmic Complexity: O(L) where L is lines count.
 pub fn count_epic_features(content: &str) -> usize {
     let mut count = 0;
@@ -1149,14 +1243,16 @@ pub fn count_epic_features(content: &str) -> usize {
             continue;
         }
 
-        let lower = trimmed.to_lowercase();
-        // Check for checklist items referencing features, e.g. "- [ ] FEAT-01" or "- [x] Feature 01"
-        if trimmed.starts_with("- [ ]") || trimmed.starts_with("- [x]") || trimmed.starts_with("* [ ]") || trimmed.starts_with("* [x]") {
-            if lower.contains("feat-") || lower.contains("feature") {
+        if trimmed.starts_with("- [ ]")
+            || trimmed.starts_with("- [x]")
+            || trimmed.starts_with("- [X]")
+            || trimmed.starts_with("* [ ]")
+            || trimmed.starts_with("* [x]")
+            || trimmed.starts_with("* [X]")
+        {
+            if is_valid_epic_feature_checklist_item(trimmed) {
                 count += 1;
             }
-        } else if (trimmed.starts_with('-') || trimmed.starts_with('*')) && (lower.contains("feat-") || lower.contains("feature ")) {
-            count += 1;
         }
     }
 
@@ -1476,7 +1572,7 @@ type: epic
 # Epic 01: Core Systems
 
 ## Requirements & Checklist
-- [ ] FEAT-01: Single feature
+- [ ] #10 - [Feature 01: Single feature](../features/FEAT-01.md) (traceable requirement)
 "#;
         let doc1 = parse_markdown(underflow_content).expect("parse markdown");
         let findings1 = validate_cardinality_bounds(&doc1, underflow_content, "docs/epics/epic-01.md")
@@ -1490,10 +1586,10 @@ type: epic
 # Epic 01: Core Systems
 
 ## Requirements & Checklist
-- [ ] FEAT-01: Feature 1
-- [ ] FEAT-02: Feature 2
-- [ ] FEAT-03: Feature 3
-- [ ] FEAT-04: Feature 4
+- [ ] #10 - [Feature 01: Feature 1](../features/FEAT-01.md) (traceable requirement)
+- [ ] #11 - [Feature 02: Feature 2](../features/FEAT-02.md) (traceable requirement)
+- [ ] #12 - [Feature 03: Feature 3](../features/FEAT-03.md) (traceable requirement)
+- [ ] #13 - [Feature 04: Feature 4](../features/FEAT-04.md) (traceable requirement)
 "#;
         let doc2 = parse_markdown(nominal_content).expect("parse markdown");
         let findings2 = validate_cardinality_bounds(&doc2, nominal_content, "docs/epics/epic-01.md")
@@ -1510,7 +1606,7 @@ type: epic
             "## Requirements & Checklist".to_string(),
         ];
         for i in 1..=16 {
-            overflow_lines.push(format!("- [ ] FEAT-{:02}: Feature {}", i, i));
+            overflow_lines.push(format!("- [ ] #{i} - [Feature {i:02}: Feature {i}](../features/FEAT-{i:02}.md) (traceable requirement)"));
         }
         let overflow_content = overflow_lines.join("\n");
         let doc3 = parse_markdown(&overflow_content).expect("parse markdown");
@@ -1868,6 +1964,42 @@ sequenceDiagram
             findings.is_empty(),
             "SCN-05 sequence diagram should pass temporal safety without violations: {:?}",
             findings
+        );
+    }
+
+    #[test]
+    fn test_issue_449_count_epic_features_strict_checklist_grammar() {
+        // Unlinked backtick item lacking IssueID, hyperlink, and trailing mapped requirements parenthetical
+        let unlinked_epic = r#"---
+type: epic
+---
+# Epic 01: Core Systems
+
+## Requirements & Checklist
+- [ ] `FEAT-01_example` -- description
+- [ ] `FEAT-02_example` -- description
+"#;
+        assert_eq!(
+            count_epic_features(unlinked_epic),
+            0,
+            "Unlinked backtick checklist items must not be counted as valid Epic features"
+        );
+
+        // Canonical linked items with IssueID, hyperlink, and parenthetical clauses
+        let canonical_epic = r#"---
+type: epic
+---
+# Epic 01: Core Systems
+
+## 2. Requirements & Checklist
+- [ ] #10 - [Feature 01: [ConOps] Tracker](../features/FEAT-01-Tracker.md) (ISO/IEC/IEEE 29148:2018 §6.4.2)
+- [x] #11 - [Feature 02: [Core] Detector](https://github.com/org/repo/blob/main/docs/features/FEAT-02-Detector.md) (traceable requirement)
+- [ ] #[IssueID] - [Feature 03: [Core] Engine](../features/FEAT-03-Engine.md) (architectural part definition)
+"#;
+        assert_eq!(
+            count_epic_features(canonical_epic),
+            3,
+            "Canonical Epic feature checklist items must be counted"
         );
     }
 }

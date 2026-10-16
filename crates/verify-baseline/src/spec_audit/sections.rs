@@ -125,6 +125,9 @@ impl SectionRules {
         let epic_sections = [
             ("## 1. Context", "## 1. Context"),
             ("## 2. Requirements & Checklist", "## 2. Requirements & Checklist"),
+            ("### Associated Use Cases & User Stories", "### Associated Use Cases & User Stories"),
+            ("#### Associated Use Cases", "#### Associated Use Cases"),
+            ("#### Associated User Stories", "#### Associated User Stories"),
             ("## 3. Architecture", "## 3. Architecture"),
             ("## 4. Operational Considerations", "## 4. Operational Considerations"),
             ("## 5. Security & Governance", "## 5. Security & Governance"),
@@ -580,6 +583,9 @@ Prose here.
         let content = r#"# Epic Complete
 ## 1. Context
 ## 2. Requirements & Checklist
+### Associated Use Cases & User Stories
+#### Associated Use Cases
+#### Associated User Stories
 ## 3. Architecture
 ## 4. Operational Considerations
 ## 5. Security & Governance
@@ -670,4 +676,36 @@ Prose here.
         let errors_valid = validate_use_case_anti_boilerplate(&doc_valid, valid_content, "docs/use-cases/uc-01.md");
         assert!(errors_valid.is_empty(), "Valid use case should have 0 boilerplate errors: {:?}", errors_valid);
     }
+
+    #[test]
+    fn test_issue_449_epic_associated_use_cases_and_user_stories_sections_required() {
+        let missing_assoc_content = r#"# Epic Complete
+## 1. Context
+## 2. Requirements & Checklist
+## 3. Architecture
+## 4. Operational Considerations
+## 5. Security & Governance
+## 6. Source References
+## System-Level UML Class Diagram
+## System State Machine Diagram
+"#;
+        let doc = parse_markdown(missing_assoc_content).unwrap();
+        let errors = validate_sections("epic", &doc, "docs/epics/epic-01-missing-assoc.md");
+        assert!(
+            errors.iter().any(|e| e.contains("Associated Use Cases & User Stories")),
+            "Epic missing '### Associated Use Cases & User Stories' must produce section validation error, got: {:?}",
+            errors
+        );
+        assert!(
+            errors.iter().any(|e| e.contains("Associated Use Cases")),
+            "Epic missing '#### Associated Use Cases' must produce section validation error, got: {:?}",
+            errors
+        );
+        assert!(
+            errors.iter().any(|e| e.contains("Associated User Stories")),
+            "Epic missing '#### Associated User Stories' must produce section validation error, got: {:?}",
+            errors
+        );
+    }
 }
+
