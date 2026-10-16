@@ -7,7 +7,7 @@ pub mod create_issue;
 pub mod frontmatter;
 pub mod tracker;
 
-use checklist::{clean_unpopulated_placeholders, contains_unpopulated_placeholders, reconcile_checklist_content};
+use checklist::{clean_unpopulated_placeholders_counted, contains_unpopulated_placeholders, reconcile_checklist_content};
 use frontmatter::{parse_frontmatter, update_frontmatter_issue_id, SpecFrontmatter};
 use tracker::{IssueIndex, TrackerClient};
 
@@ -121,9 +121,12 @@ pub fn run_reconciliation<T: TrackerClient>(
 
         // Check for prohibited unpopulated placeholders
         if contains_unpopulated_placeholders(&spec.content) {
-            spec.content = clean_unpopulated_placeholders(&spec.content);
-            modified = true;
-            summary.placeholders_purged += 1;
+            let (cleaned_content, purged_count) = clean_unpopulated_placeholders_counted(&spec.content);
+            if purged_count > 0 {
+                spec.content = cleaned_content;
+                modified = true;
+                summary.placeholders_purged += purged_count;
+            }
         }
 
         // Match spec to tracker issue
@@ -628,6 +631,59 @@ type: user-story
 
         let res = validate_checklist_publish_integrity("docs/epics/EPIC-01.md", content, &issue_index);
         assert!(res.is_ok());
+    }
+
+    #[test]
+    fn test_issue_439_reconcile_workflow_placeholder_telemetry() -> Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = std::env::temp_dir().join(format!("reconcile_telemetry_test_{}", chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)));
+        let epics_dir = temp_dir.join("docs/epics");
+        fs::create_dir_all(&epics_dir)?;
+
+        let epic_content = r#"---
+issue_id: 10
+title: "Epic 01: Test"
+type: epic
+---
+# Epic 01: Test
+
+#### Phase 1 Placeholders
+*To be populated after Phase 1*
+
+#### Phase 2 Placeholders
+*To be populated after Phase 2*
+
+#### Phase 3 Placeholders
+*To be populated after Phase 3*
+"#;
+        let epic_path = epics_dir.join("EPIC-01-Test.md");
+        fs::write(&epic_path, epic_content)?;
+
+        let tracker = OfflineTracker::with_issues(vec![]);
+        let options = ReconcileOptions {
+            workspace_root: temp_dir.clone(),
+            offline: true,
+            dry_run: false,
+            provider: "offline".to_string(),
+            sync_bodies: false,
+            repo: None,
+            default_branch: None,
+        };
+
+        // Pass 1: should purge all 3 blocks and increment telemetry by 3
+        let summary1 = run_reconciliation(&tracker, &options)?;
+        assert_eq!(summary1.placeholders_purged, 3, "Expected 3 placeholders purged in pass 1");
+
+        let updated_content = fs::read_to_string(&epic_path)?;
+        assert!(!contains_unpopulated_placeholders(&updated_content));
+        let count_none = updated_content.matches("- None allocated (structural subsystem component)").count();
+        assert_eq!(count_none, 3, "Expected 3 allocations in updated spec");
+
+        // Pass 2 (Idempotency): running reconciliation again over same spec should purge 0
+        let summary2 = run_reconciliation(&tracker, &options)?;
+        assert_eq!(summary2.placeholders_purged, 0, "Expected 0 placeholders purged on pass 2");
+
+        let _ = fs::remove_dir_all(&temp_dir);
+        Ok(())
     }
 }
 

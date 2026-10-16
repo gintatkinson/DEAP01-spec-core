@@ -89,39 +89,109 @@ fn parse_checklist_line(line: &str) -> Option<ParsedCheckline<'_>> {
 
 /// Identifies if a string contains prohibited unpopulated fallback placeholders.
 pub fn contains_unpopulated_placeholders(text: &str) -> bool {
-    let lower = text.to_lowercase();
-    lower.contains("to be populated after phase 3")
-        || lower.contains("to be populated after phase")
-        || lower.contains("*to be populated*")
+    text.to_ascii_lowercase().contains("to be populated")
 }
 
 /// Replaces prohibited placeholder blocks with compliant allocated notes or removes them.
 pub fn clean_unpopulated_placeholders(content: &str) -> String {
-    let target = "to be populated after phase 3";
+    clean_unpopulated_placeholders_counted(content).0
+}
+
+/// Replaces prohibited placeholder blocks with compliant allocated notes and returns the count of purged blocks.
+pub fn clean_unpopulated_placeholders_counted(content: &str) -> (String, usize) {
+    let target = "to be populated";
     let replacement = "- None allocated (structural subsystem component)";
     let mut result = String::with_capacity(content.len());
     let mut rest = content;
+    let mut purged_count = 0;
 
     while let Some(pos) = rest.to_ascii_lowercase().find(target) {
-        // Look backwards from pos in rest for optional whitespace and optional '*'
-        let before = &rest[..pos];
-        let before_ws = before.trim_end_matches(|c: char| c.is_ascii_whitespace());
-        let start_idx = before_ws.strip_suffix('*').unwrap_or(before_ws).len();
+        // Forward matching: check for optional trailing phase specifier e.g. " after phase [digits/alnum]"
+        let mut cur_offset = target.len();
+        let after_target = &rest[pos + cur_offset..];
+        let after_lower = after_target.to_ascii_lowercase();
 
-        // Look forwards from pos + target.len() in rest for optional whitespace and optional '*'
-        let after_pos = pos + target.len();
-        let after = &rest[after_pos..];
-        let after_ws = after.trim_start_matches(|c: char| c.is_ascii_whitespace());
-        let after_star = after_ws.strip_prefix('*').unwrap_or(after_ws);
-        let end_offset = after.len() - after_star.len();
-        let end_idx = after_pos + end_offset;
+        if after_lower.starts_with(" after phase") {
+            cur_offset += " after phase".len();
+            // Skip optional spaces/tabs between "after phase" and phase identifier
+            let rem = &rest[pos + cur_offset..];
+            let rem_trimmed = rem.trim_start_matches(|c: char| c == ' ' || c == '\t');
+            cur_offset += rem.len() - rem_trimmed.len();
+            // Consume optional alphanumeric phase identifier (e.g., "1", "2", "3", "IV")
+            let id_len = rem_trimmed.chars().take_while(|c| c.is_ascii_alphanumeric()).count();
+            cur_offset += id_len;
+        }
+
+        // Forward scanning: consume trailing closing envelope on the line
+        // Envelope characters: spaces, tabs, closing parenthesis ')', markdown emphasis '*', '_'
+        let forward_slice = &rest[pos + cur_offset..];
+        let forward_bytes = forward_slice.as_bytes();
+        let mut i = 0;
+        // Skip horizontal spaces/tabs
+        while i < forward_bytes.len() && (forward_bytes[i] == b' ' || forward_bytes[i] == b'\t') {
+            i += 1;
+        }
+        // Skip optional ')'
+        if i < forward_bytes.len() && forward_bytes[i] == b')' {
+            i += 1;
+        }
+        // Skip horizontal spaces/tabs
+        while i < forward_bytes.len() && (forward_bytes[i] == b' ' || forward_bytes[i] == b'\t') {
+            i += 1;
+        }
+        // Skip closing markdown emphasis: '*' or '_'
+        while i < forward_bytes.len() && (forward_bytes[i] == b'*' || forward_bytes[i] == b'_') {
+            i += 1;
+        }
+        // Skip optional ')' (in case formatted like (*...*))
+        if i < forward_bytes.len() && forward_bytes[i] == b')' {
+            i += 1;
+        }
+        // Skip trailing horizontal spaces/tabs up to newline
+        while i < forward_bytes.len() && (forward_bytes[i] == b' ' || forward_bytes[i] == b'\t') {
+            i += 1;
+        }
+        let end_idx = pos + cur_offset + i;
+
+        // Backward scanning: check line preceding the placeholder in `rest`
+        let before = &rest[..pos];
+        let line_start = before.rfind('\n').map(|idx| idx + 1).unwrap_or(0);
+        let line_prefix = &rest[line_start..pos];
+
+        // Measure leading indentation on this line
+        let indent_len = line_prefix.len() - line_prefix.trim_start_matches(|c: char| c == ' ' || c == '\t').len();
+        let after_indent = &line_prefix[indent_len..];
+
+        // Check if after_indent contains only markdown markers/envelope:
+        // bullets ('-', '*', '+'), emphasis ('*', '_'), parentheses ('('), whitespace (' ', '\t')
+        let is_pure_envelope = !after_indent.chars().any(|c| {
+            c != '-' && c != '*' && c != '+' && c != '_' && c != '(' && c != ' ' && c != '\t'
+        });
+
+        let start_idx = if is_pure_envelope {
+            line_start + indent_len
+        } else {
+            // If there was preceding non-envelope text, peel only trailing envelope from `before`
+            let mut j = pos;
+            while j > line_start {
+                let prev_char = rest[..j].chars().next_back().unwrap();
+                if prev_char == ' ' || prev_char == '\t' || prev_char == '*' || prev_char == '_' || prev_char == '(' {
+                    j -= prev_char.len_utf8();
+                } else {
+                    break;
+                }
+            }
+            j
+        };
 
         result.push_str(&rest[..start_idx]);
         result.push_str(replacement);
         rest = &rest[end_idx..];
+        purged_count += 1;
     }
+
     result.push_str(rest);
-    result
+    (result, purged_count)
 }
 
 /// Parses all `- [ ]` or `- [x]` checklist items from markdown content.
@@ -233,5 +303,104 @@ mod tests {
         assert_eq!(count, 1);
         assert!(reconciled.contains("- [x] #10 - Feature 01: Test"));
         assert!(reconciled.contains("- [ ] #11 - Feature 02: Another"));
+    }
+
+    #[test]
+    fn test_issue_439_placeholder_purging_regression() {
+        let canonical_replacement = "- None allocated (structural subsystem component)";
+
+        // 1. All placeholder phase variants and formatting variations
+        let test_cases = vec![
+            // Phase variants
+            "*To be populated after Phase 3*",
+            "*To be populated after Phase 2*",
+            "*To be populated after Phase 1*",
+            "*To be populated after Phase*",
+            "*To be populated*",
+            "*(To be populated)*",
+            "*(To be populated after Phase 3)*",
+            // Formatting variations
+            "**To be populated after Phase 3**",
+            "_To be populated after Phase 3_",
+            "- *To be populated after Phase 3*",
+            "TO BE POPULATED AFTER PHASE 2",
+        ];
+
+        for raw in test_cases {
+            // Precondition: detector identifies raw placeholder as unpopulated
+            assert!(
+                contains_unpopulated_placeholders(raw),
+                "Precondition failed: detector missed placeholder variant '{}'",
+                raw
+            );
+
+            let (cleaned, count) = clean_unpopulated_placeholders_counted(raw);
+            assert_eq!(
+                count, 1,
+                "Expected count == 1 for raw placeholder '{}', got count = {}",
+                raw, count
+            );
+            assert!(
+                cleaned.contains(canonical_replacement),
+                "Cleaned text did not contain canonical replacement for '{}':\n{}",
+                raw, cleaned
+            );
+            // Postcondition assertion
+            assert!(
+                !contains_unpopulated_placeholders(&cleaned),
+                "Postcondition failed: cleaned text still contains unpopulated placeholder for '{}':\n{}",
+                raw, cleaned
+            );
+            // Syntax purity assertions
+            assert!(
+                !cleaned.contains("*- None"),
+                "Syntax corruption '*- None' found for '{}':\n{}",
+                raw, cleaned
+            );
+            assert!(
+                !cleaned.contains("_- None"),
+                "Syntax corruption '_- None' found for '{}':\n{}",
+                raw, cleaned
+            );
+            assert!(
+                !cleaned.contains("- - None"),
+                "Syntax corruption '- - None' found for '{}':\n{}",
+                raw, cleaned
+            );
+
+            // Idempotency: running cleaner on already-cleaned text produces count == 0 and identical output
+            let (second_cleaned, second_count) = clean_unpopulated_placeholders_counted(&cleaned);
+            assert_eq!(second_count, 0, "Idempotency failed: second pass count = {} on '{}'", second_count, raw);
+            assert_eq!(second_cleaned, cleaned, "Idempotency failed: output changed on second pass for '{}'", raw);
+        }
+
+        // 2. Multi-block counting: 3 blocks in one string -> count == 3
+        let multi_block = r#"
+#### Block 1
+*To be populated after Phase 1*
+
+#### Block 2
+*To be populated after Phase 2*
+
+#### Block 3
+*To be populated after Phase 3*
+"#;
+        let (cleaned_multi, multi_count) = clean_unpopulated_placeholders_counted(multi_block);
+        assert_eq!(multi_count, 3, "Multi-block test failed: expected count 3, got {}", multi_count);
+        assert!(
+            !contains_unpopulated_placeholders(&cleaned_multi),
+            "Postcondition failed on multi-block:\n{}",
+            cleaned_multi
+        );
+        let occurrences = cleaned_multi.matches(canonical_replacement).count();
+        assert_eq!(occurrences, 3, "Expected 3 occurrences of canonical replacement, got {}", occurrences);
+        assert!(!cleaned_multi.contains("*- None"));
+        assert!(!cleaned_multi.contains("_- None"));
+        assert!(!cleaned_multi.contains("- - None"));
+
+        // Idempotency on multi-block
+        let (idempotent_multi, idempotent_count) = clean_unpopulated_placeholders_counted(&cleaned_multi);
+        assert_eq!(idempotent_count, 0);
+        assert_eq!(idempotent_multi, cleaned_multi);
     }
 }
