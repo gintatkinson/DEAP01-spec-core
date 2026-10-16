@@ -2027,7 +2027,7 @@ pub fn discover_sysml_files(dir: &Path) -> Vec<PathBuf> {
 /// Merges all element definitions (`imports`, `part_defs`, `port_defs`, `attribute_defs`,
 /// `action_defs`, `operation_defs`, `capability_defs`, `interaction_defs`, `constraint_defs`,
 /// `test_case_defs`, `requirement_defs`, `state_defs`, `use_case_defs`, `item_defs`, `hazard_defs`,
-/// `risk_defs`, `connection_defs`).
+/// `risk_defs`, `connection_defs`, `calc_defs`).
 /// For nested `packages`, if a child package with the same name already exists in
 /// `dest.packages`, it is recursively merged; otherwise, it is appended.
 pub fn merge_package_defs(dest: &mut PackageDef, src: PackageDef) {
@@ -2064,6 +2064,7 @@ pub fn merge_package_defs(dest: &mut PackageDef, src: PackageDef) {
     dest.hazard_defs.extend(src.hazard_defs);
     dest.risk_defs.extend(src.risk_defs);
     dest.connection_defs.extend(src.connection_defs);
+    dest.calc_defs.extend(src.calc_defs);
 
     for src_child in src.packages {
         if let Some(existing) = dest.packages.iter_mut().find(|p| p.name == src_child.name) {
@@ -2629,6 +2630,37 @@ package DEAP_Compiler_System {
         assert_eq!(root_from_dir.packages.len(), 3);
 
         let _ = fs::remove_dir_all(&temp_dir);
+        Ok(())
+    }
+
+    #[test]
+    fn test_issue_444_merge_package_defs_preserves_calc_defs() -> Result<(), Box<dyn std::error::Error>> {
+        use deap_core::sysml_ast::CalcDef;
+
+        let mut dest = PackageDef {
+            name: "TrajectorySubsystem".to_string(),
+            ..Default::default()
+        };
+        let mut src = PackageDef {
+            name: "TrajectorySubsystem".to_string(),
+            ..Default::default()
+        };
+        src.calc_defs.push(CalcDef {
+            name: "ComputeTargetTrajectory".to_string(),
+            return_type: Some("TrajectoryVector".to_string()),
+            ..Default::default()
+        });
+
+        merge_package_defs(&mut dest, src);
+        assert_eq!(
+            dest.calc_defs.len(),
+            1,
+            "merge_package_defs must preserve calc_defs from src package"
+        );
+        assert_eq!(
+            dest.calc_defs[0].name,
+            "ComputeTargetTrajectory"
+        );
         Ok(())
     }
 
