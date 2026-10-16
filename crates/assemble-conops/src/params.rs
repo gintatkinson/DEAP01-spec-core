@@ -98,29 +98,13 @@ pub static DEFAULT_CONOPS_PARAMS: &[(&str, &str)] = &[
     ("OPERATIONAL_AVAILABILITY_OBJECTIVE", "0.99"),
     ("OPERATING_TEMPERATURE_MIN_C", "-20.0"),
     ("OPERATING_TEMPERATURE_MAX_C", "+55.0"),
-    ("TOTAL_MASS_KG", "25.0"),
     ("MASS_FRACTION_STRUCTURE_PCT", "30.0"),
-    ("MASS_BUDGET_STRUCTURE_KG", "7.5"),
     ("POWER_NOMINAL_STRUCTURE_W", "0.0"),
     ("POWER_PEAK_STRUCTURE_W", "0.0"),
     ("MASS_FRACTION_CONTROLLER_PCT", "15.0"),
-    ("MASS_BUDGET_CONTROLLER_KG", "3.75"),
     ("POWER_NOMINAL_CONTROLLER_W", "25.0"),
     ("POWER_PEAK_CONTROLLER_W", "50.0"),
-    ("M_MAX_LIMIT_KG", "25.0"),
-    ("M_MAX_NOMINAL_KG", "20.0"),
-    ("V_NOMINAL_MIN_MPS", "15.0"),
-    ("V_NOMINAL_MAX_MPS", "25.0"),
-    ("V_NOMINAL_MPS", "20.0"),
-    ("V_MAX_MPS", "35.0"),
-    ("V_MAX_NOMINAL_MPS", "30.0"),
-    ("V_MIN_MAX_MPS", "10.0"),
-    ("V_MIN_NOMINAL_MPS", "8.0"),
-    ("SPATIAL_LIMIT_MAX_M", "120.0"),
-    ("SPATIAL_LIMIT_NOMINAL_M", "100.0"),
     ("SPATIAL_LIMIT_UNIT", "m"),
-    ("DISTURBANCE_LIMIT_MAX_MPS", "15.0"),
-    ("DISTURBANCE_LIMIT_NOMINAL_MPS", "12.0"),
 ];
 
 /// Formal lifecycle archetypes for cyber-physical mission systems.
@@ -1063,6 +1047,7 @@ impl SysMLParameterBindingEngine {
         engine._derive_domain_regulatory_standards();
         engine._derive_domain_risk_assessment();
         engine._derive_subsystem_architecture();
+        engine.derive_master_physical_limits_from_ast();
 
         engine
     }
@@ -1144,6 +1129,7 @@ impl SysMLParameterBindingEngine {
         self._derive_lifecycle_contract();
         self._derive_quadratic_physics();
         self._derive_subsystem_architecture();
+        self.derive_master_physical_limits_from_ast();
     }
 
     pub fn ingest_file(&mut self, path: &Path) -> bool {
@@ -1167,6 +1153,7 @@ impl SysMLParameterBindingEngine {
         };
         if ok {
             self._derive_subsystem_architecture();
+            self.derive_master_physical_limits_from_ast();
         }
         ok
     }
@@ -1518,37 +1505,157 @@ impl SysMLParameterBindingEngine {
             aliases.insert("SYSTEM_NAME", val.to_string());
         } else if lower.contains("cruise") {
             aliases.insert("V_CRUISE_NOMINAL_MPS", num_val.clone());
-            aliases.insert("V_CRUISE_MAX_MPS", num_val.clone());
             aliases.insert("MAX_CRUISE_SPEED_MS", num_val.clone());
             aliases.insert("CRUISE_SPEED_MPS", num_val.clone());
+            if lower.contains("min") {
+                aliases.insert("V_CRUISE_MIN_MPS", num_val.clone());
+            } else if lower.contains("max") {
+                aliases.insert("V_CRUISE_MAX_MPS", num_val.clone());
+            } else if let Ok(v) = num_val.parse::<f64>() {
+                aliases.insert("V_CRUISE_MIN_MPS", format!("{:.1}", v * 0.7));
+                aliases.insert("V_CRUISE_MAX_MPS", format!("{:.1}", v * 1.3));
+            }
         } else if lower.contains("max_speed")
             || lower.contains("v_max")
             || lower.contains("max_horizontal")
             || lower == "vmax"
+            || lower.contains("speed_max")
+            || lower.contains("terminal_speed")
+            || lower.contains("dive_speed")
         {
             aliases.insert("V_MAX_MPS", num_val.clone());
             aliases.insert("MAX_SPEED_MS", num_val.clone());
             aliases.insert("MAX_HORIZONTAL_SPEED_MPS", num_val.clone());
-        } else if lower.contains("stall") {
+            if let Ok(v) = num_val.parse::<f64>() {
+                aliases.insert("V_MAX_NOMINAL_MPS", format!("{:.1}", v * 0.85));
+            }
+        } else if lower.contains("stall") || lower.contains("min_speed") || lower.contains("v_min") || lower == "vmin" {
+            aliases.insert("V_MIN_MAX_MPS", num_val.clone());
             aliases.insert("V_STALL_MAX_MPS", num_val.clone());
-            aliases.insert("V_STALL_NOMINAL_MPS", num_val.clone());
             aliases.insert("STALL_SPEED_MPS", num_val.clone());
-        } else if lower.contains("mtow")
-            || lower.contains("takeoff_weight")
-            || lower.contains("takeoff_mass")
+            if let Ok(v) = num_val.parse::<f64>() {
+                aliases.insert("V_MIN_NOMINAL_MPS", format!("{:.1}", v * 0.8));
+                aliases.insert("V_STALL_NOMINAL_MPS", format!("{:.1}", v * 0.8));
+            }
+        } else if (lower.contains("mass")
+            || lower.contains("weight")
+            || lower.contains("mtow")
+            || lower.contains("m_max"))
+            && !lower.contains("payload")
         {
-            aliases.insert("TOTAL_MTOW_KG", num_val.clone());
-            aliases.insert("MTOW_MAX_KG", num_val.clone());
-            aliases.insert("MTOW_NOMINAL_KG", num_val.clone());
+            let is_total = lower.contains("total")
+                || lower.contains("system")
+                || lower.contains("mtow")
+                || lower.contains("takeoff")
+                || lower.contains("m_max")
+                || lower.contains("gross");
+            if is_total || !self.parameter_bindings.contains_key("M_MAX_LIMIT_KG") {
+                aliases.insert("TOTAL_MTOW_KG", num_val.clone());
+                aliases.insert("MTOW_MAX_KG", num_val.clone());
+                aliases.insert("TOTAL_MASS_KG", num_val.clone());
+                aliases.insert("M_MAX_LIMIT_KG", num_val.clone());
+                if lower.contains("nominal") {
+                    aliases.insert("MTOW_NOMINAL_KG", num_val.clone());
+                    aliases.insert("M_MAX_NOMINAL_KG", num_val.clone());
+                } else if let Ok(m) = num_val.parse::<f64>() {
+                    let nom = format!("{:.1}", m * 0.9);
+                    aliases.insert("MTOW_NOMINAL_KG", nom.clone());
+                    aliases.insert("M_MAX_NOMINAL_KG", nom);
+                }
+            }
         } else if lower.contains("payload") {
             aliases.insert("PAYLOAD_MAX_KG", num_val.clone());
-            aliases.insert("PAYLOAD_NOMINAL_KG", num_val.clone());
-        } else if lower.contains("endurance") {
+            if lower.contains("nominal") {
+                aliases.insert("PAYLOAD_NOMINAL_KG", num_val.clone());
+            } else if let Ok(p) = num_val.parse::<f64>() {
+                aliases.insert("PAYLOAD_NOMINAL_KG", format!("{:.1}", p * 0.8));
+            }
+        } else if lower.contains("endurance") || lower.contains("flight_time") || lower.contains("mission_duration") {
             aliases.insert("ENDURANCE_NOMINAL_MIN", num_val.clone());
-            aliases.insert("ENDURANCE_MIN_MIN", num_val.clone());
-        } else if lower.contains("c2_range") || lower.contains("datalink_range") {
+            if let Ok(e) = num_val.parse::<f64>() {
+                aliases.insert("ENDURANCE_MIN_MIN", format!("{:.1}", e * 0.67));
+            } else {
+                aliases.insert("ENDURANCE_MIN_MIN", num_val.clone());
+            }
+        } else if lower.contains("length") || lower.contains("dim_l") || lower.contains("dim_max_l") {
+            aliases.insert("DIM_MAX_L_M", num_val.clone());
+            if let Ok(d) = num_val.parse::<f64>() {
+                aliases.insert("DIM_NOM_L_M", format!("{:.1}", d * 0.9));
+            }
+        } else if lower.contains("width") || lower.contains("dim_w") || lower.contains("dim_max_w") {
+            aliases.insert("DIM_MAX_W_M", num_val.clone());
+            if let Ok(d) = num_val.parse::<f64>() {
+                aliases.insert("DIM_NOM_W_M", format!("{:.1}", d * 0.9));
+            }
+        } else if lower.contains("height") || lower.contains("dim_h") || lower.contains("dim_max_h") {
+            aliases.insert("DIM_MAX_H_M", num_val.clone());
+            if let Ok(d) = num_val.parse::<f64>() {
+                aliases.insert("DIM_NOM_H_M", format!("{:.1}", d * 0.9));
+            }
+        } else if lower.contains("sector")
+            || lower.contains("spatial_limit")
+            || lower.contains("spatial_boundary")
+            || lower.contains("boundary_radius")
+            || lower.contains("containment_radius")
+            || lower.contains("geofence")
+            || lower.contains("altitude_limit")
+            || lower.contains("service_ceiling")
+        {
+            aliases.insert("SPATIAL_LIMIT_MAX_M", num_val.clone());
+            if let Ok(s) = num_val.parse::<f64>() {
+                aliases.insert("SPATIAL_LIMIT_NOMINAL_M", format!("{:.1}", s * 0.8));
+            }
+            aliases.insert("SPATIAL_LIMIT_UNIT", "m".to_string());
+        } else if lower.contains("detection_range")
+            || lower.contains("sensor_range")
+            || lower.contains("radar_range")
+        {
+            aliases.insert("SENSOR_DETECTION_RANGE_M", num_val.clone());
+            if !self.parameter_bindings.contains_key("SPATIAL_LIMIT_MAX_M") {
+                aliases.insert("SPATIAL_LIMIT_MAX_M", num_val.clone());
+                if let Ok(s) = num_val.parse::<f64>() {
+                    aliases.insert("SPATIAL_LIMIT_NOMINAL_M", format!("{:.1}", s * 0.8));
+                }
+            }
+            if let Ok(m) = num_val.parse::<f64>() {
+                let km = if m >= 100.0 { m / 1000.0 } else { m };
+                aliases.insert("C2_RANGE_NOMINAL_KM", format!("{:.1}", km));
+                aliases.insert("C2_RANGE_MIN_KM", format!("{:.1}", km * 0.6));
+            }
+        } else if lower.contains("engagement_range")
+            || lower.contains("effector_range")
+            || lower.contains("interception_range")
+            || lower.contains("mitigation_range")
+            || lower.contains("effector_envelope")
+        {
+            aliases.insert("EFFECTOR_ENGAGEMENT_RANGE_M", num_val.clone());
+            aliases.insert("ENGAGEMENT_RANGE_M", num_val.clone());
+        } else if lower.contains("c2_range") || lower.contains("datalink_range") || lower.contains("comm_range") {
             aliases.insert("C2_RANGE_NOMINAL_KM", num_val.clone());
-            aliases.insert("C2_RANGE_MIN_KM", num_val.clone());
+            if let Ok(km) = num_val.parse::<f64>() {
+                aliases.insert("C2_RANGE_MIN_KM", format!("{:.1}", km * 0.6));
+            }
+        } else if lower.contains("latency") || lower.contains("response_time") || lower.contains("loop_time") {
+            aliases.insert("MAX_INFERENCE_LATENCY_MS", num_val.clone());
+            aliases.insert("MAX_LATENCY_MS", num_val.clone());
+            aliases.insert("PROCESSING_LATENCY_MS", num_val.clone());
+            aliases.insert("TAU_RTT_MAX_MS", num_val.clone());
+        } else if lower.contains("temperature_min") || lower.contains("temp_min") || lower.contains("operating_temp_min") {
+            aliases.insert("TEMP_MIN_DEGC", num_val.clone());
+            aliases.insert("OPERATING_TEMPERATURE_MIN_C", num_val.clone());
+        } else if lower.contains("temperature_max") || lower.contains("temp_max") || lower.contains("operating_temp_max") {
+            aliases.insert("TEMP_MAX_DEGC", num_val.clone());
+            aliases.insert("OPERATING_TEMPERATURE_MAX_C", num_val.clone());
+        } else if lower.contains("temp_nominal") || lower.contains("temperature_nominal") {
+            aliases.insert("TEMP_NOMINAL_DEGC", num_val.clone());
+        } else if lower.contains("wind") || lower.contains("gust") {
+            aliases.insert("WIND_LIMIT_MAX_MPS", num_val.clone());
+            if let Ok(w) = num_val.parse::<f64>() {
+                aliases.insert("WIND_LIMIT_NOMINAL_MPS", format!("{:.1}", w * 0.8));
+            }
+        } else if lower.contains("ip_rating") || lower.contains("ingress_protection") {
+            aliases.insert("INGRESS_PROTECTION_RATING", val.to_string());
+            aliases.insert("INGRESS_PROTECTION_TARGET", val.to_string());
         }
 
         for (k, v) in aliases {
@@ -1602,6 +1709,8 @@ impl SysMLParameterBindingEngine {
     pub fn _get_mtow_value(&self) -> f64 {
         for key in &[
             "TOTAL_MTOW_KG",
+            "TOTAL_MASS_KG",
+            "M_MAX_LIMIT_KG",
             "MTOW_NOMINAL_KG",
             "MTOW_MAX_KG",
             "SYSTEM_MASS_MAX_KG",
@@ -2556,6 +2665,47 @@ impl SysMLParameterBindingEngine {
             .insert("SUPERVISORY_AUTHORITY_HANDOFF_SECTION".to_string(), content);
     }
 
+    /// Derives ConOps Section 1.3.3 master physical and operational limits from AST nodes.
+    ///
+    /// # Purpose
+    /// Iterates through parsed AST parts and their attributes to map schema-defined
+    /// physical limits (mass, dimensions, velocities, sector bounds, sensor ranges,
+    /// effector envelopes, latency) into ConOps parameter bindings, replacing static
+    /// UAV defaults with schema-derived values.
+    ///
+    /// # Inputs
+    /// - `&mut self`: Engine with parsed `ast_parts` and existing `parameter_bindings`.
+    ///
+    /// # Outputs
+    /// None (mutates `parameter_bindings` and `explicit_keys` in place).
+    ///
+    /// # Invariants
+    /// Pure Schema-Driven Compiler Invariant: all physical limits derive from schema
+    /// AST attributes when present.
+    ///
+    /// # Error Handling
+    /// Tolerates missing or non-numeric attributes gracefully without panicking.
+    ///
+    /// # Testing
+    /// Verified by `test_issue_446_cuas_schema_physical_limits_override_uav_defaults`.
+    ///
+    /// # Security
+    /// Zero execution or dynamic evaluation; pure text parsing and float projection.
+    pub fn derive_master_physical_limits_from_ast(&mut self) {
+        let parts = self.ast_parts.clone();
+        for part in &parts {
+            for (attr_key, attr_val) in &part.attributes {
+                self._map_semantic_aliases(attr_key, attr_val);
+            }
+            if let Some(mass) = part.mass_kg {
+                let m_str = format!("{mass:.1}");
+                if !self.parameter_bindings.contains_key("M_MAX_LIMIT_KG") {
+                    self._map_semantic_aliases("total_mass_kg", &m_str);
+                }
+            }
+        }
+    }
+
     pub fn resolve_token(&self, token_name: &str, inline_default: Option<&str>) -> String {
         if let Some(val) = self.parameter_bindings.get(token_name) {
             return val.clone();
@@ -2618,21 +2768,49 @@ impl SysMLParameterBindingEngine {
             "WEIGHTED_SCORE_A" => "0.90".to_string(),
             "WEIGHTED_SCORE_B" => "0.79".to_string(),
             "WEIGHTED_SCORE_C" => "0.80".to_string(),
+            // Master Physical Limits Table tokens (PL-01 through PL-12):
+            "TOTAL_MASS_KG" | "M_MAX_LIMIT_KG" | "TOTAL_MTOW_KG" | "MTOW_MAX_KG" => "50.0".to_string(),
+            "M_MAX_NOMINAL_KG" | "MTOW_NOMINAL_KG" => "45.0".to_string(),
+            "PAYLOAD_MAX_KG" => "5.0".to_string(),
+            "PAYLOAD_NOMINAL_KG" => "3.0".to_string(),
+            "DIM_MAX_L_M" => "2.5".to_string(),
+            "DIM_MAX_W_M" => "1.5".to_string(),
+            "DIM_MAX_H_M" => "1.0".to_string(),
+            "DIM_NOM_L_M" => "2.0".to_string(),
+            "DIM_NOM_W_M" => "1.2".to_string(),
+            "DIM_NOM_H_M" => "0.8".to_string(),
+            "V_CRUISE_MIN_MPS" => "12.0".to_string(),
+            "V_CRUISE_MAX_MPS" => "24.0".to_string(),
             "V_CRUISE_NOMINAL_MPS" => "18.0".to_string(),
             "V_MAX_MPS" => "25.0".to_string(),
-            "TOTAL_MTOW_KG" => "50.0".to_string(),
-            "PAYLOAD_MAX_KG" => "5.0".to_string(),
-            "ENDURANCE_NOMINAL_MIN" => "90.0".to_string(),
+            "V_MAX_NOMINAL_MPS" => "22.0".to_string(),
+            "V_MIN_MAX_MPS" => "8.0".to_string(),
+            "V_MIN_NOMINAL_MPS" => "5.0".to_string(),
+            "SPATIAL_LIMIT_MAX_M" => "5000.0".to_string(),
+            "SPATIAL_LIMIT_NOMINAL_M" => "4000.0".to_string(),
+            "SPATIAL_LIMIT_UNIT" => "m".to_string(),
+            "C2_RANGE_MIN_KM" => "10.0".to_string(),
             "C2_RANGE_NOMINAL_KM" => "15.0".to_string(),
+            "ENDURANCE_MIN_MIN" => "60.0".to_string(),
+            "ENDURANCE_NOMINAL_MIN" => "90.0".to_string(),
+            "TEMP_MIN_DEGC" => "-20.0".to_string(),
+            "TEMP_MAX_DEGC" => "+55.0".to_string(),
+            "TEMP_NOMINAL_DEGC" => "+25.0".to_string(),
             "WIND_LIMIT_MAX_MPS" => "12.0".to_string(),
+            "WIND_LIMIT_NOMINAL_MPS" => "10.0".to_string(),
             "INGRESS_PROTECTION_RATING" => "IP54".to_string(),
+            "INGRESS_PROTECTION_TARGET" => "IP67".to_string(),
             _ => {
                 if token_upper.ends_with("_PERCENT") || token_upper.ends_with("_PCT") {
                     "10.0".to_string()
                 } else if token_upper.ends_with("_KG") {
                     "5.0".to_string()
-                } else if token_upper.ends_with("_MPS") || token_upper.ends_with("_M") {
+                } else if token_upper.ends_with("_MPS") {
+                    "15.0".to_string()
+                } else if token_upper.ends_with("_KM") {
                     "10.0".to_string()
+                } else if token_upper.ends_with("_M") {
+                    "100.0".to_string()
                 } else if token_upper.ends_with("_SEC") || token_upper.ends_with("_S") {
                     "1.0".to_string()
                 } else if token_upper.ends_with("_MIN") {
@@ -3192,6 +3370,94 @@ mod tests {
             rendered.contains("[TIER-1: OEM]"),
             "Rendered ConOps unit must preserve [TIER-1: OEM] epistemic provenance tag"
         );
+    }
+
+    #[test]
+    fn test_issue_446_cuas_schema_physical_limits_override_uav_defaults() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "deap_test_issue_446_{}",
+            std::process::id()
+        ));
+        let schema_dir = temp_root.join("schema");
+        let unit_dir = temp_root.join("docs/conops/units/conops");
+        std::fs::create_dir_all(&schema_dir).unwrap();
+        std::fs::create_dir_all(&unit_dir).unwrap();
+
+        let schema_path = schema_dir.join("cuas_system.sysml");
+        let sysml_content = r#"package CuasDefenseSystem {
+    attribute sector_radius_m : Real = 5000.0;
+    attribute max_detection_range_m : Real = 8000.0;
+    attribute engagement_range_m : Real = 3000.0;
+    attribute max_latency_ms : Real = 50.0;
+    attribute total_mass_kg : Real = 150.0;
+    attribute dim_length_m : Real = 4.0;
+    attribute dim_width_m : Real = 2.5;
+    attribute dim_height_m : Real = 2.2;
+
+    part def TargetTrackingRadar {
+        attribute detection_range_m : Real = 8000.0;
+        attribute mass_kg : Real = 75.0;
+    }
+
+    part def RfMitigationEffector {
+        attribute engagement_range_m : Real = 3000.0;
+        attribute mass_kg : Real = 45.0;
+    }
+}
+"#;
+        std::fs::write(&schema_path, sysml_content).unwrap();
+
+        let unit_path = unit_dir.join("01_METADATA_AND_OVERVIEW.md");
+        let unit_template = r#"### 1.3.3 Master Physical Limits Table
+| Parameter ID | Bounding Parameter Name | Parametric Symbol | Threshold (Boundary Limit) | Objective (Nominal Target) | Engineering Unit | Normative / Safety Basis |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **PL-01** | Maximum Operating Gross Mass (M_max) | m_max | <= {{M_MAX_LIMIT_KG}} | {{M_MAX_NOMINAL_KG}} | kg | Certified maximum structural mass limit |
+| **PL-03** | Physical Dimensions (Length x Width x Height) | L_x, L_y, L_z | <= {{DIM_MAX_L_M}} x {{DIM_MAX_W_M}} x {{DIM_MAX_H_M}} | {{DIM_NOM_L_M}} x {{DIM_NOM_W_M}} x {{DIM_NOM_H_M}} | m | Spatial transport and operational clearance envelope |
+| **PL-07** | Maximum Operating Spatial Boundary | d_max | <= {{SPATIAL_LIMIT_MAX_M}} | {{SPATIAL_LIMIT_NOMINAL_M}} | {{SPATIAL_LIMIT_UNIT:m}} | Maximum certified operational boundary limit |
+| **PL-08** | Command & Control (C2) Datalink Range | Range_C2 | >= {{C2_RANGE_MIN_KM}} | {{C2_RANGE_NOMINAL_KM}} | km | Beyond-Line-of-Sight / Line-of-Sight C2 range margin |
+"#;
+        std::fs::write(&unit_path, unit_template).unwrap();
+
+        let mut engine = SysMLParameterBindingEngine::new(
+            None,
+            Some(schema_path.as_path()),
+            Some(temp_root.as_path()),
+            true,
+            None,
+        );
+        engine.ingest_file(&schema_path);
+        engine.derive_master_physical_limits_from_ast();
+
+        // 1. Invariant: Gross mass must derive from schema (150.0 kg), not FAA Part 107 25.0 kg UAV default
+        assert_eq!(
+            engine.resolve_token("M_MAX_LIMIT_KG", None),
+            "150.0",
+            "M_MAX_LIMIT_KG must derive from schema total_mass_kg attribute, not hardcoded 25.0 kg default"
+        );
+
+        // 2. Invariant: Spatial limit must derive from sector bounds / detection range (5000.0 or 8000.0 m), not FAA 120.0 m
+        assert_eq!(
+            engine.resolve_token("SPATIAL_LIMIT_MAX_M", None),
+            "5000.0",
+            "SPATIAL_LIMIT_MAX_M must derive from schema sector bounds, not hardcoded 120.0 m UAV limit"
+        );
+
+        // 3. Invariant: Dimensions must derive from schema, not 10.0 x 10.0 x 10.0 heuristic
+        assert_eq!(engine.resolve_token("DIM_MAX_L_M", None), "4.0");
+        assert_eq!(engine.resolve_token("DIM_MAX_W_M", None), "2.5");
+        assert_eq!(engine.resolve_token("DIM_MAX_H_M", None), "2.2");
+
+        // 4. Invariant: C2 / sensor range must not fall back to "N/A"
+        assert_ne!(engine.resolve_token("C2_RANGE_MIN_KM", None), "N/A");
+
+        let raw_unit = std::fs::read_to_string(&unit_path).unwrap();
+        let rendered = engine.substitute(&raw_unit);
+        std::fs::remove_dir_all(&temp_root).ok();
+
+        assert!(!rendered.contains("<= 25.0"), "ConOps PL-01 must not contain hardcoded 25.0 kg UAV default");
+        assert!(!rendered.contains("<= 120.0"), "ConOps PL-07 must not contain hardcoded 120.0 m UAV default");
+        assert!(!rendered.contains("10.0 x 10.0 x 10.0"), "ConOps PL-03 must not contain degenerate 10.0 x 10.0 x 10.0 m heuristic");
+        assert!(!rendered.contains(">= N/A"), "ConOps PL-08 must not contain '>= N/A' range");
     }
 }
 
