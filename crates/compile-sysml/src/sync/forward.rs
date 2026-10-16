@@ -859,82 +859,86 @@ pub fn forward_sync_sysml_to_specs(
 
     let mut story_metas: Vec<StoryMeta> = Vec::new();
     for p in &ordered_packages {
-        if p.name == "ConOps" || p.name == "SysML_Model" || p.name == pkg.name {
+        if p.name == "ConOps" {
             continue;
         }
-        let action_name = match p.action_defs.first() {
-            Some(a) => a.name.clone(),
-            None => continue,
+        let subsys_display = if p.name == pkg.name || p.name == "SysML_Model" {
+            "System Architecture".to_string()
+        } else {
+            to_display_name(&p.name)
         };
-        let subsys_display = to_display_name(&p.name);
-        let subsys_dir = to_snake_case(&p.name);
-        let default_engine_name = p
-            .part_defs
-            .iter()
-            .find(|part| part.name.ends_with("Engine"))
-            .map(|part| part.name.clone())
-            .unwrap_or_else(|| {
-                p.part_defs
-                    .first()
-                    .map(|part| part.name.clone())
-                    .unwrap_or_else(|| sanitize_id(&p.name))
+        let subsys_dir = if p.name == pkg.name || p.name == "SysML_Model" {
+            "architecture".to_string()
+        } else {
+            to_snake_case(&p.name)
+        };
+
+        for (a_idx, action_def) in p.action_defs.iter().enumerate() {
+            let action_name = action_def.name.clone();
+            let default_engine_name = p
+                .part_defs
+                .iter()
+                .find(|part| part.name.ends_with("Engine"))
+                .or_else(|| p.part_defs.first())
+                .map(|part| part.name.clone())
+                .unwrap_or_else(|| sanitize_id(&p.name));
+
+            let mut caller_engine = sanitize_id(&pkg.name);
+            let mut target_engine = default_engine_name.clone();
+            let mut reply_msg = "OperationComplete".to_string();
+            let mut interaction_name = action_name.clone();
+
+            if let Some(inter) = p.interaction_defs.get(a_idx).or_else(|| p.interaction_defs.first()) {
+                interaction_name = inter.name.clone();
+                if let [l0, l1, ..] = inter.lifelines.as_slice() {
+                    if let Some((_, type_name)) = l0.split_once(':') {
+                        caller_engine = type_name.trim().to_string();
+                    }
+                    if let Some((_, type_name)) = l1.split_once(':') {
+                        target_engine = type_name.trim().to_string();
+                    }
+                }
+                if let Some(m1) = inter.messages.get(1) {
+                    if let Some(first_word) = m1.split_whitespace().next() {
+                        reply_msg = first_word.to_string();
+                    }
+                }
+            }
+
+            let default_engine_feat_num = part_contexts
+                .iter()
+                .position(|ctx| ctx.pkg_name == p.name && ctx.part.name == default_engine_name)
+                .or_else(|| part_contexts.iter().position(|ctx| ctx.part.name == default_engine_name))
+                .map(|pos| pos + 1)
+                .unwrap_or(1);
+
+            let engine_feat_num = part_contexts
+                .iter()
+                .position(|ctx| ctx.pkg_name == p.name && ctx.part.name == target_engine)
+                .or_else(|| part_contexts.iter().position(|ctx| ctx.part.name == target_engine))
+                .map(|pos| pos + 1)
+                .unwrap_or(default_engine_feat_num);
+
+            let caller_feat_num = part_contexts
+                .iter()
+                .position(|ctx| ctx.part.name == caller_engine)
+                .map(|pos| pos + 1);
+
+            let s_num = story_metas.len() + 1;
+            story_metas.push(StoryMeta {
+                action_name,
+                engine_name: target_engine,
+                caller_engine,
+                reply_msg,
+                interaction_name,
+                subsys_display: subsys_display.clone(),
+                pkg_name: p.name.clone(),
+                subsys_dir: subsys_dir.clone(),
+                engine_feat_num,
+                caller_feat_num,
+                s_num,
             });
-
-        let mut caller_engine = sanitize_id(&pkg.name);
-        let mut target_engine = default_engine_name.clone();
-        let mut reply_msg = "OperationComplete".to_string();
-        let mut interaction_name = action_name.clone();
-
-        if let Some(inter) = p.interaction_defs.first() {
-            interaction_name = inter.name.clone();
-            if let [l0, l1, ..] = inter.lifelines.as_slice() {
-                if let Some((_, type_name)) = l0.split_once(':') {
-                    caller_engine = type_name.trim().to_string();
-                }
-                if let Some((_, type_name)) = l1.split_once(':') {
-                    target_engine = type_name.trim().to_string();
-                }
-            }
-            if let Some(m1) = inter.messages.get(1) {
-                if let Some(first_word) = m1.split_whitespace().next() {
-                    reply_msg = first_word.to_string();
-                }
-            }
         }
-
-        let default_engine_feat_num = part_contexts
-            .iter()
-            .position(|ctx| ctx.pkg_name == p.name && ctx.part.name == default_engine_name)
-            .or_else(|| part_contexts.iter().position(|ctx| ctx.part.name == default_engine_name))
-            .map(|pos| pos + 1)
-            .unwrap_or(1);
-
-        let engine_feat_num = part_contexts
-            .iter()
-            .position(|ctx| ctx.pkg_name == p.name && ctx.part.name == target_engine)
-            .or_else(|| part_contexts.iter().position(|ctx| ctx.part.name == target_engine))
-            .map(|pos| pos + 1)
-            .unwrap_or(default_engine_feat_num);
-
-        let caller_feat_num = part_contexts
-            .iter()
-            .position(|ctx| ctx.part.name == caller_engine)
-            .map(|pos| pos + 1);
-
-        let s_num = story_metas.len() + 1;
-        story_metas.push(StoryMeta {
-            action_name,
-            engine_name: target_engine,
-            caller_engine,
-            reply_msg,
-            interaction_name,
-            subsys_display,
-            pkg_name: p.name.clone(),
-            subsys_dir,
-            engine_feat_num,
-            caller_feat_num,
-            s_num,
-        });
     }
 
     struct UseCaseMeta<'a> {
@@ -949,13 +953,11 @@ pub fn forward_sync_sysml_to_specs(
 
     let mut uc_metas: Vec<UseCaseMeta> = Vec::new();
     for p in &ordered_packages {
-        if p.name == "ConOps" || p.name == "SysML_Model" || p.name == pkg.name {
+        if p.name == "ConOps" {
             continue;
         }
         let subsys_dir = if p.name == pkg.name || p.name == "SysML_Model" {
             "architecture".to_string()
-        } else if p.name == "ConOps" {
-            "conops".to_string()
         } else {
             to_snake_case(&p.name)
         };
@@ -1083,14 +1085,27 @@ pub fn forward_sync_sysml_to_specs(
             let f_num = f_idx + 1;
             let f_path = format!("features/FEAT-{:02}-{}.md", f_num, ctx.part.name);
             let f_issue = resolve_issue_id(&target_out_dir, &f_path, f_num + 9);
-            let is_conops_or_root_part = ctx.pkg_name == "ConOps" || ctx.pkg_name == pkg.name || ctx.part.name == sanitize_id(&pkg.name);
-            if (is_root && is_conops_or_root_part)
-                || (is_conops && is_conops_or_root_part)
-                || (!is_root && !is_conops && ctx.pkg_name == p.name)
-            {
+            let is_match = ctx.pkg_name == p.name
+                || (is_conops && ctx.pkg_name == "ConOps")
+                || (is_root && (ctx.pkg_name == pkg.name || ctx.pkg_name == "SysML_Model"));
+            if is_match {
+                let feat_title = format!("Feature {:02}: [{}] {}", f_num, ctx.subsys_display, ctx.part.name);
+                let feat_url = format!("../features/FEAT-{:02}-{}.md", f_num, ctx.part.name);
+                let mut mapped = Vec::new();
+                for req in &ctx.part.requirements {
+                    mapped.push(req.name.clone());
+                }
+                for c in &ctx.part.constraints {
+                    mapped.push(c.name.clone());
+                }
+                let mapped_clauses = if mapped.is_empty() {
+                    format!("{}.sysml", ctx.subsys_dir)
+                } else {
+                    mapped.join(", ")
+                };
                 feat_checklist.push(format!(
-                    "- [ ] #{} - Feature {:02}: [{}] {}",
-                    f_issue, f_num, ctx.subsys_display, ctx.part.name
+                    "- [ ] #{} - [{}]({}) ({})",
+                    f_issue, feat_title, feat_url, mapped_clauses
                 ));
             }
         }
@@ -2487,6 +2502,88 @@ mod tests {
                 path
             );
         }
+        Ok(())
+    }
+
+    #[test]
+    fn test_issue_447_forward_sync_root_package_specs_actions_and_linked_checklists() -> Result<(), Box<dyn std::error::Error>> {
+        use deap_core::sysml_ast::{ActionDef, PartDef, UseCaseDef};
+
+        let mut root = PackageDef {
+            name: "SysML_Model".to_string(),
+            ..Default::default()
+        };
+        root.part_defs.push(PartDef {
+            name: "TrackingRadar".to_string(),
+            ..Default::default()
+        });
+        root.part_defs.push(PartDef {
+            name: "MitigationEffector".to_string(),
+            ..Default::default()
+        });
+        root.action_defs.push(ActionDef {
+            name: "DetectTrackAction".to_string(),
+            ..Default::default()
+        });
+        root.action_defs.push(ActionDef {
+            name: "EngageThreatAction".to_string(),
+            ..Default::default()
+        });
+        root.use_case_defs.push(UseCaseDef {
+            name: "DetectTargetUseCase".to_string(),
+            ..Default::default()
+        });
+
+        let opts = ForwardSyncOptions {
+            schema_path: PathBuf::from("schema/cuas_coa.sysml"),
+            docs_dir: PathBuf::from("docs"),
+            out_dir: None,
+            dry_run: true,
+            force: true,
+        };
+
+        let generated = forward_sync_sysml_to_specs(&root, &opts)?;
+
+        // 1. Root package User Stories must NOT be omitted, and all action_defs must be lowered (no truncation to .first())
+        let has_us01 = generated.keys().any(|k| k.contains("US-01") && k.contains("DetectTrackAction"));
+        let has_us02 = generated.keys().any(|k| k.contains("US-02") && k.contains("EngageThreatAction"));
+        assert!(has_us01, "User Story 01 for root package action must be generated");
+        assert!(has_us02, "User Story 02 for root package second action must be generated without truncation");
+
+        // 2. Root package Use Cases must NOT be omitted
+        let has_uc01 = generated.keys().any(|k| k.contains("UC-01") && k.contains("DetectTargetUseCase"));
+        assert!(has_uc01, "Use Case 01 for root package use case def must be generated");
+
+        // 3. Epic feature checklist must be linked markdown, not unlinked plain text or degenerate fallback
+        let epic_content = generated
+            .iter()
+            .find(|(k, _)| k.contains("EPIC-01") && k.contains("SysML_Model"))
+            .map(|(_, v)| v)
+            .ok_or("EPIC-01-SysML_Model.md must be generated")?;
+
+        assert!(
+            !epic_content.contains("Feature 01: Subsystem capability implementation for System Architecture."),
+            "Epic must not emit degenerate unlinked placeholder feature checklist"
+        );
+        assert!(
+            epic_content.contains("[Feature 01: [System Architecture] TrackingRadar](../features/FEAT-01-TrackingRadar.md)"),
+            "Epic feature checklist must contain linked Feature 01"
+        );
+        assert!(
+            epic_content.contains("[Feature 02: [System Architecture] MitigationEffector](../features/FEAT-02-MitigationEffector.md)"),
+            "Epic feature checklist must contain linked Feature 02"
+        );
+
+        // 4. Associated user stories and use cases must be linked in Epic
+        assert!(
+            epic_content.contains("[User Story 01: Detect Track Action](../user-stories/US-01-DetectTrackAction.md)"),
+            "Epic must associate generated User Story 01"
+        );
+        assert!(
+            epic_content.contains("[Use Case 01: Detect Target Use Case](../use-cases/UC-01-DetectTargetUseCase.md)"),
+            "Epic must associate generated Use Case 01"
+        );
+
         Ok(())
     }
 }
