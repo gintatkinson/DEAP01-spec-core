@@ -252,6 +252,18 @@ impl<'a> SysmlParser<'a> {
                     pkg.requirement_defs.push(req);
                 }
             }
+            TokenKind::Satisfy => {
+                let req_target = self.parse_satisfy_stmt()?;
+                if !req_target.is_empty() {
+                    if let Some(parent) = parent_part {
+                        if !parent.satisfied_requirements.contains(&req_target) {
+                            parent.satisfied_requirements.push(req_target);
+                        }
+                    } else if !pkg.satisfied_requirements.contains(&req_target) {
+                        pkg.satisfied_requirements.push(req_target);
+                    }
+                }
+            }
             TokenKind::State => {
                 let state = self.parse_state_decl(doc)?;
                 if let Some(parent) = parent_part {
@@ -427,6 +439,11 @@ impl<'a> SysmlParser<'a> {
                 part.operations.extend(dummy_pkg.operation_defs);
                 part.interactions.extend(dummy_pkg.interaction_defs);
                 part.calcs.extend(dummy_pkg.calc_defs);
+                for sat in dummy_pkg.satisfied_requirements {
+                    if !part.satisfied_requirements.contains(&sat) {
+                        part.satisfied_requirements.push(sat);
+                    }
+                }
                 self.skip_trivia();
             }
             self.expect(&TokenKind::CloseBrace)?;
@@ -1960,6 +1977,52 @@ impl<'a> SysmlParser<'a> {
         pieces.join(" ")
     }
 
+    fn parse_satisfy_stmt(&mut self) -> Result<String, ParseError> {
+        self.expect(&TokenKind::Satisfy)?;
+        if self.check(&TokenKind::Requirement) {
+            self.advance();
+        }
+        let mut raw = String::new();
+        while !self.check(&TokenKind::Semi)
+            && !self.check(&TokenKind::CloseBrace)
+            && !self.check(&TokenKind::By)
+            && !self.is_at_end()
+        {
+            let tok = self.advance();
+            match &tok.kind {
+                TokenKind::Ident(s) => raw.push_str(s),
+                TokenKind::StringLit(s) => raw.push_str(s),
+                TokenKind::IntLit(n) => {
+                    let span_len = tok.span.end.saturating_sub(tok.span.start);
+                    if *n < 0 {
+                        let d = span_len.saturating_sub(1);
+                        raw.push_str(&format!("-{:0width$}", n.abs(), width = d));
+                    } else if *n == 0 {
+                        if span_len > 1 && !raw.ends_with('-') {
+                            let d = span_len.saturating_sub(1);
+                            raw.push_str(&format!("-{:0width$}", 0, width = d));
+                        } else {
+                            raw.push_str(&format!("{:0width$}", 0, width = span_len));
+                        }
+                    } else {
+                        raw.push_str(&format!("{:0width$}", n, width = span_len));
+                    }
+                }
+                TokenKind::Minus => raw.push('-'),
+                TokenKind::Dot => raw.push('.'),
+                TokenKind::DoubleColon => raw.push_str("::"),
+                TokenKind::Slash => raw.push('/'),
+                _ => raw.push_str(tok.kind.as_str()),
+            }
+        }
+        if self.check(&TokenKind::By) {
+            self.read_until_semi();
+        } else {
+            self.expect_semi()?;
+        }
+        Ok(raw.trim().trim_matches('"').trim_matches('\'').trim().to_string())
+    }
+
     fn skip_until_semi_or_brace(&mut self) {
         let mut depth = 0;
         while !self.is_at_end() {
@@ -2065,6 +2128,11 @@ pub fn merge_package_defs(dest: &mut PackageDef, src: PackageDef) {
     dest.risk_defs.extend(src.risk_defs);
     dest.connection_defs.extend(src.connection_defs);
     dest.calc_defs.extend(src.calc_defs);
+    for sat in src.satisfied_requirements {
+        if !dest.satisfied_requirements.contains(&sat) {
+            dest.satisfied_requirements.push(sat);
+        }
+    }
 
     for src_child in src.packages {
         if let Some(existing) = dest.packages.iter_mut().find(|p| p.name == src_child.name) {
@@ -2820,6 +2888,152 @@ package ArrayModel {
         let source = "package BadArray {\n    attribute labelSet : String[;\n}\n";
         let parsed = SysmlParser::parse_source(source, "BadArray");
         assert!(parsed.is_err(), "unclosed '[' must be a parse error, got {:?}", parsed.ok());
+    }
+
+    #[test]
+    fn test_issue_460_parse_and_roundtrip_satisfy_requirements() -> Result<(), Box<dyn std::error::Error>> {
+        use crate::semantic::serializer::SysmlSerializable;
+
+        let source = r#"
+package UserInterfaceSystem {
+    satisfy requirement REQ-UI-00;
+
+    part def TouchScreenPanel {
+        satisfy requirement REQ-UI-01;
+        satisfy requirement REQ-UI-02 by PrimaryTouchSensor;
+        port in touchEvent;
+    }
+
+    part def NavigationController {
+        satisfy requirement REQ-NAV-001;
+        satisfy requirement REQ-CORE-002;
+    }
+}
+"#;
+        let pkg = SysmlParser::parse_source(source, "UserInterfaceSystem")?;
+
+        // 1. Package-level satisfy requirement validation
+        assert_eq!(
+            pkg.satisfied_requirements,
+            vec!["REQ-UI-00".to_string()],
+            "package-level satisfy requirement REQ-UI-00 must be captured"
+        );
+
+        // 2. Part-level satisfy requirement validation (including 'by <Part>' syntax)
+        let touch_panel = pkg
+            .part_defs
+            .iter()
+            .find(|p| p.name == "TouchScreenPanel")
+            .ok_or("missing TouchScreenPanel")?;
+        assert_eq!(
+            touch_panel.satisfied_requirements,
+            vec!["REQ-UI-01".to_string(), "REQ-UI-02".to_string()],
+            "TouchScreenPanel must capture REQ-UI-01 and REQ-UI-02"
+        );
+
+        // 3. Multi-digit zero-padded hyphenated requirement IDs
+        let nav_ctrl = pkg
+            .part_defs
+            .iter()
+            .find(|p| p.name == "NavigationController")
+            .ok_or("missing NavigationController")?;
+        assert_eq!(
+            nav_ctrl.satisfied_requirements,
+            vec!["REQ-NAV-001".to_string(), "REQ-CORE-002".to_string()],
+            "zero-padded hyphenated requirement IDs must be preserved exactly"
+        );
+
+        // 4. Serialization round-trip validation via SysmlSerializable::to_sysml
+        let serialized = pkg.to_sysml(0);
+        assert!(
+            serialized.contains("satisfy requirement REQ-UI-00;"),
+            "serialized sysml must contain package-level satisfy requirement REQ-UI-00:\n{}",
+            serialized
+        );
+        assert!(
+            serialized.contains("satisfy requirement REQ-UI-01;"),
+            "serialized sysml must contain part-level satisfy requirement REQ-UI-01:\n{}",
+            serialized
+        );
+        assert!(
+            serialized.contains("satisfy requirement REQ-UI-02;"),
+            "serialized sysml must contain part-level satisfy requirement REQ-UI-02:\n{}",
+            serialized
+        );
+        assert!(
+            serialized.contains("satisfy requirement REQ-NAV-001;"),
+            "serialized sysml must contain REQ-NAV-001:\n{}",
+            serialized
+        );
+        assert!(
+            serialized.contains("satisfy requirement REQ-CORE-002;"),
+            "serialized sysml must contain REQ-CORE-002:\n{}",
+            serialized
+        );
+
+        // 5. Re-parse serialized output and assert AST idempotency
+        let reparsed = SysmlParser::parse_source(&serialized, "UserInterfaceSystem")?;
+        assert_eq!(
+            reparsed.satisfied_requirements, pkg.satisfied_requirements,
+            "reparsed package satisfied_requirements must match original"
+        );
+
+        let reparsed_touch = reparsed
+            .part_defs
+            .iter()
+            .find(|p| p.name == "TouchScreenPanel")
+            .ok_or("missing reparsed TouchScreenPanel")?;
+        assert_eq!(
+            reparsed_touch.satisfied_requirements, touch_panel.satisfied_requirements,
+            "reparsed part satisfied_requirements must match original"
+        );
+
+        let reparsed_nav = reparsed
+            .part_defs
+            .iter()
+            .find(|p| p.name == "NavigationController")
+            .ok_or("missing reparsed NavigationController")?;
+        assert_eq!(
+            reparsed_nav.satisfied_requirements, nav_ctrl.satisfied_requirements,
+            "reparsed nav controller satisfied_requirements must match original"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_issue_460_parse_satisfy_syntax_variants_and_deduplication() -> Result<(), Box<dyn std::error::Error>> {
+        let source = r#"
+package SyntaxVariantsModel {
+    part def DisplaySubsystem {
+        // Syntax variant: without 'requirement' keyword
+        satisfy REQ-UI-01;
+        // Duplicate satisfy statement should be deduplicated
+        satisfy requirement REQ-UI-01;
+        // Quoted requirement identifier
+        satisfy requirement "REQ-UI-02";
+        // Hyphenated ID with multiple segments and zero-padding
+        satisfy requirement REQ-FMS-DISP-0042;
+    }
+}
+"#;
+        let pkg = SysmlParser::parse_source(source, "SyntaxVariantsModel")?;
+        let display = pkg
+            .part_defs
+            .iter()
+            .find(|p| p.name == "DisplaySubsystem")
+            .ok_or("missing DisplaySubsystem")?;
+
+        assert_eq!(
+            display.satisfied_requirements,
+            vec![
+                "REQ-UI-01".to_string(),
+                "REQ-UI-02".to_string(),
+                "REQ-FMS-DISP-0042".to_string(),
+            ],
+            "syntax variants and zero-padded multi-hyphen identifiers must be parsed with duplicate deduplication"
+        );
+        Ok(())
     }
 }
 

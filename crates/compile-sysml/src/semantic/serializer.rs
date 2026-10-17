@@ -530,6 +530,9 @@ impl SysmlSerializable for PartDef {
         for req in &self.requirements {
             lines.push(req.to_sysml(indent + 4));
         }
+        for sat_req in &self.satisfied_requirements {
+            lines.push(format!("{}    satisfy requirement {};", pad, sat_req));
+        }
         for st in &self.states {
             lines.push(st.to_sysml(indent + 4));
         }
@@ -621,6 +624,9 @@ impl SysmlSerializable for PackageDef {
         }
         for req in &self.requirement_defs {
             lines.push(req.to_sysml(indent + 4));
+        }
+        for sat_req in &self.satisfied_requirements {
+            lines.push(format!("{}    satisfy requirement {};", pad, sat_req));
         }
         for st in &self.state_defs {
             lines.push(st.to_sysml(indent + 4));
@@ -875,6 +881,29 @@ mod tests {
         assert!(sysml_text.contains("    import Base::Types::*;"));
         assert!(sysml_text.contains("    import NestedSys::**;"));
         assert!(sysml_text.contains("    doc /* Specific imported element */\n    import Specific::Item;"));
+    }
+
+    #[test]
+    fn test_serialize_part_def_and_package_def_with_satisfied_requirements() {
+        let part = PartDef {
+            name: "DisplayUnit".to_string(),
+            satisfied_requirements: vec!["REQ-UI-01".to_string(), "REQ-UI-02".to_string()],
+            ..Default::default()
+        };
+        let part_sysml = part.to_sysml(0);
+        assert!(part_sysml.contains("    satisfy requirement REQ-UI-01;"));
+        assert!(part_sysml.contains("    satisfy requirement REQ-UI-02;"));
+
+        let pkg = PackageDef {
+            name: "DisplayPackage".to_string(),
+            satisfied_requirements: vec!["REQ-SYS-001".to_string()],
+            part_defs: vec![part],
+            ..Default::default()
+        };
+        let pkg_sysml = pkg.to_sysml(0);
+        assert!(pkg_sysml.contains("    satisfy requirement REQ-SYS-001;"));
+        assert!(pkg_sysml.contains("        satisfy requirement REQ-UI-01;"));
+        assert!(pkg_sysml.contains("        satisfy requirement REQ-UI-02;"));
     }
 }
 

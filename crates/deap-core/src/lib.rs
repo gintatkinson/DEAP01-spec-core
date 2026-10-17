@@ -17,7 +17,7 @@ pub use rules::{
 pub use sysml_ast::{
     component_matches, extract_negated_components, is_component_negated,
     parse_action_defs, parse_attribute_defs, parse_calc_defs, parse_connection_defs, parse_constraint_defs,
-    parse_part_defs, parse_port_defs, parse_requirement_defs, parse_state_defs, parse_sysml,
+    parse_part_defs, parse_port_defs, parse_requirement_defs, parse_satisfied_requirements, parse_state_defs, parse_sysml,
     ActionDef, AttributeDef, CalcDef, CapabilityDef, ConnectionDef, ConstraintDef, FlowDef, HazardDef,
     ImportDef, InteractionDef, ItemDef, OperationDef, PackageDef, PartDef, PortDef, RequirementDef, RiskDef,
     StateDef, SysmlModel, TestCaseDef, TransitionDef, UnifiedSchemaModelExtractor, UseCaseDef,

@@ -509,6 +509,8 @@ pub struct PartDef {
     #[serde(default)]
     pub requirements: Vec<RequirementDef>,
     #[serde(default)]
+    pub satisfied_requirements: Vec<String>,
+    #[serde(default)]
     pub parts: Vec<PartDef>,
     #[serde(default)]
     pub operations: Vec<OperationDef>,
@@ -568,6 +570,7 @@ impl Default for PartDef {
             actions: Vec::new(),
             constraints: Vec::new(),
             requirements: Vec::new(),
+            satisfied_requirements: Vec::new(),
             parts: Vec::new(),
             operations: Vec::new(),
             capabilities: Vec::new(),
@@ -669,6 +672,8 @@ pub struct PackageDef {
     pub test_case_defs: Vec<TestCaseDef>,
     #[serde(default)]
     pub requirement_defs: Vec<RequirementDef>,
+    #[serde(default)]
+    pub satisfied_requirements: Vec<String>,
     #[serde(default)]
     pub state_defs: Vec<StateDef>,
     #[serde(default)]
@@ -1843,6 +1848,7 @@ impl From<SysmlModel> for PackageDef {
             constraint_defs: m.constraints,
             test_case_defs: m.test_cases,
             requirement_defs: m.requirements,
+            satisfied_requirements: Vec::new(),
             state_defs: Vec::new(),
             use_case_defs: Vec::new(),
             item_defs: Vec::new(),
@@ -3161,6 +3167,112 @@ pub fn parse_requirement_defs(content: &str) -> Vec<RequirementDef> {
     reqs
 }
 
+/// Parse satisfy requirement statements from SysML v2 container bodies.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, ISO 26262 ASIL D, and ECSS-E-ST-40C standards. Extracts
+/// component-level requirement satisfaction bindings (`satisfy requirement <ReqId>;`)
+/// from SysML v2 part or package container text to guarantee bidirectional traceability (FEAT-42 / AC-01).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Extracted requirement identifiers derive deterministically from AST text.
+/// - Order of first appearance is preserved and duplicate entries are eliminated.
+/// - Ignores inverse `satisfy by <Part>;` clauses contained within requirement definitions.
+///
+/// ## 3. Preconditions
+/// - `content` is a valid UTF-8 string slice representing container body contents.
+///
+/// ## 4. Postconditions
+/// - Returns a `Vec<String>` of unique satisfied requirement identifier strings.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(N)$ where $N$ is the byte length of `content`. Space Complexity: $O(K)$ where $K$ is the number of distinct requirement IDs.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Unclosed statements, missing semi-colons, or malformed syntax are skipped safely without panicking.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYSML-AST-SSOT-PARITY/PARSE-SATISFIED-REQUIREMENTS]
+pub fn parse_satisfied_requirements(content: &str) -> Vec<String> {
+    let clean = strip_sysml_comments(content);
+    let masked = mask_string_literals(&clean);
+    let mut satisfied = Vec::new();
+    let mut idx = 0;
+
+    while let Some(pos) = masked.get(idx..).and_then(|s| s.find("satisfy")) {
+        let satisfy_pos = idx + pos;
+        if !is_word_boundary_before(&masked, satisfy_pos) || !is_word_boundary_after(&masked, satisfy_pos + 7) {
+            idx = satisfy_pos + 7;
+            continue;
+        }
+
+        let mut curr = satisfy_pos + 7;
+        curr += skip_ws(masked.get(curr..).unwrap_or(""));
+
+        // If directly followed by 'by', this is an inverse 'satisfy by <Part>;' clause; skip.
+        if masked.get(curr..).is_some_and(|s| s.starts_with("by") && is_word_boundary_after(s, 2)) {
+            idx = satisfy_pos + 7;
+            continue;
+        }
+
+        // Skip optional 'requirement' keyword
+        if masked.get(curr..).is_some_and(|s| s.starts_with("requirement") && is_word_boundary_after(s, 11)) {
+            curr += 11;
+            curr += skip_ws(masked.get(curr..).unwrap_or(""));
+        }
+
+        // Find terminator ';'
+        let rem_masked = masked.get(curr..).unwrap_or("");
+        let rem_clean = clean.get(curr..).unwrap_or("");
+
+        if let Some(semi_pos) = rem_masked.find(';') {
+            let stmt_clean = rem_clean.get(..semi_pos).unwrap_or("").trim();
+            if !stmt_clean.contains('{') && !stmt_clean.contains('}') {
+                let by_offset = {
+                    let mut found = None;
+                    let mut search_idx = 0;
+                    while let Some(pos) = stmt_clean.get(search_idx..).and_then(|s| s.find("by")) {
+                        let actual_pos = search_idx + pos;
+                        if is_word_boundary_before(stmt_clean, actual_pos) && is_word_boundary_after(stmt_clean, actual_pos + 2) {
+                            found = Some(actual_pos);
+                            break;
+                        }
+                        search_idx = actual_pos + 2;
+                    }
+                    found
+                };
+
+                let target_part = if let Some(by_pos) = by_offset {
+                    stmt_clean.get(..by_pos).unwrap_or("").trim()
+                } else {
+                    stmt_clean
+                };
+
+                let req_id = if target_part.starts_with('"') {
+                    if let Some(unquoted) = extract_quoted_string(target_part) {
+                        unquoted.trim().to_string()
+                    } else {
+                        target_part.trim_matches('"').trim().to_string()
+                    }
+                } else if target_part.starts_with('\'') {
+                    target_part.trim_matches('\'').trim().to_string()
+                } else {
+                    target_part.trim().to_string()
+                };
+
+                if !req_id.is_empty() && !satisfied.contains(&req_id) {
+                    satisfied.push(req_id);
+                }
+            }
+            idx = curr + semi_pos + 1;
+        } else {
+            idx = satisfy_pos + 7;
+        }
+    }
+
+    satisfied
+}
+
 /// Parse test case definitions from SysML v2 source text.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -3946,6 +4058,7 @@ pub fn parse_part_defs(content: &str) -> Vec<PartDef> {
         let actions = parse_action_defs(&shallow_body);
         let constraints = parse_constraint_defs(&shallow_body);
         let requirements = parse_requirement_defs(body);
+        let satisfied_requirements = parse_satisfied_requirements(&shallow_body);
         let connections = parse_connection_defs(&shallow_body);
         let states = parse_state_defs(&shallow_body);
         let calcs = parse_calc_defs(&shallow_body);
@@ -3961,6 +4074,7 @@ pub fn parse_part_defs(content: &str) -> Vec<PartDef> {
             actions,
             constraints,
             requirements,
+            satisfied_requirements,
             parts: nested_parts,
             operations: Vec::new(),
             capabilities: Vec::new(),
@@ -6357,6 +6471,39 @@ package SystemModel_SSOT {
             hits.is_empty(),
             "sysml_ast.rs still carries untyped string-slice catalog evasions:\n{}",
             hits.join("\n")
+        );
+    }
+
+    #[test]
+    fn test_parse_satisfied_requirements_and_part_defs_extraction() {
+        let snippet = r#"
+            part def SensorController {
+                satisfy requirement REQ-CTRL-001;
+                satisfy requirement "REQ-CTRL-002";
+                satisfy REQ-PWR-03 by PowerBus;
+                satisfy requirement REQ-CTRL-001;
+            }
+        "#;
+        let satisfied = parse_satisfied_requirements(snippet);
+        assert_eq!(
+            satisfied,
+            vec![
+                "REQ-CTRL-001".to_string(),
+                "REQ-CTRL-002".to_string(),
+                "REQ-PWR-03".to_string(),
+            ]
+        );
+
+        let parts = parse_part_defs(snippet);
+        assert_eq!(parts.len(), 1);
+        assert_eq!(parts[0].name, "SensorController");
+        assert_eq!(
+            parts[0].satisfied_requirements,
+            vec![
+                "REQ-CTRL-001".to_string(),
+                "REQ-CTRL-002".to_string(),
+                "REQ-PWR-03".to_string(),
+            ]
         );
     }
 }
