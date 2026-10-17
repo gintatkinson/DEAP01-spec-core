@@ -64,6 +64,52 @@ pub fn normalize_label(label: &str) -> String {
     lower.replace(['_', ' '], "-")
 }
 
+/// Canonicalizes a specification type or label for indexing.
+pub fn canonicalize_spec_type(raw: &str) -> String {
+    let norm = normalize_label(raw);
+    match norm.as_str() {
+        "epic" | "epics" => "epic".to_string(),
+        "feature" | "features" | "feat" => "feature".to_string(),
+        "user-story" | "user-stories" | "user_story" | "user_stories" | "us" => "user-story".to_string(),
+        "use-case" | "use-cases" | "use_case" | "use_cases" | "uc" => "use-case".to_string(),
+        other => other.to_string(),
+    }
+}
+
+/// Infers the canonical specification type from a title string prefix if present.
+pub fn infer_spec_type_from_title(title: &str) -> Option<String> {
+    let trimmed = title.trim().trim_matches(|c| c == '"' || c == '\'');
+    let lower = trimmed.to_ascii_lowercase();
+    const PREFIXES: &[(&str, &str)] = &[
+        ("user-story", "user-story"),
+        ("user story", "user-story"),
+        ("user_story", "user-story"),
+        ("us", "user-story"),
+        ("use-case", "use-case"),
+        ("use case", "use-case"),
+        ("use_case", "use-case"),
+        ("uc", "use-case"),
+        ("feature", "feature"),
+        ("feat", "feature"),
+        ("epic", "epic"),
+    ];
+    for (prefix, canonical) in PREFIXES {
+        if let Some(rem) = lower.strip_prefix(prefix) {
+            if rem.is_empty()
+                || rem.starts_with(' ')
+                || rem.starts_with('-')
+                || rem.starts_with('_')
+                || rem.starts_with(':')
+                || rem.starts_with(|c: char| c.is_ascii_digit())
+                || (rem.starts_with('s') && (rem.len() == 1 || rem[1..].starts_with([' ', '-', '_', ':'])))
+            {
+                return Some((*canonical).to_string());
+            }
+        }
+    }
+    None
+}
+
 /// Canonical title normalization matching Python `reconcile_backlog.py` and `metadata.rs`.
 pub fn normalize_title(title: &str) -> String {
     let trimmed = title.trim().trim_matches(|c| c == '"' || c == '\'');
@@ -117,6 +163,7 @@ pub fn normalize_title(title: &str) -> String {
                 while temp_rem.starts_with(' ')
                     || temp_rem.starts_with(':')
                     || temp_rem.starts_with('-')
+                    || temp_rem.starts_with('_')
                 {
                     temp_rem = &temp_rem[1..];
                     temp_consumed += 1;
@@ -139,8 +186,8 @@ pub fn normalize_title(title: &str) -> String {
         stripped
     };
 
-    let hyphens_replaced = working.replace('-', " ");
-    let filtered: String = hyphens_replaced
+    let separators_replaced = working.replace('-', " ").replace('_', " ");
+    let filtered: String = separators_replaced
         .chars()
         .filter(|c| c.is_alphanumeric() || c.is_whitespace())
         .collect();
@@ -548,17 +595,26 @@ fn tempfile_named() -> Result<TempFileNamed, String> {
 #[derive(Debug, Default)]
 pub struct IssueIndex {
     pub by_number: BTreeMap<u64, TrackerIssue>,
+    pub by_type_and_title: BTreeMap<(String, String), TrackerIssue>,
     pub by_normalized_title: BTreeMap<String, TrackerIssue>,
 }
 
 impl IssueIndex {
     pub fn build(issues: Vec<TrackerIssue>) -> Self {
         let mut by_number = BTreeMap::new();
+        let mut by_type_and_title = BTreeMap::new();
         let mut by_normalized_title = BTreeMap::new();
 
         for issue in issues {
             let norm = normalize_title(&issue.title);
             if !norm.is_empty() {
+                for label in &issue.labels {
+                    let canonical = canonicalize_spec_type(label.name());
+                    by_type_and_title.insert((canonical, norm.clone()), issue.clone());
+                }
+                if let Some(inferred) = infer_spec_type_from_title(&issue.title) {
+                    by_type_and_title.insert((inferred, norm.clone()), issue.clone());
+                }
                 by_normalized_title.insert(norm, issue.clone());
             }
             by_number.insert(issue.number, issue);
@@ -566,24 +622,185 @@ impl IssueIndex {
 
         Self {
             by_number,
+            by_type_and_title,
             by_normalized_title,
         }
     }
 
-    pub fn find_issue(&self, issue_id: Option<u64>, title: &str) -> Option<&TrackerIssue> {
+    pub fn find_issue_for_type(
+        &self,
+        issue_id: Option<u64>,
+        spec_type: Option<&str>,
+        title: &str,
+    ) -> Option<&TrackerIssue> {
         if let Some(id) = issue_id {
             if let Some(issue) = self.by_number.get(&id) {
                 return Some(issue);
             }
         }
         let norm = normalize_title(title);
-        self.by_normalized_title.get(&norm)
+        if let Some(st) = spec_type {
+            let canonical = canonicalize_spec_type(st);
+            if let Some(issue) = self.by_type_and_title.get(&(canonical, norm.clone())) {
+                return Some(issue);
+            }
+        }
+        if let Some(inferred) = infer_spec_type_from_title(title) {
+            if let Some(issue) = self.by_type_and_title.get(&(inferred, norm.clone())) {
+                return Some(issue);
+            }
+        }
+        if let Some(issue) = self.by_normalized_title.get(&norm) {
+            let target_type = spec_type
+                .map(canonicalize_spec_type)
+                .or_else(|| infer_spec_type_from_title(title));
+            if let Some(tt) = target_type {
+                let matches_type = issue
+                    .labels
+                    .iter()
+                    .any(|l| canonicalize_spec_type(l.name()) == tt)
+                    || infer_spec_type_from_title(&issue.title).as_deref() == Some(&tt);
+                let has_any_type = !issue.labels.is_empty()
+                    || infer_spec_type_from_title(&issue.title).is_some();
+                if matches_type || !has_any_type {
+                    return Some(issue);
+                }
+            } else {
+                return Some(issue);
+            }
+        }
+        None
+    }
+
+    pub fn find_issue(&self, issue_id: Option<u64>, title: &str) -> Option<&TrackerIssue> {
+        let inferred = infer_spec_type_from_title(title);
+        self.find_issue_for_type(issue_id, inferred.as_deref(), title)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_normalize_title_handles_underscores_and_snake_case() {
+        assert_eq!(
+            normalize_title("Feature 01: [ConOps] Human_Engineer_Interface"),
+            "conops human engineer interface"
+        );
+        assert_eq!(
+            normalize_title("Feature_01_Human_Engineer"),
+            "human engineer"
+        );
+        assert_eq!(
+            normalize_title("Epic_02: Radar_Tracker_Architecture"),
+            "radar tracker architecture"
+        );
+        assert_eq!(
+            normalize_title("User_Story_05: Ingest_Telemetry_Stream"),
+            "ingest telemetry stream"
+        );
+        assert_eq!(
+            normalize_title("Use_Case_03: Process_Radar_Tracks"),
+            "process radar tracks"
+        );
+    }
+
+    #[test]
+    fn test_issue_index_cross_tier_isolation_and_find_issue_for_type() {
+        let epic_issue = TrackerIssue {
+            number: 10,
+            title: "Epic 01: [ConOps] Human Engineer Interface".to_string(),
+            state: "OPEN".to_string(),
+            labels: vec![TrackerLabel::String("epic".to_string())],
+            body: Some("Epic body".to_string()),
+            url: Some("https://github.com/org/repo/issues/10".to_string()),
+        };
+        let feature_issue = TrackerIssue {
+            number: 25,
+            title: "Feature 01: [ConOps] Human Engineer Interface".to_string(),
+            state: "OPEN".to_string(),
+            labels: vec![TrackerLabel::String("feature".to_string())],
+            body: Some("Feature body".to_string()),
+            url: Some("https://github.com/org/repo/issues/25".to_string()),
+        };
+        let story_issue = TrackerIssue {
+            number: 30,
+            title: "User Story 01: [ConOps] Human Engineer Interface".to_string(),
+            state: "OPEN".to_string(),
+            labels: vec![TrackerLabel::String("user-story".to_string())],
+            body: Some("Story body".to_string()),
+            url: Some("https://github.com/org/repo/issues/30".to_string()),
+        };
+        let case_issue = TrackerIssue {
+            number: 40,
+            title: "Use Case 01: [ConOps] Human Engineer Interface".to_string(),
+            state: "OPEN".to_string(),
+            labels: vec![TrackerLabel::String("use-case".to_string())],
+            body: Some("Case body".to_string()),
+            url: Some("https://github.com/org/repo/issues/40".to_string()),
+        };
+
+        let issues = vec![
+            epic_issue.clone(),
+            feature_issue.clone(),
+            story_issue.clone(),
+            case_issue.clone(),
+        ];
+        let index = IssueIndex::build(issues);
+
+        // Explicit type lookup must return isolated issues without collision
+        assert_eq!(
+            index
+                .find_issue_for_type(None, Some("epic"), "Epic 01: [ConOps] Human Engineer Interface")
+                .map(|i| i.number),
+            Some(10)
+        );
+        assert_eq!(
+            index
+                .find_issue_for_type(None, Some("feature"), "Feature 01: [ConOps] Human Engineer Interface")
+                .map(|i| i.number),
+            Some(25)
+        );
+        assert_eq!(
+            index
+                .find_issue_for_type(None, Some("user-story"), "User Story 01: [ConOps] Human Engineer Interface")
+                .map(|i| i.number),
+            Some(30)
+        );
+        assert_eq!(
+            index
+                .find_issue_for_type(None, Some("use-case"), "Use Case 01: [ConOps] Human Engineer Interface")
+                .map(|i| i.number),
+            Some(40)
+        );
+
+        // Inferred type lookup via find_issue
+        assert_eq!(
+            index
+                .find_issue(None, "Epic 01: [ConOps] Human Engineer Interface")
+                .map(|i| i.number),
+            Some(10)
+        );
+        assert_eq!(
+            index
+                .find_issue(None, "Feature 01: [ConOps] Human Engineer Interface")
+                .map(|i| i.number),
+            Some(25)
+        );
+        assert_eq!(
+            index
+                .find_issue(None, "User Story 01: [ConOps] Human Engineer Interface")
+                .map(|i| i.number),
+            Some(30)
+        );
+        assert_eq!(
+            index
+                .find_issue(None, "Use Case 01: [ConOps] Human Engineer Interface")
+                .map(|i| i.number),
+            Some(40)
+        );
+    }
 
     #[test]
     fn test_normalize_title_matches_spec() {

@@ -371,7 +371,9 @@ fn format_canonical_checklist_item(
     default_clause: Option<&str>,
 ) -> String {
     let issue_num = spec.frontmatter.issue_id.or_else(|| {
-        issue_index.find_issue(None, &spec.frontmatter.title).map(|i| i.number)
+        issue_index
+            .find_issue_for_type(None, Some(&spec.frontmatter.spec_type), &spec.frontmatter.title)
+            .map(|i| i.number)
     });
 
     let (is_resolved, issue_ref) = match issue_num {

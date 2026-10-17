@@ -434,10 +434,11 @@ pub fn normalize_title(title: &str) -> String {
                 temp_rem = temp_rem.get(digit_len..).unwrap_or("");
                 temp_consumed += digit_len;
 
-                // Skip optional trailing space, ':', or '-'
+                // Skip optional trailing space, ':', '-', or '_'
                 while temp_rem.starts_with(' ')
                     || temp_rem.starts_with(':')
                     || temp_rem.starts_with('-')
+                    || temp_rem.starts_with('_')
                 {
                     temp_rem = temp_rem.get(1..).unwrap_or("");
                     temp_consumed += 1;
@@ -460,9 +461,9 @@ pub fn normalize_title(title: &str) -> String {
         stripped
     };
 
-    let hyphens_replaced = working.replace('-', " ");
+    let separators_replaced = working.replace('-', " ").replace('_', " ");
 
-    let filtered: String = hyphens_replaced
+    let filtered: String = separators_replaced
         .chars()
         .filter(|c| c.is_alphanumeric() || c.is_whitespace())
         .collect();
@@ -982,6 +983,26 @@ mod tests {
         assert_eq!(
             normalize_title("epics-12: System Overview"),
             "system overview"
+        );
+        assert_eq!(
+            normalize_title("Feature 01: [ConOps] Human_Engineer_Interface"),
+            "conops human engineer interface"
+        );
+        assert_eq!(
+            normalize_title("Feature_01_Human_Engineer"),
+            "human engineer"
+        );
+        assert_eq!(
+            normalize_title("Epic_02: Radar_Tracker_Architecture"),
+            "radar tracker architecture"
+        );
+        assert_eq!(
+            normalize_title("User_Story_05: Ingest_Telemetry_Stream"),
+            "ingest telemetry stream"
+        );
+        assert_eq!(
+            normalize_title("Use_Case_03: Process_Radar_Tracks"),
+            "process radar tracks"
         );
     }
 

@@ -153,7 +153,11 @@ pub fn run_reconciliation<T: TrackerClient>(
         }
 
         // Match spec to tracker issue
-        if let Some(issue) = issue_index.find_issue(spec.frontmatter.issue_id, &spec.frontmatter.title) {
+        if let Some(issue) = issue_index.find_issue_for_type(
+            spec.frontmatter.issue_id,
+            Some(&spec.frontmatter.spec_type),
+            &spec.frontmatter.title,
+        ) {
             if spec.frontmatter.issue_id != Some(issue.number) {
                 spec.content = update_frontmatter_issue_id(&spec.content, issue.number);
                 spec.frontmatter.issue_id = Some(issue.number);

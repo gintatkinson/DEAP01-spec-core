@@ -212,12 +212,27 @@ pub fn run_create_issue<T: TrackerClient>(
     crate::validate_checklist_publish_integrity(&params.body_file, &body_content, &issue_index)?;
 
     let norm_target = normalize_title(&params.title);
+    let target_type = crate::tracker::canonicalize_spec_type(&params.label);
 
-    let existing = issues.iter().find(|i| {
-        let norm_existing = normalize_title(&i.title);
-        (!norm_target.is_empty() && norm_existing == norm_target)
-            || i.title.trim().eq_ignore_ascii_case(params.title.trim())
-    });
+    let existing = issue_index
+        .find_issue_for_type(None, Some(&params.label), &params.title)
+        .cloned()
+        .or_else(|| {
+            issues.iter().find(|i| {
+                let matches_type = i
+                    .labels
+                    .iter()
+                    .any(|l| crate::tracker::canonicalize_spec_type(l.name()) == target_type)
+                    || crate::tracker::infer_spec_type_from_title(&i.title).as_deref()
+                        == Some(&target_type);
+                if !matches_type {
+                    return false;
+                }
+                let norm_existing = normalize_title(&i.title);
+                (!norm_target.is_empty() && norm_existing == norm_target)
+                    || i.title.trim().eq_ignore_ascii_case(params.title.trim())
+            }).cloned()
+        });
 
     if let Some(existing_issue) = existing {
         let is_closed = existing_issue.state.eq_ignore_ascii_case("closed");
@@ -264,7 +279,9 @@ pub fn run_create_issue<T: TrackerClient>(
         let mut spec_path_to_issue = std::collections::BTreeMap::new();
         for spec in crate::load_specifications(workspace_root) {
             if let Some(id) = spec.frontmatter.issue_id.or_else(|| {
-                issue_index.find_issue(None, &spec.frontmatter.title).map(|i| i.number)
+                issue_index
+                    .find_issue_for_type(None, Some(&spec.frontmatter.spec_type), &spec.frontmatter.title)
+                    .map(|i| i.number)
             }) {
                 spec_path_to_issue.insert(spec.rel_path.clone(), id);
                 if let Some(stripped) = spec.rel_path.strip_prefix("docs/") {
@@ -694,6 +711,47 @@ mod tests {
             _ => false,
         }));
         assert!(issue_21.body.as_ref().map(|b| b.contains("# Issue Content")).unwrap_or(false));
+        Ok(())
+    }
+
+    #[test]
+    fn test_create_issue_does_not_collide_feature_with_existing_epic() -> Result<(), Box<dyn std::error::Error>> {
+        let body_tf = TempFile::new(
+            "feat_collision",
+            "# Feature 01: [ConOps] Human Engineer Interface\n\nBody content\n",
+        )?;
+
+        let existing_epic = TrackerIssue {
+            number: 10,
+            title: "Epic 01: [ConOps] Human Engineer Interface".to_string(),
+            state: "OPEN".to_string(),
+            labels: vec![TrackerLabel::String("epic".to_string())],
+            body: Some("Epic body".to_string()),
+            url: Some("https://github.com/org/repo/issues/10".to_string()),
+        };
+
+        let tracker = OfflineTracker::with_issues(vec![existing_epic]);
+        let params = ResolvedCreateIssueParams {
+            body_file: body_tf.path_str()?.to_string(),
+            label: "feature".to_string(),
+            title: "Feature 01: [ConOps] Human Engineer Interface".to_string(),
+            repo: Some("org/repo".to_string()),
+            reopen_with_analysis: None,
+            provider: "offline".to_string(),
+        };
+
+        let outcome = run_create_issue(&tracker, &params)?;
+        match outcome {
+            IssueActionOutcome::Created { number, .. } => {
+                assert_ne!(number, 10, "Feature must be created as new issue, not collide with Epic #10");
+            }
+            IssueActionOutcome::AlreadyOpen { number, .. } => {
+                panic!("Feature must NOT be treated as AlreadyOpen due to Epic #10 collision! (got issue #{})", number);
+            }
+            IssueActionOutcome::Reopened { number, .. } => {
+                panic!("Feature must NOT be reopened! (got issue #{})", number);
+            }
+        }
         Ok(())
     }
 }

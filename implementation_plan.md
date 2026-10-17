@@ -209,3 +209,49 @@ This implementation plan governs the context-isolated dispatch of an `Adversaria
   - Inspect the live published GitHub issue via `gh issue view <NEW_ISSUE_ID>` to confirm all 7 sections, Mermaid blocks, and metadata rendered cleanly without truncation.
   - Reclaim/terminate the subagent upon completion and report the live issue URL and verification evidence to the user.
 
+
+---
+
+# Implementation Plan: Adversarial Code Auditor Dispatch for Issue 2 (`satisfy requirement` AST, Parser & Serializer Round-Trip)
+
+## 1. Executive Summary & Objective
+
+This implementation plan governs the context-isolated dispatch of an `Adversarial Code Auditor` subagent (`skills/adversarial-code-auditor/SKILL.md`) to perform deep root-cause analysis, offline defect-gate verification, and GitHub issue filing for **Issue 2: `satisfy requirement` AST & Parser/Serializer Round-Trip** (`[AUDIT] [compile-sysml]: Support 'satisfy requirement' bindings in PartDef AST, parser, and serializer`).
+
+## 2. Work Packages
+
+### WP-01: Context-Isolated Adversarial Code Auditor Subagent Dispatch
+- **Action**: Dispatch a context-isolated subagent (`Role: "Adversarial Code Auditor"`) governed by `skills/adversarial-code-auditor/SKILL.md` and `rules/subagent-dispatch-standards.md`.
+- **Pre-Flight Governance Preamble**:
+  - Direct-path `view_file` on `skills/adversarial-code-auditor/SKILL.md` as Step 1.
+  - Verbatim repository classification: `UPSTREAM_SPEC_CORE_COMPILER`.
+  - Read `.pipeline/constitution.md` and target file `crates/compile-sysml/src/parser/grammar.rs`.
+  - Trailing `PROCEED` authorization token.
+- **Audit Scope & Deep Analysis Targets**:
+  1. **Target File**: `crates/compile-sysml/src/parser/grammar.rs` (specifically `parse_container_item` lines 182-370, `parse_part_decl` lines 378-435, and `parse_requirement_decl`).
+  2. **Cross-Reference Verification Targets**:
+     - `crates/deap-core/src/sysml_ast.rs` (`PartDef`, `PackageDef`, `RequirementDef` struct definitions and requirement satisfaction bindings).
+     - `crates/compile-sysml/src/semantic/serializer.rs` (`PartDef::to_sysml`, `PackageDef::to_sysml`, and `RequirementDef::to_sysml`).
+     - `docs/designs/FEAT-42_source_code_ast_ingestion_and_docstring_synthesizer.md` (Section 3.1 line 93 and Section 4 AC-01 line 156 requiring `/// Realises: [REQ-UI-01]` to lower into `satisfy requirement REQ-UI-01;` inside `PartDef`).
+     - `crates/verify-baseline/src/checks/parity_gates.rs` (Check 31 `check_dual_schema_ssot_parity` round-trip verification impact).
+
+### WP-02: 7-Section Defect Dossier Synthesis & Offline Gate Verification (Step C & Step D)
+- **Action**: The `Adversarial Code Auditor` subagent synthesizes the complete 7-section defect dossier in `/tmp/gh_body_satisfy_req_audit.md` conforming character-for-character to `skills/adversarial-code-auditor/SKILL.md` Section 2:
+  1. `## 1. Context and References` (with `<!-- test-target: crates/compile-sysml/src/parser/grammar.rs -->` and 4 bullets: `File`, `Pillar`, `Symptom`, `Test-Target`).
+  2. `## 2. Root Cause Analysis (5 Whys)` (5 numbered `**Why ...?** Because ...` items).
+  3. `## 3. Correctness Analysis` (tracing exact `file:line` references across `crates/compile-sysml/src/parser/grammar.rs`, `crates/compile-sysml/src/semantic/serializer.rs`, `crates/deap-core/src/sysml_ast.rs`, and `docs/designs/FEAT-42_source_code_ast_ingestion_and_docstring_synthesizer.md`).
+  4. `## 4. UML Diagrams` (valid Mermaid diagram conforming to all Mermaid syntax rules in `rules/platform-independence.md`).
+  5. `## 5. Affected Callers / Downstream Impact`.
+  6. `## 6. Proposed Correction` (concrete Rust code remediation for `crates/deap-core/src/sysml_ast.rs`, `crates/compile-sysml/src/parser/grammar.rs`, and `crates/compile-sysml/src/semantic/serializer.rs`, plus unit and round-trip property test specifications).
+  7. `## 7. Relationship to Existing Issues` & `## Audit Source` (`SEVERITY: Important`, `FILE_LOCATION: crates/compile-sysml/src/parser/grammar.rs:182-370`).
+- **Offline Gate Verification**:
+  - Execute all 12 checklist checks in `skills/adversarial-code-auditor/SKILL.md` Step D.
+  - Execute `./target/release/verify-baseline check-defect /tmp/gh_body_satisfy_req_audit.md` and confirm exit code `0`.
+
+### WP-03: Issue Filing & Closed-Loop Payload Verification (Step E)
+- **Action**: File the verified defect dossier to `gintatkinson/DEAP01-spec-core` with label `bug` and title `[AUDIT] [compile-sysml]: Support 'satisfy requirement' bindings in PartDef AST, parser, and serializer` via `./target/release/reconcile-backlog create-issue --repo gintatkinson/DEAP01-spec-core --title "[AUDIT] [compile-sysml]: Support 'satisfy requirement' bindings in PartDef AST, parser, and serializer" --body-file /tmp/gh_body_satisfy_req_audit.md --label bug`.
+- **Closed-Loop Verification**:
+  - Inspect the live published GitHub issue via `gh issue view <NEW_ISSUE_ID> --repo gintatkinson/DEAP01-spec-core` to confirm all 7 sections, Mermaid blocks, and metadata rendered cleanly without truncation.
+  - Remove temporary file `/tmp/gh_body_satisfy_req_audit.md`, reclaim/terminate the subagent upon completion, and report the live issue URL and verification evidence to the user.
+
+
