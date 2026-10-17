@@ -4742,7 +4742,11 @@ pub fn strip_sysml_comments(content: &str) -> String {
                         }
                     }
                 } else {
+                    out.push(' ');
                     while let Some(next_c) = chars.next() {
+                        if next_c == '\n' {
+                            out.push('\n');
+                        }
                         if next_c == '*' && chars.peek() == Some(&'/') {
                             chars.next();
                             break;
@@ -6482,6 +6486,11 @@ package SystemModel_SSOT {
                 satisfy requirement "REQ-CTRL-002";
                 satisfy REQ-PWR-03 by PowerBus;
                 satisfy requirement REQ-CTRL-001;
+                satisfy /* comment 1 */ requirement REQ-COM-04;
+                satisfy/*comment 2*/requirement REQ-COM-05;
+                satisfy requirement /*comment 3*/ REQ-COM-06;
+                satisfy requirement REQ-COM-07 /*comment 4*/;
+                satisfy requirement REQ-COM-08 /* c1 */ by /* c2 */ PowerBus /* c3 */;
             }
         "#;
         let satisfied = parse_satisfied_requirements(snippet);
@@ -6491,6 +6500,11 @@ package SystemModel_SSOT {
                 "REQ-CTRL-001".to_string(),
                 "REQ-CTRL-002".to_string(),
                 "REQ-PWR-03".to_string(),
+                "REQ-COM-04".to_string(),
+                "REQ-COM-05".to_string(),
+                "REQ-COM-06".to_string(),
+                "REQ-COM-07".to_string(),
+                "REQ-COM-08".to_string(),
             ]
         );
 
@@ -6503,6 +6517,11 @@ package SystemModel_SSOT {
                 "REQ-CTRL-001".to_string(),
                 "REQ-CTRL-002".to_string(),
                 "REQ-PWR-03".to_string(),
+                "REQ-COM-04".to_string(),
+                "REQ-COM-05".to_string(),
+                "REQ-COM-06".to_string(),
+                "REQ-COM-07".to_string(),
+                "REQ-COM-08".to_string(),
             ]
         );
     }

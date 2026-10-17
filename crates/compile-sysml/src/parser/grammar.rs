@@ -1979,7 +1979,13 @@ impl<'a> SysmlParser<'a> {
 
     fn parse_satisfy_stmt(&mut self) -> Result<String, ParseError> {
         self.expect(&TokenKind::Satisfy)?;
+        while matches!(self.peek_kind(), TokenKind::DocComment(_) | TokenKind::LineComment(_)) {
+            self.advance();
+        }
         if self.check(&TokenKind::Requirement) {
+            self.advance();
+        }
+        while matches!(self.peek_kind(), TokenKind::DocComment(_) | TokenKind::LineComment(_)) {
             self.advance();
         }
         let mut raw = String::new();
@@ -1990,6 +1996,7 @@ impl<'a> SysmlParser<'a> {
         {
             let tok = self.advance();
             match &tok.kind {
+                TokenKind::DocComment(_) | TokenKind::LineComment(_) => {}
                 TokenKind::Ident(s) => raw.push_str(s),
                 TokenKind::StringLit(s) => raw.push_str(s),
                 TokenKind::IntLit(n) => {
@@ -3033,6 +3040,295 @@ package SyntaxVariantsModel {
             ],
             "syntax variants and zero-padded multi-hyphen identifiers must be parsed with duplicate deduplication"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn test_issue_460_parse_satisfy_with_interspersed_block_comments() -> Result<(), Box<dyn std::error::Error>> {
+        let source = r#"
+package CommentVariantsModel {
+    part def CommentSubsystem {
+        // Block comment between satisfy and requirement
+        satisfy /* comment 1 */ requirement REQ-UI-01;
+        // Block comment between satisfy and ID (no requirement keyword)
+        satisfy /* comment 2 */ REQ-UI-02;
+        // Block comment between requirement and ID
+        satisfy requirement /* comment 3 */ REQ-UI-03;
+        // Block comment before semicolon
+        satisfy requirement REQ-UI-04 /* comment 4 */;
+        // Multiple block comments interspersed
+        satisfy /* c1 */ /* c2 */ requirement /* c3 */ REQ-UI-05 /* c4 */;
+        // Block comment with 'by' clause
+        satisfy requirement REQ-UI-06 /* comment 5 */ by SubsystemImpl;
+        // Qualified path
+        satisfy requirement Core::UI::REQ-07;
+    }
+}
+"#;
+        let pkg = SysmlParser::parse_source(source, "CommentVariantsModel")?;
+        let subsystem = pkg
+            .part_defs
+            .iter()
+            .find(|p| p.name == "CommentSubsystem")
+            .ok_or("missing CommentSubsystem")?;
+
+        assert_eq!(
+            subsystem.satisfied_requirements,
+            vec![
+                "REQ-UI-01".to_string(),
+                "REQ-UI-02".to_string(),
+                "REQ-UI-03".to_string(),
+                "REQ-UI-04".to_string(),
+                "REQ-UI-05".to_string(),
+                "REQ-UI-06".to_string(),
+                "Core::UI::REQ-07".to_string(),
+            ],
+            "interspersed block comments must not leak <dynamic> or prevent requirement keyword recognition"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_issue_460_comments_between_satisfy_and_requirement() -> Result<(), Box<dyn std::error::Error>> {
+        let test_cases = [
+            ("satisfy // single-line comment\n requirement REQ-01;", "REQ-01"),
+            ("satisfy /* single-line block comment */ requirement REQ-02;", "REQ-02"),
+            ("satisfy /* multi\n   line\n   block comment */ requirement REQ-03;", "REQ-03"),
+            ("satisfy /* nested /* block */ comment */ requirement REQ-04;", "REQ-04"),
+            ("satisfy doc /* doc comment style */ requirement REQ-05;", "REQ-05"),
+            ("satisfy /* doc: comment style */ requirement REQ-06;", "REQ-06"),
+            ("satisfy /* c1 */ /* c2 */ requirement REQ-07;", "REQ-07"),
+            ("satisfy /* c1 */ // line\n /* c2 */ requirement REQ-08;", "REQ-08"),
+            ("satisfy /* satisfy requirement by */ requirement REQ-09;", "REQ-09"),
+            ("satisfy /**/ requirement REQ-10;", "REQ-10"),
+        ];
+
+        for (stmt, expected_id) in test_cases {
+            let src = format!("package P {{ part def C {{ {} }} }}", stmt);
+            let pkg = SysmlParser::parse_source(&src, "P")?;
+            assert_eq!(
+                pkg.part_defs[0].satisfied_requirements,
+                vec![expected_id.to_string()],
+                "Failed to parse satisfy statement with comment between satisfy and requirement: {}",
+                stmt
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_issue_460_comments_between_requirement_and_identifier() -> Result<(), Box<dyn std::error::Error>> {
+        let test_cases = [
+            ("satisfy requirement // line comment\n REQ-01;", "REQ-01"),
+            ("satisfy requirement /* single block */ REQ-02;", "REQ-02"),
+            ("satisfy requirement /* multi\nline\nblock */ REQ-03;", "REQ-03"),
+            ("satisfy requirement doc /* doc comment */ REQ-04;", "REQ-04"),
+            ("satisfy requirement /* doc: docstring */ REQ-05;", "REQ-05"),
+            ("satisfy requirement /* c1 */ /* c2 */ REQ-06;", "REQ-06"),
+            ("satisfy requirement /* c1 */ // line\n /* c2 */ REQ-07;", "REQ-07"),
+            // Direct satisfy without 'requirement' keyword
+            ("satisfy /* comment without req keyword */ REQ-08;", "REQ-08"),
+            ("satisfy // line without req keyword\n REQ-09;", "REQ-09"),
+            ("satisfy /* multi\nline without req */ REQ-10;", "REQ-10"),
+            // Quoted and unrestricted identifiers with comments
+            ("satisfy requirement /* c1 */ \"REQ-UI-01\";", "REQ-UI-01"),
+            ("satisfy requirement /* c1 */ 'REQ-UI-02';", "REQ-UI-02"),
+            ("satisfy /* c1 */ \"REQ-UI-03\";", "REQ-UI-03"),
+        ];
+
+        for (stmt, expected_id) in test_cases {
+            let src = format!("package P {{ part def C {{ {} }} }}", stmt);
+            let pkg = SysmlParser::parse_source(&src, "P")?;
+            assert_eq!(
+                pkg.part_defs[0].satisfied_requirements,
+                vec![expected_id.to_string()],
+                "Failed to parse satisfy statement with comment between requirement and ID: {}",
+                stmt
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_issue_460_comments_within_identifier_tokens_and_hyphens() -> Result<(), Box<dyn std::error::Error>> {
+        let test_cases = [
+            ("satisfy requirement REQ /* c */ -01;", "REQ-01"),
+            ("satisfy requirement REQ- /* c */ 01;", "REQ-01"),
+            ("satisfy requirement REQ /* c1 */ - /* c2 */ UI /* c3 */ - /* c4 */ 01;", "REQ-UI-01"),
+            ("satisfy requirement REQ- // line comment\n 01;", "REQ-01"),
+            ("satisfy requirement REQ /* multi\nline */ -01;", "REQ-01"),
+            ("satisfy requirement REQ /* nested /* c */ */ -01;", "REQ-01"),
+            ("satisfy requirement REQ /* c1 */ - /* c2 */ FMS /* c3 */ - /* c4 */ DISP /* c5 */ - /* c6 */ 0042;", "REQ-FMS-DISP-0042"),
+            ("satisfy requirement Core /* c1 */ ::UI::REQ-01;", "Core::UI::REQ-01"),
+            ("satisfy requirement Core:: /* c2 */ UI::REQ-01;", "Core::UI::REQ-01"),
+            ("satisfy requirement Core::UI /* c3 */ ::REQ-01;", "Core::UI::REQ-01"),
+            ("satisfy requirement Core::UI:: /* c4 */ REQ-01;", "Core::UI::REQ-01"),
+            ("satisfy requirement Core /* c1 */ :: /* c2 */ UI /* c3 */ :: /* c4 */ REQ /* c5 */ - /* c6 */ 01;", "Core::UI::REQ-01"),
+        ];
+
+        for (stmt, expected_id) in test_cases {
+            let src = format!("package P {{ part def C {{ {} }} }}", stmt);
+            let pkg = SysmlParser::parse_source(&src, "P")?;
+            assert_eq!(
+                pkg.part_defs[0].satisfied_requirements,
+                vec![expected_id.to_string()],
+                "Failed to parse satisfy statement with comments within identifier tokens: {}",
+                stmt
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_issue_460_comments_before_terminating_semicolon() -> Result<(), Box<dyn std::error::Error>> {
+        let test_cases = [
+            ("satisfy requirement REQ-01 // line comment\n ;", "REQ-01"),
+            ("satisfy requirement REQ-02 /* block comment */;", "REQ-02"),
+            ("satisfy requirement REQ-03 /* multi\nline\ncomment */;", "REQ-03"),
+            ("satisfy requirement REQ-04 /* nested /* comment */ */;", "REQ-04"),
+            ("satisfy requirement REQ-05 /* c1 */ /* c2 */;", "REQ-05"),
+            ("satisfy requirement REQ-06 /* c1 */ // line\n /* c2 */;", "REQ-06"),
+            ("satisfy requirement REQ-07 /* ;;; */;", "REQ-07"),
+            ("satisfy requirement REQ-08 /* { } */;", "REQ-08"),
+            ("satisfy requirement \"REQ-09\" /* block comment */;", "REQ-09"),
+            ("satisfy requirement 'REQ-10' /* block comment */;", "REQ-10"),
+        ];
+
+        for (stmt, expected_id) in test_cases {
+            let src = format!("package P {{ part def C {{ {} }} }}", stmt);
+            let pkg = SysmlParser::parse_source(&src, "P")?;
+            assert_eq!(
+                pkg.part_defs[0].satisfied_requirements,
+                vec![expected_id.to_string()],
+                "Failed to parse satisfy statement with comments before terminating semicolon: {}",
+                stmt
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_issue_460_comments_surrounding_by_clause() -> Result<(), Box<dyn std::error::Error>> {
+        let test_cases = [
+            ("satisfy requirement REQ-01 /* comment before by */ by NavCtrl;", "REQ-01"),
+            ("satisfy requirement REQ-02 // line before by\n by NavCtrl;", "REQ-02"),
+            ("satisfy requirement REQ-03 /* multi\nline */ by NavCtrl;", "REQ-03"),
+            ("satisfy requirement REQ-04 by /* comment between by and part */ NavCtrl;", "REQ-04"),
+            ("satisfy requirement REQ-05 by // line between by and part\n NavCtrl;", "REQ-05"),
+            ("satisfy requirement REQ-06 by /* multi\nline */ NavCtrl;", "REQ-06"),
+            ("satisfy requirement REQ-07 by NavCtrl /* comment after part before semi */;", "REQ-07"),
+            ("satisfy requirement REQ-08 by NavCtrl // line after part before semi\n ;", "REQ-08"),
+            ("satisfy requirement REQ-09 by NavCtrl /* multi\nline */;", "REQ-09"),
+            ("satisfy requirement REQ-10 /* c1 */ by /* c2 */ NavCtrl /* c3 */;", "REQ-10"),
+            ("satisfy requirement REQ-11 // l1\n by // l2\n NavCtrl // l3\n ;", "REQ-11"),
+            ("satisfy requirement REQ-12 /* by */ by /* satisfy */ NavCtrl /* ; */;", "REQ-12"),
+            ("satisfy requirement \"REQ-UI-01\" /* c1 */ by /* c2 */ NavCtrl /* c3 */;", "REQ-UI-01"),
+        ];
+
+        for (stmt, expected_id) in test_cases {
+            let src = format!("package P {{ part def C {{ {} }} }}", stmt);
+            let pkg = SysmlParser::parse_source(&src, "P")?;
+            assert_eq!(
+                pkg.part_defs[0].satisfied_requirements,
+                vec![expected_id.to_string()],
+                "Failed to parse satisfy statement with comments surrounding 'by <Part>' clause: {}",
+                stmt
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_issue_460_comments_package_and_part_def_roundtrip_stress() -> Result<(), Box<dyn std::error::Error>> {
+        use crate::semantic::serializer::SysmlSerializable;
+
+        let source = r#"
+package AdversarialCommentsPackage {
+    // Package-level satisfy statement with inline block comment
+    satisfy /* pkg comment 1 */ requirement REQ-PKG-01 /* pkg comment 2 */;
+
+    // Package-level satisfy statement with 'by' clause and comments
+    satisfy requirement REQ-PKG-02 /* before by */ by CorePlatform /* after by */;
+
+    part def CockpitSubsystem {
+        // Position 1: between satisfy and requirement
+        satisfy /* block comment */ requirement REQ-UI-01;
+        satisfy // line comment
+            requirement REQ-UI-02;
+        satisfy /* multi
+            line
+            comment */ requirement REQ-UI-03;
+
+        // Position 2: between requirement and ID
+        satisfy requirement /* block comment */ REQ-UI-04;
+        satisfy /* without req keyword */ REQ-UI-05;
+
+        // Position 3: between ID tokens and hyphens
+        satisfy requirement REQ /* c1 */ - /* c2 */ UI /* c3 */ - /* c4 */ 06;
+        satisfy requirement Core /* c1 */ :: /* c2 */ UI /* c3 */ :: /* c4 */ REQ-UI-07;
+
+        // Position 4: before terminating semicolon
+        satisfy requirement REQ-UI-08 /* comment before semi */;
+
+        // Position 5: before and after 'by <Part>'
+        satisfy requirement REQ-UI-09 /* c1 */ by /* c2 */ TouchDisplay /* c3 */;
+
+        // Deduplication: statement with comments matches clean statement
+        satisfy requirement REQ-UI-01;
+        satisfy /* dupe comment */ requirement REQ-UI-01;
+    }
+}
+"#;
+        let pkg = SysmlParser::parse_source(source, "AdversarialCommentsPackage")?;
+
+        // 1. Package-level satisfy requirement validation
+        assert_eq!(
+            pkg.satisfied_requirements,
+            vec!["REQ-PKG-01".to_string(), "REQ-PKG-02".to_string()],
+            "package-level satisfy requirements must be extracted cleanly without comment artifacts"
+        );
+
+        // 2. Part-level satisfy requirement validation and deduplication
+        let cockpit = pkg
+            .part_defs
+            .iter()
+            .find(|p| p.name == "CockpitSubsystem")
+            .ok_or("missing CockpitSubsystem")?;
+
+        let expected_part_reqs = vec![
+            "REQ-UI-01".to_string(),
+            "REQ-UI-02".to_string(),
+            "REQ-UI-03".to_string(),
+            "REQ-UI-04".to_string(),
+            "REQ-UI-05".to_string(),
+            "REQ-UI-06".to_string(),
+            "Core::UI::REQ-UI-07".to_string(),
+            "REQ-UI-08".to_string(),
+            "REQ-UI-09".to_string(),
+        ];
+        assert_eq!(
+            cockpit.satisfied_requirements, expected_part_reqs,
+            "cockpit satisfied_requirements must match expected list with deduplication"
+        );
+
+        // 3. Serialization round-trip validation via SysmlSerializable
+        let serialized = pkg.to_sysml(0);
+        assert!(serialized.contains("satisfy requirement REQ-PKG-01;"));
+        assert!(serialized.contains("satisfy requirement REQ-PKG-02;"));
+        assert!(serialized.contains("satisfy requirement REQ-UI-01;"));
+        assert!(serialized.contains("satisfy requirement REQ-UI-06;"));
+        assert!(serialized.contains("satisfy requirement Core::UI::REQ-UI-07;"));
+
+        // 4. AST Idempotency after re-parsing serialized output
+        let reparsed = SysmlParser::parse_source(&serialized, "AdversarialCommentsPackage")?;
+        assert_eq!(reparsed.satisfied_requirements, pkg.satisfied_requirements);
+        let reparsed_cockpit = reparsed
+            .part_defs
+            .iter()
+            .find(|p| p.name == "CockpitSubsystem")
+            .ok_or("missing reparsed CockpitSubsystem")?;
+        assert_eq!(reparsed_cockpit.satisfied_requirements, cockpit.satisfied_requirements);
+
         Ok(())
     }
 }
