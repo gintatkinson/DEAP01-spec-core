@@ -456,19 +456,27 @@ fn rewrite_projected_links(
                     continue;
                 } else if let Some(r) = repo {
                     let clean_repo = clean_repo_name(r);
-                    let branch = if default_branch.trim().is_empty() { "main" } else { default_branch.trim() };
-                    if target.contains("schema/") {
-                        let s_path = &target[target.find("schema/").unwrap()..];
-                        let blob = format!("https://github.com/{}/blob/{}/{}", clean_repo, branch, s_path);
-                        result.push_str(&format!("[{}]({})", text, blob));
-                        rest = &rest[total_end..];
-                        continue;
-                    } else if target.contains("docs/") {
-                        let d_path = &target[target.find("docs/").unwrap()..];
-                        let blob = format!("https://github.com/{}/blob/{}/{}", clean_repo, branch, d_path);
-                        result.push_str(&format!("[{}]({})", text, blob));
-                        rest = &rest[total_end..];
-                        continue;
+                    if !clean_repo.is_empty() {
+                        let branch = if default_branch.trim().is_empty() { "main" } else { default_branch.trim() };
+                        if target.contains("schema/") {
+                            let s_path = &target[target.find("schema/").unwrap()..];
+                            let blob = format!("https://github.com/{}/blob/{}/{}", clean_repo, branch, s_path);
+                            result.push_str(&format!("[{}]({})", text, blob));
+                            rest = &rest[total_end..];
+                            continue;
+                        } else if target.contains("docs/") {
+                            let d_path = &target[target.find("docs/").unwrap()..];
+                            let blob = format!("https://github.com/{}/blob/{}/{}", clean_repo, branch, d_path);
+                            result.push_str(&format!("[{}]({})", text, blob));
+                            rest = &rest[total_end..];
+                            continue;
+                        } else if let Some(subdir) = ["epics/", "features/", "user-stories/", "use-cases/"].iter().find(|s| target.contains(*s)) {
+                            let s_path = &target[target.find(subdir).unwrap()..];
+                            let blob = format!("https://github.com/{}/blob/{}/docs/{}", clean_repo, branch, s_path);
+                            result.push_str(&format!("[{}]({})", text, blob));
+                            rest = &rest[total_end..];
+                            continue;
+                        }
                     }
                 }
 
@@ -516,6 +524,13 @@ pub fn project_body_for_tracker(
             projected = projected.replace("../../../docs/", &docs_blob_base);
             projected = projected.replace("../../docs/", &docs_blob_base);
             projected = projected.replace("../docs/", &docs_blob_base);
+
+            for subdir in ["epics", "features", "user-stories", "use-cases"] {
+                let blob_base = format!("https://github.com/{}/blob/{}/docs/{}/", clean_repo, branch, subdir);
+                projected = projected.replace(&format!("../../../{}/", subdir), &blob_base);
+                projected = projected.replace(&format!("../../{}/", subdir), &blob_base);
+                projected = projected.replace(&format!("../{}/", subdir), &blob_base);
+            }
         }
     }
 
@@ -604,6 +619,10 @@ type: user-story
             "Projected issue body still contains relative filesystem link '../epics/EPIC-03-SystemVision.md'!"
         );
         assert!(
+            !body.contains("../features/FEAT-01-HumanEngineer.md"),
+            "Projected issue body still contains relative filesystem link '../features/FEAT-01-HumanEngineer.md'!"
+        );
+        assert!(
             !body.contains("../../schema/model.sysml"),
             "Projected issue body still contains relative filesystem link '../../schema/model.sysml'!"
         );
@@ -614,6 +633,11 @@ type: user-story
         assert!(
             body.contains("#80 - [EPIC-03-SystemVision](https://github.com/gintatkinson/dumpiler-01/blob/main/docs/epics/EPIC-03-SystemVision.md)"),
             "Projected body should contain translated citation '#80 - [EPIC-03-SystemVision](...)', found:\n{}",
+            body
+        );
+        assert!(
+            body.contains("[Feature 01: [ConOps] Human Engineer Interface](https://github.com/gintatkinson/dumpiler-01/blob/main/docs/features/FEAT-01-HumanEngineer.md)"),
+            "Projected body should contain translated blob URL for unmapped feature link, found:\n{}",
             body
         );
         assert!(
@@ -665,6 +689,36 @@ type: user-story
         assert!(projected.contains("#76 - [Feature 02: [Core] Baseline Verifier](https://github.com/gintatkinson/dumpiler-01/blob/main/docs/features/FEAT-02-Verifier.md)"));
         assert!(projected.contains("https://github.com/gintatkinson/dumpiler-01/blob/main/schema/subsystems/system_vision/behavior.sysml"));
         assert!(projected.contains("https://github.com/gintatkinson/dumpiler-01/blob/main/docs/architecture/DEAP_MASTER_ARCHITECTURE.md"));
+    }
+
+    #[test]
+    fn test_unmapped_relative_spec_links_project_to_github_blob_urls() {
+        let raw_body = r#"
+- [Epic](../epics/EPIC-01.md)
+- [Feature](../../features/FEAT-02.md)
+- [Story](../../../user-stories/US-03.md)
+- [Use Case](../use-cases/UC-04.md)
+- Direct link: ../../../features/FEAT-05.md
+"#;
+        let empty_map = BTreeMap::new();
+        let projected = project_body_for_tracker(
+            raw_body,
+            Some("owner/myrepo"),
+            "develop",
+            &empty_map,
+        );
+
+        assert!(!projected.contains("../epics/EPIC-01.md"));
+        assert!(!projected.contains("../../features/FEAT-02.md"));
+        assert!(!projected.contains("../../../user-stories/US-03.md"));
+        assert!(!projected.contains("../use-cases/UC-04.md"));
+        assert!(!projected.contains("../../../features/FEAT-05.md"));
+
+        assert!(projected.contains("[Epic](https://github.com/owner/myrepo/blob/develop/docs/epics/EPIC-01.md)"));
+        assert!(projected.contains("[Feature](https://github.com/owner/myrepo/blob/develop/docs/features/FEAT-02.md)"));
+        assert!(projected.contains("[Story](https://github.com/owner/myrepo/blob/develop/docs/user-stories/US-03.md)"));
+        assert!(projected.contains("[Use Case](https://github.com/owner/myrepo/blob/develop/docs/use-cases/UC-04.md)"));
+        assert!(projected.contains("https://github.com/owner/myrepo/blob/develop/docs/features/FEAT-05.md"));
     }
 
     #[test]
