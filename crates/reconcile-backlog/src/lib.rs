@@ -268,6 +268,32 @@ pub fn validate_checklist_publish_integrity(
                 ));
             }
         }
+
+        // Also scan item.full_line for any #<digits> references and verify that each number exists in issue_index.by_number
+        let bytes = item.full_line.as_bytes();
+        let mut i = 0;
+        while i < bytes.len() {
+            if bytes[i] == b'#' {
+                let start = i + 1;
+                let mut end = start;
+                while end < bytes.len() && bytes[end].is_ascii_digit() {
+                    end += 1;
+                }
+                if end > start {
+                    if let Ok(num) = item.full_line[start..end].parse::<u64>() {
+                        if !issue_index.by_number.contains_key(&num) {
+                            return Err(format!(
+                                "Publish gate blocked: specification '{}' contains unresolvable checklist issue reference '#{}'. Sibling must be registered on live tracker before publishing.",
+                                spec_rel_path, num
+                            ));
+                        }
+                    }
+                    i = end;
+                    continue;
+                }
+            }
+            i += 1;
+        }
     }
     Ok(())
 }
@@ -814,6 +840,125 @@ type: user-story
 
         let res = validate_checklist_publish_integrity("docs/epics/EPIC-01.md", content, &issue_index);
         assert!(res.is_ok());
+    }
+
+    #[test]
+    fn test_publish_gate_blocks_unregistered_inline_issue_numbers() -> Result<(), Box<dyn std::error::Error>> {
+        let content = r#"# Epic: Test
+## 2. Requirements & Checklist
+- [ ] [Feature 99: Ghost Feature](../features/FEAT-99.md) (#999)
+"#;
+        let mut issue_index = IssueIndex::default();
+        issue_index.by_number.insert(
+            10,
+            tracker::TrackerIssue {
+                number: 10,
+                title: "Feature 01".to_string(),
+                labels: vec![],
+                state: "OPEN".to_string(),
+                body: None,
+                url: None,
+            },
+        );
+
+        let err = validate_checklist_publish_integrity("docs/epics/EPIC-01.md", content, &issue_index)
+            .err()
+            .ok_or("expected publish gate to reject unregistered inline issue #999")?;
+        assert!(err.contains("Publish gate blocked"));
+        assert!(err.contains("contains unresolvable checklist issue reference '#999'"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_publish_gate_passes_for_registered_inline_issue_numbers() {
+        let content = r#"# Epic: Test
+## 2. Requirements & Checklist
+- [ ] [Feature 01: Real Feature](../features/FEAT-01.md) (#10)
+"#;
+        let mut issue_index = IssueIndex::default();
+        issue_index.by_number.insert(
+            10,
+            tracker::TrackerIssue {
+                number: 10,
+                title: "Feature 01".to_string(),
+                labels: vec![],
+                state: "OPEN".to_string(),
+                body: None,
+                url: None,
+            },
+        );
+
+        let res = validate_checklist_publish_integrity("docs/epics/EPIC-01.md", content, &issue_index);
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn test_reconciliation_workflow_reconciles_markdown_linked_and_inline_issues() -> Result<(), Box<dyn std::error::Error>> {
+        let temp_dir = std::env::temp_dir().join(format!("reconcile_md_links_{}", chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)));
+        let stories_dir = temp_dir.join("docs/user-stories");
+        fs::create_dir_all(&stories_dir)?;
+
+        let story_content = r#"---
+issue_id: 100
+title: "User Story 01: Core"
+type: user-story
+---
+# User Story 01: Core
+
+## Required Features
+- [ ] [Feature 01: Human Engineer Interface](../features/FEAT-01.md)
+- [ ] [Feature 02: CI Runner](../features/FEAT-02.md) (#20)
+"#;
+        let story_path = stories_dir.join("US-01-Core.md");
+        fs::write(&story_path, story_content)?;
+
+        let issues = vec![
+            TrackerIssue {
+                number: 100,
+                title: "User Story 01: Core".to_string(),
+                state: "OPEN".to_string(),
+                labels: vec![TrackerLabel::String("user-story".to_string())],
+                body: None,
+                url: None,
+            },
+            TrackerIssue {
+                number: 10,
+                title: "Feature 01: Human Engineer Interface".to_string(),
+                state: "CLOSED".to_string(), // resolved!
+                labels: vec![TrackerLabel::String("feature".to_string())],
+                body: None,
+                url: None,
+            },
+            TrackerIssue {
+                number: 20,
+                title: "Feature 02: CI Runner".to_string(),
+                state: "CLOSED".to_string(), // resolved!
+                labels: vec![TrackerLabel::String("feature".to_string())],
+                body: None,
+                url: None,
+            },
+        ];
+
+        let tracker = OfflineTracker::with_issues(issues);
+        let options = ReconcileOptions {
+            workspace_root: temp_dir.clone(),
+            offline: false,
+            dry_run: false,
+            provider: "offline".to_string(),
+            sync_bodies: false,
+            repo: None,
+            default_branch: None,
+        };
+
+        let summary = run_reconciliation(&tracker, &options)?;
+        assert_eq!(summary.checklists_updated, 2, "Expected both checklist items to be updated to [x]");
+
+        let updated = fs::read_to_string(&story_path)?;
+        assert!(updated.contains("- [x] [Feature 01: Human Engineer Interface](../features/FEAT-01.md)"));
+        assert!(updated.contains("- [x] [Feature 02: CI Runner](../features/FEAT-02.md) (#20)"));
+
+        let _ = fs::remove_dir_all(&temp_dir);
+        Ok(())
     }
 
     #[test]

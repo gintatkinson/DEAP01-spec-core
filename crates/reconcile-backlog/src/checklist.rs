@@ -13,15 +13,15 @@ pub struct ChecklistItem {
 }
 
 /// Internal helper representing a parsed checklist line.
-struct ParsedCheckline<'a> {
+struct ParsedCheckline {
     checked: bool,
     issue_number: Option<u64>,
-    text: &'a str,
+    text: String,
     mark_pos: usize,
 }
 
 /// Parses a line into checklist components if it matches `- [ ]` or `- [x]`.
-fn parse_checklist_line(line: &str) -> Option<ParsedCheckline<'_>> {
+fn parse_checklist_line(line: &str) -> Option<ParsedCheckline> {
     let trimmed = line.trim_start();
     let indent_len = line.len() - trimmed.len();
 
@@ -56,28 +56,8 @@ fn parse_checklist_line(line: &str) -> Option<ParsedCheckline<'_>> {
     let bracket_offset = trimmed.find('[')?;
     let mark_pos = indent_len + bracket_offset + 1;
 
-    // Parse optional issue number (#123) and title from `after_box`
-    let after_ws = after_box.trim_start();
-    let (issue_number, text) = if let Some(after_hash) = after_ws.strip_prefix('#') {
-        let digits_len = after_hash.chars().take_while(|c| c.is_ascii_digit()).count();
-        if digits_len > 0 {
-            let num = after_hash[..digits_len].parse::<u64>().ok();
-            let after_digits = &after_hash[digits_len..];
-            let after_digits_trimmed = after_digits.trim_start();
-            let after_sep = if let Some(rest) = after_digits_trimmed.strip_prefix('-') {
-                rest
-            } else if let Some(rest) = after_digits_trimmed.strip_prefix(':') {
-                rest
-            } else {
-                after_digits_trimmed
-            };
-            (num, after_sep.trim_start())
-        } else {
-            (None, after_ws)
-        }
-    } else {
-        (None, after_ws)
-    };
+    // Parse issue number (#123) and clean title from `after_box`
+    let (issue_number, text) = extract_checklist_title_and_issue(after_box);
 
     Some(ParsedCheckline {
         checked,
@@ -85,6 +65,130 @@ fn parse_checklist_line(line: &str) -> Option<ParsedCheckline<'_>> {
         text,
         mark_pos,
     })
+}
+
+/// Helper function to clean markdown formatting, bold prefixes, and annotations from specification titles.
+fn clean_title_formatting(raw: &str) -> String {
+    let mut t = raw.trim();
+
+    // 1. Strip trailing parenthetical annotations like `(clauses ...)`, `(refs #...)`, `(#...)`, `(justification ...)`
+    if t.ends_with(')') {
+        if let Some(open_paren) = t.rfind('(') {
+            let inside = t[open_paren + 1..t.len() - 1].trim();
+            if inside.starts_with('#')
+                || inside.starts_with("refs")
+                || inside.starts_with("clauses")
+                || inside.starts_with("justification")
+                || inside.contains('#')
+            {
+                t = t[..open_paren].trim();
+            }
+        }
+    }
+
+    // 2. If there is a bold prefix like `**Prefix:** Title` or `**Prefix**: Title`, extract the title after bold prefix
+    if t.starts_with("**") {
+        if let Some(close_bold) = t[2..].find("**") {
+            let inside_bold = &t[2..2 + close_bold];
+            let after_bold = t[2 + close_bold + 2..].trim();
+            if inside_bold.ends_with(':') || inside_bold.ends_with('-') {
+                if !after_bold.is_empty() {
+                    t = after_bold;
+                }
+            } else if let Some(rest) = after_bold.strip_prefix(':').or_else(|| after_bold.strip_prefix('-')) {
+                let candidate = rest.trim();
+                if !candidate.is_empty() {
+                    t = candidate;
+                }
+            }
+        }
+    }
+
+    // Strip enclosing bold/italic formatting
+    while (t.starts_with("**") && t.ends_with("**")) && t.len() >= 4 {
+        t = t[2..t.len() - 2].trim();
+    }
+    while (t.starts_with('*') && t.ends_with('*')) && t.len() >= 2 {
+        t = t[1..t.len() - 1].trim();
+    }
+    while (t.starts_with("__") && t.ends_with("__")) && t.len() >= 4 {
+        t = t[2..t.len() - 2].trim();
+    }
+    while (t.starts_with('_') && t.ends_with('_')) && t.len() >= 2 {
+        t = t[1..t.len() - 1].trim();
+    }
+
+    // Strip trailing separator punctuation
+    t = t.trim_end_matches(':').trim_end_matches('-').trim();
+
+    t.to_string()
+}
+
+/// Extracts the human-readable specification title and any issue reference number (`#<digits>`)
+/// from checklist text, stripping Markdown links, bold markers, and trailing annotations.
+pub fn extract_checklist_title_and_issue(raw_text: &str) -> (Option<u64>, String) {
+    let trimmed = raw_text.trim();
+
+    // 1. Check for prefix issue: #<digits>
+    let mut found_issue = None;
+    let mut title_candidate = trimmed;
+
+    if let Some(after_hash) = trimmed.strip_prefix('#') {
+        let digits_len = after_hash.chars().take_while(|c| c.is_ascii_digit()).count();
+        if digits_len > 0 {
+            if let Ok(num) = after_hash[..digits_len].parse::<u64>() {
+                found_issue = Some(num);
+                let after_digits = &after_hash[digits_len..];
+                let after_digits_trimmed = after_digits.trim_start();
+                let after_sep = if let Some(rest) = after_digits_trimmed.strip_prefix('-') {
+                    rest
+                } else if let Some(rest) = after_digits_trimmed.strip_prefix(':') {
+                    rest
+                } else {
+                    after_digits_trimmed
+                };
+                title_candidate = after_sep.trim_start();
+            }
+        }
+    }
+
+    // 2. If no prefix issue, scan raw_text for inline #<digits>
+    if found_issue.is_none() {
+        let bytes = trimmed.as_bytes();
+        let mut i = 0;
+        while i < bytes.len() {
+            if bytes[i] == b'#' {
+                let start = i + 1;
+                let mut end = start;
+                while end < bytes.len() && bytes[end].is_ascii_digit() {
+                    end += 1;
+                }
+                if end > start {
+                    if let Ok(num) = trimmed[start..end].parse::<u64>() {
+                        found_issue = Some(num);
+                        break;
+                    }
+                }
+            }
+            i += 1;
+        }
+    }
+
+    // 3. Extract title:
+    // If text has Markdown link syntax [...](...), extract the text between outer [ and ],
+    // ignoring the (...) URL target and any trailing annotations.
+    let title = if let Some(open_b) = title_candidate.find('[') {
+        if let Some(sep) = title_candidate[open_b..].find("](") {
+            let inside_link = &title_candidate[open_b + 1..open_b + sep];
+            clean_title_formatting(inside_link)
+        } else {
+            clean_title_formatting(title_candidate)
+        }
+    } else {
+        clean_title_formatting(title_candidate)
+    };
+
+    (found_issue, title)
 }
 
 /// Identifies if a string contains prohibited unpopulated fallback placeholders.
@@ -204,7 +308,7 @@ pub fn parse_checklists(content: &str) -> Vec<ChecklistItem> {
                 line_number: idx + 1,
                 checked: parsed.checked,
                 issue_number: parsed.issue_number,
-                text: parsed.text.to_string(),
+                text: parsed.text,
                 full_line: line.to_string(),
             });
         }
@@ -1088,6 +1192,71 @@ Subsystem composition.
 
         assert!(!projected.contains("](#10)"), "Projected body must NOT contain broken intra-page anchor link [Title](#10)!");
         assert!(projected.contains("- [ ] #10 - [Feature 01: [ConOps] Radar Tracker](https://github.com/org/repo/blob/main/docs/features/FEAT-01-Tracker.md)"), "Projected body must translate markdown link to canonical repo blob URL with issue prefix, found:\n{}", projected);
+    }
+
+    #[test]
+    fn test_extract_checklist_title_and_issue_comprehensive() {
+        // 1. Prefix issue with markdown link and clause annotations
+        let (issue1, title1) = extract_checklist_title_and_issue("#10 - [Feature 01: [ConOps] Human Engineer Interface](https://github.com/org/repo/blob/main/docs/features/FEAT-01.md) (clauses REQ-01)");
+        assert_eq!(issue1, Some(10));
+        assert_eq!(title1, "Feature 01: [ConOps] Human Engineer Interface");
+
+        // 2. Markdown link without prefix issue
+        let (issue2, title2) = extract_checklist_title_and_issue("[Feature 01: Interface](docs/features/FEAT-01.md)");
+        assert_eq!(issue2, None);
+        assert_eq!(title2, "Feature 01: Interface");
+
+        // 3. Markdown link with inline issue number
+        let (issue3, title3) = extract_checklist_title_and_issue("[Feature 01: Interface](docs/features/FEAT-01.md) (#11)");
+        assert_eq!(issue3, Some(11));
+        assert_eq!(title3, "Feature 01: Interface");
+
+        // 4. Bold title without issue number
+        let (issue4, title4) = extract_checklist_title_and_issue("**Feature 01: Human Engineer**");
+        assert_eq!(issue4, None);
+        assert_eq!(title4, "Feature 01: Human Engineer");
+
+        // 5. Bold title with inline issue number
+        let (issue5, title5) = extract_checklist_title_and_issue("**Feature 01: Human Engineer** (#12)");
+        assert_eq!(issue5, Some(12));
+        assert_eq!(title5, "Feature 01: Human Engineer");
+
+        // 6. Italic title with refs parenthetical
+        let (issue6, title6) = extract_checklist_title_and_issue("*Feature 01: Human Engineer* (refs #13)");
+        assert_eq!(issue6, Some(13));
+        assert_eq!(title6, "Feature 01: Human Engineer");
+
+        // 7. Colon-separated prefix issue
+        let (issue7, title7) = extract_checklist_title_and_issue("#14: Feature 01: Plain Text");
+        assert_eq!(issue7, Some(14));
+        assert_eq!(title7, "Feature 01: Plain Text");
+    }
+
+    #[test]
+    fn test_reconcile_checklist_content_markdown_links_and_inline_issues() {
+        let content = r#"
+## Requirements
+- [ ] [Feature 01: Human Engineer Interface](../features/FEAT-01.md)
+- [ ] [Feature 02: CI Runner](../features/FEAT-02.md) (#20)
+- [x] **Feature 03: Radar Tracking** (#30)
+"#;
+
+        let (reconciled, count) = reconcile_checklist_content(content, |issue_num, item_title| {
+            if issue_num == Some(20) {
+                Some(true)
+            } else if issue_num == Some(30) {
+                Some(false)
+            } else if item_title == "Feature 01: Human Engineer Interface" {
+                Some(true)
+            } else {
+                None
+            }
+        });
+
+        assert_eq!(count, 3);
+        assert!(reconciled.contains("- [x] [Feature 01: Human Engineer Interface](../features/FEAT-01.md)"));
+        assert!(reconciled.contains("- [x] [Feature 02: CI Runner](../features/FEAT-02.md) (#20)"));
+        assert!(reconciled.contains("- [ ] **Feature 03: Radar Tracking** (#30)"));
     }
 }
 
