@@ -39,20 +39,23 @@ impl TrackerLabel {
 impl TrackerIssue {
     /// Determines whether an issue is considered resolved or fixed.
     ///
-    /// According to constitution.md:161, an issue is resolved when it carries `status:fixed-resolved`
+    /// According to constitution.md:256-265, an issue is resolved when it carries `status:fixed-resolved`
     /// or `status::fixed-resolved` (or state is CLOSED).
     pub fn is_resolved(&self) -> bool {
         if self.state.eq_ignore_ascii_case("closed") {
             return true;
         }
-        for label in &self.labels {
-            let l_norm = normalize_label(label.name());
-            if l_norm == "status:fixed-resolved" || l_norm == "status::fixed-resolved" || l_norm == "fixed-resolved" {
-                return true;
-            }
-        }
-        false
+        self.labels.iter().any(|label| is_resolved_label(label.name()))
     }
+}
+
+/// Returns true if the label represents a resolved status.
+///
+/// According to constitution.md:256-265, an issue is resolved when it carries `status:fixed-resolved`
+/// or `status::fixed-resolved` (or `fixed-resolved`).
+pub fn is_resolved_label(label: &str) -> bool {
+    let l_norm = normalize_label(label);
+    l_norm == "status:fixed-resolved" || l_norm == "status::fixed-resolved" || l_norm == "fixed-resolved"
 }
 
 /// Normalizes issue labels for robust matching.
@@ -252,10 +255,31 @@ impl TrackerClient for OfflineTracker {
         Ok(())
     }
 
-    fn reopen_issue(&self, issue_number: u64, _comment: Option<&str>, _repo: Option<&str>) -> Result<(), String> {
+    fn reopen_issue(&self, issue_number: u64, comment: Option<&str>, _repo: Option<&str>) -> Result<(), String> {
         let mut guard = self.state.lock().map_err(|e| e.to_string())?;
-        if let Some(issue) = guard.issues.iter_mut().find(|i| i.number == issue_number) {
-            issue.state = "OPEN".to_string();
+        let issue = guard
+            .issues
+            .iter_mut()
+            .find(|i| i.number == issue_number)
+            .ok_or_else(|| format!("Offline tracker: issue #{} not found", issue_number))?;
+
+        issue.state = "OPEN".to_string();
+        issue.labels.retain(|l| !is_resolved_label(l.name()));
+
+        if let Some(c) = comment {
+            let trimmed = c.trim();
+            if !trimmed.is_empty() {
+                if let Some(ref mut body) = issue.body {
+                    if !body.is_empty() {
+                        body.push_str("\n\n");
+                        body.push_str(trimmed);
+                    } else {
+                        *body = trimmed.to_string();
+                    }
+                } else {
+                    issue.body = Some(trimmed.to_string());
+                }
+            }
         }
         Ok(())
     }
@@ -453,24 +477,37 @@ impl TrackerClient for GitHubTracker {
             }
         }
 
-        if let Some(comment_text) = comment {
-            use std::io::Write;
-            let mut temp_file = tempfile_named()?;
-            temp_file.write_all(comment_text.as_bytes())
-                .map_err(|e| format!("Failed to write temporary comment file: {}", e))?;
-            let temp_path = temp_file.path.clone();
-
-            let mut comment_cmd = Command::new("gh");
-            comment_cmd.args(["issue", "comment", &issue_number.to_string(), "--body-file", &temp_path]);
+        // Remove stale resolved labels
+        for label in ["status:fixed-resolved", "status::fixed-resolved", "fixed-resolved"] {
+            let mut remove_cmd = Command::new("gh");
+            remove_cmd.args(["issue", "edit", &issue_number.to_string(), "--remove-label", label]);
             if let Some(r) = target_repo {
-                comment_cmd.args(["--repo", r]);
+                remove_cmd.args(["--repo", r]);
             }
-            let c_output = comment_cmd.output()
-                .map_err(|e| format!("Failed to execute 'gh issue comment': {}", e))?;
-            let _ = std::fs::remove_file(&temp_path);
-            if !c_output.status.success() {
-                let stderr = String::from_utf8_lossy(&c_output.stderr);
-                return Err(format!("'gh issue comment' failed for issue #{}: {}", issue_number, stderr));
+            let _ = remove_cmd.output();
+        }
+
+        if let Some(comment_text) = comment {
+            let trimmed = comment_text.trim();
+            if !trimmed.is_empty() {
+                use std::io::Write;
+                let mut temp_file = tempfile_named()?;
+                temp_file.write_all(trimmed.as_bytes())
+                    .map_err(|e| format!("Failed to write temporary comment file: {}", e))?;
+                let temp_path = temp_file.path.clone();
+
+                let mut comment_cmd = Command::new("gh");
+                comment_cmd.args(["issue", "comment", &issue_number.to_string(), "--body-file", &temp_path]);
+                if let Some(r) = target_repo {
+                    comment_cmd.args(["--repo", r]);
+                }
+                let c_output = comment_cmd.output()
+                    .map_err(|e| format!("Failed to execute 'gh issue comment': {}", e))?;
+                let _ = std::fs::remove_file(&temp_path);
+                if !c_output.status.success() {
+                    let stderr = String::from_utf8_lossy(&c_output.stderr);
+                    return Err(format!("'gh issue comment' failed for issue #{}: {}", issue_number, stderr));
+                }
             }
         }
 
@@ -596,4 +633,73 @@ mod tests {
         };
         assert!(!open_issue.is_resolved());
     }
+
+    #[test]
+    fn test_reopen_issue_strips_resolved_labels_and_persists_comment() {
+        let tracker = OfflineTracker::with_issues(vec![
+            TrackerIssue {
+                number: 101,
+                title: "Defect 101".to_string(),
+                state: "CLOSED".to_string(),
+                labels: vec![
+                    TrackerLabel::String("bug".to_string()),
+                    TrackerLabel::String("status:fixed-resolved".to_string()),
+                ],
+                body: Some("Original body".to_string()),
+                url: Some("https://github.com/org/repo/issues/101".to_string()),
+            },
+            TrackerIssue {
+                number: 102,
+                title: "Defect 102".to_string(),
+                state: "CLOSED".to_string(),
+                labels: vec![
+                    TrackerLabel::String("status::fixed-resolved".to_string()),
+                ],
+                body: None,
+                url: None,
+            },
+            TrackerIssue {
+                number: 103,
+                title: "Defect 103".to_string(),
+                state: "CLOSED".to_string(),
+                labels: vec![
+                    TrackerLabel::String("fixed-resolved".to_string()),
+                ],
+                body: Some("Another body".to_string()),
+                url: None,
+            },
+        ]);
+
+        tracker.reopen_issue(101, Some("Audit reopen reason"), None).unwrap();
+        tracker.reopen_issue(102, None, None).unwrap();
+        tracker.reopen_issue(103, Some("Reopen comment 103"), None).unwrap();
+
+        let issues = tracker.fetch_all_issues().unwrap();
+        let i101 = issues.iter().find(|i| i.number == 101).unwrap();
+        assert_eq!(i101.state, "OPEN");
+        assert!(!i101.is_resolved(), "Reopened issue 101 must not be resolved");
+        assert_eq!(i101.labels.len(), 1);
+        assert_eq!(i101.labels[0].name(), "bug");
+        let body101 = i101.body.as_deref().unwrap();
+        assert!(body101.contains("Original body"));
+        assert!(body101.contains("Audit reopen reason"));
+
+        let i102 = issues.iter().find(|i| i.number == 102).unwrap();
+        assert_eq!(i102.state, "OPEN");
+        assert!(!i102.is_resolved(), "Reopened issue 102 must not be resolved");
+        assert!(i102.labels.is_empty());
+
+        let i103 = issues.iter().find(|i| i.number == 103).unwrap();
+        assert_eq!(i103.state, "OPEN");
+        assert!(!i103.is_resolved(), "Reopened issue 103 must not be resolved");
+        assert!(i103.labels.is_empty());
+        let body103 = i103.body.as_deref().unwrap();
+        assert!(body103.contains("Another body"));
+        assert!(body103.contains("Reopen comment 103"));
+
+        let err = tracker.reopen_issue(999, None, None);
+        assert!(err.is_err());
+        assert!(err.unwrap_err().contains("issue #999 not found"));
+    }
 }
+

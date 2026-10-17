@@ -597,7 +597,10 @@ mod tests {
             number: 10,
             title: "Feature 01: Core Ingest Pipeline".to_string(),
             state: "CLOSED".to_string(),
-            labels: vec![TrackerLabel::String("feature".to_string())],
+            labels: vec![
+                TrackerLabel::String("feature".to_string()),
+                TrackerLabel::String("status:fixed-resolved".to_string()),
+            ],
             body: Some("Old body".to_string()),
             url: Some("https://github.com/org/repo/issues/10".to_string()),
         };
@@ -676,6 +679,11 @@ mod tests {
         let all_issues = tracker.fetch_all_issues()?;
         let issue_10 = all_issues.iter().find(|i| i.number == 10).ok_or("issue 10 missing")?;
         assert_eq!(issue_10.state, "OPEN");
+        assert!(!issue_10.is_resolved(), "Reopened issue 10 must not be resolved");
+        assert!(
+            issue_10.body.as_ref().map(|b| b.contains("Reopen rationale with details")).unwrap_or(false),
+            "Reopened issue 10 body must contain reopen comment"
+        );
         let issue_20 = all_issues.iter().find(|i| i.number == 20).ok_or("issue 20 missing")?;
         assert_eq!(issue_20.state, "OPEN");
         let issue_21 = all_issues.iter().find(|i| i.number == 21).ok_or("issue 21 missing")?;
