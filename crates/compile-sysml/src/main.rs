@@ -1,4 +1,35 @@
 //! CLI entrypoint for compile-sysml compiler and specification synchronization engine.
+//!
+//! ## 1. Safety Intent & Regulatory Scope
+//! Provides the primary command-line interface for the DEAP SysML v2 / KerML compilation gate,
+//! STPA 10-pillar safety artifact transpilation, STPA-to-constraint compilation, and bidirectional
+//! specification synchronization under DO-178C Level A / DO-330 TQL-4 and ISO 26262 ASIL D.
+//!
+//! ## 2. Invariants & Mathematical Properties
+//! - Dispatch determinism: identical CLI arguments and workspace input files produce bitwise-identical
+//!   serialized SysML models, SHA-256 digests, and synchronization outputs.
+//! - Non-zero exit enforcement: any lexical, syntactic, semantic, or I/O violation terminates execution
+//!   with a deterministic non-zero process exit code (`1`).
+//!
+//! ## 3. Preconditions
+//! - Invoked with valid CLI flags parsed via `clap::Parser`.
+//! - Target schema files or directories must exist on disk and contain valid UTF-8 SysML v2 / KerML text.
+//!
+//! ## 4. Postconditions
+//! - Executes the requested pipeline stage (`--stpa-transpile`, `--stpa`, `--forward-sync`,
+//!   `--reverse-sync`, or `--compile`) and persists verified artifacts to the target paths.
+//!
+//! ## 5. Algorithmic Complexity Bounds
+//! - Time complexity: $O(N \log N)$ where $N$ is the total byte length and AST node count of the
+//!   resolved SysML schema tree and markdown specification corpus.
+//! - Space complexity: $O(N)$ for holding the parsed `SysmlPackage` AST and serialized output buffers.
+//!
+//! ## 6. Failure Modes & Fault Tolerance
+//! - Missing schema files, empty schema models, parser syntax errors, semantic validation errors,
+//!   or filesystem write failures emit structured diagnostics to `stderr` and halt execution immediately.
+//!
+//! ## 7. Realization & Traceability
+//! Realises: [REQ-COMPILER-SYSML-CLI], [DO-330-TQL-4-CLI]
 
 use clap::Parser;
 use compile_sysml::semantic::serializer::{to_sysml, SysmlSerializable};
@@ -85,6 +116,36 @@ struct Cli {
     scoring_config: Option<PathBuf>,
 }
 
+/// Primary CLI entrypoint for the `compile-sysml` executable.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Routes command-line execution across STPA safety suite transpilation, STPA constraint compilation,
+/// forward/reverse specification synchronization, and the Pipeline 0 SysML compilation gate under
+/// DO-178C Level A and DO-330 TQL-4 tool operational requirements.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Exclusive mode dispatch: exactly one operational branch executes per CLI invocation in priority
+///   order (`--stpa-transpile`, `--stpa`, `--forward-sync`, `--reverse-sync`, `--compile`).
+/// - Fail-closed termination: any operational error exits immediately with status code `1`.
+///
+/// ## 3. Preconditions
+/// - Process environment supplies valid OS argument strings parseable by `Cli::parse()`.
+/// - Referenced input paths (`--schema`, `FILE`, `--stpa`, `--scoring-config`) must be readable when specified.
+///
+/// ## 4. Postconditions
+/// - Target compilation, safety, or synchronization artifacts are written to disk, or usage guidance
+///   is printed to `stdout` when no operational mode flag is supplied.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time complexity: $O(N \log N)$ bounded by downstream AST parsing, validation, and synchronization passes.
+/// - Space complexity: $O(N)$ proportional to the in-memory AST and file buffers.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Missing configuration files, malformed JSON scoring configs, unreadable schema files, or downstream
+///   transpilation/sync errors log diagnostic messages to `stderr` and invoke `process::exit(1)`.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-COMPILER-SYSML-MAIN], [DO-330-TQL-4-CLI]
 fn main() {
     let cli = Cli::parse();
 
@@ -181,7 +242,10 @@ fn main() {
 
         if cli.out.as_path() != Path::new(".pipeline/schema.sysml") {
             if let Some(parent) = cli.out.parent() {
-                let _ = fs::create_dir_all(parent);
+                if let Err(e) = fs::create_dir_all(parent) {
+                    eprintln!("Error creating output directory '{}': {}", parent.display(), e);
+                    process::exit(1);
+                }
             }
             if let Err(e) = fs::write(&cli.out, &sysml_code) {
                 eprintln!("Error writing SysML to '{}': {}", cli.out.display(), e);
@@ -300,6 +364,39 @@ pub enum SchemaTarget {
 }
 
 /// Execute the Pipeline 0 compilation gate.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Enforces the mandatory Pipeline 0 SysML v2 / KerML compilation gate -- parsing input schemas,
+/// verifying non-empty structural element counts, running semantic validation, emitting canonical
+/// serialized SysML text, and writing the cryptographic SHA-256 `SchemaDigest` under DO-178C Level A
+/// and DO-330 TQL-4 verification baselines.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Non-vacuous model guarantee: returns exit code `1` whenever `count_structural_elements(&pkg) == 0`.
+/// - Semantic soundness: halts prior to serialization if `SemanticValidator` records any error.
+/// - Cryptographic digest binding: emitted `SchemaDigest` SHA-256 matches the exact serialized output
+///   written to `output_path` and records per-file manifests for directory targets.
+///
+/// ## 3. Preconditions
+/// - `explicit_schema` is either `Some(path)` pointing to an existing `.sysml` file/directory or `None`
+///   when `schema/` contains discoverable `.sysml` files.
+/// - Parent directories of `output_path` and `digest_path` are writable by the current process.
+///
+/// ## 4. Postconditions
+/// - On return value `0`, `output_path` contains the canonical serialized SysML model and `digest_path`
+///   contains the matching JSON `SchemaDigest`.
+/// - On return value `1`, diagnostic errors are emitted to `stderr` and downstream gates are blocked.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time complexity: $O(N \log N)$ where $N$ is the total input character count and AST node count.
+/// - Space complexity: $O(N)$ for the parsed AST, validator symbol tables, and serialized SysML buffer.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Missing or empty schema files, syntax errors, zero structural elements, semantic validation errors,
+///   or filesystem write failures return `1` cleanly without panicking.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-COMPILER-SYSML-GATE], [DO-330-TQL-4-GATE]
 pub fn run_compilation_gate(
     explicit_schema: Option<PathBuf>,
     output_path: &Path,
@@ -419,6 +516,35 @@ pub fn run_compilation_gate(
 }
 
 /// Resolve input schema path into either a single file or a directory containing .sysml files.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Deterministically resolves the target SysML v2 schema source from an explicit CLI path or the
+/// default `schema/` workspace directory under DO-178C Level A and ISO 26262 ASIL D configuration
+/// management rules.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Canonical singleton normalization: a directory containing exactly one `.sysml` file resolves
+///   to `SchemaTarget::SingleFile(only)` to preserve single-file diagnostic semantics.
+/// - Deterministic file ordering: multi-file directories rely on `discover_sysml_files` lexicographical
+///   sorting so compilation order is platform-independent.
+///
+/// ## 3. Preconditions
+/// - `explicit_path` is an optional filesystem path provided by the caller or CLI parser.
+///
+/// ## 4. Postconditions
+/// - Returns `Ok(SchemaTarget::SingleFile)` or `Ok(SchemaTarget::Directory)` with non-empty file list,
+///   or `Err(String)` containing actionable remediation instructions.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time complexity: $O(F \log F)$ where $F$ is the number of filesystem entries under the target directory.
+/// - Space complexity: $O(F)$ to store discovered `PathBuf` entries.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Non-existent explicit paths, directories devoid of `.sysml` files, or missing default `schema/`
+///   files return a descriptive `Err(String)` without panicking.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-COMPILER-SYSML-RESOLVE-TARGETS], [DO-330-TQL-4-CLI]
 pub fn resolve_schema_targets(explicit_path: Option<PathBuf>) -> Result<SchemaTarget, String> {
     if let Some(path) = explicit_path {
         if path.is_file() {
@@ -452,6 +578,32 @@ pub fn resolve_schema_targets(explicit_path: Option<PathBuf>) -> Result<SchemaTa
 }
 
 /// Resolve a single concrete schema file path for legacy/single-file callers.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Selects a deterministic primary `.sysml` file path when a single file path is required from
+/// a resolved `SchemaTarget` under DO-178C Level A / DO-330 TQL-4 tool qualification rules.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Root model preference: when resolving a multi-file `SchemaTarget::Directory`, prioritizes
+///   `model.sysml` if present; otherwise selects the lexicographically first `.sysml` path.
+///
+/// ## 3. Preconditions
+/// - `explicit_path` is either `Some(path)` or `None` (defaulting to `schema/` discovery).
+///
+/// ## 4. Postconditions
+/// - Returns `Ok(PathBuf)` pointing to a concrete `.sysml` file on disk, or `Err(String)` if no
+///   valid schema file can be resolved.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time complexity: $O(F \log F)$ where $F$ is the number of discovered `.sysml` files.
+/// - Space complexity: $O(F)$ for the intermediate `SchemaTarget` file vector.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Propagates resolution errors from `resolve_schema_targets` or returns `SCHEMA_REMEDIATION_MESSAGE`
+///   if the directory file list is empty.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-COMPILER-SYSML-RESOLVE-FILE], [DO-330-TQL-4-CLI]
 pub fn resolve_schema_file(explicit_path: Option<PathBuf>) -> Result<PathBuf, String> {
     match resolve_schema_targets(explicit_path)? {
         SchemaTarget::SingleFile(p) => Ok(p),
@@ -462,5 +614,26 @@ pub fn resolve_schema_file(explicit_path: Option<PathBuf>) -> Result<PathBuf, St
                 files.first().cloned().ok_or_else(|| SCHEMA_REMEDIATION_MESSAGE.to_string())
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_compile_sysml_main_7_section_rustdoc() {
+        let src = include_str!("main.rs");
+        assert!(src.contains("//! ## 1. Safety Intent & Regulatory Scope"));
+        assert!(src.contains("//! ## 2. Invariants & Mathematical Properties"));
+        assert!(src.contains("//! ## 3. Preconditions"));
+        assert!(src.contains("//! ## 4. Postconditions"));
+        assert!(src.contains("//! ## 5. Algorithmic Complexity Bounds"));
+        assert!(src.contains("//! ## 6. Failure Modes & Fault Tolerance"));
+        assert!(src.contains("//! ## 7. Realization & Traceability"));
+        assert!(src.contains("//! Realises: [REQ-COMPILER-SYSML-CLI], [DO-330-TQL-4-CLI]"));
+        assert!(src.contains("/// ## 1. Safety Intent & Regulatory Scope"));
+        assert!(src.contains("/// Realises: [REQ-COMPILER-SYSML-MAIN]"));
+        assert!(src.contains("/// Realises: [REQ-COMPILER-SYSML-GATE]"));
+        assert!(src.contains("/// Realises: [REQ-COMPILER-SYSML-RESOLVE-TARGETS]"));
+        assert!(src.contains("/// Realises: [REQ-COMPILER-SYSML-RESOLVE-FILE]"));
     }
 }

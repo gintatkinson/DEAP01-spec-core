@@ -11,7 +11,7 @@
 //! formal invariant checks, hazard mitigations, and code generation. Corruptions or unverified
 //! omissions at this layer propagate silently throughout the lifecycle.
 //!
-//! ## 2. Core Safety Invariants & Architecture
+//! ## 2. Invariants & Mathematical Properties
 //! - **Pure Schema-Driven Operation**: All AST derivations occur deterministically from input
 //!   schemas without hardcoded domain vocabulary or speculative heuristic assumptions.
 //! - **Heterogeneous Specification Support**:
@@ -24,6 +24,28 @@
 //!   assertions (`assert_exclusion_<entity>`) to ensure strict closed-world semantics.
 //! - **Cryptographic Fingerprinting & Truncation Gates**:
 //!   [`digest`] enforces FIPS 180-4 SHA-256 fingerprinting and subagent context truncation verification.
+//!
+//! ## 3. Preconditions
+//! - Input payloads provided to ingestion translators must be valid UTF-8 text streams.
+//! - Target package identifiers and scope boundary filter sets must be well-formed strings.
+//!
+//! ## 4. Postconditions
+//! - Successful ingestion produces a deterministic, structurally valid `deap_core::sysml_ast::PackageDef`.
+//! - When scope filtering is applied, out-of-scope definitions and dangling references are pruned and
+//!   formal negative exclusion constraints are injected into `PackageDef::constraint_defs`.
+//!
+//! ## 5. Algorithmic Complexity Bounds
+//! - **Time Complexity**: $O(N + P \cdot C)$ where $N$ is the input specification byte length, $P$ is the
+//!   number of AST part definitions, and $C$ is the number of cross-referenced items/connections.
+//! - **Space Complexity**: $O(N)$ auxiliary heap memory proportional to the parsed AST node count.
+//!
+//! ## 6. Failure Modes & Fault Tolerance
+//! - Malformed syntax or structural violations in upstream documents return explicit `Err(String)`
+//!   diagnostics without panicking or emitting partial corrupt AST packages.
+//! - Unrecognized or out-of-scope entities are deterministically excluded via closed-world pruning.
+//!
+//! ## 7. Realization & Traceability
+//! Realises: [REQ-SYSML-INGEST-LIB], [DO-330-TQL-4-INGEST-LIB]
 
 pub mod detectors;
 pub mod digest;
@@ -35,59 +57,101 @@ use deap_core::sysml_ast::{ConstraintDef, PackageDef, PartDef};
 
 /// Translates a single Markdown requirement document into a canonical SysML v2 `PackageDef`.
 ///
-/// /// Realises: [REQ-SYSML-INGEST-CORE/translate_markdown]
-///
-/// ### Safety Intent:
+/// ## 1. Safety Intent & Regulatory Scope
 /// Provides the primary convenience entrypoint for ingesting Level 0 OEM Markdown documents,
 /// invoking [`translators::markdown::MarkdownTranslator::translate`] in a bounded execution context.
 ///
-/// ### Preconditions:
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves total deterministic mapping from Markdown AST headings, YAML frontmatter, and tables
+///   into `PackageDef` nodes without speculative domain inference.
+///
+/// ## 3. Preconditions
 /// - `content` is a valid UTF-8 string slice containing Markdown text.
 /// - `file_name` is a non-empty fallback package identifier.
 ///
-/// ### Postconditions:
-/// - Returns `Ok(PackageDef)` on success, or an explanatory error string on parsing failure.
+/// ## 4. Postconditions
+/// - Returns `Ok(PackageDef)` containing all extracted SysML v2 AST nodes on success, or an
+///   explanatory `Err(String)` diagnostic on parsing failure.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - **Time Complexity**: $O(N)$ where $N$ is the byte length of `content`.
+/// - **Space Complexity**: $O(N)$ to hold the synthesized `PackageDef` AST.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Propagates translator diagnostic errors cleanly if `content` violates structural expectations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYSML-INGEST-CORE/translate_markdown]
 pub fn translate_markdown(content: &str, file_name: &str) -> Result<PackageDef, String> {
     translators::markdown::MarkdownTranslator::new().translate(content, file_name)
 }
 
 /// Translates a single YANG model into a canonical SysML v2 `PackageDef`.
 ///
-/// /// Realises: [REQ-SYSML-INGEST-CORE/translate_yang]
-///
-/// ### Safety Intent:
+/// ## 1. Safety Intent & Regulatory Scope
 /// Provides the primary convenience entrypoint for ingesting RFC 6020/7950 YANG models,
 /// invoking [`translators::yang::YangTranslator::translate`] in a bounded execution context.
 ///
-/// ### Preconditions:
+/// ## 2. Invariants & Mathematical Properties
+/// - Deterministic projection of YANG containers, groupings, typedefs, and leaves into canonical
+///   SysML v2 `PartDef`, `ItemDef`, and `AttributeDef` structures.
+///
+/// ## 3. Preconditions
 /// - `content` is a valid UTF-8 string slice containing YANG specification text.
 /// - `file_name` is a non-empty fallback package identifier.
 ///
-/// ### Postconditions:
-/// - Returns `Ok(PackageDef)` on success, or an explanatory error string on parsing failure.
+/// ## 4. Postconditions
+/// - Returns `Ok(PackageDef)` on success, or an explanatory `Err(String)` on parsing failure.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - **Time Complexity**: $O(N)$ where $N$ is the byte length of `content`.
+/// - **Space Complexity**: $O(N)$ proportional to the number of YANG statements and AST elements.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Unbalanced braces or malformed YANG constructs yield deterministic `Err(String)` diagnostics.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYSML-INGEST-CORE/translate_yang]
 pub fn translate_yang(content: &str, file_name: &str) -> Result<PackageDef, String> {
     translators::yang::YangTranslator::new().translate(content, file_name)
 }
 
 /// Filters AST nodes to target metamodel scope and projects negative invariants.
 ///
-/// /// Realises: [REQ-SYSML-INGEST-SCOPE/filter_ast_to_target_scope]
-///
-/// ### Safety Intent:
+/// ## 1. Safety Intent & Regulatory Scope
 /// Enforces a strict closed-world assumption by pruning extraneous external reference entities
 /// that are not part of the active system boundary. Furthermore, projects formal negative
 /// exclusion invariants (`assert_exclusion_<name>`) to mathematically prove that phantom
 /// entities do not exist in the ingested model.
 ///
-/// ### Preconditions:
+/// ## 2. Invariants & Mathematical Properties
+/// - **Closed-World Pruning**: Every surviving `PartDef` in `pkg.part_defs` (and nested sub-packages)
+///   is guaranteed to be a member of `allowed_parts` when a whitelist is supplied.
+/// - **Idempotent Constraint Injection**: Duplicate negative invariant entries do not produce
+///   duplicate `ConstraintDef` assertions in `pkg.constraint_defs`.
+///
+/// ## 3. Preconditions
 /// - `pkg` is a mutable reference to an initialized `PackageDef`.
 /// - `allowed_parts` is an optional set of whitelisted part names. If `None`, no parts are pruned.
 /// - `negative_invariants` is an optional slice of entity names whose absence must be formally asserted.
 ///
-/// ### Postconditions:
+/// ## 4. Postconditions
 /// - Any `PartDef` whose name is not in `allowed_parts` is recursively pruned from `pkg.part_defs`.
 /// - Cascading references in items, capabilities, hazards, risks, and connections are cleaned.
 /// - For each entry in `negative_invariants`, a formal `ConstraintDef` is appended asserting `!exists(<entity>)`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - **Time Complexity**: $O(P \cdot I + H + R + K + M \cdot C)$ where $P$ is part count, $I$ is item count,
+///   $H$ is hazard count, $R$ is risk count, $K$ is connection count, $M$ is negative invariant count,
+///   and $C$ is existing constraint count.
+/// - **Space Complexity**: $O(H + D)$ where $H$ is surviving hazard set size and $D$ is package recursion depth.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Empty `allowed_parts` prunes all parts while preserving structural validity of `pkg`.
+/// - Non-alphanumeric characters in `negative_invariants` are sanitized into valid identifier tokens.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYSML-INGEST-SCOPE/filter_ast_to_target_scope]
 pub fn filter_ast_to_target_scope(
     pkg: &mut PackageDef,
     allowed_parts: Option<&HashSet<String>>,
@@ -95,7 +159,32 @@ pub fn filter_ast_to_target_scope(
 ) {
     // Step 1: Prune parts outside allowed scope if a whitelist is supplied
     if let Some(allowed) = allowed_parts {
-        // Recursive helper to filter nested child parts
+        /// Recursively filters a `PartDef` and its nested child parts against `allowed`.
+        ///
+        /// ## 1. Safety Intent & Regulatory Scope
+        /// Ensures hierarchical containment integrity during scope pruning so no disallowed child
+        /// part remains attached to an allowed parent part.
+        ///
+        /// ## 2. Invariants & Mathematical Properties
+        /// - Returns `true` if and only if `part.name` is present in `allowed`.
+        /// - All retained descendants of `part.parts` also satisfy membership in `allowed`.
+        ///
+        /// ## 3. Preconditions
+        /// - `part` is a valid mutable `PartDef` reference.
+        /// - `allowed` is an initialized `HashSet<String>` of permitted part names.
+        ///
+        /// ## 4. Postconditions
+        /// - If `part.name` is in `allowed`, `part.parts` is pruned in-place to retain only allowed descendants.
+        ///
+        /// ## 5. Algorithmic Complexity Bounds
+        /// - **Time Complexity**: $O(T)$ where $T$ is the number of nodes in the `part` subtree.
+        /// - **Space Complexity**: $O(D)$ call-stack frames where $D$ is the maximum part nesting depth.
+        ///
+        /// ## 6. Failure Modes & Fault Tolerance
+        /// - Immediately short-circuits and returns `false` when the root `part.name` is excluded.
+        ///
+        /// ## 7. Realization & Traceability
+        /// Realises: [REQ-SYSML-INGEST-SCOPE/filter_part]
         fn filter_part(part: &mut PartDef, allowed: &HashSet<String>) -> bool {
             if !allowed.contains(&part.name) {
                 return false;
@@ -229,11 +318,11 @@ mod tests {
         let content2 = "# Package_0\n\n## Classifier_Beta\nBeta doc.";
 
         let dir = std::env::temp_dir().join("ingest_test_batch");
-        let _ = fs::create_dir_all(&dir);
+        fs::create_dir_all(&dir).ok();
         let f1 = dir.join("spec1.md");
         let f2 = dir.join("spec2.md");
-        let _ = fs::write(&f1, content1);
-        let _ = fs::write(&f2, content2);
+        fs::write(&f1, content1).ok();
+        fs::write(&f2, content2).ok();
 
         let translator = translators::markdown::MarkdownTranslator::new();
         let file_paths = vec![f1.to_string_lossy().to_string(), f2.to_string_lossy().to_string()];
@@ -244,8 +333,21 @@ mod tests {
         assert!(p_names.contains(&"Classifier_Alpha"));
         assert!(p_names.contains(&"Classifier_Beta"));
 
-        let _ = fs::remove_file(f1);
-        let _ = fs::remove_file(f2);
-        let _ = fs::remove_dir(dir);
+        fs::remove_file(f1).ok();
+        fs::remove_file(f2).ok();
+        fs::remove_dir(dir).ok();
+    }
+
+    #[test]
+    fn test_ingest_sysml_lib_7_section_rustdoc() {
+        let src = include_str!("lib.rs");
+        assert!(src.contains("//! ## 1. Safety Intent & Regulatory Scope"));
+        assert!(src.contains("//! ## 2. Invariants & Mathematical Properties"));
+        assert!(src.contains("//! ## 3. Preconditions"));
+        assert!(src.contains("//! ## 4. Postconditions"));
+        assert!(src.contains("//! ## 5. Algorithmic Complexity Bounds"));
+        assert!(src.contains("//! ## 6. Failure Modes & Fault Tolerance"));
+        assert!(src.contains("//! ## 7. Realization & Traceability"));
+        assert!(src.contains("//! Realises: [REQ-SYSML-INGEST-LIB], [DO-330-TQL-4-INGEST-LIB]"));
     }
 }

@@ -1,6 +1,37 @@
 //! Pure Rust Backlog Reconciler for DEAP MBSE Framework.
 //!
-//! Realises: [Issue Tracker as Canonical SSOT, Zero Fallback Placeholders, Automated Spec Reconciliation]
+//! ## 1. Safety Intent & Regulatory Scope
+//! Provides deterministic, zero-placeholder backlog and specification synchronization
+//! across Epics, Features, User Stories, Use Cases, ConOps, and WBS artifacts in
+//! compliance with DO-178C Level A and ISO 26262 ASIL D configuration management mandates.
+//!
+//! ## 2. Invariants & Mathematical Properties
+//! - Bijective mapping between local Markdown specification YAML frontmatter (`github_issue`)
+//!   and canonical issue tracker identifiers.
+//! - Idempotent placeholder purging: applying reconciliation twice yields zero additional
+//!   mutations ($f(f(x)) = f(x)$).
+//! - Deterministic `BTreeMap` ordering across all synthesized hierarchy checklists.
+//!
+//! ## 3. Preconditions
+//! - Workspace root contains valid UTF-8 Markdown specification documents under `docs/`.
+//! - Issue tracker client is either authenticated or explicitly configured in offline/dry-run mode.
+//!
+//! ## 4. Postconditions
+//! - All unpopulated template placeholders are replaced with deterministic structural allocations.
+//! - Hierarchical checklists and Mermaid traceability diagrams reflect live tracker state.
+//! - YAML frontmatter `github_issue` fields are synchronized with created or matched tracker issues.
+//!
+//! ## 5. Algorithmic Complexity Bounds
+//! - Time Complexity: $O(N \log N + M)$ where $N$ is the number of specification documents and
+//!   $M$ is the total byte length of Markdown content scanned linearly without backtracking regex.
+//! - Space Complexity: $O(N + M)$ bounded by the in-memory `LoadedSpec` collection and `IssueIndex`.
+//!
+//! ## 6. Failure Modes & Fault Tolerance
+//! - Missing or malformed YAML frontmatter is skipped safely or reported via `Result::Err` without panicking.
+//! - Tracker CLI subprocess failures return explicit diagnostic errors preserving local file integrity.
+//!
+//! ## 7. Realization & Traceability
+//! Realises: [REQ-RECONCILE-BACKLOG-LIB, Issue Tracker as Canonical SSOT, Zero Fallback Placeholders, Automated Spec Reconciliation]
 
 pub mod checklist;
 pub mod create_issue;
