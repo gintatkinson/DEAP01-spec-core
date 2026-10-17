@@ -432,7 +432,42 @@ This implementation plan governs the context-isolated dispatch of an `Adversaria
   - Remove temporary file `/tmp/gh_body_feat42c_docstring.md`, reclaim/terminate the subagent upon completion, and report the live issue URL and verification evidence to the user.
 
 
+---
 
+# Implementation Plan: Teamwork Recursive Debugging Protocol for Issues #459 to #461
 
+## 1. Executive Summary & Objective
 
+This implementation plan governs the delegation of GitHub defect issues `#459`, `#460`, and `#461` to the `teamwork_preview` multi-agent system executing the 8-step Recursive Debugging Protocol (`skills/debug-protocol/SKILL.md`) with native Rust RED-GREEN-REFACTOR TDD, zero-regex compliance (Check 34), neutral git commit citations, remote branch synchronization (including `implementation_plan.md` sync), and closed-loop GitHub issue transition (`status:fixed-resolved` while keeping issues `OPEN`).
 
+## 2. Work Packages
+
+### WP-01: Issue #459 (`docs/designs/FEAT-42_source_code_ast_ingestion_and_docstring_synthesizer.md` & `crates/verify-baseline/src/checks/structural.rs`)
+- **Defect Summary**: `docs/designs/FEAT-42_source_code_ast_ingestion_and_docstring_synthesizer.md` references a phantom crate `crates/sysml-core` (lines 209, 242, 248) instead of `crates/deap-core` (`crates/deap-core/src/sysml_ast.rs`), defines `--source <DIR>` as unconditionally mandatory with `--format` defaulting to `code` in Section 2.1 (breaking existing `--schema <PATH>` and `--format auto` callers in `crates/ingest-sysml/src/main.rs`), and omits Check 34(f) `seen_docblocks` per-function uniqueness interpolation across Sections 1-6 in Section 3.2.
+- **Remediation Scope**:
+  1. Write a failing `#[test]` probe in `crates/verify-baseline/src/checks/structural.rs` verifying `docs/designs/FEAT-42_source_code_ast_ingestion_and_docstring_synthesizer.md` contains zero references to `sysml-core`, preserves `--schema` and `--format` default `auto` alongside `--source`, and specifies per-function AST interpolation across Sections 1-6 for Check 34 uniqueness.
+  2. Update `docs/designs/FEAT-42_source_code_ast_ingestion_and_docstring_synthesizer.md`:
+     - Replace `sysml-core` references at lines 209, 242, and 248 with `deap-core` (`crates/deap-core/src/sysml_ast.rs`).
+     - Update Section 2.1 CLI syntax (`ingest-sysml [OPTIONS] [--source <DIR> | --schema <PATH>]`) and option table so `--source` is optional (mutually exclusive with `--schema`), `--schema` defaults to `schema/`, and `--format` defaults to `auto` (auto-resolving to `code` when `--source` is provided).
+     - Update Section 3.2 and Scenarios 3/4 acceptance criteria to mandate per-function AST signature interpolation across Sections 1 through 6 so synthesized docstrings pass Check 34 `seen_docblocks` uniqueness (`crates/verify-baseline/src/checks/structural.rs:806-845`).
+  3. Verify `cargo test --workspace` and `./target/release/verify-baseline . --no-domain` pass, commit with `(refs #459)`, push to `origin`, post the 4-part verification comment on `#459`, and apply `status:fixed-resolved`.
+
+### WP-02: Issue #460 (`crates/deap-core/src/sysml_ast.rs`, `crates/compile-sysml/src/parser/grammar.rs`, `crates/compile-sysml/src/semantic/serializer.rs`, `crates/verify-baseline/src/checks/parity_gates.rs`)
+- **Defect Summary**: `satisfy requirement <ReqId>;` statements inside `part def` and `package` blocks are silently dropped by `SysmlParser::parse_container_item` (`crates/compile-sysml/src/parser/grammar.rs:182-370`), lack a `satisfied_requirements: Vec<String>` field on `PartDef` and `PackageDef` (`crates/deap-core/src/sysml_ast.rs`), are not extracted by `deap_core::sysml_ast::parse_part_defs`, and are not emitted by `PartDef::to_sysml` or `PackageDef::to_sysml` (`crates/compile-sysml/src/semantic/serializer.rs`).
+- **Remediation Scope**:
+  1. Write failing `#[test]` probes in `crates/compile-sysml/src/parser/grammar.rs` and `crates/deap-core/src/sysml_ast.rs` proving `satisfy requirement REQ-UI-01;` inside `part def` and `package` blocks is preserved across `SysmlParser::parse_source`, `PartDef::to_sysml`, `PackageDef::to_sysml`, and `parse_part_defs` (including zero-padded hyphenated IDs like `REQ-UI-01`).
+  2. Add `#[serde(default)] pub satisfied_requirements: Vec<String>` to `PartDef` and `PackageDef` in `crates/deap-core/src/sysml_ast.rs`, initialize in `Default` and `From<SysmlModel> for PackageDef`, and extract `satisfy [requirement] <ReqId>;` statements in `parse_part_defs`.
+  3. Add a `TokenKind::Satisfy` match arm and `parse_satisfy_stmt` helper in `crates/compile-sysml/src/parser/grammar.rs` (`parse_container_item`), preserving exact requirement identifier tokens (including zero-padded numeric segments after `-`), merging `satisfied_requirements` in `parse_part_decl` and `merge_package_defs`.
+  4. Emit `satisfy requirement <req_id>;` in `PartDef::to_sysml` and `PackageDef::to_sysml` (`crates/compile-sysml/src/semantic/serializer.rs`), and ensure Check 31 (`crates/verify-baseline/src/checks/parity_gates.rs`) and workspace construct initializers compile cleanly.
+  5. Rebuild release binaries, verify `cargo test --workspace` and `./target/release/verify-baseline . --no-domain` pass, commit with `(refs #460)`, push to `origin`, post the 4-part verification comment on `#460`, and apply `status:fixed-resolved`.
+
+### WP-03: Issue #461 (`crates/compile-sysml/src/semantic/validator.rs`)
+- **Defect Summary**: `SemanticValidator::validate()` (`crates/compile-sysml/src/semantic/validator.rs:416-558`) rejects SysML v2 models ingested from valid Rust and Dart source trees with false-positive `references undefined type` diagnostics when parts or requirement attributes reference composite, generic, reference, nullable, callback, or standard library/framework types (`Vec<u8>`, `Option<String>`, `&str`, `&mut Vec<u8>`, `String?`, `void`, `double`, `Widget`, `BuildContext`, `VoidCallback`, `ValueChanged<bool>`, `PathBuf`, or `Vec<CustomPart>`).
+- **Remediation Scope**:
+  1. Write failing `#[test]` unit and negative probes in `crates/compile-sysml/src/semantic/validator.rs` testing composite/generic/reference/framework types (`Vec<u8>`, `Option<String>`, `&str`, `Widget`, `ValueChanged<bool>`, `Vec<DefinedPart>`) and verifying that undefined inner/outer types (`Vec<UndefinedPart>`, `UnknownType`) still trigger `DiagnosticSeverity::Error`.
+  2. Implement deterministic, zero-regex `normalize_source_type`, `split_top_level_type_args`, expanded `is_primitive_or_builtin_type`, and recursive `SemanticValidator::is_resolvable_type(&self, scope: &str, type_name: &str) -> bool` in `crates/compile-sysml/src/semantic/validator.rs`, updating `validate_single_part_def` and `validate_single_requirement_def` to call `self.is_resolvable_type(scope, ...)`.
+  3. Rebuild release binaries, verify `cargo test --workspace` and `./target/release/verify-baseline . --no-domain` pass, commit with `(refs #461)`, push to `origin`, post the 4-part verification comment on `#461`, and apply `status:fixed-resolved`.
+
+### WP-04: Final Quality Gate, Remote Parity & Coordinator Verification
+- Ensure `implementation_plan.md` and all repository changes are committed and pushed so `git status --short` and `git diff origin/<branch>` are strictly 0 bytes prior to Sentinel Victory Audit.
+- Reclaim/terminate all subagents via `manage_subagents(Action="kill_all")` upon completion and verify issues `#459`, `#460`, and `#461` via `gh issue view`.

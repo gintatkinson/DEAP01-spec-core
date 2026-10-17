@@ -1318,6 +1318,131 @@ pub fn check_zero_retired_scripts_in_documentation(repo_root: &Path) -> Result<(
     }
 }
 
+/// Verify FEAT-42 design blueprint compliance (refs #459).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ECSS-E-ST-40C architectural integrity controls.
+/// Enforces single-source-of-truth alignment between `FEAT-42` design blueprint,
+/// the workspace AST crate architecture (`deap-core`), the `ingest-sysml` CLI contract,
+/// and Check 34 `seen_docblocks` docstring uniqueness invariants.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Zero occurrences of phantom crate `sysml-core` across `docs/designs/FEAT-42_*.md`.
+/// - Section 2.1 specifies `ingest-sysml [OPTIONS] [--source <DIR> | --schema <PATH>]`,
+///   preserves optional `--source`, documents `--schema`, and sets `--format` default `auto`.
+/// - Section 3.2 mandates Check 34 `seen_docblocks` uniqueness via per-function AST
+///   interpolation across Sections 1 through 6.
+///
+/// ## 3. Preconditions
+/// `repo_root` must be an accessible directory path.
+///
+/// ## 4. Postconditions
+/// Returns `Ok(())` on full compliance, or `Err(Vec<String>)` enumerating contract violations.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(L) where L is the byte length of the design document. Space Complexity: O(V).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// Fails closed if the blueprint is missing, unreadable, or violates any architectural contract.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-34-FEAT42-BLUEPRINT-COMPLIANCE].
+pub fn check_feat42_design_blueprint_compliance(repo_root: &Path) -> Result<(), Vec<String>> {
+    let mut violations = Vec::new();
+    let feat42_path = repo_root.join("docs/designs/FEAT-42_source_code_ast_ingestion_and_docstring_synthesizer.md");
+    if !feat42_path.is_file() {
+        violations.push(format!(
+            "Missing mandatory design blueprint: {}",
+            feat42_path.display()
+        ));
+        return Err(violations);
+    }
+
+    let content = match fs::read_to_string(&feat42_path) {
+        Ok(c) => c,
+        Err(e) => {
+            violations.push(format!(
+                "Failed to read design blueprint {}: {e}",
+                feat42_path.display()
+            ));
+            return Err(violations);
+        }
+    };
+
+    // 1. Assert zero occurrences of phantom crate 'sysml-core'
+    if content.contains("sysml-core") {
+        violations.push(
+            "FEAT-42 contains forbidden reference to non-existent 'sysml-core' crate (must reference 'deap-core')"
+                .to_string(),
+        );
+    }
+
+    // 2. Assert Section 2.1 specifies CLI syntax and backwards compatibility
+    if !content.contains("ingest-sysml [OPTIONS] [--source <DIR> | --schema <PATH>]") {
+        violations.push(
+            "FEAT-42 Section 2.1 must specify CLI syntax: ingest-sysml [OPTIONS] [--source <DIR> | --schema <PATH>]"
+                .to_string(),
+        );
+    }
+    let has_optional_source = content.contains("| `--source`")
+        && (content.contains("| No (mutually exclusive with `--schema`)")
+            || content.contains("| Path (`<DIR>`) | No"));
+    if !has_optional_source {
+        violations.push(
+            "FEAT-42 Section 2.1 must declare --source as optional (No), preserving backward compatibility"
+                .to_string(),
+        );
+    }
+    if !content.contains("| `--schema`") {
+        violations.push(
+            "FEAT-42 Section 2.1 must specify --schema in CLI option definitions table"
+                .to_string(),
+        );
+    }
+    let has_format_auto = content.lines().any(|l| l.contains("--format") && l.contains("`auto`"));
+    if !has_format_auto {
+        violations.push(
+            "FEAT-42 Section 2.1 must specify --format default value as `auto`"
+                .to_string(),
+        );
+    }
+
+    // 3. Assert Section 3.2 mandates per-function AST interpolation across Sections 1-6 for Check 34 uniqueness
+    if !content.contains("seen_docblocks") {
+        violations.push(
+            "FEAT-42 Section 3.2 must mandate docstring uniqueness under 'seen_docblocks'"
+                .to_string(),
+        );
+    }
+    if !content.contains("Check 34") {
+        violations.push(
+            "FEAT-42 Section 3.2 must cite Check 34 uniqueness contract"
+                .to_string(),
+        );
+    }
+    let has_interpolation = (content.contains("interpolate") || content.contains("Interpolate"))
+        && content.contains("Section 1")
+        && content.contains("Section 2")
+        && content.contains("Section 3")
+        && content.contains("Section 4")
+        && content.contains("Section 5")
+        && content.contains("Section 6");
+    if !has_interpolation {
+        violations.push(
+            "FEAT-42 Section 3.2 must mandate per-function AST signature interpolation across Sections 1 through 6"
+                .to_string(),
+        );
+    }
+
+    if violations.is_empty() {
+        Ok(())
+    } else {
+        violations.sort();
+        violations.dedup();
+        Err(violations)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2017,6 +2142,36 @@ pub fn check_audit() -> Result<(), Vec<String>> {
         assert!(res.is_err(), "Must reject retired Python validator in .pipeline/constitution.md");
         let errs = res.err().unwrap();
         assert!(errs.iter().any(|e| e.contains("spec_validator.py")));
+    }
+
+    #[test]
+    fn test_defect_459_feat42_design_blueprint_compliance() {
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(|p| p.parent())
+            .expect("repo root");
+
+        let res = check_feat42_design_blueprint_compliance(repo_root);
+        assert!(
+            res.is_ok(),
+            "FEAT-42 design blueprint must comply with deap-core references, CLI backwards compatibility, and Check 34 uniqueness (refs #459): {:?}",
+            res.err()
+        );
+    }
+
+    #[test]
+    fn test_defect_459_mutation_rejects_sysml_core_in_design() {
+        let tmp = TempDir::new("c459_sysml_core_mutation");
+        let designs = tmp.path.join("docs").join("designs");
+        fs::create_dir_all(&designs).unwrap();
+        let feat = designs.join("FEAT-42_source_code_ast_ingestion_and_docstring_synthesizer.md");
+        let mut f = File::create(&feat).unwrap();
+        writeln!(f, "# FEAT-42\nparticipant Core as sysml-core Parser").unwrap();
+
+        let res = check_feat42_design_blueprint_compliance(&tmp.path);
+        assert!(res.is_err(), "Must reject sysml-core in FEAT-42 design blueprint");
+        let errs = res.err().unwrap();
+        assert!(errs.iter().any(|e| e.contains("sysml-core")));
     }
 }
 
