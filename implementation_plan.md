@@ -299,4 +299,50 @@ This implementation plan governs the context-isolated dispatch of an `Adversaria
   - Remove temporary file `/tmp/gh_body_semantic_types_audit.md`, reclaim/terminate the subagent upon completion, and report the live issue URL and verification evidence to the user.
 
 
+---
+
+# Implementation Plan: Adversarial Code Auditor Dispatch for Issue 4 (Shared Zero-Regex Rust & Dart AST Parser in `deap-core`)
+
+## 1. Executive Summary & Objective
+
+This implementation plan governs the context-isolated dispatch of an `Adversarial Code Auditor` subagent (`skills/adversarial-code-auditor/SKILL.md`) to perform deep architectural and root-cause analysis, offline defect/dossier-gate verification, and GitHub issue filing for **Issue 4: Shared Zero-Regex Rust & Dart AST Parser in `deap-core`** (`[FEAT-42A] [deap-core]: Implement Check-34-compliant zero-regex Rust and Dart source AST parser`, label `feature`).
+
+## 2. Work Packages
+
+### WP-01: Context-Isolated Adversarial Code Auditor Subagent Dispatch
+- **Action**: Dispatch a context-isolated subagent (`Role: "Adversarial Code Auditor"`) governed by `skills/adversarial-code-auditor/SKILL.md` and `rules/subagent-dispatch-standards.md`.
+- **Pre-Flight Governance Preamble**:
+  - Direct-path `view_file` on `skills/adversarial-code-auditor/SKILL.md` as Step 1.
+  - Verbatim repository classification: `UPSTREAM_SPEC_CORE_COMPILER`.
+  - Read `.pipeline/constitution.md` and target file `crates/deap-core/src/lib.rs`.
+  - Trailing `PROCEED` authorization token.
+- **Audit Scope & Deep Analysis Targets**:
+  1. **Target File**: `crates/deap-core/src/lib.rs` (lines 1-30).
+  2. **Cross-Reference Verification Targets**:
+     - `Cargo.toml`, `crates/compile-sysml/Cargo.toml`, and `crates/ingest-sysml/Cargo.toml` (verifying crate dependency topology where `ingest-sysml` depends on `compile-sysml` and `deap-core`, and `compile-sysml` depends on `deap-core`).
+     - `crates/deap-core/src/sysml_ast.rs` (inspecting AST structures `PackageDef`, `PartDef`, `AttributeDef`, `ActionDef`, `PortDef`, `StateDef`, `ConstraintDef`, `RequirementDef` and the self-purity unit test `test_sysml_ast_source_purity_and_7_section_rustdoc`).
+     - `crates/verify-baseline/src/checks/structural.rs` (lines 483-560 and 565-850: `check_zero_regex` and `audit_source_purity` Check 34 constraints forbidding `regex`, `&[&str]`, `&s[a..b]`, `let _ = `, and `.filter_map(|e| e.ok())`, and enforcing per-function unique 7-section DO-178C Rustdoc blocks across `deap-core/src/`).
+     - `docs/designs/FEAT-42_source_code_ast_ingestion_and_docstring_synthesizer.md` (Scenarios 1, 2, 3, 4, and 5).
+
+### WP-02: 7-Section Dossier Synthesis & Offline Gate Verification (Step C & Step D)
+- **Action**: The `Adversarial Code Auditor` subagent synthesizes the complete 7-section dossier in `/tmp/gh_body_feat42a_source_ast.md` conforming character-for-character to `skills/adversarial-code-auditor/SKILL.md` Section 2:
+  1. `## 1. Context and References` (with `<!-- test-target: crates/deap-core/src/lib.rs -->` and 4 bullets: `File`, `Pillar`, `Symptom`, `Test-Target`).
+  2. `## 2. Root Cause Analysis (5 Whys)` (5 numbered `**Why ...?** Because ...` items).
+  3. `## 3. Correctness Analysis` (tracing exact `file:line` references across `crates/deap-core/src/lib.rs`, `crates/deap-core/src/sysml_ast.rs`, `crates/verify-baseline/src/checks/structural.rs`, `crates/compile-sysml/Cargo.toml`, `crates/ingest-sysml/Cargo.toml`, and `docs/designs/FEAT-42_source_code_ast_ingestion_and_docstring_synthesizer.md`).
+  4. `## 4. UML Diagrams` (valid Mermaid diagram conforming to all Mermaid syntax rules in `rules/platform-independence.md`).
+  5. `## 5. Affected Callers / Downstream Impact`.
+  6. `## 6. Proposed Correction` (concrete Check-34-compliant Rust architecture and implementation blueprint for `crates/deap-core/src/source_ast.rs`, `crates/deap-core/src/lib.rs`, and `crates/verify-baseline/src/checks/structural.rs`, covering zero-regex 1-indexed line/col span scanning, AC-01 Dart extraction, AC-02 Rust extraction, AC-05 syntax error handling, and self-purity unit testing).
+  7. `## 7. Relationship to Existing Issues` & `## Audit Source` (`SEVERITY: Important`, `FILE_LOCATION: crates/deap-core/src/lib.rs:1-30`).
+- **Offline Gate Verification**:
+  - Execute all 12 checklist checks in `skills/adversarial-code-auditor/SKILL.md` Step D.
+  - Execute `./target/release/verify-baseline check-defect /tmp/gh_body_feat42a_source_ast.md` and confirm exit code `0`.
+
+### WP-03: Issue Filing & Closed-Loop Payload Verification (Step E)
+- **Action**: File the verified dossier to `gintatkinson/DEAP01-spec-core` with label `feature` and title `[FEAT-42A] [deap-core]: Implement Check-34-compliant zero-regex Rust and Dart source AST parser` via `./target/release/reconcile-backlog create-issue --repo gintatkinson/DEAP01-spec-core --title "[FEAT-42A] [deap-core]: Implement Check-34-compliant zero-regex Rust and Dart source AST parser" --body-file /tmp/gh_body_feat42a_source_ast.md --label feature` (or `gh issue create --repo gintatkinson/DEAP01-spec-core --title "[FEAT-42A] [deap-core]: Implement Check-34-compliant zero-regex Rust and Dart source AST parser" --label "feature" --body-file /tmp/gh_body_feat42a_source_ast.md`).
+- **Closed-Loop Verification**:
+  - Inspect the live published GitHub issue via `gh issue view <NEW_ISSUE_ID> --repo gintatkinson/DEAP01-spec-core` to confirm all 7 sections, Mermaid blocks, and metadata rendered cleanly without truncation.
+  - Remove temporary file `/tmp/gh_body_feat42a_source_ast.md`, reclaim/terminate the subagent upon completion, and report the live issue URL and verification evidence to the user.
+
+
+
 
