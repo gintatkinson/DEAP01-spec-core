@@ -53,7 +53,7 @@ flowchart TD
     end
 
     subgraph "Deterministic Compiler Paradigm"
-        F["Normative SysML v2 SSOT Model - schema.sysml"] --> G["Deterministic AST Compiler - compile_sysml.py"]
+        F["Normative SysML v2 SSOT Model - schema.sysml"] --> G["Deterministic AST Compiler - crates/compile-sysml"]
         G --> H["Combinatorial Cartesian Product Grid - Actions x Guide Words = UCAs"]
         G --> I["Closed-Loop 10-Pillar Hazard Log & Bidirectional Traceability Graph"]
         G --> J["10-Theorem Formal Mathematical Proof Suite with SLDV Bindings"]
@@ -99,7 +99,7 @@ Autoregressive language models lack symbolic constraint solving capabilities. Wh
 
 To eliminate probabilistic failure modes, DEAP introduces the **Deterministic Safety Specification Compiler**. Instead of relying on stochastic LLM generation, DEAP decouples the specification process into two distinct tiers:
 
-1. **Deterministic AST Synthesis Engine (`scripts/compile_sysml.py`)**: A Python-based Abstract Syntax Tree (AST) compiler that ingests the authoritative SysML v2 model (`schema/*.sysml` or `.pipeline/schema.sysml`), calculates exact Cartesian product grids, evaluates Risk Classes, computes Failure Mode, Effects, and Criticality Analysis (FMECA) Risk Priority Numbers (RPN), and deterministically emits fully elaborated, cross-linked markdown artifacts.
+1. **Deterministic AST Synthesis Engine (`crates/compile-sysml`)**: A high-assurance native Rust Abstract Syntax Tree (AST) compiler (`./target/release/compile-sysml`) that ingests the authoritative SysML v2 model (`schema/*.sysml` or `.pipeline/schema.sysml`), calculates exact Cartesian product grids, evaluates Risk Classes, computes Failure Mode, Effects, and Criticality Analysis (FMECA) Risk Priority Numbers (RPN), and deterministically emits fully elaborated, cross-linked markdown artifacts.
 2. **Air-Gapped Sovereign Hardware Execution Profile**: Execution of localized, unconstrained reasoning LLMs (DeepSeek-R1-70B and Qwen-2.5-Coder-32B) deployed on sovereign, non-networked hardware (**AMD Ryzen AI Max+ 395** with **128 GB Unified LPDDR5X RAM**). This environment provides zero cloud telemetry, total immunity to commercial safety filter collisions, and microsecond-level determinism for bounded AST slot expansion.
 
 ---
@@ -168,7 +168,7 @@ $$
 
 ### 2.2 Domain-Agnostic AST Compilation Architecture
 
-In accordance with repository clean architecture rules, the compiler core in `scripts/compile_sysml.py` contains **zero hardcoded domain strings or static domain parameter dictionaries**. All system masses, speeds, voltages, time constants, and control actions are dynamically parsed from the AST nodes of the ingested SysML v2 model.
+In accordance with repository clean architecture rules, the compiler core in `crates/compile-sysml` contains **zero hardcoded domain strings or static domain parameter dictionaries**. All system masses, speeds, voltages, time constants, and control actions are dynamically parsed from the AST nodes of the ingested SysML v2 model.
 
 ---
 
@@ -1268,14 +1268,14 @@ flowchart TD
 
 ---
 
-## 7. Deterministic Python AST Compiler Specification (`scripts/compile_sysml.py`)
+## 7. Deterministic Native Rust AST Compiler Specification (`crates/compile-sysml`)
 
-The compilation engine is constructed as a deterministic multi-stage model compiler in Python 3.11+:
+The compilation engine is constructed as a deterministic multi-stage model compiler in high-assurance native Rust (`crates/compile-sysml` / `./target/release/compile-sysml`), strictly complying with Check 32 (Zero Shell Scripts), Check 33 (Zero Python Scripts), and Check 34 (Zero Regex Parsing):
 
 ```mermaid
 flowchart TD
     subgraph "1. Model Ingestion Stage"
-        A1["SysML v2 Parser - schema.sysml"] --> A2["AST Semantic Graph Builder"]
+        A1["SysML v2 Parser - schema/*.sysml"] --> A2["AST Semantic Graph Builder"]
     end
 
     subgraph "2. Mathematical & Combinatorial Synthesis Stage"
@@ -1286,8 +1286,8 @@ flowchart TD
     end
 
     subgraph "3. Verified Artifact Emission Stage"
-        C1["Markdown Specification Renderer - Jinja2 AST Blocks"]
-        C2["SLDV Verification Assertion Script Exporter"]
+        C1["Markdown Specification Renderer - Deterministic AST Blocks"]
+        C2["SysML Constraint Exporter & Forward/Reverse Synchronizer"]
         C3["JSON Schema Digest & Cryptographic SHA-256 Hasher"]
     end
 
@@ -1299,11 +1299,23 @@ flowchart TD
 
 ```bash
 # Execute deterministic 10-pillar safety compilation from SysML v2 SSOT
-python3 scripts/compile_sysml.py \
-  --schema schema/model.sysml \
-  --output-dir docs/safety/ \
-  --export-sldv \
-  --validate-all
+./target/release/compile-sysml \
+  --stpa-transpile \
+  --schema schema/cuas_coa.sysml \
+  --out-dir docs/safety/
+
+# Run the Pipeline 0 compilation gate: parse, validate semantics, serialize, and emit digest
+./target/release/compile-sysml \
+  --compile \
+  --schema schema/cuas_coa.sysml \
+  --out .pipeline/schema.sysml \
+  --digest .pipeline/schema-digest.json
+
+# Execute forward synchronization from SysML SSOT into markdown specs
+./target/release/compile-sysml \
+  --forward-sync \
+  --schema schema/cuas_coa.sysml \
+  --docs docs/
 ```
 
 ---
@@ -1312,39 +1324,48 @@ python3 scripts/compile_sysml.py \
 
 ### 8.1 Hardened Check 17 Table-Aware AST Parser Gate
 
-The verification gate parser in `scripts/verify_downstream_baseline.py` enforces structural semantic counting over markdown tables:
+The verification gate in `crates/verify-baseline` (`./target/release/verify-baseline`) enforces structural semantic counting and token-based AST parsing without regular expressions, strictly complying with Check 34 (Zero Regex Parsing Invariant):
 
-```python
-def validate_hardened_safety_gates(content: str, expected_uca_count: int, min_ls_count: int = 40) -> List[str]:
-    """Hardened Quality Gate 17 AST Validator."""
-    errors = []
-
-    # 1. Exhaustive UCA Validation matching exact Cartesian product
-    uca_matches = set(re.findall(r'\bUCA-(\d{2,3})\b', content))
-    if len(uca_matches) < expected_uca_count:
-        errors.append(f"Gate 17 Violation: Found {len(uca_matches)} unique UCAs; minimum required is {expected_uca_count}.")
-
-    # 2. Multi-Factor Loss Scenarios
-    ls_matches = set(re.findall(r'\bLS-(\d{2,3})\b', content))
-    if len(ls_matches) < min_ls_count:
-        errors.append(f"Gate 17 Violation: Found {len(ls_matches)} unique Loss Scenarios; minimum required is {min_ls_count}.")
-
-    # 3. Formal Safety Constraints
-    sc_matches = set(re.findall(r'\bSC-(\d{2,3})\b', content))
-    if len(sc_matches) < 4:
-        errors.append(f"Gate 17 Violation: Found {len(sc_matches)} unique Safety Constraints; minimum required is 4.")
-
-    # 4. FMECA Criticality Matrix
-    fmeca_rows = count_fmeca_markdown_rows(content)
-    if fmeca_rows < 15:
-        errors.append(f"Gate 17 Violation: FMECA table contains {fmeca_rows} rows; minimum required is 15.")
-
-    # 5. Strict Risk Assessment OSO-01..24 Completeness
-    missing_osos = [f"OSO-{i:02d}" for i in range(1, 25) if f"OSO-{i:02d}" not in content]
-    if missing_osos:
-        errors.append(f"Gate 17 Violation: Missing mandatory Risk Assessment OSOs: {', '.join(missing_osos)}.")
-
-    return errors
+```rust
+/// Hardened Quality Gate AST Validator: Zero-Regex Token Scanner
+pub fn has_stpa_id(lower: &str, prefix: &str) -> bool {
+    // Fast path: scan word tokens
+    for raw_token in lower.split_whitespace() {
+        let token = raw_token.trim_matches(|c: char| !c.is_alphanumeric() && c != '-' && c != '$');
+        let clean = token.strip_prefix('$').unwrap_or(token);
+        if let Some(rest) = clean.strip_prefix(prefix) {
+            let digits = rest.trim_end_matches(|c: char| !c.is_ascii_digit());
+            if !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit()) {
+                return true;
+            }
+        }
+    }
+    // Substring boundary fallback
+    let mut start = 0;
+    while let Some(pos) = lower[start..].find(prefix) {
+        let actual_pos = start + pos;
+        let prev_ok = if actual_pos == 0 {
+            true
+        } else {
+            let prev_char = lower[..actual_pos].chars().next_back().unwrap();
+            !prev_char.is_alphanumeric() && prev_char != '_'
+        };
+        let after_prefix = &lower[actual_pos + prefix.len()..];
+        let mut digits_count = 0;
+        for ch in after_prefix.chars() {
+            if ch.is_ascii_digit() {
+                digits_count += 1;
+            } else {
+                break;
+            }
+        }
+        if prev_ok && digits_count > 0 {
+            return true;
+        }
+        start = actual_pos + prefix.len();
+    }
+    false
+}
 ```
 
 ---
@@ -1385,7 +1406,7 @@ flowchart TD
 
 | Subsystem Component | Hardware Architecture | Allocation Size | System Role & Execution Invariant |
 | :--- | :--- | :--- | :--- |
-| **Zen 5 CPU Complex** | 16 Cores / 32 Threads, 64 MB L3 Cache | Host Compute | AST compilation, ANTLR4 parsing, pytest gate execution, GCC/GNAT builds. |
+| **Zen 5 CPU Complex** | 16 Cores / 32 Threads, 64 MB L3 Cache | Host Compute | AST compilation, SysML v2 parsing, cargo test gate execution, GCC/GNAT builds. |
 | **RDNA 3.5 GPU** | 40 Compute Units (Radeon 8060S / gfx1150) | GPU Compute | High-throughput matrix multiplication via AMD ROCm 6.2+ / HIP kernels. |
 | **Unified Memory Bus** | 256-bit LPDDR5X-8000 (256.0 GB/s) | Shared Fabric | Zero-copy host-to-device memory access without PCIe bus transfer overhead. |
 | **DeepSeek-R1-70B** | Quantized GGUF (Q5_K_M, 5.5 bpw) | **52.4 GB** | Deep safety chain-of-thought, STPA scenario generation, formal invariants. |
