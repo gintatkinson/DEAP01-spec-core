@@ -15,16 +15,16 @@
 - **Strict Prohibition of Concrete Specifications**: Committing concrete downstream project specifications, models, or code to upstream distribution templates is strictly forbidden.
 - **Downstream Workspace Boundary**: Concrete project schemas and specifications reside exclusively in downstream application workspaces initialized from domain distribution templates.
 
-## Mandatory Session Initialization Gate (CRITICAL FIRST STEP)
-Immediately following installation and on EVERY new session startup, before accepting ANY user directives, responding to inquiries, or executing task implementations, the agent MUST execute the following 6-step sequence in Turn 1:
+## Mandatory Session Initialization Gate (Role- & Phase-Scoped Lazy Loading)
+On session startup, before executing file modifications, the coordinator agent MUST execute the following lightweight initialization sequence (spawned single-item subagents that receive a curated prompt terminating with `---GOVERNANCE-END---` skip Steps 0-5 and execute their assigned `SKILL.md` directly):
 0. **Detect Repository Role & Scope (Direct-Path Read)**: Inspect whether `.pipeline/upstream/` exists on disk via direct-path read (`list_dir` or `view_file`). Do not rely on glob or search tools that ignore hidden dot-directories.
    - If present -> `UPSTREAM_SPEC_CORE_COMPILER`
    - If absent -> `DOWNSTREAM_CUSTOMER_PROJECT`
 1. **Read Governance Constitution**: Execute `view_file` on `.pipeline/constitution.md` to ingest the platform-independent functional governance layer and zero-mocking persistence mandates.
-2. **Load Project Skills**: Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` (and active skills under `skills/`) to initialize feature-driven implementation protocols and review gates.
+2. **Load Active Task Skill On-Demand**: Execute `view_file` ONLY on the `SKILL.md` relevant to the active task (do NOT preload `skills/feature-driven-implementation/SKILL.md` during specification, research, or upstream compiler maintenance tasks).
 3. **Load Governance Rules**: Execute `view_file` on `.pipeline/ACTIVE_RULES_BUNDLE.md` to ingest the complete, consolidated suite of active governance rules in a single read.
-4. **Load Platform Profile**: Read the target platform execution profile (e.g., `.pipeline/profiles/flutter.md`, `.pipeline/profiles/react.md`, `.pipeline/profiles/ros2_cpp.md`, or `.pipeline/profiles/px4_module.md`) to establish platform-specific constraints.
-5. **Bootstrap Tracker Labels & Verify Baseline**: Verify that repository issue tracker labels and baseline conformance pass by running the native Rust baseline verifier `./target/release/verify-baseline . --no-domain` (or `cargo run --release -p verify-baseline -- . --no-domain` if the release binary has not been built). The legacy Python and shell tooling (`scripts/verify_downstream_baseline.py`, `reconcile_backlog.py`, `parity_auditor`, `setup_git_hooks.sh`) is permanently retired per Check 32 and Check 33 and MUST NOT be invoked.
+4. **Conditional Platform Profile Load (Downstream Implementation Phase Only)**: Per `rules/constitution-first.md`, read `.pipeline/profiles/<target_platform>.md` ONLY when implementing downstream application code and ONLY for the workspace's configured target platform. Never read `.pipeline/profiles/flutter.md` during `UPSTREAM_SPEC_CORE_COMPILER` sessions, specification generation, or non-Flutter projects.
+5. **Verify Baseline When Modifying Repository State**: Run `./target/release/verify-baseline . --no-domain` (or `cargo run --release -p verify-baseline -- . --no-domain` if the release binary has not been built) once per coordinator session prior to implementation or commit gates (never redundantly inside read-only or single-item subagents). The legacy Python and shell tooling (`scripts/verify_downstream_baseline.py`, `reconcile_backlog.py`, `parity_auditor`, `setup_git_hooks.sh`) is permanently retired per Check 32 and Check 33 and MUST NOT be invoked.
 
 ## Strict Planning Gate (No Execution Without Approved Plan)
 - You are strictly forbidden from creating, modifying, or deleting files in the workspace or dispatching any subagents unless that action is documented in an approved implementation plan.
@@ -85,7 +85,7 @@ Immediately following installation and on EVERY new session startup, before acce
   * Has the user explicitly approved a file-write/command execution for this turn? (Yes/No)
   * Am I making any silent assumptions about the user's intent?
   * Does the active skill mandate context-isolated subagent dispatches, **or** does this turn write any repository source or specification file? (If yes to either, coordinator direct file-writing is locked).
-  * Has the Section 3.3 Mandatory Initialization Sequence been completed and verified for this session? (Yes/No. If No, halt all other actions and execute initialization immediately).
+  * Has the Mandatory Initialization Sequence been completed for this session (or is this a curated subagent receiving ---GOVERNANCE-END---)? (Yes/No. If No, halt all other actions and execute initialization immediately).
 - The coordinator delegation duty binds for all repository source, governance, rules, tooling, and specification writes. All file writes MUST be delegated exclusively to spawned subagents.
 - **No Documentation/Installation Drift**: Update installation instructions (`README.md`, installer scripts) whenever rules or directories change. Verify `git diff origin/<branch>` is empty before declaring completion.
 

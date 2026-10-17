@@ -1239,6 +1239,7 @@ pub fn check_zero_retired_scripts_in_documentation(repo_root: &Path) -> Result<(
     retired_needles.push("verify_commit_messages.py".to_string());
     retired_needles.push("verify_subagent_output.py".to_string());
     retired_needles.push("reconcile_backlog.py".to_string());
+    retired_needles.push("spec_validator.py".to_string());
 
     let target_dirs = vec![repo_root.join("docs"), repo_root.join("skills")];
 
@@ -1287,13 +1288,21 @@ pub fn check_zero_retired_scripts_in_documentation(repo_root: &Path) -> Result<(
         }
     }
 
-    let readme = repo_root.join("README.md");
-    if readme.is_file() {
-        if let Ok(content) = fs::read_to_string(&readme) {
-            for (idx, line) in content.lines().enumerate() {
-                for needle in &retired_needles {
-                    if line.contains(needle) {
-                        violations.push(format!("README.md:{}: references retired script '{}'", idx + 1, needle));
+    let target_single_files = vec![
+        repo_root.join("README.md"),
+        repo_root.join(".pipeline/constitution.md"),
+        repo_root.join(".pipeline/upstream/pipeline-tooling.md"),
+    ];
+
+    for file in &target_single_files {
+        if file.is_file() {
+            let rel = file.strip_prefix(repo_root).unwrap_or(file).display().to_string();
+            if let Ok(content) = fs::read_to_string(file) {
+                for (idx, line) in content.lines().enumerate() {
+                    for needle in &retired_needles {
+                        if line.contains(needle) {
+                            violations.push(format!("{}:{}: references retired script '{}'", rel, idx + 1, needle));
+                        }
                     }
                 }
             }
@@ -1993,6 +2002,21 @@ pub fn check_audit() -> Result<(), Vec<String>> {
         assert!(res.is_err(), "Must reject retired script reference in docs");
         let errs = res.err().unwrap();
         assert!(errs.iter().any(|e| e.contains(needle)));
+    }
+
+    #[test]
+    fn test_defect_450_retired_python_in_pipeline_docs_fails() {
+        let tmp = TempDir::new("c450_pipeline_retired");
+        let pipeline_dir = tmp.path.join(".pipeline");
+        fs::create_dir_all(&pipeline_dir).unwrap();
+        let const_file = pipeline_dir.join("constitution.md");
+        let mut f = File::create(&const_file).unwrap();
+        writeln!(f, "# Constitution\nRuns validators/spec_validator.py for quality gate").unwrap();
+
+        let res = check_zero_retired_scripts_in_documentation(&tmp.path);
+        assert!(res.is_err(), "Must reject retired Python validator in .pipeline/constitution.md");
+        let errs = res.err().unwrap();
+        assert!(errs.iter().any(|e| e.contains("spec_validator.py")));
     }
 }
 

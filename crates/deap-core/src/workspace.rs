@@ -797,4 +797,109 @@ mod tests {
         }
         assert_eq!(fn_count, 7, "Expected exactly 7 documented functions in workspace.rs");
     }
+
+    #[test]
+    fn test_issue_450_active_rules_bundle_bounds() -> Result<(), Box<dyn std::error::Error>> {
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(|p| p.parent())
+            .ok_or("repo root")?;
+        let bundle_path = repo_root.join(".pipeline/ACTIVE_RULES_BUNDLE.md");
+        assert!(bundle_path.is_file(), "Active rules bundle must exist at {:?}", bundle_path);
+        let metadata = fs::metadata(&bundle_path)?;
+        let byte_len = metadata.len();
+        let content = fs::read_to_string(&bundle_path)?;
+        let line_count = content.lines().count();
+
+        assert!(
+            byte_len < 40_000,
+            "ACTIVE_RULES_BUNDLE.md must be under 40,000 bytes for single-chunk view_file read (got {} bytes)",
+            byte_len
+        );
+        assert!(
+            line_count < 750,
+            "ACTIVE_RULES_BUNDLE.md must be under 750 lines for single-chunk view_file read (got {} lines)",
+            line_count
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_issue_450_agents_md_scoped_initialization_invariants() -> Result<(), Box<dyn std::error::Error>> {
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(|p| p.parent())
+            .ok_or("repo root")?;
+        let agents_md = fs::read_to_string(repo_root.join("AGENTS.md"))?;
+
+        assert!(
+            !agents_md.contains("Read the target platform execution profile (e.g., `.pipeline/profiles/flutter.md`"),
+            "AGENTS.md must not unconditionally command flutter.md profile read on Turn 1"
+        );
+        assert!(
+            agents_md.contains("Conditional Platform Profile Load")
+                || agents_md.contains("downstream feature implementation phase")
+                || agents_md.contains("ONLY when implementing downstream application code"),
+            "AGENTS.md must condition platform profile loading to downstream feature implementation"
+        );
+
+        assert!(
+            !agents_md.contains("Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` (and active skills under `skills/`)"),
+            "AGENTS.md must not unconditionally preload feature-driven-implementation/SKILL.md"
+        );
+        assert!(
+            agents_md.contains("Load Active Task Skill On-Demand") || agents_md.contains("relevant to the active task"),
+            "AGENTS.md must load active task skill on demand"
+        );
+
+        assert!(
+            agents_md.contains("---GOVERNANCE-END---"),
+            "AGENTS.md must explicitly reference ---GOVERNANCE-END--- bypass for curated subagents"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_issue_450_zero_retired_python_references_in_pipeline_governance() -> Result<(), Box<dyn std::error::Error>> {
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(|p| p.parent())
+            .ok_or("repo root")?;
+        let constitution = fs::read_to_string(repo_root.join(".pipeline/constitution.md"))?;
+        let tooling = fs::read_to_string(repo_root.join(".pipeline/upstream/pipeline-tooling.md"))?;
+
+        let retired_patterns = [
+            "spec_validator.py",
+            "verify_downstream_baseline.py",
+            "link_validator.py",
+            "uml.py",
+            "mermaid_syntax_validator.py",
+            "behavioral.py",
+            "codebase.py",
+            "test_skill_path_references.py",
+            "test_constitution_integrity.py",
+            "docs.py",
+            "spec_title_uniqueness_validator.py",
+            "source_reference_validator.py",
+            "logical_ui_validator.py",
+            "pytest",
+            "parity_auditor",
+        ];
+
+        for needle in retired_patterns {
+            assert!(
+                !constitution.contains(needle),
+                ".pipeline/constitution.md must not reference retired script '{}'",
+                needle
+            );
+            assert!(
+                !tooling.contains(needle),
+                ".pipeline/upstream/pipeline-tooling.md must not reference retired script '{}'",
+                needle
+            );
+        }
+
+        Ok(())
+    }
 }

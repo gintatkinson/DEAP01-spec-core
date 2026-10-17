@@ -15,7 +15,8 @@
 - If the functional constitution file exists in the repository, you MUST read it before starting work. Do not skip it.
 - If you are implementing a feature and no implementation profile exists for the target platform, HALT and ask the human to create one.
 - If a proposed change conflicts with any constitution document, HALT and escalate to the human.
-- Specification workers/modules MUST NOT read implementation profiles -- they operate on functional specs only.
+- Specification workers/modules and `UPSTREAM_SPEC_CORE_COMPILER` workers MUST NOT read implementation profiles -- they operate on functional specs and compiler internals only.
+- Curated single-item subagents receiving prompts ending in `---GOVERNANCE-END---` execute their assigned `SKILL.md` directly without repeating full coordinator initialization ceremonies.
 - You MUST read root `AGENTS.md` (or its optional alias `.agents/AGENTS.md` where present) before writing or modifying any file. Its *Strict Planning Gate* requires an approved implementation plan and overrides any rule that treats an authorization keyword alone as sufficient. See `rules/user-authorization-lock.md` § *Precedence*.
 - `.pipeline` and `.agents` are hidden directories and generic glob tools may exclude them. You MUST read root `AGENTS.md`, `.pipeline/constitution.md` and `.pipeline/profiles/` directly by their explicit paths. A file absent from this list and hidden from glob is effectively invisible -- that is how the strictest authorization rule came to be missed.
 - Baseline conformance is verified exclusively with the native Rust binary `./target/release/verify-baseline . --no-domain`; the retired `scripts/verify_downstream_baseline.py` MUST NOT be invoked (Check 33).

@@ -111,3 +111,101 @@ For each issue `#439`..`#449`:
 - Verify `./target/release/verify-baseline . --no-domain` passes (exit code 0).
 - Verify `git status --short` and `git diff origin/<branch>` are empty.
 - Verify all issues `#439`..`#449` carry `status:fixed-resolved` (or reclassification) via `gh issue view`.
+
+
+---
+
+# Implementation Plan: Teamwork Recursive Debugging Protocol for Issues #450 to #457
+
+## 1. Executive Summary & Objective
+
+This implementation plan governs the execution of the 8-step Recursive Debugging Protocol (`skills/debug-protocol/SKILL.md`) across issues `#450` through `#457` in `DEAP01-spec-core` (`UPSTREAM_SPEC_CORE_COMPILER`), delegated via the `teamwork_preview` multi-agent system.
+
+## 2. Work Packages
+
+### WP-01: Teamwork Multi-Agent Delegation (`teamwork_preview`)
+- **Action**: Invoke `teamwork_preview` subagent with the approved prompt from `prompt_draft.md` (including mandatory `view_file` directive on `skills/debug-protocol/SKILL.md`, repository classification `UPSTREAM_SPEC_CORE_COMPILER`, and `PROCEED` authorization token).
+- **Scope**: Execution of `skills/debug-protocol/SKILL.md` (Steps 0 through 8) across issues `#450`, `#451`, `#452`, `#453`, `#454`, `#455`, `#456`, and `#457` in `.`.
+- **Target Files Across Issues #450 to #457**:
+  - **Issue #450**: `AGENTS.md`, `CLAUDE.md`, `.pipeline/constitution.md`, `.pipeline/upstream/pipeline-tooling.md`, `.pipeline/ACTIVE_RULES_BUNDLE.md`, `rules/constitution-first.md`, `rules/role-boundary-lock.md`, `rules/subagent-dispatch-standards.md`, `crates/deap-core/src/workspace.rs`, `crates/verify-baseline/src/checks/structural.rs`.
+  - **Issue #451**: `crates/reconcile-backlog/src/create_issue.rs`.
+  - **Issue #452**: `crates/reconcile-backlog/src/tracker.rs`, `crates/reconcile-backlog/src/create_issue.rs`.
+  - **Issue #453**: `crates/reconcile-backlog/src/tracker.rs`, `crates/reconcile-backlog/src/lib.rs`, `crates/reconcile-backlog/src/checklist.rs`, `crates/reconcile-backlog/src/create_issue.rs`.
+  - **Issue #454**: `crates/reconcile-backlog/src/tracker.rs`, `crates/reconcile-backlog/src/lib.rs`.
+  - **Issue #455**: `crates/reconcile-backlog/src/lib.rs`.
+  - **Issue #456**: `crates/reconcile-backlog/src/lib.rs`, `crates/reconcile-backlog/src/checklist.rs`.
+  - **Issue #457**: `crates/reconcile-backlog/src/frontmatter.rs`.
+
+### WP-02: Per-Issue TDD Remediation & Verification Loop (Issues #450 to #457)
+For each issue `#450`..`#457`:
+1. **Step 0 (Defect Gate)**: Inspect issue via `gh issue view <ID>`. Confirm defect status (or reclassify per `skills/debug-protocol/SKILL.md` Step 8 if non-defect).
+2. **Steps 1-5 (Reproduction, Hypothesis, Investigation, Evidence, Root Cause)**: Isolate root cause in `crates/`, `AGENTS.md`, `rules/`, or `.pipeline/` with exact file and line citations.
+3. **Step 6 (Fix & Native Rust TDD)**:
+   - Write failing Rust unit/mutation test (`#[test]`) demonstrating RED before applying the fix.
+   - Implement minimal fix to achieve GREEN:
+     - **#450**: Scope Turn-1 initialization in `AGENTS.md` by role and phase (lazy-load active `SKILL.md` on-demand, load `.pipeline/profiles/<platform>.md` conditionally only during downstream feature implementation for the target platform rather than unconditionally loading `flutter.md`, allow curated subagents with `---GOVERNANCE-END---` to execute their assigned `SKILL.md` directly without redundant 9-call startup ceremonies, compact `.pipeline/ACTIVE_RULES_BUNDLE.md` under `< 40,000` bytes / `< 750` lines so it fits in a single `view_file` call without truncation while preserving all normative rules, remove retired Python validator references in `.pipeline/constitution.md` and `.pipeline/upstream/pipeline-tooling.md`, and add Check 14 regression tests in `crates/deap-core/src/workspace.rs`).
+     - **#451**: Enforce `validate_checklist_publish_integrity` against live `IssueIndex::build(issues)` in `run_create_issue`, handle arbitrary-whitespace checkbox prefixes in `validate_body_file`, populate `spec_path_to_issue` from workspace specifications and fallback `detect_git_repo`/`detect_git_branch` before calling `project_body_for_tracker`, and assert persisted tracker payloads and reopen comments in `create_issue.rs` unit tests.
+     - **#452**: Strip `status:fixed-resolved`, `status::fixed-resolved`, and `fixed-resolved` labels when reopening closed issues in both `OfflineTracker::reopen_issue` and `GitHubTracker::reopen_issue`, record reopen analysis comments in `OfflineTracker::reopen_issue`, fix doc citation to `constitution.md:256-265`, and add lifecycle transition unit tests asserting `!reopened_issue.is_resolved()`.
+     - **#453**: Treat `'_'` identically to `'-'` as a word separator in `normalize_title`, index issues by `(spec_type, normalized_title)` in `IssueIndex` (`by_type_and_title` and `find_issue_for_type`), update reconciliation and issue-creation callers to scope lookup by specification type/label when available, and add cross-tier collision and underscore word-boundary unit tests.
+     - **#454**: Implement `Drop` for `TempFileNamed` to guarantee `/tmp` cleanup on early return, include `body` in `GitHubTracker::fetch_all_issues` (`--json number,title,state,labels,body,url`), add closed-loop readback verification in `GitHubTracker::update_issue_body` and `create_issue`, return `Err` on nonexistent issue IDs in `OfflineTracker::update_issue_body`, `add_label`, and `reopen_issue`, and add unit tests for `OfflineTracker` error parity and `TempFileNamed` cleanup.
+     - **#455**: Rewrite unmapped relative sibling specification links (`../epics/`, `../features/`, `../user-stories/`, `../use-cases/`, `../../epics/`, etc.) to canonical GitHub blob URLs (`https://github.com/<repo>/blob/<branch>/docs/<subdir>/...`) in `rewrite_projected_links` and `project_body_for_tracker` when `repo` is present, and add the missing `!body.contains("../features/FEAT-01-HumanEngineer.md")` assertion in `test_relative_links_in_projected_issue_bodies_red_probe`.
+     - **#456**: Extract clean human-readable titles (stripping `[Title](url)` markdown link targets, bold wrappers, and trailing `(clauses)` suffixes) and inline `#<digits>` issue references from checklist items so `reconcile_checklist_content` and `validate_checklist_publish_integrity` accurately reconcile and gate both prefix-numbered and inline/markdown-linked checklist items, with unit tests covering both paths.
+     - **#457**: Parse leading YAML frontmatter (`--- ... ---`) and CommonMark metadata tables non-exclusively, remove the hardcoded 20-line / 25-line table truncation cutoffs once `in_table` is active, replace destructive `.trim_matches` with balanced outer delimiter stripping (`strip_enclosing_cell_delimiters`), fix the off-by-one `yaml_end_idx` after YAML `issue_id` insertion and unclosed `---` handling, guard `id` vs `issue_id` and `part` vs `schema_containers` key precedence, and add round-trip `parse_frontmatter(&update_frontmatter_issue_id(...))` unit tests on 21+ line tables, hybrid headers, and multi-span backtick cells.
+   - Run `cargo test --workspace`, `cargo build --release --workspace`, and `./target/release/verify-baseline . --no-domain`.
+   - Commit using neutral issue citations `(refs #<id>)` or `(#<id>)` (zero auto-closing keywords, zero em dashes) and push to remote.
+4. **Step 7 (Verification & Tracker Transition)**:
+   - Verify fix presence via grep, full test suite raw output, and `git diff`.
+   - Post evidence comment to GitHub issue `#<id>` and apply label `status:fixed-resolved` (leaving issue OPEN).
+   - Verify live published payload via `gh issue view <ID>`.
+
+### WP-03: Final Coordinator Audit & Remote Synchronization Verification
+- Verify `cargo test --workspace` passes (exit code 0).
+- Verify `./target/release/verify-baseline . --no-domain` passes (exit code 0).
+- Verify `git status --short` and `git diff origin/<branch>` are empty.
+- Verify all issues `#450`..`#457` carry `status:fixed-resolved` (or reclassification) via `gh issue view`.
+
+
+---
+
+# Implementation Plan: Adversarial Code Auditor Dispatch for FEAT-42 Specification Alignment (#458)
+
+## 1. Executive Summary & Objective
+
+This implementation plan governs the context-isolated dispatch of an `Adversarial Code Auditor` subagent (`skills/adversarial-code-auditor/SKILL.md`) to perform deep root-cause analysis, offline defect-gate verification, and GitHub issue filing for **Issue 1: Specification Alignment (FEAT-42 / #458)** (`[AUDIT] [FEAT-42]: Remediate crates/sysml-core references and align CLI/docstring contracts`).
+
+## 2. Work Packages
+
+### WP-01: Context-Isolated Adversarial Code Auditor Subagent Dispatch
+- **Action**: Dispatch a context-isolated subagent (`Role: "Adversarial Code Auditor"`) governed by `skills/adversarial-code-auditor/SKILL.md` and `rules/subagent-dispatch-standards.md`.
+- **Pre-Flight Governance Preamble**:
+  - Direct-path `view_file` on `skills/adversarial-code-auditor/SKILL.md` as Step 1.
+  - Verbatim repository classification: `UPSTREAM_SPEC_CORE_COMPILER`.
+  - Read `.pipeline/constitution.md` and target file `docs/designs/FEAT-42_source_code_ast_ingestion_and_docstring_synthesizer.md`.
+  - Trailing `PROCEED` authorization token.
+- **Audit Scope & Deep Analysis Targets**:
+  1. **Target File**: `docs/designs/FEAT-42_source_code_ast_ingestion_and_docstring_synthesizer.md` (specifically Sections 2.1, 3.2, 5.2, and 6.1).
+  2. **Cross-Reference Verification Targets**:
+     - `Cargo.toml` and `crates/deap-core/src/sysml_ast.rs` (verifying that `crates/sysml-core` does not exist and `deap-core` is the authoritative crate).
+     - `crates/ingest-sysml/src/main.rs` (verifying current `--schema` and `--format auto` CLI option contracts vs. `--source <DIR>`).
+     - `crates/verify-baseline/src/checks/structural.rs` (`audit_source_purity` Check 34 docstring body deduplication via `seen_docblocks`, requiring a 1-line summary + Sections 1-7 where Sections 1-6 interpolate function-specific parameter names, types, return types, and owning classifiers).
+     - `crates/verify-baseline/src/checks/parity_gates.rs` (verifying why `docs/designs/` is excluded from `TargetScanDir` factual grounding checks).
+
+### WP-02: 7-Section Defect Dossier Synthesis & Offline Gate Verification (Step C & Step D)
+- **Action**: The `Adversarial Code Auditor` subagent synthesizes the complete 7-section defect dossier in `/tmp/gh_body_<id>.md` conforming character-for-character to `skills/adversarial-code-auditor/SKILL.md` Section 2:
+  1. `## 1. Context and References` (with `<!-- test-target: ... -->` and 4 bullets: `File`, `Pillar`, `Symptom`, `Test-Target`).
+  2. `## 2. Root Cause Analysis (5 Whys)` (5 numbered `**Why ...?** Because ...` items).
+  3. `## 3. Correctness Analysis` (tracing exact `file:line` references across `FEAT-42_source_code_ast_ingestion_and_docstring_synthesizer.md`, `crates/ingest-sysml/src/main.rs`, `crates/deap-core/src/sysml_ast.rs`, and `crates/verify-baseline/src/checks/structural.rs`).
+  4. `## 4. UML Diagrams` (valid Mermaid diagram conforming to all Mermaid syntax rules in `rules/platform-independence.md`).
+  5. `## 5. Affected Callers / Downstream Impact`.
+  6. `## 6. Proposed Correction` (concrete remediation blocks for `docs/designs/FEAT-42_source_code_ast_ingestion_and_docstring_synthesizer.md` and live issue `#458` sync).
+  7. `## 7. Relationship to Existing Issues` & `## Audit Source` (`SEVERITY: Important`, `FILE_LOCATION: docs/designs/FEAT-42_source_code_ast_ingestion_and_docstring_synthesizer.md:29-249`).
+- **Offline Gate Verification**:
+  - Execute all 12 checklist checks in `skills/adversarial-code-auditor/SKILL.md` Step D.
+  - Execute `./target/release/verify-baseline check-defect /tmp/gh_body_<id>.md` and confirm exit code `0`.
+
+### WP-03: Issue Filing & Closed-Loop Payload Verification (Step E)
+- **Action**: File the verified defect dossier to `gintatkinson/DEAP01-spec-core` with label `bug` and title `[AUDIT] [FEAT-42_source_code_ast_ingestion_and_docstring_synthesizer.md]: Remediate crates/sysml-core references and align CLI/docstring contracts` via `./target/release/reconcile-backlog create-issue --label bug` (or `gh issue create --repo gintatkinson/DEAP01-spec-core --label bug --body-file /tmp/gh_body_<id>.md`).
+- **Closed-Loop Verification**:
+  - Inspect the live published GitHub issue via `gh issue view <NEW_ISSUE_ID>` to confirm all 7 sections, Mermaid blocks, and metadata rendered cleanly without truncation.
+  - Reclaim/terminate the subagent upon completion and report the live issue URL and verification evidence to the user.
+

@@ -31,6 +31,9 @@ The coordinator MUST append the authorization token `PROCEED` (case-insensitive)
 ### 8. Component-Level Failure Mode Research Swarm Mandate
 During Step 1.5 Technology Stack & Architecture Research (Phase 0.5), monolithic drafting of component failure modes is strictly forbidden. The coordinator MUST extract all structural `part def` components from the authoritative schema (`.pipeline/schema.sysml`) and dispatch dedicated, context-isolated research subagents per component (role: `Component Failure Mode Researcher` or `Failure Mode Research Worker`). Each subagent prompt MUST target exactly one component AST fragment, instructing the worker to query standard failure mode catalogs (SAE ARP4761, MIL-HDBK-338B, RTCA DO-254, RTCA DO-178C), evaluate the 4 Universal Failure Dimensions (Interface, State, Action, Resource), and document at least 3 distinct failure modes per component with integer S/O/D ratings in [1, 10] for intermediate assembly into `docs/research/FAILURE_MODE_REGISTRY.md` before authorizing downstream STPA/FMECA matrix synthesis.
 
+### 9. Curated Governance Header & Direct Execution
+Spawned single-item subagents whose prompts contain a curated governance preamble terminated by `---GOVERNANCE-END---` are authorized to execute their assigned `SKILL.md` directly. Such subagents skip repeating the coordinator Turn-1 multi-file session initialization ceremony (`AGENTS.md`, `.pipeline/constitution.md`, `.pipeline/ACTIVE_RULES_BUNDLE.md`, platform profile, baseline verification) because their scope, classification, and constraints are already fully curated within the dispatch payload.
+
 ## Subagent Pre-Flight Self-Rejection Protocol
 
 When initialized, the subagent MUST parse and validate the prompt header against the following checklist:
