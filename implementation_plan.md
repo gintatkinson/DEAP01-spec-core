@@ -388,6 +388,51 @@ This implementation plan governs the context-isolated dispatch of an `Adversaria
   - Remove temporary file `/tmp/gh_body_feat42b_ingest_cli.md`, reclaim/terminate the subagent upon completion, and report the live issue URL and verification evidence to the user.
 
 
+---
+
+# Implementation Plan: Adversarial Code Auditor Dispatch for Issue 6 (`compile-sysml` 7-Section Safety Docstring Synthesizer)
+
+## 1. Executive Summary & Objective
+
+This implementation plan governs the context-isolated dispatch of an `Adversarial Code Auditor` subagent (`skills/adversarial-code-auditor/SKILL.md`) to perform deep architectural and root-cause analysis, offline dossier-gate verification, and GitHub issue filing for **Issue 6: `compile-sysml` 7-Section Safety Docstring Synthesizer** (`[FEAT-42C] [compile-sysml]: Implement Check-34-unique, idempotent 7-section safety docstring synthesizer`, label `feature`).
+
+## 2. Work Packages
+
+### WP-01: Context-Isolated Adversarial Code Auditor Subagent Dispatch
+- **Action**: Dispatch a context-isolated subagent (`Role: "Adversarial Code Auditor"`) governed by `skills/adversarial-code-auditor/SKILL.md` and `rules/subagent-dispatch-standards.md`.
+- **Pre-Flight Governance Preamble**:
+  - Direct-path `view_file` on `skills/adversarial-code-auditor/SKILL.md` as Step 1.
+  - Verbatim repository classification: `UPSTREAM_SPEC_CORE_COMPILER`.
+  - Read `.pipeline/constitution.md` and target file `crates/compile-sysml/src/main.rs`.
+  - Trailing `PROCEED` authorization token.
+- **Audit Scope & Deep Analysis Targets**:
+  1. **Target File**: `crates/compile-sysml/src/main.rs` (lines 27-250: `Cli` struct and command dispatch).
+  2. **Cross-Reference Verification Targets**:
+     - `crates/compile-sysml/src/lib.rs` (lines 1-38) and `crates/compile-sysml/src/semantic/digest.rs` (`write_atomic`).
+     - `crates/verify-baseline/src/checks/structural.rs` (lines 806-849: `audit_source_purity` Check 34 7-section Rustdoc check, per-function `seen_docblocks` uniqueness stripping line 1 and `Realises:`, and `#[` attribute preservation across `current_doc`).
+     - `docs/designs/FEAT-42_source_code_ast_ingestion_and_docstring_synthesizer.md` (Section 2.2 lines 56-78, Section 3.2 lines 98-150, and Section 4 Scenarios 3 and 4 lines 161-166).
+
+### WP-02: 7-Section Dossier Synthesis & Offline Gate Verification (Step C & Step D)
+- **Action**: The `Adversarial Code Auditor` subagent synthesizes the complete 7-section dossier in `/tmp/gh_body_feat42c_docstring.md` conforming character-for-character to `skills/adversarial-code-auditor/SKILL.md` Section 2:
+  1. `## 1. Context and References` (with `<!-- test-target: crates/compile-sysml/src/main.rs -->` and 4 bullets: `File`, `Pillar`, `Symptom`, `Test-Target`).
+  2. `## 2. Root Cause Analysis (5 Whys)` (5 numbered `**Why ...?** Because ...` items).
+  3. `## 3. Correctness Analysis` (tracing exact `file:line` references across `crates/compile-sysml/src/main.rs`, `crates/compile-sysml/src/lib.rs`, `crates/verify-baseline/src/checks/structural.rs`, and `docs/designs/FEAT-42_source_code_ast_ingestion_and_docstring_synthesizer.md`).
+  4. `## 4. UML Diagrams` (valid Mermaid diagram conforming to all Mermaid syntax rules in `rules/platform-independence.md`).
+  5. `## 5. Affected Callers / Downstream Impact`.
+  6. `## 6. Proposed Correction` (concrete Rust implementation blueprint for `Cli` in `crates/compile-sysml/src/main.rs` and `crates/compile-sysml/src/docstring.rs`, covering `--inject-safety-docstrings <DIR>`, `--extract-source <DIR>`, `--dry-run`, `--force`, `--schema`, attribute-aware placement above `#[...]` / `@...`, per-function AST parameter/type/classifier interpolation across Sections 1-6 for Check 34 uniqueness, SHA-256 bit-for-bit idempotency on second run, and exit code `0`/`1`/`2` contract).
+  7. `## 7. Relationship to Existing Issues` & `## Audit Source` (`SEVERITY: Important`, `FILE_LOCATION: crates/compile-sysml/src/main.rs:27-90`).
+- **Offline Gate Verification**:
+  - Execute all 12 checklist checks in `skills/adversarial-code-auditor/SKILL.md` Step D.
+  - Execute `./target/release/verify-baseline check-defect /tmp/gh_body_feat42c_docstring.md` and confirm exit code `0`.
+
+### WP-03: Issue Filing & Closed-Loop Payload Verification (Step E)
+- **Action**: File the verified dossier to `gintatkinson/DEAP01-spec-core` with label `feature` and title `[FEAT-42C] [compile-sysml]: Implement Check-34-unique, idempotent 7-section safety docstring synthesizer` via `./target/release/reconcile-backlog create-issue --repo gintatkinson/DEAP01-spec-core --title "[FEAT-42C] [compile-sysml]: Implement Check-34-unique, idempotent 7-section safety docstring synthesizer" --body-file /tmp/gh_body_feat42c_docstring.md --label feature`.
+- **Closed-Loop Verification**:
+  - Inspect the live published GitHub issue via `gh issue view <NEW_ISSUE_ID> --repo gintatkinson/DEAP01-spec-core` to confirm all 7 sections, Mermaid blocks, and metadata rendered cleanly without truncation.
+  - Remove temporary file `/tmp/gh_body_feat42c_docstring.md`, reclaim/terminate the subagent upon completion, and report the live issue URL and verification evidence to the user.
+
+
+
 
 
 
