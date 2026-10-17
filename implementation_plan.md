@@ -255,3 +255,48 @@ This implementation plan governs the context-isolated dispatch of an `Adversaria
   - Remove temporary file `/tmp/gh_body_satisfy_req_audit.md`, reclaim/terminate the subagent upon completion, and report the live issue URL and verification evidence to the user.
 
 
+---
+
+# Implementation Plan: Adversarial Code Auditor Dispatch for Issue 3 (`SemanticValidator` Type Resolution for Source Languages)
+
+## 1. Executive Summary & Objective
+
+This implementation plan governs the context-isolated dispatch of an `Adversarial Code Auditor` subagent (`skills/adversarial-code-auditor/SKILL.md`) to perform deep root-cause analysis, offline defect-gate verification, and GitHub issue filing for **Issue 3: `SemanticValidator` Type Resolution for Source Languages** (`[AUDIT] [compile-sysml]: Normalize source-language composite and framework types in SemanticValidator`).
+
+## 2. Work Packages
+
+### WP-01: Context-Isolated Adversarial Code Auditor Subagent Dispatch
+- **Action**: Dispatch a context-isolated subagent (`Role: "Adversarial Code Auditor"`) governed by `skills/adversarial-code-auditor/SKILL.md` and `rules/subagent-dispatch-standards.md`.
+- **Pre-Flight Governance Preamble**:
+  - Direct-path `view_file` on `skills/adversarial-code-auditor/SKILL.md` as Step 1.
+  - Verbatim repository classification: `UPSTREAM_SPEC_CORE_COMPILER`.
+  - Read `.pipeline/constitution.md` and target file `crates/compile-sysml/src/semantic/validator.rs`.
+  - Trailing `PROCEED` authorization token.
+- **Audit Scope & Deep Analysis Targets**:
+  1. **Target File**: `crates/compile-sysml/src/semantic/validator.rs` (specifically `validate_single_part_def` lines 416-435, `validate_single_requirement_def` lines 464-492, and `is_primitive_or_builtin_type` lines 511-558).
+  2. **Cross-Reference Verification Targets**:
+     - `crates/compile-sysml/src/semantic/symbols.rs` (`SymbolTable::build_from_package` and `lookup_in_scope`).
+     - `crates/ingest-sysml/src/translators/` (`yang.rs`, `openapi.rs`, `idl.rs`, `markdown.rs` showing how existing translators map types to `"String"` or emit local `PartDef` stubs).
+     - `docs/designs/FEAT-42_source_code_ast_ingestion_and_docstring_synthesizer.md` (Section 3.1 lines 87-94 and Section 4 AC-01/AC-02 lines 155-160 requiring Dart `StatefulWidget` and Rust `struct`/`impl` blocks with typed parameters and callbacks to lower into valid SysML v2 models).
+
+### WP-02: 7-Section Defect Dossier Synthesis & Offline Gate Verification (Step C & Step D)
+- **Action**: The `Adversarial Code Auditor` subagent synthesizes the complete 7-section defect dossier in `/tmp/gh_body_semantic_types_audit.md` conforming character-for-character to `skills/adversarial-code-auditor/SKILL.md` Section 2:
+  1. `## 1. Context and References` (with `<!-- test-target: crates/compile-sysml/src/semantic/validator.rs -->` and 4 bullets: `File`, `Pillar`, `Symptom`, `Test-Target`).
+  2. `## 2. Root Cause Analysis (5 Whys)` (5 numbered `**Why ...?** Because ...` items).
+  3. `## 3. Correctness Analysis` (tracing exact `file:line` references across `crates/compile-sysml/src/semantic/validator.rs`, `crates/compile-sysml/src/semantic/symbols.rs`, `crates/ingest-sysml/src/translators/`, and `docs/designs/FEAT-42_source_code_ast_ingestion_and_docstring_synthesizer.md`).
+  4. `## 4. UML Diagrams` (valid Mermaid diagram conforming to all Mermaid syntax rules in `rules/platform-independence.md`).
+  5. `## 5. Affected Callers / Downstream Impact`.
+  6. `## 6. Proposed Correction` (concrete Rust code remediation for `is_primitive_or_builtin_type` and canonical source-type normalization in `crates/compile-sysml/src/semantic/validator.rs` / ingestion lowering, plus unit test specifications).
+  7. `## 7. Relationship to Existing Issues` & `## Audit Source` (`SEVERITY: Important`, `FILE_LOCATION: crates/compile-sysml/src/semantic/validator.rs:416-558`).
+- **Offline Gate Verification**:
+  - Execute all 12 checklist checks in `skills/adversarial-code-auditor/SKILL.md` Step D.
+  - Execute `./target/release/verify-baseline check-defect /tmp/gh_body_semantic_types_audit.md` and confirm exit code `0`.
+
+### WP-03: Issue Filing & Closed-Loop Payload Verification (Step E)
+- **Action**: File the verified defect dossier to `gintatkinson/DEAP01-spec-core` with label `bug` and title `[AUDIT] [compile-sysml]: Normalize source-language composite and framework types in SemanticValidator` via `./target/release/reconcile-backlog create-issue --repo gintatkinson/DEAP01-spec-core --title "[AUDIT] [compile-sysml]: Normalize source-language composite and framework types in SemanticValidator" --body-file /tmp/gh_body_semantic_types_audit.md --label bug`.
+- **Closed-Loop Verification**:
+  - Inspect the live published GitHub issue via `gh issue view <NEW_ISSUE_ID> --repo gintatkinson/DEAP01-spec-core` to confirm all 7 sections, Mermaid blocks, and metadata rendered cleanly without truncation.
+  - Remove temporary file `/tmp/gh_body_semantic_types_audit.md`, reclaim/terminate the subagent upon completion, and report the live issue URL and verification evidence to the user.
+
+
+
