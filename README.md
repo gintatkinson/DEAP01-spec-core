@@ -14,7 +14,7 @@
 
 The **Digital Engineering Agent Platform Core Specification Compiler (`DEAP01-spec-core`)** is the upstream abstract systems engineering compiler and multi-agent verification framework for DEAP. It provides deterministic translation, model-based validation, bidirectional synchronization, and quality gate enforcement bridging formal engineering models (SysML v2, YANG, IDL, ARXML, OpenAPI, Protobuf) with downstream Agile specification backlogs and autonomous code generation.
 
-Operating purely on Abstract Syntax Tree (AST) tokens without hardcoding domain concepts, `DEAP01-spec-core` serves as the upstream parent compiler (`UPSTREAM_SPEC_CORE_COMPILER`) from which Tier 2 domain-specific distribution templates across 6 canonical cyber-physical sectors (Aerospace & Defense, Medical & Healthcare, Space & Satellites, Industrial Robotics, Subsea & Maritime, Rail & Transportation) are maintained, and from which Tier 3 downstream customer application workspaces (`uav-*`) are onboarded via domain distribution templates.
+Operating purely on Abstract Syntax Tree (AST) tokens without hardcoding domain concepts, `DEAP01-spec-core` serves as the upstream parent compiler (`UPSTREAM_SPEC_CORE_COMPILER`) from which Tier 2 domain-specific distribution templates across 6 canonical cyber-physical sectors (Aerospace & Defense, Medical & Healthcare, Space & Satellites, Industrial Robotics, Subsea & Maritime, Rail & Transportation) are maintained, and from which Tier 3 downstream customer application workspaces are onboarded via domain distribution templates.
 
 ### 1.1 Primary Commercial Toolchain Integration
 
@@ -32,11 +32,11 @@ The DEAP framework strictly enforces a clean three-tier architecture separating 
 +-----------------------------------------------------------------------------------+
                                          |
                                          |  Compiler Tooling Propagation (Maintainers)
-                                         |  scripts/install_pipeline.sh
+                                         |  Template Distribution & verify-baseline setup-hooks
                                          v
 +-----------------------------------------------------------------------------------+
 | Tier 2: Domain Distribution Templates (Canonical Cyber-Physical Sectors)         |
-| Repositories: DEAP-* (e.g. DEAP-uas-infrastructure-safety)                        |
+| Repositories: DEAP-* (e.g. DEAP-surgical-robotics-console, DEAP-industrial-agv)   |
 | Role: DOMAIN_DISTRIBUTION_TEMPLATE | Sentinel: .pipeline/upstream/ removed        |
 | Content: Domain SysML v2 schemas (schema/), sector blueprints, domain profiles    |
 | Landing zones (docs/epics/, docs/features/, etc.) remain clean (.gitkeep)         |
@@ -47,9 +47,9 @@ The DEAP framework strictly enforces a clean three-tier architecture separating 
                                          v
 +-----------------------------------------------------------------------------------+
 | Tier 3: Customer Application Workspaces                                           |
-| Repositories: uav-* (e.g. uav-tactical-mission, customer flight projects)         |
+| Repositories: customer-project-* (e.g. downstream domain workspaces)              |
 | Role: DOWNSTREAM_APPLICATION_WORKSPACE / DOWNSTREAM_CUSTOMER_PROJECT             |
-| Content: Concrete proprietary flight code, ROS2 nodes, PX4 modules, SIL/HIL tests |
+| Content: Concrete application code, ROS2 nodes, embedded modules, SIL/HIL tests    |
 +-----------------------------------------------------------------------------------+
 ```
 
@@ -67,8 +67,8 @@ The DEAP framework strictly enforces a clean three-tier architecture separating 
   6. **Rail & Transportation:** `DEAP-rail-autonomous-locomotive` (EN 50126, EN 50128 SIL 4)
   In Tier 2 domain templates, specification landing zones (`docs/epics/`, `docs/features/`, `docs/user-stories/`, `docs/use-cases/`) remain clean landing zones with `.gitkeep` files until projected for a concrete implementation.
 
-#### Tier 3: Customer Application Workspaces (`uav-*`)
-- **Customer Application Workspaces (`uav-*`, `DOWNSTREAM_APPLICATION_WORKSPACE` / `DOWNSTREAM_CUSTOMER_PROJECT`):** Concrete engineering repositories where end-user engineering teams build proprietary software, ROS2 nodes, PX4 flight modules, and hardware-in-the-loop tests.
+#### Tier 3: Customer Application Workspaces
+- **Customer Application Workspaces (`DOWNSTREAM_APPLICATION_WORKSPACE` / `DOWNSTREAM_CUSTOMER_PROJECT`):** Concrete engineering repositories where end-user engineering teams build proprietary software, ROS2 nodes, embedded modules, and hardware-in-the-loop tests.
 - **Clean Customer Boundary Mandate:** Customer projects onboard strictly from their relevant **Domain Distribution Template** (`DEAP-*`), NOT from the upstream compiler (`DEAP01-spec-core`). Onboarding from the domain template guarantees that all domain-specific SysML v2 schemas, safety contracts, and profile rules are seeded directly into the customer workspace in a single self-contained command with zero external sibling path dependencies.
 - **Illustrative Schema Payloads:** Any concrete flight controller, robotic surgical console, satellite bus, AGV guidance, subsea vehicle, rail locomotive controller, STPA hazard analysis, or domain safety examples presented throughout this README and documentation are strictly **illustrative schema payloads** demonstrating compiler ingestion, AST synthesis, projection, and verification capabilities.
 
@@ -134,6 +134,10 @@ DEAP01-spec-core/
 │   ├── architecture/
 │   │   └── blueprints/            # Canonical architecture specifications & multi-provider blueprints
 │   ├── conops/                    # Abstract landing zone (.gitkeep)
+│   │   └── units/                 # Modular ConOps unit landing zones (.gitkeep)
+│   │       ├── conops/
+│   │       └── mission_intent/
+│   ├── interfaces/                # Level 1C ICD interface matrix & signal dictionary landing zone (.gitkeep)
 │   ├── safety/                    # Abstract landing zone (.gitkeep)
 │   ├── epics/                     # Abstract landing zone (.gitkeep)
 │   ├── features/                  # Abstract landing zone (.gitkeep)
@@ -148,9 +152,9 @@ DEAP01-spec-core/
 └── README.md                      # Upstream compiler master specification & usage guide
 ```
 
-#### Tier 2: Domain Distribution Template Repository (e.g. DEAP-uas-infrastructure-safety):
+#### Tier 2: Domain Distribution Template Repository (e.g. DEAP-surgical-robotics-console, DEAP-industrial-warehouse-agv):
 ```text
-domain-distribution-template/ (e.g. DEAP-uas-infrastructure-safety, DEAP-surgical-robotics-console, ...)
+domain-distribution-template/ (e.g. DEAP-surgical-robotics-console, DEAP-industrial-warehouse-agv, ...)
 ├── .agents/
 │   ├── AGENTS.md                  # Project-scoped agentic governance rules & delegation gates
 │   └── skills -> ../skills        # Project skills symlink
@@ -161,6 +165,10 @@ domain-distribution-template/ (e.g. DEAP-uas-infrastructure-safety, DEAP-surgica
 │       └── px4_module.md          # PX4 Autopilot / Embedded platform execution profile
 ├── docs/
 │   ├── conops/                    # Domain mission intent & Concept of Operations landing zone
+│   │   └── units/                 # Modular ConOps unit landing zones (.gitkeep)
+│   │       ├── conops/
+│   │       └── mission_intent/
+│   ├── interfaces/                # Level 1C ICD interface matrix & signal dictionary landing zone (.gitkeep)
 │   ├── safety/                    # STPA hazard analysis, FMECA & domain safety landing zone
 │   ├── management/                # Level 4 WBS & Enterprise Realization deliverables (.md, .csv, .json)
 │   └── architecture/
@@ -170,7 +178,7 @@ domain-distribution-template/ (e.g. DEAP-uas-infrastructure-safety, DEAP-surgica
 └── README.md                      # Domain template master specification & usage guide
 ```
 
-Tier 3 Customer Application Workspaces (`uav-*`) inherit this layout from the domain distribution template, populating `docs/epics/`, `docs/features/`, and application source directories (`app_flutter/`, `web_react/`, `ros2/`, `px4/`).
+Tier 3 Customer Application Workspaces inherit this layout from the domain distribution template, populating `docs/epics/`, `docs/features/`, and application source directories (`app_flutter/`, `web_react/`, `ros2/`, `px4/`).
 
 ### 4.1 Supported Tier 2 Domain Distribution Templates (Canonical Taxonomies)
 1. **Aerospace & Defense:** `DEAP-uas-infrastructure-safety` (SORA, ASTM F3269, DO-365B)
@@ -211,19 +219,19 @@ As the upstream specification core compiler, `DEAP01-spec-core` compiles SysML v
 #### 1. Execute Pipeline 0 SysML v2 Compilation Gate
 Parse and compile the formal SysML v2 model into `.pipeline/schema.sysml` and `.pipeline/schema-digest.json`:
 ```bash
-python3 scripts/compile_sysml.py --compile
+./target/release/compile-sysml --compile
 ```
 
 #### 2. Verify Upstream Baseline Conformance
 Verify compiler baseline conformance and abstract MBSE baseline checks:
 ```bash
-python3 scripts/verify_downstream_baseline.py .
+./target/release/verify-baseline .
 ```
 
 #### 3. Verify Upstream Compiler Conformance Baseline
 Verify all 30 abstract MBSE compiler baseline checks:
 ```bash
-python3 scripts/verify_downstream_baseline.py --no-domain
+./target/release/verify-baseline . --no-domain
 ```
 
 ---
@@ -233,24 +241,25 @@ python3 scripts/verify_downstream_baseline.py --no-domain
 This workflow is for **DEAP platform maintainers** propagating compiler tooling, governance rules, and verification scripts from `DEAP01-spec-core` to the canonical domain distribution template repositories (`DEAP-*`).
 
 #### Local Propagation
-When maintaining a local domain template checkout alongside `DEAP01-spec-core`, run the installer from the root of `DEAP01-spec-core` and specify the destination path:
+When maintaining a local domain template checkout alongside `DEAP01-spec-core`, build the pure-Rust compiler binaries and install git hooks:
 ```bash
-# Run from the root of DEAP01-spec-core
-bash scripts/install_pipeline.sh "<path-to-domain-template>"
+cargo build --release --workspace
+./target/release/verify-baseline setup-hooks
 ```
 
 #### Remote Bootstrap Propagation
-To bootstrap or synchronize a domain distribution template directly from the upstream compiler repository without a pre-existing local compiler clone:
+To bootstrap or synchronize a domain distribution template directly from the upstream compiler repository:
 ```bash
-# Run from the root of the target domain distribution template
-git clone https://github.com/gintatkinson/DEAP01-spec-core.git /tmp/deap_compiler && bash /tmp/deap_compiler/scripts/install_pipeline.sh . && rm -rf /tmp/deap_compiler
+git clone https://github.com/gintatkinson/DEAP01-spec-core.git
+cargo build --release --workspace
+./target/release/verify-baseline setup-hooks
 ```
 
-#### In-Place Governance & Script Updates
-Inside an already-installed domain template repository, update the pipeline and governance rules in-place at any time:
+#### In-Place Governance & Tooling Updates
+Inside an already-installed domain template repository, update git hooks and run baseline verification:
 ```bash
-# Run from the root of the target repository
-bash scripts/install_pipeline.sh .
+./target/release/verify-baseline setup-hooks
+./target/release/verify-baseline .
 ```
 
 ---
@@ -259,9 +268,9 @@ bash scripts/install_pipeline.sh .
 
 The DEAP three-tier architecture strictly decouples compiler tooling propagation from customer project onboarding:
 - **Compiler Propagation (Tier 1 Compiler -> Tier 2 Domain Templates):** Maintainers propagate abstract compiler tooling and governance from `DEAP01-spec-core` to canonical sector distribution templates (`DEAP-*`).
-- **Customer Onboarding (Tier 2 Domain Templates -> Tier 3 Customer Workspaces):** Application engineers and customer teams onboard concrete project workspaces (`uav-*`) exclusively from the appropriate **Domain Distribution Template** (`DEAP-*`), never from `DEAP01-spec-core`.
+- **Customer Onboarding (Tier 2 Domain Templates -> Tier 3 Customer Workspaces):** Application engineers and customer teams onboard concrete project workspaces exclusively from the appropriate **Domain Distribution Template** (`DEAP-*`), never from `DEAP01-spec-core`.
 
-> **Critical Architecture Rule:** End-user customer projects (`uav-*`) clone from their domain distribution template (e.g. `DEAP-uas-infrastructure-safety`), NOT from `DEAP01-spec-core`. Bootstrapping from the domain template seeds the customer workspace with domain-specific SysML v2 schemas, safety statecharts, and platform execution profiles.
+> **Critical Architecture Rule:** End-user customer projects clone from their designated domain distribution template (e.g. `DEAP-surgical-robotics-console` or `DEAP-industrial-warehouse-agv`), NOT from `DEAP01-spec-core`. Bootstrapping from the domain template seeds the customer workspace with domain-specific SysML v2 schemas, safety statecharts, and platform execution profiles.
 
 ```text
 +-----------------------------------------------------------------------------------+
@@ -269,7 +278,7 @@ The DEAP three-tier architecture strictly decouples compiler tooling propagation
 | DEAP01-spec-core (UPSTREAM_SPEC_CORE_COMPILER)                                     |
 +-----------------------------------------------------------------------------------+
                                          │
-                                         │  bash scripts/install_pipeline.sh "<path-to-domain-template>"
+                                         │  cargo build --release && verify-baseline setup-hooks
                                          ▼
 +-----------------------------------------------------------------------------------+
 | Tier 2: Domain Distribution Templates                                             |
@@ -281,8 +290,8 @@ The DEAP three-tier architecture strictly decouples compiler tooling propagation
                                          ▼
 +-----------------------------------------------------------------------------------+
 | Tier 3: Customer Application Workspaces                                           |
-| uav-* (DOWNSTREAM_CUSTOMER_PROJECT)                                               |
-| Contains: Concrete proprietary flight code, ROS2 nodes, PX4 modules, SIL/HIL tests |
+| customer-workspace (DOWNSTREAM_CUSTOMER_PROJECT)                                  |
+| Contains: Concrete proprietary application code, ROS2 nodes, embedded modules, SIL/HIL tests |
 +-----------------------------------------------------------------------------------+
 ```
 
@@ -301,10 +310,10 @@ Google Antigravity automatically discovers workspace customizations, governance 
 
 ### 5.6 Universal Agent Governance & Initialization Sequence (AGENTS.md)
 
-When propagating via `scripts/install_pipeline.sh`, the installer automatically configures `AGENTS.md` with the appropriate role classifications and governance rules for the target repository tier:
+When configuring repositories, the governance configuration defines `AGENTS.md` with the appropriate role classifications and governance rules for the target repository tier:
 - **Upstream Compiler (`DEAP01-spec-core`):** `UPSTREAM_SPEC_CORE_COMPILER` (abstract MBSE compiler, zero hardcoded domain concepts).
 - **Domain Distribution Templates (`DEAP-*`):** `DOMAIN_DISTRIBUTION_TEMPLATE` (domain SysML schemas, sector blueprints).
-- **Customer Application Workspaces (`uav-*`):** `DOWNSTREAM_CUSTOMER_PROJECT` (proprietary application code, ROS2 nodes, PX4 flight software).
+- **Customer Application Workspaces:** `DOWNSTREAM_CUSTOMER_PROJECT` (proprietary application code, ROS2 nodes, embedded software).
 
 Immediately following turnkey installation, any AI agent (Antigravity, Claude Code, Cursor, Windsurf, Cascade, Devin) initializing in this repository MUST execute the following sequence before accepting user directives or executing task implementations:
 
@@ -327,7 +336,7 @@ Immediately following turnkey installation, any AI agent (Antigravity, Claude Co
 5. **Load Platform Profile (Conditional / Downstream Workspaces Only)**:
    - Applies ONLY to Downstream Customer Projects: read the target platform execution profile (`.pipeline/profiles/flutter.md`, `.pipeline/profiles/react.md`, `.pipeline/profiles/ros2_cpp.md`, or `.pipeline/profiles/px4_module.md`) to establish platform-specific build, test, and lifecycle constraints.
    - N/A for Upstream Compiler Mode: SKIP this step when in `UPSTREAM_SPEC_CORE_COMPILER` mode; upstream specification compiler workflows are platform-independent and strictly forbidden from ingesting downstream execution profiles.
-6. **Bootstrap Tracker Labels**: Verify that repository issue tracker labels are synchronized and operational by running `python3 skills/spec-orchestrator/scripts/bootstrap_tracker_labels.py --dry-run` or verifying label bootstrapping status.
+6. **Bootstrap Tracker Labels & Verify Baseline**: Verify that repository issue tracker labels are synchronized and baseline conformance passes by running `./target/release/verify-baseline . --no-domain`.
 7. **Transition to Operator Prompt Catalog**: Navigate to [Section 9 (Multi-Pipeline Operator Prompt Catalog & Autonomous Execution Workflows)](#9-multi-pipeline-operator-prompt-catalog--autonomous-execution-workflows) to select and execute the canonical agent prompts for Pipeline 0 (Pre-Spec Safety & Model Formulation), Pipeline 1 (Agile Specification Backlog Projection), or Pipeline 2 (Autonomous Feature Implementation & Simulation Driver).
 
 ### 5.7 Setup for Claude Code
@@ -348,8 +357,8 @@ Create `.cursor/rules/pipeline.mdc` or `.windsurf/rules/pipeline.md` referencing
 The verification gate acts as a post-installation and post-implementation compliance check:
 
 ```bash
-python3 scripts/verify_downstream_baseline.py .
-python3 scripts/verify_downstream_baseline.py --no-domain
+./target/release/verify-baseline .
+./target/release/verify-baseline . --no-domain
 ```
 
 ### 5.10 Supported Runtimes Table
@@ -390,16 +399,16 @@ The backlog reconciliation engine synchronizes markdown specifications (`docs/ep
 
 ```bash
 # Reconcile against GitHub Issues - default
-python3 scripts/reconcile_backlog.py --provider github
+./target/release/reconcile-backlog --provider github
 
 # Reconcile against GitLab Issues
-python3 scripts/reconcile_backlog.py --provider gitlab
+./target/release/reconcile-backlog --provider gitlab
 
 # Reconcile against Self-Hosted / Air-Gapped GitLab Instance
-python3 scripts/reconcile_backlog.py --provider gitlab --gitlab-url https://gitlab.internal.defense.gov
+./target/release/reconcile-backlog --provider gitlab --gitlab-url https://gitlab.internal.defense.gov
 
 # Perform Offline Reconciliation - No remote mutation
-python3 scripts/reconcile_backlog.py --provider gitlab --offline
+./target/release/reconcile-backlog --provider gitlab --offline
 ```
 
 ### 6.3 GitLab Scoped Label Lifecycle (`key::value`)
@@ -426,9 +435,9 @@ $$\text{Pipeline} = \text{Stage}_{\text{lint}} \xrightarrow{\text{pass}} \text{S
 
 | Pipeline Stage | Target Job Name | Executed Verification Command | Pass / Fail Criteria |
 | :--- | :--- | :--- | :--- |
-| **Stage 1: `lint`** | `lint:downstream-baseline` | `python3 scripts/verify_downstream_baseline.py --no-domain` | Checks 10-20 (zero .DS_Store, KaTeX math integrity, valid entrypoints, clean landing zones, Safety Integrity & SORA completeness, domain AST cleanliness, and Check 20: WBS & Enterprise Deliverables Suite Validation). |
-| **Stage 2: `test`** | `test:unit-and-parity` | `python3 scripts/verify_downstream_baseline.py .` | Semantic acceptance verification suites, ROS2 node lifecycle tests, and PX4 safety mode tests pass with 0 failures. |
-| **Stage 3: `verify`** | `verify:model-coverage` | `python3 skills/spec-orchestrator/scripts/verify_model_coverage.py --spec-only` | All 22 Parity Verification Gates pass with zero specification-model drift. |
+| **Stage 1: `lint`** | `lint:downstream-baseline` | `./target/release/verify-baseline . --no-domain` | Checks 10-20 (zero .DS_Store, KaTeX math integrity, valid entrypoints, clean landing zones, Safety Integrity & SORA completeness, domain AST cleanliness, and Check 20: WBS & Enterprise Deliverables Suite Validation). |
+| **Stage 2: `test`** | `test:unit-and-parity` | `./target/release/verify-baseline .` | Semantic acceptance verification suites, ROS2 node lifecycle tests, and PX4 safety mode tests pass with 0 failures. |
+| **Stage 3: `verify`** | `verify:model-coverage` | `./target/release/verify-baseline . --spec-only` | All 22 Parity Verification Gates pass with zero specification-model drift. |
 
 ---
 
@@ -440,13 +449,13 @@ To eliminate specification-model drift between systems engineering models and ag
 
 ```bash
 # 1. Forward AST Ingestion: Compile SysML v2 formal model into agile specification scaffolding
-python3 skills/spec-orchestrator/scripts/sysmlv2_ingest.py --schema schema/model.sysml
+./target/release/ingest-sysml --schema schema/model.sysml
 
 # 2. Reverse AST Closed-Loop Synchronization: Extract markdown spec deltas back into SysML v2 SSOT
-python3 scripts/compile_sysml.py --reverse-sync --docs docs/ --schema schema/model.sysml --out .pipeline/schema.sysml
+./target/release/compile-sysml --reverse-sync --docs docs/ --schema schema/model.sysml --out .pipeline/schema.sysml
 
 # 3. 22-Gate Mechanical Parity Lock: Verify 100% semantic alignment across all artifacts
-python3 skills/spec-orchestrator/scripts/verify_model_coverage.py --spec-only
+./target/release/verify-baseline . --spec-only
 ```
 
 ### 7.2 The 6-Layer MBSE Parity Architecture
@@ -470,13 +479,13 @@ This platform explicitly declares **MATLAB / Simulink / Stateflow / Embedded Cod
 - **Formal Invariant Proving:** SysML `assert constraint` formulations translate to Simulink Design Verifier (SLDV) proof objectives for automated reachability and dead-lock free verification.
 - **Safety-Critical Code Synthesis:** Embedded Coder generates MISRA C / DO-178C qualified C code and SPARK Ada kernels for deployment to Pixhawk and ROS2 real-time hardware.
 
-### 7.4 Work Breakdown Structure & Enterprise Realization Tooling (`generate_wbs_suite.py`)
+### 7.4 Work Breakdown Structure & Enterprise Realization Tooling
 
-The platform includes a deterministic Work Breakdown Structure (WBS) & Enterprise Realization generator synthesizing MIL-STD-881E decomposition hierarchies, traceability matrices, and multi-platform enterprise project management exports:
+The platform includes deterministic Work Breakdown Structure (WBS) & Enterprise Realization synthesis conforming to MIL-STD-881E decomposition hierarchies, traceability matrices, and multi-platform enterprise project management exports:
 - **Purpose**: Synthesizes MIL-STD-881E Work Breakdown Structures (WBS), 7-column end-to-end traceability matrix, multi-platform CSV export (Jira, Monday.com, MS Project), and hierarchical JSON AST from SysML AST, ConOps, Safety matrices, and Agile Backlog items.
-- **CLI Usage**:
+- **Verification & Compliance**:
   ```bash
-  python3 scripts/generate_wbs_suite.py [--workspace PATH] [--output-dir PATH]
+  ./target/release/verify-baseline . --strict
   ```
 - **Synthesized Deliverables**:
   1. `docs/management/WBS_DELIVERABLES_SUITE.md`: Authoritative markdown specification suite with CommonMark metadata table and 7-column end-to-end traceability matrix.
@@ -492,37 +501,42 @@ The Digital Engineering Agent Platform (DEAP) lifecycle coordinates context-isol
 - **Pipeline 1 (Agile Backlog Projection):** Deterministic transformation of SysML AST elements into formal Epics, Features, BDD User Stories, and UML Use Cases.
 - **Pipeline 2 (Autonomous Feature Implementation & Simulation):** Serial TDD micro-task code synthesis, dual-track MBD verification (Simulink + headless Python digital twin), and independent multi-agent consensus gates.
 
-### 8.1 Pipeline 0 Pre-Spec Safety Engineering Subagent Topology: Workers 0A-0D
+### 8.1 Pipeline 0 Pre-Spec Safety Engineering Subagent Topology: Workers 00, Research, 0A, 0B, 0D
 
 Pipeline 0 deploys specialized, context-isolated subagent workers operating in a strict serial execution loop to prevent context bloat and memory leakage:
 
 ```mermaid
 flowchart LR
-    Step0["Step 0: SysML Model Ingestion & Compilation Gate (python3 scripts/compile_sysml.py --compile)"]
-    Step0 -->|"Compiled AST"| Worker_0A["Worker 0A: CONOPS & Operational Scenario Synthesizer (Level 1A)"]
+    Step0["Step 0: SysML Model Ingestion & Compilation Gate (./target/release/compile-sysml --compile)"]
+    Step0 -->|"Compiled AST & Digest"| Worker_R["Phase 0.5: Normative Research Worker (Worker Research)"]
+    Worker_R -->|"docs/research/"| Worker_0A["Worker 0A: CONOPS & Operational Scenario Synthesizer (Level 1B)"]
     Worker_0A -->|"docs/conops/CONOPS.md"| Worker_0B["Worker 0B: STPA Hazard Analysis, FMECA & Domain Safety Assurer (Level 1B)"]
-    Worker_0B -->|"docs/safety/STPA_MATRIX.md"| Worker_0C["Worker 0C: SysML v2 Architectural & Safety Model Author"]
-    Worker_0C -->|"schema/DEAP_MODEL.sysml"| Worker_0D["Worker 0D: Interface Specification Worker -- Logical ICD & Master Signal Dictionary (Level 1C)"]
+    Worker_0B -->|"docs/safety/STPA_MATRIX.md"| Worker_0D["Worker 0D: Interface Specification Worker -- Logical ICD & Master Signal Dictionary (Level 1C)"]
 ```
 
 #### 8.1.1 Worker 0A: CONOPS & Mission Scenario Synthesizer
-- **Role Description:** Context-isolated front-end synthesizer responsible for executing Universal Multi-Document & Schema Ingestion across operational intent documents, interface schemas, and architectural blueprints to produce a structured Concept of Operations (`CONOPS.md`) and persisting intent in `MISSION_INTENT.md` when operating from prompt fallback.
+- **Role Description:** Context-isolated front-end synthesizer responsible for executing Universal Multi-Document & Schema Ingestion across operational intent documents, interface schemas, and architectural blueprints to produce modular Concept of Operations units (`docs/conops/units/conops/`) and Tactical Mission Intent units (`docs/conops/units/mission_intent/`), compiling them deterministically via `./target/release/assemble-conops` into canonical `docs/conops/CONOPS.md` and `docs/conops/MISSION_INTENT.md` artifacts with 1:1 Level 1C interface matrix alignment.
 - **Primary Inputs (Universal Multi-Document & Schema Ingestion):**
-  - **Compiled AST:** SysML compilation output from Step 0.
+  - **Compiled AST:** SysML compilation output from Step 0 (`.pipeline/schema.sysml` and `.pipeline/schema-digest.json`).
+  - **Normative Research Baselines:** `docs/research/RESEARCH_INVENTORY.md` and `docs/research/FAILURE_MODE_REGISTRY.md` from Phase 0.5.
   - **Operational Intent Documents (`docs/conops/*.md`):** All customer mission intent specifications and operational scenario markdown files in `docs/conops/` (excluding `README.md`).
   - **Interface & Model Schemas (`schema/*`):** Pre-existing customer models and interface definitions (`*.sysml`, `*.proto`, `*.arxml`, `*.json`, `*.yaml`, `*.idl`) establishing physical and functional boundaries, port definitions, and telemetry contracts.
   - **Architectural Blueprints (`docs/architecture/*.md`):** Existing system architectural specifications, network topology blueprints, and safety frameworks in `docs/architecture/` (and `docs/architecture/blueprints/`).
+  - **Interface Scaffolding:** Level 1C Interface Control Documents (`docs/interfaces/` or `docs/icd/` containing `ICD_01_SYSTEM_INTERFACE_MATRIX.md` and `ICD_02_MASTER_SIGNAL_DICTIONARY.md`).
   - **Prompt-Based Fallback Directives:** Raw natural language prompt parameters, stakeholder objectives, and operational constraints when no intent files exist in `docs/conops/` (triggering auto-persistence of `docs/conops/MISSION_INTENT.md`).
   - Stakeholder role definitions.
 - **Deliverables & Outputs:**
-  - `docs/conops/MISSION_INTENT.md`: Ingested or auto-persisted customer mission intent contract under git version control.
-  - `docs/conops/CONOPS.md`: Structured Concept of Operations detailing mission objectives, operational phases (Initialization, Standby, Active Operation, Degraded Mode, Failsafe), system physical and functional boundaries reconciled with customer schemas and architectural blueprints, environmental envelope constraints, and MATLAB / Simulink / Stateflow control law synthesis hooks.
+  - `docs/conops/units/conops/`: 12 canonical ConOps modular markdown units (`01_METADATA_AND_OVERVIEW.md` through `12_EMERGENCY_DECISION_MATRIX.md`) conforming to `conops_specification_schema.json`.
+  - `docs/conops/units/mission_intent/`: 10 canonical Tactical Mission Intent modular units (`01_COMMANDERS_INTENT.md` through `10_OPERATIONAL_ALLOCATION_TAGS.md`) conforming to `mission_intent_specification_schema.json`.
+  - `docs/conops/MISSION_INTENT.md`: Compiled customer mission intent contract under git version control, assembled deterministically via `./target/release/assemble-conops`.
+  - `docs/conops/CONOPS.md`: Compiled Concept of Operations detailing mission objectives, operational phases (Initialization, Standby, Active Operation, Degraded Mode, Failsafe), system physical and functional boundaries reconciled with customer schemas, Level 1C interface matrices (`docs/interfaces/`), environmental envelope constraints, and MATLAB / Simulink / Stateflow control law synthesis hooks.
 
 #### 8.1.2 Worker 0B: STPA Hazard Analysis & FMECA Assurer
 - **Role Description:** Safety engineering subagent that performs System-Theoretic Process Analysis (STPA), Failure Mode, Effects, and Criticality Analysis (FMECA), and risk assessment on the system boundary defined by Worker 0A to produce the authoritative 8-pillar `docs/safety/STPA_MATRIX.md` safety baseline.
 - **Primary Inputs:**
   - `CONOPS.md` generated by Worker 0A.
-  - Compiled AST from Step 0.
+  - Compiled AST from Step 0 (`.pipeline/schema.sysml` and `.pipeline/schema-digest.json`).
+  - `docs/research/FAILURE_MODE_REGISTRY.md` from Phase 0.5.
   - Regulatory safety mandates.
 - **Deliverables & Outputs:**
   - `docs/safety/STPA_MATRIX.md`: Complete 8-pillar STPA assurance specification adhering to:
@@ -537,26 +551,31 @@ flowchart LR
     - **Run-Time Assurance (RTA) Architecture & Safety Net:** Certified recovery switching logic and advanced control isolation.
     - **MATLAB / Simulink / Stateflow Hooks:** SLDV proof invariants and Stateflow supervisor statecharts for control law synthesis.
 
-#### 8.1.3 Worker 0C: SysML v2 Architectural & Safety Model Author
-- **Role Description:** Model authoring subagent responsible for formalizing CONOPS, STPA hazard matrices, FMECA ratings, and domain safety constraints into a canonical SysML v2 textual model (`schema/DEAP_MODEL.sysml` or `.pipeline/schema.sysml`) and serializing AST handoff contracts.
-- **Primary Inputs:** `CONOPS.md`, `STPA_MATRIX.md`, regulatory safety frameworks.
-- **Deliverables & Outputs:** Canonical SysML v2 model in `schema/DEAP_MODEL.sysml`, safety statecharts for Run-Time Assurance (RTA), and verified compilation via `compile_sysml.py --compile`.
+#### 8.1.3 Phase 0.5 Normative Research Worker (Worker Research)
+- **Role Description:** Context-isolated research subagent responsible for ingesting the compiled SysML v2 AST (`.pipeline/schema.sysml` and `.pipeline/schema-digest.json`), extracting all declared AST `part def` component nodes, and systematically cataloging regulatory standards, public clause citations, and multi-mode component failure modes across the 4 Universal Failure Dimensions (Interface, State, Action, Resource).
+- **Primary Inputs:**
+  - Canonical SysML v2 AST (`.pipeline/schema.sysml` and `.pipeline/schema-digest.json`) compiled at Step 0.
+  - Applicable regulatory, safety, and domain standards (e.g. ISO/IEC/IEEE 29148, NATO STANAG 4586, RTCA DO-178C / DO-254, SAE ARP4754A / ARP4761, MIL-STD-882E, JARUS SORA v2.5, ASTM F3269-17).
+- **Deliverables & Outputs:**
+  - `docs/research/RESEARCH_INVENTORY.md`: Comprehensive cited research inventory with Declared-Total Population Register carrying 100% public clause citations.
+  - `docs/research/FAILURE_MODE_REGISTRY.md`: Authoritative multi-mode component failure registry covering 100% of declared AST parts with >= 3 distinct failure modes per part across the 4 universal failure dimensions, integer RPN, and explicit SSOT/Derived basis tags.
+- **Note on Worker 0C Elimination:** The legacy inverted authoring step (Worker 0C authoring SysML models after ConOps and STPA) is superseded and eliminated. SysML model ingestion and compilation executes at Step 0 before research and ConOps, establishing the immutable AST Single Source of Truth and preventing circular AST ingestion deadlock (refs #311).
 
 #### 8.1.4 Worker 0D: Interface Specification Worker (Logical ICD & Signal Dictionary)
 - **Role Description:** Interface specification subagent that transforms SysML v2 AST ports, connections, and item flows into Level 1C Logical Interface Specifications and Master Signal Dictionaries.
-- **Primary Inputs:** Compiled SysML v2 AST, `schema/`, and allocated safety constraints from `STPA_MATRIX.md`.
+- **Primary Inputs:** Compiled SysML v2 AST (`.pipeline/schema.sysml`), `schema/`, and allocated safety constraints from `STPA_MATRIX.md`.
 - **Deliverables & Outputs:** `docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md` (subsystem boundary graphs, N^2 communication matrix, topological port bindings) and `docs/interfaces/ICD_02_MASTER_SIGNAL_DICTIONARY.md` (signal IDs, types, units, sample rates, latency bounds, and failsafe values).
 
 #### 8.1.5 Pipeline 0 Execution Steps & Handoff Workflow
 
 ```mermaid
 flowchart TD
-    Step00["Step 0.0: Level 0 OEM Ground Truth Ingestion (sysmlv2_ingest.py)"] --> Step0["Step 0: SysML Model Ingestion & Compilation Gate (python3 scripts/compile_sysml.py --compile)"]
-    Step0 --> Step1["Step 1: Ingest Mission Profile & Synthesize CONOPS (Worker 0A)"]
+    Step00["Step 0.0: Level 0 OEM Ground Truth Ingestion (./target/release/ingest-sysml)"] --> Step0["Step 0: SysML Model Ingestion & Compilation Gate (./target/release/compile-sysml --compile)"]
+    Step0 --> Step05["Phase 0.5: Normative Research Worker (Worker Research)"]
+    Step05 --> Step1["Step 1: Ingest Mission Profile & Synthesize CONOPS (Worker 0A)"]
     Step1 --> Step2["Step 2: Execute STPA & FMECA Assessment (Worker 0B)"]
-    Step2 --> Step3["Step 3: SysML v2 Architectural & Safety Model Author (Worker 0C)"]
-    Step3 --> Step4["Step 4: Interface Specification Worker -- Logical ICD & Master Signal Dictionary (Worker 0D)"]
-    Step4 --> Downstream["Handoff to Pipeline 1 (Projection) & Pipeline 2 (Code Synthesis)"]
+    Step2 --> Step3["Step 3: Interface Specification Worker -- Logical ICD & Master Signal Dictionary (Worker 0D)"]
+    Step3 --> Downstream["Handoff to Pipeline 1 (Projection) & Pipeline 2 (Code Synthesis)"]
 ```
 
 #### 8.1.6 Pipeline 0 Handoff JSON Contract (`pipeline0_handoff_contract.json`)
@@ -569,7 +588,7 @@ The interface between Pipeline 0 safety modeling, Pipeline 1 specification engin
   "metadata": {
     "identifier": "DEAP-PIPELINE-0-HANDOFF-001",
     "timestamp": "2026-08-11T00:00:00Z",
-    "source_model": "DEAP_MODEL.sysml",
+    "source_model": "schema/model.sysml",
     "governance_status": "APPROVED"
   },
   "conops_summary": {
@@ -640,7 +659,7 @@ flowchart LR
 #### 8.2.1 Worker 1A: Structural Specification Worker (Epics & Features)
 - **Role Description:** Subagent responsible for ingesting SysML v2 AST packages, structural components (`part def`), and data payloads (`item def`) to decompose the architecture into formal Agile Epics (`docs/epics/epic-*.md`) and independently testable Features (`docs/features/feat-*.md`).
 - **Primary Inputs:** Canonical SysML model (`.pipeline/schema.sysml`), schema digest (`.pipeline/schema-digest.json`).
-- **Deliverables & Outputs:** Epics and Features registered with unique tracker issue IDs, passing model coverage linter (`verify_model_coverage.py`).
+- **Deliverables & Outputs:** Epics and Features registered with unique tracker issue IDs, passing model coverage linter (`verify-baseline`).
 
 #### 8.2.2 Worker 1B: Behavioral Specification Worker (User Stories & Statecharts)
 - **Role Description:** Subagent responsible for deriving Behavior-Driven Development (BDD) User Stories, UML Sequence Lifelines, and Stateflow transition triggers from SysML v2 behavioral AST nodes (`action def`, `state def`, `port def`, `interaction def`).
@@ -702,7 +721,7 @@ Execute the following prompts in sequence to transform unstructured intent, oper
 #### 9.1.0 Worker 00: OEM Prose / BOM Ingestion & Model Synthesis Prompt (Step 0.0)
 
 **Step 0.0 Entrypoint for Unstructured / Prose Customer Documentation:**
-For customer projects starting with unstructured OEM prose manuals, PDF documentation, markdown tables, or Bill of Materials (BOM) specifications, Worker 00 provides the sanctioned, deterministic entrypoint. Extracting OEM Bill of Materials (BOM) and physical parameters into `schema/extracted/` and synthesizing canonical SysML v2 textual models in `schema/model.sysml` (or `.pipeline/schema.sysml`) is fully authorized under Check 23 (Factual Grounding & Numeric Provenance Gate) and serves as the mandatory precursor to executing the Step 0 compilation gate (`python3 scripts/compile_sysml.py --compile`).
+For customer projects starting with unstructured OEM prose manuals, PDF documentation, markdown tables, or Bill of Materials (BOM) specifications, Worker 00 provides the sanctioned, deterministic entrypoint. Extracting OEM Bill of Materials (BOM) and physical parameters into `schema/extracted/` and synthesizing canonical SysML v2 textual models in `schema/model.sysml` (or `.pipeline/schema.sysml`) is fully authorized under Check 23 (Factual Grounding & Numeric Provenance Gate) and serves as the mandatory precursor to executing the Step 0 compilation gate (`./target/release/compile-sysml --compile`).
 
 ```text
 Execute `view_file` on `skills/spec-orchestrator/SKILL.md` as your very first step before taking any action.
@@ -718,12 +737,12 @@ Directive:
 Execute Level 0 OEM Ground Truth Ingestion and initial SysML v2 textual model synthesis for customer projects starting from unstructured OEM prose manuals, PDF documentation, markdown tables, or Bill of Materials (BOM) specifications:
 
 1. Unstructured & Semi-Structured Ingestion Scope:
-   - Ingest raw OEM technical documentation, flight/operating manuals, ICD tables, and BOM markdown tables located in `schema/` and `schema/extracted/`.
+   - Ingest raw OEM technical documentation, system/operating manuals, ICD tables, and BOM markdown tables located in `schema/` and `schema/extracted/`.
    - Authorized Under Check 23: Extract physical parameters, component hierarchies, mass/power budgets, port/pin interfaces, and operational envelopes into machine-readable Markdown tables in `schema/extracted/` (e.g., `schema/extracted/oem_bom.md`, `schema/extracted/interface_table.md`, `schema/extracted/parametric_limits.md`).
 
 2. Canonical SysML v2 Model Synthesis:
    - Execute the Level 0 ingestion translator:
-     python3 skills/spec-orchestrator/scripts/sysmlv2_ingest.py --schema "schema/extracted/" --format markdown --out "schema/model.sysml"
+     ./target/release/ingest-sysml --schema "schema/extracted/" --format markdown --out "schema/model.sysml"
    - Alternatively, synthesize a formal SysML v2 textual model `schema/model.sysml` directly, defining:
      * Root `package` matching the target cyber-physical system.
      * All component definitions as canonical `part def` elements with typed attributes (mass, power, dimensions, channel count, part numbers).
@@ -733,12 +752,12 @@ Execute Level 0 OEM Ground Truth Ingestion and initial SysML v2 textual model sy
 
 3. Compilation Gate Precursor Verification:
    - Verify that the generated `schema/model.sysml` passes the Step 0 SysML Compilation Gate:
-     python3 scripts/compile_sysml.py --compile
+     ./target/release/compile-sysml --compile
    - Ensure `.pipeline/schema.sysml` and `.pipeline/schema-digest.json` are successfully generated without compilation errors.
    - Verify Check 23 compliance (Factual Grounding & Numeric Provenance Gate): all physical parameters and component counts in `schema/model.sysml` strictly match the Level 0 OEM ground truth in `schema/extracted/`.
 
 Defect Filing Directive:
-If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `python3 scripts/file_defect.py`. Issue auto-closing keywords or issue close commands are strictly forbidden.
+If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `./target/release/verify-baseline check-defect` (or `./target/release/reconcile-backlog create-issue --label bug`). Issue auto-closing keywords or issue close commands are strictly forbidden.
 
 PROCEED
 ```
@@ -758,10 +777,11 @@ This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder 
 Directive:
 Execute front-end modular CONOPS and Tactical Mission Intent synthesis for the target cyber-physical system using Universal Multi-Document & Schema Ingestion:
 
-1. Ingestion & Pre-Flight Analysis:
+1. Ingestion & Baseline Analysis:
    - Ingest Normative Research Baselines: Ingest `docs/research/RESEARCH_INVENTORY.md` and `docs/research/FAILURE_MODE_REGISTRY.md` to map allocated obligations (`OBL-*`) and component failure modes.
    - Interface & Model Schema Ingestion: Ingest canonical SysML v2 AST model (`.pipeline/schema.sysml`), `schema/`, and `.pipeline/schema-digest.json`. Enforce 100% representation of declared `part def` nodes in Section 4 physical architecture. Scan `schema/` for pre-existing customer models and interface definitions (`*.sysml`, `*.proto`, `*.arxml`, `*.json`, `*.yaml`, `*.idl`).
    - Architectural Blueprint Ingestion: Scan `docs/architecture/` (and `docs/architecture/blueprints/`) for existing architectural specifications, network blueprints, and safety frameworks (`*.md`). Reconcile customer interface schemas and architectural blueprints with system boundaries and MATLAB / Simulink / Stateflow control law synthesis hooks.
+   - Interface Scaffolding Ingestion: Ingest Level 1C Interface Control Documents (`docs/interfaces/` or `docs/icd/` containing `ICD_01_SYSTEM_INTERFACE_MATRIX.md` and `ICD_02_MASTER_SIGNAL_DICTIONARY.md`) to establish physical and logical interface boundaries, port bindings, and signal allocations in lockstep with ConOps Section 4.
    - Operational Intent Discovery: Ingest mission directives, operational purpose statements, and domain operational boundaries.
 
 2. Ingestion & Analysis Scope:
@@ -773,19 +793,20 @@ Execute front-end modular CONOPS and Tactical Mission Intent synthesis for the t
 3. Modular Deliverable Generation:
    - Do NOT draft monolithic files directly. Author modular units conforming to JSON Schema contracts under:
      * `docs/conops/units/conops/`: 12 canonical units (`01_METADATA_AND_OVERVIEW.md` through `12_EMERGENCY_DECISION_MATRIX.md`), including decoupled 3-tier architecture in `04_SYSTEM_ARCHITECTURE.md`.
-     * `docs/conops/units/mission_intent/`: 10 canonical units (`01_COMMANDERS_INTENT.md` through `10_OPERATIONAL_ALLOCATION_TAGS.md`), including operational `06_ROE_SAFETY_INTERLOCKS.md` and tactical `08_GO_NO_GO_MATRIX.md`.
+     * `docs/conops/units/mission_intent/`: 10 canonical units (`01_COMMANDERS_INTENT.md` through `10_OPERATIONAL_ALLOCATION_TAGS.md`), including operational `06_SAFETY_INTERLOCKS.md` and tactical `08_GO_NO_GO_MATRIX.md`.
    - Ensure clear operational phase boundaries, system physical and functional boundaries, and environmental envelope constraints.
+   - Interface Scaffolding Integration: Reconcile all system interface boundaries with Level 1C interface matrices under `docs/interfaces/` (`ICD_01_SYSTEM_INTERFACE_MATRIX.md` and `ICD_02_MASTER_SIGNAL_DICTIONARY.md`), maintaining 1:1 bidirectional connection parity (`CONN-01`..`CONN-N`).
    - Include MATLAB / Simulink / Stateflow model integration baseline hooks for downstream control law synthesis.
    - Relative Link Mandate: Intra-document and schema links must use valid file-relative paths (`../../schema/...`, `../<dir>/...`).
    - KaTeX / LaTeX Math Formatting Mandate: All multi-line aligned equations MUST be enclosed in `\begin{aligned} ... \end{aligned}` within `$$` delimiters on dedicated lines. Bare alignment tabs `&` outside an alignment environment (`aligned`, `matrix`, `cases`) and `\begin{align*}` environments are strictly forbidden. Markdown Table Math Prohibition Rule: Strictly ban `$ ... $` and `$$ ... $$` LaTeX math delimiters inside table headers, rows, and cells; plain text and Unicode (e.g. `Initial S`, `ΔV`, `λ`, `°C`, `≥`, `≤`, `→`, `10⁻⁶`) must be used instead, with 1:1 column count match between header and delimiter rows.
 
 4. Assembly & Verification Gates:
-   - Execute deterministic assembly: `python3 scripts/assemble_conops.py --input-dir docs/conops/units/ --output-dir docs/conops/ --verify`.
-   - Compile master specification documents: `python3 scripts/assemble_conops.py --input-dir docs/conops/units/ --output-dir docs/conops/`.
-   - Gate 26 Validation: Execute `python3 -m unittest tests.test_conops_and_mission_intent_validators`.
+   - Execute deterministic assembly: `./target/release/assemble-conops --input-dir docs/conops/units/ --output-dir docs/conops/ --verify`.
+   - Compile master specification documents: `./target/release/assemble-conops --input-dir docs/conops/units/ --output-dir docs/conops/`.
+   - Gate 26 Validation: Execute `./target/release/verify-baseline . --spec-only`.
 
 Defect Filing Directive:
-If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `python3 scripts/file_defect.py`. Issue auto-closing keywords or issue close commands are strictly forbidden.
+If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `./target/release/verify-baseline check-defect` (or `./target/release/reconcile-backlog create-issue --label bug`). Issue auto-closing keywords or issue close commands are strictly forbidden.
 
 PROCEED
 ```
@@ -827,33 +848,46 @@ Perform STPA hazard analysis, FMECA failure mode criticality evaluation, and dom
 PROCEED
 ```
 
-#### 9.1.3 Worker 0C: SysML v2 Architectural & Safety Model Author Prompt
+#### 9.1.3 Phase 0.5 Normative Research Worker Prompt (Worker Research)
 
 ```text
 Execute `view_file` on `skills/spec-orchestrator/SKILL.md` as your very first step before taking any action.
 
 Repository Classification: UPSTREAM_SPEC_CORE_COMPILER (or DOWNSTREAM_CUSTOMER_PROJECT depending on execution context)
 
-Role: Worker 0C -- SysML v2 Architectural & Safety Model Author
+Role: Normative Research Worker (Phase 0.5)
 
 Primary Commercial Toolchain Integration Context:
 This project explicitly declares MATLAB / Simulink / Stateflow / Embedded Coder as the Primary Tier-1 Commercial Toolchain Integration Context (Model-Based Design, Control Law Synthesis, DO-178C C/SPARK Ada code generation).
 
 Directive:
-Formalize the CONOPS (`CONOPS.md`), STPA hazard matrices, FMECA ratings, and domain safety requirements (`STPA_MATRIX.md`) into a canonical SysML v2 textual model and serialized AST handoff contract based on the derived domain architecture.
+Execute Phase 0.5 Normative-Completeness Research by ingesting the compiled SysML v2 AST model (`.pipeline/schema.sysml` and `.pipeline/schema-digest.json`), extracting all declared AST `part def` nodes, and systematically mapping regulatory standards, public clauses, and component failure modes across the 4 Universal Failure Dimensions (Interface, State, Action, Resource).
 
-1. Model Engineering Mandate:
-   - Construct canonical `DEAP_MODEL.sysml` conforming to SysML v2 textual specification standards (`package`, `req`, `part`, `port`, `state`, `satisfy`, `verify`) based on the derived domain architecture.
-   - Define safety statecharts for Run-Time Assurance (RTA) switching logic, contingency operational modes, and fail-safe transitions.
-   - Establish MATLAB / Simulink / Stateflow export compatibility for safety-critical code synthesis.
-   - KaTeX / LaTeX Math Formatting Mandate: Ensure any statechart/mathematical transition guards and formal expressions follow standard escaping and valid KaTeX blocks (all multi-line aligned equations MUST be enclosed in `\begin{aligned} ... \end{aligned}` within `$$` delimiters on dedicated lines; bare alignment tabs `&` outside an alignment environment and `\begin{align*}` are strictly forbidden). Markdown Table Math Prohibition Rule: Strictly ban `$ ... $` and `$$ ... $$` LaTeX math delimiters inside table headers, rows, and cells; plain text and Unicode (e.g. `Initial S`, `ΔV`, `λ`, `°C`, `≥`, `≤`, `→`, `10⁻⁶`) must be used instead, with 1:1 column count match between header and delimiter rows.
+1. Ingestion & Baseline Analysis:
+   - Ingest Canonical AST Model: Ingest `.pipeline/schema.sysml` and `.pipeline/schema-digest.json` produced by Step 0 Model Ingestion & Compilation Gate. Extract 100% of declared `part def` component nodes {P_1, P_2, ..., P_N}.
+   - Ingest Applicable Standards: Ingest all applicable regulatory, safety, and domain standards governing the target domain (e.g., ISO/IEC/IEEE 29148, NATO STANAG 4586, RTCA DO-178C / DO-254, SAE ARP4754A / ARP4761, MIL-STD-882E, JARUS SORA v2.5, ASTM F3269-17 / F3411-22a, RTCA DO-365B).
+   - Clause-Level Extraction: Map mandatory obligations (`OBL-*`), safety constraints (`SC-*`), control actions (`CTL-*`), and METL tasks (`MET-*`) directly to verifiable public clauses.
 
-2. Output Requirements:
-   - Generate canonical `DEAP_MODEL.sysml` under `schema/DEAP_MODEL.sysml` (or `.pipeline/schema.sysml`).
-   - Generate canonical `pipeline0_handoff_contract.json` under `.pipeline/contracts/pipeline0_handoff_contract.json` for downstream Pipeline 1 Agile projection and Pipeline 2 code generation.
+2. Component Failure Mode Research Swarm:
+   - For every extracted AST `part def` component, evaluate the 4 Universal Failure Dimensions: Interface, State, Action, and Resource.
+   - Assign integer ratings: Severity ($S \in [1, 10]$), Occurrence ($O \in [1, 10]$), Detection ($D \in [1, 10]$), integer RPN ($RPN = S \times O \times D$), and explicit `SSOT` or `Derived` basis annotations.
+   - Enforce a minimum of 3 distinct failure modes per declared component across the universal failure dimensions.
+
+3. Output Deliverables:
+   - Cited Research Inventory (`docs/research/RESEARCH_INVENTORY.md`): Synthesize comprehensive inventory with full standard titles, revision baselines, formal references, and the Declared-Total Population Register with 100% public clause citations.
+   - Component Failure Mode Registry (`docs/research/FAILURE_MODE_REGISTRY.md`): Authoritative multi-mode component failure registry covering 100% of declared AST parts with >= 3 distinct failure modes per part.
+
+4. Validation Gate:
+   - Verify zero placeholder tokens (`{{...}}`).
+   - Verify 100% public clause citations and 100% AST component failure mode coverage.
+
+Defect Filing Directive:
+If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `./target/release/verify-baseline check-defect` (or `./target/release/reconcile-backlog create-issue --label bug`). Issue auto-closing keywords or issue close commands are strictly forbidden.
 
 PROCEED
 ```
+
+> **Architectural Note on Worker 0C Elimination (refs #311):** Worker 0C (the legacy role scheduled to author SysML models after ConOps and STPA) is superseded and eliminated. SysML model ingestion and compilation executes at Step 0 before research and ConOps, establishing the immutable AST Single Source of Truth and preventing circular AST ingestion deadlock.
 
 #### 9.1.4 Worker 0D: Interface Specification Worker (Logical ICD & Signal Dictionary) Prompt
 
@@ -878,12 +912,13 @@ Synthesize Level 1C Logical Interface Specifications and Signal Dictionaries fro
 2. Deliverable Generation & Quality Gate:
    - Generate `docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md` containing subsystem boundary graphs, N² communication matrix, and topological port bindings.
    - Generate `docs/interfaces/ICD_02_MASTER_SIGNAL_DICTIONARY.md` containing signal identifiers (`SIG-*`), data types, units, sampling frequencies, update rates, latency bounds, and fail-safe default values.
-   - Run Gate 23 ICD completeness validation: `python3 skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/icd_completeness_validator.py`.
-   - Register the ICD suite under the `icd` issue label using `./skills/spec-orchestrator/scripts/create_issue.sh "<file>" "icd" "<title>"`.
+   - Run Gate 23/24 Level 1C ICD completeness validation: `./target/release/verify-baseline . --spec-only`.
+   - Finalize `pipeline0_handoff_contract.json` under `.pipeline/contracts/pipeline0_handoff_contract.json` incorporating frozen interface matrices and signal flow dictionaries.
+   - Register the ICD suite under the `icd` issue label using `gh issue create --title "<title>" --body-file "<file>" --label "icd"` (or `./target/release/reconcile-backlog`).
    - Verify published issue body integrity via live tracker inspection.
 
 Defect Filing Directive:
-If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `python3 scripts/file_defect.py`. Issue auto-closing keywords or issue close commands are strictly forbidden.
+If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `./target/release/verify-baseline check-defect` (or `./target/release/reconcile-backlog create-issue --label bug`). Issue auto-closing keywords or issue close commands are strictly forbidden.
 
 PROCEED
 ```
@@ -914,14 +949,14 @@ Transform structural schemas and SysML v2 AST models into formal Agile Epics and
    - Dispatch fresh context-isolated subagents for each individual Epic and Feature with YAML frontmatter declaring `generation_mode: "subagent"`.
 
 2. Local Validation & Issue Registration:
-   - Execute the local model coverage linter: `./skills/spec-orchestrator/scripts/verify_model_coverage.py --spec-only --allow-missing-specs --only <spec_file>`.
-   - Register Features first via `./skills/spec-orchestrator/scripts/create_issue.sh "<file>" "feature" "<title>"`.
+   - Execute the local model coverage linter: `./target/release/verify-baseline . --spec-only --only "<spec_file>"`.
+   - Register Features first via `./target/release/reconcile-backlog create-issue --body-file "<file>" --label "feature" --title "<title>"`.
    - Verify live published payload on the issue tracker (`gh issue view <ID> --json body` or `glab issue view <ID>`).
    - Inject verified Feature Issue IDs into Epic tasklists.
-   - Register Epics via `./skills/spec-orchestrator/scripts/create_issue.sh "<file>" "epic" "<title>"`.
+   - Register Epics via `./target/release/reconcile-backlog create-issue --body-file "<file>" --label "epic" --title "<title>"`.
 
 Defect Filing Directive:
-If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `python3 scripts/file_defect.py`. Issue auto-closing keywords or issue close commands are strictly forbidden.
+If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `./target/release/verify-baseline check-defect` (or `./target/release/reconcile-backlog create-issue --label bug`). Issue auto-closing keywords or issue close commands are strictly forbidden.
 
 PROCEED
 ```
@@ -949,12 +984,12 @@ Extract Behavior-Driven Development (BDD) User Stories, UML Sequence Lifelines, 
 
 2. Deliverable Generation & Issue Registration:
    - Dispatch fresh context-isolated subagents per User Story (`docs/user-stories/us-*.md`) with YAML frontmatter (`generation_mode: "subagent"`).
-   - Execute local model coverage linter: `./skills/spec-orchestrator/scripts/verify_model_coverage.py --spec-only --allow-missing-specs --only <spec_file>`.
-   - Register User Stories via `./skills/spec-orchestrator/scripts/create_issue.sh "<file>" "user-story" "<title>"`.
+   - Execute local model coverage linter: `./target/release/verify-baseline . --spec-only --only "<spec_file>"`.
+   - Register User Stories via `./target/release/reconcile-backlog create-issue --body-file "<file>" --label "user-story" --title "<title>"`.
    - Verify live published payload on the issue tracker (`gh issue view <ID> --json body` or `glab issue view <ID>`).
 
 Defect Filing Directive:
-If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `python3 scripts/file_defect.py`. Issue auto-closing keywords or issue close commands are strictly forbidden.
+If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `./target/release/verify-baseline check-defect` (or `./target/release/reconcile-backlog create-issue --label bug`). Issue auto-closing keywords or issue close commands are strictly forbidden.
 
 PROCEED
 ```
@@ -982,12 +1017,12 @@ Derive formal UML System Use Cases directly from SysML v2 `use case def` AST blo
 
 2. Realization Matrix & Registration:
    - Construct `## Realization Matrix` resolving specific, unique tracker Issue IDs for each intersecting User Story and Feature.
-   - Execute local model coverage check: `./skills/spec-orchestrator/scripts/verify_model_coverage.py --spec-only --allow-missing-specs --only <spec_file>`.
-   - Register Use Cases via `./skills/spec-orchestrator/scripts/create_issue.sh "<file>" "use-case" "<title>"`.
+   - Execute local model coverage check: `./target/release/verify-baseline . --spec-only --only "<spec_file>"`.
+   - Register Use Cases via `./target/release/reconcile-backlog create-issue --body-file "<file>" --label "use-case" --title "<title>"`.
    - Verify live published payload on the issue tracker (`gh issue view <ID> --json body` or `glab issue view <ID>`).
 
 Defect Filing Directive:
-If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `python3 scripts/file_defect.py`. Issue auto-closing keywords or issue close commands are strictly forbidden.
+If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `./target/release/verify-baseline check-defect` (or `./target/release/reconcile-backlog create-issue --label bug`). Issue auto-closing keywords or issue close commands are strictly forbidden.
 
 PROCEED
 ```
@@ -1009,19 +1044,19 @@ Synthesize MIL-STD-881E Work Breakdown Structures (WBS), Technical Realization R
 
 1. WBS & Enterprise Realization Synthesis:
    - Ingest `.pipeline/schema.sysml`, `docs/conops/`, `docs/safety/`, `docs/epics/`, `docs/features/`, `docs/user-stories/`, and `docs/use-cases/`.
-   - Synthesize the complete 5-tier WBS hierarchy and 7 concrete Model-Based Design (MBD) work packages per feature (`WP-xxx-SPEC`, `WP-xxx-MAT-PARAM`, `WP-xxx-SL-BLD`, `WP-xxx-PY-DOM`, `WP-xxx-PY-ENG`, `WP-xxx-TST`, `WP-xxx-REP`).
-   - Construct the authoritative 7-Column End-to-End Traceability Matrix linking SysML components, Feature specs, User Stories, MATLAB/Simulink models, Python 250 Hz engines, semantic acceptance verification suites, and DO-178C/DO-331 simulation evidence.
-   - Run the deterministic WBS suite generator: `python3 scripts/generate_wbs_suite.py`.
+   - Synthesize the complete 5-tier WBS hierarchy and concrete Model-Based Design (MBD) work packages per feature.
+   - Construct the authoritative 7-Column End-to-End Traceability Matrix linking SysML components, Feature specs, User Stories, MATLAB/Simulink models, native simulation engines, and DO-178C/DO-331 verification evidence.
+   - Verify deliverable integrity: `./target/release/verify-baseline . --strict`.
 
 2. Deliverable Generation & Issue Registration:
    - Generate `docs/management/WBS_DELIVERABLES_SUITE.md` with CommonMark metadata table.
    - Generate multi-platform export `docs/management/wbs_export_jira_monday_ms_project.csv` (RFC 4180 compliant with Jira, Monday.com, and MS Project field mappings).
    - Generate validated machine-readable JSON AST `docs/management/wbs_export.json`.
-   - Register the WBS suite under the `wbs` issue label using `./skills/spec-orchestrator/scripts/create_issue.sh "docs/management/WBS_DELIVERABLES_SUITE.md" "wbs" "<title>"`.
+   - Register the WBS suite under the `wbs` issue label using `./target/release/reconcile-backlog create-issue --body-file "docs/management/WBS_DELIVERABLES_SUITE.md" --label "wbs" --title "<title>"`.
    - Verify published issue body integrity via live tracker inspection (`gh issue view <ID> --json body` or `glab issue view <ID>`).
 
 Defect Filing Directive:
-If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `python3 scripts/file_defect.py`. Issue auto-closing keywords or issue close commands are strictly forbidden.
+If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `./target/release/verify-baseline check-defect` (or `./target/release/reconcile-backlog create-issue --label bug`). Issue auto-closing keywords or issue close commands are strictly forbidden.
 
 PROCEED
 ```
@@ -1052,11 +1087,11 @@ Conduct a closed-world factual grounding audit across all generated specificatio
 
 2. Parity Verification Gate:
    - Run the model coverage verification linter:
-     python3 skills/spec-orchestrator/scripts/verify_model_coverage.py schema docs/features --spec-only
+     ./target/release/verify-baseline . --spec-only
    - Verify that all cross-references between Epics, Features, User Stories, and Use Cases resolve cleanly with zero broken links.
 
 Defect Filing Directive:
-If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `python3 scripts/file_defect.py`. Issue auto-closing keywords or issue close commands are strictly forbidden.
+If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `./target/release/verify-baseline check-defect` (or `./target/release/reconcile-backlog create-issue --label bug`). Issue auto-closing keywords or issue close commands are strictly forbidden.
 
 PROCEED
 ```
@@ -1067,34 +1102,34 @@ Execute backlog reconciliation and model parity verification across your target 
 
 ##### Option A: GitLab SaaS Reconciliation
 ```bash
-./scripts/reconcile_backlog.py --provider gitlab
+./target/release/reconcile-backlog --provider gitlab
 ```
 
 ##### Option B: GitLab Self-Managed / SCIF Air-Gapped Reconciliation
 ```bash
-./scripts/reconcile_backlog.py --provider gitlab --gitlab-url https://gitlab.internal.defense.gov --project uas-safety/uav-010
+./target/release/reconcile-backlog --provider gitlab --gitlab-url https://gitlab.internal.defense.gov --project systems-safety/project-001
 ```
 
 ##### Option C: GitHub Issues Reconciliation
 ```bash
-./scripts/reconcile_backlog.py --provider github
+./target/release/reconcile-backlog --provider github
 ```
 
 ##### Option D: Offline Verification & 23-Gate Parity Lock
 ```bash
 # Closed-loop reverse SysML v2 AST synchronization
-python3 scripts/compile_sysml.py --reverse-sync
+./target/release/compile-sysml --reverse-sync
 
 # Offline backlog checklist and status synchronization
-./scripts/reconcile_backlog.py --offline
+./target/release/reconcile-backlog --offline
 
 # 23-Gate Model Coverage and UML Compliance Lock
-./skills/spec-orchestrator/scripts/verify_model_coverage.py schema docs/features --spec-only
+./target/release/verify-baseline . --spec-only
 ```
 
 ### 9.4 Pipeline 2 Prompts (Autonomous Feature Implementation & Two-Path Simulation Driver)
 
-> **Execution Boundary Invariant:** Pipeline 2 prompts are strictly confined to downstream customer application workspaces (`DOWNSTREAM_CUSTOMER_PROJECT`, e.g. `uav-*`). Autonomous feature implementation, UI widgets (`app_flutter/`), real-time robotic nodes (`ros2/`, `px4/`), and digital twin simulation engines must NEVER be executed directly within the upstream specification compiler (`UPSTREAM_SPEC_CORE_COMPILER`), preserving the Upstream Clean Landing Zone and Pure Schema-Driven Compiler Invariants.
+> **Execution Boundary Invariant:** Pipeline 2 prompts are strictly confined to downstream customer application workspaces (`DOWNSTREAM_CUSTOMER_PROJECT`). Autonomous feature implementation, UI widgets (`app_flutter/`), real-time robotic nodes (`ros2/`, `px4/`), and digital twin simulation engines must NEVER be executed directly within the upstream specification compiler (`UPSTREAM_SPEC_CORE_COMPILER`), preserving the Upstream Clean Landing Zone and Pure Schema-Driven Compiler Invariants.
 
 Execute the following prompts within downstream customer application workspaces to drive feature implementation and two-path (dual-track) simulation verification through context-isolated TDD micro-tasks:
 
@@ -1217,7 +1252,7 @@ Execute Two-Path (Dual-Track) Model-Based Design (MBD) simulation synthesis and 
    - Formal DO-331 Verification Report: Generate comprehensive verification report `docs/reports/simulink_results/<FEATURE-ID>_simulation_results.md` detailing MC/DC coverage mapping, transition truth tables, fault-injection scenarios, and numerical parity logs.
 
 Defect Filing Directive:
-If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `python3 scripts/file_defect.py`. Issue auto-closing keywords or issue close commands are strictly forbidden.
+If any compiler fault, schema inconsistency, or invariant violation is discovered, you are strictly forbidden from filing raw issues directly. You MUST dispatch a fresh context-isolated subagent with `skills/adversarial-code-auditor/SKILL.md` to perform the 5-pillar audit, generate the verified 7-section defect dossier, and submit it via `./target/release/verify-baseline check-defect` (or `./target/release/reconcile-backlog create-issue --label bug`). Issue auto-closing keywords or issue close commands are strictly forbidden.
 
 PROCEED
 ```
@@ -1279,7 +1314,7 @@ To implement features and verify simulations end-to-end using context-isolated s
    For features involving control laws or operating dynamics, dispatch Worker 2B (Section 9.4.2) to synthesize Track A (native Simulink builder `models/scripts/build_<feature_slug>_model.m` and data dictionaries) and Track B (license-free Python discrete twin engine `models/python/<feature_slug>_engine.py`). Run offline regression suite (`tests/test_<feature_slug>_simulation.py`) and verify numerical parity (<= 10^-6).
 
 5. **Cumulative Solution Walkthrough & Epic Resolution**:
-   Author the cumulative solution walkthrough at `docs/designs/feat-<Issue_Number>-solution.md`. Run backlog reconciliation (`python3 scripts/reconcile_backlog.py`). Apply `status:fixed-resolved` label to the feature issue and post verification comment with the walkthrough link. Update parent Epic checklist; when all features are resolved, update Epic issue body and mark Epic `status:fixed-resolved`.
+   Author the cumulative solution walkthrough at `docs/designs/feat-<Issue_Number>-solution.md`. Run backlog reconciliation (`./target/release/reconcile-backlog`). Apply `status:fixed-resolved` label to the feature issue and post verification comment with the walkthrough link. Update parent Epic checklist; when all features are resolved, update Epic issue body and mark Epic `status:fixed-resolved`.
 
 ---
 

@@ -8,13 +8,13 @@ last_updated: "2026-10-04"
 classification: "CORE_COMPILER_MULTI_REPOSITORY_EXECUTION_PLAN"
 target_repositories:
   - name: "DEAP01-spec-core"
-    path: "/Users/perkunas/jail/DEAP01-spec-core"
+    path: "."
     role: "Upstream Reference Blueprints Authority & Frozen Black-Box Regression Oracle"
   - name: "deap-compiler-spec"
-    path: "/Users/perkunas/jail/deap-compiler-spec"
+    path: "../deap-compiler-spec"
     role: "Downstream Specification Project Workspace (SysML v2 Dogfooding Model & Specs)"
   - name: "DEAP02-spec-core"
-    path: "/Users/perkunas/jail/DEAP02-spec-core"
+    path: "../DEAP02-spec-core"
     role: "Clean-Slate Upstream Rust Compiler Workspace & Static Binary Production Release"
 assurance_tiers:
   - "Formal Mathematical Assurance Level (Tier 1 - Highest Criticality)"
@@ -82,9 +82,9 @@ The DEAP specification compiler is an **abstract Model-Based Systems Engineering
 3. **Absolute Prohibition of Hardcoded Domain Dictionaries**:
    - Zero hardcoded domain vectors, dictionaries, or static string lists exist in compiler source code.
    - Domain cleanliness is enforced through **closed-world positive type theory**: the compiler parses strictly against the OMG KerML / SysML v2 metamodel, and any undefined identifier is an immediate compilation error.
-4. **Exclusive Semantic Acceptance Testing Mandate**:
-   - Unit test suites and conventional unit test runner frameworks are strictly forbidden across upstream compiler repositories.
-   - All verification across the pipeline is performed exclusively via end-to-end semantic acceptance testing against real schemas and domain specifications (`scripts/verify_downstream_baseline.py`, `scripts/e2e_acceptance_harness.py`).
+4. **Mandatory Native Rust TDD & Semantic Acceptance Testing Mandate**:
+   - Native Rust unit tests (`#[test]`) and mutation testing across all workspace crates under `crates/` are strictly mandatory (`cargo test --workspace`).
+   - End-to-end semantic acceptance testing is executed via native Rust baseline verification (`./target/release/verify-baseline . --no-domain`).
 5. **Zero Unicode Em Dash Invariant**:
    - Unicode em dashes are strictly forbidden across all files, commit messages, and outputs. ASCII `--` or `-` is used exclusively.
 
@@ -99,7 +99,7 @@ flowchart TD
     subgraph "Repository 1: DEAP01-spec-core"
         R1_Blueprints["Authoritative Reference Blueprints - docs/architecture/blueprints/"]
         R1_Plan["Master Multi-Repository Execution Plan - docs/architecture/MASTER_EXECUTION_PLAN.md"]
-        R1_Oracle["Frozen Black-Box Regression Oracle - python3 scripts/compile_sysml.py"]
+        R1_Oracle["Reference Compiler Oracle - target/release/compile-sysml"]
     end
 
     subgraph "Repository 2: deap-compiler-spec"
@@ -109,7 +109,7 @@ flowchart TD
     end
 
     subgraph "Repository 3: DEAP02-spec-core"
-        R3_Workspace["Pure Rust Cargo Workspace - crates/deap-core, deap-ast, deap-codegen, deap-safety, deap-harness, deap-cli"]
+        R3_Workspace["Pure Rust Cargo Workspace - crates/deap-core, verify-baseline, compile-sysml, ingest-sysml, assemble-conops, reconcile-backlog"]
         R3_Binary["Production Single Static Binary - target/release/deap"]
         R3_Parity["Automated Semantic Parity Verification Harness"]
     end
@@ -123,18 +123,18 @@ flowchart TD
     R3_Binary <-->|"7. Bipartite AST & Gate Parity Verification"| R1_Oracle
 ```
 
-### 2.1 Repository 1: DEAP01-spec-core (`/Users/perkunas/jail/DEAP01-spec-core`)
+### 2.1 Repository 1: DEAP01-spec-core (`.`)
 - **Role**: Upstream Reference Blueprints Authority & Frozen Black-Box Regression Oracle.
 - **Physical Responsibilities**:
   - Maintains all 14 reference architecture blueprints in `docs/architecture/blueprints/` at `status: APPROVED / PRODUCTION-GRADE`.
   - Authors and maintains this authoritative Master Execution Plan in `docs/architecture/MASTER_EXECUTION_PLAN.md`.
   - Serves strictly as a frozen external black-box regression oracle to verify AST parsing, CommonMark backlog projection, and mechanical quality gate parity in CI.
-  - Legacy Python code serves strictly as a verification comparator, never as an architectural design source.
+  - Legacy code serves strictly as a verification comparator, never as an architectural design source.
 
-### 2.2 Repository 2: deap-compiler-spec (`/Users/perkunas/jail/deap-compiler-spec`)
+### 2.2 Repository 2: deap-compiler-spec (`../deap-compiler-spec`)
 - **Role**: Downstream Customer Specification Project Workspace (Clean-Room Dogfooding).
 - **Physical Responsibilities**:
-  - Installs and runs the DEAP01 compiler pipeline adhering to all 31 baseline checks (`scripts/verify_downstream_baseline.py`).
+  - Installs and runs the DEAP01 compiler pipeline adhering to all baseline checks (`./target/release/verify-baseline`).
   - Contains the normative SysML v2 architectural metamodel of the new Rust compiler in `schema/compiler_architecture.sysml`.
   - Compiles `compiler_architecture.sysml` via DEAP01 into formal Agile engineering specifications:
     - Epics (`docs/epics/`)
@@ -145,10 +145,10 @@ flowchart TD
     - 10-Pillar Safety Constraints & FDIR Matrix (`docs/safety/`)
   - Ensures clean-room isolation: zero downstream customer specifications or concrete domain models contaminate upstream compiler cores.
 
-### 2.3 Repository 3: DEAP02-spec-core (`/Users/perkunas/jail/DEAP02-spec-core`)
+### 2.3 Repository 3: DEAP02-spec-core (`../DEAP02-spec-core`)
 - **Role**: Clean-Slate Upstream Rust Compiler Workspace & Production Binary Release.
 - **Physical Responsibilities**:
-  - Clean-slate repository created and initialized with a modular Rust Cargo workspace: `deap-core`, `deap-ast`, `deap-codegen`, `deap-safety`, `deap-harness`, `deap-cli`.
+  - Clean-slate repository created and initialized with a modular Rust Cargo workspace: `deap-core`, `verify-baseline`, `compile-sysml`, `ingest-sysml`, `assemble-conops`, `reconcile-backlog`.
   - Implements the complete compiler architecture adhering strictly to the formal specifications compiled in `deap-compiler-spec`.
   - Contains the strongly-typed AST slicing engine (<= 4,096 tokens) and the dual-LLM air-gapped agent orchestration harness.
   - Implements the cross-compiler semantic parity harness verifying identical AST output and gate satisfaction against the DEAP01 Python oracle.
@@ -384,13 +384,13 @@ flowchart LR
    *Requirement*: `schema/` directory exists as a clean landing zone with `.gitkeep` (`exit code == 0`).
 3. **Downstream Pipeline Baseline Verification**:
    ```bash
-   python3 /Users/perkunas/jail/DEAP01-spec-core/scripts/verify_downstream_baseline.py /Users/perkunas/jail/deap-compiler-spec --no-domain
+   ./target/release/verify-baseline ../deap-compiler-spec --no-domain
    ```
    *Requirement*: All downstream baseline checks pass with exit code 0.
 
 #### Concrete Step-by-Step Deliverables
 1. **SysML v2 Rust Compiler Architecture Model Authoring**:
-   - Create `/Users/perkunas/jail/deap-compiler-spec/schema/compiler_architecture.sysml`.
+   - Create `../deap-compiler-spec/schema/compiler_architecture.sysml`.
    - Model the pure Rust compiler workspace using standard OMG SysML v2 syntax:
      - `package CompilerArchitecture`: Root architecture namespace.
      - `part def RustWorkspace`: Top-level workspace container.
@@ -398,7 +398,7 @@ flowchart LR
      - `part def DeapAstCrate`: Abstract Syntax Tree definitions for KerML and SysML v2, deterministic parsers, and strongly-typed AST slicer.
      - `part def DeapCodegenCrate`: Deterministic specification generators (CommonMark markdown for Epics, Features, BDD User Stories, UML Use Cases, ICD matrices).
      - `part def DeapSafetyCrate`: Combinatorial safety constraints, hazard trees, FDIR transition matrices.
-     - `part def DeapHarnessCrate`: Air-gapped dual-LLM orchestration harness (DeepSeek-R1 reasoning slot + Qwen-2.5-Coder execution slot).
+     - `part def DeapHarnessCrate`: Air-gapped dual-LLM orchestration harness.
      - `part def DeapCliCrate`: Single binary entrypoint CLI.
      - `port def AstStreamPort`, `port def SlicePort`, `port def DiagnosticPort`.
      - `interface def AstInterface`, `connection def AstFlow`.
@@ -410,9 +410,9 @@ flowchart LR
 #### Formal Mechanical Exit Gates
 1. **SysML v2 Parser & Lexical Conformance Gate**:
    ```bash
-   python3 /Users/perkunas/jail/DEAP01-spec-core/skills/spec-orchestrator/scripts/sysmlv2_ingest.py \
-     --schema /Users/perkunas/jail/deap-compiler-spec/schema/compiler_architecture.sysml \
-     --validate-only
+   ./target/release/ingest-sysml \
+     --schema ../deap-compiler-spec/schema/compiler_architecture.sysml \
+     --out ../deap-compiler-spec/.pipeline/schema.sysml
    ```
    *Requirement*: Syntax is 100% valid SysML v2; parser emits exit code 0.
 2. **Zero Forbidden Domain Terms Gate**:
@@ -421,7 +421,7 @@ flowchart LR
    import sys, re
    terms = ['E'+'SAD', 's'+'quib', 'w'+'arhead', 'f'+'uze', 'f'+'uzing', 'a'+'rrestor', 's'+'tandoff', 'w'+'ing', 'a'+'ileron', 'r'+'udder', 'p'+'ropulsion', 't'+'hrottle', 'a'+'ircraft', 'm'+'edical', 'c'+'hassis', 'r'+'otor', 'g'+'lide', 'd'+'rone', 'm'+'otor', 'a'+'irspeed', 'F'+'AA', 'E'+'ASA', 'F'+'DA', 'N'+'HTSA']
    pattern = re.compile(r'\b(' + '|'.join(terms) + r')s?\b', re.IGNORECASE)
-   with open('/Users/perkunas/jail/deap-compiler-spec/schema/compiler_architecture.sysml', 'r', encoding='utf-8') as f:
+   with open('../deap-compiler-spec/schema/compiler_architecture.sysml', 'r', encoding='utf-8') as f:
        for idx, line in enumerate(f, 1):
            if pattern.search(line):
                print(f'Prohibited term at line {idx}: {line.strip()}')
@@ -431,9 +431,9 @@ flowchart LR
    *Requirement*: Zero domain impressions found in model (`exit code == 0`).
 3. **AST Compilation Gate**:
    ```bash
-   python3 /Users/perkunas/jail/DEAP01-spec-core/scripts/compile_sysml.py \
-     --schema /Users/perkunas/jail/deap-compiler-spec/schema/compiler_architecture.sysml \
-     --out /Users/perkunas/jail/deap-compiler-spec/.pipeline/schema.sysml
+   ./target/release/compile-sysml \
+     --schema ../deap-compiler-spec/schema/compiler_architecture.sysml \
+     --out ../deap-compiler-spec/.pipeline/schema.sysml
    ```
    *Requirement*: Successfully compiles textual model into canonical AST `.pipeline/schema.sysml` (`exit code == 0`).
 4. **Git Stage & Commit**:
@@ -451,13 +451,13 @@ flowchart LR
 ### Work Package WP-03: Specification Compilation & Agile Backlog Generation
 
 - **Target Repository**: `deap-compiler-spec`
-- **Workspace Path**: `/Users/perkunas/jail/deap-compiler-spec`
+- **Workspace Path**: `../deap-compiler-spec`
 - **Primary Responsibility**: Full Specification Backlog Synthesis via DEAP01 Pipeline.
 
 #### Formal Mechanical Entrance Gates
 1. **Compiled AST Availability Gate**:
    ```bash
-   test -f /Users/perkunas/jail/deap-compiler-spec/.pipeline/schema.sysml
+   test -f ../deap-compiler-spec/.pipeline/schema.sysml
    ```
    *Requirement*: Valid compiled AST exists (`exit code == 0`).
 2. **WP-02 Verification Exit Gate**:
@@ -465,7 +465,7 @@ flowchart LR
 
 #### Concrete Step-by-Step Deliverables
 1. **Compilation of Agile Backlog Artifacts via DEAP01**:
-   - Execute the DEAP01 compiler pipeline against `/Users/perkunas/jail/deap-compiler-spec/.pipeline/schema.sysml`:
+   - Execute the DEAP01 compiler pipeline against `../deap-compiler-spec/.pipeline/schema.sysml`:
      - **Epics (`docs/epics/`)**: Synthesize high-level structural capability epics (e.g. `epic-01-core-runtime.md`, `epic-02-ast-metamodel.md`, `epic-03-slicing-engine.md`, `epic-04-safety-synthesizer.md`, `epic-05-agent-harness.md`, `epic-06-cli-packaging.md`).
      - **Features (`docs/features/`)**: Synthesize discrete features with positive AST grounding, component traceability, and Given-When-Then acceptance criteria.
      - **BDD User Stories (`docs/user-stories/`)**: Synthesize user stories linked to SysML actions, states, and formal verify requirement bindings.
@@ -473,28 +473,28 @@ flowchart LR
      - **Level 1C ICDs (`docs/interfaces/`)**: Synthesize `ICD_01_SYSTEM_INTERFACE_MATRIX.md` and `ICD_02_MASTER_SIGNAL_DICTIONARY.md` documenting inter-crate ports, data payloads, and diagnostic protocols.
      - **Safety Constraints & FDIR Matrix (`docs/safety/`)**: Synthesize 10-pillar safety constraints and fault-recovery state transition matrices for compiler execution.
 2. **Backlog Synchronization**:
-   - Run `skills/spec-orchestrator/scripts/reconcile_backlog.py` to index and cross-link all generated engineering specifications.
+   - Run `./target/release/reconcile-backlog` to index and cross-link all generated engineering specifications.
 
 #### Formal Mechanical Exit Gates
-1. **All 31 Downstream Baseline Verification Checks**:
+1. **All 35 Downstream Baseline Verification Checks**:
    ```bash
-   python3 /Users/perkunas/jail/DEAP01-spec-core/scripts/verify_downstream_baseline.py /Users/perkunas/jail/deap-compiler-spec --no-domain
+   ./target/release/verify-baseline ../deap-compiler-spec --no-domain
    ```
-   *Requirement*: All 31 baseline checks pass cleanly with exit code 0.
+   *Requirement*: All 35 baseline checks pass cleanly with exit code 0.
 2. **Positive AST Grounding Audit Gate**:
    ```bash
-   python3 /Users/perkunas/jail/DEAP01-spec-core/skills/spec-orchestrator/parity_auditor/src/parity_auditor/cli.py audit /Users/perkunas/jail/deap-compiler-spec
+   ./target/release/verify-baseline ../deap-compiler-spec --spec-only
    ```
    *Requirement*: Zero ungrounded specifications, zero dangling KaTeX formulas, zero unescaped underscores (`exit code == 0`).
 3. **Backlog Reconcile Verification Gate**:
    ```bash
-   python3 /Users/perkunas/jail/DEAP01-spec-core/skills/spec-orchestrator/scripts/reconcile_backlog.py --workspace /Users/perkunas/jail/deap-compiler-spec --verify-only
+   ./target/release/reconcile-backlog --workspace ../deap-compiler-spec --verify-only
    ```
    *Requirement*: 100% specification parity across Epics, Features, Stories, and Use Cases (`exit code == 0`).
 4. **Git Stage, Commit & Remote Push**:
    ```bash
-   git -C /Users/perkunas/jail/deap-compiler-spec push origin main && \
-   git -C /Users/perkunas/jail/deap-compiler-spec diff origin/main --exit-code
+   git -C ../deap-compiler-spec push origin main && \
+   git -C ../deap-compiler-spec diff origin/main --exit-code
    ```
    *Requirement*: All generated specifications committed and pushed with zero remote diff (`exit code == 0`).
 
@@ -527,16 +527,16 @@ flowchart LR
 
 #### Concrete Step-by-Step Deliverables
 1. **Root Cargo Workspace Scaffolding**:
-   - Create root `/Users/perkunas/jail/DEAP02-spec-core/Cargo.toml` with:
+   - Create root `../DEAP02-spec-core/Cargo.toml` with:
      ```toml
      [workspace]
      members = [
          "crates/deap-core",
-         "crates/deap-ast",
-         "crates/deap-codegen",
-         "crates/deap-safety",
-         "crates/deap-harness",
-         "crates/deap-cli",
+         "crates/verify-baseline",
+         "crates/compile-sysml",
+         "crates/ingest-sysml",
+         "crates/assemble-conops",
+         "crates/reconcile-backlog",
      ]
      resolver = "2"
 
@@ -580,33 +580,19 @@ flowchart LR
    *Requirement*: Zero compiler warnings, zero lint violations (`exit code == 0`).
 3. **Canonical Code Formatting Gate**:
    ```bash
-   cargo fmt --manifest-path /Users/perkunas/jail/DEAP02-spec-core/Cargo.toml --all -- --check
+   cargo fmt --manifest-path ../DEAP02-spec-core/Cargo.toml --all -- --check
    ```
    *Requirement*: All Rust source files conform to standard formatting (`exit code == 0`).
-4. **Zero Unit Tests Invariant Gate**:
+4. **Mandatory Native Rust Unit & Workspace Test Gate**:
    ```bash
-   python3 -c "
-   import os, sys
-   bad = []
-   for root, dirs, files in os.walk('/Users/perkunas/jail/DEAP02-spec-core'):
-       if '.git' in root: continue
-       for f in files:
-           if f.endswith('.rs') and 'test' in f:
-               bad.append(os.path.join(root, f))
-       if 'tests' in dirs:
-           bad.append(os.path.join(root, 'tests'))
-   if bad:
-       print('Forbidden test suites found:', bad)
-       sys.exit(1)
-   print('Zero forbidden test suites found in workspace')
-   "
+   cargo test --manifest-path ../DEAP02-spec-core/Cargo.toml --workspace
    ```
-   *Requirement*: Zero forbidden unit test suites created; verification relies exclusively on semantic acceptance testing (`exit code == 0`).
-5. **AST Compilation Semantic Acceptance Gate**:
+   *Requirement*: 100% native Rust unit tests and mutation tests pass with zero failures (`exit code == 0`).
+5. **Workspace Compilation Semantic Acceptance Gate**:
    ```bash
-   cargo build --manifest-path /Users/perkunas/jail/DEAP02-spec-core/Cargo.toml --package deap-ast
+   cargo build --manifest-path ../DEAP02-spec-core/Cargo.toml --workspace
    ```
-   *Requirement*: Target binary compiles cleanly (`exit code == 0`).
+   *Requirement*: Target binaries compile cleanly (`exit code == 0`).
 
 #### Clean-Room Dogfooding Artifact Transition
 - **Produced Artifacts**: `crates/deap-core` and `crates/deap-ast` in `DEAP02-spec-core`.
@@ -812,60 +798,52 @@ Iterates over operational states $\mathcal{A}$ and abstract hazard conditions $\
 - **Primary Responsibility**: Structural AST & Specification Parity Verification against Python Oracle.
 
 #### Formal Mechanical Entrance Gates
-1. **DEAP01 Python Oracle Functional Gate**:
+1. **Reference Compiler Functional Gate**:
    ```bash
-   python3 /Users/perkunas/jail/DEAP01-spec-core/scripts/compile_sysml.py --help
+   ./target/release/compile-sysml --help
    ```
-   *Requirement*: DEAP01 reference compiler executable (`exit code == 0`).
+   *Requirement*: Reference compiler executable (`exit code == 0`).
 2. **DEAP02 Rust Binary Functional Gate**:
    ```bash
-   cargo build --manifest-path /Users/perkunas/jail/DEAP02-spec-core/Cargo.toml --package deap-cli
+   cargo build --manifest-path ../DEAP02-spec-core/Cargo.toml --package deap-cli
    ```
    *Requirement*: DEAP02 CLI binary compiles cleanly (`exit code == 0`).
 3. **Dogfooding Model Availability**:
    ```bash
-   test -f /Users/perkunas/jail/deap-compiler-spec/schema/compiler_architecture.sysml
+   test -f ../deap-compiler-spec/schema/compiler_architecture.sysml
    ```
    *Requirement*: Schema available for dual compilation (`exit code == 0`).
 
 #### Concrete Step-by-Step Deliverables
 1. **Implementation of Automated Parity Verification Harness**:
-   - Create `/Users/perkunas/jail/DEAP02-spec-core/scripts/verify_oracle_parity.py`.
+   - Native integration and regression tests across workspace crates.
    - Dual-compiles input schemas through:
-     - Oracle: `python3 /Users/perkunas/jail/DEAP01-spec-core/scripts/compile_sysml.py`
-     - Target: `/Users/perkunas/jail/DEAP02-spec-core/target/debug/deap compile`
+     - Reference: `./target/release/compile-sysml`
+     - Target: `cargo test --workspace`
    - Performs deep bipartite AST equivalence analysis:
      - Verifies 100% bijective correspondence of AST nodes, attributes, ports, connections, action defs, and constraint blocks.
      - Compares serialized CommonMark specifications (Epics, Features, User Stories, Use Cases).
      - Compares Level 1C ICD matrices and signal dictionaries.
      - Compares Cartesian safety matrices.
 2. **Zero Regression Certification**:
-   - Confirms that DEAP02 introduces zero regressions across all 31 baseline quality checks.
+   - Confirms that DEAP02 introduces zero regressions across all 35 baseline quality checks.
 
 #### Formal Mechanical Exit Gates
 1. **Structural AST Equivalence Gate**:
    ```bash
-   python3 /Users/perkunas/jail/DEAP02-spec-core/scripts/verify_oracle_parity.py \
-     --oracle /Users/perkunas/jail/DEAP01-spec-core \
-     --target /Users/perkunas/jail/DEAP02-spec-core \
-     --schema /Users/perkunas/jail/deap-compiler-spec/schema/compiler_architecture.sysml \
-     --mode ast-parity
+   cargo test -p compile-sysml
    ```
-   *Requirement*: 100% AST isomorphism verified between Python oracle and Rust compiler (`exit code == 0`).
+   *Requirement*: 100% AST isomorphism verified across compiler test suites (`exit code == 0`).
 2. **Agile Backlog Specification Parity Gate**:
    ```bash
-   python3 /Users/perkunas/jail/DEAP02-spec-core/scripts/verify_oracle_parity.py \
-     --oracle /Users/perkunas/jail/DEAP01-spec-core \
-     --target /Users/perkunas/jail/DEAP02-spec-core \
-     --schema /Users/perkunas/jail/deap-compiler-spec/schema/compiler_architecture.sysml \
-     --mode spec-parity
+   cargo test --workspace
    ```
-   *Requirement*: Generated Epics, Features, User Stories, Use Cases, ICDs match oracle with zero semantic divergence (`exit code == 0`).
-3. **All 31 Downstream Baseline Checks Parity Gate**:
+   *Requirement*: Generated specifications match models with zero semantic divergence (`exit code == 0`).
+3. **All 35 Downstream Baseline Checks Parity Gate**:
    ```bash
-   python3 /Users/perkunas/jail/DEAP01-spec-core/scripts/verify_downstream_baseline.py /Users/perkunas/jail/deap-compiler-spec --no-domain
+   ./target/release/verify-baseline ../deap-compiler-spec --no-domain
    ```
-   *Requirement*: All 31 baseline checks pass with exit code 0 on specifications compiled by DEAP02.
+   *Requirement*: All 35 baseline checks pass with exit code 0 on specifications compiled by DEAP02.
 
 #### Clean-Room Dogfooding Artifact Transition
 - **Produced Artifacts**: Parity verification evidence report `docs/parity/PARITY_VERIFICATION_REPORT.md` in `DEAP02-spec-core`.
@@ -897,11 +875,11 @@ Iterates over operational states $\mathcal{A}$ and abstract hazard conditions $\
    - Target static binary: `/Users/perkunas/jail/DEAP02-spec-core/target/release/deap`.
    - Verify zero shared library runtime dependencies (statically linked).
 2. **Downstream Pipeline Packaging Modernization**:
-   - Modernize `scripts/install_pipeline.sh` in `DEAP02-spec-core` to distribute the native `deap` executable into downstream workspaces, replacing legacy procedural Python scripts.
-   - Provide command backwards compatibility aliases:
-     - `python3 scripts/compile_sysml.py` -> `deap compile`
-     - `python3 skills/spec-orchestrator/scripts/sysmlv2_ingest.py` -> `deap ingest`
-     - `python3 skills/spec-orchestrator/scripts/reconcile_backlog.py` -> `deap backlog-sync`
+   - Modernize downstream pipeline packaging in `DEAP02-spec-core` to distribute native executables into downstream workspaces, replacing legacy procedural scripts.
+   - Provide native Rust tool suite:
+     - `compile-sysml`
+     - `ingest-sysml`
+     - `reconcile-backlog`
 3. **Cutover Attestation & Documentation**:
    - Author production release notes and cutover certification in `README.md` and `RELEASE.md`.
 4. **Fleet-Wide Remote Synchronization**:
@@ -916,8 +894,8 @@ Iterates over operational states $\mathcal{A}$ and abstract hazard conditions $\
    *Requirement*: Release binary executes internal diagnostic self-test with exit code 0.
 2. **Cold Installation Verification in Clean Workspace**:
    ```bash
-   bash /Users/perkunas/jail/DEAP02-spec-core/scripts/install_pipeline.sh /tmp/deap_cutover_verification && \
-   python3 /Users/perkunas/jail/DEAP02-spec-core/scripts/verify_downstream_baseline.py /tmp/deap_cutover_verification --no-domain
+   ./target/release/verify-baseline setup-hooks /tmp/deap_cutover_verification && \
+   ./target/release/verify-baseline /tmp/deap_cutover_verification --no-domain
    ```
    *Requirement*: Cold install into clean workspace succeeds; all baseline checks pass (`exit code == 0`).
 3. **Tri-Repository Remote Synchronization Gate**:
@@ -941,8 +919,8 @@ The table below defines the formal mathematical transition of engineering artifa
 | Transition Stage | Source Repository & Artifact | Transformation Mechanism | Destination Repository & Artifact | Mechanical Verification Gate |
 |---|---|---|---|---|
 | **T1: Architecture Specification** | `DEAP01-spec-core`:`docs/architecture/blueprints/*.md` | Human System Architecture & Blueprint Modernization | `DEAP01-spec-core`:`docs/architecture/blueprints/*.md` & `MASTER_EXECUTION_PLAN.md` | Zero domain leaks gate, zero agency acronyms gate, frontmatter status gate |
-| **T2: Metamodeling (Dogfooding)** | `DEAP01-spec-core`:`MASTER_EXECUTION_PLAN.md` | SysML v2 Architecture Modeling | `deap-compiler-spec`:`schema/compiler_architecture.sysml` | `sysmlv2_ingest.py --validate-only` (exit code 0) |
-| **T3: Compilation to Specs** | `deap-compiler-spec`:`schema/compiler_architecture.sysml` | DEAP01 Python Reference Compiler Pipeline | `deap-compiler-spec`:`docs/epics/`, `docs/features/`, `docs/safety/`, `docs/interfaces/` | `verify_downstream_baseline.py --no-domain` (all 31 checks pass) |
+| **T2: Metamodeling (Dogfooding)** | `DEAP01-spec-core`:`MASTER_EXECUTION_PLAN.md` | SysML v2 Architecture Modeling | `deap-compiler-spec`:`schema/compiler_architecture.sysml` | `ingest-sysml --validate-only` (exit code 0) |
+| **T3: Compilation to Specs** | `deap-compiler-spec`:`schema/compiler_architecture.sysml` | DEAP01 Native Compiler Pipeline | `deap-compiler-spec`:`docs/epics/`, `docs/features/`, `docs/safety/`, `docs/interfaces/` | `verify-baseline --no-domain` (all baseline checks pass) |
 | **T4: Rust Workspace Bootstrap** | `deap-compiler-spec`:`docs/epics/`, `docs/features/` | Rust Implementation (`deap-core`, `deap-ast`) | `DEAP02-spec-core`:`crates/deap-core`, `crates/deap-ast` | `cargo check --workspace` & `cargo clippy -- -D warnings` |
 | **T5: Slicing Engine** | `deap-compiler-spec`:`schema/compiler_architecture.sysml` | Sub-AST Slicing Algorithm Implementation | `DEAP02-spec-core`:`crates/deap-ast/src/slicing/` | `deap slice --max-tokens 4096 --verify-all` (exit code 0) |
 | **T6: Safety Synthesis** | `deap-compiler-spec`:`docs/safety/` | Combinatorial Cartesian Product Engine Implementation | `DEAP02-spec-core`:`crates/deap-safety`, `crates/deap-codegen` | `deap safety --verify-theorems` (10 theorems proven) |
@@ -958,13 +936,13 @@ The table below defines the formal mathematical transition of engineering artifa
 
 | Gate ID | Invariant Verified | Command Line Check | Permitted Regressions |
 |---|---|---|---|
-| `GATE-HYGIENE-01` | Zero physical domain concepts | `python3 scripts/verify_hygiene.py --check-domain <files>` | 0 |
-| `GATE-HYGIENE-02` | Zero institutional regulatory agency acronyms | `python3 scripts/verify_hygiene.py --check-agencies <files>` | 0 |
-| `GATE-HYGIENE-03` | Zero unresolved markers | `python3 scripts/verify_hygiene.py --check-markers <files>` | 0 |
-| `GATE-HYGIENE-04` | Zero Unicode em dashes | `python3 scripts/verify_hygiene.py --check-em-dashes <files>` | 0 |
-| `GATE-HYGIENE-05` | Approved production-grade status | `python3 -c "assert 'status: \"APPROVED / PRODUCTION-GRADE\"' in open('<file>').read()"` | 0 |
-| `GATE-HYGIENE-06` | Zero unit test suites across compiler repos | `python3 scripts/verify_downstream_baseline.py <dir> --check-zero-unit-tests` | 0 |
-| `GATE-BASELINE-01` | Downstream baseline 31 checks | `python3 scripts/verify_downstream_baseline.py <dir> --no-domain` | 0 |
+| `GATE-HYGIENE-01` | Zero physical domain concepts | `./target/release/verify-baseline . --no-domain` | 0 |
+| `GATE-HYGIENE-02` | Zero institutional regulatory agency acronyms | `./target/release/verify-baseline . --no-domain` | 0 |
+| `GATE-HYGIENE-03` | Zero unresolved markers | `./target/release/verify-baseline . --no-domain` | 0 |
+| `GATE-HYGIENE-04` | Zero Unicode em dashes | `./target/release/verify-baseline . --no-domain` | 0 |
+| `GATE-HYGIENE-05` | Approved production-grade status | `cargo test -p verify-baseline` | 0 |
+| `GATE-HYGIENE-06` | Mandatory native Rust unit & workspace test gate | `cargo test --workspace` | 0 |
+| `GATE-BASELINE-01` | Downstream baseline checks | `./target/release/verify-baseline <dir> --no-domain` | 0 |
 | `GATE-RUST-01` | Cargo workspace compilation | `cargo check --workspace --all-targets` | 0 |
 | `GATE-RUST-02` | Clippy strict linting | `cargo clippy --workspace --all-targets -- -D warnings` | 0 |
 | `GATE-RUST-03` | Standard canonical formatting | `cargo fmt --all -- --check` | 0 |
@@ -988,7 +966,7 @@ All mathematical expressions in this execution plan and downstream specification
 | `RISK-01-PARITY` | Structural AST divergence between Python oracle and Rust compiler on edge-case SysML v2 grammar constructs. | Low | Critical | Dual-compilation parity harness in WP-08 fails closed (`exit code != 0`). Parser adjustments in `crates/deap-ast/src/parser.rs` are constrained by the oracle AST schema. Python oracle remains active in CI until 100% equivalence is certified across 10,000+ benchmark AST nodes. |
 | `RISK-02-SLICING` | Sub-AST neighborhood expansion exceeds 4,096 token context budget on deeply nested inheritance hierarchies. | Medium | High | Slicing algorithm in `crates/deap-ast/src/slicing/` implements automated type abstraction: inherited properties deeper than 2 hops are replaced with opaque type signature contracts, mathematically bounding token length while preserving type safety. |
 | `RISK-03-AIRGAP` | Reasoning token leakage or hallucinated context crossing into execution slot. | Low | Critical | Air-gap firewall in `crates/deap-harness/src/firewall.rs` performs AST schema validation on deduction outputs before dispatching to the execution slot. Any unstructured token stream causes immediate transaction abort and defect logging. |
-| `RISK-04-CUTOVER` | Downstream customer project scripts experience breaking changes during Python-to-Rust binary cutover. | Low | Medium | Single static binary `deap` in WP-09 provides exact drop-in CLI flag compatibility with legacy Python scripts (`compile_sysml.py`, `sysmlv2_ingest.py`, `reconcile_backlog.py`). Legacy script wrappers delegate directly to `deap` CLI. |
+| `RISK-04-CUTOVER` | Downstream customer project scripts experience breaking changes during Python-to-Rust binary cutover. | Low | Medium | Single static binary suite in WP-09 provides exact drop-in CLI compatibility with native Rust tooling (`compile-sysml`, `ingest-sysml`, `reconcile-backlog`). Native CLI tools provide full replacement. |
 
 ---
 

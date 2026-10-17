@@ -87,7 +87,7 @@ flowchart TD
 2. **Step 2: Telemetry Data Offload & Non-Volatile Log Dump ($T_0 + 2\text{ min}$ to $T_0 + 4\text{ min}$):**
    - High-speed diagnostic interface connects to the Field Control Terminal (`SE-02`).
    - Non-volatile system telemetry, sensor logs, and watchdog audit traces are offloaded and cryptographically hashed.
-   - Automated fault-scan algorithm verifies zero recorded unmitigated anomaly flags during the preceding sortie.
+   - Automated fault-scan algorithm verifies zero recorded unmitigated anomaly flags during the preceding cycle.
 3. **Step 3: Rapid Tool-less Energy / Battery Module Hot-Swap ($T_0 + 4\text{ min}$ to $T_0 + 6\text{ min}$):**
    - Maintenance Technician disengages the primary quick-release retention latches.
    - Depleted smart energy module is withdrawn and transferred to the Multi-Bay Charging Hub (`SE-01`).

@@ -30,7 +30,7 @@
 
 ## Universal Mermaid Diagram Ergonomics & Layout Invariant (Zero Horizontal Sprawl)
 
-To guarantee diagram readability, visual ergonomics, and prevent extreme horizontal aspect-ratio elongation across GitHub, GitLab, and IDE Markdown previewers, all Mermaid diagrams across all specifications, blueprinted interface documents, and architectural overviews MUST adhere to the following four ergonomics rules (E1–E4):
+To guarantee diagram readability, visual ergonomics, and prevent extreme horizontal aspect-ratio elongation across GitHub, GitLab, and IDE Markdown previewers, all Mermaid diagrams across all specifications, blueprinted interface documents, and architectural overviews MUST adhere to the following five ergonomics rules (E1-E5):
 
 - **Rule E1 (Horizontal Flow Prohibition)**: Unconstrained horizontal chaining and horizontal root layouts (`flowchart LR`, `graph LR`, `graph RL`) are strictly prohibited across all specification diagrams. Horizontal layouts force downstream renderers to scale diagrams into unreadable wide ribbons or trigger horizontal scrollbars. All flowcharts and topology graphs MUST use top-down orientation (`flowchart TD` or `graph TD`).
 - **Rule E2 (Mandatory Node Label Line-Wrapping <= 35 chars per line with `<br/>`)**: Long single-line node labels cause Mermaid boxes to stretch horizontally. Node labels MUST NOT exceed 35 characters on any single line. Any multi-word, descriptive, or compound label exceeding 35 characters MUST be broken into multiple lines using explicit `<br/>` tags inside the quoted string (e.g., `Node["Primary Telemetry Stream<br/>and Health Status Monitor"]`).
@@ -44,11 +44,16 @@ To guarantee diagram readability, visual ergonomics, and prevent extreme horizon
       end
   ```
   Topological connections bind directly between subsystem block nodes with descriptive edge labels (e.g. `SubA -->|"CONN-01 (Telemetry)"| SubB`).
+- **Rule E5 (Modularized Subgraph Boundary Edge Routing & Prohibition of Monolithic Cross-Hierarchy Edge Routing)**:
+  To eliminate unreadable visual hairballs and prevent Mermaid Dagre layout engine spline collisions cutting through intermediate nested subgraph boundaries, node text boxes, and port labels:
+  1. **Decoupled Hierarchical Architecture Views**: Architectural models MUST decouple super-system operational context (e.g. DoDAF SV-1 Super-System View `sv1_super_system.mmd` partitioning external actors, ground stations, and primary platform segments) from detailed internal subsystem bus interconnects (e.g. DoDAF SV-1 Platform Subsystems View `sv1_platform_subsystems.mmd`). Attempting to depict all operational segments and multi-tier internal LRU buses in a single monolithic flowchart is strictly prohibited.
+  2. **Boundary Port & Gateway Routing**: Cross-segment and external connection edges (such as supervisory command, telemetry, or auxiliary power) MUST connect to discrete segment boundary ports or designated gateway/controller nodes, and MUST NOT penetrate across multiple nested subgraph boundaries (>= 2 subgraph nesting levels).
+  3. **Zero Nested Subgraphs with Cross-Hierarchy Edges**: If a segment subgraph contains internal nested tier subgraphs, external edges MUST NOT target nodes inside those nested tiers. Segment containers receiving external connections MUST maintain flat node hierarchy (`direction TB`) or route external edges exclusively to segment boundary interfaces (refs #277).
 
 ## Document integrity constraints
 
 These are the non-Mermaid constraints on the same corpus, enforced offline by
-`parity_auditor/validators/docs.py`. They are stated here because each one exists to keep
+`./target/release/verify-baseline` (superseding the retired Python validator `docs.py`). They are stated here because each one exists to keep
 a Tier 1 document functional and standard-agnostic, or to keep it parseable by the tools
 that read it -- the same subject as the rules above. The three fence rules are deliberately
 **distinct** from `mermaid-fence-must-be-closed` in the Mermaid syntax checker: that rule
@@ -89,7 +94,7 @@ to say which checker fired.
 
 **This file is the single normative home for Mermaid syntax constraints.** Skills that emit Mermaid MUST reference this section rather than restating their own subset. These rules were previously fragmented across four files with disjoint subsets, so an author working from one file could breach a constraint documented in another -- see issue #289.
 
-These rules are mechanically enforced, offline, by `parity_auditor/validators/mermaid_syntax_validator.py`. That checker is a rule checker, not a full Mermaid grammar parser: a clean result means no documented rule was violated, which is not proof that a diagram renders. Blocking gates must not call remote renderers -- see `.pipeline/upstream/pipeline-tooling.md` § *Validation Gates*.
+These rules are mechanically enforced, offline, by `./target/release/verify-baseline` (superseding the retired Python validator `mermaid_syntax_validator.py`). That checker is a rule checker, not a full Mermaid grammar parser: a clean result means no documented rule was violated, which is not proof that a diagram renders. Blocking gates must not call remote renderers -- see `.pipeline/upstream/pipeline-tooling.md` § *Validation Gates*.
 
 
 

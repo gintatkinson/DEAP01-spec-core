@@ -2,7 +2,7 @@
 
 # Rule: Hierarchical Concept of Operations & Tactical Mission Intent Integrity
 
-**ALWAYS enforce:** All Concept of Operations (`docs/conops/units/conops/` and `CONOPS.md`) and Tactical Mission Intent (`docs/conops/units/mission_intent/` and `MISSION_INTENT.md`) specifications in the Digital Engineering Autonomous Pipeline (DEAP) MUST adhere strictly to pure open schema contracts ($N \ge N_{\mathrm{min}}$ with zero static row caps), open multi-domain threat taxonomies across all 7 operational domains, mandatory INCOSE SEH v5.0 MoE/MoP mathematical formulations, 100% public clause citations, and deterministic modular assembly via `scripts/assemble_conops.py`.
+**ALWAYS enforce:** All Concept of Operations (`docs/conops/units/conops/` and `CONOPS.md`) and Tactical Mission Intent (`docs/conops/units/mission_intent/` and `MISSION_INTENT.md`) specifications in the Digital Engineering Autonomous Pipeline (DEAP) MUST adhere strictly to pure open schema contracts ($N \ge N_{\mathrm{min}}$ with zero static row caps), open multi-domain threat taxonomies across all 9 operational domains, mandatory INCOSE SEH v5.0 MoE/MoP mathematical formulations, 100% public clause citations, and deterministic modular assembly via `./target/release/assemble-conops`.
 
 ## Scope and Normative Authority
 
@@ -14,17 +14,17 @@ This governance standard is aligned with:
 - **ISO/IEC/IEEE 15288:2023**: Systems and software engineering -- System life cycle processes (§6.4.2 Stakeholder Needs and Requirements Definition & §6.4.3 Architecture Definition Process).
 - **INCOSE Systems Engineering Handbook v5.0**: Concept Definition (§3.4.4), Measures of Effectiveness (MoE), Measures of Performance (MoP), and Operational Scenario Engineering.
 - **ISO/IEC/IEEE 29148:2018**: Systems and software engineering -- Requirements engineering (§6.4.2 ConOps and §6.4.3 OpsCon).
-- **NATO STANAG 4586**: Standard Interfaces of UAV Control System (UCS) for NATO UAV Interoperability.
+- **IEEE 1362:1998**: Guide for Information Technology -- System Definition -- Concept of Operations (ConOps) Document.
 - **MIL-STD-882E**: Department of Defense Standard Practice: System Safety and Hazard Analysis (Task 202: Operational Hazard Analysis).
-- **SAE ARP4761 / ARP4754A**: Guidelines and Methods for Conducting the Safety Assessment Process on Civil Airborne Systems and Equipment (§3: Functional Hazard Assessment).
+- **IEC 61508**: Functional safety of electrical/electronic/programmable electronic safety-related systems (§7: Management of functional safety & Hazard Analysis).
 - **MIL-STD-1629A**: Procedures for Performing a Failure Mode, Effects and Criticality Analysis (Method 101: Functional FMECA, Method 102: Piece-Part Hardware FMECA).
 - **Operational Domain Risk Assessment**: 4D Operational Volume and Boundary Containment Margin calculation.
 - **OMG UAF v1.2 / v2.0**: Unified Architecture Framework Operational Domain Views (Op-Pr, Op-Tx, Op-Is).
 
 Enforced offline by:
-- `parity_auditor/validators/conops_completeness_validator.py` (Gate 26)
-- `parity_auditor/validators/coverage_digest_validator.py` (Gate 28)
-- `parity_auditor/validators/obligation_witness_validator.py` (Gate 29)
+- `./target/release/verify-baseline` (superseding the retired Python validator `conops_completeness_validator.py`) (Gate 26)
+- `./target/release/verify-baseline` (superseding the retired Python validator `coverage_digest_validator.py`) (Gate 28)
+- `./target/release/verify-baseline` (superseding the retired Python validator `obligation_witness_validator.py`) (Gate 29)
 
 ### Architecture Hierarchy & Standards Governance (INCOSE SEH v5.0 §3.4.4 / ISO/IEC/IEEE 15288:2023 / ISO/IEC/IEEE 29148:2018 §6.4.2)
 
@@ -38,6 +38,8 @@ In accordance with **INCOSE Systems Engineering Handbook v5.0 (§3.4.4 Concept D
 ### Strict Level 1B vs. Level 2 Metamodel Abstraction Boundary
 - **ConOps Operational Scope (Level 1B)**: ConOps models user operational viewpoints, user classes, operational activities (`OA-xx`), and operational scenarios (`SCN-xx`).
 - **Strict Exclusion of Level 2 System Use Cases**: ConOps documents and SV-1 diagrams are strictly forbidden from defining, citing, or injecting formal Level 2 System Use Cases (`uc-xx`). Formal System Use Cases (`uc-xx`) specify technical system functions realizing Level 2 Features and belong strictly in downstream System Requirements Specifications (SyRS Level 2 under `docs/use-cases/`).
+- **User Class Taxonomy Disambiguation (`UCL-xx`)**: In accordance with ISO/IEC/IEEE 29148:2018 §5.2.4, operational User Classes MUST use the `UCL-xx` prefix (`UCL-01` through `UCL-N`), strictly isolating stakeholder taxonomy from SyRS Level 2 System Use Cases (`uc-xx` or `USECASE-xx`) to prevent downstream agent reasoning collisions and automated sanitization corruption (refs #291).
+
 
 ### System Architecture Diagram Representation Standard (Option 3) & 100% Mathematical Parity Invariant
 In accordance with DoDAF v2.02 SV-1, IEEE 1362 §5.3, ISO/IEC/IEEE 15288:2023, INCOSE SE Handbook v5.0 (§3.4.4), and ISO/IEC/IEEE 29148:2018 §6.4.2–§6.4.3:
@@ -45,7 +47,9 @@ In accordance with DoDAF v2.02 SV-1, IEEE 1362 §5.3, ISO/IEC/IEEE 15288:2023, I
 - **Vertical Hierarchical Tier Partitioning (`direction TB`)**: Multi-subsystem and segment interface diagrams MUST declare `direction TB` inside subgraphs and partition nodes into vertical tiers with a maximum of 3 columns horizontally (max 3-column vertical tier partitioning).
 - **100% Mathematical Parity with Section 4.8 Allocation Table**: Every subsystem block in the SV-1 diagram embeds the exact set of typed logical and physical ports (`• PORT-... (DIRECTION)`) matching the Section 4.8 Physical & Logical Interface Allocations table rows 1:1, derived deterministically from 100% of declared AST `part def` nodes in exact lockstep.
 - **Pure Schema-Driven Operational Segments & Dynamic Layout Spacers**: Operational segments and Mermaid layout subgraphs MUST derive 100% and exclusively from top-level packages or segment blocks present in the user-provided SysML AST in `schema/`. Hardcoding domain-specific segment names or communication plans into architecture diagrams, rules, or templates is strictly prohibited. Layout vertical spacers (`~~~`) MUST be generated dynamically between declared AST segments.
-- **Strict Level 1B vs. Level 1C ICD Boundary**: Detailed internal wire-level interconnects, pinouts, RS-485 serial framing, opcodes (0x10, 0x11, etc.), register bitmasks, and CRC-16 equations belong strictly in Level 1C Interface Control Documents (`ICD_01_SYSTEM_INTERFACE_MATRIX.md` and `ICD_02_MASTER_SIGNAL_DICTIONARY.md`), NOT in the ConOps document. Section 8 (Op-Tx) captures high-level operational information exchanges (Op-Tx: C2 Commands, Telemetry, Video, Target Tracks, Arming Authorization) and strictly excludes component-internal serial opcode reference tables.
+- **Level 1B ConOps SV-1 to Level 1C ICD 1:1 Parity Mandate**: Detailed internal wire-level interconnects, pinouts, RS-485 serial framing, opcodes (0x10, 0x11, etc.), register bitmasks, and CRC-16 equations belong in Level 1C Interface Control Documents (`ICD_01_SYSTEM_INTERFACE_MATRIX.md` and `ICD_02_MASTER_SIGNAL_DICTIONARY.md`). Every ConOps SV-1 architectural edge/connection (`CONN-01`..`CONN-N`) MUST map 1:1 bidirectionally with a registered Level 1C interface entry in the System Interface Matrix (`ICD_01_SYSTEM_INTERFACE_MATRIX.md`), ensuring zero orphan connection links or unregistered interface contracts across Level 1B and Level 1C specifications. Section 8 (Op-Tx) captures high-level operational information exchanges and strictly excludes component-internal serial opcode reference tables.
+- **Canonical SSOT Architecture Views Library Mandate (`docs/architecture/views/`) & Diagram Divergence Prevention**: All high-level operational and system architecture views MUST derive from or maintain 1:1 bidirectional parity with the canonical SSOT Architecture Views Library in `docs/architecture/views/` (including `sv1_super_system.mmd`, `sv1_platform_subsystems.mmd`, and `icd_system_interface_matrix.mmd`). Authoring independent, duplicate inline Mermaid architecture diagrams that diverge in subgraphs, nodes, ports, or connection links across ConOps, ICDs, and executive deliverables is strictly prohibited (refs #276).
+- **Modularized Subgraph Boundary Edge Routing (Rule E5)**: In accordance with Rule E5, architecture diagrams MUST decouple super-system operational context (DoDAF SV-1 Super-System View `sv1_super_system.mmd`) from internal subsystem bus breakdowns (DoDAF SV-1 Platform Subsystems View `sv1_platform_subsystems.mmd`). Inter-segment and cross-subgraph communication MUST route through discrete boundary interface ports or segment gateway/controller nodes, strictly prohibiting edges penetrating deeply into nested subgraphs across multiple hierarchy levels. Internal component buses and tier interconnects route within dedicated subsystem views, eliminating monolithic visual hairballs (refs #277).
 
 ---
 
@@ -64,14 +68,14 @@ In accordance with DoDAF v2.02 SV-1, IEEE 1362 §5.3, ISO/IEC/IEEE 15288:2023, I
 
 ### 2. Open Multi-Domain Operational Threat Matrices
 - **9-Domain Minimum Requirement**: To guarantee comprehensive risk characterization beyond simple mechanical hardware failures, the Multi-Domain Operational Threat & Contested Environment Matrix MUST explicitly address at least one threat vector from every one of the following 9 operational threat domains ($N \ge 9$):
-1. **Kinetic**: Ballistic impact, hostile shrapnel, mid-air object collision (e.g., bird strike, debris), explosive blast overpressure.
-2. **Mechanical**: Structural flutter, fatigue failure, control surface/actuator jamming, motor bearing seizure, propeller delamination.
-3. **Power / Thermal**: Battery cell thermal runaway, power rail brownout, electronic speed controller (ESC) thermal throttling, generator disconnect.
-4. **Environmental**: Extreme ambient temperature, severe turbulence/wind gusts exceeding structural / airframe limits, icing/pitot probe freeze, lightning discharge, heavy precipitation, volcanic particulate.
-5. **EW / Cyber**: GNSS spoofing/jamming, RF command uplink jamming, telemetry sniffing, man-in-the-middle packet injection, unauthorized command injection, firmware tampering.
+1. **Kinetic**: Ballistic impact, hostile fragments/shrapnel, physical obstacle/debris collision, explosive blast overpressure.
+2. **Mechanical**: Structural resonance/flutter, mechanical fatigue failure, linkage or actuator mechanism jamming, bearing seizure, structural delamination or material fracture.
+3. **Power / Thermal**: Energy storage / battery cell thermal runaway, power rail brownout, power converter / motor driver thermal throttling, generator disconnect.
+4. **Environmental**: Extreme ambient temperature, dynamic fluid/aerodynamic/hydrodynamic loads exceeding structural design limits, probe/sensor freeze and icing, electrostatic/lightning discharge, heavy precipitation, atmospheric or fluid particulate contamination.
+5. **EW / Cyber**: Positioning/navigation signal spoofing or jamming, RF command uplink jamming, telemetry interception, man-in-the-middle packet injection, unauthorized command injection, firmware tampering.
 6. **Optical**: High-energy laser blinding of optical tracking sensors, sensor dazzling, camera saturation, optical flow denial.
 7. **Signature / Acoustic**: Acoustic emission harmonics, infrared plume radiation, radar cross-section (RCS) observability.
-8. **Human Factors**: Ground operator input disparity, operator / pilot fatigue, unauthorized control override, communication protocol desynchronization.
+8. **Human Factors**: Operator input disparity, operator cognitive saturation or fatigue, unauthorized control override, human-machine interface (HMI) communication protocol desynchronization.
 9. **CBRN**: Chemical plumes, biological particulates, radiological contamination, toxic corrosive environments.
 
 Restricting threat analysis to an arbitrary single domain or omitting applicable threat vectors is strictly prohibited.
@@ -82,7 +86,7 @@ Restricting threat analysis to an arbitrary single domain or omitting applicable
 - **SI & Normalized Units**: Every metric MUST define its unit of measurement using normalized SI units, percentages, or explicit `Dimensionless` designations.
 
 ### 4. 100% Public Clause Citations
-- **Traceability Rule**: Every operational requirement, normative standard, threat mitigation rule, and METL task MUST cite verifiable, publicly accessible standard clauses (e.g., `ISO/IEC/IEEE 29148:2018 §6.4.2`, general authoritative public standards clauses, `MIL-STD-882E §4.3`, `RTCA DO-178C §6.3.1`).
+- **Traceability Rule**: Every operational requirement, normative standard, threat mitigation rule, and METL task MUST cite verifiable, publicly accessible standard clauses (e.g., `ISO/IEC/IEEE 29148:2018 §6.4.2`, general authoritative public standards clauses, `MIL-STD-882E §4.3`, `IEC 61508-3 §7.4`).
 - **Prohibition of Un-Cited Additions**: Speculative, ungrounded, or heuristic requirements lacking authoritative clause citations are strictly forbidden across all specification units.
 
 ### 5. LaTeX & KaTeX Mathematical Rendering Integrity
@@ -90,11 +94,11 @@ Per [`rules/latex-katex-integrity.md`](latex-katex-integrity.md):
 - **Display Math Blocks**: All mathematical formulations (derived from schema AST constraint or calculation definitions) MUST use dedicated display blocks `$$ \begin{aligned} ... \end{aligned} $$` on separate newlines.
 - **Pure Symbolic Math**: Embedding physical unit macros (e.g. `\text{ m}`, `\text{ m/s}`, `\text{ J}`) inside LaTeX math blocks is strictly prohibited.
 - **Accompanying Parameter Tables**: Display equations MUST be immediately followed by a parameter definition table defining every mathematical symbol, nominal value, SI unit, and engineering constraint.
-- **No Table Math Delimiters**: Math delimiters (`$ ... $` or `$$ ... $$`) inside Markdown table headers, delimiter rows, and data cells are strictly prohibited. Use standard plain text and Unicode characters (e.g. `h_max m`, `v_wind m/s`, `J`, `deg`, `tau_max ms`).
+- **No Table Math Delimiters**: Math delimiters (`$ ... $` or `$$ ... $$`) inside Markdown table headers, delimiter rows, and data cells are strictly prohibited. Use standard plain text and Unicode characters (e.g. `boundary_max m`, `v_max m/s`, `J`, `deg`, `tau_max ms`).
 
 ### 6. Deterministic Modular Assembly & Cross-Model Allocation
 - **Modular Unit Storage**: ConOps and Mission Intent specifications MUST be authored as discrete modular unit files under `docs/conops/units/conops/` (12 modules: `01_METADATA_AND_OVERVIEW.md` through `12_EMERGENCY_DECISION_MATRIX.md`) and `docs/conops/units/mission_intent/` (10 modules: `01_COMMANDERS_INTENT.md` through `10_OPERATIONAL_ALLOCATION_TAGS.md`).
-- **Deterministic Assembly Engine**: Master documents (`docs/conops/CONOPS.md` and `docs/conops/MISSION_INTENT.md`) MUST be compiled via `python3 scripts/assemble_conops.py`.
+- **Deterministic Assembly Engine**: Master documents (`docs/conops/CONOPS.md` and `docs/conops/MISSION_INTENT.md`) MUST be compiled via `./target/release/assemble-conops`.
 - **Zero Placeholder Tokens**: Assembled specifications MUST contain zero unresolved `{{...}}` template tokens.
 - **Gate 24 Operational Allocation**: Every UAF Operational Activity (`OA-XX`) and METL Task (`MET-XX`) MUST define a machine-verifiable Gate 24 allocation tag (`/// OperationalAllocation: [OA-XX]` or `/// OperationalAllocation: [MET-XX]`) linking operational tasks to structural and behavioral SysML v2 AST elements.
 
@@ -105,7 +109,7 @@ Per [`rules/latex-katex-integrity.md`](latex-katex-integrity.md):
 Safety, threat, and hazard derivation in DEAP follows a strict three-tier, multi-run architectural lifecycle to eliminate circular dependency deadlocks between operational concept definition and physical component selection:
 
 ### Tier 1 (Run 1: Mission Intent / Concept Formulation)
-- **Primary Methodologies**: Functional Hazard Assessment (FHA) under **SAE ARP4761 §3** and Operational Hazard Analysis (OHA) under **MIL-STD-882E Task 202**.
+- **Primary Methodologies**: Functional Hazard Assessment (FHA) under **IEC 61508-1 §7.4** and Operational Hazard Analysis (OHA) under **MIL-STD-882E Task 202**.
 - **Derivation Mechanism**: Threats and operational hazards are derived systematically from declared **Mission Functions** (`Propel`, `Navigate`, `Communicate`, `Sense`, `Contain`) and **Operating Domains** (`Kinetic`, `Mechanical`, `Power/Thermal`, `Environmental`, `EW`, `Cyber`, `Optical`, `Signature`, `Human Factors`, `CBRN`) using standardized hazard guide words:
   * `Loss`: Complete absence or cessation of the required mission function.
   * `Degraded`: Sub-nominal capacity, reduced bandwidth, or inadequate control authority.

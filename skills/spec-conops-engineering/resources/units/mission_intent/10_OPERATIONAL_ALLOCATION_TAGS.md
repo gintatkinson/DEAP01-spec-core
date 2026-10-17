@@ -24,11 +24,11 @@ In accordance with INCOSE Systems Engineering Handbook v5.0 and the DEAP Gate 24
 
 | Task ID | Task Name | Allocated System Subsystem | SysML v2 Allocation Block | Criticality Assurance Level | Level of Interoperability | Verification Evidence Artifact |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `MET-01` | PreOperationSystemCheckout | SystemManagementSubsystem | `SysML::Blocks::PBITExecutive` | High (Assurance_Level_A) | Level 2 (Telemetry Exchange) | `tests/pbit_checkout_test.py` |
-| `MET-02` | AutonomousCorridorTransit | GuidanceControlSubsystem | `SysML::Blocks::TrajectoryTracker` | High (Assurance_Level_A) | Level 3 (Autonomous Control) | `tests/guidance_sim.py` |
-| `MET-03` | AreaStateMonitoring | PayloadManagementSubsystem | `SysML::Blocks::SensorPayloadController` | Medium (Assurance_Level_B) | Level 4 (Payload Control) | `tests/monitoring_test.py` |
-| `MET-04` | DynamicBoundaryDeconfliction | BoundaryDeconflictionSubsystem | `SysML::Blocks::DeconflictionManager` | High (Assurance_Level_A) | Level 3 (Autonomous Control) | `tests/deconfliction_sim.py` |
-| `MET-05` | CommunicationCountermeasures | CommunicationC2Subsystem | `SysML::Blocks::PACEStateMachine` | Medium (Assurance_Level_B) | Level 2 (Telemetry Exchange) | `tests/pace_failover_test.py` |
-| `MET-06` | PrecisionStateEstimation | StateEstimationSubsystem | `SysML::Blocks::StateEstimationEngine` | Medium (Assurance_Level_B) | Level 4 (Payload Control) | `tests/state_estimation_test.py` |
-| `MET-07` | AutonomousResourceDivert | ResourceManagementSubsystem | `SysML::Blocks::ResourceReserveMonitor` | High (Assurance_Level_A) | Level 3 (Autonomous Control) | `tests/resource_math_test.py` |
-| `MET-08` | PostOperationSecureShutdown | SecurityManagementSubsystem | `SysML::Blocks::CryptoZeroizationUnit` | Medium (Assurance_Level_B) | Level 1 (Data Receipt) | `tests/crypto_zeroization_test.py` |
+| `MET-01` | PreOperationSystemCheckout | SystemManagementSubsystem | `SysML::Blocks::PBITExecutive` | High (Assurance_Level_A) | Level 2 (Telemetry Exchange) | `crates/verify-baseline` |
+| `MET-02` | AutonomousCorridorTransit | GuidanceControlSubsystem | `SysML::Blocks::TrajectoryTracker` | High (Assurance_Level_A) | Level 3 (Autonomous Control) | `crates/compile-sysml` |
+| `MET-03` | AreaStateMonitoring | PayloadManagementSubsystem | `SysML::Blocks::SensorPayloadController` | Medium (Assurance_Level_B) | Level 4 (Payload Control) | `crates/compile-sysml` |
+| `MET-04` | DynamicBoundaryDeconfliction | BoundaryDeconflictionSubsystem | `SysML::Blocks::DeconflictionManager` | High (Assurance_Level_A) | Level 3 (Autonomous Control) | `crates/compile-sysml` |
+| `MET-05` | CommunicationCountermeasures | CommunicationC2Subsystem | `SysML::Blocks::PACEStateMachine` | Medium (Assurance_Level_B) | Level 2 (Telemetry Exchange) | `crates/verify-baseline` |
+| `MET-06` | PrecisionStateEstimation | StateEstimationSubsystem | `SysML::Blocks::StateEstimationEngine` | Medium (Assurance_Level_B) | Level 4 (Payload Control) | `crates/compile-sysml` |
+| `MET-07` | AutonomousResourceDivert | ResourceManagementSubsystem | `SysML::Blocks::ResourceReserveMonitor` | High (Assurance_Level_A) | Level 3 (Autonomous Control) | `crates/verify-baseline` |
+| `MET-08` | PostOperationSecureShutdown | SecurityManagementSubsystem | `SysML::Blocks::SecurityPartition` | Medium (Assurance_Level_B) | Level 1 (Data Receipt) | `crates/verify-baseline` |

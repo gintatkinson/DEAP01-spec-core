@@ -1,0 +1,41 @@
+flowchart TD
+    subgraph External_Actors["External Operating Environment & Actors (IEEE 1362 §5.1)"]
+        direction TB
+        Operator["Operator and<br/>Supervisory Entity"]
+        Environment["External Operating Environment<br/>and Boundary Dynamics"]
+        ExternalAuthority["External Oversight and<br/>Assurance Authority"]
+    end
+
+    subgraph Supervisory_Segment["Supervisory & Control Segment (IEEE 1362 §5.3)"]
+        direction TB
+        SupervisoryStation["Supervisory Control Station<br/>• PORT_SUP_C2 (INOUT)<br/>• PORT_SUP_DISP (OUT)"]
+    end
+
+    subgraph Core_Execution_Segment["Core System Execution Segment (DoDAF SV-1)"]
+        direction TB
+        SystemController["Central System Controller<br/>• PORT_CTRL_C2 (INOUT)<br/>• PORT_CTRL_CMD (OUT)<br/>• PORT_CTRL_TLM (IN)"]
+        SensorFusion["Perception & Sensor Fusion Unit<br/>• PORT_SENS_IN (IN)<br/>• PORT_SENS_DATA (OUT)"]
+        ActuationCore["Distributed Actuation and<br/>Effector Core<br/>• PORT_ACT_IN (IN)"]
+        SafetyWatchdog["Hardware Safety Monitor & Watchdog<br/>• PORT_WD_IN (IN)<br/>• PORT_WD_TRIG (OUT)"]
+    end
+
+    subgraph Support_Segment["Auxiliary & Support Segment (IEEE 1362 §5.3)"]
+        direction TB
+        SupportEquipment["Support and Maintenance<br/>Infrastructure<br/>• PORT_SUPP_PWR (OUT)"]
+    end
+
+    External_Actors ~~~ Supervisory_Segment
+    Supervisory_Segment ~~~ Core_Execution_Segment
+    Core_Execution_Segment ~~~ Support_Segment
+
+    %% External Interface Connections
+    Operator -->|"CONN-01: Supervisory Command & Control"| SupervisoryStation
+    Environment -.->|"CONN-02: Environmental & Boundary Telemetry"| SensorFusion
+    ExternalAuthority -->|"CONN-03: Authorization & Safety Consent"| SupervisoryStation
+
+    %% Segment Inter-Connects (Item Flows)
+    SupervisoryStation -->|"CONN-04: System C2 Datalink [PORT_SUP_C2 -> PORT_CTRL_C2]"| SystemController
+    SensorFusion -->|"CONN-05: Sensor State Estimates [PORT_SENS_DATA -> PORT_CTRL_TLM]"| SystemController
+    SystemController -->|"CONN-06: Actuator Demand Vector [PORT_CTRL_CMD -> PORT_ACT_IN]"| ActuationCore
+    SystemController -->|"CONN-07: Safety Heartbeat & State [PORT_CTRL_CMD -> PORT_WD_IN]"| SafetyWatchdog
+    SupportEquipment -.->|"CONN-08: Auxiliary Power & Diagnostics [PORT_SUPP_PWR]"| SystemController

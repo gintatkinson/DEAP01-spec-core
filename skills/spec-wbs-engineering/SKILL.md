@@ -37,8 +37,8 @@ You should invoke this skill as **Phase 4 (Worker WBS - Work Breakdown Structure
 - **Preceding Phases**:
   - Phase 0.5: `Normative Research Worker` (Ingests standards and creates Declared-Total Population Register)
   - Phase 0.75: `Worker ConOps` (Synthesizes Level 1B Hierarchical ConOps and Mission Intent trees)
+  - Phase 0.85: `Interface Spec Worker (Worker ICD / Worker 0D)` (Synthesizes Level 1C Logical Interface Matrix and Signal Dictionary)
   - Phase 1: `Structural Spec Worker` (Extracts Level 2 Epics and Features from SysML AST)
-  - Phase 1.5: `Interface Spec Worker (Worker ICD)` (Synthesizes Level 1C Logical Interface Matrix and Signal Dictionary)
   - Phase 2: `Behavioral Spec Worker` (Generates Level 2 BDD User Stories)
   - Phase 3: `System Interaction Spec Worker` (Generates Level 2 UML Use Cases and Sequence Diagrams)
   - Implementation Phase: Dual-Track MBD synthesis and Pytest verification suites

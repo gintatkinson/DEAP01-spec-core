@@ -13,18 +13,18 @@
 ## Upstream Distribution Template Clean Landing Zone Invariant
 - **Clean Landing Zone Mandate**: In upstream distribution template repositories (`DEAP-*`), the directories `schema/`, `docs/epics/`, `docs/features/`, `docs/user-stories/`, and `docs/use-cases/` must remain clean landing zones with ONLY `.gitkeep` files.
 - **Strict Prohibition of Concrete Specifications**: Committing concrete downstream project specifications, models, or code to upstream distribution templates is strictly forbidden.
-- **Downstream Workspace Boundary**: Concrete project schemas and specifications reside exclusively in downstream application workspaces installed via `scripts/install_pipeline.sh`.
+- **Downstream Workspace Boundary**: Concrete project schemas and specifications reside exclusively in downstream application workspaces initialized from domain distribution templates.
 
-## Mandatory Session Initialization Gate (CRITICAL FIRST STEP)
-Immediately following installation and on EVERY new session startup, before accepting ANY user directives, responding to inquiries, or executing task implementations, the agent MUST execute the following 6-step sequence in Turn 1:
+## Mandatory Session Initialization Gate (Role- & Phase-Scoped Lazy Loading)
+On session startup, before executing file modifications, the coordinator agent MUST execute the following lightweight initialization sequence (spawned single-item subagents that receive a curated prompt terminating with `---GOVERNANCE-END---` skip Steps 0-5 and execute their assigned `SKILL.md` directly):
 0. **Detect Repository Role & Scope (Direct-Path Read)**: Inspect whether `.pipeline/upstream/` exists on disk via direct-path read (`list_dir` or `view_file`). Do not rely on glob or search tools that ignore hidden dot-directories.
    - If present -> `UPSTREAM_SPEC_CORE_COMPILER`
    - If absent -> `DOWNSTREAM_CUSTOMER_PROJECT`
 1. **Read Governance Constitution**: Execute `view_file` on `.pipeline/constitution.md` to ingest the platform-independent functional governance layer and zero-mocking persistence mandates.
-2. **Load Project Skills**: Execute `view_file` on `skills/feature-driven-implementation/SKILL.md` (and active skills under `skills/`) to initialize feature-driven implementation protocols and review gates.
+2. **Load Active Task Skill On-Demand**: Execute `view_file` ONLY on the `SKILL.md` relevant to the active task (do NOT preload `skills/feature-driven-implementation/SKILL.md` during specification, research, or upstream compiler maintenance tasks).
 3. **Load Governance Rules**: Execute `view_file` on `.pipeline/ACTIVE_RULES_BUNDLE.md` to ingest the complete, consolidated suite of active governance rules in a single read.
-4. **Load Platform Profile**: Read the target platform execution profile (e.g., `.pipeline/profiles/flutter.md`, `.pipeline/profiles/react.md`, `.pipeline/profiles/ros2_cpp.md`, or `.pipeline/profiles/px4_module.md`) to establish platform-specific constraints.
-5. **Bootstrap Tracker Labels & Verify Baseline**: Verify that repository issue tracker labels and baseline conformance pass by running `python3 scripts/verify_downstream_baseline.py --no-domain`.
+4. **Conditional Platform Profile Load (Downstream Implementation Phase Only)**: Per `rules/constitution-first.md`, read `.pipeline/profiles/<target_platform>.md` ONLY when implementing downstream application code and ONLY for the workspace's configured target platform. Never read `.pipeline/profiles/flutter.md` during `UPSTREAM_SPEC_CORE_COMPILER` sessions, specification generation, or non-Flutter projects.
+5. **Verify Baseline When Modifying Repository State**: Run `./target/release/verify-baseline . --no-domain` (or `cargo run --release -p verify-baseline -- . --no-domain` if the release binary has not been built) once per coordinator session prior to implementation or commit gates (never redundantly inside read-only or single-item subagents). The legacy Python and shell tooling (`scripts/verify_downstream_baseline.py`, `reconcile_backlog.py`, `parity_auditor`, `setup_git_hooks.sh`) is permanently retired per Check 32 and Check 33 and MUST NOT be invoked.
 
 ## Strict Planning Gate (No Execution Without Approved Plan)
 - You are strictly forbidden from creating, modifying, or deleting files in the workspace or dispatching any subagents unless that action is documented in an approved implementation plan.
@@ -42,10 +42,19 @@ Immediately following installation and on EVERY new session startup, before acce
   2. A blocking error or unresolvable requirement ambiguity is encountered.
   3. The initial implementation plan has not been approved.
 
-## Strict Prohibition of Unit Tests & Exclusive Semantic Acceptance Testing Mandate
-- **Unit Tests Strictly Forbidden**: Creating, maintaining, or executing unit test suites (`tests/`, `test_*.py`, `pytest`) is strictly forbidden across this repository. Coordinators and subagents must never create unit test files or invoke `pytest`.
-- **Exclusive Semantic Acceptance Testing**: All verification across the pipeline must be performed exclusively via end-to-end semantic acceptance testing against real schemas and domain specifications (`sysmlv2_ingest.py`, `scripts/verify_downstream_baseline.py`, and `scripts/e2e_acceptance_harness.py`).
-- **Forbidden Test Workspace Creation**: Creating mock test projects, mock repository directories, or test-runner scripts (such as `test_project/` or `run_tests.py`) directly inside the workspace is strictly forbidden.
+## Mandatory Native Rust TDD & Prohibition of Legacy Python/Pytest
+- **Legacy Python & Pytest Strictly Prohibited (Check 33)**: Creating, maintaining, or executing Python source files (`*.py`), Python test suites (`tests/`, `test_*.py`), `pytest`, or any other Python test runner is strictly forbidden across this repository. Check 33 (Zero Python Scripts Invariant) enforces this on disk; Check 32 (Zero Shell Scripts Invariant) equally forbids `*.sh` files.
+- **Native Rust Unit Tests Strictly Mandatory**: Native Rust `#[test]` unit tests, mutation tests (negative probes proving each gate can fail), and the RED-GREEN-REFACTOR TDD cycle are **strictly mandatory** across all Rust crates under `crates/`. Every fix or feature MUST ship a failing `#[test]` demonstrated RED before the implementation is written, then GREEN after it.
+- **Workspace Test Suite Gate**: `cargo test --workspace` MUST pass with zero failures before any work package is declared complete, alongside `./target/release/verify-baseline . --no-domain`.
+- **Semantic Acceptance Testing**: End-to-end semantic acceptance verification against real schemas and domain specifications is performed exclusively with the native Rust binaries:
+  - Baseline verification: `./target/release/verify-baseline . --no-domain` (or `cargo run --release -p verify-baseline -- . --no-domain`)
+  - Backlog reconciliation: `./target/release/reconcile-backlog`
+  - SysML compilation / sync / STPA: `./target/release/compile-sysml`
+  - Level 0 ingestion: `./target/release/ingest-sysml`
+  - ConOps assembly: `./target/release/assemble-conops`
+  - Workspace test suite: `cargo test --workspace`
+- **Retired Tooling**: `scripts/verify_downstream_baseline.py`, `sysmlv2_ingest.py`, `scripts/e2e_acceptance_harness.py`, `reconcile_backlog.py`, `parity_auditor`, and `setup_git_hooks.sh` are permanently retired and MUST NOT be referenced as active tooling or invoked.
+- **Forbidden Test Workspace Creation**: Creating mock test projects, mock repository directories, or test-runner scripts (such as `test_project/` or `run_tests.py`) directly inside the workspace is strictly forbidden. Rust tests requiring filesystem fixtures MUST create them in temporary directories that are removed on completion.
 
 ## Mandatory Workspace-Relative Paths Invariant
 - All source code, tests, configuration, documentation, scripts, and entitlements MUST use workspace-relative paths (`.`, `./...`) or environment-derived path resolution. Hardcoded workstation, environment-specific, or user-specific machine paths are strictly prohibited across all codebase tiers.
@@ -65,6 +74,7 @@ Immediately following installation and on EVERY new session startup, before acce
   6. **Enforce 3-Layer Definition of Done**: The full 3-layer semantic chain ((1) Domain State & Data Model, (2) Logic & State Management, (3) Presentation & Actuator Interface Binding) is mandatory per specification item. Each micro-task must state deliverables or the task number closing each layer; writing `N/A` is forbidden.
   7. **Runtime Dispatch Capability**: Use whichever context-isolated dispatch tool the active runtime provides. If unavailable, halt and escalate as a blocker.
   8. **Authorization**: Append `PROCEED` (case-insensitive) to authorize subagents to use modifying tools.
+  9. **Component-Level Failure Mode Research Swarm Mandate**: During Step 1.5, monolithic failure mode research is strictly prohibited. The coordinator MUST decompose all AST `part def` components declared in `.pipeline/schema.sysml` and dispatch context-isolated research subagents per component (role: `Component Failure Mode Researcher`) to populate `docs/research/FAILURE_MODE_REGISTRY.md` across the 4 Universal Failure Dimensions before authorizing downstream STPA/FMECA matrix synthesis.
 
 ## Mandatory Application Compilation Build for Verification
 - During Step 4 verification, the agent MUST run a full compilation build of the application (e.g. `flutter build` or `npm run build` as specified by the platform profile) to ensure it compiles cleanly. Assertions of completion without verified compile output are strictly forbidden.
@@ -75,7 +85,7 @@ Immediately following installation and on EVERY new session startup, before acce
   * Has the user explicitly approved a file-write/command execution for this turn? (Yes/No)
   * Am I making any silent assumptions about the user's intent?
   * Does the active skill mandate context-isolated subagent dispatches, **or** does this turn write any repository source or specification file? (If yes to either, coordinator direct file-writing is locked).
-  * Has the Section 3.3 Mandatory Initialization Sequence been completed and verified for this session? (Yes/No. If No, halt all other actions and execute initialization immediately).
+  * Has the Mandatory Initialization Sequence been completed for this session (or is this a curated subagent receiving ---GOVERNANCE-END---)? (Yes/No. If No, halt all other actions and execute initialization immediately).
 - The coordinator delegation duty binds for all repository source, governance, rules, tooling, and specification writes. All file writes MUST be delegated exclusively to spawned subagents.
 - **No Documentation/Installation Drift**: Update installation instructions (`README.md`, installer scripts) whenever rules or directories change. Verify `git diff origin/<branch>` is empty before declaring completion.
 
@@ -84,7 +94,7 @@ Immediately following installation and on EVERY new session startup, before acce
 - **Mandatory Tracker Issue Transition Gate**: Every issue referenced in the commit log must carry `status:fixed-resolved` (or `status::fixed-resolved` on GitLab) and verification evidence comments prior to walkthrough completion.
 
 ## Mandatory Upstream Tooling Bug Reporting
-- If a tooling bug or limitation is identified in shared pipeline scripts, dispatch a subagent with `skills/adversarial-code-auditor/SKILL.md` to produce a 7-section defect dossier and submit via `python3 scripts/file_defect.py`. Do not apply silent local-only patches.
+- Before filing an upstream defect or tooling bug, an adversarial auditor subagent MUST be dispatched with `skills/adversarial-code-auditor/SKILL.md` to produce a verified 7-section defect dossier with un-falsifiable empirical reproduction, and validate it offline via `./target/release/verify-baseline check-defect` before submitting via `./target/release/reconcile-backlog create-issue --label bug` (or `./target/release/file-defect`). Filing raw or unverified defect reports is strictly prohibited. Do not apply silent local-only patches.
 
 ## Documentation Integrity -- No Wholesale Replacement Without Approval
 - You are strictly forbidden from replacing, truncating, or rewriting any documentation file in a way that removes substantial content unless explicitly approved by the user in the current conversation turn.
@@ -106,7 +116,7 @@ Immediately following installation and on EVERY new session startup, before acce
 - **Subagent Tool Locking**: Subagents must only execute tools within their explicit domain.
 
 ## Backlog Reconciliation Mandate
-- Before finalizing any implementation branch commit, merge, or PR, execute `python3 skills/spec-orchestrator/scripts/reconcile_backlog.py` to synchronize local specifications, checklists, and diagrams with the issue tracker.
+- Before finalizing any implementation branch commit, merge, or PR, execute `./target/release/reconcile-backlog` to synchronize local specifications, checklists, and diagrams with the issue tracker. The retired `reconcile_backlog.py` script MUST NOT be invoked.
 
 ## Mermaid Syntax & Diagram Integrity Rules
 - Every Mermaid diagram MUST have matching closing fences (```` ``` ```` on a new line). Leaking fences are forbidden.

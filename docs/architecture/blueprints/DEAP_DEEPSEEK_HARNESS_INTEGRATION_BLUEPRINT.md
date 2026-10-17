@@ -204,12 +204,14 @@ sequenceDiagram
     
     rect rgb(240, 245, 255)
         note over Harness,P0: Phase 1: Pipeline 0 Pre-Spec Safety Engineering
-        Harness->>P0: Dispatch Worker 0A (CONOPS Synthesis)
-        P0-->>Harness: Output docs/conops/CONOPS.md
-        Harness->>P0: Dispatch Worker 0B (STPA & SORA SAIL)
-        P0-->>Harness: Output docs/safety/STPA_MATRIX.md + CoT Log
-        Harness->>P0: Dispatch Worker 0C (SysML v2 & Handoff AST)
-        P0-->>Harness: Output pipeline0_handoff_contract.json
+        Harness->>P0: Step 0: Ingest & Compile Schema (compile-sysml)
+        P0-->>Harness: Canonical .pipeline/schema.sysml & schema-digest.json
+        Harness->>P0: Dispatch Worker Research (Phase 0.5 Normative Research)
+        P0-->>Harness: Output docs/research/ (RESEARCH_INVENTORY.md & FAILURE_MODE_REGISTRY.md)
+        Harness->>P0: Dispatch Worker 0A/0B (Phase 0.75 CONOPS & STPA)
+        P0-->>Harness: Output docs/conops/ & docs/safety/STPA_MATRIX.md + CoT Log
+        Harness->>P0: Dispatch Worker 0D (Phase 0.85 Level 1C ICDs)
+        P0-->>Harness: Output docs/interfaces/ & pipeline0_handoff_contract.json
     end
 
     rect rgb(245, 255, 240)

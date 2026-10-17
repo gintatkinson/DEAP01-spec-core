@@ -23,29 +23,29 @@
    - [2.2 Software Dependencies](#22-software-dependencies)
 3. [Upstream Repository Setup](#3-upstream-repository-setup)
    - [Step 3.1: Clone the Upstream Compiler Repository](#step-31-clone-the-upstream-compiler-repository)
-   - [Step 3.2: Provision a Python Virtual Environment](#step-32-provision-a-python-virtual-environment)
-   - [Step 3.3: Install Repository Dependencies](#step-33-install-repository-dependencies)
-   - [Step 3.4: Install Parity Auditor in Editable Mode](#step-34-install-parity-auditor-in-editable-mode)
+   - [Step 3.2: Rust 1.80+ Toolchain Verification](#step-32-rust-180-toolchain-verification)
+   - [Step 3.3: Build Pure-Rust Workspace Crates](#step-33-build-pure-rust-workspace-crates)
+   - [Step 3.4: Configure Git Pre-Commit Hooks via verify-baseline](#step-34-configure-git-pre-commit-hooks-via-verify-baseline)
 4. [Downstream Workspace Installation & Platform Bootstrapping](#4-downstream-workspace-installation--platform-bootstrapping)
-   - [4.1 Installing into a Downstream Project](#41-installing-into-a-downstream-project)
+   - [4.1 Initializing a Downstream Workspace](#41-initializing-a-downstream-workspace)
    - [4.2 Downstream Workspace Structure](#42-downstream-workspace-structure)
    - [4.3 Clean Landing Zone Invariant Distinction](#43-clean-landing-zone-invariant-distinction)
    - [4.4 Platform Profile Bootstrapping (.pipeline/profiles/)](#44-platform-profile-bootstrapping-pipelineprofiles)
    - [4.5 Environment Variables Reference](#45-environment-variables-reference)
 5. [Verification & Quality Gates](#5-verification--quality-gates)
-   - [5.1 Running the Downstream Baseline Verification](#51-running-the-downstream-baseline-verification)
-   - [5.2 Running the Parity Auditor Gate](#52-running-the-parity-auditor-gate)
+   - [5.1 Running the Native Baseline Verifier](#51-running-the-native-baseline-verifier)
+   - [5.2 Running the Specification Verification Gate](#52-running-the-specification-verification-gate)
    - [5.3 Summary of Automated Quality Gates](#53-summary-of-automated-quality-gates)
 6. [Git Pre-Commit Hook Configuration](#6-git-pre-commit-hook-configuration)
    - [6.1 Hook Installation](#61-hook-installation)
    - [6.2 Pre-Commit Validations](#62-pre-commit-validations)
 7. [Troubleshooting & FAQ](#7-troubleshooting--faq)
    - [7.1 Tracker CLI Authentication Issues](#71-tracker-cli-authentication-issues)
-   - [7.2 Script Permission Denied](#72-script-permission-denied)
+   - [7.2 Binary Execution Permissions](#72-binary-execution-permissions)
    - [7.3 KaTeX / LaTeX Font Rendering Failures](#73-katex--latex-font-rendering-failures)
    - [7.4 Check 16 Clean Landing Zone Violation](#74-check-16-clean-landing-zone-violation)
-   - [7.5 Pytest Module Basename Collision](#75-pytest-module-basename-collision)
-   - [7.6 Python Dependency Resolution Conflicts](#76-python-dependency-resolution-conflicts)
+   - [7.5 Rust Test Execution & Filtering](#75-rust-test-execution--filtering)
+   - [7.6 Cargo Build and Toolchain Resolution](#76-cargo-build-and-toolchain-resolution)
 
 ---
 
@@ -98,7 +98,7 @@ All engineering workflows, control law synthesis models, safety statecharts, and
 
 In downstream workspaces, physical and control features maintain dual-track Model-Based Design (MBD):
 - **Track A (Native MATLAB/Simulink Synthesis)**: Programmatic model scripts (`.m`), parameter dictionaries (`.m`), and Simulink Data Dictionaries (`.sldd`) configured for deterministic discrete solvers (`FixedStepDiscrete`).
-- **Track B (Headless CI Digital Twin Engine)**: Standalone, license-free discrete-time Python execution engines validating identical loop rates, polynomial curves, and transition guards offline.
+- **Track B (Headless CI Digital Twin Engine)**: Standalone, license-free discrete-time Pure-Rust execution engines validating identical loop rates, polynomial curves, and transition guards offline.
 
 ---
 
@@ -116,9 +116,9 @@ Before configuring the compiler, ensure your workstation or CI environment meets
 
 | Dependency | Minimum Version | Required For | Verification Command |
 | :--- | :--- | :--- | :--- |
-| **Python** | 3.9+ (3.11/3.12 recommended) | Compiler scripts, AST parser, Parity Auditor, Pytest | `python3 --version` |
+| **Rust & Cargo** | 1.80+ | Workspace compiler crates, baseline verification, AST compilation | `cargo --version` |
 | **Git** | 2.38+ | Repository governance, restoration points, hook enforcement | `git --version` |
-| **Flutter SDK** | 3.22.0+ (Dart 3.4+) | Downstream Flutter cross-platform desktop/web client | `flutter --version` |
+| **Flutter SDK** | 3.22.0+ (Dart 3.4+) | Downstream Flutter cross-platform desktop/mobile client | `flutter --version` |
 | **Node.js** | 18.0.0+ LTS (npm 9+) | Web React console, Firebase emulator CLI, markdown linters | `node --version` |
 | **Java OpenJDK** | 17 LTS | SysML v2 CLI parsers, PlantUML rendering, Firestore emulator | `java -version` |
 | **GitHub CLI** | 2.40+ | GitHub issue tracking, milestone syncing, backlog reconciliation | `gh --version` |
@@ -143,93 +143,73 @@ Verify that the upstream sentinel exists:
 test -d .pipeline/upstream && echo "Upstream Sentinel Confirmed"
 ```
 
-### Step 3.2: Provision a Python Virtual Environment
+### Step 3.2: Rust 1.80+ Toolchain Verification
 
-Create and activate an isolated virtual environment:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
-
-*(On Windows PowerShell: `.\.venv\Scripts\Activate.ps1`)*
-
-Upgrade `pip`, `setuptools`, and `wheel`:
-```bash
-pip install --upgrade pip setuptools wheel
-```
-
-### Step 3.3: Install Repository Dependencies
-
-Install the core pipeline dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-### Step 3.4: Install Parity Auditor in Editable Mode
-
-The Parity Auditor engine is located at `skills/spec-orchestrator/parity_auditor`. Install it into your virtual environment in editable (`-e`) mode:
+Verify that a modern Rust toolchain is installed:
 
 ```bash
-pip install -e skills/spec-orchestrator/parity_auditor
+rustc --version
+cargo --version
 ```
 
-Verify the installation and CLI entrypoint:
+If Rust is not yet installed on your system, install it via `rustup`:
+
 ```bash
-parity-auditor --help
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
-Expected output:
-```text
-usage: parity-auditor [-h] [--workspace WORKSPACE] [--profile PROFILE]
-                      [--spec-only] [--json] [--output OUTPUT] ...
+### Step 3.3: Build Pure-Rust Workspace Crates
+
+Build the complete suite of workspace compiler and verification binaries in release mode:
+
+```bash
+cargo build --release --workspace
+```
+
+This compiles the native binaries under `./target/release/`:
+- `verify-baseline`: Mechanical baseline validator and gate verification engine
+- `compile-sysml`: SysML v2 compiler, AST extractor, and STPA engine
+- `ingest-sysml`: Level 0 AST ingestion engine (supporting SysML, KerML, and YANG)
+- `assemble-conops`: Deterministic ConOps and Mission Intent document assembler
+- `reconcile-backlog`: Backlog reconciler and tracker synchronizer
+
+### Step 3.4: Configure Git Pre-Commit Hooks via verify-baseline
+
+Install the OS-level git hooks directly using the native verifier:
+
+```bash
+./target/release/verify-baseline setup-hooks .
+```
+
+Verify that the CLI entrypoints operate correctly:
+
+```bash
+./target/release/verify-baseline --help
+./target/release/reconcile-backlog --help
 ```
 
 ---
 
 ## 4. Downstream Workspace Installation & Platform Bootstrapping
 
-The upstream repository distributes its governance baseline, rules, validation scripts, and skills to downstream engineering projects via `scripts/install_pipeline.sh`.
+The upstream specification core compiler (`UPSTREAM_SPEC_CORE_COMPILER`) serves as the central abstract MBSE engine. Downstream domain projects instantiate from clean distribution templates (`DEAP-*`).
 
-### 4.1 Installing into a Downstream Project
+### 4.1 Initializing a Downstream Workspace
 
-To initialize a downstream repository from the upstream compiler:
+To initialize and bootstrap a downstream repository:
 
-```bash
-# General syntax
-bash scripts/install_pipeline.sh [OPTIONS] <downstream_workspace_path>
-```
-
-#### Provider Examples:
-
-- **GitHub Provider (Default)**:
-  ```bash
-  bash scripts/install_pipeline.sh --provider github /path/to/my-safety-system
-  ```
-
-- **GitLab Provider (Self-Hosted or SaaS)**:
-  ```bash
-  bash scripts/install_pipeline.sh \
-    --provider gitlab \
-    --gitlab-url https://gitlab.internal.enterprise.org \
-    --gitlab-group uas-flight-control \
-    /path/to/my-safety-system
-  ```
-
-- **Jira Atlassian Cloud Provider**:
-  ```bash
-  bash scripts/install_pipeline.sh \
-    --tracker jira \
-    --jira-url https://my-org.atlassian.net \
-    --jira-project UAS \
-    --jira-email ops-engineer@my-org.com \
-    /path/to/my-safety-system
-  ```
+1. Clone or instantiate a downstream workspace from the repository template.
+2. Verify baseline conformance and initialize OS Git hooks using the native Rust binary:
+   ```bash
+   ./target/release/verify-baseline setup-hooks .
+   ./target/release/verify-baseline . --no-domain
+   ```
+3. Populate `schema/` with your domain SysML v2 / KerML models.
 
 ### 4.2 Downstream Workspace Structure
 
-The installation script provisions the downstream repository with:
-- `.pipeline/`: Governance constitution, platform profiles, and validation scripts.
+The downstream repository contains:
+- `.pipeline/`: Governance constitution, platform profiles, and validation configuration.
 - `rules/`: Hardcoded systems engineering discipline and verification rules.
 - `skills/`: Agent skills (`feature-driven-implementation`, `spec-orchestrator`, etc.).
 - `schema/`: Clean landing zone ready to receive domain SysML v2 / KerML models.
@@ -254,7 +234,7 @@ Downstream codebases select a target runtime profile located in `.pipeline/profi
 To bootstrap and lock a platform profile in a downstream workspace:
 1. Configure `.pipeline/codebase_rules.json` with the chosen platform profile identifier.
 2. Ensure the downstream agent adopts the platform profile rules during Step 1 of the feature implementation workflow.
-3. Validate profile conformance using Parity Auditor Gate 20 (`ProfileComplianceValidator`).
+3. Validate profile conformance using `./target/release/verify-baseline . --spec-only`.
 
 ### 4.5 Environment Variables Reference
 
@@ -275,14 +255,14 @@ The DEAP toolchain and downstream runtimes support the following environment var
 
 ## 5. Verification & Quality Gates
 
-The DEAP platform executes a comprehensive, 30-checkpoint verification suite to guarantee fail-closed governance and architectural compliance.
+The DEAP platform executes a comprehensive, 35-checkpoint native Rust verification suite to guarantee fail-closed governance and architectural compliance.
 
 ### 5.1 Running the Downstream Baseline Verification
 
 Run the primary verification harness against the active workspace:
 
 ```bash
-python3 scripts/verify_downstream_baseline.py .
+./target/release/verify-baseline . --no-domain
 ```
 
 Expected passing output:
@@ -293,24 +273,20 @@ Success: Check 12 verified (Master core / upstream repository detected).
 Success: Check 13 verified (KaTeX / LaTeX mathematical syntax valid across all markdown files).
 Success: Mermaid syntax verified across all markdown files.
 Success: Check 14 verified (README.md, agent instruction entrypoints exist).
-Success: Check 15 verified (scripts/reconcile_backlog.py exists and is executable).
+Success: Check 15 verified (Native reconcile-backlog binary exists and is executable).
 Success: Check 16 verified (Upstream distribution template landing zones are clean).
 ...
+Success: Checks 30A-35 verified (Architecture, binary, pure-Rust, and integrity invariants).
 Success: Build and test suite execution passed. Conformance gate verified.
 Tagging restoration point...
 ```
 
-### 5.2 Running the Parity Auditor Gate
+### 5.2 Running the Specification Verification Gate
 
-Execute the parity auditor in specification-only mode:
+Execute the baseline verifier in specification-only mode:
 
 ```bash
-parity-auditor --workspace . --spec-only
-```
-
-Or invoke the direct Python module:
-```bash
-python3 skills/spec-orchestrator/parity_auditor/src/parity_auditor/cli.py --workspace . --spec-only
+./target/release/verify-baseline . --spec-only
 ```
 
 ### 5.3 Summary of Automated Quality Gates
@@ -322,7 +298,7 @@ python3 skills/spec-orchestrator/parity_auditor/src/parity_auditor/cli.py --work
 | **Check 12** | Master Blueprint Isolation | §6.4.3 | Architecture blueprints remain synchronized without duplication. |
 | **Check 13** | Mathematical Syntax Integrity | §6.4.3 | All LaTeX / KaTeX expressions are valid; literal \$ properly escaped. |
 | **Check 14** | Entrypoint & Rules Check | §6.4.1 | Verifies presence of `README.md`, `AGENTS.md`, and core governance rules. |
-| **Check 15** | Backlog Tooling Executability | §6.4.13 | Ensures `scripts/reconcile_backlog.py` is executable. |
+| **Check 15** | Backlog Tooling Executability | §6.4.13 | Ensures `target/release/reconcile-backlog` is executable. |
 | **Check 16** | Clean Landing Zone Gate | §6.4.3 | Upstream template directories must contain zero concrete specifications. |
 | **Check 17** | Safety Invariant Landing Zone | §6.4.14 | Upstream `docs/safety/` contains zero concrete domain hazards. |
 | **Check 18** | Abstract Blueprint Cleanliness | §6.4.3 | No domain concept papers hardcoded in upstream architecture. |
@@ -335,6 +311,11 @@ python3 skills/spec-orchestrator/parity_auditor/src/parity_auditor/cli.py --work
 | **Check 28** | Coverage-Digest Population Gate | §6.4.2 | Enforces bidirectional traceability from schema nodes to specs. |
 | **Check 29** | Obligation-Witness Registry Gate | §6.4.2 | Validates that all contractual obligations have verified witnesses. |
 | **Check 30** | Architecture Viewpoint Completeness | §6.4.5 | Enforces 11 canonical architecture diagrams across 5 viewpoints. |
+| **Check 31** | Baseline Release Binary Invariant | §6.4.2 | Ensures `./target/release/verify-baseline` exists and executes. |
+| **Check 32** | Zero Shell Scripts Invariant | §6.4.2 | Zero `*.sh` scripts permitted in repository. |
+| **Check 33** | Zero Python Scripts Invariant | §6.4.2 | Zero `*.py` scripts permitted in repository. |
+| **Check 34** | Zero Dynamic Regex Across Crates | §6.4.2 | Zero regex dependency or invocation across Rust crates. |
+| **Check 35** | Handoff & Backlog Integrity Gate | §6.4.13 | Zero broken links or retired script references in active docs. |
 
 ---
 
@@ -344,10 +325,10 @@ To prevent committing malformed markdown, unescaped KaTeX delimiters, broken Mer
 
 ### 6.1 Hook Installation
 
-Run the hook setup script:
+Run the hook setup via the native baseline binary:
 
 ```bash
-python3 scripts/setup_git_hooks.py
+./target/release/verify-baseline setup-hooks .
 ```
 
 Expected output:
@@ -392,14 +373,14 @@ The installed hook automatically enforces:
   export JIRA_EMAIL="your-email@domain.com"
   ```
 
-### 7.2 Script Permission Denied
+### 7.2 Binary Execution Permissions
 
-**Symptom**: Executing `scripts/install_pipeline.sh` returns `bash: scripts/install_pipeline.sh: Permission denied`.
+**Symptom**: Executing `./target/release/verify-baseline` returns `permission denied`.
 
 **Resolution**:
-Restore execution permissions on shell and Python scripts:
+Restore execution permissions on release binaries:
 ```bash
-chmod +x scripts/*.sh scripts/*.py
+chmod +x target/release/*
 ```
 
 ### 7.3 KaTeX / LaTeX Font Rendering Failures
@@ -414,30 +395,30 @@ In markdown prose and documentation tables, standalone currency symbols or shell
 **Symptom**: `ERROR: Check 16 failed: Upstream distribution template landing zones contain concrete specification files: docs/features/FEAT-001.md`.
 
 **Resolution**:
-You are working in the upstream specification compiler repository (`DEAP01-spec-core`). Upstream landing zones (`schema/`, `docs/epics/`, `docs/features/`, `docs/user-stories/`, `docs/use-cases/`, `docs/conops/`, `docs/safety/`) must remain clean landing zones with only `.gitkeep` and `README.md` files. Move concrete project specifications to your downstream workspace created via `scripts/install_pipeline.sh`.
+You are working in the upstream specification compiler repository (`DEAP01-spec-core`). Upstream landing zones (`schema/`, `docs/epics/`, `docs/features/`, `docs/user-stories/`, `docs/use-cases/`, `docs/conops/`, `docs/safety/`) must remain clean landing zones with only `.gitkeep` and `README.md` files. Move concrete project specifications to your downstream workspace instantiated from distribution templates.
 
-### 7.5 Pytest Module Basename Collision
+### 7.5 Rust Test Execution & Filtering
 
-**Symptom**: `import file mismatch` during full recursive `pytest` invocation.
-
-**Resolution**:
-Specify targeted test paths when running pytest:
-```bash
-python3 -m pytest tests/test_doc_metadata_validator.py
-python3 -m pytest tests/test_canonical_templates.py
-```
-Or use the unified verification runner:
-```bash
-python3 scripts/verify_downstream_baseline.py .
-```
-
-### 7.6 Python Dependency Resolution Conflicts
-
-**Symptom**: `pip install` fails with conflicting package versions or build errors for binary wheels.
+**Symptom**: Long test runs when running the full workspace test suite.
 
 **Resolution**:
-Ensure `pip`, `setuptools`, and `wheel` are upgraded to the latest versions inside your virtual environment before running dependency installation:
+Target specific packages or test names when debugging:
 ```bash
-python3 -m pip install --upgrade pip setuptools wheel
-pip install -r requirements.txt
+cargo test -p verify-baseline -- test_issue_441
+cargo test -p compile-sysml
+```
+Or execute the entire workspace test suite:
+```bash
+cargo test --workspace
+```
+
+### 7.6 Cargo Build and Toolchain Resolution
+
+**Symptom**: Compilation fails with feature or edition errors on older Rust compilers.
+
+**Resolution**:
+Ensure your Rust toolchain is updated to the latest stable version:
+```bash
+rustup update stable
+cargo check --workspace
 ```

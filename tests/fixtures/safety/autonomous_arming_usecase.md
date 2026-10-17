@@ -1,13 +1,13 @@
-# Payload Deployment Use Case
+# Actuator Control Use Case
 
-## Autonomous Ignition Sequence
+## Autonomous Actuation Sequence
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Autopilot as FCS
-    participant SafeArm as FiringCircuit
-    participant Motor as SolidRocketMotor
+    participant Scheduler as AutonomousTaskScheduler
+    participant PowerStage as ActuatorPowerStage
+    participant Actuator as CoreActuator
 
-    Autopilot ->> SafeArm: Arm_Circuit
-    SafeArm ->> Motor: Fire_Pulse
+    Scheduler ->> PowerStage: Enable_PowerStage
+    PowerStage ->> Actuator: Actuate_Drive
 ```

@@ -34,7 +34,7 @@ In addition to standard deployment scenarios, you MUST scan the SysML v2 model (
 For every BDD scenario and acceptance criteria set, you MUST generate and link to a formal SysML `test case def` declaration in the AST containing explicit `subject <Part>`, `verify requirement <RequirementID>`, `objective "<Objective>"`, and ordered `step <action>` definitions, ensuring formal traceability back to parent safety requirements.
 
 ## Step 1: Context Ingestion (SysML v2 AST, Schemas & Operational Text)
-1. Ingest the canonical SysML v2 model (`.pipeline/schema.sysml`), `.pipeline/schema-digest.json`, target normative specification document, AND structural schemas.
+1. Ingest the canonical SysML v2 model (`.pipeline/schema.sysml`), `.pipeline/schema-digest.json`, target normative specification document, `docs/research/FAILURE_MODE_REGISTRY.md`, AND structural schemas.
 2. **Scan the SysML v2 AST definitions and structural schema nodes** (specifically `interaction def`, `action def`, `state def`, `port def`, `test case def`, `constraint def`, `assert constraint`, node descriptions, comments, type restrictions, and validation constraints) to identify:
    - Any interaction sequences (`interaction def`), lifelines, message flows, and triggers.
    - Any derived, calculated, or computed data fields.
@@ -51,7 +51,7 @@ For every BDD scenario and acceptance criteria set, you MUST generate and link t
 ## Step 2: Isolated User Story Modeling (Subagent Dispatch Loop)
 
 1. **Identify Scenarios & Triggers:** Analyze the specification chapters and structural schemas to determine all required deployment scenarios, calculations/derivations, interaction flows, and temporal/state lifecycles. Compile the list of target User Stories to be engineered.
-2. **Dispatch User Story Subagent:** For each identified User Story, invoke a **new, fresh subagent with an isolated context**. Pass ONLY the specific operational text, relevant schema definitions, related Feature specs, the **Mandatory AST Manifest Slice** (the exact AST `action def`, `port def`, and complete `state def` state machine family with all states, events, transitions, guards, and entry/exit actions from `.pipeline/schema.sysml`), and the User Story template. The subagent must have no visibility or knowledge of other User Stories.
+2. **Dispatch User Story Subagent:** For each identified User Story, invoke a **new, fresh subagent with an isolated context**. Pass ONLY the specific operational text, relevant schema definitions, related Feature specs, the **Mandatory AST Manifest Slice** (the exact AST `part def` component definition for internal participant lifelines, `action def`, `port def`, and complete `state def` state machine family with all states, events, transitions, guards, and entry/exit actions from `.pipeline/schema.sysml`), component-level failure modes from `docs/research/FAILURE_MODE_REGISTRY.md` across the 4 Universal Failure Dimensions (Interface, State, Action, Resource), architectural tracing to parent Features and ConOps Section 4 Subsystem components, and the User Story template. The subagent must have no visibility or knowledge of other User Stories.
 3. **Execution within Subagent Context:**
    - **Compliance Table Mandate:** Before writing the file, you MUST output a structured compliance table checking for lifeline aliasing (e.g. 'actorName : Classifier'), open return arrows ('-->'), return value assignment signatures (no method call format), Given-When-Then BDD scenarios, SysML interaction binding, and SysML test case definition bindings.
    - **Behavioral Modeling:** Model the scenario as a formal User Story integrated with OOA/OOD principles:
@@ -77,6 +77,10 @@ For every BDD scenario and acceptance criteria set, you MUST generate and link t
        - Every BDD scenario MUST declare and bind to a formal SysML `test case def` block.
        - The `test case def` MUST declare a `verify requirement` binding pointing to the parent safety requirement (e.g. `verify requirement REQ_SAF_001;`).
        - Specify the test case subject part, objective statement, and execution steps.
+     - **Component Failure Mode & Architectural Tracing Mandate**:
+       - Every internal sequence diagram `participant` lifeline MUST resolve 1:1 to an authoritative SysML `part def` component declared in the SysML AST.
+       - User Stories MUST incorporate negative/failsafe BDD scenarios derived directly from the component's cataloged failure modes in `docs/research/FAILURE_MODE_REGISTRY.md` across the 4 Universal Failure Dimensions (Interface, State, Action, Resource).
+       - Maintain continuous architectural tracing linking each participant lifeline to its parent Feature and ConOps Section 4 Subsystem Architecture.
    - **The Cross-Cutting Matrix (Feature Linking):**
      - Inspect the provided structural features to determine exactly which of those `#IssueID`s are prerequisites for the current User Story.
      - Construct the `## Required Features` matrix containing a markdown tasklist of these intersecting links referencing BOTH the Issue ID and the absolute URL of the feature document.
@@ -235,7 +239,7 @@ Normative Specification: [Normative Specification](link-to-specification)
 ## Step 5: Zero-Fault Backlog Synchronization
 1. **Mandatory Local Validation Gate:** Before committing, pushing, or creating issues in the backlog, the subagent MUST execute the local validation check:
    ```bash
-   ./skills/spec-orchestrator/scripts/verify_model_coverage.py --spec-only --allow-missing-specs --only <spec>
+   ./target/release/verify-baseline . --spec-only --only "<spec_file>"
    ```
    If the linter fails (returns a non-zero exit code), the subagent MUST parse the errors, fix all generated User Story markdown files, and re-run the linter until it passes with exit code 0.
    Before committing the generated markdown files, the agent MUST run a check for untracked pipeline infrastructure files. If untracked files are found in `.pipeline/`, `skills/`, `rules/`, or `scripts/`, they must be staged and committed alongside the markdown files using `git add` to prevent remote divergence:

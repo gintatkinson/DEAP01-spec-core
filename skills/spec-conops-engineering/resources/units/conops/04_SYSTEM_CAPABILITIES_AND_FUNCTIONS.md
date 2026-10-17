@@ -102,31 +102,28 @@ The shift rotation protocol incorporates the following mandatory operational rul
 4. **Mandatory Shift Handover Overlap ($t_{\mathrm{overlap}} \ge 15.0\text{ min}$):** Incoming and outgoing operators must participate in a structured handover briefing covering current system state, trajectory corridors, environmental conditions, and resource reserves before transferring control authority.
 5. **Fatigue-Triggered Reassignment:** If an operator exhibits elevated NASA-TLX scores exceeding nominal limits (Score > 35) or experiences continuous high-workload degraded mode management, the Mission Supervisor is empowered to mandate an immediate relief rotation.
 
-### 4.5 Operational Authority Delegation & Supervisory Handover Protocol
-Operational supervisory authority transfer between certified User Classes (e.g. System Operator UCL-01 to incoming System Operator UCL-01, or delegation to Mission Supervisor UCL-03) follows a structured operational protocol bounded by operational response thresholds ($t_{\mathrm{handoff}} \le \tau_{\text{handoff\_max}}$):
-
-1. **Handover Briefing & Status Review:** The outgoing operator reviews current system state vector, active trajectory or operating corridors, environmental stress metrics, and remaining energy/resource reserves with the incoming operator.
-2. **State Alignment & Parameter Verification:** The incoming operator verifies that telemetry parameters, boundary containment margins, and active mission goals match operational constraints.
-3. **Formal Relinquishment & Assumption:** The outgoing operator formally relinquishes supervisory control; the incoming operator confirms positive assumption of command and control responsibility.
-4. **Operational Log & Audit Archival:** The delegation transaction is timestamped and recorded in the tamper-evident mission log.
-
-Where architectural subsystem control handoffs or automated cryptographic handshakes are declared in the system model, they are derived dynamically from the SysML architecture:
+### 4.5 Authority Delegation & Supervisory Control Transitions
+Where supported by the system architecture schema, supervisory control transitions between operational roles follow authenticated, bounded delegation protocols defined by system interface specifications:
 
 {{SUPERVISORY_AUTHORITY_HANDOFF_SECTION}}
 
 
 ### 4.6 Operational Lifecycle Stages ($\Phi_{\mathrm{lifecycle}}$)
 The system operates across six mutually exclusive, deterministic lifecycle stages:
-- **Phase_Startup:** Power-on Built-In-Test (PBIT), sensor alignment, state estimator initialization, cryptographic key verification, and pre-operation interlock validation.
+- **Phase_Startup:** Power-on Built-In-Test (PBIT), sensor alignment, state estimator initialization, and pre-operation interlock validation.
 - **Phase_NominalExecution:** Autonomous mission start, transit along designated state corridors, operational state monitoring, payload processing, and real-time telemetry streaming.
-- **Phase_DegradedMode:** Non-critical sensor failover, reversion to dead reckoning upon reference signal loss, PACE datalink fallback switch, and degraded parameter limits.
+- **Phase_DegradedMode:** Non-critical sensor failover, reversion to backup navigation upon reference signal loss, secondary datalink fallback switch, and degraded parameter limits.
 - **Phase_ContingencyFailsafe:** Autonomous execution of {{LIFECYCLE_FAILSAFE_SEQUENCE}}, transition to secondary emergency recovery location, or controlled state containment.
-- **Phase_SecureShutdown:** Autonomous precision arrival, controlled deceleration to stop, actuator lock, cryptographic memory zeroization, and diagnostic log archival.
+- **Phase_SecureShutdown:** Autonomous precision arrival, controlled deceleration to stop, actuator lock, secure memory sanitization, and diagnostic log archival.
 - **Phase_MaintenanceMode:** Diagnostic telemetry offload, actuator calibration, firmware updating, and structural/hardware inspection.
 
 ### 4.7 Super-System Architecture & Segment Boundaries
+In accordance with IEEE Std 1362-1998 §5.3, ISO/IEC/IEEE 29148:2018 §6.4.2-§6.4.3, DoDAF 2.02 SV-1, and ISO/IEC/IEEE 15288:2023 §6.4.4, the super-system operational architecture is partitioned across major operational segments with discrete port definitions and traceable connection item flows:
+
 {{SUPER_SYSTEM_ARCHITECTURE}}
 
 ### 4.8 Subsystem Architecture & AST Part Allocation
+In accordance with ISO/IEC/IEEE 29148:2018 §6.4.3, IEEE Std 1362-1998 §5.3, and the Pure Schema-Driven Compiler Invariant, physical subsystems are allocated deterministically to AST part definitions:
+
 {{SUBSYSTEM_ARCHITECTURE_SECTION}}
 

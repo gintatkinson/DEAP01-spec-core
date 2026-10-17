@@ -22,7 +22,7 @@ date: "2026-09-14"
 
 Autonomous and semi-autonomous Model-Based Systems Engineering (MBSE) compiler platforms rely on multi-agent execution loops to ingest schemas, synthesize formal specifications, and implement target codebases. In prior iterations of the Digital Engineering Agent Platform (DEAP), quality gate compliance operated under a model of **voluntary compliance**:
 
-1. A validator script (such as `scripts/verify_downstream_baseline.py` or `scripts/verify_subagent_output.py`) was executed as a shell command.
+1. A legacy validator script was executed as a shell command.
 2. If the validator identified an invariant breach, it printed diagnostic error logs and terminated with a non-zero exit code (`exit code != 0`).
 3. The executing Large Language Model (LLM) agent was instructed via natural language system prompts to observe non-zero exit codes, halt execution, and remediate the defect.
 
@@ -94,15 +94,15 @@ flowchart TD
 
     subgraph Tier2 ["Tier 2: OS Mechanical Hook Trapping"]
         direction TB
-        GitHook["<b>OS Git Hooks (.git-hooks)</b><br/>• pre-commit hook trap<br/>• pre-push hook trap"]
-        ValEngine["<b>Mechanical Validator Engine</b><br/>• verify_downstream_baseline.py<br/>• verify_subagent_output.py"]
+        GitHook["<b>OS Git Hooks (.git/hooks)</b><br/>• pre-commit hook trap<br/>• pre-push hook trap"]
+        ValEngine["<b>Mechanical Validator Engine</b><br/>• verify-baseline binary<br/>• baseline verification checks"]
         DefectEngine["<b>Defect Dossier Engine</b><br/>• on-disk failure capture<br/>• 7-section report synthesis"]
     end
 
     subgraph Tier3 ["Tier 3: Persistence and Backlog Reconciler"]
         direction TB
-        DiskDefects["<b>Defect Repository</b><br/>• .pipeline-defects directory<br/>• JSON and Markdown dossiers"]
-        Reconciler["<b>Backlog Reconciler</b><br/>• reconcile_backlog.py<br/>• tracker defect registration"]
+        DiskDefects["<b>Defect Repository</b><br/>• .pipeline/defects directory<br/>• JSON and Markdown dossiers"]
+        Reconciler["<b>Backlog Reconciler</b><br/>• reconcile-backlog binary<br/>• tracker defect registration"]
         RemoteCI["<b>Server-Side CI Gate</b><br/>• GitLab-CI and GitHub Actions<br/>• branch protection lock"]
     end
 
@@ -116,15 +116,15 @@ flowchart TD
 
 ---
 
-### Layer 1: OS-Level Git Hooks (`scripts/setup_git_hooks.py`)
+### Layer 1: OS-Level Git Hooks (via `verify-baseline setup-hooks`)
 
 Git client hooks provide the first immutable perimeter. Because hooks execute directly via the system shell (`/bin/sh`) spawned by the `git` binary, they run outside the LLM execution context. If the hook exits with a non-zero status code, Git aborts the commit or push operation immediately.
 
 #### 1. Setup & Installation Mechanics
-Hook provisioning is automated by `scripts/setup_git_hooks.py`. The installation logic performs the following deterministic operations:
+Hook provisioning is automated by `./target/release/verify-baseline setup-hooks .`. The installation logic performs the following deterministic operations:
 1. Verifies the existence of `.git/hooks/` and sets directory permissions.
-2. Deploys executable shell scripts (`0o755`) for `.git/hooks/pre-commit` and `.git/hooks/pre-push`.
-3. Whitelists pipeline infrastructure directories (`.pipeline/`, `skills/`, `rules/`, `scripts/`, `.agents/`) in `.gitignore`.
+2. Deploys executable hooks for `.git/hooks/pre-commit` and `.git/hooks/pre-push`.
+3. Whitelists pipeline infrastructure directories (`.pipeline/`, `skills/`, `rules/`, `.agents/`) in `.gitignore`.
 4. Purges all macOS metadata artifacts (`.DS_Store`) recursively from the repository tree.
 
 #### 2. Pre-Commit Hook Specification (`.git/hooks/pre-commit`)
@@ -145,11 +145,11 @@ if [ -d "$DEFECT_DIR" ]; then
     fi
 fi
 
-# Step 2: Validate subagent output formatting and escape token leakage
-python3 scripts/verify_subagent_output.py --dir docs
+# Step 2: Validate specification formatting and baseline invariants
+./target/release/verify-baseline . --spec-only
 
-# Step 3: Run comprehensive downstream baseline verification
-python3 scripts/verify_downstream_baseline.py
+# Step 3: Run comprehensive baseline verification
+./target/release/verify-baseline . --no-domain
 ```
 
 #### 3. Pre-Push Hook Specification (`.git/hooks/pre-push`)
@@ -166,7 +166,7 @@ Under standard operating conditions, bypassing hooks via `--no-verify` is strict
 
 ---
 
-### Layer 2: Self-Generating Defect Dossier Engine (`scripts/verify_downstream_baseline.py`)
+### Layer 2: Self-Generating Defect Dossier Engine (`verify-baseline`)
 
 The Defect Dossier Engine transforms passive error messages into active, self-persisting system artifacts. Rather than merely emitting an error string to standard error, any validator failure triggers automatic serialization of a comprehensive forensic defect dossier directly into `.pipeline/defects/`.
 
@@ -184,7 +184,7 @@ Every captured defect generates a paired JSON and Markdown record:
   "gate_check": "Check 17: Safety Integrity Gate",
   "status": "UNRESOLVED",
   "caller_context": {
-    "invoked_script": "scripts/verify_downstream_baseline.py",
+    "invoked_binary": "./target/release/verify-baseline",
     "git_branch": "main",
     "git_head_sha": "d0d8c38a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e",
     "host_environment": "macOS-Darwin-arm64",
@@ -219,26 +219,26 @@ The markdown dossier strictly adopts the 7-section skeleton required by `skills/
 
 #### 4. The Unresolved Defect Gate Invariant
 The existence of any unresolved defect file (`DEFECT_*.json` where `status != "RESOLVED"`) in `.pipeline/defects/` creates an unconditional, fail-closed latch:
-- Every execution of `scripts/verify_downstream_baseline.py` checks `.pipeline/defects/` upon startup.
-- If an unresolved defect exists, the script immediately prints the active defect IDs and exits with `exit code 1` without running further checks.
+- Every execution of `./target/release/verify-baseline` checks `.pipeline/defects/` upon startup.
+- If an unresolved defect exists, the verifier immediately prints the active defect IDs and exits with `exit code 1` without running further checks.
 - Thus, once a defect is recorded, **no subsequent Git commit can succeed** until that defect is formally resolved and its dossier cleared or marked resolved.
 
 ---
 
-### Layer 3: Backlog Reconciler Pre-Flight Lock (`scripts/reconcile_backlog.py`)
+### Layer 3: Backlog Reconciler Pre-Flight Lock (`reconcile-backlog`)
 
 The backlog reconciler synchronizes local specification documents and issue checklists with remote issue trackers (GitHub Issues or GitLab Work Items). Under prior architectures, agents could run reconciliation while local baselines were broken, causing the reconciler to falsely mark issues as `Fixed / Resolved` on the remote tracker.
 
 #### 1. Pre-Flight Mechanical Lock
-`scripts/reconcile_backlog.py` enforces a mandatory pre-flight health gate:
-1. **Subprocess Baseline Check**: Before initiating any tracker API connection, the reconciler spawns `scripts/verify_downstream_baseline.py` as an isolated subprocess.
+`reconcile-backlog` enforces a mandatory pre-flight health gate:
+1. **Subprocess Baseline Check**: Before initiating any tracker API connection, the reconciler invokes `verify-baseline` as an isolated verification pass.
 2. **Defect Directory Inspection**: The reconciler scans `.pipeline/defects/` for unresolved defect files.
 3. **Hard Exit on Fault**: If baseline verification fails or active defects are found, the reconciler immediately prints a fatal error and terminates with `exit code 1`. It refuses to alter local frontmatter, resolve placeholders (`#[IssueID]`), or update remote issue states.
 
 #### 2. Automated Defect Registration Pipeline
 When a defect is recorded on disk, Layer 3 automatically promotes it to the remote tracking system:
-1. During authorized triage runs, `reconcile_backlog.py` identifies un-synced defect files (`"tracker_sync": {"synced": false}`).
-2. It invokes `scripts/file_defect.py` to create a formal defect issue on the remote repository with labels `bug` and `status:active`.
+1. During authorized triage runs, `reconcile-backlog` identifies un-synced defect files (`"tracker_sync": {"synced": false}`).
+2. It registers a formal defect issue on the remote repository with labels `bug` and `status:active`.
 3. Upon successful issue creation, the reconciler writes the allocated issue number and URL back into the local `.pipeline/defects/DEFECT_*.json` file, setting `"synced": true`.
 
 ---
@@ -259,11 +259,11 @@ The pipeline configuration (`.gitlab-ci.yml` and `.github/workflows/verify_pipel
 
 | Pipeline Stage | Executed Command | Gate Invariant | Failure Action |
 | :--- | :--- | :--- | :--- |
-| **Stage 1: Lint & Hygiene** | `python3 scripts/verify_subagent_output.py --dir docs` | Zero formatting faults or unclosed fences | Immediate build termination |
-| **Stage 2: Gate Verification** | `python3 scripts/verify_downstream_baseline.py` | 100% checks green (Checks 1–20) | Generates defect dossier artifact |
+| **Stage 1: Lint & Hygiene** | `./target/release/verify-baseline . --spec-only` | Zero formatting faults or unclosed fences | Immediate build termination |
+| **Stage 2: Gate Verification** | `./target/release/verify-baseline . --no-domain` | 100% checks green (Checks 10-35) | Generates defect dossier artifact |
 | **Stage 3: Defect Check** | `test $(find .pipeline/defects -name "DEFECT_*.json" 2>/dev/null | wc -l) -eq 0` | Zero unresolved defect files | Fails job; uploads dossiers as CI artifacts |
-| **Stage 4: Regression Tests** | `python3 -m pytest tests/ -q` | 100% tests passing | Blocks merge |
-| **Stage 5: Backlog Reconcile** | `python3 scripts/reconcile_backlog.py --verify-only` | Spec frontmatter matches remote tracker | Fails pipeline |
+| **Stage 4: Regression Tests** | `cargo test --workspace` | 100% tests passing | Blocks merge |
+| **Stage 5: Backlog Reconcile** | `./target/release/reconcile-backlog --verify-only` | Spec frontmatter matches remote tracker | Fails pipeline |
 
 ---
 
@@ -292,8 +292,8 @@ sequenceDiagram
         PreCommitHook-->>GitCLI: Exit code 1 (HALT execution)
         GitCLI-->>DeveloperAgent: Commit aborted: unresolved defects present
     else No existing defects
-        PreCommitHook->>BaselineValidator: Execute verify_downstream_baseline.py
-        BaselineValidator->>BaselineValidator: Execute Checks 1 through 20
+        PreCommitHook->>BaselineValidator: Execute verify-baseline
+        BaselineValidator->>BaselineValidator: Execute Checks 10 through 35
         alt Validation gate fails (exit code != 0)
             BaselineValidator->>DefectEngine: Trigger failure trap with AST violation
             DefectEngine->>FileSystem: Write DEFECT_CHECK_TIMESTAMP.md and JSON
@@ -301,7 +301,7 @@ sequenceDiagram
             BaselineValidator-->>PreCommitHook: Return exit code 1
             PreCommitHook-->>GitCLI: Intercept and abort commit
             GitCLI-->>DeveloperAgent: Commit rejected: gate failure and dossier created
-            DeveloperAgent->>BacklogReconciler: Run reconcile_backlog.py
+            DeveloperAgent->>BacklogReconciler: Run reconcile-backlog
             BacklogReconciler->>FileSystem: Discover new defect dossiers
             BacklogReconciler->>BacklogReconciler: Register defect issue on tracker
         else Validation passes (exit code 0)
@@ -327,7 +327,7 @@ stateDiagram-v2
     Resolved --> Cleared: Defect Dossier File Removed
     Cleared --> [*]: Baseline Clean and Commit Permitted
 
-    Generated: Generated on Disk (.pipeline-defects)
+    Generated: Generated on Disk (.pipeline/defects)
     TrackerRegistered: Issue Registered on GitHub or GitLab
     TDDFixing: Isolated Subagent Regression Suite
     Resolved: Tests and Mechanical Gates Green
@@ -338,7 +338,7 @@ stateDiagram-v2
 1. **`Generated`**: The defect is mechanically written to `.pipeline/defects/` by the validator. All Git commits are locked.
 2. **`TrackerRegistered`**: The defect dossier is uploaded to the remote issue tracker as an active bug item with full forensic data.
 3. **`TDDFixing`**: A context-isolated implementation subagent executes the TDD RED-GREEN-REFACTOR cycle (`skills/debug-protocol/SKILL.md`) to write regression tests and apply structural remediation.
-4. **`Resolved`**: The regression test passes and `verify_downstream_baseline.py` exits with code 0.
+4. **`Resolved`**: The regression test passes and `verify-baseline` exits with code 0.
 5. **`Cleared`**: The resolved defect dossier is purged from `.pipeline/defects/` or moved to an archived status, releasing the mechanical lock.
 
 ---
@@ -347,9 +347,9 @@ stateDiagram-v2
 
 | Work Package | Target Script / Deliverable | Implementation Scope | Acceptance Criteria |
 | :--- | :--- | :--- | :--- |
-| **WP-1: OS Hook Infrastructure** | `scripts/setup_git_hooks.py`, `.git/hooks/pre-commit`, `.git/hooks/pre-push` | Upgrade hook installer to deploy pre-commit and pre-push hooks; implement exit trapping, `.pipeline/defects/` scanning, and ANSI colored error reporting. | `git commit` fails with code 1 if baseline is dirty or defect files exist; passes when clean. |
-| **WP-2: Defect Dossier Engine** | `scripts/verify_downstream_baseline.py`, `scripts/file_defect.py` | Implement `DefectDossierGenerator` class in `verify_downstream_baseline.py`; trap check exceptions; synthesize paired JSON and 7-section Markdown dossiers into `.pipeline/defects/`. | Invariant violations write valid JSON and Markdown files with line numbers and diffs. |
-| **WP-3: Backlog Reconciler Pre-Flight Lock** | `scripts/reconcile_backlog.py` | Add pre-flight baseline execution and defect directory verification before tracker interaction; add automatic defect registration loop. | Reconciler halts with code 1 if unmitigated defects exist; registers un-synced dossiers on tracker. |
+| **WP-1: OS Hook Infrastructure** | `./target/release/verify-baseline setup-hooks`, `.git/hooks/pre-commit`, `.git/hooks/pre-push` | Upgrade hook installer to deploy pre-commit and pre-push hooks; implement exit trapping, `.pipeline/defects/` scanning, and ANSI colored error reporting. | `git commit` fails with code 1 if baseline is dirty or defect files exist; passes when clean. |
+| **WP-2: Defect Dossier Engine** | `./target/release/verify-baseline` | Implement defect dossier generation in `verify-baseline`; trap check exceptions; synthesize paired JSON and 7-section Markdown dossiers into `.pipeline/defects/`. | Invariant violations write valid JSON and Markdown files with line numbers and diffs. |
+| **WP-3: Backlog Reconciler Pre-Flight Lock** | `./target/release/reconcile-backlog` | Add pre-flight baseline execution and defect directory verification before tracker interaction; add automatic defect registration loop. | Reconciler halts with code 1 if unmitigated defects exist; registers un-synced dossiers on tracker. |
 | **WP-4: Server-Side CI Enforcement** | `.gitlab-ci.yml`, `.github/workflows/verify_pipeline.yml` | Add automated pipeline jobs enforcing zero defect files and strict gate passing; configure branch protection requirements. | CI runner fails if defect dossiers are committed or baseline check returns non-zero. |
 | **WP-5: Comprehensive Architecture Ratification** | `docs/architecture/FAIL_SAFE_MECHANICAL_GATE_ENFORCEMENT_ARCHITECTURE.md` | Formalize architecture document; link with constitution and Issue #287; commit and synchronize with upstream. | Document committed, passes all docs validators, `git diff origin/main` empty. |
 

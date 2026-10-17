@@ -43,7 +43,7 @@ flowchart TD
     subgraph "SysML v2 / KerML Metamodel"
         A["Schema AST Nodes"] --> B["_derive_lifecycle_contract() Solver"]
         B --> C{"Lifecycle Archetype Resolution"}
-        C -->|EXPENDABLE| D["EXPENDABLE_KINETIC_EFFECTOR"]
+        C -->|EXPENDABLE| D["EXPENDABLE_DISPOSAL"]
         C -->|REUSABLE| E["REUSABLE_RECOVERY"]
         C -->|STATIONARY| F["CONTINUOUS_STATIONARY"]
         C -->|ORBITAL| G["PERSISTENT_ORBITAL"]
@@ -51,7 +51,7 @@ flowchart TD
     end
 
     subgraph "Deterministic Parameter Binding & Projection"
-        D --> I["ContainmentActionType::SAFE_IMPACT_ZEROIZATION"]
+        D --> I["ContainmentActionType::CONTROLLED_DECOMMISSIONING_DISPOSAL"]
         E --> J["ContainmentActionType::CONTROLLED_RECOVERY_LANDING"]
         F --> K["ContainmentActionType::ELECTROMECHANICAL_BRAKE_LOCK"]
         G --> L["ContainmentActionType::DEORBIT_DISPOSAL_BURN"]
@@ -75,7 +75,7 @@ package MissionLifecycleMetamodel {
     enum def LifecycleType {
         doc /* Canonical operational lifecycle archetypes */
         REUSABLE_RECOVERY;
-        EXPENDABLE_KINETIC_EFFECTOR;
+        EXPENDABLE_DISPOSAL;
         CONTINUOUS_STATIONARY;
         PERSISTENT_ORBITAL;
         TRACK_BOUND_GUIDED;
@@ -84,7 +84,7 @@ package MissionLifecycleMetamodel {
     enum def ContainmentActionType {
         doc /* Deterministic safety containment actions */
         CONTROLLED_RECOVERY_LANDING;
-        SAFE_IMPACT_ZEROIZATION;
+        CONTROLLED_DECOMMISSIONING_DISPOSAL;
         ELECTROMECHANICAL_BRAKE_LOCK;
         DEORBIT_DISPOSAL_BURN;
         TRACK_SIDING_BRAKE;
@@ -110,11 +110,11 @@ package MissionLifecycleMetamodel {
 
 ## 3. The Five Canonical Lifecycle Archetypes
 
-### 3.1 Archetype 1: `EXPENDABLE_KINETIC_EFFECTOR`
-- **Application Domains:** Single-Use Autonomous Probes, Disposable Sub-surface Penetrators, High-Impulse Exploration Stages.
-- **Terminal Behavior:** Precision terminal guidance intercept or designated safety containment zone termination.
-- **Containment Action:** `SAFE_IMPACT_ZEROIZATION`
-- **Ontological Constraints:** Strictly 0 facility recovery, 0 nominal RTB return-to-base, 100% zeroization on terminal event.
+### 3.1 Archetype 1: `EXPENDABLE_DISPOSAL`
+- **Application Domains:** Single-Use Autonomous Probes, Disposable Environmental Sensors, Sub-surface Sampling Capsules, Multi-stage Separation Modules.
+- **Terminal Behavior:** Controlled terminal containment within designated disposal area or benign operational termination.
+- **Containment Action:** `CONTROLLED_DECOMMISSIONING_DISPOSAL`
+- **Ontological Constraints:** Strictly 0 facility recovery, 0 nominal RTB return-to-base, verified decommissioning on terminal event.
 
 ### 3.2 Archetype 2: `REUSABLE_RECOVERY`
 - **Application Domains:** Autonomous Mobile Survey Systems, Autonomous Surface Platforms, Robotic Inspection Units, Logistics Ground Shuttles.
@@ -152,9 +152,9 @@ The parameter binding engine projects the AST lifecycle contract into ten canoni
 | `{{LIFECYCLE_BINGO_SAFETY_ACTION}}` | Commander's Intent Key Task for Bingo Safety | Evaluated dynamically against R(t) <= R_threshold(t) |
 | `{{LIFECYCLE_END_STATE}}` | Commander's Intent Mission End State | Aligned with terminal containment archetype |
 | `{{LIFECYCLE_FAILSAFE_SEQUENCE}}` | PACE C2 and Emergency Matrix Fallback Mode | Deterministic transition latency t_resp <= tau_deadline |
-| `{{LIFECYCLE_POST_OP_STATE}}` | MET-08 Post-Operation Condition Statement | Cryptographic zeroization & safe de-energization |
+| `{{LIFECYCLE_POST_OP_STATE}}` | MET-08 Post-Operation Condition Statement | Secure memory sanitization & safe de-energization |
 | `{{PRIMARY_TERMINAL_TARGET}}` | Primary Nominal Destination Coordinate/Facility | Domain-specific recovery/containment node |
-| `{{SECONDARY_TERMINAL_TARGET}}` | Secondary Divert / Safe Ditching Target | Reachable under degraded energy envelope |
+| `{{SECONDARY_TERMINAL_TARGET}}` | Secondary Divert / Safe Containment Target | Reachable under degraded energy envelope |
 | `{{PRIMARY_RECOVERY_FACILITY}}` | Primary Maintenance / Recovery Depot | Conforms to domain infrastructure standards |
 | `{{SECONDARY_RECOVERY_FACILITY}}` | Alternate Staging / Demise Zone | Pre-cleared emergency boundary |
 | `{{LIFECYCLE_TRANSIT_MODE}}` | Guidance Controller Transit Operating Mode | Finite State Machine mode enumeration |
@@ -173,7 +173,7 @@ $$
 $$
 
 - Parameter Definitions & Engineering Units:
-- $\mathcal{S}_{\mathrm{expendable}}$ is the set of generated specifications for expendable exploration effectors.
+- $\mathcal{S}_{\mathrm{expendable}}$ is the set of generated specifications for expendable exploration systems.
 - $\mathcal{S}_{\mathrm{stationary}}$ is the set of generated specifications for stationary robotic platforms.
 - $\mathcal{S}_{\mathrm{guided}}$ is the set of generated specifications for track-bound guided platforms.
 - $\mathcal{S}_{\mathrm{orbital}}$ is the set of generated specifications for persistent orbital space platforms.

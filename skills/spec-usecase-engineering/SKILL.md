@@ -22,7 +22,7 @@ These Use Cases represent overarching system behavior, operational objectives, a
 You should invoke this skill ONLY after the behavioral User Stories have been extracted using the `spec-user-story-engineering` skill.
 
 ## Step 1: Context Ingestion (SysML v2 AST & Normative Specs)
-1. Ingest the canonical SysML v2 model (`.pipeline/schema.sysml`) and `.pipeline/schema-digest.json`.
+1. Ingest the canonical SysML v2 model (`.pipeline/schema.sysml`), `.pipeline/schema-digest.json`, and `docs/research/FAILURE_MODE_REGISTRY.md`.
 2. Extract all formal `use case def` AST nodes within the SysML v2 packages, identifying:
    - `subject`: The subsystem or component (`part def`) realizing the use case.
    - `actor`: Primary initiating actors and secondary participating actors bound to typed ports.
@@ -33,7 +33,7 @@ You should invoke this skill ONLY after the behavioral User Stories have been ex
 ## Step 2: Isolated Use Case Modeling (Subagent Dispatch Loop)
 
 1. **AST-Driven Use Case Identification:** Scan the SysML v2 model `use case def` blocks and structural schemas to identify all required System Use Cases (including mandatory behavioral triggers). **1:1 Container/Use Case Def Mapping Mandate:** Each distinct SysML `use case def` (or schema `container`/`choice`/`case`) MUST be extracted into its own separate Use Case file. Do NOT consolidate multiple use cases or containers into a single Use Case file. Compile the list of target Use Cases to be engineered.
-2. **Dispatch Use Case Subagent:** For each identified Use Case, invoke a **new, fresh subagent with an isolated context**. Pass ONLY the specific `use case def` AST node, associated system interaction text, relevant User Stories, Feature specs, the **Mandatory AST Manifest Slice** (the exact AST `use case def` with subject `part def`, actor port contracts, and include/extend dependencies from `.pipeline/schema.sysml`), and the Use Case template. The subagent must have no visibility or knowledge of other Use Cases.
+2. **Dispatch Use Case Subagent:** For each identified Use Case, invoke a **new, fresh subagent with an isolated context**. Pass ONLY the specific `use case def` AST node, associated system interaction text, relevant User Stories, Feature specs, the **Mandatory AST Manifest Slice** (the exact AST `use case def` with subject `part def` component definition, actor port contracts, and include/extend dependencies from `.pipeline/schema.sysml`), component-level failure modes for the subject `part def` from `docs/research/FAILURE_MODE_REGISTRY.md` across the 4 Universal Failure Dimensions (Interface, State, Action, Resource), architectural tracing to parent Features and ConOps Section 4 Subsystem components, and the Use Case template. The subagent must have no visibility or knowledge of other Use Cases.
 3. **Execution within Subagent Context:**
    - **Compliance Table Mandate:** Before writing the file, you MUST output a structured compliance table checking for system boundary subgraphs, external actors, and complete realization matrices.
    - **Formal AST-Driven Use Case Modeling:** Model a formal Use Case following standard UML Object-Oriented Analysis and Design (OOA/OOD) formats derived directly from SysML v2:
@@ -46,6 +46,7 @@ You should invoke this skill ONLY after the behavioral User Stories have been ex
        - *Minimum Floor*: If the total count of constraints across all referenced features is less than 2, you must still generate at least 2 Alternate/Exception flows as a minimum floor.
        - *Branching Point*: Each flow MUST explicitly identify which step of the Main Success Scenario it branches from.
        - *Flow Requirements*: Each flow must contain at least 2 numbered steps of system/actor interaction.
+       - *Component Failure Mode Alternate Flows*: Alternate/Exception flows MUST explicitly address the subject `part def` component's cataloged failure modes from `docs/research/FAILURE_MODE_REGISTRY.md` across the 4 Universal Failure Dimensions (Interface, State, Action, Resource), defining concrete system detection, containment, and recovery steps.
        - *Guarantees*: State the resulting state changes, rollback operations, or notifications.
      - **Postconditions (Success/Failure Guarantee):** The final guaranteed state of the system/objects. Define both a Success Guarantee and a Failure/Abort Guarantee.
      - **UML Diagrams**: Every Use Case MUST include:
@@ -187,7 +188,7 @@ Normative Specification: [Normative Specification](link-to-specification)
 ## Step 5: Zero-Fault Backlog Synchronization
 1. **Mandatory Local Validation Gate:** Before committing, pushing, or creating issues in the backlog, the subagent MUST execute the local validation check:
    ```bash
-   ./skills/spec-orchestrator/scripts/verify_model_coverage.py --spec-only --allow-missing-specs --only <spec>
+   ./target/release/verify-baseline . --spec-only --only "<spec_file>"
    ```
    If the linter fails (returns a non-zero exit code), the subagent MUST parse the errors, fix all generated Use Case markdown files, and re-run the linter until it passes with exit code 0.
    Before committing the generated markdown files, the agent MUST run a check for untracked pipeline infrastructure files. If untracked files are found in `.pipeline/`, `skills/`, `rules/`, or `scripts/`, they must be staged and committed alongside the markdown files using `git add` to prevent remote divergence:

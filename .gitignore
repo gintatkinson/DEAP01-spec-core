@@ -34,3 +34,4 @@ app_flutter_release.zip
 # so it was broken on every machine but one and shipped an EOL runtime (#294).
 .venv/
 venv/
+/target/

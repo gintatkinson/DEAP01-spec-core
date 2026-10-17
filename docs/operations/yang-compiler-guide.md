@@ -24,32 +24,30 @@
 
 ## 1. Overview
 
-The YANG compiler (`scripts/compile_yang.py`) is the
-build-time component of the **YANG-to-LUI (Logical UI) Translation Pipeline**
-mandated by the persistence architecture blueprint.
+The YANG ingestion engine (`./target/release/ingest-sysml --format yang`) is the
+build-time component of the **YANG-to-SysML Translation Pipeline**
+mandated by the specification compiler architecture.
 
 **YANG** (RFC 7950) is the single source of truth for data models in telecom
 and SDN environments. Network equipment vendors ship YANG modules that define
 containers, lists, leaves, types, ranges, and enumerations for every managed
 resource (interfaces, slotContainer, sensors, routing protocols, etc.).
 
-The compiler runs inside CI/CD using **pyang** -- an open-source Python YANG
-validator and parser. It walks pyang's internal AST and emits a
-`logical-layout.json` file that:
+The ingestion engine compiles YANG modules into SysML v2 textual models (`.sysml`)
+and schema digests (`.pipeline/schema-digest.json`), producing:
 
-- Drives the **sidebar hierarchy** (tree navigation of managed objects).
-- Defines **attribute definitions** (field labels, types, validation
-  constraints, and enum options) for the generic `PropertyGrid` widget.
-- Carries **layout structure** (panes, tabs, topology map) for the UI shell.
+- Pure AST representations of interface containers and managed parts.
+- Attribute definitions (field labels, types, validation constraints, and enum options).
+- Closed-world part definitions for specification and safety verification.
 
 Key architectural principles:
 
 | Principle | Rationale |
 |---|---|
-| **Build-time transformation** | No YANG parser runs in the browser or Flutter isolate. The heavy AST work happens once. |
-| **YANG path as UI key** | Each attribute's `key` is its absolute YANG XPath (e.g. `interfaces/interface/state/mtu`). Save payloads map directly to gNMI telemetry paths with zero translation. |
-| **Zero hand-edited JSON** | The output is regenerated from source YANG on every build. Manual edits to `logical-layout.json` would be overwritten. |
-| **Platform-agnostic output** | The same `logical-layout.json` is consumed by both the Flutter desktop app and the React web shell. |
+| **Build-time transformation** | Heavy AST compilation happens at build time via native Rust binaries. |
+| **YANG path as UI/AST key** | Each attribute's key maps to its canonical XPath or SysML path. |
+| **Zero hand-edited models** | Output models are deterministically generated from source schemas. |
+| **Platform-agnostic output** | Standard SysML v2 models feed downstream compilers without domain bias. |
 
 ---
 
@@ -57,48 +55,37 @@ Key architectural principles:
 
 ### Prerequisites
 
-- **Python 3.8+**
-- **pip** (Python package installer)
-- **pyang** -- the YANG parser library
+- **Rust 1.80+** and **Cargo**
+- Native build environment (macOS or Linux)
 
-### Install pyang
+### Build the Ingestion Engine
 
 ```bash
-pip install pyang
+cargo build --release -p ingest-sysml
 ```
 
-Verify the installation:
+Verify the installation and CLI entrypoint:
 
 ```bash
-pyang --version
-```
-
-### Clone the repository
-
-```bash
-git clone <repository-url>
-cd DEAP01-spec-core
-```
-
-### Test that the compiler is importable
-
-```bash
-python3 scripts/compile_yang.py --help
+./target/release/ingest-sysml --help
 ```
 
 Expected output:
 
-```
-usage: compile_yang.py [-h] --input INPUT [--output OUTPUT]
+```text
+Ground 0.0 SysML v2 Universal Ingestion Engine Command-Line Arguments.
 
-Compile YANG schema into logical-layout.json for the generic UI shell.
+Usage: ingest-sysml [OPTIONS]
 
-optional arguments:
-  -h, --help            show this help message and exit
-  --input INPUT, -i INPUT
-                        Path to the input YANG file
-  --output OUTPUT, -o OUTPUT
-                        Output path for the generated JSON
+Options:
+  -s, --schema <SCHEMA>
+          Path to input schema file or directory containing schemas (default: schema/)
+  -f, --format <FORMAT>
+          Schema format specification (auto, sysml, idl, openapi, markdown, yang, autosar, protobuf)
+  -o, --out <OUT>
+          Output SysML v2 textual file path [default: .pipeline/schema.sysml]
+  -d, --digest <DIGEST>
+          Output schema digest JSON path [default: .pipeline/schema-digest.json]
 ```
 
 ---
@@ -108,40 +95,40 @@ optional arguments:
 ### Basic command
 
 ```bash
-python3 scripts/compile_yang.py \
-  --input path/to/model.yang \
-  --output assets/logical-layout.json
+./target/release/ingest-sysml \
+  --schema path/to/model.yang \
+  --format yang \
+  --out schema/model.sysml
 ```
 
 ### Arguments
 
 | Argument | Short | Required | Default | Description |
 |---|---|---|---|---|
-| `--input` | `-i` | Yes | -- | Path to a `.yang` file |
-| `--output` | `-o` | No | `logical-layout.json` | Path for the generated JSON |
+| `--schema` | `-s` | Yes | `schema/` | Path to a `.yang` file or directory |
+| `--format` | `-f` | No | `auto` | Schema format (`yang`, `sysml`, `openapi`, etc.) |
+| `--out` | `-o` | No | `.pipeline/schema.sysml` | Output path for the generated SysML v2 file |
 
 ### Typical workflow
 
 1. Place your YANG file(s) in a directory known to the build system (e.g.
    `yang-models/`).
-2. Run the compiler with the primary YANG module as input.
-3. The compiler uses pyang's `FileRepository` to resolve `import` and
-   `include` statements relative to the input file's directory.
-4. The output `logical-layout.json` replaces the existing asset in
-   `app_flutter/assets/`.
+2. Run the ingestion engine with the primary YANG module as input.
+3. The engine parses the schema and generates canonical SysML v2 models.
+4. Downstream specification tools (`compile-sysml`, `assemble-conops`) consume the generated SysML models.
 
 ### CI/CD integration
 
-Add a build step to your pipeline (GitHub Actions, GitLab CI, Jenkins):
+Add a build step to your pipeline (GitHub Actions, GitLab CI):
 
 ```yaml
 # .github/workflows/build.yml (example snippet)
-- name: Compile YANG models
+- name: Ingest YANG models
   run: |
-    pip install pyang
-    python3 scripts/compile_yang.py \
-      --input yang-models/openconfig-interfaces.yang \
-      --output app_flutter/assets/logical-layout.json
+    ./target/release/ingest-sysml \
+      --schema yang-models/openconfig-interfaces.yang \
+      --format yang \
+      --out schema/openconfig-interfaces.sysml
 ```
 
 The generated JSON is then bundled into the Flutter or React artifact as a
@@ -152,7 +139,7 @@ static asset.
 ## 4. YANG-to-LUI Mapping Reference
 
 The compiler maps YANG constructs to LUI JSON properties using the following
-rules. These rules are implemented in `scripts/compile_yang.py`.
+rules. These rules are implemented in `crates/ingest-sysml`.
 
 ### 4.1. Hierarchy Mapping
 
@@ -466,9 +453,10 @@ cp logical-layout.json app_flutter/assets/logical-layout.json
 Or point the compiler directly:
 
 ```bash
-python3 scripts/compile_yang.py \
-  --input yang-models/openconfig-interfaces.yang \
-  --output app_flutter/assets/logical-layout.json
+./target/release/ingest-sysml \
+  --schema yang-models/openconfig-interfaces.yang \
+  --format yang \
+  --out schema/openconfig-interfaces.sysml
 ```
 
 ### 6.2. Understand the Data Flow
@@ -583,9 +571,10 @@ module example-system {
 ### 7.2. Run the Compiler
 
 ```bash
-python3 scripts/compile_yang.py \
-  --input example-system.yang \
-  --output example-logical-layout.json
+./target/release/ingest-sysml \
+  --schema example-system.yang \
+  --format yang \
+  --out schema/example-system.sysml
 ```
 
 Expected console output:
@@ -763,20 +752,21 @@ pyang --errors path/to/model.yang
 **Solution**: Use an absolute path or a relative path from the working directory:
 
 ```bash
-python3 scripts/compile_yang.py \
-  --input $(pwd)/yang-models/model.yang \
-  --output logical-layout.json
+./target/release/ingest-sysml \
+  --schema $(pwd)/yang-models/model.yang \
+  --format yang \
+  --out schema/model.sysml
 ```
 
-### Error: `pyang` module not found
+### Error: Ingestion Engine binary not found
 
-**Cause**: pyang is not installed or not in the Python path.
+**Cause**: The native binary `./target/release/ingest-sysml` has not been compiled.
 
 **Solution**:
 
 ```bash
-pip install pyang
-python3 -c "from pyang import context; print('OK')"
+cargo build --release -p ingest-sysml
+./target/release/ingest-sysml --version
 ```
 
 ### Generated JSON has no hierarchy nodes
@@ -804,8 +794,8 @@ without `leaf`/`leaf-list`.
 `"enum"`.
 
 **Solution**: Check that the YANG type is `enumeration` and that `enum`
-substatements exist. The compiler maps `enumeration` to `"enum"` (line 42 of
-`compile_yang.py`). If you see `"type": "string"`, the type name is not
+substatements exist. The engine maps `enumeration` to `"enum"` in
+`crates/ingest-sysml`. If you see `"type": "string"`, the type name is not
 `enumeration` -- verify the YANG source.
 
 ### Ranges are not reflected in the output

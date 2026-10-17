@@ -6,10 +6,10 @@
 
 ## 9. Multi-Threaded Operational Scenarios & System Timelines
 
-In accordance with ISO/IEC/IEEE 29148:2018 §6.4.2, OMG Unified Architecture Framework (UAF) v2.0 Operational Processes (Op-Pr), and MIL-STD-882E §4.3, this section specifies the multi-threaded operational scenarios, dynamic timelines, and deterministic decision gates governing the system lifecycle. All scenarios maintain 100% traceability to allocated operational activities (`OA-01`..`OA-08`), operational information exchanges (`OpTx-01`..`OpTx-08`), emergency containment triggers (`EMG-01`..`EMG-07`), and {{INTERLOCK_POLICY_NAME:Rules of Engagement (ROE)}} (`{{INTERLOCK_01_TAG:ROE-01}}`..`{{INTERLOCK_06_TAG:ROE-06}}`).
+In accordance with ISO/IEC/IEEE 29148:2018 §6.4.2, OMG Unified Architecture Framework (UAF) v2.0 Operational Processes (Op-Pr), and MIL-STD-882E §4.3, this section specifies the multi-threaded operational scenarios, dynamic timelines, and deterministic decision gates governing the system lifecycle. All scenarios maintain 100% traceability to allocated operational activities (`OA-01`..`OA-08`), operational information exchanges (`OpTx-01`..`OpTx-08`), emergency containment triggers (`EMG-01`..`EMG-07`), and {{INTERLOCK_POLICY_NAME:Operational Safety Interlocks}} (`{{INTERLOCK_01_TAG:SAF-01}}`..`{{INTERLOCK_06_TAG:SAF-06}}`).
 
-### 9.1 Scenario SCN-01: Nominal Lifecycle Thread
-Scenario `SCN-01` describes an end-to-end nominal operational mission lifecycle from pre-operation staging through autonomous state trajectory execution, on-station mission processing, precision recovery, and controlled shutdown.
+### 9.1 Scenario SCN-01: Normal Operational Cycle
+Scenario `SCN-01` describes an end-to-end nominal operational lifecycle from pre-operation staging through autonomous state trajectory execution, on-station operational processing, precision recovery, and controlled shutdown.
 
 ```mermaid
 sequenceDiagram
@@ -26,11 +26,11 @@ sequenceDiagram
     Controller ->> Sensors: 3. Interrogate Sensor Biases
     Sensors -->> Controller: 4. Sensor Telemetry Normal
     Controller ->> Watchdog: 5. Verify Safety Bounds
-    Watchdog -->> Controller: 6. Safety Interlocks Armed
+    Watchdog -->> Controller: 6. Safety Interlocks Engaged
     Controller -->> Console: 7. PBIT Status PASS
-    Console -->> Operator: 8. System Armed and Ready
+    Console -->> Operator: 8. System Validated and Ready
     Operator ->> Console: 9. Depress Execution Switch
-    Console ->> Controller: 10. Command Sortie Execution
+    Console ->> Controller: 10. Command Operational Execution
     Controller ->> Guidance: 11. Engage Trajectory Corridor
     Guidance ->> Sensors: 12. Request State Telemetry
     Sensors -->> Guidance: 13. State Telemetry Stream
@@ -48,53 +48,49 @@ sequenceDiagram
 | Step Number | Elapsed Time (T+) | Stimulus / Trigger | Actor / Performer | Action Executed | Telemetry Stream | Decision Gate | Exception Branch | Exit Criterion |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **1** | T0 + Delta_t0 | Operator energizes Operator Station and connects primary energy module | Maintenance Technician / Core Controller / Safety Watchdog | Executes automated Pre-Operation Built-In-Test (PBIT) suite per OA-01; verifies sensor biases, actuator end-stops, cryptographic root of trust, and battery state-of-charge (SoC) | OpTx-01, OpTx-06 (PBIT Status: 100% PASS; Sensor biases <= epsilon_bias_max; SoC >= SoC_launch_min; Bus Voltage nominal; Link SNR >= SNR_min) | Gate GNG-01: PBIT 100% PASS & Pre-Operation Interlocks Verified | If PBIT fails or SoC < SoC_launch_min, abort startup; latch diagnostic fault code and transition to Phase_MaintenanceMode | PBIT verification flag logged; Pre-Operation interlocks green; Root-of-trust validated |
-| **2** | T0 + Delta_t1 | Operations Coordinator issues authenticated Sortie Release Token and mission profile | System Operator / Supervisory Operator Console | Ingests cryptographic mission plan, validates digital signatures, uploads waypoints and dynamic containment polygon to Core Controller via OpTx-07, arms system | OpTx-06, OpTx-07 (Controller Mode: Armed_Standby; Waypoints Loaded: N_wp; Containment Polygon Active: R_buffer declared; Checksum: MATCH) | Gate GNG-02: Mission Plan Checksum Match & Environmental Bounds Green | If signature invalid or perimeter outside allowable envelope, reject mission plan; remain in Phase_Startup | Cryptographic mission token verified; System armed in Armed_Standby; Supervisor gives execution clearance |
-| **3** | T0 + Delta_t2 | System Operator depresses Dual-Action Execution Switch on Operator Console | Core Controller / Dynamic Actuator Subsystem | Initiates autonomous launch sequence per OA-02; commands actuators to transition profile, accelerates to nominal velocity v_nominal along ingress corridor | OpTx-01, OpTx-02, OpTx-06 (Speed: v_nominal; Trajectory Error e_track <= epsilon_track_max; Attitude rates nominal; Power draw nominal) | Gate GNG-03: Launch Corridor Clearance & Dynamic Stability Verified | If trajectory deviation e_track > epsilon_track_max or actuator fault detected, abort launch; transition to Contingency_BoundaryContainment / EMG-05 | Nominal operating speed v_nominal achieved; Ingress transition complete; Stable closed-loop tracking established |
+| **2** | T0 + Delta_t1 | Operations Coordinator issues authenticated Operation Authorization Token and mission profile | System Operator / Supervisory Operator Console | Ingests cryptographic mission plan, validates digital signatures, uploads waypoints and dynamic containment polygon to Core Controller via OpTx-07, enables system | OpTx-06, OpTx-07 (Controller Mode: Ready_Standby; Waypoints Loaded: N_wp; Containment Polygon Active: R_buffer declared; Checksum: MATCH) | Gate GNG-02: Mission Plan Checksum Match & Environmental Bounds Green | If signature invalid or perimeter outside allowable envelope, reject mission plan; remain in Phase_Startup | Cryptographic mission token verified; System configured in Ready_Standby; Supervisor gives execution clearance |
+| **3** | T0 + Delta_t2 | System Operator depresses Dual-Action Execution Switch on Operator Console | Core Controller / Dynamic Actuator Subsystem | Initiates autonomous execution sequence per OA-02; commands actuators to transition profile, accelerates to nominal velocity v_nominal along ingress corridor | OpTx-01, OpTx-02, OpTx-06 (Speed: v_nominal; Trajectory Error e_track <= epsilon_track_max; Attitude rates nominal; Power draw nominal) | Gate GNG-03: Launch Corridor Clearance & Dynamic Stability Verified | If trajectory deviation e_track > epsilon_track_max or actuator fault detected, abort launch; transition to Contingency_BoundaryContainment / EMG-05 | Nominal operating speed v_nominal achieved; Ingress transition complete; Stable closed-loop tracking established |
 | **4** | T0 + Delta_t3 | System reaches waypoint corridor boundary WP_ingress | Core Controller / Guidance Subsystem | Traverses multi-dimensional corridor towards operational station; continuously evaluates 4D state space boundaries and environmental limits per OA-05 | OpTx-01, OpTx-02, OpTx-06 (Cross-Track Error: e_xtrack <= epsilon_xtrack_max; Altitude/Position nominal; Wind/Disturbance <= Disturbance_limit) | Gate GNG-04: Corridor Containment & C2 Health Bounds Verified | If GNSS degraded or C2 SNR < SNR_min, execute PACE link failover per EMG-01 / EMG-02; divert to Contingency_DeadReckoning if unrecovered | Waypoint corridor traversed; System arrives at designated operational station perimeter |
 | **5** | T0 + Delta_t4 | System crosses station boundary perimeter WP_station | Core Controller / Sensor Suite / Edge Processing Node | Transitions to operational station pattern; activates multi-modal payload data acquisition and edge neural inference per OA-03 and OA-04 | OpTx-04, OpTx-05, OpTx-06 (Payload Mode: ACTIVE_PROCESSING; Telemetry Stream: 100% nominal; Feature vectors emitted; Downlink rate nominal) | Gate GNG-05: Payload Health & Energy Reserve R(t) > R_bingo(t) Green | If payload sensor fault occurs or R(t) <= R_bingo(t), terminate on-station operations; initiate immediate egress per OA-06 / EMG-03 | Operational mission objectives satisfied; Sensor data streams verified; Continuous station keeping maintained |
 | **6** | T0 + Delta_t5 | Primary operational objectives completed or Bingo energy threshold R_bingo reached | Core Controller / Guidance Core / Power & Resource Subsystem | Calculates optimal return trajectory corridor; stows payload into secure transit configuration; initiates nominal egress transit per OA-02 and OA-06 | OpTx-01, OpTx-02, OpTx-06 (Mode: Nominal_Egress_Transit; Distance to Base: d_base; Remaining Resource: R_current >= R_bingo; Payload: STOWED) | Gate GNG-06: Return Trajectory Clearance & Residual Energy Margin Verified | If headwind disturbance causes R_current < R_return + R_reserve, trigger secondary divert protocol to alternate landing site LZ-DIVERT-ALPHA per EMG-03 | Egress corridor entered; Standoff transit underway; Return trajectory checklist green |
 | **7** | T0 + Delta_t6 | System arrives at primary recovery location boundary WP_recovery | Guidance Subsystem / Dynamic Actuator Subsystem / Recovery Beacon | Acquires precision recovery reference beacon, aligns vehicle axes, executes controlled deceleration profile to zero velocity, reaches safe rest at recovery node | OpTx-01, OpTx-02, OpTx-06 (Velocity: v_rest; Terminal alignment error: delta_pos <= epsilon_land; Actuator Power: ISOLATED; Structural loads nominal) | Gate GNG-07: Safe Recovery Alignment & Ground Sensor Confirmation | If recovery beacon lost or terminal misalignment exceeds epsilon_land_max, initiate automated go-around maneuver if energy permits, else execute precautionary stop per EMG-06 | Vehicle at rest (v_rest = 0.0); Actuators de-energized; Recovery interlocks committed |
-| **8** | T0 + Delta_t7 | System at rest confirmation signal from ground sensors and internal IMU | Core Controller / Security Partition / Maintenance Technician | Executes post-operation secure shutdown per OA-08; offloads encrypted blackbox logs and high-bandwidth telemetry dump; zeroizes session crypto keys; enters safe power-down state | OpTx-06 (Mode: Phase_SecureShutdown; Telemetry Dump: 100% Complete; Crypto State: ZEROIZED; Hardware Safe Lock: ENGAGED) | Gate GNG-08: Telemetry Integrity Checksum & Cryptographic Zeroization Verified | If diagnostic log transfer interrupted or memory fault detected, latch fault flag on non-volatile indicator; require manual diagnostic tether | Blackbox logs secured; System fully de-energized; System ready for post-operation turnaround or maintenance |
+| **8** | T0 + Delta_t7 | System at rest confirmation signal from ground sensors and internal IMU | Core Controller / Security Partition / Maintenance Technician | Executes post-operation secure shutdown per OA-08; offloads encrypted blackbox logs and high-bandwidth telemetry dump; sanitizes session security keys; enters safe power-down state | OpTx-06 (Mode: Phase_SecureShutdown; Telemetry Dump: 100% Complete; Security State: SECURED; Hardware Safe Lock: ENGAGED) | Gate GNG-08: Telemetry Integrity Checksum & Security Sanitization Verified | If diagnostic log transfer interrupted or memory fault detected, latch fault flag on non-volatile indicator; require manual diagnostic tether | Blackbox logs secured; System fully de-energized; System ready for post-operation turnaround or maintenance |
 
 ---
 
-### 9.2 Scenario SCN-02: High-Throughput State Tracking & Target Processing
-Scenario `SCN-02` details the multi-threaded execution when real-time sensor processing detects a high-priority state feature, triggering high-resolution sensor payload tasking, centroid lock, coordinated standoff tracking, and telemetry streaming.
+### 9.2 Scenario SCN-02: Boundary Excursion & Auto-Recovery
+Scenario `SCN-02` details the closed-loop autonomous detection, containment evaluation, and restorative guidance trajectory execution when environmental disturbance or state drift approaches an authorized operational boundary.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Sensors as "Sensor Suite Array"
-    participant EdgeNode as "Edge Processing Node"
-    participant Actuator as "Payload Actuator"
+    participant Sensors as "Sensor Suite"
+    participant Watchdog as "Safety Watchdog"
     participant Controller as "Core Controller"
-    participant Modem as "PACE Transceiver"
+    participant Guidance as "Guidance Subsystem"
+    participant Actuator as "Dynamic Actuator Subsystem"
     actor Operator as "System Operator"
 
-    Sensors ->> EdgeNode: 1. Stream High-Rate Sensor Frames
-    EdgeNode ->> EdgeNode: 2. Execute Neural Feature Extraction
-    EdgeNode ->> Actuator: 3. Command Payload Slew and Centroid Lock
-    Actuator -->> EdgeNode: 4. Gimbal Centroid Lock Confirmed
-    EdgeNode ->> Controller: 5. Transmit Target State Vector
-    Controller ->> Modem: 6. Pipe High-Resolution Telemetry
-    Modem ->> Operator: 7. Deliver Target Telemetry Stream
-    Operator ->> Modem: 8. Authorize Standoff Tracking Pattern
-    Modem ->> Controller: 9. Uplink Standoff Trajectory Command
-    Controller ->> EdgeNode: 10. Confirm Standoff Tracking Active
-    Operator ->> Modem: 11. Command Tracking Termination
-    Modem ->> Controller: 12. Forward Termination Order
-    Controller ->> Actuator: 13. Command Boresight Stow
-    Actuator -->> Controller: 14. Payload Safely Stowed
+    Sensors ->> Controller: 1. Stream State Vector and Boundary Proximity
+    Controller ->> Watchdog: 2. Check Containment Boundary Margin
+    Watchdog -->> Controller: 3. Proximity Buffer Threshold Breached
+    Controller ->> Guidance: 4. Trigger Boundary Restorative Guidance Law
+    Guidance ->> Controller: 5. Compute Deconflicted Recovery Trajectory
+    Controller ->> Actuator: 6. Apply Closed-Loop Heading and Vector Correction
+    Actuator -->> Controller: 7. Restorative Attitude Maneuver Executed
+    Controller ->> Sensors: "8. Verify Margin Restoration (R_margin >= R_min)"
+    Sensors -->> Controller: 9. Within Authorized Operational Corridor
+    Controller ->> Operator: 10. Notify Boundary Recovery Successful
 ```
 
 | Step Number | Elapsed Time (T+) | Stimulus / Trigger | Actor / Performer | Action Executed | Telemetry Stream | Decision Gate | Exception Branch | Exit Criterion |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **1** | T0 + Delta_t1 | Anomaly signature or state feature detected by wide-angle sensor sweep | Sensor Suite Array / Edge Processing Node | Executes real-time edge neural inference model per OA-03; computes confidence score C_detect; extracts state coordinates p_target and bounding geometry | OpTx-04, OpTx-05 (Inference Confidence: C_detect >= C_detect_threshold; Target Coordinates: p_target; Bounding Box: [x, y, z, theta]; Frame Timestamp: t_stamp) | Gate GNG-T1: Detection Confidence C_detect >= C_detect_threshold & Coordinate Validity Verified | If confidence C_detect < C_detect_threshold or false-positive filter triggers, reject candidate detection; resume wide-angle sweep | Feature classification verified; Target Track ID assigned; Internal event emitted via OpTx-05 |
-| **2** | T0 + Delta_t2 | Target Track ID and coordinate demand received over internal bus (OpTx-05) | Payload Actuator Subsystem / Edge Processing Node | Slews narrow-field high-resolution sensor payload to target coordinate vector p_target; closes optical/state centroid tracking loop at frequency f_track | OpTx-01, OpTx-05, OpTx-06 (Payload Gimbal Angles: [theta_az, theta_el]; Centroid Tracking Error: e_track <= epsilon_track_max; Tracking Mode: Centroid Lock Active) | Gate GNG-T2: Centroid Lock Stability & Gimbal Limit Margin Verified | If payload reaches mechanical end-stop or centroid lock lost for duration tau_lost, command Core Controller to adjust system heading | Narrow-field sensor locked on target; Centroid tracking stabilized within tracking window |
-| **3** | T0 + Delta_t3 | Stable centroid lock maintained for duration tau_lock_stable | Edge Processing Node / Payload Specialist / Operator Station | Triggers multi-spectral high-fidelity coordinate extraction per OA-03; computes Target Location Error (TLE); packages precision metadata and streams high-rate telemetry to console via OpTx-05/OpTx-06 | OpTx-05, OpTx-06 (Target Range: d_target; TLE: e_TLE <= epsilon_TLE_max; High-Rate Stream Active: Throughput_stream; Target Metadata Tagged) | Gate GNG-T3: Target Location Error Bound e_TLE <= epsilon_TLE_max Verified | If TLE exceeds threshold epsilon_TLE_max due to sensor jitter, execute multi-frame filtering; alert operator if geometry remains degraded | Precision target state coordinates extracted; Telemetry stream verified on operator console; Operator notified |
-| **4** | T0 + Delta_t4 | Mission Supervisor commands persistent target tracking from Operator Console | System Operator / Core Controller / Guidance Subsystem | Ingests supervisory tracking command via OpTx-07; computes dynamic standoff trajectory (coordinated standoff pattern of radius R_orbit centered on p_target) per OA-02 | OpTx-01, OpTx-02, OpTx-06 (Guidance Mode: Standoff_Tracking_Orbit; Orbit Radius: R_orbit +/- delta_R; Standoff Distance >= R_standoff_min; Sensor Lock: MAINTAINED) | Gate GNG-T4: Dynamic Standoff Boundary & Collision Margin Verified | If standoff orbit intersects keep-out zone or geofence boundary, clamp orbit geometry to allowable corridor and notify operator | Coordinated standoff orbit established; Continuous 360-degree high-throughput sensor tracking maintained |
-| **5** | T0 + Delta_t5 | Continuous high-throughput data stream active over Primary Communications link | PACE Communications Modem / Supervisory Operator Console | Dynamically optimizes channel bandwidth allocation per OpTx-06; pipes high-resolution state stream to downstream analytical processing pipelines | OpTx-06 (Downlink Throughput: Throughput_stream >= Throughput_min; Packet Loss Rate <= 0.1%; Link Latency <= tau_latency_max; Data Quality: 100%) | Gate GNG-T5: Datalink Quality of Service (QoS) & Buffer Integrity Maintained | If link bandwidth degrades below threshold, trigger adaptive compression and throttle non-critical background telemetry | Downstream analytical systems receive synchronized telemetry stream; Target tracking dataset compiled |
-| **6** | T0 + Delta_t6 | Mission Supervisor issues tracking termination command upon objective completion | Mission Supervisor / Core Controller / Payload Actuator Subsystem | Releases centroid tracking lock; stows payload to boresight reference position; re-engages nominal corridor navigation per OA-02; updates Bingo energy reserve | OpTx-01, OpTx-02, OpTx-06 (Mode: Nominal_Corridor_Navigation; Payload Mode: BORESIGHT_STOWED; Heading: WP_next; Residual Energy: R(t) >= R_bingo(t)) | Gate GNG-T6: Boresight Stow Verification & Corridor Resumption Clearance | If payload fails to stow or gimbal jam detected, lock actuator power and report degraded payload state; proceed with vehicle transit | Payload safely stowed; Nominal trajectory tracking resumed; Target engagement logged to non-volatile memory |
+| **1** | T0 + Delta_t1 | Environmental disturbance or trajectory drift approaches operational corridor limit | Sensor Suite / Core Controller | Continuously samples navigation state vectors; evaluates distance to authorized containment perimeter d_margin per OA-05 | OpTx-01, OpTx-06 (Margin Distance: d_margin <= d_warning_threshold; Drift Velocity: v_drift; Containment Status: PROXIMITY_ALERT) | Gate GNG-B1: Containment Proximity Alert Threshold Breached | If proximity warning clears within filter window, log transient disturbance and maintain nominal tracking | Boundary proximity alert raised; Safety Watchdog armed for containment assessment |
+| **2** | T0 + Delta_t2 | Proximity alert flag asserted on internal telemetry bus | Safety Watchdog / Core Controller | Evaluates safety containment boundary margin against minimum buffer constraint R_containment >= R_min per EMG-05 | OpTx-06 (Watchdog State: EVALUATING_CONTAINMENT; Buffer Error: Delta_R; Required Clearance: R_min) | Gate GNG-B2: Margin Constraint R_containment >= R_min Violation Detected | If margin remains valid, notify supervisory console without interrupting nominal guidance | Boundary excursion condition declared; Auto-recovery sub-mode latched |
+| **3** | T0 + Delta_t3 | Safety Watchdog signals boundary excursion condition | Guidance Subsystem / Core Controller | Computes optimal restorative trajectory vector to re-align velocity with nominal corridor centerline per OA-02 | OpTx-01, OpTx-02 (Guidance Mode: AutoRecovery_Restorative; Correction Vector: [Delta_x, Delta_y, Delta_z]; Required Yaw/Bank Rate: omega_cmd) | Gate GNG-B3: Recovery Trajectory Kinematic Feasibility Verified | If kinematic limits exceeded or obstacle detected in recovery path, initiate contingency holding stop per EMG-05 | Restorative trajectory command generated and validated against dynamic limits |
+| **4** | T0 + Delta_t4 | Restorative guidance demand dispatched to actuator bus | Dynamic Actuator Subsystem / Core Controller | Applies corrective control surface deflection or thrust vectoring; executes bank-to-turn restorative maneuver | OpTx-02, OpTx-03 (Actuator Demand: delta_act; Rate of Turn: omega_actual; Structural Load: n_z <= n_z_max) | Gate GNG-B4: Actuator Rate Saturation & Dynamic Load Within Limits | If actuator response stalls or control authority saturated, trigger secondary emergency containment trigger EMG-06 | Closed-loop restorative maneuver executed; Heading converging to corridor centerline |
+| **5** | T0 + Delta_t5 | Trajectory converges to nominal corridor centerline | Guidance Subsystem / Sensor Suite / Safety Watchdog | Verifies that lateral deviation e_xtrack <= epsilon_xtrack_max and margin distance d_margin >= R_min are restored per OA-05 | OpTx-01, OpTx-06 (Cross-Track Error: e_xtrack <= epsilon_xtrack_max; Margin Restored: True; Containment Status: NOMINAL) | Gate GNG-B5: Boundary Containment Margin R_margin >= R_min Confirmed | If lateral divergence continues for tau_excursion_timeout, trigger emergency containment safes per EMG-05 | Operational corridor re-acquired; State trajectory restabilized |
+| **6** | T0 + Delta_t6 | Corridor restabilization confirmed by Safety Watchdog | Core Controller / Supervisory Operator Console | Emits boundary recovery telemetry packet via OpTx-08; resumes nominal trajectory tracking; clears proximity warning flag | OpTx-06, OpTx-08 (Recovery Status: COMPLETED; Mode: Nominal_Corridor_Navigation; Event Code: BND_RECOVERY_SUCCESS) | Gate GNG-B6: Supervisory Acknowledgment & Telemetry Health Verified | If telemetry downlink degraded, queue recovery log in non-volatile buffer for post-operation offload | System operating nominally within corridor; Excursion event logged to blackbox audit store |
 
 ---
 
@@ -137,8 +133,8 @@ sequenceDiagram
 
 ---
 
-### 9.4 Scenario SCN-04: Dynamic Geofence Boundary Divert
-Scenario `SCN-04` covers the handling of dynamic environmental stress and unexpected keep-out zone insertion exceeding nominal limits, requiring closed-loop Bingo energy calculation and secondary divert execution.
+### 9.4 Scenario SCN-04: Emergency State Safing
+Scenario `SCN-04` covers the handling of dynamic environmental stress, critical resource depletion, or unexpected keep-out zone insertion exceeding nominal limits, requiring closed-loop Bingo energy calculation and secondary divert execution.
 
 ```mermaid
 sequenceDiagram
@@ -177,129 +173,74 @@ sequenceDiagram
 
 ---
 
-### 9.5 Scenario SCN-05: Controlled Safety Interlock Action
-Scenario `SCN-05` defines the formal multi-phase verification and execution of a controlled safety interlock and high-consequence action governed by MIL-STD-882E §4.4, {{INTERLOCK_01_TAG:ROE-01}} through {{INTERLOCK_06_TAG:ROE-06}}, multi-modal {{TARGET_VERIFICATION_PHRASE:positive identification}}, dual-consent cryptographic authorization, deterministic terminal execution, and post-action telemetry dump.
+### 9.5 Scenario SCN-05: Sensor Stream Correlation & State Synchronization
+Scenario `SCN-05` defines the multi-modal sensor fusion, real-time edge neural inference, temporal correlation, and deterministic state synchronization protocol between distributed sensor suites, the core controller, and supervisory consoles.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor MissionSup as "Mission Supervisor"
-    actor SafetySup as "Safety Supervisor"
-    participant Console as "Supervisory Console"
-    participant Controller as "Core Controller"
+    participant Sensors as "Sensor Suite Array"
     participant EdgeNode as "Edge Processing Node"
+    participant Controller as "Core Controller"
     participant Watchdog as "Safety Watchdog"
-    participant Actuator as "Payload Actuator"
+    participant Console as "Supervisory Console"
 
-    Controller ->> EdgeNode: 1. Initiate Positive Target Identification
-    EdgeNode ->> Controller: 2. Verification Confidence Exceeds Threshold
-    Controller ->> Watchdog: 3. Verify Separation to Protected Boundaries
-    Watchdog -->> Controller: 4. Standoff Margin Clear (ROE-05 PASS)
-    Controller ->> Console: 5. Display Verification Data and Request Dual Keys
-    MissionSup ->> Console: 6. Submit Cryptographic Key-A
-    SafetySup ->> Console: 7. Submit Cryptographic Key-B
-    Console ->> Controller: 8. Transmit Dual Consent Tokens (ROE-03)
-    Controller ->> Watchdog: 9. Validate Timestamps and Signatures
-    Watchdog -->> Controller: 10. Dual Consent Validated - System Armed
-    Controller ->> Actuator: 11. Execute Controlled Actuation Command
-    Actuator -->> Controller: 12. Actuation Execution Confirmed
-    Controller ->> Actuator: 13. Isolate Actuator Power (ROE-06)
-    Controller ->> Watchdog: 14. Transition to Safe Egress Corridor
-    Controller ->> Console: 15. Stream Post-Action Cryptographic Telemetry
+    Sensors ->> EdgeNode: 1. Stream Synchronized Multi-Modal Frames
+    EdgeNode ->> EdgeNode: 2. Correlate Temporal Features & Fusion
+    EdgeNode ->> Controller: 3. Deliver Correlated State Vector
+    Controller ->> Watchdog: 4. Verify State Estimation Margin
+    Watchdog -->> Controller: 5. State Bounds Confirmed Normal
+    Controller ->> Console: 6. Synchronize State Telemetry
+    Console -->> Controller: 7. Supervisory State Acknowledged
+    Controller ->> Sensors: 8. Maintain Continuous Stream Calibration
 ```
 
-#### 9.5.1 Safety Interlock State Machine & Deterministic Transitions
+#### 9.5.1 Sensor Stream Correlation State Machine & Deterministic Transitions
 The following Stateflow-compatible Mermaid state machine defines the deterministic phase transitions, guard conditions, and contingency branches governing Scenario `SCN-05`:
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Phase_Ingress_StationKeeping : SortieRelease_Token_Authenticated
-    
-    state Phase_Ingress_StationKeeping {
-        [*] --> Ingress_Transit
-        Ingress_Transit --> Corridor_Verification : WP_Ingress_Reached
-        Corridor_Verification --> Station_Hold_Acquired : Station_Bounds_Locked
-        Station_Hold_Acquired --> [*]
+    [*] --> Phase_Stream_Ingress : DataStream_Active
+
+    state Phase_Stream_Ingress {
+        [*] --> Ingest_MultiModal_Frames
+        Ingest_MultiModal_Frames --> Temporal_Timestamp_Alignment : Frames_Received
+        Temporal_Timestamp_Alignment --> Buffer_Integrity_Check : Disparity_Within_Tolerance
+        Buffer_Integrity_Check --> [*]
     }
-    
-    Phase_Ingress_StationKeeping --> Phase_PID_InterlockCheck : TargetArea_Entered && Interlock_01_Clearance_PASS
-    Phase_Ingress_StationKeeping --> Contingency_LostLinkFallback : EMG_01_LostC2_Timeout
-    Phase_Ingress_StationKeeping --> Contingency_BoundaryContainment : EMG_05_Boundary_Excursion
-    
-    state Phase_PID_InterlockCheck {
-        [*] --> MultiModal_Sensing
-        MultiModal_Sensing --> Feature_Fusion_Evaluation : SensorFrames_Captured
-        Feature_Fusion_Evaluation --> Confidence_Scoring : CrossModal_Correlated
-        Confidence_Scoring --> [*] : "C_target >= C_threshold"
+
+    Phase_Stream_Ingress --> Phase_Feature_Correlation : Buffer_Valid && Stream_Rate_Nominal
+    Phase_Stream_Ingress --> Contingency_SensorFallback : EMG_02_Sensor_Integrity_Fault
+
+    state Phase_Feature_Correlation {
+        [*] --> CrossModal_Fusion
+        CrossModal_Fusion --> State_Estimation_Scoring : Features_Fused
+        State_Estimation_Scoring --> Confidence_Verification : Residuals_Bounded
+        Confidence_Verification --> [*] : "C_state >= C_threshold"
     }
-    
-    Phase_PID_InterlockCheck --> Phase_DualConsent_ArmingExecution : Interlock_02_Target_Verified && Interlock_05_Zone_Clear
-    Phase_PID_InterlockCheck --> Phase_Ingress_StationKeeping : Target_Verification_Failed / Timeout
-    Phase_PID_InterlockCheck --> Contingency_SensorFallback : EMG_02_Sensor_Integrity_Fault
-    
-    state Phase_DualConsent_ArmingExecution {
-        [*] --> Authorization_Request
-        Authorization_Request --> DualKey_Submission_Pending : Token_Dispatched
-        DualKey_Submission_Pending --> Cryptographic_Validation : Keys_Ingested
-        Cryptographic_Validation --> Terminal_Action_Armed : "Signatures_Valid && Delta_t_arm <= tau_arm_max"
-        Terminal_Action_Armed --> Action_Actuation_Fired : Execution_Trigger_Engaged
-        Action_Actuation_Fired --> [*]
+
+    Phase_Feature_Correlation --> Phase_State_Synchronization : Confidence_Verified && Bounds_PASS
+    Phase_Feature_Correlation --> Phase_Stream_Ingress : Correlation_Degraded / Low_Confidence
+
+    state Phase_State_Synchronization {
+        [*] --> Controller_State_Update
+        Controller_State_Update --> Telemetry_Packaging : State_Ingested
+        Telemetry_Packaging --> Supervisory_Transmission : Frame_Composed
+        Supervisory_Transmission --> [*] : Handshake_Acknowledged
     }
-    
-    Phase_DualConsent_ArmingExecution --> Phase_PostAction_AssessmentDump : Action_Executed && Interlock_03_DualConsent_PASS
-    Phase_DualConsent_ArmingExecution --> Phase_Ingress_StationKeeping : Interlock_04_HOTL_Veto / Arming_Window_Expired
-    Phase_DualConsent_ArmingExecution --> Emergency_SafeStateTermination : EMG_07_System_Abort_Command
-    Phase_DualConsent_ArmingExecution --> Contingency_LostLinkFallback : Interlock_06_LinkLoss_Safing
-    
-    state Phase_PostAction_AssessmentDump {
-        [*] --> Standoff_Egress_Maneuver
-        Standoff_Egress_Maneuver --> PostAction_State_Capture : Safe_Standoff_Distance_Reached
-        PostAction_State_Capture --> Telemetry_Memory_Dump : Diagnostic_Frames_Secured
-        Telemetry_Memory_Dump --> Safe_Return_Transit : Dump_Checksum_Verified
-        Safe_Return_Transit --> [*]
-    }
-    
-    Phase_PostAction_AssessmentDump --> Phase_SecureShutdown : Safe_Recovery_Committed && Telemetry_Archived
-    Phase_PostAction_AssessmentDump --> Contingency_ResourceDivert : EMG_03_Bingo_Energy_Depleted
-    Phase_SecureShutdown --> [*]
+
+    Phase_State_Synchronization --> Phase_NominalProcessing : Synchronization_Committed
+    Phase_State_Synchronization --> Contingency_LostLinkFallback : EMG_01_LostC2_Timeout
+    Phase_NominalProcessing --> [*]
 ```
 
-#### 9.5.2 Phase 1: Ingress & Station Keeping Execution Verification
-Phase 1 verifies safe transit through designated operational corridors, environmental boundary monitoring, and establishment of a stable standoff station keeping orbit around the target area.
+#### 9.5.2 Sensor Synchronization Execution Verification
+The following execution table specifies the temporal sequence, performers, decision gates, and exit criteria for Scenario `SCN-05`:
 
 | Step Number | Elapsed Time (T+) | Stimulus / Trigger | Actor / Performer | Action Executed | Telemetry Stream | Decision Gate / Interlock Check | Exception Branch | Exit Criterion |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **1** | T0 + Delta_t_p1_1 | High-consequence mission sortie authorization token verified; system enters ingress corridor | Guidance Subsystem / Core Controller | Navigates along secure ingress corridor per OA-02; maintains velocity v_nominal; checks dynamic clearance envelope | OpTx-01, OpTx-02, OpTx-06 (State: Nominal; Velocity: v_nominal; Cross-Track Error: e_track <= epsilon_track_max; Ingress Status: ACTIVE) | Gate GNG-P1.1 / {{INTERLOCK_01_TAG:ROE-01}}: Clearance Distance d_clearance >= d_min_clearance & Envelope Valid | If obstacle detected or boundary margin breached, execute immediate evasive maneuver per EMG-05 / EMG-06 | Waypoint corridor traversed; System arrives at operational target area boundary |
-| **2** | T0 + Delta_t_p1_2 | System crosses operational engagement zone boundary WP_target_zone | Core Controller / Payload Actuator Subsystem | Un-stows multi-spectral sensor suite; commands gimbal to designated forward surveillance angle [theta_az0, theta_el0] | OpTx-01, OpTx-04, OpTx-06 (Payload Mode: DEPLOYED; Gimbal Angle: [theta_az0, theta_el0]; Payload Health: 100% PASS) | Gate GNG-P1.2: Payload Mechanical Limit & Gimbal Health Verified | If gimbal fails to deploy or reports sensor bias fault, lock gimbal in safe position and report degraded payload state | Sensor payload un-stowed; Multi-modal data feeds active |
-| **3** | T0 + Delta_t_p1_3 | System reaches standoff station holding coordinates | Core Controller / Guidance Subsystem | Establishes stable standoff holding pattern (Radius = R_standoff); maintains continuous line-of-sight to target zone | OpTx-01, OpTx-02, OpTx-06 (Mode: Standoff_Station_Hold; Orbit Radius: R_standoff +/- delta_R; Speed: v_loiter; Attitude rates nominal) | Gate GNG-P1.3 / {{INTERLOCK_05_TAG:ROE-05}}: Standoff Distance to Protected Zone d_protected >= R_CDA_min Verified | If station orbit intersects dynamic exclusion buffer, expand orbit radius to satisfy R_CDA_min | Standoff orbit stabilized; Line-of-sight tracking locked; Station keeping verified |
-| **4** | T0 + Delta_t_p1_4 | Station holding maintained for duration tau_station_check | Safety Watchdog / PACE Communications Transceiver | Assesses C2 link quality and environmental stability per OA-04 and OA-05; verifies link SNR and heartbeat margins | OpTx-06 (Primary SNR >= SNR_min; Heartbeat Age <= 0.2 s; Disturbance <= Disturbance_limit; Resource SoC >= SoC_mission_min) | Gate GNG-P1.4 / {{INTERLOCK_04_TAG:ROE-04}}: Operator Heartbeat Active & HOTL Veto Disarmed | If C2 link SNR < SNR_min or heartbeat timeout expires, safing interlock triggers; transition to Contingency_LostLinkFallback per {{INTERLOCK_06_TAG:ROE-06}} / EMG-01 | Ingress and station keeping phase exit criteria verified; System ready for positive identification phase |
-
-#### 9.5.3 Phase 2: Positive Identification & Interlock Check Execution Verification
-Phase 2 executes multi-modal sensor fusion, edge neural state classification, precision target coordinate extraction, and protected boundary clearance exclusion verification.
-
-| Step Number | Elapsed Time (T+) | Stimulus / Trigger | Actor / Performer | Action Executed | Telemetry Stream | Decision Gate / Interlock Check | Exception Branch | Exit Criterion |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **1** | T0 + Delta_t_p2_1 | Sensor payload detects target feature candidate within field of regard | Sensor Suite Array / Edge Processing Node | Acquires synchronized multi-modal sensor frames (EO optical, IR thermal, RF signature); timestamps frames with microsecond precision | OpTx-04, OpTx-05 (Sensor Frames Captured: Mode_A + Mode_B; Frame Sync Disparity <= 1.0 ms; Optical Quality: 100%) | Gate GNG-P2.1: Multi-Modal Sensor Frame Synchronization & Integrity Verified | If sensor frame dropout occurs, drop incomplete candidate frame; re-acquire in next sampling cycle | Synchronized multi-modal sensor dataset delivered to Edge Processing Node |
-| **2** | T0 + Delta_t_p2_2 | Synchronized multi-modal frames received on internal payload bus | Edge Processing Node | Runs real-time sensor fusion and neural classification algorithms per OA-03; computes multi-modal confidence score C_target; extracts 3D coordinate vector p_target | OpTx-05, OpTx-06 (Target Confidence: C_target; Target Coordinates: p_target; Target Dimensions: [L, W, H]; Target Class: Validated) | Gate GNG-P2.2 / {{INTERLOCK_02_TAG:ROE-02}}: Multi-Modal Target Verification Score C_target >= C_threshold (C_target >= 0.95) Confirmed | If C_target < C_threshold, reject positive target verification; maintain standoff orbit and continue sensor sweep | Positive target verification confirmed; Target state locked with confidence exceeding normative threshold |
-| **3** | T0 + Delta_t_p2_3 | Positive identification confirmed by Edge Processing Node | Guidance Subsystem / Sensor Fusion Engine | Calculates covariance matrix and Target Location Error (TLE); computes geodetic spatial uncertainty ellipsoid | OpTx-05, OpTx-06 (TLE Metric: e_TLE <= epsilon_TLE_max; Range: d_target; Covariance Trace: trace(P) <= sigma_P_max) | Gate GNG-P2.3: Target Location Error Bound e_TLE <= epsilon_TLE_max Verified | If e_TLE > epsilon_TLE_max due to sensor distance or geometry, execute tighter orbit maneuver to reduce range | Target 3D coordinates validated within strict spatial error bound |
-| **4** | T0 + Delta_t_p2_4 | Precision coordinates p_target locked in Guidance Core | Core Controller / Safety Watchdog | Performs automated spatial boundary calculation against all declared protected zones Z_protected and non-participant exclusion zones | OpTx-01, OpTx-06 (Distance to Nearest Protected Zone: d_cda >= R_CDA_min; Boundary Status: INSIDE_ALLOWED_ZONE; Protected Zone Risk: ZERO) | Gate GNG-P2.4 / {{INTERLOCK_05_TAG:ROE-05}}: Minimum Standoff Separation d_cda >= R_CDA_min Verified | If target location is within R_CDA_min of any protected structure, interlock inhibits arming; action permanently blocked per {{INTERLOCK_05_TAG:ROE-05}} | Positive target verification and interlock check complete; Verification report packaged for dual-consent operator review |
-
-#### 9.5.4 Phase 3: Dual-Consent Arming & Execution Verification
-Phase 3 enforces the two-person cryptographic authorization rule, rolling arming time-window constraints, terminal guidance trajectory tracking, and controlled action commitment.
-
-| Step Number | Elapsed Time (T+) | Stimulus / Trigger | Actor / Performer | Action Executed | Telemetry Stream | Decision Gate / Interlock Check | Exception Branch | Exit Criterion |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **1** | T0 + Delta_t_p3_1 | Core Controller packages target verification telemetry and interlock status; transmits to Operator Console | Core Controller / Mission Supervisor / Safety Supervisor | Supervisory console displays high-resolution target verification stream, coordinate confidence, and safety zone clearance to Mission Supervisor and Safety Supervisor | OpTx-06 (Target Review Screen: ACTIVE; Interlock Status: ALL_GREEN; Consent Request: PENDING_DUAL_KEY) | Gate GNG-P3.1: Operator Situational Awareness Confirmation & Consent Prompt Ready | If either supervisor rejects target visual confirmation, supervisor asserts manual veto; returns system to station hold per {{INTERLOCK_04_TAG:ROE-04}} | Both supervisors presented with independent authorization token prompts |
-| **2** | T0 + Delta_t_p3_2 | Mission Supervisor submits Key_A and Safety Supervisor submits Key_B on independent secure consoles | Mission Supervisor / Safety Supervisor / Core Controller Security Partition | Transmits cryptographic signature tokens Key_A and Key_B via OpTx-07; Security Partition verifies digital signatures, timestamp delta \|t_A - t_B\| <= Delta_t_arm_window, and boundary containment status | OpTx-06, OpTx-07 (Key_A Status: VALID; Key_B Status: VALID; Timestamp Disparity: \|t_A - t_B\| <= Delta_t_arm_window; Arming Gate: COMMITTED) | Gate GNG-P3.2 / {{INTERLOCK_03_TAG:ROE-03}}: Dual-Consent Cryptographic Signature Verification PASS | If either key invalid or timestamp delta \|t_A - t_B\| > Delta_t_arm_window, reject arming request; latch security lock | Dual-consent authorization validated; System transitions to Terminal_Action_Armed mode |
-| **3** | T0 + Delta_t_p3_3 | System armed in Terminal_Action_Armed; terminal execution sequence initiates | Core Controller / Guidance Subsystem / Safety Watchdog | Computes and executes terminal guidance trajectory; closes guidance loop at f_control; monitors cross-track error and HOTL veto discrete line | OpTx-01, OpTx-02, OpTx-06 (Terminal Mode: ACTIVE_ARMED; Cross-Track Error: e_terminal <= epsilon_terminal_max; HOTL Veto: CLEAR) | Gate GNG-P3.3 / {{INTERLOCK_04_TAG:ROE-04}}: Terminal Tracking Error Bound & Continuous HOTL Heartbeat Active | If cross-track error e_terminal > epsilon_terminal_max or operator asserts HOTL abort switch, instantly disarm payload and abort trajectory | Terminal trajectory criteria satisfied; System reaches designated terminal actuation point |
-| **4** | T0 + Delta_t_p3_4 | System reaches terminal execution trigger point within release window Delta_t_release | Core Controller / Actuator Subsystem / Safety Watchdog | Issues authenticated actuation command signal to payload actuator bus; delivers controlled action; commands immediate transition to safe post-action egress profile | OpTx-02, OpTx-06, OpTx-08 (Actuator Command: FIRED; Release Timestamp: t_release; Execution State: SUCCESS; Payload State: EXHAUSTED_SAFED) | Gate GNG-P3.4: Action Firing Confirmation & Actuator Power Safing | If actuator command fails to execute within Delta_t_release, command immediate disarm, power isolation, and egress climb | Controlled action committed; Actuator power de-energized; System transitions to safe egress trajectory |
-
-#### 9.5.5 Phase 4: Post-Action Assessment & Telemetry Dump Execution Verification
-Phase 4 executes the immediate safe standoff egress maneuver, captures multi-spectral post-action assessment data, offloads high-bandwidth telemetry dumps, and verifies residual Bingo energy for safe recovery.
-
-| Step Number | Elapsed Time (T+) | Stimulus / Trigger | Actor / Performer | Action Executed | Telemetry Stream | Decision Gate / Interlock Check | Exception Branch | Exit Criterion |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **1** | T0 + Delta_t_p4_1 | Controlled action execution confirmed by payload discrete sensor | Core Controller / Guidance Subsystem | Commands maximum allowable rate climb/turnaway along pre-cleared egress corridor; establishes safe standoff distance d_standoff >= R_standoff_safe | OpTx-01, OpTx-02, OpTx-06 (Mode: Safe_Egress_Maneuver; Egress Speed: v_egress; Standoff Distance: d_standoff >= R_standoff_safe; Boundary: INSIDE) | Gate GNG-P4.1: Safe Standoff Separation & Corridor Clearance Verified | If egress corridor obstructed, divert to secondary deconflicted escape heading | Safe standoff distance achieved; Egress corridor established; System clear of terminal action area |
-| **2** | T0 + Delta_t_p4_2 | System stabilized in post-action standoff orbit | Sensor Suite / Edge Processing Node | Captures post-action high-resolution multi-spectral imagery and sensor telemetry of action site; computes post-action state transition metrics per OA-03 | OpTx-04, OpTx-05, OpTx-06 (Post-Action Assessment: COMPLETE; Feature Changes Detected: True; Sensor Imagery Streamed; Assessment Confidence >= 0.90) | Gate GNG-P4.2: Post-Action Sensor Image Capture & Quality Verification | If sensor field of view obscured by particulate/dust, hold standoff orbit for duration tau_clear | Comprehensive post-action assessment dataset recorded; Visual confirmation streamed to operator console |
-| **3** | T0 + Delta_t_p4_3 | Post-action assessment data compiled in non-volatile flash memory | PACE Communications Transceiver / Security Partition / Operator Console | Initiates high-bandwidth cryptographic telemetry dump via OpTx-06; offloads full-rate raw sensor logs, interlock timestamps, and guidance history | OpTx-06 (Telemetry Dump Status: IN_PROGRESS / 100% COMPLETE; Offload Throughput: Throughput_dump; Checksum: MATCH) | Gate GNG-P4.3: Telemetry Offload Checksum Match & Zeroization Flag Verified | If datalink bandwidth throttled, prioritize cryptographic audit log over raw video frames; queue remaining frames for ground tether | Full execution telemetry offloaded to ground station; Cryptographic audit trail archived |
-| **4** | T0 + Delta_t_p4_4 | Telemetry dump verified; Mission Supervisor issues return transit order | Power & Resource Subsystem / Core Controller / Guidance Core | Calculates residual energy R(t); confirms R(t) >= R_bingo(t); engages nominal return-to-base corridor navigation per OA-02 and OA-06 | OpTx-01, OpTx-02, OpTx-06 (Mode: {{LIFECYCLE_TRANSIT_MODE}}; Heading: Base_Bearing; Residual Energy: R(t) >= R_bingo(t); Payload: SAFED_STOWED) | Gate GNG-P4.4 / {{INTERLOCK_06_TAG:ROE-06}}: Residual Energy R(t) >= R_bingo(t) & Base Recovery Route Green | If residual energy R(t) < R_bingo(t) due to extended station time, initiate divert to Secondary Recovery Site LZ-DIVERT-ALPHA per EMG-03 | System safely in transit to recovery location; Post-action audit logs secured; SCN-05 thread completed |
+| **1** | T0 + Delta_t_s1 | Multi-modal sensor frame capture clock trigger | Sensor Suite Array / Edge Processing Node | Captures synchronized high-rate sensor frames across optical, inertial, and spatial channels; verifies microsecond timestamp alignment | OpTx-04, OpTx-06 (Captured Frames: N_modalities; Time Disparity: Delta_t_sync <= 1.0 ms; Bus Health: 100%) | Gate GNG-S1: Multi-Modal Frame Synchronization Delta_t_sync <= 1.0 ms Verified | If timestamp disparity exceeds tolerance, discard unsynchronized frame; re-arm capture clock | Synchronized multi-channel frame buffer delivered to edge processor |
+| **2** | T0 + Delta_t_s2 | Frame buffer validation complete | Edge Processing Node | Executes edge neural inference and statistical sensor fusion per OA-03; computes state estimation vector and confidence metric C_state | OpTx-05, OpTx-06 (State Vector: p_state; Estimation Confidence: C_state >= C_threshold; Residual Trace: trace(P) <= sigma_P_max) | Gate GNG-S2 / {{INTERLOCK_02_TAG:SAF-02}}: Estimation Confidence C_state >= C_threshold Confirmed | If confidence C_state < C_threshold, revert to primary inertial dead-reckoning filter | Fused state estimation vector generated with bounded uncertainty |
+| **3** | T0 + Delta_t_s3 | State estimation vector delivered to Core Controller | Core Controller / Safety Watchdog | Performs spatial boundary sanity check and innovation residual check against 4D containment polygon per OA-05 | OpTx-01, OpTx-06 (Innovation Residual: r_inno <= r_inno_max; Boundary Clearance: d_margin >= R_min; Watchdog Flag: NORMAL) | Gate GNG-S3: Innovation Residual Bound r_inno <= r_inno_max Verified | If innovation residual exceeds threshold, isolate divergent sensor channel per EMG-02 | State estimation validated by independent safety watchdog |
+| **4** | T0 + Delta_t_s4 | State vector accepted by Core Controller | Core Controller / Supervisory Operator Console | Packages consolidated state telemetry frame; downlinks high-rate state packet via OpTx-08; updates console display kernel | OpTx-06, OpTx-08 (Downlink Stream: SYNCHRONIZED; Latency: tau_latency <= tau_max; Packet Loss <= 0.1%) | Gate GNG-S4: Datalink Quality of Service & Display Kernel Acknowledgment PASS | If link bandwidth degraded, apply adaptive compression to non-critical telemetry | Supervisory display synchronized with real-time system state vector |
+| **5** | T0 + Delta_t_s5 | Supervisory state synchronization confirmed | Core Controller / Sensor Suite Array | Commits synchronized state timestamp to non-volatile audit register; streams continuous recalibration biases to sensor heads | OpTx-01, OpTx-06 (Calibration Status: LOCKED; Bias Drift: b_drift <= b_drift_max; Register Hash: COMMITTED) | Gate GNG-S5: Sensor Calibration Bias Stability Bound Verified | If bias drift exceeds allowable limit, schedule recalibration cycle at next waypoint | Continuous state synchronization loop closed; SCN-05 thread complete |

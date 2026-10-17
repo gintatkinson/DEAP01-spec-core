@@ -73,7 +73,7 @@ flowchart TD
   - Tests must never pass artificial strings.
   - Tests must execute directly against the real files in the repository:
     `schema/a5-user-manual-2.md` (2,234 lines)  
-    `schema/avenger-5-spec-sheet-rev3.md` (160 lines)  
+    `schema/alpha-platform-spec-sheet-rev1.md` (160 lines)  
     `schema/esad-icd-excalibur-ab00-0054.md` (305 lines)  
     `docs/safety/STPA_MATRIX.md` (661 lines)  
 - **Negative Testing Without Mocks**:

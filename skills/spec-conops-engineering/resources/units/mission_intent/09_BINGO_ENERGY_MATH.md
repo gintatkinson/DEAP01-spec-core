@@ -46,11 +46,11 @@ $$
 
 When the primary recovery location is unavailable (obstruction, localized environmental hazard, or communication loss), the executive controller autonomously executes secondary or tertiary divert sequencing:
 
-| Recovery Site ID | Site Classification | Location State | Elevation / Level | Dimension Envelope | Priority Order | Ingress Clearance |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `RS-PRIMARY` | Primary Base Recovery Location | p_RS_primary | h_RS_primary | L_primary x W_primary | Priority 1 (Nominal) | Unrestricted Path |
-| `RS-DIVERT-ALPHA` | Secondary Divert Recovery Site | p_RS_divert_alpha | h_RS_divert_alpha | L_alpha x W_alpha | Priority 2 (Secondary) | Obstacle Clearance Verified |
-| `RS-DIVERT-BRAVO` | Tertiary Emergency Safe Location | p_RS_divert_bravo | h_RS_divert_bravo | L_bravo x W_bravo | Priority 3 (Contingency) | Boundary Standoff Verified |
+| Recovery Site ID | Site Classification | Location State | Dimension Envelope | Priority Order | Ingress Clearance |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `RS-PRIMARY` | Primary Base Recovery Location | p_RS_primary | L_primary x W_primary | Priority 1 (Nominal) | Unrestricted Path |
+| `RS-DIVERT-ALPHA` | Secondary Divert Recovery Site | p_RS_divert_alpha | L_alpha x W_alpha | Priority 2 (Secondary) | Clearance Verified |
+| `RS-DIVERT-BRAVO` | Tertiary Emergency Safe Location | p_RS_divert_bravo | L_bravo x W_bravo | Priority 3 (Contingency) | Boundary Standoff Verified |
 
 - **Autonomous Divert Protocol:** If $R_{\mathrm{current}} \le R_{\mathrm{threshold}}$ and `RS-PRIMARY` reports obstruction, the executive controller commands immediate divert to `RS-DIVERT-ALPHA` within $t_{\mathrm{resp}} \le \tau_{\mathrm{containment}}$, adjusting operating profile for optimal specific resource range.
 - **Public Clause Citation:** INCOSE SEH v5.0 §3.2

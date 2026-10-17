@@ -32,14 +32,15 @@ The `ingest-sysml` tool discovers, lexes, parses, and serializes source code tre
 
 #### CLI Command-Line Syntax
 ```text
-ingest-sysml [OPTIONS] --source <DIR>
+ingest-sysml [OPTIONS] [--source <DIR> | --schema <PATH>]
 ```
 
 #### CLI Option Definitions
 | Flag / Option | Argument Type | Mandatory | Default Value | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `--source` | Path (`<DIR>`) | Yes | None | Absolute or workspace-relative path to root of source code tree |
-| `--format` | String | No | `code` | Input format selector (`code`, `markdown`, `idl`, `openapi`, `yang`, `auto`) |
+| `--source` | Path (`<DIR>`) | No (mutually exclusive with `--schema`) | None | Absolute or workspace-relative path to root of source code tree for AST extraction |
+| `--schema` | Path (`<PATH>`) | No (defaults to `schema/` when `--source` is omitted) | `schema/` | Path to input schema file or directory containing schemas (`crates/ingest-sysml/src/main.rs:55`) |
+| `--format` | String | No | `auto` | Input format selector (`auto`, `code`, `sysml`, `markdown`, `idl`, `openapi`, `yang`); auto-resolves to `code` when `--source` is provided |
 | `--language` | String | No | `auto` | Language parser selection (`auto`, `dart`, `rust`) |
 | `--out` | Path (`<FILE>`) | No | `.pipeline/schema.sysml` | Destination path for synthesized canonical SysML v2 text |
 | `--digest` | Path (`<FILE>`) | No | `.pipeline/schema-digest.json` | Destination path for cryptographic SHA-256 schema digest JSON |
@@ -95,30 +96,33 @@ The transformation engine maps source language AST constructs into closed-gramma
 
 ---
 
-### 3.2 Formal 7-Section Safety Docstring Grammar
+### 3.2 Formal 7-Section Safety Docstring Grammar & Check 34 Uniqueness Contract
 
-Safety docstrings injected into source code conform to a rigid, standardized 7-section structure.
+Safety docstrings injected into source code conform to a rigid, standardized 7-section structure satisfying DO-178C Level A and Check 34 source purity gates (`audit_source_purity` in `crates/verify-baseline/src/checks/structural.rs:806-845`).
 
-#### Docstring Structural Sections
-1. `## 1. Safety Intent & Regulatory Scope`: Regulatory standard alignment (DO-178C Level A, ISO 26262 ASIL D, ECSS-E-ST-40C) and high-level safety objective.
-2. `## 2. Invariants & Mathematical Properties`: Mathematical conservation laws, state boundaries, and deterministic invariants.
-3. `## 3. Preconditions`: Explicit input domain constraints, parameter validation ranges, and initialization requirements.
-4. `## 4. Postconditions`: Guaranteed output state, returned value bounds, and post-execution environment state.
-5. `## 5. Algorithmic Complexity Bounds`: Formal asymptotic notation bounding computational resources.
-6. `## 6. Failure Modes & Fault Tolerance`: Systematic evaluation across the 4 Universal Failure Dimensions:
-   - `Interface`: Signal corruption, serialization fault, buffer boundary errors.
-   - `State`: Invalid transition, deadlock, desynchronization, safe-state fallback.
-   - `Action`: Spurious execution, command omission, latency deadline breach.
-   - `Resource`: Memory exhaustion, heap fragmentation, stack depth overflow.
-7. `## 7. Realization & Traceability`: Explicit requirement tags (`Realises: [REQ-ID]`) and owning SysML v2 component bindings.
+#### Docstring Structural Sections & Per-Function Uniqueness Invariant
+To satisfy Check 34 `seen_docblocks` uniqueness (`crates/verify-baseline/src/checks/structural.rs:825-845`), which normalizes docstrings by discarding the summary line and the `Realises:` line before hashing, every synthesized docstring MUST:
+1. Contain all seven exact section headers (`## 1. Safety Intent & Regulatory Scope` through `## 7. Realization & Traceability`).
+2. Guarantee **per-function normalized body uniqueness** across all functions in the module. The synthesizer MUST interpolate function-specific AST attributes across Sections 1 through 6:
+   - **Section 1 (`## 1. Safety Intent & Regulatory Scope`)**: Interpolate owning `PartDef` / module classifier name, function identifier `<fn_name>`, and specific regulatory safety objective.
+   - **Section 2 (`## 2. Invariants & Mathematical Properties`)**: Interpolate struct/module state invariants, conservation properties, and determinism constraints specific to `<fn_name>`.
+   - **Section 3 (`## 3. Preconditions`)**: Enumerate each formal input parameter `<param_name>: <ParamType>` and its domain constraint derived from `ActionDef::in_params`.
+   - **Section 4 (`## 4. Postconditions`)**: Specify the concrete return type `<ReturnType>` (`ActionDef::out_params`) and resulting state mutation contract.
+   - **Section 5 (`## 5. Algorithmic Complexity Bounds`)**: Bind asymptotic time and space complexity variables to the function's specific input parameter dimensions.
+   - **Section 6 (`## 6. Failure Modes & Fault Tolerance`)**: Map error/fallback behavior across the 4 Universal Failure Dimensions to the function's specific return path (`Result`, `Option`, or infallible value):
+     - `Interface`: Parameter validation and boundary error handling.
+     - `State`: State machine transition validity and safe-state fallback.
+     - `Action`: Reentrancy, timeout, and execution sequencing.
+     - `Resource`: Allocation, stack depth, and buffer bounds.
+   - **Section 7 (`## 7. Realization & Traceability`)**: Emit `Realises: [<REQ-ID>]` bound to the owning SysML v2 element.
 
 #### Extended Backus-Naur Form (EBNF) Docstring Grammar
 ```ebnf
 SafetyDocstring     ::= Section1 Section2 Section3 Section4 Section5 Section6 Section7
-Section1            ::= HeaderPrefix "## 1. Safety Intent & Regulatory Scope" Newline BodyText
-Section2            ::= HeaderPrefix "## 2. Invariants & Mathematical Properties" Newline BodyText
-Section3            ::= HeaderPrefix "## 3. Preconditions" Newline BodyText
-Section4            ::= HeaderPrefix "## 4. Postconditions" Newline BodyText
+Section1            ::= HeaderPrefix "## 1. Safety Intent & Regulatory Scope" Newline HeaderPrefix FunctionScopeIntent Newline
+Section2            ::= HeaderPrefix "## 2. Invariants & Mathematical Properties" Newline HeaderPrefix FunctionInvariants Newline
+Section3            ::= HeaderPrefix "## 3. Preconditions" Newline ParameterConstraints
+Section4            ::= HeaderPrefix "## 4. Postconditions" Newline ReturnTypeContract
 Section5            ::= HeaderPrefix "## 5. Algorithmic Complexity Bounds" Newline ComplexityList
 Section6            ::= HeaderPrefix "## 6. Failure Modes & Fault Tolerance" Newline FailureModesList
 Section7            ::= HeaderPrefix "## 7. Realization & Traceability" Newline TraceabilityLine
@@ -159,10 +163,10 @@ $$
 - **AC-02 (Rust Struct and Impl Block AST Ingestion)**: **Given** a Rust crate containing `pub struct ComponentBuffer` and an associated `impl ComponentBuffer` block declaring public methods and invariants; **When** `ingest-sysml --source crates/my-crate/src --format code --language rust` is executed; **Then** the parser produces a canonical `PartDef` for `ComponentBuffer`, maps each struct field to an `AttributeDef`, and lowers each public method into a typed `ActionDef` with formal `in` and `out` parameter signatures.
 
 ### Scenario 3: Forward Safety Docstring Synthesis and Injection
-- **AC-03 (Forward Safety Docstring Synthesis and Injection)**: **Given** a Rust or Dart source file containing bare function declarations and a SysML v2 schema declaring corresponding `requirement def` and `constraint def` rules; **When** `compile-sysml --inject-safety-docstrings src/` is executed; **Then** the synthesizer parses the SysML constraints, formats the complete 7-section DO-178C safety docstring with mathematical complexity bounds and failure mode analysis, and prepends it to the function declarations via atomic file replacement.
+- **AC-03 (Forward Safety Docstring Synthesis and Injection)**: **Given** a Rust or Dart source file containing bare function declarations and a SysML v2 schema declaring corresponding `requirement def` and `constraint def` rules; **When** `compile-sysml --inject-safety-docstrings src/` is executed; **Then** the synthesizer parses the SysML constraints and function AST signatures, formats the complete 7-section DO-178C safety docstring with per-function parameter, invariant, return-type, and failure-mode interpolation across Sections 1 through 6, ensuring each generated docblock passes Check 34 normalized body uniqueness under `seen_docblocks` (`crates/verify-baseline/src/checks/structural.rs:806-845`), and prepends it to the function declarations via atomic file replacement.
 
 ### Scenario 4: Idempotency Invariant Verification
-- **AC-04 (Idempotency Invariant Verification)**: **Given** a source code directory that has successfully received synthesized 7-section safety docstrings; **When** `compile-sysml --inject-safety-docstrings <DIR>` is executed a second time on the identical directory; **Then** the file contents remain bit-for-bit identical, producing zero diffs, zero git working tree modifications, and identical SHA-256 file hashes.
+- **AC-04 (Idempotency Invariant Verification)**: **Given** a source code directory that has successfully received synthesized 7-section safety docstrings; **When** `compile-sysml --inject-safety-docstrings <DIR>` is executed a second time on the identical directory; **Then** the file contents remain bit-for-bit identical, producing zero diffs, zero git working tree modifications, and identical SHA-256 file hashes, while continuing to pass Check 34 `seen_docblocks` uniqueness across all multi-function source files.
 
 ### Scenario 5: Zero-Regex Lexer Correctness and Error Recovery (Negative Test)
 - **AC-05 (Zero-Regex Lexer Correctness and Error Recovery)**: **Given** a source file containing a syntax error (such as an unclosed brace or malformed token stream); **When** `ingest-sysml --source <DIR>` is invoked; **Then** the deterministic recursive-descent parser detects the unexpected token at line and column offset, halts closed without panicking, logs a structured error to standard error, and terminates with exit code `1` leaving existing output files unmodified.
@@ -206,7 +210,7 @@ flowchart TD
 sequenceDiagram
     actor Dev as Developer Or CLI
     participant Ingest as ingest-sysml Tool
-    participant Core as sysml-core Parser
+    participant Core as deap-core sysml_ast
     participant SSOT as SysML v2 Schema SSOT
     participant Compile as compile-sysml Tool
     participant Source as Source Code Tree
@@ -239,13 +243,13 @@ sequenceDiagram
 
 ### 6.1 Authoritative Normative Sources
 
-This specification derives from and maintains strict architectural alignment with normative standards (DO-178C, ISO 26262, ECSS-E-ST-40C), core governance rules ([.pipeline/constitution.md](../../.pipeline/constitution.md), [rules/sysml-ssot-completeness.md](../../rules/sysml-ssot-completeness.md), [rules/domain-engineering-standards.md](../../rules/domain-engineering-standards.md)), and compiler engine crates ([crates/ingest-sysml](../../crates/ingest-sysml), [crates/compile-sysml](../../crates/compile-sysml), [crates/sysml-core](../../crates/sysml-core)):
+This specification derives from and maintains strict architectural alignment with normative standards (DO-178C, ISO 26262, ECSS-E-ST-40C), core governance rules ([.pipeline/constitution.md](../../.pipeline/constitution.md), [rules/sysml-ssot-completeness.md](../../rules/sysml-ssot-completeness.md), [rules/domain-engineering-standards.md](../../rules/domain-engineering-standards.md)), and compiler engine crates ([crates/ingest-sysml](../../crates/ingest-sysml), [crates/compile-sysml](../../crates/compile-sysml), [crates/deap-core](../../crates/deap-core)):
 - **Governance Constitution**: [.pipeline/constitution.md](../../.pipeline/constitution.md) (Three-Tier Platform Isolation, Zero-Mocking Live Persistence Mandate)
 - **SysML SSOT Completeness**: [rules/sysml-ssot-completeness.md](../../rules/sysml-ssot-completeness.md) (100% Structural Single Source of Truth)
 - **Domain Engineering Standards**: [rules/domain-engineering-standards.md](../../rules/domain-engineering-standards.md) (M2 Closed-Grammar Metamodel Hygiene)
 - **Ingestion Engine Crate**: [crates/ingest-sysml](../../crates/ingest-sysml) (AST Lexer, Tokenizer, and Format Translators)
 - **Compilation Engine Crate**: [crates/compile-sysml](../../crates/compile-sysml) (SysML Parser, STPA Transpiler, and Synchronization Engine)
-- **Core AST Engine Crate**: [crates/sysml-core](../../crates/sysml-core) (Abstract Syntax Tree Definitions and Serializers)
+- **Core AST Engine Crate**: [crates/deap-core](../../crates/deap-core) (`crates/deap-core/src/sysml_ast.rs`: Abstract Syntax Tree Definitions and Serializers)
 
 ### 6.2 Traceability Matrix
 

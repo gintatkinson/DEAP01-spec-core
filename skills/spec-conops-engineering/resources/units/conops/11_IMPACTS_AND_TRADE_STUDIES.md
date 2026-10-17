@@ -74,9 +74,9 @@ $$
 | Nominal Gravimetric Energy Density | rho_energy | {{BATTERY_ENERGY_DENSITY_NOMINAL}} | Wh/kg | Nominal gravimetric energy storage density |
 | Required Cycle Lifetime | N_cycles_req | {{BATTERY_CYCLE_LIFE_REQ}} | Cycles | Minimum required charge-discharge cycles to 80% state of health |
 
-#### 11.4.2 Trade Study 2: Edge Neural Compute vs Datalink Compression (Fix #129)
+#### 11.4.2 Trade Study 2: Edge Neural Compute vs Datalink Compression (refs #129)
 - **Objective & Problem Statement:** Determine the optimal balance between onboard edge neural inference compute and high-bandwidth telemetry downlink transmission under contested, degraded, or jammed RF communications environments.
-- **Normative Standards Baseline:** INCOSE SEH v5.0 §4.3, ISO/IEC/IEEE 29148:2018 §6.4.2, STANAG 4586 Annex B §3.2, NIST SP 800-82r3 §5.2.
+- **Normative Standards Baseline:** INCOSE SEH v5.0 §4.3, ISO/IEC/IEEE 29148:2018 §6.4.2, ISO/IEC/IEEE 15288:2023 §6.4.2, NIST SP 800-82r3 §5.2.
 - **Options Evaluated:**
   - **Option A (Baseline):** Raw Telemetry Streaming with Centralized Operator Station AI Processing (Transmits raw uncompressed high-rate sensor streams to the supervisory station; minimal onboard compute SWaP-C, but high RF bandwidth demand and catastrophic operational failure during RF link denial).
   - **Option B (Selected Architecture):** Onboard Edge Neural Inference Accelerator with Dynamic Context Compression (Executes real-time feature extraction and boundary detection locally; transmits compact semantic state vectors and compressed telemetry at $\text{Throughput}_{\mathrm{feature}} \ll \text{Throughput}_{\mathrm{raw}}$, guaranteeing autonomous mission execution during communications loss).

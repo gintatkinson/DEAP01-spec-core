@@ -1484,7 +1484,7 @@ sequenceDiagram
 
     Runner->>Harness: Execute Job verify:dual-llm-dispatch
     Harness->>Slicer: Slice AST for Target Component
-    Slicer-->>Harness: Emit AST Slice Envelope (&lt;= 4,096 Tokens)
+    Slicer-->>Harness: Emit AST Slice Envelope (max 4,096 Tokens)
     
     rect rgb(240, 245, 255)
         note over Harness,AuditLog: Phase 1: DeepSeek-R1 CoT Reasoning Slot

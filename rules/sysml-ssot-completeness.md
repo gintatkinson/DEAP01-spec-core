@@ -24,22 +24,24 @@ This project explicitly declares **MATLAB / Simulink / Stateflow / Embedded Code
 Every downstream engineering specification artifact MUST be formally rooted in and mapped to corresponding SysML v2 AST elements:
 
 1. **Epics & Features -> Structural Definitions (`package`, `part def`, `item def`)**:
-   - Every Epic must map to a top-level or architectural `package` defining subsystem boundaries.
-   - Every Feature specification must map to at least one `part def` (structural component/block) or `item def` (data definition/message payload).
+   - Every Epic must map to a top-level or architectural `package` defining subsystem boundaries, linked to ConOps Super-System architecture.
+   - Every Feature specification must map to at least one `part def` (structural component/block) or `item def` (data definition/message payload), bound to component-level failure modes from `docs/research/FAILURE_MODE_REGISTRY.md` and ConOps Subsystem architecture.
    - Component hierarchies, composition relationships, and data item schemas must be formally defined in SysML v2 before Feature elaboration.
 
-2. **User Stories -> Behavioral & Interface Definitions (`action def`, `state def`, `port def`)**:
-   - Every User Story must map to formal behavioral elements: discrete computational operations (`action def`), lifecycle and operational modes (`state def`), or interface boundaries (`port def`).
-   - Given-When-Then BDD scenarios must execute against the actions, states, and ports declared on the parent component's SysML definition.
+2. **User Stories -> Behavioral & Interface Definitions (`part def`, `action def`, `state def`, `port def`)**:
+   - Every User Story must ground in formal structural `part def` components: internal participant lifelines must bind 1:1 to SysML `part def`s.
+   - Behavioral elements map to discrete computational operations (`action def`), lifecycle and operational modes (`state def`), or interface boundaries (`port def`).
+   - Given-When-Then BDD scenarios must execute against the actions, states, and ports declared on the parent component's SysML definition, incorporating failure mode mitigations from `docs/research/FAILURE_MODE_REGISTRY.md` across the 4 Universal Failure Dimensions.
    - Parameter inputs (`in`), outputs (`out`), and flow directions must be explicitly typed.
 
-3. **Use Cases -> Formal Use Case Definitions (`use case def`)**:
+3. **Use Cases -> Formal Use Case Definitions (`use case def`, subject `part def`)**:
    - Every Use Case specification must be declared as a formal `use case def` in the SysML v2 model.
    - Each `use case def` MUST formally specify:
      - `subject`: The system or subsystem part under design (`part def`) providing the capability.
      - `actor`: Primary initiating actors and secondary participating actors (bound via typed ports/interfaces).
      - `objective`: Formal operational goal and success criteria.
      - `include` / `extend`: Formal relationships connecting modular or conditional sub-use-cases.
+   - Alternate and exception flows must address component-level failure modes from `docs/research/FAILURE_MODE_REGISTRY.md` for the subject `part def`.
 
 4. **Safety Invariants -> Formal Requirement Definitions (`requirement def`)**:
    - All safety constraints derived from STPA (System-Theoretic Process Analysis: Unsafe Control Actions, Loss Scenarios) and FMECA (Failure Mode, Effects, and Criticality Analysis) MUST be modeled as formal `requirement def` nodes.
@@ -88,24 +90,24 @@ Check 23 enforces absolute physical fidelity, attribute-level AST closure, and f
 
 ### 1. Mandatory SSOT Bill of Materials (BOM) Extraction & Parameter Grounding
 - **Level 0 Ground Truth Extraction**: All physical components, quantities, actuation mechanisms, and environmental/operational boundaries declared in Level 0 OEM specification tables and Bill of Materials (BOM) in `schema/` or `schema/extracted/` form the immutable parametric foundation of the system.
-- **AST Attribute Parameter Grounding**: Extracted physical parameters must be formally declared in SysML v2 as typed attributes (e.g. `attribute actuatorCount : Integer = 4;`, `attribute maxOperatingLimit : Real = 12.0;`) or part definitions.
+- **AST Attribute Parameter Grounding**: Extracted physical parameters must be formally declared in SysML v2 as typed attributes (e.g. `attribute componentCount : Integer = 4;`, `attribute maxOperatingLimit : Real = 12.0;`) or part definitions.
 
 ### 2. Attribute-Level AST Closure
-- **Universal Parameter Alignment**: All numeric limits, actuator and channel counts, structural configurations, electrical/datalink communication protocols, and physical dimensions referenced across downstream specifications must be formally declared in and grounded against the SysML AST and schema ground truth.
+- **Universal Parameter Alignment**: All numeric limits, component quantities, structural configurations, electrical/datalink communication protocols, and physical dimensions referenced across downstream specifications must be formally declared in and grounded against the SysML AST and schema ground truth.
 - **Rejection of Ungrounded Structural Assertions**:
-  - *Structural & Component Drift*: Claiming a dual-redundant topology when the BOM or SysML AST defines 4 quad-redundant channels, or asserting 2 actuators when 4 are defined, is strictly prohibited and rejected under rule `factual-grounding-numeric-drift`.
-  - *Fabricated Operational Limits & Thresholds*: Fabricating operational limits or physical metrics (e.g., asserting an ungrounded 18g/18-bar dynamic load when the schema limit is 12.0 or unsubstantiated) is strictly prohibited under rule `factual-grounding-numeric-drift`.
+  - *Structural Configuration & Cardinality Drift*: Asserting structural topology, configurations, or component counts that contradict the BOM or SysML AST definitions is strictly prohibited and rejected under rule `factual-grounding-numeric-drift`.
+  - *Fabricated Operational Limits*: Fabricating operational metrics or environmental boundaries beyond OEM schema limits is strictly prohibited under rule `factual-grounding-numeric-drift`.
   - *Unverified Communication & Electrical Protocols*: Mentioning ungrounded protocol standards (e.g., STANAG 4586, STANAG 4609, MIL-STD-1553, ARINC 429, CANopen) that are not declared in SysML AST port/item definitions or Level 0 OEM documents is rejected under rule `factual-grounding-unverified-protocol`.
 
 ### 3. Temporal Safety in Sequence Diagrams (Mandatory HITL Authorization)
-- **Prohibition of Autonomous Arming**: Autonomous generation of physical arming, firing, ignition, or weapon/pyrotechnic release signals is strictly forbidden.
-- **Explicit Temporal Precedence**: In any Mermaid sequence diagram (`sequenceDiagram`) across `docs/`, every physical arming, firing, or motor-enable signal targeting safety-critical actuators, pyrotechnics, rocket motors, or fuzing circuits MUST be preceded temporally by an explicit Human-in-the-Loop (HITL) C2 arming command, operator consent, or pilot authorization.
-- **Enforcement Rule**: Any sequence diagram attempting physical arming without prior human operator C2 consent is immediately rejected under rule `factual-grounding-temporal-safety-violation`.
+- **Prohibition of Autonomous Hazardous Actuation**: Autonomous generation of safety-critical irreversible actuation or energization signals without operator authorization is strictly forbidden.
+- **Explicit Temporal Precedence**: In any Mermaid sequence diagram (`sequenceDiagram`) across `docs/`, every irreversible state transition or energization signal targeting safety-critical actuators MUST be preceded temporally by an explicit Human-in-the-Loop (HITL) supervisory authorization command or operator consent.
+- **Enforcement Rule**: Any sequence diagram attempting irreversible actuation without prior human operator consent is immediately rejected under rule `factual-grounding-temporal-safety-violation`.
 
 ### 4. SSOT Citation Contract & Machine-Resolvable Provenance
 - **Traceability Citations**: Any specification claim or parametric assertion derived from OEM baseline data must carry explicit, machine-resolvable citations. Acceptable forms include:
   - HTML citation comments: `<!-- Source: schema/model.sysml -->` or `<!-- SSOT: schema/extracted/oem_bom.md -->`
-  - Markdown links to schema files: `[OEM Airframe Spec](schema/.../oem_spec.md)`
+  - Markdown links to schema files: `[OEM Specification](schema/.../oem_spec.md)`
   - YAML frontmatter metadata: `source_references` or `realized_ast_nodes` declaring the exact source files.
 - **Contextual Non-Normative Filtering**: Non-normative sections (e.g., Glossaries, Acronym lists, MCDA Trade Studies / Alternatives Analysis evaluating rejected design candidates) and Markdown code fences/comments are exempt from positive assertion drift checks.
 

@@ -1,0 +1,27 @@
+flowchart TD
+    subgraph Platform_Subsystems["Platform Subsystems Breakdown (DoDAF SV-1 / IEEE 1362 §5.3)"]
+        direction TB
+        subgraph Subsystems_Tier1["Tier 1 - Processing & Control"]
+            direction TB
+            Controller["<b>Flight & Mission Controller</b><br/>• PORT-CTRL-IN (IN)<br/>• PORT-CTRL-OUT (OUT)"]
+            Navigation["<b>Navigation & Guidance</b><br/>• PORT-NAV-IN (IN)<br/>• PORT-NAV-OUT (OUT)"]
+        end
+        subgraph Subsystems_Tier2["Tier 2 - Sensing & Perception"]
+            direction TB
+            Sensors["<b>Sensor Fusion Core</b><br/>• PORT-SENS-IN (IN)<br/>• PORT-SENS-OUT (OUT)"]
+            Payload["<b>Payload Subsystem</b><br/>• PORT-PAYLOAD-IN (IN)<br/>• PORT-PAYLOAD-OUT (OUT)"]
+        end
+        subgraph Subsystems_Tier3["Tier 3 - Power & Actuation"]
+            direction TB
+            Actuation["<b>Actuation & Effectors</b><br/>• PORT-ACT-IN (IN)<br/>• PORT-ACT-OUT (OUT)"]
+            PowerMgmt["<b>Power Distribution Unit</b><br/>• PORT-PWR-IN (IN)<br/>• PORT-PWR-OUT (OUT)"]
+        end
+        Subsystems_Tier1 ~~~ Subsystems_Tier2
+        Subsystems_Tier2 ~~~ Subsystems_Tier3
+    end
+
+    Controller -->|"CONN-01: Control Bus"| Actuation
+    Sensors -->|"CONN-02: Sensor Stream"| Controller
+    Navigation -->|"CONN-03: Guidance Vector"| Controller
+    PowerMgmt -->|"CONN-04: Power Delivery"| Controller
+    Controller -->|"CONN-05: Payload Command"| Payload
