@@ -515,14 +515,49 @@ impl<'a> SemanticValidator<'a> {
     /// this function returns `false`.
     pub fn is_resolvable_type(&self, scope: &str, type_name: &str) -> bool {
         let clean = normalize_source_type(type_name);
-        if clean.is_empty() || clean == "()" {
+        if clean.is_empty() {
+            return false;
+        }
+        if clean == "()" {
             return true;
+        }
+
+        // Handle tuple types FIRST: (T1, T2, ...)
+        if clean.starts_with('(') && clean.ends_with(')') {
+            let mut depth = 0usize;
+            let mut closed_early = false;
+            let last_idx = clean.len() - 1;
+            for (idx, ch) in clean.char_indices() {
+                match ch {
+                    '(' => depth += 1,
+                    ')' => {
+                        depth = depth.saturating_sub(1);
+                        if depth == 0 && idx < last_idx {
+                            closed_early = true;
+                            break;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            if depth == 0 && !closed_early {
+                let inner = clean[1..last_idx].trim();
+                if inner.is_empty() {
+                    return true;
+                }
+                let args = split_top_level_type_args(inner);
+                return !args.is_empty() && args.into_iter().all(|arg| self.is_resolvable_type(scope, arg));
+            }
         }
 
         // Handle generic containers: Outer<Inner1, Inner2, ...>
         if let Some(lt_idx) = clean.find('<') {
             if let Some(gt_idx) = clean.rfind('>') {
                 if gt_idx > lt_idx {
+                    if !clean[gt_idx + 1..].trim().is_empty() {
+                        // Trailing tokens after '>' (e.g. Option<String> UndefinedType) must fail closed
+                        return false;
+                    }
                     let outer = clean[..lt_idx].trim();
                     let inner_str = &clean[lt_idx + 1..gt_idx];
 
@@ -547,16 +582,6 @@ impl<'a> SemanticValidator<'a> {
             }
         }
 
-        // Handle tuple types: (T1, T2, ...)
-        if clean.starts_with('(') && clean.ends_with(')') {
-            let inner = clean[1..clean.len() - 1].trim();
-            if inner.is_empty() {
-                return true;
-            }
-            let args = split_top_level_type_args(inner);
-            return !args.is_empty() && args.into_iter().all(|arg| self.is_resolvable_type(scope, arg));
-        }
-
         // Check primitive / builtin types
         if is_primitive_or_builtin_type(clean) {
             return true;
@@ -573,7 +598,11 @@ impl<'a> SemanticValidator<'a> {
 ///
 /// Complies with Check 34 Zero Regex invariant using character/string slicing only.
 pub fn normalize_source_type<'a>(raw: &'a str) -> &'a str {
-    let mut s = raw.trim();
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return "";
+    }
+    let mut s = trimmed;
     loop {
         let prev = s;
 
@@ -584,19 +613,19 @@ pub fn normalize_source_type<'a>(raw: &'a str) -> &'a str {
 
         // 2. Strip reference and pointer prefixes
         if let Some(rest) = s.strip_prefix("*const") {
-            if rest.is_empty() || rest.starts_with(|c: char| c.is_whitespace() || c == '*' || c == '&') {
+            if rest.is_empty() || rest.starts_with(|c: char| c.is_whitespace() || c == '*' || c == '&' || c == '[' || c == '(') {
                 s = rest.trim_start();
             }
         } else if let Some(rest) = s.strip_prefix("*mut") {
-            if rest.is_empty() || rest.starts_with(|c: char| c.is_whitespace() || c == '*' || c == '&') {
+            if rest.is_empty() || rest.starts_with(|c: char| c.is_whitespace() || c == '*' || c == '&' || c == '[' || c == '(') {
                 s = rest.trim_start();
             }
         } else if let Some(rest) = s.strip_prefix("&mut") {
-            if rest.is_empty() || rest.starts_with(|c: char| c.is_whitespace() || c == '*' || c == '&') {
+            if rest.is_empty() || rest.starts_with(|c: char| c.is_whitespace() || c == '*' || c == '&' || c == '[' || c == '(') {
                 s = rest.trim_start();
             }
         } else if let Some(rest) = s.strip_prefix("&const") {
-            if rest.is_empty() || rest.starts_with(|c: char| c.is_whitespace() || c == '*' || c == '&') {
+            if rest.is_empty() || rest.starts_with(|c: char| c.is_whitespace() || c == '*' || c == '&' || c == '[' || c == '(') {
                 s = rest.trim_start();
             }
         } else if let Some(rest) = s.strip_prefix('&') {
@@ -610,11 +639,11 @@ pub fn normalize_source_type<'a>(raw: &'a str) -> &'a str {
                     .map_or(rest.len(), |(idx, _)| idx);
                 rest = rest[lifetime_end..].trim_start();
                 if let Some(after_mut) = rest.strip_prefix("mut") {
-                    if after_mut.starts_with(|c: char| c.is_whitespace() || c == '*' || c == '&' || c == '[') {
+                    if after_mut.is_empty() || after_mut.starts_with(|c: char| c.is_whitespace() || c == '*' || c == '&' || c == '[' || c == '(') {
                         rest = after_mut.trim_start();
                     }
                 } else if let Some(after_const) = rest.strip_prefix("const") {
-                    if after_const.starts_with(|c: char| c.is_whitespace() || c == '*' || c == '&' || c == '[') {
+                    if after_const.is_empty() || after_const.starts_with(|c: char| c.is_whitespace() || c == '*' || c == '&' || c == '[' || c == '(') {
                         rest = after_const.trim_start();
                     }
                 }
@@ -622,34 +651,58 @@ pub fn normalize_source_type<'a>(raw: &'a str) -> &'a str {
             s = rest.trim_start();
         }
 
-        // 3. Strip array wrappers [T; N] and [T]
-        if s.starts_with('[') && s.ends_with(']') {
-            let inner = s[1..s.len() - 1].trim();
+        // 3. Strip trait object prefix `dyn `
+        if let Some(rest) = s.strip_prefix("dyn") {
+            if rest.starts_with(|c: char| c.is_whitespace()) {
+                s = rest.trim_start();
+            }
+        }
+
+        // 4. Bracket handling: multiplicity suffixes and array wrappers.
+        // Multiplicity suffixes (`Type[1..*]`, `Type[]`, `Type[0..1]`) are stripped BEFORE
+        // array wrappers (`[T; N]`, `[T]`).
+        // We find the matching opening '[' for the trailing ']' by walking backwards.
+        if s.ends_with(']') {
             let mut depth = 0usize;
-            let mut semi_pos = None;
-            for (idx, ch) in inner.char_indices() {
+            let mut matching_open = None;
+            for (idx, ch) in s.char_indices().rev() {
                 match ch {
-                    '[' | '<' | '(' => depth += 1,
-                    ']' | '>' | ')' => depth = depth.saturating_sub(1),
-                    ';' if depth == 0 => {
-                        semi_pos = Some(idx);
-                        break;
+                    ']' => depth += 1,
+                    '[' => {
+                        depth -= 1;
+                        if depth == 0 {
+                            matching_open = Some(idx);
+                            break;
+                        }
                     }
                     _ => {}
                 }
             }
-            s = if let Some(semi_idx) = semi_pos {
-                inner[..semi_idx].trim()
-            } else {
-                inner
-            };
-        }
-
-        // 4. Strip multiplicity suffixes: Type[1..*], Type[], Type[0..1]
-        if s.ends_with(']') && !s.ends_with('>') {
-            if let Some(open_idx) = s.rfind('[') {
+            if let Some(open_idx) = matching_open {
                 if open_idx > 0 {
+                    // Multiplicity suffix of preceding type: Type[1..*], Type[], Type[0..1], [u8][0..1]
                     s = s[..open_idx].trim_end();
+                } else {
+                    // Enclosing array wrapper: [T; N] or [T]
+                    let inner = s[1..s.len() - 1].trim();
+                    let mut inner_depth = 0usize;
+                    let mut semi_pos = None;
+                    for (idx, ch) in inner.char_indices() {
+                        match ch {
+                            '[' | '<' | '(' => inner_depth += 1,
+                            ']' | '>' | ')' => inner_depth = inner_depth.saturating_sub(1),
+                            ';' if inner_depth == 0 => {
+                                semi_pos = Some(idx);
+                                break;
+                            }
+                            _ => {}
+                        }
+                    }
+                    s = if let Some(semi_idx) = semi_pos {
+                        inner[..semi_idx].trim()
+                    } else {
+                        inner
+                    };
                 }
             }
         }
@@ -658,6 +711,13 @@ pub fn normalize_source_type<'a>(raw: &'a str) -> &'a str {
             break;
         }
     }
+
+    // Detect when raw was non-empty but normalized to empty (e.g. bare modifiers like "&", "*const", "[]", "?").
+    // Preserves the raw trimmed token so fail-closed validation can reject it with proper diagnostics.
+    if s.is_empty() {
+        return trimmed;
+    }
+
     s
 }
 
@@ -669,7 +729,25 @@ pub fn normalize_source_type<'a>(raw: &'a str) -> &'a str {
 pub fn split_top_level_type_args<'a>(args: &'a str) -> Vec<&'a str> {
     let mut s = args.trim();
     if s.starts_with('<') && s.ends_with('>') {
-        s = s[1..s.len() - 1].trim();
+        let mut depth = 0usize;
+        let mut closed_early = false;
+        let last_idx = s.len() - 1;
+        for (idx, ch) in s.char_indices() {
+            match ch {
+                '<' => depth += 1,
+                '>' => {
+                    depth = depth.saturating_sub(1);
+                    if depth == 0 && idx < last_idx {
+                        closed_early = true;
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        if depth == 0 && !closed_early {
+            s = s[1..last_idx].trim();
+        }
     }
     if s.is_empty() {
         return Vec::new();
@@ -710,14 +788,48 @@ pub fn split_top_level_type_args<'a>(args: &'a str) -> Vec<&'a str> {
 
 pub fn is_primitive_or_builtin_type(type_name: &str) -> bool {
     let clean = normalize_source_type(type_name);
-    if clean.is_empty() || clean == "()" {
+    if clean.is_empty() {
+        return false;
+    }
+    if clean == "()" {
         return true;
+    }
+
+    // Tuple unrolling: (T1, T2, ...)
+    if clean.starts_with('(') && clean.ends_with(')') {
+        let mut depth = 0usize;
+        let mut closed_early = false;
+        let last_idx = clean.len() - 1;
+        for (idx, ch) in clean.char_indices() {
+            match ch {
+                '(' => depth += 1,
+                ')' => {
+                    depth = depth.saturating_sub(1);
+                    if depth == 0 && idx < last_idx {
+                        closed_early = true;
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        if depth == 0 && !closed_early {
+            let inner = clean[1..last_idx].trim();
+            if inner.is_empty() {
+                return true;
+            }
+            let args = split_top_level_type_args(inner);
+            return !args.is_empty() && args.into_iter().all(is_primitive_or_builtin_type);
+        }
     }
 
     // Generic decomposition
     if let Some(lt_idx) = clean.find('<') {
         if let Some(gt_idx) = clean.rfind('>') {
             if gt_idx > lt_idx {
+                if !clean[gt_idx + 1..].trim().is_empty() {
+                    return false;
+                }
                 let outer = clean[..lt_idx].trim();
                 let inner_str = &clean[lt_idx + 1..gt_idx];
                 if !is_primitive_or_builtin_type(outer) {
@@ -1537,6 +1649,424 @@ mod tests {
             validator.errors()
         );
     }
+
+    // =========================================================================
+    // Issue #461 Iteration 2: Comprehensive Edge Case Regression Test Suite
+    // Covers all 8 edge cases discovered during Iteration 1 adversarial review.
+    // =========================================================================
+
+    #[test]
+    fn test_issue_461_iter2_edge_1_trailing_tokens_after_generics_fail_closed() {
+        let pkg = PackageDef {
+            name: "TestScope".to_string(),
+            part_defs: vec![
+                PartDef {
+                    name: "ValidPart".to_string(),
+                    is_def: true,
+                    ..Default::default()
+                },
+                PartDef {
+                    name: "bad_part_trailing_undefined".to_string(),
+                    is_def: false,
+                    type_name: Some("Option<String> UndefinedType".to_string()),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+
+        let mut validator = SemanticValidator::new(&pkg);
+        validator.validate();
+
+        // 1. Full model validation MUST fail closed
+        assert!(
+            validator.has_errors(),
+            "Expected validation error for part referencing 'Option<String> UndefinedType'"
+        );
+        let errors = validator.errors();
+        assert!(
+            errors.iter().any(|e| e.message.contains("references undefined type 'Option<String> UndefinedType'")),
+            "Expected diagnostic error message for trailing undefined token, got: {:?}",
+            errors
+        );
+
+        // 2. Direct is_resolvable_type probes MUST fail closed
+        let validator = SemanticValidator::new(&pkg);
+        assert!(!validator.is_resolvable_type("TestScope", "Option<String> UndefinedType"));
+        assert!(!validator.is_resolvable_type("TestScope", "Vec<u8> junk"));
+        assert!(!validator.is_resolvable_type("TestScope", "HashMap<String, i32> trailing"));
+        assert!(!validator.is_resolvable_type("TestScope", "Vec<ValidPart> GhostPart"));
+
+        // 3. Direct is_primitive_or_builtin_type probes MUST fail closed
+        assert!(!is_primitive_or_builtin_type("Option<String> UndefinedType"));
+        assert!(!is_primitive_or_builtin_type("Vec<u8> junk"));
+        assert!(!is_primitive_or_builtin_type("HashMap<String, i32> trailing"));
+    }
+
+    #[test]
+    fn test_issue_461_edge_1_trailing_tokens_after_generics_fail_closed() {
+        test_issue_461_iter2_edge_1_trailing_tokens_after_generics_fail_closed();
+    }
+
+    #[test]
+    fn test_issue_461_iter2_edge_2_tuples_with_generics_resolve() {
+        let pkg = PackageDef {
+            name: "TestScope".to_string(),
+            part_defs: vec![
+                PartDef {
+                    name: "ValidPart".to_string(),
+                    is_def: true,
+                    ..Default::default()
+                },
+                PartDef {
+                    name: "tuple_part".to_string(),
+                    is_def: false,
+                    type_name: Some("(ValidPart, Vec<String>)".to_string()),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+
+        // 1. Full model validation MUST pass for valid generic tuples
+        let mut validator = SemanticValidator::new(&pkg);
+        validator.validate();
+        assert!(
+            !validator.has_errors(),
+            "Expected zero validation errors for valid tuple with generics, got: {:?}",
+            validator.errors()
+        );
+
+        // 2. Direct is_resolvable_type probes
+        let validator = SemanticValidator::new(&pkg);
+        assert!(validator.is_resolvable_type("TestScope", "(ValidPart, Vec<String>)"));
+        assert!(validator.is_resolvable_type("TestScope", "(i32, Option<ValidPart>)"));
+        assert!(validator.is_resolvable_type("TestScope", "(Vec<ValidPart>, HashMap<String, Option<i32>>)"));
+
+        // 3. Negative mutation: tuples containing undefined types MUST fail closed
+        assert!(!validator.is_resolvable_type("TestScope", "(ValidPart, Vec<UndefinedPart>)"));
+        assert!(!validator.is_resolvable_type("TestScope", "(UndefinedPart, Vec<String>)"));
+        assert!(!validator.is_resolvable_type("TestScope", "(i32, Option<GhostSymbol>)"));
+    }
+
+    #[test]
+    fn test_issue_461_edge_2_tuples_with_generics_resolve() {
+        test_issue_461_iter2_edge_2_tuples_with_generics_resolve();
+    }
+
+    #[test]
+    fn test_issue_461_iter2_edge_3_bare_modifiers_and_empty_types_fail_closed() {
+        let pkg = PackageDef::default();
+        let validator = SemanticValidator::new(&pkg);
+
+        // 1. Bare modifiers in is_resolvable_type MUST return false
+        assert!(!validator.is_resolvable_type("", "&"));
+        assert!(!validator.is_resolvable_type("", "*const"));
+        assert!(!validator.is_resolvable_type("", "*mut"));
+        assert!(!validator.is_resolvable_type("", "&mut"));
+        assert!(!validator.is_resolvable_type("", "&const"));
+        assert!(!validator.is_resolvable_type("", "[]"));
+        assert!(!validator.is_resolvable_type("", "?"));
+        assert!(!validator.is_resolvable_type("", ""));
+        assert!(!validator.is_resolvable_type("", "   "));
+
+        // 2. Bare modifiers in is_primitive_or_builtin_type MUST return false
+        assert!(!is_primitive_or_builtin_type("&"));
+        assert!(!is_primitive_or_builtin_type("*const"));
+        assert!(!is_primitive_or_builtin_type("*mut"));
+        assert!(!is_primitive_or_builtin_type("&mut"));
+        assert!(!is_primitive_or_builtin_type("&const"));
+        assert!(!is_primitive_or_builtin_type("[]"));
+        assert!(!is_primitive_or_builtin_type("?"));
+        assert!(!is_primitive_or_builtin_type(""));
+        assert!(!is_primitive_or_builtin_type("   "));
+
+        // 3. Generics wrapping bare modifiers MUST fail closed
+        assert!(!validator.is_resolvable_type("", "Option<&>"));
+        assert!(!validator.is_resolvable_type("", "Option<[]>"));
+        assert!(!validator.is_resolvable_type("", "Vec<?>"));
+        assert!(!validator.is_resolvable_type("", "Result<&, []>"));
+
+        // 4. Model validation probe with bare modifier part
+        let invalid_pkg = PackageDef {
+            name: "InvalidPkg".to_string(),
+            part_defs: vec![
+                PartDef {
+                    name: "bad_mod_part".to_string(),
+                    is_def: false,
+                    type_name: Some("&".to_string()),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        let mut invalid_validator = SemanticValidator::new(&invalid_pkg);
+        invalid_validator.validate();
+        assert!(
+            invalid_validator.has_errors(),
+            "Expected validation error for part with bare modifier type '&'"
+        );
+    }
+
+    #[test]
+    fn test_issue_461_edge_3_bare_modifiers_and_empty_types_fail_closed() {
+        test_issue_461_iter2_edge_3_bare_modifiers_and_empty_types_fail_closed();
+    }
+
+    #[test]
+    fn test_issue_461_iter2_edge_4_pointer_array_wrappers_normalize_and_resolve() {
+        let pkg = PackageDef {
+            name: "TestScope".to_string(),
+            part_defs: vec![
+                PartDef {
+                    name: "ValidPart".to_string(),
+                    is_def: true,
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+
+        // 1. Normalization probes for pointer array wrappers
+        assert_eq!(normalize_source_type("*const[ValidPart; 10]"), "ValidPart");
+        assert_eq!(normalize_source_type("*mut[u8; 16]"), "u8");
+        assert_eq!(normalize_source_type("&mut[ValidPart; 4]"), "ValidPart");
+        assert_eq!(normalize_source_type("&const[i32; 8]"), "i32");
+        assert_eq!(normalize_source_type("*const[TotallyUndefined; 10]"), "TotallyUndefined");
+
+        // 2. Resolution for valid pointer-wrapped arrays
+        let validator = SemanticValidator::new(&pkg);
+        assert!(validator.is_resolvable_type("TestScope", "*const[ValidPart; 10]"));
+        assert!(validator.is_resolvable_type("TestScope", "*mut[ValidPart; 10]"));
+        assert!(validator.is_resolvable_type("TestScope", "&mut[ValidPart; 10]"));
+        assert!(validator.is_resolvable_type("TestScope", "&const[ValidPart; 10]"));
+        assert!(validator.is_resolvable_type("TestScope", "*const[u8; 32]"));
+
+        // 3. Negative mutations: pointer-wrapped arrays with undefined types MUST fail closed
+        assert!(!validator.is_resolvable_type("TestScope", "*const[TotallyUndefined; 10]"));
+        assert!(!validator.is_resolvable_type("TestScope", "*mut[TotallyUndefined; 10]"));
+        assert!(!validator.is_resolvable_type("TestScope", "&mut[TotallyUndefined; 10]"));
+        assert!(!validator.is_resolvable_type("TestScope", "&const[TotallyUndefined; 10]"));
+    }
+
+    #[test]
+    fn test_issue_461_edge_4_pointer_array_wrappers_normalize_and_resolve() {
+        test_issue_461_iter2_edge_4_pointer_array_wrappers_normalize_and_resolve();
+    }
+
+    #[test]
+    fn test_issue_461_iter2_edge_5_slice_multiplicity_normalization_and_resolution() {
+        let pkg = PackageDef {
+            name: "TestScope".to_string(),
+            part_defs: vec![
+                PartDef {
+                    name: "SensorNode".to_string(),
+                    is_def: true,
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+
+        // 1. Normalization of slices with multiplicity suffixes
+        assert_eq!(normalize_source_type("[u8][0..1]"), "u8");
+        assert_eq!(normalize_source_type("[u8][1..*]"), "u8");
+        assert_eq!(normalize_source_type("[u8][]"), "u8");
+        assert_eq!(normalize_source_type("[SensorNode][0..1]"), "SensorNode");
+        assert_eq!(normalize_source_type("[SensorNode][1..*]"), "SensorNode");
+        assert_eq!(normalize_source_type("&[u8][0..1]"), "u8");
+
+        // 2. Resolution of valid slices with multiplicity
+        let validator = SemanticValidator::new(&pkg);
+        assert!(validator.is_resolvable_type("TestScope", "[u8][0..1]"));
+        assert!(validator.is_resolvable_type("TestScope", "[u8][1..*]"));
+        assert!(validator.is_resolvable_type("TestScope", "[SensorNode][0..1]"));
+        assert!(validator.is_resolvable_type("TestScope", "[SensorNode][1..*]"));
+
+        // 3. Negative mutation: slices with undefined inner type MUST fail closed
+        assert!(!validator.is_resolvable_type("TestScope", "[UndefinedPart][0..1]"));
+        assert!(!validator.is_resolvable_type("TestScope", "[UndefinedPart][1..*]"));
+    }
+
+    #[test]
+    fn test_issue_461_edge_5_slice_multiplicity_normalization_and_resolution() {
+        test_issue_461_iter2_edge_5_slice_multiplicity_normalization_and_resolution();
+    }
+
+    #[test]
+    fn test_issue_461_iter2_edge_6_split_top_level_type_args_multiple_bracket_groups() {
+        // 1. Multiple top-level angle bracket groups split cleanly
+        assert_eq!(split_top_level_type_args("<A>, <B>"), vec!["<A>", "<B>"]);
+        assert_eq!(split_top_level_type_args("<A, B>, <C, D>"), vec!["<A, B>", "<C, D>"]);
+        assert_eq!(
+            split_top_level_type_args("<A>, <B, <C, D>>, <E>"),
+            vec!["<A>", "<B, <C, D>>", "<E>"]
+        );
+
+        // 2. Single enclosing angle brackets are unwrapped cleanly
+        assert_eq!(split_top_level_type_args("<A, B>"), vec!["A", "B"]);
+        assert_eq!(split_top_level_type_args("<<A, B>>"), vec!["<A, B>"]);
+
+        // 3. Standard comma-separated arguments remain intact
+        assert_eq!(split_top_level_type_args("A, B, C"), vec!["A", "B", "C"]);
+        assert_eq!(
+            split_top_level_type_args("HashMap<String, Vec<u8>>, Result<Option<T>, E>"),
+            vec!["HashMap<String, Vec<u8>>", "Result<Option<T>, E>"]
+        );
+    }
+
+    #[test]
+    fn test_issue_461_edge_6_split_top_level_type_args_multiple_bracket_groups() {
+        test_issue_461_iter2_edge_6_split_top_level_type_args_multiple_bracket_groups();
+    }
+
+    #[test]
+    fn test_issue_461_iter2_edge_7_trait_objects_with_dyn_resolve() {
+        let pkg = PackageDef {
+            name: "TestScope".to_string(),
+            part_defs: vec![
+                PartDef {
+                    name: "ValidPart".to_string(),
+                    is_def: true,
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+
+        // 1. Normalization of trait objects with dyn prefix
+        assert_eq!(normalize_source_type("dyn Error"), "Error");
+        assert_eq!(normalize_source_type("&dyn Error"), "Error");
+        assert_eq!(normalize_source_type("Box<dyn Error>"), "Box<dyn Error>");
+        assert_eq!(
+            normalize_source_type("Result<Option<HashMap<String, Vec<u8>>>, Box<dyn Error>>"),
+            "Result<Option<HashMap<String, Vec<u8>>>, Box<dyn Error>>"
+        );
+
+        // 2. Resolution of standard trait objects
+        let validator = SemanticValidator::new(&pkg);
+        assert!(validator.is_resolvable_type("", "Box<dyn Error>"));
+        assert!(validator.is_resolvable_type("", "Arc<dyn Error>"));
+        assert!(validator.is_resolvable_type("", "Result<Option<HashMap<String, Vec<u8>>>, Box<dyn Error>>"));
+        assert!(validator.is_resolvable_type("TestScope", "Result<ValidPart, Box<dyn Error>>"));
+
+        // 3. Negative mutation: trait objects with undefined trait MUST fail closed
+        assert!(!validator.is_resolvable_type("", "Box<dyn UndefinedTrait>"));
+        assert!(!validator.is_resolvable_type("TestScope", "Result<ValidPart, Box<dyn UndefinedTrait>>"));
+    }
+
+    #[test]
+    fn test_issue_461_edge_7_trait_objects_with_dyn_resolve() {
+        test_issue_461_iter2_edge_7_trait_objects_with_dyn_resolve();
+    }
+
+    #[test]
+    fn test_issue_461_iter2_edge_8_tuples_in_primitive_and_generic_containers() {
+        let pkg = PackageDef {
+            name: "TestScope".to_string(),
+            part_defs: vec![
+                PartDef {
+                    name: "ValidPart".to_string(),
+                    is_def: true,
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+
+        // 1. Direct tuple resolution in is_primitive_or_builtin_type
+        assert!(is_primitive_or_builtin_type("(u32, bool)"));
+        assert!(is_primitive_or_builtin_type("(i32, f64, String)"));
+        assert!(is_primitive_or_builtin_type("Vec<(u32, bool)>"));
+        assert!(is_primitive_or_builtin_type("Option<(i32, f64)>"));
+        assert!(is_primitive_or_builtin_type("HashMap<String, (u8, u16)>"));
+
+        // 2. Negative mutations in is_primitive_or_builtin_type
+        assert!(!is_primitive_or_builtin_type("(u32, UnknownType)"));
+        assert!(!is_primitive_or_builtin_type("Vec<(u32, UnknownType)>"));
+
+        // 3. Direct resolution in is_resolvable_type with mixed scope symbols
+        let validator = SemanticValidator::new(&pkg);
+        assert!(validator.is_resolvable_type("", "Vec<(u32, bool)>"));
+        assert!(validator.is_resolvable_type("TestScope", "Vec<(ValidPart, bool)>"));
+        assert!(validator.is_resolvable_type("TestScope", "Option<(ValidPart, String)>"));
+        assert!(!validator.is_resolvable_type("TestScope", "Vec<(UndefinedPart, bool)>"));
+    }
+
+    #[test]
+    fn test_issue_461_edge_8_tuples_in_primitive_and_generic_containers() {
+        test_issue_461_iter2_edge_8_tuples_in_primitive_and_generic_containers();
+    }
+
+    #[test]
+    fn test_issue_461_iter2_all_iteration_1_edge_cases_comprehensive_matrix() {
+        let pkg = PackageDef {
+            name: "MatrixScope".to_string(),
+            part_defs: vec![
+                PartDef {
+                    name: "DeclaredSensor".to_string(),
+                    is_def: true,
+                    ..Default::default()
+                },
+                PartDef {
+                    name: "DeclaredActuator".to_string(),
+                    is_def: true,
+                    ..Default::default()
+                },
+                // Edge Case 2: Tuple with generic
+                PartDef {
+                    name: "sensor_tuple".to_string(),
+                    is_def: false,
+                    type_name: Some("(DeclaredSensor, Vec<String>)".to_string()),
+                    ..Default::default()
+                },
+                // Edge Case 4: Pointer array wrapper
+                PartDef {
+                    name: "pointer_array".to_string(),
+                    is_def: false,
+                    type_name: Some("*const[DeclaredActuator; 8]".to_string()),
+                    ..Default::default()
+                },
+                // Edge Case 5: Slice multiplicity
+                PartDef {
+                    name: "slice_multiplicity".to_string(),
+                    is_def: false,
+                    type_name: Some("[DeclaredSensor][1..*]".to_string()),
+                    ..Default::default()
+                },
+                // Edge Case 7: Trait object
+                PartDef {
+                    name: "error_handler".to_string(),
+                    is_def: false,
+                    type_name: Some("Box<dyn Error>".to_string()),
+                    ..Default::default()
+                },
+                // Edge Case 8: Generic container wrapping primitive tuple
+                PartDef {
+                    name: "coordinate_stream".to_string(),
+                    is_def: false,
+                    type_name: Some("Stream<(f64, f64)>".to_string()),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+
+        // All valid edge cases in the matrix MUST validate cleanly
+        let mut validator = SemanticValidator::new(&pkg);
+        validator.validate();
+        assert!(
+            !validator.has_errors(),
+            "Expected zero validation errors for comprehensive edge cases matrix, got: {:?}",
+            validator.errors()
+        );
+    }
+
+    #[test]
+    fn test_issue_461_all_iteration_1_edge_cases_comprehensive_matrix() {
+        test_issue_461_iter2_all_iteration_1_edge_cases_comprehensive_matrix();
+    }
 }
+
 
 
