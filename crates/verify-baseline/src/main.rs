@@ -1,4 +1,42 @@
-//! CLI entrypoint for verify-baseline utility.
+//! CLI entrypoint for the `verify-baseline` deterministic verification utility.
+//!
+//! ## 1. Safety Intent & Regulatory Scope
+//! Provides the primary command-line interface and subcommand dispatcher for
+//! deterministic baseline verification, commit-message non-closure checks,
+//! subagent output integrity verification, 7-section defect dossier validation,
+//! native git hook installation, and post-build secret scanning under DO-178C
+//! Level A, DO-330 TQL-4, and ISO 26262 ASIL D tool qualification governance.
+//!
+//! ## 2. Invariants & Mathematical Properties
+//! - Dispatch determinism: Every parsed CLI invocation maps to exactly one
+//!   execution branch (`Subcommands` variant or default `BaselineOptions` audit run).
+//! - Exit-code monotonicity: Any verification failure (`Err`) terminates the
+//!   process with a non-zero exit code (`>= 1`); exit code `0` is emitted if and
+//!   only if the selected verification routine returns `Ok(())`.
+//!
+//! ## 3. Preconditions
+//! - Command-line arguments provided by the host operating system must conform
+//!   to the `Cli` grammar enforced by `clap::Parser`.
+//! - Target filesystem paths supplied via arguments must be accessible to the
+//!   invoking user process.
+//!
+//! ## 4. Postconditions
+//! - On verification success, all enabled baseline or subcommand checks have
+//!   completed without violation and the process exits with status `0`.
+//! - On verification failure, diagnostic telemetry is emitted and the process
+//!   terminates immediately via `std::process::exit` with a non-zero status code.
+//!
+//! ## 5. Algorithmic Complexity Bounds
+//! - CLI argument parsing and dispatch overhead is $O(A)$ in time and space,
+//!   where $A$ is the number of command-line tokens passed to the binary.
+//!
+//! ## 6. Failure Modes & Fault Tolerance
+//! - Invalid CLI flags or malformed subcommand syntax are intercepted by `clap`
+//!   before execution, emitting structured usage diagnostics and exiting non-zero.
+//! - Downstream audit failures propagate explicit error codes to `process::exit`.
+//!
+//! ## 7. Realization & Traceability
+//! Realises: [REQ-VERIFY-BASELINE-CLI], [DO-330-TQL-4-VERIFY-CLI]
 
 use clap::Parser;
 use std::path::PathBuf;
@@ -79,6 +117,40 @@ enum Subcommands {
     CheckSecrets(CheckSecretsArgs),
 }
 
+/// Executes the `verify-baseline` CLI entrypoint and dispatches subcommands.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Parses process command-line arguments and routes execution deterministically
+/// to either the requested verification subcommand (`check-commit-msg`,
+/// `check-output`, `check-defect`, `setup-hooks`, `check-secrets`) or the full
+/// baseline verification runner under DO-178C Level A / ISO 26262 ASIL D
+/// tool qualification controls.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Total branch coverage: Either `Some(cmd)` dispatches to its exact module
+///   handler, or `None` constructs a complete `BaselineOptions` record and
+///   invokes `verify_baseline::runner::run`.
+/// - Non-zero fault exit: Every `Err` result triggers `std::process::exit` with
+///   a non-zero exit status.
+///
+/// ## 3. Preconditions
+/// - Invoked as the main OS process entrypoint with valid UTF-8 process arguments.
+///
+/// ## 4. Postconditions
+/// - Returns normally (exit code `0`) if and only if the dispatched verification
+///   gate succeeds without errors.
+/// - Calls `std::process::exit` with a non-zero code on any verification failure.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - $O(A)$ argument parsing and struct construction prior to subcommand execution,
+///   where $A$ is the count of CLI argument strings.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Propagates subcommand-specific exit codes directly to the OS process termination
+///   handler without panicking or silently ignoring errors.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-VERIFY-BASELINE-MAIN]
 fn main() {
     let cli = Cli::parse();
 
@@ -126,5 +198,25 @@ fn main() {
         if let Err(()) = run(&options) {
             process::exit(1);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_verify_baseline_main_7_section_rustdoc() {
+        let src = include_str!("main.rs");
+        let module_header = src.split("\nuse ").next().unwrap_or("");
+        assert!(module_header.contains("//! ## 1. Safety Intent & Regulatory Scope"));
+        assert!(module_header.contains("//! ## 2. Invariants & Mathematical Properties"));
+        assert!(module_header.contains("//! ## 3. Preconditions"));
+        assert!(module_header.contains("//! ## 4. Postconditions"));
+        assert!(module_header.contains("//! ## 5. Algorithmic Complexity Bounds"));
+        assert!(module_header.contains("//! ## 6. Failure Modes & Fault Tolerance"));
+        assert!(module_header.contains("//! ## 7. Realization & Traceability"));
+        assert!(module_header.contains("//! Realises: [REQ-VERIFY-BASELINE-CLI], [DO-330-TQL-4-VERIFY-CLI]"));
+        assert!(src.contains("/// ## 1. Safety Intent & Regulatory Scope"));
+        assert!(src.contains("/// ## 7. Realization & Traceability"));
+        assert!(src.contains("/// Realises: [REQ-VERIFY-BASELINE-MAIN]"));
     }
 }

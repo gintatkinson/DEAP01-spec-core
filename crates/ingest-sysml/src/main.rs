@@ -3,7 +3,7 @@
 //! ## 1. Safety Intent & Regulatory Scope
 //! This module provides the command-line interface (CLI) entrypoint for the Ground 0.0
 //! SysML v2 Universal Ingestion Engine. It discovers, classifies, translates, and serializes
-//! heterogeneous Level 0 OEM technical specifications (Markdown, SysML v2, OMG IDL, OpenAPI)
+//! heterogeneous Level 0 OEM technical specifications (Markdown, SysML v2, OMG IDL, OpenAPI, YANG)
 //! into canonical SysML v2 textual models (`.pipeline/schema.sysml`) accompanied by an
 //! authoritative cryptographic schema digest (`.pipeline/schema-digest.json`).
 //!
@@ -12,7 +12,7 @@
 //! and the formal MBSE compilation pipeline. An unhandled error, silent truncation, partial write,
 //! or corrupted exit status can compromise the integrity of downstream static analysis and compilation.
 //!
-//! ## 2. Core Safety Invariants & Execution Contract
+//! ## 2. Invariants & Mathematical Properties
 //! - **Fail-Safe Exit Code Contract**:
 //!   On any unhandled failure (e.g. invalid syntax, missing files, permission denial), the CLI halts
 //!   immediately, logs an explicit diagnostic message to standard error, and terminates with exit code `1`.
@@ -27,6 +27,35 @@
 //! - **Cryptographic Model Verification**:
 //!   Every ingestion run computes an authoritative SHA-256 fingerprint digest recording line counts,
 //!   AST entity counts, and content hashes.
+//!
+//! ## 3. Preconditions
+//! - Command-line arguments must conform to the [`CliArgs`] grammar parsed by `clap`.
+//! - The target input file or directory (`--schema` or default `schema/`) must exist on disk and contain
+//!   at least one supported Level 0 specification artifact.
+//! - The process must hold write permissions for the parent directories of `--out` and `--digest`.
+//!
+//! ## 4. Postconditions
+//! - On successful execution, `.pipeline/schema.sysml` (or `--out`) contains a deterministic, syntactically
+//!   valid SysML v2 textual model, and `.pipeline/schema-digest.json` (or `--digest`) records its SHA-256
+//!   cryptographic digest.
+//! - On failure, target files remain untouched, staging files are unlinked, and the process exits with status `1`.
+//!
+//! ## 5. Algorithmic Complexity Bounds
+//! - **Time Complexity**: $O(N \log N)$ where $N$ is the total byte size of discovered input specifications,
+//!   bounded by deterministic lexicographical sorting and linear-pass AST translation and serialization.
+//! - **Space Complexity**: $O(N)$ auxiliary heap memory to hold the parsed [`PackageDef`] AST and serialized
+//!   SysML v2 output buffer prior to atomic disk commit.
+//!
+//! ## 6. Failure Modes & Fault Tolerance
+//! - **Empty or Unreadable Schema Directory**: Detected prior to translation; returns an explicit `Err(String)`
+//!   naming the searched path and halts before creating output files.
+//! - **Unsupported or Raw Format**: Rejects untranslated raw documents (`"raw"`) and unknown format strings
+//!   with a deterministic diagnostic error to prevent silent SSOT bypass.
+//! - **Filesystem I/O Faults**: Handled by atomic write helpers (`write_atomic`, `write_digest_atomic`) so
+//!   interrupted writes never corrupt existing baseline artifacts.
+//!
+//! ## 7. Realization & Traceability
+//! Realises: [REQ-SYSML-INGEST-CLI], [DO-330-TQL-4-INGEST-CLI]
 
 use clap::Parser;
 use std::collections::HashSet;
@@ -45,8 +74,29 @@ use ingest_sysml::translators::{
 
 /// Ground 0.0 SysML v2 Universal Ingestion Engine Command-Line Arguments.
 ///
+/// ## 1. Safety Intent & Regulatory Scope
 /// Encapsulates all configuration parameters, input paths, format overrides,
-/// output targets, and architectural scope filters.
+/// output targets, and architectural scope filters for the DO-330 TQL-4 ingestion CLI.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Default output paths deterministically target `.pipeline/schema.sysml` and `.pipeline/schema-digest.json`.
+/// - Format defaults to `"auto"` when omitted by the caller.
+///
+/// ## 3. Preconditions
+/// - Supplied CLI flags must be valid UTF-8 strings and OS paths parseable by `clap::Parser`.
+///
+/// ## 4. Postconditions
+/// - Produces an immutable [`CliArgs`] configuration record passed directly to [`run_ingestion`].
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - **Time Complexity**: $O(A)$ where $A$ is the number of command-line argument tokens.
+/// - **Space Complexity**: $O(A)$ heap allocation for owned [`PathBuf`] and `String` fields.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Invalid or unknown CLI flags cause `clap` to emit usage diagnostics and exit cleanly with non-zero status.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYSML-INGEST-CLI/CliArgs], [DO-330-TQL-4-INGEST-CLI]
 #[derive(Parser, Debug)]
 #[command(name = "ingest-sysml", version = "0.1.0", about = "SysML v2 Universal Ingestion Engine")]
 pub struct CliArgs {
@@ -75,6 +125,32 @@ pub struct CliArgs {
     pub negative_invariants: Option<String>,
 }
 
+/// Binary entrypoint for the `ingest-sysml` command-line executable.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Parses process arguments via [`CliArgs`] and invokes [`run_ingestion`], enforcing the
+/// DO-178C Level A / DO-330 TQL-4 fail-safe process exit contract on any ingestion failure.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Total termination: every execution path either completes [`run_ingestion`] with exit code `0`
+///   or prints a structured diagnostic to `stderr` and exits with code `1`.
+///
+/// ## 3. Preconditions
+/// - Invoked as an OS process with standard argument vector and `stderr`/`stdout` streams attached.
+///
+/// ## 4. Postconditions
+/// - Terminates with exit status `0` iff [`run_ingestion`] returns `Ok(())`; terminates with exit status `1` otherwise.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - **Time Complexity**: Dominated by [`run_ingestion`], $O(N \log N)$ in total input specification size $N$.
+/// - **Space Complexity**: Dominated by [`run_ingestion`], $O(N)$ for AST and serialization buffers.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Any `Err(e)` from [`run_ingestion`] is formatted to `stderr` with the `[SysML v2 Ingestion] ERROR:` prefix
+///   before immediate `process::exit(1)`.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYSML-INGEST-CLI/main], [DO-330-TQL-4-INGEST-CLI]
 fn main() {
     let args = CliArgs::parse();
 
@@ -86,19 +162,36 @@ fn main() {
 
 /// Executes the end-to-end ingestion pipeline with validated input arguments.
 ///
-/// /// Realises: [REQ-SYSML-INGEST-CLI/run_ingestion]
+/// ## 1. Safety Intent & Regulatory Scope
+/// Coordinates schema target discovery, format classification, AST translation, closed-world scope
+/// filtering, textual SysML v2 serialization, atomic file writes, and cryptographic digest recording
+/// within a bounded, fail-safe transaction under DO-178C Level A and ISO 26262 ASIL D governance.
 ///
-/// ### Safety Intent:
-/// Coordinates discovery, classification, AST translation, scope filtering, textual serialization,
-/// atomic file writes, and cryptographic digest recording within a bounded, fail-safe transaction.
+/// ## 2. Invariants & Mathematical Properties
+/// - **Transactional Atomicity**: Target files (`args.out` and `args.digest`) are never partially overwritten;
+///   all mutations occur via temporary staging files and atomic rename.
+/// - **Deterministic Output**: Identical input schemas and scope filters yield byte-identical SysML v2 text
+///   and identical SHA-256 schema digests.
 ///
-/// ### Preconditions:
-/// - `args` contains well-formed CLI arguments.
+/// ## 3. Preconditions
+/// - `args` contains well-formed [`CliArgs`] parameters with readable schema paths and writable output directories.
 ///
-/// ### Postconditions:
-/// - On success, writes valid SysML v2 text to `args.out` and cryptographic digest to `args.digest`.
-/// - Returns `Ok(())` on complete success, or an explanatory `Err(String)` on any failure.
-/// - Invariant: In the event of an error, temporary staging files are cleaned up and target files are untouched.
+/// ## 4. Postconditions
+/// - On success, writes canonical SysML v2 text to `args.out`, writes the cryptographic digest to `args.digest`,
+///   and returns `Ok(())`.
+/// - On failure, returns an explanatory `Err(String)` and leaves existing output files unmodified.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - **Time Complexity**: $O(N \log N + P + I)$ where $N$ is the input specification byte count, $P$ is the
+///   number of `--allowed-parts` tokens, and $I$ is the number of `--negative-invariants` tokens.
+/// - **Space Complexity**: $O(N + P + I)$ heap memory for AST nodes, scope filter sets, and serialized SysML text.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Propagates discovery, file read, translator parse, unsupported format, and atomic write errors via `Result::Err`
+///   without panicking or leaking temporary staging files.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYSML-INGEST-CLI/run_ingestion], [DO-330-TQL-4-INGEST-CLI]
 pub fn run_ingestion(args: CliArgs) -> Result<(), String> {
     // Step 1: Discover schema targets and detect input format
     let (disc_fmt, disc_files) =

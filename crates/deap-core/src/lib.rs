@@ -1,4 +1,38 @@
 //! deap-core: Shared library crate across DEAP pipeline utilities.
+//!
+//! ## 1. Safety Intent & Regulatory Scope
+//! Provides the core foundational library of deterministic AST parsers, diagnostic
+//! structures, markdown/diagram syntax verifiers, governance rule models, and
+//! workspace baseline checks for the DEAP specification compiler under DO-178C
+//! Level A, DO-330 TQL-4, and ISO 26262 ASIL D tool qualification standards.
+//!
+//! ## 2. Invariants & Mathematical Properties
+//! - Re-exported types and verification functions are pure, deterministic, and
+//!   free of hidden global mutable state.
+//! - All AST extraction, markdown stripping, and rule evaluation APIs preserve
+//!   workspace-relative path semantics and schema-driven determinism.
+//!
+//! ## 3. Preconditions
+//! - Callers supply valid UTF-8 source strings or accessible workspace root paths
+//!   to the re-exported verification and parsing routines.
+//!
+//! ## 4. Postconditions
+//! - Exposes a cohesive, strongly-typed public surface unifying `diagnostics`,
+//!   `markdown`, `rules`, `sysml_ast`, and `workspace` modules without side effects
+//!   on module load.
+//!
+//! ## 5. Algorithmic Complexity Bounds
+//! - Time Complexity: $O(1)$ crate namespace re-export resolution at compile time;
+//!   individual delegated routines execute within linear $O(N)$ bounds over input size.
+//! - Space Complexity: $O(1)$ static overhead.
+//!
+//! ## 6. Failure Modes & Fault Tolerance
+//! - Compilation fails closed if any constituent submodule violates type or visibility
+//!   contracts; runtime failures in delegated functions are surfaced explicitly via
+//!   structured `Diagnostic` values or `Result` types without panicking.
+//!
+//! ## 7. Realization & Traceability
+//! Realises: [REQ-DEAP-CORE-LIB], [DO-330-TQL-4-CORE-LIB]
 
 pub mod diagnostics;
 pub mod markdown;
@@ -27,3 +61,50 @@ pub use workspace::{
     check_no_duplicate_master_blueprints, check_reconcile_backlog_tooling_exists,
     check_upstream_template_clean_landing_zones, is_upstream_compiler,
 };
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_deap_core_lib_7_section_rustdoc() {
+        let source = include_str!("lib.rs");
+        let module_doc: String = source
+            .lines()
+            .filter(|line| line.trim_start().starts_with("//!"))
+            .collect::<Vec<&str>>()
+            .join("\n");
+
+        assert!(
+            module_doc.contains("//! ## 1. Safety Intent & Regulatory Scope"),
+            "Missing section 1 in module docstring"
+        );
+        assert!(
+            module_doc.contains("//! ## 2. Invariants & Mathematical Properties"),
+            "Missing section 2 in module docstring"
+        );
+        assert!(
+            module_doc.contains("//! ## 3. Preconditions"),
+            "Missing section 3 in module docstring"
+        );
+        assert!(
+            module_doc.contains("//! ## 4. Postconditions"),
+            "Missing section 4 in module docstring"
+        );
+        assert!(
+            module_doc.contains("//! ## 5. Algorithmic Complexity Bounds"),
+            "Missing section 5 in module docstring"
+        );
+        assert!(
+            module_doc.contains("//! ## 6. Failure Modes & Fault Tolerance"),
+            "Missing section 6 in module docstring"
+        );
+        assert!(
+            module_doc.contains("//! ## 7. Realization & Traceability"),
+            "Missing section 7 in module docstring"
+        );
+        assert!(
+            module_doc.contains("//! Realises: ["),
+            "Missing unfenced Realises traceability header in module docstring"
+        );
+    }
+}
+

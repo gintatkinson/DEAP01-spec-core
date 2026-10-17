@@ -1,4 +1,36 @@
 //! AST structures for SysML v2 entities, requirements, and system architecture.
+//!
+//! ## 1. Safety Intent & Regulatory Scope
+//! Provides the canonical Abstract Syntax Tree (AST) data structures, recursive parsers, and
+//! deterministic architecture extractors for SysML v2 models in accordance with DO-178C Level A,
+//! DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C verification and traceability mandates.
+//!
+//! ## 2. Invariants & Mathematical Properties
+//! - Pure Schema-Driven Extraction: All AST representations derive exclusively and deterministically
+//!   from SysML v2 structural, behavioral, and requirement declarations without hardcoded domain state.
+//! - Deterministic Ordering: Multi-file directory traversal and map/set aggregations preserve
+//!   canonical lexicographical ordering via `BTreeMap` and `BTreeSet`.
+//!
+//! ## 3. Preconditions
+//! - Input SysML v2 source strings and workspace schema paths must be valid UTF-8 text or readable
+//!   filesystem directories containing `.sysml` specification units.
+//!
+//! ## 4. Postconditions
+//! - Returns strongly typed, serializable AST node collections (`SysmlModel`, `PartDef`,
+//!   `RequirementDef`, `PortDef`, `ActionDef`, `StateDef`, `UseCaseDef`, `TestCaseDef`) preserving
+//!   exact block hierarchy and requirement satisfaction bindings.
+//!
+//! ## 5. Algorithmic Complexity Bounds
+//! - Time Complexity: $O(N)$ linear in the byte length of parsed SysML v2 source text and number of
+//!   AST tokens.
+//! - Space Complexity: $O(V + E)$ proportional to the extracted AST vertices and directed edges.
+//!
+//! ## 6. Failure Modes & Fault Tolerance
+//! - Unbalanced braces, malformed declarations, or unreadable paths are handled gracefully via
+//!   bounded character-stream scanning and explicit `Result` error propagation without panicking.
+//!
+//! ## 7. Realization & Traceability
+//! Realises: [REQ-SYSML-AST-MODULE], [DO-330-TQL-4-SYSML-AST]
 
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -6524,5 +6556,23 @@ package SystemModel_SSOT {
                 "REQ-COM-08".to_string(),
             ]
         );
+    }
+
+    #[test]
+    fn test_sysml_ast_module_7_section_rustdoc() {
+        let src = include_str!("sysml_ast.rs");
+        let module_doc: String = src
+            .lines()
+            .take_while(|line| line.starts_with("//!"))
+            .collect::<Vec<&str>>()
+            .join("\n");
+        assert!(module_doc.contains("//! ## 1. Safety Intent & Regulatory Scope"));
+        assert!(module_doc.contains("//! ## 2. Invariants & Mathematical Properties"));
+        assert!(module_doc.contains("//! ## 3. Preconditions"));
+        assert!(module_doc.contains("//! ## 4. Postconditions"));
+        assert!(module_doc.contains("//! ## 5. Algorithmic Complexity Bounds"));
+        assert!(module_doc.contains("//! ## 6. Failure Modes & Fault Tolerance"));
+        assert!(module_doc.contains("//! ## 7. Realization & Traceability"));
+        assert!(module_doc.contains("//! Realises: [REQ-SYSML-AST-MODULE], [DO-330-TQL-4-SYSML-AST]"));
     }
 }
