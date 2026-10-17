@@ -344,5 +344,50 @@ This implementation plan governs the context-isolated dispatch of an `Adversaria
   - Remove temporary file `/tmp/gh_body_feat42a_source_ast.md`, reclaim/terminate the subagent upon completion, and report the live issue URL and verification evidence to the user.
 
 
+---
+
+# Implementation Plan: Adversarial Code Auditor Dispatch for Issue 5 (`ingest-sysml` CLI & Translator Integration)
+
+## 1. Executive Summary & Objective
+
+This implementation plan governs the context-isolated dispatch of an `Adversarial Code Auditor` subagent (`skills/adversarial-code-auditor/SKILL.md`) to perform deep architectural and root-cause analysis, offline dossier-gate verification, and GitHub issue filing for **Issue 5: `ingest-sysml` CLI & Translator Integration** (`[FEAT-42B] [ingest-sysml]: Wire --source and --language CLI flags to source AST translator`, label `feature`).
+
+## 2. Work Packages
+
+### WP-01: Context-Isolated Adversarial Code Auditor Subagent Dispatch
+- **Action**: Dispatch a context-isolated subagent (`Role: "Adversarial Code Auditor"`) governed by `skills/adversarial-code-auditor/SKILL.md` and `rules/subagent-dispatch-standards.md`.
+- **Pre-Flight Governance Preamble**:
+  - Direct-path `view_file` on `skills/adversarial-code-auditor/SKILL.md` as Step 1.
+  - Verbatim repository classification: `UPSTREAM_SPEC_CORE_COMPILER`.
+  - Read `.pipeline/constitution.md` and target file `crates/ingest-sysml/src/main.rs`.
+  - Trailing `PROCEED` authorization token.
+- **Audit Scope & Deep Analysis Targets**:
+  1. **Target File**: `crates/ingest-sysml/src/main.rs` (lines 50-237: `CliArgs`, `main`, and `run_ingestion`).
+  2. **Cross-Reference Verification Targets**:
+     - `crates/ingest-sysml/src/detectors.rs` (`detect_format` lines 48-161 and `discover_schema_targets` lines 194-450).
+     - `crates/ingest-sysml/src/translators/mod.rs` (lines 1-21) and `crates/ingest-sysml/src/lib.rs` (`filter_ast_to_target_scope`).
+     - `docs/designs/FEAT-42_source_code_ast_ingestion_and_docstring_synthesizer.md` (Section 2.1 lines 29-53 and Section 4 Scenarios 1, 2, and 5 lines 155-169).
+
+### WP-02: 7-Section Dossier Synthesis & Offline Gate Verification (Step C & Step D)
+- **Action**: The `Adversarial Code Auditor` subagent synthesizes the complete 7-section dossier in `/tmp/gh_body_feat42b_ingest_cli.md` conforming character-for-character to `skills/adversarial-code-auditor/SKILL.md` Section 2:
+  1. `## 1. Context and References` (with `<!-- test-target: crates/ingest-sysml/src/main.rs -->` and 4 bullets: `File`, `Pillar`, `Symptom`, `Test-Target`).
+  2. `## 2. Root Cause Analysis (5 Whys)` (5 numbered `**Why ...?** Because ...` items).
+  3. `## 3. Correctness Analysis` (tracing exact `file:line` references across `crates/ingest-sysml/src/main.rs`, `crates/ingest-sysml/src/detectors.rs`, `crates/ingest-sysml/src/translators/mod.rs`, `crates/ingest-sysml/src/lib.rs`, and `docs/designs/FEAT-42_source_code_ast_ingestion_and_docstring_synthesizer.md`).
+  4. `## 4. UML Diagrams` (valid Mermaid diagram conforming to all Mermaid syntax rules in `rules/platform-independence.md`).
+  5. `## 5. Affected Callers / Downstream Impact`.
+  6. `## 6. Proposed Correction` (concrete Rust implementation blueprint for `CliArgs` and `run_ingestion` in `crates/ingest-sysml/src/main.rs`, `CodeTranslator` in `crates/ingest-sysml/src/translators/code.rs`, `crates/ingest-sysml/src/translators/mod.rs`, `crates/ingest-sysml/src/detectors.rs`, and exit-code `0`/`1`/`2` handling with untouched output file guarantees on failure).
+  7. `## 7. Relationship to Existing Issues` & `## Audit Source` (`SEVERITY: Important`, `FILE_LOCATION: crates/ingest-sysml/src/main.rs:50-236`).
+- **Offline Gate Verification**:
+  - Execute all 12 checklist checks in `skills/adversarial-code-auditor/SKILL.md` Step D.
+  - Execute `./target/release/verify-baseline check-defect /tmp/gh_body_feat42b_ingest_cli.md` and confirm exit code `0`.
+
+### WP-03: Issue Filing & Closed-Loop Payload Verification (Step E)
+- **Action**: File the verified dossier to `gintatkinson/DEAP01-spec-core` with label `feature` and title `[FEAT-42B] [ingest-sysml]: Wire --source and --language CLI flags to source AST translator` via `./target/release/reconcile-backlog create-issue --repo gintatkinson/DEAP01-spec-core --title "[FEAT-42B] [ingest-sysml]: Wire --source and --language CLI flags to source AST translator" --body-file /tmp/gh_body_feat42b_ingest_cli.md --label feature`.
+- **Closed-Loop Verification**:
+  - Inspect the live published GitHub issue via `gh issue view <NEW_ISSUE_ID> --repo gintatkinson/DEAP01-spec-core` to confirm all 7 sections, Mermaid blocks, and metadata rendered cleanly without truncation.
+  - Remove temporary file `/tmp/gh_body_feat42b_ingest_cli.md`, reclaim/terminate the subagent upon completion, and report the live issue URL and verification evidence to the user.
+
+
+
 
 
