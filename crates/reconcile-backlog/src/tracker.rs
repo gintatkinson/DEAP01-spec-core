@@ -259,17 +259,23 @@ impl TrackerClient for OfflineTracker {
 
     fn update_issue_body(&self, issue_number: u64, body: &str) -> Result<(), String> {
         let mut guard = self.state.lock().map_err(|e| e.to_string())?;
-        if let Some(issue) = guard.issues.iter_mut().find(|i| i.number == issue_number) {
-            issue.body = Some(body.to_string());
-        }
+        let issue = guard
+            .issues
+            .iter_mut()
+            .find(|i| i.number == issue_number)
+            .ok_or_else(|| format!("Offline tracker: issue #{} not found", issue_number))?;
+        issue.body = Some(body.to_string());
         Ok(())
     }
 
     fn add_label(&self, issue_number: u64, label: &str) -> Result<(), String> {
         let mut guard = self.state.lock().map_err(|e| e.to_string())?;
-        if let Some(issue) = guard.issues.iter_mut().find(|i| i.number == issue_number) {
-            issue.labels.push(TrackerLabel::String(label.to_string()));
-        }
+        let issue = guard
+            .issues
+            .iter_mut()
+            .find(|i| i.number == issue_number)
+            .ok_or_else(|| format!("Offline tracker: issue #{} not found", issue_number))?;
+        issue.labels.push(TrackerLabel::String(label.to_string()));
         Ok(())
     }
 
@@ -357,7 +363,7 @@ impl Default for GitHubTracker {
 impl TrackerClient for GitHubTracker {
     fn fetch_all_issues(&self) -> Result<Vec<TrackerIssue>, String> {
         let mut cmd = Command::new("gh");
-        cmd.args(["issue", "list", "--limit", "1000", "--state", "all", "--json", "number,title,state,labels,url"]);
+        cmd.args(["issue", "list", "--limit", "1000", "--state", "all", "--json", "number,title,state,labels,body,url"]);
         if let Some(ref r) = self.repo {
             cmd.args(["--repo", r]);
         }
@@ -381,6 +387,8 @@ impl TrackerClient for GitHubTracker {
         let mut temp_file = tempfile_named()?;
         temp_file.write_all(body.as_bytes())
             .map_err(|e| format!("Failed to write temporary issue body file: {}", e))?;
+        temp_file.flush()
+            .map_err(|e| format!("Failed to flush temporary issue body file: {}", e))?;
         let temp_path = temp_file.path.clone();
 
         let mut cmd = Command::new("gh");
@@ -391,11 +399,51 @@ impl TrackerClient for GitHubTracker {
         let output = cmd.output()
             .map_err(|e| format!("Failed to execute 'gh issue edit': {}", e))?;
 
-        let _ = std::fs::remove_file(&temp_path);
-
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(format!("'gh issue edit' failed for issue #{}: {}", issue_number, stderr));
+        }
+
+        // Closed-loop readback verification
+        let mut view_cmd = Command::new("gh");
+        view_cmd.args(["issue", "view", &issue_number.to_string(), "--json", "number,body"]);
+        if let Some(ref r) = self.repo {
+            view_cmd.args(["--repo", r]);
+        }
+        let view_output = view_cmd.output()
+            .map_err(|e| format!("Failed to execute 'gh issue view' for closed-loop verification: {}", e))?;
+
+        if !view_output.status.success() {
+            let stderr = String::from_utf8_lossy(&view_output.stderr);
+            return Err(format!(
+                "'gh issue view' closed-loop verification failed for issue #{}: {}",
+                issue_number, stderr
+            ));
+        }
+
+        #[derive(Deserialize)]
+        struct UpdateViewPayload {
+            number: u64,
+            #[serde(default)]
+            body: Option<String>,
+        }
+
+        let view_str = String::from_utf8_lossy(&view_output.stdout);
+        let parsed: UpdateViewPayload = serde_json::from_str(&view_str)
+            .map_err(|e| format!("Failed to parse 'gh issue view' closed-loop verification output: {}", e))?;
+
+        if parsed.number != issue_number {
+            return Err(format!(
+                "Closed-loop verification mismatch: expected issue #{}, got #{}",
+                issue_number, parsed.number
+            ));
+        }
+
+        if !body.trim().is_empty() && parsed.body.as_deref().unwrap_or("").trim().is_empty() {
+            return Err(format!(
+                "Closed-loop verification error: remote body for issue #{} is empty",
+                issue_number
+            ));
         }
 
         Ok(())
@@ -424,6 +472,8 @@ impl TrackerClient for GitHubTracker {
         let mut temp_file = tempfile_named()?;
         temp_file.write_all(body.as_bytes())
             .map_err(|e| format!("Failed to write temporary issue body file: {}", e))?;
+        temp_file.flush()
+            .map_err(|e| format!("Failed to flush temporary issue body file: {}", e))?;
         let temp_path = temp_file.path.clone();
 
         let mut cmd = Command::new("gh");
@@ -434,8 +484,6 @@ impl TrackerClient for GitHubTracker {
 
         let output = cmd.output()
             .map_err(|e| format!("Failed to execute 'gh issue create': {}", e))?;
-
-        let _ = std::fs::remove_file(&temp_path);
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -455,6 +503,40 @@ impl TrackerClient for GitHubTracker {
             .next()
             .and_then(|seg| seg.trim().parse::<u64>().ok())
             .ok_or_else(|| format!("Could not parse issue number from created URL: '{}'", url))?;
+
+        // Closed-loop readback verification
+        let mut view_cmd = Command::new("gh");
+        view_cmd.args([
+            "issue",
+            "view",
+            &number.to_string(),
+            "--json",
+            "number,title,state,body,url",
+        ]);
+        if let Some(r) = target_repo {
+            view_cmd.args(["--repo", r]);
+        }
+        let view_output = view_cmd.output()
+            .map_err(|e| format!("Failed to execute 'gh issue view' for closed-loop verification: {}", e))?;
+
+        if !view_output.status.success() {
+            let stderr = String::from_utf8_lossy(&view_output.stderr);
+            return Err(format!(
+                "'gh issue view' closed-loop verification failed for created issue #{}: {}",
+                number, stderr
+            ));
+        }
+
+        let view_str = String::from_utf8_lossy(&view_output.stdout);
+        let parsed: TrackerIssue = serde_json::from_str(&view_str)
+            .map_err(|e| format!("Failed to parse 'gh issue view' verification output for issue #{}: {}", number, e))?;
+
+        if parsed.number != number {
+            return Err(format!(
+                "Closed-loop verification mismatch: expected issue #{}, got #{}",
+                number, parsed.number
+            ));
+        }
 
         Ok((number, url))
     }
@@ -541,6 +623,8 @@ impl TrackerClient for GitHubTracker {
                 let mut temp_file = tempfile_named()?;
                 temp_file.write_all(trimmed.as_bytes())
                     .map_err(|e| format!("Failed to write temporary comment file: {}", e))?;
+                temp_file.flush()
+                    .map_err(|e| format!("Failed to flush temporary comment file: {}", e))?;
                 let temp_path = temp_file.path.clone();
 
                 let mut comment_cmd = Command::new("gh");
@@ -550,7 +634,6 @@ impl TrackerClient for GitHubTracker {
                 }
                 let c_output = comment_cmd.output()
                     .map_err(|e| format!("Failed to execute 'gh issue comment': {}", e))?;
-                let _ = std::fs::remove_file(&temp_path);
                 if !c_output.status.success() {
                     let stderr = String::from_utf8_lossy(&c_output.stderr);
                     return Err(format!("'gh issue comment' failed for issue #{}: {}", issue_number, stderr));
@@ -565,16 +648,23 @@ impl TrackerClient for GitHubTracker {
 /// Helper struct for temporary file without extra crate dependencies.
 struct TempFileNamed {
     path: String,
-    file: std::fs::File,
+    file: Option<std::fs::File>,
 }
 
 impl std::io::Write for TempFileNamed {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.file.write(buf)
+        self.file.as_mut().expect("file handle open").write(buf)
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
-        self.file.flush()
+        self.file.as_mut().expect("file handle open").flush()
+    }
+}
+
+impl Drop for TempFileNamed {
+    fn drop(&mut self) {
+        let _ = self.file.take();
+        let _ = std::fs::remove_file(&self.path);
     }
 }
 
@@ -588,7 +678,10 @@ fn tempfile_named() -> Result<TempFileNamed, String> {
     let path_str = path.display().to_string();
     let file = std::fs::File::create(&path)
         .map_err(|e| format!("Unable to create temp file {}: {}", path_str, e))?;
-    Ok(TempFileNamed { path: path_str, file })
+    Ok(TempFileNamed {
+        path: path_str,
+        file: Some(file),
+    })
 }
 
 /// Indexes issues by number and normalized title.
@@ -918,5 +1011,74 @@ mod tests {
         assert!(err.is_err());
         assert!(err.unwrap_err().contains("issue #999 not found"));
     }
+
+    #[test]
+    fn test_offline_tracker_error_parity_on_nonexistent_issue() {
+        let tracker = OfflineTracker::new();
+        let res_update = tracker.update_issue_body(999, "new body");
+        assert!(res_update.is_err(), "update_issue_body on nonexistent issue must fail");
+        assert!(
+            res_update.unwrap_err().contains("issue #999 not found"),
+            "Error message must specify issue #999 not found"
+        );
+
+        let res_label = tracker.add_label(999, "bug");
+        assert!(res_label.is_err(), "add_label on nonexistent issue must fail");
+        assert!(
+            res_label.unwrap_err().contains("issue #999 not found"),
+            "Error message must specify issue #999 not found"
+        );
+    }
+
+    #[test]
+    fn test_temp_file_named_raii_drop_cleanup() {
+        use std::io::Write;
+        let path = {
+            let mut temp = tempfile_named().expect("create temp file");
+            let path = temp.path.clone();
+            temp.write_all(b"temporary test data").expect("write bytes");
+            temp.flush().expect("flush bytes");
+            assert!(std::path::Path::new(&path).exists(), "Temp file must exist while in scope");
+            path
+        };
+        assert!(
+            !std::path::Path::new(&path).exists(),
+            "Temp file must be removed when TempFileNamed drops out of scope"
+        );
+    }
+
+    #[test]
+    fn test_tracker_issue_deserialization_with_body() {
+        let json_with_body = r#"{
+            "number": 42,
+            "title": "Issue with body",
+            "state": "OPEN",
+            "labels": ["bug"],
+            "body": "some text",
+            "url": "https://github.com/org/repo/issues/42"
+        }"#;
+        let issue: TrackerIssue = serde_json::from_str(json_with_body).unwrap();
+        assert_eq!(issue.body, Some("some text".to_string()));
+
+        let json_without_body = r#"{
+            "number": 43,
+            "title": "Issue without body",
+            "state": "OPEN",
+            "labels": []
+        }"#;
+        let issue_no_body: TrackerIssue = serde_json::from_str(json_without_body).unwrap();
+        assert_eq!(issue_no_body.body, None);
+
+        let json_null_body = r#"{
+            "number": 44,
+            "title": "Issue with null body",
+            "state": "OPEN",
+            "labels": [],
+            "body": null
+        }"#;
+        let issue_null_body: TrackerIssue = serde_json::from_str(json_null_body).unwrap();
+        assert_eq!(issue_null_body.body, None);
+    }
 }
+
 
