@@ -945,7 +945,31 @@ impl<'a> SemanticValidator<'a> {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-VALIDATE-PART-DEFS-IN-PKG] | SysML v2: ActionDef(SemanticValidator::validate_part_defs_in_pkg)
     fn validate_part_defs_in_pkg(&mut self, pkg: &PackageDef, parent_scope: &str) {
-        let pkg_scope = if parent_scope.is_empty() {
+        let is_synthetic_multi_root = parent_scope.is_empty()
+            && !pkg.packages.is_empty()
+            && (pkg.name.is_empty()
+                || (pkg.name == "SysML_Model"
+                    && pkg.attribute_defs.is_empty()
+                    && pkg.port_defs.is_empty()
+                    && pkg.action_defs.is_empty()
+                    && pkg.constraint_defs.is_empty()
+                    && pkg.calc_defs.is_empty()
+                    && pkg.requirement_defs.is_empty()
+                    && pkg.state_defs.is_empty()
+                    && pkg.connection_defs.is_empty()
+                    && pkg.use_case_defs.is_empty()
+                    && pkg.item_defs.is_empty()
+                    && pkg.hazard_defs.is_empty()
+                    && pkg.risk_defs.is_empty()
+                    && pkg.test_case_defs.is_empty()
+                    && pkg.capability_defs.is_empty()
+                    && pkg.operation_defs.is_empty()
+                    && pkg.interaction_defs.is_empty()
+                    && pkg.part_defs.is_empty()));
+
+        let pkg_scope = if is_synthetic_multi_root {
+            String::new()
+        } else if parent_scope.is_empty() {
             pkg.name.clone()
         } else if pkg.name.is_empty() {
             parent_scope.to_string()
@@ -1068,7 +1092,31 @@ impl<'a> SemanticValidator<'a> {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SEMANTIC-VALIDATOR-SEMANTICVALIDATOR-VALIDATE-REQUIREMENTS-IN-PKG] | SysML v2: ActionDef(SemanticValidator::validate_requirements_in_pkg)
     fn validate_requirements_in_pkg(&mut self, pkg: &PackageDef, parent_scope: &str) {
-        let pkg_scope = if parent_scope.is_empty() {
+        let is_synthetic_multi_root = parent_scope.is_empty()
+            && !pkg.packages.is_empty()
+            && (pkg.name.is_empty()
+                || (pkg.name == "SysML_Model"
+                    && pkg.attribute_defs.is_empty()
+                    && pkg.port_defs.is_empty()
+                    && pkg.action_defs.is_empty()
+                    && pkg.constraint_defs.is_empty()
+                    && pkg.calc_defs.is_empty()
+                    && pkg.requirement_defs.is_empty()
+                    && pkg.state_defs.is_empty()
+                    && pkg.connection_defs.is_empty()
+                    && pkg.use_case_defs.is_empty()
+                    && pkg.item_defs.is_empty()
+                    && pkg.hazard_defs.is_empty()
+                    && pkg.risk_defs.is_empty()
+                    && pkg.test_case_defs.is_empty()
+                    && pkg.capability_defs.is_empty()
+                    && pkg.operation_defs.is_empty()
+                    && pkg.interaction_defs.is_empty()
+                    && pkg.part_defs.is_empty()));
+
+        let pkg_scope = if is_synthetic_multi_root {
+            String::new()
+        } else if parent_scope.is_empty() {
             pkg.name.clone()
         } else if pkg.name.is_empty() {
             parent_scope.to_string()

@@ -1216,6 +1216,38 @@ impl SysmlSerializable for PackageDef {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SEMANTIC-SERIALIZER-PACKAGEDEF-TO-SYSML] | SysML v2: ActionDef(PackageDef::to_sysml)
     fn to_sysml(&self, indent: usize) -> String {
+        let is_synthetic_multi_root = indent == 0
+            && (self.name.is_empty() || self.name == "SysML_Model")
+            && !self.packages.is_empty()
+            && self.doc.is_none()
+            && self.imports.is_empty()
+            && self.attribute_defs.is_empty()
+            && self.port_defs.is_empty()
+            && self.action_defs.is_empty()
+            && self.constraint_defs.is_empty()
+            && self.calc_defs.is_empty()
+            && self.requirement_defs.is_empty()
+            && self.satisfied_requirements.is_empty()
+            && self.state_defs.is_empty()
+            && self.connection_defs.is_empty()
+            && self.use_case_defs.is_empty()
+            && self.item_defs.is_empty()
+            && self.hazard_defs.is_empty()
+            && self.risk_defs.is_empty()
+            && self.test_case_defs.is_empty()
+            && self.capability_defs.is_empty()
+            && self.operation_defs.is_empty()
+            && self.interaction_defs.is_empty()
+            && self.part_defs.is_empty();
+        if is_synthetic_multi_root {
+            return self
+                .packages
+                .iter()
+                .map(|sub| sub.to_sysml(0))
+                .collect::<Vec<_>>()
+                .join("\n\n");
+        }
+
         let pad = " ".repeat(indent);
         let doc = format_doc_comment(&self.doc, indent);
         let mut lines = Vec::new();

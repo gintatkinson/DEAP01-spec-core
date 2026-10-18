@@ -542,7 +542,31 @@ impl SymbolTable {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-SEMANTIC-SYMBOLS-SYMBOLTABLE-INDEX-PACKAGE] | SysML v2: ActionDef(SymbolTable::index_package)
     fn index_package(&mut self, pkg: &PackageDef, parent_scope: &str) {
-        let pkg_qname = if parent_scope.is_empty() {
+        let is_synthetic_multi_root = parent_scope.is_empty()
+            && !pkg.packages.is_empty()
+            && (pkg.name.is_empty()
+                || (pkg.name == "SysML_Model"
+                    && pkg.attribute_defs.is_empty()
+                    && pkg.port_defs.is_empty()
+                    && pkg.action_defs.is_empty()
+                    && pkg.constraint_defs.is_empty()
+                    && pkg.calc_defs.is_empty()
+                    && pkg.requirement_defs.is_empty()
+                    && pkg.state_defs.is_empty()
+                    && pkg.connection_defs.is_empty()
+                    && pkg.use_case_defs.is_empty()
+                    && pkg.item_defs.is_empty()
+                    && pkg.hazard_defs.is_empty()
+                    && pkg.risk_defs.is_empty()
+                    && pkg.test_case_defs.is_empty()
+                    && pkg.capability_defs.is_empty()
+                    && pkg.operation_defs.is_empty()
+                    && pkg.interaction_defs.is_empty()
+                    && pkg.part_defs.is_empty()));
+
+        let pkg_qname = if is_synthetic_multi_root {
+            String::new()
+        } else if parent_scope.is_empty() {
             pkg.name.clone()
         } else if pkg.name.is_empty() {
             parent_scope.to_string()
@@ -550,29 +574,31 @@ impl SymbolTable {
             format!("{}::{}", parent_scope, pkg.name)
         };
 
-        self.package_imports
-            .insert(pkg_qname.clone(), pkg.imports.clone());
-        if !pkg.name.is_empty() && pkg.name != pkg_qname {
+        if !pkg_qname.is_empty() {
             self.package_imports
-                .entry(pkg.name.clone())
-                .or_default()
-                .extend(pkg.imports.clone());
-        }
+                .insert(pkg_qname.clone(), pkg.imports.clone());
+            if !pkg.name.is_empty() && pkg.name != pkg_qname {
+                self.package_imports
+                    .entry(pkg.name.clone())
+                    .or_default()
+                    .extend(pkg.imports.clone());
+            }
 
-        self.insert(Symbol {
-            name: pkg.name.clone(),
-            qualified_name: pkg_qname.clone(),
-            kind: SymbolKind::Package,
-            parent: if parent_scope.is_empty() {
-                None
-            } else {
-                Some(parent_scope.to_string())
-            },
-            type_name: None,
-            direction: None,
-            is_conjugated: false,
-            doc: pkg.doc.clone(),
-        });
+            self.insert(Symbol {
+                name: pkg.name.clone(),
+                qualified_name: pkg_qname.clone(),
+                kind: SymbolKind::Package,
+                parent: if parent_scope.is_empty() {
+                    None
+                } else {
+                    Some(parent_scope.to_string())
+                },
+                type_name: None,
+                direction: None,
+                is_conjugated: false,
+                doc: pkg.doc.clone(),
+            });
+        }
 
         for attr in &pkg.attribute_defs {
             self.insert(Symbol {

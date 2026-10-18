@@ -1218,12 +1218,31 @@ pub fn forward_sync_sysml_to_specs(
     let mut part_contexts: Vec<PartContext> = Vec::new();
     let mut ordered_packages: Vec<&PackageDef> = Vec::new();
 
+    let is_empty_synthetic_root = pkg.name == "SysML_Model"
+        && !pkg.packages.is_empty()
+        && pkg.part_defs.is_empty()
+        && pkg.action_defs.is_empty()
+        && pkg.use_case_defs.is_empty()
+        && pkg.requirement_defs.is_empty();
+
     // Collect ordered packages: Root first, then ConOps, then imported packages in AST order, then remaining packages
-    let root_pkg = all_packages
-        .iter()
-        .find(|p| p.name == pkg.name)
-        .or_else(|| all_packages.iter().find(|p| p.name == "SysML_Model"))
-        .or_else(|| all_packages.first());
+    let root_pkg = if is_empty_synthetic_root {
+        all_packages
+            .iter()
+            .find(|p| p.name != "SysML_Model" && p.name != "ConOps" && !p.imports.is_empty())
+            .or_else(|| {
+                all_packages
+                    .iter()
+                    .find(|p| p.name != "SysML_Model" && p.name != "ConOps")
+            })
+            .or_else(|| all_packages.iter().find(|p| p.name != "SysML_Model"))
+    } else {
+        all_packages
+            .iter()
+            .find(|p| p.name == pkg.name)
+            .or_else(|| all_packages.iter().find(|p| p.name == "SysML_Model"))
+            .or_else(|| all_packages.first())
+    };
 
     let conops_pkg = all_packages.iter().find(|p| p.name == "ConOps");
 

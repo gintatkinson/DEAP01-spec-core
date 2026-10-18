@@ -238,6 +238,12 @@ impl<'a> SysmlParser<'a> {
                 self.skip_trivia();
             }
 
+            if root.packages.len() == 1 && (root.name == "SysML_Model" || root.name.is_empty()) {
+                let mut single = root.packages.remove(0);
+                merge_package_defs(&mut single, root);
+                return Ok(single);
+            }
+
             return Ok(root);
         }
 
@@ -423,7 +429,11 @@ impl<'a> SysmlParser<'a> {
         match self.peek_kind() {
             TokenKind::Package => {
                 let subpkg = self.parse_package_decl(doc)?;
-                pkg.packages.push(subpkg);
+                if let Some(existing) = pkg.packages.iter_mut().find(|p| p.name == subpkg.name) {
+                    merge_package_defs(existing, subpkg);
+                } else {
+                    pkg.packages.push(subpkg);
+                }
             }
             TokenKind::Part => {
                 let part = self.parse_part_decl(doc)?;
@@ -682,7 +692,13 @@ impl<'a> SysmlParser<'a> {
 
         if self.check(&TokenKind::Colon) || self.check(&TokenKind::ColonGt) {
             self.advance();
-            type_name = Some(self.expect_ident()?);
+            let mut ty = self.expect_ident()?;
+            while self.check(&TokenKind::DoubleColon) {
+                self.advance();
+                ty.push_str("::");
+                ty.push_str(&self.expect_ident()?);
+            }
+            type_name = Some(ty);
         }
 
         let mut part = PartDef {
@@ -800,7 +816,13 @@ impl<'a> SysmlParser<'a> {
                 self.advance();
                 is_conjugated = true;
             }
-            self.expect_ident()?
+            let mut ty = self.expect_ident()?;
+            while self.check(&TokenKind::DoubleColon) {
+                self.advance();
+                ty.push_str("::");
+                ty.push_str(&self.expect_ident()?);
+            }
+            ty
         } else {
             name.clone()
         };
@@ -854,7 +876,13 @@ impl<'a> SysmlParser<'a> {
                     let flow_name = self.expect_ident()?;
                     let flow_type = if self.check(&TokenKind::Colon) {
                         self.advance();
-                        self.expect_ident()?
+                        let mut ty = self.expect_ident()?;
+                        while self.check(&TokenKind::DoubleColon) {
+                            self.advance();
+                            ty.push_str("::");
+                            ty.push_str(&self.expect_ident()?);
+                        }
+                        ty
                     } else {
                         "Item".to_string()
                     };
@@ -917,6 +945,11 @@ impl<'a> SysmlParser<'a> {
         if self.check(&TokenKind::Colon) {
             self.advance();
             type_name = self.expect_ident()?;
+            while self.check(&TokenKind::DoubleColon) {
+                self.advance();
+                type_name.push_str("::");
+                type_name.push_str(&self.expect_ident()?);
+            }
             // Array-valued attribute types (`Type[]`), e.g. YANG `leaf-list` lowering.
             if self.check(&TokenKind::OpenBracket) {
                 self.advance();
@@ -1301,19 +1334,19 @@ impl<'a> SysmlParser<'a> {
                     if self.check(&TokenKind::From) {
                         self.advance();
                     }
-                    derived_from.push(self.read_until_semi());
+                    derived_from.push(self.read_until_semi().replace(" :: ", "::"));
                 } else if self.check(&TokenKind::Verify) {
                     self.advance();
                     if self.check(&TokenKind::By) {
                         self.advance();
                     }
-                    verified_by.push(self.read_until_semi());
+                    verified_by.push(self.read_until_semi().replace(" :: ", "::"));
                 } else if self.check(&TokenKind::Satisfy) {
                     self.advance();
                     if self.check(&TokenKind::By) {
                         self.advance();
                     }
-                    satisfied_by.push(self.read_until_semi());
+                    satisfied_by.push(self.read_until_semi().replace(" :: ", "::"));
                 } else {
                     self.skip_until_semi_or_brace();
                 }
@@ -3417,6 +3450,12 @@ pub fn parse_sysml_tree(files: &[PathBuf]) -> Result<PackageDef, ParseError> {
         } else {
             root.packages.push(parsed);
         }
+    }
+
+    if root.packages.len() == 1 && (root.name == "SysML_Model" || root.name.is_empty()) {
+        let mut single = root.packages.remove(0);
+        merge_package_defs(&mut single, root);
+        return Ok(single);
     }
 
     Ok(root)
