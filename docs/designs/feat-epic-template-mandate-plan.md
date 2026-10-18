@@ -83,8 +83,8 @@ This restores all child features, stories, and use cases to the local disk witho
 4. Reassemble the `## Child Features` checklist using the exact live Issue IDs (`#1` through `#4`) and absolute file links to prevent 404 navigation errors.
 
 ### Phase 4: Verification
-1. Run the newly updated model coverage linter script:
+1. Run the newly updated model coverage linter binary:
    ```bash
-   python3 <active_repo_dir>/skills/spec-orchestrator/scripts/verify_model_coverage.py <restore_workspace_dir>/yang <restore_workspace_dir>/docs/features
+   <active_repo_dir>/target/release/verify-baseline <restore_workspace_dir>
    ```
 2. Verify that the command succeeds with `exit code 0`, 100% coverage, and 100% UML compliance.

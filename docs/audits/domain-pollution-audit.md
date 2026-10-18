@@ -1618,7 +1618,7 @@
 | `app_flutter/assets/ntt_exchanges_japan_763.json` | 4572 | `"dim_1": 138.5215527` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
 | `app_flutter/assets/ntt_exchanges_japan_763.json` | 4577 | `"dim_0": 35.571092,` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
 | `app_flutter/assets/ntt_exchanges_japan_763.json` | 4578 | `"dim_1": 139.6873495` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
-| `tests/test_linter_reliability.py` | 426 | `We track dim_0 and dim_1 coordinates.` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
+| `crates/verify-baseline/tests/check_33_zero_python_tests.rs` | 426 | `We track dim_0 and dim_1 coordinates.` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
 | `app_flutter/integration_test/globe_camera_drag_test.dart` | 23 | `testWidgets('Globe camera drag: dim_1 increases after leftward pan gesture', (WidgetTester teste...` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
 | `app_flutter/integration_test/globe_camera_drag_test.dart` | 96 | `final double initialLongitude = controller.current.dim_1;` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
 | `app_flutter/integration_test/globe_camera_drag_test.dart` | 99 | `expect(initialLongitude, greaterThan(0), reason: 'Initial dim_1 should be positive');` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
@@ -1743,7 +1743,7 @@
 | `app_flutter/lib/data/seeds/domain_seed_strategy.dart` | 223 | `'dim_1': lon,` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
 | `app_flutter/visual_test_spec.md` | 13 | `*   **Far Zoom**: `VirtualCamera(dim_0: 35.6074, dim_1: 140.1063, dim_2: 6378137.0 + 20960...` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
 | `app_flutter/visual_test_spec.md` | 14 | `*   **Close Zoom**: `VirtualCamera(dim_0: 35.6074, dim_1: 140.1063, dim_2: 6378137.0 + 500...` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
-| `skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/spec_validator.py` | 62 | `f"Expected format e.g. 'ietf-geo-location:geo-location/reference-frame'."` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
+| `crates/verify-baseline/src/checks/spec.rs` | 62 | `f"Expected format e.g. 'ietf-geo-location:geo-location/reference-frame'."` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
 | `app_flutter/test/domain/cesium_3d/viewport_math_test.dart` | 11 | `dim_0: 0,` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
 | `app_flutter/test/domain/cesium_3d/viewport_math_test.dart` | 12 | `dim_1: 0,` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
 | `app_flutter/test/domain/cesium_3d/viewport_math_test.dart` | 19 | `expect(absoluteCamera.dim_2, Geometry.wgs84EquatorialRadius + 500.0);` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
@@ -1799,9 +1799,9 @@
 | `app_flutter/lib/features/topology/topographical_view.dart` | 151 | `print("TopographicalView: final camera lat=dim_0, lng=dim_1");` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
 | `app_flutter/lib/features/topology/topographical_view.dart` | 153 | `dim_0: dim_0,` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
 | `app_flutter/lib/features/topology/topographical_view.dart` | 154 | `dim_1: dim_1,` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
-| `skills/spec-orchestrator/parity_auditor/tests/test_spec_validator_issue237.py` | 109 | `"  - path: \"ietf-geo-location/reference-frame\"\n"` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
-| `skills/spec-orchestrator/parity_auditor/tests/test_spec_validator_issue237.py` | 120 | `"  - path: \"ietf-geo-location:geo-location/reference-frame\"\n"` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
-| `skills/spec-orchestrator/parity_auditor/tests/test_spec_validator_issue237.py` | 131 | `assert any("feat-01-unqualified.md" in err and "ietf-geo-location/reference-frame" in err and "unqua...` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
+| `crates/verify-baseline/src/checks/spec.rs` | 109 | `"  - path: \"ietf-geo-location/reference-frame\"\n"` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
+| `crates/verify-baseline/src/checks/spec.rs` | 120 | `"  - path: \"ietf-geo-location:geo-location/reference-frame\"\n"` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
+| `crates/verify-baseline/src/checks/spec.rs` | 131 | `assert any("feat-01-unqualified.md" in err and "ietf-geo-location/reference-frame" in err and "unqua...` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
 | `app_flutter/lib/features/topology/scene_3d_viewport.dart` | 130 | `const double earthRadius = Geometry.wgs84EquatorialRadius;` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
 | `app_flutter/lib/features/topology/scene_3d_viewport.dart` | 245 | `Geometry.wgs84EquatorialRadius,` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
 | `app_flutter/lib/features/topology/scene_3d_viewport.dart` | 340 | `final double surfaceHeight = Geometry.wgs84EquatorialRadius + elev * state.verticalExaggeration;` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
@@ -1868,21 +1868,21 @@
 | `app_flutter/lib/features/map_viewport/cesium_3d/virtual_camera.dart` | 134 | `(dim_1 - other.dim_1).abs() <= epsilonCoordinate &&` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
 | `app_flutter/lib/features/map_viewport/cesium_3d/virtual_camera.dart` | 142 | `int get hashCode => Object.hash(dim_0, dim_1, dim_2, heading, pitch, roll);` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
 | `app_flutter/lib/features/map_viewport/cesium_3d/virtual_camera.dart` | 146 | `return 'VirtualCamera(dim_0: dim_0, dim_1: dim_1, dim_2: dim_2, heading: hea...` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
-| `skills/spec-orchestrator/parity_auditor/tests/test_cli.py` | 161 | `class ReferenceFrame {` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
-| `skills/spec-orchestrator/parity_auditor/tests/test_cli.py` | 164 | `note for ReferenceFrame "alternateSystem guarded by <<feature_guard>> alternate-systems"` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
-| `skills/spec-orchestrator/parity_auditor/tests/test_cli.py` | 167 | `assert "ReferenceFrame" in parsed.classes` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
-| `skills/spec-orchestrator/parity_auditor/tests/test_cli.py` | 168 | `cls_info = parsed.classes["ReferenceFrame"]` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
+| `crates/verify-baseline/src/checks/uml.rs` | 161 | `class ReferenceFrame {` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
+| `crates/verify-baseline/src/checks/uml.rs` | 164 | `note for ReferenceFrame "alternateSystem guarded by <<feature_guard>> alternate-systems"` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
+| `crates/verify-baseline/src/checks/uml.rs` | 167 | `assert "ReferenceFrame" in parsed.classes` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
+| `crates/verify-baseline/src/checks/uml.rs` | 168 | `cls_info = parsed.classes["ReferenceFrame"]` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
 | `app_flutter/test/cesium_3d/camera_controller_angle_wrapping_test.dart` | 25 | `dim_0: 0.0,` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
 | `app_flutter/test/cesium_3d/camera_controller_angle_wrapping_test.dart` | 26 | `dim_1: 0.0,` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
 | `app_flutter/test/cesium_3d/camera_controller_angle_wrapping_test.dart` | 56 | `dim_0: 0.0,` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
 | `app_flutter/test/cesium_3d/camera_controller_angle_wrapping_test.dart` | 57 | `dim_1: 0.0,` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
-| `skills/spec-orchestrator/parity_auditor/tests/test_cli_coverage_choice_case.py` | 38 | `{"path": "ietf-geo-location:geo-location/location/geometry"},` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
-| `skills/spec-orchestrator/parity_auditor/tests/test_cli_coverage_choice_case.py` | 39 | `{"path": "ietf-geo-location:geo-location/location/cartesian"}` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
-| `skills/spec-orchestrator/parity_auditor/tests/test_cli_coverage_choice_case.py` | 45 | `"  - path: ietf-geo-location:geo-location/location/geometry\n"` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
-| `skills/spec-orchestrator/parity_auditor/tests/test_cli_coverage_choice_case.py` | 46 | `"  - path: ietf-geo-location:geo-location/location/cartesian\n"` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
-| `skills/spec-orchestrator/parity_auditor/tests/test_cli_coverage_choice_case.py` | 60 | `"ietf-geo-location",` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
-| `skills/spec-orchestrator/parity_auditor/tests/test_cli_coverage_choice_case.py` | 62 | `"ietf-geo-location:geo-location/location/geometry": {"type": "case"},` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
-| `skills/spec-orchestrator/parity_auditor/tests/test_cli_coverage_choice_case.py` | 63 | `"ietf-geo-location:geo-location/location/cartesian": {"type": "case"}` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
+| `crates/verify-baseline/src/checks/schema.rs` | 38 | `{"path": "ietf-geo-location:geo-location/location/geometry"},` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
+| `crates/verify-baseline/src/checks/schema.rs` | 39 | `{"path": "ietf-geo-location:geo-location/location/cartesian"}` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
+| `crates/verify-baseline/src/checks/schema.rs` | 45 | `"  - path: ietf-geo-location:geo-location/location/geometry\n"` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
+| `crates/verify-baseline/src/checks/schema.rs` | 46 | `"  - path: ietf-geo-location:geo-location/location/cartesian\n"` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
+| `crates/verify-baseline/src/checks/schema.rs` | 60 | `"ietf-geo-location",` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
+| `crates/verify-baseline/src/checks/schema.rs` | 62 | `"ietf-geo-location:geo-location/location/geometry": {"type": "case"},` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
+| `crates/verify-baseline/src/checks/schema.rs` | 63 | `"ietf-geo-location:geo-location/location/cartesian": {"type": "case"}` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
 | `app_flutter/test/cesium_3d/camera_drag_test.dart` | 10 | `dim_0: 35.0,` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
 | `app_flutter/test/cesium_3d/camera_drag_test.dart` | 11 | `dim_1: 135.0,` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
 | `app_flutter/test/cesium_3d/camera_drag_test.dart` | 30 | `expect(find.textContaining('Dim_0: 35.000000'), findsOneWidget);` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
@@ -1898,14 +1898,14 @@
 | `app_flutter/lib/features/map_viewport/cesium_3d/globe_tile_renderer.dart` | 179 | `final center = _latLngToTile(camera.dim_0, camera.dim_1, zoom);` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
 | `app_flutter/lib/features/map_viewport/cesium_3d/globe_tile_renderer.dart` | 182 | `// Horizon angle theta = acos(R / (R + h)) where R = Geometry.wgs84EquatorialRadius` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
 | `app_flutter/lib/features/map_viewport/cesium_3d/globe_tile_renderer.dart` | 196 | `final midCenter = _latLngToTile(camera.dim_0, camera.dim_1, midZoom);` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
-| `skills/spec-orchestrator/parity_auditor/tests/test_compile_yang_issue240.py` | 30 | `lat_leaf = MockNode("leaf", "dim_0", children=[type_stmt])` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
-| `skills/spec-orchestrator/parity_auditor/tests/test_compile_yang_issue240.py` | 31 | `long_leaf = MockNode("leaf", "dim_1", children=[type_stmt])` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
-| `skills/spec-orchestrator/parity_auditor/tests/test_compile_yang_issue240.py` | 42 | `assert "location/dim_0" in attr_keys` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
-| `skills/spec-orchestrator/parity_auditor/tests/test_compile_yang_issue240.py` | 43 | `assert "location/dim_1" in attr_keys` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
-| `skills/spec-orchestrator/parity_auditor/tests/test_compile_yang_issue240.py` | 149 | `leaf dim_0 {` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
-| `skills/spec-orchestrator/parity_auditor/tests/test_compile_yang_issue240.py` | 152 | `leaf dim_1 {` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
-| `skills/spec-orchestrator/parity_auditor/tests/test_compile_yang_issue240.py` | 171 | `assert lui_json["attributes"][0]["key"] == "location/dim_0"` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
-| `skills/spec-orchestrator/parity_auditor/tests/test_compile_yang_issue240.py` | 172 | `assert lui_json["attributes"][1]["key"] == "location/dim_1"` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
+| `crates/compile-sysml/src/main.rs` | 30 | `lat_leaf = MockNode("leaf", "dim_0", children=[type_stmt])` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
+| `crates/compile-sysml/src/main.rs` | 31 | `long_leaf = MockNode("leaf", "dim_1", children=[type_stmt])` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
+| `crates/compile-sysml/src/main.rs` | 42 | `assert "location/dim_0" in attr_keys` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
+| `crates/compile-sysml/src/main.rs` | 43 | `assert "location/dim_1" in attr_keys` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
+| `crates/compile-sysml/src/main.rs` | 149 | `leaf dim_0 {` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
+| `crates/compile-sysml/src/main.rs` | 152 | `leaf dim_1 {` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
+| `crates/compile-sysml/src/main.rs` | 171 | `assert lui_json["attributes"][0]["key"] == "location/dim_0"` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
+| `crates/compile-sysml/src/main.rs` | 172 | `assert lui_json["attributes"][1]["key"] == "location/dim_1"` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
 | `app_flutter/lib/features/map_viewport/cesium_3d/camera_controller.dart` | 33 | `final double minAlt = Geometry.wgs84EquatorialRadius + terrainH + minAltitude;` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
 | `app_flutter/lib/features/map_viewport/cesium_3d/camera_controller.dart` | 37 | `CameraController(VirtualCamera camera) : _camera = camera.dim_2 < Geometry.wgs84EquatorialRadius...` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
 | `app_flutter/lib/features/map_viewport/cesium_3d/camera_controller.dart` | 38 | `dim_0: camera.dim_0,` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
@@ -1969,18 +1969,18 @@
 | `app_flutter/test/cesium_3d/camera_collision_test.dart` | 87 | `dim_1: 138.7274,` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
 | `app_flutter/lib/features/map_viewport/cesium_3d/cesium_3d_native.dart` | 26 | `dim_0: camera.dim_0,` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
 | `app_flutter/lib/features/map_viewport/cesium_3d/cesium_3d_native.dart` | 27 | `dim_1: camera.dim_1,` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
-| `skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/logical_ui_validator.py` | 166 | `FORBIDDEN_CHOICE_NODES = {"location-choice", "cartesian", "geometry", "choice", "case"}` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
-| `skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/logical_ui_validator.py` | 227 | `GEODETIC_REGEX = re.compile(r"\b(?:location\|rateOfChange\|geo-location\|geometry\|dim_0\|dim_1\|...` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
+| `crates/verify-baseline/src/checks/lui.rs` | 166 | `FORBIDDEN_CHOICE_NODES = {"location-choice", "cartesian", "geometry", "choice", "case"}` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
+| `crates/verify-baseline/src/checks/lui.rs` | 227 | `GEODETIC_REGEX = re.compile(r"\b(?:location\|rateOfChange\|geo-location\|geometry\|dim_0\|dim_1\|...` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
 | `app_flutter/test/cesium_3d/scroll_zoom_test.dart` | 11 | `dim_0: 35.0,` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
 | `app_flutter/test/cesium_3d/scroll_zoom_test.dart` | 12 | `dim_1: 135.0,` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
 | `app_flutter/lib/features/map_viewport/cesium_3d/native/bridge_bindings.dart` | 12 | `external double dim_0;` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
 | `app_flutter/lib/features/map_viewport/cesium_3d/native/bridge_bindings.dart` | 15 | `external double dim_1;` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
 | `app_flutter/test/cesium_3d/double_click_fly_test.dart` | 10 | `dim_0: 35.0,` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
 | `app_flutter/test/cesium_3d/double_click_fly_test.dart` | 11 | `dim_1: 135.0,` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
-| `skills/spec-orchestrator/parity_auditor/tests/test_logical_ui_validator_issue222.py` | 374 | `Contains dim_0 and dim_1 coordinates.` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
-| `skills/spec-orchestrator/parity_auditor/tests/test_logical_ui_validator_issue222.py` | 388 | `Contains dim_0 and dim_1 coordinates.` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
-| `skills/spec-orchestrator/parity_auditor/tests/test_logical_ui_validator_issue222.py` | 622 | `- **Data Source Binding:** /ietf-hardware:hardware/component/location-choice, /ietf-hardware:hardwar...` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
-| `skills/spec-orchestrator/parity_auditor/tests/test_logical_ui_validator_issue222.py` | 630 | `forbidden_nodes = ["location-choice", "cartesian", "geometry", "my-choice", "my-case"]` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
+| `crates/verify-baseline/src/checks/lui.rs` | 374 | `Contains dim_0 and dim_1 coordinates.` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
+| `crates/verify-baseline/src/checks/lui.rs` | 388 | `Contains dim_0 and dim_1 coordinates.` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
+| `crates/verify-baseline/src/checks/lui.rs` | 622 | `- **Data Source Binding:** /ietf-hardware:hardware/component/location-choice, /ietf-hardware:hardwar...` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
+| `crates/verify-baseline/src/checks/lui.rs` | 630 | `forbidden_nodes = ["location-choice", "cartesian", "geometry", "my-choice", "my-case"]` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
 | `app_flutter/test/cesium_3d/ctrl_drag_test.dart` | 11 | `dim_0: 35.0,` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
 | `app_flutter/test/cesium_3d/ctrl_drag_test.dart` | 12 | `dim_1: 135.0,` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |
 | `app_flutter/test/cesium_3d/ctrl_drag_test.dart` | 48 | `expect(controller.current.dim_0, equals(35.0));` | Rename to domain-agnostic terms (e.g. x/y/z or physical dimensions) |

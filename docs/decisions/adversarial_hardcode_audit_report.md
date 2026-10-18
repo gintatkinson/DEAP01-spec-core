@@ -51,12 +51,12 @@ This report compiles the exhaustive findings from the 5 concurrent adversarial s
 ---
 
 ## 5. Scripts, Verification & Automation Assumptions (Agent 5)
-*   **File**: `skills/spec-orchestrator/scripts/verify_model_coverage.py`
-    *   **YANG Statements Ingestion (Lines 9-37, 44)**: Employs regex parsers strictly looking for YANG syntax (`typedef`, `leaf`, `container`, etc.) and ignores metadata tags like `description`.
+*   **File**: `crates/verify-baseline/src/main.rs`
+    *   **YANG Statements Ingestion (Lines 9-37, 44)**: Employs parsers strictly looking for YANG syntax (`typedef`, `leaf`, `container`, etc.) and ignores metadata tags like `description`.
     *   **Hardcoded GitHub URLs (Line 238)**: Restricts Realization Matrix checks to links starting with `"https://github.com/"`.
     *   **Alistair Cockburn Structure (Lines 197-205, 227-230)**: Validates Use Case documents against hardcoded markdown sections (`## 1. Actors`, `### Required User Stories`, etc.).
     *   **Mermaid Extensions (Lines 134-143, 163-168, 180-190)**: Validates Mermaid blocks based on hardcoded diagram types (`classDiagram`, `sequenceDiagram`, `stateDiagram`).
-*   **File**: `skills/spec-orchestrator/scripts/reconcile_backlog.py`
+*   **File**: `crates/reconcile-backlog/src/main.rs`
     *   **GitHub CLI Integration (Lines 43, 150, 160)**: Leverages `gh` commands directly to list, edit, and close remote issues.
     *   **Rigid Naming & Prefix Stripping (Line 16)**: Strips prefixes like `epic-`, `feat-`, `us-`, `uc-` to match issue titles.
     *   **Issue Labels (Lines 186-193)**: Uses a static dictionary mapping issue titles strictly for labels `"epic"`, `"feature"`, `"user-story"`, and `"use-case"`.

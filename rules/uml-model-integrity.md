@@ -237,8 +237,8 @@ those are.
   modelled element with no functional requirement behind it, which is the coverage gap
   `.pipeline/constitution.md` § *Data Model Integrity* prohibits ("Every schema
   definition, model node, data object ... MUST map to at least one Feature"). Stated here
-  because this file is the normative home for the constraints `cardinality_validator.py`
-  and `uml.py` enforce; it was previously anchored to a heading in `implementation_plan.md`
+  because this file is the normative home for the constraints `./target/release/verify-baseline`
+  (`crates/verify-baseline/src/spec_audit/provenance.rs` and `uml_validator.rs`) enforces; it was previously anchored to a heading in `implementation_plan.md`
   that no longer exists, leaving the rule enforced and undocumented.
 - **SysML Models Must Be Readable**: a SysML v2 model file must exist in the schemas directory and be readable as UTF-8 text for cardinality validation.
 - **SysML Feature Specifications Must Be Readable**: feature specification markdown files must be readable as UTF-8 text when validating SysML model extraction coverage.

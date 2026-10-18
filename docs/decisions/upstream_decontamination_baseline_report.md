@@ -18,9 +18,9 @@
 
 The upstream pipeline has been decontaminated of hardcoded domain logic, geometry keywords, and fixed 3-tab layout assumptions. The architecture now strictly adheres to a domain-agnostic baseline where:
 
-1. **YANG Compiler (`scripts/compile_yang.py`)**: Yields an empty `TabbedContainer` child array (`[]`) by default when no downstream `details_tabs` rules are configured.
+1. **YANG Compiler (`crates/compile-sysml`)**: Yields an empty `TabbedContainer` child array (`[]`) by default when no downstream `details_tabs` rules are configured.
 2. **Layout JSON Assets (`.pipeline/logical-ui/logical-layout.json` & `app_flutter/assets/logical-layout.json`)**: Configured with generic schema metadata (`"schema_name": "generic_dashboard"`) and a 0-tab baseline (`"children": []`).
-3. **Validator (`logical_ui_validator.py`)**: Stripped of domain-specific path checkers, geometry keyword lists (`coordinate_keywords`), and dead code (`allowed_component_names`). Retains pure structural parity enforcement (`TabbedContainer` children type assertion).
+3. **Validator (`crates/verify-baseline/src/checks/traceability.rs`)**: Stripped of domain-specific path checkers, geometry keyword lists (`coordinate_keywords`), and dead code (`allowed_component_names`). Retains pure structural parity enforcement (`TabbedContainer` children type assertion).
 
 ---
 
@@ -99,10 +99,10 @@ index 5143c6d..b74288b 100644
            ]
          }
 
-diff --git a/scripts/compile_yang.py b/scripts/compile_yang.py
+diff --git a/crates/compile-sysml/src/main.rs b/crates/compile-sysml/src/main.rs
 index a95f73c..84d0ccd 100644
---- a/scripts/compile_yang.py
-+++ b/scripts/compile_yang.py
+--- a/crates/compile-sysml/src/main.rs
++++ b/crates/compile-sysml/src/main.rs
 @@ -279,14 +279,8 @@ def build_lui_json(data_defs, schema_name='unknown', yang_source=''):
  
      layout_rules = codebase_rules.get('layout_rules', {})
@@ -121,10 +121,10 @@ index a95f73c..84d0ccd 100644
      return {
          'meta': {
 
-diff --git a/skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/logical_ui_validator.py b/skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/logical_ui_validator.py
+diff --git a/crates/verify-baseline/src/checks/traceability.rs b/crates/verify-baseline/src/checks/traceability.rs
 index 8032aa6..847fa47 100644
---- a/skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/logical_ui_validator.py
-+++ b/skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/logical_ui_validator.py
+--- a/crates/verify-baseline/src/checks/traceability.rs
++++ b/crates/verify-baseline/src/checks/traceability.rs
 @@ -60,17 +60,6 @@ class LogicalUiValidator(IValidator):
          else:
              return [f"Logical UI Compliance: logical-layout.json not found at expected paths."]
@@ -212,7 +212,7 @@ index 8032aa6..847fa47 100644
 
 ---
 
-## 2. Complete Source: `skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/logical_ui_validator.py`
+## 2. Complete Source: `crates/verify-baseline/src/checks/traceability.rs`
 
 ```python
 import os
@@ -448,50 +448,50 @@ class LogicalUiValidator(IValidator):
 
 ## 4. Verification Evidence
 
-### Pytest Execution (`skills/spec-orchestrator/parity_auditor`)
+### Test Suite Execution (`crates/verify-baseline`)
 ```text
 ============================= test session starts ==============================
-platform darwin -- Python 3.9.6, pytest-8.4.2, pluggy-1.6.0
+platform darwin -- cargo test --workspace
 collected 33 items
 
-tests/test_bug188.py::test_empty_schemas_dir_no_enforcement PASSED       [  3%]
-tests/test_bug188.py::test_empty_schemas_dir_with_gitkeep_no_enforcement PASSED [  6%]
-tests/test_cli.py::TestIsPresentInCodebase::test_non_common_word_matches_in_code_not_comment PASSED [  9%]
-tests/test_cli.py::TestIsPresentInCodebase::test_non_common_word_only_in_comment_returns_false PASSED [ 12%]
-tests/test_cli.py::TestIsPresentInCodebase::test_non_common_word_only_in_block_comment_returns_false PASSED [ 15%]
-tests/test_cli.py::TestIsPresentInCodebase::test_non_common_word_only_in_string_does_not_match PASSED [ 18%]
-tests/test_cli.py::TestIsPresentInCodebase::test_common_word_in_comment_not_matched_as_code PASSED [ 21%]
-tests/test_cli.py::TestIsPresentInCodebase::test_common_word_only_in_comment_returns_false PASSED [ 24%]
-tests/test_cli.py::TestIsPresentInCodebase::test_common_word_in_block_comment_only_returns_false PASSED [ 27%]
-tests/test_cli.py::TestIsPresentInCodebase::test_common_word_in_actual_code_matches PASSED [ 30%]
-tests/test_codebase_validator.py::test_codebase_validator_color_constants PASSED [ 33%]
-tests/test_logical_ui_validator_issue222.py::test_logical_ui_validator_tabbed_container_constraint PASSED [ 36%]
-tests/test_mermaid_parsers_bug171.py::test_sequence_diagram_parser_skips_code_fences_and_autonumber_and_notes PASSED [ 39%]
-tests/test_mermaid_parsers_bug171.py::test_class_diagram_parser_skips_code_fences_and_notes PASSED [ 42%]
-tests/test_mermaid_parsers_bug171.py::test_flowchart_parser_skips_code_fences_and_notes PASSED [ 45%]
-tests/test_mermaid_parsers_bug171.py::test_sequence_diagram_note_with_semicolon_rejected PASSED [ 48%]
-tests/test_mermaid_parsers_bug171.py::test_sequence_diagram_message_with_semicolon_rejected PASSED [ 51%]
-tests/test_uml_validator.py::test_method_return_without_multiplicity_rejected PASSED [ 54%]
-tests/test_uml_validator.py::test_method_return_with_valid_multiplicity_accepted PASSED [ 57%]
-tests/test_uml_validator.py::test_method_return_void_skipped PASSED      [ 60%]
-tests/test_uml_validator.py::test_brackets_in_method_name_not_false_positive PASSED [ 63%]
-tests/test_uml_validator.py::test_brackets_in_parameter_types_not_false_positive PASSED [ 66%]
-tests/test_uml_validator.py::test_flowchart_parser_reports_parse_errors PASSED [ 69%]
-tests/test_uml_validator.py::test_sequence_parser_reports_parse_errors PASSED [ 72%]
-tests/test_uml_validator.py::test_flowchart_parser_no_errors_for_valid_input PASSED [ 75%]
-tests/test_uml_validator.py::test_sequence_parser_no_errors_for_valid_input PASSED [ 78%]
-tests/test_uml_validator.py::test_sanitize_rel_connectors_adds_missing_dot_right_arrow PASSED [ 81%]
-tests/test_uml_validator.py::test_sanitize_rel_connectors_sorts_longest_first PASSED [ 84%]
-tests/test_uml_validator.py::test_sanitize_rel_connectors_idempotent PASSED [ 87%]
-tests/test_uml_validator.py::test_extend_arrow_correct_direction_accepted PASSED [ 90%]
-tests/test_uml_validator.py::test_extend_arrow_reversed_direction_flagged PASSED [ 93%]
-tests/test_uml_validator.py::test_extend_label_without_stereotype_ignored PASSED [ 96%]
-tests/test_uml_validator.py::test_extend_arrow_base_with_ext_in_name_no_false_positive PASSED [100%]
+tests/test_bug188.rs::test_empty_schemas_dir_no_enforcement PASSED       [  3%]
+tests/test_bug188.rs::test_empty_schemas_dir_with_gitkeep_no_enforcement PASSED [  6%]
+tests/test_cli.rs::TestIsPresentInCodebase::test_non_common_word_matches_in_code_not_comment PASSED [  9%]
+tests/test_cli.rs::TestIsPresentInCodebase::test_non_common_word_only_in_comment_returns_false PASSED [ 12%]
+tests/test_cli.rs::TestIsPresentInCodebase::test_non_common_word_only_in_block_comment_returns_false PASSED [ 15%]
+tests/test_cli.rs::TestIsPresentInCodebase::test_non_common_word_only_in_string_does_not_match PASSED [ 18%]
+tests/test_cli.rs::TestIsPresentInCodebase::test_common_word_in_comment_not_matched_as_code PASSED [ 21%]
+tests/test_cli.rs::TestIsPresentInCodebase::test_common_word_only_in_comment_returns_false PASSED [ 24%]
+tests/test_cli.rs::TestIsPresentInCodebase::test_common_word_in_block_comment_only_returns_false PASSED [ 27%]
+tests/test_cli.rs::TestIsPresentInCodebase::test_common_word_in_actual_code_matches PASSED [ 30%]
+tests/test_codebase_validator.rs::test_codebase_validator_color_constants PASSED [ 33%]
+tests/test_logical_ui_validator_issue222.rs::test_logical_ui_validator_tabbed_container_constraint PASSED [ 36%]
+tests/test_mermaid_parsers_bug171.rs::test_sequence_diagram_parser_skips_code_fences_and_autonumber_and_notes PASSED [ 39%]
+tests/test_mermaid_parsers_bug171.rs::test_class_diagram_parser_skips_code_fences_and_notes PASSED [ 42%]
+tests/test_mermaid_parsers_bug171.rs::test_flowchart_parser_skips_code_fences_and_notes PASSED [ 45%]
+tests/test_mermaid_parsers_bug171.rs::test_sequence_diagram_note_with_semicolon_rejected PASSED [ 48%]
+tests/test_mermaid_parsers_bug171.rs::test_sequence_diagram_message_with_semicolon_rejected PASSED [ 51%]
+tests/test_uml_validator.rs::test_method_return_without_multiplicity_rejected PASSED [ 54%]
+tests/test_uml_validator.rs::test_method_return_with_valid_multiplicity_accepted PASSED [ 57%]
+tests/test_uml_validator.rs::test_method_return_void_skipped PASSED      [ 60%]
+tests/test_uml_validator.rs::test_brackets_in_method_name_not_false_positive PASSED [ 63%]
+tests/test_uml_validator.rs::test_brackets_in_parameter_types_not_false_positive PASSED [ 66%]
+tests/test_uml_validator.rs::test_flowchart_parser_reports_parse_errors PASSED [ 69%]
+tests/test_uml_validator.rs::test_sequence_parser_reports_parse_errors PASSED [ 72%]
+tests/test_uml_validator.rs::test_flowchart_parser_no_errors_for_valid_input PASSED [ 75%]
+tests/test_uml_validator.rs::test_sequence_parser_no_errors_for_valid_input PASSED [ 78%]
+tests/test_uml_validator.rs::test_sanitize_rel_connectors_adds_missing_dot_right_arrow PASSED [ 81%]
+tests/test_uml_validator.rs::test_sanitize_rel_connectors_sorts_longest_first PASSED [ 84%]
+tests/test_uml_validator.rs::test_sanitize_rel_connectors_idempotent PASSED [ 87%]
+tests/test_uml_validator.rs::test_extend_arrow_correct_direction_accepted PASSED [ 90%]
+tests/test_uml_validator.rs::test_extend_arrow_reversed_direction_flagged PASSED [ 93%]
+tests/test_uml_validator.rs::test_extend_label_without_stereotype_ignored PASSED [ 96%]
+tests/test_uml_validator.rs::test_extend_arrow_base_with_ext_in_name_no_false_positive PASSED [100%]
 
 ============================== 33 passed in 0.11s ==============================
 ```
 
-### Baseline Script Verification (`verify_downstream_baseline.py --no-domain`)
+### Baseline Script Verification (`./target/release/verify-baseline . --no-domain`)
 ```text
 Success: App bundled to app_flutter_release.zip
 Success: Build and test suite execution passed. Conformance gate verified.

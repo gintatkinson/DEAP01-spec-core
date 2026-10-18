@@ -159,7 +159,7 @@ Use Cases define formal operational capabilities (`use case def`), subject bound
 
 - **Markdown-First Parsing**: Tooling, validators, and issue trackers that ingest specification metadata MUST parse the initial CommonMark table directly.
 - **Regex & AST Extraction**: Automated tools can extract key-value pairs from lines matching `\|\s*\*{0,2}(?P<key>[^|*]+?)\*{0,2}\s*\|\s*(?P<val>[^|]+?)\s*\|`.
-- **Bidirectional Traceability**: The `Specification Source` relative path allows automated integrity scanners (e.g., `link_validator.py` and document reference tests) to verify that the source SysML file exists and contains the referenced containers.
+- **Bidirectional Traceability**: The `Specification Source` relative path allows automated integrity scanners (e.g., `./target/release/verify-baseline` and document reference tests) to verify that the source SysML file exists and contains the referenced containers.
 
 ## Why
 

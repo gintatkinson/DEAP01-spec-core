@@ -44,14 +44,14 @@ The following table maps the logical UML model elements of the decompiler to the
 ### 3.1. Model Coverage Validation
 To verify that the generated specifications satisfy the linter's coverage and semantic rules, run the spec verification gate:
 ```bash
-python3 skills/spec-orchestrator/scripts/verify_model_coverage.py --spec-only
+./target/release/verify-baseline . --spec-only
 ```
-- **Acceptance Criteria**: The script must parse the updated feature specs under `docs/features/` and exit with code `0`, confirming that no syntax errors, unclosed Mermaid fences, or invalid types are present.
+- **Acceptance Criteria**: The binary must parse the updated feature specs under `docs/features/` and exit with code `0`, confirming that no syntax errors, unclosed Mermaid fences, or invalid types are present.
 
 ### 3.2. Automated Testing Matrix
 Execute the standard test suite to verify decompiler logic:
 ```bash
-python3 -m pytest tests/
+cargo test --workspace
 ```
 - **Test cases to validate**:
   1. `test_utility_module_suppression`: Asserts that modules with only helper types are registered in `SharedTypeRegistry` and generate `0` Epics.

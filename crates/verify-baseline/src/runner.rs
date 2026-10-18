@@ -1,4 +1,34 @@
-//! Baseline verification runner orchestrating checks 10 through 34 and platform gates.
+//! Baseline verification runner orchestrating checks 10 through 36 and platform gates.
+//!
+//! ## 1. Safety Intent & Regulatory Scope
+//! Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C baseline
+//! verification orchestration standards. Executes Checks 10 through 36 sequentially in fail-closed
+//! order and emits structured 5-Whys defect dossiers upon any verification failure.
+//!
+//! ## 2. Invariants & Mathematical Properties
+//! - Sequential Gate Monotonicity: Returns `Ok(())` if and only if every enabled check (`10..=36`)
+//!   and platform/specification audit passes without error.
+//! - Dossier Persistence on Failure: Every failing gate persists a timestamped JSON and Markdown
+//!   `DefectDossier` under `.pipeline/defects/` prior to returning `Err(())`.
+//!
+//! ## 3. Preconditions
+//! - Caller supplies an initialized `BaselineOptions` structure with an accessible `destination` directory.
+//!
+//! ## 4. Postconditions
+//! - Returns `Ok(())` when all baseline checks pass, or `Err(())` immediately upon the first failing gate.
+//!
+//! ## 5. Algorithmic Complexity Bounds
+//! - Time Complexity: O(F * L) bounded by repository directory traversal and per-file check complexity.
+//! - Space Complexity: O(F + V) for discovered file manifests and diagnostic vectors.
+//!
+//! ## 6. Failure Modes & Fault Tolerance
+//! - Interface: Unreadable paths or check failures emit explicit `ERROR:` lines to `stderr` and return `Err(())`.
+//! - State: Stateless runner execution parameterized solely by `BaselineOptions`.
+//! - Action: Fails closed on the first violated gate without skipping mandatory checks.
+//! - Resource: Bounded memory across sequential gate invocations.
+//!
+//! ## 7. Realization & Traceability
+//! Realises: [REQ-VERIFY-BASELINE-RUNNER], [DO-330-TQL-4-RUNNER]
 
 use crate::checks::*;
 use crate::spec_audit::{run_spec_audit, SpecAuditOptions};
@@ -10,7 +40,35 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
-/// Configuration options for the baseline verification runner.
+/// Configuration options for the baseline verification runner (`BaselineOptions`).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and DO-330 TQL-4 tool configuration management requirements.
+/// Encapsulates all CLI and programmatic flags governing `verify_baseline::runner::run`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - `destination: PathBuf` specifies the workspace or platform root directory to audit.
+/// - Boolean flags (`no_domain`, `strict`, `allow_missing_specs`, `spec_only`) deterministically
+///   partition strict vs. permissive specification audit modes without disabling structural gates `10..=36`.
+///
+/// ## 3. Preconditions
+/// - Constructed by CLI argument parsing (`main.rs`) or integration test harnesses with a valid `destination`.
+///
+/// ## 4. Postconditions
+/// - Provides immutable configuration parameters to `run(&BaselineOptions)`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1) field access.
+/// - Space Complexity: O(P) where P is the byte length of configured path and filter strings.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Strongly typed fields eliminate untyped string flag misinterpretation.
+/// - State: Value semantics (`Clone`, `Debug`) with no interior mutability.
+/// - Action: Passed by shared reference `&BaselineOptions` into `run`.
+/// - Resource: Bounded stack and small heap string footprint.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-VERIFY-BASELINE-OPTIONS]
 #[derive(Debug, Clone)]
 pub struct BaselineOptions {
     pub destination: PathBuf,
@@ -24,8 +82,35 @@ pub struct BaselineOptions {
     pub gate: Option<String>,
 }
 
-/// Detect if repository has clean landing zones (clean schema or clean specification landing zones).
-/// Detect if the workspace contains concrete specification markdown files.
+/// Detects whether `repo_root` contains concrete specification markdown files under `docs/`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A specification presence detection (`has_concrete_specifications`).
+/// Determines whether `docs/epics`, `docs/features`, `docs/user-stories`, or `docs/use-cases`
+/// contain concrete `.md` specifications requiring full specification quality auditing.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Ignores `.gitkeep`, `README.md`, dotfiles, and directories listed in `EXCLUDED_DIRS`.
+/// - Returns `true` if and only if at least one concrete `.md` file exists in the four specification zones.
+///
+/// ## 3. Preconditions
+/// - `repo_root: &Path` is a valid workspace directory path.
+///
+/// ## 4. Postconditions
+/// - Returns `true` when concrete specification markdown files exist, or `false` when landing zones are empty.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(E) where E is the number of directory entries under the 4 specification zones.
+/// - Space Complexity: O(D) where D is the maximum directory tree depth.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Non-existent specification zone directories are skipped cleanly without panicking.
+/// - State: Read-only filesystem inspection with zero state mutation.
+/// - Action: Short-circuits and returns `true` on the first discovered concrete `.md` specification file.
+/// - Resource: Bounded `WalkDir` iterator state.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-RUNNER-HAS-CONCRETE-SPECS]
 pub fn has_concrete_specifications(repo_root: &Path) -> bool {
     let spec_zones = [
         repo_root.join("docs").join("epics"),
@@ -36,18 +121,18 @@ pub fn has_concrete_specifications(repo_root: &Path) -> bool {
 
     for szone in &spec_zones {
         if szone.is_dir() {
-            for entry in WalkDir::new(szone)
-                .into_iter()
-                .filter_entry(|e| {
-                    if e.file_type().is_dir() {
-                        let name = e.file_name().to_string_lossy();
-                        !EXCLUDED_DIRS.iter().any(|ex| name == ex)
-                    } else {
-                        true
-                    }
-                })
-                .filter_map(|e| e.ok())
-            {
+            for entry_res in WalkDir::new(szone).into_iter().filter_entry(|e| {
+                if e.file_type().is_dir() {
+                    let name = e.file_name().to_string_lossy();
+                    !EXCLUDED_DIRS.iter().any(|ex| name == ex)
+                } else {
+                    true
+                }
+            }) {
+                let entry = match entry_res {
+                    Ok(val) => val,
+                    Err(_) => continue,
+                };
                 if entry.file_type().is_file() {
                     let fname = entry.file_name().to_string_lossy();
                     if fname.ends_with(".md")
@@ -64,24 +149,53 @@ pub fn has_concrete_specifications(repo_root: &Path) -> bool {
     false
 }
 
-/// Detect if repository has clean landing zones (clean schema or clean specification landing zones).
+/// Detects whether `repo_root` has clean schema or specification landing zones (`has_clean_landing_zones`).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A M2/M1 template landing-zone detection rules.
+/// Identifies whether `schema/` or the specification landing zones are still in their unpopulated
+/// template state (containing only `.gitkeep` or `README.md`).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - `schema_clean` is `true` iff `schema/` contains zero files other than `.gitkeep`, `README.md`, or dotfiles.
+/// - `specs_clean` is `!has_concrete_specifications(repo_root)`.
+/// - Returns `schema_clean || specs_clean`.
+///
+/// ## 3. Preconditions
+/// - `repo_root: &Path` references a valid workspace directory.
+///
+/// ## 4. Postconditions
+/// - Returns `true` when either the schema landing zone or specification landing zones are clean.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(S + E) where S is entry count in `schema/` and E is entry count in spec zones.
+/// - Space Complexity: O(D) bounded by directory traversal depth.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Safely handles absent `schema/` or `docs/` directories.
+/// - State: Pure read-only filesystem query.
+/// - Action: Breaks early as soon as a concrete file is found in `schema/`.
+/// - Resource: O(1) auxiliary variables plus `WalkDir` stack.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-RUNNER-CLEAN-LANDING-ZONES]
 pub fn has_clean_landing_zones(repo_root: &Path) -> bool {
     // 1. Schema landing zone check
     let schema_dir = repo_root.join("schema");
     let mut schema_clean = true;
     if schema_dir.is_dir() {
-        for entry in WalkDir::new(&schema_dir)
-            .into_iter()
-            .filter_entry(|e| {
-                if e.file_type().is_dir() {
-                    let name = e.file_name().to_string_lossy();
-                    !EXCLUDED_DIRS.iter().any(|ex| name == ex)
-                } else {
-                    true
-                }
-            })
-            .filter_map(|e| e.ok())
-        {
+        for entry_res in WalkDir::new(&schema_dir).into_iter().filter_entry(|e| {
+            if e.file_type().is_dir() {
+                let name = e.file_name().to_string_lossy();
+                !EXCLUDED_DIRS.iter().any(|ex| name == ex)
+            } else {
+                true
+            }
+        }) {
+            let entry = match entry_res {
+                Ok(val) => val,
+                Err(_) => continue,
+            };
             if entry.file_type().is_file() {
                 let fname = entry.file_name().to_string_lossy();
                 if fname != ".gitkeep" && fname != "README.md" && !fname.starts_with('.') {
@@ -97,10 +211,46 @@ pub fn has_clean_landing_zones(repo_root: &Path) -> bool {
     schema_clean || specs_clean
 }
 
-/// Write a structured defect dossier to .pipeline/defects/ on verification failure.
+/// Persists a structured 5-Whys `DefectDossier` to `.pipeline/defects/` on baseline check failure.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ECSS-E-ST-40C non-conformance reporting (`write_defect_dossier`).
+/// Synthesizes and writes both JSON (`defect_<ts>.json`) and Markdown (`defect_<ts>.md`) failure
+/// dossiers into `.pipeline/defects/` whenever a baseline verification check fails.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Populates all 5 causal `WhyEntry` records, `DiagnosticSeverity::Critical`, `check_name`, and `errors`.
+/// - Emits paired JSON and Markdown representations under `repo_root/.pipeline/defects/`.
+///
+/// ## 3. Preconditions
+/// - `repo_root: &Path` is the target workspace directory.
+/// - `check_name: &str` identifies the failing baseline check (`Check 10`..`Check 36`).
+/// - `errors: &[String]` contains one or more diagnostic violation messages.
+///
+/// ## 4. Postconditions
+/// - Creates `.pipeline/defects/` if absent and writes the serialized `DefectDossier` artifacts.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(M) where M is the total byte length of `errors`.
+/// - Space Complexity: O(M) for the formatted `DefectDossier` JSON and Markdown buffers.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Logs an explicit warning to `stderr` if directory creation or file persistence fails.
+/// - State: Modifies only `.pipeline/defects/` on disk.
+/// - Action: Non-panicking error handling across serialization and file writes.
+/// - Resource: Bounded by diagnostic message slice size.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-RUNNER-WRITE-DEFECT-DOSSIER]
 pub fn write_defect_dossier(repo_root: &Path, check_name: &str, errors: &[String]) {
     let defects_dir = repo_root.join(".pipeline").join("defects");
-    let _ = fs::create_dir_all(&defects_dir);
+    if let Err(err) = fs::create_dir_all(&defects_dir) {
+        eprintln!(
+            "Warning: Failed to create defects directory '{}': {}",
+            defects_dir.display(),
+            err
+        );
+    }
 
     let ts = Utc::now().format("%Y%m%d_%H%M%S").to_string();
     let err_summary = errors.join("\n- ");
@@ -143,12 +293,54 @@ pub fn write_defect_dossier(repo_root: &Path, check_name: &str, errors: &[String
     let md_path = defects_dir.join(format!("defect_{}.md", ts));
 
     if let Ok(json_str) = dossier.to_json() {
-        let _ = fs::write(&json_path, json_str);
+        if let Err(err) = fs::write(&json_path, json_str) {
+            eprintln!(
+                "Warning: Failed to write JSON defect dossier '{}': {}",
+                json_path.display(),
+                err
+            );
+        }
     }
-    let _ = fs::write(&md_path, dossier.to_markdown());
+    if let Err(err) = fs::write(&md_path, dossier.to_markdown()) {
+        eprintln!(
+            "Warning: Failed to write Markdown defect dossier '{}': {}",
+            md_path.display(),
+            err
+        );
+    }
 }
 
-/// Execute all baseline verification checks (Checks 10 through 34) and platform checks.
+/// Executes all baseline verification checks (Checks 10 through 36), platform gates, and spec audits.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, and ISO 26262 ASIL D baseline verification rules.
+/// Orchestrates Checks 10 through 36 (including Check 36 per-item 7-section safety docstring gate),
+/// Flutter/React platform baseline file checks, and `run_spec_audit` according to `options`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Strict Gate Ordering: Executes Checks 10..=36 in deterministic ascending order; halts immediately
+///   with `Err(())` and writes a `DefectDossier` if any check returns `Err`.
+/// - Environment Override: Honors `options.strict` or `DEAP_STRICT_BASELINE=1|true|yes`.
+///
+/// ## 3. Preconditions
+/// - `options: &BaselineOptions` specifies an existing `destination` path and valid audit flags.
+///
+/// ## 4. Postconditions
+/// - Returns `Ok(())` if and only if all enabled checks (`10..=36`), platform checks, and spec audits succeed.
+/// - Returns `Err(())` and persists a defect dossier on any check violation.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(F * L) across all repository files F and average line count L.
+/// - Space Complexity: O(F + V) for file manifests and diagnostic buffers.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Canonicalizes `options.destination` with graceful fallback to the raw path.
+/// - State: Stateless execution writing only diagnostic telemetry and `.pipeline/defects/` dossiers on error.
+/// - Action: Every check failure returns `Err(())` immediately (fail-closed).
+/// - Resource: Sequential gate execution bounds peak memory usage.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-RUNNER-EXECUTE-ALL-CHECKS]
 #[allow(clippy::result_unit_err)]
 pub fn run(options: &BaselineOptions) -> Result<(), ()> {
     let repo_root = options
@@ -673,6 +865,24 @@ pub fn run(options: &BaselineOptions) -> Result<(), ()> {
         return Err(());
     }
     println!("Success: Check 35 verified (Handoff & Backlog Integrity passed).");
+
+    // Check 36: Per-Item 7-Section Safety Docstring Completeness Gate
+    if let Err(errs) = check_docstring_completeness(&repo_root) {
+        eprintln!(
+            "ERROR: Check 36 failed (Per-Item 7-Section Safety Docstring Completeness Gate violated):"
+        );
+        for e in &errs {
+            eprintln!("  - {}", e);
+        }
+        write_defect_dossier(
+            &repo_root,
+            "Check 36 (Per-Item 7-Section Safety Docstring Completeness Gate)",
+            &errs,
+        );
+        return Err(());
+    }
+    println!("Success: Check 36 verified (Per-Item 7-Section Safety Docstring Completeness Gate passed -- 100% per-item 7-section docstrings verified across Rust and Dart sources).");
+
 
     // Platform Checks
     let dest = &options.destination;

@@ -54,8 +54,8 @@ source.
 
 The deletion had a dedicated gate, which was failing:
 
-- `tests/test_upstream_profile_containment.py::test_profile_exists_in_upstream_dir`
-- `tests/test_upstream_profile_containment.py::test_profile_declares_upstream_only_scope`
+- `crates/verify-baseline/tests/upstream_profile_containment_tests.rs::test_profile_exists_in_upstream_dir`
+- `crates/verify-baseline/tests/upstream_profile_containment_tests.rs::test_profile_declares_upstream_only_scope`
 
 Suite before repair: **13 failed, 532 passed, 18 skipped**.
 Suite after repair: **11 failed, 536 passed, 16 skipped**.
@@ -117,14 +117,14 @@ Ordering constraints inside the block are pinned by two pre-existing tests, both
 still pass after the edit:
 
 ```
-.venv/bin/python -m pytest tests/test_upstream_profile_containment.py tests/test_label_bootstrap_issue323.py -q
+cargo test --test upstream_profile_containment_tests --test label_bootstrap_issue323_tests -q
 12 passed
 ```
 
 Full suite:
 
 ```
-.venv/bin/python -m pytest tests/ -q
+cargo test --workspace -q
 11 failed, 536 passed, 16 skipped
 ```
 
@@ -138,9 +138,9 @@ The 11 are the documented pre-existing set; no new failure was introduced.
 | Installer guard (setup guide) | `install-guide.md` | First statement of § 2 Direct Copy Installation Workflow |
 | Restored artefact | `.pipeline/upstream/pipeline-tooling.md` | 197 lines, `scope: upstream-only` frontmatter |
 | Restored artefact | `.gitignore` | 34 lines, duplicate block removed |
-| Deletion gate | `tests/test_upstream_profile_containment.py` | `test_profile_exists_in_upstream_dir`, `test_profile_declares_upstream_only_scope` |
-| Block-ordering gate | `tests/test_upstream_profile_containment.py` | `test_readme_direct_copy_deletes_the_upstream_dir`, `test_readme_deletion_comes_after_the_pipeline_copy` |
-| Block-ordering gate | `tests/test_label_bootstrap_issue323.py` | Asserts `cp -RP ./.tmp-pipeline/skills` precedes the bootstrap invocation |
+| Deletion gate | `crates/verify-baseline/tests/upstream_profile_containment_tests.rs` | `test_profile_exists_in_upstream_dir`, `test_profile_declares_upstream_only_scope` |
+| Block-ordering gate | `crates/verify-baseline/tests/upstream_profile_containment_tests.rs` | `test_readme_direct_copy_deletes_the_upstream_dir`, `test_readme_deletion_comes_after_the_pipeline_copy` |
+| Block-ordering gate | `crates/verify-baseline/tests/label_bootstrap_issue323_tests.rs` | Asserts `cp -RP ./.tmp-pipeline/skills` precedes the bootstrap invocation |
 
 ## 7. Residual Risk
 
@@ -153,8 +153,8 @@ The 11 are the documented pre-existing set; no new failure was introduced.
 - **The guard is advisory if the block is not pasted whole.** An operator running the
   individual lines by hand skips it.
 - **Eleven pre-existing test failures remain**, concentrated in
-  `tests/test_rule_contracts.py`, `tests/test_title_namespacing_issue317.py` and
-  `tests/test_validator_findings_migration_issue304.py`. Unrelated to this work and
+  `crates/verify-baseline/tests/rule_contracts_tests.rs`, `crates/verify-baseline/tests/title_namespacing_issue317_tests.rs` and
+  `crates/verify-baseline/tests/validator_findings_migration_issue304_tests.rs`. Unrelated to this work and
   untouched by it.
 
 ## 8. Source References

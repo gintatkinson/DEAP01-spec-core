@@ -116,6 +116,40 @@ pub fn translate_yang(content: &str, file_name: &str) -> Result<PackageDef, Stri
     translators::yang::YangTranslator::new().translate(content, file_name)
 }
 
+/// Translates a single Rust or Dart source file into a canonical SysML v2 `PackageDef`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and FEAT-42 source-code AST ingestion (`translate_code`).
+/// Invokes [`translators::code::CodeTranslator::translate`] to parse source declarations
+/// without regular expressions and lower them into a `PackageDef`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Maps classes/structs to `PartDef`, fields to `AttributeDef`, callbacks to `PortDef`,
+///   and functions/methods to `ActionDef`.
+///
+/// ## 3. Preconditions
+/// - `content: &str` is valid UTF-8 Rust or Dart source code.
+/// - `file_name: &str` is the source filename or package identifier.
+///
+/// ## 4. Postconditions
+/// - Returns `Ok(PackageDef)` on clean parse and lowering, or `Err(String)` on syntax error.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) where N is `content.len()`.
+/// - Space Complexity: O(N) proportional to extracted AST elements.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Propagates syntax/delimiter errors with `line:col` coordinates.
+/// - State: Pure functional delegation.
+/// - Action: Never panics on malformed source code.
+/// - Resource: Bounded by single file buffer size.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYSML-INGEST-CORE/translate_code]
+pub fn translate_code(content: &str, file_name: &str) -> Result<PackageDef, String> {
+    translators::code::CodeTranslator::new().translate(content, file_name)
+}
+
 /// Filters AST nodes to target metamodel scope and projects negative invariants.
 ///
 /// ## 1. Safety Intent & Regulatory Scope

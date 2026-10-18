@@ -22,22 +22,22 @@ Issue #44 introduces the **Downstream Baseline Seeding and Compliance Framework*
 
 Two key utility scripts were added to realize Feature 44:
 
-### 2.1. [bootstrap_downstream.py](scripts/bootstrap_downstream.py)
-This script initializes or updates a downstream application (either `react` or `flutter`) by copying baseline template files from the repository's root template folders (`web_react` or `app_flutter`) to a specified destination directory.
+### 2.1. [bootstrap-downstream](crates/verify-baseline/src/main.rs)
+This tool initializes or updates a downstream application (either `react` or `flutter`) by copying baseline template files from the repository's root template folders (`web_react` or `app_flutter`) to a specified destination directory.
 - **Preservation Logic**: It surgically avoids overwriting critical working state files and folders at the destination, including `.git`, `node_modules`, `.dart_tool`, `package-lock.json`, `pubspec.lock`, and other package-manager lockfiles.
 - **Usage**:
   ```bash
-  python3 scripts/bootstrap_downstream.py <platform> <destination_path>
+  ./target/release/verify-baseline --bootstrap <platform> <destination_path>
   ```
 
-### 2.2. [verify_downstream_baseline.py](scripts/verify_downstream_baseline.py)
+### 2.2. [verify-baseline](crates/verify-baseline/src/main.rs)
 This compliance validator asserts that a downstream project matches all baseline and structural requirements:
 - **Baseline Check**: Asserts that all essential files exist (e.g., `package.json`, `tsconfig.json`, `vite.config.ts`, `src/types.ts` for React; `pubspec.yaml`, `analysis_options.yaml`, `lib/domain/types.dart`, `lib/domain/validation.dart` for Flutter).
 - **Type Compatibility**: Programmatically parses the types file (`types.ts` or `types.dart`) to ensure the presence of all 9 mandated domain classes/interfaces.
 - **Build and Test Verification**: Triggers the package manager to fetch dependencies and executes build/compilation and test suites (`npm run build` for React; `flutter pub get && flutter analyze && flutter test` for Flutter).
 - **Usage**:
   ```bash
-  python3 scripts/verify_downstream_baseline.py <platform> <destination_path>
+  ./target/release/verify-baseline <destination_path>
   ```
 
 ---
@@ -49,8 +49,8 @@ To make baseline verification a mandatory quality gate for downstream applicatio
 ### Section 4.5: Downstream Conformance Gates
 The following rules were formally integrated under Section 4:
 - Prior to integrating any downstream application implementation, the project **MUST** be bootstrapped and verified.
-- The downstream project must be initialized using the [bootstrap_downstream.py](scripts/bootstrap_downstream.py) script.
-- The baseline conformance must be verified using the [verify_downstream_baseline.py](scripts/verify_downstream_baseline.py) script, which asserts that all baseline files are present, validates type compatibility with the mandated domain classes, and compiles/tests the project with a clean exit code.
+- The downstream project must be initialized using the [bootstrap-downstream](crates/verify-baseline/src/main.rs) tool.
+- The baseline conformance must be verified using the [verify-baseline](crates/verify-baseline/src/main.rs) binary, which asserts that all baseline files are present, validates type compatibility with the mandated domain classes, and compiles/tests the project with a clean exit code.
 
 Additionally, **Section 5 (Forbidden Practices)** was updated to forbid deleting, disabling, or modifying baseline files, layout splitters, playback timelines, or focus-loss validation forms in downstream projects, as they form the core compliance and verification framework.
 
@@ -62,8 +62,8 @@ The following table maps the feature components to their corresponding files, cl
 
 | UML Element | Realization Tag | File Path | Properties & Realized Behavior |
 | :--- | :--- | :--- | :--- |
-| `PersistenceBootstrap` | `@realizes UML::PersistenceBootstrap` | [bootstrap_downstream.py](scripts/bootstrap_downstream.py) | Copies core template components and structures into the target project workspace. |
-| `ComplianceValidator` | `@realizes UML::ComplianceValidator` | [verify_downstream_baseline.py](scripts/verify_downstream_baseline.py) | Validates baseline file existence, checks for mandated class declarations, and verifies build/test cycles. |
+| `PersistenceBootstrap` | `@realizes UML::PersistenceBootstrap` | [main.rs](crates/verify-baseline/src/main.rs) | Copies core template components and structures into the target project workspace. |
+| `ComplianceValidator` | `@realizes UML::ComplianceValidator` | [main.rs](crates/verify-baseline/src/main.rs) | Validates baseline file existence, checks for mandated class declarations, and verifies build/test cycles. |
 | `RateOfChange` | `@realizes UML::RateOfChange` | [types.ts](web_react/src/types.ts) | Interface defining 3D rateOfChange vectors: `vNorth`, `vEast`, `vUp`. |
 | | `@realizes UML::RateOfChange` | [types.dart](app_flutter/lib/domain/types.dart) | Class representing 3D rateOfChange vectors with `fromJson` and `toJson` serialization. |
 | `TemporalContext` | `@realizes UML::TemporalContext` | [types.ts](web_react/src/types.ts) | Interface combining `timestamp`, `validUntil`, and `rateOfChange`. |
@@ -87,11 +87,11 @@ The following table maps the feature components to their corresponding files, cl
 
 ## 5. Verification Results
 
-Both downstream platforms were verified successfully using the [verify_downstream_baseline.py](scripts/verify_downstream_baseline.py) gate.
+Both downstream platforms were verified successfully using the [verify-baseline](crates/verify-baseline/src/main.rs) gate.
 
 ### 5.1. React Baseline Verification
 ```bash
-python3 scripts/verify_downstream_baseline.py react web_react
+./target/release/verify-baseline web_react
 ```
 **Output Trace:**
 ```text
@@ -117,7 +117,7 @@ Success: Build and test suite execution passed. Conformance gate verified.
 
 ### 5.2. Flutter Baseline Verification
 ```bash
-python3 scripts/verify_downstream_baseline.py flutter app_flutter
+./target/release/verify-baseline app_flutter
 ```
 **Output Trace:**
 ```text

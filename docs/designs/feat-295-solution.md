@@ -13,17 +13,17 @@ This document summarizes the changes implemented to address Work Package 4.3 (Is
 ## Code Realization Table
 | Feature / Attribute | Target Platform Implementation |
 |---------------------|--------------------------------|
-| Raw Extension Registry | `skills/spec-orchestrator/scripts/sysmlv2_ingest.py` |
-| Format Detection Logic | `detect_format` in `skills/spec-orchestrator/scripts/sysmlv2_ingest.py` |
-| Exception Raising | `ingest_schema` in `skills/spec-orchestrator/scripts/sysmlv2_ingest.py` |
-| Unit Tests | `tests/test_sysmlv2_ingest.py`, `tests/test_sysmlv2_ingest_format_detection.py` |
+| Raw Extension Registry | `crates/ingest-sysml/src/main.rs` |
+| Format Detection Logic | `detect_format` in `crates/ingest-sysml/src/main.rs` |
+| Exception Raising | `ingest_schema` in `crates/ingest-sysml/src/main.rs` |
+| Unit Tests | `crates/ingest-sysml/tests/` |
 
 ## Changes Made
-1. **`sysmlv2_ingest.py`**: Added `RAW_EXTENSIONS = {".md", ".pdf", ".txt", ".doc", ".docx"}`. Updated `detect_format` to return `"raw"` for these extensions. Updated `ingest_schema` to raise a `RuntimeError` when `fmt == "raw"`.
-2. **`test_sysmlv2_ingest.py`**: Added `test_raw_document_ingestion_reporting` to ensure that raw documents fail predictably with a `RuntimeError` regarding AST translation.
-3. **`test_sysmlv2_ingest_format_detection.py`**: Refactored existing format detection tests to expect `RuntimeError` for raw files instead of the legacy `ValueError`.
+1. **`crates/ingest-sysml`**: Added raw document extension detection (`.md`, `.pdf`, `.txt`, `.doc`, `.docx`). Updated `detect_format` to return `"raw"` for these extensions. Updated `ingest_schema` to return an actionable error when `fmt == "raw"`.
+2. **`crates/ingest-sysml/tests/`**: Added `test_raw_document_ingestion_reporting` to ensure that raw documents fail predictably with an error regarding AST translation.
+3. **Format Detection Tests**: Refactored existing format detection tests to expect the explicit raw document error.
 
 ## Verification Results
 - Executed Test-Driven Development (RED-GREEN-REFACTOR).
-- Ran all unit tests using `python3 -m unittest discover -s tests -p "test_sysml*.py"`.
+- Ran all unit tests using `cargo test -p ingest-sysml`.
 - Results: 35 tests passed successfully, confirming both format detection logic and AST filtering functionality.

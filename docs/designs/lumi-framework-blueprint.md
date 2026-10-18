@@ -33,7 +33,7 @@ The **LUMI (Logical User & Machine Interface)** Framework is the core architectu
   2. *Logic & Safety State Management*: Safety statecharts, validators, or ViewModels.
   3. *Display & Actuator Interface Binding*: Concrete UI widget, API endpoint, or register buffer mapping.
 - **Formal Grammar Compliance**: All interface definitions within Feature specifications strictly conform to an Extended Backus-Naur Form (EBNF) grammar.
-- **Static Parity Auditing**: Enforced automatically offline by `logical_ui_validator.py` during build and CI pipeline runs.
+- **Static Parity Auditing**: Enforced automatically offline by `crates/verify-baseline/src/checks/lui.rs` during build and CI pipeline runs.
 
 ---
 
@@ -203,7 +203,7 @@ sequenceDiagram
     Coordinator->>SpecWorker: Dispatch micro-task (Scope: 1 Feature specification)
     SpecWorker->>SpecWorker: Read active SKILL.md (spec-orchestrator)
     SpecWorker->>SpecWorker: Generate Feature spec with frontmatter & LUMI bindings section
-    SpecWorker->>ParityAuditor: Execute logical_ui_validator.py against feature spec
+    SpecWorker->>ParityAuditor: Execute ./target/release/verify-baseline against feature spec
     ParityAuditor->>ParityAuditor: Validate YAML frontmatter (interface_type / interface_types)
     ParityAuditor->>ParityAuditor: Parse ## Logical UI & Interface Bindings via EBNF grammar
     ParityAuditor->>ParityAuditor: Check canonical component dictionary compliance
@@ -215,7 +215,7 @@ sequenceDiagram
     else Validation Failed
         ParityAuditor-->>SpecWorker: Return structured parity errors with line numbers
         SpecWorker->>SpecWorker: Apply remediation to Feature spec markdown
-        SpecWorker->>ParityAuditor: Re-execute logical_ui_validator.py
+        SpecWorker->>ParityAuditor: Re-execute ./target/release/verify-baseline
     end
 ```
 
@@ -452,9 +452,9 @@ NL                  ::= "\n" ;
 
 ---
 
-## 5. Parity Auditor Validator Algorithm (`logical_ui_validator.py`)
+## 5. Parity Auditor Validator Algorithm (`crates/verify-baseline/src/checks/lui.rs`)
 
-The `LogicalUiValidator` in `skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/logical_ui_validator.py` evaluates all repository Feature specification markdown files against LUMI standards.
+The `LogicalUiValidator` in `crates/verify-baseline/src/checks/lui.rs` evaluates all repository Feature specification markdown files against LUMI standards.
 
 ### 5.1 Parity Audit Workflow Algorithm
 

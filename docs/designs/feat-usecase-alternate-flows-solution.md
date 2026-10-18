@@ -38,9 +38,9 @@ Previously, the linter only verified a static floor (typically 2) for Alternate/
 We have redesigned the linter to verify that the number of Alternate/Exception flows in a Use Case matches or exceeds the number of schema validation constraints defined in its referenced features.
 
 ### Linter Enhancements
-* **Target File**: [uml.py](../../skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/uml.py)
+* **Target File**: [uml.rs](../../crates/verify-baseline/src/checks/uml.rs)
 * **Changes**:
-  1. **Flow Parsing with Bullet Lookahead**: Modified the alternate flow splitter regex to support both `-` and `*` bullet list styles and parse the entire flow body (including numbered steps) by performing a lookahead for the next flow marker or the end of the block.
+  1. **Flow Parsing with Bullet Lookahead**: Modified the alternate flow splitter to support both `-` and `*` bullet list styles and parse the entire flow body (including numbered steps) by performing a lookahead for the next flow marker or the end of the block.
   2. **Schema Constraint Counting**: For each Use Case, the linter parses the realization matrix to locate all referenced feature files. It then scans those features' `### Validation & Constraints` (or `### 2. Validation & Constraints`) sections to count the defined validation constraints.
   3. **Constraint-Flow Parity Assertion**: Asserts that the Use Case defines at least `max(flow_limit, total_constraints)` Alternate/Exception flows. If the number of flows is fewer than the total count of validation constraints, the linter reports a compliance violation.
   4. **Title-Based Feature Resolution**: Enhanced the linter to handle tracker-linked feature references (e.g. `[Feature Title](https://.../issues/1)`). The linter extracts and normalizes the link's title text and dynamically maps it to the local feature file matching that title, ensuring constraints are successfully parsed offline even when file-path links are not present.
@@ -52,7 +52,7 @@ We have redesigned the linter to verify that the number of Alternate/Exception f
 Previously, the codebase linter raised "Compliance Bypass Loophole" errors if configured React/Flutter directories did not exist in the workspace, regardless of whether there was any code to validate. This blocked execution in empty/specification-only downstream projects (such as `dep-tst29`) or single-platform projects (React-only or Flutter-only).
 
 ### Fix Details
-* **Target File**: [codebase.py](../../skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/codebase.py)
+* **Target File**: [codebase.rs](../../crates/verify-baseline/src/checks/codebase.rs)
 * **Changes**:
   * Added a `has_files_with_extensions` helper that scans the workspace for files of specific extensions (excluding meta/tool folders like `.git`, `skills`, `docs`, etc.).
   * Updated the validator to only trigger a loophole block for a missing configured directory if files matching the respective platform's file extensions are actually present in the workspace.

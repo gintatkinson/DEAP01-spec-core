@@ -378,26 +378,35 @@ pub fn check_zero_shell_scripts(repo_root: &Path) -> Result<(), Vec<String>> {
     }
 }
 
-/// Check 33: Zero Python Scripts Invariant.
+/// Check 33: Zero Python Scripts & Operational Python/Pytest Reference Invariant.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A and ECSS-E-ST-40C Rust-native toolchain purity controls.
-/// Recursively walks the repository filesystem and fails closed if any `.py` file exists.
+/// Recursively walks `repo_root: &Path` to reject any physical `.py` file on disk and scans
+/// governed text files across `skills/`, `.agents/skills/`, `rules/`, `.pipeline/` (excluding
+/// `.pipeline/defects/`), `docs/`, `README.md`, and `AGENTS.md` for operational Python/Pytest tokens.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// Zero files in `repo_root` (excluding `target`, `.git`, `build`, `Pods`, `ephemeral`, and `.dart_tool`) may have extension `.py` (case-insensitive).
+/// - Zero files in `repo_root` (excluding `target`, `.git`, `build`, `Pods`, `ephemeral`, and `.dart_tool`)
+///   may have extension `.py` (case-insensitive).
+/// - Zero governed `.md`, `.yaml`, `.yml`, `.json`, or `.toml` lines (outside explicit governance
+///   prohibition clauses and `.pipeline/defects/` historical dossiers) may contain operational
+///   Python/Pytest tokens (`python3`, `pytest`, `.py`, `models/python`, `unittest`,
+///   `execution_environment: [python`, `language: python`).
 ///
 /// ## 3. Preconditions
-/// `repo_root` must be an accessible directory path.
+/// `repo_root: &Path` must be an accessible directory path on the local filesystem.
 ///
 /// ## 4. Postconditions
-/// Returns `Ok(())` if zero `.py` files exist, or `Err(Vec<String>)` with sorted relative paths.
+/// Returns `Ok(())` if zero `.py` files and zero operational Python/Pytest references exist,
+/// or `Err(Vec<String>)` with sorted, deduplicated relative paths and `rel_path:line_no` diagnostics.
 ///
 /// ## 5. Algorithmic Complexity Bounds
-/// Time Complexity: O(N) where N is repository file count. Space Complexity: O(V).
+/// Time Complexity: O(N + G * L) where N is repository entry count, G is governed text file count,
+/// and L is average line count per governed file. Space Complexity: O(V) where V is violation count.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// Fails closed on any discovered `.py` file.
+/// Fails closed on any discovered `.py` file, operational Python/Pytest token, or filesystem I/O error.
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-CHECK-33-ZERO-PYTHON-SCRIPTS].
@@ -422,7 +431,10 @@ pub fn check_zero_python_scripts(repo_root: &Path) -> Result<(), Vec<String>> {
     {
         let entry = match entry_res {
             Ok(e) => e,
-            Err(_) => continue,
+            Err(err) => {
+                violations.push(format!("Check 33 I/O error: {}", err));
+                continue;
+            }
         };
         if entry.file_type().is_file() {
             let fname = entry.file_name().to_string_lossy();
@@ -444,13 +456,318 @@ pub fn check_zero_python_scripts(repo_root: &Path) -> Result<(), Vec<String>> {
         }
     }
 
+    scan_governed_files_for_python_references(repo_root, &mut violations);
+
     if violations.is_empty() {
         Ok(())
     } else {
         violations.sort();
+        violations.dedup();
         Err(violations)
     }
 }
+
+/// Traverses governed directories and root files to detect operational Python/Pytest references.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ECSS-E-ST-40C toolchain integrity verification controls.
+/// Ensures `scan_governed_files_for_python_references` inspects every `.md`, `.yaml`, `.yml`,
+/// `.json`, and `.toml` file under `skills/`, `.agents/skills/`, `rules/`, `.pipeline/`
+/// (excluding `.pipeline/defects/`), `docs/`, `README.md`, and `AGENTS.md`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Directory traversal excludes build artifacts (`target`, `.git`, `build`, `Pods`, `ephemeral`,
+///   `.dart_tool`) and historical defect dossiers (`.pipeline/defects/`).
+/// - Every matching text file in the governed set is scanned deterministically via `scan_file_for_python_references`.
+///
+/// ## 3. Preconditions
+/// - `repo_root: &Path` points to the workspace root directory.
+/// - `violations: &mut Vec<String>` is a mutable accumulator owned by `check_zero_python_scripts`.
+///
+/// ## 4. Postconditions
+/// Appends `rel_path:line_no` diagnostics for all operational Python/Pytest references into `violations`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(G * L) where G is governed file count and L is average line count per file.
+/// Space Complexity: O(D) recursion stack depth for directory walk plus O(V) appended violations.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// Fails closed by pushing `Check 33 I/O error` diagnostics into `violations` if directory traversal fails.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-33-SCAN-GOVERNED-FILES].
+fn scan_governed_files_for_python_references(repo_root: &Path, violations: &mut Vec<String>) {
+    let governed_dirs = [
+        repo_root.join("skills"),
+        repo_root.join(".agents").join("skills"),
+        repo_root.join("rules"),
+        repo_root.join(".pipeline"),
+        repo_root.join("docs"),
+    ];
+
+    for dir_path in &governed_dirs {
+        if !dir_path.is_dir() {
+            continue;
+        }
+        let is_pipeline_root = dir_path
+            .file_name()
+            .map(|n| n.to_string_lossy() == ".pipeline")
+            .unwrap_or(false);
+        for entry_res in WalkDir::new(dir_path).into_iter().filter_entry(|e| {
+            if e.file_type().is_dir() {
+                let name = e.file_name().to_string_lossy();
+                if is_pipeline_root && name == "defects" {
+                    return false;
+                }
+                name != "target"
+                    && name != ".git"
+                    && name != "build"
+                    && name != "Pods"
+                    && name != "ephemeral"
+                    && name != ".dart_tool"
+            } else {
+                true
+            }
+        }) {
+            let entry = match entry_res {
+                Ok(e) => e,
+                Err(err) => {
+                    violations.push(format!("Check 33 I/O error: {}", err));
+                    continue;
+                }
+            };
+            if entry.file_type().is_file() && is_governed_python_scan_extension(entry.path()) {
+                scan_file_for_python_references(entry.path(), repo_root, violations);
+            }
+        }
+    }
+
+    let root_files = [repo_root.join("README.md"), repo_root.join("AGENTS.md")];
+    for file_path in &root_files {
+        if file_path.is_file() {
+            scan_file_for_python_references(file_path, repo_root, violations);
+        }
+    }
+}
+
+/// Evaluates whether `path: &Path` carries a governed text extension for Check 33 content scanning.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A deterministic file-type classification controls.
+/// Restricts `is_governed_python_scan_extension` to structured documentation and configuration
+/// formats (`.md`, `.yaml`, `.yml`, `.json`, `.toml`) without static string-slice arrays.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// Case-insensitive extension predicate returning `true` if and only if the file extension
+/// matches `md`, `yaml`, `yml`, `json`, or `toml`.
+///
+/// ## 3. Preconditions
+/// `path: &Path` is a valid filesystem path reference.
+///
+/// ## 4. Postconditions
+/// Returns `true` when `path` has a governed text extension; returns `false` otherwise.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(E) where E is extension byte length. Space Complexity: O(E) for ASCII lowercase conversion.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// Total, non-panicking predicate; paths without an extension return `false`.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-33-GOVERNED-EXTENSIONS].
+fn is_governed_python_scan_extension(path: &Path) -> bool {
+    let ext = match path.extension() {
+        Some(e) => e.to_string_lossy().to_ascii_lowercase(),
+        None => return false,
+    };
+    matches!(ext.as_str(), "md" | "yaml" | "yml" | "json" | "toml")
+}
+
+/// Scans a single governed text file line-by-line for operational Python/Pytest tokens.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ECSS-E-ST-40C trace-level defect detection.
+/// Reads `path: &Path` and inspects each 1-indexed line via `is_python_prohibition_clause`
+/// and `detect_operational_python_token`, recording `rel_path:line_no` violations.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Lines containing explicit governance prohibition terms are exempted via `is_python_prohibition_clause`.
+/// - Every remaining line containing an operational Python/Pytest token emits exactly one
+///   `rel_path:line_no` violation entry into `violations`.
+///
+/// ## 3. Preconditions
+/// - `path: &Path` is an existing regular file under `repo_root: &Path`.
+/// - `violations: &mut Vec<String>` is a valid mutable vector.
+///
+/// ## 4. Postconditions
+/// Appends formatted `rel_path:line_no` diagnostics (or file read failure diagnostics) into `violations`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(B) where B is the byte length of `path`. Space Complexity: O(B) for file buffer.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// Fails closed if `fs::read_to_string(path)` returns an I/O or UTF-8 decoding error.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-33-LINE-SCANNER].
+fn scan_file_for_python_references(path: &Path, repo_root: &Path, violations: &mut Vec<String>) {
+    let rel = path
+        .strip_prefix(repo_root)
+        .unwrap_or(path)
+        .display()
+        .to_string();
+    let content = match fs::read_to_string(path) {
+        Ok(c) => c,
+        Err(err) => {
+            violations.push(format!("{}: Unable to read file in Check 33: {}", rel, err));
+            return;
+        }
+    };
+
+    for (idx, raw_line) in content.lines().enumerate() {
+        let line_no = idx.saturating_add(1);
+        let ascii_folded = raw_line.to_ascii_lowercase();
+        if is_python_prohibition_clause(&ascii_folded) {
+            continue;
+        }
+        if let Some(token_label) = detect_operational_python_token(&ascii_folded) {
+            violations.push(format!(
+                "{}:{}: forbidden operational Python/Pytest reference ({}): {}",
+                rel,
+                line_no,
+                token_label,
+                raw_line.trim()
+            ));
+        }
+    }
+}
+
+/// Determines whether an ASCII-lowercased line is an explicit governance prohibition clause.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A normative rule preservation controls.
+/// Allows constitutional rules and agent instructions in `AGENTS.md`, `rules/`, and
+/// `.pipeline/ACTIVE_RULES_BUNDLE.md` to state that Python and Pytest are prohibited without
+/// triggering false-positive self-violations in `is_python_prohibition_clause`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// Returns `true` if and only if `ascii_folded` contains at least one canonical prohibition
+/// stem (`prohibit`, `forbid`, `retired`, `eliminat`, `zero python`, `never`, `ban`, `check 33`).
+///
+/// ## 3. Preconditions
+/// `ascii_folded: &str` must already be converted to ASCII lowercase by the caller.
+///
+/// ## 4. Postconditions
+/// Pure boolean classification indicating whether the line states a governance prohibition.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(L) where L is the byte length of `ascii_folded`. Space Complexity: O(1).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// Infallible, zero-allocation substring inspection that never panics.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-33-PROHIBITION-CLAUSE-EXEMPTION].
+fn is_python_prohibition_clause(ascii_folded: &str) -> bool {
+    ascii_folded.contains("prohibit")
+        || ascii_folded.contains("forbid")
+        || ascii_folded.contains("retired")
+        || ascii_folded.contains("eliminat")
+        || ascii_folded.contains("zero python")
+        || ascii_folded.contains("never")
+        || ascii_folded.contains("ban")
+        || ascii_folded.contains("check 33")
+}
+
+/// Detects whether an ASCII-lowercased line contains an operational Python or Pytest token.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ECSS-E-ST-40C pure-Rust toolchain enforcement.
+/// Identifies operational invocations and configuration tokens (`python3`, `pytest`,
+/// `models/python`, `unittest`, `execution_environment: [python`, `language: python`, and
+/// `.py` script tokens) inside `detect_operational_python_token` using zero regular expressions.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// Evaluates a fixed priority order of operational Python tokens and delegates `.py` token
+/// boundary verification to `contains_dot_py_token`.
+///
+/// ## 3. Preconditions
+/// `ascii_folded: &str` is an ASCII-lowercased line that has already been screened by
+/// `is_python_prohibition_clause`.
+///
+/// ## 4. Postconditions
+/// Returns `Some(&'static str)` naming the first matched operational Python token, or `None`
+/// if the line is clean.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(L) where L is the byte length of `ascii_folded`. Space Complexity: O(1).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// Pure, deterministic, non-panicking string inspection with zero heap allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-33-OPERATIONAL-TOKEN-DETECTOR].
+fn detect_operational_python_token(ascii_folded: &str) -> Option<&'static str> {
+    if ascii_folded.contains("python3") {
+        Some("python3")
+    } else if ascii_folded.contains("pytest") {
+        Some("pytest")
+    } else if ascii_folded.contains("models/python") {
+        Some("models/python")
+    } else if ascii_folded.contains("unittest") {
+        Some("unittest")
+    } else if ascii_folded.contains("execution_environment: [python") {
+        Some("execution_environment: [python")
+    } else if ascii_folded.contains("language: python") {
+        Some("language: python")
+    } else if contains_dot_py_token(ascii_folded) {
+        Some(".py")
+    } else {
+        None
+    }
+}
+
+/// Checks whether an ASCII-lowercased line contains a `.py` file extension token at a word boundary.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and Check 34 non-panicking slice access rules.
+/// Detects `.py` script paths and tokens in `contains_dot_py_token` while avoiding false
+/// positives on words where `.py` is immediately followed by alphanumeric or underscore characters.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// For every byte offset `idx` where `".py"` occurs in `ascii_folded`, inspects `bytes.get(idx + 3)`
+/// and returns `true` if and only if the following byte is absent (`None`) or is neither ASCII
+/// alphanumeric nor `b'_'`.
+///
+/// ## 3. Preconditions
+/// `ascii_folded: &str` is an ASCII-lowercased line slice.
+///
+/// ## 4. Postconditions
+/// Returns `true` if at least one boundary-terminated `.py` token exists in `ascii_folded`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// Time Complexity: O(L) where L is byte length of `ascii_folded`. Space Complexity: O(1).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// Uses `.get(..)` exclusively on `bytes` and `saturating_add(3)` on `idx`, guaranteeing zero panics.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-33-DOT-PY-BOUNDARY-SCAN].
+fn contains_dot_py_token(ascii_folded: &str) -> bool {
+    let bytes = ascii_folded.as_bytes();
+    for (idx, _) in ascii_folded.match_indices(".py") {
+        let after_idx = idx.saturating_add(3);
+        let is_boundary = match bytes.get(after_idx) {
+            Some(&b) => !b.is_ascii_alphanumeric() && b != b'_',
+            None => true,
+        };
+        if is_boundary {
+            return true;
+        }
+    }
+    false
+}
+
 
 /// Check 34: Zero Regex Invariant & Self-Hosting Compiler Purity Gate.
 ///
@@ -527,12 +844,17 @@ pub fn check_zero_regex(repo_root: &Path) -> Result<(), Vec<String>> {
                     match fs::read_to_string(path) {
                         Ok(content) => {
                             let is_audited = rel.contains("parity_gates.rs")
+                                || rel.contains("docstring_gate.rs")
+                                || rel.contains("defect_dossier.rs")
+                                || rel.contains("compile-sysml/src/docstring.rs")
+                                || rel.contains("ingest-sysml/src/translators/code.rs")
                                 || (rel.contains("deap-core/src/")
                                     && (rel.ends_with("diagnostics.rs")
                                         || rel.ends_with("rules.rs")
                                         || rel.ends_with("workspace.rs")
                                         || rel.ends_with("markdown.rs")
-                                        || rel.ends_with("sysml_ast.rs")));
+                                        || rel.ends_with("sysml_ast.rs")
+                                        || rel.ends_with("source_ast.rs")));
                             if let Err(errs) = audit_source_purity(&content, &rel, is_audited) {
                                 if is_audited {
                                     violations.extend(errs);
@@ -593,11 +915,16 @@ pub fn check_compiler_ast_purity(repo_root: &Path) -> Result<(), Vec<String>> {
 
     let audited_files = [
         repo_root.join("crates").join("verify-baseline").join("src").join("checks").join("parity_gates.rs"),
+        repo_root.join("crates").join("verify-baseline").join("src").join("checks").join("docstring_gate.rs"),
+        repo_root.join("crates").join("verify-baseline").join("src").join("defect_dossier.rs"),
         repo_root.join("crates").join("deap-core").join("src").join("diagnostics.rs"),
         repo_root.join("crates").join("deap-core").join("src").join("rules.rs"),
         repo_root.join("crates").join("deap-core").join("src").join("workspace.rs"),
         repo_root.join("crates").join("deap-core").join("src").join("markdown.rs"),
         repo_root.join("crates").join("deap-core").join("src").join("sysml_ast.rs"),
+        repo_root.join("crates").join("deap-core").join("src").join("source_ast.rs"),
+        repo_root.join("crates").join("compile-sysml").join("src").join("docstring.rs"),
+        repo_root.join("crates").join("ingest-sysml").join("src").join("translators").join("code.rs"),
     ];
 
     for file_path in &audited_files {

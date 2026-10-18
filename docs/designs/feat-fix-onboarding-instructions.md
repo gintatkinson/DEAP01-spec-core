@@ -13,7 +13,7 @@ This document details the update applied to the onboarding instructions in the f
 
 | Feature / Area | Source File | Lines Affected | Rationale |
 | :--- | :--- | :--- | :--- |
-| Workspace Feature Skill | [SKILL.md](skills/feature-driven-implementation/SKILL.md) | 42 | Replace stale reference to `bootstrap_downstream.py` with native GitHub template instructions |
+| Workspace Feature Skill | [SKILL.md](skills/feature-driven-implementation/SKILL.md) | 42 | Replace stale reference to `bootstrap-downstream` with native GitHub template instructions |
 | Agent System Skill Copy | [SKILL.md copy](.agents/skills/feature-driven-implementation/SKILL.md) | 42 | Replaced via shared symlink alignment |
 
 ---
@@ -25,7 +25,7 @@ The onboarding instructions in the workspace's feature-driven-implementation ski
 ### 2.1. Feature Skill (`skills/feature-driven-implementation/SKILL.md`)
 Previously, step 2 of the Backlog & Dependency Mapping process instructs:
 ```markdown
-Ensure that the downstream workspace has been bootstrapped using the upstream-only `bootstrap_downstream.py` script. Note that this is an upstream-only tool and must be executed from the upstream repository directory (`<upstream_workspace_path>`) targeting the downstream workspace path BEFORE the downstream agent begins work (use the `--no-domain` flag with the bootstrap script if implementing a different project domain).
+Ensure that the downstream workspace has been bootstrapped using the upstream-only `bootstrap-downstream` tool. Note that this is an upstream-only tool and must be executed from the upstream repository directory (`<upstream_workspace_path>`) targeting the downstream workspace path BEFORE the downstream agent begins work (use the `--no-domain` flag with the bootstrap tool if implementing a different project domain).
 ```
 This has been updated to align with the native GitHub template onboarding architecture:
 ```markdown
@@ -40,7 +40,7 @@ Since `.agents/skills` is a tracked symlink pointing directly to `skills`, the u
 ## 3. Technical Rationale
 
 1. **Eliminating Stale/Deleted References**:
-   The `bootstrap_downstream.py` script was previously removed from the repository. Continuing to reference it in onboarding skills caused confusion and execution errors for agents or developers attempting to follow the onboarding guides.
+   The `bootstrap-downstream` script was previously removed from the repository. Continuing to reference it in onboarding skills caused confusion and execution errors for agents or developers attempting to follow the onboarding guides.
 
 2. **Native Template Integration**:
    By switching the instructions to use `gh repo create <new_app_name> --template gintatkinson/DEAP-implementation-driver --public --clone`, we leverage GitHub's native template repository capabilities. This offers a robust, officially supported, and platform-standard mechanism to bootstrap new projects from the repository template without maintaining custom scripts.

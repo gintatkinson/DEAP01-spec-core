@@ -17,7 +17,7 @@ Use this skill as the single canonical workflow for transforming formal SysML v2
 
 In accordance with **MIL-STD-881E** (Work Breakdown Structures for Defense Materiel Items), **INCOSE Systems Engineering Handbook v5.0**, [`rules/dual-track-mbd-verification.md`](../../rules/dual-track-mbd-verification.md), [`rules/sysml-ssot-completeness.md`](../../rules/sysml-ssot-completeness.md), and [`rules/tracker-source-of-truth.md`](../../rules/tracker-source-of-truth.md), the Work Breakdown Structure represents the product-oriented family tree division of hardware, software, services, data, and facilities resulting from systems engineering efforts.
 
-Level 4 WBS & Enterprise Realization acts as the authoritative programmatic and technical execution bridge connecting abstract Model-Based Systems Engineering (MBSE) models with downstream software engineering deliverables, agile tracking issues, and enterprise program management toolchains. All control law, safety statechart, and physical estimation work packages integrate directly into the Primary Tier-1 Commercial Toolchain Context (**MATLAB / Simulink / Stateflow / Embedded Coder** for DO-178C C / SPARK Ada generation) paired with standalone 250 Hz deterministic Python digital twin simulation engines for license-free headless continuous integration (CI).
+Level 4 WBS & Enterprise Realization acts as the authoritative programmatic and technical execution bridge connecting abstract Model-Based Systems Engineering (MBSE) models with downstream software engineering deliverables, agile tracking issues, and enterprise program management toolchains. All control law, safety statechart, and physical estimation work packages integrate directly into the Primary Tier-1 Commercial Toolchain Context (**MATLAB / Simulink / Stateflow / Embedded Coder** for DO-178C C / SPARK Ada generation) paired with standalone 250 Hz deterministic Rust digital twin simulation engines for license-free headless continuous integration (CI).
 
 > [!TIP]
 > This skill operates in the spirit of the `andrej-karpathy` methodology: focus deeply on the fundamentals, enforce exhaustive structural rigor, eliminate ambiguity across deliverables, and instrument all realization artifacts flawlessly into enterprise tracking systems.
@@ -41,7 +41,7 @@ You should invoke this skill as **Phase 4 (Worker WBS - Work Breakdown Structure
   - Phase 1: `Structural Spec Worker` (Extracts Level 2 Epics and Features from SysML AST)
   - Phase 2: `Behavioral Spec Worker` (Generates Level 2 BDD User Stories)
   - Phase 3: `System Interaction Spec Worker` (Generates Level 2 UML Use Cases and Sequence Diagrams)
-  - Implementation Phase: Dual-Track MBD synthesis and Pytest verification suites
+  - Implementation Phase: Dual-Track MBD synthesis and Rust Cargo verification suites
 - **Succeeding Phases**:
   - Enterprise Program Management Ingestion (Jira Software, Monday.com, Microsoft Project)
   - Earned Value Management System (EVMS) Cost/Schedule Baseline Tracking
@@ -111,9 +111,9 @@ flowchart TD
     L4_SPEC["WP-xxx-SPEC: Feature Spec"]
     L4_MAT["WP-xxx-MAT-PARAM: MATLAB Params"]
     L4_SL["WP-xxx-SL-BLD: Simulink Builder"]
-    L4_DOM["WP-xxx-PY-DOM: Python Domain"]
-    L4_ENG["WP-xxx-PY-ENG: Python 250 Hz Engine"]
-    L4_TST["WP-xxx-TST: Pytest Verification"]
+    L4_DOM["WP-xxx-RS-DOM: Rust Domain"]
+    L4_ENG["WP-xxx-RS-ENG: Rust 250 Hz Engine"]
+    L4_TST["WP-xxx-TST: Cargo Test Verification"]
     L4_REP["WP-xxx-REP: DO-178C Report"]
 
     L1 --> L2_1
@@ -151,9 +151,9 @@ flowchart TD
 | `WP-xxx-SPEC` | Feature Specification | `docs/features/feat-xxx-*.md` | Abstract Markdown / SysML AST | Authoritative functional definition, Given-When-Then BDD acceptance criteria, LUMI bindings, and SysML AST mapping. |
 | `WP-xxx-MAT-PARAM` | MATLAB Plant Parameters | `models/matlab/*_params.m`, `*.sldd` | MATLAB / Simulink Data Dictionary | Physical plant constants, aerodynamic coefficients, sensor noise variances, and filter thresholds. |
 | `WP-xxx-SL-BLD` | Simulink Model Synthesizer | `models/scripts/build_*_model.m`, `*.slx` | MATLAB / Stateflow / Embedded Coder | Programmatic builder script synthesizing native Simulink block diagrams and Stateflow charts configured for Embedded Coder DO-178C C / SPARK Ada synthesis. |
-| `WP-xxx-PY-DOM` | Python Typed Domain Model | `models/python/*_domain.py` | Python 3.10+ Dataclasses & Enums | Strongly-typed domain state vectors, telemetry logs, commands, and enumerated state definitions. |
-| `WP-xxx-PY-ENG` | Python 250 Hz Deterministic Engine | `models/python/*_engine.py` | Standalone Python Simulation Engine | License-free discrete-time simulation engine executing at dt = 0.004 s (250 Hz) with identical transition guards and algebraic dynamics. |
-| `WP-xxx-TST` | Pytest Verification Suite | `tests/test_feat_*_simulation.py` | Pytest / Headless CI Runner | Automated headless CI test suite validating safety invariants, nominal control response, fault injections, and bounding envelope conditions. |
+| `WP-xxx-RS-DOM` | Rust Typed Domain Model | `crates/*/src/domain.rs` | Rust Structs & Enums | Strongly-typed domain state vectors, telemetry logs, commands, and enumerated state definitions. |
+| `WP-xxx-RS-ENG` | Rust 250 Hz Deterministic Engine | `crates/*/src/engine.rs` | Standalone Rust Simulation Engine | License-free discrete-time simulation engine executing at dt = 0.004 s (250 Hz) with identical transition guards and algebraic dynamics. |
+| `WP-xxx-TST` | Cargo Test Verification Suite | `crates/*/tests/*_simulation.rs` | Cargo Test / Headless CI Runner | Automated headless CI test suite validating safety invariants, nominal control response, fault injections, and bounding envelope conditions. |
 | `WP-xxx-REP` | Formal Simulation Results Report | `docs/reports/simulink_results/*_simulation_results.md` | DO-178C / DO-331 Verification | Formal simulation verification report documenting mathematical equivalence (error <= 1e-6), Monte Carlo dispersion results, and structural test evidence. |
 
 ---
@@ -163,9 +163,9 @@ flowchart TD
 To satisfy **DO-178C Section 5.5**, **DO-331 Section MB.6.3**, and **CMMI Level 3 Requirements Management (REQM)**, the Worker WBS synthesizes the canonical 7-Column End-to-End Traceability Matrix:
 
 ```markdown
-| SysML Component | Feature Spec | User Stories | MATLAB / Simulink Plant | Python 250 Hz Engine | Verification Suite | Simulation Evidence |
+| SysML Component | Feature Spec | User Stories | MATLAB / Simulink Plant | Rust 250 Hz Engine | Verification Suite | Simulation Evidence |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `SysSSOT::NavSubsys` | [Feat-01](docs/features/feat-01-nav.md) | [US-01](docs/user-stories/us-01.md), [US-02](docs/user-stories/us-02.md) | `models/scripts/build_nav_model.m` | `models/python/nav_engine.py` | `tests/test_feat_01_nav.py` | [Nav Sim Report](docs/reports/simulink_results/EXAMPLE_results.md) |
+| `SysSSOT::NavSubsys` | [Feat-01](docs/features/feat-01-nav.md) | [US-01](docs/user-stories/us-01.md), [US-02](docs/user-stories/us-02.md) | `models/scripts/build_nav_model.m` | `crates/nav/src/engine.rs` | `crates/nav/tests/feat_01_nav.rs` | [Nav Sim Report](docs/reports/simulink_results/EXAMPLE_results.md) |
 ```
 
 ### Traceability Column Definitions & Verification Rules
@@ -174,13 +174,13 @@ To satisfy **DO-178C Section 5.5**, **DO-331 Section MB.6.3**, and **CMMI Level 
 2. **Feature Spec**: Workspace-relative link to the Level 2 Feature specification (`docs/features/feat-*.md`).
 3. **User Stories**: Comma-separated list of Level 2 BDD User Story specifications (`docs/user-stories/us-*.md`) realizing the feature.
 4. **MATLAB / Simulink Plant**: Workspace-relative link to Track A programmatic builder (`models/scripts/build_*.m`) and parameter files (`models/matlab/*_params.m`).
-5. **Python 250 Hz Engine**: Workspace-relative link to Track B standalone discrete digital twin engine (`models/python/*_engine.py`).
-6. **Verification Suite**: Workspace-relative link to automated headless Pytest CI test harness (`tests/test_feat_*.py`).
+5. **Rust 250 Hz Engine**: Workspace-relative link to Track B standalone discrete digital twin engine (`crates/*/src/engine.rs`).
+6. **Verification Suite**: Workspace-relative link to automated headless Cargo CI test harness (`crates/*/tests/*.rs`).
 7. **Simulation Evidence**: Workspace-relative link to formal DO-178C / DO-331 simulation results report (`docs/reports/simulink_results/*.md`).
 
 ### Mathematical & Discrete Equivalence Formulation
 
-All work packages adhering to the dual-track strategy must maintain mathematical equivalence between continuous Simulink models and discrete Python engines:
+All work packages adhering to the dual-track strategy must maintain mathematical equivalence between continuous Simulink models and discrete Rust engines:
 
 $$
 \begin{aligned}
@@ -209,7 +209,7 @@ The export CSV file utilizes a unified, multi-platform column schema that maps d
 | Column Header | Data Type | Jira Software Field Mapping | Monday.com Field Mapping | MS Project Field Mapping | Description / Example |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | `WBS Code` | String | Custom Field: `WBS Code` | Text Column: `WBS Code` | `WBS` / `Outline Number` | Hierarchical numerical index (e.g., `1.1.1.4`). |
-| `Task Name` | String | `Summary` | `Item Name` | `Task Name` | Concise deliverable title (e.g., `[WP-01-PY-ENG] Python 250 Hz Engine`). |
+| `Task Name` | String | `Summary` | `Item Name` | `Task Name` | Concise deliverable title (e.g., `[WP-01-RS-ENG] Rust 250 Hz Engine`). |
 | `WBS Level` | Integer | Custom Field: `WBS Level` | Numbers Column: `Level` | `Outline Level` | Numeric hierarchy depth (1 to 5). |
 | `Issue Type` | String | `Issue Type` (`Epic`, `Task`, `Sub-task`) | Type / Group Classification | Task Type / Milestone | Standard tracking issue taxonomy. |
 | `Parent WBS` | String | `Parent` / `Epic Link` | Parent Item / Subitem link | `Predecessors` / Parent | WBS code of immediate parent node (e.g., `1.1.1`). |
@@ -220,7 +220,7 @@ The export CSV file utilizes a unified, multi-platform column schema that maps d
 | `Labels` | String | `Labels` (space or comma-delimited) | Tags Column | Text Column: `Tags` | Standard classification tags (e.g., `wbs,mbd,do-178c`). |
 | `Artifact Path` | String | Custom Field: `Artifact URL` | Link Column: `Artifact` | Text Column: `Text1` | Workspace-relative path to concrete source or spec file. |
 | `SysML Anchor` | String | Custom Field: `SysML SSOT` | Text Column: `SysML Anchor` | Text Column: `Text2` | Fully qualified SysML v2 AST component path. |
-| `Toolchain Context` | String | Custom Field: `Toolchain` | Dropdown: `Toolchain` | Text Column: `Text3` | `MATLAB / Simulink` or `Python / Pytest`. |
+| `Toolchain Context` | String | Custom Field: `Toolchain` | Dropdown: `Toolchain` | Text Column: `Text3` | `MATLAB / Simulink` or `Rust / Cargo`. |
 
 ### 2. Hierarchical JSON AST Schema (`wbs_export.json`)
 
@@ -265,7 +265,7 @@ The Worker WBS generates a machine-readable, fully resolved JSON Abstract Syntax
           "feature_spec",
           "user_stories",
           "matlab_simulink_plant",
-          "python_250hz_engine",
+          "rust_250hz_engine",
           "verification_suite",
           "simulation_evidence"
         ],
@@ -274,7 +274,7 @@ The Worker WBS generates a machine-readable, fully resolved JSON Abstract Syntax
           "feature_spec": { "type": "string" },
           "user_stories": { "type": "array", "items": { "type": "string" } },
           "matlab_simulink_plant": { "type": "string" },
-          "python_250hz_engine": { "type": "string" },
+          "rust_250hz_engine": { "type": "string" },
           "verification_suite": { "type": "string" },
           "simulation_evidence": { "type": "string" }
         }
@@ -338,8 +338,8 @@ sequenceDiagram
 
 ### Step 3: Discover Implementation Models & Verification Evidence
 1. Scan `models/matlab/` and `models/scripts/` for Track A MATLAB parameters and Simulink builder scripts.
-2. Scan `models/python/` for Track B strongly-typed domain models and 250 Hz simulation engines.
-3. Scan `tests/` for automated Pytest verification suites.
+2. Scan `crates/` for Track B strongly-typed domain models and 250 Hz simulation engines.
+3. Scan `crates/*/tests/` for automated Cargo verification suites.
 4. Scan `docs/reports/simulink_results/` for formal DO-178C / DO-331 verification evidence reports.
 
 ### Step 4: Synthesize Deliverables Suite
@@ -357,7 +357,7 @@ Generate the three canonical Level 4 engineering deliverables:
 1. Assert 100% Feature Coverage: Every Level 3 Feature MUST contain all 7 concrete work packages.
 2. Assert 0 Orphaned Work Packages: Every work package must link to an existing file or a documented scheduled task.
 3. Assert Directed Acyclic Graph (DAG) Integrity: Predecessor dependency links in CSV and JSON must form a valid DAG with zero cyclical deadlocks.
-4. Assert Discrete Equivalence Invariant: Mathematical error between Simulink and Python twins must satisfy $\epsilon_{\mathrm{equiv}} \le 10^{-6}$.
+4. Assert Discrete Equivalence Invariant: Mathematical error between Simulink and Rust twins must satisfy $\epsilon_{\mathrm{equiv}} \le 10^{-6}$.
 
 ---
 
@@ -388,15 +388,15 @@ All Level 4 WBS suite documents reside in `docs/management/` and MUST begin at l
 - `WP-01-SPEC`: Feature Specification (`docs/features/feat-01.md`)
 - `WP-01-MAT-PARAM`: MATLAB Parameters (`models/matlab/feat_01_params.m`)
 - `WP-01-SL-BLD`: Simulink Builder (`models/scripts/build_feat_01_model.m`)
-- `WP-01-PY-DOM`: Python Domain Model (`models/python/feat_01_domain.py`)
-- `WP-01-PY-ENG`: Python 250 Hz Engine (`models/python/feat_01_engine.py`)
-- `WP-01-TST`: Pytest Verification (`tests/test_feat_01.py`)
+- `WP-01-RS-DOM`: Rust Domain Model (`crates/feat_01/src/domain.rs`)
+- `WP-01-RS-ENG`: Rust 250 Hz Engine (`crates/feat_01/src/engine.rs`)
+- `WP-01-TST`: Cargo Test Verification (`crates/feat_01/tests/feat_01_simulation.rs`)
 - `WP-01-REP`: DO-178C Results Report (`docs/reports/simulink_results/EXAMPLE_results.md`)
 
 ## 3. 7-Column End-to-End Traceability Matrix
-| SysML Component | Feature Spec | User Stories | MATLAB / Simulink Plant | Python 250 Hz Engine | Verification Suite | Simulation Evidence |
+| SysML Component | Feature Spec | User Stories | MATLAB / Simulink Plant | Rust 250 Hz Engine | Verification Suite | Simulation Evidence |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `SysSSOT::SubsystemA` | [Feat-01](docs/features/feat-01.md) | [US-01](docs/user-stories/us-01.md) | `models/scripts/build_feat_01_model.m` | `models/python/feat_01_engine.py` | `tests/test_feat_01.py` | [Report](docs/reports/simulink_results/EXAMPLE_results.md) |
+| `SysSSOT::SubsystemA` | [Feat-01](docs/features/feat-01.md) | [US-01](docs/user-stories/us-01.md) | `models/scripts/build_feat_01_model.m` | `crates/feat_01/src/engine.rs` | `crates/feat_01/tests/feat_01_simulation.rs` | [Report](docs/reports/simulink_results/EXAMPLE_results.md) |
 
 ## 4. Multi-Platform Enterprise Export Summary
 - **CSV Export**: `docs/management/wbs_export_jira_monday_ms_project.csv`
@@ -442,8 +442,8 @@ Per [`rules/platform-independence.md`](../../rules/platform-independence.md):
 1. **Mandatory Local Validation Check**:
    Before committing, pushing, or registering tracker issues, the Worker WBS MUST execute local repository verification:
    ```bash
-   python3 tests/test_no_emdash_integrity.py
-   python3 -m unittest discover -s tests -p "test_*.py"
+   ./target/release/verify-baseline . --no-domain
+   cargo test --workspace
    ```
 
 2. **Untracked Infrastructure Pre-Commit Check**:

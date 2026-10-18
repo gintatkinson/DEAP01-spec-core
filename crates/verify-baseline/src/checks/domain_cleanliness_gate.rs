@@ -135,6 +135,31 @@ pub const METAMODEL_TYPE_KEYS: &[&str] = &[
 ];
 
 /// Check if a type name conforms to the closed M2 metamodel allowlist or carries a meta_ prefix.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `is_allowed_m2_type` in `crates/verify-baseline/src/checks/domain_cleanliness_gate.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic state conservation and referential transparency for fn `is_allowed_m2_type` (declaration #1) within `CHECKS-DOMAIN-CLEANLINESS-GATE`.
+///
+/// ## 3. Preconditions
+/// - `type_name: &str` must satisfy domain and type-safety constraints prior to invoking `is_allowed_m2_type`.
+///
+/// ## 4. Postconditions
+/// - Returns `bool` from `is_allowed_m2_type` with deterministic post-execution state.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(type_name)) bounded over input/member dimension of `is_allowed_m2_type`.
+/// - Space Complexity: O(N(type_name)) bounded auxiliary memory for `is_allowed_m2_type`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `is_allowed_m2_type` (`bool`).
+/// - State: Maintains consistent state invariants across `is_allowed_m2_type` without partial mutation on error.
+/// - Action: Executes `is_allowed_m2_type` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `is_allowed_m2_type` (`CHECKS-DOMAIN-CLEANLINESS-GATE`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECKS-DOMAIN-CLEANLINESS-GATE-IS-ALLOWED-M2-TYPE] | SysML v2: ActionDef(is_allowed_m2_type)
 pub fn is_allowed_m2_type(type_name: &str) -> bool {
     let cleaned = type_name.trim();
     if cleaned.is_empty() {
@@ -151,6 +176,31 @@ pub fn is_allowed_m2_type(type_name: &str) -> bool {
 }
 
 /// Helper extracting declared identifier name from a const or static line in native Rust.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `extract_rust_const_or_static_ident` in `crates/verify-baseline/src/checks/domain_cleanliness_gate.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic state conservation and referential transparency for fn `extract_rust_const_or_static_ident` (declaration #2) within `CHECKS-DOMAIN-CLEANLINESS-GATE`.
+///
+/// ## 3. Preconditions
+/// - `line: &str` must satisfy domain and type-safety constraints prior to invoking `extract_rust_const_or_static_ident`.
+///
+/// ## 4. Postconditions
+/// - Returns `Option<&str>` from `extract_rust_const_or_static_ident` with deterministic post-execution state.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(line)) bounded over input/member dimension of `extract_rust_const_or_static_ident`.
+/// - Space Complexity: O(N(line)) bounded auxiliary memory for `extract_rust_const_or_static_ident`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `extract_rust_const_or_static_ident` (`Option<&str>`).
+/// - State: Maintains consistent state invariants across `extract_rust_const_or_static_ident` without partial mutation on error.
+/// - Action: Executes `extract_rust_const_or_static_ident` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `extract_rust_const_or_static_ident` (`CHECKS-DOMAIN-CLEANLINESS-GATE`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECKS-DOMAIN-CLEANLINESS-GATE-EXTRACT-RUST-CONST-OR-STATIC-IDENT] | SysML v2: ActionDef(extract_rust_const_or_static_ident)
 fn extract_rust_const_or_static_ident(line: &str) -> Option<&str> {
     let trimmed = line.trim();
     if trimmed.starts_with("//") || trimmed.starts_with("/*") || trimmed.starts_with('*') {

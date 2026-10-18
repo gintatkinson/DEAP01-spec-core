@@ -74,7 +74,7 @@ To guarantee zero model drift between agile specification backlogs and the archi
 
 - **Reverse Sync Compilation Mandate**: Whenever subagents or engineers elaborate, refine, or add new structural elements, state transitions, port interfaces, action signatures, use cases, or safety constraints in markdown specifications (`docs/epics`, `docs/features`, `docs/user-stories`, `docs/use-cases`), the reverse synchronization compiler MUST be executed:
   ```bash
-  python3 scripts/compile_sysml.py --reverse-sync
+  ./target/release/compile-sysml --reverse-sync
   ```
 - **Automated AST Extraction & Elaboration**: The `--reverse-sync` engine mechanically extracts:
   1. *Structural Blocks & Items*: Ingests YAML frontmatter metadata and Mermaid class diagrams, compiling newly declared components and payload schemas into `part def` and `item def` nodes.
@@ -82,7 +82,7 @@ To guarantee zero model drift between agile specification backlogs and the archi
   3. *Use Cases & Interaction Flows*: Ingests Use Case realization tables, actor/subject bindings, and include/extend trees, compiling them into formal `use case def` nodes.
   4. *Safety & RTA Invariants*: Ingests STPA UCA and FMECA tables, compiling safety rules into formal `requirement def`, `constraint def`, and `assert constraint` nodes.
 - **Non-Destructive Semantic Merge & Digest Regeneration**: The AST merge engine merges extracted AST deltas into `.pipeline/schema.sysml` without destroying existing formal invariants, serializes the updated model via canonical `to_sysml()` emission, and regenerates the SHA-256 cryptographic digest in `.pipeline/schema-digest.json`.
-- **Pre-Commit Verification Lock**: All reverse-synchronized models MUST immediately undergo verification via `verify_model_coverage.py` across all 23 parity gates before commits or pull requests are merged.
+- **Pre-Commit Verification Lock**: All reverse-synchronized models MUST immediately undergo verification via `./target/release/verify-baseline` across all 23 parity gates before commits or pull requests are merged.
 
 ## Check 23: Factual Grounding & Numeric Provenance Gate (Attribute-Level AST Closure & SSOT Citation Contract)
 

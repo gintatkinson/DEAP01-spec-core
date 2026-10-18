@@ -285,7 +285,7 @@ To prevent high-frequency telemetry event storms from freezing user interfaces o
 
 ## 8. Verification & Conformance Strategy
 
-- **Semantic Acceptance Testing**: Verified via `python3 scripts/verify_downstream_baseline.py .` with exit code 0.
+- **Semantic Acceptance Testing**: Verified via `./target/release/verify-baseline . --no-domain` with exit code 0.
 - **Zero Forbidden Unit Tests**: In accordance with repository invariants, no unit test suites exist in upstream repositories.
 - **Zero Em Dash Invariant**: The document contains 0 Unicode em dashes (`\u2014`), using ASCII `--` or `-` exclusively.
 - **Zero Prohibited Terms**: Contains 0 kinetic, munition, or regulatory agency citations.

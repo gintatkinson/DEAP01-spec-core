@@ -9,12 +9,12 @@ This document summarizes the changes, verification proof, and Code Realization T
 
 ## Changes Overview
 
-1. **`scripts/bootstrap_downstream.py`**:
+1. **`crates/verify-baseline/src/main.rs`**:
    - Added the `--no-domain` command-line argument.
    - For Flutter, skips walking/copying the `lib/domain` directory.
    - For React, skips copying the `src/types.ts` file.
 
-2. **`scripts/verify_downstream_baseline.py`**:
+2. **`crates/verify-baseline/src/checks/codebase.rs`**:
    - Implemented dynamic loading of mandated domain classes from configuration files inside the downstream directory (checking in order: `.pipeline/logical-ui/codebase_rules.json`, `codebase_rules.json`, `baseline_manifest.json`).
    - Parses `"mandated_classes"` under the `"validation_rules"` key or at the root level.
    - Falls back to the hardcoded default `MANDATED_CLASSES` list if configuration is missing or invalid.
@@ -27,14 +27,14 @@ This document summarizes the changes, verification proof, and Code Realization T
    - Updated Section 4.5 (Downstream Conformance Gates) to document that domain baseline verification is dynamically parameterized via target configuration rules.
 
 5. **`.agents/skills/feature-driven-implementation/SKILL.md`**:
-   - Added a note instructing agents to use the `--no-domain` flag with the bootstrap script if implementing a different project domain.
+   - Added a note instructing agents to use the `--no-domain` flag with the bootstrap tool if implementing a different project domain.
 
 ## Code Realization Table
 
 | Component/Feature | Source File | Class / Function / Section | Description |
 | :--- | :--- | :--- | :--- |
-| `--no-domain` Flag | [scripts/bootstrap_downstream.py](scripts/bootstrap_downstream.py) | `main` | Added `--no-domain` argument and directory/file skip logic. |
-| Dynamic Verification | [scripts/verify_downstream_baseline.py](scripts/verify_downstream_baseline.py) | `load_mandated_classes`, `main` | Added configuration lookup logic and replaced hardcoded class loop. |
+| `--no-domain` Flag | [crates/verify-baseline/src/main.rs](crates/verify-baseline/src/main.rs) | `main` | Added `--no-domain` argument and directory/file skip logic. |
+| Dynamic Verification | [crates/verify-baseline/src/checks/codebase.rs](crates/verify-baseline/src/checks/codebase.rs) | `load_mandated_classes`, `main` | Added configuration lookup logic and replaced hardcoded class loop. |
 | User Instructions | [README.md](README.md) | Downstream Baseline Seeding and Compliance | Documented the `--no-domain` option and dynamic validation rules. |
 | Constitution Rules | [.pipeline/constitution.md](.pipeline/constitution.md) | Section 4.5 Downstream Conformance Gates | Noted that domain validation is dynamically parameterized. |
 | Agent Workflows | [.agents/skills/feature-driven-implementation/SKILL.md](.agents/skills/feature-driven-implementation/SKILL.md) | Step 1: Backlog & Dependency Mapping | Instructed agents to use `--no-domain` for different project domains. |

@@ -22,7 +22,7 @@ document must refer to something that exists.
   MUST point at a file that exists. This is the specification-corpus counterpart of the
   rule above -- that one governs paths named in governance prose, this one governs
   `[text](target)` links in Epics, Features, User Stories and Use Cases, and it is
-  enforced by a different checker (`link_validator.py`, offline, no network). A broken
+  enforced by a different checker (`./target/release/verify-baseline`, offline, no network). A broken
   link inside a specification is worse than a broken prose reference, because the
   specification is published to the tracker where the link renders as live and resolves
   to a 404 for every reader.
@@ -59,15 +59,15 @@ document must refer to something that exists.
 ## Scope
 
 These constraints apply to every document under `rules/`, `skills/`, `.agents/` and
-`.pipeline/` -- the corpus scanned by `tests/test_skill_path_references.py`. Hidden
+`.pipeline/` -- the corpus scanned by `./target/release/verify-baseline`. Hidden
 directories are explicitly in scope; omitting them is how the prefix rule went unenforced
 against the only document that violated it (issue #305).
 
 ## Enforcement
 
-Mechanically enforced, offline, by `tests/test_skill_path_references.py`. The pairing
+Mechanically enforced, offline, by `./target/release/verify-baseline`. The pairing
 between each constraint above and its enforcing assertion is registered in
-`tests/rule_contracts.py`, so removing either side fails the suite.
+`crates/verify-baseline`, so removing either side fails the suite.
 
 ## Why
 
@@ -77,7 +77,7 @@ absent from `rules/` is invisible to the process meant to guarantee compliance -
 could follow every documented rule and still fail the suite. It also left the rules
 unamendable, because there was no text to propose a change against.
 
-That is the **orphan enforcement** failure mode `tests/rule_contracts.py` exists to detect,
+That is the **orphan enforcement** failure mode `crates/verify-baseline` exists to detect,
 and the same class as issue #299, where the Mermaid parser rejected unquoted relationship
 labels that `rules/platform-independence.md` never mentioned.
 

@@ -13,11 +13,11 @@ This document details the solution walkthrough for the domain decoupling and dyn
 
 | Feature / Attribute | Source File | Class / Component | Method / Function | Description |
 |---|---|---|---|---|
-| YANG Compiler decoupling | `scripts/compile_yang.py` | N/A | `build_lui_json` | Loads `codebase_rules.json` and injects `"layout_rules" -> "details_tabs"`. Fallback to generic Properties `TableView` if undefined. |
+| YANG Compiler decoupling | `crates/compile-sysml/src/main.rs` | N/A | `build_lui_json` | Loads `codebase_rules.json` and injects `"layout_rules" -> "details_tabs"`. Fallback to generic Properties `TableView` if undefined. |
 | Flutter Generic Validator | `app_flutter/lib/domain/validation.dart` | N/A | `validateFields` | Evaluates validation constraints (`isRequired`/`required`, `minValue`/`maxValue`, `pattern`, `options`/`enumOptions`) against a map of inputs and a list of `FieldDescriptor`s. |
 | React Generic Validator | `web_react/src/domain/validation.ts` | N/A | `validateFields` | Replicates generic validation engine in TypeScript. |
 | Dynamic Property Grid | `web_react/src/components/property-grid.tsx` | `PropertyGrid` | N/A | Groups inputs by `sectionGroup`, dynamically renders form inputs by looping over `logicalLayout.attributes`, and uses `validateFields` for input validation. |
-| Baseline Gate decoupling | `scripts/verify_downstream_baseline.py` | N/A | N/A | Clears hardcoded default fallback list of `MANDATED_CLASSES` to `[]`. |
+| Baseline Gate decoupling | `crates/verify-baseline/src/checks/codebase.rs` | N/A | N/A | Clears hardcoded default fallback list of `MANDATED_CLASSES` to `[]`. |
 
 ---
 
@@ -45,7 +45,7 @@ The React `PropertyGrid` component now imports `logical-layout.json` (falling ba
 - Performs live validation on blur using the dynamic `validateFields` function and displays custom error messages based on violated constraints.
 
 ### 2.4. Conformance Gate & Guide
-- The conformance gate script `verify_downstream_baseline.py` was updated to set default fallback list of `MANDATED_CLASSES` to `[]` to prevent failures when domain classes are removed/decoupled.
+- The conformance gate module `crates/verify-baseline/src/checks/codebase.rs` was updated to set default fallback list of `MANDATED_CLASSES` to `[]` to prevent failures when domain classes are removed/decoupled.
 - The YANG compiler guide `docs/operations/yang-compiler-guide.md` was updated to explicitly denote that property mappings are dynamically resolved from source schemas rather than hardcoded, labeling network-specific terms as examples.
 
 ---

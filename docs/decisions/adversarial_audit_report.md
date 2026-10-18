@@ -39,9 +39,9 @@ Three concurrent adversarial subagents were initialized to target and isolate th
   * If an agent strictly follows the instructions in [skills/project-constitution/SKILL.md](../../skills/project-constitution/SKILL.md#L79-L80) (*"The constitution itself MUST NOT hardcode or assume any specific standard or schema format (such as YANG or RFC 8345) during initialization; all reference models are loaded dynamically at runtime"*), it will output a protocol-agnostic constitution and **fail** the evaluation.
   * If the agent hardcodes YANG/RFC 8345 references to pass the evaluation, it violates the skill's own core architecture mandate.
 
-### Root Cause 2: Hardcoded YANG Ingestion in `verify_model_coverage.py`
-* **File Path**: [verify_model_coverage.py](../../skills/spec-orchestrator/scripts/verify_model_coverage.py)
-* **Findings**: The script scans for files by strictly checking for the `.yang` extension, and the parser is hardcoded for YANG statement patterns (`typedef`, `leaf`, `container`, etc.).
+### Root Cause 2: Hardcoded YANG Ingestion in `crates/verify-baseline`
+* **File Path**: [crates/verify-baseline/src/main.rs](../../crates/verify-baseline/src/main.rs)
+* **Findings**: The verifier scans for files by strictly checking for the `.yang` extension, and the parser is hardcoded for YANG statement patterns (`typedef`, `leaf`, `container`, etc.).
 * **Impact**: Other schema formats (e.g. OpenAPI `.json`/`.yaml`, Protobuf `.proto`) submitted at runtime are silently ignored, causing coverage verification to fail.
 
 ### Root Cause 3: Hardcoded Template References in Spec Generation Skills

@@ -2,7 +2,7 @@
 
 Append-only record of every change to `.pipeline/constitution.md`.
 
-`tests/test_constitution_integrity.py` asserts that the SHA-256 of the constitution
+`crates/verify-baseline/src/checks/structural.rs` asserts that the SHA-256 of the constitution
 matches the newest entry below. **The constitution therefore cannot be changed by
 anyone -- human or agent -- without a logged entry.** An unlogged edit fails the suite.
 
@@ -55,7 +55,7 @@ entry was written, because it records the state as of the last actual change.
 
 Two divergences between the constitution and the implemented, enforced behaviour were
 outstanding when this log was created. Both are registered in
-`tests/rule_contracts.py` `KNOWN_DOC_DIVERGENCES` and both require line-by-line human
+`crates/verify-baseline/src/checks/structural.rs` `KNOWN_DOC_DIVERGENCES` and both require line-by-line human
 approval before they can be applied through Step 9:
 
 1. **Line 41 -- external actor exemption (issue #277).** The constitution requires
@@ -93,7 +93,7 @@ After:
 
 ### Rationale
 
-Issue #277 replaced a name-suffix bypass in `validators/uml.py` with an exemption keyed
+Issue #277 replaced a name-suffix bypass in `crates/verify-baseline/src/checks/uml.rs` with an exemption keyed
 on UML role. The prior rule exempted classifiers by spelling -- `PaymentManager` passed
 while `PaymentHandler` did not -- and, because an exempt classifier never entered the
 global class registry, it also silently disabled operation-signature validation for
@@ -283,14 +283,14 @@ Before:
 
 After:
 
-> - Every Epic MUST reference the specification section(s) it covers. Enforced by parity_auditor/validators/uml.py via required sections configuration.
-> - Every Feature MUST include a "Source References" section with verbatim specification clause numbers and schema paths. Enforced by parity_auditor/validators/uml.py and source_reference_validator.py.
-> - Every User Story MUST link to the Features it validates. Enforced by parity_auditor/validators/uml.py via Required Features Matrix validation.
-> - Every Use Case MUST link to the User Stories and Features it realizes. Enforced by parity_auditor/validators/uml.py via Realization Matrix validation.
+> - Every Epic MUST reference the specification section(s) it covers. Enforced by crates/verify-baseline/src/checks/uml.rs via required sections configuration.
+> - Every Feature MUST include a "Source References" section with verbatim specification clause numbers and schema paths. Enforced by crates/verify-baseline/src/checks/uml.rs and crates/verify-baseline/src/checks/spec_sections.rs.
+> - Every User Story MUST link to the Features it validates. Enforced by crates/verify-baseline/src/checks/uml.rs via Required Features Matrix validation.
+> - Every Use Case MUST link to the User Stories and Features it realizes. Enforced by crates/verify-baseline/src/checks/uml.rs via Realization Matrix validation.
 
 ### Rationale
 
-Update each of the four traceability mandates in the Tier 1 constitution to explicitly name its enforcing validator paths (`parity_auditor/validators/uml.py` and `source_reference_validator.py`), closing document-enforcement traceability gaps as required by Issue #378.
+Update each of the four traceability mandates in the Tier 1 constitution to explicitly name its enforcing validator paths (`crates/verify-baseline/src/checks/uml.rs` and `crates/verify-baseline/src/checks/spec_sections.rs`), closing document-enforcement traceability gaps as required by Issue #378.
 
 Non-destructive: additive clarification of enforcing validator paths, governance rules unchanged.
 
@@ -316,11 +316,11 @@ Before:
 
 After:
 
-> - Matching by title normalization is the primary selector used by the backlog reconciliation tool. To prevent collisions, all specification files of the same spec type MUST have unique normalised titles, as enforced by parity_auditor/validators/spec_title_uniqueness_validator.py and rules/tracker-source-of-truth.md.
+> - Matching by title normalization is the primary selector used by the backlog reconciliation tool. To prevent collisions, all specification files of the same spec type MUST have unique normalised titles, as enforced by crates/verify-baseline/src/checks/spec_sections.rs and rules/tracker-source-of-truth.md.
 
 ### Rationale
 
-Update `.pipeline/constitution.md` under `### Unique Backlog Identifiers` to reflect that matching by title normalization is the primary selector used by the backlog reconciliation tool (`reconcile_backlog.py`), resolving governance document contradiction as required by Issue #377.
+Update `.pipeline/constitution.md` under `### Unique Backlog Identifiers` to reflect that matching by title normalization is the primary selector used by the backlog reconciliation tool (`./target/release/reconcile-backlog`), resolving governance document contradiction as required by Issue #377.
 
 Non-destructive: title normalization rule updated to match enforced reconciliation primary selector, governance rules aligned.
 
@@ -382,11 +382,11 @@ Section *Traceability*, line 81.
 
 Before:
 
-> - Every Feature MUST include a "Source References" section with verbatim specification clause numbers and schema paths. Enforced by parity_auditor/validators/uml.py and source_reference_validator.py.
+> - Every Feature MUST include a "Source References" section with verbatim specification clause numbers and schema paths. Enforced by crates/verify-baseline/src/checks/uml.rs and crates/verify-baseline/src/checks/spec_sections.rs.
 
 After:
 
-> - Every Feature MUST include a 'Source References' section with verbatim specification clause numbers and schema paths. Every Epic, User Story, and Use Case MUST also carry a 'Source References' section (or Realization / Target Features Matrix linking to upstream sources). Enforced by parity_auditor/validators/uml.py via required_sections configuration in codebase_rules.json.
+> - Every Feature MUST include a 'Source References' section with verbatim specification clause numbers and schema paths. Every Epic, User Story, and Use Case MUST also carry a 'Source References' section (or Realization / Target Features Matrix linking to upstream sources). Enforced by crates/verify-baseline/src/checks/uml.rs via required_sections configuration in codebase_rules.json.
 
 ### Rationale
 
@@ -426,21 +426,21 @@ After:
 >
 > | Quality Gate | Enforcing Validator Path | Documentation Reference |
 > |---|---|---|
-> | Specification Validation | `validators/spec_validator.py` | `rules/platform-independence.md` |
-> | Model Coverage Verification | `scripts/verify_model_coverage.py` | `rules/platform-independence.md` |
-> | Cross-Reference Integrity | `validators/link_validator.py` | `rules/document-references.md` |
+> | Specification Validation | `crates/verify-baseline/src/checks/spec_sections.rs` | `rules/platform-independence.md` |
+> | Model Coverage Verification | `./target/release/verify-baseline . --spec-only` | `rules/platform-independence.md` |
+> | Cross-Reference Integrity | `crates/verify-baseline/src/checks/links.rs` | `rules/document-references.md` |
 > | Human Approval | `rules/user-authorization-lock.md` | `.pipeline/constitution.md` |
-> | Downstream Conformance | `scripts/verify_downstream_baseline.py` | `rules/downstream-conformance.md` |
-> | UML Model Integrity | `validators/uml.py` | `rules/uml-model-integrity.md` |
-> | Mermaid Syntax Constraints | `validators/mermaid_syntax_validator.py` | `rules/platform-independence.md` |
-> | Behavioral Trigger Coverage | `validators/behavioral.py` | `rules/behavioral-trigger-coverage.md` |
-> | Codebase Compliance | `validators/codebase.py` | `rules/codebase-compliance.md` |
-> | Document Cross-Reference Integrity | `tests/test_skill_path_references.py` | `rules/document-references.md` |
-> | Constitution Amendment Integrity | `tests/test_constitution_integrity.py` | `.pipeline/constitution-amendments.md` |
-> | Specification File Integrity | `validators/docs.py` | `rules/platform-independence.md` |
-> | Spec Title Uniqueness | `validators/spec_title_uniqueness_validator.py` | `rules/tracker-source-of-truth.md` |
-> | Source Reference Integrity | `validators/source_reference_validator.py` | `rules/codebase-compliance.md` |
-> | Logical UI Validation | `validators/logical_ui_validator.py` | `rules/platform-independence.md` |
+> | Downstream Conformance | `./target/release/verify-baseline .` | `rules/downstream-conformance.md` |
+> | UML Model Integrity | `crates/verify-baseline/src/checks/uml.rs` | `rules/uml-model-integrity.md` |
+> | Mermaid Syntax Constraints | `crates/verify-baseline/src/checks/mermaid.rs` | `rules/platform-independence.md` |
+> | Behavioral Trigger Coverage | `crates/verify-baseline/src/checks/behavioral.rs` | `rules/behavioral-trigger-coverage.md` |
+> | Codebase Compliance | `crates/verify-baseline/src/checks/codebase.rs` | `rules/codebase-compliance.md` |
+> | Document Cross-Reference Integrity | `crates/verify-baseline/src/checks/links.rs` | `rules/document-references.md` |
+> | Constitution Amendment Integrity | `crates/verify-baseline/src/checks/structural.rs` | `.pipeline/constitution-amendments.md` |
+> | Specification File Integrity | `crates/verify-baseline/src/checks/spec_sections.rs` | `rules/platform-independence.md` |
+> | Spec Title Uniqueness | `crates/verify-baseline/src/checks/spec_sections.rs` | `rules/tracker-source-of-truth.md` |
+> | Source Reference Integrity | `crates/verify-baseline/src/checks/spec_sections.rs` | `rules/codebase-compliance.md` |
+> | Logical UI Validation | `crates/verify-baseline/src/checks/lumi.rs` | `rules/platform-independence.md` |
 >
 > ### Specification Validation Gates
 
@@ -518,12 +518,12 @@ After:
 >
 > | Process Area (CMMI Acronym) | Enforcing Mechanisms & Pipeline Artifacts |
 > |---|---|
-> | Requirements Management (REQM) | `tracker-source-of-truth.md`, `reconcile_backlog.py` |
-> | Verification (VER) | `verify_model_coverage.py`, `parity_auditor` validators |
+> | Requirements Management (REQM) | `tracker-source-of-truth.md`, `./target/release/reconcile-backlog` |
+> | Verification (VER) | `./target/release/verify-baseline . --spec-only`, `verify-baseline` checks |
 > | Validation (VAL) | Product Owner `Closed` state transition & verification walkthroughs |
 > | Configuration Management (CM) | Git-tracked specification files, `constitution-amendments.md` |
 > | Technical Solution (TS) | 3-Layer LUI Definition of Done & implementation profiles |
-> | Product Integration (PI) | Automated baseline verification `verify_downstream_baseline.py` |
+> | Product Integration (PI) | Automated baseline verification `./target/release/verify-baseline` |
 >
 > ### Separation of Verification and Validation
 
@@ -566,7 +566,7 @@ After:
 
 > ### Granularity Bounds
 > - An Epic SHOULD contain 3-15 Features. Epics exceeding 15 Features MUST be split by the schema-specification-engineering worker during Step 1 decomposition; Epics with fewer than 3 Features MUST be reviewed for consolidation. Enforced by schema-specification-engineering decomposition heuristics.
-> - A Feature SHOULD carry 3-10 acceptance criteria. Features exceeding 10 acceptance criteria MUST be split into targeted sub-features; Features with fewer than 3 acceptance criteria MUST be expanded to ensure full scenario coverage. Enforced by parity_auditor/validators/cardinality_validator.py and spec worker review gates.
+> - A Feature SHOULD carry 3-10 acceptance criteria. Features exceeding 10 acceptance criteria MUST be split into targeted sub-features; Features with fewer than 3 acceptance criteria MUST be expanded to ensure full scenario coverage. Enforced by crates/verify-baseline/src/checks/spec_sections.rs and spec worker review gates.
 >
 > ### Epic Granularity
 > - One Epic per major functional domain or protocol module.
@@ -579,7 +579,7 @@ After:
 
 ### Rationale
 
-Update `.pipeline/constitution.md` under `### Granularity Bounds` to use normative RFC 2119 SHOULD/MUST language with explicit enforcing mechanisms (`schema-specification-engineering` decomposition heuristics and `parity_auditor/validators/cardinality_validator.py`), resolving audit finding #379.
+Update `.pipeline/constitution.md` under `### Granularity Bounds` to use normative RFC 2119 SHOULD/MUST language with explicit enforcing mechanisms (`schema-specification-engineering` decomposition heuristics and `crates/verify-baseline/src/checks/spec_sections.rs`), resolving audit finding #379.
 
 Non-destructive: additive Granularity Bounds subsection with normative language and explicit enforcers, line count increased from 233 to 235 lines, governance rules preserved.
 
@@ -758,7 +758,7 @@ Before:
 > | Quality Gate | Enforcing Validator Path | Documentation Reference |
 > |---|---|---|
 > ...
-> | Logical UI Validation | `validators/logical_ui_validator.py` | `rules/platform-independence.md` |
+> | Logical UI Validation | `crates/verify-baseline/src/checks/lumi.rs` | `rules/platform-independence.md` |
 > 
 > ### Specification Validation Gates
 
@@ -770,8 +770,8 @@ After:
 > | Quality Gate | Enforcing Validator Path | Documentation Reference |
 > |---|---|---|
 > ...
-> | Logical UI Validation | `validators/logical_ui_validator.py` | `rules/platform-independence.md` |
-> | Safety Integrity Quality Gate | `scripts/verify_downstream_baseline.py` | `docs/safety/README.md` |
+> | Logical UI Validation | `crates/verify-baseline/src/checks/lumi.rs` | `rules/platform-independence.md` |
+> | Safety Integrity Quality Gate | `./target/release/verify-baseline` | `docs/safety/README.md` |
 > 
 > ### Phase 0 Safety Engineering Airworthiness Gate
 > - **8-Pillar Safety Specification Schema**: All downstream safety engineering deliverables (`docs/safety/STPA_MATRIX.md`) MUST conform to the 8-pillar STPA, FMECA, and SORA schema:

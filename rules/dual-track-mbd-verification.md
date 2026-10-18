@@ -32,16 +32,16 @@ flowchart TD
 
     subgraph TrackB["Track B: Headless CI Digital Twin Engine"]
         direction TB
-        PY_DOMAIN["Domain Models and Enums:<br/>models - python - *_domain.py"]
-        PY_ENGINE["Discrete Sim Engines:<br/>models - python - *_engine.py"]
-        PY_TEST["Automated CI Test Runners:<br/>tests - test_*_simulation.py"]
+        RS_DOMAIN["Domain Models and Enums:<br/>crates - * - src - domain.rs"]
+        RS_ENGINE["Discrete Sim Engines:<br/>crates - * - src - engine.rs"]
+        RS_TEST["Automated CI Test Runners:<br/>crates - * - tests - *_simulation.rs"]
         CI_REPORT["Formal Results Reports:<br/>docs - simulink_results - *.md"]
     end
 
     SYSML --> M_BUILD
-    SYSML --> PY_DOMAIN
+    SYSML --> RS_DOMAIN
     SPECS --> M_PARAM
-    SPECS --> PY_ENGINE
+    SPECS --> RS_ENGINE
 
     M_BUILD --> SLX
     M_PARAM --> SLX
@@ -49,11 +49,11 @@ flowchart TD
     SLX --> CODER
     SLX --> SLDV
 
-    PY_DOMAIN --> PY_ENGINE
-    PY_ENGINE --> PY_TEST
-    PY_TEST --> CI_REPORT
+    RS_DOMAIN --> RS_ENGINE
+    RS_ENGINE --> RS_TEST
+    RS_TEST --> CI_REPORT
 
-    SLX -.->|"Discrete Equivalence (dt; guards; polynomials; tol <= 1e-6)"| PY_ENGINE
+    SLX -.->|"Discrete Equivalence (dt; guards; polynomials; tol <= 1e-6)"| RS_ENGINE
 ```
 
 ## The Four Non-Negotiable Core Invariants
@@ -64,7 +64,7 @@ flowchart TD
    - The resulting block diagrams and statecharts MUST be configured for deterministic fixed-step solvers (`FixedStepDiscrete`), strict signal logging (`logsout`), and Embedded Coder DO-178C C / SPARK Ada code synthesis.
 
 2. **Track B (Headless CI Digital Twin Engine)**:
-   - All control law and safety statechart features MUST provide a standalone, license-free discrete-time execution engine (`models/python/` or C++/Rust).
+   - All control law and safety statechart features MUST provide a standalone, license-free discrete-time execution engine (`crates/` in Rust or C++).
    - The digital twin engine MUST execute at the exact same discrete loop rate ($dt$) and implement identical transition guards, algebraic transfer functions, polynomial blending curves, and 6-DOF vehicle kinematics.
    - The engine MUST expose strongly typed domain models, state vectors, telemetry logs, and step functions (`step(dt, inputs) -> outputs`).
 
@@ -84,15 +84,16 @@ Every feature containing control laws, system guidance, physical plant estimator
 models/
 ├── scripts/
 │   └── build_<feature_slug>_model.m        # Track A: Programmatic Simulink/Stateflow builder
-├── matlab/
-│   ├── <feature_slug>_params.m            # Track A: MATLAB physical & threshold parameters
-│   └── <feature_slug>_data.sldd           # Track A: Simulink Data Dictionary (when required)
-└── python/
-    ├── <feature_slug>_domain.py           # Track B: Strongly-typed domain state & telemetry
-    └── <feature_slug>_engine.py           # Track B: Standalone 250 Hz discrete simulation engine
+└── matlab/
+    ├── <feature_slug>_params.m            # Track A: MATLAB physical & threshold parameters
+    └── <feature_slug>_data.sldd           # Track A: Simulink Data Dictionary (when required)
 
-tests/
-└── test_<feature_slug>_simulation.py      # Automated CI test suite executing Track B headless engine
+crates/<feature_slug>/
+├── src/
+│   ├── domain.rs                          # Track B: Strongly-typed domain state & telemetry
+│   └── engine.rs                          # Track B: Standalone 250 Hz discrete simulation engine
+└── tests/
+    └── <feature_slug>_simulation.rs       # Automated CI test suite executing Track B headless engine
 
 docs/reports/simulink_results/
 └── <FEATURE-ID>_simulation_results.md     # Formal DO-331 simulation & verification report
@@ -127,9 +128,9 @@ All discrete-time algorithms implemented across Track A and Track B must adhere 
 
 | Standard Requirement | Track A (Simulink / Embedded Coder) | Track B (Headless CI Digital Twin) |
 | :--- | :--- | :--- |
-| **High-Level Requirement Traceability** | SysML v2 ports & requirement links in `.slx` | Traceability tags (`Realises`) in Python engine |
+| **High-Level Requirement Traceability** | SysML v2 ports & requirement links in `.slx` | Traceability tags (`Realises`) in Rust engine |
 | **Low-Level Requirement Verification** | Stateflow truth tables & transition tests | Automated unit & parameterized CI test suites |
-| **Model Coverage (MC/DC)** | Simulink Coverage / Simulink Test | Python coverage (`pytest-cov` branch analysis) |
+| **Model Coverage (MC/DC)** | Simulink Coverage / Simulink Test | Rust coverage (`cargo test --workspace` branch analysis) |
 | **Formal Property Proving** | Simulink Design Verifier (SLDV) | SMT solver / property-based hypothesis testing |
 | **Target Code Generation** | Embedded Coder DO-178C C / SPARK Ada | Pure reference model for validation & oracle |
 | **Continuous Regression Execution** | Triggered in licensed batch builds | Executed on every pull request & commit in CI |

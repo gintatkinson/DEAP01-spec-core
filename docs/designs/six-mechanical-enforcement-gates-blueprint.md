@@ -18,7 +18,7 @@ These six mechanical gates act as physical constraints within the agent orchestr
 
 1. **Pre-Dispatch Schema Ingestion Gate**: Validates input schema digests (`schema-digest.json`) using SHA-256 verification and strict node accounting across containers, lists, leaves, typedefs, identities, and groupings.
 2. **Runtime Capability Pre-Flight Probe Check**: Dispatches a lightweight probe subagent before Phase 2 (User Stories/Use Cases) and Phase 3 (Implementation) to verify subagent execution capabilities. The system HALTs immediately on probe failure, locking coordinator direct writes.
-3. **Subagent Output Integrity Validator**: Executes `scripts/verify_subagent_output.py` to verify that subagents produce non-zero file sizes, verified file creation proof, valid issue URLs, and complete payloads.
+3. **Subagent Output Integrity Validator**: Executes `./target/release/verify-baseline --subagent-output` to verify that subagents produce non-zero file sizes, verified file creation proof, valid issue URLs, and complete payloads.
 4. **Template Placeholder Escape Tokens**: Enforces mandatory token replacement for `{{REQUIRED_JUSTIFICATION}}`, `{{REQUIRED_SOURCE_REF}}`, and `{{REQUIRED_LUI}}`. Any remaining escape token causes an immediate registration rejection.
 5. **Shift-Left Registration-Time Phase Gate**: Validates Phase 3 Use Case flows, preconditions, and realization matrices at registration time prior to issue creation or branch commit.
 6. **Plan-to-Schema Cross-Reference Gate**: Verifies `schema_nodes` mapping in `implementation_plan.md`, asserting that `union(mappings) == 100%` of elements in `schema-digest.json`.
@@ -52,9 +52,9 @@ To prevent partial or broken multi-agent dispatches, the orchestrator dispatches
 
 ### 2.3 Mechanism 3: Subagent Output Integrity Validator
 
-The `scripts/verify_subagent_output.py` validator script executes immediately upon subagent completion. It performs automated verification on the subagent's delivered artifacts:
+The `./target/release/verify-baseline --subagent-output` validator executes immediately upon subagent completion. It performs automated verification on the subagent's delivered artifacts:
 
-- **Non-Zero File Size**: Asserts `os.path.getsize(file_path) > 0` for all declared deliverables.
+- **Non-Zero File Size**: Asserts `fs::metadata(file_path).len() > 0` for all declared deliverables.
 - **File Creation Proof**: Verifies physical file existence on the file system and validates `git status` output.
 - **Tracker & Issue Link Proof**: Parses generated issue markdown files to verify valid GitHub issue URLs (`https://github.com/.../issues/N`) or tracker tokens.
 - **Mermaid Syntax Proof**: Validates that all Mermaid diagrams in subagent outputs contain mandatory type headers and closed code fences.
@@ -67,7 +67,7 @@ To prevent boilerplate leaks, placeholder text, or incomplete specifications fro
 - `{{REQUIRED_SOURCE_REF}}`: Concrete file path and line number reference to the normative source schema.
 - `{{REQUIRED_LUI}}`: Full 3-layer Logical UI (LUI) semantic chain definition.
 
-Registration tools (`reconcile_backlog.py`, spec registration scripts) scan all draft Markdown files for un-replaced tokens. If any instance of `{{REQUIRED_*}}` is detected, the operation fails with `Exit Code 42` and registration is aborted.
+Registration tools (`./target/release/reconcile-backlog`, spec registration gates) scan all draft Markdown files for un-replaced tokens. If any instance of `{{REQUIRED_*}}` is detected, the operation fails with `Exit Code 42` and registration is aborted.
 
 ### 2.5 Mechanism 5: Shift-Left Registration-Time Phase Gate
 
@@ -99,7 +99,7 @@ graph TD
     C --> D["Pre-Flight Probe Check"]
     D -->|"Probe PASS"| E["Context-Isolated Subagent Dispatch"]
     D -->|"Probe FAIL"| F["Orchestrator HALT & Escalation"]
-    E --> G["Subagent Output Integrity Validator (verify_subagent_output.py)"]
+    E --> G["Subagent Output Integrity Validator (verify-baseline)"]
     G --> H["Template Escape Token Check ({{REQUIRED_*}})"]
     H --> I["Shift-Left Registration Phase Gate"]
     I --> J["Plan-to-Schema Cross-Reference Gate"]
@@ -126,7 +126,7 @@ sequenceDiagram
     Probe-->>Coord: Probe Status (PASS)
     Coord->>Sub: Dispatch Micro-Task Subagent
     Sub-->>Coord: Return Deliverable Files & Logs
-    Coord->>Val: Run verify_subagent_output.py
+    Coord->>Val: Run ./target/release/verify-baseline --subagent-output
     Val-->>Coord: Artifact Integrity Proof (PASS)
     Coord->>Token: Scan for {{REQUIRED_*}} Tokens
     Token-->>Coord: Zero Unreplaced Tokens (PASS)
@@ -199,7 +199,7 @@ Boolean            ::= 'true' | 'false' ;
 }
 ```
 
-### 4.3 JSON Schema for `verify_subagent_output.py` Report
+### 4.3 JSON Schema for Subagent Output Verification Report
 
 ```json
 {
@@ -237,12 +237,12 @@ Boolean            ::= 'true' | 'false' ;
 
 | Deliverable Path | Description | Mechanism |
 | :--- | :--- | :--- |
-| `scripts/generate_schema_digest.py` | Schema parser and SHA-256 + node count digest generator | Mechanism 1 |
-| `scripts/probe_subagent_capability.py` | Pre-flight subagent capability probe checker | Mechanism 2 |
-| `scripts/verify_subagent_output.py` | Subagent output artifact integrity validator | Mechanism 3 |
-| `scripts/check_template_escape_tokens.py` | Scanner for unreplaced `{{REQUIRED_*}}` tokens | Mechanism 4 |
-| `scripts/validate_shift_left_phase_gate.py` | Shift-left Use Case flow and realization matrix checker | Mechanism 5 |
-| `scripts/verify_plan_schema_cross_ref.py` | Cross-reference validator for `implementation_plan.md` schema coverage | Mechanism 6 |
+| `crates/ingest-sysml/src/main.rs` | Schema parser and SHA-256 + node count digest generator | Mechanism 1 |
+| `crates/verify-baseline/src/checks/structural.rs` | Pre-flight subagent capability probe checker | Mechanism 2 |
+| `crates/verify-baseline/src/checks/structural.rs` | Subagent output artifact integrity validator | Mechanism 3 |
+| `crates/verify-baseline/src/checks/spec.rs` | Scanner for unreplaced `{{REQUIRED_*}}` tokens | Mechanism 4 |
+| `crates/reconcile-backlog/src/main.rs` | Shift-left Use Case flow and realization matrix checker | Mechanism 5 |
+| `crates/verify-baseline/src/checks/schema.rs` | Cross-reference validator for `implementation_plan.md` schema coverage | Mechanism 6 |
 | `docs/designs/six-mechanical-enforcement-gates-blueprint.md` | Official architectural solution blueprint | Governance |
 
 ### 5.2 Test Plan
@@ -255,15 +255,15 @@ graph TD
     T4["test_template_escape_tokens_rejection"] --> M4["Mechanism 4 Unit Tests"]
     T5["test_shift_left_registration_gate"] --> M5["Mechanism 5 Unit Tests"]
     T6["test_plan_schema_cross_ref_coverage"] --> M6["Mechanism 6 Unit Tests"]
-    T7["test_document_references.py"] --> M7["Blueprint Governance Test"]
+    T7["document_references_tests"] --> M7["Blueprint Governance Test"]
 ```
 
 1. **Unit Test Suite**:
    - Verify `schema-digest.json` generation and digest mismatch detection.
    - Test subagent probe failure escalation and zero coordinator write lock.
-   - Verify `scripts/verify_subagent_output.py` against non-zero file sizes and missing files.
+   - Verify `./target/release/verify-baseline --subagent-output` against non-zero file sizes and missing files.
    - Test detection of `{{REQUIRED_JUSTIFICATION}}`, `{{REQUIRED_SOURCE_REF}}`, and `{{REQUIRED_LUI}}`.
    - Validate registration rejection on broken Use Case flows or unmapped features.
    - Assert `union(mappings) == 100%` verification failure when a node is omitted.
 2. **Governance Test Suite**:
-   - `tests/test_document_references.py` asserts existence, frontmatter metadata, mechanism specifications, Mermaid diagrams, EBNF grammar, JSON schemas, and test plan in `docs/designs/six-mechanical-enforcement-gates-blueprint.md`.
+   - `crates/verify-baseline/tests/` asserts existence, frontmatter metadata, mechanism specifications, Mermaid diagrams, EBNF grammar, JSON schemas, and test plan in `docs/designs/six-mechanical-enforcement-gates-blueprint.md`.

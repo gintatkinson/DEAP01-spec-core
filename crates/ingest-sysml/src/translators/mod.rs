@@ -14,6 +14,7 @@
 //! - [`openapi`]: Translates OpenAPI 3.0/3.1 RESTful schemas and routes into SysML parts and action endpoints.
 //! - [`yang`]: Translates RFC 6020/7950 YANG data models into SysML packages, parts, attributes, actions, and use cases.
 
+pub mod code;
 pub mod idl;
 pub mod markdown;
 pub mod openapi;

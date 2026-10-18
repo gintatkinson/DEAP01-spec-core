@@ -63,15 +63,7 @@ As a domain engineer, I want to take a YANG data model file and automatically ge
   --schema /tmp/nonexistent.yang \
   --format yang \
   --out /tmp/test-output.sysml 2>&1 && echo 'FAIL: Should have errored' || echo 'AC5 PASS: Correctly errored'
-```
 
 # AC6: Generated file matches expected structure
-python3 -c "
-import json
-with open('/tmp/test-output.json') as f:
-    d = json.load(f)
-required_keys = {'meta', 'theme', 'navigation', 'layout', 'attributes'}
-assert required_keys.issubset(d.keys()), f'Missing keys: {required_keys - d.keys()}'
-print('AC6 PASS')
-"
+./target/release/verify-baseline . --no-domain
 ```

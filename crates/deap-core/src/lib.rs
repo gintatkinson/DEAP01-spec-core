@@ -37,6 +37,7 @@
 pub mod diagnostics;
 pub mod markdown;
 pub mod rules;
+pub mod source_ast;
 pub mod sysml_ast;
 pub mod workspace;
 
@@ -47,6 +48,16 @@ pub use markdown::{
 };
 pub use rules::{
     CodebaseRules, MetaConfig, TrackerRules, ValidationRules, EXCLUDED_DIRS, MASTER_BLUEPRINTS,
+};
+pub use source_ast::{
+    classify_dart_member_ast, classify_dart_top_level_ast, classify_rust_item_line_ast,
+    discover_source_files, extract_dart_callable_ident, extract_leading_ast_ident,
+    extract_realises_ids_from_doc_lines, ingest_source_directory, lower_source_ast_to_package,
+    normalize_type_for_sysml, parse_dart_callable_signature, parse_dart_source_ast,
+    parse_rust_callable_signature, parse_rust_source_ast, sanitize_sysml_identifier,
+    summary_from_doc_lines, update_ast_delimiter_depths, validate_source_syntax,
+    validate_source_syntax_for_language, SourceAstItem, SourceField, SourceItemKind,
+    SourceLanguage, SourceParam,
 };
 pub use sysml_ast::{
     component_matches, extract_negated_components, is_component_negated,

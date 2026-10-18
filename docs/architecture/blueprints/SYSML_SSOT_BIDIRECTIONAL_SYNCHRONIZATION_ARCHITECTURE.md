@@ -146,10 +146,10 @@ The architecture adheres to four fundamental principles:
 
 ## 4. Schema Ingestion Pipeline & SysML v2 AST Metamodel
 
-Input specifications and interface definitions placed in `schema/` are ingested via `deap-ast` / `sysmlv2_ingest.py`. The ingestion engine normalizes heterogeneous domain descriptions into standardized SysML v2 packages:
+Input specifications and interface definitions placed in `schema/` are ingested via `deap-ast` / `./target/release/ingest-sysml`. The ingestion engine normalizes heterogeneous domain descriptions into standardized SysML v2 packages:
 
 ```
-schema/  -->  deap-ast (sysmlv2_ingest.py)  -->  .pipeline/schema.sysml  +  .pipeline/schema-digest.json
+schema/  -->  deap-ast (./target/release/ingest-sysml)  -->  .pipeline/schema.sysml  +  .pipeline/schema-digest.json
 ```
 
 ### AST Element Metamodel Mapping
@@ -184,7 +184,7 @@ Forward specification generation decomposes the canonical SysML v2 AST model int
 When agile specification workers elaborate edge cases, exception flows, or refined parameters during development phases, those deltas MUST be synchronized back into `.pipeline/schema.sysml` via the reverse synchronization compiler:
 
 ```bash
-deap sync --reverse # or python3 scripts/compile_sysml.py --reverse-sync
+deap sync --reverse # or ./target/release/compile-sysml --reverse-sync
 ```
 
 ### Reverse Synchronization Engine Workflow
@@ -193,7 +193,7 @@ deap sync --reverse # or python3 scripts/compile_sysml.py --reverse-sync
 2. **Non-Destructive Semantic AST Merge**: Merges newly discovered components, states, actions, ports, and requirements into `.pipeline/schema.sysml` without overwriting existing formal constraints.
 3. **Canonical Serialization**: Re-emits `.pipeline/schema.sysml` using strict canonical indentation and symbol ordering.
 4. **Cryptographic Parity Digest Regeneration**: Computes updated SHA-256 hash, line counts, and symbol manifests in `.pipeline/schema-digest.json`.
-5. **Pre-Commit Parity Lock**: Automatically validates all 22 parity gates via `deap-harness` and `verify_downstream_baseline.py`.
+5. **Pre-Commit Parity Lock**: Automatically validates all 22 parity gates via `deap-harness` and `./target/release/verify-baseline`.
 
 ---
 
@@ -241,10 +241,10 @@ flowchart TD
     end
 
     subgraph TrackB["Track B: Headless CI Digital Twin Engine (License-Free Runner)"]
-        PY_DOMAIN["Domain Models: models/python/*_domain.py"]
-        PY_ENGINE["Discrete 250 Hz Engine: models/python/*_engine.py"]
+        RS_DOMAIN["Domain Models: models/rust/*_domain.rs"]
+        RS_ENGINE["Discrete 250 Hz Engine: models/rust/*_engine.rs"]
         SIM_HARNESS["CI Simulation Runner: deap-harness"]
-        PY_COV["Branch & Condition Coverage Engine"]
+        RS_COV["Branch & Condition Coverage Engine"]
     end
 
     subgraph ParityGate["Dual-Track Parity & Verification Deliverables"]
@@ -253,11 +253,11 @@ flowchart TD
     end
 
     AST --> BUILD_M
-    AST --> PY_DOMAIN
+    AST --> RS_DOMAIN
     FSM_SPEC --> BUILD_M
-    FSM_SPEC --> PY_ENGINE
+    FSM_SPEC --> RS_ENGINE
     DYN_SPEC --> PARAMS_M
-    DYN_SPEC --> PY_ENGINE
+    DYN_SPEC --> RS_ENGINE
 
     BUILD_M --> SLX_MODEL
     PARAMS_M --> SLX_MODEL
@@ -265,12 +265,12 @@ flowchart TD
     SLX_MODEL --> EMBEDDED_CODER
     SLX_MODEL --> SLDV_COV
 
-    PY_DOMAIN --> PY_ENGINE
-    PY_ENGINE --> SIM_HARNESS
-    SIM_HARNESS --> PY_COV
+    RS_DOMAIN --> RS_ENGINE
+    RS_ENGINE --> SIM_HARNESS
+    SIM_HARNESS --> RS_COV
 
     SLX_MODEL -.-> EQUIV
-    PY_ENGINE -.-> EQUIV
+    RS_ENGINE -.-> EQUIV
     EQUIV --> REPORT
 ```
 
@@ -285,8 +285,8 @@ flowchart TD
 #### 2. Track B: Headless CI Digital Twin Engine
 - **Purpose**: Autonomous, 100% license-free regression testing, continuous integration, and subagent verification loops.
 - **Deliverables**:
-  - Domain state and telemetry models: `models/python/<feature_slug>_domain.py` with immutable data structures and explicit enum states.
-  - Discrete-time simulation engine: `models/python/<feature_slug>_engine.py` executing synchronous time-step updates (`step(dt, inputs) -> outputs`).
+  - Domain state and telemetry models: `models/rust/<feature_slug>_domain.rs` with immutable data structures and explicit enum states.
+  - Discrete-time simulation engine: `models/rust/<feature_slug>_engine.rs` executing synchronous time-step updates (`step(dt, inputs) -> outputs`).
   - Automated CI simulation suites: executed by `deap-harness` asserting fault injection, boundary trips, and timing bounds.
 - **Runtime Model**: Operates without external MathWorks licenses, running inside standard headless Linux CI runners in under 1 second.
 
@@ -320,12 +320,12 @@ The integrity of the bidirectional digital thread is mechanically enforced by th
 
 | Parity Gate ID | Category | Enforcing Mechanism | Blocking Threshold |
 | :--- | :--- | :--- | :--- |
-| **GATE-01** | Structural Completeness | `deap-harness` / `validators/uml.py` | 100% Schema-to-Feature coverage |
-| **GATE-02** | Behavioral Alignment | `deap-harness` / `validators/behavioral.py` | 100% State/Action trigger parity |
-| **GATE-03** | Use Case Realization | `deap-harness` / `validators/uml.py` | 100% Use-Case-to-Story mapping |
-| **GATE-04** | Safety Traceability | `deap-harness` / `validators/schema_mapping_validator.py` | 100% STPA/FMECA constraint satisfaction |
-| **GATE-05** | Reverse Sync Parity | `deap-ast` / `compile_sysml.py` | Zero AST delta drift |
-| **GATE-06** | Mathematical KaTeX Integrity | `deap-harness` / `validators/katex_validator.py` | 0 dangling operators, 0 math-in-table errors |
+| **GATE-01** | Structural Completeness | `deap-harness` / `crates/verify-baseline/src/checks/uml.rs` | 100% Schema-to-Feature coverage |
+| **GATE-02** | Behavioral Alignment | `deap-harness` / `crates/verify-baseline/src/checks/behavioral.rs` | 100% State/Action trigger parity |
+| **GATE-03** | Use Case Realization | `deap-harness` / `crates/verify-baseline/src/checks/uml.rs` | 100% Use-Case-to-Story mapping |
+| **GATE-04** | Safety Traceability | `deap-harness` / `crates/verify-baseline/src/checks/schema_mapping.rs` | 100% STPA/FMECA constraint satisfaction |
+| **GATE-05** | Reverse Sync Parity | `deap-ast` / `./target/release/compile-sysml` | Zero AST delta drift |
+| **GATE-06** | Mathematical KaTeX Integrity | `deap-harness` / `crates/verify-baseline/src/checks/katex.rs` | 0 dangling operators, 0 math-in-table errors |
 | **GATE-07** | Dual-Track MBD Compliance | `rules/dual-track-mbd-verification.md` | Track A + Track B deliverable completeness |
 | **GATE-08** | Discrete Loop Rate Parity | `deap-harness` Simulation Runner | Synchronous loop rate (dt = 0.004 s / 250 Hz) |
 | **GATE-09** | Numerical Precision Bound | `deap-harness` Equivalence Engine | State divergence <= 10^-6 |

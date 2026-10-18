@@ -95,7 +95,7 @@ flowchart TD
    Automatically capture and archive raw DeepSeek-R1 reasoning traces (`<think>...</think>`) into `.pipeline/diagnostics/cot_audit_log.json`. Every safety constraint ($SC-1..N$), System-Theoretic Process Analysis (STPA) Unsafe Control Action ($UCA-1..N$), and Run-Time Assurance (RTA) switching threshold is backed by immutable, traceable LLM reasoning evidence for multi-authority regulatory reviews (AssuranceLevel::Tier1..5).
 
 3. **Autonomous End-to-End Pipeline State Machine**:
-   Eliminate manual human context-switching between pipeline stages. `DEAP-Harness` orchestrates the handoff from Pipeline 0 (SysML v2 textual model and `pipeline0_handoff_contract.json`) to Pipeline 1 (Agile backlog generation) and Pipeline 2 (serial subagent RED-GREEN TDD code synthesis) with automated quality gate enforcement (`verify_model_coverage.py`, `verify_downstream_baseline.py`).
+   Eliminate manual human context-switching between pipeline stages. `DEAP-Harness` orchestrates the handoff from Pipeline 0 (SysML v2 textual model and `pipeline0_handoff_contract.json`) to Pipeline 1 (Agile backlog generation) and Pipeline 2 (serial subagent RED-GREEN TDD code synthesis) with automated quality gate enforcement (`./target/release/verify-baseline`).
 
 ---
 
@@ -218,7 +218,7 @@ sequenceDiagram
         note over Harness,P1: Phase 2: Pipeline 1 Agile Backlog Projection
         Harness->>P1: Ingest JSON Handoff Contract & Project Backlog
         P1-->>Harness: Generate docs/epics/, docs/features/, BDD Stories
-        Harness->>Gates: Run verify_model_coverage.py
+        Harness->>Gates: Run ./target/release/verify-baseline
         Gates-->>Harness: Coverage Gate PASSED (Exit Code 0)
     end
 
@@ -230,7 +230,7 @@ sequenceDiagram
             Harness->>P2: Dispatch Micro-Task Implementer (GREEN Phase)
             P2-->>Harness: Domain Code Written & Test Passing
         end
-        Harness->>Gates: Run verify_downstream_baseline.py
+        Harness->>Gates: Run ./target/release/verify-baseline
         Gates-->>Harness: Downstream Conformance Gate PASSED (Exit Code 0)
     end
 
@@ -313,7 +313,7 @@ pipeline_settings:
     reconcile_backlog_on_completion: true
   pipeline2:
     enforce_tdd_red_green: true
-    target_profile: "ros2_cpp" # Options: ros2_cpp, spark_ada, python
+    target_profile: "ros2_cpp" # Options: ros2_cpp, spark_ada, rust
 
 audit_logging:
   enabled: true
@@ -429,7 +429,7 @@ chmod +x bin/deap-harness
 ./bin/deap-harness check-ast --max-tokens 4096 --schema docs/architecture/blueprints/DEAP_MODEL.sysml
 
 # Execute baseline conformance gate
-python3 scripts/verify_downstream_baseline.py --no-domain
+./target/release/verify-baseline . --no-domain
 ```
 
 ---
@@ -448,7 +448,7 @@ The upstream repository is the confidential engineering core containing full sou
 Downstream customer repositories and on-premises client distributions receive a clean, zero-source operational deployment:
 * **Binary Tier (`bin/`)**: Contains only the pre-compiled native executable:
   * `bin/deap-harness` (Statically compiled native Rust binary, stripped)
-* **Strict Zero-Source Invariant**: Downstream customer workspaces contain **exactly 0 `.rs`, 0 `.py`, 0 `.cpp`, and 0 `.hpp` files**. Customers cannot view, decompile, or tamper with proprietary compiler or harness algorithms.
+* **Strict Zero-Source Invariant**: Downstream customer workspaces contain **exactly 0 `.rs`, 0 `.cpp`, and 0 `.hpp` compiler source files**. Customers cannot view, decompile, or tamper with proprietary compiler or harness algorithms.
 * **Compile-Time Hardening & Optimization**:
   * Compiled with `opt-level = 3`, `lto = "fat"`, and `codegen-units = 1`.
   * Stripped of all debugging and symbol tables using `strip -s`.

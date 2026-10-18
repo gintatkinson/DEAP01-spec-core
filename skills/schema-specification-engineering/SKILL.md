@@ -57,9 +57,9 @@ To eliminate hallucinated metrics and uphold the **Pure Schema-Driven Compiler I
 
 > [!IMPORTANT]
 > **MANDATORY PRE-EXECUTION INGESTION GATE (SysML v2 SSOT)**
-> Before initiating Phase 1 decomposition, you MUST execute `sysmlv2_ingest.py` to convert input specification schemas (OMG IDL, AUTOSAR ARXML, Protobuf, OpenAPI) into canonical SysML v2 textual models (`.pipeline/schema.sysml`) and generate `.pipeline/schema-digest.json` per [`rules/sysml-ssot-completeness.md`](rules/sysml-ssot-completeness.md):
+> Before initiating Phase 1 decomposition, you MUST execute `./target/release/ingest-sysml` to convert input specification schemas (OMG IDL, AUTOSAR ARXML, Protobuf, OpenAPI) into canonical SysML v2 textual models (`.pipeline/schema.sysml`) and generate `.pipeline/schema-digest.json` per [`rules/sysml-ssot-completeness.md`](rules/sysml-ssot-completeness.md):
 > ```bash
-> python3 skills/spec-orchestrator/scripts/sysmlv2_ingest.py --schema <schema-file-or-dir> --format auto --out .pipeline/schema.sysml --digest .pipeline/schema-digest.json
+> ./target/release/ingest-sysml --schema <schema-file-or-dir> --format auto --out .pipeline/schema.sysml --digest .pipeline/schema-digest.json
 > ```
 > All Epics and Features MUST be derived directly from the resulting SysML v2 AST nodes (`package`, `part def`, `item def`), and any downstream structural refinements must maintain 100% bidirectional parity with the SysML v2 model.
 
@@ -470,7 +470,7 @@ For each Bounded Context, partition its subtree into cohesive functional feature
      1. Backlog issues MUST be registered using `TITLE=$(awk -F'|' '/**Title**/ {print $3}' <local-md-file> | xargs); gh issue create --title "$TITLE" --body-file <local-md-file>` (to ensure they start with the full markdown content, including diagrams and references).
      2. Immediately after placeholder resolution (when the live issue ID is injected back into the file), the subagent MUST execute `gh issue edit <ID> --body-file <local-md-file>` to sync the resolved ID body.
      3. The subagent MUST run a post-creation verification check:
-         `gh issue view <ID> --json body | python3 -c "import sys,json; b=json.load(sys.stdin)['body']; markers=['Source References','UML Class Diagram','Acceptance Criteria']; missing=[m for m in markers if m not in b]; assert not missing, f'Body incomplete: missing {missing}'"`
+         `gh issue view <ID> --json body --jq '.body | select(contains("Source References") and contains("UML Class Diagram") and contains("Acceptance Criteria"))' && ./target/release/verify-baseline check-output --file <local-md-file>`
          and retry/halt if this verification fails.
      4. Before committing the generated feature markdown files, the agent MUST run a check for untracked pipeline infrastructure files. If untracked files are found in `.pipeline/`, `skills/`, `rules/`, or `scripts/`, they must be staged and committed alongside the markdown files using `git add` to prevent remote divergence:
         ```bash
@@ -492,7 +492,7 @@ For each Bounded Context, partition its subtree into cohesive functional feature
      1. Register the Epic issue using `TITLE=$(awk -F'|' '/**Title**/ {print $3}' <local-md-file> | xargs); gh issue create --title "$TITLE" --body-file <local-md-file>`.
      2. Immediately after placeholder resolution, the subagent MUST execute `gh issue edit <ID> --body-file <local-md-file>` to sync the resolved ID body.
      3. The subagent MUST run a post-creation verification check:
-         `gh issue view <ID> --json body | python3 -c "import sys,json; b=json.load(sys.stdin)['body']; markers=['Source References','System-Level UML Class Diagram','Context']; missing=[m for m in markers if m not in b]; assert not missing, f'Body incomplete: missing {missing}'"`
+         `gh issue view <ID> --json body --jq '.body | select(contains("Source References") and contains("System-Level UML Class Diagram") and contains("Context"))' && ./target/release/verify-baseline check-output --file <local-md-file>`
           and retry/halt if this verification fails.
       4. Before committing the generated epic markdown files, the agent MUST run a check for untracked pipeline infrastructure files. If untracked files are found in `.pipeline/`, `skills/`, `rules/`, or `scripts/`, they must be staged and committed alongside the markdown files using `git add` to prevent remote divergence:
         ```bash

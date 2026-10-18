@@ -13,7 +13,7 @@
 
 ## 1. Executive Summary
 
-While the project constitution (`.pipeline/constitution.md`) and platform-specific profiles (`react.md`, `flutter.md`) lay out a mathematically rigorous and performant architectural design (enforcing background execution, WebGPU double-single precision shaders, event-echo guards, and network egress write-locks), **the static verification tooling (`verify_model_coverage.py`) fails to enforce these rules robustly**. 
+While the project constitution (`.pipeline/constitution.md`) and platform-specific profiles (`react.md`, `flutter.md`) lay out a mathematically rigorous and performant architectural design (enforcing background execution, WebGPU double-single precision shaders, event-echo guards, and network egress write-locks), **the static verification tooling (`crates/verify-baseline`) fails to enforce these rules robustly**. 
 
 The current validation checks rely on shallow, regex-based string matching and hardcoded directory filters rather than AST (Abstract Syntax Tree) parsing. This design discrepancy results in several critical vulnerabilities, logical gaps, and bypasses:
 1. **Linter Completeness Gaps**: Complete omission of non-YANG schemas (OpenAPI, Protobuf) from coverage parity checks, combined with regex-based AST mockups that are easily tricked.
@@ -27,7 +27,7 @@ The current validation checks rely on shallow, regex-based string matching and h
 ## 2. Linter Rules Completeness & Gaps
 
 ### 2.1 Regex-Based Code Analysis vs. AST Parsing
-The script `verify_model_coverage.py` uses python's standard `re` and basic string search capabilities to analyze React and Flutter codebases:
+The verifier `crates/verify-baseline` uses basic string search capabilities to analyze React and Flutter codebases:
 ```python
 if any(lib in content for lib in ["satellite.js", "satellite-js", "sgp4"]):
 ```
@@ -195,7 +195,7 @@ To bypass the Flutter Isolate linter rule (`if "sgp4" in content_lower or "orbit
 ### 5.2 Double-Single (DS-FP) Precision Shader Bypasses
 The platform profiles specify that WebGPU/Impeller shaders must use Double-Single precision floating-point arithmetic (relative-to-eye subtraction) to resolve planetary-scale rendering jitter ($6.3 \times 10^6\text{m}$ radius vs. sub-meter UI precision). 
 
-However, `verify_model_coverage.py` contains **no checks, regexes, or parsing rules** to verify shader configurations, projection matrices, or shader source files (`.wgsl`, `.glsl`, `.frag`, `.vert`).
+However, `crates/verify-baseline` contains **no checks, regexes, or parsing rules** to verify shader configurations, projection matrices, or shader source files (`.wgsl`, `.glsl`, `.frag`, `.vert`).
 
 A developer can write standard Single-Precision shaders that cause severe planetary-scale rendering jitter:
 ```wgsl
@@ -215,11 +215,11 @@ This code passes the pipeline checks without warnings because the linter is blin
 To close these architectural loop-holes and secure the quality gates, the pipeline verification checks must be upgraded from basic string matching to syntactic structures:
 
 ### 6.1 Implement AST-Based Linter Rules
-Replace regex scanning in `verify_model_coverage.py` with AST parsing.
+Replace string scanning in `crates/verify-baseline` with AST parsing.
 - **For React**: Integrate ESLint rules using the Babel/TypeScript AST parser to detect actual imports of SGP4 packages regardless of file path.
 - **For Flutter**: Write a custom Dart Analyzer plugin to verify that UI classes inheriting from `Widget` or `State` do not import or reference packages listed in an import blocklist.
 
-Example of an AST import detector structure in python:
+Example of an AST import detector structure:
 ```python
 import esprima
 
@@ -237,7 +237,7 @@ def verify_react_ast(file_content):
 ```
 
 ### 6.2 Fix Behavioral Trigger Logic
-Modify `verify_model_coverage.py`'s trigger verification so it validates coverage **per triggered schema node** rather than globally breaking on the first file match.
+Modify `crates/verify-baseline`'s trigger verification so it validates coverage **per triggered schema node** rather than globally breaking on the first file match.
 
 ```python
 # Remediated trigger validation

@@ -64,9 +64,7 @@ Flutter workspace. They live here rather than in `rules/` because each one names
 Flutter source tree, a Flutter widget, or Flutter UI directories, and would be
 meaningless on another platform -- see `rules/platform-independence.md`
 § *Where platform-specific details belong*. Enforced offline by
-`parity_auditor/validators/profile_scoping_validator.py`,
-`parity_auditor/validators/schema_mapping_validator.py`, and
-`parity_auditor/validators/profile_compliance_validator.py`.
+`crates/verify-baseline/src/checks/codebase.rs` and `./target/release/verify-baseline`.
 
 - **Profile Scoping Requires Platform Sources**: profile-compliance auditing runs over
   the Flutter source tree named by `target_directories.flutter`. A workspace with no
@@ -93,7 +91,7 @@ meaningless on another platform -- see `rules/platform-independence.md`
   in the data layer and invisible to the operator. Where the workspace declares UI
   directories at all, realisation without a UI binding is reported.
 - **Public Member Docstrings Mandatory**: every public class, interface, method, function,
-  and public property MUST include full docstrings (DartDoc ///, JSDoc /** */, Python """).
+  and public property MUST include full docstrings (DartDoc `///`, JSDoc `/** */`, RustDoc `///`).
   Enforced as a mandatory blocking linter rule via `public_member_api_docs`.
 - **UML Traceability Tags Mandatory**: Every public Dart class MUST include a DartDoc comment citing its underlying specification or UML class (e.g., /// Realises: [Feat-002/VirtualCameraNormalization]).
 - **Domain Immutable Annotations Mandatory**: Every public domain model class MUST include an @immutable annotation.

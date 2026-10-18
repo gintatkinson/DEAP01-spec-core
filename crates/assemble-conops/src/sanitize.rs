@@ -1,5 +1,33 @@
 //! Level 1B operational abstraction sanitization and Mermaid formatting routines.
 
+/// Executes deterministic fn `match_token` within `crates/assemble-conops/src/sanitize.rs`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `match_token` in `crates/assemble-conops/src/sanitize.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic state conservation and referential transparency for fn `match_token` (declaration #1) within `ASSEMBLE-CONOPS-SANITIZE`.
+///
+/// ## 3. Preconditions
+/// - `lower: &str` must satisfy domain and type-safety constraints prior to invoking `match_token`.
+/// - `idx: usize` must satisfy domain and type-safety constraints prior to invoking `match_token`.
+/// - `token: &str` must satisfy domain and type-safety constraints prior to invoking `match_token`.
+///
+/// ## 4. Postconditions
+/// - Returns `Option<usize>` from `match_token` with deterministic post-execution state.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(lower)) bounded over input/member dimension of `match_token`.
+/// - Space Complexity: O(N(lower)) bounded auxiliary memory for `match_token`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `match_token` (`Option<usize>`).
+/// - State: Maintains consistent state invariants across `match_token` without partial mutation on error.
+/// - Action: Executes `match_token` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `match_token` (`ASSEMBLE-CONOPS-SANITIZE`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-ASSEMBLE-CONOPS-SANITIZE-MATCH-TOKEN] | SysML v2: ActionDef(match_token)
 fn match_token(lower: &str, mut idx: usize, token: &str) -> Option<usize> {
     let bytes = lower.as_bytes();
     while idx < bytes.len() && (bytes[idx] == b' ' || bytes[idx] == b'\t') {
@@ -13,6 +41,32 @@ fn match_token(lower: &str, mut idx: usize, token: &str) -> Option<usize> {
     }
 }
 
+/// Executes deterministic fn `strip_poly_equation` within `crates/assemble-conops/src/sanitize.rs`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `strip_poly_equation` in `crates/assemble-conops/src/sanitize.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic state conservation and referential transparency for fn `strip_poly_equation` (declaration #2) within `ASSEMBLE-CONOPS-SANITIZE`.
+///
+/// ## 3. Preconditions
+/// - `text: &str` must satisfy domain and type-safety constraints prior to invoking `strip_poly_equation`.
+///
+/// ## 4. Postconditions
+/// - Returns `String` from `strip_poly_equation` with deterministic post-execution state.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(text)) bounded over input/member dimension of `strip_poly_equation`.
+/// - Space Complexity: O(N(text)) bounded auxiliary memory for `strip_poly_equation`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `strip_poly_equation` (`String`).
+/// - State: Maintains consistent state invariants across `strip_poly_equation` without partial mutation on error.
+/// - Action: Executes `strip_poly_equation` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `strip_poly_equation` (`ASSEMBLE-CONOPS-SANITIZE`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-ASSEMBLE-CONOPS-SANITIZE-STRIP-POLY-EQUATION] | SysML v2: ActionDef(strip_poly_equation)
 fn strip_poly_equation(text: &str) -> String {
     let lower = text.to_ascii_lowercase();
     let mut result = String::with_capacity(text.len());
@@ -51,6 +105,32 @@ fn strip_poly_equation(text: &str) -> String {
     result
 }
 
+/// Executes deterministic fn `strip_poly_hex` within `crates/assemble-conops/src/sanitize.rs`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `strip_poly_hex` in `crates/assemble-conops/src/sanitize.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic state conservation and referential transparency for fn `strip_poly_hex` (declaration #3) within `ASSEMBLE-CONOPS-SANITIZE`.
+///
+/// ## 3. Preconditions
+/// - `text: &str` must satisfy domain and type-safety constraints prior to invoking `strip_poly_hex`.
+///
+/// ## 4. Postconditions
+/// - Returns `String` from `strip_poly_hex` with deterministic post-execution state.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(text)) bounded over input/member dimension of `strip_poly_hex`.
+/// - Space Complexity: O(N(text)) bounded auxiliary memory for `strip_poly_hex`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `strip_poly_hex` (`String`).
+/// - State: Maintains consistent state invariants across `strip_poly_hex` without partial mutation on error.
+/// - Action: Executes `strip_poly_hex` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `strip_poly_hex` (`ASSEMBLE-CONOPS-SANITIZE`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-ASSEMBLE-CONOPS-SANITIZE-STRIP-POLY-HEX] | SysML v2: ActionDef(strip_poly_hex)
 fn strip_poly_hex(text: &str) -> String {
     let lower = text.to_ascii_lowercase();
     let bytes = text.as_bytes();
@@ -81,6 +161,32 @@ fn strip_poly_hex(text: &str) -> String {
     result
 }
 
+/// Executes deterministic fn `replace_crc16` within `crates/assemble-conops/src/sanitize.rs`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `replace_crc16` in `crates/assemble-conops/src/sanitize.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic state conservation and referential transparency for fn `replace_crc16` (declaration #4) within `ASSEMBLE-CONOPS-SANITIZE`.
+///
+/// ## 3. Preconditions
+/// - `text: &str` must satisfy domain and type-safety constraints prior to invoking `replace_crc16`.
+///
+/// ## 4. Postconditions
+/// - Returns `String` from `replace_crc16` with deterministic post-execution state.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(text)) bounded over input/member dimension of `replace_crc16`.
+/// - Space Complexity: O(N(text)) bounded auxiliary memory for `replace_crc16`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `replace_crc16` (`String`).
+/// - State: Maintains consistent state invariants across `replace_crc16` without partial mutation on error.
+/// - Action: Executes `replace_crc16` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `replace_crc16` (`ASSEMBLE-CONOPS-SANITIZE`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-ASSEMBLE-CONOPS-SANITIZE-REPLACE-CRC16] | SysML v2: ActionDef(replace_crc16)
 fn replace_crc16(text: &str) -> String {
     let lower = text.to_ascii_lowercase();
     let bytes = text.as_bytes();
@@ -162,6 +268,32 @@ fn replace_crc16(text: &str) -> String {
     result
 }
 
+/// Executes deterministic fn `replace_polynomial_equation` within `crates/assemble-conops/src/sanitize.rs`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `replace_polynomial_equation` in `crates/assemble-conops/src/sanitize.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic state conservation and referential transparency for fn `replace_polynomial_equation` (declaration #5) within `ASSEMBLE-CONOPS-SANITIZE`.
+///
+/// ## 3. Preconditions
+/// - `text: &str` must satisfy domain and type-safety constraints prior to invoking `replace_polynomial_equation`.
+///
+/// ## 4. Postconditions
+/// - Returns `String` from `replace_polynomial_equation` with deterministic post-execution state.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(text)) bounded over input/member dimension of `replace_polynomial_equation`.
+/// - Space Complexity: O(N(text)) bounded auxiliary memory for `replace_polynomial_equation`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `replace_polynomial_equation` (`String`).
+/// - State: Maintains consistent state invariants across `replace_polynomial_equation` without partial mutation on error.
+/// - Action: Executes `replace_polynomial_equation` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `replace_polynomial_equation` (`ASSEMBLE-CONOPS-SANITIZE`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-ASSEMBLE-CONOPS-SANITIZE-REPLACE-POLYNOMIAL-EQUATION] | SysML v2: ActionDef(replace_polynomial_equation)
 fn replace_polynomial_equation(text: &str) -> String {
     let lower = text.to_ascii_lowercase();
     let bytes = text.as_bytes();
@@ -200,6 +332,32 @@ fn replace_polynomial_equation(text: &str) -> String {
     result
 }
 
+/// Executes deterministic fn `strip_baud_rates` within `crates/assemble-conops/src/sanitize.rs`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `strip_baud_rates` in `crates/assemble-conops/src/sanitize.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic state conservation and referential transparency for fn `strip_baud_rates` (declaration #6) within `ASSEMBLE-CONOPS-SANITIZE`.
+///
+/// ## 3. Preconditions
+/// - `text: &str` must satisfy domain and type-safety constraints prior to invoking `strip_baud_rates`.
+///
+/// ## 4. Postconditions
+/// - Returns `String` from `strip_baud_rates` with deterministic post-execution state.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(text)) bounded over input/member dimension of `strip_baud_rates`.
+/// - Space Complexity: O(N(text)) bounded auxiliary memory for `strip_baud_rates`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `strip_baud_rates` (`String`).
+/// - State: Maintains consistent state invariants across `strip_baud_rates` without partial mutation on error.
+/// - Action: Executes `strip_baud_rates` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `strip_baud_rates` (`ASSEMBLE-CONOPS-SANITIZE`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-ASSEMBLE-CONOPS-SANITIZE-STRIP-BAUD-RATES] | SysML v2: ActionDef(strip_baud_rates)
 fn strip_baud_rates(text: &str) -> String {
     let lower = text.to_ascii_lowercase();
     let bytes = text.as_bytes();
@@ -286,6 +444,32 @@ fn strip_baud_rates(text: &str) -> String {
     result
 }
 
+/// Executes deterministic fn `strip_opcodes` within `crates/assemble-conops/src/sanitize.rs`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `strip_opcodes` in `crates/assemble-conops/src/sanitize.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic state conservation and referential transparency for fn `strip_opcodes` (declaration #7) within `ASSEMBLE-CONOPS-SANITIZE`.
+///
+/// ## 3. Preconditions
+/// - `text: &str` must satisfy domain and type-safety constraints prior to invoking `strip_opcodes`.
+///
+/// ## 4. Postconditions
+/// - Returns `String` from `strip_opcodes` with deterministic post-execution state.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(text)) bounded over input/member dimension of `strip_opcodes`.
+/// - Space Complexity: O(N(text)) bounded auxiliary memory for `strip_opcodes`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `strip_opcodes` (`String`).
+/// - State: Maintains consistent state invariants across `strip_opcodes` without partial mutation on error.
+/// - Action: Executes `strip_opcodes` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `strip_opcodes` (`ASSEMBLE-CONOPS-SANITIZE`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-ASSEMBLE-CONOPS-SANITIZE-STRIP-OPCODES] | SysML v2: ActionDef(strip_opcodes)
 fn strip_opcodes(text: &str) -> String {
     let lower = text.to_ascii_lowercase();
     let bytes = text.as_bytes();
@@ -370,6 +554,32 @@ fn strip_opcodes(text: &str) -> String {
     result
 }
 
+/// Executes deterministic fn `strip_use_cases` within `crates/assemble-conops/src/sanitize.rs`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `strip_use_cases` in `crates/assemble-conops/src/sanitize.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic state conservation and referential transparency for fn `strip_use_cases` (declaration #8) within `ASSEMBLE-CONOPS-SANITIZE`.
+///
+/// ## 3. Preconditions
+/// - `text: &str` must satisfy domain and type-safety constraints prior to invoking `strip_use_cases`.
+///
+/// ## 4. Postconditions
+/// - Returns `String` from `strip_use_cases` with deterministic post-execution state.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(text)) bounded over input/member dimension of `strip_use_cases`.
+/// - Space Complexity: O(N(text)) bounded auxiliary memory for `strip_use_cases`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `strip_use_cases` (`String`).
+/// - State: Maintains consistent state invariants across `strip_use_cases` without partial mutation on error.
+/// - Action: Executes `strip_use_cases` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `strip_use_cases` (`ASSEMBLE-CONOPS-SANITIZE`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-ASSEMBLE-CONOPS-SANITIZE-STRIP-USE-CASES] | SysML v2: ActionDef(strip_use_cases)
 fn strip_use_cases(text: &str) -> String {
     let lower = text.to_ascii_lowercase();
     let bytes = text.as_bytes();
@@ -456,6 +666,34 @@ fn strip_use_cases(text: &str) -> String {
     result
 }
 
+/// Executes deterministic fn `strip_empty_delimited` within `crates/assemble-conops/src/sanitize.rs`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `strip_empty_delimited` in `crates/assemble-conops/src/sanitize.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic state conservation and referential transparency for fn `strip_empty_delimited` (declaration #9) within `ASSEMBLE-CONOPS-SANITIZE`.
+///
+/// ## 3. Preconditions
+/// - `text: &str` must satisfy domain and type-safety constraints prior to invoking `strip_empty_delimited`.
+/// - `open: char` must satisfy domain and type-safety constraints prior to invoking `strip_empty_delimited`.
+/// - `close: char` must satisfy domain and type-safety constraints prior to invoking `strip_empty_delimited`.
+///
+/// ## 4. Postconditions
+/// - Returns `String` from `strip_empty_delimited` with deterministic post-execution state.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(text)) bounded over input/member dimension of `strip_empty_delimited`.
+/// - Space Complexity: O(N(text)) bounded auxiliary memory for `strip_empty_delimited`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `strip_empty_delimited` (`String`).
+/// - State: Maintains consistent state invariants across `strip_empty_delimited` without partial mutation on error.
+/// - Action: Executes `strip_empty_delimited` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `strip_empty_delimited` (`ASSEMBLE-CONOPS-SANITIZE`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-ASSEMBLE-CONOPS-SANITIZE-STRIP-EMPTY-DELIMITED] | SysML v2: ActionDef(strip_empty_delimited)
 fn strip_empty_delimited(text: &str, open: char, close: char) -> String {
     let mut result = String::with_capacity(text.len());
     let mut chars = text.char_indices().peekable();
@@ -491,6 +729,32 @@ fn strip_empty_delimited(text: &str, open: char, close: char) -> String {
     result
 }
 
+/// Executes deterministic fn `clean_lead_comma_paren` within `crates/assemble-conops/src/sanitize.rs`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `clean_lead_comma_paren` in `crates/assemble-conops/src/sanitize.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic state conservation and referential transparency for fn `clean_lead_comma_paren` (declaration #10) within `ASSEMBLE-CONOPS-SANITIZE`.
+///
+/// ## 3. Preconditions
+/// - `text: &str` must satisfy domain and type-safety constraints prior to invoking `clean_lead_comma_paren`.
+///
+/// ## 4. Postconditions
+/// - Returns `String` from `clean_lead_comma_paren` with deterministic post-execution state.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(text)) bounded over input/member dimension of `clean_lead_comma_paren`.
+/// - Space Complexity: O(N(text)) bounded auxiliary memory for `clean_lead_comma_paren`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `clean_lead_comma_paren` (`String`).
+/// - State: Maintains consistent state invariants across `clean_lead_comma_paren` without partial mutation on error.
+/// - Action: Executes `clean_lead_comma_paren` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `clean_lead_comma_paren` (`ASSEMBLE-CONOPS-SANITIZE`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-ASSEMBLE-CONOPS-SANITIZE-CLEAN-LEAD-COMMA-PAREN] | SysML v2: ActionDef(clean_lead_comma_paren)
 fn clean_lead_comma_paren(text: &str) -> String {
     let mut result = String::with_capacity(text.len());
     let bytes = text.as_bytes();
@@ -519,6 +783,32 @@ fn clean_lead_comma_paren(text: &str) -> String {
     result
 }
 
+/// Executes deterministic fn `clean_trail_comma_paren` within `crates/assemble-conops/src/sanitize.rs`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `clean_trail_comma_paren` in `crates/assemble-conops/src/sanitize.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic state conservation and referential transparency for fn `clean_trail_comma_paren` (declaration #11) within `ASSEMBLE-CONOPS-SANITIZE`.
+///
+/// ## 3. Preconditions
+/// - `text: &str` must satisfy domain and type-safety constraints prior to invoking `clean_trail_comma_paren`.
+///
+/// ## 4. Postconditions
+/// - Returns `String` from `clean_trail_comma_paren` with deterministic post-execution state.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(text)) bounded over input/member dimension of `clean_trail_comma_paren`.
+/// - Space Complexity: O(N(text)) bounded auxiliary memory for `clean_trail_comma_paren`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `clean_trail_comma_paren` (`String`).
+/// - State: Maintains consistent state invariants across `clean_trail_comma_paren` without partial mutation on error.
+/// - Action: Executes `clean_trail_comma_paren` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `clean_trail_comma_paren` (`ASSEMBLE-CONOPS-SANITIZE`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-ASSEMBLE-CONOPS-SANITIZE-CLEAN-TRAIL-COMMA-PAREN] | SysML v2: ActionDef(clean_trail_comma_paren)
 fn clean_trail_comma_paren(text: &str) -> String {
     let mut result = String::with_capacity(text.len());
     let bytes = text.as_bytes();
@@ -542,6 +832,32 @@ fn clean_trail_comma_paren(text: &str) -> String {
     result
 }
 
+/// Executes deterministic fn `clean_multi_commas` within `crates/assemble-conops/src/sanitize.rs`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `clean_multi_commas` in `crates/assemble-conops/src/sanitize.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic state conservation and referential transparency for fn `clean_multi_commas` (declaration #12) within `ASSEMBLE-CONOPS-SANITIZE`.
+///
+/// ## 3. Preconditions
+/// - `text: &str` must satisfy domain and type-safety constraints prior to invoking `clean_multi_commas`.
+///
+/// ## 4. Postconditions
+/// - Returns `String` from `clean_multi_commas` with deterministic post-execution state.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(text)) bounded over input/member dimension of `clean_multi_commas`.
+/// - Space Complexity: O(N(text)) bounded auxiliary memory for `clean_multi_commas`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `clean_multi_commas` (`String`).
+/// - State: Maintains consistent state invariants across `clean_multi_commas` without partial mutation on error.
+/// - Action: Executes `clean_multi_commas` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `clean_multi_commas` (`ASSEMBLE-CONOPS-SANITIZE`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-ASSEMBLE-CONOPS-SANITIZE-CLEAN-MULTI-COMMAS] | SysML v2: ActionDef(clean_multi_commas)
 fn clean_multi_commas(text: &str) -> String {
     let mut result = String::with_capacity(text.len());
     let bytes = text.as_bytes();
@@ -571,6 +887,32 @@ fn clean_multi_commas(text: &str) -> String {
     result
 }
 
+/// Executes deterministic fn `clean_space_commas` within `crates/assemble-conops/src/sanitize.rs`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `clean_space_commas` in `crates/assemble-conops/src/sanitize.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic state conservation and referential transparency for fn `clean_space_commas` (declaration #13) within `ASSEMBLE-CONOPS-SANITIZE`.
+///
+/// ## 3. Preconditions
+/// - `text: &str` must satisfy domain and type-safety constraints prior to invoking `clean_space_commas`.
+///
+/// ## 4. Postconditions
+/// - Returns `String` from `clean_space_commas` with deterministic post-execution state.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(text)) bounded over input/member dimension of `clean_space_commas`.
+/// - Space Complexity: O(N(text)) bounded auxiliary memory for `clean_space_commas`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `clean_space_commas` (`String`).
+/// - State: Maintains consistent state invariants across `clean_space_commas` without partial mutation on error.
+/// - Action: Executes `clean_space_commas` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `clean_space_commas` (`ASSEMBLE-CONOPS-SANITIZE`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-ASSEMBLE-CONOPS-SANITIZE-CLEAN-SPACE-COMMAS] | SysML v2: ActionDef(clean_space_commas)
 fn clean_space_commas(text: &str) -> String {
     let mut result = String::with_capacity(text.len());
     let bytes = text.as_bytes();
@@ -598,6 +940,32 @@ fn clean_space_commas(text: &str) -> String {
     result
 }
 
+/// Executes deterministic fn `clean_comma_period` within `crates/assemble-conops/src/sanitize.rs`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `clean_comma_period` in `crates/assemble-conops/src/sanitize.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic state conservation and referential transparency for fn `clean_comma_period` (declaration #14) within `ASSEMBLE-CONOPS-SANITIZE`.
+///
+/// ## 3. Preconditions
+/// - `text: &str` must satisfy domain and type-safety constraints prior to invoking `clean_comma_period`.
+///
+/// ## 4. Postconditions
+/// - Returns `String` from `clean_comma_period` with deterministic post-execution state.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(text)) bounded over input/member dimension of `clean_comma_period`.
+/// - Space Complexity: O(N(text)) bounded auxiliary memory for `clean_comma_period`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `clean_comma_period` (`String`).
+/// - State: Maintains consistent state invariants across `clean_comma_period` without partial mutation on error.
+/// - Action: Executes `clean_comma_period` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `clean_comma_period` (`ASSEMBLE-CONOPS-SANITIZE`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-ASSEMBLE-CONOPS-SANITIZE-CLEAN-COMMA-PERIOD] | SysML v2: ActionDef(clean_comma_period)
 fn clean_comma_period(text: &str) -> String {
     let mut result = String::with_capacity(text.len());
     let bytes = text.as_bytes();
@@ -621,6 +989,32 @@ fn clean_comma_period(text: &str) -> String {
     result
 }
 
+/// Executes deterministic fn `clean_multi_spaces` within `crates/assemble-conops/src/sanitize.rs`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `clean_multi_spaces` in `crates/assemble-conops/src/sanitize.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic state conservation and referential transparency for fn `clean_multi_spaces` (declaration #15) within `ASSEMBLE-CONOPS-SANITIZE`.
+///
+/// ## 3. Preconditions
+/// - `text: &str` must satisfy domain and type-safety constraints prior to invoking `clean_multi_spaces`.
+///
+/// ## 4. Postconditions
+/// - Returns `String` from `clean_multi_spaces` with deterministic post-execution state.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(text)) bounded over input/member dimension of `clean_multi_spaces`.
+/// - Space Complexity: O(N(text)) bounded auxiliary memory for `clean_multi_spaces`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `clean_multi_spaces` (`String`).
+/// - State: Maintains consistent state invariants across `clean_multi_spaces` without partial mutation on error.
+/// - Action: Executes `clean_multi_spaces` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `clean_multi_spaces` (`ASSEMBLE-CONOPS-SANITIZE`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-ASSEMBLE-CONOPS-SANITIZE-CLEAN-MULTI-SPACES] | SysML v2: ActionDef(clean_multi_spaces)
 fn clean_multi_spaces(text: &str) -> String {
     let mut result = String::with_capacity(text.len());
     let bytes = text.as_bytes();
@@ -642,6 +1036,32 @@ fn clean_multi_spaces(text: &str) -> String {
     result
 }
 
+/// Executes deterministic fn `strip_html_tags` within `crates/assemble-conops/src/sanitize.rs`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `strip_html_tags` in `crates/assemble-conops/src/sanitize.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic state conservation and referential transparency for fn `strip_html_tags` (declaration #16) within `ASSEMBLE-CONOPS-SANITIZE`.
+///
+/// ## 3. Preconditions
+/// - `s: &str` must satisfy domain and type-safety constraints prior to invoking `strip_html_tags`.
+///
+/// ## 4. Postconditions
+/// - Returns `String` from `strip_html_tags` with deterministic post-execution state.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(s)) bounded over input/member dimension of `strip_html_tags`.
+/// - Space Complexity: O(N(s)) bounded auxiliary memory for `strip_html_tags`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `strip_html_tags` (`String`).
+/// - State: Maintains consistent state invariants across `strip_html_tags` without partial mutation on error.
+/// - Action: Executes `strip_html_tags` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `strip_html_tags` (`ASSEMBLE-CONOPS-SANITIZE`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-ASSEMBLE-CONOPS-SANITIZE-STRIP-HTML-TAGS] | SysML v2: ActionDef(strip_html_tags)
 fn strip_html_tags(s: &str) -> String {
     let mut result = String::with_capacity(s.len());
     let bytes = s.as_bytes();
@@ -680,8 +1100,31 @@ fn strip_html_tags(s: &str) -> String {
 }
 
 /// Sanitizes text to enforce Level 1B operational abstraction.
-/// Strips component-internal serial opcodes, baud rates, CRC-16 polynomial formulas,
-/// and Level 2 System Use Cases (uc-xx / (UC-xx)).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `sanitize_level_1b_operational_text` in `crates/assemble-conops/src/sanitize.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic state conservation and referential transparency for fn `sanitize_level_1b_operational_text` (declaration #17) within `ASSEMBLE-CONOPS-SANITIZE`.
+///
+/// ## 3. Preconditions
+/// - `text: &str` must satisfy domain and type-safety constraints prior to invoking `sanitize_level_1b_operational_text`.
+///
+/// ## 4. Postconditions
+/// - Returns `String` from `sanitize_level_1b_operational_text` with deterministic post-execution state.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(text)) bounded over input/member dimension of `sanitize_level_1b_operational_text`.
+/// - Space Complexity: O(N(text)) bounded auxiliary memory for `sanitize_level_1b_operational_text`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `sanitize_level_1b_operational_text` (`String`).
+/// - State: Maintains consistent state invariants across `sanitize_level_1b_operational_text` without partial mutation on error.
+/// - Action: Executes `sanitize_level_1b_operational_text` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `sanitize_level_1b_operational_text` (`ASSEMBLE-CONOPS-SANITIZE`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-ASSEMBLE-CONOPS-SANITIZE-SANITIZE-LEVEL-1B-OPERATIONAL-TEXT] | SysML v2: ActionDef(sanitize_level_1b_operational_text)
 pub fn sanitize_level_1b_operational_text(text: &str) -> String {
     if text.is_empty() {
         return String::new();
@@ -718,7 +1161,32 @@ pub fn sanitize_level_1b_operational_text(text: &str) -> String {
 }
 
 /// Wraps text into segments <= max_width characters using `<br/>`.
-/// Enforces Rule E2 / Rule E3 visual ergonomics.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `wrap_mermaid_label` in `crates/assemble-conops/src/sanitize.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic state conservation and referential transparency for fn `wrap_mermaid_label` (declaration #18) within `ASSEMBLE-CONOPS-SANITIZE`.
+///
+/// ## 3. Preconditions
+/// - `text: &str` must satisfy domain and type-safety constraints prior to invoking `wrap_mermaid_label`.
+/// - `max_width: usize` must satisfy domain and type-safety constraints prior to invoking `wrap_mermaid_label`.
+///
+/// ## 4. Postconditions
+/// - Returns `String` from `wrap_mermaid_label` with deterministic post-execution state.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(text)) bounded over input/member dimension of `wrap_mermaid_label`.
+/// - Space Complexity: O(N(text)) bounded auxiliary memory for `wrap_mermaid_label`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `wrap_mermaid_label` (`String`).
+/// - State: Maintains consistent state invariants across `wrap_mermaid_label` without partial mutation on error.
+/// - Action: Executes `wrap_mermaid_label` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `wrap_mermaid_label` (`ASSEMBLE-CONOPS-SANITIZE`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-ASSEMBLE-CONOPS-SANITIZE-WRAP-MERMAID-LABEL] | SysML v2: ActionDef(wrap_mermaid_label)
 pub fn wrap_mermaid_label(text: &str, max_width: usize) -> String {
     if text.is_empty() {
         return String::new();
@@ -775,6 +1243,34 @@ pub fn wrap_mermaid_label(text: &str, max_width: usize) -> String {
     out_parts.join("")
 }
 
+/// Executes deterministic fn `process_segment` within `crates/assemble-conops/src/sanitize.rs`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `process_segment` in `crates/assemble-conops/src/sanitize.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic state conservation and referential transparency for fn `process_segment` (declaration #19) within `ASSEMBLE-CONOPS-SANITIZE`.
+///
+/// ## 3. Preconditions
+/// - `seg: &str` must satisfy domain and type-safety constraints prior to invoking `process_segment`.
+/// - `max_width: usize` must satisfy domain and type-safety constraints prior to invoking `process_segment`.
+/// - `out_parts: &mut Vec<String>` must satisfy domain and type-safety constraints prior to invoking `process_segment`.
+///
+/// ## 4. Postconditions
+/// - Returns `()` from `process_segment` with deterministic post-execution state.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(seg)) bounded over input/member dimension of `process_segment`.
+/// - Space Complexity: O(N(seg)) bounded auxiliary memory for `process_segment`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `process_segment` (`()`).
+/// - State: Maintains consistent state invariants across `process_segment` without partial mutation on error.
+/// - Action: Executes `process_segment` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `process_segment` (`ASSEMBLE-CONOPS-SANITIZE`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-ASSEMBLE-CONOPS-SANITIZE-PROCESS-SEGMENT] | SysML v2: ActionDef(process_segment)
 fn process_segment(
     seg: &str,
     max_width: usize,

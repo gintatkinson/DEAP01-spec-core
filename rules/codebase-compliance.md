@@ -52,8 +52,8 @@ have been told what it had to satisfy.
   literal equal to a colour declared in the design tokens file. Reference the theme or
   the tokens configuration instead. A duplicated literal is the value that stops tracking
   the token when the token changes.
-- **Python Source Must Not Hardcode Token Constants**: the same constraint, checked
-  through the Python AST rather than by pattern, so a colour assembled from constants is
+- **Rust & Platform Source Must Not Hardcode Token Constants**: the same constraint, checked
+  through the source AST rather than by pattern, so a colour assembled from constants is
   caught as well as one written literally.
 
 ## Interaction and concurrency

@@ -173,7 +173,7 @@ class FeatureClassifier {
 ```
 
 ### Remediation 2: Mandate DTO Separation for Off-Thread Classifiers
-* The linter (`verify_model_coverage.py`) must fail if a class diagram contains a class with methods that is also designated as a transferable message payload.
+* The linter (`crates/verify-baseline`) must fail if a class diagram contains a class with methods that is also designated as a transferable message payload.
 * Designate data structures as `<<dataType>>` or `<<dto>>` in Mermaid. They must contain zero operations.
 * Any service class crossing the thread boundary must have its operations return `Promise` or `Future` types in the UI-facing proxy.
 

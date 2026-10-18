@@ -262,6 +262,6 @@ Normative Specification: [Normative Specification](link-to-specification)
         (to ensure they start with the full markdown content, including diagrams and references).
      2. Immediately after placeholder resolution (when the live issue ID is injected back into the file), the subagent MUST execute `gh issue edit <ID> --body-file <local-md-file>` to sync the resolved ID body.
      3. The subagent MUST run a post-creation verification check:
-        `gh issue view <ID> --json body | python3 -c "import sys,json; b=json.load(sys.stdin)['body']; assert 'Source References' in b or 'References' in b, 'Body is a stub'"`
+        `gh issue view <ID> --json body --jq '.body | select(contains("Source References") or contains("References"))' && ./target/release/verify-baseline check-output --file <local-md-file>`
         and retry/halt if this verification fails.
 5. Verify the creation and return the generated issue URLs/IDs to the Orchestrator or User.

@@ -84,7 +84,7 @@ In adopting Spec Kit concepts natively, DEAP maintains complete architectural so
 3. **Dual-LLM Air-Gapped Inference**: DeepSeek-R1 Chain-of-Thought (CoT) reasoning stream logged to `.pipeline/diagnostics/cot_audit_log.json`, transitioning cleanly to Qwen-2.5-Coder execution slot.
 4. **Two-Stage Review Gates**: Independent, blocking verification gates (specification compliance followed by code quality review).
 5. **Zero-Ephemeral Persistence**: All engineering artifacts, execution logs, and constitution amendments are committed directly to version control (`.pipeline/`, `docs/`, `schema/`).
-6. **Exclusive Semantic Acceptance Testing**: Strict prohibition of unit test suites (`tests/`, `test_*.py`, `pytest`). All verification occurs via end-to-end semantic acceptance testing and baseline gates.
+6. **Exclusive Semantic Acceptance Testing**: Strict prohibition of isolated unit-level mock suites (`tests/unit/`). All verification occurs via end-to-end semantic acceptance testing and baseline gates (`./target/release/verify-baseline` and `cargo test --workspace`).
 
 ---
 
@@ -182,7 +182,7 @@ All constitutional principles and engineering specifications adhere to zero-ephe
 
 ## 7. Verification & Conformance Strategy
 
-- **Baseline Gate Conformance**: Verified via `python3 scripts/verify_downstream_baseline.py .` with exit code 0 across all checks.
+- **Baseline Gate Conformance**: Verified via `./target/release/verify-baseline .` with exit code 0 across all checks.
 - **Zero Forbidden Unit Tests**: In accordance with repository invariants, no unit test files exist in upstream repositories.
 - **Zero Em Dash Invariant**: The document contains 0 Unicode em dashes (`\u2014`), using ASCII `--` or `-` exclusively.
 - **Zero Provisional Markers**: Verified clean of all unapproved or incomplete markers.

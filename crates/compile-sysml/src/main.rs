@@ -32,6 +32,9 @@
 //! Realises: [REQ-COMPILER-SYSML-CLI], [DO-330-TQL-4-CLI]
 
 use clap::Parser;
+use compile_sysml::docstring::{
+    run_docstring_injection, run_extract_source, DocstringExitCode, DocstringInjectionOptions,
+};
 use compile_sysml::semantic::serializer::{to_sysml, SysmlSerializable};
 use compile_sysml::semantic::validator::SemanticValidator;
 use compile_sysml::stpa::compile_stpa_to_constraints_filtered;
@@ -55,6 +58,33 @@ If starting from unstructured OEM prose manuals, PDF documentation, or BOM markd
      ./target/release/ingest-sysml --schema <path_to_markdown> --format markdown --out schema/model.sysml
   3. Re-run ./target/release/compile-sysml --compile to satisfy the compilation gate.";
 
+/// Command-line argument definition for the `compile-sysml` compiler and synchronization engine.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Defines the deterministic CLI contract for `compile-sysml` under DO-178C Level A and DO-330 TQL-4,
+/// covering Pipeline 0 compilation, STPA transpilation, specification synchronization, source AST
+/// extraction, and 7-section safety docstring synthesis.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Strongly typed argument binding via `clap::Parser`.
+/// - Defaults `docs` to `"docs/"`, `out` to `".pipeline/schema.sysml"`, and `digest` to
+///   `".pipeline/schema-digest.json"`.
+///
+/// ## 3. Preconditions
+/// - Constructed from process arguments via `Cli::parse()`.
+///
+/// ## 4. Postconditions
+/// - Populates validated `PathBuf` and boolean mode flags for downstream dispatch in `main`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(A) where A is the number of CLI argument tokens.
+/// - Space Complexity: O(A) for owned path buffers.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Invalid or unrecognized CLI flags are rejected by `clap` prior to entering pipeline execution.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-COMPILER-SYSML-CLI-ARGS], [DO-330-TQL-4-CLI]
 #[derive(Parser, Debug)]
 #[command(name = "compile-sysml")]
 #[command(about = "SysML v2 / KerML compiler and specification synchronization engine")]
@@ -86,6 +116,14 @@ struct Cli {
     /// Execute forward synchronization from SysML SSOT into markdown specs
     #[arg(long)]
     forward_sync: bool,
+
+    /// Synthesize and inject 7-section safety docstrings into source files under DIR
+    #[arg(long, value_name = "DIR")]
+    inject_safety_docstrings: Option<PathBuf>,
+
+    /// Extract structural source AST elements from DIR into SysML v2 notation
+    #[arg(long, value_name = "DIR")]
+    extract_source: Option<PathBuf>,
 
     /// Path to documentation directory
     #[arg(long, default_value = "docs/")]
@@ -120,21 +158,22 @@ struct Cli {
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Routes command-line execution across STPA safety suite transpilation, STPA constraint compilation,
-/// forward/reverse specification synchronization, and the Pipeline 0 SysML compilation gate under
-/// DO-178C Level A and DO-330 TQL-4 tool operational requirements.
+/// forward/reverse specification synchronization, 7-section safety docstring injection, and the
+/// Pipeline 0 SysML compilation gate under DO-178C Level A and DO-330 TQL-4 tool operational requirements.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Exclusive mode dispatch: exactly one operational branch executes per CLI invocation in priority
-///   order (`--stpa-transpile`, `--stpa`, `--forward-sync`, `--reverse-sync`, `--compile`).
-/// - Fail-closed termination: any operational error exits immediately with status code `1`.
+///   order (`--inject-safety-docstrings`, `--extract-source`, `--stpa-transpile`, `--stpa`,
+///   `--forward-sync`, `--reverse-sync`, `--compile`).
+/// - Fail-closed termination: any operational error exits immediately with a non-zero status code.
 ///
 /// ## 3. Preconditions
 /// - Process environment supplies valid OS argument strings parseable by `Cli::parse()`.
 /// - Referenced input paths (`--schema`, `FILE`, `--stpa`, `--scoring-config`) must be readable when specified.
 ///
 /// ## 4. Postconditions
-/// - Target compilation, safety, or synchronization artifacts are written to disk, or usage guidance
-///   is printed to `stdout` when no operational mode flag is supplied.
+/// - Target compilation, safety, docstring, or synchronization artifacts are written to disk, or usage
+///   guidance is printed to `stdout` when no operational mode flag is supplied.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time complexity: $O(N \log N)$ bounded by downstream AST parsing, validation, and synchronization passes.
@@ -142,12 +181,64 @@ struct Cli {
 ///
 /// ## 6. Failure Modes & Fault Tolerance
 /// - Missing configuration files, malformed JSON scoring configs, unreadable schema files, or downstream
-///   transpilation/sync errors log diagnostic messages to `stderr` and invoke `process::exit(1)`.
+///   transpilation/sync errors log diagnostic messages to `stderr` and invoke `process::exit`.
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-COMPILER-SYSML-MAIN], [DO-330-TQL-4-CLI]
 fn main() {
     let cli = Cli::parse();
+
+    // 0a. Safety Docstring Synthesis & Injection (FEAT-42)
+    if let Some(ref target_dir) = cli.inject_safety_docstrings {
+        let schema_model = match resolve_schema_targets(cli.schema.clone().or_else(|| cli.file.clone())) {
+            Ok(SchemaTarget::SingleFile(p)) => fs::read_to_string(&p)
+                .ok()
+                .and_then(|c| parse_sysml(&c).ok()),
+            Ok(SchemaTarget::Directory(_, files)) => parse_sysml_tree(&files).ok(),
+            Err(_) => None,
+        };
+        let opts = DocstringInjectionOptions {
+            target_path: target_dir.clone(),
+            dry_run: cli.dry_run,
+            force: cli.force,
+            schema_model,
+        };
+        match run_docstring_injection(&opts) {
+            Ok(report) => {
+                println!(
+                    "[Docstring Synthesizer] Scanned {} file(s), modified {} file(s), enriched {} item(s) in '{}'",
+                    report.files_scanned,
+                    report.files_modified,
+                    report.items_enriched,
+                    target_dir.display()
+                );
+                process::exit(DocstringExitCode::Clean.code());
+            }
+            Err((code, msg)) => {
+                eprintln!("Error during docstring injection: {}", msg);
+                process::exit(code.code());
+            }
+        }
+    }
+
+    // 0b. Source Code AST Extraction to SysML (FEAT-42)
+    if let Some(ref extract_dir) = cli.extract_source {
+        match run_extract_source(extract_dir, &cli.out, &cli.digest, cli.dry_run) {
+            Ok(pkg) => {
+                println!(
+                    "[Extract Source] Extracted {} structural item(s) from '{}' to '{}'",
+                    count_structural_elements(&pkg),
+                    extract_dir.display(),
+                    cli.out.display()
+                );
+                process::exit(DocstringExitCode::Clean.code());
+            }
+            Err((code, msg)) => {
+                eprintln!("Error during source extraction: {}", msg);
+                process::exit(code.code());
+            }
+        }
+    }
 
     // 1. STPA Transpilation: transpile schema AST into 10-pillar safety suite
     if cli.stpa_transpile {
@@ -351,10 +442,34 @@ fn main() {
         process::exit(code);
     }
 
-    println!("compile-sysml: Specify --compile, --stpa-transpile, --stpa, --forward-sync, or --reverse-sync. Run with --help for usage.");
+    println!("compile-sysml: Specify --compile, --stpa-transpile, --stpa, --forward-sync, --reverse-sync, --inject-safety-docstrings, or --extract-source. Run with --help for usage.");
 }
 
 /// Target SysML schema input resolved from CLI flags or default paths.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Distinguishes between a single `.sysml` schema file and a multi-file schema directory tree
+/// under DO-178C Level A and DO-330 TQL-4 deterministic model loading requirements.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - `Directory` always holds a non-empty, lexicographically sorted `Vec<PathBuf>`.
+/// - Single-file directories are canonicalized into `SingleFile`.
+///
+/// ## 3. Preconditions
+/// - Constructed exclusively by `resolve_schema_targets`.
+///
+/// ## 4. Postconditions
+/// - Enables callers to dispatch either `parse_sysml` or `parse_sysml_tree` deterministically.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1) variant inspection.
+/// - Space Complexity: O(F) where F is the number of files in `Directory`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Total sum type with no invalid runtime states.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-COMPILER-SYSML-SCHEMA-TARGET], [DO-330-TQL-4-CLI]
 #[derive(Debug, Clone, PartialEq)]
 pub enum SchemaTarget {
     /// A single concrete .sysml file path.

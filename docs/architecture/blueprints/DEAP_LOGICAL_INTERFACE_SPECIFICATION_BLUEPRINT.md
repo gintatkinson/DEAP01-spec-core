@@ -580,9 +580,9 @@ To ensure production readiness and certification compliance, each rollout phase 
 
 | Phase / Milestone | Verification Method | Acceptance Criteria | Target Tool / Authority |
 | :--- | :--- | :--- | :--- |
-| **Milestone 1: Metamodel Synthesis** | Automated Schema AST Inspection | 100% extraction of subsystem ports, item flows, and connections from Level 0 schemas without data loss. | `scripts/compile_sysml_v2.py` |
+| **Milestone 1: Metamodel Synthesis** | Automated Schema AST Inspection | 100% extraction of subsystem ports, item flows, and connections from Level 0 schemas without data loss. | `./target/release/compile-sysml` |
 | **Milestone 2: Artifact Structure** | Markdown AST & Table Validator | Strict conformance to 10-column schema in `ICD_02` and complete N² matrix in `ICD_01`. | `parity_auditor` Markdown Engine |
-| **Milestone 3: Gate 23 Parity** | Semantic Acceptance Verification Suite | Zero dangling ports, 100% port binding parity, and zero missing safe defaults across all test suites. | `deap-harness` / `scripts/verify_downstream_baseline.py` |
+| **Milestone 3: Gate 23 Parity** | Semantic Acceptance Verification Suite | Zero dangling ports, 100% port binding parity, and zero missing safe defaults across all test suites. | `deap-harness` / `./target/release/verify-baseline` |
 | **Milestone 4: L2 Backlog Traceability** | Bidirectional Cross-Reference Check | 100% of Level 2 BDD User Story data parameters cite valid `SIG-*` dictionary identifiers. | `parity_auditor` Spec Validator |
 | **Milestone 5: Multi-Target Code Synthesis** | Code Generation & Static Analysis | Synthesized SPARK Ada packages, C structs, and Simulink Bus objects match Level 1C types and ranges. | GNATprove / Polyspace / SCADE |
 

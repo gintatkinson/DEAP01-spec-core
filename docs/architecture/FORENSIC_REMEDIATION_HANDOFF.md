@@ -20,7 +20,7 @@
 
 This handoff document provides the authoritative engineering truth and execution baseline to remediate the upstream specification compiler (`DEAP01-spec-core`) and synchronize downstream domain distribution repositories (`DEAP-avionic-flight-safety`, `DEAP-uas-infrastructure-safety`) and customer projects (`uav-009`).
 
-The ConOps assembly compiler (`scripts/assemble_conops.py`) and Gate 26 validator (`conops_completeness_validator.py`) suffered from 6 structural root causes that resulted in:
+The ConOps assembly compiler (`./target/release/assemble-conops`) and Gate 26 validator (`crates/verify-baseline/src/checks/conops.rs`) suffered from 6 structural root causes that resulted in:
 1. Premature truncation of ConOps at Section 4.5.
 2. Silent omission of Section 4.7 (Super-System OV-2) and Section 4.8 (Subsystems SV-1 / SV-4).
 3. False-positive discarding of legitimate OEM subsystem hardware specifications.
@@ -28,7 +28,7 @@ The ConOps assembly compiler (`scripts/assemble_conops.py`) and Gate 26 validato
 5. Ingestion blindness to non-SysML schemas (`.yaml`, `.json`, `.proto`, `.idl`, `.arxml`) and markdown subsystem tables.
 6. Gate 26 fail-open verification emitting false-positive `100% PASS (0/0)` when 0 parts were ingested.
 
-All 6 root causes have been formally audited against the 5-pillar adversarial framework, mechanically verified with `scripts/file_defect.py --validate-only`, and lodged on GitHub.
+All 6 root causes have been formally audited against the 5-pillar adversarial framework, mechanically verified with `./target/release/verify-baseline check-defect --validate-only`, and lodged on GitHub.
 
 ---
 
@@ -36,12 +36,12 @@ All 6 root causes have been formally audited against the 5-pillar adversarial fr
 
 | Issue | Target File & Component | Pillar & Severity | Defect Summary & Root Cause |
 | :--- | :--- | :--- | :--- |
-| **[#296](https://github.com/gintatkinson/DEAP01-spec-core/issues/296)** | `scripts/assemble_conops.py:2650` | Resource Lifecycle<br>**Critical** | **Ingestion False-Positive Discard**: `is_component_icd_document()` rejects valid OEM subsystem specifications in `schema/` or `docs/` if they contain pinouts, tables, or the words *"interface control document"*. |
-| **[#297](https://github.com/gintatkinson/DEAP01-spec-core/issues/297)** | `scripts/assemble_conops.py:1550` | Semantic Traceability<br>**Critical** | **Synthetic Subsystem Fabrication**: Fallback logic synthesizes ungrounded domain archetypes (`Clinical Supervisory Controller`, `Automatic Train Protection`, fake `PORT-...` names) when 0 parts are ingested, violating the *Pure Schema-Driven Compiler Invariant*. |
-| **[#298](https://github.com/gintatkinson/DEAP01-spec-core/issues/298)** | `conops_completeness_validator.py:30` | Semantic Traceability<br>**Critical** | **Gate 26 Schema Offset**: Checks an obsolete 12-section layout (Pugh in Sec 4, SORA in Sec 6, Scenarios in Sec 10), diverging from IEEE 1362-1998 and ISO/IEC/IEEE 15288:2023. |
-| **[#299](https://github.com/gintatkinson/DEAP01-spec-core/issues/299)** | `scripts/assemble_conops.py:2690` | Semantic Traceability<br>**Critical** | **Ingestion Blindness**: Auto-discovery ignores `.yaml`, `.json`, `.proto`, `.idl`, `.arxml`, and ignores `docs/architecture/` and `docs/research/`. Markdown parser fails to extract subsystem/port tables into `self.ast_parts`. |
-| **[#300](https://github.com/gintatkinson/DEAP01-spec-core/issues/300)** | `README.md:100` & `install_pipeline.sh:150` | Semantic Traceability<br>**Important** | **Defective Prompts & Missing Scaffolding**: Prompts mandate authoring a monolithic `CONOPS.md` directly (omitting 24 modular units and `assemble_conops.py`), installer omits `docs/interfaces/` scaffolding, and `docs/OPERATOR_PROMPT_CATALOG.md` is missing upstream. |
-| **[#301](https://github.com/gintatkinson/DEAP01-spec-core/issues/301)** | `conops_completeness_validator.py:380` | Test Integrity<br>**Critical** | **Gate 26 Fail-Open Blind Spot**: Wraps Section 4.8 PartDef coverage check in `if part_defs:`. When ingestion drops parts and `part_defs` is empty, it computes `0 / 0` and emits a false-positive `100% PASS`. |
+| **[#296](https://github.com/gintatkinson/DEAP01-spec-core/issues/296)** | `crates/assemble-conops/src/lib.rs:2650` | Resource Lifecycle<br>**Critical** | **Ingestion False-Positive Discard**: `is_component_icd_document()` rejects valid OEM subsystem specifications in `schema/` or `docs/` if they contain pinouts, tables, or the words *"interface control document"*. |
+| **[#297](https://github.com/gintatkinson/DEAP01-spec-core/issues/297)** | `crates/assemble-conops/src/lib.rs:1550` | Semantic Traceability<br>**Critical** | **Synthetic Subsystem Fabrication**: Fallback logic synthesizes ungrounded domain archetypes (`Clinical Supervisory Controller`, `Automatic Train Protection`, fake `PORT-...` names) when 0 parts are ingested, violating the *Pure Schema-Driven Compiler Invariant*. |
+| **[#298](https://github.com/gintatkinson/DEAP01-spec-core/issues/298)** | `crates/verify-baseline/src/checks/conops.rs:30` | Semantic Traceability<br>**Critical** | **Gate 26 Schema Offset**: Checks an obsolete 12-section layout (Pugh in Sec 4, SORA in Sec 6, Scenarios in Sec 10), diverging from IEEE 1362-1998 and ISO/IEC/IEEE 15288:2023. |
+| **[#299](https://github.com/gintatkinson/DEAP01-spec-core/issues/299)** | `crates/assemble-conops/src/lib.rs:2690` | Semantic Traceability<br>**Critical** | **Ingestion Blindness**: Auto-discovery ignores `.yaml`, `.json`, `.proto`, `.idl`, `.arxml`, and ignores `docs/architecture/` and `docs/research/`. Markdown parser fails to extract subsystem/port tables into `self.ast_parts`. |
+| **[#300](https://github.com/gintatkinson/DEAP01-spec-core/issues/300)** | `README.md:100` & `install_pipeline.sh:150` | Semantic Traceability<br>**Important** | **Defective Prompts & Missing Scaffolding**: Prompts mandate authoring a monolithic `CONOPS.md` directly (omitting 24 modular units and `assemble-conops`), installer omits `docs/interfaces/` scaffolding, and `docs/OPERATOR_PROMPT_CATALOG.md` is missing upstream. |
+| **[#301](https://github.com/gintatkinson/DEAP01-spec-core/issues/301)** | `crates/verify-baseline/src/checks/conops.rs:380` | Test Integrity<br>**Critical** | **Gate 26 Fail-Open Blind Spot**: Wraps Section 4.8 PartDef coverage check in `if part_defs:`. When ingestion drops parts and `part_defs` is empty, it computes `0 / 0` and emits a false-positive `100% PASS`. |
 
 ---
 
@@ -88,10 +88,10 @@ For 100% of declared OEM AST parts:
 ### Phase 1: Upstream Core Compiler Remediation (`DEAP01-spec-core`)
 1. **WP-1.1 (Resolves #296, #299)**: Fix `is_component_icd_document()`, expand `auto_detect_workspace_parameters()` to scan `.yaml`, `.json`, `.proto`, `.idl`, `.arxml`, `.md` across `schema/`, `docs/architecture/`, and `docs/research/`, and implement markdown table parsing in `ingest_markdown_text()` to populate `self.ast_parts`.
 2. **WP-1.2 (Resolves #297)**: Expunge `_get_archetype_subsystems()`, implement fail-closed abort if parts are missing, synthesize dynamic Section 4.7 (OV-2) and Section 4.8 (SV-1/SV-4) from model boundaries. Guaranteed injection in `04_USER_CLASSES_AND_STAKEHOLDERS.md`.
-3. **WP-1.3 (Resolves #298, #301)**: Harmonize Gate 26 (`conops_completeness_validator.py` in `skills/` and `.agents/`) to the canonical 12 sections and eliminate the `if part_defs:` fail-open check.
-4. **WP-1.4**: Harmonize `CONOPS_CANONICAL_TEMPLATE.md` in `skills/` and `.agents/` and update `tests/test_assemble_conops.py` and `tests/test_conops_and_mission_intent_validators.py`.
+3. **WP-1.3 (Resolves #298, #301)**: Harmonize Gate 26 (`crates/verify-baseline/src/checks/conops.rs`) to the canonical 12 sections and eliminate the `if part_defs:` fail-open check.
+4. **WP-1.4**: Harmonize `CONOPS_CANONICAL_TEMPLATE.md` in `skills/` and `.agents/` and update `crates/assemble-conops/tests/` and `crates/verify-baseline/tests/`.
 5. **WP-1.5 (Resolves #300)**: Update `scripts/install_pipeline.sh` (scaffold `docs/interfaces/` and modular units), author `docs/OPERATOR_PROMPT_CATALOG.md`, and update `README.md`.
-6. **WP-1.6**: Run full test discovery (`python3 -m unittest discover tests`), commit, and push to `origin/main`.
+6. **WP-1.6**: Run full test discovery (`cargo test --workspace`), commit, and push to `origin/main`.
 
 ### Phase 2: Downstream Domain Distribution Synchronization
 1. Lodge tracking issues on `gintatkinson/DEAP-avionic-flight-safety` (Tier 1 Parent) and `gintatkinson/DEAP-uas-infrastructure-safety` (Tier 2 Child) linking to upstream issues #296–#301.

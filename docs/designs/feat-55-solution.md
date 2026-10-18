@@ -9,8 +9,8 @@ This document summarizes the changes, components implemented, and verification d
 
 ## 1. Overview of Changes
 
-### Python Compiler Script Refactoring
-- **`scripts/compile_yang.py`**: Refactored the output generator. Instead of completely replacing `logical-layout.json` with a flat list, the script now reads the existing `app_flutter/assets/logical-layout.json` if present (or falls back to `.pipeline/logical-ui/logical-layout.json`) and merges the compiled AttributeDefinitions list under the key `"attributes"`. This preserves the entire metadata, theme, navigation, and layout structure of the dashboard configuration.
+### Schema Compiler Refactoring
+- **`crates/compile-sysml/src/main.rs`**: Refactored the output generator. Instead of completely replacing `logical-layout.json` with a flat list, the compiler now reads the existing `app_flutter/assets/logical-layout.json` if present (or falls back to `.pipeline/logical-ui/logical-layout.json`) and merges the compiled AttributeDefinitions list under the key `"attributes"`. This preserves the entire metadata, theme, navigation, and layout structure of the dashboard configuration.
 
 ### Flutter Presentation Layer Refactoring
 - **`layout.dart`**: Updated `_loadLayoutConfig()` to parse the `"attributes"` key from the decoded configuration map. Inside `_buildChildWidget()`, it deserializes this JSON array into a typed `List<AttributeDefinition>` and injects it dynamically into the `PropertyGrid` child instance.
@@ -22,7 +22,7 @@ This document summarizes the changes, components implemented, and verification d
 
 | UML Element | Realization Tag | File Path | Properties & Realized Behavior |
 | :--- | :--- | :--- | :--- |
-| `YangCompiler` | `@realizes UML::YangCompiler` | [compile_yang.py](../../scripts/compile_yang.py) | Parses YANG AST, extracts leaves/constraints, and merges compiled array into `logical-layout.json` |
+| `YangCompiler` | `@realizes UML::YangCompiler` | [main.rs](../../crates/compile-sysml/src/main.rs) | Parses SysML/YANG AST, extracts leaves/constraints, and merges compiled array into `logical-layout.json` |
 | `PropertyGrid` | `@realizes UML::PropertyGrid` | [property_grid.dart](../../app_flutter/lib/components/property_grid.dart) | Instantiated dynamically with AttributeDefinition configurations parsed from the JSON schema |
 | `FormFieldFactory` | `@realizes UML::FormFieldFactory` | [property_grid.dart](../../app_flutter/lib/components/property_grid.dart) | Generates and binds text fields, number inputs, or dropdown form widgets based on type configurations |
 
@@ -33,7 +33,7 @@ This document summarizes the changes, components implemented, and verification d
 ### Compilation Verification
 We successfully verified that the compiler merges attributes without corrupting dashboard layouts:
 ```bash
-.venv/bin/python3 scripts/compile_yang.py schema/openconfig-interfaces.yang app_flutter/assets/logical-layout.json
+./target/release/compile-sysml schema/openconfig-interfaces.sysml app_flutter/assets/logical-layout.json
 ```
 
 ### Automated Flutter Tests

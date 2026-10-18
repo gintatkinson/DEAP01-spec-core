@@ -64,12 +64,13 @@ use std::path::PathBuf;
 use std::process;
 
 use compile_sysml::{generate_digest, parse_sysml, to_sysml, write_atomic, write_digest_atomic};
+use deap_core::source_ast::SourceLanguage;
 use deap_core::sysml_ast::PackageDef;
 use ingest_sysml::detectors::discover_schema_targets;
 use ingest_sysml::filter_ast_to_target_scope;
 use ingest_sysml::translators::{
-    idl::IDLTranslator, markdown::MarkdownTranslator, openapi::OpenAPITranslator,
-    yang::YangTranslator,
+    code::CodeTranslator, idl::IDLTranslator, markdown::MarkdownTranslator,
+    openapi::OpenAPITranslator, yang::YangTranslator,
 };
 
 /// Ground 0.0 SysML v2 Universal Ingestion Engine Command-Line Arguments.
@@ -80,7 +81,7 @@ use ingest_sysml::translators::{
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Default output paths deterministically target `.pipeline/schema.sysml` and `.pipeline/schema-digest.json`.
-/// - Format defaults to `"auto"` when omitted by the caller.
+/// - Format defaults to `"auto"` when omitted by the caller and auto-resolves to `"code"` when `--source` is supplied.
 ///
 /// ## 3. Preconditions
 /// - Supplied CLI flags must be valid UTF-8 strings and OS paths parseable by `clap::Parser`.
@@ -100,13 +101,21 @@ use ingest_sysml::translators::{
 #[derive(Parser, Debug)]
 #[command(name = "ingest-sysml", version = "0.1.0", about = "SysML v2 Universal Ingestion Engine")]
 pub struct CliArgs {
+    /// Path to root of source code tree for AST extraction (mutually exclusive with --schema)
+    #[arg(long)]
+    pub source: Option<PathBuf>,
+
     /// Path to input schema file or directory containing schemas (default: schema/)
     #[arg(short, long)]
     pub schema: Option<PathBuf>,
 
-    /// Schema format specification (auto, sysml, idl, openapi, markdown, yang, autosar, protobuf)
+    /// Schema format specification (auto, code, sysml, idl, openapi, markdown, yang, autosar, protobuf)
     #[arg(short, long, default_value = "auto")]
     pub format: String,
+
+    /// Source language parser selection for code ingestion (auto, dart, rust)
+    #[arg(long, default_value = "auto")]
+    pub language: String,
 
     /// Output SysML v2 textual file path
     #[arg(short, long, default_value = ".pipeline/schema.sysml")]
@@ -193,102 +202,154 @@ fn main() {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-INGEST-CLI/run_ingestion], [DO-330-TQL-4-INGEST-CLI]
 pub fn run_ingestion(args: CliArgs) -> Result<(), String> {
-    // Step 1: Discover schema targets and detect input format
-    let (disc_fmt, disc_files) =
-        discover_schema_targets(args.schema.as_deref(), Some(&args.format))?;
-
-    if disc_files.is_empty() {
-        let target_desc = args
-            .schema
-            .as_ref()
-            .map(|p| p.display().to_string())
-            .unwrap_or_else(|| "schema/ or schema/extracted/".to_string());
-        return Err(format!("No supported schema files found in {}", target_desc));
+    if args.source.is_some() && args.schema.is_some() {
+        return Err("CLI options '--source' and '--schema' are mutually exclusive.".to_string());
     }
 
-    // Step 2: Resolve format (auto vs user-specified override)
-    let fmt = if args.format == "auto" {
-        disc_fmt
-    } else {
-        args.format.to_ascii_lowercase()
-    };
-
-    let is_dir = args.schema.as_ref().is_some_and(|p| p.is_dir());
     let mut pkg: PackageDef;
 
-    // Step 3: Dispatch translation based on format and file cardinality
-    if fmt == "markdown" && (disc_files.len() > 1 || is_dir) {
-        // Multi-file Markdown batch translation via parallel Rayon ingestion
-        let def_name = if is_dir {
-            args.schema
-                .as_ref()
-                .and_then(|p| p.file_name())
-                .and_then(|s| s.to_str())
-                .unwrap_or("OEM_System_Model")
-        } else {
-            "OEM_System_Model"
-        };
-
-        let file_strs: Vec<String> = disc_files.iter().map(|p| p.to_string_lossy().to_string()).collect();
-        let translator = MarkdownTranslator::new();
-        pkg = translator.translate_files(&file_strs, def_name)?;
-
+    if let Some(ref source_path) = args.source {
+        let fmt_lower = args.format.trim().to_ascii_lowercase();
+        if fmt_lower != "auto" && fmt_lower != "code" {
+            return Err(format!(
+                "Invalid format '{}' when '--source' is specified. Expected 'auto' or 'code'.",
+                args.format
+            ));
+        }
+        let lang = SourceLanguage::from_flag(&args.language)?;
+        let pkg_name = source_path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("SourceCodeModel");
+        pkg = CodeTranslator::with_language(lang).translate_directory(source_path, pkg_name)?;
         println!(
-            "[SysML v2 Ingestion] Successfully ingested {} markdown files -> {}",
-            disc_files.len(),
+            "[SysML v2 Ingestion] Successfully ingested source AST from '{}' -> {}",
+            source_path.display(),
             args.out.display()
         );
-    } else if fmt == "yang" && (disc_files.len() > 1 || is_dir) {
-        // Multi-file YANG batch translation
-        let def_name = if is_dir {
-            args.schema
-                .as_ref()
-                .and_then(|p| p.file_name())
-                .and_then(|s| s.to_str())
-                .unwrap_or("YangModel")
-        } else {
-            "YangModel"
-        };
-
-        let file_strs: Vec<String> = disc_files.iter().map(|p| p.to_string_lossy().to_string()).collect();
-        let translator = YangTranslator::new();
-        pkg = translator.translate_files(&file_strs, def_name)?;
-
+    } else if args.format.eq_ignore_ascii_case("code") {
+        let target_path = args
+            .schema
+            .clone()
+            .unwrap_or_else(|| PathBuf::from("src"));
+        let lang = SourceLanguage::from_flag(&args.language)?;
+        let pkg_name = target_path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("SourceCodeModel");
+        pkg = CodeTranslator::with_language(lang).translate_directory(&target_path, pkg_name)?;
         println!(
-            "[SysML v2 Ingestion] Successfully ingested {} yang files -> {}",
-            disc_files.len(),
+            "[SysML v2 Ingestion] Successfully ingested source AST from '{}' -> {}",
+            target_path.display(),
             args.out.display()
         );
     } else {
-        // Single file translation path
-        let target_file = &disc_files[0];
-        let content = fs::read_to_string(target_file)
-            .map_err(|e| format!("Failed to read file '{}': {}", target_file.display(), e))?;
-        let basename = target_file
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("Model");
+        // Step 1: Discover schema targets and detect input format
+        let (disc_fmt, disc_files) =
+            discover_schema_targets(args.schema.as_deref(), Some(&args.format))?;
 
-        pkg = match fmt.as_str() {
-            "sysml" => parse_sysml(&content)
-                .map_err(|e| format!("SysML v2 parse error in '{}': {}", target_file.display(), e))?,
-            "idl" => IDLTranslator::new().translate(&content, basename)?,
-            "openapi" => OpenAPITranslator::new().translate(&content, basename)?,
-            "markdown" => MarkdownTranslator::new().translate(&content, basename)?,
-            "yang" => YangTranslator::new().translate(&content, basename)?,
-            "raw" => {
-                return Err("AST translation is required for raw document formats. SSOT ingestion failed.".to_string());
-            }
-            other => {
-                return Err(format!("Unsupported format '{}' for file '{}'", other, target_file.display()));
-            }
+        if disc_files.is_empty() {
+            let target_desc = args
+                .schema
+                .as_ref()
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|| "schema/ or schema/extracted/".to_string());
+            return Err(format!("No supported schema files found in {}", target_desc));
+        }
+
+        // Step 2: Resolve format (auto vs user-specified override)
+        let fmt = if args.format == "auto" {
+            disc_fmt
+        } else {
+            args.format.to_ascii_lowercase()
         };
 
-        println!(
-            "[SysML v2 Ingestion] Successfully ingested '{}' -> {}",
-            target_file.display(),
-            args.out.display()
-        );
+        let is_dir = args.schema.as_ref().is_some_and(|p| p.is_dir());
+
+        // Step 3: Dispatch translation based on format and file cardinality
+        if fmt == "markdown" && (disc_files.len() > 1 || is_dir) {
+            let def_name = if is_dir {
+                args.schema
+                    .as_ref()
+                    .and_then(|p| p.file_name())
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("OEM_System_Model")
+            } else {
+                "OEM_System_Model"
+            };
+
+            let file_strs: Vec<String> = disc_files
+                .iter()
+                .map(|p| p.to_string_lossy().to_string())
+                .collect();
+            let translator = MarkdownTranslator::new();
+            pkg = translator.translate_files(&file_strs, def_name)?;
+
+            println!(
+                "[SysML v2 Ingestion] Successfully ingested {} markdown files -> {}",
+                disc_files.len(),
+                args.out.display()
+            );
+        } else if fmt == "yang" && (disc_files.len() > 1 || is_dir) {
+            let def_name = if is_dir {
+                args.schema
+                    .as_ref()
+                    .and_then(|p| p.file_name())
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("YangModel")
+            } else {
+                "YangModel"
+            };
+
+            let file_strs: Vec<String> = disc_files
+                .iter()
+                .map(|p| p.to_string_lossy().to_string())
+                .collect();
+            let translator = YangTranslator::new();
+            pkg = translator.translate_files(&file_strs, def_name)?;
+
+            println!(
+                "[SysML v2 Ingestion] Successfully ingested {} yang files -> {}",
+                disc_files.len(),
+                args.out.display()
+            );
+        } else {
+            let target_file = &disc_files[0];
+            let content = fs::read_to_string(target_file)
+                .map_err(|e| format!("Failed to read file '{}': {}", target_file.display(), e))?;
+            let basename = target_file
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("Model");
+
+            let lang = SourceLanguage::from_flag(&args.language)?;
+            pkg = match fmt.as_str() {
+                "sysml" => parse_sysml(&content).map_err(|e| {
+                    format!("SysML v2 parse error in '{}': {}", target_file.display(), e)
+                })?,
+                "code" => CodeTranslator::with_language(lang).translate(&content, basename)?,
+                "idl" => IDLTranslator::new().translate(&content, basename)?,
+                "openapi" => OpenAPITranslator::new().translate(&content, basename)?,
+                "markdown" => MarkdownTranslator::new().translate(&content, basename)?,
+                "yang" => YangTranslator::new().translate(&content, basename)?,
+                "raw" => {
+                    return Err("AST translation is required for raw document formats. SSOT ingestion failed.".to_string());
+                }
+                other => {
+                    return Err(format!(
+                        "Unsupported format '{}' for file '{}'",
+                        other,
+                        target_file.display()
+                    ));
+                }
+            };
+
+            println!(
+                "[SysML v2 Ingestion] Successfully ingested '{}' -> {}",
+                target_file.display(),
+                args.out.display()
+            );
+        }
     }
 
     // Step 4: Apply closed-world AST filtering & negative invariant projection

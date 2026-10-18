@@ -286,9 +286,9 @@ To eliminate race conditions, corrupted partial writes, and unintended overwrite
 
 ### 6.1 Semantic Acceptance Gate
 In strict compliance with repository governance, verification of the persistence architecture is performed exclusively via end-to-end semantic acceptance testing:
-- **Baseline Verification**: `python3 scripts/verify_downstream_baseline.py .` passes all 31 checks with exit code 0.
+- **Baseline Verification**: `./target/release/verify-baseline .` passes all 36 checks with exit code 0.
 - **AST Integrity Check**: `.pipeline/schema.sysml` and `.pipeline/schema-digest.json` maintain cryptographic hash parity.
-- **Zero Forbidden Unit Tests**: Zero `test_*.py` or unit test runners exist in upstream repositories.
+- **Zero Forbidden Script Runners**: Zero dynamic script test runners exist in upstream repositories; verification executes via compiled Rust binaries (`cargo test --workspace`).
 - **Zero Em Dash Invariant**: The document contains 0 Unicode em dashes (`\u2014`), using ASCII `--` or `-` exclusively.
 
 ---

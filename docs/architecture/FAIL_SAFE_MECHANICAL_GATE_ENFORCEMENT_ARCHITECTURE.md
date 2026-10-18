@@ -156,7 +156,7 @@ fi
 The pre-push hook intercepts all `git push` commands before network transmission:
 1. Runs full regression suites across unit, contract, and documentation integrity gates.
 2. Validates that no uncommitted or untracked defect files exist in the working tree.
-3. Asserts that the local branch lineage strictly matches upstream tracking branches (`verify_branch_lineage.py`).
+3. Asserts that the local branch lineage strictly matches upstream tracking branches (`./target/release/verify-baseline`).
 
 #### 4. Controlled Pipeline Bypass & CI Protocol
 Under standard operating conditions, bypassing hooks via `--no-verify` is strictly prohibited by pipeline governance rules. However, in automated headless Continuous Integration (CI) runners or emergency recovery scenarios, an explicit, cryptographic override mechanism is required:
@@ -372,5 +372,5 @@ stateDiagram-v2
 
 - **Architecture Ratification:** 2026-09-14
 - **Auditor Context:** DEAP Architecture & Specification Core Compiler Team
-- **Verification Command:** `pytest tests/test_docs_integrity.py tests/test_skill_path_references.py -q`
+- **Verification Command:** `cargo test --workspace`
 - **Tracked Issue Reference:** refs #287

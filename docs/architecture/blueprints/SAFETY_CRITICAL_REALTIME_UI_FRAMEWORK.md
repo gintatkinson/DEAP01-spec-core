@@ -276,9 +276,9 @@ For safety-critical decision logic, all Boolean expressions in state transitions
 - Every condition must be shown to independently affect the decision outcome.
 - Condition trees are statically extracted and verified via semantic acceptance test harnesses.
 
-### 8.2 Zero Forbidden Unit Tests Invariant
-- In strict adherence to repository invariants, unit test suites (`tests/`, `test_*.py`, `pytest`) are strictly prohibited.
-- Verification is performed exclusively through end-to-end semantic acceptance testing and baseline gate checks (`scripts/verify_downstream_baseline.py`).
+### 8.2 Zero Forbidden Script Runners Invariant
+- In strict adherence to repository invariants, interpreted script test suites are strictly prohibited.
+- Verification is performed exclusively through end-to-end semantic acceptance testing and baseline gate checks (`./target/release/verify-baseline` and `cargo test --workspace`).
 - Zero Unicode em dashes (`\u2014`); ASCII `--` or `-` exclusively.
 
 ---

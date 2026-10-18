@@ -517,7 +517,7 @@ flowchart TD
 
 ## 6. Continuous Compliance Verification & Parity Gate (`deap-harness`)
 
-Continuous compliance and structural parity are mechanically verified by `deap-harness` and `scripts/verify_downstream_baseline.py`.
+Continuous compliance and structural parity are mechanically verified by `deap-harness` and `./target/release/verify-baseline`.
 
 ```mermaid
 sequenceDiagram
@@ -577,6 +577,6 @@ gantt
 | **Phase 1: AST Parser & Slicing Engine** | SysML v2 grammar parser, typed AST slices (<= 4,096 tokens) | `deap-ast`, `deap-core` | Parsed `.sysml` files output valid `SemanticGraphDAG` and context-isolated AST slices without data loss. |
 | **Phase 2: MATLAB Tier-1 Adapter** | MBD exporter for Simulink & Stateflow | `deap-codegen` Simulink exporter | MATLAB CLI successfully loads exported `.slreqx` and executes `.sfx` Stateflow simulation without errors. |
 | **Phase 3: Backlog Projection Engine** | Projection rules for Epics, Features, User Stories, Use Cases | `deap-codegen`, backlog reconciliation | 100% of SysML requirements and packages projected into specifications with valid YAML frontmatter tags. |
-| **Phase 4: Parity Gate & Compliance** | Semantic acceptance verification harness | `deap-harness`, `scripts/verify_downstream_baseline.py` | `python3 scripts/verify_downstream_baseline.py` passes 100% green; bi-directional audit verifies zero orphan code symbols or requirements. |
+| **Phase 4: Parity Gate & Compliance** | Semantic acceptance verification harness | `deap-harness`, `./target/release/verify-baseline` | `./target/release/verify-baseline . --no-domain` passes 100% green; bi-directional audit verifies zero orphan code symbols or requirements. |
 
 ---

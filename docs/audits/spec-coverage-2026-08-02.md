@@ -25,9 +25,9 @@ The report further diagnoses the 5 systemic root cause mechanisms explaining why
 | 02 | `docs/features/feat-03-dynamics-temporal.md` | Temporal Dynamics Engine | Camera position animation interpolation present. | Temporal velocity vector extrapolation and playback control scrubber. | **40%** |
 | 03 | `docs/features/feat-04-diagnostic-payload-generation.md` | Diagnostic Payload Exporter | Python repro payload exporter in `scripts/` active. | Client-side Flutter diagnostic dump exporter UI widget. | **60%** |
 | 04 | `docs/features/feat-04-numeric-metrics.md` | Numeric Metrics HUD | `CameraStatsPanel` HUD overlay active (lat/lng/alt). | Continuous metric series accumulator and frame-drop histogram. | **70%** |
-| 05 | `docs/features/feat-05-agent-bug-filing.md` | Automated Agent Bug Filing | Python `gh` issue filing scripts active. | Flutter in-app defect report submission modal. | **50%** |
+| 05 | `docs/features/feat-05-agent-bug-filing.md` | Automated Agent Bug Filing | Rust `gh` issue filing binaries active. | Flutter in-app defect report submission modal. | **50%** |
 | 06 | `docs/features/feat-05-temporal-precision.md` | Microsecond Temporal Precision | Microsecond timestamped camera state active. | Sub-millisecond FFI timer synchronization on Android. | **65%** |
-| 07 | `docs/features/feat-06-upstream-regression-testing.md` | Upstream Regression Testing | Python `verify_downstream_baseline.py` script active. | Automated Flutter visual regression baseline comparator. | **75%** |
+| 07 | `docs/features/feat-06-upstream-regression-testing.md` | Upstream Regression Testing | `./target/release/verify-baseline` binary active. | Automated Flutter visual regression baseline comparator. | **75%** |
 | 08 | `docs/features/feat-10-logical-ui-layout.md` | Logical UI Layout Architecture | `Scene3DViewport`, `PropertyGrid`, `MapConfigPanel` active. | Custom panel docking/undocking and layout serialization. | **80%** |
 | 09 | `docs/features/feat-11-topology-map.md` | 3D Topology Map Viewport | `Scene3DViewportPainter` and tile imagery fetcher active. | Multi-tile Level-of-Detail quadtree mesh renderer. | **80%** |
 | 10 | `docs/features/feat-12-yang-compiler.md` | Client-Side YANG Compiler | SQLite pre-seeded `domain_seed_strategy.dart` active. | In-browser dynamic YANG AST compiler & parser. | **35%** |
@@ -36,8 +36,8 @@ The report further diagnoses the 5 systemic root cause mechanisms explaining why
 | 13 | `docs/features/feat-15-off-thread-telemetry.md` | Off-Thread Telemetry Worker | FFI C-library bindings probe active. | Dart Isolate background worker thread telemetry queue. | **55%** |
 | 14 | `docs/features/feat-16-gpu-topology.md` | GPU-Accelerated Topology Engine | CustomPainter canvas rendering and mesh geometry active. | WebGL / GPU shader pipeline stubbed. | **75%** |
 | 15 | `docs/features/feat-18-parent-epic-linkage.md` | Parent Epic Traceability Linkage | Tracker issue markdown link resolution active. | Client-side visual epic hierarchy tree view. | **60%** |
-| 16 | `docs/features/feat-27-coverage-gate.md` | Model Coverage Parity Gate | `parity_auditor` spec coverage CLI active. | Real-time IDE spec coverage telemetry plugin. | **85%** |
-| 17 | `docs/features/feat-28-traceability-gate.md` | Traceability Validation Gate | `parity_auditor/validators/uml.py` traceability checks active. | Automated PR blocker bot. | **85%** |
+| 16 | `docs/features/feat-27-coverage-gate.md` | Model Coverage Parity Gate | `./target/release/verify-baseline` spec coverage CLI active. | Real-time IDE spec coverage telemetry plugin. | **85%** |
+| 17 | `docs/features/feat-28-traceability-gate.md` | Traceability Validation Gate | `crates/verify-baseline/src/checks/traceability.rs` traceability checks active. | Automated PR blocker bot. | **85%** |
 | 18 | `docs/features/feat-44-downstream-baseline.md` | Downstream Baseline Verification | Full Flutter & React baseline verification scripts active. | Cross-platform binary artifact caching. | **90%** |
 | 19 | `docs/features/feat-45-yang-decomposition.md` | YANG Schema Graph Decomposition | Chunked batch insertion & scalar top-K selection active. | Dynamic topology graph partitioning algorithm. | **85%** |
 
@@ -73,26 +73,26 @@ The report further diagnoses the 5 systemic root cause mechanisms explaining why
 | 29 | `docs/architecture/string-externalization-plan.md` | String Externalization Plan | HUD text string externalization (Latitude/Longitude/Altitude) complete. | Multi-language i18n JSON bundle loader. | **80%** |
 | 30 | `docs/designs/feat-11-solution.md` | Feat-11 Solution Design (Topology) | CanvasRenderer delegation and 3D Viewport integration active. | Quadtree level-of-detail caching. | **85%** |
 | 31 | `docs/designs/feat-18-solution.md` | Feat-18 Solution Design (Epic Linkage) | Markdown issue link parser active. | Tracker issue dependency graph visualizer. | **65%** |
-| 32 | `docs/designs/feat-44-solution.md` | Feat-44 Solution Design (Baseline) | `verify_downstream_baseline.py` path resolution fixed. | Automated CI baseline comparison runner. | **90%** |
+| 32 | `docs/designs/feat-44-solution.md` | Feat-44 Solution Design (Baseline) | `./target/release/verify-baseline` path resolution fixed. | Automated CI baseline comparison runner. | **90%** |
 | 33 | `docs/designs/feat-45-solution.md` | Feat-45 Solution Design (YANG Seed) | 1,000-op batch chunking and scalar top-K selection active. | Dynamic graph re-indexing. | **90%** |
 | 34 | `docs/designs/feat-55-solution.md` | Feat-55 Solution Design (Temporal) | Microsecond camera state timestamping active. | FFI platform high-resolution timer sync. | **65%** |
 | 35 | `docs/designs/feat-58-solution.md` | Feat-58 Solution Design (Basemap) | Basemap tile fetcher decoupling active. | Vector basemap tile renderer. | **80%** |
 | 36 | `docs/designs/feat-65-solution.md` | Feat-65 Solution Design (Decoupling) | Domain models decoupled from Flutter UI framework. | Dynamic domain service locator plugin. | **85%** |
 | 37 | `docs/designs/feat-70-solution.md` | Feat-70 Solution Design (Orchestration)| Multi-process baseline verification active. | Distributed subagent process pool manager. | **75%** |
 | 38 | `docs/designs/feat-adversarial-audit-solution.md` | Adversarial Audit Remediation Solution | 5 audit pillars implemented and 10 issues resolved. | Continuous background fuzzer daemon. | **95%** |
-| 39 | `docs/designs/feat-backprop-downstream-changes.md` | Downstream Backprop Synchronization | Backlog reconciliation script (`reconcile_backlog.py`) active. | Bi-directional git remote webhook trigger. | **90%** |
+| 39 | `docs/designs/feat-backprop-downstream-changes.md` | Downstream Backprop Synchronization | Backlog reconciliation binary (`./target/release/reconcile-backlog`) active. | Bi-directional git remote webhook trigger. | **90%** |
 | 40 | `docs/designs/feat-backprop-flutter-source-changes.md` | Flutter Source Backprop Solution | Flutter source changes backpropagated to main repo. | Automated Flutter source AST sync. | **85%** |
 | 41 | `docs/designs/feat-basemap-refactoring-solution.md` | Basemap Refactoring Solution | Tile imagery painter decoupled from Scene3DViewport. | Satellite imagery tile provider fallback. | **80%** |
 | 42 | `docs/designs/feat-cleanup-stale-domain-features.md` | Domain Feature Stale Cleanup Plan | Obsolete domain field references cleaned up across tests. | Automatic stale spec pruner. | **90%** |
 | 43 | `docs/designs/feat-domain-decoupling-solution.md` | Domain Decoupling Solution | Domain seed strategy decoupled from Sqflite FFI details. | Universal web/desktop/mobile DB adapter. | **85%** |
 | 44 | `docs/designs/feat-epic-template-mandate-plan.md` | Epic Template Mandate Plan | Epic frontmatter validation rules registered in auditor. | Automated epic generator template. | **80%** |
-| 45 | `docs/designs/feat-epic-template-mandate-solution.md` | Epic Template Mandate Solution | Parity auditor `uml.py` validates epic structure. | Epic template generator CLI. | **85%** |
+| 45 | `docs/designs/feat-epic-template-mandate-solution.md` | Epic Template Mandate Solution | `crates/verify-baseline` validates epic structure. | Epic template generator CLI. | **85%** |
 | 46 | `docs/designs/feat-fix-isolation-rules.md` | Subagent Isolation Rules Solution | Fresh context subagent dispatch enforced in `AGENTS.md`. | Automated subagent context validator hook. | **90%** |
 | 47 | `docs/designs/feat-fix-onboarding-instructions.md` | Onboarding Instructions Solution | `README.md` and `AGENTS.md` installation steps updated. | Interactive CLI setup wizard. | **90%** |
 | 48 | `docs/designs/feat-fix-readme-installation.md` | README Installation Solution | All installation instructions synchronized across docs. | Automatic doc drift checker CI gate. | **95%** |
 | 49 | `docs/designs/feat-pipeline-audit-solution.md` | Pipeline Tooling Audit Solution | Verify script path mutation fixed (#352). | Upstream tooling defect auto-filer. | **90%** |
 | 50 | `docs/designs/feat-sanitize-hardcoded-paths.md` | Hardcoded Path Sanitization Solution | Developer path sanitization rules enforced in gates. | Automated git pre-commit path scrubber. | **85%** |
-| 51 | `docs/designs/feat-usecase-alternate-flows-solution.md` | Use Case Alternate Flow Solution | `uml.py` header regex updated for Validation & Constraints (#354). | Interactive alternate flow tracer. | **85%** |
+| 51 | `docs/designs/feat-usecase-alternate-flows-solution.md` | Use Case Alternate Flow Solution | `crates/verify-baseline` header validation updated for Validation & Constraints (#354). | Interactive alternate flow tracer. | **85%** |
 | 52 | `docs/designs/multi-process-flutter-orchestration.md` | Multi-Process Orchestration Blueprint | Flutter dev server & runner process management active. | Multi-node distributed Flutter runner pool. | **70%** |
 | 53 | `docs/designs/persistence-architecture-blueprint.md` | Persistence Architecture Blueprint | SQLite database initializer and sqflite FFI active. | Offline-first local/remote sync coordinator. | **75%** |
 | 54 | `docs/feat-decoupled-persistence-layout-engine-design.md` | Decoupled Persistence Layout Engine | `PropertyGrid` and `MapConfigPanel` decoupling active. | Persistence state rollback engine. | **75%** |
@@ -150,8 +150,8 @@ The root causes stem from five structural and operational friction points:
 * **Impact**: Subagents implementing a User Story read the Sequence Diagram and BDD Given-When-Then scenarios. They implement the exact messages present in the Sequence Diagram, leaving the remaining 80% of un-exercised methods declared in the Class Diagram unimplemented.
 
 ### 4. Absence of Pre-Completion Parity Auditor Gates for Subagents
-* **Mechanism**: Subagents validate their work using build commands (`flutter test`, `flutter analyze`, `pytest`). These compilers and test runners check for syntax correctness, lint rules, and passing unit tests--not for missing UML methods or un-implemented spec sections.
-* **Impact**: `parity_auditor` was executed post-hoc at the project coordinator level rather than as a mandatory step in the subagent's local verification loop. The subagent believes it achieved 100% success because all build/test gates passed.
+* **Mechanism**: Subagents validate their work using build commands (`flutter test`, `flutter analyze`, `cargo test --workspace`). These compilers and test runners check for syntax correctness, lint rules, and passing unit tests--not for missing UML methods or un-implemented spec sections.
+* **Impact**: `./target/release/verify-baseline` was executed post-hoc at the project coordinator level rather than as a mandatory step in the subagent's local verification loop. The subagent believes it achieved 100% success because all build/test gates passed.
 
 ### 5. Role Boundary Locking & Task Scope Boundaries
 * **Mechanism**: Subagents are assigned atomic work packages (e.g. "Implement CameraStatsPanel HUD").
@@ -164,7 +164,7 @@ The root causes stem from five structural and operational friction points:
 To guarantee 100% specification implementation compliance in future subagent dispatches:
 
 1. **Mandate Pre-Completion Parity Auditor Gates**:
-   - Update `skills/feature-driven-implementation/SKILL.md` (Step 4 Verification) to require running `python3 -m parity_auditor` before declaring an implementation task complete.
+   - Update `skills/feature-driven-implementation/SKILL.md` (Step 4 Verification) to require running `./target/release/verify-baseline .` before declaring an implementation task complete.
 2. **Exhaustive UML Member Checklists in Subagent Prompts**:
    - Update prompt templates in `feature-driven-implementation` to extract and list every public operation signature, attribute, and alternate flow from the spec as explicit checkboxes.
 3. **Multi-Scenario TDD RED Phase Enforcement**:

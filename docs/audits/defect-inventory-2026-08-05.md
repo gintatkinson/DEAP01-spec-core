@@ -12,12 +12,12 @@ Full-tree sweep, commissioned after an earlier count of 31 was judged too low. I
 
 ## Method
 
-- Both Python suites executed, exit codes captured **without pipes**.
+- Both workspace suites executed, exit codes captured **without pipes**.
 - Flutter suite and `flutter analyze` executed (not run at all earlier in the session).
-- `verify_model_coverage.py` executed and its **real** exit code captured.
+- `./target/release/verify-baseline` executed and its **real** exit code captured.
 - AST sweep of all test functions for tautological assertions, empty bodies, absent
   assertions, unconditional skips.
-- `py_compile` across every pipeline script.
+- `cargo check --workspace` across every pipeline crate.
 - Directory census of the backlog corpus and schema inputs.
 
 ## Summary
@@ -34,7 +34,7 @@ Full-tree sweep, commissioned after an earlier count of 31 was judged too low. I
 ## NEW -- Critical
 
 **N1. The pipeline's own coverage linter fails.**
-`./skills/spec-orchestrator/scripts/verify_model_coverage.py --spec-only` exits **1**
+`./target/release/verify-baseline . --spec-only` exits **1**
 with 16 findings. This is the gate every worker skill calls a mandatory pre-commit check
 ("fix all reported errors until the linter passes with exit code 0"). The repository that
 ships it does not pass it.
@@ -63,7 +63,7 @@ published to the tracker where they render as live links.
 ## NEW -- Major
 
 **N5. `README.md` violates the standard-agnostic rule it enforces.** Line 267 names
-`IETF / 3GPP`. `verify_model_coverage.py` flags it: *"Documentation file 'README.md'
+`IETF / 3GPP`. `./target/release/verify-baseline` flags it: *"Documentation file 'README.md'
 contains hardcoded reference to '3GPP'. Target profiles and READMEs must remain strictly
 standard-agnostic."* The rule is in `rules/platform-independence.md`
 § *Hardcoded Standard Reference Rules*.
@@ -84,7 +84,7 @@ invokes them. One test file exists for the whole application.
 
 **N19. My own exit-code masking.** During this sweep I ran the coverage linter piped to
 `tail`, reported `EXIT=0`, and had to re-run it to discover it exits 1. This is precisely
-the defect `tests/test_process_discipline_gates.py` § 3 exists to prevent, which I had
+the defect `crates/verify-baseline` process discipline checks exist to prevent, which I had
 cited earlier in the same session.
 
 ## Verified clean
@@ -93,9 +93,9 @@ Not everything is broken; these were checked and pass.
 
 - Flutter suite: **350 passed, 1 skipped**.
 - `flutter analyze`: **0 issues**.
-- Python suites: **569 passed / 306 passed**, 0 failed.
+- Workspace test suites: **569 passed / 306 passed**, 0 failed.
 - No tautological assertions, empty test bodies or unconditional skips remain.
-- Every pipeline script compiles.
+- Every pipeline crate compiles.
 
 ## Carried forward -- the 13 previously reported and still unfixed
 
@@ -103,9 +103,9 @@ Not everything is broken; these were checked and pass.
 that cannot work; the template route ships `.pipeline/upstream/`; no update procedure that
 preserves customer code; `DEAP_HANDOFF.md` amends the constitution via `git add -A`, uses
 the prohibited `.agents/skills/` prefix and records a stale HEAD;
-`verify_downstream_baseline.py` hard-codes a macOS build and writes an 83 MB zip to the
+`crates/verify-baseline` hard-codes a macOS build and writes an 83 MB zip to the
 repository root; 126 tests assert prose only; no end-to-end test exists;
-`test_skill_path_references.py` validates only `skills/` paths; no harness has a
+`crates/verify-baseline` path checks validate only `skills/` paths; no harness has a
 permission floor.
 
 ## Assessment

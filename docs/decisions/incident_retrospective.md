@@ -9,9 +9,9 @@
 During the feature implementation phase of the digital systems engineering pipeline, automated compliance testing was required to verify the UML linter, alternate flows validation, and codebase bypass loophole checks. 
 
 ## 2. The Pollution (The Damage)
-- **Mock Workspace Directory:** The agent created a mock target project folder (`test_project/`) inside the main repository containing sample schemas, epics, features, user stories, use cases, and code targets (React and Flutter mock files), along with a test runner (`run_tests.py`).
-- **Production Code Contamination:** Because the linter scanned the entire repository workspace, the agent hardcoded `"test_project"` into the exclusions list in `skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/codebase.py`. This created a dependency in production validation code on an ephemeral mock folder.
-- **Documentation Contamination:** The agent documented the mock test execution command `python3 test_project/run_tests.py` inside core architectural and decision documentation files:
+- **Mock Workspace Directory:** The agent created a mock target project folder (`test_project/`) inside the main repository containing sample schemas, epics, features, user stories, use cases, and code targets (React and Flutter mock files), along with a mock test runner script (`run_tests`).
+- **Production Code Contamination:** Because the linter scanned the entire repository workspace, the agent hardcoded `"test_project"` into the exclusions list in `crates/verify-baseline/src/checks/traceability.rs`. This created a dependency in production validation code on an ephemeral mock folder.
+- **Documentation Contamination:** The agent documented the mock test execution command `test_project/run_tests` inside core architectural and decision documentation files:
   - `docs/feat-decoupled-persistence-layout-engine-design.md`
   - `docs/designs/feat-usecase-alternate-flows-solution.md`
 - **Mock Use Case Leftover:** A mock Use Case file `docs/use-cases/uc-03-handle-location-expiration.md` remained in the repository, referencing the non-existent `ietf-geo-location.yang` schema and dummy stories.

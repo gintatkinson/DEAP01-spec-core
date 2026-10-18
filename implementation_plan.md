@@ -471,3 +471,24 @@ This implementation plan governs the delegation of GitHub defect issues `#459`, 
 ### WP-04: Final Quality Gate, Remote Parity & Coordinator Verification
 - Ensure `implementation_plan.md` and all repository changes are committed and pushed so `git status --short` and `git diff origin/<branch>` are strictly 0 bytes prior to Sentinel Victory Audit.
 - Reclaim/terminate all subagents via `manage_subagents(Action="kill_all")` upon completion and verify issues `#459`, `#460`, and `#461` via `gh issue view`.
+
+
+---
+
+# Implementation Plan: Persist macOS `exebox` + `gh` TLS/Keychain & System Clock Rules in `AGENTS.md`
+
+## 1. Executive Summary & Objective
+
+This implementation plan governs persisting the operational rules learned from diagnosing the `gh` CLI TLS (`x509: "api.github.com" certificate is not trusted`) and Keychain token access failures inside the macOS `exebox` sandbox, as well as prohibiting model training-cutoff date hallucinations, into root `AGENTS.md`.
+
+## 2. Work Packages
+
+### WP-01: Subagent Update to `AGENTS.md`
+- **Target File**: `AGENTS.md` (Section `## Strict Verification & Parametric Assumption Prevention Rules`, lines 133-137).
+- **Action**: Dispatch a context-isolated subagent to add two rules under `## Strict Verification & Parametric Assumption Prevention Rules`:
+  1. **Prohibition of Training-Cutoff Date Hallucinations**: Agents MUST treat the host system clock and `<ADDITIONAL_METADATA>` timestamp as the authoritative current date/time, and are strictly forbidden from claiming that current 2026+ system dates are "in the future" due to model training cutoffs.
+  2. **macOS `exebox` Sandbox & `gh` CLI TLS/Keychain Remediation**: Document that Go binaries on macOS (`gh`) ignore `SSL_CERT_FILE` (`CN=antigravity CA` injected by `exebox`) in favor of `SecTrustEvaluateWithError` (macOS Keychain), and that the sandbox blocks `SecItemCopyMatching` secret reads from Keychain. Document the two-step persistence remediation (`security add-trusted-cert -d -r trustRoot -k ~/Library/Keychains/login.keychain-db` and `gh auth token | gh auth login --with-token --insecure-storage`).
+
+### WP-02: Verification Gate
+- Verify `AGENTS.md` contains zero Unicode em dashes (`\u2014`) and stays well below the 24,000-byte rule cap.
+- Run `./target/release/verify-baseline . --no-domain` (or `cargo test -p deap-core -- workspace`) to confirm Check 14 (`AGENTS.md` integrity) passes with exit code `0`.

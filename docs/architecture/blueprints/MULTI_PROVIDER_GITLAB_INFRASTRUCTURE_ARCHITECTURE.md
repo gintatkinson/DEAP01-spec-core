@@ -49,8 +49,8 @@ flowchart TB
     subgraph VCS_Agnostic_Core ["DEAP Core Engine - VCS & Tracker Agnostic Layer"]
         AST_SSOT["SysML v2 Formal AST SSOT - .pipeline/schema.sysml"]
         Spec_Corpus["Agile Backlog Corpus - Epics, Features, Stories, Use Cases"]
-        Reconcile_Engine["reconcile_backlog.py Engine"]
-        Parity_Lock["22-Gate Parity Lock - verify_model_coverage.py"]
+        Reconcile_Engine["reconcile-backlog Engine"]
+        Parity_Lock["22-Gate Parity Lock - verify-baseline"]
     end
 
     subgraph Tracker_Abstraction ["Unified Tracker Abstraction Layer"]
@@ -144,7 +144,7 @@ flowchart TD
 
 ### 1.4 Architectural Invariants & Non-Negotiable Tenets
 
-1. **Zero External Runtime Dependency Policy:** All tracker clients, API callers, and reconciliation scripts must execute using standard Python runtime libraries (`urllib.request`, `urllib.parse`, `json`, `ssl`, `time`). External third-party packages (e.g., `requests`, `python-gitlab`, `urllib3`) must not be required for production reconciliation.
+1. **Zero External Runtime Dependency Policy:** All tracker clients, API callers, and reconciliation binaries must execute as self-contained native executables (`./target/release/reconcile-backlog`) or zero-external-dependency standard library components without requiring third-party runtime wheels.
 2. **Deterministic Provider Independence:** Specifying `TRACKER_PROVIDER=gitlab` or `TRACKER_PROVIDER=github` switches remote serialization without modifying a single markdown frontmatter schema, SysML v2 AST node, or test suite.
 3. **Strict Transport Decoupling:** Git version control (cloning, branching, committing, pushing) operates over standard Git protocols (SSH/HTTPS) independently of the Issue Tracking REST API.
 4. **Air-Gap & Private PKI First-Class Support:** The GitLab REST engine must natively support custom root CA certificates (`GITLAB_CA_CERT_PATH`), self-hosted domain routing (`GITLAB_URL`, `CI_SERVER_URL`), and ephemeral pipeline credentials (`CI_JOB_TOKEN`).
@@ -357,13 +357,13 @@ class TrackerComment:
 
 ### 2.4 Transactional Backlog Reconciliation Lifecycle
 
-The reconciliation engine (`scripts/reconcile_backlog.py`) executes a 7-step transactional pipeline ensuring that markdown files in `docs/` and remote tracker issues remain in mathematical synchronization:
+The reconciliation engine (`./target/release/reconcile-backlog`) executes a 7-step transactional pipeline ensuring that markdown files in `docs/` and remote tracker issues remain in mathematical synchronization:
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant LocalDisk as "Local Spec Corpus (docs/)"
-    participant Reconciler as "reconcile_backlog.py"
+    participant Reconciler as "reconcile-backlog"
     participant Factory as "TrackerFactory"
     participant Driver as "GitLabV4Tracker Driver"
     participant GL_API as "GitLab REST API v4"
@@ -391,7 +391,7 @@ sequenceDiagram
     rect rgb(240, 255, 240)
         Note over Reconciler,LocalDisk: Step 7: Local Frontmatter Update & Verification
         Reconciler->>LocalDisk: Write canonical issue_id & url to YAML frontmatter
-        Reconciler->>Auditor: Execute verify_model_coverage.py
+        Reconciler->>Auditor: Execute ./target/release/verify-baseline
         Auditor-->>Reconciler: Verification Pass (0 Drift / 0 Violations)
     end
 ```
@@ -400,9 +400,9 @@ sequenceDiagram
 
 ## Section 3: Native GitLab REST API v4 Engine Specification
 
-### 3.1 Zero-Dependency Python Client Architecture (`urllib.request`)
+### 3.1 Zero-Dependency Client Architecture (`urllib.request` / `crates/reconcile-backlog`)
 
-In restricted, air-gapped, and SCIF environments, installing third-party Python wheels (such as `requests`, `urllib3`, `certifi`, or `python-gitlab`) is strictly governed and often prohibited without lengthy security accreditation. To ensure zero operational friction, the DEAP GitLab Engine is implemented purely using the Python standard library.
+In restricted, air-gapped, and SCIF environments, installing third-party runtime packages is strictly governed and often prohibited without lengthy security accreditation. To ensure zero operational friction, the DEAP GitLab Engine is implemented with zero external third-party runtime dependencies.
 
 ```python
 import os
@@ -703,7 +703,7 @@ stateDiagram-v2
     state InProgress {
         [*] --> Authoring
         Authoring --> SpecElaboration : "Refine Markdown & SysML AST"
-        SpecElaboration --> LocalVerification : "Run verify_model_coverage.py"
+        SpecElaboration --> LocalVerification : "Run ./target/release/verify-baseline"
     }
 
     InProgress --> ReadyForReview : "Spec & Code Complete (status::ready-for-review)"
@@ -869,9 +869,9 @@ DEAP implements strict TLS validation using the local authority store:
 ```mermaid
 flowchart LR
     subgraph Air_Gapped_Host ["Air-Gapped Host / Runner Node"]
-        Client_Script["DEAP Python Script - GitLabV4Client"]
+        Client_Script["DEAP Native Client - GitLabV4Client"]
         CA_Store["/etc/ssl/certs/defense-internal-root-ca.crt - GITLAB_CA_CERT_PATH"]
-        Custom_SSL["ssl.SSLContext - TLS 1.3 / 1.2 Strict"]
+        Custom_SSL["TLS 1.3 / 1.2 Strict Context"]
     end
 
     subgraph Enclave_Network ["Isolated SCIF Enclave (Zero Egress)"]
@@ -896,7 +896,7 @@ flowchart TD
     subgraph SCIF_Enclave ["Sensitive Compartmented Information Facility (SCIF) Enclave"]
         subgraph Vault ["Local Artifact Vault (Air-Gapped)"]
             GitLab_EE["Self-Hosted GitLab EE Server (Local DB & Repos)"]
-            PyPI_Mirror["Offline Python Package Mirror (Audited Wheels)"]
+            Cargo_Mirror["Offline Crate Registry Mirror (Audited Crates)"]
             MATLAB_Server["MathWorks Network License Server (Local)"]
         end
 
@@ -941,7 +941,6 @@ flowchart LR
         L1["lint:sysml (AST & Syntax)"]
         L2["lint:markdown (Frontmatter & Links)"]
         L3["lint:cargo (Clippy & Fmt for Crates)"]
-        L4["lint:python (Flake8 & Type Checks)"]
     end
 
     subgraph Stage_Test ["Stage 2: test"]
@@ -1001,18 +1000,16 @@ stages:
   - release
 
 variables:
-  PYTHONUNBUFFERED: "1"
-  PIP_DISABLE_PIP_VERSION_CHECK: "1"
   TRACKER_PROVIDER: "gitlab"
   GIT_DEPTH: "50"
   CARGO_HOME: "$CI_PROJECT_DIR/.cargo"
   RUST_BACKTRACE: "1"
 
 default:
-  image: python:3.11-slim
+  image: rust:1.80-slim
   before_script:
-    - python3 --version
-    - export PYTHONPATH=".:skills/spec-orchestrator/parity_auditor/src:$PYTHONPATH"
+    - cargo --version
+    - cargo build --release --workspace
 
 # ------------------------------------------------------------------------------
 # Workspace Container Caching Policy
@@ -1036,7 +1033,7 @@ lint:sysml:
   stage: lint
   script:
     - echo "=== Validating SysML v2 AST & Schema Consistency ==="
-    - python3 scripts/compile_sysml.py --check
+    - ./target/release/compile-sysml --check
     - test -f .pipeline/schema.sysml
     - test -f .pipeline/schema-digest.json
 
@@ -1044,7 +1041,7 @@ lint:markdown:
   stage: lint
   script:
     - echo "=== Validating Specification Frontmatter & Scoped Labels ==="
-    - python3 scripts/validate_layout.py
+    - ./target/release/verify-baseline . --no-domain
 
 lint:cargo:
   stage: lint
@@ -1053,12 +1050,6 @@ lint:cargo:
     - echo "=== Validating Cargo Workspace Crates (Clippy & Format) ==="
     - cargo fmt --all -- --check
     - cargo clippy --workspace --all-targets -- -D warnings
-
-lint:python:
-  stage: lint
-  script:
-    - echo "=== Validating Python Source Code Compliance ==="
-    - python3 -m py_compile scripts/*.py
 
 # ------------------------------------------------------------------------------
 # Stage 2: Test
@@ -1091,14 +1082,14 @@ test:semantic-acceptance:
   stage: test
   script:
     - echo "=== Running Semantic Acceptance Harness & Baseline Verification ==="
-    - python3 scripts/verify_downstream_baseline.py --no-domain
-    - python3 scripts/e2e_acceptance_harness.py
+    - ./target/release/verify-baseline . --no-domain
+    - cargo test --workspace
 
 test:reconcile-mock:
   stage: test
   script:
     - echo "=== Running Round-Trip Mock Backlog Reconciliation ==="
-    - python3 scripts/reconcile_backlog.py --dry-run --provider mock
+    - ./target/release/reconcile-backlog --dry-run --provider mock
 
 test:simulink-harness:
   stage: test
@@ -1130,7 +1121,7 @@ verify:22-gate-parity:
   stage: verify
   script:
     - echo "=== Executing 22-Gate Mechanical Parity Lock ==="
-    - python3 skills/spec-orchestrator/parity_auditor/src/parity_auditor/cli.py --strict
+    - ./target/release/verify-baseline . --strict
   artifacts:
     name: "deap-parity-audit-report-$CI_COMMIT_SHORT_SHA"
     when: always
@@ -1143,7 +1134,7 @@ verify:traceability-matrix:
   stage: verify
   script:
     - echo "=== Generating DO-178C End-to-End Traceability Matrix ==="
-    - python3 scripts/generate_spdx_sbom.py
+    - ./target/release/verify-baseline . --no-domain
   artifacts:
     name: "deap-traceability-matrix-$CI_COMMIT_SHORT_SHA"
     paths:
@@ -1158,7 +1149,7 @@ verify:reconcile-gitlab-sync:
       when: on_success
   script:
     - echo "=== Synchronizing Scoped Labels & Evidence Notes to GitLab ==="
-    - python3 scripts/reconcile_backlog.py --sync-remote --provider gitlab
+    - ./target/release/reconcile-backlog --sync-remote --provider gitlab
 
 # ------------------------------------------------------------------------------
 # Stage 4: Release (Multi-Crate Release Tagging & Package Publication)
@@ -1716,7 +1707,7 @@ gantt
     Implement Zero-Dependency GitLabV4Client :2026-08-27, 3d
     Implement LocalMockTracker & Acceptance Harness :2026-08-30, 2d
     section Phase 2 - Reconciler & Scoped Labels
-    Refactor reconcile_backlog.py for Multi-Provider :2026-09-01, 3d
+    Refactor reconcile-backlog for Multi-Provider :2026-09-01, 3d
     Implement Scoped Label Lifecycle Engine :2026-09-04, 2d
     Air-Gapped Private CA TLS Integration :2026-09-06, 2d
     section Phase 3 - Modular Cargo Workspace & Slicing

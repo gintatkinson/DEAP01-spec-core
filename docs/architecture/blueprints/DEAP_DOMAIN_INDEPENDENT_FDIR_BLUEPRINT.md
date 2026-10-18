@@ -54,7 +54,7 @@ flowchart TD
     end
 
     subgraph "2. Schema Compiler & Digest Engine"
-        F_DEF & D_DEF & I_DEF & R_DEF --> PARSER["sysml_parser.py & compile_sysml.py"]
+        F_DEF & D_DEF & I_DEF & R_DEF --> PARSER["crates/ingest-sysml & crates/compile-sysml"]
         PARSER --> DIGEST[".pipeline/schema-digest.json<br/>('fdir_defs' Key)"]
     end
 
@@ -184,7 +184,7 @@ package DEAP_Abstract_FDIR {
 
 The compiler enhancements reside entirely within the abstract toolchain:
 
-### 3.1 AST Parser Extensions (`scripts/sysml_parser.py`)
+### 3.1 AST Parser Extensions (`crates/ingest-sysml`)
 - Recognizes `fault def`, `detection def`, `isolation def`, `recovery def`, and `fdir contract def` AST nodes.
 - Extracts attributes into clean dictionary AST representations:
   ```json
@@ -213,7 +213,7 @@ The compiler enhancements reside entirely within the abstract toolchain:
   }
   ```
 
-### 3.2 Schema Digest Integration (`scripts/compile_sysml.py`)
+### 3.2 Schema Digest Integration (`crates/compile-sysml`)
 - Ingests user-provided `.sysml` schema files in downstream repositories.
 - Emits `.pipeline/schema-digest.json` including the `"fdir_defs"` collection.
 
@@ -238,10 +238,10 @@ flowchart LR
 
 The compiler enforces strict gates ensuring zero domain coupling:
 
-1. **Gate 1: AST Extraction Gate (`test_fdir_parser.py`)**:
+1. **Gate 1: AST Extraction Gate (`crates/ingest-sysml/tests/`)**:
    - Asserts that generic models (`Node1`, `Node2`, `SigA`, `FaultB`) parse with 100% fidelity.
-2. **Gate 2: Zero Domain String Linter (`test_domain_independence.py`)**:
-   - Scans all upstream parser scripts for forbidden concrete domain words and vehicle primitives to guarantee pure abstract semantics.
+2. **Gate 2: Zero Domain String Linter (`crates/verify-baseline`)**:
+   - Scans all upstream parser crates for forbidden concrete domain words and vehicle primitives to guarantee pure abstract semantics.
 3. **Gate 3: Statechart Reachability Gate**:
    - Proves mathematically that all declared `targetFallbackState` strings correspond to actual `state def` nodes in the schema.
 4. **Gate 4: Bounded Detection Gate**:

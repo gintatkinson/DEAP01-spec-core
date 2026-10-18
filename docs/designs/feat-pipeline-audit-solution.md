@@ -14,10 +14,10 @@ This walkthrough details the changes made to generalize the digital systems engi
 ### Phase 1: Preparation
 *   **behavioral_triggers.json**: Created [behavioral_triggers.json](../../rules/behavioral_triggers.json) to decouple the linter checks for rateOfChange and temporal calculations from python script execution, defining them dynamically as configuration rules.
 
-### Phase 2: Model Coverage Script Refactoring
-*   **verify_model_coverage.py**: 
+### Phase 2: Model Coverage Checker Refactoring
+*   **crates/verify-baseline/src/main.rs**: 
     *   Implemented `parse_schema_file(filepath)` to route schema node extraction by file extension (`.yang` matched natively, with placeholders/stubs for OpenAPI and Protobuf).
-    *   Added `load_behavioral_triggers` to dynamically read JSON rules from `rules/behavioral_triggers.json` (falling back to schema or script directories).
+    *   Added `load_behavioral_triggers` to dynamically read JSON rules from `rules/behavioral_triggers.json` (falling back to schema or tool directories).
     *   Replaced hardcoded check loops inside `main` with a generic trigger evaluator that runs matches against the loaded rule definitions.
     *   Allowed directory resolution using `SCHEMA_DIR` instead of strictly checking for a `yang` directory.
 
@@ -35,7 +35,7 @@ This walkthrough details the changes made to generalize the digital systems engi
 ## 2. Verification
 
 ### Compiler Verification
-*   Executed compilation checks: `python3 -m py_compile skills/spec-orchestrator/scripts/verify_model_coverage.py skills/spec-orchestrator/scripts/reconcile_backlog.py` resulting in **0 compiler errors**.
+*   Executed compilation checks: `cargo check --workspace` resulting in **0 compiler errors**.
 
 ---
 

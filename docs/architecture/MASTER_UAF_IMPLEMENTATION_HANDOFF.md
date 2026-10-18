@@ -33,13 +33,13 @@
 - **Action:** Execute `view_file` on [`skills/feature-driven-implementation/SKILL.md`](skills/feature-driven-implementation/SKILL.md) and [`skills/spec-orchestrator/SKILL.md`](skills/spec-orchestrator/SKILL.md) to initialize feature-driven implementation protocols, RED-GREEN-REFACTOR TDD cycle discipline, and review gates.
 
 ### Step 3: Load Governance Rules
-- **Action:** Ingest [`.agents/AGENTS.md`](.agents/AGENTS.md) and [`rules/`](rules) to enforce project-scoped agentic rules, context-isolated subagent dispatch loops (`python3 scripts/dispatch_subagent.py`), role boundary locks, and native CommonMark metadata table integrity.
+- **Action:** Ingest [`.agents/AGENTS.md`](.agents/AGENTS.md) and [`rules/`](rules) to enforce project-scoped agentic rules, context-isolated subagent dispatch loops, role boundary locks, and native CommonMark metadata table integrity.
 
 ### Step 4: Load Platform Profile
 - **Action:** Read the target platform execution profiles under [`.pipeline/profiles/`](.pipeline/profiles) to establish platform-specific build, test, and lifecycle constraints.
 
 ### Step 5: Bootstrap Tracker Labels
-- **Action:** Verify that repository issue tracker labels are synchronized and operational by running `python3 scripts/reconcile_backlog.py --offline` or `python3 skills/spec-orchestrator/scripts/bootstrap_tracker_labels.py --dry-run`.
+- **Action:** Verify that repository issue tracker labels are synchronized and operational by running `./target/release/reconcile-backlog --offline` or `./target/release/reconcile-backlog bootstrap-labels --dry-run`.
 
 ---
 
@@ -60,7 +60,7 @@ Prior agents repeatedly failed by:
    - All models, examples, and validators MUST use Abstract Systems Engineering Archetypes (`SensorProcessingSubsystem`, `ControllerLogicSubsystem`, `PrimarySensorState`, `ActuatorDemandValue`, `H-1 Boundary Violation`).
    - Zero hardcoded domain concepts (no aviation flight controls, automotive ECUs, or medical terms).
 3. **Zero Coordinator Direct Code/Spec Writes**:
-   - All code implementation, specification authoring, and test writing MUST be executed via context-isolated subagents dispatched with `python3 scripts/dispatch_subagent.py`.
+   - All code implementation, specification authoring, and test writing MUST be executed via context-isolated subagents.
 4. **Zero Drafts & Atomic SSOT Registration**:
    - No detached `.md` files in `docs/designs/`. Every feature MUST be registered directly to GitHub via `gh issue create --label feature` as part of its creation transaction.
 5. **Mandatory Adversarial Auditor on Failure**:
@@ -119,7 +119,7 @@ Prior agents repeatedly failed by:
     - Markdown: `/// OperationalAllocation: [OperationalActivityOrPhaseName]`
     - SysML v2: `doc /* /// OperationalAllocation: [OperationalActivityOrPhaseName] */`
   - **Static Analysis Validator (`OperationalAllocationValidator`):**
-    - Registered as Gate 24 in `skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/operational_allocation_validator.py`, `aggregator.py`, `cli.py`, and `reconcile_backlog.py`.
+    - Registered as Gate 24 in `crates/verify-baseline/src/checks/`, `./target/release/verify-baseline`, and `./target/release/reconcile-backlog`.
     - Automated synthesis of `docs/conops/OP_TO_RES_ALLOCATION_MATRIX.md`.
 
 ---
@@ -137,7 +137,7 @@ Prior agents repeatedly failed by:
     - Theorem 3 (Dimensional Homogeneity): For every connector $c = (p_{\text{src}}, p_{\text{dst}})$, assert $D(e_{\text{src}}) = D(e_{\text{dst}})$.
     - Slew rate and Nyquist-Shannon sampling frequency validation ($f_{\text{sample}} \ge 2 f_{\text{signal,max}}$).
   - **Static Analysis Validator (`StandardsAndMeasurementValidator`):**
-    - Registered as Gate 25 in `skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/standards_measurement_validator.py`, `aggregator.py`, `cli.py`, and `reconcile_backlog.py`.
+    - Registered as Gate 25 in `crates/verify-baseline/src/checks/`, `./target/release/verify-baseline`, and `./target/release/reconcile-backlog`.
     - Automated synthesis of `STANDARDS_TAXONOMY_BASELINE.md` and `PARAMETER_MEASUREMENT_DICTIONARY.md`.
 
 ---
@@ -146,14 +146,6 @@ Prior agents repeatedly failed by:
 
 ### Work Package 1: Register and Verify Feature 1 (FEAT-UAF-01: Res-Cn & Res-Tx)
 - **Task 1.1: Dispatch Feature Spec Worker**
-  ```bash
-  python3 scripts/dispatch_subagent.py \
-    --skill skills/spec-orchestrator/SKILL.md \
-    --target docs/architecture/blueprints/DEAP_LOGICAL_INTERFACE_SPECIFICATION_BLUEPRINT.md \
-    --role "Feature Spec Writer (FEAT-UAF-01: Resource Connectivity Metamodel)" \
-    --type "feature_spec_writer" \
-    --classification "UPSTREAM_SPEC_CORE_COMPILER"
-  ```
   Subagent registers GitHub Issue:
   ```bash
   gh issue create --repo gintatkinson/DEAP01-spec-core \
@@ -163,21 +155,13 @@ Prior agents repeatedly failed by:
   ```
 - **Task 1.2: Run Gate 23 Verification**
   ```bash
-  python3 -m unittest tests/test_icd_completeness_validator.py
+  cargo test --package verify-baseline
   ```
 
 ---
 
 ### Work Package 2: Register and Implement Feature 2 (FEAT-UAF-02: Gate 24 Op-to-Res Validator)
 - **Task 2.1: Dispatch Feature Spec Worker**
-  ```bash
-  python3 scripts/dispatch_subagent.py \
-    --skill skills/spec-orchestrator/SKILL.md \
-    --target skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/operational_allocation_validator.py \
-    --role "Feature Spec Writer (FEAT-UAF-02: Gate 24 Allocation Validator)" \
-    --type "feature_spec_writer" \
-    --classification "UPSTREAM_SPEC_CORE_COMPILER"
-  ```
   Subagent registers GitHub Issue:
   ```bash
   gh issue create --repo gintatkinson/DEAP01-spec-core \
@@ -186,20 +170,11 @@ Prior agents repeatedly failed by:
     --body-file /tmp/feat_02_body.md
   ```
 - **Task 2.2: Dispatch Code Modifier Worker for TDD RED-GREEN Implementation**
-  ```bash
-  python3 scripts/dispatch_subagent.py \
-    --skill skills/feature-driven-implementation/SKILL.md \
-    --target skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/operational_allocation_validator.py \
-    --role "Governance & Tooling Engineer (Gate 24 Implementation)" \
-    --type "code_modifier_worker" \
-    --classification "UPSTREAM_SPEC_CORE_COMPILER"
-  ```
   - Files to implement:
-    - `skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/operational_allocation_validator.py`
-    - `.agents/skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/operational_allocation_validator.py`
-    - `tests/test_operational_allocation_validator.py`
-  - Register in `cli.py`, `aggregator.py`, and `reconcile_backlog.py`
-  - Verify unit tests: `python3 -m unittest tests/test_operational_allocation_validator.py`.
+    - `crates/verify-baseline/src/checks/`
+    - `crates/verify-baseline/tests/`
+  - Register in `verify-baseline` and `reconcile-backlog`
+  - Verify unit tests: `cargo test --package verify-baseline`.
 
 ---
 
@@ -214,17 +189,17 @@ Prior agents repeatedly failed by:
   ```
 - **Task 3.2: Dispatch Code Modifier Worker for TDD RED-GREEN Implementation**
   - Files to implement:
-    - `skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/standards_measurement_validator.py`
-    - `tests/test_standards_measurement_validator.py`
-  - Verify unit tests: `python3 -m unittest tests/test_standards_measurement_validator.py`.
+    - `crates/verify-baseline/src/checks/`
+    - `crates/verify-baseline/tests/`
+  - Verify unit tests: `cargo test --package verify-baseline`.
 
 ---
 
 ### Work Package 4: Master Verification, Commit & Ephemeral Child Repositories Rollout
 - **Task 4.1: Run Full Test Suite & Baseline Conformance**
   ```bash
-  python3 -m unittest discover -s tests
-  python3 scripts/verify_downstream_baseline.py --no-domain
+  cargo test --workspace
+  ./target/release/verify-baseline . --no-domain
   ```
 - **Task 4.2: Commit and Push to `origin/main`**
   ```bash

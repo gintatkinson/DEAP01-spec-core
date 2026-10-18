@@ -8,7 +8,7 @@
     "profiles_directory": ".pipeline/profiles",
     "walkthrough_directory": "docs/designs",
     "walkthrough_pattern": "feat-{number}-solution.md",
-    "reconciliation_script_path": "skills/spec-orchestrator/scripts/reconcile_backlog.py",
+    "reconciliation_script_path": "./target/release/reconcile-backlog",
     "behavioral_triggers_path": "rules/behavioral_triggers.json"
   },
   "tracker_rules": {

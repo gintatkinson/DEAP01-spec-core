@@ -20,7 +20,7 @@ This document records the systemic fix applied to the zero-defect digital engine
     * `## Child Features` list with issue links.
 
 ### 2. Plugged the Epic Linter Gap
-* **Target File**: [verify_model_coverage.py](../../skills/spec-orchestrator/scripts/verify_model_coverage.py)
+* **Target File**: [uml.rs](../../crates/verify-baseline/src/checks/uml.rs)
 * **Modifications**:
   * Defined `epics_dir` mapping to `docs/epics/` in the `verify_uml_diagrams` function.
   * Added a dedicated `# 4. Verify Epics` section auditing all Epic markdown files.

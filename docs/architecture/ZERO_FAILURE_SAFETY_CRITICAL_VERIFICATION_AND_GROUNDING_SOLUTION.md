@@ -20,7 +20,7 @@ In digital engineering for safety-critical aerospace systems, verification must 
 
 Two catastrophic failure modes were identified in the platform:
 1. **Verification Theater (The Mock Anti-Pattern)**:
-   Compiler validation gates were tested using `unittest.mock` (`MagicMock`, `patch`) and synthetic in-memory strings in `/tmp`. These mock suites passed 100% while actual customer deliverables in `uav-008` suffered from false citations and technical fabrications.
+   Compiler validation gates were tested using in-memory synthetic mock objects (`MagicMock`, `patch`) and synthetic in-memory strings in `/tmp`. These mock suites passed 100% while actual customer deliverables in `uav-008` suffered from false citations and technical fabrications.
 2. **Semantic Citation Fraud & Closed-World Breach**:
    Third-party COTS documentation (502 ArduPilot `.rst` files) was ingested into the active workspace, breaching the closed-world schema boundary. Agents hallucinated digital protocols (DShot600, 16-bit DMA timers) and execution rates (400 Hz inner loop), falsely citing customer manual sections (`§7.2.3`, `§8.1.5`) that contained no such requirements.
 
@@ -31,7 +31,7 @@ Two catastrophic failure modes were identified in the platform:
 ```mermaid
 flowchart TD
     subgraph "Pillar 1: Zero-Mock Physical Verification"
-        ZM1["Strict Ban on unittest.mock in Safety Gates"]
+        ZM1["Strict Ban on Synthetic Mocks in Safety Gates"]
         ZM2["Execution Against Physical Real Files on Disk"]
         ZM3["Negative Invariant Subprocess Testing"]
     end
@@ -88,7 +88,7 @@ flowchart TD
   4. Fails closed (`exit code 1`) if the asserted parameters do not exist in the sliced text.
 
 ### Pillar 3: 4-Tier Epistemic Taxonomy Contract
-Eliminates hallucinated citations by providing honest classifications for all parameters:
+Eliminate hallucinated citations by providing honest classifications for all parameters:
 
 | Epistemic Tier | Semantic Rule | Permitted Citations | Forbidden Actions |
 | :--- | :--- | :--- | :--- |
@@ -97,7 +97,7 @@ Eliminates hallucinated citations by providing honest classifications for all pa
 | **`[TIER-3: DESIGN-CHOICE]`** | COTS engineering adaptation (ArduPilot 1000–2000 µs PWM throttle mapping, ASTM F3269-17 RTA, DO-178C DALs). | Must cite engineering architecture. | Citing customer manual or spec sheet. |
 | **`[TIER-4: OEM-UNSPECIFIED-TBD]`** | Unknown parameter where OEM is silent (physical servo protocol, ESC telemetry rate). | Open Question / TBD. | Assigning arbitrary numeric values. Must remain `TBD` or `0.0`. |
 
-### Pillar 4: Dedicated Phase 1 Airworthiness Baseline Gate (`verify_phase1_baseline.py`)
+### Pillar 4: Dedicated Phase 1 Airworthiness Baseline Gate (`./target/release/verify-baseline`)
 - Isolates Phase 1 from Phase 2.
 - **Enforces**:
   1. Fail-closed SHA-256 validation of the 4 SSOT customer files against `schema/SSOT_INPUT_REGISTER.md`.
@@ -105,7 +105,7 @@ Eliminates hallucinated citations by providing honest classifications for all pa
   3. 100% AST representation of all 12 subsystems in FMECA across Γ, Φ, Ω, Ψ dimensions.
   4. Zero semantic citation fraud (using Mechanical Section Slicer).
   5. Zero mentions of foreign COTS protocols (`DShot`, `400 Hz inner loop`, `30 Hz GUI`).
-- **Physical Lock**: Downstream feature tools cannot run until `verify_phase1_baseline.py` exits with code 0.
+- **Physical Lock**: Downstream feature tools cannot run until `./target/release/verify-baseline` exits with code 0.
 
 ### Pillar 5: Quarantine of External COTS Documentation
 - External software reference manuals (e.g., ArduPilot `.rst` docs) are quarantined outside the workspace requirements boundary.
@@ -118,7 +118,7 @@ Eliminates hallucinated citations by providing honest classifications for all pa
 | Work Package | Target Repository | Scope & Deliverables | Verification Criteria |
 | :--- | :--- | :--- | :--- |
 | **WP-1: Adversarial Audit** | `DEAP01-spec-core` | Dispatch auditor subagent on Mock Usage & Verification Theater; file issue. | 5-pillar dossier; issue created on GitHub. |
-| **WP-2: Phase 1 Safety Gate** | `DEAP01-spec-core` | Implement `scripts/verify_phase1_baseline.py` with zero mocks, physical disk execution, and semantic section slicing. | Real physical execution against `uav-008`; exit 0 on clean, exit 1 on dirty. |
-| **WP-3: STPA/FMECA Sanitization** | `uav-008` | Surgically remediate lines 533 & 559 in `docs/safety/STPA_MATRIX.md` with honest epistemic tags (`[TIER-3: DESIGN-CHOICE]`, `[TIER-4: OEM-UNSPECIFIED-TBD]`). | Zero DShot, zero false citations; passes `verify_phase1_baseline.py`. |
+| **WP-2: Phase 1 Safety Gate** | `DEAP01-spec-core` | Implement `./target/release/verify-baseline` with zero mocks, physical disk execution, and semantic section slicing. | Real physical execution against `uav-008`; exit 0 on clean, exit 1 on dirty. |
+| **WP-3: STPA/FMECA Sanitization** | `uav-008` | Surgically remediate lines 533 & 559 in `docs/safety/STPA_MATRIX.md` with honest epistemic tags (`[TIER-3: DESIGN-CHOICE]`, `[TIER-4: OEM-UNSPECIFIED-TBD]`). | Zero DShot, zero false citations; passes `./target/release/verify-baseline`. |
 | **WP-4: COTS Reference Quarantine** | `uav-008` | Excise `docs/references/ardupilot/` from active spec tree to eliminate context poisoning. | Directory removed; zero dead links. |
 | **WP-5: Remote Synchronization** | Both repos | Commit, push to `origin/main`, and close tracked issues (#285, #143, #146). | `git diff origin/main` empty across both repos. |

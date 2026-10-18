@@ -11,7 +11,7 @@ This report consolidates the findings of 5 specialized adversarial subagents dep
 
 ## 1. Executive Summary
 
-The audit reveals a significant gap between the **UML design mandates** defined in the specification worker skills and the **automated verification checks** executed by the linter script (`verify_model_coverage.py`). 
+The audit reveals a significant gap between the **UML design mandates** defined in the specification worker skills and the **automated verification checks** executed by the linter (`crates/verify-baseline`). 
 
 Currently, the linter performs superficial string-presence checks (e.g., verifying that a block starts with ````mermaid classDiagram```` or ````mermaid stateDiagram-v2````) but fails to validate the internal diagram syntax, relationships, or structural parity with the underlying schema. This allows incorrect or placeholder diagrams to pass validation silently, causing quality gaps in generated specs.
 
@@ -20,7 +20,7 @@ Currently, the linter performs superficial string-presence checks (e.g., verifyi
 ## 2. Enumerated Gaps and Defects
 
 ### A. Structural UML Gaps (Class Diagrams)
-* **[GAP-STR-01] Weak Relationship Verification**: The linter script (`verify_model_coverage.py`) accepts any line (`--`) or generic dependency (`-->`) in Class Diagrams, even though `SKILL.md` mandates strict composition (`*--`) or aggregation (`o--`) to represent container hierarchies.
+* **[GAP-STR-01] Weak Relationship Verification**: The linter (`crates/verify-baseline`) accepts any line (`--`) or generic dependency (`-->`) in Class Diagrams, even though `SKILL.md` mandates strict composition (`*--`) or aggregation (`o--`) to represent container hierarchies.
 * **[GAP-STR-02] Undetected Isolated Classes**: The linter only triggers an error if a Class Diagram contains *zero* relationships. If a diagram contains a mix of connected classes and completely isolated classes, it passes validation, violating the "no isolated classes" rule.
 * **[GAP-STR-03] Choice & Case Stereotype Omission**: When the schema contains a `choice` block, the linter does not verify the presence of the `<<choice>>` stereotype or inheritance (`<|--`) relationships in the diagram.
 * **[GAP-STR-04] Text-Only Coverage Loophole**: Node coverage is validated by scanning the markdown prose for the node name in backticks or bold. The linter does not check that the node is actually represented as a class or attribute inside the Mermaid `classDiagram` block.
@@ -44,13 +44,13 @@ Currently, the linter performs superficial string-presence checks (e.g., verifyi
 * **[GAP-UC-06] Missing Section 7 Verification**: The linter does not assert the presence of `## 7. Operational Context` in Use Case markdown files.
 
 ### D. Traceability & Linkage Gaps
-* **[GAP-TR-01] Fragile Title Matching**: `reconcile_backlog.py` prefix-stripping regex fails on bracketed tags (e.g., `[User Story]`) or hyphen separators (e.g., ` - `), causing matching failures against GitHub issues.
+* **[GAP-TR-01] Fragile Title Matching**: `crates/reconcile-backlog` prefix-stripping fails on bracketed tags (e.g., `[User Story]`) or hyphen separators (e.g., ` - `), causing matching failures against GitHub issues.
 * **[GAP-TR-02] Rigid Checkbox Layout Assumption**: The sync script assumes the issue ID (`#IssueID`) immediately follows the checkbox, failing on standard links (e.g., `- [ ] [Title](URL) - #123`).
 * **[GAP-TR-03] No Epic Checklist Validation**: The linter does not verify the Epic's `## 2. Requirements & Checklist` section, allowing empty list items, relative paths, or broken links to pass.
 * **[GAP-TR-04] User Story Justification Validation Omission**: The linter validates parenthetical justifications for Use Cases but omits them for User Stories, allowing stories to bypass semantic justifications.
 * **[GAP-TR-05] Checkbox Mark Case-Sensitivity**: User Story validation accepts only `[x]`, rejecting `[X]`, which is accepted in Use Cases and supported by the reconciler.
 
-### E. Linter & Parser Gaps (verify_model_coverage.py / reconcile_backlog.py)
+### E. Linter & Parser Gaps (crates/verify-baseline / crates/reconcile-backlog)
 * **[GAP-LNT-01] Comment-Cleaning Order Bug**: In `parse_yang_file`, the module name is extracted before comments are stripped, leading to matching dummy module declarations in header comments.
 * **[GAP-LNT-02] Quote-Wrapped Identifiers Swallowed**: Comment stripping replaces string literals with `""`, erasing quote-wrapped YANG identifiers (e.g. `container "geo-location"`).
 * **[GAP-LNT-03] Coverage Leakage**: Linter coverage is verified against a concatenation of all feature files globally, allowing cross-file matching rather than scoping strictly to labeled files.
@@ -62,7 +62,7 @@ Currently, the linter performs superficial string-presence checks (e.g., verifyi
 ## 3. Actionable Recommendations
 
 ### 1. Upgrade the UML Class Diagram Parser
-Modify `verify_model_coverage.py` to parse Mermaid class diagrams structurally:
+Modify `crates/verify-baseline` to parse Mermaid class diagrams structurally:
 * Build an adjacency list of relationships and run a connectivity check to assert **zero isolated classes**.
 * Verify that composition (`*--`) or aggregation (`o--`) is used for containment hierarchies.
 * Assert that case classes inherit from choice classes using `<|--`.
@@ -83,5 +83,5 @@ Modify `verify_model_coverage.py` to parse Mermaid class diagrams structurally:
 
 ### 5. Fix Linter and Reconciler Code Bugs
 * **YANG Parser**: Strip comments/strings *before* running module name regex, and support optional single/double quotes around identifier matches.
-* **Reconciler YAML**: Replace the naive line splitter in `reconcile_backlog.py` with a standard YAML library (or robust multi-line parser) to prevent block description erasures.
+* **Reconciler YAML**: Replace the naive line splitter in `crates/reconcile-backlog` with a standard YAML library (or robust multi-line parser) to prevent block description erasures.
 * **Reconciler Error Handling**: Log warnings instead of crashing with `sys.exit(1)` when a single issue reference is missing.

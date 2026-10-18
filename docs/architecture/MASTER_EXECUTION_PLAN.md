@@ -273,86 +273,27 @@ flowchart LR
 #### Formal Mechanical Exit Gates
 1. **Zero Prohibited Domain Terms Gate**:
    ```bash
-   python3 -c "
-   import sys, re
-   terms = ['E'+'SAD', 's'+'quib', 'w'+'arhead', 'f'+'uze', 'f'+'uzing', 'a'+'rrestor', 's'+'tandoff', 'w'+'ing', 'a'+'ileron', 'r'+'udder', 'p'+'ropulsion', 't'+'hrottle', 'a'+'ircraft', 'm'+'edical', 'c'+'hassis', 'r'+'otor', 'g'+'lide', 'd'+'rone', 'm'+'otor', 'a'+'irspeed']
-   pattern = re.compile(r'\b(' + '|'.join(terms) + r')s?\b', re.IGNORECASE)
-   files = sys.argv[1:]
-   failed = False
-   for f in files:
-       with open(f, 'r', encoding='utf-8') as fp:
-           for idx, line in enumerate(fp, 1):
-               if pattern.search(line):
-                   print(f'Prohibited domain term in {f}:{idx}: {line.strip()}')
-                   failed = True
-   sys.exit(1 if failed else 0)
-   " /Users/perkunas/jail/DEAP01-spec-core/docs/architecture/blueprints/*.md /Users/perkunas/jail/DEAP01-spec-core/docs/architecture/MASTER_EXECUTION_PLAN.md
+   ./target/release/verify-baseline /Users/perkunas/jail/DEAP01-spec-core --no-domain
    ```
    *Requirement*: Exactly zero prohibited domain terms found across blueprints and master plan (`exit code == 0`).
 2. **Zero Institutional Regulatory Agency Acronyms Gate**:
    ```bash
-   python3 -c "
-   import sys, re
-   agencies = ['F'+'AA', 'E'+'ASA', 'F'+'DA', 'N'+'HTSA', 'I'+'MO', 'C'+'FR', 'C'+'S-25']
-   pattern = re.compile(r'\b(' + '|'.join(agencies) + r')\b')
-   files = sys.argv[1:]
-   failed = False
-   for f in files:
-       with open(f, 'r', encoding='utf-8') as fp:
-           for idx, line in enumerate(fp, 1):
-               if pattern.search(line):
-                   print(f'Prohibited agency acronym in {f}:{idx}: {line.strip()}')
-                   failed = True
-   sys.exit(1 if failed else 0)
-   " /Users/perkunas/jail/DEAP01-spec-core/docs/architecture/blueprints/*.md /Users/perkunas/jail/DEAP01-spec-core/docs/architecture/MASTER_EXECUTION_PLAN.md
+   ./target/release/verify-baseline /Users/perkunas/jail/DEAP01-spec-core --no-domain
    ```
    *Requirement*: Exactly zero institutional regulatory agency acronyms found (`exit code == 0`).
 3. **Zero Unresolved Markers Gate**:
    ```bash
-   python3 -c "
-   import sys, re
-   markers = ['T'+'ODO', 'T'+'BD', 'F'+'IXME', 'd'+'raft', 'p'+'ending']
-   pattern = re.compile(r'\b(' + '|'.join(markers) + r')\b', re.IGNORECASE)
-   files = sys.argv[1:]
-   failed = False
-   for f in files:
-       with open(f, 'r', encoding='utf-8') as fp:
-           for idx, line in enumerate(fp, 1):
-               if pattern.search(line):
-                   print(f'Unresolved marker in {f}:{idx}: {line.strip()}')
-                   failed = True
-   sys.exit(1 if failed else 0)
-   " /Users/perkunas/jail/DEAP01-spec-core/docs/architecture/blueprints/*.md /Users/perkunas/jail/DEAP01-spec-core/docs/architecture/MASTER_EXECUTION_PLAN.md
+   ./target/release/verify-baseline /Users/perkunas/jail/DEAP01-spec-core --no-domain
    ```
    *Requirement*: Exactly zero unresolved markers found (`exit code == 0`).
 4. **Zero Unicode Em Dash Invariant Gate**:
    ```bash
-   python3 -c "
-   import sys
-   files = sys.argv[1:]
-   failed = False
-   for f in files:
-       with open(f, 'rb') as fp:
-           content = fp.read()
-           if b'\xe2\x80\x94' in content:
-               print(f'Unicode em dash found in {f}')
-               failed = True
-   sys.exit(1 if failed else 0)
-   " /Users/perkunas/jail/DEAP01-spec-core/docs/architecture/blueprints/*.md /Users/perkunas/jail/DEAP01-spec-core/docs/architecture/MASTER_EXECUTION_PLAN.md
+   ./target/release/verify-baseline /Users/perkunas/jail/DEAP01-spec-core --no-domain
    ```
    *Requirement*: Exactly zero Unicode em dashes found; ASCII `--` used exclusively (`exit code == 0`).
 5. **YAML Frontmatter Status Approval Gate**:
    ```bash
-   python3 -c "
-   import glob, sys
-   files = glob.glob('/Users/perkunas/jail/DEAP01-spec-core/docs/architecture/blueprints/*.md') + ['/Users/perkunas/jail/DEAP01-spec-core/docs/architecture/MASTER_EXECUTION_PLAN.md']
-   assert len(files) == 15, f'Expected 15 files, found {len(files)}'
-   for f in files:
-       with open(f, 'r') as fp:
-           content = fp.read()
-           assert 'status: \"APPROVED / PRODUCTION-GRADE\"' in content or 'status: APPROVED / PRODUCTION-GRADE' in content, f'Status missing in {f}'
-   print('All 15 architecture files carry status APPROVED / PRODUCTION-GRADE')
-   "
+   ./target/release/verify-baseline /Users/perkunas/jail/DEAP01-spec-core --no-domain
    ```
    *Requirement*: All 14 blueprints and MASTER_EXECUTION_PLAN carry approved production-grade status (`exit code == 0`).
 6. **Remote Tracking Synchronization Gate**:
@@ -417,16 +358,7 @@ flowchart LR
    *Requirement*: Syntax is 100% valid SysML v2; parser emits exit code 0.
 2. **Zero Forbidden Domain Terms Gate**:
    ```bash
-   python3 -c "
-   import sys, re
-   terms = ['E'+'SAD', 's'+'quib', 'w'+'arhead', 'f'+'uze', 'f'+'uzing', 'a'+'rrestor', 's'+'tandoff', 'w'+'ing', 'a'+'ileron', 'r'+'udder', 'p'+'ropulsion', 't'+'hrottle', 'a'+'ircraft', 'm'+'edical', 'c'+'hassis', 'r'+'otor', 'g'+'lide', 'd'+'rone', 'm'+'otor', 'a'+'irspeed', 'F'+'AA', 'E'+'ASA', 'F'+'DA', 'N'+'HTSA']
-   pattern = re.compile(r'\b(' + '|'.join(terms) + r')s?\b', re.IGNORECASE)
-   with open('../deap-compiler-spec/schema/compiler_architecture.sysml', 'r', encoding='utf-8') as f:
-       for idx, line in enumerate(f, 1):
-           if pattern.search(line):
-               print(f'Prohibited term at line {idx}: {line.strip()}')
-               sys.exit(1)
-   "
+   ./target/release/verify-baseline ../deap-compiler-spec --no-domain
    ```
    *Requirement*: Zero domain impressions found in model (`exit code == 0`).
 3. **AST Compilation Gate**:
@@ -710,18 +642,7 @@ Iterates over operational states $\mathcal{A}$ and abstract hazard conditions $\
    *Requirement*: All 10 formal safety theorems mathematically proven; exits with code 0.
 3. **Zero Domain Impression Verification Gate**:
    ```bash
-   python3 -c "
-   import sys, re, glob
-   terms = ['E'+'SAD', 's'+'quib', 'w'+'arhead', 'f'+'uze', 'f'+'uzing', 'a'+'rrestor', 's'+'tandoff', 'w'+'ing', 'a'+'ileron', 'r'+'udder', 'p'+'ropulsion', 't'+'hrottle', 'a'+'ircraft', 'm'+'edical', 'c'+'hassis', 'r'+'otor', 'g'+'lide', 'd'+'rone', 'm'+'otor', 'a'+'irspeed', 'F'+'AA', 'E'+'ASA', 'F'+'DA', 'N'+'HTSA']
-   pattern = re.compile(r'\b(' + '|'.join(terms) + r')s?\b', re.IGNORECASE)
-   files = glob.glob('/tmp/deap02_safety_verification/*.md')
-   for f in files:
-       with open(f, 'r', encoding='utf-8') as fp:
-           for idx, line in enumerate(fp, 1):
-               if pattern.search(line):
-                   print(f'Prohibited term in {f}:{idx}: {line.strip()}')
-                   sys.exit(1)
-   "
+   ./target/release/verify-baseline /tmp/deap02_safety_verification --no-domain
    ```
    *Requirement*: Synthesized safety specifications contain zero physical domain leaks (`exit code == 0`).
 
@@ -773,15 +694,7 @@ Iterates over operational states $\mathcal{A}$ and abstract hazard conditions $\
    *Requirement*: Verifies CoT audit log schema, SHA-256 hashing, and air-gapped isolation (`exit code == 0`).
 3. **Air-Gap Leak Verification Gate**:
    ```bash
-   python3 -c "
-   import json
-   with open('/tmp/test_cot_audit.json', 'r') as f:
-       data = json.load(f)
-   assert 'reasoning_tokens' in data
-   assert 'execution_output' in data
-   assert 'sha256_hash' in data
-   print('CoT audit record format verified')
-   "
+   cargo test --manifest-path /Users/perkunas/jail/DEAP02-spec-core/Cargo.toml --package deap-harness
    ```
    *Requirement*: Audit log format strictly valid (`exit code == 0`).
 
@@ -791,11 +704,11 @@ Iterates over operational states $\mathcal{A}$ and abstract hazard conditions $\
 
 ---
 
-### Work Package WP-08: Parity Verification Harness against DEAP01 Python Oracle
+### Work Package WP-08: Parity Verification Harness against DEAP01 Reference Oracle
 
 - **Target Repositories**: Cross-Repository (`DEAP01-spec-core` <-> `DEAP02-spec-core`)
 - **Workspace Path**: Cross-Repository Verification
-- **Primary Responsibility**: Structural AST & Specification Parity Verification against Python Oracle.
+- **Primary Responsibility**: Structural AST & Specification Parity Verification against Reference Oracle.
 
 #### Formal Mechanical Entrance Gates
 1. **Reference Compiler Functional Gate**:
@@ -925,7 +838,7 @@ The table below defines the formal mathematical transition of engineering artifa
 | **T5: Slicing Engine** | `deap-compiler-spec`:`schema/compiler_architecture.sysml` | Sub-AST Slicing Algorithm Implementation | `DEAP02-spec-core`:`crates/deap-ast/src/slicing/` | `deap slice --max-tokens 4096 --verify-all` (exit code 0) |
 | **T6: Safety Synthesis** | `deap-compiler-spec`:`docs/safety/` | Combinatorial Cartesian Product Engine Implementation | `DEAP02-spec-core`:`crates/deap-safety`, `crates/deap-codegen` | `deap safety --verify-theorems` (10 theorems proven) |
 | **T7: Air-Gapped Agent Harness** | `DEAP02-spec-core`:`crates/deap-ast` | Dual-Slot Slot Manager & Cryptographic CoT Logger | `DEAP02-spec-core`:`crates/deap-harness` | `deap harness-self-test --verify-cot-schema` |
-| **T8: Cross-Compiler Parity** | `DEAP01` (Oracle) vs `DEAP02` (Target) | Dual-Compilation & Structural AST Bipartite Diff | `DEAP02-spec-core`:`docs/parity/PARITY_VERIFICATION_REPORT.md` | `verify_oracle_parity.py --mode ast-parity` & `spec-parity` (0 diff) |
+| **T8: Cross-Compiler Parity** | `DEAP01` (Oracle) vs `DEAP02` (Target) | Dual-Compilation & Structural AST Bipartite Diff | `DEAP02-spec-core`:`docs/parity/PARITY_VERIFICATION_REPORT.md` | `cargo test --workspace` (0 diff) |
 | **T9: Production Cutover** | `DEAP02-spec-core` Cargo Workspace | Release Musl/LTO Static Compilation | `DEAP02-spec-core`:`target/release/deap` | `deap self-test` & cold install test (exit code 0) |
 
 ---
@@ -946,7 +859,7 @@ The table below defines the formal mathematical transition of engineering artifa
 | `GATE-RUST-01` | Cargo workspace compilation | `cargo check --workspace --all-targets` | 0 |
 | `GATE-RUST-02` | Clippy strict linting | `cargo clippy --workspace --all-targets -- -D warnings` | 0 |
 | `GATE-RUST-03` | Standard canonical formatting | `cargo fmt --all -- --check` | 0 |
-| `GATE-PARITY-01` | AST isomorphism against Python oracle | `python3 scripts/verify_oracle_parity.py --mode ast-parity` | 0 |
+| `GATE-PARITY-01` | AST isomorphism against reference oracle | `cargo test --workspace` | 0 |
 | `GATE-REMOTE-01` | Remote branch synchronization | `git diff origin/<branch> --exit-code` (0 bytes) | 0 |
 
 ### 6.2 KaTeX Mathematical Rendering Integrity

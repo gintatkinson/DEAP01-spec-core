@@ -61,16 +61,16 @@ The 5 adversarial subagents will be deployed concurrently to audit the pipeline 
   - **Text-to-Diagram Consistency**: Do the actor-system associations in the diagram match the actor and scenario definitions in the text?
 
 ### Agent 4: Cross-Specification Consistency & Traceability Auditor
-* **Target**: `skills/spec-orchestrator/scripts/reconcile_backlog.py` and backlog checklists.
+* **Target**: `crates/reconcile-backlog/src/main.rs` and backlog checklists.
 * **Audit Criteria**:
   - **Cross-Diagram Consistency**: Verify that every lifeline and message in a Sequence Diagram is defined as a Class or Operation in the Class Diagram.
   - **Use Case realization**: Verify that Use Case scenario steps map 1-to-1 to sequence diagram messages.
   - **Traceability Linkages**: Verify that realization matrices and checklists enforce absolute traceability from use cases down to features and classes.
 
 ### Agent 5: Automated Verification Compliance Auditor (Linter Engine)
-* **Target**: `skills/spec-orchestrator/scripts/verify_model_coverage.py` code logic.
+* **Target**: `crates/verify-baseline/src/main.rs` code logic.
 * **Audit Criteria**:
-  - **Semantic Parser Rigor**: Does the linter script parse the structure and definition of diagram blocks to validate UML semantics, or does it only check for text headers?
+  - **Semantic Parser Rigor**: Does the linter parse the structure and definition of diagram blocks to validate UML semantics, or does it only check for text headers?
   - **Coverage Completeness**: Does it verify that every schema node corresponds to a property in the UML Class model?
 
 ---
@@ -91,7 +91,7 @@ The final report will be compiled at `docs/uml_compliance_audit_report.md` and s
   * **E. Verification Engine Gaps**: Gaps `[GAP-LNT-01]` to `[GAP-LNT-05]`.
 * **Section 3: Actionable Recommendations**
   * Redesigning generator templates to structure specifications as formal UML classifiers with embedded Mermaid diagrams.
-  * Upgrades to the linter (`verify_model_coverage.py`) to parse and validate UML model semantics inside Mermaid blocks.
+  * Upgrades to the linter (`crates/verify-baseline`) to parse and validate UML model semantics inside Mermaid blocks.
 
 ---
 

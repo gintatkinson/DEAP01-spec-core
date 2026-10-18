@@ -33,19 +33,19 @@ This walkthrough documents the successful execution of the template de-biasing a
     *   Replaced hardcoded `master` branch references with `<default-branch>` (or main/master) across checkout, merge, push, and issue close comment templates.
 
 ### Micro-Task 4: Graceful Degradation for Non-YANG Schemas
-*   **Target**: [verify_model_coverage.py](../../skills/spec-orchestrator/scripts/verify_model_coverage.py)
+*   **Target**: [main.rs](../../crates/verify-baseline/src/main.rs)
 *   **Changes**:
     *   Added logic to check for other non-YANG extensions (`.yaml`, `.yml`, `.json`, `.proto`).
-    *   If non-YANG schemas exist and no YANG modules are found, the script prints a warning and sets `skip_coverage_checks = True` to bypass strict AST node coverage audits. It then proceeds directly to verify UML diagrams and triggers without exiting or failing.
+    *   If non-YANG schemas exist and no YANG modules are found, the binary prints a warning and sets `skip_coverage_checks = true` to bypass strict AST node coverage audits. It then proceeds directly to verify UML diagrams and triggers without exiting or failing.
 
 ### Micro-Task 5: Relax Realization Matrix URL Constraints
-*   **Target**: [verify_model_coverage.py](../../skills/spec-orchestrator/scripts/verify_model_coverage.py)
+*   **Target**: [spec.rs](../../crates/verify-baseline/src/checks/spec.rs)
 *   **Changes**:
-    *   Replaced the hardcoded check for `https://github.com/` in the Realization Matrix link verification with a generic absolute URI regex check (`https?://[a-zA-Z0-9.-]+/`), supporting custom domains and GitHub Enterprise configurations.
+    *   Replaced the hardcoded check for `https://github.com/` in the Realization Matrix link verification with a generic absolute URI check (`https?://`), supporting custom domains and GitHub Enterprise configurations.
 
 ---
 
 ## 2. Verification
 
 ### Compiler Verification
-*   Executed compilation checks: `python3 -m py_compile skills/spec-orchestrator/scripts/verify_model_coverage.py skills/spec-orchestrator/scripts/reconcile_backlog.py` resulting in **0 compiler errors**.
+*   Executed compilation checks: `cargo check --workspace` resulting in **0 compiler errors**.

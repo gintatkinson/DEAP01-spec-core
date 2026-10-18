@@ -30,6 +30,7 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-COMPILER-SYSML-LIB], [DO-330-TQL-4-LIB]
 
+pub mod docstring;
 pub mod lexer;
 pub mod parser;
 pub mod semantic;
@@ -37,6 +38,10 @@ pub mod stpa;
 pub mod sync;
 
 pub use deap_core::sysml_ast::*;
+pub use docstring::{
+    inject_dart_file_docstrings, inject_rust_file_docstrings, run_docstring_injection,
+    run_extract_source, DocstringExitCode, DocstringInjectionOptions, DocstringInjectionReport,
+};
 pub use lexer::scanner::Scanner;
 pub use lexer::token::{Span, Token, TokenKind};
 pub use parser::expressions::{parse_expression, BinaryOp, Expr, ExpressionParser, UnaryOp};

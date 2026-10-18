@@ -18,21 +18,21 @@ This document details the changes back-propagated from downstream repositories, 
 
 ### Modified Files
 
-* **[skills/spec-orchestrator/parity_auditor/src/parity_auditor/core/models.py](skills/spec-orchestrator/parity_auditor/src/parity_auditor/core/models.py)**:
+* **[crates/verify-baseline/src/rules.rs](crates/verify-baseline/src/rules.rs)**:
   - Made the `react` directory and `react_rules` fields optional in the codebase rules models (`TargetDirectories` and `CodebaseRules`).
   - Refactored `load_from_dict` to gracefully handle the absence of `react_rules`.
 
-* **[skills/spec-orchestrator/parity_auditor/src/parity_auditor/cli.py](skills/spec-orchestrator/parity_auditor/src/parity_auditor/cli.py)**:
+* **[crates/verify-baseline/src/main.rs](crates/verify-baseline/src/main.rs)**:
   - Added a new CLI argument `--allow-missing-specs` to optionally bypass strict validation failures when specification files are missing.
   - Guarded React-specific configuration references to prevent crashes when React target settings or rules are omitted.
 
-* **[skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/codebase.py](skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/codebase.py)**:
+* **[crates/verify-baseline/src/checks/codebase.rs](crates/verify-baseline/src/checks/codebase.rs)**:
   - Guarded React codebase compliance validation so it skips React check steps and does not crash when `react_rules` is omitted.
 
-* **[skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/profile_scoping_validator.py](skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/profile_scoping_validator.py)**:
+* **[crates/verify-baseline/src/checks/profile.rs](crates/verify-baseline/src/checks/profile.rs)**:
   - Guarded profile scoping checks to avoid crashing and skip react source files validation when `react_rules` is `None`.
 
-* **[skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/schema_mapping_validator.py](skills/spec-orchestrator/parity_auditor/src/parity_auditor/validators/schema_mapping_validator.py)**:
+* **[crates/verify-baseline/src/checks/schema.rs](crates/verify-baseline/src/checks/schema.rs)**:
   - Guarded schema mapping checks to skip collecting React UI files when `react_rules` is `None`.
 
 ---
@@ -43,7 +43,7 @@ This document details the changes back-propagated from downstream repositories, 
    The `adversarial-code-auditor` skill enables rigorous subagent-based auditing. Bringing it upstream guarantees that all repositories extending this tooling can execute pre-emptive safety audits against critical correctness vectors (memory leaks, thread concurrency issues, test integrity, and FFI boundary safety).
 
 2. **Support for Single-Platform Codebases**:
-   Previously, the `parity_auditor` assumed both Flutter and React folders were present and defined in the rules file (`codebase_rules.json`). For codebases that only build a mobile Flutter client (or only a React web frontend), this restriction forced the creation of dummy folders and rules files. By making `react_rules` and `react` optional, the validator dynamically scales to the platform(s) defined, avoiding unnecessary exceptions.
+   Previously, the `verify-baseline` tool assumed both Flutter and React folders were present and defined in the rules file (`codebase_rules.json`). For codebases that only build a mobile Flutter client (or only a React web frontend), this restriction forced the creation of dummy folders and rules files. By making `react_rules` and `react` optional, the validator dynamically scales to the platform(s) defined, avoiding unnecessary exceptions.
 
 3. **Incremental Parity Auditing**:
    By adding `--allow-missing-specs`, pipeline verification checks can be run in situations where specs are still being drafted or backlogged, reporting the discrepancies without blocking CI/CD pipelines with non-zero exit codes.
@@ -52,7 +52,7 @@ This document details the changes back-propagated from downstream repositories, 
 
 ## 3. Detailed Diff Walkthrough
 
-### `models.py`
+### `crates/verify-baseline/src/rules.rs`
 ```diff
 @@ -24,7 +24,7 @@ class BacklogDirectories:
  
@@ -70,7 +70,7 @@ This document details the changes back-propagated from downstream repositories, 
 -    react_rules: ReactRules = field(default_factory=ReactRules)
 +    react_rules: Optional[ReactRules] = None
      flutter_rules: FlutterRules = field(default_factory=FlutterRules)
-     python_rules: PythonRules = field(default_factory=PythonRules)
+     rust_rules: RustRules = field(default_factory=RustRules)
      spec_rules: SpecRules = field(default_factory=SpecRules)
 @@ -145,8 +145,11 @@ def load_from_dict(data: dict) -> CodebaseRules:
      td_data = data.get("target_directories", {})
@@ -85,7 +85,7 @@ This document details the changes back-propagated from downstream repositories, 
 +        react_rules = None
 ```
 
-### `cli.py`
+### `crates/verify-baseline/src/main.rs`
 ```diff
 @@ -79,6 +79,7 @@ def _main_impl():
      parser.add_argument("schema_dir", nargs="?", help="Path to schema directory")
@@ -115,7 +115,7 @@ This document details the changes back-propagated from downstream repositories, 
              if os.path.exists(react_dir):
 ```
 
-### `codebase.py`
+### `crates/verify-baseline/src/checks/codebase.rs`
 ```diff
 @@ -69,7 +69,7 @@ class CodebaseValidator(IValidator):
          react_dir_name = target_dirs.react
@@ -136,7 +136,7 @@ This document details the changes back-propagated from downstream repositories, 
              react_exclusions = set(react_rules.exclusions)
 ```
 
-### `profile_scoping_validator.py`
+### `crates/verify-baseline/src/checks/profile.rs`
 ```diff
 @@ -29,7 +29,10 @@ class ProfileScopingValidator(IValidator):
              return matched
@@ -151,7 +151,7 @@ This document details the changes back-propagated from downstream repositories, 
          flutter_rules = rules.flutter_rules
 ```
 
-### `schema_mapping_validator.py`
+### `crates/verify-baseline/src/checks/schema.rs`
 ```diff
 @@ -40,8 +40,12 @@ class SchemaMappingValidator(IValidator):
          ui_files = []

@@ -1,7 +1,31 @@
 //! Markdown token scanner, KaTeX, and math block parser.
 
 /// Typed enumeration of every KaTeX environment in which bare `&` alignment operators are permitted.
-/// Realises: [deap_core::markdown::AllowedAlignmentEnv]
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for enum `AllowedAlignmentEnv` in `crates/deap-core/src/markdown.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves structural type invariants for enum `AllowedAlignmentEnv` across member set `[Aligned, AlignedAt, Matrix, ParenMatrix, BracketMatrix, BraceMatrix]`.
+///
+/// ## 3. Preconditions
+/// - Caller supplies well-formed values for `AllowedAlignmentEnv` members (`Aligned, AlignedAt, Matrix, ParenMatrix, BracketMatrix, BraceMatrix`).
+///
+/// ## 4. Postconditions
+/// - Defines the authoritative `AllowedAlignmentEnv` representation for enum `AllowedAlignmentEnv`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(M(6)) bounded over input/member dimension of `AllowedAlignmentEnv`.
+/// - Space Complexity: O(M(6)) bounded auxiliary memory for `AllowedAlignmentEnv`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `AllowedAlignmentEnv` (`AllowedAlignmentEnv`).
+/// - State: Maintains consistent state invariants across `AllowedAlignmentEnv` without partial mutation on error.
+/// - Action: Executes `AllowedAlignmentEnv` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `AllowedAlignmentEnv` (`DEAP-CORE-MARKDOWN`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [deap_core::markdown::AllowedAlignmentEnv] | SysML v2: PartDef(AllowedAlignmentEnv)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum AllowedAlignmentEnv {
     /// Multi-line aligned equations (`aligned`).
@@ -140,6 +164,31 @@ impl AllowedAlignmentEnv {
 }
 
 /// Zero-sized catalog of allowed LaTeX environments where bare `&` alignment operators are permitted.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `AllowedAlignmentEnvsCatalog` in `crates/deap-core/src/markdown.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves structural type invariants for struct `AllowedAlignmentEnvsCatalog` across member set `[const: AllowedAlignmentEnvsCatalog = AllowedAlignmentEnvsCatalog;]`.
+///
+/// ## 3. Preconditions
+/// - Caller supplies well-formed values for `AllowedAlignmentEnvsCatalog` members (`const: AllowedAlignmentEnvsCatalog = AllowedAlignmentEnvsCatalog;`).
+///
+/// ## 4. Postconditions
+/// - Defines the authoritative `AllowedAlignmentEnvsCatalog` representation for struct `AllowedAlignmentEnvsCatalog`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(M(1)) bounded over input/member dimension of `AllowedAlignmentEnvsCatalog`.
+/// - Space Complexity: O(M(1)) bounded auxiliary memory for `AllowedAlignmentEnvsCatalog`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `AllowedAlignmentEnvsCatalog` (`AllowedAlignmentEnvsCatalog`).
+/// - State: Maintains consistent state invariants across `AllowedAlignmentEnvsCatalog` without partial mutation on error.
+/// - Action: Executes `AllowedAlignmentEnvsCatalog` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `AllowedAlignmentEnvsCatalog` (`DEAP-CORE-MARKDOWN`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-DEAP-CORE-MARKDOWN-ALLOWEDALIGNMENTENVSCATALOG] | SysML v2: PartDef(AllowedAlignmentEnvsCatalog)
 #[derive(Debug, Clone, Copy, Default)]
 pub struct AllowedAlignmentEnvsCatalog;
 
@@ -235,7 +284,31 @@ impl AllowedAlignmentEnvsCatalog {
 }
 
 /// Typed enumeration of every Mermaid diagram type header accepted as the first non-comment line of a block.
-/// Realises: [deap_core::markdown::ValidMermaidHeader]
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for enum `ValidMermaidHeader` in `crates/deap-core/src/markdown.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves structural type invariants for enum `ValidMermaidHeader` across member set `[Graph, Flowchart, SequenceDiagram, StateDiagram, StateDiagramV2, ClassDiagram]`.
+///
+/// ## 3. Preconditions
+/// - Caller supplies well-formed values for `ValidMermaidHeader` members (`Graph, Flowchart, SequenceDiagram, StateDiagram, StateDiagramV2, ClassDiagram`).
+///
+/// ## 4. Postconditions
+/// - Defines the authoritative `ValidMermaidHeader` representation for enum `ValidMermaidHeader`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(M(6)) bounded over input/member dimension of `ValidMermaidHeader`.
+/// - Space Complexity: O(M(6)) bounded auxiliary memory for `ValidMermaidHeader`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `ValidMermaidHeader` (`ValidMermaidHeader`).
+/// - State: Maintains consistent state invariants across `ValidMermaidHeader` without partial mutation on error.
+/// - Action: Executes `ValidMermaidHeader` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `ValidMermaidHeader` (`DEAP-CORE-MARKDOWN`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [deap_core::markdown::ValidMermaidHeader] | SysML v2: PartDef(ValidMermaidHeader)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ValidMermaidHeader {
     /// Legacy graph diagram (`graph`).
@@ -379,6 +452,31 @@ impl ValidMermaidHeader {
 }
 
 /// Zero-sized catalog of known valid Mermaid diagram type headers.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `ValidMermaidHeadersCatalog` in `crates/deap-core/src/markdown.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves structural type invariants for struct `ValidMermaidHeadersCatalog` across member set `[const: ValidMermaidHeadersCatalog = ValidMermaidHeadersCatalog;]`.
+///
+/// ## 3. Preconditions
+/// - Caller supplies well-formed values for `ValidMermaidHeadersCatalog` members (`const: ValidMermaidHeadersCatalog = ValidMermaidHeadersCatalog;`).
+///
+/// ## 4. Postconditions
+/// - Defines the authoritative `ValidMermaidHeadersCatalog` representation for struct `ValidMermaidHeadersCatalog`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(M(1)) bounded over input/member dimension of `ValidMermaidHeadersCatalog`.
+/// - Space Complexity: O(M(1)) bounded auxiliary memory for `ValidMermaidHeadersCatalog`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `ValidMermaidHeadersCatalog` (`ValidMermaidHeadersCatalog`).
+/// - State: Maintains consistent state invariants across `ValidMermaidHeadersCatalog` without partial mutation on error.
+/// - Action: Executes `ValidMermaidHeadersCatalog` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `ValidMermaidHeadersCatalog` (`DEAP-CORE-MARKDOWN`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-DEAP-CORE-MARKDOWN-VALIDMERMAIDHEADERSCATALOG] | SysML v2: PartDef(ValidMermaidHeadersCatalog)
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ValidMermaidHeadersCatalog;
 

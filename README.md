@@ -146,9 +146,9 @@ DEAP01-spec-core/
 │   └── management/                # Abstract landing zone (.gitkeep)
 ├── rules/                         # Abstract verification & governance rules
 ├── schema/                        # Abstract landing zone (.gitkeep)
-├── scripts/                       # Turnkey installer, compiler, and parity verification scripts
+├── crates/                        # Pure-Rust workspace crates (verify-baseline, ingest-sysml, compile-sysml, reconcile-backlog, assemble-conops)
 ├── skills/                        # Multi-agent orchestrator & implementation skills
-├── pyproject.toml                 # Project metadata & packaging configuration
+├── Cargo.toml                     # Workspace manifest & crate dependency configuration
 └── README.md                      # Upstream compiler master specification & usage guide
 ```
 
@@ -174,7 +174,7 @@ domain-distribution-template/ (e.g. DEAP-surgical-robotics-console, DEAP-industr
 │   └── architecture/
 │       └── blueprints/            # Canonical architecture specifications & multi-provider blueprints
 ├── schema/                        # Domain-specific structural schemas & SysML v2 models
-├── pyproject.toml                 # Project metadata & packaging configuration
+├── Cargo.toml                     # Workspace manifest & packaging configuration
 └── README.md                      # Domain template master specification & usage guide
 ```
 
@@ -192,24 +192,15 @@ Tier 3 Customer Application Workspaces inherit this layout from the domain distr
 
 ## 5. Installation & Developer Quick-Start Guide
 
-### 5.1 Prerequisites & Python 3.12 Setup
+### 5.1 Prerequisites & Rust Toolchain Setup
 
-The platform requires **Python 3.12+**, the configured tracker CLI (or native REST credentials), and git. Python scripts require `PyYAML`.
+The platform requires the **Rust 2021+ Toolchain (`cargo`, `rustc`)**, the configured tracker CLI (or native REST credentials), and git. All compiler, verification, and reconciliation binaries compile natively via Cargo with zero external scripting runtimes.
 
-#### Installing Python 3.12
-- **macOS (Homebrew)**:
+#### Installing the Rust Toolchain & Building Release Binaries
+- **macOS / Linux (`rustup`)**:
   ```bash
-  brew install python@3.12
-  python3.12 -m venv .venv
-  source .venv/bin/activate
-  pip install -r requirements.txt
-  ```
-- **Ubuntu / Debian**:
-  ```bash
-  sudo apt-get update && sudo apt-get install -y python3.12 python3.12-venv
-  python3.12 -m venv .venv
-  source .venv/bin/activate
-  pip install -r requirements.txt
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+  cargo build --release --workspace
   ```
 
 ### 5.2 Running & Verifying the Upstream Compiler
@@ -696,7 +687,7 @@ flowchart TD
 1. **Worker 2A (Feature-Driven Implementation & Synthesis Driver)**:
    Executes serial TDD RED-GREEN-REFACTOR micro-tasks (2-5 minutes each) adhering strictly to the target platform profile (e.g., `app_flutter/` MVVM architecture with the 15 mandatory Domain Engineering Standards, ROS2 C++ lifecycle nodes, or PX4 flight modules). Enforces the 3-Layer Definition of Done (Domain State & Signal Model, Logic & Safety State Management, Display & Actuator Interface Binding).
 2. **Worker 2B (Two-Path / Dual-Track Simulation Driver)**:
-   Delivers the complete dual-track MBD simulation package: Track A (Native MATLAB / Simulink / Stateflow synthesis builder `build_<feature_slug>_model.m`, physical parameter dictionary `<feature_slug>_params.m`, and `.sldd` data dictionary) and Track B (Headless, license-free Python discrete twin engine `<feature_slug>_domain.py` and `_engine.py` executing at identical dt, e.g. 250 Hz, offline CI test harness `tests/test_<feature_slug>_simulation.py`, and DO-331 simulation report `<FEATURE-ID>_simulation_results.md` verifying numerical tolerance <= 10^-6).
+   Delivers the complete dual-track MBD simulation package: Track A (Native MATLAB / Simulink / Stateflow synthesis builder `build_<feature_slug>_model.m`, physical parameter dictionary `<feature_slug>_params.m`, and `.sldd` data dictionary) and Track B (Headless, license-free Rust discrete twin engine `crates/<feature_slug>_sim/src/domain.rs` and `engine.rs` executing at identical dt, e.g. 250 Hz, offline CI test harness `crates/<feature_slug>_sim/tests/simulation_tests.rs`, and DO-331 simulation report `<FEATURE-ID>_simulation_results.md` verifying numerical tolerance <= 10^-6).
 3. **Reviewer 1 (Specification Compliance Reviewer)**:
    Stage 1 Review Gate: Verifies that the implementation strictly matches the approved implementation plan, SysML AST, acceptance criteria, and 3-Layer LUI DoD. Asserts zero in-memory stubs against live emulators / databases.
 4. **Reviewer 2 (Code Quality & Numerical Equivalence Reviewer)**:
@@ -1244,8 +1235,8 @@ Execute Two-Path (Dual-Track) Model-Based Design (MBD) simulation synthesis and 
    - Solver & Synthesis Baseline: Configure models for deterministic fixed-step discrete solvers (`FixedStepDiscrete`, dt = 0.004 s / 250 Hz) and Embedded Coder DO-178C C / SPARK Ada code synthesis.
 
 2. Track B (Headless CI Digital Twin Engine):
-   - License-Free Discrete Execution Engine: Deliver standalone Python simulation engine (`models/python/<feature_slug>_domain.py` and `models/python/<feature_slug>_engine.py`) executing at identical discrete loop rate (dt) with exact transition guards, polynomial transfer curves, and 6-DOF kinematics.
-   - Zero License Blocker CI Harness: Deliver automated regression test suite `tests/test_<feature_slug>_simulation.py` running 100% offline in containerized CI environments without MathWorks licenses.
+   - License-Free Discrete Execution Engine: Deliver standalone Rust simulation engine (`crates/<feature_slug>_sim/src/domain.rs` and `crates/<feature_slug>_sim/src/engine.rs`) executing at identical discrete loop rate (dt) with exact transition guards, polynomial transfer curves, and 6-DOF kinematics.
+   - Zero License Blocker CI Harness: Deliver automated regression test suite `crates/<feature_slug>_sim/tests/simulation_tests.rs` running 100% offline in containerized CI environments without MathWorks licenses.
 
 3. Mathematical & Discrete Equivalence Mandate:
    - Numerical Tolerance Verification: Guarantee state vector and output trajectory error between Track A reference and Track B digital twin satisfies error <= 10^-6.
@@ -1265,15 +1256,16 @@ Every feature containing control laws, operating dynamics, physical plant estima
 models/
 ├── scripts/
 │   └── build_<feature_slug>_model.m        # Track A: Programmatic Simulink/Stateflow builder script
-├── matlab/
-│   ├── <feature_slug>_params.m            # Track A: MATLAB physical plant & control parameters
-│   └── <feature_slug>_data.sldd           # Track A: Simulink Data Dictionary (data types & signals)
-└── python/
-    ├── <feature_slug>_domain.py           # Track B: Strongly-typed domain models & state vectors
-    └── <feature_slug>_engine.py           # Track B: Standalone discrete-time simulation engine
+└── matlab/
+    ├── <feature_slug>_params.m            # Track A: MATLAB physical plant & control parameters
+    └── <feature_slug>_data.sldd           # Track A: Simulink Data Dictionary (data types & signals)
 
-tests/
-└── test_<feature_slug>_simulation.py      # Automated CI regression suite for Track B engine
+crates/<feature_slug>_sim/
+├── src/
+│   ├── domain.rs                          # Track B: Strongly-typed domain models & state vectors
+│   └── engine.rs                          # Track B: Standalone discrete-time simulation engine
+└── tests/
+    └── simulation_tests.rs                # Automated CI regression suite for Track B engine
 
 docs/reports/simulink_results/
 └── <FEATURE-ID>_simulation_results.md     # Formal DO-331 simulation & numerical parity report
@@ -1287,10 +1279,10 @@ docs/reports/simulink_results/
 2. **`models/matlab/<feature_slug>_params.m` & `.sldd` (Track A Dictionaries)**:
    Declares physical plant constants, control gains, rate limits, sensor noise variances, and discrete sample time (dt = 0.004 s / 250 Hz) in typed MATLAB structures and Simulink Data Dictionaries.
 
-3. **`models/python/<feature_slug>_domain.py` & `_engine.py` (Track B Digital Twin)**:
-   Pure Python, license-free, headless discrete simulation engine executing identical algebraic formulations, cubic polynomial blending curves, and safety transition guards. Exposes typed state vectors and `step(dt, inputs) -> outputs` execution interface.
+3. **`crates/<feature_slug>_sim/src/domain.rs` & `engine.rs` (Track B Digital Twin)**:
+   Pure Rust, license-free, headless discrete simulation engine executing identical algebraic formulations, cubic polynomial blending curves, and safety transition guards. Exposes typed state vectors and `step(dt, inputs) -> outputs` execution interface.
 
-4. **`tests/test_<feature_slug>_simulation.py` (Automated CI Verification Suite)**:
+4. **`crates/<feature_slug>_sim/tests/simulation_tests.rs` (Automated CI Verification Suite)**:
    Semantic acceptance verification suite executing offline in CI/CD runners without MathWorks license blockers. Validates nominal control tracks, fault-injection responses, emergency safety transitions, and state invariants.
 
 5. **`docs/reports/simulink_results/<FEATURE-ID>_simulation_results.md` (DO-331 Verification Report)**:
@@ -1311,7 +1303,7 @@ To implement features and verify simulations end-to-end using context-isolated s
    - **Stage 2 (Code Quality Review - Reviewer 2)**: Verify strict typing, public member docstrings (DartDoc `///`), UML traceability tags (`/// Realises: [...]`), immutability, value equality, and zero `dynamic`.
 
 4. **Dual-Track Simulation Synthesis & Parity (Worker 2B)**:
-   For features involving control laws or operating dynamics, dispatch Worker 2B (Section 9.4.2) to synthesize Track A (native Simulink builder `models/scripts/build_<feature_slug>_model.m` and data dictionaries) and Track B (license-free Python discrete twin engine `models/python/<feature_slug>_engine.py`). Run offline regression suite (`tests/test_<feature_slug>_simulation.py`) and verify numerical parity (<= 10^-6).
+   For features involving control laws or operating dynamics, dispatch Worker 2B (Section 9.4.2) to synthesize Track A (native Simulink builder `models/scripts/build_<feature_slug>_model.m` and data dictionaries) and Track B (license-free Rust discrete twin engine `crates/<feature_slug>_sim/src/engine.rs`). Run offline regression suite (`cargo test --workspace`) and verify numerical parity (<= 10^-6).
 
 5. **Cumulative Solution Walkthrough & Epic Resolution**:
    Author the cumulative solution walkthrough at `docs/designs/feat-<Issue_Number>-solution.md`. Run backlog reconciliation (`./target/release/reconcile-backlog`). Apply `status:fixed-resolved` label to the feature issue and post verification comment with the walkthrough link. Update parent Epic checklist; when all features are resolved, update Epic issue body and mark Epic `status:fixed-resolved`.

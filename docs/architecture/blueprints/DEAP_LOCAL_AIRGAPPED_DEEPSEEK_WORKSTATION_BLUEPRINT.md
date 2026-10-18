@@ -342,7 +342,7 @@ flowchart TD
 | Model Tier & Checkpoint | Quantization & Size | DEAP Pipeline Phase & Responsibilities | Safety / Engineering Output |
 | :--- | :--- | :--- | :--- |
 | **Tier 1: DeepSeek-R1-70B** | GGUF `Q4_K_M` (~43.2 GB) | **Pipeline 0 (Pre-Spec Safety & Systems Architecture)**: Ingests unstructured customer intent; synthesizes CONOPS; derives 80 STPA Unsafe Control Actions (UCAs); computes AssuranceLevel::Tier1..5 compliance bounds; derives ASTM F3269-17 RTA safety bounds; authors normative SysML v2 models; streams reasoning trace to `.pipeline/diagnostics/cot_audit_log.json`. | `CONOPS.md`<br>`STPA_MATRIX.md`<br>`DEAP_MODEL.sysml`<br>`pipeline0_handoff_contract.json`<br>Raw `<think>` CoT Audit Log |
-| **Tier 2: Qwen-2.5-Coder-32B** | GGUF `Q4_K_M` (~20.1 GB) | **Pipeline 1 & Pipeline 2 (Agile Projection & Code Synthesis)**: Ingests strongly-typed AST slices (<= 4,096 tokens); projects Agile backlog (Epics, Features, BDD User Stories); drives `reconcile_backlog.py`; executes code synthesis across ROS 2 C++, SPARK Ada, Python, and UI dashboards with semantic acceptance coverage. | `docs/epics/*`<br>`docs/features/*`<br>`docs/user-stories/*`<br>`src/*` (C++ / Ada / Python)<br>`artifacts/verification/*` |
+| **Tier 2: Qwen-2.5-Coder-32B** | GGUF `Q4_K_M` (~20.1 GB) | **Pipeline 1 & Pipeline 2 (Agile Projection & Code Synthesis)**: Ingests strongly-typed AST slices (<= 4,096 tokens); projects Agile backlog (Epics, Features, BDD User Stories); drives `./target/release/reconcile-backlog`; executes code synthesis across ROS 2 C++, SPARK Ada, Rust, and UI dashboards with semantic acceptance coverage. | `docs/epics/*`<br>`docs/features/*`<br>`docs/user-stories/*`<br>`src/*` (C++ / Ada / Rust)<br>`artifacts/verification/*` |
 | **Tier 3: DeepSeek-R1-14B** | GGUF `Q8_0` (~16.0 GB) | **Subagent Micro-Task Triage & AST Repair**: Performs rapid AST syntax repairs, resolving single-function compiler warnings, fixing AST schema drift, and repairing isolated semantic acceptance assertions. | Hot-fix patches, syntax linter corrections. |
 
 ### 5.2 Quantization Precision & Perplexity Analysis
@@ -479,7 +479,7 @@ pipeline_routing:
       features_dir: "docs/features/"
       user_stories_dir: "docs/user-stories/"
       auto_reconcile_backlog: true
-      reconcile_script: "scripts/reconcile_backlog.py"
+      reconcile_binary: "./target/release/reconcile-backlog"
 
   pipeline_2:
     name: "Feature Implementation & TDD Code Synthesis"
@@ -487,10 +487,10 @@ pipeline_routing:
     repair_engine_binding: "triage_repair_engine"
     settings:
       enforce_tdd_red_green: true
-      target_profiles: ["ros2_cpp", "px4_module", "spark_ada", "python"]
+      target_profiles: ["ros2_cpp", "px4_module", "spark_ada", "rust"]
       max_repair_iterations: 3
-      coverage_gate_script: "scripts/verify_subagent_output.py"
-      baseline_gate_script: "scripts/verify_downstream_baseline.py"
+      coverage_gate_binary: "./target/release/verify-baseline"
+      baseline_gate_binary: "./target/release/verify-baseline"
 
 # ------------------------------------------------------------------------------
 # 4. Chain-of-Thought (CoT) Regulatory Audit Logger
@@ -708,7 +708,7 @@ Run a complete DEAP multi-pipeline synthesis run locally:
 cat .pipeline/diagnostics/cot_audit_log.json | jq .audit_metadata
 
 # Execute DEAP baseline conformance gate
-python3 scripts/verify_downstream_baseline.py --no-domain
+./target/release/verify-baseline . --no-domain
 ```
 
 ---

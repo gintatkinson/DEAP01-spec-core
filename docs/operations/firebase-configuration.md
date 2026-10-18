@@ -54,7 +54,7 @@ This script:
 3. Creates `firestore.rules` (permissive rules for local development).
 4. Starts the emulator in the background.
 5. Waits for the emulator to be ready (polls `http://localhost:8080`).
-6. Seeds test data via `scripts/seed-firebase-data.py`.
+6. Seeds test data via `scripts/seed-firebase-data.sh`.
 
 ### Run the app
 
@@ -157,11 +157,11 @@ firebase deploy --only firestore:rules
 
 ### 3.3 Seed the Firestore schema
 
-Seed the schema document and base data using the REST API or the Firebase Admin SDK. You can use the same `seed-firebase-data.py` script by pointing it at the Firestore REST endpoint for your cloud project:
+Seed the schema document and base data using the REST API or the Firebase Admin SDK. You can use the same `seed-firebase-data.sh` script by pointing it at the Firestore REST endpoint for your cloud project:
 
 ```bash
 # Default (emulator) -- no change needed
-python3 app_flutter/scripts/seed-firebase-data.py
+./app_flutter/scripts/seed-firebase-data.sh
 
 # Cloud -- override the BASE and PROJECT variables in the script.
 ```
@@ -340,14 +340,14 @@ Run the full setup script:
 cd app_flutter && ./scripts/setup-firebase-emulator.sh
 ```
 
-This starts the emulator and runs the Python seed script automatically.
+This starts the emulator and runs the seed script automatically.
 
 ### 6.2 Manual seeding
 
 If the emulator is already running, seed data manually:
 
 ```bash
-cd app_flutter && python3 scripts/seed-firebase-data.py
+cd app_flutter && ./scripts/seed-firebase-data.sh
 ```
 
 The seed script targets `http://localhost:8080` with project ID `demo-project` and populates:
@@ -359,17 +359,17 @@ The seed script targets `http://localhost:8080` with project ID `demo-project` a
 
 ### 6.3 Seeding a cloud project
 
-To seed a cloud Firestore instance, edit `seed-firebase-data.py` and change:
+To seed a cloud Firestore instance, edit `seed-firebase-data.sh` and change:
 
-```python
-BASE = "http://localhost:8080"        # → your Firestore REST endpoint
-PROJECT = "demo-project"               # → your Firebase project ID
+```bash
+BASE="http://localhost:8080"        # → your Firestore REST endpoint
+PROJECT="demo-project"              # → your Firebase project ID
 ```
 
 Then run:
 
 ```bash
-python3 app_flutter/scripts/seed-firebase-data.py
+./app_flutter/scripts/seed-firebase-data.sh
 ```
 
 For production, consider using the Firebase Admin SDK instead of the REST API for better authentication and transaction support.
@@ -430,7 +430,7 @@ If the document is missing, re-run the seed script (see [Section 6](#6-seeding-t
 
 ### Seed script fails with HTTP 404
 
-**Symptom:** `seed-firebase-data.py` reports `404` status codes.
+**Symptom:** `seed-firebase-data.sh` reports `404` status codes.
 
 **Solution:** The emulator may not be running, or the project ID does not match. Check the emulator is on port 8080:
 
@@ -440,8 +440,8 @@ curl http://localhost:8080
 
 If running, verify the `PROJECT` variable in the seed script matches the emulator's project ID:
 
-```python
-PROJECT = "demo-project"
+```bash
+PROJECT="demo-project"
 ```
 
 The emulator accepts any project ID by default, but the URL path must match.

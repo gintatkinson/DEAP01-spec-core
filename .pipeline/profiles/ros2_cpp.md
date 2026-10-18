@@ -27,7 +27,7 @@ last_updated: "2026-08-29"
 - Commercial Toolchain Context: MATLAB / Simulink / Embedded Coder synthesis integration hooks for control law algorithms.
 
 ## Testing Mandates
-- Unit Tests: `ament_cmake_gtest` / `ament_cmake_pytest`.
+- Unit Tests: `ament_cmake_gtest` / `ament_cmake_gmock`.
 - Linting: `ament_lint_auto`, `ament_clang_format`, `ament_cpplint`.
 - Real-Time Profiling: Memory lock checks (`mlockall`) and jitter benchmarking.
 
