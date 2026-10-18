@@ -523,15 +523,26 @@ impl<'a> SysmlParser<'a> {
                     }
                 } else if self.check(&TokenKind::Flow) || self.check(&TokenKind::In) || self.check(&TokenKind::Out) {
                     let mut flow_dir = "out".to_string();
-                    if self.check(&TokenKind::In) {
-                        self.advance();
-                        flow_dir = "in".to_string();
-                    } else if self.check(&TokenKind::Out) {
-                        self.advance();
-                        flow_dir = "out".to_string();
-                    }
                     if self.check(&TokenKind::Flow) {
                         self.advance();
+                        if self.check(&TokenKind::In) {
+                            self.advance();
+                            flow_dir = "in".to_string();
+                        } else if self.check(&TokenKind::Out) {
+                            self.advance();
+                            flow_dir = "out".to_string();
+                        }
+                    } else {
+                        if self.check(&TokenKind::In) {
+                            self.advance();
+                            flow_dir = "in".to_string();
+                        } else if self.check(&TokenKind::Out) {
+                            self.advance();
+                            flow_dir = "out".to_string();
+                        }
+                        if self.check(&TokenKind::Flow) {
+                            self.advance();
+                        }
                     }
                     let flow_name = self.expect_ident()?;
                     let flow_type = if self.check(&TokenKind::Colon) {
