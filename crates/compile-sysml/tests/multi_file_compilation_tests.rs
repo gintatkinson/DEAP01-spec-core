@@ -223,9 +223,9 @@ fn test_multi_file_with_top_level_doc_and_imports_preserves_package_scopes_and_d
     fs::create_dir_all(&schema_dir)?;
     fs::create_dir_all(&pipeline_dir)?;
 
-    let domain_file = schema_dir.join("cuas_coa.sysml");
-    let cockpit_file = schema_dir.join("cuas_coa_cockpit_realization.sysml");
-    let solver_file = schema_dir.join("cuas_coa_solver_realization.sysml");
+    let domain_file = schema_dir.join("01_cuas_coa.sysml");
+    let cockpit_file = schema_dir.join("02_cuas_coa_cockpit_realization.sysml");
+    let solver_file = schema_dir.join("03_cuas_coa_solver_realization.sysml");
 
     fs::write(
         &domain_file,
@@ -239,10 +239,18 @@ fn test_multi_file_with_top_level_doc_and_imports_preserves_package_scopes_and_d
 
     fs::write(
         &solver_file,
-        "import CUAS_COA_System::*;\n\npackage SolverRealization {\n    part def EngagementSolver {\n        port solutionOut;\n    }\n    constraint def SolverBudgetConstraint;\n}\n\npackage CUAS_COA_System {\n    part def InterceptPlanner {\n        port planOut;\n    }\n}\n",
+        "doc /* Multi-package solver and domain extension file */\nimport CUAS_COA_System::*;\n\npackage SolverRealization {\n    part def EngagementSolver {\n        port solutionOut;\n    }\n    constraint def SolverBudgetConstraint;\n}\n\npackage CUAS_COA_System {\n    part def InterceptPlanner {\n        port planOut;\n    }\n}\n",
     )?;
 
-    // 1. Single-package file with top-level doc and imports must unwrap to CockpitRealization
+    // 1. Single-package file with leading doc + line comment must preserve doc on CUAS_COA_System
+    let domain_parsed = parse_sysml(&fs::read_to_string(&domain_file)?)?;
+    assert_eq!(domain_parsed.name, "CUAS_COA_System");
+    assert_eq!(
+        domain_parsed.doc.as_deref(),
+        Some("Domain architecture model")
+    );
+
+    // 2. Single-package file with top-level doc and imports must unwrap to CockpitRealization
     let cockpit_parsed = parse_sysml(&fs::read_to_string(&cockpit_file)?)?;
     assert_eq!(
         cockpit_parsed.name, "CockpitRealization",
@@ -255,7 +263,7 @@ fn test_multi_file_with_top_level_doc_and_imports_preserves_package_scopes_and_d
     );
     assert_eq!(cockpit_parsed.imports.len(), 2);
 
-    // 2. Unsorted vs sorted file slices in parse_sysml_tree must be deterministic and identical
+    // 3. Unsorted vs sorted file slices in parse_sysml_tree must be deterministic and identical
     let tree_unsorted = parse_sysml_tree(&[
         solver_file.clone(),
         domain_file.clone(),
@@ -263,8 +271,11 @@ fn test_multi_file_with_top_level_doc_and_imports_preserves_package_scopes_and_d
     ])?;
     let tree_sorted = parse_sysml_tree(&[domain_file, cockpit_file, solver_file])?;
     assert_eq!(tree_unsorted, tree_sorted);
+    assert!(compile_sysml::parser::grammar::is_synthetic_forest_root(
+        &tree_sorted
+    ));
 
-    // 3. Serialized .pipeline/schema.sysml must NEVER contain `package SysML_Model`
+    // 4. Serialized .pipeline/schema.sysml must NEVER contain `package SysML_Model` and must preserve top-level doc
     let compiled_sysml = tree_sorted.to_sysml(0);
     let pipeline_schema_path = pipeline_dir.join("schema.sysml");
     fs::write(&pipeline_schema_path, &compiled_sysml)?;
@@ -274,8 +285,13 @@ fn test_multi_file_with_top_level_doc_and_imports_preserves_package_scopes_and_d
         "Compiled .pipeline/schema.sysml must never wrap multi-file packages in SysML_Model:\n{}",
         compiled_sysml
     );
+    assert!(
+        compiled_sysml.contains("Multi-package solver and domain extension file"),
+        "Top-level doc on synthetic forest root must be preserved at indent 0 in serialized output:\n{}",
+        compiled_sysml
+    );
 
-    // 4. Re-parsing .pipeline/schema.sysml preserves all 3 top-level packages and merged definitions
+    // 5. Re-parsing .pipeline/schema.sysml preserves all 3 top-level packages and merged definitions
     let reparsed = parse_sysml(&compiled_sysml)?;
     let pkg_names: Vec<&str> = reparsed.packages.iter().map(|p| p.name.as_str()).collect();
     assert_eq!(
@@ -289,6 +305,10 @@ fn test_multi_file_with_top_level_doc_and_imports_preserves_package_scopes_and_d
     assert!(sym_table.lookup("CockpitRealization::TacticalDisplay").is_some());
     assert!(sym_table.lookup("SolverRealization::EngagementSolver").is_some());
     assert!(sym_table.lookup("SysML_Model::CUAS_COA_System::TrackManager").is_none());
+    // Root-level import `import CUAS_COA_System::*;` must be resolvable from any child package scope
+    assert!(sym_table
+        .lookup_in_scope("SolverRealization", "TrackManager")
+        .is_some());
 
     let _ = fs::remove_dir_all(&tmp_dir);
     Ok(())

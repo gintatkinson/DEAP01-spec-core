@@ -219,6 +219,7 @@ impl<'a> SysmlParser<'a> {
 
         // Check if top-level starts with package declaration
         let mut pending_doc = self.take_doc_comment();
+        self.skip_trivia();
         if self.check(&TokenKind::Package) {
             let first_pkg = self.parse_package_decl(pending_doc)?;
             self.skip_trivia();
@@ -431,6 +432,7 @@ impl<'a> SysmlParser<'a> {
     ) -> Result<(), ParseError> {
         self.skip_trivia();
         let doc = self.take_doc_comment();
+        self.skip_trivia();
 
         if self.is_at_end() {
             return Ok(());

@@ -1218,6 +1218,10 @@ impl SysmlSerializable for PackageDef {
     fn to_sysml(&self, indent: usize) -> String {
         if indent == 0 && crate::parser::grammar::is_synthetic_forest_root(self) {
             let mut top_sections = Vec::new();
+            let doc = format_doc_comment(&self.doc, 0);
+            if !doc.is_empty() {
+                top_sections.push(doc.trim_end().to_string());
+            }
             if !self.imports.is_empty() {
                 let import_block = self
                     .imports
