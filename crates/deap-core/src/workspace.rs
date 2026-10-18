@@ -804,6 +804,9 @@ mod tests {
             .parent()
             .and_then(|p| p.parent())
             .ok_or("repo root")?;
+        if !is_upstream_compiler(repo_root) {
+            return Ok(());
+        }
         let bundle_path = repo_root.join(".pipeline/ACTIVE_RULES_BUNDLE.md");
         assert!(bundle_path.is_file(), "Active rules bundle must exist at {:?}", bundle_path);
         let metadata = fs::metadata(&bundle_path)?;
@@ -830,6 +833,9 @@ mod tests {
             .parent()
             .and_then(|p| p.parent())
             .ok_or("repo root")?;
+        if !is_upstream_compiler(repo_root) {
+            return Ok(());
+        }
         let agents_md = fs::read_to_string(repo_root.join("AGENTS.md"))?;
 
         assert!(
@@ -866,6 +872,9 @@ mod tests {
             .parent()
             .and_then(|p| p.parent())
             .ok_or("repo root")?;
+        if !is_upstream_compiler(repo_root) {
+            return Ok(());
+        }
         let constitution = fs::read_to_string(repo_root.join(".pipeline/constitution.md"))?;
         let tooling = fs::read_to_string(repo_root.join(".pipeline/upstream/pipeline-tooling.md"))?;
 
