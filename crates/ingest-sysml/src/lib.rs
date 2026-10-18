@@ -300,6 +300,139 @@ pub fn filter_ast_to_target_scope(
     }
 }
 
+/// Collects all declared `PartDef` names across a `PackageDef` hierarchy into `out`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, and Issue #472 architectural realization scoping
+/// (`collect_declared_part_names`). Extracts the authoritative set of architectural `part def`
+/// identifiers from a domain reference schema so code-ingestion passes can prune unannotated
+/// internal implementation helpers automatically.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Traverses `pkg.part_defs`, nested `part.parts`, and nested `pkg.packages` using bounded
+///   explicit work stacks without unbounded recursion.
+/// - Monotonically inserts non-empty `PartDef::name` strings into `out`.
+///
+/// ## 3. Preconditions
+/// - `pkg: &PackageDef` is a parsed domain reference schema package tree.
+/// - `out: &mut HashSet<String>` is an initialized hash set receiving discovered part names.
+///
+/// ## 4. Postconditions
+/// - `out` contains every `PartDef::name` reachable from `pkg`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - **Time Complexity**: $O(P + K)$ where $P$ is total `PartDef` count and $K$ is nested `PackageDef` count.
+/// - **Space Complexity**: $O(P + K)$ for the traversal work stacks and hash set entries.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Empty packages or part trees leave `out` unmodified without error or panic.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYSML-INGEST-SCOPE/collect_declared_part_names], [REQ-ISSUE-472-SCHEMA-SCOPED-CODE-INGESTION]
+pub fn collect_declared_part_names(pkg: &PackageDef, out: &mut HashSet<String>) {
+    let mut pkg_stack: Vec<&PackageDef> = vec![pkg];
+    while let Some(curr_pkg) = pkg_stack.pop() {
+        let mut part_stack: Vec<&PartDef> = curr_pkg.part_defs.iter().collect();
+        while let Some(curr_part) = part_stack.pop() {
+            if !curr_part.name.trim().is_empty() {
+                out.insert(curr_part.name.clone());
+            }
+            for child in &curr_part.parts {
+                part_stack.push(child);
+            }
+        }
+        for sub_pkg in &curr_pkg.packages {
+            pkg_stack.push(sub_pkg);
+        }
+    }
+}
+
+/// Filters a code-extracted `PackageDef` to retain only architectural `part def` components
+/// present in `schema_parts` or source constructs carrying explicit `Realises:` bindings.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, ISO 26262 ASIL D, and Issue #472 realization boundary control
+/// (`filter_ast_to_realized_or_allowed`). Prevents internal UI widgets, `State<T>` classes,
+/// scratch buffers, and helper enums lacking architectural realization tags from polluting
+/// system-level `part def` namespaces and breaking Check 17 Pillar 7 FMECA closure.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - A `PartDef` $P$ is retained iff $P.\text{name} \in \text{schema\_parts} \lor P.\text{satisfied\_requirements} \neq \emptyset$
+///   (or $P$ encloses a retained child `PartDef`).
+/// - Applies identically across nested `pkg.packages`.
+///
+/// ## 3. Preconditions
+/// - `pkg: &mut PackageDef` is a mutable code-extracted SysML v2 package.
+/// - `schema_parts: &HashSet<String>` contains architectural `part def` names from the reference schema.
+///
+/// ## 4. Postconditions
+/// - Unannotated implementation helper `PartDef` nodes absent from `schema_parts` are pruned in-place.
+/// - All architectural `PartDef` nodes and explicitly realized (`!satisfied_requirements.is_empty()`)
+///   `PartDef` nodes are preserved.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - **Time Complexity**: $O(P)$ where $P$ is total `PartDef` node count across `pkg`.
+/// - **Space Complexity**: $O(D)$ where $D$ is maximum nested package/part depth.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Safely retains realized parts even when `schema_parts` is empty.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYSML-INGEST-SCOPE/filter_ast_to_realized_or_allowed], [REQ-ISSUE-472-SCHEMA-SCOPED-CODE-INGESTION]
+pub fn filter_ast_to_realized_or_allowed(pkg: &mut PackageDef, schema_parts: &HashSet<String>) {
+    /// Recursively prunes `part.parts` and determines whether `part` is retained under realization scoping.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Preserves hierarchical part containment during realization filtering so a parent container
+    /// is retained whenever either the parent itself or any nested child realizes a requirement
+    /// or matches an architectural `part def` in `schema_parts`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Evaluates child `part.parts` bottom-up via `retain_mut` before deciding parent retention.
+    ///
+    /// ## 3. Preconditions
+    /// - `part: &mut PartDef` is a candidate code-extracted part node.
+    /// - `schema_parts: &HashSet<String>` is the reference architectural part name set.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `true` iff `part` or a surviving child is in `schema_parts` or has non-empty `satisfied_requirements`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - **Time Complexity**: $O(T)$ where $T$ is the subtree size rooted at `part`.
+    /// - **Space Complexity**: $O(H)$ where $H$ is the part nesting height.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Pure in-place vector retention with zero panics.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYSML-INGEST-SCOPE/retain_realized_part]
+    fn retain_realized_part(part: &mut PartDef, schema_parts: &HashSet<String>) -> bool {
+        part.parts
+            .retain_mut(|sub| retain_realized_part(sub, schema_parts));
+        let has_realises_doc = part
+            .doc
+            .as_deref()
+            .is_some_and(|d| d.contains("Realises:") && !d.contains("Realises: [UNMAPPED]"));
+        schema_parts.contains(&part.name)
+            || !part.satisfied_requirements.is_empty()
+            || has_realises_doc
+            || !part.parts.is_empty()
+    }
+
+    pkg.part_defs
+        .retain_mut(|p| retain_realized_part(p, schema_parts));
+
+    for sub_pkg in &mut pkg.packages {
+        filter_ast_to_realized_or_allowed(sub_pkg, schema_parts);
+    }
+    pkg.packages.retain(|sub_pkg| {
+        !sub_pkg.part_defs.is_empty()
+            || !sub_pkg.action_defs.is_empty()
+            || !sub_pkg.requirement_defs.is_empty()
+            || !sub_pkg.packages.is_empty()
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

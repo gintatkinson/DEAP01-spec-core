@@ -1607,6 +1607,67 @@ pub fn lower_source_ast_to_package(items: &[SourceAstItem], package_name: &str) 
     pkg
 }
 
+/// Resolves a deterministic SysML v2 package identifier for an ingested source directory.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, and Issue #472 namespace isolation rules
+/// (`resolve_source_package_name`). Prevents multi-crate Rust (`<component>/src`) and
+/// Flutter (`<component>/lib`) source trees from colliding under unscoped `package src`
+/// or `package lib` root namespaces when no explicit `--package` override is provided.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - When `explicit_package` contains a non-empty trimmed identifier, returns its sanitized
+///   SysML v2 representation directly.
+/// - When `explicit_package` is `None` (or empty) and the leaf directory of `source_dir` is
+///   `"src"` or `"lib"` with a valid parent directory name `<Parent>`, synthesizes
+///   `<Parent>_<src|lib>_Realization`.
+/// - Otherwise sanitizes the leaf directory name with fallback `"SourceCodeModel"`.
+///
+/// ## 3. Preconditions
+/// - `source_dir: &Path` is the filesystem path being ingested.
+/// - `explicit_package: Option<&str>` is an optional caller-supplied package override.
+///
+/// ## 4. Postconditions
+/// - Returns a non-empty, syntactically valid SysML v2 package identifier string.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(P)$ where $P$ is the character length of the path leaf and parent components.
+/// - Space Complexity: $O(P)$ heap allocation for the resolved identifier string.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Gracefully handles root paths or relative paths lacking a parent component by
+///   falling back to the sanitized leaf name or `"SourceCodeModel"`.
+/// - State: Pure function with zero filesystem or global state mutation.
+/// - Action: Never panics on arbitrary OS path structures.
+/// - Resource: Bounded single `String` allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-FEAT-42-RESOLVE-SOURCE-PACKAGE-NAME], [REQ-ISSUE-472-PACKAGE-QUALIFICATION]
+pub fn resolve_source_package_name(source_dir: &Path, explicit_package: Option<&str>) -> String {
+    if let Some(pkg) = explicit_package.map(str::trim).filter(|s| !s.is_empty()) {
+        return sanitize_sysml_identifier(pkg, "SourceCodeModel");
+    }
+    let leaf = source_dir
+        .file_name()
+        .and_then(|n| n.to_str())
+        .filter(|s| !s.is_empty())
+        .unwrap_or("SourceCodeModel");
+    if matches!(leaf, "src" | "lib") {
+        if let Some(parent_name) = source_dir
+            .parent()
+            .and_then(|p| p.file_name())
+            .and_then(|n| n.to_str())
+            .filter(|s| !s.is_empty() && *s != "." && *s != "..")
+        {
+            return sanitize_sysml_identifier(
+                &format!("{}_{}_Realization", parent_name, leaf),
+                "SourceCodeModel",
+            );
+        }
+    }
+    sanitize_sysml_identifier(leaf, "SourceCodeModel")
+}
+
 /// Recursively scans `source_dir` for `.rs` and/or `.dart` files and lowers them into a canonical `PackageDef`.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -1617,11 +1678,12 @@ pub fn lower_source_ast_to_package(items: &[SourceAstItem], package_name: &str) 
 /// ## 2. Invariants & Mathematical Properties
 /// - Lexicographical file sorting guarantees bit-for-bit identical `PackageDef` outputs across platforms.
 /// - Any syntax error in any discovered source file halts ingestion immediately with `Err(String)`.
+/// - Raw `"src"` or `"lib"` package identifiers are automatically parent-qualified via [`resolve_source_package_name`].
 ///
 /// ## 3. Preconditions
 /// - `source_dir: &Path` is an existing file or directory path on disk.
 /// - `language: SourceLanguage` specifies `Auto`, `Rust`, or `Dart`.
-/// - `package_name: &str` provides the root SysML v2 package identifier.
+/// - `package_name: &str` provides the root SysML v2 package identifier or raw leaf fallback.
 ///
 /// ## 4. Postconditions
 /// - Returns `Ok(PackageDef)` when at least one eligible source file is parsed cleanly, or `Err(String)`
@@ -1685,7 +1747,13 @@ pub fn ingest_source_directory(
         all_items.append(&mut parsed);
     }
 
-    Ok(lower_source_ast_to_package(&all_items, package_name))
+    let effective_pkg_name = if matches!(package_name.trim(), "" | "src" | "lib") {
+        resolve_source_package_name(source_dir, None)
+    } else {
+        resolve_source_package_name(source_dir, Some(package_name))
+    };
+
+    Ok(lower_source_ast_to_package(&all_items, &effective_pkg_name))
 }
 
 /// Discovers eligible `.rs` and/or `.dart` source files under `root` in deterministic sorted order.

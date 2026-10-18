@@ -1023,8 +1023,9 @@ pub fn check_safety_integrity(
                 errors.push("Pillar 7 violation: FMECA Criticality Matrix contains rows but no valid components or failure modes could be resolved.".to_string());
             }
 
-            // Bidirectional AST closure and negative AST constraint verification (Issue #249)
-            let model_text = crate::checks::parity_gates::discover_sysml_model_text(repo_root);
+            // Bidirectional AST closure and negative AST constraint verification (Issue #249 / Issue #472)
+            let model_text =
+                crate::checks::parity_gates::discover_architectural_sysml_model_text(repo_root);
             if let Some(ref text) = model_text {
                 let model_parts = deap_core::sysml_ast::parse_part_defs(text);
                 let expected_parts: Vec<String> = model_parts

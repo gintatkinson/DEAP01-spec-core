@@ -289,11 +289,8 @@ pub fn run_extract_source(
     digest_path: &Path,
     dry_run: bool,
 ) -> Result<PackageDef, (DocstringExitCode, String)> {
-    let pkg_name = source_dir
-        .file_name()
-        .and_then(|s| s.to_str())
-        .unwrap_or("ExtractedSourceModel");
-    let pkg = ingest_source_directory(source_dir, SourceLanguage::Auto, pkg_name)
+    let pkg_name = deap_core::source_ast::resolve_source_package_name(source_dir, None);
+    let pkg = ingest_source_directory(source_dir, SourceLanguage::Auto, &pkg_name)
         .map_err(|e| (DocstringExitCode::Error, e))?;
     let sysml_text = to_sysml(&pkg);
 

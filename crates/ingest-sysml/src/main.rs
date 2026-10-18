@@ -60,17 +60,21 @@
 use clap::Parser;
 use std::collections::HashSet;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process;
 
-use compile_sysml::{generate_digest, parse_sysml, to_sysml, write_atomic, write_digest_atomic};
-use deap_core::source_ast::SourceLanguage;
+use compile_sysml::{
+    generate_digest, parse_sysml, parse_sysml_tree, to_sysml, write_atomic, write_digest_atomic,
+};
+use deap_core::source_ast::{resolve_source_package_name, sanitize_sysml_identifier, SourceLanguage};
 use deap_core::sysml_ast::PackageDef;
 use ingest_sysml::detectors::discover_schema_targets;
-use ingest_sysml::filter_ast_to_target_scope;
 use ingest_sysml::translators::{
     code::CodeTranslator, idl::IDLTranslator, markdown::MarkdownTranslator,
     openapi::OpenAPITranslator, yang::YangTranslator,
+};
+use ingest_sysml::{
+    collect_declared_part_names, filter_ast_to_realized_or_allowed, filter_ast_to_target_scope,
 };
 
 /// Ground 0.0 SysML v2 Universal Ingestion Engine Command-Line Arguments.
@@ -101,13 +105,17 @@ use ingest_sysml::translators::{
 #[derive(Parser, Debug)]
 #[command(name = "ingest-sysml", version = "0.1.0", about = "SysML v2 Universal Ingestion Engine")]
 pub struct CliArgs {
-    /// Path to root of source code tree for AST extraction (mutually exclusive with --schema)
+    /// Path to root of source code tree for AST extraction (can be combined with --schema for realization scoping)
     #[arg(long)]
     pub source: Option<PathBuf>,
 
     /// Path to input schema file or directory containing schemas (default: schema/)
     #[arg(short, long)]
     pub schema: Option<PathBuf>,
+
+    /// Optional explicit SysML v2 root package name override for the ingested model
+    #[arg(long)]
+    pub package: Option<String>,
 
     /// Schema format specification (auto, code, sysml, idl, openapi, markdown, yang, autosar, protobuf)
     #[arg(short, long, default_value = "auto")]
@@ -132,6 +140,41 @@ pub struct CliArgs {
     /// Comma-separated list of entities to assert negative exclusion for (!exists(...))
     #[arg(long)]
     pub negative_invariants: Option<String>,
+}
+
+/// Derives a deterministic SysML v2 package identifier for an ingested source directory or explicit override.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, and Issue #472 package namespace hygiene
+/// (`resolve_ingested_package_name`). Ensures that pointing `--source` at `<component>/src`
+/// or `<component>/lib` produces `<component>_<src|lib>_Realization` instead of polluting
+/// the root namespace with raw `package src` or `package lib`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Honors `explicit_package` whenever a non-empty trimmed package identifier is supplied.
+/// - Delegates parent-qualified `"src"` / `"lib"` realization naming to [`resolve_source_package_name`].
+///
+/// ## 3. Preconditions
+/// - `source_path: &Path` is the target source directory or file path.
+/// - `explicit_package: Option<&str>` is the optional `--package` CLI flag value.
+///
+/// ## 4. Postconditions
+/// - Returns a non-empty, sanitized SysML v2 identifier suitable for `PackageDef::name`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - **Time Complexity**: $O(P)$ where $P$ is the length of the path leaf/parent or explicit package string.
+/// - **Space Complexity**: $O(P)$ heap allocation for the returned `String`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Falls back deterministically to `"SourceCodeModel"` when `source_path` has no usable basename.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYSML-INGEST-CLI/resolve_ingested_package_name], [REQ-ISSUE-472-PACKAGE-QUALIFICATION]
+pub fn resolve_ingested_package_name(
+    source_path: &Path,
+    explicit_package: Option<&str>,
+) -> String {
+    resolve_source_package_name(source_path, explicit_package)
 }
 
 /// Binary entrypoint for the `ingest-sysml` command-line executable.
@@ -202,10 +245,6 @@ fn main() {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-SYSML-INGEST-CLI/run_ingestion], [DO-330-TQL-4-INGEST-CLI]
 pub fn run_ingestion(args: CliArgs) -> Result<(), String> {
-    if args.source.is_some() && args.schema.is_some() {
-        return Err("CLI options '--source' and '--schema' are mutually exclusive.".to_string());
-    }
-
     let mut pkg: PackageDef;
 
     if let Some(ref source_path) = args.source {
@@ -217,11 +256,46 @@ pub fn run_ingestion(args: CliArgs) -> Result<(), String> {
             ));
         }
         let lang = SourceLanguage::from_flag(&args.language)?;
-        let pkg_name = source_path
-            .file_name()
-            .and_then(|s| s.to_str())
-            .unwrap_or("SourceCodeModel");
-        pkg = CodeTranslator::with_language(lang).translate_directory(source_path, pkg_name)?;
+        let pkg_name = resolve_ingested_package_name(source_path, args.package.as_deref());
+        pkg = CodeTranslator::with_language(lang).translate_directory(source_path, &pkg_name)?;
+
+        // When --schema is supplied alongside --source (and --allowed-parts is omitted),
+        // scope code PartDef extraction to architectural part defs declared in the reference schema
+        // or source items carrying explicit Realises: requirement bindings.
+        if let Some(ref schema_path) = args.schema {
+            if args.allowed_parts.is_none() {
+                let ref_pkg = if schema_path.is_dir() {
+                    let (_, sysml_files) =
+                        discover_schema_targets(Some(schema_path), Some("sysml"))?;
+                    parse_sysml_tree(&sysml_files).map_err(|e| {
+                        format!(
+                            "Failed to parse reference schema directory '{}': {}",
+                            schema_path.display(),
+                            e
+                        )
+                    })?
+                } else {
+                    let schema_content = fs::read_to_string(schema_path).map_err(|e| {
+                        format!(
+                            "Failed to read reference schema '{}': {}",
+                            schema_path.display(),
+                            e
+                        )
+                    })?;
+                    parse_sysml(&schema_content).map_err(|e| {
+                        format!(
+                            "Failed to parse reference schema '{}': {}",
+                            schema_path.display(),
+                            e
+                        )
+                    })?
+                };
+                let mut schema_parts = HashSet::new();
+                collect_declared_part_names(&ref_pkg, &mut schema_parts);
+                filter_ast_to_realized_or_allowed(&mut pkg, &schema_parts);
+            }
+        }
+
         println!(
             "[SysML v2 Ingestion] Successfully ingested source AST from '{}' -> {}",
             source_path.display(),
@@ -233,11 +307,8 @@ pub fn run_ingestion(args: CliArgs) -> Result<(), String> {
             .clone()
             .unwrap_or_else(|| PathBuf::from("src"));
         let lang = SourceLanguage::from_flag(&args.language)?;
-        let pkg_name = target_path
-            .file_name()
-            .and_then(|s| s.to_str())
-            .unwrap_or("SourceCodeModel");
-        pkg = CodeTranslator::with_language(lang).translate_directory(&target_path, pkg_name)?;
+        let pkg_name = resolve_ingested_package_name(&target_path, args.package.as_deref());
+        pkg = CodeTranslator::with_language(lang).translate_directory(&target_path, &pkg_name)?;
         println!(
             "[SysML v2 Ingestion] Successfully ingested source AST from '{}' -> {}",
             target_path.display(),
@@ -350,6 +421,10 @@ pub fn run_ingestion(args: CliArgs) -> Result<(), String> {
                 args.out.display()
             );
         }
+    }
+
+    if let Some(explicit_pkg) = args.package.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        pkg.name = sanitize_sysml_identifier(explicit_pkg, &pkg.name);
     }
 
     // Step 4: Apply closed-world AST filtering & negative invariant projection
