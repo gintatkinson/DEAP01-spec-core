@@ -883,6 +883,22 @@ pub fn run(options: &BaselineOptions) -> Result<(), ()> {
     }
     println!("Success: Check 36 verified (Per-Item 7-Section Safety Docstring Completeness Gate passed -- 100% per-item 7-section docstrings verified across Rust and Dart sources).");
 
+    // Check 37: Architecture Blueprint Grounding Gate
+    if let Err(errs) = check_blueprint_grounding(&repo_root) {
+        eprintln!(
+            "ERROR: Check 37 failed (Architecture Blueprint Grounding Gate violated):"
+        );
+        for e in &errs {
+            eprintln!("  - {}", e);
+        }
+        write_defect_dossier(
+            &repo_root,
+            "Check 37 (Architecture Blueprint Grounding Gate)",
+            &errs,
+        );
+        return Err(());
+    }
+    println!("Success: Check 37 verified (Architecture Blueprint Grounding Gate passed -- all 12 blueprints grounded in workspace crates and paths).");
 
     // Platform Checks
     let dest = &options.destination;

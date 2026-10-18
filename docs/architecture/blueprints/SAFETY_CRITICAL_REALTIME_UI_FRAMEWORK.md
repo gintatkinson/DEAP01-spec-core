@@ -24,7 +24,7 @@ target_regulatory_frameworks:
 | **Status** | `APPROVED / PRODUCTION-GRADE` |
 | **Classification** | `UPSTREAM_SPEC_CORE_COMPILER` |
 | **Assurance Level** | `AssuranceLevel::Tier1` (Formal Deterministic Execution & Mathematical Verification) |
-| **Target Technology Profile** | Modular Rust Cargo Workspace (`deap-core`, `deap-ast`, `deap-codegen`, `deap-harness`, `deap-cli`) |
+| **Target Technology Profile** | Modular Rust Cargo Workspace (`crates/deap-core`, `crates/compile-sysml`, `crates/verify-baseline`, `crates/ingest-sysml`, `crates/assemble-conops`, `crates/reconcile-backlog`) |
 
 ---
 
@@ -43,20 +43,23 @@ All models and requirements adhere strictly to the **Pure Schema-Driven Compiler
 ```mermaid
 flowchart TD
     subgraph AssuranceTier ["Mathematical Assurance Framework"]
-        Tier1["AssuranceLevel::Tier1 (Formal Proof, 100% MC/DC Coverage)"]
-        Tier2["AssuranceLevel::Tier2 (Spatial & Temporal Partitioning)"]
-        Tier3["AssuranceLevel::Tier3 (Bounded Frame Latency <= 16.6ms)"]
+        direction TB
+        Tier1["AssuranceLevel::Tier1<br/>(Formal Proof, 100% MC/DC)"]
+        Tier2["AssuranceLevel::Tier2<br/>(Spatial & Temporal Partition)"]
+        Tier3["AssuranceLevel::Tier3<br/>(Bounded Frame <= 16.6ms)"]
     end
 
     subgraph Architecture ["Evolved LUI Core Architecture"]
-        PatA["Pattern A: Deterministic Display Kernel (Binary Buffer -> Widget DF -> Render Kernel)"]
-        PatB["Pattern B: Real-Time Safety Statecharts (Discrete Event -> FSM -> Vector Symbology)"]
-        PatC["Pattern C: Decoupled Operator Consoles (Operator Action -> ViewModel -> GUI Binding)"]
+        direction TB
+        PatA["Pattern A: Display Kernel<br/>(Buffer to Widget DF to Render)"]
+        PatB["Pattern B: Safety Statecharts<br/>(Event to FSM to Symbology)"]
+        PatC["Pattern C: Operator Consoles<br/>(Action to ViewModel to GUI)"]
     end
 
-    subgraph Hardware ["Deterministic Execution & Rendering Engine"]
-        DisplayKernel["Deterministic Display Kernel (Zero Dynamic Heap Post-Init)"]
-        FrameBuffer["Hardware Frame Buffer & Video Readback CRC-32 Monitor"]
+    subgraph Hardware ["Deterministic Rendering Engine"]
+        direction TB
+        DisplayKernel["Deterministic Display Kernel<br/>(Zero Dynamic Heap Post-Init)"]
+        FrameBuffer["Hardware Frame Buffer &<br/>Video Readback CRC-32 Monitor"]
     end
 
     AssuranceTier --> Architecture
@@ -79,21 +82,25 @@ The framework operates within a partitioned operating system environment, isolat
 
 ```mermaid
 flowchart TD
-    subgraph OS_Partition ["Partitioned Operating System Environment"]
-        subgraph Part1 ["Partition 1: Supervisory Application - AssuranceLevel::Tier3"]
-            App_Logic["Supervisory Planning Application"]
+    subgraph OS_Partition ["Partitioned OS Environment"]
+        direction TB
+        subgraph Part1 ["Partition 1: Tier3 Supervisory"]
+            direction TB
+            App_Logic["Supervisory Planning App"]
             App_Buffer["Parameter Output Buffer"]
         end
 
-        subgraph Part2 ["Partition 2: Display Kernel - AssuranceLevel::Tier1"]
-            Binary_Parser["Binary Protocol Parser (O(1) Time Complexity)"]
-            Widget_Tree["Widget Definition Tree (Static Pool)"]
-            Render_Engine["Deterministic Vector Symbology Engine"]
+        subgraph Part2 ["Partition 2: Tier1 Display Kernel"]
+            direction TB
+            Binary_Parser["Binary Protocol Parser<br/>(O(1) Time Complexity)"]
+            Widget_Tree["Widget Definition Tree<br/>(Static Memory Pool)"]
+            Render_Engine["Deterministic Vector<br/>Symbology Engine"]
         end
 
-        subgraph Part3 ["Partition 3: Safety Monitor - AssuranceLevel::Tier1"]
-            CRC_Monitor["Video Frame Buffer CRC-32 Monitor"]
-            Health_Monitor["System Health & Deadline Watchdog"]
+        subgraph Part3 ["Partition 3: Tier1 Safety Monitor"]
+            direction TB
+            CRC_Monitor["Video Frame Buffer<br/>CRC-32 Monitor"]
+            Health_Monitor["System Health &<br/>Deadline Watchdog"]
         end
     end
 
@@ -118,6 +125,7 @@ sequenceDiagram
     participant Kernel as Display Kernel Parser
     participant DF as Widget Definition Tree
     participant GPU as Hardware Display Kernel Render
+    participant Display as Hardware Frame Buffer
 
     App->>Buffer: Update Parameter (Parameter_01 = Value_Alpha)
     Buffer->>Kernel: Send Binary Command Block (CMD_SET_PARAMETER)
@@ -128,14 +136,14 @@ sequenceDiagram
 ```
 
 #### Layer Mapping for Pattern A
-1. **Layer 1 (Domain State & Signal Model)**: Supervisory Parameter Output Buffer / Telemetry Input Stream.
-2. **Layer 2 (Logic & Safety State Management)**: Display Kernel Widget Definition Tree and Symbolic Attribute Registry.
-3. **Layer 3 (Display & Actuator Interface Binding)**: Deterministic Display Kernel Vector Engine rendering to hardware frame buffer and actuator interface.
+1. **Layer 1 (Domain State & Signal Model)**: Supervisory Parameter Output Buffer / Telemetry Input Stream (`FlowDef` and `AttributeDef` in `crates/deap-core/src/sysml_ast.rs`).
+2. **Layer 2 (Logic & Safety State Management)**: Display Kernel Widget Definition Tree and Symbolic Attribute Registry (`PartDef` and `PortDef` in `crates/deap-core/src/sysml_ast.rs`).
+3. **Layer 3 (Display & Actuator Interface Binding)**: Deterministic Display Kernel Vector Engine rendering to hardware frame buffer and actuator interface (`ActionDef` and `ConstraintDef` in `crates/deap-core/src/sysml_ast.rs`).
 
 ---
 
 ### 3.2 Pattern B: Real-Time Safety Statecharts & Symbology Engine
-Pattern B is optimized for high-speed, discrete event-driven statechart execution and vector symbology generation.
+Pattern B is optimized for high-speed, discrete event-driven statechart execution (`StateDef` and `TransitionDef` in `crates/deap-core/src/sysml_ast.rs`) and vector symbology generation.
 
 ```mermaid
 stateDiagram-v2
@@ -157,73 +165,78 @@ stateDiagram-v2
 
 #### Layer Mapping for Pattern B
 1. **Layer 1 (Domain State & Signal Model)**: Continuous System State Vector $x(t) \in \mathbb{R}^n$ / Discrete Input Event Frame $\Sigma$.
-2. **Layer 2 (Logic & Safety State Management)**: Safety Statechart / Hierarchical Finite State Machine (FSM) Mode Controller.
+2. **Layer 2 (Logic & Safety State Management)**: Safety Statechart / Hierarchical Finite State Machine (FSM) Mode Controller (`StateDef` and `TransitionDef` in `crates/deap-core/src/sysml_ast.rs`).
 3. **Layer 3 (Display & Actuator Interface Binding)**: Vector Graphic Symbology with priority-based layer rasterization and Actuator Output Command Interface.
 
 ---
 
 ### 3.3 Pattern C: Decoupled Operator Consoles
-Pattern C provides a model-driven, reactive presentation architecture for supervisory engineering consoles and operator workstations using BDD-verified ViewModels.
+Pattern C provides a model-driven, reactive presentation architecture for supervisory engineering consoles and operator workstations using BDD-verified ViewModels (`UseCaseDef`, `RequirementDef`, and `TestCaseDef` in `crates/deap-core/src/sysml_ast.rs`).
 
 ```mermaid
-flowchart LR
-    subgraph L1 ["Layer 1: Domain State & Signal Model"]
-        DomainModel["Subsystem Domain Model & Repository Data Source"]
+flowchart TD
+    subgraph L1 ["Layer 1: Domain & Signal Model"]
+        direction TB
+        DomainModel["Subsystem Domain Model &<br/>Repository Data Source"]
     end
 
-    subgraph L2 ["Layer 2: Logic & Safety State Management"]
-        ViewModel["Operator Console ViewModel (State & Action Reducer)"]
+    subgraph L2 ["Layer 2: Safety State Logic"]
+        direction TB
+        ViewModel["Operator Console ViewModel<br/>(State & Action Reducer)"]
     end
 
-    subgraph L3 ["Layer 3: Display & Actuator Interface Binding"]
-        GUIWidget["GUI Component / Widget Data-Binding"]
-        BDDTest["BDD Acceptance Test (Given-When-Then Verification)"]
+    subgraph L3 ["Layer 3: Display & Binding"]
+        direction TB
+        GUIWidget["GUI Component /<br/>Widget Data-Binding"]
+        BDDTest["BDD Acceptance Test<br/>(Given-When-Then Gate)"]
     end
 
     DomainModel --> ViewModel
     ViewModel --> GUIWidget
     GUIWidget -. "User Input Event" .-> ViewModel
-    BDDTest -- "Automated Semantic Verification" --> GUIWidget
+    BDDTest -- "Semantic Verification" --> GUIWidget
 ```
 
 #### Layer Mapping for Pattern C
 1. **Layer 1 (Domain State & Signal Model)**: Console Domain Model / Sensor Telemetry & Persistent Repository.
 2. **Layer 2 (Logic & Safety State Management)**: ViewModel / Reactive State Holder handling user commands.
-3. **Layer 3 (Display & Actuator Interface Binding)**: GUI Component / Widget Binding + BDD Acceptance Test asserting:
+3. **Layer 3 (Display & Actuator Interface Binding)**: GUI Component / Widget Binding + BDD Acceptance Test (`TestCaseDef` in `crates/deap-core/src/sysml_ast.rs`) asserting:
    `User Action -> ViewModel Action -> State Change -> Display/Actuator Binding Render`.
 
 ---
 
 ## 4. Modular Cargo Workspace Architecture
 
-The Real-Time UI Framework is built upon the pure Rust Cargo workspace:
+The Real-Time UI Framework is grounded in the DEAP pure Rust Cargo workspace (`Cargo.toml`):
 
 ```
-deap-workspace/
-├── Cargo.toml                      # Workspace manifest
+DEAP01-spec-core/
+├── Cargo.toml                      # Workspace manifest (forbid unsafe_code, deny unwrap/expect/panic)
 ├── crates/
-│   ├── deap-core/                  # Fixed-point math, CRC-32 verification, static memory pools
-│   ├── deap-ast/                   # Statechart AST, Widget Definition metamodel, AST slicing
-│   ├── deap-codegen/               # State machine compiler, vector command synthesizer
-│   ├── deap-harness/               # Dual-LLM air-gapped agentic harness (DeepSeek-R1 / Qwen-2.5)
-│   └── deap-cli/                   # UI verification CLI & headless test harness
+│   ├── deap-core/                  # Core SysML v2 AST (sysml_ast.rs) & workspace scan rules (rules.rs)
+│   ├── compile-sysml/              # SysML v2 compiler (lib.rs) & STPA safety suite (stpa/safety_suite.rs)
+│   ├── verify-baseline/            # Fail-closed gate runner (runner.rs) & parity gates (checks/parity_gates.rs)
+│   ├── ingest-sysml/               # Level 0 schema ingestion & normalization CLI
+│   ├── assemble-conops/            # Deterministic Concept of Operations assembly CLI
+│   └── reconcile-backlog/          # Issue tracker & specification backlog reconciliation CLI
 ```
 
 ### 4.1 Crate Allocation
 
-| Crate | Responsibility |
-| :--- | :--- |
-| **`deap-core`** | Static pool allocators, memory arena primitives, CRC-32 frame signature verifier, ring buffer implementations. |
-| **`deap-ast`** | Statechart AST nodes (`StateDef`, `TransitionDef`, `ActionDef`), Widget Definition models, and token-bounded AST slicing. |
-| **`deap-codegen`** | Deterministic code generator producing static C/Rust state machine tables and LUI schema bindings. |
-| **`deap-harness`** | Dual-LLM air-gapped agent dispatch (DeepSeek-R1 CoT slot streaming to `.pipeline/diagnostics/cot_audit_log.json` -> Qwen-2.5-Coder execution slot). |
-| **`deap-cli`** | Headless frame buffer simulation and verification CLI. |
+| Crate | Key Modules | Responsibility |
+| :--- | :--- | :--- |
+| **`crates/deap-core`** | `crates/deap-core/src/sysml_ast.rs`, `crates/deap-core/src/rules.rs` | Canonical SysML v2 AST structures (`PartDef`, `PortDef`, `ActionDef`, `StateDef`, `TransitionDef`, `ConstraintDef`, `RequirementDef`, `TestCaseDef`, `FlowDef`, `AttributeDef`) and deterministic workspace traversal rules (`ExcludedDir`). |
+| **`crates/compile-sysml`** | `crates/compile-sysml/src/lib.rs`, `crates/compile-sysml/src/stpa/safety_suite.rs` | Deterministic SysML v2 parser (`parse_sysml`, `SysmlParser`), bidirectional specification synchronization (`forward_sync_sysml_to_specs`, `reverse_sync_specs_to_sysml`), and 10-pillar STPA/FMECA safety suite synthesis (`ProofTemplate`, `emit_safety_suite`, `transpile_safety_suite`). |
+| **`crates/verify-baseline`** | `crates/verify-baseline/src/runner.rs`, `crates/verify-baseline/src/checks/parity_gates.rs` | Sequential fail-closed verification runner (`BaselineOptions`, `has_concrete_specifications`) executing Checks 10 through 36 and semantic diagram-to-AST parity gates (`ParityOutcome`, `DiagramType`). |
+| **`crates/ingest-sysml`** | `crates/ingest-sysml/src/main.rs` | Level 0 structural schema ingestion into normalized SysML v2 AST packages (`./target/release/ingest-sysml`). |
+| **`crates/assemble-conops`** | `crates/assemble-conops/src/main.rs` | Deterministic assembly of Concept of Operations and Tactical Mission Intent units (`./target/release/assemble-conops`). |
+| **`crates/reconcile-backlog`** | `crates/reconcile-backlog/src/main.rs` | Bidirectional backlog synchronization and verified defect filing (`./target/release/reconcile-backlog`). |
 
 ---
 
 ## 5. Strongly-Typed AST Slicing Mechanics ($\le 4,096$ Tokens)
 
-To synthesize UI components and state machines within strict context boundaries, the framework slices UI metamodels into discrete subgraphs:
+To synthesize UI components and state machines within strict context boundaries, `crates/deap-core/src/sysml_ast.rs` and `crates/compile-sysml/src/lib.rs` slice UI metamodels (`PartDef`, `StateDef`, `TransitionDef`, `PortDef`) into discrete subgraphs:
 
 $$
 \mathcal{V}_{\text{ui\_slice}} = \{w_0\} \cup \mathcal{N}_{\text{child\_widgets}}(w_0) \cup \mathcal{N}_{\text{state\_bindings}}(w_0)
@@ -235,13 +248,13 @@ $$
 |\text{TokenCount}(\text{Serialize}(\mathcal{S}(w_0)))| \le 4096
 $$
 
-This ensures that agentic code synthesis prompts are mathematically bounded, eliminating context window degradation.
+This ensures that agentic specification and code synthesis prompts are mathematically bounded, eliminating context window degradation.
 
 ---
 
 ## 6. Binary Protocol & Static Widget Subsystem
 
-The framework provides an $O(1)$ time complexity binary protocol parser operating with zero dynamic heap allocation:
+The framework models an $O(1)$ time complexity binary protocol parser operating with zero dynamic heap allocation:
 
 | Field Offset | Parameter Identifier | Size (Bytes) | Description |
 | :--- | :--- | :--- | :--- |
@@ -261,8 +274,8 @@ Symbology generation requiring rapid frame updates utilizes a pre-allocated stat
 
 ```mermaid
 flowchart TD
-    Sensors["Sensor Input Telemetry Stream"] --> MatrixCalc["Fixed-Point Projection Matrix Calculation"]
-    MatrixCalc --> VBuffer["Pre-allocated Static Vertex Buffer (Max 4,096 Vertices)"]
+    Sensors["Sensor Input Telemetry Stream"] --> MatrixCalc["Fixed-Point Projection Matrix<br/>Calculation Engine"]
+    MatrixCalc --> VBuffer["Pre-allocated Static Vertex<br/>Buffer (Max 4,096 Vertices)"]
     VBuffer --> Rasterizer["Hardware Vector Rasterizer Core"]
     Rasterizer --> FrameBuffer["Display Hardware Frame Buffer"]
 ```
@@ -272,13 +285,17 @@ flowchart TD
 ## 8. Verification, Formal Coverage & BDD Acceptance Strategy
 
 ### 8.1 100% Modified Condition/Decision Coverage (MC/DC)
-For safety-critical decision logic, all Boolean expressions in state transitions (e.g., `if (signal_a < threshold_1 && signal_b > threshold_2 && invariant_active)`) undergo formal condition isolation:
+For safety-critical decision logic modeled in `crates/deap-core/src/sysml_ast.rs` (`ConstraintDef`, `TransitionDef`) and synthesized via `crates/compile-sysml/src/stpa/safety_suite.rs` (`ProofTemplate`), all Boolean expressions in state transitions (e.g., `if (signal_a < threshold_1 && signal_b > threshold_2 && invariant_active)`) undergo formal condition isolation:
 - Every condition must be shown to independently affect the decision outcome.
-- Condition trees are statically extracted and verified via semantic acceptance test harnesses.
+- Condition trees are statically extracted and verified via native Rust semantic acceptance test harnesses (`crates/verify-baseline/src/runner.rs` and `crates/verify-baseline/src/checks/parity_gates.rs`).
 
-### 8.2 Zero Forbidden Script Runners Invariant
-- In strict adherence to repository invariants, interpreted script test suites are strictly prohibited.
-- Verification is performed exclusively through end-to-end semantic acceptance testing and baseline gate checks (`./target/release/verify-baseline` and `cargo test --workspace`).
+### 8.2 Native Rust Verification & Zero Forbidden Script Runners Invariant
+- In strict adherence to Check 32 and Check 33 in `crates/verify-baseline`, legacy Python and shell scripts are permanently retired and strictly prohibited.
+- Verification is performed exclusively through native Rust CLI binaries and the workspace test suite:
+  - Baseline & parity verification: `./target/release/verify-baseline . --no-domain`
+  - SysML v2 compilation & STPA safety suite: `./target/release/compile-sysml`
+  - Backlog reconciliation: `./target/release/reconcile-backlog`
+  - Workspace unit & integration test suite: `cargo test --workspace`
 - Zero Unicode em dashes (`\u2014`); ASCII `--` or `-` exclusively.
 
 ---

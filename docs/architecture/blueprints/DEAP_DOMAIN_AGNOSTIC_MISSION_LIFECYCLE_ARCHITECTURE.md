@@ -41,26 +41,25 @@ This architecture introduces formal Model-Based Systems Engineering (MBSE) abstr
 ```mermaid
 flowchart TD
     subgraph "SysML v2 / KerML Metamodel"
-        A["Schema AST Nodes"] --> B["_derive_lifecycle_contract() Solver"]
-        B --> C{"Lifecycle Archetype Resolution"}
-        C -->|EXPENDABLE| D["EXPENDABLE_DISPOSAL"]
-        C -->|REUSABLE| E["REUSABLE_RECOVERY"]
-        C -->|STATIONARY| F["CONTINUOUS_STATIONARY"]
-        C -->|ORBITAL| G["PERSISTENT_ORBITAL"]
-        C -->|RAIL| H["TRACK_BOUND_GUIDED"]
+        direction TB
+        A["Schema AST Nodes<br/>(SysmlModel)"] --> B["SysMLParameterBindingEngine<br/>derive_lifecycle_contract()"]
+        B --> C{"LifecycleType<br/>Archetype Resolution"}
+        C -->|"Mobile / Reusable"| D["REUSABLE_RECOVERY &<br/>TRACK_BOUND_GUIDED"]
+        C -->|"Single-Use / Space"| E["EXPENDABLE_DISPOSAL &<br/>PERSISTENT_ORBITAL"]
+        C -->|"Fixed Facility"| F["CONTINUOUS_STATIONARY"]
     end
 
-    subgraph "Deterministic Parameter Binding & Projection"
-        D --> I["ContainmentActionType::CONTROLLED_DECOMMISSIONING_DISPOSAL"]
-        E --> J["ContainmentActionType::CONTROLLED_RECOVERY_LANDING"]
-        F --> K["ContainmentActionType::ELECTROMECHANICAL_BRAKE_LOCK"]
-        G --> L["ContainmentActionType::DEORBIT_DISPOSAL_BURN"]
-        H --> M["ContainmentActionType::TRACK_SIDING_BRAKE"]
+    subgraph "Deterministic Parameter Binding"
+        direction TB
+        D --> G["CONTROLLED_RECOVERY_LANDING<br/>TRACK_SIDING_BRAKE"]
+        E --> H["CONTROLLED_DECOMMISSIONING<br/>_DISPOSAL &<br/>DEORBIT_DISPOSAL_BURN"]
+        F --> I["ELECTROMECHANICAL_BRAKE_LOCK"]
     end
 
     subgraph "Canonical Artifact Synthesis"
-        I & J & K & L & M --> N["CONOPS.md & MISSION_INTENT.md"]
-        N --> O["100% Traceable / 0 Invalid RTB Violations"]
+        direction TB
+        G & H & I --> J["assemble-conops<br/>CONOPS.md & MISSION_INTENT.md"]
+        J --> K["verify-baseline<br/>0 Invalid RTB Violations"]
     end
 ```
 
@@ -195,38 +194,39 @@ Every compiled specification is validated against the 6-Layer Semantic Acceptanc
 
 ## 6. Modular Cargo Workspace Architecture & Air-Gapped Verification
 
-The deterministic lifecycle contract engine is codified within the modular Rust workspace architecture:
+The deterministic lifecycle contract engine is codified within the 6-crate Rust workspace architecture:
 
 ### 6.1 Modular Cargo Workspace Crate Decomposition
 
 | Crate Identifier | Architecture & Responsibilities | Key Dependencies | Quality Gate Contract |
 | :--- | :--- | :--- | :--- |
-| **`deap-core`** | Houses the canonical lifecycle metamodel definitions (`LifecycleType`, `ContainmentActionType`, `LifecycleContract`), mathematical non-contradiction theorems, and formal state reachability engines. | `serde`, `petgraph`, `thiserror` | Pure deterministic domain-independent core with zero runtime I/O dependencies. |
-| **`deap-ast`** | Strongly-typed SysML v2 / KerML AST parser, token-bounded AST slicing engine, and visitor traversals. | `deap-core`, `serde`, `rkyv`, `logos` | Partition AST representations into strongly-typed context slices with strict size bounds (<= 4,096 tokens). |
-| **`deap-codegen`** | Deterministic code synthesis translating validated lifecycle contracts into template parameters, Stateflow statecharts, and target platform interfaces. | `deap-core`, `deap-ast`, `tera` | Generates 100% compliant lifecycle contracts with zero semantic drift. |
-| **`deap-harness`** | Closed-loop semantic acceptance test harnesses, simulation oracles, and property-based verification runners. | `deap-core`, `deap-ast`, `proptest` | Validates energy conservation and terminal state invariants across all lifecycle archetypes. |
-| **`deap-cli`** | Developer CLI coordinating end-to-end AST compilation, lifecycle derivation, and quality gate enforcement. | `deap-core`, `deap-ast`, `deap-codegen`, `clap` | Single binary entrypoint returning deterministic exit codes (0 on full compliance, non-zero on violation). |
+| **`crates/deap-core`** | Houses the canonical SysML v2 / KerML AST (`crates/deap-core/src/sysml_ast.rs` defining `SysmlModel`, `AstSlice`, `SysmlModel::slice_package_subsystem`, `IncrementalAstCache`, `CotAuditRecord`, `CotAuditLog`), Markdown AST utilities, and shared verification rules. | `serde`, `serde_json`, `walkdir`, `chrono`, `uuid` | Partition AST representations into strongly-typed context slices (`<= 4,096` tokens) with deterministic FNV-1a digest caching. |
+| **`crates/ingest-sysml`** | Level 0 requirement and specification ingestion engine (`crates/ingest-sysml/src/lib.rs`) transforming stakeholder requirements and interface definitions into canonical SysML v2 textual AST models. | `deap-core`, `compile-sysml`, `clap`, `serde`, `serde_json`, `walkdir`, `chrono`, `rayon` | Deterministic Level 0 ingestion into valid SysML v2 packages with zero data loss. |
+| **`crates/compile-sysml`** | Bidirectional SysML v2 compiler, STPA 10-pillar safety suite generator (`crates/compile-sysml/src/lib.rs`, `crates/compile-sysml/src/stpa/safety_suite.rs`), and forward specification synchronizer (`crates/compile-sysml/src/sync/forward.rs`). | `deap-core`, `clap`, `serde`, `serde_json`, `walkdir`, `chrono` | Generates 100% compliant Epics, Features, User Stories, Use Cases, and STPA safety artifacts with zero semantic drift. |
+| **`crates/verify-baseline`** | Fail-closed baseline verification runner (`crates/verify-baseline/src/runner.rs`) executing Checks 10 through 37, including STPA safety integrity (`crates/verify-baseline/src/checks/safety_stpa.rs`) and specification parity gates (`crates/verify-baseline/src/checks/parity_gates.rs`). | `deap-core`, `clap`, `serde`, `serde_json`, `walkdir`, `chrono`, `pulldown-cmark`, `rayon` | Single binary entrypoint returning deterministic exit codes (`0` on full compliance, non-zero with 5-Whys defect dossier on violation). |
+| **`crates/assemble-conops`** | Deterministic ConOps and Mission Intent assembler (`crates/assemble-conops/src/main.rs`) and lifecycle parameter binding engine (`crates/assemble-conops/src/params.rs` defining `LifecycleType`, `SysMLParameterBindingEngine`, and `SysMLParameterBindingEngine::derive_lifecycle_contract`). | `deap-core`, `clap`, `pulldown-cmark`, `serde`, `serde_json`, `walkdir`, `chrono` | Validates energy conservation, terminal state contracts, and zero forbidden cross-domain ontology across all lifecycle archetypes. |
+| **`crates/reconcile-backlog`** | Deterministic Agile backlog, WBS, and issue tracker reconciler (`crates/reconcile-backlog/src/lib.rs`) enforcing bijective traceability across local specifications and remote trackers. | `deap-core`, `clap`, `serde`, `serde_json`, `walkdir`, `chrono`, `pulldown-cmark` | Enforces 100% traceability synchronization across Epics, Features, User Stories, Use Cases, ConOps, and WBS artifacts. |
 
 ### 6.2 Strongly-Typed AST Slicing Mechanics (<= 4,096 Tokens)
 
-To guarantee that language model inference and formal constraint solvers remain immune to attention decay, context loss, and truncation, `deap-ast` implements deterministic AST slicing:
-- **Structural Partitioning**: Every structural subsystem graph $\mathcal{G}_{\mathrm{sub}} = (V, E)$ is traversed and partitioned along subsystem containment boundaries into self-contained AST slices.
-- **Strict Token Floor & Ceiling**: Every AST slice $\mathcal{S}_k$ is strictly bounded to $\le 4,096$ tokens:
+To guarantee that language model inference and formal constraint solvers remain immune to attention decay, context loss, and truncation, `crates/deap-core` (`crates/deap-core/src/sysml_ast.rs`) implements deterministic AST slicing via `SysmlModel::slice_package_subsystem`, returning bounded `AstSlice` records cached through `IncrementalAstCache`:
+- **Structural Partitioning**: Every structural subsystem graph $\mathcal{G}_{\mathrm{sub}} = (V, E)$ in `SysmlModel` is traversed and partitioned along subsystem containment boundaries into self-contained `AstSlice` units.
+- **Strict Token Floor & Ceiling**: Every AST slice $\mathcal{S}_k$ (`AstSlice`) is strictly bounded to $\le 4,096$ tokens (`AstSlice::MAX_TOKEN_BUDGET`):
 $$
 \begin{aligned}
 \forall \mathcal{S}_k \in \mathcal{P}(\mathcal{G}), \quad \mathrm{TokenCount}(\mathcal{S}_k) \le 4096
 \end{aligned}
 $$
-- **Closed Dependency Context**: Each slice embeds all referenced upstream type definitions, interface port contracts, and operational states, eliminating unresolved external identifier references.
+- **Closed Dependency Context**: Each `AstSlice` embeds all referenced upstream type definitions, interface port contracts, and operational states, while `IncrementalAstCache` tracks FNV-1a 64-bit content digests to eliminate redundant recomputation and unresolved external identifier references.
 
 ### 6.3 Dual-LLM Air-Gapped Agent Dispatch Protocol
 
-To guarantee mathematical determinism, total intellectual property containment, and complete immunity to cloud rate-limiting or content censorship, DEAP utilizes a dual-LLM air-gapped agent dispatch architecture:
+To guarantee mathematical determinism, total intellectual property containment, and complete immunity to cloud rate-limiting or content censorship, DEAP utilizes a dual-LLM air-gapped agent dispatch architecture backed by `CotAuditRecord` and `CotAuditLog` in `crates/deap-core/src/sysml_ast.rs`:
 1. **Reasoning Slot (DeepSeek-R1)**:
    - Dedicated Chain-of-Thought (CoT) reasoning model executing on air-gapped workstation hardware.
-   - Streams formal mathematical proofs, reachability derivations, and safety invariant checks directly into `.pipeline/diagnostics/cot_audit_log.json`.
+   - Streams formal mathematical proofs, reachability derivations, and safety invariant checks via `CotAuditLog` and `CotAuditRecord` directly into `.pipeline/diagnostics/cot_audit_log.json`.
    - Never generates raw code directly; outputs verified formal derivations and boundary assertions.
 2. **Execution Slot (Qwen-2.5-Coder)**:
    - High-throughput deterministic code and specification synthesis model.
-   - Ingests verified reasoning derivations from the CoT audit log along with the strongly-typed AST slice (<= 4,096 tokens).
+   - Ingests verified reasoning derivations (`CotAuditRecord`) from `.pipeline/diagnostics/cot_audit_log.json` along with the strongly-typed `AstSlice` (`<= 4,096` tokens) produced by `SysmlModel::slice_package_subsystem`.
    - Generates verified SysML v2 lifecycle contracts, BDD test scenarios, and Stateflow integration hooks.

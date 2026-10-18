@@ -44,31 +44,35 @@ Cloud-hosted Large Language Model (LLM) endpoints introduce operational hazards 
 2. **API Non-Determinism & Drift**: Unannounced upstream model updates degrade reasoning reproducibility, invalidating regulatory validation baselines.
 3. **Network Latency & Flakiness**: Cloud-dependent multi-pipeline agent dispatches suffer from rate-limiting, socket disconnects, and non-deterministic response latencies.
 
-To eliminate these vulnerabilities, DEAP codifies a **Dual-LLM Air-Gapped Agent Dispatch** pattern orchestrated by modular Cargo workspace crates (`deap-core`, `deap-ast`, `deap-codegen`, `deap-harness`, `deap-cli`). Under this architecture:
+To eliminate these vulnerabilities, DEAP codifies a **Dual-LLM Air-Gapped Agent Dispatch** pattern orchestrated by the 6 modular Cargo workspace crates (`deap-core`, `ingest-sysml`, `compile-sysml`, `verify-baseline`, `assemble-conops`, `reconcile-backlog`). Under this architecture:
 - **Reasoning Slot (DeepSeek-R1)**: Dedicated to mathematical and systems reasoning, generating structured Chain-of-Thought (CoT) traces streamed in real time to `.pipeline/diagnostics/cot_audit_log.json`.
-- **Execution Slot (Qwen-2.5-Coder)**: Dedicated to deterministic code generation and artifact synthesis, consuming bounded, strongly-typed AST slices (<= 4,096 tokens) partitioned by `deap-ast`.
+- **Execution Slot (Qwen-2.5-Coder)**: Dedicated to deterministic code generation and artifact synthesis, consuming bounded, strongly-typed AST slices (<= 4,096 tokens) partitioned by `deap-core::sysml_ast` and `compile-sysml`.
 
 ```mermaid
 flowchart TD
-    subgraph AirGappedEnclave["Sovereign Air-Gapped Defense & Aerospace Facility"]
-        subgraph HardwareNode["ASUS ProArt Workstation (AMD Strix Halo APU)"]
-            UnifiedRAM["128 GB Unified LPDDR5X-8533 Memory - 273 GB/s"]
+    subgraph AirGappedEnclave["Sovereign Air-Gapped Facility"]
+        direction TB
+        subgraph HardwareNode["ASUS ProArt (AMD Strix Halo)"]
+            direction TB
+            UnifiedRAM["128 GB Unified LPDDR5X-8533<br/>Memory Bandwidth: 273 GB/s"]
             Zen5CPU["Zen 5 16-Core / 32-Thread CPU"]
-            RDNA35GPU["RDNA 3.5 40 CU GPU - Radeon 8060S / gfx1150"]
-            ROCmStack["AMD ROCm 6.2+ / HIP Driver Layer (amdgpu.gttsize=114688)"]
+            RDNA35GPU["RDNA 3.5 40 CU GPU<br/>Radeon 8060S / gfx1150"]
+            ROCmStack["AMD ROCm 6.2+ / HIP Driver<br/>(amdgpu.gttsize=114688)"]
         end
 
-        subgraph RuntimeTier["Local Dual-Engine Inference Layer (Ollama / vLLM)"]
-            R1_70B["DeepSeek-R1-70B Q4_K_M (~43.2 GB) - Deep Safety Reasoning & CoT"]
-            Coder_32B["Qwen-2.5-Coder-32B Q4_K_M (~20.1 GB) - TDD Code Synthesis"]
-            R1_14B["DeepSeek-R1-14B Q8_0 (~16.0 GB) - Micro-Task AST Repair"]
+        subgraph RuntimeTier["Local Dual-Engine Inference"]
+            direction TB
+            R1_70B["DeepSeek-R1-70B Q4_K_M (43.2 GB)<br/>Deep Safety Reasoning & CoT"]
+            Coder_32B["Qwen-2.5-Coder-32B (20.1 GB)<br/>Deterministic Code Synthesis"]
+            R1_14B["DeepSeek-R1-14B Q8_0 (16.0 GB)<br/>Micro-Task AST Repair"]
         end
 
-        subgraph HarnessCore["DEAP Agent Orchestration Harness (DEAP-Harness)"]
-            P0["Pipeline 0: Pre-Spec Safety & Systems (CONOPS, STPA, SysML v2)"]
-            P1["Pipeline 1: Agile Backlog Projection (Epics, Features, Stories)"]
-            P2["Pipeline 2: TDD Code Synthesis (ROS 2 C++, SPARK Ada, UI)"]
-            AuditEngine["Chain-of-Thought CoT Audit Log - .pipeline/diagnostics/cot_audit_log.json"]
+        subgraph HarnessCore["DEAP Rust Compiler Workspace"]
+            direction TB
+            P0["Pipeline 0: ingest-sysml,<br/>assemble-conops, compile-sysml"]
+            P1["Pipeline 1: reconcile-backlog<br/>(Epics, Features, Stories)"]
+            P2["Pipeline 2: TDD Code Synthesis<br/>& verify-baseline Gates"]
+            AuditEngine["CoT Audit Log:<br/>.pipeline/diagnostics/"]
         end
     end
 
@@ -89,21 +93,24 @@ This blueprint defines the authoritative specification for deploying the complet
 The AMD Ryzen AI Max+ 395 (Strix Halo APU) represents a paradigm shift for local AI engineering workstations. By unifying CPU, GPU, and NPU compute engines over a single high-bandwidth 256-bit memory bus, it eliminates discrete PCIe host-to-device transfer latency.
 
 ```mermaid
-flowchart LR
-    subgraph StrixHaloSoC["AMD Ryzen AI Max+ 395 APU (TSMC 4nm)"]
+flowchart TD
+    subgraph StrixHaloSoC["AMD Ryzen AI Max+ 395 APU (4nm)"]
+        direction TB
         subgraph ComputeUnits["Heterogeneous Processing Blocks"]
-            Zen5["16x Zen 5 CPU Cores (32 Threads, 64 MB L3 Cache)"]
-            RDNA35["40x RDNA 3.5 Compute Units - Radeon 8060S / gfx1150"]
+            direction TB
+            Zen5["16x Zen 5 CPU Cores<br/>(32 Threads, 64 MB L3 Cache)"]
+            RDNA35["40x RDNA 3.5 Compute Units<br/>(Radeon 8060S / gfx1150)"]
             XDNA2["XDNA 2 NPU Subsystem (50+ TOPS)"]
         end
 
-        MemCtrl["256-bit Wide LPDDR5X-8533 Memory Controller"]
+        MemCtrl["256-bit Wide LPDDR5X-8533<br/>Unified Memory Controller"]
         ComputeUnits --- MemCtrl
     end
 
-    subgraph PhysicalMemory["Unified Memory Pool (128 GB LPDDR5X)"]
-        GTT_VRAM["Dynamic VRAM / GTT Partition - amdgpu.gttsize=114688 - Up to 112 GB"]
-        SysRAM["OS Kernel, Toolchains, Harvester & Caches (16 GB to 48 GB)"]
+    subgraph PhysicalMemory["Unified Memory Pool (128 GB)"]
+        direction TB
+        GTT_VRAM["Dynamic VRAM / GTT Partition<br/>amdgpu.gttsize=114688 (112 GB)"]
+        SysRAM["OS Kernel, Rust Toolchains,<br/>& Caches (16 GB to 48 GB)"]
     end
 
     MemCtrl ---|"273.0 GB/s Peak Bandwidth"| PhysicalMemory
@@ -113,7 +120,7 @@ flowchart LR
 
 | Subsystem Component | Architecture & Configuration | Technical Capabilities & DEAP Role |
 | :--- | :--- | :--- |
-| **CPU Complex** | 16-Core / 32-Thread AMD Zen 5 (Dual-CCD, 64 MB L3) | Orchestrates native deap-harness async queues, executes modular Cargo workspace builds (deap-core, deap-ast, deap-codegen, deap-harness, deap-cli), invokes compilation toolchains (Rustc/Cargo, GCC, Clang, GNAT), and executes semantic acceptance test runners and AST invariant gates. |
+| **CPU Complex** | 16-Core / 32-Thread AMD Zen 5 (Dual-CCD, 64 MB L3) | Orchestrates agent dispatch queues, executes the 6 modular Cargo workspace crates (`deap-core`, `ingest-sysml`, `compile-sysml`, `verify-baseline`, `assemble-conops`, `reconcile-backlog`), invokes compilation toolchains (Rustc/Cargo, GCC, Clang, GNAT), and executes semantic acceptance test runners and AST invariant gates. |
 | **GPU Complex** | 40 Compute Units AMD RDNA 3.5 (`Radeon 8060S` / `gfx1150` / `gfx1151`) | Executes matrix multiplications for transformer inference, PagedAttention kernels, and high-speed token generation via ROCm/HIP. |
 | **NPU Subsystem** | AMD XDNA 2 Neural Processing Unit | Delivers 50+ NPU TOPS for local background telemetry analysis, audio/speech interfaces, and low-power background health monitoring. |
 | **Memory Bus** | 256-bit LPDDR5X-8533 Unified Memory | Delivers **~273.0 GB/s** theoretical peak bandwidth across a shared physical address space accessible to both CPU and GPU without PCIe serialization. |
@@ -138,7 +145,7 @@ By default, the Linux AMDGPU driver limits the Graphics Translation Table (GTT) 
 
 $$\text{GTT Allocation (MB)} = 112 \times 1024 = 114688\,\text{MB}$$
 
-This configuration guarantees that the GPU can address up to **112.0 GB** of VRAM for model weights and KV caches, leaving **16.0 GB** strictly reserved for the Ubuntu 26 Linux kernel, system daemons, DEAP-Harness orchestration controllers, and build toolchains.
+This configuration guarantees that the GPU can address up to **112.0 GB** of VRAM for model weights and KV caches, leaving **16.0 GB** strictly reserved for the Ubuntu 26 Linux kernel, system daemons, DEAP compiler binaries (`ingest-sysml`, `compile-sysml`, `verify-baseline`, `assemble-conops`, `reconcile-backlog`), and build toolchains.
 
 ### 3.2 Kernel Parameter Configuration (`/etc/default/grub`)
 
@@ -203,30 +210,35 @@ Expected output confirmation:
 
 ## 4. Local Inference Runtimes (Ollama & vLLM on ROCm)
 
-DEAP-Harness supports two primary local inference runtimes on the Strix Halo architecture: **Ollama (Native Systemd Service)** for low-overhead multi-model residency, and **vLLM (ROCm Container/Native)** for high-concurrency batched micro-task execution.
+The DEAP workstation supports two primary local inference runtimes on the Strix Halo architecture: **Ollama (Native Systemd Service)** for low-overhead multi-model residency, and **vLLM (ROCm Container/Native)** for high-concurrency batched micro-task execution.
 
 ```mermaid
 flowchart TD
     subgraph UserSpace["DEAP Multi-Pipeline Architecture"]
-        Harness["DEAP-Harness Execution Engine"]
+        direction TB
+        Harness["DEAP Rust Compiler Workspace<br/>(deap-core & 5 CLI Binaries)"]
     end
 
-    subgraph InferenceOptions["Local Air-Gapped ROCm Runtime Options"]
-        subgraph OptionA["Option A: Ollama Service (Recommended Default)"]
+    subgraph InferenceOptions["Local Air-Gapped ROCm Runtimes"]
+        direction TB
+        subgraph OptionA["Option A: Ollama Service"]
+            direction TB
             OllamaDaemon["Ollama Daemon - Port 11434"]
-            EnvOverride["HSA_OVERRIDE_GFX_VERSION=11.5.0\nOLLAMA_NUM_PARALLEL=4\nOLLAMA_MAX_LOADED_MODELS=2\nOLLAMA_KEEP_ALIVE=24h"]
+            EnvOverride["HSA_OVERRIDE_GFX_VERSION=11.5.0<br/>OLLAMA_NUM_PARALLEL=4<br/>OLLAMA_MAX_LOADED_MODELS=2<br/>OLLAMA_KEEP_ALIVE=24h"]
             OllamaDaemon --- EnvOverride
         end
 
-        subgraph OptionB["Option B: vLLM ROCm Engine (High Batching)"]
+        subgraph OptionB["Option B: vLLM ROCm Engine"]
+            direction TB
             vLLMDaemon["vLLM ROCm Server - Port 8000"]
-            vLLMFlags["--gpu-memory-utilization 0.88\n--max-model-len 32768\nPagedAttention Kernels"]
+            vLLMFlags["--gpu-memory-utilization 0.88<br/>--max-model-len 32768<br/>PagedAttention Kernels"]
             vLLMDaemon --- vLLMFlags
         end
     end
 
     subgraph DriverLayer["ROCm 6.2+ / KFD Driver (/dev/kfd)"]
-        RDNAEngine["RDNA 3.5 40 CU Matrix Engine (112 GB GTT Pool)"]
+        direction TB
+        RDNAEngine["RDNA 3.5 40 CU Matrix Engine<br/>(112 GB GTT Memory Pool)"]
     end
 
     Harness -->|"HTTP / REST API"| OllamaDaemon
@@ -305,33 +317,37 @@ docker run -d \
 | **Primary Advantage** | Seamless dual-model residency (70B + 32B in GGUF format); low idle memory overhead. | Maximum tokens/sec for batched parallel micro-task subagents via PagedAttention. |
 | **Quantization Format** | GGUF (`Q4_K_M`, `Q5_K_M`, `Q8_0`). | AWQ, GPTQ, FP8, Unquantized BF16. |
 | **Setup Complexity** | Zero-container native systemd daemon. | Docker/Podman container with device pass-through. |
-| **Recommended Pipeline Role** | **Standard Turnkey DEAP-Harness Deployment** (Default). | High-Throughput CI/CD Automated Test Matrix Pipelines. |
+| **Recommended Pipeline Role** | **Standard Turnkey DEAP Workstation Deployment** (Default). | High-Throughput CI/CD Automated Test Matrix Pipelines. |
 
 ---
 
 ## 5. Multi-Tier Dual-Engine Selection & Quantization
 
-The DEAP architecture employs a **Multi-Tier Dual-Engine Pattern** governed by the native atomic agent coordination harness (`deap-harness`) to optimize reasoning capability, code precision, and execution speed.
+The DEAP architecture employs a **Multi-Tier Dual-Engine Pattern** governed by the 6 native Cargo workspace crates (`deap-core`, `ingest-sysml`, `compile-sysml`, `verify-baseline`, `assemble-conops`, `reconcile-backlog`) to optimize reasoning capability, code precision, and execution speed.
 
 ```mermaid
 flowchart TD
-    subgraph DualEngineTopology["Multi-Tier Dual-Engine Architecture"]
-        subgraph Tier1["Tier 1: Deep Reasoning Engine (Pipeline 0 - DeepSeek-R1)"]
-            R1["DeepSeek-R1-70B-GGUF (Q4_K_M)\nFootprint: ~43.2 GB | Context: 32k\nRole: STPA, SORA, RTA Invariants, SysML v2\nStreams CoT to .pipeline/diagnostics/cot_audit_log.json"]
+    subgraph DualEngineTopology["Multi-Tier Dual-Engine Topology"]
+        direction TB
+        subgraph Tier1["Tier 1: Deep Reasoning Engine"]
+            direction TB
+            R1["DeepSeek-R1-70B-GGUF (Q4_K_M)<br/>Footprint: 43.2 GB | Ctx: 32k<br/>Role: STPA, SORA, RTA, SysML v2<br/>Streams CoT to .pipeline/"]
         end
 
-        subgraph Tier2["Tier 2: Code Execution Engine (Pipeline 1 & 2 - Qwen-2.5-Coder)"]
-            Coder["Qwen-2.5-Coder-32B-GGUF (Q4_K_M)\nFootprint: ~20.1 GB | Context: 32k\nRole: Agile Projection, Code Synthesis\nConsumes AST Slices <= 4,096 Tokens"]
+        subgraph Tier2["Tier 2: Code Execution Engine"]
+            direction TB
+            Coder["Qwen-2.5-Coder-32B (Q4_K_M)<br/>Footprint: 20.1 GB | Ctx: 32k<br/>Role: Backlog & Code Synthesis<br/>Consumes AST Slices <= 4096 Tok"]
         end
 
-        subgraph Tier3["Tier 3: Rapid Subagent Repair Engine (Hot-Fixes)"]
-            Repair["DeepSeek-R1-14B-GGUF (Q8_0 or Q4_K_M)\nFootprint: ~16.0 GB | Context: 16k\nRole: AST Lint Fixes, Failing Semantic Acceptance Triage"]
+        subgraph Tier3["Tier 3: Subagent Repair Engine"]
+            direction TB
+            Repair["DeepSeek-R1-14B-GGUF (Q8_0)<br/>Footprint: 16.0 GB | Ctx: 16k<br/>Role: AST Lint & Gate Triage"]
         end
     end
 
     P0_Req["Customer Intent / Safety Goals"] --> Tier1
-    Tier1 -->|"pipeline0_handoff_contract.json\n(with raw think CoT trace)"| Tier2
-    Tier2 -->|"Synthesized Artifacts & Acceptance Specs"| TestGate{"Acceptance Gate Pass?"}
+    Tier1 -->|"pipeline0_handoff_contract.json"| Tier2
+    Tier2 -->|"Synthesized Specs & Code"| TestGate{"verify-baseline Pass?"}
     TestGate -- "Pass" --> Release["Verified System Artifacts"]
     TestGate -- "Fail (Micro-Bug)" --> Tier3
     Tier3 -->|"Patched AST / Invariant Fix"| TestGate
@@ -369,25 +385,25 @@ $$
 
 The remaining **48.7 GB** of host RAM is dynamically allocated to:
 1. **Ubuntu 26 Linux Kernel & Daemons**: ~4.0 GB.
-2. **DEAP-Harness Async Controller & State Engine**: ~2.0 GB.
+2. **DEAP Compiler Binaries & Agent State Engine**: ~2.0 GB.
 3. **Compiler Toolchains & Provers (GCC, Clang, GNATprove, Z3 SMT Solver)**: ~16.0 GB.
 4. **Linux Page Cache & In-Memory RAM Disk for Test Harness Artifacts**: ~26.7 GB.
 
 ---
 
-## 6. Complete Production `deap_harness_config.yaml`
+## 6. Complete Production `deap_workstation_config.yaml`
 
 The following configuration file governs local air-gapped execution on the ASUS ProArt Strix Halo workstation:
 
 ```yaml
 # ==============================================================================
-# DEAP Agent Orchestration Harness (DEAP-Harness) Configuration
+# DEAP Local Air-Gapped Workstation & Compiler Configuration
 # Hardware Profile: ASUS ProArt (AMD Ryzen AI Max+ 395 / Strix Halo 128 GB)
 # Target Operating System: Ubuntu 26 (ROCm 6.2+ / GTT 112 GB Dynamic VRAM)
 # ==============================================================================
 
 version: "1.0"
-harness_branding: "DEAP-Harness / Air-Gapped Sovereign Edition"
+workstation_branding: "DEAP Air-Gapped Sovereign Edition"
 
 # ------------------------------------------------------------------------------
 # 1. Local Air-Gapped Inference Providers
@@ -454,6 +470,7 @@ pipeline_routing:
     workers:
       worker_0a_conops:
         output_path: "docs/conops/CONOPS.md"
+        assemble_binary: "./target/release/assemble-conops"
         enforce_schema: true
       worker_0b_stpa_safety:
         output_path: "docs/safety/STPA_MATRIX.md"
@@ -462,9 +479,11 @@ pipeline_routing:
       worker_0c_sysml_author:
         output_model_path: "docs/architecture/blueprints/DEAP_MODEL.sysml"
         output_handoff_contract: "pipeline0_handoff_contract.json"
+        ingest_binary: "./target/release/ingest-sysml"
+        compile_binary: "./target/release/compile-sysml"
         validate_ast_syntax: true
 
-  # Strongly-Typed AST Context Slicing Engine (deap-ast)
+  # Strongly-Typed AST Context Slicing Engine (deap-core::sysml_ast)
   ast_slicing:
     enabled: true
     max_slice_tokens: 4096
@@ -525,13 +544,13 @@ The local workstation architecture provides mathematical proof of regulatory com
 sequenceDiagram
     autonumber
     participant Op as Systems / Safety Engineer
-    participant Harness as DEAP-Harness Orchestrator
+    participant Harness as DEAP Compiler & Agent Orchestrator
     participant R1 as DeepSeek-R1-70B (Tier 1 Reasoning)
     participant Coder as Qwen-2.5-Coder-32B (Tier 2 Synthesis)
     participant Audit as CoT Audit Logger (.pipeline/diagnostics/)
-    participant Gate as Constitutional Quality Gate
+    participant Gate as verify-baseline Quality Gate
 
-    Op->>Harness: deap-harness run --air-gapped --profile ros2_cpp
+    Op->>Harness: compile-sysml . --air-gapped
     Harness->>R1: Dispatch Worker 0B (STPA Hazard & SORA Analysis)
     R1-->>Audit: "Stream <think>...</think> Reasoning Trace"
     R1-->>Harness: Emit STPA Safety Constraints & Invariants (SC-01..80)
@@ -540,7 +559,7 @@ sequenceDiagram
     Coder-->>Harness: Output Agile Backlog & Gherkin Features
     Harness->>Coder: Synthesize TDD Test & C++ Implementation (Pipeline 2)
     Coder-->>Harness: Emits ROS 2 Node & Semantic Acceptance Suite
-    Harness->>Gate: Execute Local Build & Verification Gate
+    Harness->>Gate: Execute ./target/release/verify-baseline .
     Gate-->>Harness: Gate Passed (Exit Code 0)
     Harness-->>Op: Complete Sovereign Delivery & Verified Audit Package
 ```
@@ -601,8 +620,8 @@ rocminfo | grep "gfx1150"
 ### Step 3: Ollama ROCm Systemd Service Deployment
 
 ```bash
-# 1. Install Ollama native binary
-curl -fsSL https://ollama.com/install.sh | sh
+# 1. Install Ollama native package from local air-gapped repository
+sudo apt-get install -y ollama
 
 # 2. Create systemd override directory
 sudo mkdir -p /etc/systemd/system/ollama.service.d
@@ -694,20 +713,23 @@ Expected output includes the detailed `<think> ... </think>` block followed by t
 
 ### Step 7: End-to-End Air-Gapped Pipeline Execution
 
-Run a complete DEAP multi-pipeline synthesis run locally:
+Run a complete DEAP multi-pipeline synthesis and verification sequence locally using the native Rust workspace binaries:
 
 ```bash
-# Execute turnkey Pipeline 0 -> Pipeline 1 -> Pipeline 2 run via native deap-harness binary
-./bin/deap-harness run \
-  --config deap_harness_config.yaml \
-  --schema docs/architecture/blueprints/DEAP_MODEL.sysml \
-  --profile ros2_cpp \
-  --air-gapped
+# 1. Execute Level 0 SysML v2 ingestion and ConOps assembly
+./target/release/ingest-sysml .
+./target/release/assemble-conops .
 
-# Verify generated Chain-of-Thought regulatory audit log
+# 2. Execute SysML v2 AST compilation, sync, and STPA verification
+./target/release/compile-sysml .
+
+# 3. Reconcile Agile backlog specifications and traceability matrices
+./target/release/reconcile-backlog
+
+# 4. Verify generated Chain-of-Thought regulatory audit log
 cat .pipeline/diagnostics/cot_audit_log.json | jq .audit_metadata
 
-# Execute DEAP baseline conformance gate
+# 5. Execute DEAP baseline conformance gate
 ./target/release/verify-baseline . --no-domain
 ```
 
@@ -729,4 +751,4 @@ cat .pipeline/diagnostics/cot_audit_log.json | jq .audit_metadata
 
 1. **Repository Anchoring**: Maintained as an authoritative Tier-1 infrastructure blueprint under `docs/architecture/blueprints/DEAP_LOCAL_AIRGAPPED_DEEPSEEK_WORKSTATION_BLUEPRINT.md` in [`DEAP01-spec-core`](https://github.com/gintatkinson/DEAP01-spec-core).
 2. **Master Sitemap Registration**: Registered in `docs/architecture/DEAP_SPECIFICATIONS_SITEMAP.md` under Section 1 Authoritative Architecture & Blueprint Documents.
-3. **Execution Script Alignment**: Synchronized with the native `deap-harness` binary and modular Cargo workspace crates (`deap-core`, `deap-ast`, `deap-codegen`, `deap-harness`, `deap-cli`) for automated hardware profile detection, AST slicing (<= 4,096 tokens), and GTT memory boundary validation.
+3. **Workspace Crate & Binary Alignment**: Synchronized with the 6 native Cargo workspace crates (`deap-core`, `ingest-sysml`, `compile-sysml`, `verify-baseline`, `assemble-conops`, `reconcile-backlog`) for deterministic SysML v2 AST parsing (`deap-core::sysml_ast::parse_sysml`), AST slicing (<= 4,096 tokens), ConOps assembly, backlog reconciliation, and GTT memory boundary validation.

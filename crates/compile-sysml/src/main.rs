@@ -43,8 +43,8 @@ use compile_sysml::sync::{
     ReverseSyncOptions,
 };
 use compile_sysml::{
-    compute_file_manifest, count_structural_elements, discover_sysml_files, parse_sysml,
-    parse_sysml_tree, SchemaDigest,
+    compute_file_manifest, count_structural_elements, discover_sysml_files, export_mbd_artifacts,
+    parse_sysml, parse_sysml_tree, SchemaDigest,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -125,6 +125,14 @@ struct Cli {
     #[arg(long, value_name = "DIR")]
     extract_source: Option<PathBuf>,
 
+    /// Export grounded MBD verification artifacts (.slreqx, .sfx, .m, layer_contracts.json) to DIR
+    #[arg(long, value_name = "DIR")]
+    export_mbd: Option<PathBuf>,
+
+    /// Slice a target package subsystem AST within a deterministic token budget
+    #[arg(long, value_name = "PACKAGE")]
+    slice_package: Option<String>,
+
     /// Path to documentation directory
     #[arg(long, default_value = "docs/")]
     docs: PathBuf,
@@ -163,8 +171,8 @@ struct Cli {
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Exclusive mode dispatch: exactly one operational branch executes per CLI invocation in priority
-///   order (`--inject-safety-docstrings`, `--extract-source`, `--stpa-transpile`, `--stpa`,
-///   `--forward-sync`, `--reverse-sync`, `--compile`).
+///   order (`--inject-safety-docstrings`, `--extract-source`, `--export-mbd`, `--slice-package`,
+///   `--stpa-transpile`, `--stpa`, `--forward-sync`, `--reverse-sync`, `--compile`).
 /// - Fail-closed termination: any operational error exits immediately with a non-zero status code.
 ///
 /// ## 3. Preconditions
@@ -236,6 +244,55 @@ fn main() {
             Err((code, msg)) => {
                 eprintln!("Error during source extraction: {}", msg);
                 process::exit(code.code());
+            }
+        }
+    }
+
+    // 0c. MBD Artifact Bundle Export
+    if let Some(ref mbd_dir) = cli.export_mbd {
+        let pkg = match load_schema_package_for_cli(cli.schema.clone().or_else(|| cli.file.clone())) {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("{}", e);
+                process::exit(1);
+            }
+        };
+        let model = flatten_package_to_model(pkg, None);
+        match export_mbd_artifacts(&model, mbd_dir) {
+            Ok(written) => {
+                println!(
+                    "[MBD Export] Emitted {} artifact(s) to '{}'",
+                    written.len(),
+                    mbd_dir.display()
+                );
+                process::exit(0);
+            }
+            Err(e) => {
+                eprintln!("Error exporting MBD artifacts: {}", e);
+                process::exit(1);
+            }
+        }
+    }
+
+    // 0d. AST Subsystem Slicing
+    if let Some(ref target_pkg) = cli.slice_package {
+        let pkg = match load_schema_package_for_cli(cli.schema.clone().or_else(|| cli.file.clone())) {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("{}", e);
+                process::exit(1);
+            }
+        };
+        let model = flatten_package_to_model(pkg, Some(target_pkg.as_str()));
+        match model.slice_package_subsystem(target_pkg, 4096) {
+            Ok(slice) => {
+                let json = serde_json::to_string_pretty(&slice).unwrap_or_else(|_| "{}".to_string());
+                println!("{}", json);
+                process::exit(0);
+            }
+            Err(e) => {
+                eprintln!("Error slicing package '{}': {}", target_pkg, e);
+                process::exit(1);
             }
         }
     }
@@ -732,6 +789,103 @@ pub fn resolve_schema_file(explicit_path: Option<PathBuf>) -> Result<PathBuf, St
     }
 }
 
+/// Resolves and parses a single-file or multi-file SysML schema target into a `PackageDef`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Provides a unified, fail-closed schema loader for MBD artifact synthesis (`--export-mbd`)
+/// and package subsystem slicing (`--slice-package`) under DO-330 TQL-4 CLI determinism rules.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Delegates target discovery to `resolve_schema_targets` and parses via `parse_sysml` or `parse_sysml_tree`.
+///
+/// ## 3. Preconditions
+/// - `explicit_path` is an optional user-supplied file or directory path.
+///
+/// ## 4. Postconditions
+/// - Returns `Ok(PackageDef)` upon successful lexical and syntactic parsing, or `Err(String)` on error.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time complexity: $O(N)$ in total schema source byte size.
+/// - Space complexity: $O(N)$ for the parsed `PackageDef` AST.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Propagates missing file, I/O read, and syntax parse errors as descriptive `Err(String)` values.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-COMPILER-SYSML-LOAD-PACKAGE-CLI]
+fn load_schema_package_for_cli(
+    explicit_path: Option<PathBuf>,
+) -> Result<deap_core::sysml_ast::PackageDef, String> {
+    match resolve_schema_targets(explicit_path)? {
+        SchemaTarget::SingleFile(schema_path) => {
+            let content = fs::read_to_string(&schema_path)
+                .map_err(|e| format!("Error reading schema '{}': {}", schema_path.display(), e))?;
+            parse_sysml(&content)
+                .map_err(|e| format!("Error parsing schema '{}': {}", schema_path.display(), e))
+        }
+        SchemaTarget::Directory(dir, files) => parse_sysml_tree(&files)
+            .map_err(|e| format!("Error parsing schema directory '{}': {}", dir.display(), e)),
+    }
+}
+
+/// Converts a `PackageDef` (including nested subpackages) into a consolidated `SysmlModel`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Ensures multi-package SysML v2 models retain all nested `PartDef`, `PortDef`, and
+/// `RequirementDef` declarations when projected into `SysmlModel` for MBD synthesis or slicing.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - If `target_pkg` matches a nested subpackage name, prioritizes that subpackage's `PackageDef`
+///   while preserving cross-package requirements.
+/// - Otherwise merges child subpackage definitions deterministically into the root `PackageDef`
+///   before converting via `SysmlModel::from`.
+///
+/// ## 3. Preconditions
+/// - `pkg` is a parsed `PackageDef`; `target_pkg` is an optional package or part slice target.
+///
+/// ## 4. Postconditions
+/// - Returns a populated `deap_core::sysml_ast::SysmlModel`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time complexity: $O(P + R)$ across all nested packages $P$ and requirements $R$.
+/// - Space complexity: $O(P + R)$ for the consolidated `SysmlModel`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Total function over `PackageDef`; never panics.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-COMPILER-SYSML-FLATTEN-MODEL]
+fn flatten_package_to_model(
+    mut pkg: deap_core::sysml_ast::PackageDef,
+    target_pkg: Option<&str>,
+) -> deap_core::sysml_ast::SysmlModel {
+    if let Some(target) = target_pkg {
+        if let Some(matched_sub) = pkg
+            .packages
+            .iter()
+            .find(|sub| sub.name == target || sub.name.eq_ignore_ascii_case(target))
+            .cloned()
+        {
+            let mut model = deap_core::sysml_ast::SysmlModel::from(matched_sub);
+            for req in pkg.requirement_defs {
+                if !model
+                    .requirements
+                    .iter()
+                    .any(|r| r.name == req.name && r.req_id == req.req_id)
+                {
+                    model.requirements.push(req);
+                }
+            }
+            return model;
+        }
+    }
+    let subpackages = std::mem::take(&mut pkg.packages);
+    for sub in subpackages {
+        compile_sysml::merge_package_defs(&mut pkg, sub);
+    }
+    deap_core::sysml_ast::SysmlModel::from(pkg)
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -750,5 +904,30 @@ mod tests {
         assert!(src.contains("/// Realises: [REQ-COMPILER-SYSML-GATE]"));
         assert!(src.contains("/// Realises: [REQ-COMPILER-SYSML-RESOLVE-TARGETS]"));
         assert!(src.contains("/// Realises: [REQ-COMPILER-SYSML-RESOLVE-FILE]"));
+    }
+
+    #[test]
+    fn test_cli_export_mbd_and_slice_package_flags_and_flatten() {
+        use super::*;
+        let cli = Cli::parse_from(vec![
+            "compile-sysml",
+            "--export-mbd",
+            "out/mbd",
+            "--slice-package",
+            "FlightPkg",
+        ]);
+        assert_eq!(cli.export_mbd, Some(PathBuf::from("out/mbd")));
+        assert_eq!(cli.slice_package.as_deref(), Some("FlightPkg"));
+
+        let pkg = parse_sysml(
+            "package RootPkg { package FlightPkg { part def Autopilot { attribute gain : Real; } } }",
+        )
+        .expect("parse nested pkg");
+        let model = flatten_package_to_model(pkg, Some("FlightPkg"));
+        assert_eq!(model.package_name.as_deref(), Some("FlightPkg"));
+        let slice = model
+            .slice_package_subsystem("FlightPkg", 4096)
+            .expect("slice should succeed");
+        assert_eq!(slice.parts.len(), 1);
     }
 }

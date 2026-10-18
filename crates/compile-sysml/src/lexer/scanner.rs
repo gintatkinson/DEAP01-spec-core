@@ -540,6 +540,7 @@ impl<'a> Scanner<'a> {
     /// ## 7. Realization & Traceability
     /// Realises: [REQ-LEXER-SCANNER-SCANNER-SCAN-IDENT-OR-KEYWORD] | SysML v2: ActionDef(Scanner::scan_ident_or_keyword)
     fn scan_ident_or_keyword(&mut self, start: usize, line: usize, col: usize) -> Result<Token, String> {
+        self.advance();
         while !self.is_at_end() && is_ident_continue(self.peek()) {
             self.advance();
         }
@@ -889,7 +890,7 @@ impl<'a> Scanner<'a> {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-LEXER-SCANNER-IS-IDENT-START] | SysML v2: ActionDef(is_ident_start)
 fn is_ident_start(c: char) -> bool {
-    c.is_ascii_alphabetic() || c == '_'
+    c.is_ascii_alphabetic() || c == '_' || c == '@'
 }
 
 /// Executes deterministic fn `is_ident_continue` within `crates/compile-sysml/src/lexer/scanner.rs`.

@@ -433,6 +433,43 @@ pub fn filter_ast_to_realized_or_allowed(pkg: &mut PackageDef, schema_parts: &Ha
     });
 }
 
+/// Loads or parses and caches an ingested `SysmlModel` using `IncrementalAstCache`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Provides SHA-256 content-addressed incremental AST caching for Level 0 SysML v2 ingestion
+/// under DO-330 TQL-4 determinism and reproducibility mandates.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Cache hit occurs if and only if the persisted `.pipeline/cache/sysml_ast_cache.json` entry
+///   matches the SHA-256 digest of `sysml_source`.
+/// - Returns `(SysmlModel, true)` on a verified cache hit and `(SysmlModel, false)` on a fresh
+///   parse-and-persist cycle.
+///
+/// ## 3. Preconditions
+/// - `repo_root` is a writable workspace directory; `sysml_source` is valid UTF-8 SysML v2 text.
+///
+/// ## 4. Postconditions
+/// - Returns `Ok((SysmlModel, bool))` with the parsed or cached `SysmlModel` and cache-hit flag,
+///   or `Err(String)` if parsing or cache persistence fails.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time complexity: $O(N)$ where $N$ is `sysml_source.len()` for hashing and serialization.
+/// - Space complexity: $O(N)$ proportional to AST node count.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Corrupted cache files are automatically invalidated and recomputed by `IncrementalAstCache`;
+///   filesystem write errors propagate as `Err(String)`.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYSML-INGEST-CACHE-MODEL]
+pub fn cache_ingested_sysml_model(
+    repo_root: &std::path::Path,
+    sysml_source: &str,
+) -> Result<(deap_core::sysml_ast::SysmlModel, bool), String> {
+    let cache = deap_core::sysml_ast::IncrementalAstCache::new(repo_root);
+    cache.load_or_parse(sysml_source)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -517,4 +554,34 @@ mod tests {
         assert!(src.contains("//! ## 7. Realization & Traceability"));
         assert!(src.contains("//! Realises: [REQ-SYSML-INGEST-LIB], [DO-330-TQL-4-INGEST-LIB]"));
     }
+
+    #[test]
+    fn test_cache_ingested_sysml_model_hit_and_invalidation() {
+        let tmp_dir = std::env::temp_dir().join(format!(
+            "deap_ingest_cache_test_{}",
+            std::process::id()
+        ));
+        std::fs::remove_dir_all(&tmp_dir).unwrap_or(());
+        std::fs::create_dir_all(&tmp_dir).expect("temp dir creation");
+
+        let sysml_v1 = "package IngestPkg { part def SensorUnit { attribute rate_hz : Real; } }";
+        let (model_first, hit_first) =
+            cache_ingested_sysml_model(&tmp_dir, sysml_v1).expect("first cache call");
+        assert!(!hit_first);
+        assert_eq!(model_first.parts.len(), 1);
+
+        let (model_second, hit_second) =
+            cache_ingested_sysml_model(&tmp_dir, sysml_v1).expect("second cache call");
+        assert!(hit_second);
+        assert_eq!(model_second, model_first);
+
+        let sysml_v2 = "package IngestPkg { part def SensorUnit { attribute rate_hz : Real; } part def ActuatorUnit {} }";
+        let (model_third, hit_third) =
+            cache_ingested_sysml_model(&tmp_dir, sysml_v2).expect("third cache call after mutation");
+        assert!(!hit_third);
+        assert_eq!(model_third.parts.len(), 2);
+
+        std::fs::remove_dir_all(&tmp_dir).unwrap_or(());
+    }
 }
+

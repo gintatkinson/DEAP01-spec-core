@@ -17,37 +17,40 @@ Instead of writing custom C-UAS screens in Dart, we leverage the exact component
 
 ```mermaid
 flowchart TD
-    subgraph Step0["1. Schema & Rule Ingestion (Rust CLI / FFI)"]
-        RawInputs["Scenario Feeds (CSV / JSON / YAML / YANG / SysML v2)<br/>• Threat Waves, Sensors, Effectors, Consumables, CONOPS/TTPs"]
-        IngestBin["ingest-sysml & compile-sysml<br/>• Lowers to .pipeline/schema.sysml + schema-digest.json"]
+    subgraph Step0["1. Schema Ingestion (Rust CLI)"]
+        direction TB
+        RawInputs["Scenario Feeds (CSV/JSON/SysML)<br/>Threat Waves & Sensors<br/>Effectors & CONOPS Rules"]
+        IngestBin["crates/ingest-sysml &<br/>crates/compile-sysml<br/>Lowers to schema.sysml"]
         RawInputs --> IngestBin
     end
 
-    subgraph SolverCrate["2. Pure-Rust COA Engine (crates/cuas-coa-engine)"]
-        RulePruner["CONOPS / TTP Constraint Pruner<br/>• Enforces 0 Rule Violations (ROE, Sector, Magazine Floor)"]
-        ParetoSolver["3-COA Pareto Optimizer (<60s)<br/>• COA-Alpha (Max Coverage)<br/>• COA-Bravo (Multi-Wave Sustainment)<br/>• COA-Charlie (EW/Sensor Resilience)"]
-        WaveStress["Adversarial Multi-Wave Stress-Tester<br/>• Simulates Wave N+1 / N+2 Swarm & Attrition"]
-        SqliteExporter["Metadata & Layout Hydrator<br/>• Writes properties_db.db.gz & logical-layout.json"]
+    subgraph SolverCrate["2. COA Engine (deap-core)"]
+        direction TB
+        RulePruner["crates/deap-core Rule Pruner<br/>Enforces 0 Rule Violations<br/>ROE, Sector & Magazine Floor"]
+        ParetoSolver["crates/compile-sysml Optimizer<br/>COA-Alpha (Max Coverage)<br/>COA-Bravo (Sustainment)<br/>COA-Charlie (EW Resilience)"]
+        WaveStress["Multi-Wave Stress-Tester<br/>Simulates Wave N+1 / N+2<br/>Swarm & Attrition"]
+        SqliteExporter["Metadata & Layout Hydrator<br/>Writes properties_db.db.gz<br/>& logical-layout.json"]
         IngestBin --> RulePruner
         RulePruner --> ParetoSolver
         ParetoSolver --> WaveStress
         WaveStress --> SqliteExporter
     end
 
-    subgraph FlutterApp["3. Flutter Operator Console (app_flutter/lib/)"]
-        RepoResolver["RepositoryResolver (Zero-Mocking DI)<br/>• SqliteDataSource + GnmiTelemetryClient"]
-        SidebarTree["SidebarTree (lib/features/tree/)<br/>• Protected Assets -> Sectors -> Assigned Sensors/Effectors"]
-        Viewport3D["Cesium3D & TopographicalView (lib/features/map_viewport/ & topology/)<br/>• 3D Threat Ingress Vectors, Sensor Domes & Effector Rings"]
-        CoaTables["TabbedContainer & TableViewWidget (lib/features/tables/)<br/>• Side-by-Side 3-COA Trade-Off & Wave Stress Scorecard"]
-        PropGrid["PropertyGrid & UseCaseActionBar (lib/features/properties/)<br/>• Plain-Language Rationale, Constraint Citations & HITL Approval"]
-        WaveInjector["TelemetryInjectionPanel (lib/features/telemetry/)<br/>• Inject Wave N+1 Shift / Sensor Loss -> <15s Replan"]
+    subgraph FlutterApp["3. Flutter Console (app_flutter)"]
+        direction TB
+        RepoResolver["RepositoryResolver (DI)<br/>SqliteDataSource &<br/>GnmiTelemetryClient"]
+        SidebarTree["SidebarTree (features/tree/)<br/>Assets -> Sectors -> Units"]
+        Viewport3D["Cesium3D & TopographicalView<br/>3D Threat Ingress Vectors<br/>Sensor Domes & Effector Rings"]
+        CoaTables["TabbedContainer & TableView<br/>3-COA Trade-Off &<br/>Wave Stress Scorecard"]
+        PropGrid["PropertyGrid & ActionBar<br/>Plain-Language Rationale &<br/>HITL Approval Gate"]
+        WaveInjector["TelemetryInjectionPanel<br/>Inject Wave N+1 / Sensor Loss<br/>Triggers <15s Replan"]
 
         SqliteExporter --> RepoResolver
         RepoResolver --> SidebarTree
         RepoResolver --> Viewport3D
         RepoResolver --> CoaTables
         RepoResolver --> PropGrid
-        WaveInjector -.->|"Trigger <15s Replan via FFI / gNMI"| RulePruner
+        WaveInjector -.->|"Trigger <15s Replan"| RulePruner
     end
 ```
 
@@ -182,11 +185,10 @@ In `DEAP-profile-flutter-app`, Pipeline 0 assembles `docs/conops/CONOPS.md` and 
 Once your current agent finishes stabilizing the upstream `DEAP01-spec-core` repository, here is the clean sequence to stand up the C-UAS COA downstream repo:
 
 1. **Step 1 -- Upgrade `DEAP-profile-flutter-app` to the Pure-Rust Toolchain:**
-   * Remove the retired Python scripts in `scripts/` and `skills/spec-orchestrator/parity_auditor/`.
-   * Copy the compiled Rust binaries (`verify-baseline`, `ingest-sysml`, `compile-sysml`, `assemble-conops`, `reconcile-backlog`) and updated `AGENTS.md` / `rules/` from `DEAP01-spec-core`.
+   * Synchronize the workspace crates (`crates/deap-core`, `crates/verify-baseline`, `crates/ingest-sysml`, `crates/compile-sysml`, `crates/assemble-conops`, `crates/reconcile-backlog`) and compiled release binaries (`verify-baseline`, `ingest-sysml`, `compile-sysml`, `assemble-conops`, `reconcile-backlog`) along with `AGENTS.md` and `rules/` from `DEAP01-spec-core`.
 
-2. **Step 2 -- Add the `cuas-coa-engine` Rust Crate (or Subcommand):**
-   * Implement the deterministic Pareto solver and multi-wave stress-tester in Rust that reads `.pipeline/schema.sysml` + scenario JSON/CSV feeds and outputs:
+2. **Step 2 -- Extend `crates/deap-core` and `crates/compile-sysml` for C-UAS COA Evaluation:**
+   * Implement the deterministic Pareto solver and multi-wave stress-tester within `crates/deap-core` and `crates/compile-sysml` that reads `.pipeline/schema.sysml` + scenario JSON/CSV feeds and outputs:
      1. The 3 stress-tested COAs (`COA-Alpha`, `COA-Bravo`, `COA-Charlie`) with plain-language rationale and `<!-- Source: ... -->` citations.
      2. Updated `app_flutter/assets/properties_db.db.gz` and `app_flutter/assets/logical-layout.json` (and `topology_data.json` for the 3D/2D sector viewport).
 

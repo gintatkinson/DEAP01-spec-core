@@ -46,24 +46,27 @@ Historically, safety-critical organizations have been trapped in rigid, single-v
 
 ```mermaid
 flowchart TD
-    subgraph Problem_Silos ["Traditional Fragmented Toolchain Silos (High Cost, Manual Translation, Specification Drift)"]
-        Silo_MBD["Proprietary MBD Silo - SCADE / Simulink"]
-        Silo_Formal["Formal Provers Silo - SPARK Ada / SMT"]
-        Silo_Physics["Co-Simulation Silo - Modelica / AADL"]
-        Silo_RTOS["Target Execution Silo - Zephyr / RTEMS / QNX"]
+    subgraph Problem_Silos ["Traditional Fragmented Silos"]
+        direction TB
+        Silo_MBD["Proprietary MBD Silo<br/>(SCADE / Simulink)"]
+        Silo_Formal["Formal Provers Silo<br/>(SPARK Ada / SMT)"]
+        Silo_Physics["Co-Simulation Silo<br/>(Modelica / AADL)"]
+        Silo_RTOS["Target Execution Silo<br/>(Zephyr / RTEMS / QNX)"]
     end
 
-    subgraph DEAP_Solution ["DEAP Abstract MBSE Compiler & Synthesis Orchestrator"]
-        SysML_SSOT["Canonical SysML v2 AST SSOT (".pipeline/schema.sysml")"]
-        Synthesizer["Universal Multi-Backend AST Synthesis Compiler"]
-        Parity_Lock["22-Gate Parity Lock & Mechanical Verification Suite"]
+    subgraph DEAP_Solution ["DEAP Abstract MBSE Compiler"]
+        direction TB
+        SysML_SSOT["Canonical SysML v2 AST SSOT<br/>(.pipeline/schema.sysml)"]
+        Synthesizer["Multi-Backend AST Synthesis<br/>(crates/compile-sysml)"]
+        Parity_Lock["Checks 10..36 Parity Lock<br/>(crates/verify-baseline)"]
     end
 
-    subgraph Synthesized_Ecosystem ["Target Synthesis Tiers (Unified, Zero-Drift, Fully Traceable)"]
-        Tier1["Tier 1: Certified MBD ("SCADE KCG / Simulink Embedded Coder")"]
-        Tier2["Tier 2: Formal Contract & Prover ("SPARK Ada / Ferrocene Rust / nuXmv")"]
-        Tier3["Tier 3: Open Standards & Multi-Physics ("OpenModelica FMI / OSATE AADL")"]
-        Tier4["Tier 4: Target RTOS Frameworks ("Zephyr / RTEMS / QNX / VxWorks / Generic_RTOS_Kernel / ROS 2")"]
+    subgraph Synthesized_Ecosystem ["Target Synthesis Tiers"]
+        direction TB
+        Tier1["Tier 1: Certified MBD<br/>(SCADE KCG / Simulink)"]
+        Tier2["Tier 2: Formal Provers<br/>(SPARK / Ferrocene / nuXmv)"]
+        Tier3["Tier 3: Multi-Physics<br/>(OpenModelica FMI / AADL)"]
+        Tier4["Tier 4: Target RTOS<br/>(Zephyr / RTEMS / QNX / ROS 2)"]
     end
 
     Problem_Silos -.->|"Eliminated by"| DEAP_Solution
@@ -87,22 +90,25 @@ The **Digital Engineering Agentic Pipeline (DEAP)** resolves this fragmentation 
 Rather than binding systems engineering workflows to any single commercial modeling tool, language, or target operating system, DEAP treats the **OMG SysML v2 Abstract Syntax Tree (AST)** (defined in `".pipeline/schema.sysml"`) as the **Universal Front-End Intermediate Representation (IR)**. 
 
 ```mermaid
-flowchart LR
+flowchart TD
     subgraph Frontend_IR ["Universal Front-End IR"]
-        AST_IR["OMG SysML v2 AST Metamodel (Packages, Parts, Items, Actions, States, Ports, Constraints, Tests)"]
+        direction TB
+        AST_IR["OMG SysML v2 AST Metamodel<br/>crates/deap-core/src/sysml_ast.rs"]
     end
 
     subgraph DEAP_Compiler ["DEAP Synthesis Compiler Engine"]
-        Lexer["SysML v2 Parser & Semantic Analyzer"]
-        IR_Transform["AST Transformation & Normalization Pipeline"]
-        Backend_Emit["Multi-Target Backend Code & Model Generators"]
+        direction TB
+        Lexer["SysML v2 Parser & Validator<br/>(crates/compile-sysml)"]
+        IR_Transform["AST Slicing & Normalization<br/>(slice_package_subsystem)"]
+        Backend_Emit["Multi-Target MBD & Code Emit<br/>(synthesize_mbd_bundle)"]
     end
 
     subgraph Backend_Targets ["Multi-Tier Target Backends"]
-        T1_Out["SCADE Lustre AST / Simulink SLX + SLDD"]
-        T2_Out["SPARK Ada Contracts / Ferrocene Rust / SMT Invariants"]
-        T3_Out["Modelica DAE Models / AADL Declarations"]
-        T4_Out["Zephyr Drivers / QNX Partitions / Generic_RTOS_Kernel Modules / ROS 2 Nodes"]
+        direction TB
+        T1_Out["SCADE Lustre AST &<br/>Simulink SLX + SLDD"]
+        T2_Out["SPARK Ada Contracts &<br/>Ferrocene Rust / SMT"]
+        T3_Out["Modelica DAE Models &<br/>AADL Declarations"]
+        T4_Out["Zephyr / QNX / ROS 2 &<br/>Generic_RTOS_Kernel"]
     end
 
     AST_IR --> Lexer
@@ -134,36 +140,38 @@ The DEAP Multi-Toolchain Synthesis Architecture guarantees the following mathema
 
 ### 1.4 Pure Rust Modular Cargo Workspace Architecture, AST Slicing Mechanics & Incremental Caching
 
-To execute deterministic multi-toolchain synthesis without runtime memory hazards, latency jitter, or garbage collection stalls, DEAP organizes its synthesis engine as a modular, pure Rust Cargo workspace:
+To execute deterministic multi-toolchain synthesis without runtime memory hazards, latency jitter, or garbage collection stalls, DEAP organizes its synthesis and verification engine as a modular, 6-crate pure Rust Cargo workspace (`Cargo.toml`):
 
 ```
-deap-compiler/
-├── Cargo.toml                  # Workspace root manifest
+DEAP01-spec-core/
+├── Cargo.toml                  # Workspace root manifest (6-crate topology)
 ├── crates/
-│   ├── deap-core/              # Core primitives, diagnostics, hashing, and configuration
-│   ├── deap-ast/               # SysML v2 AST, grammar parser, slicing engine, incremental cache
-│   ├── deap-codegen/           # Multi-toolchain code synthesis (MBD, SPARK, Rust, FMI, RTOS)
-│   ├── deap-harness/           # Parity validation gates, semantic acceptance tests, simulation drivers
-│   └── deap-cli/               # Unified CLI entrypoint (`deap synthesize`, `deap verify`)
+│   ├── deap-core/              # Canonical SysML v2 AST (`src/sysml_ast.rs`), source AST, diagnostics, and rules
+│   ├── compile-sysml/          # SysML v2 compiler, MBD bundle synthesis (`src/lib.rs`), STPA, and sync (`src/sync/forward.rs`)
+│   ├── ingest-sysml/           # Heterogeneous Level 0 specification AST translators (`src/translators/mod.rs`)
+│   ├── verify-baseline/        # Mechanical verification runner (`src/runner.rs`) and parity/docstring gates (`src/checks/`)
+│   ├── assemble-conops/        # Deterministic ConOps & Mission Intent assembly engine (`src/main.rs`)
+│   └── reconcile-backlog/      # Pure Rust Agile backlog & tracker reconciliation engine (`src/lib.rs`)
 ```
 
-- **`deap-core`**: Defines the shared vocabulary across crates, cryptographic digest generators (SHA-256), and structured diagnostic reporters.
-- **`deap-ast`**: Formal SysML v2 AST definitions, incremental AST parser caching, and strongly-typed topological AST slicing.
-- **`deap-codegen`**: Modular synthesis backends targeting SCADE Lustre, MATLAB Simulink/Stateflow, SPARK Ada contracts, Ferrocene Rust, OpenModelica FMI, and RTOS configurations.
-- **`deap-harness`**: Mechanical verification harness executing closed-world AST checks, MIL/SIL parity tests, and 22 verification gates.
-- **`deap-cli`**: High-performance CLI interface for developers, CI/CD runners, and automated agents.
+- **`crates/deap-core`**: Defines the canonical SysML v2 AST data structures and slicing primitives in `crates/deap-core/src/sysml_ast.rs` (`SysmlModel`, `PackageDef`, `PartDef`, `PortDef`, `ActionDef`, `StateDef`, `ConstraintDef`, `RequirementDef`, `AstSlice`, `SysmlModel::slice_package_subsystem`, `IncrementalAstCache`, `TypeDescriptor`, `FieldDescriptor`), source AST extraction (`crates/deap-core/src/source_ast.rs`), Markdown/Mermaid/KaTeX verifiers (`crates/deap-core/src/markdown.rs`), and structured diagnostic dossiers (`crates/deap-core/src/diagnostics.rs`).
+- **`crates/compile-sysml`**: Provides the SysML v2 / KerML compiler, cryptographic `SchemaDigest` generator, and MBD / 3-Layer contract synthesis engine in `crates/compile-sysml/src/lib.rs` (`MbdExportBundle`, `synthesize_mbd_bundle`, `export_mbd_artifacts`), forward specification synchronization in `crates/compile-sysml/src/sync/forward.rs`, and the CLI entrypoint in `crates/compile-sysml/src/main.rs` (`--compile`, `--slice-package <pkg>`, `--export-mbd <dir>`, `--stpa-transpile`, `--forward-sync`, `--reverse-sync`, `--inject-safety-docstrings`, `--extract-source`).
+- **`crates/ingest-sysml`**: Provides heterogeneous Level 0 specification AST translators in `crates/ingest-sysml/src/translators/mod.rs` (`idl`, `markdown`, `openapi`, `yang`, `code`) that lower external schemas into canonical SysML v2 AST models.
+- **`crates/verify-baseline`**: Orchestrates mechanical baseline and parity verification in `crates/verify-baseline/src/runner.rs` across `crates/verify-baseline/src/checks/structural.rs`, `crates/verify-baseline/src/checks/parity_gates.rs`, and `crates/verify-baseline/src/checks/docstring_gate.rs` (Checks 10 through 36).
+- **`crates/assemble-conops`**: Executes deterministic Concept of Operations (`CONOPS.md`) and Tactical Mission Intent (`MISSION_INTENT.md`) assembly and verification via `crates/assemble-conops/src/main.rs`.
+- **`crates/reconcile-backlog`**: Synchronizes local Epics, Features, User Stories, Use Cases, and WBS checklists with the remote issue tracker via `crates/reconcile-backlog/src/lib.rs`.
 
 #### Strongly-Typed AST Slicing Mechanics (<= 4,096 Tokens)
-Autonomous AI code generation subagents require focused, context-isolated inputs to eliminate context saturation and prevent cross-boundary hallucinations. The `deap-ast` slicing engine provides:
-1. **Topological Subgraph Partitioning:** Decomposes the monolithic `SemanticGraphDAG` into targeted slices focused on a single subsystem, port boundary, or statechart.
+Autonomous AI code generation subagents require focused, context-isolated inputs to eliminate context saturation and prevent cross-boundary hallucinations. The AST slicing engine in `crates/deap-core/src/sysml_ast.rs` (`SysmlModel::slice_package_subsystem` returning `AstSlice`, invoked via `./target/release/compile-sysml --slice-package <pkg>` in `crates/compile-sysml/src/main.rs`) provides:
+1. **Topological Subgraph Partitioning:** `SysmlModel::slice_package_subsystem` decomposes the canonical `SysmlModel` / `PackageDef` hierarchy into a targeted `AstSlice` focused on a single subsystem package, port boundary, or statechart.
 2. **Strict Context Budget (<= 4,096 tokens):** Calculates the exact token footprint of serialized AST nodes. Slices exceeding 4,096 tokens are recursively partitioned along interface boundaries.
-3. **Interface Stubbing:** Slices replace out-of-scope model entities with typed interface contracts and port stubs, ensuring each slice is syntactically and semantically self-contained.
+3. **Interface Stubbing & Typed Descriptors:** Slices project boundary types through `TypeDescriptor` and `FieldDescriptor` in `crates/deap-core/src/sysml_ast.rs`, replacing out-of-scope model entities with typed interface contracts and port stubs so each slice is syntactically and semantically self-contained.
 
-#### Incremental AST Parser Caching
-To accelerate multi-toolchain synthesis across incremental model revisions:
-1. **Content-Hash Keying:** Input schemas are indexed by SHA-256 content hashes in `.pipeline/cache/ast/<sha256>.bin`.
-2. **Sub-Millisecond Deserialization:** Pre-parsed AST DAGs are loaded via zero-copy bincode deserialization, bypassing the lexical and grammar parser when source files are unmodified.
-3. **Topological Invalidation:** Only modified packages and their transitive dependents in the DAG trigger re-synthesis, preserving downstream artifact stability.
+#### Incremental AST Parser Caching & MBD Contract Synthesis
+To accelerate multi-toolchain synthesis across incremental model revisions and emit deterministic 3-Layer MBD contracts:
+1. **Content-Hash Keying (`IncrementalAstCache`):** Input schemas are indexed by SHA-256 content hashes via `IncrementalAstCache` in `crates/deap-core/src/sysml_ast.rs` and `SchemaDigest` in `crates/compile-sysml/src/lib.rs` (persisted to `.pipeline/schema-digest.json` and `.pipeline/cache/ast/<sha256>.bin`).
+2. **Sub-Millisecond Deserialization:** Pre-parsed AST models are loaded via deterministic deserialization, bypassing lexical and grammar parsing when source files in the `FileDigestEntry` manifest are unmodified.
+3. **MBD & 3-Layer Contract Synthesis (`MbdExportBundle`):** `synthesize_mbd_bundle` and `export_mbd_artifacts` in `crates/compile-sysml/src/lib.rs` (invoked via `./target/release/compile-sysml --export-mbd <dir>` in `crates/compile-sysml/src/main.rs` alongside `crates/compile-sysml/src/sync/forward.rs`) deterministically synthesize `MbdExportBundle` artifacts across (1) Domain State & Data Models (`TypeDescriptor`, `FieldDescriptor`), (2) Logic & State Management (`state def`, `action def`, `calc def`), and (3) Presentation & Actuator Interface Bindings (`port def`, `connection def`).
 
 #### Dual-LLM Air-Gapped Agent Dispatch Protocol
 To guarantee mathematical determinism, total intellectual property containment, and complete immunity to cloud rate-limiting or content censorship, DEAP utilizes a dual-LLM air-gapped agent dispatch architecture:
@@ -173,8 +181,8 @@ To guarantee mathematical determinism, total intellectual property containment, 
    - Never generates raw code directly; outputs verified formal derivations and boundary assertions.
 2. **Execution Slot (Qwen-2.5-Coder)**:
    - High-throughput deterministic code and specification synthesis model.
-   - Ingests verified reasoning derivations from the CoT audit log along with the strongly-typed AST slice (<= 4,096 tokens).
-   - Generates verified multi-toolchain synthesis artifacts across MBD, formal contracts, and RTOS configurations.
+   - Ingests verified reasoning derivations from the CoT audit log along with the strongly-typed `AstSlice` (`<= 4,096` tokens) produced by `SysmlModel::slice_package_subsystem`.
+   - Generates verified multi-toolchain synthesis artifacts across MBD (`MbdExportBundle`), formal contracts, and RTOS configurations.
 
 ---
 
@@ -187,34 +195,39 @@ The DEAP multi-toolchain synthesis ecosystem categorizes target engineering tool
 ```mermaid
 flowchart TD
     subgraph SSOT ["Universal Source of Truth"]
-        SysML["SysML v2 AST SSOT (".pipeline/schema.sysml")"]
-        Digest["Cryptographic Parity Digest (".pipeline/schema-digest.json")"]
+        direction TB
+        SysML["SysML v2 AST SSOT<br/>(.pipeline/schema.sysml)"]
+        Digest["Cryptographic Parity Digest<br/>(.pipeline/schema-digest.json)"]
     end
 
-    subgraph Tier1 ["Tier 1: Certified Model-Based Design (MBD) & Code Generation"]
-        T1_SCADE["ANSYS SCADE Suite ("KCG Qualifiable Code Generator / SCADE Display ARINC 661")"]
-        T1_MATLAB["MathWorks MATLAB / Simulink / Stateflow / Embedded Coder / SLDV"]
+    subgraph Tier1 ["Tier 1: Certified MBD & Codegen"]
+        direction TB
+        T1_SCADE["ANSYS SCADE Suite<br/>(KCG / SCADE Display ARINC 661)"]
+        T1_MATLAB["MathWorks MATLAB / Simulink<br/>(Stateflow / Embedded Coder)"]
     end
 
-    subgraph Tier2 ["Tier 2: Formal Contract & Prover Ecosystems"]
-        T2_SPARK["AdaCore SPARK Ada 2014 / GNAT Pro (AoRTE Prover Engine)"]
-        T2_RUST["High-Assurance Rust ("Ferrocene ISO 26262 ASIL D / Kani Verifier")"]
-        T2_CHECKERS["Model Checkers & SMT Solvers ("nuXmv / UPPAAL / CBMC / Z3 / CVC5")"]
+    subgraph Tier2 ["Tier 2: Formal Contract & Provers"]
+        direction TB
+        T2_SPARK["AdaCore SPARK Ada 2014<br/>(GNAT Pro AoRTE Prover)"]
+        T2_RUST["High-Assurance Rust<br/>(Ferrocene ASIL D / Kani)"]
+        T2_CHECKERS["Model Checkers & SMT Solvers<br/>(nuXmv / UPPAAL / CBMC / Z3)"]
     end
 
-    subgraph Tier3 ["Tier 3: Open Standards, Multi-Physics & Architectural Co-Simulation"]
-        T3_FMI["OpenModelica & FMI 2.0/3.0 (Functional Mock-up Units ME & CS)"]
-        T3_AADL["OSATE & AADL SAE AS5506 (ARINC 653 Schedulability & Partitioning)"]
+    subgraph Tier3 ["Tier 3: Multi-Physics & Co-Sim"]
+        direction TB
+        T3_FMI["OpenModelica & FMI 2.0/3.0<br/>(FMU Model Exchange & Co-Sim)"]
+        T3_AADL["OSATE & AADL SAE AS5506<br/>(ARINC 653 Schedulability)"]
     end
 
-    subgraph Tier4 ["Tier 4: Target Real-Time Execution Frameworks & RTOS Platforms"]
-        T4_ZEPHYR["Zephyr RTOS ("MPU Partitioning / Devicetree")"]
-        T4_RTEMS["RTEMS (Space-Qualified Deterministic SMP POSIX)"]
-        T4_QNX["QNX Neutrino ("ASIL D / High-Assurance Microkernel")"]
-        T4_VXWORKS["Wind River VxWorks 653 (ARINC 653 Multi-Core DAL A)"]
-        T4_ROS2["ROS 2 Real-Time (DDS Middleware and Micro-ROS)"]
-        T4_PX4["Generic_RTOS_Kernel ("Deterministic Task Scheduling")"]
-        T4_CFS["Deterministic Separation Microkernel ("POSIX PSE51 Partitioning")"]
+    subgraph Tier4 ["Tier 4: Target RTOS Platforms"]
+        direction TB
+        T4_ZEPHYR["Zephyr RTOS<br/>(MPU Partitioning / Devicetree)"]
+        T4_RTEMS["RTEMS Space RTOS<br/>(Deterministic SMP POSIX)"]
+        T4_QNX["QNX Neutrino<br/>(ASIL D Microkernel)"]
+        T4_VXWORKS["Wind River VxWorks 653<br/>(ARINC 653 Multi-Core DAL A)"]
+        T4_ROS2["ROS 2 Real-Time<br/>(DDS Middleware & Micro-ROS)"]
+        T4_PX4["Generic_RTOS_Kernel<br/>(Deterministic Task Scheduling)"]
+        T4_CFS["Separation Microkernel<br/>(POSIX PSE51 Partitioning)"]
     end
 
     SysML --> Tier1
@@ -242,27 +255,30 @@ flowchart TD
 Tier 1 encompasses industry-standard, certifiable Model-Based Design environments with qualifiable automatic code generation and formal property checking.
 
 ```mermaid
-flowchart LR
+flowchart TD
     subgraph SysML_Frontend ["SysML v2 AST Input"]
+        direction TB
         SysML_Parts["part def & item def"]
         SysML_States["state def & action def"]
-        SysML_Ports["port def ("in / out")"]
+        SysML_Ports["port def (in / out)"]
         SysML_Constraints["assert constraint & req def"]
     end
 
     subgraph Tier1_SCADE ["ANSYS SCADE Suite Toolchain"]
-        SCADE_Lustre["SCADE Synchronous Dataflow (Lustre AST)"]
-        SCADE_KCG["SCADE KCG Code Generator (DO-330 TQL-1 Qualified)"]
-        SCADE_Display["SCADE Display (ARINC 661 Server DF & Client UA)"]
-        SCADE_Out["Certified DO-178C DAL A C/Ada Source"]
+        direction TB
+        SCADE_Lustre["SCADE Synchronous Dataflow<br/>(Lustre AST)"]
+        SCADE_KCG["SCADE KCG Code Generator<br/>(DO-330 TQL-1 Qualified)"]
+        SCADE_Display["SCADE Display<br/>(ARINC 661 Server DF & UA)"]
+        SCADE_Out["Certified DO-178C DAL A<br/>C / Ada Source"]
     end
 
-    subgraph Tier1_Simulink ["MathWorks MATLAB / Simulink Toolchain"]
-        SL_Subsystems["Simulink Subsystem Hierarchy & Bus Objects"]
-        SF_Charts["Stateflow Discrete Statecharts & Truth Tables"]
-        SLDV_Prover["Simulink Design Verifier (SLDV Prover Engine)"]
-        EC_Coder["Embedded Coder (DO-330 TQL-5 Qualification Kit)"]
-        SL_Out["MISRA C:2012 / C++ Source & SLDV Proof Reports"]
+    subgraph Tier1_Simulink ["MathWorks MATLAB / Simulink"]
+        direction TB
+        SL_Subsystems["Simulink Subsystem Hierarchy<br/>& Bus Objects"]
+        SF_Charts["Stateflow Discrete Statecharts<br/>& Truth Tables"]
+        SLDV_Prover["Simulink Design Verifier<br/>(SLDV Prover Engine)"]
+        EC_Coder["Embedded Coder<br/>(DO-330 TQL-5 Kit)"]
+        SL_Out["MISRA C:2012 / C++ Source<br/>& SLDV Proof Reports"]
     end
 
     SysML_Parts --> SCADE_Lustre
@@ -351,6 +367,8 @@ SLDV uses automated formal methods (powered by the Prover Technology proof engin
 
 ### 3.4 SysML v2 to Tier-1 MBD Transformation Rules
 
+In `crates/compile-sysml/src/lib.rs`, `synthesize_mbd_bundle` and `export_mbd_artifacts` (invoked via `./target/release/compile-sysml --export-mbd <dir>` in `crates/compile-sysml/src/main.rs`) lower `SysmlModel` / `PackageDef` AST nodes (`TypeDescriptor`, `FieldDescriptor` in `crates/deap-core/src/sysml_ast.rs`) into an `MbdExportBundle` containing Tier-1 MBD artifacts:
+
 ```sysml
 /* Canonical SysML v2 Input */
 package CyberPhysicalSystemControl {
@@ -407,29 +425,34 @@ Tier 2 provides mathematically provable assurance through deductive formal contr
 ```mermaid
 flowchart TD
     subgraph SysML_Formal_Front ["Formal SysML v2 Invariants"]
-        Contracts["Preconditions, Postconditions, Frame Conditions"]
-        Temporal_Reqs["Temporal Logic Constraints ("LTL / CTL")"]
-        FSM_Models["Finite & Timed Automata Models"]
+        direction TB
+        Contracts["Preconditions, Postconditions<br/>& Frame Conditions"]
+        Temporal_Reqs["Temporal Logic Constraints<br/>(LTL / CTL)"]
+        FSM_Models["Finite & Timed<br/>Automata Models"]
     end
 
     subgraph Tier2_Backends ["Tier 2 Formal Verification Engines"]
+        direction TB
         subgraph SPARK_Ecosystem ["AdaCore SPARK Ada 2014"]
-            GNATprove["GNATprove Flow & Proof Engine"]
-            Why3["Why3 Intermediate Platform"]
-            SMT_Solvers["Alt-Ergo / CVC5 / Z3 Solvers"]
-            AoRTE_Proof["Absence of Run-Time Errors Proof (AoRTE)"]
+            direction TB
+            GNATprove["GNATprove Flow &<br/>Proof Engine"]
+            Why3["Why3 Intermediate<br/>Verification Platform"]
+            SMT_Solvers["Alt-Ergo / CVC5 /<br/>Z3 SMT Solvers"]
+            AoRTE_Proof["Absence of Run-Time<br/>Errors Proof (AoRTE)"]
         end
 
         subgraph Rust_Ecosystem ["High-Assurance Rust"]
-            Ferrocene["Ferrocene ISO 26262 ASIL D Toolchain"]
-            Kani["Kani Rust Model Checker (CBMC Backend)"]
-            Rust_Proof["Panic-Free & Invariant Verification"]
+            direction TB
+            Ferrocene["Ferrocene ISO 26262<br/>ASIL D Toolchain"]
+            Kani["Kani Rust Model Checker<br/>(CBMC Backend)"]
+            Rust_Proof["Panic-Free & Invariant<br/>Verification"]
         end
 
         subgraph Model_Checkers ["Symbolic Model Checkers"]
-            nuXmv["nuXmv ("BDD / SAT / SMT LTL Model Checking")"]
-            UPPAAL["UPPAAL (Timed Automata Real-Time Schedulability)"]
-            CBMC["CBMC (Bounded Model Checking for C Code)"]
+            direction TB
+            nuXmv["nuXmv (BDD / SAT /<br/>SMT LTL Checking)"]
+            UPPAAL["UPPAAL Timed Automata<br/>Schedulability"]
+            CBMC["CBMC Bounded Model<br/>Checking for C"]
         end
     end
 
@@ -549,25 +572,29 @@ Tier 3 bridges discrete cyber control software with continuous multi-physics pla
 
 ```mermaid
 flowchart TD
-    subgraph SysML_Arch_Front ["System Architecture & Physics Definitions"]
-        SysML_Physics["Multi-Physics Differential Algebraic Equations (DAEs)"]
-        SysML_Compute["Processing Topology, Threads & Partitions"]
-        SysML_Buses["Communication Buses (AFDX, CAN, Ethernet)"]
+    subgraph SysML_Arch_Front ["System Architecture & Physics"]
+        direction TB
+        SysML_Physics["Multi-Physics Differential<br/>Algebraic Equations (DAEs)"]
+        SysML_Compute["Processing Topology,<br/>Threads & Partitions"]
+        SysML_Buses["Communication Buses<br/>(AFDX, CAN, Ethernet)"]
     end
 
-    subgraph Tier3_CoSim ["Tier 3 Multi-Physics & Architectural Analysis"]
+    subgraph Tier3_CoSim ["Tier 3 Multi-Physics & Analysis"]
+        direction TB
         subgraph FMI_Modelica ["OpenModelica & FMI 2.0 / 3.0"]
-            Modelica_DAE["Modelica Continuous Plant Models"]
-            FMU_ME["Functional Mock-up Unit: Model Exchange (ME)"]
-            FMU_CS["Functional Mock-up Unit: Co-Simulation (CS)"]
-            Master_Sim["FMI Co-Simulation Master Engine"]
+            direction TB
+            Modelica_DAE["Modelica Continuous<br/>Plant Models"]
+            FMU_ME["Functional Mock-up Unit:<br/>Model Exchange (ME)"]
+            FMU_CS["Functional Mock-up Unit:<br/>Co-Simulation (CS)"]
+            Master_Sim["FMI Co-Simulation<br/>Master Engine"]
         end
 
         subgraph AADL_OSATE ["OSATE & AADL (SAE AS5506D)"]
-            AADL_Arch["AADL System / Memory / Processor Components"]
-            ARINC653_Sched["ARINC 653 Major Frame & Partition Schedules"]
-            Latency_Analysis["End-to-End Latency & Bus Schedulability"]
-            RMA_EDF["RMA / EDF Schedulability Verifier"]
+            direction TB
+            AADL_Arch["AADL System / Memory /<br/>Processor Components"]
+            ARINC653_Sched["ARINC 653 Major Frame<br/>& Partition Schedules"]
+            Latency_Analysis["End-to-End Latency &<br/>Bus Schedulability"]
+            RMA_EDF["RMA / EDF<br/>Schedulability Verifier"]
         end
     end
 
@@ -660,20 +687,22 @@ Tier 4 maps synthesized control algorithms, data contracts, and formal statechar
 ```mermaid
 flowchart TD
     subgraph SysML_Execution_Front ["SysML v2 Abstract Real-Time Model"]
-        Tasks["Periodic & Aperiodic Action Tasks"]
-        State_Supervisors["Discrete Statechart Supervisors"]
-        IPC_Ports["Typed IPC Ports & Queues"]
-        Memory_Bounds["Static Memory Pools & Allocations"]
+        direction TB
+        Tasks["Periodic & Aperiodic<br/>Action Tasks"]
+        State_Supervisors["Discrete Statechart<br/>Supervisors"]
+        IPC_Ports["Typed IPC Ports<br/>& Queues"]
+        Memory_Bounds["Static Memory Pools<br/>& Allocations"]
     end
 
     subgraph Tier4_Targets ["Tier 4 Target Execution Platforms"]
-        T4_Zephyr["Zephyr RTOS (MPU Partitioning and Kconfig)"]
-        T4_RTEMS["RTEMS Space RTOS (Deterministic SMP POSIX)"]
-        T4_QNX["QNX Neutrino (Microkernel ASIL D IPC)"]
-        T4_VxWorks["VxWorks 653 (ARINC 653 Multi-Core)"]
-        T4_ROS2["ROS 2 Real-Time (DDS Middleware and Micro-ROS)"]
-        T4_Kernel["Generic_RTOS_Kernel (Deterministic Task Scheduling)"]
-        T4_Micro["Deterministic Separation Microkernel (POSIX PSE51 Partitioning)"]
+        direction TB
+        T4_Zephyr["Zephyr RTOS<br/>(MPU Partitioning & Kconfig)"]
+        T4_RTEMS["RTEMS Space RTOS<br/>(Deterministic SMP POSIX)"]
+        T4_QNX["QNX Neutrino<br/>(Microkernel ASIL D IPC)"]
+        T4_VxWorks["VxWorks 653<br/>(ARINC 653 Multi-Core)"]
+        T4_ROS2["ROS 2 Real-Time<br/>(DDS Middleware & Micro-ROS)"]
+        T4_Kernel["Generic_RTOS_Kernel<br/>(Deterministic Task Scheduling)"]
+        T4_Micro["Separation Microkernel<br/>(POSIX PSE51 Partitioning)"]
     end
 
     Tasks --> T4_Zephyr
@@ -751,26 +780,29 @@ flowchart TD
 Deploying multi-toolchain synthesis across regulated industries requires strict compliance with international software safety standards and tool qualification frameworks.
 
 ```mermaid
-flowchart LR
+flowchart TD
     subgraph Regulatory_Domains ["Universal Regulatory Standards"]
-        Aero["Aerospace: RTCA DO-178C / DO-330 / DO-331 / DO-333"]
-        Auto["Automotive: ISO 26262:2018 (ASIL A - D)"]
-        Med["High-Assurance Automation: AssuranceLevel::Tier1..5"]
-        Rail["Rail: EN 50128:2011 / EN 50657 (SIL 1 - 4)"]
-        Ind["Industrial: IEC 61508:2010 (SIL 1 - 4)"]
+        direction TB
+        Aero["Aerospace: RTCA DO-178C /<br/>DO-330 / DO-331 / DO-333"]
+        Auto["Automotive: ISO 26262:2018<br/>(ASIL A - D)"]
+        Med["High-Assurance Automation:<br/>AssuranceLevel::Tier1..5"]
+        Rail["Rail: EN 50128:2011 /<br/>EN 50657 (SIL 1 - 4)"]
+        Ind["Industrial: IEC 61508:2010<br/>(SIL 1 - 4)"]
     end
 
-    subgraph DEAP_Qual_Engine ["DEAP Automated Qualification Engine"]
-        TOR["Tool Operational Requirements (TOR) Synthesis"]
-        TQP["Tool Qualification Plan (TQP) Generator"]
-        TVR["Tool Verification Results (TVR) & Coverage Audit"]
-        TCR["Tool Conformity Review (TCR) Artifact Package"]
+    subgraph DEAP_Qual_Engine ["DEAP Qualification Engine"]
+        direction TB
+        TOR["Tool Operational Requirements<br/>(TOR) Synthesis"]
+        TQP["Tool Qualification Plan<br/>(TQP) Generator"]
+        TVR["Tool Verification Results<br/>(TVR) & Coverage Audit"]
+        TCR["Tool Conformity Review<br/>(TCR) Artifact Package"]
     end
 
-    subgraph Qualification_Levels ["Harmonized Tool Qualification Tiers"]
-        TQL1["TQL-1 / TCL-3 / SIL 4 (Code Generators without target verification)"]
-        TQL2["TQL-2 / TCL-2 / SIL 3 (Tools whose failure impacts verification)"]
-        TQL5["TQL-5 / TCL-1 / SIL 1-2 (Verification & Analysis Tools)"]
+    subgraph Qualification_Levels ["Harmonized Qualification Tiers"]
+        direction TB
+        TQL1["TQL-1 / TCL-3 / SIL 4<br/>(Qualified Code Generators)"]
+        TQL2["TQL-2 / TCL-2 / SIL 3<br/>(High-Impact Verifiers)"]
+        TQL5["TQL-5 / TCL-1 / SIL 1-2<br/>(Verification & Analysis)"]
     end
 
     Aero --> DEAP_Qual_Engine
@@ -839,18 +871,20 @@ To enforce strict, deterministic synthesis rules across downstream repositories,
 ```mermaid
 flowchart TD
     subgraph Profile_Standard ["Profile Specification Standard"]
-        YAML_Header["YAML Frontmatter (Metadata, Standards, Constraints)"]
-        Comp_Config["Compiler & Toolchain Configuration Directives"]
-        Mem_Rules["Memory Allocation & Concurrency Invariants"]
-        Static_Rules["Static Analysis & Linter Rule Sets"]
-        Proof_Hooks["Formal Verification & Proof Harness Bindings"]
+        direction TB
+        YAML_Header["YAML Frontmatter<br/>(Metadata & Constraints)"]
+        Comp_Config["Compiler & Toolchain<br/>Configuration Directives"]
+        Mem_Rules["Memory Allocation &<br/>Concurrency Invariants"]
+        Static_Rules["Static Analysis &<br/>Linter Rule Sets"]
+        Proof_Hooks["Formal Verification &<br/>Proof Harness Bindings"]
     end
 
     subgraph Concrete_Profiles ["Standardized Platform Profiles"]
-        P_SCADE["scade_c.md (ANSYS SCADE KCG Profile)"]
-        P_SPARK["spark_ada.md (AdaCore SPARK Ada 2014 Profile)"]
-        P_FERROCENE["ferrocene_rust.md (Ferrocene ASIL D Rust Profile)"]
-        P_FMI["modelica_fmi.md (OpenModelica FMI Profile)"]
+        direction TB
+        P_SCADE["scade_c.md<br/>(ANSYS SCADE KCG Profile)"]
+        P_SPARK["spark_ada.md<br/>(SPARK Ada 2014 Profile)"]
+        P_FERROCENE["ferrocene_rust.md<br/>(Ferrocene ASIL D Profile)"]
+        P_FMI["modelica_fmi.md<br/>(OpenModelica FMI Profile)"]
     end
 
     Profile_Standard --> P_SCADE
@@ -987,4 +1021,4 @@ status: "PRODUCTION-GRADE"
 
 ## Section 9: Architectural Summary & Verification Parity Gate
 
-The **DEAP Multi-Toolchain Synthesis & Formal Verification Architecture** bridges abstract systems engineering with concrete execution and formal proof ecosystems. By establishing the **OMG SysML v2 AST** as the immutable intermediate representation and governing transformations through rigorous platform profiles and mechanical verification gates, DEAP guarantees absolute specification-model-code parity across the entire safety-critical lifecycle.
+The **DEAP Multi-Toolchain Synthesis & Formal Verification Architecture** bridges abstract systems engineering with concrete execution and formal proof ecosystems. By establishing the **OMG SysML v2 AST** (`crates/deap-core/src/sysml_ast.rs`) as the immutable intermediate representation and governing transformations through rigorous platform profiles (`.pipeline/profiles/*.md`), native Rust compilation (`./target/release/compile-sysml --compile`, `--slice-package <pkg>`, `--export-mbd <dir>`), Level 0 ingestion (`./target/release/ingest-sysml`), ConOps assembly (`./target/release/assemble-conops`), backlog reconciliation (`./target/release/reconcile-backlog`), and mechanical verification gates (`./target/release/verify-baseline . --no-domain` in `crates/verify-baseline/src/runner.rs`), DEAP guarantees absolute specification-model-code parity across the entire safety-critical lifecycle.

@@ -74,7 +74,8 @@ use ingest_sysml::translators::{
     openapi::OpenAPITranslator, yang::YangTranslator,
 };
 use ingest_sysml::{
-    collect_declared_part_names, filter_ast_to_realized_or_allowed, filter_ast_to_target_scope,
+    cache_ingested_sysml_model, collect_declared_part_names, filter_ast_to_realized_or_allowed,
+    filter_ast_to_target_scope,
 };
 
 /// Ground 0.0 SysML v2 Universal Ingestion Engine Command-Line Arguments.
@@ -140,6 +141,10 @@ pub struct CliArgs {
     /// Comma-separated list of entities to assert negative exclusion for (!exists(...))
     #[arg(long)]
     pub negative_invariants: Option<String>,
+
+    /// Populate or validate the SHA-256 incremental AST cache (.pipeline/cache/sysml_ast_cache.json)
+    #[arg(long)]
+    pub cache_ast: bool,
 }
 
 /// Derives a deterministic SysML v2 package identifier for an ingested source directory or explicit override.
@@ -461,5 +466,24 @@ pub fn run_ingestion(args: CliArgs) -> Result<(), String> {
         args.digest.display()
     );
 
+    if args.cache_ast {
+        let (_cached_model, cache_hit) = cache_ingested_sysml_model(Path::new("."), &sysml_text)?;
+        println!(
+            "[SysML v2 Ingestion] Incremental AST cache updated (cache_hit={})",
+            cache_hit
+        );
+    }
+
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_cli_cache_ast_flag() {
+        let parsed = CliArgs::parse_from(vec!["ingest-sysml", "--cache-ast"]);
+        assert!(parsed.cache_ast);
+    }
 }

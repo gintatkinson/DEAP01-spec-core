@@ -494,6 +494,288 @@ impl MasterBlueprintsCatalog {
     }
 }
 
+/// Typed enumeration of the 12 canonical architecture blueprint filenames under `docs/architecture/blueprints/`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for enum `CanonicalArchitectureBlueprint` in `crates/deap-core/src/rules.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Bijective 12-variant mapping between each `CanonicalArchitectureBlueprint` variant and its canonical markdown filename under `docs/architecture/blueprints/`.
+///
+/// ## 3. Preconditions
+/// - Caller selects or iterates over one of the 12 compile-time `CanonicalArchitectureBlueprint` variants.
+///
+/// ## 4. Postconditions
+/// - Projects each `CanonicalArchitectureBlueprint` variant to its exact `.md` blueprint filename without runtime allocation or untyped string-slice tables.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1) per variant projection and O(12) across `CanonicalArchitectureBlueprint::ALL`.
+/// - Space Complexity: O(1) static compile-time storage.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Exhaustive `match` arms enforce compile-time coverage across all 12 architecture blueprints.
+/// - State: Stateless value enum (`Copy`, `Eq`, `Hash`).
+/// - Action: Deterministic projection with zero panics.
+/// - Resource: Zero heap allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [deap_core::rules::CanonicalArchitectureBlueprint] | SysML v2: PartDef(CanonicalArchitectureBlueprint)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum CanonicalArchitectureBlueprint {
+    /// `"DEAP_SYSML_V2_INGESTION_ENGINE_BLUEPRINT.md"` -- SysML v2 ingestion engine blueprint.
+    DeapSysmlV2IngestionEngineBlueprint,
+    /// `"SYSML_SSOT_BIDIRECTIONAL_SYNCHRONIZATION_ARCHITECTURE.md"` -- SysML v2 bidirectional SSOT synchronization blueprint.
+    SysmlSsotBidirectionalSynchronizationArchitecture,
+    /// `"DEAP_DETERMINISTIC_SAFETY_SPECIFICATION_COMPILER_BLUEPRINT.md"` -- deterministic safety specification compiler blueprint.
+    DeapDeterministicSafetySpecificationCompilerBlueprint,
+    /// `"DEAP_MULTI_TOOLCHAIN_SYNTHESIS_ARCHITECTURE.md"` -- multi-toolchain synthesis architecture blueprint.
+    DeapMultiToolchainSynthesisArchitecture,
+    /// `"DEAP_LOGICAL_INTERFACE_SPECIFICATION_BLUEPRINT.md"` -- logical interface specification (ICD) blueprint.
+    DeapLogicalInterfaceSpecificationBlueprint,
+    /// `"MULTI_PROVIDER_GITLAB_INFRASTRUCTURE_ARCHITECTURE.md"` -- multi-provider GitHub/GitLab tracker infrastructure blueprint.
+    MultiProviderGitlabInfrastructureArchitecture,
+    /// `"PERSISTENCE_ARCHITECTURE.md"` -- zero-mocking persistence and AST storage blueprint.
+    PersistenceArchitecture,
+    /// `"SAFETY_CRITICAL_REALTIME_UI_FRAMEWORK.md"` -- safety-critical real-time UI framework blueprint.
+    SafetyCriticalRealtimeUiFramework,
+    /// `"RUNTIME_METADATA_ENGINE.md"` -- runtime metadata reflection and type descriptor engine blueprint.
+    RuntimeMetadataEngine,
+    /// `"SPECKIT_NATIVE_INTEGRATION.md"` -- SpecKit native integration blueprint.
+    SpeckitNativeIntegration,
+    /// `"DEAP_LOCAL_AIRGAPPED_DEEPSEEK_WORKSTATION_BLUEPRINT.md"` -- local air-gapped DeepSeek workstation blueprint.
+    DeapLocalAirgappedDeepseekWorkstationBlueprint,
+    /// `"DEAP_DEEPSEEK_HARNESS_INTEGRATION_BLUEPRINT.md"` -- DeepSeek harness and CoT audit integration blueprint.
+    DeapDeepseekHarnessIntegrationBlueprint,
+}
+
+impl CanonicalArchitectureBlueprint {
+    /// Complete ordered slice of all 12 `CanonicalArchitectureBlueprint` variants.
+    pub const ALL: &'static [Self] = &[
+        Self::DeapSysmlV2IngestionEngineBlueprint,
+        Self::SysmlSsotBidirectionalSynchronizationArchitecture,
+        Self::DeapDeterministicSafetySpecificationCompilerBlueprint,
+        Self::DeapMultiToolchainSynthesisArchitecture,
+        Self::DeapLogicalInterfaceSpecificationBlueprint,
+        Self::MultiProviderGitlabInfrastructureArchitecture,
+        Self::PersistenceArchitecture,
+        Self::SafetyCriticalRealtimeUiFramework,
+        Self::RuntimeMetadataEngine,
+        Self::SpeckitNativeIntegration,
+        Self::DeapLocalAirgappedDeepseekWorkstationBlueprint,
+        Self::DeapDeepseekHarnessIntegrationBlueprint,
+    ];
+
+    /// Projects this `CanonicalArchitectureBlueprint` variant to its canonical markdown filename under `docs/architecture/blueprints/`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and Check 34 compile-time catalog rules for `CanonicalArchitectureBlueprint::as_str`.
+    /// Provides a total, allocation-free filename mapping for the 12 canonical architecture blueprints.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Injective across all 12 variants of `CanonicalArchitectureBlueprint`.
+    /// - Every returned `&'static str` ends with `".md"` and matches the exact filename in `docs/architecture/blueprints/`.
+    ///
+    /// ## 3. Preconditions
+    /// - `self` is a valid `CanonicalArchitectureBlueprint` enum value.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns the exact static filename string corresponding to `self`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1) constant-time branch selection.
+    /// - Space Complexity: O(1) zero auxiliary memory.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Total function over a closed 12-variant enum.
+    /// - State: Pure `const fn` with no mutable state.
+    /// - Action: Exhaustive pattern match verified by `rustc`.
+    /// - Resource: Zero heap or dynamic stack usage.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-RULES-CANONICAL-BLUEPRINT-AS-STR]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::DeapSysmlV2IngestionEngineBlueprint => {
+                "DEAP_SYSML_V2_INGESTION_ENGINE_BLUEPRINT.md"
+            }
+            Self::SysmlSsotBidirectionalSynchronizationArchitecture => {
+                "SYSML_SSOT_BIDIRECTIONAL_SYNCHRONIZATION_ARCHITECTURE.md"
+            }
+            Self::DeapDeterministicSafetySpecificationCompilerBlueprint => {
+                "DEAP_DETERMINISTIC_SAFETY_SPECIFICATION_COMPILER_BLUEPRINT.md"
+            }
+            Self::DeapMultiToolchainSynthesisArchitecture => {
+                "DEAP_MULTI_TOOLCHAIN_SYNTHESIS_ARCHITECTURE.md"
+            }
+            Self::DeapLogicalInterfaceSpecificationBlueprint => {
+                "DEAP_LOGICAL_INTERFACE_SPECIFICATION_BLUEPRINT.md"
+            }
+            Self::MultiProviderGitlabInfrastructureArchitecture => {
+                "MULTI_PROVIDER_GITLAB_INFRASTRUCTURE_ARCHITECTURE.md"
+            }
+            Self::PersistenceArchitecture => "PERSISTENCE_ARCHITECTURE.md",
+            Self::SafetyCriticalRealtimeUiFramework => "SAFETY_CRITICAL_REALTIME_UI_FRAMEWORK.md",
+            Self::RuntimeMetadataEngine => "RUNTIME_METADATA_ENGINE.md",
+            Self::SpeckitNativeIntegration => "SPECKIT_NATIVE_INTEGRATION.md",
+            Self::DeapLocalAirgappedDeepseekWorkstationBlueprint => {
+                "DEAP_LOCAL_AIRGAPPED_DEEPSEEK_WORKSTATION_BLUEPRINT.md"
+            }
+            Self::DeapDeepseekHarnessIntegrationBlueprint => {
+                "DEAP_DEEPSEEK_HARNESS_INTEGRATION_BLUEPRINT.md"
+            }
+        }
+    }
+
+    /// Reference-accepting adapter around [`CanonicalArchitectureBlueprint::as_str`] for `slice::Iter::map` coercion.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and Check 34 `(b)` by enabling `CanonicalArchitectureBlueprintsCatalog::iter`
+    /// to map `&'static CanonicalArchitectureBlueprint` items with a named function pointer.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - For every `v: CanonicalArchitectureBlueprint`, `v.as_str_ref() == v.as_str()`.
+    ///
+    /// ## 3. Preconditions
+    /// - `self` is a valid shared reference to a `CanonicalArchitectureBlueprint` variant.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns the identical `&'static str` filename produced by `(*self).as_str()`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1) dereference and dispatch.
+    /// - Space Complexity: O(1).
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Infallible reference projection.
+    /// - State: Stateless.
+    /// - Action: Delegates directly to `Self::as_str`.
+    /// - Resource: Zero allocations.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-RULES-CANONICAL-BLUEPRINT-AS-STR-REF]
+    pub const fn as_str_ref(&self) -> &'static str {
+        (*self).as_str()
+    }
+}
+
+/// Zero-sized catalog type providing typed iteration and membership queries over all 12 `CanonicalArchitectureBlueprint` filenames.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `CanonicalArchitectureBlueprintsCatalog` in `crates/deap-core/src/rules.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Zero-sized structural unit type backed exclusively by `CanonicalArchitectureBlueprint::ALL`.
+///
+/// ## 3. Preconditions
+/// - Constructed at compile time via `CANONICAL_ARCHITECTURE_BLUEPRINTS`.
+///
+/// ## 4. Postconditions
+/// - Exposes deterministic `iter()` and `contains()` operations over the 12 canonical architecture blueprints.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1) instantiation.
+/// - Space Complexity: O(1) zero-sized type (`size_of::<CanonicalArchitectureBlueprintsCatalog>() == 0`).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Type-safe catalog methods with no mutable state.
+/// - State: Immutable compile-time singleton.
+/// - Action: Deterministic execution.
+/// - Resource: Zero runtime memory footprint.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [deap_core::rules::CanonicalArchitectureBlueprintsCatalog] | SysML v2: PartDef(CanonicalArchitectureBlueprintsCatalog)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CanonicalArchitectureBlueprintsCatalog;
+
+/// Authoritative catalog of the 12 canonical architecture blueprints in `docs/architecture/blueprints/`.
+pub const CANONICAL_ARCHITECTURE_BLUEPRINTS: CanonicalArchitectureBlueprintsCatalog =
+    CanonicalArchitectureBlueprintsCatalog;
+
+impl CanonicalArchitectureBlueprintsCatalog {
+    /// Returns a deterministic iterator yielding all 12 canonical architecture blueprint filenames.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and Check 34 `(b)` by iterating over the typed
+    /// `CanonicalArchitectureBlueprint::ALL` slice via `CanonicalArchitectureBlueprint::as_str_ref`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Yields exactly 12 `&'static str` filenames in the declaration order of `CanonicalArchitectureBlueprint::ALL`.
+    ///
+    /// ## 3. Preconditions
+    /// - `self` is a valid `CanonicalArchitectureBlueprintsCatalog` reference.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns a `std::iter::Map` over `CanonicalArchitectureBlueprint::ALL.iter()`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1) iterator creation; O(12) complete traversal.
+    /// - Space Complexity: O(1) stack-allocated iterator state.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Pure iterator projection with zero fallible operations.
+    /// - State: Reads only static compile-time memory.
+    /// - Action: Never panics or skips entries.
+    /// - Resource: Zero heap allocation.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-RULES-CANONICAL-BLUEPRINTS-ITER]
+    pub fn iter(
+        &self,
+    ) -> std::iter::Map<
+        std::slice::Iter<'static, CanonicalArchitectureBlueprint>,
+        fn(&'static CanonicalArchitectureBlueprint) -> &'static str,
+    > {
+        let project: fn(&'static CanonicalArchitectureBlueprint) -> &'static str =
+            CanonicalArchitectureBlueprint::as_str_ref;
+        CanonicalArchitectureBlueprint::ALL.iter().map(project)
+    }
+
+    /// Checks whether `candidate` matches one of the 12 canonical architecture blueprint filenames.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and ECSS-E-ST-40C architecture governance verification.
+    /// Validates candidate blueprint filenames against the 12 canonical blueprints in `docs/architecture/blueprints/`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Returns `true` if and only if `candidate` equals `v.as_str()` for some `v` in `CanonicalArchitectureBlueprint::ALL`.
+    ///
+    /// ## 3. Preconditions
+    /// - `candidate: &str` is a valid UTF-8 filename slice.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `true` on an exact case-sensitive match against the 12 canonical blueprint filenames, or `false` otherwise.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1) bounded pattern match across 12 literal arms.
+    /// - Space Complexity: O(1) zero auxiliary memory.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Handles empty strings, relative paths, and non-matching filenames safely by returning `false`.
+    /// - State: Stateless predicate.
+    /// - Action: Pure compile-time `matches!` evaluation.
+    /// - Resource: Zero allocations.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-RULES-CANONICAL-BLUEPRINTS-CONTAINS]
+    pub fn contains(&self, candidate: &str) -> bool {
+        matches!(
+            candidate,
+            "DEAP_SYSML_V2_INGESTION_ENGINE_BLUEPRINT.md"
+                | "SYSML_SSOT_BIDIRECTIONAL_SYNCHRONIZATION_ARCHITECTURE.md"
+                | "DEAP_DETERMINISTIC_SAFETY_SPECIFICATION_COMPILER_BLUEPRINT.md"
+                | "DEAP_MULTI_TOOLCHAIN_SYNTHESIS_ARCHITECTURE.md"
+                | "DEAP_LOGICAL_INTERFACE_SPECIFICATION_BLUEPRINT.md"
+                | "MULTI_PROVIDER_GITLAB_INFRASTRUCTURE_ARCHITECTURE.md"
+                | "PERSISTENCE_ARCHITECTURE.md"
+                | "SAFETY_CRITICAL_REALTIME_UI_FRAMEWORK.md"
+                | "RUNTIME_METADATA_ENGINE.md"
+                | "SPECKIT_NATIVE_INTEGRATION.md"
+                | "DEAP_LOCAL_AIRGAPPED_DEEPSEEK_WORKSTATION_BLUEPRINT.md"
+                | "DEAP_DEEPSEEK_HARNESS_INTEGRATION_BLUEPRINT.md"
+        )
+    }
+}
+
 /// Top-level codebase rules representation matching `codebase_rules.json`.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -941,4 +1223,59 @@ mod tests {
         );
         Ok(())
     }
+
+    #[test]
+    fn test_canonical_architecture_blueprint_enum_cardinality_and_catalog() {
+        let expected = vec![
+            "DEAP_SYSML_V2_INGESTION_ENGINE_BLUEPRINT.md",
+            "SYSML_SSOT_BIDIRECTIONAL_SYNCHRONIZATION_ARCHITECTURE.md",
+            "DEAP_DETERMINISTIC_SAFETY_SPECIFICATION_COMPILER_BLUEPRINT.md",
+            "DEAP_MULTI_TOOLCHAIN_SYNTHESIS_ARCHITECTURE.md",
+            "DEAP_LOGICAL_INTERFACE_SPECIFICATION_BLUEPRINT.md",
+            "MULTI_PROVIDER_GITLAB_INFRASTRUCTURE_ARCHITECTURE.md",
+            "PERSISTENCE_ARCHITECTURE.md",
+            "SAFETY_CRITICAL_REALTIME_UI_FRAMEWORK.md",
+            "RUNTIME_METADATA_ENGINE.md",
+            "SPECKIT_NATIVE_INTEGRATION.md",
+            "DEAP_LOCAL_AIRGAPPED_DEEPSEEK_WORKSTATION_BLUEPRINT.md",
+            "DEAP_DEEPSEEK_HARNESS_INTEGRATION_BLUEPRINT.md",
+        ];
+        assert_eq!(CanonicalArchitectureBlueprint::ALL.len(), 12);
+        let via_enum: Vec<&'static str> = CanonicalArchitectureBlueprint::ALL
+            .iter()
+            .map(|b| b.as_str())
+            .collect();
+        assert_eq!(via_enum, expected);
+        let via_catalog: Vec<&'static str> = CANONICAL_ARCHITECTURE_BLUEPRINTS.iter().collect();
+        assert_eq!(via_catalog, expected);
+        for b in CanonicalArchitectureBlueprint::ALL {
+            assert_eq!(b.as_str_ref(), b.as_str());
+            assert!(CANONICAL_ARCHITECTURE_BLUEPRINTS.contains(b.as_str()));
+        }
+        assert!(!CANONICAL_ARCHITECTURE_BLUEPRINTS.contains("NON_EXISTENT_BLUEPRINT.md"));
+        assert!(
+            !CANONICAL_ARCHITECTURE_BLUEPRINTS
+                .contains("deap_sysml_v2_ingestion_engine_blueprint.md")
+        );
+    }
+
+    #[test]
+    fn test_canonical_architecture_blueprints_exist_on_disk() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(|p| p.parent())
+            .ok_or("repo root")?;
+        let blueprints_dir = repo_root.join("docs").join("architecture").join("blueprints");
+        for blueprint_name in CANONICAL_ARCHITECTURE_BLUEPRINTS.iter() {
+            let path = blueprints_dir.join(blueprint_name);
+            assert!(
+                path.is_file(),
+                "Expected canonical architecture blueprint file to exist on disk: {}",
+                path.display()
+            );
+        }
+        Ok(())
+    }
 }
+

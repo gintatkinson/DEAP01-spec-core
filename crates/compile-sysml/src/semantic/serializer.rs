@@ -481,6 +481,15 @@ impl SysmlSerializable for RequirementDef {
         for s in &self.satisfied_by {
             lines.push(format!("{}    satisfy by {};", pad, s));
         }
+        for h in &self.triggers_hazards {
+            lines.push(format!("{}    @TriggersHazard(\"{}\");", pad, h));
+        }
+        for sr in &self.safety_realises {
+            lines.push(format!("{}    @SafetyRealises(\"{}\");", pad, sr));
+        }
+        if let Some(lyr) = &self.layer {
+            lines.push(format!("{}    @Layer(\"{}\");", pad, lyr));
+        }
         lines.push(format!("{}}}", pad));
         lines.join("\n")
     }
@@ -1082,6 +1091,15 @@ impl SysmlSerializable for PartDef {
         }
         lines.push(format!("{}{} {}{} {{", pad, kw, self.name, type_annot));
 
+        for h in &self.triggers_hazards {
+            lines.push(format!("{}    @TriggersHazard(\"{}\");", pad, h));
+        }
+        for sr in &self.safety_realises {
+            lines.push(format!("{}    @SafetyRealises(\"{}\");", pad, sr));
+        }
+        if let Some(lyr) = &self.layer {
+            lines.push(format!("{}    @Layer(\"{}\");", pad, lyr));
+        }
         for a in &self.attributes {
             lines.push(a.to_sysml(indent + 4));
         }

@@ -492,3 +492,135 @@ This implementation plan governs persisting the operational rules learned from d
 ### WP-02: Verification Gate
 - Verify `AGENTS.md` contains zero Unicode em dashes (`\u2014`) and stays well below the 24,000-byte rule cap.
 - Run `./target/release/verify-baseline . --no-domain` (or `cargo test -p deap-core -- workspace`) to confirm Check 14 (`AGENTS.md` integrity) passes with exit code `0`.
+
+
+---
+
+# Implementation Plan: Option C -- Full Architecture Blueprint Grounding, Missing Rust Capability Synthesis & `verify-baseline` Mechanical Grounding Gate
+
+## 1. Executive Summary & Objective
+
+This implementation plan governs **Option C** across the entire architecture blueprint suite (`docs/architecture/blueprints/*.md`) and the Rust compiler workspace (`crates/`):
+1. **Native Rust TDD Implementation of Missing Blueprint Capabilities (`crates/deap-core`, `crates/ingest-sysml`, `crates/compile-sysml`)**: Implement the missing architectural capabilities claimed across the blueprints in pure, deterministic, zero-regex Rust (conforming to Check 34 and Check 36 7-section safety docstrings):
+   - **Deterministic AST Slicing & Token Budgeting (`AstSlice`, `slice_package_subsystem`)**: Graph-closure extraction of target `PackageDef`, `PartDef`, connected `PortDef`, `InterfaceDef`, `RequirementDef`, and `HazardDef` nodes bounded to `<= 4,096` estimated tokens.
+   - **Content-Addressed Incremental AST Caching (`IncrementalAstCache`)**: Deterministic SHA-256 content-addressed caching under `.pipeline/cache/ast/<sha256>.json` with cache-hit/miss verification.
+   - **Custom Safety Stereotype Annotations (`@TriggersHazard`, `@SafetyRealises`, `@Layer`)**: First-class AST extraction and preservation in `deap_core::sysml_ast` and `compile-sysml` parser/semantic passes.
+   - **Deterministic Multi-Toolchain & MBD Synthesis Exporters (`compile-sysml`)**: Deterministic Simulink/Stateflow (`slreq`, `.sfx`, `Simulink.Bus`) and 3-Layer architecture contract synthesis from `SysmlModel`.
+   - **Runtime Metadata, Persistence & CoT Audit Structures (`deap-core`)**: Grounded `TypeDescriptor`, `FieldDescriptor`, `AstPersistenceEngine`, and `CotAuditRecord` / `CotAuditLog` structures in `deap-core`.
+2. **Mechanical Blueprint Grounding Gate in `crates/verify-baseline` (Check 37)**: Add a fail-closed baseline verification gate (`check_blueprint_grounding`) that mechanically audits all 12 blueprints in `docs/architecture/blueprints/*.md` (and `README.md` / `.pipeline/constitution.md`) against the live workspace:
+   - Verifies all 12 canonical blueprints in `CanonicalArchitectureBlueprint::ALL` exist on disk in `docs/architecture/blueprints/`.
+   - Rejects any reference to nonexistent `crates/<name>` directories or nonexistent `crates/.../src/...` source files (such as `crates/deap-ast`, `crates/deap-codegen`, `crates/deap-harness`, `crates/deap-cli`, `crates/verify-baseline/src/checks/uml.rs`, `behavioral.rs`, `schema_mapping.rs`, `katex.rs`).
+   - Rejects retired Python/legacy tool identifiers (`verify_downstream`, `verify_downstream_baseline`, `sysmlv2_ingest`, `reconcile_backlog.py`, `parity_auditor`, `setup_git_hooks.sh`).
+   - Enforces Mermaid Rules E1-E5 (`flowchart TD`, `direction TB` inside every `subgraph`, balanced fences, zero unquoted `<`/`>`, and node labels `<= 35` characters per `<br/>`-delimited line segment) and zero Unicode em dashes (`\u2014`) across `docs/architecture/blueprints/*.md`.
+3. **Full Reconciliation of All 12 Architecture Blueprints (`docs/architecture/blueprints/*.md`), `README.md`, and `.pipeline/constitution.md`**: Reconcile every blueprint via single-item context-isolated subagents so 100% of crate names, file paths, Rust structs/functions, CLI commands, metadata headers, and Mermaid diagrams are grounded in the live Rust workspace.
+
+---
+
+## 2. Work Packages & File-Level Changes
+
+### WP-01: Native Rust TDD -- Missing Capabilities in `deap-core`, `ingest-sysml`, and `compile-sysml`
+
+#### Files to Modify / Create:
+1. `crates/deap-core/src/rules.rs`:
+   - Add `CanonicalArchitectureBlueprint` enum (with 12 variants corresponding to the 12 `.md` blueprints in `docs/architecture/blueprints/`) and `CANONICAL_ARCHITECTURE_BLUEPRINTS` catalog while preserving `MasterBlueprint` for Check 12 backwards compatibility.
+   - Add RED-GREEN unit tests verifying `CanonicalArchitectureBlueprint::ALL` cardinality (`12`) and on-disk existence in the upstream workspace.
+2. `crates/deap-core/src/sysml_ast.rs`:
+   - Extend `SysmlModel`, `PartDef`, and `RequirementDef` (or add structured `SafetyAnnotation` metadata: `triggers_hazards: Vec<String>`, `safety_realises: Vec<String>`, `layer: Option<String>`) to extract and preserve `@TriggersHazard`, `@SafetyRealises`, and `@Layer` annotations in `parse_sysml_model`.
+   - Implement `AstSlice` and `SysmlModel::slice_package_subsystem(&self, target_package: &str, max_tokens: usize) -> Result<AstSlice, String>` performing deterministic graph-closure AST slicing (collecting target `PackageDef`, child `PartDef`s, connected `PortDef`s, `InterfaceDef`s, `RequirementDef`s, and `HazardDef`s) with deterministic token-budget enforcement (`<= max_tokens`, default `4096`).
+   - Implement `IncrementalAstCache` providing deterministic SHA-256 content-addressed read/write caching of `SysmlModel` / `AstSlice` artifacts under `.pipeline/cache/ast/<sha256>.json`.
+   - Implement `TypeDescriptor`, `FieldDescriptor`, `AstPersistenceEngine`, and `CotAuditRecord` / `CotAuditLog` structures with deterministic JSON serialization and validation.
+   - All new items in `crates/deap-core/src/sysml_ast.rs` and `crates/deap-core/src/rules.rs` must carry complete, unique 7-section safety docstrings (`## 1.` through `## 7.` with `Realises: [...]`) and obey Check 34 (`audit_source_purity`: zero regex, zero static string-slice arrays `&[&str]`, zero `let _ = `, zero fail-open `.ok()`, zero direct range-slice indexing `expr[a..b]`).
+3. `crates/deap-core/src/lib.rs`:
+   - Re-export the new AST slicing, caching, runtime metadata, persistence, and canonical blueprint types.
+4. `crates/ingest-sysml/src/lib.rs` & `crates/ingest-sysml/src/main.rs`:
+   - Expose optional incremental AST cache (`--cache-dir` / `.pipeline/cache/ast/`) and subsystem slice emission hooks backed by `deap_core::sysml_ast::{IncrementalAstCache, AstSlice}` with 7-section docstrings and unit tests.
+5. `crates/compile-sysml/src/lib.rs`, `crates/compile-sysml/src/main.rs`, and `crates/compile-sysml/src/parser/grammar.rs`:
+   - Parse and preserve `@TriggersHazard`, `@SafetyRealises`, and `@Layer` annotations in `compile-sysml`.
+   - Implement deterministic MBD & multi-toolchain exporters (`export_simulink_artifacts` generating deterministic `.slreqx` / `.sfx` / `Simulink.Bus` MATLAB `.m` definitions and 3-layer contract descriptors from `SysmlModel`) and expose `--export-mbd <dir>` / `--slice-package <pkg>` CLI flags in `compile-sysml`.
+   - Add RED-GREEN unit tests across `deap-core`, `ingest-sysml`, and `compile-sysml`.
+
+---
+
+### WP-02: Mechanical Blueprint Grounding Gate in `crates/verify-baseline` (Check 37)
+
+#### Files to Modify:
+1. `crates/verify-baseline/src/checks/structural.rs`:
+   - Implement `pub fn check_blueprint_grounding(repo_root: &Path) -> Result<(), Vec<String>>` (Check 37) with full 7-section safety docstrings:
+     1. In upstream compiler workspaces (`is_upstream_compiler(repo_root)`), verifies that all 12 `CanonicalArchitectureBlueprint::ALL` files exist in `docs/architecture/blueprints/`.
+     2. Scans all `.md` files in `docs/architecture/blueprints/` (plus `README.md` and `.pipeline/constitution.md`) for:
+        - Fictional/retired crate identifiers (`deap-ast`, `deap-codegen`, `deap-harness`, `deap-cli`).
+        - Any `crates/<crate_name>` or `crates/<crate_name>/src/<subpath>` reference where the referenced crate directory or `.rs` source file does not exist on disk under `repo_root`.
+        - Any retired tooling token (`verify_downstream`, `sysmlv2_ingest`, `reconcile_backlog.py`, `parity_auditor`, `setup_git_hooks.sh`).
+        - Any Unicode em dash (`\u{2014}`).
+     3. Invokes Mermaid compliance validation on every ```mermaid block in `docs/architecture/blueprints/*.md` (enforcing `flowchart TD` for flowcharts, `direction TB` inside every `subgraph`, and node label line segments `<= 35` chars per Rules E1-E5).
+   - Add RED-GREEN unit tests and negative mutation tests proving `check_blueprint_grounding` fails closed on:
+     - Fictional crate names (`deap-ast`, `deap-codegen`, `deap-harness`, `deap-cli`),
+     - Nonexistent `crates/verify-baseline/src/checks/uml.rs` path references,
+     - Retired `verify_downstream` references,
+     - Missing canonical blueprint files.
+2. `crates/verify-baseline/src/runner.rs`:
+   - Wire Check 37 (`check_blueprint_grounding(&repo_root)`) into the sequential baseline verification pipeline immediately after Check 36, emitting a structured `DefectDossier` on failure.
+
+---
+
+### WP-03: Reconcile All 12 Architecture Blueprints, `README.md`, and `.pipeline/constitution.md`
+
+Each blueprint in `docs/architecture/blueprints/` will be updated by a dedicated single-item subagent (enforcing the Single-Item Scope rule: 1 blueprint per subagent dispatch) so that every claim, crate name, file path, Rust struct/function, CLI command, and Mermaid diagram is 100% grounded in the workspace:
+
+1. `docs/architecture/blueprints/DEAP_SYSML_V2_INGESTION_ENGINE_BLUEPRINT.md`:
+   - Reconcile Section 1-6 crate topology to the actual 6-crate workspace (`deap-core`, `ingest-sysml`, `compile-sysml`, `verify-baseline`, `assemble-conops`, `reconcile-backlog`).
+   - Ground AST structs (`SysmlModel`, `PackageDef`, `PartDef`, `PortDef`, `InterfaceDef`, `ActionDef`, `StateDef`, `RequirementDef`, `HazardDef`, `AstSlice`, `IncrementalAstCache`) to `crates/deap-core/src/sysml_ast.rs` and `crates/compile-sysml/src/parser/grammar.rs`.
+   - Ground MBD exporters and CLI invocations to `compile-sysml` and `ingest-sysml`.
+   - Replace `verify_downstream` in the Section 6 Mermaid diagram with `verify-baseline` and `reconcile-backlog`, and ensure all Mermaid diagrams obey Rules E1-E5 (`flowchart TD`, `direction TB` in subgraphs, line segments `<= 35` chars).
+2. `docs/architecture/blueprints/SYSML_SSOT_BIDIRECTIONAL_SYNCHRONIZATION_ARCHITECTURE.md`:
+   - Replace fictional 5-crate architecture diagram and table with the actual 6 workspace crates.
+   - Replace nonexistent `crates/verify-baseline/src/checks/{uml,behavioral,schema_mapping,katex}.rs` paths with the actual check modules (`crates/verify-baseline/src/checks/{parity_gates,mermaid,math_katex,safety_stpa,structural,wbs_integrity,docstring_gate,domain_cleanliness_gate}.rs`).
+   - Ground forward/backward sync and STPA commands to `compile-sysml` (`crates/compile-sysml/src/sync/{mod,forward,backward}.rs` and `crates/compile-sysml/src/stpa/{mod,safety_suite}.rs`).
+   - Fix all Mermaid diagrams to obey Rules E1-E5 (`flowchart TD`, `direction TB`, `<= 35` char line segments).
+3. `docs/architecture/blueprints/DEAP_DETERMINISTIC_SAFETY_SPECIFICATION_COMPILER_BLUEPRINT.md`:
+   - Replace `deap-ast`, `deap-codegen`, `deap-harness`, `deap-cli` references with `deap-core`, `compile-sysml`, `ingest-sysml`, `verify-baseline`, `assemble-conops`, `reconcile-backlog`.
+   - Ground STPA 8-pillar synthesis to `crates/compile-sysml/src/stpa/safety_suite.rs` and Check 17/25 in `crates/verify-baseline/src/checks/safety_stpa.rs`.
+   - Fix all Mermaid diagrams to obey Rules E1-E5.
+4. `docs/architecture/blueprints/DEAP_MULTI_TOOLCHAIN_SYNTHESIS_ARCHITECTURE.md`:
+   - Replace `deap-ast`, `deap-codegen`, `deap-harness`, `deap-cli` with the actual workspace crates (`deap-core`, `compile-sysml`, `verify-baseline`).
+   - Ground AST slicing and multi-toolchain synthesis references to `crates/deap-core/src/sysml_ast.rs` and `crates/compile-sysml/src/lib.rs`.
+   - Fix all Mermaid diagrams to obey Rules E1-E5.
+5. `docs/architecture/blueprints/DEAP_LOGICAL_INTERFACE_SPECIFICATION_BLUEPRINT.md`:
+   - Replace `deap-ast`, `deap-codegen`, `deap-harness`, `deap-cli` with `deap-core`, `compile-sysml`, `verify-baseline`.
+   - Ground Level 1C ICD verification to Check 24 (`check_icd_completeness` in `crates/verify-baseline/src/checks/parity_gates.rs`) and `skills/spec-icd-engineering/SKILL.md`.
+   - Fix all Mermaid diagrams to obey Rules E1-E5.
+6. `docs/architecture/blueprints/MULTI_PROVIDER_GITLAB_INFRASTRUCTURE_ARCHITECTURE.md`:
+   - Replace `deap-cli`, `deap-harness`, `deap-codegen` references with `reconcile-backlog` (`crates/reconcile-backlog/src/lib.rs`) and `verify-baseline` (`crates/verify-baseline`).
+   - Fix all Mermaid diagrams to obey Rules E1-E5.
+7. `docs/architecture/blueprints/PERSISTENCE_ARCHITECTURE.md`:
+   - Replace `deap-ast`, `deap-codegen`, `deap-harness` references with `deap-core`, `compile-sysml`, `verify-baseline`.
+   - Ground `AstPersistenceEngine` and `IncrementalAstCache` to `crates/deap-core/src/sysml_ast.rs`.
+   - Fix all Mermaid diagrams to obey Rules E1-E5.
+8. `docs/architecture/blueprints/SAFETY_CRITICAL_REALTIME_UI_FRAMEWORK.md`:
+   - Replace `deap-ast`, `deap-codegen`, `deap-harness` references with `deap-core`, `compile-sysml`, `verify-baseline`.
+   - Fix all Mermaid diagrams to obey Rules E1-E5.
+9. `docs/architecture/blueprints/RUNTIME_METADATA_ENGINE.md`:
+   - Replace `deap-ast`, `deap-codegen`, `deap-harness` references with `deap-core`, `compile-sysml`, `verify-baseline`.
+   - Ground `TypeDescriptor` and `FieldDescriptor` to `crates/deap-core/src/sysml_ast.rs`.
+   - Fix all Mermaid diagrams to obey Rules E1-E5.
+10. `docs/architecture/blueprints/SPECKIT_NATIVE_INTEGRATION.md`:
+    - Replace `deap-ast`, `deap-codegen`, `deap-harness`, `deap-cli` references with `deap-core`, `ingest-sysml`, `compile-sysml`, `assemble-conops`, `reconcile-backlog`, `verify-baseline`.
+    - Fix all Mermaid diagrams to obey Rules E1-E5.
+11. `docs/architecture/blueprints/DEAP_LOCAL_AIRGAPPED_DEEPSEEK_WORKSTATION_BLUEPRINT.md`:
+    - Ensure all crate and binary references align with `deap-core`, `ingest-sysml`, `compile-sysml`, `verify-baseline`, `assemble-conops`, `reconcile-backlog` and all Mermaid diagrams obey Rules E1-E5 (`direction TB` in subgraphs, `<= 35` char line segments).
+12. `docs/architecture/blueprints/DEAP_DEEPSEEK_HARNESS_INTEGRATION_BLUEPRINT.md`:
+    - Replace `deap-harness` / `deap-cli` / `deap-ast` references with `deap-core` (`CotAuditRecord`, `CotAuditLog` in `crates/deap-core/src/sysml_ast.rs`), `compile-sysml`, and `verify-baseline`.
+    - Fix all Mermaid diagrams to obey Rules E1-E5.
+13. `.pipeline/constitution.md` & `README.md`:
+    - Reconcile `.pipeline/constitution.md` Section 5.6 master blueprint list with the 12 canonical blueprints in `docs/architecture/blueprints/` and verify `README.md` links and descriptions match 100%.
+
+---
+
+### WP-04: End-to-End Verification, Adversarial Mutation Probe, Commit & Remote Push
+
+1. Build release binaries: `cargo build --release --workspace`.
+2. Execute full workspace test suite: `cargo test --workspace` (assert 0 failures).
+3. Execute baseline verification gate (including new Check 37): `./target/release/verify-baseline . --no-domain` (assert exit code 0 and all checks 10..37 passing).
+4. Execute ConOps assembly verification: `./target/release/assemble-conops --input-dir skills/spec-conops-engineering/resources/units --verify`.
+5. Execute backlog reconciliation check: `./target/release/reconcile-backlog`.
+6. Commit all changes with neutral issue citation and push to `origin/<branch>`, verifying `git diff origin/<branch>` is empty.

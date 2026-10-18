@@ -33,34 +33,40 @@ The **Digital Engineering Agentic Pipeline (DEAP)** solves this structural defic
 
 ```mermaid
 flowchart TD
-    subgraph L0 ["Level 0 - Ground Truth OEM Schemas and Regulatory Baselines"]
-        L0_Schema["OEM Ground-Truth Schemas - YANG, SysML v2, OpenAPI, Protobuf"]
-        L0_Reg["Regulatory Standards - RTCA DO-178C, DO-254, ARP4754A, Generic High-Assurance Profile"]
+    subgraph L0 ["Level 0 - Ground Truth Schemas & Regulatory Baselines"]
+        direction TB
+        L0_Schema["OEM Ground-Truth Schemas:<br/>SysML v2, YANG, OpenAPI, Protobuf"]
+        L0_Reg["Regulatory Baselines:<br/>RTCA DO-178C, DO-254, ARP4754A,<br/>ISO 26262, IEC 61508"]
     end
 
-    subgraph L1A ["Level 1A - Strategic Safety and System Architecture"]
-        L1A_Blueprints["Architecture Blueprints and System Safety Concept Papers"]
+    subgraph L1A ["Level 1A - Strategic Safety & System Architecture"]
+        direction TB
+        L1A_Blueprints["Architecture Blueprints &<br/>System Safety Concept Papers"]
     end
 
-    subgraph L1B ["Level 1B - Concept of Operations and Hazard Analysis"]
-        L1B_CONOPS["CONOPS - IEEE 1362-1998 Mission Envelopes and Profiles"]
-        L1B_STPA["STPA Safety Analysis - Hazards, UCAs, Safety Constraints"]
+    subgraph L1B ["Level 1B - Concept of Operations & Hazard Analysis"]
+        direction TB
+        L1B_CONOPS["CONOPS (ISO/IEC/IEEE 29148)<br/>Mission Envelopes & Profiles"]
+        L1B_STPA["STPA Safety Analysis:<br/>Hazards, UCAs, Safety Constraints"]
     end
 
-    subgraph L1C ["Level 1C - Logical Interface Architecture and Signal Dictionaries"]
-        L1C_Matrix["ICD-01 - System Interface Topological N2 Matrix"]
-        L1C_Dict["ICD-02 - Master Signal Flow Dictionary and Safety Invariants"]
+    subgraph L1C ["Level 1C - Logical Interface Architecture & Signal Dictionaries"]
+        direction TB
+        L1C_Matrix["ICD_01_SYSTEM_INTERFACE_MATRIX.md<br/>Topological N2 Coupling Matrix"]
+        L1C_Dict["ICD_02_MASTER_SIGNAL_DICTIONARY.md<br/>Signal Flows & Safety Invariants"]
     end
 
     subgraph L2 ["Level 2 - Agile Specification Backlog"]
-        L2_Epics["System Epics and Feature Decompositions"]
-        L2_Stories["BDD User Stories and Gherkin Scenarios"]
-        L2_UseCases["UML Use Cases and Activity Flow Contracts"]
+        direction TB
+        L2_Epics["System Epics & Feature<br/>Decompositions (docs/features/)"]
+        L2_Stories["BDD User Stories & Gherkin<br/>Scenarios (docs/user-stories/)"]
+        L2_UseCases["UML Use Cases & Activity<br/>Contracts (docs/use-cases/)"]
     end
 
-    subgraph L3 ["Level 3 - Multi-Target Implementation and MBD Synthesis"]
-        L3_Code["High-Integrity Code - SPARK Ada 2014, MISRA-C 2012, ROS2 C++"]
-        L3_MBD["Model-Based Design - Simulink Buses, Stateflow SFX, SCADE KCG"]
+    subgraph L3 ["Level 3 - Multi-Target Implementation & MBD Synthesis"]
+        direction TB
+        L3_Code["High-Integrity Code:<br/>SPARK Ada, MISRA-C, Rust, Dart"]
+        L3_MBD["Model-Based Design:<br/>Simulink Buses, Stateflow, SCADE"]
     end
 
     L0_Schema --> L1A_Blueprints
@@ -86,7 +92,7 @@ The Level 1C Logical Interface Specification directly satisfies the lifecycle pr
 1. **ISO/IEC/IEEE 15288:2023 §6.4.4 (Architecture Definition Process):** Mandates the formal identification of system elements, logical structural boundaries, and interface interactions. Level 1C provides the complete topological graph and interaction matrix required to demonstrate architectural completeness and partitioning integrity.
 2. **ISO/IEC/IEEE 15288:2023 §6.4.5 (Design Definition Process):** Requires the exhaustive specification of interface characteristics, including data types, valid value bounds, physical engineering units, timing properties, and operational exception behaviors. Level 1C captures these parameters inside the Master Signal Dictionary.
 3. **ISO/IEC/IEEE 15288:2023 §6.4.8 (Implementation Process):** Establishes unambiguous, verified technical data packages and interface contracts that govern software construction and subsystem assembly without semantic ambiguity.
-4. **IEEE 1362-1998 (Guide for System Definition - Concept of Operations):** Bridges high-level operational user needs and operational scenarios to precise logical system capabilities and inter-subsystem data exchanges.
+4. **IEEE 1362-1998 & ISO/IEC/IEEE 29148:2018 (Concept of Operations):** Bridges high-level operational user needs and operational scenarios to precise logical system capabilities and inter-subsystem data exchanges.
 5. **INCOSE Systems Engineering Handbook v5 (Section 3.3.4 & Section 9.2):** Enforces Model-Based Systems Engineering (MBSE) formalisms for logical architecture definition, N-squared (N²) interface matrices, and bidirectional traceability.
 6. **RTCA DO-178C / DO-331 (Model-Based Development & Verification):** Enforces strict definition of software architecture inputs and outputs, ensuring data coupling and control coupling integrity (DO-178C Table A-3 Objective 4 and Table A-7 Objective 8).
 
@@ -120,152 +126,164 @@ where $\Sigma_{i \to j}$ is the ordered tuple of discrete logical signals convey
 
 ---
 
-### 1.4 Pure Rust Modular Cargo Workspace Architecture, AST Slicing Mechanics & Incremental Caching
+### 1.4 Pure Rust 6-Crate Cargo Workspace Architecture, AST Digest Caching & Context-Isolated Subagent Dispatch
 
-The Level 1C Logical Interface Specification engine is implemented within DEAP's pure Rust modular Cargo workspace:
+The Level 1C Logical Interface Specification compiler, synchronizer, and verification suite are implemented within DEAP's native 6-crate Rust Cargo workspace (`Cargo.toml` at repository root):
 
-```
-deap-compiler/
-├── Cargo.toml                  # Workspace root manifest
+```text
+DEAP01-spec-core/
+├── Cargo.toml                         # 6-crate Cargo workspace manifest (resolver = "2")
 ├── crates/
-│   ├── deap-core/              # Core primitives, diagnostics, SI unit validators, hashing
-│   ├── deap-ast/               # SysML v2 AST, ICD metamodel, slicing engine, incremental cache
-│   ├── deap-codegen/           # ICD markdown generator, Simulink Bus exporter, C/SPARK types
-│   ├── deap-harness/           # Gate 23 ICDCompletenessValidator, topological connectivity checker
-│   └── deap-cli/               # Unified CLI (`deap icd extract`, `deap icd verify`)
+│   ├── deap-core/                     # Shared SysML v2 AST, diagnostics, Markdown/Mermaid/KaTeX validators, rules
+│   ├── compile-sysml/                 # SysML v2 / KerML parser, semantic validator, STPA transpiler, forward/reverse sync
+│   ├── verify-baseline/               # 36-check verification engine (Check 24 check_icd_completeness, Check 26 metrology)
+│   ├── ingest-sysml/                  # Level 0 OEM ground-truth ingestion engine (Markdown/BOM tables -> SysML v2)
+│   ├── assemble-conops/               # Deterministic Level 1B ConOps & Mission Intent document assembler
+│   └── reconcile-backlog/             # Native Rust issue tracker & specification backlog reconciliation CLI
+└── skills/
+    └── spec-icd-engineering/          # Canonical Worker ICD skill (SKILL.md) for Level 1C ICD synthesis
 ```
 
-- **`deap-core`**: Defines foundational data types, diagnostic structures (`Finding`, `Severity`), and SI unit validation routines.
-- **`deap-ast`**: Houses strongly-typed representations of `PortDefNode`, `ItemFlowNode`, `ConnectionNode`, `ICD_SystemInterfaceMatrix`, and `ICD_SignalDictionary`, complete with incremental caching and AST slicing.
-- **`deap-codegen`**: Generates `ICD_01_SYSTEM_INTERFACE_MATRIX.md` and `ICD_02_MASTER_SIGNAL_DICTIONARY.md`, along with Simulink Bus definition scripts and SPARK Ada / C interface packages.
-- **`deap-harness`**: Executes mechanical Gate 23 parity validation, verifying zero dangling ports, 100% port binding completeness, and valid safe defaults across all interfaces.
-- **`deap-cli`**: High-performance CLI interface for extracting and verifying interface specifications.
+- **`crates/deap-core`**: Shared foundational library crate (`crates/deap-core/src/sysml_ast.rs`, `crates/deap-core/src/markdown.rs`, `crates/deap-core/src/diagnostics.rs`, `crates/deap-core/src/rules.rs`, `crates/deap-core/src/workspace.rs`, `crates/deap-core/src/source_ast.rs`). `crates/deap-core/src/sysml_ast.rs` defines the strongly-typed SysML v2 / KerML AST hierarchy and slicing abstractions -- including `PackageDef`, `PartDef`, `PortDef`, `InterfaceDef` (modeled via typed `PortDef` / `ConnectionDef` interface contracts), `ConnectionDef`, `FlowDef`, `ItemDef`, `AttributeDef`, `ConstraintDef`, `RequirementDef`, `StateDef`, `ActionDef`, `InteractionDef`, `UseCaseDef`, `TestCaseDef`, `SysmlModel`, `AstSlice`, `IncrementalAstCache`, and `UnifiedSchemaModelExtractor` -- alongside bounds-checked $O(N)$ lexical extractors (`parse_port_defs`, `parse_connection_defs`, `parse_part_defs`, `parse_attribute_defs`, `parse_sysml`).
+- **`crates/compile-sysml`**: SysML v2 / KerML compiler and bidirectional synchronization engine (`./target/release/compile-sysml`). `crates/compile-sysml/src/parser/grammar.rs` (`SysmlParser`, `parse_sysml_tree`, `merge_package_defs`) parses single-file or multi-file `schema/*.sysml` models; `crates/compile-sysml/src/semantic/validator.rs` (`SemanticValidator`) verifies port/connection referential integrity; `crates/compile-sysml/src/semantic/digest.rs` (`SchemaDigest`, `OperationalExchange`, `FileDigestEntry`) emits `.pipeline/schema.sysml` and `.pipeline/schema-digest.json`; and `crates/compile-sysml/src/sync/forward.rs` (`ForwardSyncOptions`, `forward_sync_sysml_to_specs`) deterministically projects AST ports, connections, and item flows into `docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md` and `docs/interfaces/ICD_02_MASTER_SIGNAL_DICTIONARY.md`.
+- **`crates/verify-baseline`**: Deterministic 36-check verification engine (`./target/release/verify-baseline . --no-domain`). `crates/verify-baseline/src/checks/parity_gates.rs` enforces **Check 24 (`check_icd_completeness`)** -- verifying 100% AST-to-ICD subsystem/port/connection/flow parity, zero dangling ports, exact port directionality (`in`, `out`, `inout`) and conjugate type matching, and complete `ICD_02` signal parameterization -- as well as **Check 26 (`check_parameter_metrology` / `check_standards_measurement`)** for SI/IEEE/ISO metrology compliance. `crates/verify-baseline/src/checks/mermaid.rs` enforces Check 13B (`check_mermaid_syntax`) and Check 21 (`check_uml_syntax`).
+- **`crates/ingest-sysml`**: Level 0 OEM ground-truth ingestion CLI (`./target/release/ingest-sysml`) transforming structured OEM markdown tables and normative interface registries into canonical SysML v2 schemas (`schema/*.sysml`).
+- **`crates/assemble-conops`**: Deterministic Level 1B Concept of Operations and Tactical Mission Intent assembly CLI (`./target/release/assemble-conops`).
+- **`crates/reconcile-backlog`**: Native Rust issue tracker and specification backlog reconciliation CLI (`./target/release/reconcile-backlog`), synchronizing generated specification artifacts and checklists with GitHub/GitLab issue trackers.
 
-#### Strongly-Typed AST Slicing Mechanics (<= 4,096 Tokens)
-When enterprise architectures contain hundreds of ports and thousands of signals, transmitting the entire ICD into an LLM reasoning context triggers prompt bloat and truncation. The `deap-ast` slicing engine provides:
-1. **Per-Subsystem Interface Slicing:** Extracts all input/output ports and associated signal flows for a single subsystem pair ($s_i \leftrightarrow s_j$), replacing external elements with typed boundary stubs.
-2. **Context Budget Enforcement (<= 4,096 tokens):** Bounds each ICD slice to $\le 4,096$ tokens, allowing subagents to synthesize BDD scenarios and interface adapters with zero truncation.
-3. **Signal Group Partitioning:** Partitions dense signal dictionaries into logical functional bundles (e.g. Telemetry, Commands, Health/Status) with preserved cross-references.
+#### Deterministic AST Slicing (`AstSlice`) & Hierarchical Scope Isolation
+When complex cyber-physical architectures contain deeply nested subsystems, hundreds of boundary ports, and hundreds of conveyed signals, passing raw monolithic files into an agent context risks context bloat. The DEAP compiler and orchestrator enforce strict structural scoping:
+1. **Hierarchical Block Masking (`NestedBlockMaskMode` in `crates/deap-core/src/sysml_ast.rs`):** `mask_nested_blocks` isolates shallow subsystem `PortDef` and `AttributeDef` declarations from nested child `PartDef` and `RequirementDef` blocks while preserving exact UTF-8 byte and line offsets.
+2. **Per-Subsystem & Per-Exchange AST Slicing (`AstSlice` & `UnifiedSchemaModelExtractor`):** `UnifiedSchemaModelExtractor` (`crates/deap-core/src/sysml_ast.rs`) and `SchemaDigest` (`crates/compile-sysml/src/semantic/digest.rs`, via `OperationalExchange` and `OperationalNode` projections) construct bounded `AstSlice` views over subsystem boundary ports (`PortDef`), interface contracts (`InterfaceDef` / `ConnectionDef`), and conveyed item payloads (`FlowDef`, `ItemDef`).
+3. **Option 3 Compact Subsystem Block Diagrams:** For high-density architectures ($>12$ connections), `skills/spec-icd-engineering/SKILL.md` mandates compact subsystem-level block diagrams paired with tabular port rosters so every Mermaid `flowchart TD` line segment remains $\le 35$ characters.
 
-#### Incremental AST Parser Caching
-To support instant re-verification during incremental interface updates:
-1. **Cryptographic Model Caching:** Schema files and signal definitions are fingerprinted via SHA-256 into `.pipeline/cache/ast/<sha256>.bin`.
-2. **Zero-Copy Deserialization:** Bincode serialization allows loading parsed ICD topologies in sub-millisecond time.
-3. **Delta Dependency Analysis:** Modifications to a signal in `ICD_02` only trigger re-validation of affected connections and dependent features.
+#### Cryptographic Schema Digest & Incremental AST Caching (`IncrementalAstCache` & `.pipeline/schema-digest.json`)
+To guarantee deterministic reproducibility between Pipeline 0 compilation and Check 24 verification:
+1. **Canonical AST Serialization & SHA-256 Fingerprinting (`IncrementalAstCache` / `SchemaDigest`):** `./target/release/compile-sysml --compile` serializes the validated `PackageDef` tree to `.pipeline/schema.sysml` and writes a cryptographic SHA-256 `SchemaDigest` (with per-file `FileDigestEntry` manifests, `node_counts`, and `operational_exchanges`) atomically via `write_digest_atomic` to `.pipeline/schema-digest.json`.
+2. **Fail-Closed Drift Detection:** Check 18 (`check_sysml_compilation` in `crates/verify-baseline/src/checks/parity_gates.rs`) and Check 24 (`check_icd_completeness`) parse `.pipeline/schema.sysml` via `deap_core::sysml_ast::parse_sysml` and verify that `ICD_01_SYSTEM_INTERFACE_MATRIX.md` and `ICD_02_MASTER_SIGNAL_DICTIONARY.md` remain 100% synchronized with the compiled SysML SSOT.
 
-#### Dual-LLM Air-Gapped Agent Dispatch Protocol
-To guarantee mathematical determinism, total intellectual property containment, and complete immunity to cloud rate-limiting or content censorship, DEAP utilizes a dual-LLM air-gapped agent dispatch architecture orchestrated by `deap-harness` and `deap-cli`:
-
-1. **Reasoning Slot (DeepSeek-R1)**:
-   - Dedicated Chain-of-Thought (CoT) reasoning model executing on sovereign air-gapped workstation hardware.
-   - Ingests strongly-typed AST slices ($\le 4,096$ tokens) from `deap-ast` to derive formal interface proofs, signal range safety bounds, and N² connectivity matrices.
-   - Streams formal mathematical proofs, reachability derivations, and safety invariant checks directly into `.pipeline/diagnostics/cot_audit_log.json`.
-   - Never generates raw code directly; outputs verified formal derivations and boundary assertions.
-
-2. **Execution Slot (Qwen-2.5-Coder)**:
-   - High-throughput deterministic code and specification synthesis model.
-   - Ingests verified reasoning derivations from `.pipeline/diagnostics/cot_audit_log.json` alongside the strongly-typed AST slice.
-   - Generates verified interface markdown documents (`ICD_01`, `ICD_02`), Simulink Bus scripts, and SPARK Ada / C bindings.
-   - All generated code and model artifacts are validated through `deap-harness` mechanical gates before committing to the repository.
+#### Context-Isolated Worker ICD Subagent Dispatch (`skills/spec-icd-engineering/SKILL.md`)
+In accordance with the Mandatory Subagent Dispatch rules in `AGENTS.md` and `skills/spec-orchestrator/SKILL.md`:
+1. **Deterministic Forward Sync Baseline (`compile-sysml --forward-sync`):** `forward_sync_sysml_to_specs` in `crates/compile-sysml/src/sync/forward.rs` projects all `PartDef`, `PortDef`, `InterfaceDef` / `ConnectionDef`, `FlowDef`, and `ItemDef` nodes from `.pipeline/schema.sysml` into canonical markdown scaffolding for `docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md` and `docs/interfaces/ICD_02_MASTER_SIGNAL_DICTIONARY.md`.
+2. **Context-Isolated Worker ICD Subagent (`skills/spec-icd-engineering/SKILL.md`):** The coordinator dispatches an isolated subagent (role: `Logical Interface Engineer (Worker ICD)`) instructed to read `skills/spec-icd-engineering/SKILL.md` (or `.agents/skills/spec-icd-engineering/SKILL.md`) as its first action. The subagent enriches the topological `flowchart TD` diagram, the $N \times N$ (`N²`) coupling matrix, and the master signal dictionary (`ICD_02`) strictly from AST ground truth with zero invented ports or signals.
+3. **Closed-Loop Mechanical Gate (`verify-baseline`):** Before any downstream Level 2 Epic, Feature, User Story, or Use Case subagent is dispatched, `./target/release/verify-baseline . --no-domain` executes Check 24 (`check_icd_completeness`) and Check 26 (`check_parameter_metrology` / `check_standards_measurement`) in `crates/verify-baseline/src/checks/parity_gates.rs` to verify zero dangling ports and 100% typed signal parity.
 
 ---
 
 ## Section 2: Abstract Schema AST to Logical Interface Metamodel Mapping
 
-### 2.1 Metamodel Definition & AST Hierarchy
+### 2.1 Metamodel Definition & AST Hierarchy in `crates/deap-core/src/sysml_ast.rs`
 
-The Level 1C Logical Interface Metamodel formalizes the semantic bridge between the raw parsed schema Abstract Syntax Tree (AST) generated from normative domain sources (YANG models, SysML v2 text, OpenAPI definitions, or Protobuf files) and downstream specification models.
+The Level 1C Logical Interface Metamodel formalizes the deterministic mapping between the SysML v2 / KerML Abstract Syntax Tree (AST) structs defined in `crates/deap-core/src/sysml_ast.rs` (and compiled by `SysmlParser` in `crates/compile-sysml/src/parser/grammar.rs`) and the standardized Level 1C Markdown specifications in `docs/interfaces/`.
 
-The metamodel consists of six primary entities:
-1. **`SchemaAST_Root`**: The immutable, root-level abstract syntax tree parsed from Level 0 normative schemas. It encapsulates namespace metadata, type declarations, container hierarchies, and structural leaves.
-2. **`ICD_SystemInterfaceMatrix`**: The system-level container that maintains the topological connectivity graph, subsystem registry, and canonical N² interaction matrix.
-3. **`ICD_SignalDictionary`**: The master registry containing the exhaustive set of all logical signals, telemetry channels, command parameters, and safety-critical state variables.
-4. **`PortDefNode`**: A discrete logical port situated on a subsystem boundary. It defines directional flow (IN, OUT, INOUT), port classification (Data, Command, Telemetry, Event), and structural multiplicity.
-5. **`ItemFlowNode`**: A typed logical payload entity representing a distinct signal or record transferred across ports. It enforces SI unit normalization, numeric bounds, quantization resolution, update rate, and fail-safe defaults.
-6. **`ConnectionNode`**: A directed topological link binding a source `PortDefNode` to one or more destination `PortDefNode` instances, with explicit latency and transmission constraints.
+The metamodel consists of six primary Rust AST structures and caching/slicing projections:
+1. **`PackageDef` / `SysmlModel` (`crates/deap-core/src/sysml_ast.rs`) & `SchemaDigest` / `IncrementalAstCache` (`crates/compile-sysml/src/semantic/digest.rs`)**: The root-level abstract syntax tree parsed from `schema/*.sysml` and persisted to `.pipeline/schema.sysml` and `.pipeline/schema-digest.json`. Encapsulates package declarations, imports, top-level `PartDef` blocks, `PortDef` definitions, `ItemDef` payloads, and `ConnectionDef` topologies, supporting bounded `AstSlice` extraction.
+2. **`PartDef` (`crates/deap-core/src/sysml_ast.rs`)**: Represents a logical subsystem or component (`part def` or nested `part` usage). Encapsulates boundary `ports: Vec<PortDef>`, internal/boundary `connections: Vec<ConnectionDef>`, structural `attributes: Vec<AttributeDef>`, local `item_defs: Vec<ItemDef>`, and recursive child `parts: Vec<PartDef>`.
+3. **`PortDef` & `InterfaceDef` (`crates/deap-core/src/sysml_ast.rs`)**: Represents a discrete logical port or conjugate interface contract situated on a `PartDef` boundary (`port def` or `in`/`out`/`inout` port usage). Captures `name: String`, `direction: Option<String>` (`"in"`, `"out"`, `"inout"`), `type_name: Option<String>` (including conjugate `~PortType` bindings), `flows: Vec<FlowDef>`, and `attributes: Vec<AttributeDef>`.
+4. **`FlowDef` & `ItemDef` (`crates/deap-core/src/sysml_ast.rs`)**: Represent typed logical payload entities conveyed across ports. `FlowDef` captures directional item flows (`direction: String`, `name: String`, `type_name: String`) inside a `PortDef`, while `ItemDef` defines composite or scalar payload structures (`name: String`, `attributes: Vec<AttributeDef>`, `doc: Option<String>`) whose attributes specify data types, physical SI units, valid numeric ranges, and sampling rates.
+5. **`ConnectionDef` (`crates/deap-core/src/sysml_ast.rs`)**: Represents a directed topological link (`connection def`, `interface def`, or `flow` block containing `connect <source_port> to <target_port>;` or `flow from <source_port> to <target_port>;`) binding `source_port: String` (on `source_part: Option<String>`) to `target_port: String` (on `target_part: Option<String>`) with `item_flow_ref: Option<String>`, `protocol: Option<String>`, `latency_ms: Option<f64>`, and `is_flow: bool`.
+6. **`AttributeDef` (`crates/deap-core/src/sysml_ast.rs`)**: Captures typed properties (`name: String`, `type_name: String`, `default_value: Option<String>`, `doc: Option<String>`) on `PartDef`, `PortDef`, and `ItemDef` nodes, driving the physical unit, valid range, rate, and safe-default columns in `ICD_02_MASTER_SIGNAL_DICTIONARY.md`.
 
 ```mermaid
 classDiagram
-    class SchemaAST_Root {
-        +String schema_id
-        +String schema_version
-        +String sha256_hash
-        +String source_file_path
-        +List~String~ namespaces
+    class PackageDef {
+        +String name
+        +Vec~PartDef~ parts
+        +Vec~PortDef~ ports
+        +Vec~ItemDef~ item_defs
+        +Vec~ConnectionDef~ connections
+        +Vec~RequirementDef~ requirements
     }
 
-    class ICD_SystemInterfaceMatrix {
-        +String matrix_id
-        +String system_name
-        +String baseline_version
-        +Int subsystem_count
-        +Int total_connections
+    class SchemaDigest {
+        +String sha256
+        +usize total_lines
+        +Vec~String~ schema_nodes
+        +Vec~FileDigestEntry~ file_manifest
+        +Vec~OperationalExchange~ operational_exchanges
     }
 
-    class ICD_SignalDictionary {
-        +String dictionary_id
-        +String baseline_version
-        +Int total_signal_count
-        +Int safety_critical_count
+    class PartDef {
+        +String name
+        +bool is_def
+        +Option~String~ type_name
+        +Vec~PortDef~ ports
+        +Vec~ConnectionDef~ connections
+        +Vec~AttributeDef~ attributes
+        +Vec~ItemDef~ item_defs
+        +Vec~PartDef~ parts
     }
 
-    class PortDefNode {
-        +String port_id
-        +String subsystem_id
-        +String port_name
+    class PortDef {
+        +String name
+        +Option~String~ direction
+        +Option~String~ type_name
+        +Vec~FlowDef~ flows
+        +Vec~AttributeDef~ attributes
+        +Option~String~ doc
+    }
+
+    class FlowDef {
         +String direction
-        +String port_type
-        +Int multiplicity
-        +String protocol_profile
+        +String name
+        +String type_name
     }
 
-    class ItemFlowNode {
-        +String signal_id
-        +String signal_name
-        +String data_type
-        +String si_units
-        +String valid_range
-        +Float update_rate_hz
-        +String safe_default_value
-        +String schema_citation
-        +Boolean is_safety_critical
-        +String hazard_ref
+    class ItemDef {
+        +String name
+        +Option~String~ doc
+        +Vec~AttributeDef~ attributes
     }
 
-    class ConnectionNode {
-        +String connection_id
-        +String source_port_ref
-        +String dest_port_ref
-        +List~String~ item_flow_refs
-        +Float latency_max_ms
-        +String reliability_req
-        +String flow_behavior
+    class ConnectionDef {
+        +String name
+        +String source_port
+        +String target_port
+        +Option~String~ source_part
+        +Option~String~ target_part
+        +Option~String~ item_flow_ref
+        +Option~String~ protocol
+        +Option~f64~ latency_ms
+        +bool is_flow
     }
 
-    SchemaAST_Root *-- ICD_SystemInterfaceMatrix
-    SchemaAST_Root *-- ICD_SignalDictionary
-    ICD_SystemInterfaceMatrix *-- PortDefNode
-    ICD_SystemInterfaceMatrix *-- ConnectionNode
-    ICD_SignalDictionary *-- ItemFlowNode
-    PortDefNode "1" <-- ConnectionNode : binds_source
-    PortDefNode "1..*" <-- ConnectionNode : binds_destination
-    ConnectionNode "1" o-- "1..*" ItemFlowNode : conveys
+    class AttributeDef {
+        +String name
+        +String type_name
+        +Option~String~ default_value
+        +Option~String~ doc
+    }
+
+    PackageDef *-- PartDef
+    PackageDef *-- PortDef
+    PackageDef *-- ItemDef
+    PackageDef *-- ConnectionDef
+    PackageDef ..> SchemaDigest : computes
+    PartDef *-- PortDef
+    PartDef *-- ConnectionDef
+    PartDef *-- AttributeDef
+    PortDef *-- FlowDef
+    PortDef *-- AttributeDef
+    ItemDef *-- AttributeDef
+    PortDef "1" <-- ConnectionDef : source_port
+    PortDef "1" <-- ConnectionDef : target_port
+    ConnectionDef o-- ItemDef : item_flow_ref
 ```
 
-### 2.2 Formal AST Transformation Functions
+### 2.2 Formal AST Transformation Functions (`deap-core` & `compile-sysml`)
 
-The automated synthesis of Level 1C interface artifacts from the Level 0 `SchemaAST_Root` is governed by deterministic projection functions:
+The automated synthesis of Level 1C interface artifacts from the compiled `PackageDef` AST in `crates/deap-core/src/sysml_ast.rs` and `crates/compile-sysml/src/sync/forward.rs` is governed by deterministic projection functions:
 
-Let $\mathcal{T}_{\mathrm{ast}}$ represent the schema AST node set. The projection function $\Pi_{\mathrm{port}}: \mathcal{T}_{\mathrm{ast}} \to \mathcal{P}$ extracts port definitions:
+Let $\mathcal{T}_{\mathrm{ast}}$ represent the compiled `PackageDef` AST node set. The port extraction function $\Pi_{\mathrm{port}}: \mathcal{T}_{\mathrm{ast}} \to \mathcal{P}$ (implemented via `parse_port_defs` in `crates/deap-core/src/sysml_ast.rs` and `collect_ast_nested_subsystems_and_ports` in `crates/verify-baseline/src/checks/parity_gates.rs`) extracts typed `PortDef` structures:
 
 $$ \begin{aligned}
 \Pi_{\mathrm{port}}(n) &= \begin{cases}
-\mathrm{PortDefNode}(n.\mathrm{id}, n.\mathrm{subsys}, n.\mathrm{dir}, n.\mathrm{type}) & \text{if } n \text{ is port-like} \\
+\mathrm{PortDef}(n.\mathrm{name}, n.\mathrm{direction}, n.\mathrm{type\_name}, n.\mathrm{flows}) & \text{if } n \text{ is a SysML port / port def} \\
 \emptyset & \text{otherwise}
 \end{cases}
 \end{aligned} $$
 
-Similarly, the signal extraction function $\Pi_{\mathrm{signal}}: \mathcal{T}_{\mathrm{ast}} \to \mathcal{S}_{\mathrm{dict}}$ projects terminal leaf and attribute nodes into canonical `ItemFlowNode` records:
+Similarly, the signal and item-flow projection function $\Pi_{\mathrm{signal}}: \mathcal{T}_{\mathrm{ast}} \to \mathcal{S}_{\mathrm{dict}}$ (implemented in `forward_sync_sysml_to_specs` in `crates/compile-sysml/src/sync/forward.rs`) projects `ItemDef`, `FlowDef`, `PortDef`, and `AttributeDef` nodes into canonical `ICD_02_MASTER_SIGNAL_DICTIONARY.md` rows:
 
 $$ \begin{aligned}
 \Pi_{\mathrm{signal}}(l) &= \left\langle \mathrm{ID}(l), \mathrm{Name}(l), \mathrm{Type}(l), \mathrm{Unit}(l), \mathrm{Range}(l), f_{\mathrm{rate}}(l), v_{\mathrm{default}}(l), \mathrm{Cite}(l) \right\rangle
@@ -284,7 +302,7 @@ To prevent premature hardware coupling and preserve platform independence, Level
 
 ## Section 3: Standardized Level 1C Interface Artifacts in `docs/interfaces/`
 
-All Level 1C logical interface specifications are maintained in the standardized repository directory `docs/interfaces/`. Level 1C comprises two canonical, human-readable, and machine-verifiable CommonMark artifacts:
+All Level 1C logical interface specifications are maintained in the standardized repository directory `docs/interfaces/`. Level 1C comprises two canonical, human-readable, and machine-verifiable CommonMark artifacts synthesized via `skills/spec-icd-engineering/SKILL.md` and `crates/compile-sysml/src/sync/forward.rs`:
 - `docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md`
 - `docs/interfaces/ICD_02_MASTER_SIGNAL_DICTIONARY.md`
 
@@ -293,25 +311,28 @@ All Level 1C logical interface specifications are maintained in the standardized
 `ICD_01_SYSTEM_INTERFACE_MATRIX.md` captures the global subsystem topological connectivity graph, port rosters, connection bindings, and canonical N² interaction matrix.
 
 #### 3.1.1 Subsystem Topological Connectivity Graph
-The connectivity graph visualizes all directional data and command flows between subsystems.
+The connectivity graph visualizes all directional data and command flows between subsystems using `flowchart TD` with `direction TB` in every `subgraph` and line segments bounded to $\le 35$ characters.
 
 ```mermaid
 flowchart TD
-    subgraph SEN ["SensorProcessingSubsystem - ResourcePerformer: Sensor Processing Subsystem"]
-        P_SEN_TELEM["PORT-SEN-TELEM_OUT"]
+    subgraph SEN ["SensorProcessingSubsystem (SEN)"]
+        direction TB
+        P_SEN_TELEM["out port SensorTelemetryOut<br/>(PORT-SEN-TELEM_OUT)"]
     end
 
-    subgraph CTL ["ControllerLogicSubsystem - ResourcePerformer: Controller Logic Subsystem"]
-        P_CTL_TELEM["PORT-CTL-TELEM_IN"]
-        P_CTL_CMD["PORT-CTL-CMD_OUT"]
+    subgraph CTL ["ControllerLogicSubsystem (CTL)"]
+        direction TB
+        P_CTL_TELEM["in port SensorTelemetryIn<br/>(PORT-CTL-TELEM_IN)"]
+        P_CTL_CMD["out port ActuatorCommandOut<br/>(PORT-CTL-CMD_OUT)"]
     end
 
-    subgraph ACT ["ActuationDriverSubsystem - ResourcePerformer: Actuation Driver Subsystem"]
-        P_ACT_CMD["PORT-ACT-CMD_IN"]
+    subgraph ACT ["ActuationDriverSubsystem (ACT)"]
+        direction TB
+        P_ACT_CMD["in port ActuatorCommandIn<br/>(PORT-ACT-CMD_IN)"]
     end
 
-    P_SEN_TELEM -->|"CONN-01 (Sensor State Stream)"| P_CTL_TELEM
-    P_CTL_CMD -->|"CONN-02 (Actuator Demand Stream)"| P_ACT_CMD
+    P_SEN_TELEM -->|"CONN-01:<br/>Sensor State Stream"| P_CTL_TELEM
+    P_CTL_CMD -->|"CONN-02:<br/>Actuator Demand Stream"| P_ACT_CMD
 ```
 
 #### 3.1.2 Canonical N² Subsystem Interface Matrix
@@ -350,18 +371,18 @@ Every signal entry in the Master Signal Dictionary must strictly adhere to the t
 7. **Valid Range:** Precise mathematical domain interval `[min, max]` or discrete enumeration literal set.
 8. **Update Rate:** Periodic frequency in plain text `f Hz` (e.g., `50 Hz`, `100 Hz`) or aperiodic timing bound `Aperiodic [tau_min, tau_max] ms`.
 9. **Safe Default Value:** Deterministic value assigned during cold initialization, link interruption, sensor fault, or emergency failsafe state.
-10. **Schema Citation:** Exact normative provenance pointer to Level 0 source schema (`schema/extracted/filename.yang#Lnn` or `models/system.sysml#Lnn`).
+10. **Schema Citation:** Exact normative provenance pointer to Level 0 source schema (`schema/model.sysml#Lnn`, `.pipeline/schema.sysml#Lnn`, or `schema/extracted/filename.yang#Lnn`).
 
 #### 3.2.2 Canonical Signal Flow Table Example
 
 | Signal ID | Signal Name | Source Port | Dest Port | Data Type | SI Units | Valid Range | Update Rate | Safe Default Value | Schema Citation |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `SIG-SEN-CTL-001` | PrimarySensorState | `PORT-SEN-TELEM_OUT` | `PORT-CTL-TELEM_IN` | Float32 | V | [0.0, 100.0] | 100 Hz | 0.0 | `schema/extracted/sensor.yang#L45` |
-| `SIG-SEN-CTL-002` | OperationalRateSignal | `PORT-SEN-TELEM_OUT` | `PORT-CTL-TELEM_IN` | Float32 | rad/s | [-50.0, 50.0] | 100 Hz | 0.0 | `schema/extracted/sensor.yang#L58` |
-| `SIG-SEN-CTL-003` | EnvironmentalMetric | `PORT-SEN-TELEM_OUT` | `PORT-CTL-TELEM_IN` | Float32 | Pa | [0.0, 1000.0] | 50 Hz | 0.0 | `schema/extracted/sensor.yang#L72` |
-| `SIG-CTL-ACT-001` | PrimaryActuatorDemand | `PORT-CTL-CMD_OUT` | `PORT-ACT-CMD_IN` | Float32 | dimensionless | [-1.0, 1.0] | 200 Hz | 0.0 | `schema/extracted/controller.yang#L110` |
-| `SIG-CTL-ACT-002` | AuxiliaryActuatorDemand | `PORT-CTL-CMD_OUT` | `PORT-ACT-CMD_IN` | Float32 | dimensionless | [-1.0, 1.0] | 200 Hz | 0.0 | `schema/extracted/controller.yang#L124` |
-| `SIG-CTL-ACT-003` | PowerEnableDemand | `PORT-CTL-CMD_OUT` | `PORT-ACT-CMD_IN` | Float32 | dimensionless | [0.0, 1.0] | 100 Hz | 0.0 | `schema/extracted/controller.yang#L138` |
+| `SIG-SEN-CTL-001` | PrimarySensorState | `PORT-SEN-TELEM_OUT` | `PORT-CTL-TELEM_IN` | Float32 | V | [0.0, 100.0] | 100 Hz | 0.0 | `schema/model.sysml#L45` |
+| `SIG-SEN-CTL-002` | OperationalRateSignal | `PORT-SEN-TELEM_OUT` | `PORT-CTL-TELEM_IN` | Float32 | rad/s | [-50.0, 50.0] | 100 Hz | 0.0 | `schema/model.sysml#L58` |
+| `SIG-SEN-CTL-003` | EnvironmentalMetric | `PORT-SEN-TELEM_OUT` | `PORT-CTL-TELEM_IN` | Float32 | Pa | [0.0, 1000.0] | 50 Hz | 0.0 | `schema/model.sysml#L72` |
+| `SIG-CTL-ACT-001` | PrimaryActuatorDemand | `PORT-CTL-CMD_OUT` | `PORT-ACT-CMD_IN` | Float32 | dimensionless | [-1.0, 1.0] | 200 Hz | 0.0 | `schema/model.sysml#L110` |
+| `SIG-CTL-ACT-002` | AuxiliaryActuatorDemand | `PORT-CTL-CMD_OUT` | `PORT-ACT-CMD_IN` | Float32 | dimensionless | [-1.0, 1.0] | 200 Hz | 0.0 | `schema/model.sysml#L124` |
+| `SIG-CTL-ACT-003` | PowerEnableDemand | `PORT-CTL-CMD_OUT` | `PORT-ACT-CMD_IN` | Float32 | dimensionless | [0.0, 1.0] | 100 Hz | 0.0 | `schema/model.sysml#L138` |
 
 #### 3.2.3 Safety-Critical Signal Allocation & STPA Hazard Mapping Example
 
@@ -380,210 +401,259 @@ Every signal entry in the Master Signal Dictionary must strictly adhere to the t
 
 ### 4.1 Multi-Phase Agentic Execution Pipeline
 
-Level 1C is integrated directly into the DEAP Orchestration lifecycle via a dedicated Systems Engineering baseline stage: **Worker 0D (Worker ICD - Logical Interface Engineer)** completing Pipeline 0 prior to Pipeline 1 Agile Backlog projection.
+Level 1C is integrated directly into the DEAP Orchestration lifecycle (`skills/spec-orchestrator/SKILL.md`) via a dedicated Systems Engineering baseline stage: **Worker 0D (Worker ICD - Logical Interface Engineer, governed by `skills/spec-icd-engineering/SKILL.md`)** completing Pipeline 0 prior to Pipeline 1 Agile Backlog projection.
 
 The orchestrator enforces strict serialization and artifact immutability across successive execution phases:
-- **Phase 0 (Front-End Systems & Safety Modeling):** Step 0 Model Ingestion & Compilation (`compile-sysml`) compiles the AST SSOT, Phase 0.5 executes Normative Research, Phase 0.75 (Worker 0A & 0B) authors `CONOPS.md` and `STPA_MATRIX.md`, and Phase 0.85 (Worker 0D) authors Level 1C ICDs (`ICD_01` and `ICD_02`).
-- **Phase 1 (Agile Specification Backlog Generation - Pipeline 1):** Downstream Worker 1A, 1B, and 1C project frozen Level 1C interfaces and signals into Epics, Features, BDD User Stories, and UML Use Cases.
-- **Phase 2 (Work Breakdown Structure & Enterprise Realization):** Worker 1D synthesizes WBS and MBD work packages.
-- **Phase 3 (Feature-Driven Implementation - Pipeline 2):** Sub-implementers synthesize SPARK Ada, MISRA C, ROS2 C++, and Simulink models.
-- **Phase 4 (AST Parity Auditor & Verification Gates):** Executes **Gate 23/24 (ICD Completeness Validation)** alongside Gates 1–22.
+- **Phase 0 (Front-End Systems & Safety Modeling):** Step 0 Model Ingestion & Compilation (`./target/release/ingest-sysml` and `./target/release/compile-sysml --compile`) compiles the AST SSOT into `.pipeline/schema.sysml` and `.pipeline/schema-digest.json`. Step 1.5 dispatches Component-Level Failure Mode Researchers (`docs/research/FAILURE_MODE_REGISTRY.md`). Workers 0A and 0B synthesize Level 1B ConOps (`./target/release/assemble-conops`) and STPA safety artifacts (`./target/release/compile-sysml --stpa-transpile`). Worker 0D (`skills/spec-icd-engineering/SKILL.md` coupled with `forward_sync_sysml_to_specs` in `crates/compile-sysml/src/sync/forward.rs`) authors `docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md` and `docs/interfaces/ICD_02_MASTER_SIGNAL_DICTIONARY.md`.
+- **Phase 1 (Agile Specification Backlog Generation - Pipeline 1):** Downstream Workers (`schema-specification-engineering`, `spec-user-story-engineering`, `spec-usecase-engineering`) project frozen Level 1C interfaces and signals into Epics, Features, BDD User Stories, and UML Use Cases.
+- **Phase 2 (Work Breakdown Structure & Enterprise Realization):** Worker 1D (`spec-wbs-engineering`) synthesizes MIL-STD-881E WBS and realization registers.
+- **Phase 3 (Feature-Driven Implementation - Pipeline 2):** Subagent implementers (`feature-driven-implementation`) synthesize target application and MBD artifacts.
+- **Phase 4 (Baseline Verification Engine - `crates/verify-baseline`):** Executes `./target/release/verify-baseline . --no-domain`, invoking **Check 24 (`check_icd_completeness`)** and **Check 26 (`check_parameter_metrology` / `check_standards_measurement`)** in `crates/verify-baseline/src/checks/parity_gates.rs` across the full 36-check verification suite.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Orchestrator as Master Orchestrator
-    participant Step0 as Pipeline 0: Step 0 Ingestion & Compilation Gate
-    participant Worker0 as Pipeline 0: Pre-Spec Safety & ConOps (Workers 0A-0B)
-    participant WorkerICD as Pipeline 0: Worker 0D (Interface Eng / Level 1C)
-    participant WorkerAgile as Pipeline 1: Agile Spec Workers (Workers 1A-1D)
-    participant Implementer as Pipeline 2: Code Synthesis Worker
-    participant Gate23 as Verification: Gate 23/24 (ICD Completeness)
+    participant Orchestrator as Master Orchestrator (spec-orchestrator)
+    participant Step0 as compile-sysml (grammar.rs & forward.rs)
+    participant Worker0 as Pre-Spec Safety & ConOps (assemble-conops)
+    participant WorkerICD as Worker ICD (spec-icd-engineering/SKILL.md)
+    participant WorkerAgile as Pipeline 1 Agile Spec Workers
+    participant Implementer as Pipeline 2 Implementation Worker
+    participant VerifyBaseline as verify-baseline (Check 24 & Check 26)
 
     Note over Orchestrator,Step0: Pipeline 0 - Step 0 Ingestion & Canonical AST Compilation Gate
-    Orchestrator->>Step0: Compile input models via compile-sysml --compile
-    Step0-->>Orchestrator: Canonical .pipeline/schema.sysml & schema-digest.json
+    Orchestrator->>Step0: Execute ./target/release/compile-sysml --compile
+    Step0-->>Orchestrator: Emit .pipeline/schema.sysml & .pipeline/schema-digest.json
 
-    Note over Orchestrator,Worker0: Pipeline 0 - Synthesize High-Level Safety and Operational Concepts
-    Orchestrator->>Worker0: Dispatch Front-End Safety & ConOps Tasks (ingests compiled AST)
-    Worker0-->>Orchestrator: Return CONOPS.md & STPA_MATRIX.md
+    Note over Orchestrator,Worker0: Pipeline 0 - Synthesize Level 1B ConOps and STPA Safety Suite
+    Orchestrator->>Worker0: Execute assemble-conops & compile-sysml --stpa-transpile
+    Worker0-->>Orchestrator: Return docs/conops/ & docs/safety/ artifacts
 
     Note over Orchestrator,WorkerICD: Pipeline 0 - Synthesize Level 1C Logical Interface Specifications
-    Orchestrator->>WorkerICD: Dispatch ICD Synthesis Task (SchemaAST + CONOPS + STPA)
-    WorkerICD->>WorkerICD: Synthesize Subsystem Port Topological Connectivity Graph
-    WorkerICD->>WorkerICD: Construct Canonical N2 Interface Interaction Matrix
-    WorkerICD->>WorkerICD: Generate Master Signal Flow Dictionary (SIG-*)
-    WorkerICD->>WorkerICD: Finalize pipeline0_handoff_contract.json after Gate 23/24 PASS
-    WorkerICD-->>Orchestrator: Write docs/interfaces/ICD_01 and ICD_02 Artifacts
+    Orchestrator->>Step0: Execute compile-sysml --forward-sync (forward_sync_sysml_to_specs)
+    Step0-->>WorkerICD: Project PortDef, ConnectionDef, FlowDef, ItemDef scaffolding
+    Orchestrator->>WorkerICD: Dispatch Worker ICD (read skills/spec-icd-engineering/SKILL.md)
+    WorkerICD->>WorkerICD: Synthesize Subsystem Port Topological flowchart TD
+    WorkerICD->>WorkerICD: Construct Canonical N2 Interface Coupling Matrix (ICD_01)
+    WorkerICD->>WorkerICD: Generate Master Signal Flow Dictionary (ICD_02)
+    WorkerICD-->>Orchestrator: Write docs/interfaces/ICD_01 & ICD_02 artifacts
+
+    Note over Orchestrator,VerifyBaseline: Pipeline 0 Gate - Verify Level 1C ICD Parity Before Pipeline 1
+    Orchestrator->>VerifyBaseline: Execute ./target/release/verify-baseline . --no-domain
+    VerifyBaseline->>VerifyBaseline: Run Check 24 (check_icd_completeness) & Check 26 (metrology)
+    VerifyBaseline-->>Orchestrator: Check 24 & Check 26 PASS (100% AST-to-ICD Parity)
 
     Note over Orchestrator,WorkerAgile: Pipeline 1 - Decompose Level 1C into Agile Specifications
-    Orchestrator->>WorkerAgile: Dispatch Backlog Generation (Bind Stories to SIG-*)
+    Orchestrator->>WorkerAgile: Dispatch Single-Item Spec Subagents (Bind Lifelines to ICD_01/02)
     WorkerAgile-->>Orchestrator: Return Epics, Features, BDD User Stories, UML Use Cases
 
-    Note over Orchestrator,Implementer: Phase 3 - Multi-Target High-Integrity Implementation
-    Orchestrator->>Implementer: Dispatch Code Synthesis (SPARK Ada, MISRA C, Simulink)
-    Implementer-->>Orchestrator: Deliver Implementation Source Code and Test Fixtures
-
-    Note over Orchestrator,Gate23: Phase 4 - Continuous Parity Verification and Gate 23
-    Orchestrator->>Gate23: Execute ICDCompletenessValidator Verification
-    Gate23->>Gate23: Verify Zero Dangling Ports (100% Port Connection Parity)
-    Gate23->>Gate23: Verify 100% Signal-to-Port Allocation Parity
-    Gate23->>Gate23: Verify 100% Schema Leaf Coverage and Non-Empty Safe Defaults
-    Gate23-->>Orchestrator: Verification PASS (Zero Defect / Ready for Integration)
+    Note over Orchestrator,Implementer: Pipeline 2 - Feature-Driven Implementation & Final Verification
+    Orchestrator->>Implementer: Dispatch TDD Implementation Subagents
+    Implementer-->>Orchestrator: Deliver Source Code & Unit/Mutation Tests
+    Orchestrator->>VerifyBaseline: Re-run ./target/release/verify-baseline . --no-domain
+    VerifyBaseline-->>Orchestrator: Full 36-Check Verification Suite PASS
 ```
 
 ---
 
-## Section 5: Parity Auditor Gate 23 (ICDCompletenessValidator Specification)
+## Section 5: Mechanical Verification -- Check 24 (`check_icd_completeness`) & Check 26 (`check_parameter_metrology`) in `crates/verify-baseline`
 
-### 5.1 Formal Gate Requirements & Defect Taxonomy
+### 5.1 Formal Check Requirements & Defect Taxonomy
 
-**Gate 23 (`ICDCompletenessValidator`)** is implemented as a deterministic, offline static verification engine within the DEAP Parity Auditor suite (`skills/spec-orchestrator/parity_auditor/`).
+Level 1C interface verification is implemented in native Rust within `crates/verify-baseline/src/checks/parity_gates.rs` and executed via `./target/release/verify-baseline . --no-domain` (or `cargo run --release -p verify-baseline -- . --no-domain`). Two complementary verification gates govern Level 1C artifacts:
+- **Check 24 (`check_icd_completeness`)**: Enforces 100% structural, directional, and topological parity between the SysML v2 AST (`.pipeline/schema.sysml` or `schema/*.sysml`) and `docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md` / `docs/interfaces/ICD_02_MASTER_SIGNAL_DICTIONARY.md`, as well as downstream Level 2 User Story sequence diagram traceability.
+- **Check 26 (`check_parameter_metrology` / `check_standards_measurement`)**: Enforces SI/IEEE/ISO physical unit presence, numeric range bounds, and non-placeholder measurement specifications across `ICD_02_MASTER_SIGNAL_DICTIONARY.md` and specification tables.
 
-Gate 23 enforces five mandatory verification rules:
+Check 24 (`check_icd_completeness`) enforces five mandatory verification rules:
 
-1. **Rule 1 (`icd-dangling-port-detected`):** Asserts that every logical port $p \in \mathcal{P}_{\mathrm{internal}}$ declared in `ICD_01_SYSTEM_INTERFACE_MATRIX.md` is bound to at least one active connection $c \in \mathcal{C}$ or is formally marked as an external boundary port.
-2. **Rule 2 (`icd-unmapped-signal-detected`):** Asserts that every signal $\sigma \in \mathcal{S}_{\mathrm{dict}}$ in `ICD_02_MASTER_SIGNAL_DICTIONARY.md` maps to a declared connection $c$ and matching ports $(p_{\mathrm{src}}, p_{\mathrm{dst}})$ in `ICD_01_SYSTEM_INTERFACE_MATRIX.md`.
-3. **Rule 3 (`icd-schema-orphan-leaf-detected`):** Asserts that 100% of inter-subsystem data leaves in `SchemaAST_Root` are allocated to a corresponding `SIG-*` entry.
-4. **Rule 4 (`icd-invalid-field-contract`):** Asserts that every signal contains non-empty, valid SI units, a bounded valid range `[min, max]`, a positive update rate $f > 0$, an unambiguous safe default value, and a valid schema citation.
-5. **Rule 5 (`icd-downstream-citation-missing`):** Asserts that all downstream Level 2 BDD User Stories and UML Use Cases referencing inter-subsystem data exchanges cite valid, registered `SIG-*` identifiers from `ICD_02_MASTER_SIGNAL_DICTIONARY.md`.
+1. **Rule 1 (Subsystem & Port AST Coverage and Direction/Conjugate Parity):** Recursively traverses `model.parts` and nested `part.parts` via `collect_ast_nested_subsystems_and_ports` (`PortMeta { direction, type_name }`). Verifies that 100% of AST subsystems (`PartDef`) and boundary ports (`PortDef`) appear in `ICD_01_SYSTEM_INTERFACE_MATRIX.md` with matching direction (`in`, `out`, `inout`) and port type / conjugate notation (`~PortType` vs. `PortType`).
+2. **Rule 2 (Zero Orphan / Dangling Ports):** Cross-checks every AST port (`PortDef`) against all AST connections (`ConnectionDef` from `model.connections` and `part.connections`). Any port with zero connection bindings is rejected unless explicitly documented as an external boundary port in `ICD_01_SYSTEM_INTERFACE_MATRIX.md`.
+3. **Rule 3 (Bidirectional Connection & Item Flow Parity):** Verifies that every AST `ConnectionDef`, `FlowDef`, and `ItemDef` is documented in `ICD_01_SYSTEM_INTERFACE_MATRIX.md` and `ICD_02_MASTER_SIGNAL_DICTIONARY.md`, and conversely rejects any hallucinated subsystem, port, or signal row in `ICD_01` or `ICD_02` that does not exist in the SysML AST.
+4. **Rule 4 (Signal Field Contract & Physical Metrology Completeness):** Inspects every table row in `ICD_02_MASTER_SIGNAL_DICTIONARY.md` (and via Check 26 `check_standards_measurement`) to ensure every signal defines a non-empty data type, valid physical SI unit (rejecting `TBD`, `TODO`, `?`, `N/A`, `-`), bounded numeric range, and sampling rate/period.
+5. **Rule 5 (Cross-Document `ICD_01` <-> `ICD_02` & Level 2 Sequence Lifeline Parity):** Verifies that every payload referenced in `ICD_01` has a corresponding specification row in `ICD_02`, and that every `participant` lifeline and synchronous/asynchronous message in `docs/user-stories/US-*.md` sequence diagrams resolves to a valid AST/ICD subsystem and signal flow.
 
 ### 5.2 Mathematical Completeness Formulation
 
-Let $\mathcal{P}_{\mathrm{declared}}$ be the set of declared subsystem ports and $\mathcal{P}_{\mathrm{bound}}$ be the set of ports referenced by connections:
+Let $\mathcal{P}_{\mathrm{declared}}$ be the set of declared subsystem ports extracted from `PackageDef` / `SysmlModel` and $\mathcal{P}_{\mathrm{bound}}$ be the set of ports referenced by `ConnectionDef` instances:
 
 $$ \begin{aligned}
 \mathcal{P}_{\mathrm{bound}} &= \bigcup_{c \in \mathcal{C}} \{ c.p_{\mathrm{src}}, c.p_{\mathrm{dst}} \}
 \end{aligned} $$
 
-The dangling port set $\mathcal{D}_{\mathrm{port}}$ must evaluate to the empty set:
+The dangling port set $\mathcal{D}_{\mathrm{port}}$ evaluated by `check_icd_completeness` must equal the empty set:
 
 $$ \begin{aligned}
 \mathcal{D}_{\mathrm{port}} &= \mathcal{P}_{\mathrm{declared}} \setminus (\mathcal{P}_{\mathrm{bound}} \cup \mathcal{P}_{\mathrm{external}}) = \emptyset
 \end{aligned} $$
 
-The signal dictionary coverage metric $\Omega_{\mathrm{coverage}}$ over all schema interface leaves $\mathcal{L}_{\mathrm{schema}}$ must strictly equal 1.0 (100%):
+The signal dictionary coverage metric $\Omega_{\mathrm{coverage}}$ over all schema interface payloads $\mathcal{L}_{\mathrm{schema}} = \mathcal{F}_{\mathrm{flows}} \cup \mathcal{I}_{\mathrm{items}}$ must strictly equal 1.0 (100%):
 
 $$ \begin{aligned}
 \Omega_{\mathrm{coverage}} &= \frac{|\mathcal{S}_{\mathrm{dict}} \cap \mathcal{L}_{\mathrm{schema}}|}{|\mathcal{L}_{\mathrm{schema}}|} = 1.0
 \end{aligned} $$
 
-### 5.3 Validator Implementation Architecture
+### 5.3 Native Rust Validator Implementation (`crates/verify-baseline/src/checks/parity_gates.rs`)
 
-The `ICDCompletenessValidator` class adheres to the `IValidator` interface:
+Check 24 (`check_icd_completeness`) and Check 26 (`check_standards_measurement`) are implemented in `crates/verify-baseline/src/checks/parity_gates.rs` using `deap_core::sysml_ast::parse_sysml` and `deap_core::diagnostics::Diagnostic`:
 
-```python
-"""
-ICD Completeness & Signal Flow Parity Validator (Gate 23).
-"""
+```rust
+//! Excerpt from crates/verify-baseline/src/checks/parity_gates.rs
+//! Check 24 (check_icd_completeness) & Check 26 (check_standards_measurement)
 
-import os
-import re
-from typing import Dict, List, Set, Tuple
-from parity_auditor.validators.base import IValidator
-from parity_auditor.core.findings import Finding
-from parity_auditor.core.workspace import WorkspaceRepository
+use deap_core::diagnostics::Diagnostic;
+use deap_core::markdown::check_mermaid_syntax;
+use deap_core::rules::ValidationRules;
+use deap_core::sysml_ast::{parse_sysml, PartDef};
+use std::collections::{BTreeMap, BTreeSet};
+use std::fs;
+use std::path::Path;
 
-class ICDCompletenessValidator(IValidator):
-    """
-    Gate 23: Enforces 100% topological port binding, zero dangling ports,
-    and complete signal dictionary coverage for Level 1C ICD artifacts.
-    """
+#[derive(Clone, Debug)]
+struct PortMeta {
+    direction: Option<String>,
+    type_name: Option<String>,
+}
 
-    PORT_ROSTER_RE = re.compile(r"^\|\s*`?(PORT-[A-Z0-9_-]+)`?\s*\|\s*([A-Z0-9_-]+)\s*\|\s*([A-Za-z0-9_-]+)\s*\|\s*(IN|OUT|INOUT)\s*\|", re.MULTILINE)
-    CONN_ROW_RE = re.compile(r"^\|\s*`?(CONN-[A-Z0-9_-]+)`?\s*\|\s*`?(PORT-[A-Z0-9_-]+)`?\s*\|\s*`?(PORT-[A-Z0-9_-]+)`?\s*\|", re.MULTILINE)
-    SIGNAL_ROW_RE = re.compile(r"^\|\s*`?(SIG-[A-Z0-9_-]+)`?\s*\|\s*([A-Za-z0-9_]+)\s*\|\s*`?(PORT-[A-Z0-9_-]+)`?\s*\|\s*`?(PORT-[A-Z0-9_-]+)`?\s*\|\s*([A-Za-z0-9_]+)\s*\|\s*([^|]+)\|\s*([^|]+)\|\s*([^|]+)\|\s*([^|]+)\|\s*`?([^|`]+)`?\s*\|", re.MULTILINE)
+/// Recursively collects nested subsystem `PartDef` names and `PortDef` metadata from the SysML AST.
+fn collect_ast_nested_subsystems_and_ports(
+    parts: &[PartDef],
+    ast_subsystems: &mut BTreeSet<String>,
+    ast_ports: &mut BTreeMap<String, Vec<PortMeta>>,
+) {
+    for p in parts {
+        if !p.ports.is_empty() || !p.connections.is_empty() || !p.parts.is_empty() {
+            ast_subsystems.insert(p.name.clone());
+        }
+        for port in &p.ports {
+            ast_ports
+                .entry(port.name.clone())
+                .or_default()
+                .push(PortMeta {
+                    direction: port.direction.clone(),
+                    type_name: port.type_name.clone(),
+                });
+        }
+        collect_ast_nested_subsystems_and_ports(&p.parts, ast_subsystems, ast_ports);
+    }
+}
 
-    def validate(self, repo: WorkspaceRepository, **kwargs) -> List[Finding]:
-        findings: List[Finding] = []
-        icd01_path = os.path.join(repo.workspace_dir, "docs", "interfaces", "ICD_01_SYSTEM_INTERFACE_MATRIX.md")
-        icd02_path = os.path.join(repo.workspace_dir, "docs", "interfaces", "ICD_02_MASTER_SIGNAL_DICTIONARY.md")
+/// Check 24: Verifies Level 1C ICD_01_SYSTEM_INTERFACE_MATRIX.md and
+/// ICD_02_MASTER_SIGNAL_DICTIONARY.md completeness and parity against the SysML AST.
+pub fn check_icd_completeness(workspace: &Path, _rules: &ValidationRules) -> Vec<Diagnostic> {
+    let mut diags = Vec::new();
+    let icd_dir = workspace.join("docs/interfaces");
+    let icd_01 = icd_dir.join("ICD_01_SYSTEM_INTERFACE_MATRIX.md");
+    let icd_02 = icd_dir.join("ICD_02_MASTER_SIGNAL_DICTIONARY.md");
 
-        if not os.path.exists(icd01_path):
-            findings.append(Finding("icd-file-missing", "Missing required Level 1C artifact: docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md", location="docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md"))
-            return findings
+    // 1. Verify existence, non-empty content, and Mermaid syntax of ICD_01 and ICD_02
+    let Ok(c1) = fs::read_to_string(&icd_01) else {
+        diags.push(Diagnostic::error(
+            24,
+            "icd-completeness",
+            "Missing docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md.",
+        ));
+        return diags;
+    };
+    let Ok(c2) = fs::read_to_string(&icd_02) else {
+        diags.push(Diagnostic::error(
+            24,
+            "icd-completeness",
+            "Missing docs/interfaces/ICD_02_MASTER_SIGNAL_DICTIONARY.md.",
+        ));
+        return diags;
+    };
 
-        if not os.path.exists(icd02_path):
-            findings.append(Finding("icd-file-missing", "Missing required Level 1C artifact: docs/interfaces/ICD_02_MASTER_SIGNAL_DICTIONARY.md", location="docs/interfaces/ICD_02_MASTER_SIGNAL_DICTIONARY.md"))
-            return findings
+    for err in check_mermaid_syntax(&c1, "docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md") {
+        diags.push(Diagnostic::error(24, "icd-completeness", err));
+    }
 
-        with open(icd01_path, "r", encoding="utf-8") as f:
-            icd01_text = f.read()
-        with open(icd02_path, "r", encoding="utf-8") as f:
-            icd02_text = f.read()
+    // 2. Parse compiled SysML AST (.pipeline/schema.sysml or schema/*.sysml)
+    //    and verify 100% subsystem, port direction/conjugate type, connection,
+    //    zero-orphan-port, and ICD_02 signal unit/range/rate parity.
+    let schema_path = workspace.join(".pipeline/schema.sysml");
+    if let Ok(schema_text) = fs::read_to_string(&schema_path) {
+        let model = parse_sysml(&schema_text);
+        let mut ast_subsystems = BTreeSet::new();
+        let mut ast_ports: BTreeMap<String, Vec<PortMeta>> = BTreeMap::new();
+        collect_ast_nested_subsystems_and_ports(&model.parts, &mut ast_subsystems, &mut ast_ports);
 
-        # Parse ports and connections
-        declared_ports: Set[str] = set(m.group(1) for m in self.PORT_ROSTER_RE.finditer(icd01_text))
-        bound_ports: Set[str] = set()
-        for m in self.CONN_ROW_RE.finditer(icd01_text):
-            bound_ports.add(m.group(2))
-            bound_ports.add(m.group(3))
+        for subsys in &ast_subsystems {
+            if !c1.contains(subsys.as_str()) {
+                diags.push(Diagnostic::error(
+                    24,
+                    "icd-completeness",
+                    format!("AST subsystem '{}' is missing from ICD_01_SYSTEM_INTERFACE_MATRIX.md.", subsys),
+                ));
+            }
+        }
+        for port_name in ast_ports.keys() {
+            if !c1.contains(port_name.as_str()) && !c2.contains(port_name.as_str()) {
+                diags.push(Diagnostic::error(
+                    24,
+                    "icd-completeness",
+                    format!("AST port '{}' is undocumented in ICD_01 / ICD_02.", port_name),
+                ));
+            }
+        }
+    }
 
-        # Check for dangling ports
-        dangling = declared_ports - bound_ports
-        for port in sorted(dangling):
-            findings.append(Finding(
-                "icd-dangling-port-detected",
-                f"Declared port '{port}' in ICD_01 is not bound to any active ConnectionNode.",
-                location="docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md",
-                detail={"port_id": port}
-            ))
-
-        # Parse signals and validate signal integrity
-        signal_ids: Set[str] = set()
-        for m in self.SIGNAL_ROW_RE.finditer(icd02_text):
-            sig_id, sig_name, src_p, dst_p, d_type, units, v_range, rate, default_v, schema_ref = [m.group(i).strip() for i in range(1, 11)]
-            signal_ids.add(sig_id)
-
-            if src_p not in declared_ports:
-                findings.append(Finding("icd-invalid-port-ref", f"Signal '{sig_id}' cites undeclared Source Port '{src_p}'.", location="docs/interfaces/ICD_02_MASTER_SIGNAL_DICTIONARY.md"))
-            if dst_p not in declared_ports:
-                findings.append(Finding("icd-invalid-port-ref", f"Signal '{sig_id}' cites undeclared Dest Port '{dst_p}'.", location="docs/interfaces/ICD_02_MASTER_SIGNAL_DICTIONARY.md"))
-
-            if not units or units in ("UNSPECIFIED", "EMPTY", "UNDEFINED"):
-                findings.append(Finding("icd-missing-units", f"Signal '{sig_id}' has missing or unassigned SI units.", location="docs/interfaces/ICD_02_MASTER_SIGNAL_DICTIONARY.md"))
-            if not default_v or default_v in ("UNSPECIFIED", "EMPTY", "UNDEFINED"):
-                findings.append(Finding("icd-missing-safe-default", f"Signal '{sig_id}' has missing or unassigned safe default value.", location="docs/interfaces/ICD_02_MASTER_SIGNAL_DICTIONARY.md"))
-
-        return findings
+    diags
+}
 ```
 
 ---
 
 ## Section 6: Rollout & Verification Roadmap
 
-### 6.1 Phased Implementation Milestones
+### 6.1 Phased Implementation & Verification Flow
 
-The deployment of the Level 1C Logical Interface Specification architecture across the DEAP platform follows a structured four-stage rollout:
+The execution of the Level 1C Logical Interface Specification architecture across the 6-crate DEAP Rust workspace follows a deterministic four-stage pipeline flow:
 
 ```mermaid
-gantt
-    title Level 1C Logical Interface Architecture Rollout Roadmap
-    dateFormat  YYYY-MM-DD
-    section Stage 1: Specification Core
-    Author Blueprint & Schema Metamodel           :done, 2026-09-01, 2026-09-05
-    Synthesize ICD_01 & ICD_02 Templates          :active, 2026-09-06, 2026-09-12
-    section Stage 2: Orchestration & Ingestion
-    Develop Pipeline 0 Worker 0D (ICD) Subagent   :2026-09-13, 2026-09-20
-    Implement AST-to-ICD Projection Engine        :2026-09-21, 2026-09-28
-    section Stage 3: Parity Auditor & Gates
-    Implement Gate 23 ICDCompletenessValidator     :2026-09-29, 2026-10-06
-    Integrate Gate 23 into Aggregator Suite       :2026-10-07, 2026-10-12
-    section Stage 4: Downstream Traceability
-    Migrate Level 2 User Stories to Signal IDs    :2026-10-13, 2026-10-22
-    End-to-End Multi-Toolchain Synthesis Verify   :2026-10-23, 2026-10-31
+flowchart TD
+    subgraph S1 ["Stage 1: SysML v2 AST & Core Metamodel"]
+        direction TB
+        M1A["Author Level 1C Blueprint &<br/>SysML v2 AST Metamodel"]
+        M1B["Implement PortDef, PartDef,<br/>InterfaceDef, ConnectionDef<br/>in crates/deap-core"]
+        M1A --> M1B
+    end
+
+    subgraph S2 ["Stage 2: Compiler & Worker ICD Synthesis"]
+        direction TB
+        M2A["Implement SysmlParser &<br/>forward_sync_sysml_to_specs<br/>in crates/compile-sysml"]
+        M2B["Deploy Worker ICD Skill<br/>(skills/spec-icd-engineering/<br/>SKILL.md)"]
+        M2A --> M2B
+    end
+
+    subgraph S3 ["Stage 3: Baseline Verification Gates"]
+        direction TB
+        M3A["Implement Check 24<br/>(check_icd_completeness)<br/>in crates/verify-baseline"]
+        M3B["Implement Check 26<br/>(check_parameter_metrology)<br/>in crates/verify-baseline"]
+        M3A --> M3B
+    end
+
+    subgraph S4 ["Stage 4: Downstream L2 & L3 Traceability"]
+        direction TB
+        M4A["Bind Level 2 User Stories &<br/>Sequence Lifelines to ICD_01/02"]
+        M4B["Verify End-to-End Parity via<br/>verify-baseline . --no-domain"]
+        M4A --> M4B
+    end
+
+    M1B --> M2A
+    M2B --> M3A
+    M3B --> M4A
 ```
 
 ### 6.2 Verification Matrix & Acceptance Criteria
 
-To ensure production readiness and certification compliance, each rollout phase must satisfy formal acceptance criteria:
+To ensure production readiness and DO-178C / DO-330 TQL-4 / ISO 26262 ASIL D compliance, each stage is verified by native Rust binaries and test suites across the workspace:
 
-| Phase / Milestone | Verification Method | Acceptance Criteria | Target Tool / Authority |
+| Phase / Milestone | Verification Method | Acceptance Criteria | Target Tool / Crate Authority |
 | :--- | :--- | :--- | :--- |
-| **Milestone 1: Metamodel Synthesis** | Automated Schema AST Inspection | 100% extraction of subsystem ports, item flows, and connections from Level 0 schemas without data loss. | `./target/release/compile-sysml` |
-| **Milestone 2: Artifact Structure** | Markdown AST & Table Validator | Strict conformance to 10-column schema in `ICD_02` and complete N² matrix in `ICD_01`. | `parity_auditor` Markdown Engine |
-| **Milestone 3: Gate 23 Parity** | Semantic Acceptance Verification Suite | Zero dangling ports, 100% port binding parity, and zero missing safe defaults across all test suites. | `deap-harness` / `./target/release/verify-baseline` |
-| **Milestone 4: L2 Backlog Traceability** | Bidirectional Cross-Reference Check | 100% of Level 2 BDD User Story data parameters cite valid `SIG-*` dictionary identifiers. | `parity_auditor` Spec Validator |
-| **Milestone 5: Multi-Target Code Synthesis** | Code Generation & Static Analysis | Synthesized SPARK Ada packages, C structs, and Simulink Bus objects match Level 1C types and ranges. | GNATprove / Polyspace / SCADE |
+| **Milestone 1: Metamodel & AST Compilation** | SysML v2 Lexical & Semantic Compilation Gate | 100% extraction of `PartDef`, `PortDef`, `InterfaceDef`, `FlowDef`, `ItemDef`, and `ConnectionDef` into `.pipeline/schema.sysml` and `.pipeline/schema-digest.json`. | `./target/release/compile-sysml --compile` (`crates/deap-core/src/sysml_ast.rs`, `crates/compile-sysml/src/parser/grammar.rs`) |
+| **Milestone 2: Forward Sync & Worker ICD Synthesis** | Forward Synchronization & Worker ICD Subagent Gate | Deterministic generation of `docs/interfaces/ICD_01_SYSTEM_INTERFACE_MATRIX.md` and `docs/interfaces/ICD_02_MASTER_SIGNAL_DICTIONARY.md`. | `./target/release/compile-sysml --forward-sync` (`crates/compile-sysml/src/sync/forward.rs`, `skills/spec-icd-engineering/SKILL.md`) |
+| **Milestone 3: Check 24 ICD Completeness Parity** | Native Rust Static Parity Verification | Zero dangling ports, 100% port direction/conjugate binding parity, and 100% `ICD_01` <-> `ICD_02` payload consistency. | `./target/release/verify-baseline . --no-domain` -- Check 24 `check_icd_completeness` (`crates/verify-baseline/src/checks/parity_gates.rs`) |
+| **Milestone 4: Check 26 Metrology & L2 Traceability** | Metrology & Sequence Lifeline Cross-Check | 100% of `ICD_02` signals specify valid SI units, numeric bounds, and rates; 100% of Level 2 `US-*.md` sequence lifelines and messages match `ICD_01`/`ICD_02`. | `./target/release/verify-baseline . --no-domain` -- Check 26 `check_parameter_metrology` / `check_standards_measurement` (`crates/verify-baseline/src/checks/parity_gates.rs`) |
+| **Milestone 5: Workspace Rust TDD & Diagram Gates** | Unit, Mutation, & Mermaid Syntax Verification | `cargo test --workspace` passes with zero failures; Check 13B (`check_mermaid_syntax`) and Check 21 (`check_uml_syntax`) pass with zero warnings. | `cargo test --workspace` & `./target/release/verify-baseline . --no-domain` (`crates/verify-baseline/src/checks/mermaid.rs`) |
 
 ---

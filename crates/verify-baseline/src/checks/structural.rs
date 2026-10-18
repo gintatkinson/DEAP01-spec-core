@@ -1,6 +1,6 @@
 //! Structural repository topology and integrity checks.
 
-use deap_core::rules::EXCLUDED_DIRS;
+use deap_core::rules::{CanonicalArchitectureBlueprint, EXCLUDED_DIRS};
 use deap_core::workspace::{
     check_downstream_instructions_exist as core_check_downstream_instructions_exist,
     check_gitignore_exists as core_check_gitignore_exists,
@@ -1770,6 +1770,595 @@ pub fn check_feat42_design_blueprint_compliance(repo_root: &Path) -> Result<(), 
     }
 }
 
+/// Check 37: Verify architecture blueprint grounding in workspace crates and on-disk paths.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C architectural
+/// traceability and configuration management controls. Enforces that all 12 canonical architecture
+/// blueprints under `docs/architecture/blueprints/` exist on disk and reference only actual
+/// workspace crates, existing `crates/...` file paths, native Rust tools, and ASCII punctuation.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Canonical Completeness: Every variant in `CanonicalArchitectureBlueprint::ALL` resolves to an
+///   existing regular file under `docs/architecture/blueprints/`.
+/// - Zero Em Dash Invariant: Zero lines in `docs/architecture/blueprints/*.md` contain `\u2014`.
+/// - Zero Fictional Crate Names: Zero blueprint lines reference `deap-ast`, `deap-codegen`,
+///   `deap-harness`, `deap-cli`, or their underscore variants outside explicit negative rule text.
+/// - Zero Retired Tool References: Zero blueprint lines reference `verify_downstream`,
+///   `sysmlv2_ingest`, `reconcile_backlog.py`, `parity_auditor`, or `setup_git_hooks.sh`.
+/// - On-Disk Path Grounding: Every non-placeholder `crates/...` path token resolves to one of the
+///   6 workspace crates (`deap-core`, `verify-baseline`, `compile-sysml`, `ingest-sysml`,
+///   `assemble-conops`, `reconcile-backlog`) and exists on disk.
+///
+/// ## 3. Preconditions
+/// - `repo_root: &Path` references an accessible workspace directory on the local filesystem.
+///
+/// ## 4. Postconditions
+/// - Returns `Ok(())` when `docs/architecture/blueprints/` is absent in a downstream workspace or
+///   when all 12 blueprints exist and satisfy all grounding invariants.
+/// - Returns `Err(Vec<String>)` with sorted, deduplicated `file:line` violations upon any failure.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(B * L) where B is the number of blueprint markdown files and L is line count.
+/// - Space Complexity: O(V) where V is the number of detected grounding violations.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Missing blueprint files or unreadable markdown files fail closed with explicit errors.
+/// - State: Stateless verification pass with deterministic sorted diagnostic output.
+/// - Action: Non-panicking slice inspection using `.get(..)` exclusively.
+/// - Resource: Bounded memory proportional to single-file content and violation vector size.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-37-BLUEPRINT-GROUNDING]
+pub fn check_blueprint_grounding(repo_root: &Path) -> Result<(), Vec<String>> {
+    let blueprints_dir = repo_root
+        .join("docs")
+        .join("architecture")
+        .join("blueprints");
+    if !blueprints_dir.is_dir() && !is_upstream_compiler(repo_root) {
+        return Ok(());
+    }
+
+    let mut violations = Vec::new();
+    if !blueprints_dir.is_dir() {
+        violations.push(
+            "Missing docs/architecture/blueprints directory in upstream specification compiler repository."
+                .to_string(),
+        );
+        return Err(violations);
+    }
+
+    for bp in CanonicalArchitectureBlueprint::ALL {
+        let bp_path = blueprints_dir.join(bp.as_str());
+        if !bp_path.is_file() {
+            violations.push(format!(
+                "Missing canonical architecture blueprint: docs/architecture/blueprints/{}",
+                bp.as_str()
+            ));
+        }
+    }
+
+    let mut md_files = Vec::new();
+    match fs::read_dir(&blueprints_dir) {
+        Ok(entries) => {
+            for entry_res in entries {
+                match entry_res {
+                    Ok(entry) => {
+                        let path = entry.path();
+                        if path.is_file()
+                            && path.extension().map(|ext| ext == "md").unwrap_or(false)
+                        {
+                            md_files.push(path);
+                        }
+                    }
+                    Err(err) => {
+                        violations.push(format!(
+                            "docs/architecture/blueprints: directory entry read error: {}",
+                            err
+                        ));
+                    }
+                }
+            }
+        }
+        Err(err) => {
+            violations.push(format!(
+                "docs/architecture/blueprints: unable to read directory: {}",
+                err
+            ));
+        }
+    }
+
+    md_files.sort();
+    for md_path in &md_files {
+        scan_blueprint_markdown_file(repo_root, md_path, &mut violations);
+    }
+
+    if violations.is_empty() {
+        Ok(())
+    } else {
+        violations.sort();
+        violations.dedup();
+        Err(violations)
+    }
+}
+
+/// Scans a single architecture blueprint Markdown file for Check 37 grounding violations.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ECSS-E-ST-40C architectural document verification rules.
+/// Inspects every line of a blueprint file under `docs/architecture/blueprints/` for forbidden
+/// em dashes, fictional crate names, retired Python/shell tools, and ungrounded `crates/...` paths.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Line-by-line deterministic scan preserving 1-based line numbers (`idx.saturating_add(1)`).
+/// - Appends a diagnostic entry to `violations` for every violated invariant on each line.
+///
+/// ## 3. Preconditions
+/// - `repo_root` is the workspace root directory and `md_path` is a `.md` file path inside `docs/architecture/blueprints/`.
+///
+/// ## 4. Postconditions
+/// - Mutates `violations` in place by appending all discovered `rel:line_no` violations; leaves `violations` unchanged if the file is clean.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(L * W) where L is the line count of `md_path` and W is average line length.
+/// - Space Complexity: O(B + V_file) where B is file byte size and V_file is violations in `md_path`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: File read failures push an explicit I/O diagnostic to `violations` (fail-closed).
+/// - State: Only appends to `violations`; no global state.
+/// - Action: Bounded single-pass iteration over `content.lines()`.
+/// - Resource: Single file buffer allocation per blueprint.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-37-SCAN-BLUEPRINT-FILE]
+fn scan_blueprint_markdown_file(
+    repo_root: &Path,
+    md_path: &Path,
+    violations: &mut Vec<String>,
+) {
+    let rel = md_path
+        .strip_prefix(repo_root)
+        .unwrap_or(md_path)
+        .display()
+        .to_string();
+
+    let content = match fs::read_to_string(md_path) {
+        Ok(c) => c,
+        Err(err) => {
+            violations.push(format!("{}: unable to read blueprint file: {}", rel, err));
+            return;
+        }
+    };
+
+    for (idx, line) in content.lines().enumerate() {
+        let line_no = idx.saturating_add(1);
+
+        if line.contains('\u{2014}') {
+            violations.push(format!(
+                "{}:{}: forbidden Unicode em dash (\\u2014) in architecture blueprint",
+                rel, line_no
+            ));
+        }
+
+        check_blueprint_line_fictional_crates(&rel, line_no, line, violations);
+        check_blueprint_line_retired_tools(&rel, line_no, line, violations);
+        check_blueprint_line_crates_paths(repo_root, &rel, line_no, line, violations);
+    }
+}
+
+/// Checks whether `line` contains `token` bounded by non-identifier characters.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A lexical boundary verification for Check 37 (`contains_bounded_token`).
+/// Prevents substring false positives (such as `deap_harness` matching inside `deap_harness_config.yaml`)
+/// while deterministically detecting standalone crate identifiers without regular expressions.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - For each byte offset `idx` yielded by `line.match_indices(token)`, inspects the preceding byte
+///   (`idx.saturating_sub(1)`) and trailing byte (`idx.saturating_add(token.len())`) via `bytes.get(..)`.
+/// - Returns `true` iff neither adjacent byte is ASCII alphanumeric, `b'_'`, or `b'-'`.
+///
+/// ## 3. Preconditions
+/// - `line: &str` and `token: &str` are valid UTF-8 string slices with `token` non-empty.
+///
+/// ## 4. Postconditions
+/// - Returns `true` if at least one identifier-bounded occurrence of `token` exists in `line`, or `false` otherwise.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(W) where W is the byte length of `line`.
+/// - Space Complexity: O(1) zero heap allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Non-panicking byte inspection via `.get(..)`, `saturating_sub`, and `saturating_add`.
+/// - State: Pure function with zero mutable state.
+/// - Action: Deterministic linear scan.
+/// - Resource: Zero dynamic memory allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-37-BOUNDED-TOKEN-MATCH]
+fn contains_bounded_token(line: &str, token: &str) -> bool {
+    let bytes = line.as_bytes();
+    let token_len = token.len();
+    for (idx, _) in line.match_indices(token) {
+        let before_ok = if idx == 0 {
+            true
+        } else {
+            match bytes.get(idx.saturating_sub(1)) {
+                Some(&b) => !b.is_ascii_alphanumeric() && b != b'_' && b != b'-',
+                None => true,
+            }
+        };
+        let after_idx = idx.saturating_add(token_len);
+        let after_ok = match bytes.get(after_idx) {
+            Some(&b) => !b.is_ascii_alphanumeric() && b != b'_' && b != b'-',
+            None => true,
+        };
+        if before_ok && after_ok {
+            return true;
+        }
+    }
+    false
+}
+
+/// Checks whether a blueprint line is an explicit negative prohibition or retirement statement.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A context-sensitive rule auditing for Check 37 (`is_negative_blueprint_rule_line`).
+/// Allows blueprints to state that legacy/fictional identifiers are forbidden, prohibited, retired,
+/// or non-existent without triggering a positive reference violation.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Folds `line` to ASCII lowercase and evaluates six negative-rule keyword predicates (`forbidden`,
+///   `prohibited`, `retired`, `nonexistent`, `non-existent`, `fictional`).
+///
+/// ## 3. Preconditions
+/// - `line: &str` is a valid UTF-8 line from an architecture blueprint file.
+///
+/// ## 4. Postconditions
+/// - Returns `true` iff `line` contains an explicit negative-rule keyword.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(W) where W is the byte length of `line`.
+/// - Space Complexity: O(W) for the temporary ASCII-lowercased string buffer.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Infallible `&str -> bool` predicate.
+/// - State: Stateless evaluation.
+/// - Action: Deterministic substring checks.
+/// - Resource: Bounded single-line string allocation.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-37-NEGATIVE-RULE-CONTEXT]
+fn is_negative_blueprint_rule_line(line: &str) -> bool {
+    let lower = line.to_ascii_lowercase();
+    lower.contains("forbidden")
+        || lower.contains("prohibited")
+        || lower.contains("retired")
+        || lower.contains("nonexistent")
+        || lower.contains("non-existent")
+        || lower.contains("fictional")
+}
+
+/// Scans a blueprint line for all references to fictional, non-existent DEAP crate names.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A architectural accuracy controls for Check 37.
+/// Prevents architecture blueprints from citing hallucinated crate names (`deap-ast`,
+/// `deap-codegen`, `deap-harness`, `deap-cli`, or underscore variants) that do not exist in `Cargo.toml`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Evaluates all 8 fictional crate tokens independently via `contains_bounded_token` so multiple
+///   fictional crates on a single line are each reported.
+/// - Exempts lines where `is_negative_blueprint_rule_line(line)` holds.
+///
+/// ## 3. Preconditions
+/// - `rel_file` and `line_no` identify the source location of `line` within `docs/architecture/blueprints/`.
+///
+/// ## 4. Postconditions
+/// - Appends a diagnostic entry to `violations` for each fictional crate token found on `line`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(W) where W is the byte length of `line`.
+/// - Space Complexity: O(1) auxiliary space when clean; O(V_line) when violations are pushed.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Total function over `&str` and `&mut Vec<String>`.
+/// - State: Appends only to `violations`.
+/// - Action: Deterministic bounded token checks with zero regex.
+/// - Resource: Zero allocation on clean lines.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-37-DETECT-FICTIONAL-CRATE]
+fn check_blueprint_line_fictional_crates(
+    rel_file: &str,
+    line_no: usize,
+    line: &str,
+    violations: &mut Vec<String>,
+) {
+    if is_negative_blueprint_rule_line(line) {
+        return;
+    }
+    if contains_bounded_token(line, "deap-ast") {
+        violations.push(format!(
+            "{}:{}: references fictional crate 'deap-ast'",
+            rel_file, line_no
+        ));
+    }
+    if contains_bounded_token(line, "deap-codegen") {
+        violations.push(format!(
+            "{}:{}: references fictional crate 'deap-codegen'",
+            rel_file, line_no
+        ));
+    }
+    if contains_bounded_token(line, "deap-harness") {
+        violations.push(format!(
+            "{}:{}: references fictional crate 'deap-harness'",
+            rel_file, line_no
+        ));
+    }
+    if contains_bounded_token(line, "deap-cli") {
+        violations.push(format!(
+            "{}:{}: references fictional crate 'deap-cli'",
+            rel_file, line_no
+        ));
+    }
+    if contains_bounded_token(line, "deap_ast") {
+        violations.push(format!(
+            "{}:{}: references fictional crate 'deap_ast'",
+            rel_file, line_no
+        ));
+    }
+    if contains_bounded_token(line, "deap_codegen") {
+        violations.push(format!(
+            "{}:{}: references fictional crate 'deap_codegen'",
+            rel_file, line_no
+        ));
+    }
+    if contains_bounded_token(line, "deap_harness") {
+        violations.push(format!(
+            "{}:{}: references fictional crate 'deap_harness'",
+            rel_file, line_no
+        ));
+    }
+    if contains_bounded_token(line, "deap_cli") {
+        violations.push(format!(
+            "{}:{}: references fictional crate 'deap_cli'",
+            rel_file, line_no
+        ));
+    }
+}
+
+/// Scans a blueprint line for references to retired Python or shell scripts.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and Check 32/33/37 pure-Rust toolchain invariants.
+/// Rejects blueprint lines referencing retired scripts (`verify_downstream`, `sysmlv2_ingest`,
+/// `reconcile_backlog.py`, `parity_auditor`, `setup_git_hooks.sh`) outside negative retirement rules.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Evaluates all five retired tool tokens independently in deterministic order without static string arrays.
+/// - Exempts lines where `is_negative_blueprint_rule_line(line)` holds.
+///
+/// ## 3. Preconditions
+/// - `rel_file` and `line_no` identify the source location of `line` in `docs/architecture/blueprints/`.
+///
+/// ## 4. Postconditions
+/// - Appends a diagnostic entry to `violations` for every retired tool token matched on `line`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(W) where W is the byte length of `line`.
+/// - Space Complexity: O(1) auxiliary memory when clean.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Total function over `&str` and `&mut Vec<String>`.
+/// - State: Appends diagnostics only to `violations`.
+/// - Action: Non-panicking substring scan.
+/// - Resource: Zero dynamic memory usage on clean lines.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-37-DETECT-RETIRED-TOOL]
+fn check_blueprint_line_retired_tools(
+    rel_file: &str,
+    line_no: usize,
+    line: &str,
+    violations: &mut Vec<String>,
+) {
+    if is_negative_blueprint_rule_line(line) {
+        return;
+    }
+    if line.contains("verify_downstream") {
+        violations.push(format!(
+            "{}:{}: references retired tool 'verify_downstream'",
+            rel_file, line_no
+        ));
+    }
+    if line.contains("sysmlv2_ingest") {
+        violations.push(format!(
+            "{}:{}: references retired tool 'sysmlv2_ingest'",
+            rel_file, line_no
+        ));
+    }
+    if line.contains("reconcile_backlog.py") {
+        violations.push(format!(
+            "{}:{}: references retired tool 'reconcile_backlog.py'",
+            rel_file, line_no
+        ));
+    }
+    if line.contains("parity_auditor") {
+        violations.push(format!(
+            "{}:{}: references retired tool 'parity_auditor'",
+            rel_file, line_no
+        ));
+    }
+    if line.contains("setup_git_hooks.sh") {
+        violations.push(format!(
+            "{}:{}: references retired tool 'setup_git_hooks.sh'",
+            rel_file, line_no
+        ));
+    }
+}
+
+/// Checks whether `crate_name` is one of the 6 canonical workspace crates in `Cargo.toml`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A workspace topology verification for Check 37.
+/// Restricts concrete `crates/<crate_name>` references in upstream architecture blueprints to the
+/// 6 actual workspace crates (`deap-core`, `verify-baseline`, `compile-sysml`, `ingest-sysml`,
+/// `assemble-conops`, `reconcile-backlog`).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Returns `true` iff `crate_name` matches one of the 6 canonical workspace crate directory names.
+///
+/// ## 3. Preconditions
+/// - `crate_name: &str` is the first path segment following `"crates/"` in an extracted blueprint path token.
+///
+/// ## 4. Postconditions
+/// - Returns `true` for valid workspace crates and `false` for any unknown or fictional crate name.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1) compile-time pattern match across 6 literal arms.
+/// - Space Complexity: O(1) zero allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Total boolean predicate over `&str`.
+/// - State: Pure compile-time match.
+/// - Action: Never panics.
+/// - Resource: Zero stack or heap growth.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-37-VALID-WORKSPACE-CRATE]
+fn is_valid_workspace_crate_name(crate_name: &str) -> bool {
+    matches!(
+        crate_name,
+        "deap-core"
+            | "verify-baseline"
+            | "compile-sysml"
+            | "ingest-sysml"
+            | "assemble-conops"
+            | "reconcile-backlog"
+    )
+}
+
+/// Extracts and validates all concrete `crates/...` path tokens on a blueprint line against disk.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and Check 34/37 mechanical grounding controls.
+/// Ensures that every non-placeholder `crates/...` path cited in an architecture blueprint names
+/// one of the 6 real workspace crates and resolves to an existing file or directory on disk.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Ignores template/wildcard tokens containing `*`, `<`, `>`, `{`, `}`, `...`, or `$`.
+/// - Strips `#L...` anchors, `:line` suffixes, and trailing punctuation (`.`, `,`, `:`, `;`, `/`)
+///   exclusively via non-panicking `.get(..)` and string splitting methods.
+/// - Verifies both `is_valid_workspace_crate_name(crate_name)` and `repo_root.join(cleaned).exists()`.
+///
+/// ## 3. Preconditions
+/// - `repo_root` is the workspace root path; `rel_file` and `line_no` identify the source location of `line`.
+///
+/// ## 4. Postconditions
+/// - Appends a diagnostic string to `violations` for each ungrounded crate or non-existent `crates/...` path on `line`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(W + K) where W is byte length of `line` and K is the number of `crates/` occurrences on `line`.
+/// - Space Complexity: O(1) auxiliary slice references beyond any pushed violation strings.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Non-panicking slice indexing via `.get(..)` and `saturating_sub`.
+/// - State: Appends diagnostics only to `violations`.
+/// - Action: Deterministic left-to-right token extraction.
+/// - Resource: Zero intermediate heap allocations on valid paths.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-37-LINE-CRATES-PATHS]
+fn check_blueprint_line_crates_paths(
+    repo_root: &Path,
+    rel_file: &str,
+    line_no: usize,
+    line: &str,
+    violations: &mut Vec<String>,
+) {
+    let bytes = line.as_bytes();
+    for (start_idx, _) in line.match_indices("crates/") {
+        if start_idx > 0 {
+            if let Some(&prev) = bytes.get(start_idx.saturating_sub(1)) {
+                if prev.is_ascii_alphanumeric() || prev == b'_' || prev == b'-' {
+                    continue;
+                }
+            }
+        }
+
+        let tail = match line.get(start_idx..) {
+            Some(t) => t,
+            None => continue,
+        };
+
+        let end_offset = tail
+            .find(|c: char| {
+                c.is_whitespace()
+                    || matches!(
+                        c,
+                        '`' | '\'' | '"' | '(' | ')' | '[' | ']' | ';' | ',' | '|'
+                    )
+            })
+            .unwrap_or(tail.len());
+
+        let raw_token = match tail.get(..end_offset) {
+            Some(tok) => tok,
+            None => continue,
+        };
+
+        if raw_token.contains('*')
+            || raw_token.contains('<')
+            || raw_token.contains('>')
+            || raw_token.contains('{')
+            || raw_token.contains('}')
+            || raw_token.contains("...")
+            || raw_token.contains('$')
+        {
+            continue;
+        }
+
+        let without_hash = match raw_token.split_once('#') {
+            Some((before, _)) => before,
+            None => raw_token,
+        };
+        let without_colon = match without_hash.split_once(':') {
+            Some((before, _)) => before,
+            None => without_hash,
+        };
+        let cleaned = without_colon
+            .trim_end_matches(|c: char| matches!(c, '.' | ',' | ':' | ';' | '/'));
+
+        if cleaned.is_empty() || cleaned == "crates" {
+            continue;
+        }
+
+        let after_crates = match cleaned.strip_prefix("crates/") {
+            Some(rest) => rest,
+            None => continue,
+        };
+        let crate_name = after_crates.split('/').next().unwrap_or("");
+        if crate_name.is_empty() {
+            continue;
+        }
+
+        if !is_valid_workspace_crate_name(crate_name) {
+            violations.push(format!(
+                "{}:{}: ungrounded crate '{}' in blueprint path '{}' (must be one of deap-core, verify-baseline, compile-sysml, ingest-sysml, assemble-conops, reconcile-backlog)",
+                rel_file, line_no, crate_name, cleaned
+            ));
+            continue;
+        }
+
+        if !repo_root.join(cleaned).exists() {
+            violations.push(format!(
+                "{}:{}: non-existent workspace path '{}' referenced in architecture blueprint",
+                rel_file, line_no, cleaned
+            ));
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2499,6 +3088,92 @@ pub fn check_audit() -> Result<(), Vec<String>> {
         assert!(res.is_err(), "Must reject sysml-core in FEAT-42 design blueprint");
         let errs = res.err().unwrap();
         assert!(errs.iter().any(|e| e.contains("sysml-core")));
+    }
+
+    #[test]
+    fn test_check_37_blueprint_grounding_passes_on_live_repo() {
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(|p| p.parent())
+            .expect("repo root");
+
+        let res = check_blueprint_grounding(repo_root);
+        assert!(
+            res.is_ok(),
+            "Check 37 blueprint grounding failed on live repository: {:?}",
+            res.err()
+        );
+    }
+
+    #[test]
+    fn test_check_37_rejects_fictional_crates_and_nonexistent_paths() {
+        let tmp = TempDir::new("c37_mutations");
+        let bp_dir = tmp.path.join("docs").join("architecture").join("blueprints");
+        fs::create_dir_all(&bp_dir).unwrap();
+        fs::create_dir_all(tmp.path.join("crates").join("deap-core").join("src")).unwrap();
+        File::create(
+            tmp.path
+                .join("crates")
+                .join("deap-core")
+                .join("src")
+                .join("lib.rs"),
+        )
+        .unwrap();
+
+        for bp in CanonicalArchitectureBlueprint::ALL {
+            let mut f = File::create(bp_dir.join(bp.as_str())).unwrap();
+            writeln!(f, "# Blueprint\nGrounded in `crates/deap-core/src/lib.rs`.").unwrap();
+        }
+
+        let clean_res = check_blueprint_grounding(&tmp.path);
+        assert!(
+            clean_res.is_ok(),
+            "Clean grounded blueprints must pass Check 37: {:?}",
+            clean_res.err()
+        );
+
+        let target_bp = bp_dir.join(
+            CanonicalArchitectureBlueprint::DeapSysmlV2IngestionEngineBlueprint.as_str(),
+        );
+        let mut f = File::create(&target_bp).unwrap();
+        writeln!(
+            f,
+            "# Corrupted Blueprint\nUses `deap-ast` and `deap-harness`.\nRuns `verify_downstream`.\nInspects `crates/verify-baseline/src/checks/uml.rs`.\nContains em dash \u{2014} here."
+        )
+        .unwrap();
+
+        let err_res = check_blueprint_grounding(&tmp.path);
+        assert!(
+            err_res.is_err(),
+            "Check 37 must fail closed on fictional crates, retired tools, nonexistent paths, and em dashes"
+        );
+        let errs = err_res.unwrap_err();
+        assert!(
+            errs.iter().any(|e| e.contains("deap-ast")),
+            "Must report fictional crate deap-ast: {:?}",
+            errs
+        );
+        assert!(
+            errs.iter().any(|e| e.contains("deap-harness")),
+            "Must report fictional crate deap-harness: {:?}",
+            errs
+        );
+        assert!(
+            errs.iter().any(|e| e.contains("verify_downstream")),
+            "Must report retired tool verify_downstream: {:?}",
+            errs
+        );
+        assert!(
+            errs.iter()
+                .any(|e| e.contains("crates/verify-baseline/src/checks/uml.rs")),
+            "Must report nonexistent path crates/verify-baseline/src/checks/uml.rs: {:?}",
+            errs
+        );
+        assert!(
+            errs.iter().any(|e| e.contains("\\u2014") || e.contains("em dash")),
+            "Must report em dash violation: {:?}",
+            errs
+        );
     }
 }
 

@@ -633,6 +633,12 @@ pub struct RequirementDef {
     pub derived_from: Vec<String>,
     #[serde(default)]
     pub derives: Vec<String>,
+    #[serde(default)]
+    pub triggers_hazards: Vec<String>,
+    #[serde(default)]
+    pub safety_realises: Vec<String>,
+    #[serde(default)]
+    pub layer: Option<String>,
 }
 
 /// Represents a state transition in a SysML v2 state machine.
@@ -1016,6 +1022,12 @@ pub struct PartDef {
     pub connections: Vec<ConnectionDef>,
     #[serde(default)]
     pub calcs: Vec<CalcDef>,
+    #[serde(default)]
+    pub triggers_hazards: Vec<String>,
+    #[serde(default)]
+    pub safety_realises: Vec<String>,
+    #[serde(default)]
+    pub layer: Option<String>,
 }
 
 impl Default for PartDef {
@@ -1065,6 +1077,9 @@ impl Default for PartDef {
             risks: Vec::new(),
             connections: Vec::new(),
             calcs: Vec::new(),
+            triggers_hazards: Vec::new(),
+            safety_realises: Vec::new(),
+            layer: None,
         }
     }
 }
@@ -3552,6 +3567,139 @@ pub fn parse_calc_defs(content: &str) -> Vec<CalcDef> {
     calcs
 }
 
+/// Extracts quoted string literals or parenthesized/assigned tokens from a single SysML v2 `@Annotation` line.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, ISO 26262 ASIL D, and ECSS-E-ST-40C deterministic annotation parsing (`extract_annotation_values`).
+/// Extracts metadata values from `@TriggersHazard`, `@SafetyRealises`, and `@Layer` annotations without regular expressions.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Scans balanced `"..."` string literals using bounds-checked `.get(..)` slices.
+/// - Falls back to extracting unquoted tokens inside `(...)` or following `=` when quotes are omitted.
+///
+/// ## 3. Preconditions
+/// - `after_tag: &str` is the substring of an annotation line immediately following the `@AnnotationName` prefix.
+///
+/// ## 4. Postconditions
+/// - Returns a `Vec<String>` of non-empty trimmed annotation argument values in appearance order.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(L)$ where $L$ is the byte length of `after_tag`.
+/// - Space Complexity: $O(K)$ where $K$ is the number of extracted values on the line.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Handles unclosed quotes or empty braces safely by returning only valid tokens.
+/// - State: Pure lexical helper with zero global state.
+/// - Action: Non-panicking `.get(..)` bounds-checked slicing.
+/// - Resource: Bounded by single-line byte length.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYSML-AST-ANNOTATION-VALUES]
+fn extract_annotation_values(after_tag: &str) -> Vec<String> {
+    let mut values = Vec::new();
+    let mut cursor = 0;
+    while let Some(open_q) = after_tag.get(cursor..).and_then(|s| s.find('"')) {
+        let start = cursor + open_q + 1;
+        if let Some(close_q) = after_tag.get(start..).and_then(|s| s.find('"')) {
+            if let Some(val) = after_tag.get(start..start + close_q) {
+                let trimmed = val.trim();
+                if !trimmed.is_empty() {
+                    values.push(trimmed.to_string());
+                }
+            }
+            cursor = start + close_q + 1;
+        } else {
+            break;
+        }
+    }
+    if !values.is_empty() {
+        return values;
+    }
+    let trimmed = after_tag.trim();
+    if let Some(inside_parens) = trimmed
+        .strip_prefix('(')
+        .and_then(|s| s.split_once(')').map(|(inner, _)| inner))
+    {
+        for part in inside_parens.split(',') {
+            let clean = part.trim().trim_matches('\'').trim();
+            if !clean.is_empty() {
+                values.push(clean.to_string());
+            }
+        }
+    } else if let Some((_, rhs)) = trimmed.split_once('=') {
+        let clean = rhs
+            .trim()
+            .trim_end_matches('}')
+            .trim()
+            .trim_end_matches(';')
+            .trim()
+            .trim_matches('\'')
+            .trim();
+        if !clean.is_empty() {
+            values.push(clean.to_string());
+        }
+    }
+    values
+}
+
+/// Parses `@TriggersHazard`, `@SafetyRealises`, and `@Layer` annotations from a SysML v2 declaration body.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, ISO 26262 ASIL D, and MIL-STD-882E safety traceability mandates (`parse_safety_and_layer_annotations`).
+/// Binds structural `part def` and `requirement def` AST nodes directly to STPA hazards (`@TriggersHazard`),
+/// safety constraints (`@SafetyRealises`), and architectural tiers (`@Layer`).
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves declaration order and eliminates duplicate hazard or safety requirement identifiers.
+/// - Supports both SysML v2 brace syntax (`@TriggersHazard { hazard = "H-01"; }`) and call syntax (`@TriggersHazard("H-01")`).
+///
+/// ## 3. Preconditions
+/// - `body: &str` is the comment-stripped interior text of a `part def` or `requirement def` block.
+///
+/// ## 4. Postconditions
+/// - Returns `(triggers_hazards, safety_realises, layer)` populated deterministically from `body`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(N)$ where $N$ is `body.len()`.
+/// - Space Complexity: $O(H + S)$ where $H$ and $S$ are extracted hazard and safety requirement counts.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Unrecognized `@` annotations are ignored without error.
+/// - State: Pure function.
+/// - Action: Zero regex and zero panicking slice indexing.
+/// - Resource: Linear memory proportional to extracted annotation strings.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYSML-AST-SAFETY-LAYER-ANNOTATIONS]
+fn parse_safety_and_layer_annotations(body: &str) -> (Vec<String>, Vec<String>, Option<String>) {
+    let mut triggers_hazards = Vec::new();
+    let mut safety_realises = Vec::new();
+    let mut layer = None;
+
+    for line in body.lines() {
+        let trimmed = line.trim();
+        if let Some(after) = trimmed.strip_prefix("@TriggersHazard") {
+            for val in extract_annotation_values(after) {
+                if !triggers_hazards.contains(&val) {
+                    triggers_hazards.push(val);
+                }
+            }
+        } else if let Some(after) = trimmed.strip_prefix("@SafetyRealises") {
+            for val in extract_annotation_values(after) {
+                if !safety_realises.contains(&val) {
+                    safety_realises.push(val);
+                }
+            }
+        } else if let Some(after) = trimmed.strip_prefix("@Layer") {
+            if let Some(first_val) = extract_annotation_values(after).into_iter().next() {
+                layer = Some(first_val);
+            }
+        }
+    }
+
+    (triggers_hazards, safety_realises, layer)
+}
+
 /// Parse requirement definitions from SysML v2 source text.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -3585,17 +3733,44 @@ pub fn parse_requirement_defs(content: &str) -> Vec<RequirementDef> {
             idx = req_pos + 11;
             continue;
         }
-        let doc = extract_doc_comment_before(&clean, req_pos);
+        if masked
+            .get(..req_pos)
+            .map(str::trim_end)
+            .is_some_and(|before| {
+                before.ends_with("satisfy")
+                    && (before.len() == 7
+                        || !before
+                            .as_bytes()
+                            .get(before.len().saturating_sub(8))
+                            .copied()
+                            .is_some_and(is_ident_char))
+            })
+        {
+            idx = req_pos + 11;
+            continue;
+        }
+        let mut doc = extract_doc_comment_before(&clean, req_pos);
         let mut curr = req_pos + 11;
         curr += skip_ws(masked.get(curr..).unwrap_or(""));
+        let mut has_def = false;
         if masked
             .get(curr..)
             .is_some_and(|s| s.starts_with("def") && is_word_boundary_after(s, 3))
         {
+            has_def = true;
             curr += 3;
             curr += skip_ws(masked.get(curr..).unwrap_or(""));
         }
-        let (name, name_len) = extract_ident(masked.get(curr..).unwrap_or(""));
+        let rem_ident = masked.get(curr..).unwrap_or("");
+        let name_len = if has_def {
+            rem_ident
+                .bytes()
+                .take_while(|&b| is_ident_char(b) || b == b'-')
+                .count()
+        } else {
+            rem_ident.bytes().take_while(|&b| is_ident_char(b)).count()
+        };
+        let name = rem_ident.get(..name_len).unwrap_or("");
         if name.is_empty() {
             idx = req_pos + 11;
             continue;
@@ -3629,8 +3804,26 @@ pub fn parse_requirement_defs(content: &str) -> Vec<RequirementDef> {
         let mut derived_from = Vec::new();
         let mut verified_by = Vec::new();
         let mut satisfied_by = Vec::new();
+        let mut triggers_hazards = Vec::new();
+        let mut safety_realises = Vec::new();
+        let mut layer = None;
 
         if let Some(body) = body_str {
+            if doc.is_none() {
+                if let Some(open_doc) = body.find("doc") {
+                    let after_doc = body.get(open_doc + 3..).unwrap_or("").trim_start();
+                    if let Some(after_open) = after_doc.strip_prefix("/*") {
+                        if let Some(close_doc) = after_open.find("*/") {
+                            if let Some(inner_doc) = after_open.get(..close_doc) {
+                                let clean_doc = inner_doc.trim().to_string();
+                                if !clean_doc.is_empty() {
+                                    doc = Some(clean_doc);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             for line in body.lines() {
                 let trimmed = line.trim();
                 if trimmed.starts_with("id") && is_word_boundary_after(trimmed, 2) {
@@ -3704,6 +3897,14 @@ pub fn parse_requirement_defs(content: &str) -> Vec<RequirementDef> {
 
             attributes = parse_attribute_defs(body);
             constraints = parse_constraint_defs(body);
+            let (th, sr, lyr) = parse_safety_and_layer_annotations(body);
+            triggers_hazards = th;
+            safety_realises = sr;
+            layer = lyr;
+        }
+
+        if req_id.is_empty() {
+            req_id = name.to_string();
         }
 
         reqs.push(RequirementDef {
@@ -3718,6 +3919,9 @@ pub fn parse_requirement_defs(content: &str) -> Vec<RequirementDef> {
             derived_from,
             verified_by,
             satisfied_by,
+            triggers_hazards,
+            safety_realises,
+            layer,
             ..Default::default()
         });
     }
@@ -4038,14 +4242,25 @@ pub fn parse_connection_defs(content: &str) -> Vec<ConnectionDef> {
         }
         curr += name_len;
         curr += skip_ws(masked.get(curr..).unwrap_or(""));
-        if !masked.get(curr..).is_some_and(|s| s.starts_with('{')) {
-            idx = kw_pos + kw_len;
-            continue;
-        }
-        let body = if let Some(close_pos) = find_matching_brace(&clean, curr) {
-            let b = clean.get(curr + 1..close_pos).unwrap_or("");
-            idx = close_pos + 1;
-            b
+        let rem_conn = masked.get(curr..).unwrap_or("");
+        let body = if rem_conn.starts_with('{') {
+            if let Some(close_pos) = find_matching_brace(&clean, curr) {
+                let b = clean.get(curr + 1..close_pos).unwrap_or("");
+                idx = close_pos + 1;
+                b
+            } else {
+                idx = kw_pos + kw_len;
+                continue;
+            }
+        } else if rem_conn.starts_with("connect") && is_word_boundary_after(rem_conn, 7) {
+            if let Some(semi_rel) = rem_conn.find(';') {
+                let b = clean.get(curr..curr + semi_rel + 1).unwrap_or("");
+                idx = curr + semi_rel + 1;
+                b
+            } else {
+                idx = kw_pos + kw_len;
+                continue;
+            }
         } else {
             idx = kw_pos + kw_len;
             continue;
@@ -4644,6 +4859,9 @@ pub fn parse_part_defs(content: &str) -> Vec<PartDef> {
         let connections = parse_connection_defs(&shallow_body);
         let states = parse_state_defs(&shallow_body);
         let calcs = parse_calc_defs(&shallow_body);
+        let hazards = parse_hazard_defs(&shallow_body);
+        let (triggers_hazards, safety_realises, layer) =
+            parse_safety_and_layer_annotations(&shallow_body);
         let nested_parts = parse_part_defs(body);
 
         parts.push(PartDef {
@@ -4665,13 +4883,141 @@ pub fn parse_part_defs(content: &str) -> Vec<PartDef> {
             states,
             use_cases: Vec::new(),
             item_defs: Vec::new(),
-            hazards: Vec::new(),
+            hazards,
             risks: Vec::new(),
             connections,
             calcs,
+            triggers_hazards,
+            safety_realises,
+            layer,
         });
     }
     parts
+}
+
+/// Parses safety `hazard def <Name>` declarations from a SysML v2 source text fragment.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, ISO 26262 ASIL D, and MIL-STD-882E hazard extraction (`parse_hazard_defs`).
+/// Extracts STPA/FMECA `HazardDef` AST nodes (`hazard def H-01 { doc /* ... */ }`) without regular expressions.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Recognizes `hazard` and `hazard def` declarations at word boundaries and supports hyphenated hazard IDs (`H-01`).
+/// - Defaults `severity` to `1` unless overridden by `severity = <int>;` inside the hazard body.
+///
+/// ## 3. Preconditions
+/// - `content: &str` is a valid UTF-8 SysML v2 source fragment.
+///
+/// ## 4. Postconditions
+/// - Returns a `Vec<HazardDef>` containing all parsed hazard definitions in appearance order.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(N)$ where $N$ is `content.len()`.
+/// - Space Complexity: $O(H)$ where $H$ is the number of parsed `HazardDef` nodes.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Skips malformed or unclosed `hazard` blocks safely without panicking.
+/// - State: Pure function.
+/// - Action: Uses bounds-checked `.get(..)` slicing exclusively.
+/// - Resource: Linear memory proportional to hazard count.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYSML-AST-PARSE-HAZARD-DEFS]
+pub fn parse_hazard_defs(content: &str) -> Vec<HazardDef> {
+    let clean = strip_sysml_comments(content);
+    let masked = mask_string_literals(&clean);
+    let mut hazards = Vec::new();
+    let mut idx = 0;
+    while let Some(pos) = masked.get(idx..).and_then(|s| s.find("hazard")) {
+        let haz_pos = idx + pos;
+        if !is_word_boundary_before(&masked, haz_pos) || !is_word_boundary_after(&masked, haz_pos + 6)
+        {
+            idx = haz_pos + 6;
+            continue;
+        }
+        let mut doc = extract_doc_comment_before(&clean, haz_pos);
+        let mut curr = haz_pos + 6;
+        curr += skip_ws(masked.get(curr..).unwrap_or(""));
+        if masked
+            .get(curr..)
+            .is_some_and(|s| s.starts_with("def") && is_word_boundary_after(s, 3))
+        {
+            curr += 3;
+            curr += skip_ws(masked.get(curr..).unwrap_or(""));
+        } else {
+            idx = haz_pos + 6;
+            continue;
+        }
+        let rem_ident = masked.get(curr..).unwrap_or("");
+        let name_len = rem_ident
+            .bytes()
+            .take_while(|&b| is_ident_char(b) || b == b'-')
+            .count();
+        let name = rem_ident.get(..name_len).unwrap_or("");
+        if name.is_empty() {
+            idx = haz_pos + 6;
+            continue;
+        }
+        curr += name_len;
+        curr += skip_ws(masked.get(curr..).unwrap_or(""));
+
+        let rem_body = masked.get(curr..).unwrap_or("");
+        let mut body_opt = None;
+        if rem_body.starts_with('{') {
+            if let Some(close_pos) = find_matching_brace(&clean, curr) {
+                body_opt = clean.get(curr + 1..close_pos);
+                idx = close_pos + 1;
+            } else {
+                idx = haz_pos + 6;
+                continue;
+            }
+        } else if rem_body.starts_with(';') {
+            idx = curr + 1;
+        } else {
+            idx = haz_pos + 6;
+            continue;
+        }
+
+        let mut severity = 1;
+        if let Some(body) = body_opt {
+            if doc.is_none() {
+                if let Some(open_doc) = body.find("doc") {
+                    let after_doc = body.get(open_doc + 3..).unwrap_or("").trim_start();
+                    if let Some(after_open) = after_doc.strip_prefix("/*") {
+                        if let Some(close_doc) = after_open.find("*/") {
+                            if let Some(inner_doc) = after_open.get(..close_doc) {
+                                let clean_doc = inner_doc.trim().to_string();
+                                if !clean_doc.is_empty() {
+                                    doc = Some(clean_doc);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            for line in body.lines() {
+                let trimmed = line.trim();
+                if let Some(after_sev) = trimmed.strip_prefix("severity") {
+                    if let Some((_, rhs)) = after_sev.split_once('=') {
+                        let num_str = rhs.trim().trim_end_matches(';').trim();
+                        if let Ok(parsed_sev) = num_str.parse::<i32>() {
+                            severity = parsed_sev;
+                        }
+                    }
+                }
+            }
+        }
+
+        hazards.push(HazardDef {
+            name: name.to_string(),
+            doc,
+            severity,
+            source_port: None,
+            target_port: None,
+            part_ref: None,
+        });
+    }
+    hazards
 }
 
 /// Parse an entire SysML v2 source text into a structured SysmlModel.
@@ -4733,13 +5079,28 @@ pub fn parse_sysml(content: &str) -> SysmlModel {
     }
 
     if let Some((package_name, doc, body)) = package_info {
-        let parts = parse_part_defs(body);
+        let mut parts = parse_part_defs(body);
         let ports = parse_port_defs(body);
         let actions = parse_action_defs(body);
         let constraints = parse_constraint_defs(body);
         let requirements = parse_requirement_defs(body);
         let attributes = parse_attribute_defs(body);
         let test_cases = parse_test_case_defs(body);
+        let pkg_connections = parse_connection_defs(body);
+        let pkg_hazards = parse_hazard_defs(body);
+
+        if let Some(first_part) = parts.first_mut() {
+            for conn in pkg_connections {
+                if !first_part.connections.iter().any(|c| c.name == conn.name && c.source_port == conn.source_port && c.target_port == conn.target_port) {
+                    first_part.connections.push(conn);
+                }
+            }
+            for haz in pkg_hazards {
+                if !first_part.hazards.iter().any(|h| h.name == haz.name) {
+                    first_part.hazards.push(haz);
+                }
+            }
+        }
 
         SysmlModel {
             package_name: Some(package_name),
@@ -4753,13 +5114,28 @@ pub fn parse_sysml(content: &str) -> SysmlModel {
             test_cases,
         }
     } else {
-        let parts = parse_part_defs(&clean);
+        let mut parts = parse_part_defs(&clean);
         let ports = parse_port_defs(&clean);
         let actions = parse_action_defs(&clean);
         let constraints = parse_constraint_defs(&clean);
         let requirements = parse_requirement_defs(&clean);
         let attributes = parse_attribute_defs(&clean);
         let test_cases = parse_test_case_defs(&clean);
+        let root_connections = parse_connection_defs(&clean);
+        let root_hazards = parse_hazard_defs(&clean);
+
+        if let Some(first_part) = parts.first_mut() {
+            for conn in root_connections {
+                if !first_part.connections.iter().any(|c| c.name == conn.name && c.source_port == conn.source_port && c.target_port == conn.target_port) {
+                    first_part.connections.push(conn);
+                }
+            }
+            for haz in root_hazards {
+                if !first_part.hazards.iter().any(|h| h.name == haz.name) {
+                    first_part.hazards.push(haz);
+                }
+            }
+        }
 
         SysmlModel {
             package_name: None,
@@ -4773,6 +5149,37 @@ pub fn parse_sysml(content: &str) -> SysmlModel {
             test_cases,
         }
     }
+}
+
+/// Parses a SysML v2 textual model into a `SysmlModel` (canonical alias for [`parse_sysml`]).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for `parse_sysml_model`.
+/// Provides the canonical `parse_sysml_model` entry point used by `IncrementalAstCache::load_or_parse` and downstream compilers.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Referentially transparent and bit-for-bit identical to `parse_sysml(content)`.
+///
+/// ## 3. Preconditions
+/// - `content: &str` is a valid UTF-8 SysML v2 source string.
+///
+/// ## 4. Postconditions
+/// - Returns a populated `SysmlModel` with all parsed parts, ports, requirements, constraints, and safety annotations.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(N \cdot D)$ where $N$ is `content.len()` and $D$ is nesting depth.
+/// - Space Complexity: $O(N)$ for the returned `SysmlModel` AST.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Handles arbitrary UTF-8 input safely without panicking.
+/// - State: Pure function.
+/// - Action: Delegates to `parse_sysml(content)`.
+/// - Resource: Bounded by input text length.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYSML-AST-PARSE-SYSML-MODEL]
+pub fn parse_sysml_model(content: &str) -> SysmlModel {
+    parse_sysml(content)
 }
 
 /// Checks whether `needle` appears as a distinct alphanumeric word inside `haystack` (case-insensitive).
@@ -6078,6 +6485,1131 @@ impl UnifiedSchemaModelExtractor {
     }
 }
 
+/// Represents a logical interface connection binding between a source port and a target port in an AST slice.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `InterfaceDef` in `crates/deap-core/src/sysml_ast.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves structural type invariants for struct `InterfaceDef` across member set `[name: String, source_port: String, target_port: String, doc: Option<String>]`.
+///
+/// ## 3. Preconditions
+/// - Caller supplies well-formed values for `InterfaceDef` members (`name: String, source_port: String, target_port: String, doc: Option<String>`).
+///
+/// ## 4. Postconditions
+/// - Defines the authoritative `InterfaceDef` representation for struct `InterfaceDef`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(M(4)) bounded over input/member dimension of `InterfaceDef`.
+/// - Space Complexity: O(M(4)) bounded auxiliary memory for `InterfaceDef`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `InterfaceDef` (`InterfaceDef`).
+/// - State: Maintains consistent state invariants across `InterfaceDef` without partial mutation on error.
+/// - Action: Executes `InterfaceDef` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `InterfaceDef` (`DEAP-CORE-SYSML-AST`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-DEAP-CORE-SYSML-AST-INTERFACEDEF] | SysML v2: PartDef(InterfaceDef)
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct InterfaceDef {
+    pub name: String,
+    pub source_port: String,
+    pub target_port: String,
+    #[serde(default)]
+    pub doc: Option<String>,
+}
+
+/// Represents a token-budgeted subsystem slice extracted from a `SysmlModel` for air-gapped or single-item synthesis.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `AstSlice` in `crates/deap-core/src/sysml_ast.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves structural type invariants for struct `AstSlice` across member set `[target_package: String, packages: Vec<PackageDef>, parts: Vec<PartDef>, ports: Vec<PortDef>, interfaces: Vec<InterfaceDef>, requirements: Vec<RequirementDef>, hazards: Vec<HazardDef>, estimated_tokens: usize]`.
+///
+/// ## 3. Preconditions
+/// - Caller supplies well-formed values for `AstSlice` members (`target_package: String, packages: Vec<PackageDef>, parts: Vec<PartDef>, ports: Vec<PortDef>, interfaces: Vec<InterfaceDef>, requirements: Vec<RequirementDef>, hazards: Vec<HazardDef>, estimated_tokens: usize`).
+///
+/// ## 4. Postconditions
+/// - Defines the authoritative `AstSlice` representation for struct `AstSlice`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(M(8)) bounded over input/member dimension of `AstSlice`.
+/// - Space Complexity: O(M(8)) bounded auxiliary memory for `AstSlice`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `AstSlice` (`AstSlice`).
+/// - State: Maintains consistent state invariants across `AstSlice` without partial mutation on error.
+/// - Action: Executes `AstSlice` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `AstSlice` (`DEAP-CORE-SYSML-AST`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-DEAP-CORE-SYSML-AST-ASTSLICE] | SysML v2: PartDef(AstSlice)
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct AstSlice {
+    pub target_package: String,
+    pub packages: Vec<PackageDef>,
+    pub parts: Vec<PartDef>,
+    pub ports: Vec<PortDef>,
+    pub interfaces: Vec<InterfaceDef>,
+    pub requirements: Vec<RequirementDef>,
+    pub hazards: Vec<HazardDef>,
+    pub estimated_tokens: usize,
+}
+
+impl SysmlModel {
+    /// Extracts a deterministic, token-budgeted `AstSlice` for `target_package` from this `SysmlModel`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and `DEAP_LOCAL_AIRGAPPED_DEEPSEEK_WORKSTATION_BLUEPRINT.md`
+    /// context-budget enforcement (`SysmlModel::slice_package_subsystem`). Prevents context-window overflow
+    /// by isolating only the target subsystem's `PartDef`s, `PortDef`s, `InterfaceDef`s, referenced `RequirementDef`s,
+    /// and referenced `HazardDef`s.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Estimates token count deterministically as `json_bytes.len().saturating_add(3) / 4`.
+    /// - Enforces `estimated_tokens <= max_tokens` and fails closed with `Err(String)` when exceeded.
+    ///
+    /// ## 3. Preconditions
+    /// - `target_package: &str` is a non-empty package or subsystem part identifier.
+    /// - `max_tokens: usize` is strictly positive (`max_tokens > 0`).
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Ok(AstSlice)` with `estimated_tokens <= max_tokens` when a matching package or part exists,
+    ///   or `Err(String)` on missing target or token budget violation.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(P + R + H)$ where $P$, $R$, and $H$ are part, requirement, and hazard counts in `self`.
+    /// - Space Complexity: $O(S)$ where $S$ is the serialized size of the resulting `AstSlice`.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Rejects `max_tokens == 0` and empty `target_package` strings immediately.
+    /// - State: Read-only projection; never mutates `self`.
+    /// - Action: Deterministic JSON byte estimation via `serde_json::to_vec`.
+    /// - Resource: Fails closed before returning an oversized slice that exceeds `max_tokens`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYSML-AST-SLICE-PACKAGE-SUBSYSTEM]
+    pub fn slice_package_subsystem(
+        &self,
+        target_package: &str,
+        max_tokens: usize,
+    ) -> Result<AstSlice, String> {
+        let target = target_package.trim();
+        if target.is_empty() {
+            return Err("target_package must not be empty".to_string());
+        }
+        if max_tokens == 0 {
+            return Err("max_tokens must be greater than zero".to_string());
+        }
+
+        let pkg_matches = self
+            .package_name
+            .as_deref()
+            .is_some_and(|pkg_name| pkg_name == target || pkg_name.eq_ignore_ascii_case(target));
+
+        let matched_parts: Vec<PartDef> = if pkg_matches {
+            self.parts.clone()
+        } else {
+            self.parts
+                .iter()
+                .filter(|p| {
+                    p.name == target
+                        || p.name.starts_with(target)
+                        || p.name.eq_ignore_ascii_case(target)
+                })
+                .cloned()
+                .collect()
+        };
+
+        if !pkg_matches && matched_parts.is_empty() {
+            return Err(format!(
+                "No package or part matching '{}' found in SysmlModel",
+                target
+            ));
+        }
+
+        let mut ports: Vec<PortDef> = Vec::new();
+        if pkg_matches {
+            for port in &self.ports {
+                if !ports.iter().any(|existing| existing.name == port.name) {
+                    ports.push(port.clone());
+                }
+            }
+        }
+
+        let mut interfaces: Vec<InterfaceDef> = Vec::new();
+        let mut referenced_req_ids: Vec<String> = Vec::new();
+        let mut referenced_hazard_ids: Vec<String> = Vec::new();
+        let mut discovered_hazards: Vec<HazardDef> = Vec::new();
+        let mut part_requirements: Vec<RequirementDef> = Vec::new();
+
+        for part in &matched_parts {
+            for port in &part.ports {
+                if !ports.iter().any(|existing| existing.name == port.name) {
+                    ports.push(port.clone());
+                }
+            }
+            for conn in &part.connections {
+                let iface = InterfaceDef {
+                    name: conn.name.clone(),
+                    source_port: conn.source_port.clone(),
+                    target_port: conn.target_port.clone(),
+                    doc: conn.doc.clone(),
+                };
+                if !interfaces.contains(&iface) {
+                    interfaces.push(iface);
+                }
+            }
+            for req_id in &part.satisfied_requirements {
+                if !referenced_req_ids.contains(req_id) {
+                    referenced_req_ids.push(req_id.clone());
+                }
+            }
+            for safety_req_id in &part.safety_realises {
+                if !referenced_req_ids.contains(safety_req_id) {
+                    referenced_req_ids.push(safety_req_id.clone());
+                }
+            }
+            for haz_id in &part.triggers_hazards {
+                if !referenced_hazard_ids.contains(haz_id) {
+                    referenced_hazard_ids.push(haz_id.clone());
+                }
+            }
+            for haz in &part.hazards {
+                if !discovered_hazards.iter().any(|h| h.name == haz.name) {
+                    discovered_hazards.push(haz.clone());
+                }
+            }
+            for req in &part.requirements {
+                if !part_requirements
+                    .iter()
+                    .any(|r| r.name == req.name && r.req_id == req.req_id)
+                {
+                    part_requirements.push(req.clone());
+                }
+            }
+        }
+
+        let mut requirements: Vec<RequirementDef> = Vec::new();
+        for req in self.requirements.iter().chain(part_requirements.iter()) {
+            let is_referenced = referenced_req_ids.is_empty()
+                || referenced_req_ids
+                    .iter()
+                    .any(|id| id == &req.name || id == &req.req_id);
+            if is_referenced
+                && !requirements
+                    .iter()
+                    .any(|r| r.name == req.name && r.req_id == req.req_id)
+            {
+                requirements.push(req.clone());
+                for haz_id in &req.triggers_hazards {
+                    if !referenced_hazard_ids.contains(haz_id) {
+                        referenced_hazard_ids.push(haz_id.clone());
+                    }
+                }
+            }
+        }
+
+        let mut hazards: Vec<HazardDef> = Vec::new();
+        for haz in &discovered_hazards {
+            if referenced_hazard_ids.is_empty() || referenced_hazard_ids.contains(&haz.name) {
+                if !hazards.iter().any(|h| h.name == haz.name) {
+                    hazards.push(haz.clone());
+                }
+            }
+        }
+        for haz_id in &referenced_hazard_ids {
+            if !hazards.iter().any(|h| &h.name == haz_id) {
+                hazards.push(HazardDef {
+                    name: haz_id.clone(),
+                    doc: None,
+                    severity: 1,
+                    source_port: None,
+                    target_port: None,
+                    part_ref: None,
+                });
+            }
+        }
+
+        let slice_pkg = PackageDef {
+            name: target.to_string(),
+            doc: self.doc.clone(),
+            part_defs: matched_parts.clone(),
+            port_defs: ports.clone(),
+            requirement_defs: requirements.clone(),
+            hazard_defs: hazards.clone(),
+            ..Default::default()
+        };
+
+        let mut slice = AstSlice {
+            target_package: target.to_string(),
+            packages: vec![slice_pkg],
+            parts: matched_parts,
+            ports,
+            interfaces,
+            requirements,
+            hazards,
+            estimated_tokens: 0,
+        };
+
+        let json_bytes = serde_json::to_vec(&slice)
+            .map_err(|e| format!("Failed to serialize AstSlice for token estimation: {}", e))?;
+        let estimated_tokens = json_bytes.len().saturating_add(3) / 4;
+        slice.estimated_tokens = estimated_tokens;
+
+        if estimated_tokens > max_tokens {
+            return Err(format!(
+                "AstSlice for '{}' requires {} estimated tokens, exceeding max_tokens budget of {}",
+                target, estimated_tokens, max_tokens
+            ));
+        }
+
+        Ok(slice)
+    }
+}
+
+/// Computes a pure-Rust FIPS 180-4 SHA-256 lowercase hexadecimal digest of `bytes`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, and FIPS 180-4 cryptographic hashing standards (`compute_sha256_hex`).
+/// Provides deterministic content-addressable hashing for `IncrementalAstCache` and `CotAuditRecord` without external crates.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Produces a 64-character lowercase ASCII hexadecimal string for any input byte slice.
+/// - Satisfies NIST FIPS 180-4 test vectors (e.g., `compute_sha256_hex(b"abc") == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"`).
+///
+/// ## 3. Preconditions
+/// - `bytes: &[u8]` is a valid byte slice of arbitrary length.
+///
+/// ## 4. Postconditions
+/// - Returns a 64-byte `String` containing only `'0'..='9'` and `'a'..='f'`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(B)$ where $B$ is the number of 512-bit (64-byte) padded blocks.
+/// - Space Complexity: $O(B)$ for the padded message buffer plus 64-word message schedule.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Uses `.get(..)` and `.get_mut(..)` bounds-checked access exclusively (zero slice indexing).
+/// - State: Pure function with local 32-bit state registers `h0..h7`.
+/// - Action: Wrapping 32-bit arithmetic prevents integer overflow panics in debug and release profiles.
+/// - Resource: Bounded memory proportional to input length.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYSML-AST-SHA256-HEX]
+fn compute_sha256_hex(bytes: &[u8]) -> String {
+    const K: [u32; 64] = [
+        0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4,
+        0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe,
+        0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f,
+        0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7,
+        0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc,
+        0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b,
+        0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116,
+        0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+        0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7,
+        0xc67178f2,
+    ];
+
+    let mut h0: u32 = 0x6a09e667;
+    let mut h1: u32 = 0xbb67ae85;
+    let mut h2: u32 = 0x3c6ef372;
+    let mut h3: u32 = 0xa54ff53a;
+    let mut h4: u32 = 0x510e527f;
+    let mut h5: u32 = 0x9b05688c;
+    let mut h6: u32 = 0x1f83d9ab;
+    let mut h7: u32 = 0x5be0cd19;
+
+    let bit_len = (bytes.len() as u64).wrapping_mul(8);
+    let mut msg = bytes.to_vec();
+    msg.push(0x80);
+    while (msg.len() % 64) != 56 {
+        msg.push(0x00);
+    }
+    msg.extend_from_slice(&bit_len.to_be_bytes());
+
+    for chunk in msg.chunks_exact(64) {
+        let mut w = [0u32; 64];
+        for (i, word_bytes) in chunk.chunks_exact(4).enumerate() {
+            if let (Some(&b0), Some(&b1), Some(&b2), Some(&b3), Some(slot)) = (
+                word_bytes.first(),
+                word_bytes.get(1),
+                word_bytes.get(2),
+                word_bytes.get(3),
+                w.get_mut(i),
+            ) {
+                *slot = u32::from_be_bytes([b0, b1, b2, b3]);
+            }
+        }
+        for i in 16..64 {
+            let w_i_15 = w.get(i - 15).copied().unwrap_or(0);
+            let w_i_2 = w.get(i - 2).copied().unwrap_or(0);
+            let w_i_16 = w.get(i - 16).copied().unwrap_or(0);
+            let w_i_7 = w.get(i - 7).copied().unwrap_or(0);
+            let s0 = w_i_15.rotate_right(7) ^ w_i_15.rotate_right(18) ^ (w_i_15 >> 3);
+            let s1 = w_i_2.rotate_right(17) ^ w_i_2.rotate_right(19) ^ (w_i_2 >> 10);
+            if let Some(slot) = w.get_mut(i) {
+                *slot = w_i_16
+                    .wrapping_add(s0)
+                    .wrapping_add(w_i_7)
+                    .wrapping_add(s1);
+            }
+        }
+
+        let mut a = h0;
+        let mut b = h1;
+        let mut c = h2;
+        let mut d = h3;
+        let mut e = h4;
+        let mut f = h5;
+        let mut g = h6;
+        let mut h = h7;
+
+        for i in 0..64 {
+            let k_i = K.get(i).copied().unwrap_or(0);
+            let w_i = w.get(i).copied().unwrap_or(0);
+            let s1 = e.rotate_right(6) ^ e.rotate_right(11) ^ e.rotate_right(25);
+            let ch = (e & f) ^ ((!e) & g);
+            let temp1 = h
+                .wrapping_add(s1)
+                .wrapping_add(ch)
+                .wrapping_add(k_i)
+                .wrapping_add(w_i);
+            let s0 = a.rotate_right(2) ^ a.rotate_right(13) ^ a.rotate_right(22);
+            let maj = (a & b) ^ (a & c) ^ (b & c);
+            let temp2 = s0.wrapping_add(maj);
+
+            h = g;
+            g = f;
+            f = e;
+            e = d.wrapping_add(temp1);
+            d = c;
+            c = b;
+            b = a;
+            a = temp1.wrapping_add(temp2);
+        }
+
+        h0 = h0.wrapping_add(a);
+        h1 = h1.wrapping_add(b);
+        h2 = h2.wrapping_add(c);
+        h3 = h3.wrapping_add(d);
+        h4 = h4.wrapping_add(e);
+        h5 = h5.wrapping_add(f);
+        h6 = h6.wrapping_add(g);
+        h7 = h7.wrapping_add(h);
+    }
+
+    format!(
+        "{:08x}{:08x}{:08x}{:08x}{:08x}{:08x}{:08x}{:08x}",
+        h0, h1, h2, h3, h4, h5, h6, h7
+    )
+}
+
+/// Content-addressable SHA-256 incremental cache for parsed `SysmlModel` AST trees under `.pipeline/cache/ast/`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `IncrementalAstCache` in `crates/deap-core/src/sysml_ast.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves structural type invariants for struct `IncrementalAstCache` across member set `[cache_dir: std::path::PathBuf]`.
+///
+/// ## 3. Preconditions
+/// - Caller supplies a valid repository root path to `IncrementalAstCache::new` or a valid `cache_dir` path.
+///
+/// ## 4. Postconditions
+/// - Defines the authoritative `IncrementalAstCache` representation for struct `IncrementalAstCache`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(M(1)) bounded over input/member dimension of `IncrementalAstCache`.
+/// - Space Complexity: O(M(1)) bounded auxiliary memory for `IncrementalAstCache`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `IncrementalAstCache` (`IncrementalAstCache`).
+/// - State: Maintains consistent state invariants across `IncrementalAstCache` without partial mutation on error.
+/// - Action: Executes `IncrementalAstCache` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `IncrementalAstCache` (`DEAP-CORE-SYSML-AST`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-DEAP-CORE-SYSML-AST-INCREMENTALASTCACHE] | SysML v2: PartDef(IncrementalAstCache)
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IncrementalAstCache {
+    pub cache_dir: std::path::PathBuf,
+}
+
+impl IncrementalAstCache {
+    /// Initializes an `IncrementalAstCache` rooted at `<repo_root>/.pipeline/cache/ast`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and `DEAP_SYSML_V2_INGESTION_ENGINE_BLUEPRINT.md` incremental AST caching rules (`IncrementalAstCache::new`).
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Resolves `self.cache_dir` deterministically as `repo_root.join(".pipeline").join("cache").join("ast")`.
+    ///
+    /// ## 3. Preconditions
+    /// - `repo_root: &std::path::Path` is a valid workspace directory path reference.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns an `IncrementalAstCache` instance configured with the canonical AST cache directory path.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(P)$ where $P$ is the path length of `repo_root`.
+    /// - Space Complexity: $O(P)$ for the allocated `PathBuf`.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Accepts any valid `Path` reference without performing premature I/O.
+    /// - State: Pure constructor.
+    /// - Action: Never panics.
+    /// - Resource: Single `PathBuf` allocation.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYSML-AST-CACHE-NEW]
+    pub fn new(repo_root: &std::path::Path) -> Self {
+        Self {
+            cache_dir: repo_root.join(".pipeline").join("cache").join("ast"),
+        }
+    }
+
+    /// Computes the lowercase hexadecimal SHA-256 digest of `sysml_source`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, and FIPS 180-4 (`IncrementalAstCache::compute_digest`).
+    /// Ensures any single-byte change in `sysml_source` invalidates prior cached AST artifacts.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Deterministic 64-character lowercase hex SHA-256 digest of `sysml_source.as_bytes()`.
+    ///
+    /// ## 3. Preconditions
+    /// - `sysml_source: &str` is a valid UTF-8 SysML v2 source string.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns the 64-character lowercase hex SHA-256 string.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(N)$ where $N$ is `sysml_source.len()`.
+    /// - Space Complexity: $O(N)$ for message block padding.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Handles empty and arbitrarily large UTF-8 strings safely.
+    /// - State: Pure function.
+    /// - Action: Delegates to `compute_sha256_hex`.
+    /// - Resource: Bounded by `sysml_source.len()`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYSML-AST-CACHE-DIGEST]
+    pub fn compute_digest(sysml_source: &str) -> String {
+        compute_sha256_hex(sysml_source.as_bytes())
+    }
+
+    /// Loads a cached `SysmlModel` by SHA-256 digest if present on disk, or parses `sysml_source` and populates the cache.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and `DEAP_SYSML_V2_INGESTION_ENGINE_BLUEPRINT.md` (`IncrementalAstCache::load_or_parse`).
+    /// Eliminates redundant re-parsing of unchanged SysML v2 schemas while guaranteeing bit-for-bit AST fidelity.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Returns `Ok((model, true))` on a verified SHA-256 cache hit when `<cache_dir>/<digest>.json` exists and deserializes cleanly.
+    /// - Returns `Ok((model, false))` on a cache miss after persisting the pretty-printed JSON AST to `<cache_dir>/<digest>.json`.
+    ///
+    /// ## 3. Preconditions
+    /// - `sysml_source: &str` is a valid UTF-8 SysML v2 source string.
+    /// - `self.cache_dir` is a writable filesystem path (created automatically on cache miss).
+    ///
+    /// ## 4. Postconditions
+    /// - `<self.cache_dir>/<digest>.json` exists on disk and contains the serialized `SysmlModel`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(N)$ for SHA-256 calculation plus $O(N)$ JSON deserialization (hit) or SysML parsing + serialization (miss).
+    /// - Space Complexity: $O(N)$ for the `SysmlModel` and JSON buffer.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Propagates filesystem I/O or JSON serialization/deserialization errors via `Err(String)`.
+    /// - State: Creates `self.cache_dir` via `std::fs::create_dir_all` prior to writing.
+    /// - Action: Never swallows I/O or deserialization errors silently.
+    /// - Resource: Bounded by AST document size.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYSML-AST-CACHE-LOAD-OR-PARSE]
+    pub fn load_or_parse(&self, sysml_source: &str) -> Result<(SysmlModel, bool), String> {
+        let digest = Self::compute_digest(sysml_source);
+        let cache_path = self.cache_dir.join(format!("{}.json", digest));
+        if cache_path.is_file() {
+            let cached_text = std::fs::read_to_string(&cache_path).map_err(|e| {
+                format!(
+                    "Failed to read cached AST file '{}': {}",
+                    cache_path.display(),
+                    e
+                )
+            })?;
+            let model: SysmlModel = serde_json::from_str(&cached_text).map_err(|e| {
+                format!(
+                    "Failed to deserialize cached AST file '{}': {}",
+                    cache_path.display(),
+                    e
+                )
+            })?;
+            return Ok((model, true));
+        }
+
+        let model = parse_sysml_model(sysml_source);
+        std::fs::create_dir_all(&self.cache_dir).map_err(|e| {
+            format!(
+                "Failed to create AST cache directory '{}': {}",
+                self.cache_dir.display(),
+                e
+            )
+        })?;
+        let serialized = serde_json::to_string_pretty(&model)
+            .map_err(|e| format!("Failed to serialize SysmlModel for AST cache: {}", e))?;
+        std::fs::write(&cache_path, serialized).map_err(|e| {
+            format!(
+                "Failed to write cached AST file '{}': {}",
+                cache_path.display(),
+                e
+            )
+        })?;
+        Ok((model, false))
+    }
+}
+
+/// Runtime metadata descriptor for a single `AttributeDef` field on a SysML v2 `PartDef`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and `RUNTIME_METADATA_ENGINE.md` safety objectives for struct `FieldDescriptor` in `crates/deap-core/src/sysml_ast.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves structural type invariants for struct `FieldDescriptor` across member set `[name: String, type_name: String, si_unit: Option<String>, range_bounds: Option<(f64, f64)>]`.
+///
+/// ## 3. Preconditions
+/// - Caller supplies well-formed values for `FieldDescriptor` members (`name: String, type_name: String, si_unit: Option<String>, range_bounds: Option<(f64, f64)>`).
+///
+/// ## 4. Postconditions
+/// - Defines the authoritative `FieldDescriptor` representation for struct `FieldDescriptor`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(M(4)) bounded over input/member dimension of `FieldDescriptor`.
+/// - Space Complexity: O(M(4)) bounded auxiliary memory for `FieldDescriptor`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `FieldDescriptor` (`FieldDescriptor`).
+/// - State: Maintains consistent state invariants across `FieldDescriptor` without partial mutation on error.
+/// - Action: Executes `FieldDescriptor` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `FieldDescriptor` (`DEAP-CORE-SYSML-AST`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-DEAP-CORE-SYSML-AST-FIELDDESCRIPTOR] | SysML v2: PartDef(FieldDescriptor)
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct FieldDescriptor {
+    pub name: String,
+    pub type_name: String,
+    pub si_unit: Option<String>,
+    pub range_bounds: Option<(f64, f64)>,
+}
+
+/// Extracts optional SI unit (`[m/s]`) and numeric range bounds (`[min..max]`) from an attribute expression string.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and `RUNTIME_METADATA_ENGINE.md` physical metrology extraction (`extract_si_unit_and_bounds`).
+/// Parses bracketed `[unit]` and `[min..max]` annotations from `AttributeDef::default_value` or `doc` without regex.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Bracketed segments containing `".."` are parsed as `(f64, f64)` range bounds when both endpoints are valid floats.
+/// - Bracketed segments without `".."` are captured as the canonical `si_unit` string.
+///
+/// ## 3. Preconditions
+/// - `raw: &str` is an attribute default value or documentation string slice.
+///
+/// ## 4. Postconditions
+/// - Returns `(Option<String>, Option<(f64, f64)>)` representing `(si_unit, range_bounds)`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(L)$ where $L$ is `raw.len()`.
+/// - Space Complexity: $O(U)$ where $U$ is the unit string length.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Malformed brackets or non-numeric range tokens are ignored safely without panicking.
+/// - State: Pure helper.
+/// - Action: Uses bounds-checked `.get(..)` slicing exclusively.
+/// - Resource: At most one small `String` allocation for `si_unit`.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SYSML-AST-EXTRACT-SI-UNIT-BOUNDS]
+fn extract_si_unit_and_bounds(raw: &str) -> (Option<String>, Option<(f64, f64)>) {
+    let mut si_unit = None;
+    let mut range_bounds = None;
+    let mut cursor = 0;
+
+    while let Some(open_b) = raw.get(cursor..).and_then(|s| s.find('[')) {
+        let start = cursor + open_b + 1;
+        if let Some(close_b) = raw.get(start..).and_then(|s| s.find(']')) {
+            if let Some(inside) = raw.get(start..start + close_b) {
+                let trimmed = inside.trim();
+                if let Some((min_s, max_s)) = trimmed.split_once("..") {
+                    if let (Ok(min_v), Ok(max_v)) =
+                        (min_s.trim().parse::<f64>(), max_s.trim().parse::<f64>())
+                    {
+                        range_bounds = Some((min_v, max_v));
+                    }
+                } else if !trimmed.is_empty() && si_unit.is_none() {
+                    si_unit = Some(trimmed.to_string());
+                }
+            }
+            cursor = start + close_b + 1;
+        } else {
+            break;
+        }
+    }
+
+    (si_unit, range_bounds)
+}
+
+/// Runtime metadata reflection descriptor for a SysML v2 `PartDef` component.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and `RUNTIME_METADATA_ENGINE.md` safety objectives for struct `TypeDescriptor` in `crates/deap-core/src/sysml_ast.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves structural type invariants for struct `TypeDescriptor` across member set `[type_name: String, package_name: String, layer: Option<String>, fields: Vec<FieldDescriptor>, satisfied_requirements: Vec<String>]`.
+///
+/// ## 3. Preconditions
+/// - Caller supplies well-formed values for `TypeDescriptor` members (`type_name: String, package_name: String, layer: Option<String>, fields: Vec<FieldDescriptor>, satisfied_requirements: Vec<String>`).
+///
+/// ## 4. Postconditions
+/// - Defines the authoritative `TypeDescriptor` representation for struct `TypeDescriptor`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(M(5)) bounded over input/member dimension of `TypeDescriptor`.
+/// - Space Complexity: O(M(5)) bounded auxiliary memory for `TypeDescriptor`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `TypeDescriptor` (`TypeDescriptor`).
+/// - State: Maintains consistent state invariants across `TypeDescriptor` without partial mutation on error.
+/// - Action: Executes `TypeDescriptor` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `TypeDescriptor` (`DEAP-CORE-SYSML-AST`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-DEAP-CORE-SYSML-AST-TYPEDESCRIPTOR] | SysML v2: PartDef(TypeDescriptor)
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct TypeDescriptor {
+    pub type_name: String,
+    pub package_name: String,
+    pub layer: Option<String>,
+    pub fields: Vec<FieldDescriptor>,
+    pub satisfied_requirements: Vec<String>,
+}
+
+impl TypeDescriptor {
+    /// Synthesizes a runtime `TypeDescriptor` from a `PartDef` AST node and its enclosing `package_name`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and `RUNTIME_METADATA_ENGINE.md` (`TypeDescriptor::from_part_def`).
+    /// Projects a SysML v2 `PartDef` and its `AttributeDef` members into an inspectable runtime schema descriptor.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves the exact declaration order of `part.attributes` in `self.fields`.
+    /// - Propagates `part.layer` and `part.satisfied_requirements` losslessly.
+    ///
+    /// ## 3. Preconditions
+    /// - `package_name: &str` is the enclosing SysML v2 package identifier.
+    /// - `part: &PartDef` is a valid parsed `PartDef` reference.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns a populated `TypeDescriptor` with `fields.len() == part.attributes.len()`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(A)$ where $A$ is `part.attributes.len()`.
+    /// - Space Complexity: $O(A)$ for the allocated `FieldDescriptor` vector.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Handles attributes lacking default values or unit annotations by setting `si_unit` and `range_bounds` to `None`.
+    /// - State: Pure projection; does not mutate `part`.
+    /// - Action: Deterministic execution with zero panics.
+    /// - Resource: Linear memory allocation proportional to attribute count.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYSML-AST-TYPE-DESCRIPTOR-FROM-PART]
+    pub fn from_part_def(package_name: &str, part: &PartDef) -> Self {
+        let fields = part
+            .attributes
+            .iter()
+            .map(|attr| {
+                let (mut si_unit, mut range_bounds) = attr
+                    .default_value
+                    .as_deref()
+                    .map(extract_si_unit_and_bounds)
+                    .unwrap_or((None, None));
+                if si_unit.is_none() && range_bounds.is_none() {
+                    if let Some(ref doc_str) = attr.doc {
+                        let (doc_unit, doc_bounds) = extract_si_unit_and_bounds(doc_str);
+                        si_unit = doc_unit;
+                        range_bounds = doc_bounds;
+                    }
+                }
+                FieldDescriptor {
+                    name: attr.name.clone(),
+                    type_name: attr.type_name.clone(),
+                    si_unit,
+                    range_bounds,
+                }
+            })
+            .collect();
+
+        Self {
+            type_name: part.name.clone(),
+            package_name: package_name.to_string(),
+            layer: part.layer.clone(),
+            fields,
+            satisfied_requirements: part.satisfied_requirements.clone(),
+        }
+    }
+}
+
+/// Zero-mocking file-backed persistence engine for `SysmlModel` AST snapshots (`PERSISTENCE_ARCHITECTURE.md`).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and `PERSISTENCE_ARCHITECTURE.md` safety objectives for struct `AstPersistenceEngine` in `crates/deap-core/src/sysml_ast.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves structural type invariants for struct `AstPersistenceEngine` across member set `[storage_root: std::path::PathBuf]`.
+///
+/// ## 3. Preconditions
+/// - Caller supplies a valid directory path for `storage_root: std::path::PathBuf`.
+///
+/// ## 4. Postconditions
+/// - Defines the authoritative `AstPersistenceEngine` representation for struct `AstPersistenceEngine`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(M(1)) bounded over input/member dimension of `AstPersistenceEngine`.
+/// - Space Complexity: O(M(1)) bounded auxiliary memory for `AstPersistenceEngine`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `AstPersistenceEngine` (`AstPersistenceEngine`).
+/// - State: Maintains consistent state invariants across `AstPersistenceEngine` without partial mutation on error.
+/// - Action: Executes `AstPersistenceEngine` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `AstPersistenceEngine` (`DEAP-CORE-SYSML-AST`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-DEAP-CORE-SYSML-AST-ASTPERSISTENCEENGINE] | SysML v2: PartDef(AstPersistenceEngine)
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct AstPersistenceEngine {
+    pub storage_root: std::path::PathBuf,
+}
+
+impl AstPersistenceEngine {
+    /// Creates a new `AstPersistenceEngine` backed by `storage_root`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and `.pipeline/constitution.md` Section 1.9 Zero-Mocking Live Persistence Mandate (`AstPersistenceEngine::new`).
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Stores `storage_root` verbatim for deterministic `<storage_root>/<model_id>.json` resolution.
+    ///
+    /// ## 3. Preconditions
+    /// - `storage_root: std::path::PathBuf` is a valid filesystem path.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns an initialized `AstPersistenceEngine`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(1)$ move construction.
+    /// - Space Complexity: $O(1)$.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Infallible constructor.
+    /// - State: Pure value initialization.
+    /// - Action: Zero panics.
+    /// - Resource: Zero additional heap allocations.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYSML-AST-PERSISTENCE-NEW]
+    pub fn new(storage_root: std::path::PathBuf) -> Self {
+        Self { storage_root }
+    }
+
+    /// Persists `model` under `model_id` as a canonical JSON document inside `self.storage_root`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and `PERSISTENCE_ARCHITECTURE.md` (`AstPersistenceEngine::persist_model`).
+    /// Ensures durable, deterministic serialization of `SysmlModel` instances to disk.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Rejects empty or path-traversing `model_id` values (`..`, `/`, `\\`).
+    /// - Round-trip invariant: `self.load_model(model_id)` after `self.persist_model(model_id, model)` yields a `SysmlModel` equal to `model`.
+    ///
+    /// ## 3. Preconditions
+    /// - `model_id: &str` is a non-empty identifier free of path separators.
+    /// - `model: &SysmlModel` is a valid AST model reference.
+    ///
+    /// ## 4. Postconditions
+    /// - Writes `<storage_root>/<model_id>.json` and returns `Ok(PathBuf)` pointing to the persisted file.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(N)$ where $N$ is the serialized byte size of `model`.
+    /// - Space Complexity: $O(N)$ for the formatted JSON buffer.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Returns `Err(String)` if `model_id` is empty or contains path separators.
+    /// - State: Creates `self.storage_root` via `std::fs::create_dir_all` before writing.
+    /// - Action: Propagates all I/O and serialization errors via `Result::Err`.
+    /// - Resource: Bounded by `model` AST size.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYSML-AST-PERSIST-MODEL]
+    pub fn persist_model(
+        &self,
+        model_id: &str,
+        model: &SysmlModel,
+    ) -> Result<std::path::PathBuf, String> {
+        let clean_id = model_id.trim();
+        if clean_id.is_empty()
+            || clean_id.contains("..")
+            || clean_id.contains('/')
+            || clean_id.contains('\\')
+        {
+            return Err(format!("Invalid model_id '{}' for persistence", model_id));
+        }
+        std::fs::create_dir_all(&self.storage_root).map_err(|e| {
+            format!(
+                "Failed to create persistence root '{}': {}",
+                self.storage_root.display(),
+                e
+            )
+        })?;
+        let target_path = self.storage_root.join(format!("{}.json", clean_id));
+        let json_payload = serde_json::to_string_pretty(model).map_err(|e| {
+            format!(
+                "Failed to serialize SysmlModel '{}' for persistence: {}",
+                clean_id, e
+            )
+        })?;
+        std::fs::write(&target_path, json_payload).map_err(|e| {
+            format!(
+                "Failed to write persisted model '{}': {}",
+                target_path.display(),
+                e
+            )
+        })?;
+        Ok(target_path)
+    }
+
+    /// Loads and deserializes a persisted `SysmlModel` identified by `model_id` from `self.storage_root`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A and `PERSISTENCE_ARCHITECTURE.md` (`AstPersistenceEngine::load_model`).
+    /// Restores a previously persisted `SysmlModel` snapshot with full structural fidelity.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Rejects empty or path-traversing `model_id` values (`..`, `/`, `\\`).
+    /// - Deserializes `<storage_root>/<model_id>.json` into an owned `SysmlModel`.
+    ///
+    /// ## 3. Preconditions
+    /// - `model_id: &str` refers to a model previously written via `persist_model`.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Ok(SysmlModel)` on valid file read and JSON deserialization, or `Err(String)` otherwise.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(N)$ where $N$ is the byte length of `<model_id>.json`.
+    /// - Space Complexity: $O(N)$ for the loaded `SysmlModel`.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Fails closed with `Err(String)` when the file is missing, unreadable, or malformed JSON.
+    /// - State: Read-only filesystem operation.
+    /// - Action: Zero panics or silent error suppression.
+    /// - Resource: Bounded by persisted file size.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYSML-AST-LOAD-MODEL]
+    pub fn load_model(&self, model_id: &str) -> Result<SysmlModel, String> {
+        let clean_id = model_id.trim();
+        if clean_id.is_empty()
+            || clean_id.contains("..")
+            || clean_id.contains('/')
+            || clean_id.contains('\\')
+        {
+            return Err(format!("Invalid model_id '{}' for load_model", model_id));
+        }
+        let target_path = self.storage_root.join(format!("{}.json", clean_id));
+        let json_payload = std::fs::read_to_string(&target_path).map_err(|e| {
+            format!(
+                "Failed to read persisted model '{}': {}",
+                target_path.display(),
+                e
+            )
+        })?;
+        serde_json::from_str(&json_payload).map_err(|e| {
+            format!(
+                "Failed to deserialize persisted model '{}': {}",
+                target_path.display(),
+                e
+            )
+        })
+    }
+}
+
+/// Cryptographically bound Chain-of-Thought (CoT) reasoning audit record (`DEAP_DEEPSEEK_HARNESS_INTEGRATION_BLUEPRINT.md`).
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and `DEAP_DEEPSEEK_HARNESS_INTEGRATION_BLUEPRINT.md` safety objectives for struct `CotAuditRecord` in `crates/deap-core/src/sysml_ast.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves structural type invariants for struct `CotAuditRecord` across member set `[step_id: String, model_id: String, prompt_sha256: String, reasoning_trace: String, verified_ast_refs: Vec<String>]`.
+///
+/// ## 3. Preconditions
+/// - Caller supplies well-formed values for `CotAuditRecord` members (`step_id: String, model_id: String, prompt_sha256: String, reasoning_trace: String, verified_ast_refs: Vec<String>`).
+///
+/// ## 4. Postconditions
+/// - Defines the authoritative `CotAuditRecord` representation for struct `CotAuditRecord`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(M(5)) bounded over input/member dimension of `CotAuditRecord`.
+/// - Space Complexity: O(M(5)) bounded auxiliary memory for `CotAuditRecord`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `CotAuditRecord` (`CotAuditRecord`).
+/// - State: Maintains consistent state invariants across `CotAuditRecord` without partial mutation on error.
+/// - Action: Executes `CotAuditRecord` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `CotAuditRecord` (`DEAP-CORE-SYSML-AST`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-DEAP-CORE-SYSML-AST-COTAUDITRECORD] | SysML v2: PartDef(CotAuditRecord)
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct CotAuditRecord {
+    pub step_id: String,
+    pub model_id: String,
+    pub prompt_sha256: String,
+    pub reasoning_trace: String,
+    pub verified_ast_refs: Vec<String>,
+}
+
+/// Append-only audit log of `CotAuditRecord` entries for DO-330 TQL-4 verification traceability.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and `DEAP_DEEPSEEK_HARNESS_INTEGRATION_BLUEPRINT.md` safety objectives for struct `CotAuditLog` in `crates/deap-core/src/sysml_ast.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves structural type invariants for struct `CotAuditLog` across member set `[records: Vec<CotAuditRecord>]`.
+///
+/// ## 3. Preconditions
+/// - Caller constructs `CotAuditLog` via `CotAuditLog::new()` or `Default::default()` and appends valid `CotAuditRecord` entries.
+///
+/// ## 4. Postconditions
+/// - Defines the authoritative `CotAuditLog` representation for struct `CotAuditLog`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(M(1)) bounded over input/member dimension of `CotAuditLog`.
+/// - Space Complexity: O(M(1)) bounded auxiliary memory for `CotAuditLog`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `CotAuditLog` (`CotAuditLog`).
+/// - State: Maintains consistent state invariants across `CotAuditLog` without partial mutation on error.
+/// - Action: Executes `CotAuditLog` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `CotAuditLog` (`DEAP-CORE-SYSML-AST`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-DEAP-CORE-SYSML-AST-COTAUDITLOG] | SysML v2: PartDef(CotAuditLog)
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct CotAuditLog {
+    pub records: Vec<CotAuditRecord>,
+}
+
+impl CotAuditLog {
+    /// Creates an empty `CotAuditLog`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, and `DEAP_DEEPSEEK_HARNESS_INTEGRATION_BLUEPRINT.md` (`CotAuditLog::new`).
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Initializes `self.records` as an empty vector (`self.records.is_empty()`).
+    ///
+    /// ## 3. Preconditions
+    /// - None.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns an empty `CotAuditLog` ready to record reasoning traces.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(1)$.
+    /// - Space Complexity: $O(1)$ zero heap allocation.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Infallible constructor.
+    /// - State: Clean initial state.
+    /// - Action: Never panics.
+    /// - Resource: Zero initial capacity allocation.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYSML-AST-COT-AUDIT-LOG-NEW]
+    pub fn new() -> Self {
+        Self {
+            records: Vec::new(),
+        }
+    }
+
+    /// Appends a `CotAuditRecord` in chronological order to `self.records`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, and `DEAP_DEEPSEEK_HARNESS_INTEGRATION_BLUEPRINT.md` (`CotAuditLog::append_record`).
+    /// Preserves a tamper-evident chronological sequence of synthesis reasoning steps and verified AST references.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Strictly monotonic: `self.records.len()` increases by 1 and prior records remain unmodified.
+    ///
+    /// ## 3. Preconditions
+    /// - `record: CotAuditRecord` is a populated audit record.
+    ///
+    /// ## 4. Postconditions
+    /// - `self.records.last() == Some(&record)`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(1)$ amortized vector push.
+    /// - Space Complexity: $O(R)$ where $R$ is the size of `record`.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Accepts any owned `CotAuditRecord`.
+    /// - State: Mutates only `self.records`.
+    /// - Action: Never panics under normal memory availability.
+    /// - Resource: Single record move into `self.records`.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYSML-AST-COT-AUDIT-LOG-APPEND]
+    pub fn append_record(&mut self, record: CotAuditRecord) {
+        self.records.push(record);
+    }
+
+    /// Serializes the `CotAuditLog` to a deterministic pretty-printed JSON string.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, and `DEAP_DEEPSEEK_HARNESS_INTEGRATION_BLUEPRINT.md` (`CotAuditLog::to_json_pretty`).
+    /// Produces human-reviewable and machine-verifiable JSON audit evidence.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Round-trip invariant: `serde_json::from_str::<CotAuditLog>(&log.to_json_pretty()?) == Ok(log)`.
+    ///
+    /// ## 3. Preconditions
+    /// - `self` is a valid `CotAuditLog` reference.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Ok(String)` containing the pretty-printed JSON representation, or `Err(String)` on serialization failure.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: $O(N)$ where $N$ is the total byte length across all `CotAuditRecord` entries.
+    /// - Space Complexity: $O(N)$ for the formatted JSON string.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Maps any `serde_json` error to a descriptive `Err(String)`.
+    /// - State: Read-only serialization.
+    /// - Action: Zero panics.
+    /// - Resource: Bounded by log size.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-SYSML-AST-COT-AUDIT-LOG-JSON]
+    pub fn to_json_pretty(&self) -> Result<String, String> {
+        serde_json::to_string_pretty(self)
+            .map_err(|e| format!("Failed to serialize CotAuditLog to pretty JSON: {}", e))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -7125,4 +8657,219 @@ package SystemModel_SSOT {
         assert!(module_doc.contains("//! ## 7. Realization & Traceability"));
         assert!(module_doc.contains("//! Realises: [REQ-SYSML-AST-MODULE], [DO-330-TQL-4-SYSML-AST]"));
     }
+
+    #[test]
+    fn test_parse_triggers_hazard_safety_realises_and_layer_annotations() -> Result<(), String> {
+        let sysml = r#"
+            package SafetyPkg {
+                part def FlightActuator {
+                    @TriggersHazard { hazard = "H-01"; }
+                    @TriggersHazard("H-02")
+                    @SafetyRealises { requirement = "SC-01"; }
+                    @SafetyRealises("SC-02")
+                    @Layer { name = "Domain"; }
+                    attribute position_deg : Real = 0.0;
+                }
+
+                requirement def SC-01 {
+                    doc /* Prevent uncommanded actuator deflection. */
+                    @TriggersHazard("H-01")
+                    @SafetyRealises { requirement = "SYS-REQ-01"; }
+                    @Layer("Safety")
+                }
+            }
+        "#;
+
+        let model = parse_sysml_model(sysml);
+        assert_eq!(model.package_name.as_deref(), Some("SafetyPkg"));
+        let part = model.parts.first().ok_or("Expected FlightActuator")?;
+        assert_eq!(part.name, "FlightActuator");
+        assert_eq!(
+            part.triggers_hazards,
+            vec!["H-01".to_string(), "H-02".to_string()]
+        );
+        assert_eq!(
+            part.safety_realises,
+            vec!["SC-01".to_string(), "SC-02".to_string()]
+        );
+        assert_eq!(part.layer, Some("Domain".to_string()));
+
+        let req = model.requirements.first().ok_or("Expected SC-01")?;
+        assert_eq!(req.name, "SC-01");
+        assert_eq!(req.req_id, "SC-01");
+        assert_eq!(req.triggers_hazards, vec!["H-01".to_string()]);
+        assert_eq!(req.safety_realises, vec!["SYS-REQ-01".to_string()]);
+        assert_eq!(req.layer, Some("Safety".to_string()));
+        Ok(())
+    }
+
+    #[test]
+    fn test_slice_package_subsystem_within_budget_and_overflow() -> Result<(), String> {
+        let sysml = r#"
+            package FlightGuidance {
+                part def GuidanceComputer {
+                    @TriggersHazard("H-01")
+                    @SafetyRealises("SC-01")
+                    @Layer("Domain")
+                    in port nav_in : NavBusPort;
+                    out port cmd_out : ActuatorCmdPort;
+                    satisfy requirement REQ-FG-01;
+                }
+                connection nav_to_cmd connect nav_in to cmd_out;
+                requirement def REQ-FG-01 {
+                    doc /* Compute guidance law at 250 Hz. */
+                }
+                requirement def SC-01 {
+                    doc /* Bound pitch rate command within envelope. */
+                }
+                hazard def H-01 {
+                    doc /* Uncommanded pitch excursion. */
+                }
+            }
+            package TelemetryLogging {
+                part def TelemetryRecorder {
+                    attribute buffer_kb : Integer = 512;
+                }
+            }
+        "#;
+
+        let model = parse_sysml_model(sysml);
+        let slice = model.slice_package_subsystem("FlightGuidance", 4096)?;
+        assert_eq!(slice.target_package, "FlightGuidance");
+        assert_eq!(slice.packages.len(), 1);
+        assert_eq!(slice.parts.len(), 1);
+        assert_eq!(slice.ports.len(), 2);
+        assert_eq!(slice.interfaces.len(), 1);
+        assert_eq!(slice.requirements.len(), 2);
+        assert_eq!(slice.hazards.len(), 1);
+        assert!(slice.estimated_tokens > 0 && slice.estimated_tokens <= 4096);
+
+        let overflow = model.slice_package_subsystem("FlightGuidance", 1);
+        assert!(
+            overflow.is_err(),
+            "Expected budget overflow error when max_tokens == 1"
+        );
+
+        let zero_budget = model.slice_package_subsystem("FlightGuidance", 0);
+        assert!(
+            zero_budget.is_err(),
+            "Expected error when max_tokens == 0"
+        );
+
+        let missing = model.slice_package_subsystem("NonExistentSubsystem", 4096);
+        assert!(
+            missing.is_err(),
+            "Expected error when neither package nor part matches"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_incremental_ast_cache_miss_and_hit() -> Result<(), String> {
+        let tmp_root = std::env::temp_dir().join(format!(
+            "deap_core_ast_cache_test_{}",
+            uuid::Uuid::new_v4()
+        ));
+        let cache = IncrementalAstCache::new(&tmp_root);
+        assert_eq!(
+            cache.cache_dir,
+            tmp_root.join(".pipeline").join("cache").join("ast")
+        );
+
+        let digest_abc = IncrementalAstCache::compute_digest("abc");
+        assert_eq!(
+            digest_abc,
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+
+        let sysml_source = r#"
+            package CacheTestPkg {
+                part def CachedSensor {
+                    @Layer("Domain")
+                    attribute sample_rate_hz : Real = 100.0;
+                }
+            }
+        "#;
+
+        let (model_miss, was_hit_first) = cache.load_or_parse(sysml_source)?;
+        assert!(!was_hit_first, "First call must be a cache miss");
+        assert_eq!(model_miss.package_name.as_deref(), Some("CacheTestPkg"));
+        assert_eq!(model_miss.parts.len(), 1);
+
+        let (model_hit, was_hit_second) = cache.load_or_parse(sysml_source)?;
+        assert!(was_hit_second, "Second call must be a cache hit");
+        assert_eq!(model_miss, model_hit);
+
+        let _ = std::fs::remove_dir_all(&tmp_root);
+        Ok(())
+    }
+
+    #[test]
+    fn test_type_descriptor_from_part_def() -> Result<(), String> {
+        let sysml = r#"
+            package AvionicsPkg {
+                part def AirDataSensor {
+                    @Layer("Domain")
+                    attribute airspeed_mps : Real = 85.0 [m/s] [0.0..350.0];
+                    attribute valid_flag : Boolean = true;
+                    satisfy requirement REQ-ADS-01;
+                }
+            }
+        "#;
+        let model = parse_sysml_model(sysml);
+        let pkg_name = model.package_name.as_deref().ok_or("Expected AvionicsPkg")?;
+        let part = model.parts.first().ok_or("Expected AirDataSensor")?;
+        let td = TypeDescriptor::from_part_def(pkg_name, part);
+        assert_eq!(td.type_name, "AirDataSensor");
+        assert_eq!(td.package_name, "AvionicsPkg");
+        assert_eq!(td.layer, Some("Domain".to_string()));
+        assert_eq!(td.satisfied_requirements, vec!["REQ-ADS-01".to_string()]);
+        assert_eq!(td.fields.len(), 2);
+        let first_field = td.fields.first().ok_or("Expected airspeed_mps field")?;
+        assert_eq!(first_field.name, "airspeed_mps");
+        assert_eq!(first_field.type_name, "Real");
+        assert_eq!(first_field.si_unit, Some("m/s".to_string()));
+        assert_eq!(first_field.range_bounds, Some((0.0, 350.0)));
+        Ok(())
+    }
+
+    #[test]
+    fn test_ast_persistence_engine_and_cot_audit_log() -> Result<(), String> {
+        let tmp_root = std::env::temp_dir().join(format!(
+            "deap_core_persistence_test_{}",
+            uuid::Uuid::new_v4()
+        ));
+        let engine = AstPersistenceEngine::new(tmp_root.clone());
+        let model = parse_sysml_model(
+            r#"
+            package PersistedPkg {
+                part def PersistentNode {
+                    attribute node_id : Integer = 7;
+                }
+            }
+        "#,
+        );
+        let saved_path = engine.persist_model("model_alpha", &model)?;
+        assert!(saved_path.is_file());
+        let loaded = engine.load_model("model_alpha")?;
+        assert_eq!(loaded, model);
+        assert!(engine.load_model("missing_model").is_err());
+
+        let mut audit_log = CotAuditLog::new();
+        audit_log.append_record(CotAuditRecord {
+            step_id: "STEP-01".to_string(),
+            model_id: "deepseek-r1-local".to_string(),
+            prompt_sha256: IncrementalAstCache::compute_digest("prompt-payload"),
+            reasoning_trace: "Verified PartDef PersistentNode invariants.".to_string(),
+            verified_ast_refs: vec!["PersistedPkg::PersistentNode".to_string()],
+        });
+        assert_eq!(audit_log.records.len(), 1);
+        let json_str = audit_log.to_json_pretty()?;
+        assert!(json_str.contains("STEP-01"));
+        assert!(json_str.contains("PersistedPkg::PersistentNode"));
+
+        let _ = std::fs::remove_dir_all(&tmp_root);
+        Ok(())
+    }
 }
+

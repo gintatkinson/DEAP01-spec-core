@@ -46,19 +46,21 @@ Empirical evaluation of commercial cloud Large Language Models (LLMs) executing 
 ```mermaid
 flowchart TD
     subgraph "Probabilistic LLM Generative Failure Modes"
-        A["Unconstrained LLM Prompt Generation"] --> B["1. Attention Decay & Mode Collapse - Combinatorial Regression"]
-        A --> C["2. Shallow Regex Linter Blindspots - False Verification Passes"]
-        A --> D["3. Cloud Content Filter Collisions - Domain & Defense Censorship"]
-        A --> E["4. Floating-Point & Algebraic Hallucination - Invalid Proofs"]
+        direction TB
+        A["Unconstrained LLM<br/>Prompt Generation"] --> B["1. Attention Decay &<br/>Combinatorial Collapse"]
+        A --> C["2. Shallow Linter<br/>Verification Blindspots"]
+        A --> D["3. Cloud Content Filter<br/>Safety Collisions"]
+        A --> E["4. Floating-Point &<br/>Algebraic Hallucination"]
     end
 
     subgraph "Deterministic Compiler Paradigm"
-        F["Normative SysML v2 SSOT Model - schema.sysml"] --> G["Deterministic AST Compiler - crates/compile-sysml"]
-        G --> H["Combinatorial Cartesian Product Grid - Actions x Guide Words = UCAs"]
-        G --> I["Closed-Loop 10-Pillar Hazard Log & Bidirectional Traceability Graph"]
-        G --> J["10-Theorem Formal Mathematical Proof Suite with SLDV Bindings"]
-        G --> K["Table-Aware Quality Gate AST Verification - UCA and OSO Cardinality"]
-        G --> L["Air-Gapped Sovereign Hardware Execution - AMD Ryzen AI Max+ 395 128 GB"]
+        direction TB
+        F["Normative SysML v2 SSOT<br/>schema/*.sysml"] --> G["Deterministic AST Compiler<br/>crates/compile-sysml"]
+        G --> H["Combinatorial UCA Grid<br/>Actions x Guide Words"]
+        G --> I["Closed-Loop 10-Pillar<br/>Hazard Traceability Graph"]
+        G --> J["10-Theorem Proof Suite<br/>with SLDV Bindings"]
+        G --> K["AST Quality Gate Check 17<br/>crates/verify-baseline"]
+        G --> L["Air-Gapped Sovereign<br/>Ryzen AI Max+ 395 128 GB"]
     end
 
     B -.->|"Eliminated By"| H
@@ -179,14 +181,14 @@ The compiled safety baseline establishes an exhaustive, mathematically closed-lo
 ```mermaid
 flowchart TD
     P1["Pillar 1: System Losses (L)"] --> P2["Pillar 2: System Hazards (H)"]
-    P2 --> P3["Pillar 3: Hierarchical Control Structure DAG"]
-    P3 --> P4["Pillar 4: Exhaustive UCA Combinatorial Grid"]
-    P4 --> P5["Pillar 5: Multi-Factor Loss Scenarios (LS)"]
-    P5 --> P6["Pillar 6: Formal Mathematical Safety Constraints (SC)"]
-    P6 --> P7["Pillar 7: FMECA Criticality Matrix"]
-    P7 --> P8["Pillar 8: Operational Safety Objectives (OSO-01..24)"]
-    P8 --> P9["Pillar 9: ASTM F3269-17 RTA Simplex Architecture & Physics"]
-    P9 --> P10["Pillar 10: Closed-Loop Hazard Log Traceability Graph"]
+    P2 --> P3["Pillar 3: Hierarchical<br/>Control Structure DAG"]
+    P3 --> P4["Pillar 4: Exhaustive UCA<br/>Combinatorial Grid"]
+    P4 --> P5["Pillar 5: Multi-Factor<br/>Loss Scenarios (LS)"]
+    P5 --> P6["Pillar 6: Formal Safety<br/>Constraints (SC)"]
+    P6 --> P7["Pillar 7: FMECA<br/>Criticality Matrix"]
+    P7 --> P8["Pillar 8: Operational Safety<br/>Objectives (OSO-01..24)"]
+    P8 --> P9["Pillar 9: ASTM F3269-17<br/>RTA Simplex & Physics"]
+    P9 --> P10["Pillar 10: Closed-Loop<br/>Hazard Log Graph"]
 
     P10 -.->|"Formal Verification Anchor"| P1
 ```
@@ -257,35 +259,42 @@ Downward paths convey control actions ($CA_i \in \mathcal{A}$), while upward pat
 ```mermaid
 flowchart TD
     subgraph "Tier 1: Supervisory Mission Command"
-        T1["Operator / Remote Mission Commander"]
+        direction TB
+        T1["Operator / Remote<br/>Mission Commander"]
     end
 
     subgraph "Tier 2: Ground / Remote Terminal"
-        T2["Ground Control Terminal & Telemetry Processor"]
+        direction TB
+        T2["Ground Control Terminal &<br/>Telemetry Processor"]
     end
 
     subgraph "Tier 3: Autonomous Guidance Tier"
-        T3["Complex Uncertified Guidance Computer (CUF)"]
+        direction TB
+        T3["Complex Uncertified<br/>Guidance Computer (CUF)"]
     end
 
     subgraph "Tier 4: Certified Safety Net (ASTM F3269-17)"
-        T4["Certified Safety Net (CSN) & Simplex Safety Switch"]
+        direction TB
+        T4["Certified Safety Net (CSN)<br/>& Simplex Safety Switch"]
     end
 
     subgraph "Tier 5: Core Control & Energy Management Execution"
-        T5A["Primary SystemController Computer (SystemController)"]
-        T5B["High-Energy Safe De-Energization Controller (Subsystem_05B)"]
+        direction TB
+        T5A["Primary SystemController<br/>Computer"]
+        T5B["High-Energy Safe<br/>De-Energization (Subsystem_05B)"]
     end
 
     subgraph "Tier 6: Plant & Actuation Subsystems"
-        T6A["Actuator_Subsystem_01 & Power Inverters"]
-        T6B["Primary Actuator Dynamic Servos"]
-        T6C["Emergency Deceleration Deployer"]
-        T6D["High-Voltage Storage & Discharge Bleed Circuit"]
+        direction TB
+        T6A["Actuator_Subsystem_01 &<br/>Power Inverters"]
+        T6B["Primary Actuator<br/>Dynamic Servos"]
+        T6C["Emergency Deceleration<br/>Deployer"]
+        T6D["High-Voltage Storage &<br/>Discharge Bleed Circuit"]
     end
 
     subgraph "Tier 7: Controlled Physical Environment"
-        T7["Plant Dynamics, Signal Paths, Terrain & EM Spectrum"]
+        direction TB
+        T7["Plant Dynamics, Signals,<br/>Terrain & EM Spectrum"]
     end
 
     T1 -->|"CA_01..05: Mission Commands, Arming Auth, E-Stop"| T2
@@ -385,23 +394,26 @@ $$
 $$
 
 ```mermaid
-flowchart LR
+flowchart TD
     subgraph "Causal Factor Space"
-        C1["Hardware / Actuator Degradation"]
-        C2["Sensor Drift / Signal Attenuation"]
-        C3["RTOS Priority Inversion / Deadlock"]
-        C4["Environmental Gust / Temperature Extreme"]
-        C5["Operator Mental Model Confusion"]
+        direction TB
+        C1["Hardware / Actuator<br/>Degradation"]
+        C2["Sensor Drift /<br/>Signal Attenuation"]
+        C3["RTOS Priority Inversion /<br/>Deadlock"]
+        C4["Environmental Gust /<br/>Temperature Extreme"]
+        C5["Operator Mental Model<br/>Confusion"]
     end
 
     subgraph "Multi-Factor Loss Scenarios"
-        S1["LS_01..20: Sensor & Physical Plant Degradation"]
-        S2["LS_21..40: Software & RTA Simplex Failures"]
-        S3["LS_41..60: Ordnance & Energy Interlock Faults"]
-        S4["LS_61..84: Environmental & C2 Link Anomalies"]
+        direction TB
+        S1["LS_01..20: Sensor &<br/>Plant Degradation"]
+        S2["LS_21..40: Software &<br/>RTA Simplex Failures"]
+        S3["LS_41..60: High-Energy &<br/>Interlock Faults"]
+        S4["LS_61..84: Environment &<br/>C2 Link Anomalies"]
     end
 
     subgraph "Unsafe Actions & Hazards"
+        direction TB
         U["UCAs (UCA_01..84)"]
         H["Hazards (H_01..14)"]
         L["System Losses (L_01..05)"]
@@ -544,17 +556,18 @@ Under **Generic Risk Assessment Framework** guidelines, risk classes and operati
 4. **Specific Assurance and Integrity Level (SAIL)**: Comprehensive compliance profile evaluated across OSO-01 through OSO-24.
 
 ```mermaid
-flowchart LR
+flowchart TD
     subgraph "Risk Assessment Risk Determination"
-        AST_Params["AST Mass, Speed & Dimension"] --> IntGRC["Initial GRC"]
+        direction TB
+        AST_Params["AST Mass, Speed &<br/>Characteristic Dimension"] --> IntGRC["Initial GRC"]
         IntGRC --> M1["M1: Spatial Geofence (-1)"]
-        IntGRC --> M2["M2: PhysicalActuator (Emergency Deceleration) / Deceleration (-1)"]
+        IntGRC --> M2["M2: Emergency Deceleration<br/>Impact Reduction (-1)"]
         M1 & M2 --> FinalGRC["Final GRC"]
 
-        Airspace["Airspace Environment"] --> IntARC["Initial ARC"]
+        Airspace["Operational Environment"] --> IntARC["Initial ARC"]
         IntARC --> DAA["Detect and Avoid (DAA)"] --> ResARC["Residual ARC"]
 
-        FinalGRC & ResARC --> SAIL["Target Profile: SAIL Assessment"]
+        FinalGRC & ResARC --> SAIL["Target Profile:<br/>SAIL Assessment"]
     end
 ```
 
@@ -597,12 +610,12 @@ The Run-Time Assurance (RTA) architecture follows the **ASTM F3269-17 Simplex Pa
 3. **Simplex Switch & Monitor**: Hardware-enforced selection multiplexer evaluating invariant boundaries.
 
 ```mermaid
-flowchart LR
-    Sensors["Sensor Triad - IMU GNSS Speed"] --> CUF["Complex Uncertified Function - CUF Guidance"]
-    Sensors --> CSN["Certified Safety Net - CSN Recovery"]
-    Sensors --> Monitor["Safety Monitor & Barrier Evaluator - B(x) >= 0"]
+flowchart TD
+    Sensors["Sensor Triad - IMU GNSS Speed"] --> CUF["Complex Uncertified Function<br/>CUF Guidance"]
+    Sensors --> CSN["Certified Safety Net<br/>CSN Recovery"]
+    Sensors --> Monitor["Safety Monitor & Barrier<br/>Evaluator: B(x) >= 0"]
 
-    CUF -->|"u_cuf"| Switch{"Simplex Switch Multiplexer"}
+    CUF -->|"u_cuf"| Switch{"Simplex Switch<br/>Multiplexer"}
     CSN -->|"u_csn"| Switch
     Monitor -->|"Trip Signal: s = 0/1"| Switch
 
@@ -622,12 +635,12 @@ $$
 $$
 
 ```mermaid
-flowchart LR
-    H["System Hazard - H_i"] --- UCA["Unsafe Control Action - UCA_j"]
-    UCA --- LS["Loss Scenario - LS_k"]
-    LS --- SC["Safety Constraint - SC_m"]
-    SC --- REQ["SysML Requirement - REQ_n"]
-    REQ --- TC["Verification Testcase - TC_p"]
+flowchart TD
+    H["System Hazard: H_i"] --- UCA["Unsafe Control Action:<br/>UCA_j"]
+    UCA --- LS["Loss Scenario: LS_k"]
+    LS --- SC["Safety Constraint: SC_m"]
+    SC --- REQ["SysML Requirement: REQ_n"]
+    REQ --- TC["Verification Testcase: TC_p"]
 ```
 
 ```
@@ -1239,11 +1252,12 @@ The Level 1C Interface Control Document architecture partitions all subsystem da
 ```mermaid
 flowchart TD
     subgraph "Level 1C Subsystems"
+        direction TB
         S1["Ground Control Terminal"]
-        S2["Autonomous Guidance Computer - CUF"]
-        S3["Certified Safety Net - CSN"]
-        S4["Primary SystemController Computer"]
-        S5["High-Energy Safe & Arm Device"]
+        S2["Autonomous Guidance<br/>Computer (CUF)"]
+        S3["Certified Safety Net (CSN)"]
+        S4["Primary SystemController<br/>Computer"]
+        S5["High-Energy Safe &<br/>Arm Device"]
         S6["Power Distribution Unit"]
     end
 
@@ -1275,46 +1289,64 @@ The compilation engine is constructed as a deterministic multi-stage model compi
 ```mermaid
 flowchart TD
     subgraph "1. Model Ingestion Stage"
-        A1["SysML v2 Parser - schema/*.sysml"] --> A2["AST Semantic Graph Builder"]
+        direction TB
+        A1["SysML v2 Parser<br/>crates/compile-sysml/src/parser"] --> A2["AST Semantic Graph<br/>crates/deap-core/src/sysml_ast.rs"]
     end
 
     subgraph "2. Mathematical & Combinatorial Synthesis Stage"
-        B1["Combinatorial STPA Cartesian Generator - Actions x GuideWords"]
-        B2["Risk Assessment Risk Class & 24 OSO Evaluation Engine"]
-        B3["FMECA Severity, Occurrence, Detection RPN Evaluator"]
-        B4["10-Theorem Formal Mathematical Physics Solver"]
+        direction TB
+        B1["STPA Cartesian Generator<br/>stpa/uca.rs"]
+        B2["Unified 8-Pillar STPA Matrix<br/>stpa/safety_suite.rs"]
+        B3["FMECA RPN Evaluator<br/>stpa/fmeca.rs"]
+        B4["10-Theorem Proof Templates<br/>stpa/safety_suite.rs"]
     end
 
     subgraph "3. Verified Artifact Emission Stage"
-        C1["Markdown Specification Renderer - Deterministic AST Blocks"]
-        C2["SysML Constraint Exporter & Forward/Reverse Synchronizer"]
-        C3["JSON Schema Digest & Cryptographic SHA-256 Hasher"]
+        direction TB
+        C1["10-Pillar Safety Suite<br/>transpile_safety_suite"]
+        C2["Forward & Reverse Sync<br/>crates/compile-sysml/src/sync"]
+        C3["SHA-256 Schema Digest<br/>semantic/digest.rs"]
     end
 
     A2 --> B1 & B2 & B3 & B4
     B1 & B2 & B3 & B4 --> C1 & C2 & C3
 ```
 
-### 7.1 Compiler Execution CLI Interface
+### 7.1 STPA 8-Pillar Matrix & 10-Pillar Safety Suite Synthesis (`crates/compile-sysml/src/stpa/`)
+
+The STPA and FMECA transpilation pipeline in `crates/compile-sysml/src/stpa/` deterministically synthesizes the safety baseline from parsed `deap_core::sysml_ast::PackageDef` AST models:
+
+- **`crates/compile-sysml/src/stpa/mod.rs`**: Exposes the top-level `transpile_stpa(schema_path, out_dir, scoring_config_path)` entrypoint, parsing the SysML v2 model via `parse_sysml` and invoking `emit_safety_suite`.
+- **`crates/compile-sysml/src/stpa/uca.rs`**: Implements `expand_cartesian_stpa(pkg)` and `UnsafeControlAction`, expanding every controlling `PartDef` and downward `ActionDef` across the four STPA guide-word categories.
+- **`crates/compile-sysml/src/stpa/fmeca.rs`**: Implements `generate_fmeca_matrix(pkg, scoring_config)`, `FmecaRow`, and `FmecaScoringConfig`, computing Severity ($S$), Occurrence ($O$), Detection ($D$), and $\mathrm{RPN} = S \times O \times D$ across the 4 universal failure dimensions (`Interface`, `State`, `Action`, `Resource`) with explicit `SSOT` and `Derived` provenance basis classification.
+- **`crates/compile-sysml/src/stpa/safety_suite.rs`**: Implements `transpile_safety_suite`, `emit_safety_suite`, `render_unified_stpa_matrix`, `compile_stpa_to_constraints`, `compile_stpa_to_constraints_filtered`, and `PROOF_TEMPLATES`. Emits the unified 8-pillar `docs/safety/STPA_MATRIX.md` alongside the safety suite deliverables (`docs/safety/HAZARD_LOG.md`, `docs/safety/UCA_REGISTER.md` / `02_UCA_COMBINATORIAL_MATRIX.md`, `docs/safety/SAFETY_CONSTRAINTS.md` / `04_SAFETY_CONSTRAINTS.md`, `docs/safety/RTA_DIRECTIVES.md` / `07_RTA_ARCHITECTURE.md`, `01_LOSSES_HAZARDS_TOPOLOGY.md`, `03_LOSS_SCENARIOS.md`, `05_FMECA_MATRIX.md`, `06_REGULATORY_OBJECTIVES_ASSESSMENT.md`, `06_SORA_SAIL_ASSESSMENT.md`, and `SLDV_FORMAL_PROOFS.m`).
+
+### 7.2 Compiler Execution CLI Interface
 
 ```bash
 # Execute deterministic 10-pillar safety compilation from SysML v2 SSOT
 ./target/release/compile-sysml \
   --stpa-transpile \
-  --schema schema/cuas_coa.sysml \
+  --schema schema/model.sysml \
   --out-dir docs/safety/
+
+# Compile STPA markdown tables into formal SysML v2 constraint definitions
+./target/release/compile-sysml \
+  --stpa docs/safety/STPA_MATRIX.md \
+  --schema schema/model.sysml \
+  --out .pipeline/safety_constraints.sysml
 
 # Run the Pipeline 0 compilation gate: parse, validate semantics, serialize, and emit digest
 ./target/release/compile-sysml \
   --compile \
-  --schema schema/cuas_coa.sysml \
+  --schema schema/model.sysml \
   --out .pipeline/schema.sysml \
   --digest .pipeline/schema-digest.json
 
 # Execute forward synchronization from SysML SSOT into markdown specs
 ./target/release/compile-sysml \
   --forward-sync \
-  --schema schema/cuas_coa.sysml \
+  --schema schema/model.sysml \
   --docs docs/
 ```
 
@@ -1322,12 +1354,16 @@ flowchart TD
 
 ## 8. Hardened Verification Gates & Quality Assurance
 
-### 8.1 Hardened Check 17 Table-Aware AST Parser Gate
+### 8.1 Hardened Check 17 Table-Aware AST Parser Gate (`crates/verify-baseline/src/checks/safety_stpa.rs`)
 
-The verification gate in `crates/verify-baseline` (`./target/release/verify-baseline`) enforces structural semantic counting and token-based AST parsing without regular expressions, strictly complying with Check 34 (Zero Regex Parsing Invariant):
+Check 17 (`check_safety_integrity` returning `Result<SafetyCheckOutcome, Vec<String>>` in `crates/verify-baseline/src/checks/safety_stpa.rs`) enforces structural semantic counting and token-based AST parsing across `docs/safety/STPA_MATRIX.md`, `HAZARD_LOG.md`, `UCA_REGISTER.md`, `SAFETY_CONSTRAINTS.md`, and `RTA_DIRECTIVES.md` without regular expressions, strictly complying with Check 34 (Zero Regex Parsing Invariant):
+
+- **8-Pillar Unified Matrix Completeness**: Verifies that `docs/safety/STPA_MATRIX.md` contains Pillar 1 (`L-1..N` System Losses), Pillar 2 (`H-1..N` System Hazards), Pillar 3 (Hierarchical Control Structure Topology), Pillar 4 (`UCA-1..N` Unsafe Control Actions across all 4 guide-word categories via `check_uca_categories`), Pillar 5 (`LS-1..N` Loss Scenarios), Pillar 6 (`SC-1..N` Formal Safety Constraints), Pillar 7 (FMECA Criticality Matrix via `parse_fmeca_table`), Pillar 8 (Domain Regulatory Objectives & SORA SAIL Risk Mitigations), and MATLAB / Simulink / Stateflow / SLDV toolchain hooks.
+- **Bidirectional AST Closure & Multi-Mode FMECA Verification**: Validates $\ge 15$ FMECA rows, $\ge 2$ distinct failure modes per component across the 4 universal failure dimensions (`check_failure_dimension_coverage`), exact $\mathrm{RPN} = S \times O \times D$ arithmetic, explicit `SSOT` / `Derived` derivation basis tags, 100% coverage of declared SysML `part def` components, rejection of undeclared phantom components, and enforcement of negative AST safety constraints (`deap_core::sysml_ast::is_component_negated`).
 
 ```rust
 /// Hardened Quality Gate AST Validator: Zero-Regex Token Scanner
+/// Grounded in `crates/verify-baseline/src/checks/safety_stpa.rs`
 pub fn has_stpa_id(lower: &str, prefix: &str) -> bool {
     // Fast path: scan word tokens
     for raw_token in lower.split_whitespace() {
@@ -1360,13 +1396,29 @@ pub fn has_stpa_id(lower: &str, prefix: &str) -> bool {
             }
         }
         if prev_ok && digits_count > 0 {
-            return true;
+            let after_digits = &after_prefix[digits_count..];
+            let next_ok = if after_digits.is_empty() {
+                true
+            } else {
+                let next_char = after_digits.chars().next().unwrap();
+                !next_char.is_alphanumeric() && next_char != '_'
+            };
+            if next_ok {
+                return true;
+            }
         }
         start = actual_pos + prefix.len();
+        while start < lower.len() && !lower.is_char_boundary(start) {
+            start += 1;
+        }
     }
     false
 }
 ```
+
+### 8.2 Check 25 Operational-to-Resource Allocation & Baseline Gate Orchestration (`crates/verify-baseline`)
+
+Alongside Check 17 (`check_safety_integrity` in `crates/verify-baseline/src/checks/safety_stpa.rs`), the baseline verification runner (`crates/verify-baseline/src/runner.rs`) executes Check 25 (`check_operational_allocation` / `check_operational_to_resource_allocation` in `crates/verify-baseline/src/checks/parity_gates.rs` and `crates/verify-baseline/src/spec_audit/conops_audit.rs`) to verify that every operational activity (`[OA-XX]`) and mission essential task (`[MET-XX]`) is deterministically allocated to a valid system `PartDef` without orphan activities or phantom allocation tags. Any violation across Checks 10 through 36 emits a structured 5-Whys `DefectDossier` via `crates/verify-baseline/src/defect_dossier.rs` and `write_defect_dossier` in `crates/verify-baseline/src/runner.rs`.
 
 ---
 
@@ -1377,21 +1429,25 @@ To ensure zero information leakage, deterministic latency, and total immunity to
 ```mermaid
 flowchart TD
     subgraph "AMD Ryzen AI Max+ 395 APU - 128 GB Unified RAM"
+        direction TB
         subgraph "Unified Memory Allocation Partition - 128 GB Total"
-            GTT_VRAM["ROCm / HIP Dynamic VRAM Partition - Up to 112 GB"]
-            SysRAM["Linux OS Kernel, DEAP AST Compiler & Build Toolchains - 40 GB"]
+            direction TB
+            GTT_VRAM["ROCm / HIP Dynamic VRAM<br/>Up to 112 GB"]
+            SysRAM["Linux OS Kernel & DEAP<br/>Rust Toolchains (40 GB)"]
         end
 
         subgraph "In-Memory Dual-Model Inference Tier - vLLM ROCm 6.2+"
-            R1_70B["DeepSeek-R1-70B Q5_K_M - Formal Safety Reasoning & STPA CoT"]
-            Coder_32B["Qwen-2.5-Coder-32B Q4_K_M - AST Model Synthesis & SPARK Ada"]
-            KVCache["PagedAttention KV Cache Pool - 32k Tokens Context"]
+            direction TB
+            R1_70B["DeepSeek-R1-70B Q5_K_M<br/>Formal Safety Reasoning"]
+            Coder_32B["Qwen-2.5-Coder-32B Q4_K_M<br/>AST Model Synthesis"]
+            KVCache["PagedAttention KV Cache<br/>32k Tokens Context"]
         end
 
         subgraph "Heterogeneous Silicon Engines"
-            Zen5["16x Zen 5 CPU Cores - 32 Threads, 64 MB L3 Cache"]
-            RDNA35["40x RDNA 3.5 CUs - Radeon 8060S gfx1150"]
-            XDNA2["XDNA 2 NPU Subsystem - 50+ NPU TOPS"]
+            direction TB
+            Zen5["16x Zen 5 CPU Cores<br/>32 Threads, 64 MB L3"]
+            RDNA35["40x RDNA 3.5 CUs<br/>Radeon 8060S gfx1150"]
+            XDNA2["XDNA 2 NPU Subsystem<br/>50+ NPU TOPS"]
         end
     end
 
@@ -1432,22 +1488,23 @@ $$
 
 ---
 
-### 9.3 Modular Cargo Workspace Architecture
+### 9.3 Modular 6-Crate Cargo Workspace Architecture
 
-The deterministic safety compiler engine is codified within the modular Rust workspace architecture:
+The deterministic safety compiler engine is codified within the 6-crate native Rust workspace defined in `Cargo.toml`:
 
-| Crate Identifier | Architecture & Responsibilities | Key Dependencies | Quality Gate Contract |
+| Crate Path | Core Source Modules | Architecture & Responsibilities | Quality Gate Contract |
 | :--- | :--- | :--- | :--- |
-| **`deap-core`** | Fundamental safety metamodel types, STPA guide word definitions, loss/hazard formalisms, and mathematical invariant solvers. | `serde`, `petgraph`, `thiserror` | Pure deterministic domain-independent core with zero runtime I/O dependencies. |
-| **`deap-ast`** | Strongly-typed SysML v2 / KerML AST parser, token-bounded AST slicing engine, and visitor traversals. | `deap-core`, `serde`, `rkyv`, `logos` | Partition AST representations into strongly-typed context slices with strict size bounds (<= 4,096 tokens). |
-| **`deap-codegen`** | Deterministic code synthesis translating validated safety contracts into Stateflow statecharts, Simulink monitors, and formal verification assertions. | `deap-core`, `deap-ast`, `tera` | Generates 100% compliant Stateflow transition structures and SLDV properties with zero semantic drift. |
-| **`deap-harness`** | Closed-loop semantic acceptance test harnesses, simulation oracles, and property-based verification runners. | `deap-core`, `deap-ast`, `proptest` | Validates formal invariant preservation and safety barrier closure across all operational states. |
-| **`deap-cli`** | Developer CLI coordinating end-to-end AST compilation, STPA/FMECA matrix generation, and quality gate enforcement. | `deap-core`, `deap-ast`, `deap-codegen`, `clap` | Single binary entrypoint returning deterministic exit codes (0 on full compliance, non-zero on violation). |
+| **`crates/deap-core`** | `src/sysml_ast.rs`, `src/source_ast.rs`, `src/markdown.rs`, `src/workspace.rs`, `src/rules.rs`, `src/diagnostics.rs` | Shared SysML v2 AST metamodel (`PackageDef`, `PartDef`, `ActionDef`, `ConstraintDef`), source AST extraction, zero-regex KaTeX/Mermaid scanners, workspace role detection, and 5-Whys `DefectDossier` types. | Pure deterministic domain-independent core with zero regular expressions and `#![forbid(unsafe_code)]`. |
+| **`crates/ingest-sysml`** | `src/main.rs`, `src/lib.rs`, `src/detectors.rs`, `src/digest.rs`, `src/translators/mod.rs` | Level 0 multi-format ingestion engine (`./target/release/ingest-sysml`) translating YANG, OpenAPI, Protobuf, ASN.1, SQL DDL, XSD, and OEM Markdown tables into canonical SysML v2 schemas. | Emits deterministic SysML v2 packages and SHA-256 ingestion digests without lossy regex heuristics. |
+| **`crates/compile-sysml`** | `src/main.rs`, `src/lib.rs`, `src/parser/grammar.rs`, `src/semantic/digest.rs`, `src/sync/mod.rs`, `src/stpa/safety_suite.rs`, `src/docstring.rs` | Recursive-descent SysML v2 compiler (`./target/release/compile-sysml`), 10-pillar STPA/FMECA safety suite transpiler (`transpile_safety_suite`, `render_unified_stpa_matrix`), forward/reverse spec synchronizer, and 7-section safety docstring synthesizer. | Deterministic AST compilation, atomic file emission (`write_atomic`), and SHA-256 schema digest verification. |
+| **`crates/verify-baseline`** | `src/runner.rs`, `src/spec_audit.rs`, `src/defect_dossier.rs`, `src/checks/safety_stpa.rs`, `src/checks/parity_gates.rs`, `src/checks/structural.rs`, `src/checks/docstring_gate.rs` | Fail-closed baseline verification suite (`./target/release/verify-baseline`) executing Checks 10 through 36, including Check 17 (`check_safety_integrity`) and Check 25 (`check_operational_allocation`). | Returns exit code `0` only on 100% gate compliance; persists timestamped 5-Whys defect dossiers on any failure. |
+| **`crates/assemble-conops`** | `src/main.rs` | Deterministic Concept of Operations and Tactical Mission Intent assembler (`./target/release/assemble-conops`) combining modular units under `docs/conops/units/` into executive deliverables. | Enforces zero unrendered placeholder tokens, strict section ordering, and SHA-256 assembly integrity. |
+| **`crates/reconcile-backlog`** | `src/main.rs`, `src/lib.rs` | Bidirectional Agile backlog and defect tracking synchronizer (`./target/release/reconcile-backlog`) linking local Epics, Features, User Stories, Use Cases, and defect dossiers with GitHub/GitLab issues. | Enforces closed-loop issue state verification and non-destructive specification traceability. |
 
 ### 9.4 Strongly-Typed AST Slicing Mechanics (<= 4,096 Tokens)
 
-To guarantee that language model inference and formal constraint solvers remain immune to attention decay, context loss, and truncation, `deap-ast` implements deterministic AST slicing:
-- **Structural Partitioning**: Every structural subsystem graph $\mathcal{G}_{\mathrm{sub}} = (V, E)$ is traversed and partitioned along subsystem containment boundaries into self-contained AST slices.
+To guarantee that language model inference and formal constraint solvers remain immune to attention decay, context loss, and truncation, `crates/deap-core` (`src/sysml_ast.rs`, `src/source_ast.rs`) and `crates/compile-sysml` (`src/parser/grammar.rs`, `src/stpa/safety_suite.rs`) implement deterministic AST slicing:
+- **Structural Partitioning**: Every structural subsystem graph $\mathcal{G}_{\mathrm{sub}} = (V, E)$ is traversed via `PackageDef::get_all_parts()` and partitioned along subsystem containment boundaries into self-contained AST slices.
 - **Strict Token Floor & Ceiling**: Every AST slice $\mathcal{S}_k$ is strictly bounded to $\le 4,096$ tokens:
 $$
 \begin{aligned}

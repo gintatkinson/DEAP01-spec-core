@@ -623,6 +623,28 @@ impl<'a> SysmlParser<'a> {
                     pkg.calc_defs.push(c);
                 }
             }
+            _ if self.peek_stereotype_name().is_some() => {
+                let (stereo_name, values) = self.parse_stereotype_annotation()?;
+                if let Some(parent) = parent_part {
+                    if stereo_name == "TriggersHazard" {
+                        for val in values {
+                            if !val.is_empty() && !parent.triggers_hazards.contains(&val) {
+                                parent.triggers_hazards.push(val);
+                            }
+                        }
+                    } else if stereo_name == "SafetyRealises" {
+                        for val in values {
+                            if !val.is_empty() && !parent.safety_realises.contains(&val) {
+                                parent.safety_realises.push(val);
+                            }
+                        }
+                    } else if stereo_name == "Layer" {
+                        if let Some(first_val) = values.into_iter().find(|v| !v.is_empty()) {
+                            parent.layer = Some(first_val);
+                        }
+                    }
+                }
+            }
             _ => {
                 // Skip unknown statement or delimiter to maintain fault tolerance
                 self.skip_until_semi_or_brace();
@@ -630,6 +652,130 @@ impl<'a> SysmlParser<'a> {
         }
 
         Ok(())
+    }
+
+    /// Executes deterministic fn `SysmlParser::peek_stereotype_name` within `crates/compile-sysml/src/parser/grammar.rs`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SysmlParser::peek_stereotype_name` in `crates/compile-sysml/src/parser/grammar.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Preserves deterministic lookahead state without cursor mutation when inspecting `@`-prefixed SysML v2 stereotype tokens in `PARSER-GRAMMAR`.
+    ///
+    /// ## 3. Preconditions
+    /// - Invoked within a valid token stream cursor context for `SysmlParser::peek_stereotype_name`.
+    ///
+    /// ## 4. Postconditions
+    /// - Returns `Option<String>` containing the stripped stereotype identifier if the current token begins with `@`, or `None` otherwise.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(1) token lookahead and prefix inspection.
+    /// - Space Complexity: O(L) where L is the stereotype identifier byte length.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Safely returns `None` at EOF or on non-stereotype tokens.
+    /// - State: Read-only inspection; zero mutation of parser cursor.
+    /// - Action: Executes deterministically with zero recursion.
+    /// - Resource: Bounded single-identifier string allocation on match.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PEEK-STEREOTYPE-NAME] | SysML v2: ActionDef(SysmlParser::peek_stereotype_name)
+    fn peek_stereotype_name(&self) -> Option<String> {
+        match self.peek_kind() {
+            TokenKind::Ident(s) => {
+                if let Some(stripped) = s.strip_prefix('@') {
+                    if !stripped.is_empty() {
+                        return Some(stripped.to_string());
+                    }
+                    if let Some(next_tok) = self.tokens.get(self.pos + 1) {
+                        if let TokenKind::Ident(next_ident) = &next_tok.kind {
+                            return Some(next_ident.clone());
+                        }
+                    }
+                }
+                None
+            }
+            _ => None,
+        }
+    }
+
+    /// Executes deterministic fn `SysmlParser::parse_stereotype_annotation` within `crates/compile-sysml/src/parser/grammar.rs`.
+    ///
+    /// ## 1. Safety Intent & Regulatory Scope
+    /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `SysmlParser::parse_stereotype_annotation` in `crates/compile-sysml/src/parser/grammar.rs`.
+    ///
+    /// ## 2. Invariants & Mathematical Properties
+    /// - Deterministically extracts `(stereotype_name, values)` from both call-style `@Anno("V")` and block-style `@Anno { k = "V"; }` SysML v2 stereotype syntax.
+    ///
+    /// ## 3. Preconditions
+    /// - The current token at `self.pos` must satisfy `self.peek_stereotype_name().is_some()`.
+    ///
+    /// ## 4. Postconditions
+    /// - Advances the cursor past the annotation clause (and any trailing semicolon) and returns `Result<(String, Vec<String>), ParseError>`.
+    ///
+    /// ## 5. Algorithmic Complexity Bounds
+    /// - Time Complexity: O(T) where T is the number of tokens in the annotation clause.
+    /// - Space Complexity: O(V) where V is the number of extracted string/identifier values.
+    ///
+    /// ## 6. Failure Modes & Fault Tolerance
+    /// - Interface: Handles both string literals and identifier tokens inside parentheses or braces.
+    /// - State: Advances cursor deterministically to the end of the stereotype clause.
+    /// - Action: Bounded loop terminated by closing delimiter or EOF.
+    /// - Resource: Bounded vector allocation proportional to annotation arguments.
+    ///
+    /// ## 7. Realization & Traceability
+    /// Realises: [REQ-PARSER-GRAMMAR-SYSMLPARSER-PARSE-STEREOTYPE-ANNOTATION] | SysML v2: ActionDef(SysmlParser::parse_stereotype_annotation)
+    fn parse_stereotype_annotation(&mut self) -> Result<(String, Vec<String>), ParseError> {
+        let name = self.peek_stereotype_name().unwrap_or_default();
+        if let TokenKind::Ident(s) = self.peek_kind().clone() {
+            self.advance();
+            if s == "@" && matches!(self.peek_kind(), TokenKind::Ident(_)) {
+                self.advance();
+            }
+        }
+        let mut values = Vec::new();
+        self.skip_trivia();
+        if self.check(&TokenKind::OpenParen) {
+            self.advance();
+            while !self.check(&TokenKind::CloseParen) && !self.is_at_end() {
+                match self.peek_kind().clone() {
+                    TokenKind::StringLit(v) | TokenKind::Ident(v) => {
+                        values.push(v);
+                        self.advance();
+                    }
+                    _ => {
+                        self.advance();
+                    }
+                }
+            }
+            if self.check(&TokenKind::CloseParen) {
+                self.advance();
+            }
+        } else if self.check(&TokenKind::OpenBrace) {
+            self.advance();
+            while !self.check(&TokenKind::CloseBrace) && !self.is_at_end() {
+                if self.check(&TokenKind::Eq) {
+                    self.advance();
+                    self.skip_trivia();
+                    if let TokenKind::StringLit(v) | TokenKind::Ident(v) = self.peek_kind().clone() {
+                        values.push(v);
+                        self.advance();
+                    }
+                } else if let TokenKind::StringLit(v) = self.peek_kind().clone() {
+                    values.push(v);
+                    self.advance();
+                } else {
+                    self.advance();
+                }
+            }
+            if self.check(&TokenKind::CloseBrace) {
+                self.advance();
+            }
+        }
+        if self.check(&TokenKind::Semi) {
+            self.advance();
+        }
+        Ok((name, values))
     }
 
     /// Executes deterministic fn `SysmlParser::peek_next_is_port` within `crates/compile-sysml/src/parser/grammar.rs`.
@@ -1299,6 +1445,9 @@ impl<'a> SysmlParser<'a> {
         let mut satisfied_by = Vec::new();
         let mut attributes = Vec::new();
         let mut constraints = Vec::new();
+        let mut triggers_hazards = Vec::new();
+        let mut safety_realises = Vec::new();
+        let mut layer = None;
 
         if self.check(&TokenKind::OpenBrace) {
             self.advance();
@@ -1325,6 +1474,25 @@ impl<'a> SysmlParser<'a> {
                 } else if self.check(&TokenKind::Constraint) || self.check(&TokenKind::Assert) {
                     let con = self.parse_constraint_decl(sub_doc)?;
                     constraints.push(con);
+                } else if self.peek_stereotype_name().is_some() {
+                    let (stereo_name, values) = self.parse_stereotype_annotation()?;
+                    if stereo_name == "TriggersHazard" {
+                        for val in values {
+                            if !val.is_empty() && !triggers_hazards.contains(&val) {
+                                triggers_hazards.push(val);
+                            }
+                        }
+                    } else if stereo_name == "SafetyRealises" {
+                        for val in values {
+                            if !val.is_empty() && !safety_realises.contains(&val) {
+                                safety_realises.push(val);
+                            }
+                        }
+                    } else if stereo_name == "Layer" {
+                        if let Some(first_val) = values.into_iter().find(|v| !v.is_empty()) {
+                            layer = Some(first_val);
+                        }
+                    }
                 } else if let Some(d) = sub_doc {
                     if text.is_empty() {
                         text = d;
@@ -1381,6 +1549,9 @@ impl<'a> SysmlParser<'a> {
             satisfied_by,
             derived_from,
             derives: Vec::new(),
+            triggers_hazards,
+            safety_realises,
+            layer,
         })
     }
 
@@ -1421,6 +1592,7 @@ impl<'a> SysmlParser<'a> {
         let mut do_action = None;
         let mut exit_action = None;
         let mut transitions = Vec::new();
+        let mut sub_states = Vec::new();
 
         if self.check(&TokenKind::OpenBrace) {
             self.advance();
@@ -1435,6 +1607,9 @@ impl<'a> SysmlParser<'a> {
                 } else if self.check(&TokenKind::Exit) {
                     self.advance();
                     exit_action = Some(self.read_until_semi());
+                } else if self.check(&TokenKind::State) {
+                    let sub_st = self.parse_state_decl(None)?;
+                    sub_states.push(sub_st);
                 } else if self.check(&TokenKind::Transition) {
                     self.advance();
                     let t_stmt = self.read_until_semi();
@@ -1463,7 +1638,7 @@ impl<'a> SysmlParser<'a> {
             do_action,
             exit_action,
             transitions,
-            sub_states: Vec::new(),
+            sub_states,
         })
     }
 

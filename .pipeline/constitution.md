@@ -235,7 +235,19 @@ The pipeline mechanically enforces 16 active quality gates that halt execution o
 - Baseline conformance must be verified using the configured verification script, which asserts that all baseline files are present, validates type compatibility, and compiles/tests the project with a clean exit code.
 
 ### Downstream Single Source of Truth (SSOT) & Clean Baseline Mandate
-- **Single Source of Truth (SSOT)**: Master architecture blueprints (`DEAP_MASTER_ARCHITECTURE.md`, `THREE_TIER_GOVERNANCE_BLUEPRINT.md`, `SYSML_SSOT_BIDIRECTIONAL_SYNCHRONIZATION_ARCHITECTURE.md`) reside exclusively in the central upstream specification repository (`DEAP01-spec-core`). Downstream repositories are strictly forbidden from copying or duplicating master blueprints locally. All downstream projects MUST reference upstream specifications via URLs or relative submodule paths.
+- **Single Source of Truth (SSOT)**: Master architecture blueprints -- including legacy sentinel filenames (`DEAP_MASTER_ARCHITECTURE.md`, `THREE_TIER_GOVERNANCE_BLUEPRINT.md`) and all 12 canonical architecture blueprints residing in `docs/architecture/blueprints/` -- reside exclusively in the central upstream specification repository (`DEAP01-spec-core`). Downstream repositories are strictly forbidden from copying or duplicating master blueprints locally. All downstream projects MUST reference upstream specifications via URLs or relative submodule paths:
+  - `DEAP_SYSML_V2_INGESTION_ENGINE_BLUEPRINT.md`
+  - `SYSML_SSOT_BIDIRECTIONAL_SYNCHRONIZATION_ARCHITECTURE.md`
+  - `DEAP_DETERMINISTIC_SAFETY_SPECIFICATION_COMPILER_BLUEPRINT.md`
+  - `DEAP_MULTI_TOOLCHAIN_SYNTHESIS_ARCHITECTURE.md`
+  - `DEAP_LOGICAL_INTERFACE_SPECIFICATION_BLUEPRINT.md`
+  - `MULTI_PROVIDER_GITLAB_INFRASTRUCTURE_ARCHITECTURE.md`
+  - `PERSISTENCE_ARCHITECTURE.md`
+  - `SAFETY_CRITICAL_REALTIME_UI_FRAMEWORK.md`
+  - `RUNTIME_METADATA_ENGINE.md`
+  - `SPECKIT_NATIVE_INTEGRATION.md`
+  - `DEAP_LOCAL_AIRGAPPED_DEEPSEEK_WORKSTATION_BLUEPRINT.md`
+  - `DEAP_DEEPSEEK_HARNESS_INTEGRATION_BLUEPRINT.md`
 - **Clean Baseline & Version Control Mandate**: Every downstream repository MUST maintain a valid `.gitignore` file in its root directory. OS-generated metadata files (such as `.DS_Store`) and build artifacts are strictly forbidden from being committed or present in the working tree or git index.
 
 ## CMMI Level 3 & Scrum Issue Lifecycle Rules

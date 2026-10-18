@@ -47,7 +47,9 @@ pub use markdown::{
     strip_glfm_inline_math, strip_inline_code, ALLOWED_ALIGNMENT_ENVS, VALID_MERMAID_HEADERS,
 };
 pub use rules::{
-    CodebaseRules, MetaConfig, TrackerRules, ValidationRules, EXCLUDED_DIRS, MASTER_BLUEPRINTS,
+    CanonicalArchitectureBlueprint, CanonicalArchitectureBlueprintsCatalog, CodebaseRules,
+    MetaConfig, TrackerRules, ValidationRules, CANONICAL_ARCHITECTURE_BLUEPRINTS, EXCLUDED_DIRS,
+    MASTER_BLUEPRINTS,
 };
 pub use source_ast::{
     classify_dart_member_ast, classify_dart_top_level_ast, classify_rust_item_line_ast,
@@ -60,12 +62,15 @@ pub use source_ast::{
     SourceLanguage, SourceParam,
 };
 pub use sysml_ast::{
-    component_matches, extract_negated_components, is_component_negated,
-    parse_action_defs, parse_attribute_defs, parse_calc_defs, parse_connection_defs, parse_constraint_defs,
-    parse_part_defs, parse_port_defs, parse_requirement_defs, parse_satisfied_requirements, parse_state_defs, parse_sysml,
-    ActionDef, AttributeDef, CalcDef, CapabilityDef, ConnectionDef, ConstraintDef, FlowDef, HazardDef,
-    ImportDef, InteractionDef, ItemDef, OperationDef, PackageDef, PartDef, PortDef, RequirementDef, RiskDef,
-    StateDef, SysmlModel, TestCaseDef, TransitionDef, UnifiedSchemaModelExtractor, UseCaseDef,
+    component_matches, extract_negated_components, is_component_negated, parse_action_defs,
+    parse_attribute_defs, parse_calc_defs, parse_connection_defs, parse_constraint_defs,
+    parse_hazard_defs, parse_part_defs, parse_port_defs, parse_requirement_defs,
+    parse_satisfied_requirements, parse_state_defs, parse_sysml, parse_sysml_model, ActionDef,
+    AstPersistenceEngine, AstSlice, AttributeDef, CalcDef, CapabilityDef, ConnectionDef,
+    ConstraintDef, CotAuditLog, CotAuditRecord, FieldDescriptor, FlowDef, HazardDef, ImportDef,
+    IncrementalAstCache, InteractionDef, InterfaceDef, ItemDef, OperationDef, PackageDef, PartDef,
+    PortDef, RequirementDef, RiskDef, StateDef, SysmlModel, TestCaseDef, TransitionDef,
+    TypeDescriptor, UnifiedSchemaModelExtractor, UseCaseDef,
 };
 pub use workspace::{
     check_downstream_instructions_exist, check_gitignore_exists, check_no_ds_store_files,

@@ -38,46 +38,53 @@ target_standards:
 
 ### 1.1 Executive Summary
 
-In safety-critical cyber-physical systems--specifically abstract cyber-physical pipeline execution runners near critical infrastructure--system safety, multi-authority regulatory auditability (AssuranceLevel::Tier1..5), and formal certification (RTCA DO-178C / DO-331) demand end-to-end bi-directional traceability across all engineering artifacts.
+In safety-critical cyber-physical systems--specifically abstract cyber-physical pipeline execution runners near critical infrastructure--system safety, multi-authority regulatory auditability (`AssuranceLevel::Tier1..5`), and formal certification (RTCA DO-178C / DO-331) demand end-to-end bi-directional traceability across all engineering artifacts.
 
 A major architectural challenge in enterprise high-assurance infrastructure projects is **infrastructure and provider lock-in**. While initial open-source or commercial research and development frequently takes place on public software-as-a-service (SaaS) platforms (such as GitHub.com or GitLab.com SaaS), production deployment, defense programs, and classified operational variants are mandated to execute within **on-premises, air-gapped, or Sensitive Compartmented Information Facility (SCIF)** enclaves. These secure enclaves standardly deploy **GitLab Community Edition (CE)** or **GitLab Enterprise Edition (EE)** hosted on private hardware or isolated sovereign clouds (e.g., AWS Secret Region, Azure Government).
 
-The **Digital Engineering Agentic Pipeline (DEAP)** resolves this operational divide by introducing a **Multi-Provider Infrastructure Architecture**. DEAP decouples the underlying Version Control System (VCS) transport from issue tracking, agile backlog reconciliation, and continuous integration/continuous delivery (CI/CD) pipelines. By providing native, zero-dependency GitLab REST API v4 integration alongside GitHub and local mock drivers, DEAP guarantees 100% deterministic portability between public SaaS, private enterprise clouds, and air-gapped defense enclaves without altering a single engineering specification, SysML v2 model, or Tier-1 commercial Model-Based Design (MBD) synthesis pipeline (**MATLAB / Simulink / Stateflow / Embedded Coder**).
+The **Digital Engineering Agentic Pipeline (DEAP)** resolves this operational divide by introducing a **Multi-Provider Infrastructure Architecture** grounded in the native Rust workspace crates `crates/reconcile-backlog`, `crates/deap-core`, `crates/verify-baseline`, `crates/compile-sysml`, `crates/ingest-sysml`, and `crates/assemble-conops`. DEAP decouples the underlying Version Control System (VCS) transport from issue tracking, agile backlog reconciliation, and continuous integration/continuous delivery (CI/CD) pipelines. By providing multi-provider issue tracking and scoped label normalization (`status::fixed-resolved` and `status:fixed-resolved`) in `crates/reconcile-backlog/src/tracker.rs` alongside `CodebaseRules` and `TrackerRules` in `crates/deap-core/src/rules.rs`, DEAP guarantees 100% deterministic portability between public SaaS, private enterprise clouds, and air-gapped defense enclaves without altering a single engineering specification, SysML v2 model, or Tier-1 commercial Model-Based Design (MBD) synthesis pipeline (**MATLAB / Simulink / Stateflow / Embedded Coder**).
 
 ```mermaid
-flowchart TB
+flowchart TD
     subgraph VCS_Agnostic_Core ["DEAP Core Engine - VCS & Tracker Agnostic Layer"]
-        AST_SSOT["SysML v2 Formal AST SSOT - .pipeline/schema.sysml"]
-        Spec_Corpus["Agile Backlog Corpus - Epics, Features, Stories, Use Cases"]
-        Reconcile_Engine["reconcile-backlog Engine"]
-        Parity_Lock["22-Gate Parity Lock - verify-baseline"]
+        direction TB
+        AST_SSOT["SysML v2 Formal AST SSOT<br/>.pipeline/schema.sysml"]
+        Spec_Corpus["Agile Backlog Corpus<br/>Epics, Features, Stories"]
+        Reconcile_Engine["reconcile-backlog<br/>crates/reconcile-backlog"]
+        Parity_Lock["verify-baseline Engine<br/>crates/verify-baseline"]
     end
 
     subgraph Tracker_Abstraction ["Unified Tracker Abstraction Layer"]
-        Driver_Interface["IssueTracker Abstract Base Class"]
-        GL_Driver["GitLabV4Tracker Driver - Zero-Dependency"]
-        GH_Driver["GitHubCliTracker / GitHubRestTracker Driver"]
-        Local_Driver["LocalMockTracker Driver - Offline/Isolated"]
+        direction TB
+        Driver_Interface["TrackerClient Trait<br/>tracker.rs Interface"]
+        GL_Driver["GitLab Provider Mode<br/>glab & REST v4 Sync"]
+        GH_Driver["GitHubTracker Struct<br/>gh CLI & REST Sync"]
+        Local_Driver["OfflineTracker Struct<br/>Offline & Dry-Run Mode"]
     end
 
     subgraph Infrastructure_Targets ["Supported Infrastructure Deployment Targets"]
+        direction TB
         subgraph Target_Public ["Public / Commercial SaaS"]
-            GH_SaaS["GitHub.com Enterprise SaaS"]
-            GL_SaaS["GitLab.com Ultimate SaaS"]
+            direction TB
+            GH_SaaS["GitHub.com Enterprise<br/>Cloud SaaS"]
+            GL_SaaS["GitLab.com Ultimate<br/>Cloud SaaS"]
         end
         subgraph Target_Private ["Private / Sovereign Cloud"]
-            GL_SelfHosted["GitLab EE Self-Hosted - AWS GovCloud / Azure Gov"]
+            direction TB
+            GL_SelfHosted["GitLab EE Self-Hosted<br/>Sovereign Cloud"]
         end
         subgraph Target_AirGapped ["Air-Gapped / SCIF Defense Enclave"]
-            GL_AirGapped["GitLab CE/EE Air-Gapped Enclave - Offline CA / Zero Egress"]
+            direction TB
+            GL_AirGapped["GitLab CE/EE Enclave<br/>Offline CA / Zero Egress"]
         end
     end
 
     subgraph Toolchain_Synthesis ["Primary Tier-1 Commercial Toolchain - MBD"]
-        Simulink["MATLAB / Simulink - Subsystems & Buses"]
-        Stateflow["Stateflow - Discrete Mode Supervisors"]
-        SLDV["Simulink Design Verifier - Formal RTA Proofs"]
-        Coder["Embedded Coder - DO-178C C / SPARK Ada Synthesis"]
+        direction TB
+        Simulink["MATLAB / Simulink<br/>Subsystems & Buses"]
+        Stateflow["Stateflow Charts<br/>Discrete Mode Supervisors"]
+        SLDV["Simulink Design Verifier<br/>Formal RTA Proofs"]
+        Coder["Embedded Coder<br/>DO-178C C & SPARK Ada"]
     end
 
     VCS_Agnostic_Core --> Tracker_Abstraction
@@ -107,8 +114,8 @@ The following matrix compares infrastructure deployment environments across tran
 | **API Version** | GitHub REST API v3 / GraphQL | GitLab REST API v4 | GitLab REST API v4 | GitLab REST API v4 |
 | **Auth Tokens** | `GITHUB_TOKEN`, `GH_TOKEN`, PAT | `GITLAB_TOKEN`, `GL_TOKEN`, PAT | `GITLAB_TOKEN`, `CI_JOB_TOKEN` | `GITLAB_TOKEN`, `CI_JOB_TOKEN` |
 | **TLS/SSL Validation** | Public WebPKI CA | Public WebPKI CA | Enterprise / Corporate Root CA | Private Air-Gapped Enclave Root CA |
-| **CLI Availability** | `gh` CLI required | `glab` CLI or REST API | REST API / `glab` (optional) | **REST API Only (Zero External CLI)** |
-| **Scoped Labels** | Emulated via strings | Native (`key::value`) | Native (`key::value`) | Native (`key::value`) |
+| **CLI / Transport** | `gh` CLI via `GitHubTracker` | `glab` CLI or REST API v4 | REST API v4 / `glab` CLI | **OfflineTracker / Local Enclave REST** |
+| **Scoped Labels** | Normalized (`status:fixed-resolved`) | Native (`status::fixed-resolved`) | Native (`status::fixed-resolved`) | Native (`status::fixed-resolved`) |
 | **CI/CD Pipeline Engine** | GitHub Actions (`.github/`) | GitLab CI (`.gitlab-ci.yml`) | GitLab CI (`.gitlab-ci.yml`) | GitLab CI (`.gitlab-ci.yml`) |
 | **Runner Infrastructure** | Hosted Runners (Ubuntu/macOS) | Hosted / Shared Runners | Private Docker / Shell Runners | Local Bare-Metal / K8s Runners |
 | **Artifact Storage** | GitHub Packages / Releases | GitLab Package Registry | Self-Hosted MinIO / Ceph S3 | Air-Gapped Local Blob Storage |
@@ -116,17 +123,17 @@ The following matrix compares infrastructure deployment environments across tran
 
 ---
 
-### 1.3 5-Whys Root Cause Analysis: Vendor Lock-In & Air-Gap Failures in high-assurance CI/CD
+### 1.3 5-Whys Root Cause Analysis: Vendor Lock-In & Air-Gap Failures in High-Assurance CI/CD
 
 To understand why traditional high-assurance software pipelines fail when migrating from development environments to secure system-certification enclaves, DEAP applies the formal **5-Whys Root Cause Analysis**:
 
 ```mermaid
 flowchart TD
-    W1["Why 1 - Why do safety-critical high-assurance CI/CD pipelines fail when deployed to air-gapped or SCIF certification environments?"]
-    W2["Why 2 - Why cannot pipeline automation scripts authenticate or reconcile backlog issues in secure enclaves?"]
-    W3["Why 3 - Why are backlog automation scripts coupled to external CLI tools (e.g., gh CLI) and public SaaS endpoints?"]
-    W4["Why 4 - Why was issue tracking and backlog reconciliation hard-coded to a single VCS vendor API instead of an abstract transport layer?"]
-    W5["Why 5 (Root Cause) - Why did the software architecture fail to decouple VCS transport, issue tracking, and CI/CD execution via a zero-dependency REST engine and standard-compliant scoped label lifecycle?"]
+    W1["Why 1: Why do high-assurance<br/>CI/CD pipelines fail in SCIF<br/>certification environments?"]
+    W2["Why 2: Why cannot scripts<br/>authenticate or reconcile<br/>issues in secure enclaves?"]
+    W3["Why 3: Why were scripts<br/>coupled to single-vendor<br/>public SaaS endpoints?"]
+    W4["Why 4: Why was issue tracking<br/>hardcoded instead of using a<br/>TrackerClient trait?"]
+    W5["Why 5: Root Cause: Lack of<br/>crates/reconcile-backlog<br/>TrackerClient & Scoped Labels"]
 
     W1 --> W2
     W2 --> W3
@@ -134,21 +141,21 @@ flowchart TD
     W4 --> W5
 ```
 
-- **Why 1:** Safety-critical pipelines fail in secure enclaves because scripts make outbound HTTP requests to unauthorized public hosts or require external binary dependencies not approved on the air-gapped baseline.
-- **Why 2:** Backlog automation scripts fail to execute because they depend on external binaries (such as `gh` or Node-based GitHub action runners) and public certificate trust stores rather than enterprise TLS anchors.
-- **Why 3:** Scripts are coupled to vendor-specific tooling because developers treat issue tracking as a proprietary portal rather than a standardized, REST-compliant entity lifecycle.
-- **Why 4:** Issue tracking was coupled to a single vendor because early prototypes lacked an abstract provider interface separating domain logic (Epics, Features, Stories, Use Cases) from remote API serialization.
-- **Why 5 (Root Cause):** The systems engineering architecture lacked a unified **Tracker Abstraction Architecture**, a **Zero-Dependency Native REST API Engine**, and a **Scoped Label Lifecycle** compatible with both GitLab CE/EE and GitHub.
+- **Why 1:** Safety-critical pipelines fail in secure enclaves because scripts make outbound HTTP requests to unauthorized public hosts or require unaccredited dynamic interpreter dependencies not approved on the air-gapped baseline.
+- **Why 2:** Backlog automation scripts fail to execute because they depend on unabstracted vendor assumptions and public certificate trust stores rather than statically compiled Rust binaries and enterprise TLS anchors.
+- **Why 3:** Scripts are coupled to vendor-specific tooling because developers treat issue tracking as a proprietary portal rather than a standardized entity lifecycle governed by `.codebase-rules.json`.
+- **Why 4:** Issue tracking was coupled to a single vendor because early prototypes lacked the `TrackerClient` trait abstraction (`crates/reconcile-backlog/src/tracker.rs`) separating domain specifications (Epics, Features, User Stories, Use Cases) from remote provider synchronization.
+- **Why 5 (Root Cause):** The systems engineering architecture required a unified **Tracker Abstraction Architecture** in `crates/reconcile-backlog`, declarative **TrackerRules** in `crates/deap-core/src/rules.rs`, and a **Scoped Label Lifecycle** (`is_resolved_label` and `normalize_label` in `crates/reconcile-backlog/src/tracker.rs`) compatible with both GitLab CE/EE (`status::fixed-resolved`) and GitHub (`status:fixed-resolved`).
 
 ---
 
 ### 1.4 Architectural Invariants & Non-Negotiable Tenets
 
-1. **Zero External Runtime Dependency Policy:** All tracker clients, API callers, and reconciliation binaries must execute as self-contained native executables (`./target/release/reconcile-backlog`) or zero-external-dependency standard library components without requiring third-party runtime wheels.
-2. **Deterministic Provider Independence:** Specifying `TRACKER_PROVIDER=gitlab` or `TRACKER_PROVIDER=github` switches remote serialization without modifying a single markdown frontmatter schema, SysML v2 AST node, or test suite.
-3. **Strict Transport Decoupling:** Git version control (cloning, branching, committing, pushing) operates over standard Git protocols (SSH/HTTPS) independently of the Issue Tracking REST API.
-4. **Air-Gap & Private PKI First-Class Support:** The GitLab REST engine must natively support custom root CA certificates (`GITLAB_CA_CERT_PATH`), self-hosted domain routing (`GITLAB_URL`, `CI_SERVER_URL`), and ephemeral pipeline credentials (`CI_JOB_TOKEN`).
-5. **Bidirectional DO-178C Traceability Parity:** Scoped labels (`type::*`, `status::*`, `safety::*`, `rta::*`) must enforce mutual exclusivity and provide a complete audit trail mapping directly to RTCA DO-178C verification objectives and ASTM F3269-17 Run-Time Assurance (RTA) invariants.
+1. **Pure Native Rust Binary Policy (Checks 32 & 33):** All tracker clients, backlog reconciliation tools, defect dossier validators, and baseline verifiers execute as compiled native Rust binaries (`./target/release/reconcile-backlog`, `./target/release/verify-baseline`, `./target/release/compile-sysml`, `./target/release/ingest-sysml`, `./target/release/assemble-conops`). Python (`*.py`) and shell (`*.sh`) scripts are strictly prohibited across the workspace.
+2. **Deterministic Provider Independence:** Specifying `--provider gitlab`, `--provider github`, or `--offline` / `--provider mock` on `./target/release/reconcile-backlog` (or configuring `tracker_rules.provider` in `.codebase-rules.json`, parsed by `deap_core::rules::CodebaseRules`) switches remote synchronization without modifying a single markdown frontmatter schema, SysML v2 AST node, or Rust unit test suite.
+3. **Strict Transport Decoupling:** Git version control (cloning, branching, committing, pushing, and repository detection via `detect_git_repo` and `detect_git_branch` in `crates/reconcile-backlog/src/lib.rs`) operates over standard Git protocols (SSH/HTTPS) independently of issue tracker synchronization.
+4. **Air-Gap & Private PKI First-Class Support:** Offline validation is natively supported via `OfflineTracker` (`--offline` or `--dry-run`) in `crates/reconcile-backlog/src/tracker.rs`, while enterprise GitLab deployments support custom root CA certificates (`GITLAB_CA_CERT_PATH`, `SSL_CERT_FILE`), self-hosted domain routing (`GITLAB_URL`, `CI_SERVER_URL`), and pipeline credentials (`CI_JOB_TOKEN`).
+5. **Bidirectional DO-178C Traceability Parity:** Scoped labels (`type::*`, `status::*`, `safety::*`, `rta::*`) enforce mutual exclusivity and provide a complete audit trail verified by `validate_checklist_publish_integrity` (`crates/reconcile-backlog/src/lib.rs`) and Check 28 / Check 31 in `crates/verify-baseline/src/checks/parity_gates.rs`.
 
 ---
 
@@ -156,138 +163,144 @@ flowchart TD
 
 ### 2.1 Tracker Decoupling Topology & Domain Model
 
-The DEAP tracker architecture separates engineering domain concerns from infrastructure transport mechanics. The core engine interacts exclusively with the abstract `IssueTracker` interface, which defines standardized CRUD operations, search filters, comment streams, and label mutations.
+The DEAP tracker architecture in `crates/reconcile-backlog` separates engineering domain concerns (`LoadedSpec`, `SpecFrontmatter`, `ReconcileOptions`, `ReconcileSummary` in `crates/reconcile-backlog/src/lib.rs`) from issue tracker transport mechanics (`TrackerClient`, `GitHubTracker`, `OfflineTracker`, `IssueIndex`, `TrackerIssue`, `TrackerLabel` in `crates/reconcile-backlog/src/tracker.rs`). The reconciliation engine `run_reconciliation<T: TrackerClient>` interacts exclusively with the `TrackerClient` trait.
 
 ```mermaid
 classDiagram
-    class IssueTracker {
-        <<Abstract>>
-        +str get_provider_name()
-        +bool authenticate()
-        +List~TrackerIssue~ list_issues(filters)
-        +TrackerIssue get_issue(issue_id)
-        +TrackerIssue create_issue(issue)
-        +TrackerIssue update_issue(issue_id, updates)
-        +TrackerComment add_comment(issue_id, body)
-        +bool set_labels(issue_id, labels)
-        +CanonicalStatus normalize_status(raw_status)
+    class TrackerClient {
+        <<Trait>>
+        +Result fetch_all_issues()
+        +Result update_issue_body(u64 issue_number, str body)
+        +Result add_label(u64 issue_number, str label)
+        +Result create_issue(str title, str body, str label, Option repo)
+        +Result ensure_label_exists(str label, Option repo)
+        +Result reopen_issue(u64 issue_number, Option comment, Option repo)
     }
 
-    class GitLabV4Tracker {
-        -GitLabV4Client client
-        -str project_id
-        -bool scoped_label_enabled
-        +List~TrackerIssue~ list_issues(filters)
-        +TrackerIssue get_issue(issue_id)
-        +TrackerIssue create_issue(issue)
-        +TrackerIssue update_issue(issue_id, updates)
-        +TrackerComment add_comment(issue_id, body)
-        +bool set_labels(issue_id, labels)
-        -_map_scoped_labels(labels) List~str~
+    class GitHubTracker {
+        +Option repo
+        +usize retry_delays_len
+        +GitHubTracker new()
+        +GitHubTracker with_repo(Option repo)
+        +Result run_gh(Slice args)
+        +Result fetch_all_issues()
+        +Result update_issue_body(u64 issue_number, str body)
+        +Result add_label(u64 issue_number, str label)
+        +Result create_issue(str title, str body, str label, Option repo)
+        +Result ensure_label_exists(str label, Option repo)
+        +Result reopen_issue(u64 issue_number, Option comment, Option repo)
     }
 
-    class GitHubCliTracker {
-        -str gh_binary
-        -str repo_slug
-        +List~TrackerIssue~ list_issues(filters)
-        +TrackerIssue get_issue(issue_id)
-        +TrackerIssue create_issue(issue)
-        +TrackerIssue update_issue(issue_id, updates)
-        +TrackerComment add_comment(issue_id, body)
-        +bool set_labels(issue_id, labels)
+    class OfflineTracker {
+        +Vec issues
+        +OfflineTracker new()
+        +OfflineTracker with_issues(Vec issues)
+        +Result fetch_all_issues()
+        +Result update_issue_body(u64 issue_number, str body)
+        +Result add_label(u64 issue_number, str label)
+        +Result create_issue(str title, str body, str label, Option repo)
+        +Result ensure_label_exists(str label, Option repo)
+        +Result reopen_issue(u64 issue_number, Option comment, Option repo)
     }
 
-    class GitHubRestTracker {
-        -str token
-        -str base_url
-        +List~TrackerIssue~ list_issues(filters)
-        +TrackerIssue get_issue(issue_id)
-        +TrackerIssue create_issue(issue)
-        +TrackerIssue update_issue(issue_id, updates)
-        +TrackerComment add_comment(issue_id, body)
-        +bool set_labels(issue_id, labels)
+    class IssueIndex {
+        +BTreeMap by_number
+        +BTreeMap by_type_and_title
+        +BTreeMap by_normalized_title
+        +IssueIndex build(Vec issues)
+        +Option find_issue_for_type(str spec_type, Option id, str title)
+        +Option find_issue(Option id, str title)
     }
 
-    class LocalMockTracker {
-        -Path mock_store_path
-        -Dict in_memory_db
-        +List~TrackerIssue~ list_issues(filters)
-        +TrackerIssue get_issue(issue_id)
-        +TrackerIssue create_issue(issue)
-        +TrackerIssue update_issue(issue_id, updates)
-        +TrackerComment add_comment(issue_id, body)
-        +bool set_labels(issue_id, labels)
+    class TrackerIssue {
+        +u64 number
+        +String title
+        +String state
+        +Vec labels
+        +Option body
+        +Option url
+        +bool is_resolved()
     }
 
-    IssueTracker <|-- GitLabV4Tracker
-    IssueTracker <|-- GitHubCliTracker
-    IssueTracker <|-- GitHubRestTracker
-    IssueTracker <|-- LocalMockTracker
+    TrackerClient <|.. GitHubTracker
+    TrackerClient <|.. OfflineTracker
+    IssueIndex *-- TrackerIssue
 ```
 
 ---
 
-### 2.2 Factory Pattern & Dynamic Provider Resolution
+### 2.2 Provider & Rules Resolution in `crates/reconcile-backlog` and `crates/deap-core`
 
-The reconciliation engine instantiates concrete tracker drivers at runtime via a deterministic resolution hierarchy:
+The binary entrypoint `crates/reconcile-backlog/src/main.rs` parses CLI arguments (`Cli` and `Subcommands::CreateIssue(CreateIssueArgs)`) and resolves workspace configuration alongside `CodebaseRules` and `TrackerRules` defined in `crates/deap-core/src/rules.rs`:
 
 ```mermaid
 flowchart TD
-    Start["Initiate Tracker Initialization"] --> Check_Explicit{"Is TRACKER_PROVIDER set in env?"}
-    
-    Check_Explicit -->|Yes: gitlab| Init_GitLab["Instantiate GitLabV4Tracker"]
-    Check_Explicit -->|Yes: github| Init_GitHub["Instantiate GitHubCliTracker / GitHubRestTracker"]
-    Check_Explicit -->|Yes: local / mock| Init_Mock["Instantiate LocalMockTracker"]
-    
-    Check_Explicit -->|No| Check_CI{"Is GitLab CI active? (CI_SERVER_URL or GITLAB_CI present)"}
-    Check_CI -->|Yes| Init_GitLab
-    Check_CI -->|No| Check_GH_Env{"Is GITHUB_ACTIONS or GH_TOKEN present?"}
-    Check_GH_Env -->|Yes| Init_GitHub
-    Check_GH_Env -->|No| Check_Remote{"Inspect git remote origin URL"}
-    
-    Check_Remote -->|Contains gitlab| Init_GitLab
-    Check_Remote -->|Contains github| Init_GitHub
-    Check_Remote -->|No Remote / Air-Gapped Local| Init_Mock
+    Start["Start reconcile-backlog<br/>CLI & Options Init"] --> Check_Subcmd{"Is Subcommand<br/>create-issue?"}
+    Check_Subcmd -->|Yes| Exec_Create["execute_create_issue()<br/>crates/reconcile-backlog"]
+    Check_Subcmd -->|No| Check_Rules["Load .codebase-rules.json<br/>deap_core::rules::TrackerRules"]
 
-    Init_GitLab --> Auth_GL{"Validate GitLab Auth Token & CA"}
-    Init_GitHub --> Auth_GH{"Validate GitHub Auth / CLI"}
-    Init_Mock --> Ready["Tracker Driver Ready for Reconciliation"]
+    Check_Rules --> Check_Offline{"Is --offline flag or<br/>provider == mock?"}
+    Check_Offline -->|Yes| Init_Offline["Instantiate OfflineTracker<br/>crates/reconcile-backlog"]
+    Check_Offline -->|No| Check_Provider{"Inspect --provider<br/>CLI / TrackerRules"}
 
-    Auth_GL -->|Pass| Ready
-    Auth_GL -->|Fail| Fatal_GL["Raise FatalAuthenticationError (Hard Stop)"]
-    Auth_GH -->|Pass| Ready
-    Auth_GH -->|Fail| Fatal_GH["Raise FatalAuthenticationError (Hard Stop)"]
+    Check_Provider -->|gitlab| Init_GitLab["Configure GitLab Mode<br/>glab / REST API v4"]
+    Check_Provider -->|github / auto| Init_GitHub["Instantiate GitHubTracker<br/>with_repo(detect_git_repo)"]
+
+    Init_Offline --> Fetch_Issues["Invoke fetch_all_issues()<br/>via TrackerClient Trait"]
+    Init_GitLab --> Fetch_Issues
+    Init_GitHub --> Fetch_Issues
+
+    Fetch_Issues --> Build_Index["IssueIndex::build(issues)<br/>by_number & by_type_and_title"]
+    Build_Index --> Run_Reconcile["Execute run_reconciliation<br/>Sync Frontmatter & Checklists"]
 ```
 
-#### Provider Resolution Configuration Specification
+#### Declarative Tracker Rules Configuration (`crates/deap-core/src/rules.rs`)
 
-The runtime resolution is parameterized by `.pipeline/config.yaml` or `.codebase-rules.json`:
+The workspace configuration in `.codebase-rules.json` is deserialized by `CodebaseRules::load_from_dir` in `crates/deap-core/src/rules.rs`, which exposes strongly-typed structs for `MetaConfig`, `TrackerRules`, and `ValidationRules`:
+
+```rust
+// Grounded in: crates/deap-core/src/rules.rs
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CodebaseRules {
+    pub meta: Option<MetaConfig>,
+    pub tracker_rules: Option<TrackerRules>,
+    pub validation_rules: Option<ValidationRules>,
+    pub backlog_directories: Option<BTreeMap<String, String>>,
+    pub target_directories: Option<BTreeMap<String, Option<String>>>,
+    #[serde(flatten)]
+    pub extra: BTreeMap<String, serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct TrackerRules {
+    pub provider: Option<String>,
+    pub issue_id_placeholder: Option<String>,
+    pub prefix_normalization_regex: Option<String>,
+    pub title_extraction_prefixes_regex: Option<String>,
+    pub numeric_prefix: Option<String>,
+    pub labels: Option<BTreeMap<String, String>>,
+    #[serde(flatten)]
+    pub extra: BTreeMap<String, serde_json::Value>,
+}
+```
+
+And the corresponding `.codebase-rules.json` tracker configuration schema:
 
 ```json
 {
-  "tracker_configuration": {
-    "default_provider": "auto",
-    "providers": {
-      "gitlab": {
-        "api_version": "v4",
-        "default_url": "https://gitlab.com",
-        "url_env_vars": ["GITLAB_URL", "CI_SERVER_URL"],
-        "token_env_vars": ["GITLAB_TOKEN", "GL_TOKEN", "CI_JOB_TOKEN"],
-        "ca_cert_env_vars": ["GITLAB_CA_CERT_PATH", "REQUESTS_CA_BUNDLE", "SSL_CERT_FILE"],
-        "scoped_labels": true,
-        "max_body_chars": 1000000,
-        "rate_limit_retry_attempts": 5,
-        "rate_limit_backoff_base_sec": 1.5
-      },
-      "github": {
-        "api_version": "v3",
-        "default_url": "https://api.github.com",
-        "token_env_vars": ["GITHUB_TOKEN", "GH_TOKEN"],
-        "scoped_labels": false,
-        "max_body_chars": 65536,
-        "rate_limit_retry_attempts": 5,
-        "rate_limit_backoff_base_sec": 2.0
-      }
+  "tracker_rules": {
+    "provider": "gitlab",
+    "issue_id_placeholder": "[IssueID]",
+    "numeric_prefix": "#",
+    "labels": {
+      "epic": "type::epic",
+      "feature": "type::feature",
+      "user_story": "type::user-story",
+      "use_case": "type::use-case",
+      "resolved": "status::fixed-resolved"
     }
   }
 }
@@ -295,278 +308,214 @@ The runtime resolution is parameterized by `.pipeline/config.yaml` or `.codebase
 
 ---
 
-### 2.3 Uniform Data Model & Entities
+### 2.3 Uniform Data Model & Entities (`crates/reconcile-backlog/src/tracker.rs`)
 
-The unified data model defines immutable, strongly-typed representations of backlog entities across all providers:
+The unified data model in `crates/reconcile-backlog/src/tracker.rs` and `crates/reconcile-backlog/src/lib.rs` defines strongly-typed Rust structs and traits for backlog entities across GitHub (`gh`), GitLab (`glab` / REST API v4), and offline modes:
 
-```python
-from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Any
-from enum import Enum
+```rust
+// Grounded in: crates/reconcile-backlog/src/tracker.rs
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
-class CanonicalStatus(str, Enum):
-    PROPOSED = "proposed"
-    IN_PROGRESS = "in-progress"
-    READY_FOR_REVIEW = "ready-for-review"
-    FIXED_RESOLVED = "fixed-resolved"
-    VERIFIED = "verified"
-    CLOSED = "closed"
-    BLOCKED = "blocked"
+/// Represents an issue fetched from the remote tracker (GitHub or GitLab).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TrackerIssue {
+    pub number: u64,
+    pub title: String,
+    pub state: String,
+    #[serde(default)]
+    pub labels: Vec<TrackerLabel>,
+    #[serde(default)]
+    pub body: Option<String>,
+    #[serde(default)]
+    pub url: Option<String>,
+}
 
-class SpecType(str, Enum):
-    EPIC = "epic"
-    FEATURE = "feature"
-    USER_STORY = "user-story"
-    USE_CASE = "use-case"
-    SAFETY_REQ = "safety-req"
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum TrackerLabel {
+    Object { name: String },
+    String(String),
+}
 
-@dataclass(frozen=True)
-class TrackerLabel:
-    name: str
-    color: Optional[str] = None
-    description: Optional[str] = None
-    scoped_key: Optional[str] = None
-    scoped_value: Optional[str] = None
+impl TrackerLabel {
+    pub fn name(&self) -> &str {
+        match self {
+            TrackerLabel::Object { name } => name,
+            TrackerLabel::String(s) => s,
+        }
+    }
+}
 
-@dataclass
-class TrackerIssue:
-    issue_id: str                      # Canonical string representation (e.g., "104" or "GL-104")
-    iid: int                           # Internal integer project-scoped ID (GitLab IID / GitHub Number)
-    title: str                         # Normalized issue title
-    body: str                          # Markdown specification content
-    state: str                         # Provider state ("opened", "closed", "OPEN", "CLOSED")
-    labels: List[str]                  # Complete list of applied label strings
-    author: str                        # Author username
-    web_url: str                       # Canonical web URL for the issue
-    created_at: str                    # ISO 8601 timestamp
-    updated_at: str                    # ISO 8601 timestamp
-    status: CanonicalStatus = CanonicalStatus.PROPOSED
-    spec_type: Optional[SpecType] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+/// Checks if a label string represents a resolved status across providers
+/// (supporting both GitHub `status:fixed-resolved` and GitLab scoped `status::fixed-resolved`).
+pub fn is_resolved_label(label: &str) -> bool {
+    let lower = label.trim().to_lowercase();
+    lower == "status:fixed-resolved"
+        || lower == "status::fixed-resolved"
+        || lower == "fixed-resolved"
+}
 
-@dataclass
-class TrackerComment:
-    comment_id: str
-    body: str
-    author: str
-    created_at: str
-    system: bool = False
+impl TrackerIssue {
+    /// An issue is considered resolved if its state is closed or it carries a resolved label.
+    pub fn is_resolved(&self) -> bool {
+        let state_closed = self.state.eq_ignore_ascii_case("closed");
+        let has_resolved_label = self.labels.iter().any(|l| is_resolved_label(l.name()));
+        state_closed || has_resolved_label
+    }
+}
+
+/// Trait abstracting remote issue tracker operations for testability and offline mode.
+pub trait TrackerClient {
+    fn fetch_all_issues(&self) -> Result<Vec<TrackerIssue>, String>;
+    fn update_issue_body(&self, issue_number: u64, body: &str) -> Result<(), String>;
+    fn add_label(&self, issue_number: u64, label: &str) -> Result<(), String>;
+    fn create_issue(
+        &self,
+        title: &str,
+        body: &str,
+        label: &str,
+        repo: Option<&str>,
+    ) -> Result<(u64, String), String>;
+    fn ensure_label_exists(&self, label: &str, repo: Option<&str>) -> Result<(), String>;
+    fn reopen_issue(
+        &self,
+        issue_number: u64,
+        comment: Option<&str>,
+        repo: Option<&str>,
+    ) -> Result<(), String>;
+}
 ```
 
 ---
 
-### 2.4 Transactional Backlog Reconciliation Lifecycle
+### 2.4 Transactional Backlog Reconciliation Lifecycle (`run_reconciliation`)
 
-The reconciliation engine (`./target/release/reconcile-backlog`) executes a 7-step transactional pipeline ensuring that markdown files in `docs/` and remote tracker issues remain in mathematical synchronization:
+The reconciliation engine (`./target/release/reconcile-backlog`, implemented in `crates/reconcile-backlog/src/lib.rs`) executes a deterministic transactional pipeline ensuring that markdown files in `docs/epics/`, `docs/features/`, `docs/user-stories/`, and `docs/use-cases/` and remote tracker issues remain in mathematical synchronization:
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant LocalDisk as "Local Spec Corpus (docs/)"
-    participant Reconciler as "reconcile-backlog"
-    participant Factory as "TrackerFactory"
-    participant Driver as "GitLabV4Tracker Driver"
-    participant GL_API as "GitLab REST API v4"
-    participant Auditor as "22-Gate Parity Lock"
+    participant Reconciler as "reconcile-backlog (lib.rs)"
+    participant Index as "IssueIndex (tracker.rs)"
+    participant Driver as "TrackerClient Implementation"
+    participant RemoteAPI as "GitLab / GitHub Remote API"
+    participant Verifier as "verify-baseline (runner.rs)"
 
-    LocalDisk->>Reconciler: Scan docs/epics, features, user-stories, use-cases
-    Reconciler->>Factory: Resolve Provider (env/remote detection)
-    Factory->>Driver: Initialize GitLabV4Tracker(project_id, token, url)
-    Driver->>GL_API: GET /api/v4/projects/:id (Validate connectivity & permissions)
-    GL_API-->>Driver: HTTP 200 OK (Project JSON metadata)
-
-    Reconciler->>Driver: list_issues(state="all", per_page=100)
-    Driver->>GL_API: GET /api/v4/projects/:id/issues?pagination=keyset
-    GL_API-->>Driver: Return all existing issues (Paginated)
-    Driver-->>Reconciler: In-memory Issue Index (by IID & title)
+    LocalDisk->>Reconciler: load_specifications(workspace_root)
+    Reconciler->>Driver: fetch_all_issues()
+    Driver->>RemoteAPI: Query open & closed issues with labels
+    RemoteAPI-->>Driver: Return JSON issue payloads
+    Driver-->>Reconciler: "Vec<TrackerIssue>"
+    Reconciler->>Index: IssueIndex::build(issues)
 
     rect rgb(240, 248, 255)
-        Note over Reconciler,GL_API: Step 4-6: Placeholder Resolution & Issue Sync
-        Reconciler->>Reconciler: Resolve #[IssueID] -> #[IID] in dependencies
-        Reconciler->>Driver: Update issue body & Scoped Labels (status::*, type::*)
-        Driver->>GL_API: PUT /api/v4/projects/:id/issues/:iid
-        GL_API-->>Driver: HTTP 200 OK (Updated Issue)
+        Note over Reconciler,RemoteAPI: Frontmatter, Placeholder & Checklist Reconciliation
+        Reconciler->>Index: find_issue_for_type(spec_type, issue_id, title)
+        Reconciler->>Reconciler: reconcile_checklists & purge #[IssueID] placeholders
+        Reconciler->>Reconciler: validate_checklist_publish_integrity()
+        Reconciler->>Driver: update_issue_body(issue_number, body)
+        Driver->>RemoteAPI: Mutate remote issue body & scoped labels
     end
 
     rect rgb(240, 255, 240)
-        Note over Reconciler,LocalDisk: Step 7: Local Frontmatter Update & Verification
-        Reconciler->>LocalDisk: Write canonical issue_id & url to YAML frontmatter
-        Reconciler->>Auditor: Execute ./target/release/verify-baseline
-        Auditor-->>Reconciler: Verification Pass (0 Drift / 0 Violations)
+        Note over Reconciler,Verifier: Local Persistence & Baseline Gate Verification
+        Reconciler->>LocalDisk: Write updated YAML frontmatter & checklists
+        Reconciler->>Verifier: Execute ./target/release/verify-baseline . --no-domain
+        Verifier-->>Reconciler: Verification Pass (0 Drift / 0 Violations)
     end
 ```
 
 ---
 
-## Section 3: Native GitLab REST API v4 Engine Specification
+## Section 3: Native Tracker Client & Issue Creation Engine (`crates/reconcile-backlog`)
 
-### 3.1 Zero-Dependency Client Architecture (`urllib.request` / `crates/reconcile-backlog`)
+### 3.1 Native Rust Tracker Client & Retry Engine (`crates/reconcile-backlog/src/tracker.rs`)
 
-In restricted, air-gapped, and SCIF environments, installing third-party runtime packages is strictly governed and often prohibited without lengthy security accreditation. To ensure zero operational friction, the DEAP GitLab Engine is implemented with zero external third-party runtime dependencies.
+In restricted, air-gapped, and SCIF environments, installing third-party Python interpreters or dynamic packages is strictly prohibited by Check 33 (Zero Python Scripts Invariant) and Check 32 (Zero Shell Scripts Invariant). To ensure zero operational friction, `crates/reconcile-backlog` compiles to a standalone native Rust binary (`./target/release/reconcile-backlog`) implementing bounded retry backoff (`RETRY_DELAYS`), label normalization (`normalize_label`), and multi-dimensional issue indexing (`IssueIndex`):
 
-```python
-import os
-import json
-import ssl
-import time
-import urllib.request
-import urllib.parse
-import urllib.error
-from typing import Dict, List, Optional, Tuple, Any
+```rust
+// Grounded in: crates/reconcile-backlog/src/tracker.rs
+use std::collections::BTreeMap;
+use std::process::Command;
+use std::thread;
+use std::time::Duration;
 
-class GitLabV4Client:
-    """
-    Zero-dependency GitLab REST API v4 client.
-    Implements RFC 5988 Link header pagination, rate-limit backoff,
-    custom private CA TLS validation, and scoped label management.
-    """
+const RETRY_DELAYS: [u64; 3] = [1, 2, 4];
 
-    def __init__(
-        self,
-        base_url: str,
-        token: str,
-        project_id: str,
-        ca_cert_path: Optional[str] = None,
-        timeout_sec: int = 30,
-        max_retries: int = 5,
-        backoff_base_sec: float = 1.5,
-    ):
-        self.base_url = base_url.rstrip("/")
-        self.token = token
-        self.project_id = urllib.parse.quote(project_id, safe="")
-        self.timeout_sec = timeout_sec
-        self.max_retries = max_retries
-        self.backoff_base_sec = backoff_base_sec
-        self.ssl_context = self._create_ssl_context(ca_cert_path)
+/// Normalizes a label to a canonical type key:
+/// e.g. `"type:epic"` -> `"epic"`, `"type::user-story"` -> `"user-story"`, `"use_case"` -> `"use-case"`.
+pub fn normalize_label(label: &str) -> String {
+    let lower = label.trim().to_lowercase();
+    let stripped = if let Some(rest) = lower.strip_prefix("type::") {
+        rest
+    } else if let Some(rest) = lower.strip_prefix("type:") {
+        rest
+    } else {
+        &lower
+    };
+    canonicalize_spec_type(stripped)
+}
 
-    def _create_ssl_context(self, ca_cert_path: Optional[str]) -> ssl.SSLContext:
-        """Create secure TLS 1.3/1.2 SSL context with custom enterprise/SCIF root CAs."""
-        ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
-        if ca_cert_path and os.path.isfile(ca_cert_path):
-            ctx.load_verify_locations(cafile=ca_cert_path)
-        # Defense requirement: enforce TLS 1.2 minimum
-        ctx.minimum_version = ssl.TLSVersion.TLSv1_2
-        return ctx
+pub fn canonicalize_spec_type(raw: &str) -> String {
+    let lower = raw.trim().to_lowercase().replace('_', "-");
+    match lower.as_str() {
+        "epic" | "epics" => "epic".to_string(),
+        "feature" | "features" => "feature".to_string(),
+        "user-story" | "user-stories" | "story" | "userstory" => "user-story".to_string(),
+        "use-case" | "use-cases" | "usecase" => "use-case".to_string(),
+        other => other.to_string(),
+    }
+}
 
-    def _build_request(
-        self,
-        endpoint: str,
-        method: str = "GET",
-        params: Optional[Dict[str, Any]] = None,
-        data: Optional[Dict[str, Any]] = None,
-    ) -> urllib.request.Request:
-        """Constructs authenticated urllib Request with private token headers."""
-        url = f"{self.base_url}/api/v4/{endpoint.lstrip('/')}"
-        if params:
-            query_string = urllib.parse.urlencode(params)
-            url = f"{url}?{query_string}"
-
-        body = None
-        headers = {
-            "PRIVATE-TOKEN": self.token,
-            "Accept": "application/json",
-            "User-Agent": "DEAP-GitLab-Engine/1.0 (DO-178C-Audited)",
-        }
-
-        if data is not None:
-            body = json.dumps(data).encode("utf-8")
-            headers["Content-Type"] = "application/json; charset=utf-8"
-
-        return urllib.request.Request(url=url, data=body, headers=headers, method=method)
-
-    def execute_request(
-        self,
-        endpoint: str,
-        method: str = "GET",
-        params: Optional[Dict[str, Any]] = None,
-        data: Optional[Dict[str, Any]] = None,
-    ) -> Tuple[int, Dict[str, Any], Dict[str, str]]:
-        """
-        Executes HTTP request with exponential backoff for 429 and 5xx errors.
-        Returns: (status_code, json_response_dict, headers_dict)
-        """
-        req = self._build_request(endpoint, method, params, data)
-        attempt = 0
-
-        while attempt < self.max_retries:
-            attempt += 1
-            try:
-                with urllib.request.urlopen(req, context=self.ssl_context, timeout=self.timeout_sec) as resp:
-                    status_code = resp.status
-                    resp_headers = dict(resp.headers.items())
-                    raw_body = resp.read().decode("utf-8")
-                    parsed_body = json.loads(raw_body) if raw_body else {}
-                    return status_code, parsed_body, resp_headers
-
-            except urllib.error.HTTPError as e:
-                status_code = e.code
-                error_headers = dict(e.headers.items()) if e.headers else {}
-                
-                # Check for rate limiting (429) or transient gateway failures (502, 503, 504)
-                if status_code in (429, 502, 503, 504):
-                    retry_after = error_headers.get("Retry-After")
-                    if retry_after and retry_after.isdigit():
-                        sleep_time = float(retry_after)
-                    else:
-                        sleep_time = self.backoff_base_sec * (2 ** (attempt - 1))
-                    
-                    time.sleep(sleep_time)
-                    continue
-
-                raw_err = e.read().decode("utf-8") if e.fp else ""
-                raise RuntimeError(
-                    f"GitLab API HTTP {status_code} Error on {method} {endpoint}: {raw_err}"
-                ) from e
-
-            except urllib.error.URLError as e:
-                if attempt >= self.max_retries:
-                    raise RuntimeError(f"Network transport failure connecting to {self.base_url}: {e.reason}") from e
-                time.sleep(self.backoff_base_sec * (2 ** (attempt - 1)))
-
-        raise TimeoutError(f"Exceeded maximum retries ({self.max_retries}) for GitLab API request: {endpoint}")
+/// Multi-dimensional index of remote tracker issues for fast lookup by:
+/// 1. Issue number
+/// 2. (canonical_spec_type, normalized_title)
+/// 3. normalized_title fallback
+#[derive(Debug, Clone, Default)]
+pub struct IssueIndex {
+    pub by_number: BTreeMap<u64, TrackerIssue>,
+    pub by_type_and_title: BTreeMap<(String, String), TrackerIssue>,
+    pub by_normalized_title: BTreeMap<String, TrackerIssue>,
+}
 ```
 
 ---
 
 ### 3.2 Endpoint Architecture & Request/Response Contracts
 
-The DEAP client interacts with four primary GitLab REST API v4 resource trees:
+When operating against GitLab REST API v4 or `glab` / `gh` provider transports, the `TrackerClient` implementation maps its six trait methods to the target provider's issue and label endpoints:
 
 ```mermaid
-graph LR
-    subgraph GitLab_API_v4 ["GitLab REST API v4 Endpoints"]
-        P_Proj["/api/v4/projects/:id"]
-        P_Issues["/api/v4/projects/:id/issues"]
-        P_Issue_IID["/api/v4/projects/:id/issues/:issue_iid"]
-        P_Notes["/api/v4/projects/:id/issues/:issue_iid/notes"]
-        P_Labels["/api/v4/projects/:id/labels"]
+flowchart TD
+    subgraph GitLab_API_v4 ["GitLab REST API v4 & Tracker Endpoints"]
+        direction TB
+        P_Proj["GET /api/v4/projects/:id<br/>Project Metadata"]
+        P_Issues["GET /api/v4/projects/:id/issues<br/>fetch_all_issues()"]
+        P_Issue_IID["PUT /projects/:id/issues/:iid<br/>update_issue_body()"]
+        P_Notes["POST /issues/:iid/notes<br/>reopen_issue() & Evidence"]
+        P_Labels["POST /projects/:id/labels<br/>ensure_label_exists()"]
     end
 
-    Client["GitLabV4Client"] --> P_Proj
+    Client["TrackerClient Implementation<br/>crates/reconcile-backlog"] --> P_Proj
     Client --> P_Issues
     Client --> P_Issue_IID
     Client --> P_Notes
     Client --> P_Labels
 ```
 
-#### 1. Project Discovery & Validation
-- **Method / Path:** `GET /api/v4/projects/:id`
-- **Path Parameter `:id`:** URL-encoded project path (e.g., `Cyber-Physical System-group%2Fsystem-safety-subsystem`) or numeric ID (e.g., `42019`).
-- **Response Validation:** Verifies project accessibility, default branch, visibility, and features enabled (`issues_enabled == true`).
+#### 1. Project Discovery & Repository Slug Normalization (`crates/reconcile-backlog/src/lib.rs`)
+- **Functions:** `detect_git_repo(workspace_root: &Path) -> Option<String>`, `parse_repo_from_remote_url(url: &str) -> Option<String>`, and `clean_repo_name(raw: &str) -> String`.
+- **Behavior:** Strips `.git` suffixes and extracts `owner/repo` or nested group paths from `git remote get-url origin` across both SSH (`git@...`) and HTTPS (`https://...`) remote URLs.
 
-#### 2. Keyset & Offset Issue Query
-- **Method / Path:** `GET /api/v4/projects/:id/issues`
-- **Query Parameters:**
-  - `state`: `all` | `opened` | `closed`
-  - `labels`: Comma-separated list (e.g., `type::feature,status::in-progress`)
-  - `per_page`: `100` (GitLab maximum)
-  - `pagination`: `keyset` (preferred for high-volume enterprise projects)
-  - `order_by`: `created_at` | `id`
-  - `sort`: `asc` | `desc`
+#### 2. Issue Fetching & Indexing (`TrackerClient::fetch_all_issues`)
+- **Trait Method:** `fetch_all_issues(&self) -> Result<Vec<TrackerIssue>, String>`
+- **Index Construction:** `IssueIndex::build(issues)` indexes issues by `number`, `(canonical_spec_type, normalized_title)`, and `normalized_title` so that specifications can be matched deterministically even before an `issue_id` is written to frontmatter.
 
-#### 3. Transactional Issue Update
-- **Method / Path:** `PUT /api/v4/projects/:id/issues/:issue_iid`
-- **Payload Schema:**
+#### 3. Transactional Issue Body & Label Synchronization (`update_issue_body` & `add_label`)
+- **Pre-Publish Gate:** Before any issue body is published via `update_issue_body`, `validate_checklist_publish_integrity(spec_rel_path, content, &issue_index)` in `crates/reconcile-backlog/src/lib.rs` verifies that every checked item (`- [x] #<id>`) corresponds to a genuinely resolved issue (`issue.is_resolved() == true`) in `IssueIndex`.
+- **GitLab Payload Schema (`PUT /api/v4/projects/:id/issues/:issue_iid`):**
 ```json
 {
   "title": "Feature 104: Multi-Spectral Optical Fence Intrusion Detector",
@@ -577,96 +526,76 @@ graph LR
 }
 ```
 
-#### 4. Audit & Verification Discussion Notes
-- **Method / Path:** `POST /api/v4/projects/:id/issues/:issue_iid/notes`
-- **Payload Schema:**
-```json
-{
-  "body": "### \u2705 DEAP DO-178C Automated Verification Report\n\n- **22-Gate Parity Lock:** PASSED\n- **SysML v2 AST Digest:** `a7f9c2...`\n- **Simulink Model Synthesis:** `SystemControl_SLX_v2.slx` (0 SLDV Errors)\n- **Traceability Status:** 100% Objectives Satisfied\n- **GitLab Pipeline:** [#94821](https://gitlab.internal.defense.gov/Cyber-Physical System/safety/-/pipelines/94821)"
-}
-```
+#### 4. Audited Issue & Defect Creation (`crates/reconcile-backlog/src/create_issue.rs`)
+- **CLI Subcommand:** `./target/release/reconcile-backlog create-issue --title <TITLE> --body-file <PATH> --label <LABEL>`
+- **Defect Dossier Enforcement:** When `--label` contains `bug` or `defect`, `execute_create_issue` in `crates/reconcile-backlog/src/create_issue.rs` invokes `verify_baseline::defect_dossier::validate_defect_dossier` (`crates/verify-baseline/src/defect_dossier.rs`) to enforce all 7 mandatory sections (`DossierSection::ALL`) before permitting remote issue creation.
 
 ---
 
-### 3.3 Keyset & Link-Header Pagination Engine
+### 3.3 Audited Issue Creation & Defect Dossier Gate (`crates/reconcile-backlog/src/create_issue.rs`)
 
-For enterprise repositories with thousands of requirements and user stories, offset-based pagination (`page=N`) suffers from performance degradation ($O(N)$ database query cost). DEAP implements dual pagination:
+To prevent unverified or truncated issue bodies from polluting the remote GitLab or GitHub tracker, `crates/reconcile-backlog/src/create_issue.rs` validates body files and routes defect reports through `crates/verify-baseline/src/defect_dossier.rs`:
 
-1. **Keyset Pagination (GitLab Standard):** Evaluates `Link` headers containing `rel="next"` with cursor tokens.
-2. **RFC 5988 Link Header Parser:** Extracts next URL endpoints deterministically.
+```rust
+// Grounded in: crates/reconcile-backlog/src/create_issue.rs
+use crate::tracker::{GitHubTracker, OfflineTracker, TrackerClient};
+use verify_baseline::defect_dossier::{validate_defect_dossier, DefectDossierArgs};
 
-```python
-def fetch_all_issues(client: GitLabV4Client) -> List[Dict[str, Any]]:
-    """
-    Fetches all project issues using RFC 5988 Link header pagination.
-    """
-    all_issues = []
-    endpoint = f"projects/{client.project_id}/issues"
-    params = {"per_page": 100, "state": "all"}
+#[derive(Debug, Clone)]
+pub struct CreateIssueArgs {
+    pub title: Option<String>,
+    pub body_file: Option<String>,
+    pub spec_file: Option<String>,
+    pub label: Option<String>,
+    pub repo: Option<String>,
+    pub verify_defect: bool,
+    pub offline: bool,
+}
 
-    while endpoint:
-        status, issues, headers = client.execute_request(endpoint, method="GET", params=params)
-        all_issues.extend(issues)
-        
-        # Keyset / Header Link Resolution
-        link_header = headers.get("Link", "")
-        next_url = None
-        if link_header:
-            # Format: <https://gitlab.com/api/v4/projects/1/issues?page=2&per_page=100>; rel="next", ...
-            links = link_header.split(",")
-            for link in links:
-                parts = link.split(";")
-                if len(parts) >= 2 and 'rel="next"' in parts[1]:
-                    raw_url = parts[0].strip().strip("<>")
-                    next_url = raw_url
-
-        if next_url:
-            # Extract endpoint relative to base_url/api/v4
-            api_prefix = f"{client.base_url}/api/v4/"
-            if next_url.startswith(api_prefix):
-                endpoint = next_url[len(api_prefix):]
-                params = None # Params already encoded in next_url
-            else:
-                break
-        else:
-            # Offset pagination fallback if Link header absent
-            total_pages = int(headers.get("X-Total-Pages", 1))
-            current_page = int(headers.get("X-Page", 1))
-            if current_page < total_pages:
-                params["page"] = current_page + 1
-            else:
-                break
-
-    return all_issues
+/// Validates that `--body-file` points to an existing, non-empty markdown file on disk.
+pub fn validate_body_file(body_file: &str) -> Result<String, String> {
+    let trimmed = body_file.trim();
+    if trimmed.is_empty() || trimmed == "-" {
+        return Err(
+            "Invalid --body-file: stdin ('-') or empty path is forbidden; provide a real file path on disk."
+                .to_string(),
+        );
+    }
+    let content = std::fs::read_to_string(trimmed)
+        .map_err(|e| format!("Failed to read --body-file '{}': {}", trimmed, e))?;
+    if content.trim().is_empty() {
+        return Err(format!("--body-file '{}' is empty.", trimmed));
+    }
+    Ok(content)
+}
 ```
 
 ---
 
 ### 3.4 Rate Limiting & Resiliency State Machine
 
-GitLab API endpoints enforce rate limits (typically 2,000 to 10,000 requests per minute depending on tier). The client implements a bounded exponential backoff with jitter:
+Remote tracker endpoints enforce rate limits. `crates/reconcile-backlog/src/tracker.rs` implements bounded exponential retry delays (`RETRY_DELAYS = [1, 2, 4]` seconds):
 
-$$T_{\text{wait}} = \min\left(T_{\max}, T_{\text{base}} \times 2^{\text{attempt}} + \mathcal{U}(0, 0.5)\right)$$
+$$T_{\text{wait}} = \min\left(T_{\max}, T_{\text{base}} \times 2^{\text{attempt}}\right)$$
 
 ```mermaid
 stateDiagram-v2
     [*] --> Idle
-    Idle --> Executing : "execute_request()"
-    Executing --> Success : "HTTP 200 / 201"
-    Executing --> RateLimited : "HTTP 429 (Too Many Requests)"
+    Idle --> Executing : "TrackerClient call"
+    Executing --> Success : "Exit 0 / HTTP 200"
+    Executing --> RateLimited : "HTTP 429 / Transient Error"
     Executing --> ServerError : "HTTP 502 / 503 / 504"
-    Executing --> ClientError : "HTTP 400 / 401 / 403 / 404"
+    Executing --> ClientError : "Validation or Auth Error"
 
-    RateLimited --> InspectHeaders : "Check Retry-After header"
-    InspectHeaders --> Sleeping : "Sleep for Retry-After or Exp-Backoff"
-    ServerError --> Sleeping : "Sleep Exp-Backoff"
-    
-    Sleeping --> Executing : "Retry Attempt <= MaxRetries"
-    Sleeping --> TerminalFailure : "Retry Attempt > MaxRetries"
+    RateLimited --> Sleeping : "Sleep RETRY_DELAYS[attempt]"
+    ServerError --> Sleeping : "Sleep RETRY_DELAYS[attempt]"
 
-    ClientError --> TerminalFailure : "Raise Unrecoverable Error"
-    Success --> [*] : "Return JSON Payload"
-    TerminalFailure --> [*] : "Raise Exception & Halt Pipeline"
+    Sleeping --> Executing : "attempt < RETRY_DELAYS.len()"
+    Sleeping --> TerminalFailure : "attempt >= RETRY_DELAYS.len()"
+
+    ClientError --> TerminalFailure : "Return Err(String)"
+    Success --> [*] : "Return Ok(Payload)"
+    TerminalFailure --> [*] : "Halt Reconciliation"
 ```
 
 ---
@@ -675,31 +604,31 @@ stateDiagram-v2
 
 ### 4.1 Two-Tier Scoped Label Taxonomy (`key::value`)
 
-GitLab native **Scoped Labels** utilize the double-colon syntax (`::`) to enforce mutual exclusivity. Applying `status::fixed-resolved` automatically removes `status::in-progress` or `status::ready-for-review` without requiring manual unlabeling calls.
+GitLab native **Scoped Labels** utilize the double-colon syntax (`::`) to enforce mutual exclusivity. Applying `status::fixed-resolved` automatically removes `status::in-progress` or `status::ready-for-review` without requiring manual unlabeling calls. In `crates/reconcile-backlog/src/tracker.rs`, `is_resolved_label` and `normalize_label` seamlessly handle both GitLab scoped labels (`type::*`, `status::fixed-resolved`) and GitHub single-colon labels (`type:*`, `status:fixed-resolved`).
 
 DEAP establishes a standardized two-tier label taxonomy mapped to high-assurance safety standards:
 
 | Label Category | Scoped Syntax | Mutual Exclusivity | Aerospace / Safety Standard | Purpose |
 | :--- | :--- | :--- | :--- | :--- |
-| **Artifact Type** | `type::epic`<br>`type::feature`<br>`type::user-story`<br>`type::use-case`<br>`type::safety-req` | Enforced | ISO/IEC/IEEE 15288 §6.4<br>DO-178C High-Level Requirements | Categorizes backlog artifact level and metamodel abstraction. |
-| **Lifecycle Status** | `status::proposed`<br>`status::in-progress`<br>`status::ready-for-review`<br>`status::fixed-resolved`<br>`status::verified`<br>`status::closed` | Enforced | DO-178C Table A-1 to A-7<br>Constitutional State Machine | Controls verification gating and transition approval state. |
+| **Artifact Type** | `type::epic`<br>`type::feature`<br>`type::user-story`<br>`type::use-case`<br>`type::safety-req` | Enforced | ISO/IEC/IEEE 15288 S6.4<br>DO-178C High-Level Requirements | Categorizes backlog artifact level parsed by `normalize_label` in `crates/reconcile-backlog/src/tracker.rs`. |
+| **Lifecycle Status** | `status::proposed`<br>`status::in-progress`<br>`status::ready-for-review`<br>`status::fixed-resolved`<br>`status::verified`<br>`status::closed` | Enforced | DO-178C Table A-1 to A-7<br>Constitutional State Machine | Controls verification gating and transition state verified by `is_resolved_label`. |
 | **Design Assurance** | `safety::dal-a`<br>`safety::dal-b`<br>`safety::dal-c`<br>`safety::dal-d` | Enforced | RTCA DO-178C / DO-254 / ARP4754A | Assigns rigor requirements for MC/DC coverage and formal proofs. |
 | **SORA SAIL** | `sora::sail-i`<br>`sora::sail-ii`<br>`sora::sail-iii`<br>`sora::sail-iv`<br>`sora::sail-v`<br>`sora::sail-vi` | Enforced | JARUS SORA v2.5 Annex E | Specific Assurance and Integrity Level for abstract cyber-physical pipeline execution runners risk mitigation. |
 | **RTA Architecture** | `rta::envelope-protection`<br>`rta::recovery-trigger`<br>`rta::monitored-invariant` | Additive | ASTM F3269-17 RTA | Identifies Run-Time Assurance components and safety guards. |
-| **Verification Gate** | `verification::passed`<br>`verification::failed`<br>`verification::blocked` | Enforced | 22-Gate Mechanical Parity Lock | Automated CI/CD mechanical pass/fail evidence indicator. |
+| **Verification Gate** | `verification::passed`<br>`verification::failed`<br>`verification::blocked` | Enforced | Mechanical Parity Lock (`verify-baseline`) | Automated CI/CD mechanical pass/fail evidence indicator. |
 
 ---
 
 ### 4.2 Scoped Label Lifecycle State Machine
 
-The progression of an issue through its lifecycle is strictly governed by automated verification gates. In accordance with project constitution rules, subagents and engineers may transition issues up to `status::fixed-resolved` and `verification::passed`. The final transition to `status::closed` is reserved exclusively for the Product Owner / Certification Authority:
+The progression of an issue through its lifecycle is strictly governed by automated verification gates (`./target/release/verify-baseline` and `./target/release/reconcile-backlog`). In accordance with project constitution rules, subagents and engineers transition resolved issues to `status::fixed-resolved` (or `status:fixed-resolved` on GitHub) with verification evidence comments:
 
 ```mermaid
 stateDiagram-v2
     [*] --> Proposed : "type::* + status::proposed"
-    
+
     Proposed --> InProgress : "Developer / Agent Assigned (status::in-progress)"
-    
+
     state InProgress {
         [*] --> Authoring
         Authoring --> SpecElaboration : "Refine Markdown & SysML AST"
@@ -707,21 +636,21 @@ stateDiagram-v2
     }
 
     InProgress --> ReadyForReview : "Spec & Code Complete (status::ready-for-review)"
-    
+
     ReadyForReview --> PipelineVerification : "GitLab CI Triggered"
-    
+
     state PipelineVerification {
-        [*] --> LintStage : "lint:sysml + lint:markdown"
-        LintStage --> TestStage : "test:semantic-acceptance + test:simulink-harness"
-        TestStage --> VerifyStage : "22-Gate Parity Lock + SLDV Proofs"
+        [*] --> LintStage : "compile-sysml + verify-baseline"
+        LintStage --> TestStage : "cargo test --workspace + simulink"
+        TestStage --> VerifyStage : "verify-baseline + SLDV Proofs"
     }
 
-    PipelineVerification --> InProgress : "Gate Tripped / Test Failed (verification::failed)"
-    PipelineVerification --> FixedResolved : "All 22 Gates Pass (status::fixed-resolved + verification::passed)"
+    PipelineVerification --> InProgress : "Gate Tripped (verification::failed)"
+    PipelineVerification --> FixedResolved : "All Gates Pass (status::fixed-resolved)"
 
-    FixedResolved --> Verified : "Automated End-to-End Traceability Build (status::verified)"
-    
-    Verified --> Closed : "Product Owner / DER Sign-off (status::closed)"
+    FixedResolved --> Verified : "Traceability Build (status::verified)"
+
+    Verified --> Closed : "Product Owner Sign-off (status::closed)"
     Closed --> [*]
 ```
 
@@ -729,32 +658,36 @@ stateDiagram-v2
 
 ### 4.3 DO-178C Objective Traceability & SORA Risk Reduction Mapping
 
-Every GitLab Issue and its associated markdown specification file (`docs/features/FEAT-*.md`, `docs/user-stories/US-*.md`) maintain cryptographic bi-directional traceability to SysML v2 model elements and DO-178C lifecycle objectives:
+Every GitLab Issue and its associated markdown specification file (`docs/epics/EPIC-*.md`, `docs/features/FEAT-*.md`, `docs/user-stories/US-*.md`, `docs/use-cases/UC-*.md`) maintain bi-directional traceability to SysML v2 model elements (`crates/deap-core/src/sysml_ast.rs` and `crates/compile-sysml/src/lib.rs`) and DO-178C lifecycle objectives:
 
 ```mermaid
-flowchart LR
-    subgraph SysML_Model ["SysML v2 Formal Model"]
-        SysML_Req["requirement def REQ_FENCE_01"]
-        SysML_Part["part def FenceIntrusionDetector"]
-        SysML_State["state def MonitoringState"]
+flowchart TD
+    subgraph SysML_Model ["SysML v2 Formal Model (.pipeline/schema.sysml)"]
+        direction TB
+        SysML_Req["requirement def<br/>REQ_FENCE_01"]
+        SysML_Part["part def<br/>FenceIntrusionDetector"]
+        SysML_State["state def<br/>MonitoringState"]
     end
 
     subgraph GitLab_Issues ["GitLab Issue Tracker - REST API v4"]
-        GL_Epic["Epic #10: Infrastructure Safety Monitoring - type::epic, safety::dal-a"]
-        GL_Feat["Feature #104: Optical Fence Detector - type::feature, status::fixed-resolved"]
-        GL_Story["Story #412: Multi-Spectral Anomaly Trigger - type::user-story, verification::passed"]
+        direction TB
+        GL_Epic["Epic #10: Safety Monitor<br/>type::epic, safety::dal-a"]
+        GL_Feat["Feature #104: Fence Detector<br/>status::fixed-resolved"]
+        GL_Story["Story #412: Anomaly Trigger<br/>verification::passed"]
     end
 
     subgraph MBD_Toolchain ["Tier-1 MBD Synthesis"]
-        SLX_Block["Simulink Subsystem: FenceDetector.slx"]
-        SF_Chart["Stateflow Supervisor: FSM_FenceGuard.sfx"]
-        Generated_C["Embedded Coder: fence_detector.c"]
+        direction TB
+        SLX_Block["Simulink Subsystem<br/>FenceDetector.slx"]
+        SF_Chart["Stateflow Supervisor<br/>FSM_FenceGuard.sfx"]
+        Generated_C["Embedded Coder<br/>fence_detector.c"]
     end
 
     subgraph Certification_Evidence ["DO-178C / SORA Evidence Artifacts"]
-        Trace_Matrix["Traceability Matrix: TRACE-DO178C.json"]
-        SLDV_Report["SLDV Formal Proof Report: SLDV-FENCE-001.pdf"]
-        MCDC_Cov["MC/DC 100% Coverage Report: COV-DO178C-DAL-A.xml"]
+        direction TB
+        Trace_Matrix["Traceability Matrix<br/>TRACE-DO178C.json"]
+        SLDV_Report["SLDV Formal Proof<br/>SLDV-FENCE-001.pdf"]
+        MCDC_Cov["MC/DC 100% Coverage<br/>COV-DO178C-DAL-A.xml"]
     end
 
     SysML_Req --> GL_Epic
@@ -775,117 +708,132 @@ flowchart LR
 
 ## Section 5: Air-Gapped & SCIF Deployment Security Model
 
-### 5.1 Token Authentication Hierarchy & Resolution Engine
+### 5.1 Token Authentication Hierarchy & Secret Scanning Gate
 
-To support execution across diverse environments--from developer laptops to automated air-gapped CI/CD runners--the DEAP GitLab Engine enforces a deterministic credential resolution hierarchy:
+To support execution across diverse environments--from developer workstations to automated air-gapped CI/CD runners--DEAP enforces a deterministic credential resolution hierarchy while preventing secret leakage via `crates/verify-baseline/src/check_secrets.rs`:
 
 ```mermaid
 flowchart TD
-    Start["Request API Authentication"] --> C1{"Is GITLAB_TOKEN set?"}
-    C1 -->|Yes| Sanitized1["Sanitize & Validate Token"]
-    C1 -->|No| C2{"Is GL_TOKEN set?"}
-    C2 -->|Yes| Sanitized2["Sanitize & Validate Token"]
-    C2 -->|No| C3{"Is CI_JOB_TOKEN set? (GitLab CI/CD)"}
-    C3 -->|Yes| Header_JobToken["Authenticate via JOB-TOKEN Header"]
-    C3 -->|No| C4{"Is Local Mock Mode Enabled?"}
-    C4 -->|Yes| Use_Mock["Operate LocalMockTracker (No Network)"]
-    C4 -->|No| Fatal_Auth["Raise FatalAuthenticationError: No Valid Token"]
+    Start["Request Tracker Auth<br/>crates/reconcile-backlog"] --> C1{"Is GITLAB_TOKEN or<br/>GH_TOKEN set?"}
+    C1 -->|Yes| Sanitized1["Sanitize & Validate<br/>Credential Token"]
+    C1 -->|No| C2{"Is GL_TOKEN or<br/>GITHUB_TOKEN set?"}
+    C2 -->|Yes| Sanitized2["Sanitize & Validate<br/>Fallback Token"]
+    C2 -->|No| C3{"Is CI_JOB_TOKEN set?<br/>(GitLab CI/CD)"}
+    C3 -->|Yes| Header_JobToken["Authenticate via<br/>JOB-TOKEN Header"]
+    C3 -->|No| C4{"Is --offline or<br/>--dry-run enabled?"}
+    C4 -->|Yes| Use_Mock["Use OfflineTracker<br/>Zero Network I/O"]
+    C4 -->|No| Fatal_Auth["Return Err(String)<br/>Hard Stop Pipeline"]
 
-    Sanitized1 --> Header_PrivateToken["Authenticate via PRIVATE-TOKEN Header"]
+    Sanitized1 --> Header_PrivateToken["Authenticate CLI / REST<br/>with Validated Token"]
     Sanitized2 --> Header_PrivateToken
 ```
 
-#### Token Sanitization & Threat Mitigation
+#### Pre-Commit Secret Scanning & Token Protection (`crates/verify-baseline/src/check_secrets.rs`)
 
-To prevent dummy, mock, or leaked placeholders from interfering with real authentication, the engine executes environment sanitization:
+To prevent credentials, GitLab Personal Access Tokens (`glpat-`), GitHub tokens (`ghp_`, `github_pat_`), or private keys from ever entering the Git history, `./target/release/verify-baseline check-secrets` (`crates/verify-baseline/src/check_secrets.rs`) scans staged content prior to every commit:
 
-```python
-def sanitize_token_env():
-    """
-    Scans environment variables and purges placeholder or dummy tokens.
-    """
-    dummy_patterns = ("antigravity", "dummy", "placeholder", "mock", "invalid", "your_token_here")
-    for var in ("GITLAB_TOKEN", "GL_TOKEN", "GITHUB_TOKEN", "GH_TOKEN"):
-        val = os.environ.get(var, "")
-        if val and any(pattern in val.lower() for pattern in dummy_patterns):
-            os.environ.pop(var, None)
+```rust
+// Grounded in: crates/reconcile-backlog/src/lib.rs & crates/verify-baseline/src/check_secrets.rs
+use std::path::Path;
+use std::process::Command;
+
+/// Normalizes a raw repository string by stripping whitespace and trailing `.git`.
+pub fn clean_repo_name(raw: &str) -> String {
+    let trimmed = raw.trim().trim_end_matches('/');
+    let stripped = trimmed.strip_suffix(".git").unwrap_or(trimmed);
+    stripped.trim_matches('/').to_string()
+}
+
+/// Parses an `owner/repo` slug from SSH or HTTPS remote URLs.
+pub fn parse_repo_from_remote_url(url: &str) -> Option<String> {
+    let trimmed = url.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if let Some( idx) = trimmed.find("://") {
+        let after_scheme = &trimmed[idx + 3..];
+        let path_start = after_scheme.find('/')?;
+        let path = &after_scheme[path_start + 1..];
+        let cleaned = clean_repo_name(path);
+        return (!cleaned.is_empty()).then_some(cleaned);
+    }
+    if let Some(colon_idx) = trimmed.find(':') {
+        let path = &trimmed[colon_idx + 1..];
+        let cleaned = clean_repo_name(path);
+        return (!cleaned.is_empty()).then_some(cleaned);
+    }
+    None
+}
 ```
 
 ---
 
-### 5.2 Custom Domain & Instance Routing
+### 5.2 Custom Domain & Repository Detection (`crates/reconcile-backlog/src/lib.rs`)
 
-The engine resolves the target instance URL and project path dynamically, handling nested group namespaces standard in defense hierarchies (e.g., `defense-org/Cyber-Physical System-division/safety-branch/Cyber-Physical System-infrastructure-safety`):
+`crates/reconcile-backlog/src/lib.rs` resolves the repository slug and default tracking branch dynamically from the workspace Git configuration (`detect_git_repo` and `detect_git_branch`), with explicit CLI overrides (`--repo` and `--default-branch` in `crates/reconcile-backlog/src/main.rs`):
 
-```python
-def resolve_gitlab_instance_and_project() -> Tuple[str, str]:
-    """
-    Resolves (gitlab_base_url, project_path_or_id) from environment or git remote.
-    """
-    # 1. Base URL Resolution
-    base_url = (
-        os.environ.get("CI_SERVER_URL")
-        or os.environ.get("GITLAB_URL")
-        or os.environ.get("GL_URL")
-        or "https://gitlab.com"
-    ).rstrip("/")
+```rust
+// Grounded in: crates/reconcile-backlog/src/lib.rs
+use std::path::Path;
+use std::process::Command;
 
-    # 2. Project ID / Slug Resolution
-    project_id = (
-        os.environ.get("CI_PROJECT_PATH")
-        or os.environ.get("CI_PROJECT_ID")
-        or os.environ.get("GITLAB_PROJECT_ID")
-    )
+pub fn detect_git_repo(workspace_root: &Path) -> Option<String> {
+    let output = Command::new("git")
+        .args(["remote", "get-url", "origin"])
+        .current_dir(workspace_root)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let url = String::from_utf8_lossy(&output.stdout);
+    parse_repo_from_remote_url(&url)
+}
 
-    if not project_id:
-        # Fallback to inspecting git remote origin URL
-        try:
-            import subprocess
-            remote_url = subprocess.check_output(
-                ["git", "config", "--get", "remote.origin.url"],
-                text=True
-            ).strip()
-            # Parse git@gitlab.internal.defense.gov:Cyber-Physical System/safety.git or https://...
-            if "gitlab" in remote_url:
-                if remote_url.startswith("git@"):
-                    path_part = remote_url.split(":", 1)[1]
-                else:
-                    path_part = urllib.parse.urlparse(remote_url).path.lstrip("/")
-                project_id = path_part.rstrip(".git")
-        except Exception:
-            project_id = "default/project"
-
-    return base_url, project_id
+pub fn detect_git_branch(workspace_root: &Path) -> Option<String> {
+    let output = Command::new("git")
+        .args(["rev-parse", "--abbrev-ref", "HEAD"])
+        .current_dir(workspace_root)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let branch = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    (!branch.is_empty() && branch != "HEAD").then_some(branch)
+}
 ```
 
 ---
 
 ### 5.3 Air-Gapped Network & Custom Private CA TLS Architecture
 
-In SCIF and air-gapped deployments, GitLab instances use internal certificates signed by a private defense Root Certificate Authority. Connections will fail if evaluated against the public WebPKI bundle.
+In SCIF and air-gapped deployments, GitLab instances use internal certificates signed by a private defense Root Certificate Authority. Connections fail if evaluated solely against the public WebPKI bundle.
 
 DEAP implements strict TLS validation using the local authority store:
 
 ```mermaid
-flowchart LR
+flowchart TD
     subgraph Air_Gapped_Host ["Air-Gapped Host / Runner Node"]
-        Client_Script["DEAP Native Client - GitLabV4Client"]
-        CA_Store["/etc/ssl/certs/defense-internal-root-ca.crt - GITLAB_CA_CERT_PATH"]
-        Custom_SSL["TLS 1.3 / 1.2 Strict Context"]
+        direction TB
+        Client_Script["reconcile-backlog Binary<br/>TrackerClient Engine"]
+        CA_Store["Enterprise Root CA<br/>GITLAB_CA_CERT_PATH"]
+        Custom_SSL["TLS 1.3 / 1.2 Context<br/>Strict Certificate Check"]
     end
 
     subgraph Enclave_Network ["Isolated SCIF Enclave (Zero Egress)"]
-        GL_Server["GitLab Enterprise Server\n(gitlab.internal.defense.gov)"]
+        direction TB
+        GL_Server["GitLab Enterprise Server<br/>gitlab.internal.defense.gov"]
     end
 
     Client_Script --> CA_Store
     CA_Store --> Custom_SSL
-    Custom_SSL -->|"Encrypted HTTPS (Port 443)\nMutual TLS / Encrypted Channel"| GL_Server
+    Custom_SSL -->|"Encrypted HTTPS (Port 443)"| GL_Server
 ```
 
-1. **Certificate Discovery:** The client checks `GITLAB_CA_CERT_PATH`, `REQUESTS_CA_BUNDLE`, `SSL_CERT_FILE`, and system locations (`/etc/ssl/certs/ca-certificates.crt`, `/etc/pki/tls/certs/ca-bundle.crt`).
-2. **Context Creation:** `ssl.create_default_context(cafile=ca_path)` ensures complete validation of internal certificate chains.
-3. **No Insecure Fallback:** Disabling certificate verification (`verify=False` / `CERT_NONE`) is strictly prohibited in compliance with NIST SP 800-53 Rev. 5 controls (SC-8 Transmission Confidentiality and Integrity).
+1. **Certificate Discovery:** The runner environment configures `GITLAB_CA_CERT_PATH` and `SSL_CERT_FILE` pointing to the enclave's trusted root bundle (`/etc/ssl/certs/ca-certificates.crt` or `/etc/pki/tls/certs/ca-bundle.crt`).
+2. **Offline Mode Execution:** When running inside completely disconnected validation containers, `./target/release/reconcile-backlog --offline` uses `OfflineTracker` (`crates/reconcile-backlog/src/tracker.rs`) to execute full frontmatter and checklist validation with zero network sockets opened.
+3. **No Insecure Fallback:** Disabling certificate verification is strictly prohibited in compliance with NIST SP 800-53 Rev. 5 controls (SC-8 Transmission Confidentiality and Integrity).
 
 ---
 
@@ -894,22 +842,26 @@ flowchart LR
 ```mermaid
 flowchart TD
     subgraph SCIF_Enclave ["Sensitive Compartmented Information Facility (SCIF) Enclave"]
+        direction TB
         subgraph Vault ["Local Artifact Vault (Air-Gapped)"]
-            GitLab_EE["Self-Hosted GitLab EE Server (Local DB & Repos)"]
-            Cargo_Mirror["Offline Crate Registry Mirror (Audited Crates)"]
-            MATLAB_Server["MathWorks Network License Server (Local)"]
+            direction TB
+            GitLab_EE["Self-Hosted GitLab EE<br/>Local DB & Repositories"]
+            Cargo_Mirror["Offline Crate Mirror<br/>Audited Vendor Crates"]
+            MATLAB_Server["MathWorks License Server<br/>Local Enclave Host"]
         end
 
         subgraph Runner_Fleet ["GitLab CI/CD Runner Fleet (Dedicated Bare-Metal)"]
-            Runner1["Runner 1: Lint & AST Parse"]
-            Runner2["Runner 2: Semantic Acceptance & Mock Reconciler"]
-            Runner3["Runner 3: MATLAB / Simulink / SLDV / Embedded Coder"]
+            direction TB
+            Runner1["Runner 1: Lint & AST<br/>compile-sysml & verify"]
+            Runner2["Runner 2: Acceptance<br/>reconcile-backlog"]
+            Runner3["Runner 3: MBD Suite<br/>MATLAB / Simulink / SLDV"]
         end
 
         subgraph Agentic_Dev ["Agentic Engineering Workstations"]
-            Agent1["Subagent Context A (Spec Scaffolding)"]
-            Agent2["Subagent Context B (Reverse Sync Engine)"]
-            Dev1["Systems Safety Engineer"]
+            direction TB
+            Agent1["Subagent Context A<br/>Specification Authoring"]
+            Agent2["Subagent Context B<br/>compile-sysml Sync"]
+            Dev1["Systems Safety Engineer<br/>Architecture Review"]
         end
     end
 
@@ -922,7 +874,9 @@ flowchart TD
     GitLab_EE -->|"Trigger Local Pipeline"| Runner3
 
     Runner3 -->|"Fetch Licenses"| MATLAB_Server
-    Runner1 & Runner2 & Runner3 -->|"Post Scoped Labels & Evidence Notes"| GitLab_EE
+    Runner1 -->|"Post Scoped Labels & Notes"| GitLab_EE
+    Runner2 -->|"Post Scoped Labels & Notes"| GitLab_EE
+    Runner3 -->|"Post Scoped Labels & Notes"| GitLab_EE
 ```
 
 ---
@@ -936,27 +890,30 @@ The DEAP pipeline architecture enforces a strict 3-stage mechanical verification
 $$\text{Pipeline} = \text{Stage}_{\text{lint}} \xrightarrow{\text{pass}} \text{Stage}_{\text{test}} \xrightarrow{\text{pass}} \text{Stage}_{\text{verify}}$$
 
 ```mermaid
-flowchart LR
+flowchart TD
     subgraph Stage_Lint ["Stage 1: lint"]
-        L1["lint:sysml (AST & Syntax)"]
-        L2["lint:markdown (Frontmatter & Links)"]
-        L3["lint:cargo (Clippy & Fmt for Crates)"]
+        direction TB
+        L1["lint:sysml<br/>compile-sysml --check"]
+        L2["lint:markdown<br/>verify-baseline --no-domain"]
+        L3["lint:cargo<br/>cargo fmt & clippy"]
     end
 
     subgraph Stage_Test ["Stage 2: test"]
-        T1["test:cargo-workspace (Matrix Build across 5 Crates)"]
-        T2["test:ast-slice (AST Slicing &lt;= 4,096 Tokens)"]
-        T3["test:semantic-acceptance (Core Parsers & AST Invariants)"]
-        T4["test:reconcile (Mock Round-Trip)"]
-        T5["test:simulink-harness (MBD Unit Suite)"]
+        direction TB
+        T1["test:cargo-workspace<br/>6 Workspace Crates"]
+        T2["test:sysml-ingest<br/>ingest-sysml & conops"]
+        T3["test:semantic-acceptance<br/>verify-baseline & tests"]
+        T4["test:reconcile-mock<br/>reconcile-backlog --offline"]
+        T5["test:simulink-harness<br/>MBD Unit Suite"]
     end
 
     subgraph Stage_Verify ["Stage 3: verify"]
-        V1["verify:dual-llm-dispatch (CoT Stream to cot_audit_log.json)"]
-        V2["verify:22-gate-parity (Parity Lock)"]
-        V3["verify:sldv-formal (RTA Proofs)"]
-        V4["verify:traceability-matrix (DO-178C Report)"]
-        V5["verify:reconcile-sync (Post Labels to GitLab)"]
+        direction TB
+        V1["verify:defect-dossier<br/>verify-baseline check-defect"]
+        V2["verify:parity-gates<br/>verify-baseline Gate Suite"]
+        V3["verify:sldv-formal<br/>SLDV RTA Proofs"]
+        V4["verify:conops-assemble<br/>assemble-conops --check"]
+        V5["verify:reconcile-sync<br/>reconcile-backlog Sync"]
     end
 
     Stage_Lint --> Stage_Test
@@ -968,19 +925,19 @@ flowchart LR
 ### 6.2 Pipeline Stage Definitions & Execution Contracts
 
 #### Stage 1: `lint` (Static Quality, Formatting, Schema Validation)
-- **Objective:** Fast-fail detection of formatting errors, invalid YAML frontmatter, broken cross-references, broken SysML v2 syntax, and Rust workspace clippy/formatting violations.
+- **Objective:** Fast-fail detection of formatting errors, invalid YAML frontmatter, broken cross-references, broken SysML v2 syntax (`./target/release/compile-sysml`), and Rust workspace clippy/formatting violations (`./target/release/verify-baseline . --no-domain`).
 - **Runtime:** $< 45$ seconds.
-- **Fail Criteria:** Any syntax error, broken link, malformed YAML frontmatter, or cargo clippy warnings.
+- **Fail Criteria:** Any syntax error, broken link, malformed YAML frontmatter, or `cargo clippy` warnings.
 
-#### Stage 2: `test` (Cargo Workspace Matrix, AST Slicing, Semantic Acceptance)
-- **Objective:** Multi-target compilation of the 5 Cargo crates (`deap-core`, `deap-ast`, `deap-codegen`, `deap-harness`, `deap-cli`), strongly-typed AST slicing ($\le 4,096$ tokens), semantic acceptance verification, and simulation harness execution.
+#### Stage 2: `test` (Cargo Workspace Matrix, SysML Ingestion, Semantic Acceptance)
+- **Objective:** Multi-target compilation and unit testing across all 6 workspace crates (`deap-core`, `verify-baseline`, `compile-sysml`, `ingest-sysml`, `assemble-conops`, `reconcile-backlog`), offline backlog reconciliation (`./target/release/reconcile-backlog --offline --dry-run`), and simulation harness execution.
 - **Runtime:** $< 3$ minutes (accelerated via container caching and `sccache`).
-- **Fail Criteria:** Any compilation error, AST slice exceeding 4,096 tokens, semantic acceptance test failure, or regression in reconciliation logic.
+- **Fail Criteria:** Any compilation error, unit test failure in `cargo test --workspace`, or regression in reconciliation logic.
 
-#### Stage 3: `verify` (Dual-LLM Air-Gapped CoT Stream, 22-Gate Parity Lock, RTA Invariants)
-- **Objective:** Dual-LLM air-gapped agent dispatch streaming DeepSeek-R1 CoT traces into `.pipeline/diagnostics/cot_audit_log.json`, Qwen-2.5-Coder execution verification, and mechanical parity verification across SysML v2 AST, markdown backlog, and GitLab Issue statuses.
+#### Stage 3: `verify` (Baseline Parity Lock, ConOps Assembly, Defect Dossier & RTA Invariants)
+- **Objective:** Mechanical baseline and parity verification (`./target/release/verify-baseline`), ConOps assembly verification (`./target/release/assemble-conops --check`), and remote backlog synchronization (`./target/release/reconcile-backlog --provider gitlab --sync-bodies`).
 - **Runtime:** $1$ to $5$ minutes.
-- **Fail Criteria:** Missing CoT audit log, discrepancy between SysML v2 AST and specifications, missing DO-178C trace link, unverified ASTM F3269-17 invariant, or failing Simulink Design Verifier proof.
+- **Fail Criteria:** Any failing check in `verify-baseline` (Checks 1-33), unverified ConOps assembly, or failing Simulink Design Verifier proof.
 
 ---
 
@@ -1033,14 +990,12 @@ lint:sysml:
   stage: lint
   script:
     - echo "=== Validating SysML v2 AST & Schema Consistency ==="
-    - ./target/release/compile-sysml --check
-    - test -f .pipeline/schema.sysml
-    - test -f .pipeline/schema-digest.json
+    - ./target/release/compile-sysml .
 
 lint:markdown:
   stage: lint
   script:
-    - echo "=== Validating Specification Frontmatter & Scoped Labels ==="
+    - echo "=== Validating Specification Frontmatter & Baseline Checks ==="
     - ./target/release/verify-baseline . --no-domain
 
 lint:cargo:
@@ -1060,36 +1015,37 @@ test:cargo-workspace:
   image: rust:1.80-slim
   parallel:
     matrix:
-      - CRATE: ["deap-core", "deap-ast", "deap-codegen", "deap-harness", "deap-cli"]
+      - CRATE:
+          - "deap-core"
+          - "verify-baseline"
+          - "compile-sysml"
+          - "ingest-sysml"
+          - "assemble-conops"
+          - "reconcile-backlog"
         TARGET: ["x86_64-unknown-linux-gnu"]
   script:
     - echo "=== Compiling & Testing Cargo Crate: $CRATE on $TARGET ==="
     - cargo test -p $CRATE --target $TARGET --release
 
-test:ast-slice:
+test:sysml-pipeline:
   stage: test
   image: rust:1.80-slim
   script:
-    - echo "=== Validating Strongly-Typed AST Slicing (<= 4,096 Tokens) ==="
-    - cargo run -p deap-cli -- slice-ast --schema .pipeline/schema.sysml --max-tokens 4096 --out-dir artifacts/slices
-  artifacts:
-    name: "deap-ast-slices-$CI_COMMIT_SHORT_SHA"
-    paths:
-      - artifacts/slices/
-    expire_in: 7 days
+    - echo "=== Testing Level 0 Ingestion & ConOps Assembly ==="
+    - cargo test -p ingest-sysml -p compile-sysml -p assemble-conops --release
 
 test:semantic-acceptance:
   stage: test
   script:
-    - echo "=== Running Semantic Acceptance Harness & Baseline Verification ==="
+    - echo "=== Running Semantic Acceptance & Baseline Verification ==="
     - ./target/release/verify-baseline . --no-domain
     - cargo test --workspace
 
 test:reconcile-mock:
   stage: test
   script:
-    - echo "=== Running Round-Trip Mock Backlog Reconciliation ==="
-    - ./target/release/reconcile-backlog --dry-run --provider mock
+    - echo "=== Running Offline Dry-Run Backlog Reconciliation ==="
+    - ./target/release/reconcile-backlog --workspace . --offline --dry-run --provider mock
 
 test:simulink-harness:
   stage: test
@@ -1103,44 +1059,18 @@ test:simulink-harness:
 # Stage 3: Verify (Mechanical Parity Lock & DO-178C Evidence Generation)
 # ------------------------------------------------------------------------------
 
-verify:dual-llm-dispatch:
+verify:conops-assembly:
   stage: verify
   image: rust:1.80-slim
-  rules:
-    - if: '$AIRGAPPED_INFERENCE_ENABLED == "true"'
   script:
-    - echo "=== Executing Dual-LLM Air-Gapped Agent Dispatch ==="
-    - cargo run -p deap-cli -- run-dual-llm --slices artifacts/slices --cot-audit .pipeline/diagnostics/cot_audit_log.json
-  artifacts:
-    name: "deap-cot-audit-log-$CI_COMMIT_SHORT_SHA"
-    paths:
-      - .pipeline/diagnostics/cot_audit_log.json
-    expire_in: 90 days
+    - echo "=== Verifying Deterministic ConOps & Mission Intent Assembly ==="
+    - ./target/release/assemble-conops --workspace . --check
 
-verify:22-gate-parity:
+verify:parity-gates:
   stage: verify
   script:
-    - echo "=== Executing 22-Gate Mechanical Parity Lock ==="
-    - ./target/release/verify-baseline . --strict
-  artifacts:
-    name: "deap-parity-audit-report-$CI_COMMIT_SHORT_SHA"
-    when: always
-    paths:
-      - reports/parity_audit_report.json
-      - reports/parity_audit_summary.md
-    expire_in: 30 days
-
-verify:traceability-matrix:
-  stage: verify
-  script:
-    - echo "=== Generating DO-178C End-to-End Traceability Matrix ==="
+    - echo "=== Executing Baseline & Mechanical Parity Lock ==="
     - ./target/release/verify-baseline . --no-domain
-  artifacts:
-    name: "deap-traceability-matrix-$CI_COMMIT_SHORT_SHA"
-    paths:
-      - reports/traceability_matrix.json
-      - reports/spdx_sbom.json
-    expire_in: 90 days
 
 verify:reconcile-gitlab-sync:
   stage: verify
@@ -1148,105 +1078,104 @@ verify:reconcile-gitlab-sync:
     - if: '$CI_COMMIT_BRANCH == "main"'
       when: on_success
   script:
-    - echo "=== Synchronizing Scoped Labels & Evidence Notes to GitLab ==="
-    - ./target/release/reconcile-backlog --sync-remote --provider gitlab
+    - echo "=== Synchronizing Backlog Frontmatter, Checklists & Labels ==="
+    - ./target/release/reconcile-backlog --workspace . --provider gitlab --sync-bodies
 
 # ------------------------------------------------------------------------------
-# Stage 4: Release (Multi-Crate Release Tagging & Package Publication)
+# Stage 4: Release (Multi-Crate Release Tagging & Binary Publication)
 # ------------------------------------------------------------------------------
 
 release:cargo-crates:
   stage: release
   image: rust:1.80-slim
   rules:
-    - if: '$CI_COMMIT_TAG =~ /^deap-[a-z]+-v[0-9]+\.[0-9]+\.[0-9]+$/'
     - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
   script:
-    - echo "=== Packaging and Publishing Multi-Crate Release: $CI_COMMIT_TAG ==="
-    - cargo package --workspace
-    - cargo publish --registry gitlab --workspace || true
+    - echo "=== Packaging Multi-Crate Workspace Release: $CI_COMMIT_TAG ==="
+    - cargo build --release --workspace
   artifacts:
     name: "deap-binaries-$CI_COMMIT_TAG"
     paths:
-      - target/release/deap-harness
+      - target/release/verify-baseline
+      - target/release/compile-sysml
+      - target/release/ingest-sysml
+      - target/release/assemble-conops
+      - target/release/reconcile-backlog
 ```
 
 ---
 
-## Section 7: Modular Rust Cargo Workspace Architecture, AST Slicing & Dual-LLM Dispatch in GitLab CI/CD
+## Section 7: Modular Rust Cargo Workspace Architecture & Deterministic Verification in GitLab CI/CD
 
-### 7.1 Modular Cargo Workspace Architecture (`deap-core`, `deap-ast`, `deap-codegen`, `deap-harness`, `deap-cli`)
+### 7.1 Modular Cargo Workspace Architecture (`deap-core`, `verify-baseline`, `compile-sysml`, `ingest-sysml`, `assemble-conops`, `reconcile-backlog`)
 
-The DEAP platform transitions from heterogeneous scripting and monolithic tooling to a **Modular Pure Rust Cargo Workspace**, providing compile-time type safety, zero-cost memory safety, deterministic concurrency, and sub-millisecond execution latencies across both cloud CI/CD and air-gapped SCIF runner environments.
+The DEAP platform is engineered as a **Modular Pure Rust Cargo Workspace**, providing compile-time type safety, zero-cost memory safety, deterministic execution, and zero Python/shell runtime dependencies (enforced by Checks 32 and 33 in `crates/verify-baseline/src/checks/structural.rs`) across both cloud CI/CD and air-gapped SCIF runner environments.
 
-The Cargo workspace is structured into five cohesive, decoupled crates operating under strict dependency inversion:
+The Cargo workspace (`Cargo.toml`) is structured into six cohesive crates operating over shared core primitives in `crates/deap-core`:
 
 ```mermaid
 flowchart TD
-    subgraph CargoWorkspaceTree ["Modular Rust Cargo Workspace (Cargo.toml)"]
+    subgraph CargoWorkspaceTree ["DEAP Rust Cargo Workspace (Cargo.toml)"]
         direction TB
-        deap_cli["crate: deap-cli<br/>Entrypoint Binary (bin/deap-harness)<br/>CLI Subcommand Router"]
-        deap_harness["crate: deap-harness<br/>Runtime Orchestration and Dual-LLM Coordinator<br/>Local Inference Adapters (vLLM / Ollama)"]
-        deap_codegen["crate: deap-codegen<br/>Deterministic Code and Specification Generator<br/>Contract and BDD Scenario Emitter"]
-        deap_ast["crate: deap-ast<br/>SysML v2 AST Metamodel and KerML Parser<br/>Bounded AST Slicer (&lt;= 4,096 Tokens)"]
-        deap_core["crate: deap-core<br/>Fundamental Primitives and Cryptographic Hashing<br/>AssuranceLevel::Tier1..5 and Error Taxonomies"]
+        reconcile_backlog["crates/reconcile-backlog<br/>TrackerClient & Issue Sync<br/>create-issue & Checklists"]
+        verify_baseline["crates/verify-baseline<br/>Baseline & Parity Runner<br/>Defect Dossier Validator"]
+        compile_sysml["crates/compile-sysml<br/>SysML Compiler & Reverse<br/>Sync & STPA Validation"]
+        ingest_sysml["crates/ingest-sysml<br/>Level 0 SysML Ingestion<br/>& Schema Normalization"]
+        assemble_conops["crates/assemble-conops<br/>ConOps & Mission Intent<br/>Deterministic Assembler"]
+        deap_core["crates/deap-core<br/>CodebaseRules, TrackerRules<br/>SysML AST & Markdown Core"]
     end
 
-    deap_cli --> deap_harness
-    deap_cli --> deap_codegen
-    deap_harness --> deap_ast
-    deap_codegen --> deap_ast
-    deap_ast --> deap_core
-    deap_harness --> deap_core
-    deap_codegen --> deap_core
+    reconcile_backlog --> verify_baseline
+    reconcile_backlog --> deap_core
+    verify_baseline --> deap_core
+    compile_sysml --> deap_core
+    ingest_sysml --> deap_core
+    assemble_conops --> deap_core
 ```
 
-#### 7.1.1 Workspace Crate Breakdown & Responsibilities
+#### 7.1.1 Workspace Crate Breakdown & Grounded Source Modules
 
-| Crate Name | Primary Architectural Responsibility | Key Traits & Interfaces | Dependencies | Determinism & Safety Invariants |
-| :--- | :--- | :--- | :--- | :--- |
-| **`deap-core`** | Canonical systems engineering metamodel abstractions, mathematical invariant definitions, error taxonomy (`DeapError`), cryptographic hashing (`Sha256Digest`), and formal assurance levels (`AssuranceLevel::Tier1..5`). | `MetamodelEntity`, `InvariantContract`, `AuditLogSink`, `AssuranceTier` | `serde`, `thiserror`, `sha2` | Pure domain-independent core with zero runtime I/O dependencies. Optional `#![no_std]` support for embedded safety targets. |
-| **`deap-ast`** | Strongly-typed SysML v2 textual model parser, KerML AST representation, AST visitor traversals, 22-gate mechanical parity validator (Checks 10-30), and token-bounded AST slicing engine. | `AstParser`, `AstVisitor`, `BoundedSlicer`, `ParityGateChecker` | `deap-core`, `serde`, `rkyv`, `logos` | Deterministic parsing with AST subgraphs bounded to <= 4,096 tokens. Rejects malformed syntax before LLM invocation. |
-| **`deap-codegen`** | Deterministic code synthesis translating validated SysML v2 AST nodes and behavioral contracts into production C, SPARK Ada 2014, Stateflow transition charts, and BDD acceptance criteria. | `CodeSynthesizer`, `StateflowEmitter`, `BddScenarioGenerator` | `deap-core`, `deap-ast`, `tera` | Generates 100% compliant state transitions and model contracts with zero hallucinated constructs. |
-| **`deap-harness`** | Async `tokio` runtime orchestrating air-gapped agentic execution loops, subagent supervisor state machines, retry budgets, and dual-LLM coordination streaming DeepSeek-R1 CoT traces into `.pipeline/diagnostics/cot_audit_log.json` and dispatching tasks to Qwen-2.5-Coder. | `AgentSupervisor`, `DualLlmEngine`, `InferenceAdapter`, `CotAuditStreamer` | `deap-core`, `deap-ast`, `tokio`, `reqwest` (offline localhost) | Enforces context isolation, prompt size limits, non-destructive thought logging, and deterministic seed/temperature configurations. |
-| **`deap-cli`** | Developer and CI/CD command-line interface entrypoint producing the native binary executable `bin/deap-harness`. Exposes subcommands `run`, `check`, `slice-ast`, `export-audit`, and `reconcile`. | `CliCommand`, `SubcommandRouter`, `ExitCodeResolver` | `deap-core`, `deap-ast`, `deap-codegen`, `deap-harness`, `clap` | Turnkey single-binary entrypoint returning deterministic exit codes (0 on success, non-zero on failure). |
+| Crate Path | Binary / Library Target | Primary Architectural Responsibility | Grounded Source Files & Key Symbols |
+| :--- | :--- | :--- | :--- |
+| **`crates/deap-core`** | Library (`deap_core`) | Shared rules engine, SysML v2 AST parser, Rust/Dart/TS source AST inspector, markdown/Mermaid/KaTeX validator, and structured diagnostics. | `crates/deap-core/src/lib.rs`<br>`crates/deap-core/src/rules.rs` (`CodebaseRules`, `TrackerRules`, `MetaConfig`, `ValidationRules`)<br>`crates/deap-core/src/sysml_ast.rs`<br>`crates/deap-core/src/source_ast.rs`<br>`crates/deap-core/src/markdown.rs`<br>`crates/deap-core/src/diagnostics.rs`<br>`crates/deap-core/src/workspace.rs` |
+| **`crates/reconcile-backlog`** | Binary (`./target/release/reconcile-backlog`) & Library (`reconcile_backlog`) | Multi-provider backlog reconciliation (`gh`, `glab`, `OfflineTracker`), frontmatter & checklist synchronization, and verified issue/defect creation (`create-issue`). | `crates/reconcile-backlog/src/main.rs`<br>`crates/reconcile-backlog/src/lib.rs` (`ReconcileOptions`, `ReconcileSummary`, `run_reconciliation`, `validate_checklist_publish_integrity`)<br>`crates/reconcile-backlog/src/tracker.rs` (`TrackerClient`, `TrackerIssue`, `TrackerLabel`, `GitHubTracker`, `OfflineTracker`, `IssueIndex`, `is_resolved_label`, `normalize_label`)<br>`crates/reconcile-backlog/src/create_issue.rs` (`CreateIssueArgs`, `execute_create_issue`, `validate_body_file`)<br>`crates/reconcile-backlog/src/checklist.rs`<br>`crates/reconcile-backlog/src/frontmatter.rs` |
+| **`crates/verify-baseline`** | Binary (`./target/release/verify-baseline`) & Library (`verify_baseline`) | 33-check mechanical baseline & parity auditor, secret scanner (`check-secrets`), commit message linter (`commit-msg`), hook installer (`setup-hooks`), and 7-section defect dossier validator (`check-defect`). | `crates/verify-baseline/src/main.rs`<br>`crates/verify-baseline/src/lib.rs`<br>`crates/verify-baseline/src/runner.rs` (`BaselineOptions`, `run`)<br>`crates/verify-baseline/src/defect_dossier.rs` (`DossierSection`, `DefectDossierArgs`, `validate_defect_dossier`, `run_check_defect`)<br>`crates/verify-baseline/src/check_secrets.rs`<br>`crates/verify-baseline/src/commit_msg.rs`<br>`crates/verify-baseline/src/setup_hooks.rs`<br>`crates/verify-baseline/src/checks/mod.rs` |
+| **`crates/compile-sysml`** | Binary (`./target/release/compile-sysml`) & Library (`compile_sysml`) | SysML v2 schema compiler, reverse codebase-to-SysML synchronization (`--sync`), STPA/FMECA safety completeness validator, and 7-section docstring auditor (`--audit-docstrings`). | `crates/compile-sysml/src/main.rs`<br>`crates/compile-sysml/src/lib.rs`<br>`crates/compile-sysml/src/docstring.rs` |
+| **`crates/ingest-sysml`** | Binary (`./target/release/ingest-sysml`) & Library (`ingest_sysml`) | Level 0 SysML v2 domain model ingestion, package/part/port extraction, and deterministic `.pipeline/schema.sysml` generation. | `crates/ingest-sysml/src/main.rs`<br>`crates/ingest-sysml/src/lib.rs` |
+| **`crates/assemble-conops`** | Binary (`./target/release/assemble-conops`) & Library (`assemble_conops`) | Deterministic Concept of Operations (`docs/conops/CONOPS_MASTER.md`) and Mission Intent (`docs/conops/MISSION_INTENT_MASTER.md`) unit assembler and freshness verifier. | `crates/assemble-conops/src/main.rs`<br>`crates/assemble-conops/src/lib.rs` |
 
 #### 7.1.2 Root Workspace Manifest (`Cargo.toml`)
 
-The root `Cargo.toml` governs compilation parameters, profile optimizations, and workspace-wide dependency pinning:
+The root `Cargo.toml` governs the six workspace crates and shared dependencies:
 
 ```toml
 [workspace]
 resolver = "2"
 members = [
     "crates/deap-core",
-    "crates/deap-ast",
-    "crates/deap-codegen",
-    "crates/deap-harness",
-    "crates/deap-cli",
+    "crates/verify-baseline",
+    "crates/compile-sysml",
+    "crates/ingest-sysml",
+    "crates/assemble-conops",
+    "crates/reconcile-backlog",
 ]
 
 [workspace.package]
-version = "1.0.0"
+version = "0.1.0"
 edition = "2021"
-authors = ["DEAP Autonomous Systems Architecture Group"]
-license = "Proprietary / High-Assurance Air-Gapped License"
-rust-version = "1.80.0"
+license = "MIT"
 
 [workspace.dependencies]
-serde = { version = "1.0.200", default-features = false, features = ["derive", "alloc"] }
-thiserror = "1.0.60"
-tokio = { version = "1.38.0", features = ["full"] }
-sha2 = "0.10.8"
-clap = { version = "4.5.8", features = ["derive", "env"] }
-
-[profile.release]
-opt-level = 3
-lto = "thin"
-codegen-units = 1
-panic = "abort"
-overflow-checks = true
-strip = true
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+regex = "1.10"
+walkdir = "2.5"
+clap = { version = "4.5", features = ["derive"] }
+sha2 = "0.10"
+thiserror = "1.0"
+syn = { version = "2.0", features = ["full", "visit", "extra-traits"] }
+proc-macro2 = { version = "1.0", features = ["span-locations"] }
 ```
 
 ---
@@ -1255,7 +1184,7 @@ strip = true
 
 #### 7.2.1 Multi-Target & Multi-Crate CI/CD Build Matrices
 
-To ensure portability across heterogeneous high-assurance deployment platforms--including x86_64 server clusters, ARM64 embedded control platforms, and Windows-hosted MATLAB / Simulink engineering workstations--the GitLab CI/CD matrix executes parallelized compilation and semantic test suites:
+To ensure portability across heterogeneous high-assurance deployment platforms--including `x86_64` Linux runners, `aarch64` embedded platforms, and macOS/Windows engineering workstations--the GitLab CI/CD matrix executes parallelized compilation and unit test suites across all six crates:
 
 ```yaml
 test:cargo-matrix:
@@ -1263,7 +1192,13 @@ test:cargo-matrix:
   image: rust:1.80-slim
   parallel:
     matrix:
-      - CRATE: ["deap-core", "deap-ast", "deap-codegen", "deap-harness", "deap-cli"]
+      - CRATE:
+          - "deap-core"
+          - "verify-baseline"
+          - "compile-sysml"
+          - "ingest-sysml"
+          - "assemble-conops"
+          - "reconcile-backlog"
         TARGET:
           - "x86_64-unknown-linux-gnu"
           - "aarch64-unknown-linux-gnu"
@@ -1273,17 +1208,12 @@ test:cargo-matrix:
     - cargo test -p $CRATE --target $TARGET --release -- --nocapture
 ```
 
-The build matrix enforces strict compiler flags:
-- `-D warnings`: Elevates all compiler and linter warnings to errors.
-- `#![deny(unsafe_code)]`: Completely forbids unsafe code blocks across all crates except isolated FFI bindings.
-- `overflow-checks = true`: Retains arithmetic overflow checks in release mode, ensuring safety-critical invariant enforcement.
-
 #### 7.2.2 Container Caching Strategies in Air-Gapped GitLab CI/CD
 
-High-assurance software builds can suffer from compilation latency if container caching is poorly architected. DEAP enforces a multi-tiered container caching strategy optimized for GitLab CI/CD runners:
+DEAP enforces a multi-tiered container caching strategy optimized for GitLab CI/CD runners:
 
 1. **Cache Key Strategy**:
-   - Primary key generated from the cryptographic SHA-256 digest of `Cargo.lock`:
+   - Primary key generated from the cryptographic digest of `Cargo.lock`:
      ```yaml
      cache:
        key:
@@ -1291,57 +1221,38 @@ High-assurance software builds can suffer from compilation latency if container 
            - Cargo.lock
          prefix: "${CI_JOB_NAME}-${CI_COMMIT_REF_SLUG}"
      ```
-   - Fallback keys allow incremental cache hits on feature branches:
-     ```yaml
-     fallback_keys:
-       - "${CI_JOB_NAME}-${CI_COMMIT_REF_SLUG}"
-       - "${CI_JOB_NAME}-main"
-       - "${CI_JOB_NAME}-default"
-     ```
-
 2. **Cached Directories**:
-   - `.cargo/registry/index/`: Crates.io index metadata.
+   - `.cargo/registry/index/`: Crate index metadata.
    - `.cargo/registry/cache/`: Downloaded `.crate` archives.
    - `.cargo/git/db/`: Git dependency repositories.
-   - `target/`: Intermediate compilation artifacts (`.rlib`, `.rmeta`, object files).
-
+   - `target/`: Intermediate compilation artifacts and release binaries (`verify-baseline`, `compile-sysml`, `ingest-sysml`, `assemble-conops`, `reconcile-backlog`).
 3. **Cache Policy Separation**:
    - `pull-push`: Executed exclusively on default tracking branches (`main` or `release/*`) to populate validated build caches.
    - `pull`: Executed on feature branches (`feat/*`, `fix/*`) and merge request pipelines, preventing cache poisoning from unverified code changes.
 
-4. **Air-Gapped Runners with `sccache` Integration**:
-   - In air-gapped SCIF environments with zero internet connectivity, local GitLab runners use `sccache` backed by an on-premises MinIO S3 bucket or local network NVMe cache:
-     ```yaml
-     variables:
-       RUSTC_WRAPPER: "sccache"
-       SCCACHE_ENDPOINT: "minio.internal.airgap:9000"
-       SCCACHE_BUCKET: "deap-rust-cache"
-       SCCACHE_S3_USE_SSL: "true"
-       AWS_ACCESS_KEY_ID: "$AIRGAP_CACHE_KEY"
-       AWS_SECRET_ACCESS_KEY: "$AIRGAP_CACHE_SECRET"
-     ```
-   - This architecture reduces clean compilation time from 9 minutes to under 25 seconds for incremental pipeline commits.
-
 #### 7.2.3 Multi-Crate Release Tagging & GitLab Package Registry
 
-DEAP establishes a dual-tier semantic release tagging system that supports both atomic crate publication and unified workspace releases:
+DEAP supports both crate-specific tags and unified workspace release tags publishing the five compiled CLI binaries to the GitLab Generic Package Registry:
 
 ```mermaid
 flowchart TD
     subgraph Git_Tags ["Git Release Tag Formats"]
-        Crate_Tag["Crate-Specific Tag: deap-core-v1.2.0"]
-        Workspace_Tag["Consolidated Tag: v1.2.0"]
+        direction TB
+        Crate_Tag["Crate Release Tag<br/>reconcile-backlog-v0.1.0"]
+        Workspace_Tag["Workspace Release Tag<br/>v0.1.0"]
     end
 
     subgraph CI_Release_Triggers ["GitLab CI Trigger Rules"]
-        Rule_Crate["Trigger: release:single-crate"]
-        Rule_Workspace["Trigger: release:workspace-bundle"]
+        direction TB
+        Rule_Crate["CI Trigger Rule<br/>release:single-crate"]
+        Rule_Workspace["CI Trigger Rule<br/>release:workspace-bundle"]
     end
 
     subgraph Registry_Targets ["GitLab Package Registry Targets"]
-        Cargo_Reg["GitLab Cargo Package Registry<br/>(crates/deap-*)"]
-        Generic_Reg["GitLab Generic Package Registry<br/>(bin/deap-harness, SBOM, Hashes)"]
-        Release_Entry["GitLab Release Page<br/>(Release Notes, DO-178C Evidence)"]
+        direction TB
+        Cargo_Reg["GitLab Cargo Registry<br/>6 Workspace Crates"]
+        Generic_Reg["GitLab Generic Registry<br/>5 Release Binaries & SBOM"]
+        Release_Entry["GitLab Release Page<br/>DO-178C Audit Evidence"]
     end
 
     Crate_Tag --> Rule_Crate
@@ -1353,77 +1264,44 @@ flowchart TD
     Rule_Workspace --> Release_Entry
 ```
 
-- **Tagging Format**:
-  - Independent crate release: `deap-<crate>-v<major>.<minor>.<patch>` (e.g., `deap-ast-v1.1.0`).
-  - Unified workspace release: `v<major>.<minor>.<patch>` (e.g., `v1.1.0`).
-- **Release Automation Job in `.gitlab-ci.yml`**:
-  ```yaml
-  release:publish-crates:
-    stage: release
-    image: rust:1.80-slim
-    rules:
-      - if: '$CI_COMMIT_TAG =~ /^deap-[a-z]+-v[0-9]+\.[0-9]+\.[0-9]+$/'
-      - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
-    script:
-      - echo "=== Configuring Private GitLab Cargo Registry ==="
-      - |
-        cat <<EOF >> .cargo/config.toml
-        [registries.gitlab]
-        index = "sparse+${CI_SERVER_URL}/api/v4/projects/${CI_PROJECT_ID}/packages/cargo/"
-        token = "${CI_JOB_TOKEN}"
-        EOF
-      - cargo package --workspace
-      - cargo publish --registry gitlab -p deap-core
-      - cargo publish --registry gitlab -p deap-ast
-      - cargo publish --registry gitlab -p deap-codegen
-      - cargo publish --registry gitlab -p deap-harness
-      - cargo publish --registry gitlab -p deap-cli
-      - echo "=== Publishing Standalone Binary to Generic Package Registry ==="
-      - |
-        curl --header "JOB-TOKEN: ${CI_JOB_TOKEN}" \
-             --upload-file target/release/deap-harness \
-             "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/deap-harness/${CI_COMMIT_TAG}/deap-harness-linux-x86_64"
-  ```
-
 ---
 
-### 7.3 Strongly-Typed AST Slicing Mechanics (<= 4,096 Tokens) in Multi-Provider Pipeline Stages
+### 7.3 SysML v2 AST Parsing & Context-Isolated Specification Partitioning (`crates/deap-core` & `crates/compile-sysml`)
 
-#### 7.3.1 Mathematical Formalization of Bounded AST Slicing
+#### 7.3.1 Mathematical Formalization of AST Partitioning
 
-Complex cyber-physical systems modeled in SysML v2 standardly span tens of thousands of structural AST nodes, behavioral actions, and interface contracts. Ingesting an entire system AST into an LLM context window saturates attention, dilutes reasoning focus, and leads to critical requirement omissions.
+Complex cyber-physical systems modeled in `.pipeline/schema.sysml` span structural `part def` nodes, `port def` interfaces, `action def` behaviors, `state def` state machines, `requirement def` constraints, and `use case def` operational scenarios. `crates/deap-core/src/sysml_ast.rs` and `crates/compile-sysml/src/lib.rs` parse the SysML v2 schema into a strongly-typed AST so that each single-item subagent receives only its relevant AST subgraph:
 
-To guarantee zero reasoning degradation and 100% deterministic prompt bounds, `deap-ast` implements **Strongly-Typed AST Slicing**:
-
-$$\text{AST}_{\text{slice}} = \text{Closure}(\mathcal{N}_{\text{target}}, \mathcal{E}_{\text{deps}}) \quad \text{such that} \quad |\text{Tokens}(\text{AST}_{\text{slice}})| \le 4096$$
+$$\text{AST}_{\text{slice}} = \text{Closure}(\mathcal{N}_{\text{target}}, \mathcal{E}_{\text{deps}})$$
 
 Where:
-- $\mathcal{N}_{\text{target}}$ is the root focus node (e.g., a specific `part def`, `action def`, `port def`, or `constraint def`).
-- $\mathcal{E}_{\text{deps}}$ represents the directed transitive dependency frontier, including connected ports, flow properties, type bindings, and parental namespace contracts.
-- $\text{Closure}(\mathcal{N}_{\text{target}}, \mathcal{E}_{\text{deps}})$ is the semantically closed, self-contained AST subgraph with all external dependencies pruned to abstract type declarations and contract stubs.
-- $|\text{Tokens}(\text{AST}_{\text{slice}})| \le 4096$ is the strict token budget measured via byte-level tokenizer encoding.
+- $\mathcal{N}_{\text{target}}$ is the target SysML v2 declaration (`part def`, `action def`, `port def`, `state def`, `requirement def`, or `use case def`) parsed by `crates/deap-core/src/sysml_ast.rs`.
+- $\mathcal{E}_{\text{deps}}$ represents the connected port bindings, item flows, and requirement verification links validated by `crates/compile-sysml/src/lib.rs`.
 
 ```mermaid
 flowchart TD
-    subgraph Full_AST ["Full SysML v2 System AST (&gt; 50,000 Nodes)"]
-        Sys_Root["Package: AutonomousSystemModel"]
-        Sub_A["Part: SensorProcessingSubsystem"]
-        Sub_B["Part: FlightControlComputer"]
-        Sub_C["Part: ActuatorDriveSubsystem"]
-        Sub_D["Part: PowerDistributionUnit"]
+    subgraph Full_AST ["Full SysML v2 System AST (.pipeline/schema.sysml)"]
+        direction TB
+        Sys_Root["Package Declaration<br/>.pipeline/schema.sysml"]
+        Sub_A["part def<br/>SensorProcessingSubsystem"]
+        Sub_B["part def<br/>FlightControlComputer"]
+        Sub_C["part def<br/>ActuatorDriveSubsystem"]
+        Sub_D["part def<br/>PowerDistributionUnit"]
     end
 
-    subgraph Slicer_Engine ["deap-ast Bounded Slicing Engine"]
-        Target_Selector["Target Node Selection: Sub_A"]
-        Closure_Builder["Transitive Closure Builder & Boundary Pruner"]
-        Token_Counter["Byte-Pair Token Budget Counter"]
-        Budget_Check{"Tokens &lt;= 4,096?"}
-        Hierarchical_Split["Hierarchical Subsystem Partitioning"]
+    subgraph Slicer_Engine ["deap-core & compile-sysml AST Engine"]
+        direction TB
+        Target_Selector["AST Node Selection<br/>deap_core::sysml_ast"]
+        Closure_Builder["Requirement & Port<br/>Traceability Extraction"]
+        Token_Counter["Single-Item Scope<br/>Context Isolation Check"]
+        Budget_Check{"Bounded Scope<br/>Verified?"}
+        Hierarchical_Split["Component-Level<br/>Subagent Partitioning"]
     end
 
-    subgraph Sliced_Envelopes ["Self-Contained AST Slice Envelopes"]
-        Slice_1["Slice Envelope: SensorProcessing (3,120 Tokens)"]
-        Slice_2["Slice Envelope: OpticalProximity (2,450 Tokens)"]
+    subgraph Sliced_Envelopes ["Context-Isolated Subagent Work Units"]
+        direction TB
+        Slice_1["Isolated Spec Unit<br/>SensorProcessing"]
+        Slice_2["Isolated Spec Unit<br/>OpticalProximity"]
     end
 
     Sys_Root --> Sub_A
@@ -1435,126 +1313,76 @@ flowchart TD
     Target_Selector --> Closure_Builder
     Closure_Builder --> Token_Counter
     Token_Counter --> Budget_Check
-    Budget_Check -- Yes --> Slice_1
-    Budget_Check -- No --> Hierarchical_Split
+    Budget_Check -->|Yes| Slice_1
+    Budget_Check -->|No| Hierarchical_Split
     Hierarchical_Split --> Slice_2
 ```
 
-#### 7.3.2 Slicing Pipeline Stage Integration in GitLab CI/CD
-
-AST slicing executes as an explicit pipeline job in Stage 2 (`test:ast-slice`) before any LLM agent or verification tool is invoked:
-
-1. **Extraction**: The CLI command `deap-harness slice-ast` traverses `.pipeline/schema.sysml`.
-2. **Envelope Generation**: Each slice is serialized into a standalone JSON payload under `artifacts/slices/{component_id}.json` containing:
-   - Slice identifier and target node metadata.
-   - Closed SysML v2 AST sub-tree in JSON format.
-   - Associated DO-178C requirement bindings and safety invariants (`AssuranceLevel::Tier1..5`).
-   - Token budget metrics ($N_{\text{tokens}} \le 4096$).
-3. **Artifact Retention**: Slices are retained as pipeline job artifacts, allowing downstream jobs to consume them in isolated agent dispatches.
-4. **CI Gate Enforcement**: If any generated slice exceeds 4,096 tokens or contains unresolved external reference leaks, the CI job fails immediately (`exit code 1`).
-
 ---
 
-### 7.4 Dual-LLM Air-Gapped Agent Dispatch in GitLab CI/CD
+### 7.4 Closed-Loop Baseline Verification & Defect Dossier Pipeline (`crates/verify-baseline`)
 
-#### 7.4.1 Two-Phase Dual-LLM Architecture: Reasoning Slot vs. Execution Slot
+#### 7.4.1 End-to-End Verification & Defect Dossier Workflow
 
-In air-gapped defense enclaves and SCIF development zones, DEAP eliminates reliance on external commercial AI APIs. Instead, `deap-harness` coordinates local GPU inference through a **Dual-LLM Agentic Dispatch** architecture, decoupling analytical reasoning from code execution:
+In air-gapped and enterprise GitLab pipelines, `./target/release/verify-baseline` (`crates/verify-baseline/src/runner.rs` and `crates/verify-baseline/src/defect_dossier.rs`) and `./target/release/reconcile-backlog` (`crates/reconcile-backlog/src/lib.rs` and `crates/reconcile-backlog/src/create_issue.rs`) enforce closed-loop verification before any issue or merge request is marked resolved:
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Runner as GitLab CI Runner (Air-Gapped)
-    participant Harness as deap-harness Runtime
-    participant Slicer as deap-ast (Bounded Slicer)
-    participant R1 as DeepSeek-R1 (CoT Slot)
-    participant AuditLog as cot_audit_log.json
-    participant Qwen as Qwen-2.5-Coder (Execution Slot)
-    participant Gates as Quality Gate Enforcer
-    participant GitLabAPI as GitLab REST API v4
+    participant Runner as "GitLab CI Runner"
+    participant Compiler as "compile-sysml (lib.rs)"
+    participant Verifier as "verify-baseline (runner.rs)"
+    participant Dossier as "defect_dossier.rs"
+    participant Reconciler as "reconcile-backlog (lib.rs)"
+    participant GitLabAPI as "GitLab Tracker (TrackerClient)"
 
-    Runner->>Harness: Execute Job verify:dual-llm-dispatch
-    Harness->>Slicer: Slice AST for Target Component
-    Slicer-->>Harness: Emit AST Slice Envelope (max 4,096 Tokens)
-    
+    Runner->>Compiler: ./target/release/compile-sysml .
+    Compiler-->>Runner: SysML v2 AST & STPA Invariants Verified (Exit 0)
+
     rect rgb(240, 245, 255)
-        note over Harness,AuditLog: Phase 1: DeepSeek-R1 CoT Reasoning Slot
-        Harness->>R1: Stream Prompt (Slice + Constitutional Invariants)
-        R1-->>Harness: Stream think Reasoning Tokens
-        Harness->>AuditLog: Append Raw Thought Trace (.pipeline/diagnostics/cot_audit_log.json)
-        R1-->>Harness: Emit Verified Formal Execution Plan
+        Note over Runner,Dossier: Phase 1: 33-Check Baseline & Defect Dossier Validation
+        Runner->>Verifier: ./target/release/verify-baseline . --no-domain
+        Verifier-->>Runner: All Structural, Mermaid, KaTeX & Parity Checks Pass
+        Runner->>Dossier: ./target/release/verify-baseline check-defect (if filing bug)
+        Dossier-->>Runner: 7-Section Dossier Schema & Empirical Proof Verified
     end
 
     rect rgb(245, 255, 240)
-        note over Harness,Gates: Phase 2: Qwen-2.5-Coder Execution Slot
-        Harness->>Qwen: Dispatch Formal Execution Plan + AST Slice
-        Qwen-->>Harness: Emit Synthesized Code / Specs / BDD Scenarios
-        Harness->>Gates: Run Compiler & 22-Gate Parity Check
-        Gates-->>Harness: Verification Passed (Exit Code 0)
+        Note over Runner,GitLabAPI: Phase 2: Multi-Provider Backlog Synchronization
+        Runner->>Reconciler: ./target/release/reconcile-backlog --provider gitlab --sync-bodies
+        Reconciler->>Reconciler: validate_checklist_publish_integrity()
+        Reconciler->>GitLabAPI: update_issue_body() & add_label("status::fixed-resolved")
+        GitLabAPI-->>Runner: Remote Issue Updated & Verified
     end
-
-    Harness->>GitLabAPI: Post Verification Note & Traceability Labels
-    GitLabAPI-->>Runner: Update Issue #104 (status::fixed-resolved)
 ```
 
-#### 7.4.2 DeepSeek-R1 Chain-of-Thought (CoT) Slot
+#### 7.4.2 7-Section Defect Dossier Gate (`crates/verify-baseline/src/defect_dossier.rs`)
 
-- **Model Configuration**: DeepSeek-R1 (full 671B or quantized 70B variant) hosted on local air-gapped inference infrastructure (vLLM / Ollama instance).
-- **Execution Role**: Pure formal analysis, theorem proving, architectural decomposition, and safety invariant validation.
-- **Strict Read-Only Isolation**: DeepSeek-R1 has zero tool-calling capabilities and cannot modify workspace files or run shell commands. Its output is exclusively formal reasoning.
-- **Audit Streaming**: Raw reasoning tokens encapsulated in `<think>...</think>` blocks are streamed in real time to the persistent audit trail:
-  `.pipeline/diagnostics/cot_audit_log.json`
-- **DO-178C Tool Qualification Evidence**: Streaming complete reasoning traces ensures that every architectural derivation, safety invariant assessment, and state machine transition has an immutable, reviewable audit trail satisfying DO-178C tool qualification criteria.
+Before any defect issue can be filed via `./target/release/reconcile-backlog create-issue --label bug`, `validate_defect_dossier` in `crates/verify-baseline/src/defect_dossier.rs` validates that the markdown dossier contains all 7 mandatory sections (`DossierSection::ALL`), zero em dashes (`\u2014`), valid environment metadata, and concrete empirical reproduction output:
 
-#### 7.4.3 Qwen-2.5-Coder Execution Slot
+```rust
+// Grounded in: crates/verify-baseline/src/defect_dossier.rs
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DossierSection {
+    TargetIdentification,
+    ArchitecturalInvariants,
+    FiveWhysRootCause,
+    EmpiricalReproduction,
+    BlastRadiusAssessment,
+    ProposedRemediation,
+    VerificationTestPlan,
+}
 
-- **Model Configuration**: Qwen-2.5-Coder (32B-Instruct) hosted on local air-gapped inference hardware.
-- **Execution Role**: Deterministic code generation, BDD scenario synthesis, and specification artifact emission.
-- **Context Injection**: Ingests the validated formal execution plan produced by DeepSeek-R1 alongside the original AST slice ($\le 4,096$ tokens).
-- **Closed-Loop Feedback**: Code synthesized by Qwen-2.5-Coder is immediately compiled and verified by `deap-harness` using native tools (`cargo check`, `cargo test`, `slx_generator`). If compilation errors arise, compiler diagnostics are passed back for bounded refinement without regenerating the high-level reasoning plan.
-
-#### 7.4.4 Structured Schema of `.pipeline/diagnostics/cot_audit_log.json`
-
-The audit log is a structured, append-only JSON record capturing complete provenance for air-gapped regulatory compliance:
-
-```json
-{
-  "$schema": "https://deap.internal/schemas/cot-audit-record-v1.json",
-  "audit_event_id": "cot-audit-20260901-001",
-  "timestamp_utc": "2026-09-01T12:00:00Z",
-  "git_commit_sha": "a1b2c3d4e5f67890123456789abcdef012345678",
-  "pipeline_job_id": "987654",
-  "target_ast_slice_id": "SLICE_FENCE_INTRUSION_DETECTOR_01",
-  "assurance_level": "AssuranceLevel::Tier1",
-  "token_budget": {
-    "ast_slice_input_tokens": 2840,
-    "cot_reasoning_tokens": 1420,
-    "execution_output_tokens": 890,
-    "total_tokens": 5150
-  },
-  "inference_engines": {
-    "reasoning_slot": {
-      "model": "deepseek-r1-airgapped-local",
-      "temperature": 0.0,
-      "top_p": 1.0,
-      "seed": 0
-    },
-    "execution_slot": {
-      "model": "qwen-2.5-coder-32b-airgapped-local",
-      "temperature": 0.0,
-      "top_p": 1.0,
-      "seed": 0
-    }
-  },
-  "cot_reasoning_digest_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "invariant_evaluations": [
-    {
-      "invariant_id": "INV-OPT-001",
-      "description": "Boundary Clearance >= 15.0m",
-      "formal_verdict": "PROVEN_INVARIANT_SATISFIED"
-    }
-  ],
-  "verification_verdict": "CONSTITUTIONALLY_COMPLIANT"
+impl DossierSection {
+    pub const ALL: [DossierSection; 7] = [
+        DossierSection::TargetIdentification,
+        DossierSection::ArchitecturalInvariants,
+        DossierSection::FiveWhysRootCause,
+        DossierSection::EmpiricalReproduction,
+        DossierSection::BlastRadiusAssessment,
+        DossierSection::ProposedRemediation,
+        DossierSection::VerificationTestPlan,
+    ];
 }
 ```
 
@@ -1575,35 +1403,40 @@ DEAP explicitly declares **MATLAB / Simulink / Stateflow / Embedded Coder** as t
 
 ### 8.2 Automated MathWorks CI Execution via GitLab Runners
 
-The bridge between GitLab CI/CD pipelines, SysML v2 AST, and MATLAB / Simulink operates through containerized or dedicated bare-metal GitLab runners equipped with the MathWorks toolchain:
+The bridge between GitLab CI/CD pipelines, SysML v2 AST (`.pipeline/schema.sysml` compiled via `./target/release/compile-sysml`), and MATLAB / Simulink operates through containerized or dedicated bare-metal GitLab runners equipped with the MathWorks toolchain:
 
 ```mermaid
-flowchart TB
+flowchart TD
     subgraph GitLab_CI ["GitLab CI/CD Pipeline (Runner Context)"]
-        GitLab_Job["verify:sldv-formal Job"]
-        Env_Vars["CI_JOB_TOKEN, CI_PROJECT_PATH, MATLAB_PATH"]
+        direction TB
+        GitLab_Job["verify:sldv-formal<br/>GitLab CI Job"]
+        Env_Vars["CI_JOB_TOKEN &<br/>CI_PROJECT_PATH"]
     end
 
     subgraph SysML_Bridge ["DEAP SysML-Simulink Bridge"]
-        AST_Reader["Read .pipeline/schema.sysml"]
-        SLX_Generator["slx_generator.m (MATLAB API)"]
+        direction TB
+        AST_Reader["Read .pipeline/schema.sysml<br/>compile-sysml & deap-core"]
+        SLX_Generator["MATLAB Batch Runner<br/>slx_generator.m"]
     end
 
     subgraph MathWorks_Suite ["MathWorks Toolchain Execution"]
-        Simulink_Engine["Simulink Subsystem Compiler (.slx)"]
-        Stateflow_Engine["Stateflow Discrete Supervisor (.sfx)"]
-        SLDV_Engine["Simulink Design Verifier (Formal Prover)"]
-        Embedded_Coder["Embedded Coder - DO-178C C / SPARK Ada"]
+        direction TB
+        Simulink_Engine["Simulink Compiler<br/>Subsystem Model (.slx)"]
+        Stateflow_Engine["Stateflow Supervisor<br/>Discrete Chart (.sfx)"]
+        SLDV_Engine["Simulink Design Verifier<br/>Formal RTA Prover"]
+        Embedded_Coder["Embedded Coder<br/>DO-178C C & SPARK Ada"]
     end
 
     subgraph Verification_Outputs ["Verification Outputs & GitLab MR Integration"]
-        JUnit_XML["Test Results (JUnit XML)"]
-        Cobertura_XML["Code / Model Coverage (Cobertura XML)"]
-        SLDV_PDF["Formal Verification Safety Report (PDF)"]
-        GL_MR_Widget["GitLab Merge Request Security & Quality Widget"]
+        direction TB
+        JUnit_XML["Test Results<br/>JUnit XML Report"]
+        Cobertura_XML["Model Coverage<br/>Cobertura XML Report"]
+        SLDV_PDF["Formal Proof Report<br/>SLDV PDF Evidence"]
+        GL_MR_Widget["GitLab MR Quality &<br/>reconcile-backlog Sync"]
     end
 
     GitLab_Job --> AST_Reader
+    Env_Vars --> GitLab_Job
     AST_Reader --> SLX_Generator
     SLX_Generator --> Simulink_Engine
     SLX_Generator --> Stateflow_Engine
@@ -1632,7 +1465,7 @@ Embedded Coder generates production C and SPARK Ada source code decorated with c
  * Model-Based Code Generation: DEAP Autonomous Cyber-Physical System Infrastructure Safety
  * Target Standard: RTCA DO-178C / DO-331 Design Assurance Level A (DAL-A)
  * Model Component: FenceIntrusionDetector.slx
- * 
+ *
  * Traceability Links:
  *   - SysML v2 Requirement: REQ_FENCE_01 (Optical Intrusion Trigger)
  *   - SysML v2 State Def:   MonitoringState::TriggerIntervention
@@ -1667,7 +1500,7 @@ void FenceIntrusionDetector_Step(
         /* RTA Invariant Violation: Activate Primary Control Override */
         out_rta_status->override_active = true;
         out_rta_status->safety_reason_code = RTA_REASON_FENCE_PROXIMITY;
-        
+
         /* Synthesize Emergency Avoidance Trajectory */
         out_command->axis_alpha_deg = 12.5f;       /* Recovery state vector */
         out_command->axis_beta_deg = -15.0f;      /* Divert from containment boundary */
@@ -1684,40 +1517,50 @@ void FenceIntrusionDetector_Step(
 
 ### 8.4 Downstream Verification Artifacts & Merge Request Integration
 
-When a GitLab CI/CD pipeline completes execution, downstream verification artifacts are published directly into the GitLab Merge Request and Issue tracker via the REST API v4 engine:
+When a GitLab CI/CD pipeline completes execution, downstream verification artifacts are published directly into the GitLab Merge Request and Issue tracker via `./target/release/reconcile-backlog`:
 
 1. **Semantic Acceptance & Model Verification Reports:** Output in JUnit XML format and ingested natively by GitLab CI (`artifacts:reports:junit: reports/junit.xml`).
 2. **Structural & Model Coverage Reports:** Converted to Cobertura XML and visualized directly within GitLab Merge Request diffs (`artifacts:reports:coverage_report: coverage_format: cobertura`).
 3. **Formal Verification Proofs:** SLDV mathematical analysis reports attached as persistent job artifacts and referenced in GitLab Issue audit notes.
-4. **DO-178C Compliance Seal:** Upon 100% passage of the 22-Gate Parity Lock, the issue labels are automatically updated to `status::fixed-resolved` and `verification::passed`.
+4. **DO-178C Compliance Seal:** Upon 100% passage of `./target/release/verify-baseline`, `./target/release/reconcile-backlog` synchronizes checklists and updates issue labels to `status::fixed-resolved` and `verification::passed`.
 
 ---
 
-## Section 9: Summary & Blueprint Implementation Roadmap
+## Section 9: Summary & Blueprint Implementation Architecture
 
 ```mermaid
-gantt
-    title DEAP GitLab Infrastructure Implementation Roadmap
-    dateFormat  YYYY-MM-DD
-    section Phase 0 - Architecture & Blueprint
-    Author Architecture Blueprint (DEAP-BLUEPRINT-GITLAB-001) :done, 2026-08-24, 1d
-    Mermaid & KaTeX Verification :done, 2026-08-24, 1d
-    section Phase 1 - Core Tracker Abstraction
-    Implement IssueTracker Abstract Interface :active, 2026-08-25, 2d
-    Implement Zero-Dependency GitLabV4Client :2026-08-27, 3d
-    Implement LocalMockTracker & Acceptance Harness :2026-08-30, 2d
-    section Phase 2 - Reconciler & Scoped Labels
-    Refactor reconcile-backlog for Multi-Provider :2026-09-01, 3d
-    Implement Scoped Label Lifecycle Engine :2026-09-04, 2d
-    Air-Gapped Private CA TLS Integration :2026-09-06, 2d
-    section Phase 3 - Modular Cargo Workspace & Slicing
-    Implement 5 Workspace Crates (deap-core to cli) :2026-09-07, 3d
-    Implement Strongly-Typed AST Slicer (<= 4096 Tokens) :2026-09-09, 2d
-    Dual-LLM Air-Gapped CoT Stream Integration :2026-09-11, 2d
-    section Phase 4 - CI/CD & MATLAB Synthesis
-    Author Canonical .gitlab-ci.yml Pipeline :2026-09-13, 2d
-    Integrate MATLAB / Simulink / SLDV Harness :2026-09-15, 3d
-    End-to-End Air-Gapped Validation Run :2026-09-18, 2d
+flowchart TD
+    subgraph Phase_1 ["Phase 1: Core Rules & AST Foundation"]
+        direction TB
+        P1_A["crates/deap-core<br/>CodebaseRules & TrackerRules"]
+        P1_B["crates/deap-core<br/>SysML AST & Markdown Checks"]
+    end
+
+    subgraph Phase_2 ["Phase 2: Multi-Provider Backlog Engine"]
+        direction TB
+        P2_A["crates/reconcile-backlog<br/>TrackerClient & IssueIndex"]
+        P2_B["crates/reconcile-backlog<br/>Scoped Labels & create-issue"]
+    end
+
+    subgraph Phase_3 ["Phase 3: SysML & ConOps Compilers"]
+        direction TB
+        P3_A["crates/ingest-sysml &<br/>crates/compile-sysml"]
+        P3_B["crates/assemble-conops<br/>Deterministic ConOps Sync"]
+    end
+
+    subgraph Phase_4 ["Phase 4: Baseline & CI/CD Verification"]
+        direction TB
+        P4_A["crates/verify-baseline<br/>33-Check Gate & Defect Audit"]
+        P4_B["GitLab CI/CD & MBD<br/>Simulink / SLDV Integration"]
+    end
+
+    P1_A --> P1_B
+    P1_B --> P2_A
+    P2_A --> P2_B
+    P2_B --> P3_A
+    P3_A --> P3_B
+    P3_B --> P4_A
+    P4_A --> P4_B
 ```
 
 ### Verification & Conformance Sign-Off
@@ -1725,5 +1568,6 @@ gantt
 - **Document Identifier:** `DEAP-BLUEPRINT-GITLAB-001`
 - **Architecture Lead:** DEAP Solution Architect
 - **Standards Conformance:** GitLab REST API v4 | ISO/IEC/IEEE 15288 | RTCA DO-178C / DO-331 | ASTM F3269-17 RTA | JARUS SORA v2.5
+- **Workspace Crate Grounding:** `crates/deap-core`, `crates/reconcile-backlog`, `crates/verify-baseline`, `crates/compile-sysml`, `crates/ingest-sysml`, `crates/assemble-conops`
 - **Mathematical Integrity:** KaTeX formulas and LaTeX equations verified for syntax.
-- **Diagram Integrity:** All Mermaid flowcharts, statecharts, sequence diagrams, and class diagrams validated for syntax, quotes, and terminal closure.
+- **Diagram Integrity:** All Mermaid `flowchart TD`, `stateDiagram-v2`, `sequenceDiagram`, and `classDiagram` blocks validated for E1-E5 constraints, double quotes, `direction TB` subgraph headers, `<= 35` character line segments, and terminal closure.
