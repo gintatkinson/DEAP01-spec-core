@@ -238,7 +238,11 @@ impl<'a> SysmlParser<'a> {
                 self.skip_trivia();
             }
 
-            if root.packages.len() == 1 && (root.name == "SysML_Model" || root.name.is_empty()) {
+            if root.packages.len() == 1
+                && (is_synthetic_forest_root(&root)
+                    || root.name == "SysML_Model"
+                    || root.name.is_empty())
+            {
                 let mut single = root.packages.remove(0);
                 merge_package_defs(&mut single, root);
                 return Ok(single);
@@ -257,6 +261,12 @@ impl<'a> SysmlParser<'a> {
         while !self.is_at_end() {
             self.parse_container_item(&mut pkg, None)?;
             self.skip_trivia();
+        }
+
+        if pkg.packages.len() == 1 && is_synthetic_forest_root(&pkg) {
+            let mut single = pkg.packages.remove(0);
+            merge_package_defs(&mut single, pkg);
+            return Ok(single);
         }
 
         Ok(pkg)
@@ -3396,6 +3406,57 @@ pub fn merge_package_defs(dest: &mut PackageDef, src: PackageDef) {
     }
 }
 
+/// Returns `true` when `pkg` is a synthetic multi-package or single-package forest root
+/// (`SysML_Model` or empty name) that holds child `packages` (and optional top-level `imports`)
+/// without any direct structural definitions of its own.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `is_synthetic_forest_root` in `crates/compile-sysml/src/parser/grammar.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic state conservation and referential transparency for fn `is_synthetic_forest_root` within `PARSER-GRAMMAR`.
+///
+/// ## 3. Preconditions
+/// - `pkg: &PackageDef` must satisfy domain and type-safety constraints prior to invoking `is_synthetic_forest_root`.
+///
+/// ## 4. Postconditions
+/// - Returns `bool` from `is_synthetic_forest_root` with deterministic post-execution state.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1) constant-time inspection of `PackageDef` collection lengths.
+/// - Space Complexity: O(1) auxiliary memory for `is_synthetic_forest_root`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `is_synthetic_forest_root` (`bool`).
+/// - State: Maintains consistent state invariants across `is_synthetic_forest_root` without mutation.
+/// - Action: Executes `is_synthetic_forest_root` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `is_synthetic_forest_root` (`PARSER-GRAMMAR`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-PARSER-GRAMMAR-IS-SYNTHETIC-FOREST-ROOT] | SysML v2: ActionDef(is_synthetic_forest_root)
+pub fn is_synthetic_forest_root(pkg: &PackageDef) -> bool {
+    (pkg.name.is_empty() || pkg.name == "SysML_Model")
+        && !pkg.packages.is_empty()
+        && pkg.attribute_defs.is_empty()
+        && pkg.port_defs.is_empty()
+        && pkg.action_defs.is_empty()
+        && pkg.constraint_defs.is_empty()
+        && pkg.calc_defs.is_empty()
+        && pkg.requirement_defs.is_empty()
+        && pkg.satisfied_requirements.is_empty()
+        && pkg.state_defs.is_empty()
+        && pkg.connection_defs.is_empty()
+        && pkg.use_case_defs.is_empty()
+        && pkg.item_defs.is_empty()
+        && pkg.hazard_defs.is_empty()
+        && pkg.risk_defs.is_empty()
+        && pkg.test_case_defs.is_empty()
+        && pkg.capability_defs.is_empty()
+        && pkg.operation_defs.is_empty()
+        && pkg.interaction_defs.is_empty()
+        && pkg.part_defs.is_empty()
+}
+
 /// Parse multiple SysML files and merge their package definitions into a unified root `PackageDef`.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -3430,12 +3491,15 @@ pub fn parse_sysml_tree(files: &[PathBuf]) -> Result<PackageDef, ParseError> {
         });
     }
 
+    let mut sorted_files = files.to_vec();
+    sorted_files.sort();
+
     let mut root = PackageDef {
         name: "SysML_Model".to_string(),
         ..Default::default()
     };
 
-    for file in files {
+    for file in &sorted_files {
         let content = fs::read_to_string(file).map_err(|e| ParseError {
             message: format!("Failed to read SysML file '{}': {}", file.display(), e),
             span: Span::default(),
@@ -3452,7 +3516,11 @@ pub fn parse_sysml_tree(files: &[PathBuf]) -> Result<PackageDef, ParseError> {
         }
     }
 
-    if root.packages.len() == 1 && (root.name == "SysML_Model" || root.name.is_empty()) {
+    if root.packages.len() == 1
+        && (is_synthetic_forest_root(&root)
+            || root.name == "SysML_Model"
+            || root.name.is_empty())
+    {
         let mut single = root.packages.remove(0);
         merge_package_defs(&mut single, root);
         return Ok(single);

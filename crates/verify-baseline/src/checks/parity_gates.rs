@@ -4075,7 +4075,11 @@ fn collect_qualified_package_bodies(content: &str, parent_pkg: &str, out: &mut V
             if let Some(close_pos) = find_matching_brace(&clean, curr) {
                 let body = clean.get(curr + 1..close_pos).unwrap_or("");
                 let qualified_pkg = if parent_pkg.is_empty() {
-                    name.to_string()
+                    if name == "SysML_Model" {
+                        String::new()
+                    } else {
+                        name.to_string()
+                    }
                 } else {
                     format!("{}::{}", parent_pkg, name)
                 };
