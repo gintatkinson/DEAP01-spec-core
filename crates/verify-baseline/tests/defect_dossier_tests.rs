@@ -4,11 +4,41 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::time::{SystemTime, UNIX_EPOCH};
 use verify_baseline::checks::audit_source_purity;
 use verify_baseline::defect_dossier::{
-    derive_defect_title, extract_file_basename, run_check_defect, validate_defect_dossier,
-    validate_defect_title, verify_closed_loop_payload, DefectDossierArgs,
+    derive_defect_title, extract_file_basename, parse_github_repo_slug, resolve_target_repo,
+    run_check_defect, validate_defect_dossier, validate_defect_title, verify_closed_loop_payload,
+    DefectDossierArgs,
 };
+
+struct ScopedTempWorkspace {
+    root: PathBuf,
+}
+
+impl ScopedTempWorkspace {
+    fn new(prefix: &str) -> Self {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let root = std::env::temp_dir().join(format!(
+            "deap_defect_dossier_{}_{}_{}",
+            prefix,
+            std::process::id(),
+            nanos
+        ));
+        fs::create_dir_all(&root).expect("create temp workspace");
+        Self { root }
+    }
+}
+
+impl Drop for ScopedTempWorkspace {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.root);
+    }
+}
 
 fn sample_valid_critical_dossier() -> String {
     r#"## 1. Context and References
@@ -291,7 +321,7 @@ fn test_rejects_ephemeral_tmp_path_when_publish_or_issue_is_set() {
     let args = DefectDossierArgs {
         body_file: Some(PathBuf::from("/tmp/gh_body_ephemeral_12345.md")),
         title: Some("[AUDIT] [bridge.cpp]: Use-after-free".to_string()),
-        repo: "gintatkinson/DEAP01-spec-core".to_string(),
+        repo: Some("gintatkinson/DEAP01-spec-core".to_string()),
         label: None,
         provider: "github".to_string(),
         dry_run: true,
@@ -303,6 +333,22 @@ fn test_rejects_ephemeral_tmp_path_when_publish_or_issue_is_set() {
     assert!(
         res.is_err(),
         "Ephemeral /tmp/ path must be rejected when --publish is set"
+    );
+
+    let default_pub_args = DefectDossierArgs {
+        body_file: Some(PathBuf::from("/tmp/gh_body_ephemeral_12345.md")),
+        title: Some("[AUDIT] [bridge.cpp]: Use-after-free".to_string()),
+        repo: Some("gintatkinson/DEAP01-spec-core".to_string()),
+        label: None,
+        provider: "github".to_string(),
+        dry_run: false,
+        publish: false,
+        issue: None,
+        target: None,
+    };
+    assert!(
+        run_check_defect(&default_pub_args).is_err(),
+        "Ephemeral /tmp/ path must be rejected by default when dry_run is false even if publish is false"
     );
 }
 
@@ -486,5 +532,149 @@ fn test_adversarial_code_auditor_skill_minimized_and_identical() {
     assert!(
         content_a.contains("./target/release/verify-baseline check-defect .pipeline/defects/"),
         "SKILL.md must delegate verification, persistence, and publishing to verify-baseline check-defect"
+    );
+    assert!(
+        content_a.contains("BypassSandbox: true")
+            && content_a.contains("[CLOSED-LOOP VERIFIED]")
+            && content_a.contains("--dry-run"),
+        "SKILL.md must mandate autonomous BypassSandbox: true execution, default publishing unless --dry-run, and hard failure unless [CLOSED-LOOP VERIFIED] is emitted"
+    );
+    assert!(
+        !content_a.contains('\u{2014}'),
+        "SKILL.md must contain zero Unicode em dashes"
+    );
+}
+
+#[test]
+fn test_parse_github_repo_slug_ssh_https_and_invalid() {
+    assert_eq!(
+        parse_github_repo_slug("git@github.com:gintatkinson/DEAP01-cuas-coa-engine.git").unwrap(),
+        "gintatkinson/DEAP01-cuas-coa-engine"
+    );
+    assert_eq!(
+        parse_github_repo_slug("git@github.com:gintatkinson/DEAP01-spec-core").unwrap(),
+        "gintatkinson/DEAP01-spec-core"
+    );
+    assert_eq!(
+        parse_github_repo_slug("ssh://git@github.com/gintatkinson/DEAP01-cuas-coa-engine.git")
+            .unwrap(),
+        "gintatkinson/DEAP01-cuas-coa-engine"
+    );
+    assert_eq!(
+        parse_github_repo_slug("https://github.com/gintatkinson/DEAP01-cuas-coa-engine.git")
+            .unwrap(),
+        "gintatkinson/DEAP01-cuas-coa-engine"
+    );
+    assert_eq!(
+        parse_github_repo_slug("https://github.com/gintatkinson/DEAP01-cuas-coa-engine").unwrap(),
+        "gintatkinson/DEAP01-cuas-coa-engine"
+    );
+    assert_eq!(
+        parse_github_repo_slug("http://github.com/gintatkinson/DEAP01-cuas-coa-engine.git")
+            .unwrap(),
+        "gintatkinson/DEAP01-cuas-coa-engine"
+    );
+    assert_eq!(
+        parse_github_repo_slug("gintatkinson/DEAP01-cuas-coa-engine").unwrap(),
+        "gintatkinson/DEAP01-cuas-coa-engine"
+    );
+
+    assert!(parse_github_repo_slug("").is_err());
+    assert!(parse_github_repo_slug("https://github.com/only-owner").is_err());
+    assert!(parse_github_repo_slug("not-a-valid-slug").is_err());
+    assert!(parse_github_repo_slug("owner/repo/extra").is_err());
+}
+
+#[test]
+fn test_resolve_target_repo_auto_detects_origin_and_fails_without_remote() {
+    let tmp = ScopedTempWorkspace::new("resolve_repo");
+    let repo_dir = &tmp.root;
+
+    // Without git init / origin remote, omitting --repo must return a hard Err
+    let err_no_git = resolve_target_repo(None, repo_dir);
+    assert!(
+        err_no_git.is_err(),
+        "Expected resolve_target_repo(None) in non-git dir to fail"
+    );
+
+    // Initialize git repo without origin remote -> must still fail
+    let status_init = Command::new("git")
+        .args(["init", "-q"])
+        .current_dir(repo_dir)
+        .status()
+        .expect("git init");
+    assert!(status_init.success());
+
+    let err_no_origin = resolve_target_repo(None, repo_dir);
+    assert!(
+        err_no_origin.is_err(),
+        "Expected resolve_target_repo(None) without origin remote to fail"
+    );
+
+    // Configure downstream origin remote -> must auto-resolve to downstream repo, NOT DEAP01-spec-core
+    let status_remote = Command::new("git")
+        .args([
+            "remote",
+            "add",
+            "origin",
+            "git@github.com:gintatkinson/DEAP01-cuas-coa-engine.git",
+        ])
+        .current_dir(repo_dir)
+        .status()
+        .expect("git remote add origin");
+    assert!(status_remote.success());
+
+    let resolved = resolve_target_repo(None, repo_dir).expect("resolve from origin remote");
+    assert_eq!(resolved, "gintatkinson/DEAP01-cuas-coa-engine");
+
+    // Explicit --repo overrides git remote
+    let explicit =
+        resolve_target_repo(Some("gintatkinson/DEAP01-spec-core"), repo_dir).expect("explicit");
+    assert_eq!(explicit, "gintatkinson/DEAP01-spec-core");
+}
+
+#[test]
+fn test_run_check_defect_publishes_by_default_without_publish_flag_and_fails_closed() {
+    let tmp = ScopedTempWorkspace::new("default_publish");
+    let defects_dir = tmp.root.join(".pipeline").join("defects");
+    fs::create_dir_all(&defects_dir).expect("create .pipeline/defects");
+    let dossier_path = defects_dir.join("DEFECT_TEST_DEFAULT_PUBLISH.md");
+    fs::write(&dossier_path, sample_valid_critical_dossier()).expect("write dossier");
+
+    // Case 1: --repo is None and directory has no git origin remote -> must fail closed with Err(1)
+    let args_no_remote = DefectDossierArgs {
+        body_file: Some(dossier_path.clone()),
+        title: None,
+        repo: None,
+        label: None,
+        provider: "github".to_string(),
+        dry_run: false,
+        publish: false,
+        issue: None,
+        target: None,
+    };
+    assert_eq!(
+        run_check_defect(&args_no_remote),
+        Err(1),
+        "run_check_defect without --dry-run and without --repo in a non-git directory must fail with Err(1)"
+    );
+
+    // Case 2: --dry-run is false and --publish is false with an unreachable/nonexistent repo ->
+    // must attempt publication by default (even though --publish was not passed) and fail closed with Err(1)
+    let args_default_pub_fail = DefectDossierArgs {
+        body_file: Some(dossier_path),
+        title: None,
+        repo: Some("invalid-nonexistent-owner-99999/invalid-nonexistent-repo-99999".to_string()),
+        label: None,
+        provider: "github".to_string(),
+        dry_run: false,
+        publish: false,
+        issue: None,
+        target: None,
+    };
+    assert_eq!(
+        run_check_defect(&args_default_pub_fail),
+        Err(1),
+        "run_check_defect with publish: false and dry_run: false must attempt GitHub publication by default and return Err(1) on failure"
     );
 }

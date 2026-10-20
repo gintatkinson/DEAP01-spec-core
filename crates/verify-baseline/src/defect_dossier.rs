@@ -346,9 +346,9 @@ pub struct DefectDossierArgs {
     #[arg(long = "title")]
     pub title: Option<String>,
 
-    /// Repository identifier (e.g. gintatkinson/DEAP01-spec-core)
-    #[arg(long = "repo", default_value = "gintatkinson/DEAP01-spec-core")]
-    pub repo: String,
+    /// Repository identifier (`<owner>/<repo>`); auto-resolved from `git remote get-url origin` when omitted
+    #[arg(long = "repo")]
+    pub repo: Option<String>,
 
     /// Override label to apply
     #[arg(long = "label")]
@@ -1264,6 +1264,176 @@ pub fn validate_defect_dossier(content: &str) -> Result<DefectSchemaValidation, 
     }
 }
 
+/// Parses a `<owner>/<repo>` repository slug from a Git remote URL or explicit slug string.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ECSS-E-ST-40C configuration management controls. Prevents
+/// cross-repository SSOT contamination (where downstream findings could be misrouted to
+/// `gintatkinson/DEAP01-spec-core`) by deterministically extracting the `<owner>/<repo>` slug
+/// from SSH (`git@github.com:owner/repo.git`, `ssh://git@github.com/owner/repo.git`), HTTPS
+/// (`https://github.com/owner/repo.git`), or direct `<owner>/<repo>` strings without regular expressions.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Strips optional trailing `.git` and `/` delimiters prior to path extraction.
+/// - Accepts only two-segment `<owner>/<repo>` identifiers where both segments are non-empty,
+///   contain zero whitespace, zero `:` characters, and zero additional `/` separators.
+///
+/// ## 3. Preconditions
+/// - `remote_url` is a UTF-8 string slice representing a Git remote URL or `<owner>/<repo>` slug.
+///
+/// ## 4. Postconditions
+/// - Returns `Ok(String)` formatted as `<owner>/<repo>` when `remote_url` is valid.
+/// - Returns `Err(String)` with a diagnostic explanation when `remote_url` is empty or malformed.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(U)$ where $U$ is the byte length of `remote_url`.
+/// - Space Complexity: $O(U)$ for the normalized `<owner>/<repo>` output string.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Total non-panicking parser using `strip_prefix`, `strip_suffix`, and `split_once` exclusively.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-DEFECT-DOSSIER-PARSE-REPO-SLUG]
+pub fn parse_github_repo_slug(remote_url: &str) -> Result<String, String> {
+    let trimmed = remote_url.trim();
+    if trimmed.is_empty() {
+        return Err("Repository remote URL or slug is empty.".to_string());
+    }
+
+    let without_trailing_slash = trimmed.trim_end_matches('/');
+    let without_git_suffix = without_trailing_slash
+        .strip_suffix(".git")
+        .unwrap_or(without_trailing_slash)
+        .trim_end_matches('/');
+
+    let slug_candidate = if let Some(after_scheme) = without_git_suffix
+        .strip_prefix("https://")
+        .or_else(|| without_git_suffix.strip_prefix("http://"))
+        .or_else(|| without_git_suffix.strip_prefix("ssh://"))
+    {
+        match after_scheme.split_once('/') {
+            Some((_host, path)) => path.trim_start_matches('/'),
+            None => {
+                return Err(format!(
+                    "Invalid repository URL '{}': missing '<owner>/<repo>' path after host.",
+                    trimmed
+                ));
+            }
+        }
+    } else if let Some((_user_host, path)) = without_git_suffix.split_once(':') {
+        path.trim_start_matches('/')
+    } else {
+        without_git_suffix
+    };
+
+    let Some((owner, repo)) = slug_candidate.split_once('/') else {
+        return Err(format!(
+            "Invalid repository identifier '{}': expected '<owner>/<repo>' slug.",
+            trimmed
+        ));
+    };
+
+    let owner_clean = owner.trim();
+    let repo_clean = repo.trim().trim_end_matches('/');
+    if owner_clean.is_empty()
+        || repo_clean.is_empty()
+        || repo_clean.contains('/')
+        || owner_clean.contains(':')
+        || repo_clean.contains(':')
+        || owner_clean.chars().any(char::is_whitespace)
+        || repo_clean.chars().any(char::is_whitespace)
+    {
+        return Err(format!(
+            "Invalid repository slug '{}' derived from '{}': expected '<owner>/<repo>'.",
+            slug_candidate, trimmed
+        ));
+    }
+
+    Ok(format!("{}/{}", owner_clean, repo_clean))
+}
+
+/// Resolves the target GitHub repository `<owner>/<repo>` slug from an explicit `--repo` argument
+/// or by querying `git remote get-url origin` in the dossier's working directory.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and DO-330 TQL-4 repository boundary isolation controls. Eliminates
+/// the hardcoded `gintatkinson/DEAP01-spec-core` default on `--repo` so downstream projects
+/// automatically resolve their own `origin` remote and fail closed if `--repo` is omitted and no
+/// valid `origin` remote exists.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - When `explicit_repo` is `Some(r)` with non-empty `r.trim()`, validates `r` via `parse_github_repo_slug`
+///   without invoking `git`.
+/// - When `explicit_repo` is `None` (or blank), executes `git remote get-url origin` in the nearest
+///   existing directory ancestor of `work_dir` and parses stdout via `parse_github_repo_slug`.
+///
+/// ## 3. Preconditions
+/// - `work_dir` is the directory path associated with the defect dossier or current workspace.
+///
+/// ## 4. Postconditions
+/// - Returns `Ok(String)` containing the verified `<owner>/<repo>` slug on success.
+/// - Returns `Err(String)` if `--repo` was omitted and `git remote get-url origin` fails or cannot be parsed.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(U)$ string parsing plus at most one `git remote get-url origin` subprocess call.
+/// - Space Complexity: $O(U)$ for subprocess stdout/stderr buffers.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Missing `git` binary, non-git directories, missing `origin` remotes, or malformed URLs fail closed
+///   with an explicit `Err(String)`.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-DEFECT-DOSSIER-RESOLVE-TARGET-REPO]
+pub fn resolve_target_repo(explicit_repo: Option<&str>, work_dir: &Path) -> Result<String, String> {
+    if let Some(raw) = explicit_repo {
+        let trimmed = raw.trim();
+        if !trimmed.is_empty() {
+            return parse_github_repo_slug(trimmed);
+        }
+    }
+
+    let effective_dir = if work_dir.as_os_str().is_empty() {
+        Path::new(".")
+    } else if work_dir.is_dir() {
+        work_dir
+    } else {
+        work_dir
+            .ancestors()
+            .find(|p| !p.as_os_str().is_empty() && p.is_dir())
+            .unwrap_or_else(|| Path::new("."))
+    };
+
+    let output = Command::new("git")
+        .args(["remote", "get-url", "origin"])
+        .current_dir(effective_dir)
+        .output()
+        .map_err(|e| {
+            format!(
+                "--repo was omitted and failed to execute 'git remote get-url origin' in '{}': {}",
+                effective_dir.display(),
+                e
+            )
+        })?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!(
+            "--repo was omitted and 'git remote get-url origin' could not be resolved in '{}': {}",
+            effective_dir.display(),
+            stderr.trim()
+        ));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    parse_github_repo_slug(stdout.trim()).map_err(|e| {
+        format!(
+            "--repo was omitted and 'git remote get-url origin' returned an unparseable URL '{}': {}",
+            stdout.trim(),
+            e
+        )
+    })
+}
+
 /// Checks whether a candidate file path points to an ephemeral `/tmp/` location outside `.pipeline/defects/`.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
@@ -1648,9 +1818,9 @@ pub fn run_check_defect(args: &DefectDossierArgs) -> Result<(), i32> {
         }
     };
 
-    if (args.publish || args.issue.is_some()) && is_ephemeral_tmp_path(body_file) {
+    if (!args.dry_run || args.publish || args.issue.is_some()) && is_ephemeral_tmp_path(body_file) {
         eprintln!(
-            "Error: Ephemeral /tmp/ path '{}' is forbidden when --publish or --issue is set. Write defect dossiers directly to .pipeline/defects/<name>.md.",
+            "Error: Ephemeral /tmp/ path '{}' is forbidden when publishing or updating GitHub SSOT issues. Write defect dossiers directly to .pipeline/defects/<name>.md.",
             body_file.display()
         );
         return Err(1);
@@ -1672,8 +1842,21 @@ pub fn run_check_defect(args: &DefectDossierArgs) -> Result<(), i32> {
         }
     };
 
+    let work_dir = body_file
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+
     match validate_defect_dossier(&content) {
         Ok(validation) => {
+            let resolved_repo = match resolve_target_repo(args.repo.as_deref(), work_dir) {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("Error resolving target repository: {}", e);
+                    return Err(1);
+                }
+            };
+
             let label = args.label.clone().unwrap_or_else(|| {
                 if args.provider == "gitlab" {
                     if validation.suggested_label == "bug" {
@@ -1703,7 +1886,7 @@ pub fn run_check_defect(args: &DefectDossierArgs) -> Result<(), i32> {
                 None => derive_defect_title(&validation.file_location, &validation.symptom),
             };
 
-            let persisted_path = if args.publish || args.issue.is_some() {
+            let persisted_path = if !args.dry_run || args.publish || args.issue.is_some() {
                 match ensure_persisted_in_pipeline_defects(body_file, &content) {
                     Ok(p) => p,
                     Err(e) => {
@@ -1721,7 +1904,7 @@ pub fn run_check_defect(args: &DefectDossierArgs) -> Result<(), i32> {
             );
             println!("[VALIDATION] Target payload:");
             println!("  Provider: {}", args.provider);
-            println!("  Repo: {}", args.repo);
+            println!("  Repo: {}", resolved_repo);
             println!("  Title: {}", title);
             println!("  Severity: {}", validation.severity);
             println!("  File Location: {}", validation.file_location);
@@ -1729,9 +1912,9 @@ pub fn run_check_defect(args: &DefectDossierArgs) -> Result<(), i32> {
             println!("  Label: {}", label);
             println!("  Body file: {}", persisted_path.display());
 
-            if (args.publish || args.issue.is_some()) && !args.dry_run {
+            if !args.dry_run {
                 match publish_or_edit_github_issue(
-                    &args.repo,
+                    &resolved_repo,
                     &title,
                     &label,
                     &persisted_path,

@@ -42,7 +42,10 @@ pub mod spec_audit;
 
 pub use check_secrets::{run_check_secrets, CheckSecretsArgs};
 pub use commit_msg::{scan_commit_message, CommitMsgArgs, CommitViolation};
-pub use defect_dossier::{validate_defect_dossier, DefectDossierArgs, DefectSchemaValidation};
+pub use defect_dossier::{
+    parse_github_repo_slug, resolve_target_repo, validate_defect_dossier, DefectDossierArgs,
+    DefectSchemaValidation,
+};
 pub use output_integrity::{verify_file_output, OutputIntegrityArgs};
 pub use runner::{run, BaselineOptions};
 pub use setup_hooks::{run_setup_hooks, SetupHooksArgs};
