@@ -24,7 +24,7 @@ On session startup, before executing file modifications, the coordinator agent M
 2. **Load Active Task Skill On-Demand**: Execute `view_file` ONLY on the `SKILL.md` relevant to the active task (do NOT preload `skills/feature-driven-implementation/SKILL.md` during specification, research, or upstream compiler maintenance tasks).
 3. **Load Governance Rules**: Execute `view_file` on `.pipeline/ACTIVE_RULES_BUNDLE.md` to ingest the complete, consolidated suite of active governance rules in a single read.
 4. **Conditional Platform Profile Load (Downstream Implementation Phase Only)**: Per `rules/constitution-first.md`, read `.pipeline/profiles/<target_platform>.md` ONLY when implementing downstream application code and ONLY for the workspace's configured target platform. Never read `.pipeline/profiles/flutter.md` during `UPSTREAM_SPEC_CORE_COMPILER` sessions, specification generation, or non-Flutter projects.
-5. **Pre-Commit Baseline Verification (NEVER on Startup/Init or Read-Only Turns)**: NEVER run `verify-baseline`, `cargo test`, or `flutter test` on session startup/initialization, during read-only questions, or on turns where no tracked source/model files were modified. Run `./target/release/verify-baseline` (or `./target/release/verify-baseline . --no-domain`) ONLY ONCE at the end of an implementation task after modifying tracked code/model files and immediately prior to `git commit` / `git push` (never redundantly inside read-only or single-item subagents). The legacy Python and shell tooling (`scripts/verify_downstream_baseline.py`, `reconcile_backlog.py`, `parity_auditor`, `setup_git_hooks.sh`) is permanently retired per Check 32 and Check 33 and MUST NOT be invoked.
+5. **Verify Baseline When Modifying Repository State**: Run `./target/release/verify-baseline . --no-domain` (or `cargo run --release -p verify-baseline -- . --no-domain` if the release binary has not been built) once per coordinator session prior to implementation or commit gates (never redundantly inside read-only or single-item subagents). The legacy Python and shell tooling (`scripts/verify_downstream_baseline.py`, `reconcile_backlog.py`, `parity_auditor`, `setup_git_hooks.sh`) is permanently retired per Check 32 and Check 33 and MUST NOT be invoked.
 
 ## Strict Planning Gate (No Execution Without Approved Plan)
 - You are strictly forbidden from creating, modifying, or deleting files in the workspace or dispatching any subagents unless that action is documented in an approved implementation plan.
@@ -36,7 +36,7 @@ On session startup, before executing file modifications, the coordinator agent M
 - Once an implementation plan has been established or approved, you are strictly forbidden from abandoning, altering, replacing, or discarding the plan without explicit user review and authorization.
 
 ## Automated Continuous Execution & Passing-Validation Fast-Path
-- **Continuous Execution Gate**: Once an implementation plan receives user approval (`PROCEED`), all documented micro-tasks, subagent dispatches, verification tests, and git pushes are fully authorized to run continuously to completion without intermediate approval pauses.
+- **Continuous Execution Gate**: Once an implementation plan receives user approval (`PROCEED`), all documented work packages, subagent dispatches, verification tests, and git pushes are fully authorized to run continuously to completion without intermediate approval pauses.
 - **Stop-On-Failure Rule**: The coordinator MUST stop and prompt the user ONLY if:
   1. A build, test, or linter gate fails (`exit code != 0`).
   2. A blocking error or unresolvable requirement ambiguity is encountered.
@@ -45,7 +45,7 @@ On session startup, before executing file modifications, the coordinator agent M
 ## Mandatory Native Rust TDD & Prohibition of Legacy Python/Pytest
 - **Legacy Python & Pytest Strictly Prohibited (Check 33)**: Creating, maintaining, or executing Python source files (`*.py`), Python test suites (`tests/`, `test_*.py`), `pytest`, or any other Python test runner is strictly forbidden across this repository. Check 33 (Zero Python Scripts Invariant) enforces this on disk; Check 32 (Zero Shell Scripts Invariant) equally forbids `*.sh` files.
 - **Native Rust Unit Tests Strictly Mandatory**: Native Rust `#[test]` unit tests, mutation tests (negative probes proving each gate can fail), and the RED-GREEN-REFACTOR TDD cycle are **strictly mandatory** across all Rust crates under `crates/`. Every fix or feature MUST ship a failing `#[test]` demonstrated RED before the implementation is written, then GREEN after it.
-- **Workspace Test Suite Gate**: `cargo test --workspace` MUST pass with zero failures before any task or feature is declared complete, alongside `./target/release/verify-baseline . --no-domain`.
+- **Workspace Test Suite Gate**: `cargo test --workspace` MUST pass with zero failures before any work package is declared complete, alongside `./target/release/verify-baseline . --no-domain`.
 - **Semantic Acceptance Testing**: End-to-end semantic acceptance verification against real schemas and domain specifications is performed exclusively with the native Rust binaries:
   - Baseline verification: `./target/release/verify-baseline . --no-domain` (or `cargo run --release -p verify-baseline -- . --no-domain`)
   - Backlog reconciliation: `./target/release/reconcile-backlog`
@@ -90,11 +90,8 @@ On session startup, before executing file modifications, the coordinator agent M
 - **No Documentation/Installation Drift**: Update installation instructions (`README.md`, installer scripts) whenever rules or directories change. Verify `git diff origin/<branch>` is empty before declaring completion.
 
 ## Atomic Work Execution & Walkthrough Gates
-- All tasks must be executed as atomic micro-tasks with focused commits and handoff summaries. Commingling unrelated changes is forbidden.
-- **Canonical DEAP Taxonomy**: Organize work strictly by Pipeline Steps (`Step 1..Step 4`), Epics (`EPIC-XX`), Features (`FEAT-XX`), User Stories (`US-XX`), Use Cases (`UC-XX`), Micro-Tasks (`Task 1..Task N`), and GitHub Issue IDs (`#Issue`). Never use `WP-*` or `Phase *` labels, and never create `implementation_plan.md` or `docs/reports/PHASE_*` files.
-- **Opt-In Desktop Visual E2E Suites**: Never run `flutter test integration_test/... -d macos` unless explicitly commanded by the user in the current prompt.
-- **Desktop Layout & Readability Invariants**: Multi-panel workspace tiers default to equal split proportions (`1/3 : 1/3 : 1/3`) unless specified otherwise by the deterministic Rust LUI AST, with zero `RenderFlex` overflows or truncated headers across standard desktop viewports (`>= 1920x1200`).
-- **Mandatory Tracker Issue Transition Gate**: Every issue referenced in the commit log must carry `status:fixed-resolved` (or `status::fixed-resolved` on GitLab) and verification evidence comments prior to completion.
+- All tasks must be executed as atomic work packages with focused implementation plans, commits, and walkthroughs. Commingling unrelated changes is forbidden.
+- **Mandatory Tracker Issue Transition Gate**: Every issue referenced in the commit log must carry `status:fixed-resolved` (or `status::fixed-resolved` on GitLab) and verification evidence comments prior to walkthrough completion.
 
 ## Mandatory Upstream Tooling Bug Reporting
 - Before filing an upstream defect or tooling bug, an adversarial auditor subagent MUST be dispatched with `skills/adversarial-code-auditor/SKILL.md` to produce a verified 7-section defect dossier with un-falsifiable empirical reproduction, and validate it offline via `./target/release/verify-baseline check-defect` before submitting via `./target/release/reconcile-backlog create-issue --label bug` (or `./target/release/file-defect`). Filing raw or unverified defect reports is strictly prohibited. Do not apply silent local-only patches.
@@ -106,7 +103,7 @@ On session startup, before executing file modifications, the coordinator agent M
 - The coordinator MUST ensure every spawned subagent is terminated or confirmed reclaimed immediately once its atomic task is complete. Subagents must never be left in an idle or dormant state.
 
 ## Mandatory Directory Constraints (No Root Writes)
-- Creating or modifying source code or project configuration files at the repository root is strictly forbidden (except `.gitignore` or approved configurations).
+- Creating or modifying source code or project configuration files at the repository root is strictly forbidden (except `implementation_plan.md`, `.gitignore`, or approved configurations).
 - Flutter application code resides under `app_flutter/`; React application code resides under `web_react/`.
 
 ## Strict Context Isolation & Skill Fidelity (No Cross-Talk)
