@@ -36,7 +36,7 @@ On session startup, before executing file modifications, the coordinator agent M
 - Once an implementation plan has been established or approved, you are strictly forbidden from abandoning, altering, replacing, or discarding the plan without explicit user review and authorization.
 
 ## Automated Continuous Execution & Passing-Validation Fast-Path
-- **Continuous Execution Gate**: Once an implementation plan receives user approval (`PROCEED`), all documented work packages, subagent dispatches, verification tests, and git pushes are fully authorized to run continuously to completion without intermediate approval pauses.
+- **Continuous Execution Gate**: Once an implementation plan receives user approval (`PROCEED`), all documented micro-tasks, subagent dispatches, verification tests, and git pushes are fully authorized to run continuously to completion without intermediate approval pauses.
 - **Stop-On-Failure Rule**: The coordinator MUST stop and prompt the user ONLY if:
   1. A build, test, or linter gate fails (`exit code != 0`).
   2. A blocking error or unresolvable requirement ambiguity is encountered.
@@ -45,7 +45,7 @@ On session startup, before executing file modifications, the coordinator agent M
 ## Mandatory Native Rust TDD & Prohibition of Legacy Python/Pytest
 - **Legacy Python & Pytest Strictly Prohibited (Check 33)**: Creating, maintaining, or executing Python source files (`*.py`), Python test suites (`tests/`, `test_*.py`), `pytest`, or any other Python test runner is strictly forbidden across this repository. Check 33 (Zero Python Scripts Invariant) enforces this on disk; Check 32 (Zero Shell Scripts Invariant) equally forbids `*.sh` files.
 - **Native Rust Unit Tests Strictly Mandatory**: Native Rust `#[test]` unit tests, mutation tests (negative probes proving each gate can fail), and the RED-GREEN-REFACTOR TDD cycle are **strictly mandatory** across all Rust crates under `crates/`. Every fix or feature MUST ship a failing `#[test]` demonstrated RED before the implementation is written, then GREEN after it.
-- **Workspace Test Suite Gate**: `cargo test --workspace` MUST pass with zero failures before any work package is declared complete, alongside `./target/release/verify-baseline . --no-domain`.
+- **Workspace Test Suite Gate**: `cargo test --workspace` MUST pass with zero failures before any task or feature is declared complete, alongside `./target/release/verify-baseline . --no-domain`.
 - **Semantic Acceptance Testing**: End-to-end semantic acceptance verification against real schemas and domain specifications is performed exclusively with the native Rust binaries:
   - Baseline verification: `./target/release/verify-baseline . --no-domain` (or `cargo run --release -p verify-baseline -- . --no-domain`)
   - Backlog reconciliation: `./target/release/reconcile-backlog`
@@ -90,8 +90,11 @@ On session startup, before executing file modifications, the coordinator agent M
 - **No Documentation/Installation Drift**: Update installation instructions (`README.md`, installer scripts) whenever rules or directories change. Verify `git diff origin/<branch>` is empty before declaring completion.
 
 ## Atomic Work Execution & Walkthrough Gates
-- All tasks must be executed as atomic work packages with focused implementation plans, commits, and walkthroughs. Commingling unrelated changes is forbidden.
-- **Mandatory Tracker Issue Transition Gate**: Every issue referenced in the commit log must carry `status:fixed-resolved` (or `status::fixed-resolved` on GitLab) and verification evidence comments prior to walkthrough completion.
+- All tasks must be executed as atomic micro-tasks with focused commits and handoff summaries. Commingling unrelated changes is forbidden.
+- **Canonical DEAP Taxonomy**: Organize all work strictly by Pipeline Steps (`Step 1..Step 4`), Epics (`EPIC-XX`), Features (`FEAT-XX`), User Stories (`US-XX`), Use Cases (`UC-XX`), Micro-Tasks (`Task 1..Task N`), and GitHub Issue IDs (`#Issue`). Never invent `WP-*` (Work Package) or `Phase *` labels, and never create workspace `implementation_plan.md` or `docs/reports/PHASE_*` files.
+- **Opt-In Desktop Visual E2E Suites**: Do not run `flutter test integration_test/... -d macos` screenshot suites during atomic defect fixes or unit/widget tasks unless explicitly requested by the user.
+- **Desktop Layout & Readability Invariants**: Multi-panel workspace tiers default to equal split proportions (`1/3 : 1/3 : 1/3`) unless specified otherwise by the deterministic Rust LUI AST, with zero `RenderFlex` overflows or truncated headers across standard desktop viewports (`>= 1920x1200`).
+- **Mandatory Tracker Issue Transition Gate**: Every issue referenced in the commit log must carry `status:fixed-resolved` (or `status::fixed-resolved` on GitLab) and verification evidence comments prior to completion.
 
 ## Mandatory Upstream Tooling Bug Reporting
 - Before filing an upstream defect or tooling bug, an adversarial auditor subagent MUST be dispatched with `skills/adversarial-code-auditor/SKILL.md` to produce a verified 7-section defect dossier with un-falsifiable empirical reproduction, and validate it offline via `./target/release/verify-baseline check-defect` before submitting via `./target/release/reconcile-backlog create-issue --label bug` (or `./target/release/file-defect`). Filing raw or unverified defect reports is strictly prohibited. Do not apply silent local-only patches.
@@ -103,7 +106,7 @@ On session startup, before executing file modifications, the coordinator agent M
 - The coordinator MUST ensure every spawned subagent is terminated or confirmed reclaimed immediately once its atomic task is complete. Subagents must never be left in an idle or dormant state.
 
 ## Mandatory Directory Constraints (No Root Writes)
-- Creating or modifying source code or project configuration files at the repository root is strictly forbidden (except `implementation_plan.md`, `.gitignore`, or approved configurations).
+- Creating or modifying source code or project configuration files at the repository root is strictly forbidden (except `.gitignore` or approved configurations).
 - Flutter application code resides under `app_flutter/`; React application code resides under `web_react/`.
 
 ## Strict Context Isolation & Skill Fidelity (No Cross-Talk)

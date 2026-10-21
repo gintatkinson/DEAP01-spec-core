@@ -261,7 +261,7 @@
 ### Hard Constraints
 - **Strict Planning Gate**: Before creating, modifying, or deleting files, the agent MUST write/update the implementation plan, stop, and obtain user approval.
 - **Approved Plan Fidelity**: Only files and actions explicitly documented in the approved plan may be modified.
-- **Continuous Execution**: Once the plan is approved (`PROCEED`), work packages and subagents execute continuously to completion unless a gate fails.
+- **Continuous Execution**: Once the plan is approved (`PROCEED`), micro-tasks and subagents execute continuously to completion unless a gate fails.
 
 ---
 
@@ -271,6 +271,9 @@
 **ALWAYS enforce:** Never assert state or completion without direct, empirical verification.
 
 ### Hard Constraints
-- **Mandatory Quality Gates**: Run `cargo test --workspace` and `./target/release/verify-baseline . --no-domain` before declaring completion.
+- **Mandatory Quality Gates**: Run `cargo test --workspace`, headless unit/widget tests (`flutter test` excluding `integration_test/`), and `./target/release/verify-baseline` before declaring completion.
 - **Remote Sync Verification**: Push all commits to the remote tracking branch and verify `git diff origin/<branch>` is empty.
-- **Forensic Verification Evidence**: Document raw terminal outputs, test results, commit hashes, and issue transitions in handoff reports and issue comments.
+- **Forensic Verification Evidence**: Document terminal test results, commit hashes, and GitHub issue transitions (`#Issue`) in issue comments and handoff summaries.
+- **Canonical DEAP Taxonomy**: Organize all work strictly by Pipeline Steps (`Step 1..Step 4`), Epics (`EPIC-XX`), Features (`FEAT-XX`), User Stories (`US-XX`), Use Cases (`UC-XX`), Micro-Tasks (`Task 1..Task N`), and GitHub Issue IDs (`#Issue`). Never invent `WP-*` (Work Package) or `Phase *` labels, and never create workspace `implementation_plan.md` or `docs/reports/PHASE_*` files.
+- **Opt-In Desktop Visual E2E Suites**: Do not run `flutter test integration_test/... -d macos` screenshot suites during atomic defect fixes or unit/widget tasks unless explicitly requested by the user.
+- **Desktop Layout & Readability Invariants**: Multi-panel workspace tiers default to equal split proportions (`1/3 : 1/3 : 1/3`) unless specified otherwise by the deterministic Rust LUI AST, with zero `RenderFlex` overflows or truncated headers across standard desktop viewports (`>= 1920x1200`).
