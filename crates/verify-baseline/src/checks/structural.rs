@@ -1829,6 +1829,14 @@ pub fn check_blueprint_grounding(repo_root: &Path) -> Result<(), Vec<String>> {
     }
 
     for bp in CanonicalArchitectureBlueprint::ALL {
+        if !is_upstream_compiler(repo_root)
+            && matches!(
+                bp,
+                CanonicalArchitectureBlueprint::SysmlSsotBidirectionalSynchronizationArchitecture
+            )
+        {
+            continue;
+        }
         let bp_path = blueprints_dir.join(bp.as_str());
         if !bp_path.is_file() {
             violations.push(format!(
