@@ -39,6 +39,10 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-CHECK-36-DOCSTRING-GATE], [DO-330-TQL-4-DOCSTRING-GATE]
 
+use deap_core::source_ast::{
+    extract_dart_getter_ident, strip_leading_dart_annotations,
+    strip_line_comment_preserving_strings,
+};
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
@@ -806,19 +810,17 @@ pub fn audit_dart_source_docstrings(source: &str, file_rel: &str) -> Result<usiz
             continue;
         }
 
-        let code = if let Some((before, _)) = trimmed.split_once("//") {
-            before.trim()
-        } else {
-            trimmed
-        };
+        let code = strip_line_comment_preserving_strings(trimmed);
 
         if code.is_empty() {
             continue;
         }
 
-        if code.starts_with('@') {
+        let stripped_code = strip_leading_dart_annotations(code);
+        if stripped_code.trim().is_empty() {
             continue;
         }
+        let code = stripped_code.trim();
 
         if paren_depth == 0 {
             if brace_depth == 0 {
@@ -868,8 +870,11 @@ pub fn audit_dart_source_docstrings(source: &str, file_rel: &str) -> Result<usiz
             }
         }
 
+        let prev_brace_depth = brace_depth;
         update_line_delimiter_depths(code, &mut brace_depth, &mut paren_depth);
-        if brace_depth == 0 {
+        if (prev_brace_depth > 0 && brace_depth == 0)
+            || (brace_depth == 0 && (code.ends_with(';') || code.ends_with('}')))
+        {
             active_class_name = None;
         }
     }
@@ -1241,6 +1246,10 @@ fn classify_dart_top_level_item(code: &str) -> Option<(&'static str, String)> {
         return Some(("fn", fn_name));
     }
 
+    if let Some(getter_name) = extract_dart_getter_ident(code) {
+        return Some(("fn", getter_name));
+    }
+
     None
 }
 
@@ -1291,7 +1300,13 @@ fn classify_dart_member_item(code: &str, class_name: &str) -> Option<(&'static s
     }
 
     if let Some(after_factory) = code.strip_prefix("factory ") {
-        let cname = extract_leading_identifier(after_factory.trim_start())?;
+        let trimmed_after = after_factory.trim_start();
+        if let Some((cls, rest)) = trimmed_after.split_once('.') {
+            if let Some(named) = extract_leading_identifier(rest) {
+                return Some(("constructor", format!("{}.{}", cls, named)));
+            }
+        }
+        let cname = extract_leading_identifier(trimmed_after)?;
         return Some(("constructor", cname));
     }
 
@@ -1315,6 +1330,10 @@ fn classify_dart_member_item(code: &str, class_name: &str) -> Option<(&'static s
 
     if code.starts_with("const ") {
         return None;
+    }
+
+    if let Some(getter_name) = extract_dart_getter_ident(code) {
+        return Some(("method", getter_name));
     }
 
     let after_mods = code
@@ -1475,13 +1494,14 @@ fn extract_dart_callable_name(code: &str) -> Option<String> {
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A deterministic delimiter tracking (`update_line_delimiter_depths`).
-/// Tracks `(` / `)` and `{` / `}` while ignoring characters inside string or character literals and
-/// ignoring `{` / `}` inside `(...)` so Dart named parameter blocks `({super.key})` never alter class brace depth.
+/// Delegates to `update_ast_delimiter_depths` to track delimiters across single/double quotes,
+/// raw strings, nested `${...}` interpolations, lifetimes, and unicode character literals.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - `paren_depth` increments on unquoted `'('` and saturatingly decrements on unquoted `')'`.
 /// - `brace_depth` increments on unquoted `'{'` and saturatingly decrements on unquoted `'}'` if and
 ///   only if `*paren_depth == 0`.
+/// - Characters inside string literals, raw string literals, or character literals are ignored.
 ///
 /// ## 3. Preconditions
 /// - `code: &str` is a comment-stripped source line.
@@ -1495,9 +1515,9 @@ fn extract_dart_callable_name(code: &str) -> Option<String> {
 /// - Space Complexity: O(1) auxiliary state.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Non-panicking `.get(..)` byte lookups and saturating counter arithmetic.
+/// - Interface: Non-panicking byte lookups and saturating counter arithmetic.
 /// - State: Updates only the two caller-provided depth references.
-/// - Action: Skips escaped characters `\.` inside string and character literals safely.
+/// - Action: Skips escaped characters inside string and character literals safely.
 /// - Resource: Zero heap allocations.
 ///
 /// ## 7. Realization & Traceability
@@ -1535,7 +1555,6 @@ fn update_line_delimiter_depths(code: &str, brace_depth: &mut usize, paren_depth
         if b == b'"' {
             in_double_quote = true;
         } else if b == b'\'' {
-            // In Rust, `'a` can be a lifetime; only enter single-quote literal if a closing `'` exists nearby
             let is_char_lit = bytes.get(idx.saturating_add(2)) == Some(&b'\'')
                 || (bytes.get(idx.saturating_add(1)) == Some(&b'\\')
                     && bytes.get(idx.saturating_add(3)) == Some(&b'\''));

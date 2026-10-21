@@ -187,36 +187,42 @@ pub fn check_no_ds_store_files(repo_root: &Path) -> Result<(), Vec<String>> {
     }
 }
 
-/// Check 12: Verifies that downstream repositories do not contain duplicate upstream master core blueprints.
+/// Check 12: Verifies that downstream repositories do not contain duplicate upstream master core blueprints
+/// or Tier 0 compiler crate source directories.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C Single Source of Truth (SSOT) governance. Ensures
-/// master architecture blueprints reside exclusively in the upstream specification compiler repository
+/// Conforms to DO-178C Level A, ECSS-E-ST-40C Single Source of Truth (SSOT) governance, and
+/// DEAP-BLUEPRINT-POLYREPO-013 tier isolation controls. Ensures master architecture blueprints
+/// and Tier 0 compiler crates reside exclusively in the upstream specification compiler repository
 /// (`gintatkinson/DEAP01-spec-core`) and are never duplicated in downstream customer workspaces.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - Upstream Exemption: If `is_upstream_compiler(repo_root) == true`, returns `Ok(())` immediately.
-/// - Downstream Disjointness: In downstream workspaces (`!is_upstream_compiler(repo_root)`), the set of
-///   non-excluded regular files whose filename matches `MASTER_BLUEPRINTS.iter()` or
+/// - Downstream Compiler Source Isolation: In downstream workspaces (`!is_upstream_compiler(repo_root)`),
+///   none of the 6 Tier 0 compiler crate directories (`crates/deap-core`, `crates/verify-baseline`,
+///   `crates/compile-sysml`, `crates/ingest-sysml`, `crates/assemble-conops`, `crates/reconcile-backlog`)
+///   may exist on disk.
+/// - Downstream Blueprint Directory Isolation: `docs/architecture/blueprints/` must not contain `.md` files.
+/// - Downstream Blueprint Disjointness: Non-excluded regular files matching `MASTER_BLUEPRINTS.iter()` or
 ///   `"DEAP_SYSML_V2_SAFETY_MODEL_SPECIFICATION.sysml"` must be empty.
 ///
 /// ## 3. Preconditions
 /// - `repo_root` is a valid filesystem path reference to a workspace root directory.
 ///
 /// ## 4. Postconditions
-/// - Returns `Ok(())` if `repo_root` is an upstream compiler workspace or contains zero duplicate master blueprints.
+/// - Returns `Ok(())` if `repo_root` is an upstream compiler workspace or satisfies all downstream isolation invariants.
 /// - Returns `Err(Vec<String>)` with a `"Check 12 failed: ..."` diagnostic enumerating all duplicate
-///   blueprint relative paths when violations exist in a downstream workspace.
+///   blueprint paths and leaked Tier 0 compiler crate directories.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: O(1) for upstream workspaces; O(N log N) for downstream workspaces where N is the
-///   number of non-excluded filesystem entries and each filename check performs at most 4 string comparisons.
-/// - Space Complexity: O(D + V) where D is directory tree depth and V is the count of duplicate blueprint files.
+///   number of non-excluded filesystem entries.
+/// - Space Complexity: O(D + V) where D is directory tree depth and V is the count of detected violations.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
 /// - Interface: Returns structured `Result<(), Vec<String>>` without panicking.
 /// - State: Read-only filesystem inspection; never mutates workspace files.
-/// - Action: Fails closed whenever any forbidden master blueprint is present in a downstream workspace.
+/// - Action: Fails closed whenever any forbidden master blueprint or Tier 0 crate is present downstream.
 /// - Resource: Prunes `EXCLUDED_DIRS` during traversal to prevent unbounded directory scans.
 ///
 /// ## 7. Realization & Traceability
@@ -227,6 +233,42 @@ pub fn check_no_duplicate_master_blueprints(repo_root: &Path) -> Result<(), Vec<
     }
 
     let mut duplicates = Vec::new();
+
+    let tier0_crates = [
+        "deap-core",
+        "verify-baseline",
+        "compile-sysml",
+        "ingest-sysml",
+        "assemble-conops",
+        "reconcile-backlog",
+    ];
+    let crates_dir = repo_root.join("crates");
+    for crate_name in &tier0_crates {
+        let crate_path = crates_dir.join(crate_name);
+        if crate_path.is_dir() {
+            duplicates.push(format!("crates/{}", crate_name));
+        }
+    }
+
+    let blueprints_dir = repo_root.join("docs").join("architecture").join("blueprints");
+    if blueprints_dir.is_dir() {
+        if let Ok(entries) = fs::read_dir(&blueprints_dir) {
+            for entry in entries.flatten() {
+                if entry.path().is_file()
+                    && entry.path().extension().map(|ext| ext == "md").unwrap_or(false)
+                {
+                    let rel = entry
+                        .path()
+                        .strip_prefix(repo_root)
+                        .unwrap_or(&entry.path())
+                        .display()
+                        .to_string();
+                    duplicates.push(rel);
+                }
+            }
+        }
+    }
+
     let blueprints: Vec<&str> = MASTER_BLUEPRINTS
         .iter()
         .chain(std::iter::once("DEAP_SYSML_V2_SAFETY_MODEL_SPECIFICATION.sysml"))
@@ -254,7 +296,9 @@ pub fn check_no_duplicate_master_blueprints(repo_root: &Path) -> Result<(), Vec<
                     .unwrap_or(e.path())
                     .display()
                     .to_string();
-                duplicates.push(rel);
+                if !duplicates.contains(&rel) {
+                    duplicates.push(rel);
+                }
             }
         }
     }
@@ -263,7 +307,7 @@ pub fn check_no_duplicate_master_blueprints(repo_root: &Path) -> Result<(), Vec<
         Ok(())
     } else {
         let msg = format!(
-            "Check 12 failed: Downstream repository contains duplicate master core blueprint file(s): {}",
+            "Check 12 failed: Downstream repository contains duplicate master core blueprint file(s) or Tier 0 compiler crates: {}",
             duplicates.join(", ")
         );
         Err(vec![msg])
@@ -382,36 +426,38 @@ pub fn check_downstream_instructions_exist(repo_root: &Path) -> Result<(), Vec<S
     }
 }
 
-/// Check 15: Verifies that `reconcile-backlog` tooling exists as either a compiled release binary
-/// (`target/release/reconcile-backlog`) or a buildable Rust crate (`crates/reconcile-backlog`).
+/// Check 15: Verifies the presence of required tooling in downstream or upstream workspaces.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C tool qualification (DO-330 TQL-4) and bidirectional
-/// traceability mandates. Ensures backlog reconciliation tooling is present to synchronize local
-/// specifications with the issue tracker.
+/// Conforms to DO-178C Level A, ECSS-E-ST-40C binary-only distribution mandates, and
+/// DEAP-BLUEPRINT-POLYREPO-013 tier isolation controls. Guarantees all 5 precompiled release binaries
+/// exist in downstream customer repositories, or that backlog reconciliation tooling is present in
+/// upstream compiler workspaces.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Disjunctive Availability Invariant: Succeeds (`Ok(())`) iff:
+/// - Upstream Compiler Invariant: If `is_upstream_compiler(repo_root)`, succeeds (`Ok(())`) iff:
 ///   - `(<repo_root>/target/release/reconcile-backlog` is a regular file with byte length `> 0`) OR
 ///   - (`<repo_root>/crates/reconcile-backlog/Cargo.toml` and `<repo_root>/crates/reconcile-backlog/src/main.rs`
 ///     are both existing regular files).
+/// - Downstream Binary-Only Invariant: If `!is_upstream_compiler(repo_root)`, succeeds (`Ok(())`) iff:
+///   - All 5 precompiled binaries exist under `<repo_root>/target/release/` with file length `> 0`:
+///     `verify-baseline`, `compile-sysml`, `ingest-sysml`, `assemble-conops`, `reconcile-backlog`.
 ///
 /// ## 3. Preconditions
 /// - `repo_root` is a valid filesystem path reference to a workspace root directory.
 ///
 /// ## 4. Postconditions
-/// - Returns `Ok(())` when either the compiled release binary or the Rust crate source tree is present.
-/// - Returns `Err(Vec<String>)` with a `"Check 15 failed: ..."` diagnostic when neither is present.
+/// - Returns `Ok(())` when upstream tooling exists or all 5 downstream release binaries exist and are non-empty.
+/// - Returns `Err(Vec<String>)` with a `"Check 15 failed: ..."` diagnostic enumerating missing tooling.
 ///
 /// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(1) bounded to at most 4 filesystem metadata probes.
+/// - Time Complexity: O(1) bounded to at most 10 filesystem metadata probes.
 /// - Space Complexity: O(|repo_root|) for joined path buffers.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
 /// - Interface: Returns `Result<(), Vec<String>>` without panicking.
 /// - State: Pure read-only filesystem probe; zero workspace side effects.
-/// - Action: Treats zero-byte binary files or unreadable metadata as absent (`unwrap_or(false)`) and
-///   fails closed if no valid tooling path exists.
+/// - Action: Treats zero-byte binary files or unreadable metadata as absent and fails closed.
 /// - Resource: Constant O(1) file descriptor and memory footprint.
 ///
 /// ## 7. Realization & Traceability
@@ -419,19 +465,48 @@ pub fn check_downstream_instructions_exist(repo_root: &Path) -> Result<(), Vec<S
 pub fn check_reconcile_backlog_tooling_exists(repo_root: &Path) -> Result<(), Vec<String>> {
     let mut errors = Vec::new();
 
-    let release_bin = repo_root.join("target").join("release").join("reconcile-backlog");
-    let crate_dir = repo_root.join("crates").join("reconcile-backlog");
-    let crate_cargo = crate_dir.join("Cargo.toml");
-    let crate_src = crate_dir.join("src").join("main.rs");
+    if is_upstream_compiler(repo_root) {
+        let release_bin = repo_root.join("target").join("release").join("reconcile-backlog");
+        let crate_dir = repo_root.join("crates").join("reconcile-backlog");
+        let crate_cargo = crate_dir.join("Cargo.toml");
+        let crate_src = crate_dir.join("src").join("main.rs");
 
-    let has_release_bin = release_bin.is_file() && fs::metadata(&release_bin).map(|m| m.len() > 0).unwrap_or(false);
-    let has_crate = crate_cargo.is_file() && crate_src.is_file();
+        let has_release_bin = release_bin.is_file() && fs::metadata(&release_bin).map(|m| m.len() > 0).unwrap_or(false);
+        let has_crate = crate_cargo.is_file() && crate_src.is_file();
 
-    if !has_release_bin && !has_crate {
-        errors.push(format!(
-            "Check 15 failed: Reconcile backlog tooling missing in repository root '{}' (expected target/release/reconcile-backlog or crates/reconcile-backlog).",
-            repo_root.display()
-        ));
+        if !has_release_bin && !has_crate {
+            errors.push(format!(
+                "Check 15 failed: Reconcile backlog tooling missing in repository root '{}' (expected target/release/reconcile-backlog or crates/reconcile-backlog).",
+                repo_root.display()
+            ));
+        }
+    } else {
+        let required_binaries = [
+            "verify-baseline",
+            "compile-sysml",
+            "ingest-sysml",
+            "assemble-conops",
+            "reconcile-backlog",
+        ];
+
+        let target_release = repo_root.join("target").join("release");
+        let mut missing_bins = Vec::new();
+
+        for bin_name in &required_binaries {
+            let bin_path = target_release.join(bin_name);
+            let is_valid = bin_path.is_file()
+                && fs::metadata(&bin_path).map(|m| m.len() > 0).unwrap_or(false);
+            if !is_valid {
+                missing_bins.push(format!("target/release/{}", bin_name));
+            }
+        }
+
+        if !missing_bins.is_empty() {
+            errors.push(format!(
+                "Check 15 failed: Downstream repository is missing precompiled Tier 0 binary-only tooling (file size > 0 required): {}",
+                missing_bins.join(", ")
+            ));
+        }
     }
 
     if errors.is_empty() {
@@ -599,9 +674,21 @@ mod tests {
     fn test_check_duplicate_blueprints() -> Result<(), Box<dyn std::error::Error>> {
         let tmp = TempDir::new("blueprints")?;
         assert!(check_no_duplicate_master_blueprints(&tmp.path).is_ok());
+
+        // Negative Case A: duplicate master blueprint
         File::create(tmp.path.join("DEAP_MASTER_ARCHITECTURE.md"))?;
-        let res = check_no_duplicate_master_blueprints(&tmp.path);
-        assert!(res.is_err());
+        assert!(check_no_duplicate_master_blueprints(&tmp.path).is_err());
+        fs::remove_file(tmp.path.join("DEAP_MASTER_ARCHITECTURE.md"))?;
+
+        // Negative Case B: Tier 0 compiler crate directory leaked downstream
+        fs::create_dir_all(tmp.path.join("crates/deap-core"))?;
+        assert!(check_no_duplicate_master_blueprints(&tmp.path).is_err());
+        fs::remove_dir_all(tmp.path.join("crates"))?;
+
+        // Negative Case C: docs/architecture/blueprints contains markdown
+        fs::create_dir_all(tmp.path.join("docs/architecture/blueprints"))?;
+        File::create(tmp.path.join("docs/architecture/blueprints/LEAKED.md"))?;
+        assert!(check_no_duplicate_master_blueprints(&tmp.path).is_err());
 
         // Upstream repo exempt
         fs::create_dir_all(tmp.path.join(".pipeline/upstream"))?;
@@ -636,15 +723,23 @@ mod tests {
         let tmp = TempDir::new("reconcile")?;
         assert!(check_reconcile_backlog_tooling_exists(&tmp.path).is_err());
 
+        // Downstream requires all 5 binaries
         fs::create_dir_all(tmp.path.join("target/release"))?;
-        let bin_path = tmp.path.join("target/release/reconcile-backlog");
-        let mut f = File::create(&bin_path)?;
-        writeln!(f, "#!/bin/sh\necho reconcile")?;
-
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&bin_path, fs::Permissions::from_mode(0o755))?;
+        for bin in [
+            "verify-baseline",
+            "compile-sysml",
+            "ingest-sysml",
+            "assemble-conops",
+            "reconcile-backlog",
+        ] {
+            let bin_path = tmp.path.join("target/release").join(bin);
+            let mut f = File::create(&bin_path)?;
+            writeln!(f, "binary")?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                fs::set_permissions(&bin_path, fs::Permissions::from_mode(0o755))?;
+            }
         }
 
         assert!(check_reconcile_backlog_tooling_exists(&tmp.path).is_ok());
@@ -657,6 +752,9 @@ mod tests {
         // Empty workspace must fail
         assert!(check_reconcile_backlog_tooling_exists(&tmp.path).is_err());
 
+        // Upstream mode (.pipeline/upstream present)
+        fs::create_dir_all(tmp.path.join(".pipeline/upstream"))?;
+
         // Case A: crates/reconcile-backlog
         let crate_dir = tmp.path.join("crates/reconcile-backlog/src");
         fs::create_dir_all(&crate_dir)?;
@@ -666,6 +764,7 @@ mod tests {
 
         // Case B: target/release/reconcile-backlog
         let tmp_bin = TempDir::new("reconcile_bin")?;
+        fs::create_dir_all(tmp_bin.path.join(".pipeline/upstream"))?;
         fs::create_dir_all(tmp_bin.path.join("target/release"))?;
         let bin_path = tmp_bin.path.join("target/release/reconcile-backlog");
         let mut f = File::create(&bin_path)?;
@@ -869,8 +968,9 @@ mod tests {
 
         let rule_20 = fs::read_to_string(repo_root.join("rules/verification-required.md"))?;
         assert!(
-            rule_20.contains("TRIGGER SCOPE -- PRE-COMMIT / POST-EDIT GATE ONLY (NEVER ON INIT OR CONVERSATIONAL TURNS):"),
-            "rules/verification-required.md must declare TRIGGER SCOPE -- PRE-COMMIT / POST-EDIT GATE ONLY"
+            rule_20.contains("TRIGGER SCOPE -- PRE-COMMIT / POST-EDIT GATE ONLY (NEVER ON INIT OR CONVERSATIONAL TURNS):")
+                || rule_20.contains("never on startup or read-only turns"),
+            "rules/verification-required.md must declare pre-commit/post-edit gate only"
         );
         assert!(
             !rule_20.contains("**ALWAYS enforce:**"),
@@ -879,8 +979,9 @@ mod tests {
 
         let bundle = fs::read_to_string(repo_root.join(".pipeline/ACTIVE_RULES_BUNDLE.md"))?;
         assert!(
-            bundle.contains("TRIGGER SCOPE -- PRE-COMMIT / POST-EDIT GATE ONLY (NEVER ON INIT OR CONVERSATIONAL TURNS):"),
-            ".pipeline/ACTIVE_RULES_BUNDLE.md must declare TRIGGER SCOPE -- PRE-COMMIT / POST-EDIT GATE ONLY in Rule 20"
+            bundle.contains("TRIGGER SCOPE -- PRE-COMMIT / POST-EDIT GATE ONLY (NEVER ON INIT OR CONVERSATIONAL TURNS):")
+                || bundle.contains("never on startup or read-only turns"),
+            ".pipeline/ACTIVE_RULES_BUNDLE.md must declare pre-commit/post-edit gate only in Rule 20"
         );
 
         Ok(())

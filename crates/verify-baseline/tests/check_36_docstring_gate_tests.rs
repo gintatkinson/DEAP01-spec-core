@@ -353,3 +353,212 @@ fn test_live_workspace_crates_have_100_percent_per_item_7_section_docstrings() {
         full_gate.err()
     );
 }
+
+#[test]
+fn test_check_36_catches_multiline_dart_classes_string_slashes_interpolated_quotes_and_dart3_items() {
+    let valid_dart = r#"
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A PrimaryService classification.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Endpoint URL points to secure API gateway.
+///
+/// ## 3. Preconditions
+/// - System network stack is initialized.
+///
+/// ## 4. Postconditions
+/// - Instantiates primary service handler.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1) constant time initialization.
+/// - Space Complexity: O(1) instance allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Network failures fall back to secondary service.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SERV-01-PRIMARY-SERVICE]
+class PrimaryService {
+  final String url = "https://example.com/api//v1";
+
+  /// ## 1. Safety Intent & Regulatory Scope
+  /// PrimaryService constructor safety intent.
+  ///
+  /// ## 2. Invariants & Mathematical Properties
+  /// - Default instance state.
+  ///
+  /// ## 3. Preconditions
+  /// - None.
+  ///
+  /// ## 4. Postconditions
+  /// - Returns new PrimaryService.
+  ///
+  /// ## 5. Algorithmic Complexity Bounds
+  /// - Time: O(1).
+  /// - Space: O(1).
+  ///
+  /// ## 6. Failure Modes & Fault Tolerance
+  /// - Infallible constructor.
+  ///
+  /// ## 7. Realization & Traceability
+  /// Realises: [REQ-SERV-01-PRIMARY-SERVICE-CTOR]
+  PrimaryService();
+
+  /// ## 1. Safety Intent & Regulatory Scope
+  /// Named factory constructor for JSON initialization.
+  ///
+  /// ## 2. Invariants & Mathematical Properties
+  /// - Validates JSON configuration map.
+  ///
+  /// ## 3. Preconditions
+  /// - json map is not null.
+  ///
+  /// ## 4. Postconditions
+  /// - Returns initialized PrimaryService.
+  ///
+  /// ## 5. Algorithmic Complexity Bounds
+  /// - Time: O(1).
+  /// - Space: O(1).
+  ///
+  /// ## 6. Failure Modes & Fault Tolerance
+  /// - Invalid fields throw FormatException.
+  ///
+  /// ## 7. Realization & Traceability
+  /// Realises: [REQ-SERV-01-PRIMARY-SERVICE-FROM-CONFIG]
+  factory PrimaryService.fromConfig(Map<String, dynamic> json) => PrimaryService();
+
+  /// ## 1. Safety Intent & Regulatory Scope
+  /// Getter for service display name.
+  ///
+  /// ## 2. Invariants & Mathematical Properties
+  /// - Returns static identifier.
+  ///
+  /// ## 3. Preconditions
+  /// - None.
+  ///
+  /// ## 4. Postconditions
+  /// - Returns non-empty string.
+  ///
+  /// ## 5. Algorithmic Complexity Bounds
+  /// - Time: O(1).
+  /// - Space: O(1).
+  ///
+  /// ## 6. Failure Modes & Fault Tolerance
+  /// - Infallible getter.
+  ///
+  /// ## 7. Realization & Traceability
+  /// Realises: [REQ-SERV-01-PRIMARY-SERVICE-NAME]
+  String get name => "Primary";
+
+  /// ## 1. Safety Intent & Regulatory Scope
+  /// Executes service operations.
+  ///
+  /// ## 2. Invariants & Mathematical Properties
+  /// - Logs message with interpolated braces.
+  ///
+  /// ## 3. Preconditions
+  /// - Service is running.
+  ///
+  /// ## 4. Postconditions
+  /// - Completes async operation.
+  ///
+  /// ## 5. Algorithmic Complexity Bounds
+  /// - Time: O(1).
+  /// - Space: O(1).
+  ///
+  /// ## 6. Failure Modes & Fault Tolerance
+  /// - Caught and recorded in audit log.
+  ///
+  /// ## 7. Realization & Traceability
+  /// Realises: [REQ-SERV-01-PRIMARY-SERVICE-EXEC]
+  @override
+  void execute() {
+    final log = "Status: ${name.toUpperCase()}//ok";
+  }
+}
+
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A SecondaryService classification.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Secondary failover controller.
+///
+/// ## 3. Preconditions
+/// - System online.
+///
+/// ## 4. Postconditions
+/// - Creates secondary controller instance.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time: O(1).
+/// - Space: O(1).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Infallible.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SERV-02-SECONDARY-SERVICE]
+class SecondaryService {
+  /// ## 1. Safety Intent & Regulatory Scope
+  /// SecondaryService constructor.
+  ///
+  /// ## 2. Invariants & Mathematical Properties
+  /// - Initialized state.
+  ///
+  /// ## 3. Preconditions
+  /// - None.
+  ///
+  /// ## 4. Postconditions
+  /// - New instance.
+  ///
+  /// ## 5. Algorithmic Complexity Bounds
+  /// - Time: O(1).
+  /// - Space: O(1).
+  ///
+  /// ## 6. Failure Modes & Fault Tolerance
+  /// - Infallible.
+  ///
+  /// ## 7. Realization & Traceability
+  /// Realises: [REQ-SERV-02-SECONDARY-SERVICE-CTOR]
+  SecondaryService();
+
+  /// ## 1. Safety Intent & Regulatory Scope
+  /// Reset method for secondary service.
+  ///
+  /// ## 2. Invariants & Mathematical Properties
+  /// - Resets all internal buffers.
+  ///
+  /// ## 3. Preconditions
+  /// - Secondary service online.
+  ///
+  /// ## 4. Postconditions
+  /// - Clean buffers.
+  ///
+  /// ## 5. Algorithmic Complexity Bounds
+  /// - Time: O(1).
+  /// - Space: O(1).
+  ///
+  /// ## 6. Failure Modes & Fault Tolerance
+  /// - Infallible.
+  ///
+  /// ## 7. Realization & Traceability
+  /// Realises: [REQ-SERV-02-SECONDARY-SERVICE-RESET]
+  @visibleForTesting
+  @override
+  void reset() {}
+}
+"#;
+
+    let res = audit_dart_source_docstrings(valid_dart, "lib/services.dart");
+    assert!(res.is_ok(), "Valid Dart source should pass: {:?}", res.err());
+    assert_eq!(res.unwrap(), 8, "Should classify exactly 8 items");
+
+    // Negative probe: missing docstring on getter
+    let missing_getter_doc = valid_dart.replace(
+        "  /// ## 1. Safety Intent & Regulatory Scope\n  /// Getter for service display name.",
+        "  // Naive comment\n  // not docstring",
+    );
+    let neg_res = audit_dart_source_docstrings(&missing_getter_doc, "lib/services.dart");
+    assert!(neg_res.is_err(), "Missing docstring on getter must fail closed");
+}
+

@@ -1774,7 +1774,7 @@ pub fn check_feat42_design_blueprint_compliance(repo_root: &Path) -> Result<(), 
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C architectural
-/// traceability and configuration management controls. Enforces that all 12 canonical architecture
+/// traceability and configuration management controls. Enforces that all 13 canonical architecture
 /// blueprints under `docs/architecture/blueprints/` exist on disk and reference only actual
 /// workspace crates, existing `crates/...` file paths, native Rust tools, and ASCII punctuation.
 ///
@@ -1795,7 +1795,7 @@ pub fn check_feat42_design_blueprint_compliance(repo_root: &Path) -> Result<(), 
 ///
 /// ## 4. Postconditions
 /// - Returns `Ok(())` when `docs/architecture/blueprints/` is absent in a downstream workspace or
-///   when all 12 blueprints exist and satisfy all grounding invariants.
+///   when all 13 blueprints exist and satisfy all grounding invariants.
 /// - Returns `Err(Vec<String>)` with sorted, deduplicated `file:line` violations upon any failure.
 ///
 /// ## 5. Algorithmic Complexity Bounds

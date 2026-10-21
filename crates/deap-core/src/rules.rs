@@ -500,20 +500,20 @@ impl MasterBlueprintsCatalog {
 /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for enum `CanonicalArchitectureBlueprint` in `crates/deap-core/src/rules.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Bijective 12-variant mapping between each `CanonicalArchitectureBlueprint` variant and its canonical markdown filename under `docs/architecture/blueprints/`.
+/// - Bijective 13-variant mapping between each `CanonicalArchitectureBlueprint` variant and its canonical markdown filename under `docs/architecture/blueprints/`.
 ///
 /// ## 3. Preconditions
-/// - Caller selects or iterates over one of the 12 compile-time `CanonicalArchitectureBlueprint` variants.
+/// - Caller selects or iterates over one of the 13 compile-time `CanonicalArchitectureBlueprint` variants.
 ///
 /// ## 4. Postconditions
 /// - Projects each `CanonicalArchitectureBlueprint` variant to its exact `.md` blueprint filename without runtime allocation or untyped string-slice tables.
 ///
 /// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(1) per variant projection and O(12) across `CanonicalArchitectureBlueprint::ALL`.
+/// - Time Complexity: O(1) per variant projection and O(13) across `CanonicalArchitectureBlueprint::ALL`.
 /// - Space Complexity: O(1) static compile-time storage.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Interface: Exhaustive `match` arms enforce compile-time coverage across all 12 architecture blueprints.
+/// - Interface: Exhaustive `match` arms enforce compile-time coverage across all 13 architecture blueprints.
 /// - State: Stateless value enum (`Copy`, `Eq`, `Hash`).
 /// - Action: Deterministic projection with zero panics.
 /// - Resource: Zero heap allocation.
@@ -546,10 +546,12 @@ pub enum CanonicalArchitectureBlueprint {
     DeapLocalAirgappedDeepseekWorkstationBlueprint,
     /// `"DEAP_DEEPSEEK_HARNESS_INTEGRATION_BLUEPRINT.md"` -- DeepSeek harness and CoT audit integration blueprint.
     DeapDeepseekHarnessIntegrationBlueprint,
+    /// `"DEAP_POLY_REPO_BINARY_DISTRIBUTION_ARCHITECTURE.md"` -- poly-repo binary-only distribution and tier isolation architecture blueprint.
+    DeapPolyRepoBinaryDistributionArchitecture,
 }
 
 impl CanonicalArchitectureBlueprint {
-    /// Complete ordered slice of all 12 `CanonicalArchitectureBlueprint` variants.
+    /// Complete ordered slice of all 13 `CanonicalArchitectureBlueprint` variants.
     pub const ALL: &'static [Self] = &[
         Self::DeapSysmlV2IngestionEngineBlueprint,
         Self::SysmlSsotBidirectionalSynchronizationArchitecture,
@@ -563,16 +565,17 @@ impl CanonicalArchitectureBlueprint {
         Self::SpeckitNativeIntegration,
         Self::DeapLocalAirgappedDeepseekWorkstationBlueprint,
         Self::DeapDeepseekHarnessIntegrationBlueprint,
+        Self::DeapPolyRepoBinaryDistributionArchitecture,
     ];
 
     /// Projects this `CanonicalArchitectureBlueprint` variant to its canonical markdown filename under `docs/architecture/blueprints/`.
     ///
     /// ## 1. Safety Intent & Regulatory Scope
     /// Conforms to DO-178C Level A and Check 34 compile-time catalog rules for `CanonicalArchitectureBlueprint::as_str`.
-    /// Provides a total, allocation-free filename mapping for the 12 canonical architecture blueprints.
+    /// Provides a total, allocation-free filename mapping for the 13 canonical architecture blueprints.
     ///
     /// ## 2. Invariants & Mathematical Properties
-    /// - Injective across all 12 variants of `CanonicalArchitectureBlueprint`.
+    /// - Injective across all 13 variants of `CanonicalArchitectureBlueprint`.
     /// - Every returned `&'static str` ends with `".md"` and matches the exact filename in `docs/architecture/blueprints/`.
     ///
     /// ## 3. Preconditions
@@ -586,7 +589,7 @@ impl CanonicalArchitectureBlueprint {
     /// - Space Complexity: O(1) zero auxiliary memory.
     ///
     /// ## 6. Failure Modes & Fault Tolerance
-    /// - Interface: Total function over a closed 12-variant enum.
+    /// - Interface: Total function over a closed 13-variant enum.
     /// - State: Pure `const fn` with no mutable state.
     /// - Action: Exhaustive pattern match verified by `rustc`.
     /// - Resource: Zero heap or dynamic stack usage.
@@ -623,6 +626,9 @@ impl CanonicalArchitectureBlueprint {
             Self::DeapDeepseekHarnessIntegrationBlueprint => {
                 "DEAP_DEEPSEEK_HARNESS_INTEGRATION_BLUEPRINT.md"
             }
+            Self::DeapPolyRepoBinaryDistributionArchitecture => {
+                "DEAP_POLY_REPO_BINARY_DISTRIBUTION_ARCHITECTURE.md"
+            }
         }
     }
 
@@ -658,7 +664,7 @@ impl CanonicalArchitectureBlueprint {
     }
 }
 
-/// Zero-sized catalog type providing typed iteration and membership queries over all 12 `CanonicalArchitectureBlueprint` filenames.
+/// Zero-sized catalog type providing typed iteration and membership queries over all 13 `CanonicalArchitectureBlueprint` filenames.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `CanonicalArchitectureBlueprintsCatalog` in `crates/deap-core/src/rules.rs`.
@@ -670,7 +676,7 @@ impl CanonicalArchitectureBlueprint {
 /// - Constructed at compile time via `CANONICAL_ARCHITECTURE_BLUEPRINTS`.
 ///
 /// ## 4. Postconditions
-/// - Exposes deterministic `iter()` and `contains()` operations over the 12 canonical architecture blueprints.
+/// - Exposes deterministic `iter()` and `contains()` operations over the 13 canonical architecture blueprints.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: O(1) instantiation.
@@ -687,19 +693,19 @@ impl CanonicalArchitectureBlueprint {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CanonicalArchitectureBlueprintsCatalog;
 
-/// Authoritative catalog of the 12 canonical architecture blueprints in `docs/architecture/blueprints/`.
+/// Authoritative catalog of the 13 canonical architecture blueprints in `docs/architecture/blueprints/`.
 pub const CANONICAL_ARCHITECTURE_BLUEPRINTS: CanonicalArchitectureBlueprintsCatalog =
     CanonicalArchitectureBlueprintsCatalog;
 
 impl CanonicalArchitectureBlueprintsCatalog {
-    /// Returns a deterministic iterator yielding all 12 canonical architecture blueprint filenames.
+    /// Returns a deterministic iterator yielding all 13 canonical architecture blueprint filenames.
     ///
     /// ## 1. Safety Intent & Regulatory Scope
     /// Conforms to DO-178C Level A and Check 34 `(b)` by iterating over the typed
     /// `CanonicalArchitectureBlueprint::ALL` slice via `CanonicalArchitectureBlueprint::as_str_ref`.
     ///
     /// ## 2. Invariants & Mathematical Properties
-    /// - Yields exactly 12 `&'static str` filenames in the declaration order of `CanonicalArchitectureBlueprint::ALL`.
+    /// - Yields exactly 13 `&'static str` filenames in the declaration order of `CanonicalArchitectureBlueprint::ALL`.
     ///
     /// ## 3. Preconditions
     /// - `self` is a valid `CanonicalArchitectureBlueprintsCatalog` reference.
@@ -708,7 +714,7 @@ impl CanonicalArchitectureBlueprintsCatalog {
     /// - Returns a `std::iter::Map` over `CanonicalArchitectureBlueprint::ALL.iter()`.
     ///
     /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(1) iterator creation; O(12) complete traversal.
+    /// - Time Complexity: O(1) iterator creation; O(13) complete traversal.
     /// - Space Complexity: O(1) stack-allocated iterator state.
     ///
     /// ## 6. Failure Modes & Fault Tolerance
@@ -730,11 +736,11 @@ impl CanonicalArchitectureBlueprintsCatalog {
         CanonicalArchitectureBlueprint::ALL.iter().map(project)
     }
 
-    /// Checks whether `candidate` matches one of the 12 canonical architecture blueprint filenames.
+    /// Checks whether `candidate` matches one of the 13 canonical architecture blueprint filenames.
     ///
     /// ## 1. Safety Intent & Regulatory Scope
     /// Conforms to DO-178C Level A and ECSS-E-ST-40C architecture governance verification.
-    /// Validates candidate blueprint filenames against the 12 canonical blueprints in `docs/architecture/blueprints/`.
+    /// Validates candidate blueprint filenames against the 13 canonical blueprints in `docs/architecture/blueprints/`.
     ///
     /// ## 2. Invariants & Mathematical Properties
     /// - Returns `true` if and only if `candidate` equals `v.as_str()` for some `v` in `CanonicalArchitectureBlueprint::ALL`.
@@ -743,10 +749,10 @@ impl CanonicalArchitectureBlueprintsCatalog {
     /// - `candidate: &str` is a valid UTF-8 filename slice.
     ///
     /// ## 4. Postconditions
-    /// - Returns `true` on an exact case-sensitive match against the 12 canonical blueprint filenames, or `false` otherwise.
+    /// - Returns `true` on an exact case-sensitive match against the 13 canonical blueprint filenames, or `false` otherwise.
     ///
     /// ## 5. Algorithmic Complexity Bounds
-    /// - Time Complexity: O(1) bounded pattern match across 12 literal arms.
+    /// - Time Complexity: O(1) bounded pattern match across 13 literal arms.
     /// - Space Complexity: O(1) zero auxiliary memory.
     ///
     /// ## 6. Failure Modes & Fault Tolerance
@@ -772,6 +778,7 @@ impl CanonicalArchitectureBlueprintsCatalog {
                 | "SPECKIT_NATIVE_INTEGRATION.md"
                 | "DEAP_LOCAL_AIRGAPPED_DEEPSEEK_WORKSTATION_BLUEPRINT.md"
                 | "DEAP_DEEPSEEK_HARNESS_INTEGRATION_BLUEPRINT.md"
+                | "DEAP_POLY_REPO_BINARY_DISTRIBUTION_ARCHITECTURE.md"
         )
     }
 }
@@ -1239,8 +1246,9 @@ mod tests {
             "SPECKIT_NATIVE_INTEGRATION.md",
             "DEAP_LOCAL_AIRGAPPED_DEEPSEEK_WORKSTATION_BLUEPRINT.md",
             "DEAP_DEEPSEEK_HARNESS_INTEGRATION_BLUEPRINT.md",
+            "DEAP_POLY_REPO_BINARY_DISTRIBUTION_ARCHITECTURE.md",
         ];
-        assert_eq!(CanonicalArchitectureBlueprint::ALL.len(), 12);
+        assert_eq!(CanonicalArchitectureBlueprint::ALL.len(), 13);
         let via_enum: Vec<&'static str> = CanonicalArchitectureBlueprint::ALL
             .iter()
             .map(|b| b.as_str())

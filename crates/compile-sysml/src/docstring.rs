@@ -44,6 +44,7 @@ use deap_core::source_ast::{
     classify_dart_member_ast, classify_dart_top_level_ast, classify_rust_item_line_ast,
     extract_leading_ast_ident, extract_realises_ids_from_doc_lines, ingest_source_directory,
     parse_dart_callable_signature, parse_rust_callable_signature, sanitize_sysml_identifier,
+    strip_leading_dart_annotations, strip_line_comment_preserving_strings,
     summary_from_doc_lines, update_ast_delimiter_depths, validate_source_syntax_for_language,
     SourceItemKind, SourceLanguage, SourceParam,
 };
@@ -625,11 +626,7 @@ pub fn inject_rust_file_docstrings(
             continue;
         }
 
-        let code = if let Some((before, _)) = trimmed.split_once("//") {
-            before.trim()
-        } else {
-            trimmed
-        };
+        let code = strip_line_comment_preserving_strings(trimmed);
 
         if code.is_empty() {
             continue;
@@ -885,22 +882,20 @@ pub fn inject_dart_file_docstrings(
             continue;
         }
 
-        let code = if let Some((before, _)) = trimmed.split_once("//") {
-            before.trim()
-        } else {
-            trimmed
-        };
+        let code = strip_line_comment_preserving_strings(trimmed);
 
         if code.is_empty() {
             continue;
         }
 
-        if code.starts_with('@') {
-            if first_annot_idx.is_none() {
-                first_annot_idx = Some(idx);
-            }
+        if code.starts_with('@') && first_annot_idx.is_none() {
+            first_annot_idx = Some(idx);
+        }
+        let stripped_code = strip_leading_dart_annotations(code);
+        if stripped_code.trim().is_empty() {
             continue;
         }
+        let code = stripped_code.trim();
 
         if paren_depth == 0 {
             if brace_depth == 0 {
@@ -1049,8 +1044,11 @@ pub fn inject_dart_file_docstrings(
             }
         }
 
+        let prev_brace_depth = brace_depth;
         update_ast_delimiter_depths(code, &mut brace_depth, &mut paren_depth);
-        if brace_depth == 0 {
+        if (prev_brace_depth > 0 && brace_depth == 0)
+            || (brace_depth == 0 && (code.ends_with(';') || code.ends_with('}')))
+        {
             active_class_name = None;
         }
     }
@@ -1476,7 +1474,7 @@ fn inspect_rust_item_details(
         let end_sig_scan = start_idx.saturating_add(16).min(raw_lines.len());
         if let Some(window) = raw_lines.get(start_idx..end_sig_scan) {
             for &line in window {
-                let code = line.split_once("//").map(|(b, _)| b.trim()).unwrap_or(line.trim());
+                let code = strip_line_comment_preserving_strings(line.trim());
                 if !sig_buf.is_empty() {
                     sig_buf.push(' ');
                 }
@@ -1511,7 +1509,7 @@ fn inspect_rust_item_details(
         let end_scan = start_idx.saturating_add(25).min(raw_lines.len());
         if let Some(window) = raw_lines.get(start_idx.saturating_add(1)..end_scan) {
             for &line in window {
-                let t = line.split_once("//").map(|(b, _)| b.trim()).unwrap_or(line.trim());
+                let t = strip_line_comment_preserving_strings(line.trim());
                 if t.starts_with('}') {
                     break;
                 }

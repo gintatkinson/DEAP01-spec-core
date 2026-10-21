@@ -918,11 +918,7 @@ pub fn parse_rust_source_ast(source: &str, file_label: &str) -> Result<Vec<Sourc
             continue;
         }
 
-        let code = if let Some((before, _)) = trimmed.split_once("//") {
-            before.trim()
-        } else {
-            trimmed
-        };
+        let code = strip_line_comment_preserving_strings(trimmed).trim();
         if code.is_empty() {
             continue;
         }
@@ -1226,14 +1222,12 @@ pub fn parse_dart_source_ast(source: &str, file_label: &str) -> Result<Vec<Sourc
             continue;
         }
 
-        let code = if let Some((before, _)) = trimmed.split_once("//") {
-            before.trim()
-        } else {
-            trimmed
-        };
-        if code.is_empty() || code.starts_with('@') {
+        let code = strip_line_comment_preserving_strings(trimmed).trim();
+        let stripped_code = strip_leading_dart_annotations(code);
+        if stripped_code.trim().is_empty() {
             continue;
         }
+        let code = stripped_code.trim();
 
         if paren_depth == 0 {
             if brace_depth == 0 {
@@ -1336,8 +1330,11 @@ pub fn parse_dart_source_ast(source: &str, file_label: &str) -> Result<Vec<Sourc
             }
         }
 
+        let prev_brace_depth = brace_depth;
         update_ast_delimiter_depths(code, &mut brace_depth, &mut paren_depth);
-        if brace_depth == 0 {
+        if (prev_brace_depth > 0 && brace_depth == 0)
+            || (brace_depth == 0 && (code.ends_with(';') || code.ends_with('}')))
+        {
             active_class_idx = None;
             active_class_name = None;
             active_fn_idx = None;
@@ -2343,6 +2340,10 @@ pub fn classify_dart_top_level_ast(
         return Some((SourceItemKind::Typedef, name, None));
     }
 
+    if let Some(getter_name) = extract_dart_getter_ident(code) {
+        return Some((SourceItemKind::Function, getter_name, None));
+    }
+
     if let Some(fn_name) = extract_dart_callable_ident(code) {
         return Some((SourceItemKind::Function, fn_name, None));
     }
@@ -2354,7 +2355,7 @@ pub fn classify_dart_top_level_ast(
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A and Check 36 Dart member parity (`classify_dart_member_ast`).
-/// Identifies `const MyApp({super.key});`, named constructors, factory constructors, and class
+/// Identifies `const MyApp({super.key});`, named constructors, factory constructors, getters, and class
 /// methods while excluding field declarations.
 ///
 /// ## 2. Invariants & Mathematical Properties
@@ -2392,7 +2393,16 @@ pub fn classify_dart_member_ast(code: &str, class_name: &str) -> Option<(SourceI
     }
 
     if let Some(after_factory) = code.strip_prefix("factory ") {
-        let cname = extract_leading_ast_ident(after_factory.trim_start())?;
+        let trimmed_after = after_factory.trim_start();
+        if let Some((cls, rest)) = trimmed_after.split_once('.') {
+            if let Some(named) = extract_leading_ast_ident(rest) {
+                return Some((
+                    SourceItemKind::Constructor,
+                    format!("{}.{}", cls, named),
+                ));
+            }
+        }
+        let cname = extract_leading_ast_ident(trimmed_after)?;
         return Some((SourceItemKind::Constructor, cname));
     }
 
@@ -2419,6 +2429,10 @@ pub fn classify_dart_member_ast(code: &str, class_name: &str) -> Option<(SourceI
 
     if code.starts_with("const ") {
         return None;
+    }
+
+    if let Some(getter_name) = extract_dart_getter_ident(code) {
+        return Some((SourceItemKind::Method, getter_name));
     }
 
     let after_mods = code.strip_prefix("static ").unwrap_or(code).trim_start();
@@ -3299,15 +3313,438 @@ pub fn extract_dart_callable_ident(code: &str) -> Option<String> {
     Some(ident)
 }
 
+
+/// Determines the byte length of a single-character literal at the start of `slice`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A character literal parsing standards.
+/// Correctly computes byte lengths for ASCII, escape-sequence, and multi-byte UTF-8 character literals.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Returns `Some(byte_length)` if `slice` starts with a well-formed character literal, or `None`.
+/// - Supports multi-byte unicode code points up to 4 UTF-8 bytes.
+///
+/// ## 3. Preconditions
+/// - `slice` is a valid UTF-8 string slice.
+///
+/// ## 4. Postconditions
+/// - Returns `Some(len)` where `len >= 3` and matches the full character literal token.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1) bounded inspection of leading bytes.
+/// - Space Complexity: O(1) zero allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Non-panicking string slicing using `.get(..)`.
+/// - State: Stateless.
+/// - Action: Rejects unclosed or empty single-quoted tokens safely.
+/// - Resource: Zero heap allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SOURCE-AST-SINGLE-CHAR-LITERAL]
+fn single_char_literal_byte_len(slice: &str) -> Option<usize> {
+    if !slice.starts_with('\'') {
+        return None;
+    }
+    let rest = slice.get(1..)?;
+    if rest.starts_with('\\') {
+        let after_backslash = rest.get(1..)?;
+        let mut chars = after_backslash.chars();
+        let first = chars.next()?;
+        if first == 'x' {
+            if after_backslash.get(3..4) == Some("'") {
+                return Some(6);
+            }
+        } else if first == 'u' {
+            if let Some(close_brace) = after_backslash.find('}') {
+                if after_backslash.get(close_brace.saturating_add(1)..close_brace.saturating_add(2)) == Some("'") {
+                    return Some(close_brace.saturating_add(4));
+                }
+            }
+        } else if after_backslash.get(first.len_utf8()..first.len_utf8().saturating_add(1)) == Some("'") {
+            return Some(first.len_utf8().saturating_add(3));
+        }
+        None
+    } else {
+        let mut chars = rest.chars();
+        let ch = chars.next()?;
+        if ch != '\'' && ch != '\\' && rest.get(ch.len_utf8()..ch.len_utf8().saturating_add(1)) == Some("'") {
+            Some(ch.len_utf8().saturating_add(2))
+        } else {
+            None
+        }
+    }
+}
+
+/// Checks whether an unescaped closing quote character exists on the remainder of the line.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A string literal boundary verification.
+/// Ensures single-line string tokenization only commences when a terminating matching quote is present.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Scans byte-by-byte skipping backslash-escaped characters.
+/// - Returns `true` if `quote` is encountered without an unescaped preceding backslash.
+///
+/// ## 3. Preconditions
+/// - `bytes` is a byte slice; `start_idx` is a valid search start offset.
+///
+/// ## 4. Postconditions
+/// - Returns a deterministic boolean indicating unescaped quote presence.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) where N is remaining slice length.
+/// - Space Complexity: O(1) zero allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Non-panicking index loop bounded by `bytes.len()`.
+/// - State: Stateless.
+/// - Action: Never panics on boundary conditions.
+/// - Resource: Zero heap allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SOURCE-AST-CLOSING-QUOTE-CHECK]
+fn has_unescaped_closing_quote(bytes: &[u8], start_idx: usize, quote: u8) -> bool {
+    let mut i = start_idx;
+    while i < bytes.len() {
+        if bytes.get(i) == Some(&b'\\') {
+            i = i.saturating_add(2);
+            continue;
+        }
+        if bytes.get(i) == Some(&quote) {
+            return true;
+        }
+        i = i.saturating_add(1);
+    }
+    false
+}
+
+/// Disambiguates Rust lifetime annotations (`&'a`, `<'a>`, `'a: 'b`) from character or string literals.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A Rust grammar tokenization rules.
+/// Prevents lifetime identifiers from being erroneously tokenized as unclosed character literals.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Returns `true` if the single quote at `idx` is immediately followed by a Rust lifetime identifier
+///   and is preceded by lifetime-introducing punctuation (`&`, `<`, `,`, `:`, `(`).
+/// - Returns `false` if followed immediately by a closing single quote (character literal).
+///
+/// ## 3. Preconditions
+/// - `bytes` is a byte slice of a source line; `idx` is the offset of a single quote `b'\''`.
+///
+/// ## 4. Postconditions
+/// - Returns `true` if `idx` represents a Rust lifetime, `false` otherwise.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(K) where K is the length of the lifetime identifier.
+/// - Space Complexity: O(1) zero allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Safe indexing with `.get(..)` and saturating arithmetic.
+/// - State: Stateless predicate.
+/// - Action: Never panics.
+/// - Resource: Zero allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SOURCE-AST-RUST-LIFETIME-CHECK]
+fn is_rust_lifetime_at(bytes: &[u8], idx: usize) -> bool {
+    if bytes.get(idx) != Some(&b'\'') {
+        return false;
+    }
+    match bytes.get(idx.saturating_add(1)) {
+        Some(&b) if b.is_ascii_alphabetic() || b == b'_' => {}
+        _ => return false,
+    }
+    let mut end = idx.saturating_add(2);
+    while let Some(&b) = bytes.get(end) {
+        if b.is_ascii_alphanumeric() || b == b'_' {
+            end = end.saturating_add(1);
+        } else {
+            break;
+        }
+    }
+    if bytes.get(end) == Some(&b'\'') {
+        return false;
+    }
+
+    let mut prev = idx;
+    while prev > 0 && bytes.get(prev.saturating_sub(1)).map(|b| b.is_ascii_whitespace()).unwrap_or(false) {
+        prev = prev.saturating_sub(1);
+    }
+    let prev_byte = if prev > 0 {
+        bytes.get(prev.saturating_sub(1)).copied()
+    } else {
+        None
+    };
+
+    matches!(prev_byte, Some(b'&' | b'<' | b',' | b'(' | b':')) || bytes.get(end) == Some(&b':')
+}
+
+/// Strips a line comment (`// ...`) from a source line while preserving `//` inside string and char literals.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and Check 36 comment-stripping rules.
+/// Prevents URL protocols (`http://`, `package://`) inside string literals from being prematurely
+/// truncated as line comments in Rust and Dart source files.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Only truncates at `//` when neither `in_single_quote` nor `in_double_quote` is active.
+/// - Accurately skips escaped quotes and character literals.
+///
+/// ## 3. Preconditions
+/// - `line` is a valid UTF-8 string slice.
+///
+/// ## 4. Postconditions
+/// - Returns a prefix slice of `line` up to the first unquoted `//`, or the entire `line` if none exists.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(L) where L is byte length of `line`.
+/// - Space Complexity: O(1) zero heap allocations.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Non-panicking byte scanner using `.get(..)`.
+/// - Stateless pure function.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SOURCE-AST-STRIP-LINE-COMMENT]
+pub fn strip_line_comment_preserving_strings(line: &str) -> &str {
+    let bytes = line.as_bytes();
+    let mut idx: usize = 0;
+    let mut in_double_quote = false;
+    let mut in_single_quote = false;
+    let mut is_raw = false;
+
+    while idx < bytes.len() {
+        let b = bytes[idx];
+
+        if !in_double_quote && !in_single_quote {
+            if b == b'/' && bytes.get(idx.saturating_add(1)) == Some(&b'/') {
+                return &line[..idx];
+            }
+
+            if (b == b'r' || b == b'R')
+                && (bytes.get(idx.saturating_add(1)) == Some(&b'\'') || bytes.get(idx.saturating_add(1)) == Some(&b'"'))
+            {
+                let prev_is_ident = if idx > 0 {
+                    let p = bytes[idx.saturating_sub(1)];
+                    p.is_ascii_alphanumeric() || p == b'_'
+                } else {
+                    false
+                };
+                if !prev_is_ident {
+                    is_raw = true;
+                    idx = idx.saturating_add(1);
+                    continue;
+                }
+            }
+
+            if b == b'"' {
+                in_double_quote = true;
+                idx = idx.saturating_add(1);
+                continue;
+            }
+
+            if b == b'\'' {
+                if let Some(char_len) = single_char_literal_byte_len(&line[idx..]) {
+                    idx = idx.saturating_add(char_len);
+                    is_raw = false;
+                    continue;
+                }
+                if is_rust_lifetime_at(bytes, idx) {
+                    idx = idx.saturating_add(1);
+                    continue;
+                }
+                if has_unescaped_closing_quote(bytes, idx.saturating_add(1), b'\'') {
+                    in_single_quote = true;
+                }
+                idx = idx.saturating_add(1);
+                continue;
+            }
+
+            is_raw = false;
+            idx = idx.saturating_add(1);
+            continue;
+        }
+
+        if in_double_quote {
+            if !is_raw && b == b'\\' {
+                idx = idx.saturating_add(2);
+                continue;
+            }
+            if b == b'"' {
+                in_double_quote = false;
+                is_raw = false;
+            }
+            idx = idx.saturating_add(1);
+            continue;
+        }
+
+        if in_single_quote {
+            if !is_raw && b == b'\\' {
+                idx = idx.saturating_add(2);
+                continue;
+            }
+            if b == b'\'' {
+                in_single_quote = false;
+                is_raw = false;
+            }
+            idx = idx.saturating_add(1);
+            continue;
+        }
+
+        idx = idx.saturating_add(1);
+    }
+
+    line
+}
+
+/// Strips leading Dart annotations (e.g. `@override`, `@visibleForTesting`, `@pragma(...)`) from a code line.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A Dart member declaration classification rules.
+/// Ensures annotated methods, getters, and constructors are accurately recognized by AST classifiers.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Loops until all leading `@identifier` and `@identifier(...)` annotations are stripped.
+/// - Skips balanced parentheses inside annotation argument lists.
+///
+/// ## 3. Preconditions
+/// - `code` is a borrowed UTF-8 string slice.
+///
+/// ## 4. Postconditions
+/// - Returns the remaining slice after stripping all leading annotations and whitespace.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(A) where A is the byte length of leading annotations.
+/// - Space Complexity: O(1) zero heap allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Total function; returns empty string if line contains only annotations.
+/// - Never panics on unbalanced parentheses.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SOURCE-AST-STRIP-DART-ANNOTATIONS]
+pub fn strip_leading_dart_annotations(mut code: &str) -> &str {
+    loop {
+        let trimmed = code.trim_start();
+        if !trimmed.starts_with('@') {
+            return trimmed;
+        }
+        let after_at = match trimmed.get(1..) {
+            Some(s) => s,
+            None => return "",
+        };
+        let mut idx = 0;
+        let bytes = after_at.as_bytes();
+        while idx < bytes.len() && (bytes[idx].is_ascii_alphanumeric() || bytes[idx] == b'_' || bytes[idx] == b'.') {
+            idx = idx.saturating_add(1);
+        }
+        if idx == 0 {
+            return trimmed;
+        }
+        let rest = match after_at.get(idx..) {
+            Some(r) => r,
+            None => return "",
+        };
+        if rest.trim_start().starts_with('(') {
+            let mut paren_depth: usize = 0;
+            let mut paren_end = None;
+            for (p_idx, b) in rest.char_indices() {
+                if b == '(' {
+                    paren_depth = paren_depth.saturating_add(1);
+                } else if b == ')' {
+                    paren_depth = paren_depth.saturating_sub(1);
+                    if paren_depth == 0 {
+                        paren_end = Some(p_idx.saturating_add(1));
+                        break;
+                    }
+                }
+            }
+            if let Some(end) = paren_end {
+                code = rest.get(end..).unwrap_or("");
+                continue;
+            }
+        }
+        code = rest;
+    }
+}
+
+/// Extracts a Dart getter identifier (`<Type> get <name> => ...` or `get <name> => ...`) from a code line.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A Dart 3 member classification.
+/// Allows getters with or without explicit return types and optional annotations to be classified as callables.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Requires `" get "` keyword token or leading `"get "` prefix.
+/// - Extracts the following alphanumeric identifier before `=>`, `{`, `;`, or whitespace.
+///
+/// ## 3. Preconditions
+/// - `code` is a borrowed UTF-8 string slice.
+///
+/// ## 4. Postconditions
+/// - Returns `Some(identifier)` if the line defines a Dart getter, or `None`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) where N is `code.len()`.
+/// - Space Complexity: O(I) for the extracted identifier string.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Non-panicking token scanner.
+/// - State: Pure function.
+/// - Action: Rejects standard function calls with `get` prefixes (e.g. `getWidget()`).
+/// - Resource: At most one string allocation on successful match.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-SOURCE-AST-EXTRACT-DART-GETTER]
+pub fn extract_dart_getter_ident(code: &str) -> Option<String> {
+    let stripped = strip_leading_dart_annotations(code).trim();
+    let s = stripped.strip_prefix("static ").unwrap_or(stripped).trim();
+    let after_get = if let Some(rest) = s.strip_prefix("get ") {
+        rest.trim_start()
+    } else if let Some(idx) = s.find(" get ") {
+        s.get(idx.saturating_add(5)..)?.trim_start()
+    } else if let Some(idx) = s.find("\tget ") {
+        s.get(idx.saturating_add(5)..)?.trim_start()
+    } else if let Some(idx) = s.find(" get\t") {
+        s.get(idx.saturating_add(5)..)?.trim_start()
+    } else {
+        return None;
+    };
+
+    let mut end: usize = 0;
+    let bytes = after_get.as_bytes();
+    while end < bytes.len() && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_') {
+        end = end.saturating_add(1);
+    }
+    if end == 0 {
+        return None;
+    }
+    let ident = after_get.get(..end)?;
+    let remainder = after_get.get(end..)?.trim_start();
+    if remainder.is_empty()
+        || remainder.starts_with("=>")
+        || remainder.starts_with('{')
+        || remainder.starts_with(';')
+    {
+        Some(ident.to_string())
+    } else {
+        None
+    }
+}
+
 /// Updates `brace_depth` and `paren_depth` across a single comment-stripped line during AST extraction.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A delimiter tracking parity (`update_ast_delimiter_depths`).
-/// Ensures named parameter braces `({super.key})` inside `(...)` never alter `brace_depth`.
+/// Ensures named parameter braces `({super.key})` inside `(...)` never alter `brace_depth`,
+/// and handles nested quotes inside string interpolations `${...}` and raw strings `r'...'`.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// - `paren_depth` updates on unquoted `'('` and `')'`.
 /// - `brace_depth` updates on unquoted `'{'` and `'}'` iff `*paren_depth == 0`.
+/// - Tracks interpolation stack `interp_stack` for nested `${...}` expressions inside strings.
 ///
 /// ## 3. Preconditions
 /// - `code: &str` is a comment-stripped source line; `brace_depth` and `paren_depth` are mutable counters.
@@ -3317,54 +3754,91 @@ pub fn extract_dart_callable_ident(code: &str) -> Option<String> {
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: O(N) single-pass byte scan over `code`.
-/// - Space Complexity: O(1) auxiliary state.
+/// - Space Complexity: O(D) where D is max interpolation nesting depth.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
 /// - Interface: Uses `.get(..)` and saturating arithmetic.
 /// - State: Mutates only the two depth references.
 /// - Action: Skips escaped bytes inside string and character literals.
-/// - Resource: Zero heap allocations.
+/// - Resource: Bounded stack allocation for interpolation frames.
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-FEAT-42-UPDATE-AST-DELIMITER-DEPTHS]
 pub fn update_ast_delimiter_depths(code: &str, brace_depth: &mut usize, paren_depth: &mut usize) {
     let bytes = code.as_bytes();
     let mut idx: usize = 0;
-    let mut in_double_quote = false;
-    let mut in_single_quote = false;
+    let mut active_quote: Option<u8> = None;
+    let mut is_raw = false;
+    let mut interp_stack: Vec<(u8, usize)> = Vec::new();
 
     while let Some(&b) = bytes.get(idx) {
-        if in_double_quote {
-            if b == b'\\' {
+        if let Some(q) = active_quote {
+            if !is_raw && b == b'\\' {
                 idx = idx.saturating_add(2);
                 continue;
             }
-            if b == b'"' {
-                in_double_quote = false;
+            if !is_raw && b == b'$' && bytes.get(idx.saturating_add(1)) == Some(&b'{') {
+                interp_stack.push((q, *brace_depth));
+                *brace_depth = brace_depth.saturating_add(1);
+                active_quote = None;
+                idx = idx.saturating_add(2);
+                continue;
+            }
+            if b == q {
+                active_quote = None;
+                is_raw = false;
             }
             idx = idx.saturating_add(1);
             continue;
         }
-        if in_single_quote {
-            if b == b'\\' {
-                idx = idx.saturating_add(2);
-                continue;
+
+        if b == b'}' {
+            if let Some(&(saved_quote, saved_depth)) = interp_stack.last() {
+                if *brace_depth == saved_depth.saturating_add(1) {
+                    interp_stack.pop();
+                    *brace_depth = saved_depth;
+                    active_quote = Some(saved_quote);
+                    idx = idx.saturating_add(1);
+                    continue;
+                }
             }
-            if b == b'\'' {
-                in_single_quote = false;
+            if *paren_depth == 0 {
+                *brace_depth = brace_depth.saturating_sub(1);
             }
             idx = idx.saturating_add(1);
             continue;
+        }
+
+        if (b == b'r' || b == b'R')
+            && (bytes.get(idx.saturating_add(1)) == Some(&b'\'') || bytes.get(idx.saturating_add(1)) == Some(&b'"'))
+        {
+            let prev_is_ident = if idx > 0 {
+                let p = bytes[idx.saturating_sub(1)];
+                p.is_ascii_alphanumeric() || p == b'_'
+            } else {
+                false
+            };
+            if !prev_is_ident {
+                is_raw = true;
+                idx = idx.saturating_add(1);
+                continue;
+            }
         }
 
         if b == b'"' {
-            in_double_quote = true;
+            active_quote = Some(b'"');
         } else if b == b'\'' {
-            let is_char_lit = bytes.get(idx.saturating_add(2)) == Some(&b'\'')
-                || (bytes.get(idx.saturating_add(1)) == Some(&b'\\')
-                    && bytes.get(idx.saturating_add(3)) == Some(&b'\''));
-            if is_char_lit {
-                in_single_quote = true;
+            if let Some(char_len) = single_char_literal_byte_len(&code[idx..]) {
+                idx = idx.saturating_add(char_len);
+                is_raw = false;
+                continue;
+            }
+            if is_rust_lifetime_at(bytes, idx) {
+                idx = idx.saturating_add(1);
+                continue;
+            }
+            if has_unescaped_closing_quote(bytes, idx.saturating_add(1), b'\'') {
+                active_quote = Some(b'\'');
             }
         } else if b == b'(' {
             *paren_depth = paren_depth.saturating_add(1);
@@ -3372,8 +3846,6 @@ pub fn update_ast_delimiter_depths(code: &str, brace_depth: &mut usize, paren_de
             *paren_depth = paren_depth.saturating_sub(1);
         } else if b == b'{' && *paren_depth == 0 {
             *brace_depth = brace_depth.saturating_add(1);
-        } else if b == b'}' && *paren_depth == 0 {
-            *brace_depth = brace_depth.saturating_sub(1);
         }
 
         idx = idx.saturating_add(1);

@@ -898,7 +898,7 @@ pub fn run(options: &BaselineOptions) -> Result<(), ()> {
         );
         return Err(());
     }
-    println!("Success: Check 37 verified (Architecture Blueprint Grounding Gate passed -- all 12 blueprints grounded in workspace crates and paths).");
+    println!("Success: Check 37 verified (Architecture Blueprint Grounding Gate passed -- all 13 blueprints grounded in workspace crates and paths).");
 
     // Platform Checks
     let dest = &options.destination;

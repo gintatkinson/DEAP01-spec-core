@@ -328,3 +328,71 @@ impl AttitudeController {
 
     fs::remove_dir_all(&dir).expect("cleanup temp dir");
 }
+
+#[test]
+fn test_injector_handles_multiline_dart_classes_string_slashes_interpolated_utf8_quotes_and_dart3_items() {
+    let dart_source = r#"// Leading top comment
+import 'dart:async';
+
+class PrimaryService {
+  final String endpoint = "https://api.example.com/v1//endpoint";
+  final String marker = '•';
+  final String quoted = "“nested quotes”";
+
+  PrimaryService();
+
+  factory PrimaryService.fromConfig(Map<String, dynamic> config) {
+    return PrimaryService();
+  }
+
+  String get serviceName => "Primary";
+
+  @override
+  Future<void> execute() async {
+    final log = "Executing: ${serviceName.toLowerCase()} with id: ${1 + 1}";
+  }
+}
+
+class SecondaryService {
+  final int code = 42;
+
+  SecondaryService(this.code);
+
+  @visibleForTesting
+  @override
+  int get calculatedCode => code * 2;
+
+  void reset() {
+    final status = 'reset://done';
+  }
+}
+"#;
+
+    let (injected, count) = inject_dart_file_docstrings(
+        dart_source,
+        "lib/services.dart",
+        None,
+        false,
+    )
+    .expect("inject dart docstrings");
+
+    assert!(count >= 8, "Expected at least 8 documented items, got {}", count);
+    assert!(injected.contains("PrimaryService"));
+    assert!(injected.contains("PrimaryService.fromConfig"));
+    assert!(injected.contains("serviceName"));
+    assert!(injected.contains("SecondaryService"));
+    assert!(injected.contains("calculatedCode"));
+
+    // Verify idempotency: re-injecting on the already injected source produces identical content
+    let (second_injected, second_count) = inject_dart_file_docstrings(
+        &injected,
+        "lib/services.dart",
+        None,
+        false,
+    )
+    .expect("second injection must succeed");
+
+    assert_eq!(second_count, 0, "Idempotent run must have count 0");
+    assert_eq!(injected, second_injected, "Idempotent injection must match byte-for-byte");
+}
+
