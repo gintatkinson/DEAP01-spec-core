@@ -486,6 +486,7 @@ fn test_persisted_dogfood_audit_dossiers_466_467_468_pass_12_checks() {
         "DEFECT_AUDITOR_467.md",
         "DEFECT_AUDITOR_468.md",
         "DEFECT_ZERO_PYTHON_REFERENCES.md",
+        "DEFECT_RULE_20_INIT_LOOP_AND_WP_CONTAMINATION.md",
     ] {
         let p = repo_root.join(".pipeline/defects").join(name);
         let content = fs::read_to_string(&p).unwrap_or_else(|e| panic!("read {}: {}", name, e));

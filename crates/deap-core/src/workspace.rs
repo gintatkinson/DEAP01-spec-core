@@ -862,6 +862,26 @@ mod tests {
             agents_md.contains("---GOVERNANCE-END---"),
             "AGENTS.md must explicitly reference ---GOVERNANCE-END--- bypass for curated subagents"
         );
+        assert!(
+            agents_md.contains("NEVER run `verify-baseline`, `cargo test`, or `flutter test` on session startup/initialization"),
+            "AGENTS.md Step 5 must explicitly forbid running verify-baseline, cargo test, or flutter test on session startup/initialization"
+        );
+
+        let rule_20 = fs::read_to_string(repo_root.join("rules/verification-required.md"))?;
+        assert!(
+            rule_20.contains("TRIGGER SCOPE -- PRE-COMMIT / POST-EDIT GATE ONLY (NEVER ON INIT OR CONVERSATIONAL TURNS):"),
+            "rules/verification-required.md must declare TRIGGER SCOPE -- PRE-COMMIT / POST-EDIT GATE ONLY"
+        );
+        assert!(
+            !rule_20.contains("**ALWAYS enforce:**"),
+            "rules/verification-required.md must not use unconditional **ALWAYS enforce:** language"
+        );
+
+        let bundle = fs::read_to_string(repo_root.join(".pipeline/ACTIVE_RULES_BUNDLE.md"))?;
+        assert!(
+            bundle.contains("TRIGGER SCOPE -- PRE-COMMIT / POST-EDIT GATE ONLY (NEVER ON INIT OR CONVERSATIONAL TURNS):"),
+            ".pipeline/ACTIVE_RULES_BUNDLE.md must declare TRIGGER SCOPE -- PRE-COMMIT / POST-EDIT GATE ONLY in Rule 20"
+        );
 
         Ok(())
     }
