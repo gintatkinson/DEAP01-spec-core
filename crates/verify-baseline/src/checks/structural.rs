@@ -2350,7 +2350,9 @@ fn check_blueprint_line_crates_paths(
             continue;
         }
 
-        if !is_valid_workspace_crate_name(crate_name) {
+        let is_downstream_crate = !is_upstream_compiler(repo_root)
+            && repo_root.join("crates").join(crate_name).is_dir();
+        if !is_valid_workspace_crate_name(crate_name) && !is_downstream_crate {
             violations.push(format!(
                 "{}:{}: ungrounded crate '{}' in blueprint path '{}' (must be one of deap-core, verify-baseline, compile-sysml, ingest-sysml, assemble-conops, reconcile-backlog)",
                 rel_file, line_no, crate_name, cleaned
