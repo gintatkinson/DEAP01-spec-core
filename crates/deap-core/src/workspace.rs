@@ -203,6 +203,9 @@ pub fn check_no_ds_store_files(repo_root: &Path) -> Result<(), Vec<String>> {
 ///   `crates/compile-sysml`, `crates/ingest-sysml`, `crates/assemble-conops`, `crates/reconcile-backlog`)
 ///   may exist on disk.
 /// - Downstream Blueprint Directory Isolation: `docs/architecture/blueprints/` must not contain `.md` files.
+/// - Downstream Fixture & Tier 1 SDK Isolation: `tests/fixtures/safety` and `app_flutter/test/topology/failures`
+///   must not exist on disk, and Tier 2 Flutter applications consuming `package:app_flutter` must not duplicate
+///   canonical Tier 1 SDK core source files locally.
 /// - Downstream Blueprint Disjointness: Non-excluded regular files matching `MASTER_BLUEPRINTS.iter()` or
 ///   `"DEAP_SYSML_V2_SAFETY_MODEL_SPECIFICATION.sysml"` must be empty.
 ///
@@ -247,6 +250,35 @@ pub fn check_no_duplicate_master_blueprints(repo_root: &Path) -> Result<(), Vec<
         let crate_path = crates_dir.join(crate_name);
         if crate_path.is_dir() {
             duplicates.push(format!("crates/{}", crate_name));
+        }
+    }
+
+    let forbidden_downstream_dirs = [
+        "tests/fixtures/safety",
+        "app_flutter/test/topology/failures",
+    ];
+    for rel_dir in &forbidden_downstream_dirs {
+        if repo_root.join(rel_dir).is_dir() {
+            duplicates.push(rel_dir.to_string());
+        }
+    }
+
+    let pubspec_path = repo_root.join("app_flutter").join("pubspec.yaml");
+    if pubspec_path.is_file() {
+        if let Ok(pubspec_text) = fs::read_to_string(&pubspec_path) {
+            if !pubspec_text.contains("name: app_flutter") && pubspec_text.contains("app_flutter:") {
+                let tier1_sdk_files = [
+                    "app_flutter/lib/features/layout/component_factory.dart",
+                    "app_flutter/lib/features/layout/layout.dart",
+                    "app_flutter/lib/core/theme/theme_controller.dart",
+                    "app_flutter/lib/domain/result.dart",
+                ];
+                for rel_file in &tier1_sdk_files {
+                    if repo_root.join(rel_file).exists() {
+                        duplicates.push(rel_file.to_string());
+                    }
+                }
+            }
         }
     }
 
@@ -689,6 +721,29 @@ mod tests {
         fs::create_dir_all(tmp.path.join("docs/architecture/blueprints"))?;
         File::create(tmp.path.join("docs/architecture/blueprints/LEAKED.md"))?;
         assert!(check_no_duplicate_master_blueprints(&tmp.path).is_err());
+        fs::remove_dir_all(tmp.path.join("docs"))?;
+
+        // Negative Case D: upstream safety fixtures directory leaked downstream
+        fs::create_dir_all(tmp.path.join("tests/fixtures/safety"))?;
+        assert!(check_no_duplicate_master_blueprints(&tmp.path).is_err());
+        fs::remove_dir_all(tmp.path.join("tests"))?;
+
+        // Negative Case E: upstream topology failure fixtures directory leaked downstream
+        fs::create_dir_all(tmp.path.join("app_flutter/test/topology/failures"))?;
+        assert!(check_no_duplicate_master_blueprints(&tmp.path).is_err());
+        fs::remove_dir_all(tmp.path.join("app_flutter"))?;
+
+        // Negative Case F: Tier 2 Flutter app consuming package:app_flutter duplicates Tier 1 SDK core files
+        fs::create_dir_all(tmp.path.join("app_flutter/lib/features/layout"))?;
+        fs::write(
+            tmp.path.join("app_flutter/pubspec.yaml"),
+            "name: cuas_coa_app\ndependencies:\n  app_flutter:\n    path: ../../DEAP-profile-flutter-app/app_flutter\n",
+        )?;
+        File::create(tmp.path.join("app_flutter/lib/features/layout/component_factory.dart"))?;
+        assert!(check_no_duplicate_master_blueprints(&tmp.path).is_err());
+        fs::remove_file(tmp.path.join("app_flutter/lib/features/layout/component_factory.dart"))?;
+        assert!(check_no_duplicate_master_blueprints(&tmp.path).is_ok());
+        fs::remove_dir_all(tmp.path.join("app_flutter"))?;
 
         // Upstream repo exempt
         fs::create_dir_all(tmp.path.join(".pipeline/upstream"))?;

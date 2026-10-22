@@ -907,11 +907,13 @@ pub fn run(options: &BaselineOptions) -> Result<(), ()> {
 
     if is_flutter {
         println!("Verifying conformance for platform 'flutter' at '{}'...", dest.display());
+        let pubspec_text = std::fs::read_to_string(dest.join("pubspec.yaml")).unwrap_or_default();
+        let consumes_tier1_sdk =
+            !pubspec_text.contains("name: app_flutter") && pubspec_text.contains("app_flutter:");
         let baseline_files = [
             "pubspec.yaml",
             "analysis_options.yaml",
             "lib/main.dart",
-            "lib/domain/validation.dart",
         ];
         let mut missing_files = Vec::new();
         for f in &baseline_files {
@@ -919,11 +921,14 @@ pub fn run(options: &BaselineOptions) -> Result<(), ()> {
                 missing_files.push(f.to_string());
             }
         }
+        if !consumes_tier1_sdk && !dest.join("lib/domain/validation.dart").exists() {
+            missing_files.push("lib/domain/validation.dart".to_string());
+        }
         let repo_resolvers = [
             dest.join("lib").join("domain").join("repository_resolver.dart"),
             dest.join("lib").join("core").join("di").join("repository_resolver.dart"),
         ];
-        if !repo_resolvers.iter().any(|p| p.exists()) && !options.no_domain {
+        if !consumes_tier1_sdk && !repo_resolvers.iter().any(|p| p.exists()) && !options.no_domain {
             missing_files.push("lib/domain/repository_resolver.dart (or lib/core/di/repository_resolver.dart)".to_string());
         }
 

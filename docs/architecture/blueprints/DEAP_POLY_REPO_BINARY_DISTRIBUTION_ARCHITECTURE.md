@@ -101,20 +101,21 @@ flowchart TD
   - Invariant: Zero customer domain models, zero customer schemas, zero customer UI code.
 
 ### 2.2 Tier 1: Upstream Platform Template (`UPSTREAM_PLATFORM_TEMPLATE`)
-- **Repository**: `gintatkinson/DEAP-profile-flutter-app`
+- **Repository**: `gintatkinson/DEAP-profile-flutter-app` (`app_flutter`, `name: app_flutter`)
 - **Scope & Role**:
-  - Flutter GUI SDK template for high-assurance desktop applications.
+  - Flutter GUI SDK template for high-assurance desktop applications, published as `package:app_flutter` (`DEAP-profile-flutter-app/app_flutter`).
   - Implements generic workspace layouts, split viewports, tree navigation, and standard desktop ergonomics.
   - **Binary-Only Toolchain**: Consumes precompiled Tier 0 binaries in `target/release/`. Zero Tier 0 compiler crate source directories. Zero duplicated master architecture blueprints.
-  - **Open-Closed Component Extension**: Exposes `ComponentFactory` parameterized by `Map<String, DeapComponentBuilder> customBuilders` and `DeapComponentScope`.
+  - **Open-Closed Component Extension**: Exposes `ComponentFactory` parameterized by `Map<String, DeapComponentBuilder> customBuilders` and `DeapComponentScope`, evaluating `customBuilders[type]` prior to built-in `switch (type)` cases.
 
 ### 2.3 Tier 2: Downstream Customer Projects (`DOWNSTREAM_CUSTOMER_PROJECT`)
-- **Repository**: `DEAP01-cuas-coa-engine` (and similar domain deployments).
+- **Repository**: `DEAP01-cuas-coa-engine` (`app_flutter`, `name: cuas_coa_app`) and similar domain deployments.
 - **Scope & Role**:
   - Concrete mission and domain implementations (e.g. Counter-Unmanned Aircraft Systems Course of Action Pareto solver).
   - Contains domain-specific crates (e.g. downstream domain engine) with zero dependencies on Tier 0 compiler crates.
   - **Binary-Only Toolchain**: Consumes precompiled Tier 0 binaries in `target/release/`.
-  - **Domain GUI Extensions**: Registers domain widgets via `app_flutter/lib/extensions/cuas_component_registry.dart` with zero modifications to `ComponentFactory` in the core SDK.
+  - **Tier 1 Flutter SDK Package Dependency**: Consumes `DEAP-profile-flutter-app/app_flutter` (`name: app_flutter`) as a Flutter package dependency (`package:app_flutter`) from `DEAP01-cuas-coa-engine/app_flutter` (`name: cuas_coa_app`) with zero duplicated Tier 1 SDK core files (`component_factory.dart`, `layout.dart`, `theme_controller.dart`, `result.dart`).
+  - **Domain GUI Extensions**: Registers domain widgets and overrides (`HierarchyTreeSelector`, `TopographicalView`, `TabbedContainer`, `PropertiesPanel`) via `app_flutter/lib/extensions/cuas_component_registry.dart` with zero modifications to `ComponentFactory` in the core SDK.
 
 ---
 
@@ -196,23 +197,24 @@ class DeapComponentScope {
 ```
 
 ### 4.2 ComponentFactory Open-Closed Delegation
+`ComponentFactory.build()` evaluates `customBuilders[type]` prior to the built-in `switch (type)` cases so Tier 2 can override `HierarchyTreeSelector`, `TopographicalView`, `TabbedContainer`, and `PropertiesPanel` via `DeapComponentScope`:
 ```dart
 class ComponentFactory {
   final Map<String, DeapComponentBuilder> customBuilders;
 
   Widget build(Map<String, dynamic> node, double width, double height, BuildContext context) {
     final type = node['type'] as String? ?? '';
+    final customBuilder = customBuilders[type];
+    if (customBuilder != null) {
+      final scope = _createScope(context);
+      return customBuilder(context, node, scope);
+    }
     switch (type) {
       case 'SidebarLayout':
         return _buildSidebar(node, width, height, context);
       case 'SplitWorkspace':
         return _buildSplitWorkspace(node, width, height, context);
       default:
-        final builder = customBuilders[type];
-        if (builder != null) {
-          final scope = _createScope(context);
-          return builder(context, node, scope);
-        }
         return const SizedBox.shrink();
     }
   }
@@ -250,6 +252,8 @@ Three mechanical checks enforce tier boundaries and prevent regression:
 - In downstream (`!is_upstream_compiler(repo_root)`):
   - Fails closed if any of the 6 Tier 0 compiler crate source directories exist:
     `crates/deap-core`, `crates/verify-baseline`, `crates/compile-sysml`, `crates/ingest-sysml`, `crates/assemble-conops`, `crates/reconcile-backlog`.
+  - Fails closed if upstream test fixture directories `tests/fixtures/safety/` or `app_flutter/test/topology/failures/` exist on disk.
+  - Fails closed if a Tier 2 Flutter application consuming `package:app_flutter` duplicates Tier 1 SDK core files (`app_flutter/lib/features/layout/component_factory.dart`, `app_flutter/lib/features/layout/layout.dart`, `app_flutter/lib/core/theme/theme_controller.dart`, `app_flutter/lib/domain/result.dart`).
   - Fails closed if `docs/architecture/blueprints/*.md` exists on disk.
   - Fails closed if duplicate master blueprints exist.
 
