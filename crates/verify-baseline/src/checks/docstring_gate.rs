@@ -650,11 +650,7 @@ pub fn audit_rust_source_docstrings(source: &str, file_rel: &str) -> Result<usiz
             continue;
         }
 
-        let code = if let Some((before, _)) = trimmed.split_once("//") {
-            before.trim()
-        } else {
-            trimmed
-        };
+        let code = strip_line_comment_preserving_strings(trimmed).trim();
 
         if code.is_empty() {
             continue;
@@ -1523,54 +1519,131 @@ fn extract_dart_callable_name(code: &str) -> Option<String> {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-CHECK-36-DELIMITER-DEPTH-TRACKER]
 fn update_line_delimiter_depths(code: &str, brace_depth: &mut usize, paren_depth: &mut usize) {
-    let bytes = code.as_bytes();
-    let mut idx: usize = 0;
-    let mut in_double_quote = false;
-    let mut in_single_quote = false;
+    deap_core::source_ast::update_ast_delimiter_depths(code, brace_depth, paren_depth);
+}
 
-    while let Some(&b) = bytes.get(idx) {
-        if in_double_quote {
-            if b == b'\\' {
-                idx = idx.saturating_add(2);
-                continue;
-            }
-            if b == b'"' {
-                in_double_quote = false;
-            }
-            idx = idx.saturating_add(1);
-            continue;
-        }
-        if in_single_quote {
-            if b == b'\\' {
-                idx = idx.saturating_add(2);
-                continue;
-            }
-            if b == b'\'' {
-                in_single_quote = false;
-            }
-            idx = idx.saturating_add(1);
-            continue;
-        }
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-        if b == b'"' {
-            in_double_quote = true;
-        } else if b == b'\'' {
-            let is_char_lit = bytes.get(idx.saturating_add(2)) == Some(&b'\'')
-                || (bytes.get(idx.saturating_add(1)) == Some(&b'\\')
-                    && bytes.get(idx.saturating_add(3)) == Some(&b'\''));
-            if is_char_lit {
-                in_single_quote = true;
-            }
-        } else if b == b'(' {
-            *paren_depth = paren_depth.saturating_add(1);
-        } else if b == b')' {
-            *paren_depth = paren_depth.saturating_sub(1);
-        } else if b == b'{' && *paren_depth == 0 {
-            *brace_depth = brace_depth.saturating_add(1);
-        } else if b == b'}' && *paren_depth == 0 {
-            *brace_depth = brace_depth.saturating_sub(1);
-        }
+    #[test]
+    fn test_update_line_delimiter_depths_dart_interpolation_raw_and_utf8_char() {
+        let mut brace_depth: usize = 0;
+        let mut paren_depth: usize = 0;
 
-        idx = idx.saturating_add(1);
+        update_line_delimiter_depths(
+            "final sep = r'\\'; final raw = r\"\\\"; final msg = '${map['{']}'; final msg2 = \"${map[\"{\"]}\"; if (ch == '↑') {",
+            &mut brace_depth,
+            &mut paren_depth,
+        );
+        assert_eq!(
+            brace_depth, 1,
+            "brace_depth must increment to 1 on trailing '{{' without being corrupted by raw strings, '${{...}}' interpolations, or UTF-8 char literals"
+        );
+        assert_eq!(paren_depth, 0);
+    }
+
+    #[test]
+    fn test_audit_rust_source_docstrings_preserves_double_slash_in_string_literal() {
+        let rust_with_missing_fn = r#"/// Documented function with URL string literal containing double slashes.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Validates URL prefix handling.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves delimiter balance across URL literals.
+///
+/// ## 3. Preconditions
+/// - `endpoint` is a valid UTF-8 slice.
+///
+/// ## 4. Postconditions
+/// - Returns true when matching.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1).
+/// - Space Complexity: O(1).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Total comparison with zero panics.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-TEST-URL-01]
+pub fn check_endpoint(endpoint: &str) -> bool {
+    let _ = format!("https://example.com//path");
+    if endpoint == "https://example.com//path" {
+        return true;
+    }
+    false
+}
+
+pub fn missing_docs() {}
+"#;
+        let err = audit_rust_source_docstrings(rust_with_missing_fn, "crates/demo/src/lib.rs")
+            .expect_err("undocumented function after URL string literal must be flagged");
+        assert!(
+            err.iter().any(|v| v.contains("missing_docs")),
+            "Expected violation for missing_docs, got: {:?}",
+            err
+        );
+
+        let rust_all_documented = r#"/// Documented function with URL string literal containing double slashes.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Validates URL prefix handling.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves delimiter balance across URL literals.
+///
+/// ## 3. Preconditions
+/// - `endpoint` is a valid UTF-8 slice.
+///
+/// ## 4. Postconditions
+/// - Returns true when matching.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1).
+/// - Space Complexity: O(1).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Total comparison with zero panics.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-TEST-URL-01]
+pub fn check_endpoint(endpoint: &str) -> bool {
+    let _ = format!("https://example.com//path");
+    if endpoint == "https://example.com//path" {
+        return true;
+    }
+    false
+}
+
+/// Documented second function following URL string literal function.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Secondary operation after URL literal function.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Executes only after `check_endpoint` delimiter scope closes cleanly.
+///
+/// ## 3. Preconditions
+/// - None.
+///
+/// ## 4. Postconditions
+/// - Completes deterministically.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(1).
+/// - Space Complexity: O(1).
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Infallible unit return.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-TEST-URL-02]
+pub fn documented_followup() {}
+"#;
+        let count = audit_rust_source_docstrings(rust_all_documented, "crates/demo/src/lib.rs")
+            .expect("both documented functions must pass Check 36");
+        assert_eq!(count, 2);
     }
 }

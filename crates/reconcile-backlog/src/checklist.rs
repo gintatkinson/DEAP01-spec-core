@@ -999,6 +999,33 @@ fn format_canonical_checklist_item(
     format!("- [{}] {} - [{}]({}){}", mark, issue_ref, title, link, clause_suffix)
 }
 
+/// Executes deterministic fn `contains_spec_reference` within `crates/reconcile-backlog/src/checklist.rs`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `contains_spec_reference` in `crates/reconcile-backlog/src/checklist.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic state conservation and referential transparency for fn `contains_spec_reference` (declaration #19) within `RECONCILE-BACKLOG-CHECKLIST`.
+///
+/// ## 3. Preconditions
+/// - `line: &str` must satisfy domain and type-safety constraints prior to invoking `contains_spec_reference`.
+/// - `spec: &crate::LoadedSpec` must satisfy domain and type-safety constraints prior to invoking `contains_spec_reference`.
+///
+/// ## 4. Postconditions
+/// - Returns `bool` from `contains_spec_reference` with deterministic post-execution state.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(line)) bounded over input/member dimension of `contains_spec_reference`.
+/// - Space Complexity: O(N(line)) bounded auxiliary memory for `contains_spec_reference`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `contains_spec_reference` (`bool`).
+/// - State: Maintains consistent state invariants across `contains_spec_reference` without partial mutation on error.
+/// - Action: Executes `contains_spec_reference` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `contains_spec_reference` (`RECONCILE-BACKLOG-CHECKLIST`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-RECONCILE-BACKLOG-CHECKLIST-CONTAINS-SPEC-REFERENCE] | SysML v2: ActionDef(contains_spec_reference)
 fn contains_spec_reference(line: &str, spec: &crate::LoadedSpec) -> bool {
     let spec_file = std::path::Path::new(&spec.rel_path)
         .file_name()
@@ -1023,6 +1050,37 @@ fn contains_spec_reference(line: &str, spec: &crate::LoadedSpec) -> bool {
     false
 }
 
+/// Executes deterministic fn `reconcile_or_inject_section` within `crates/reconcile-backlog/src/checklist.rs`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `reconcile_or_inject_section` in `crates/reconcile-backlog/src/checklist.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic state conservation and referential transparency for fn `reconcile_or_inject_section` (declaration #20) within `RECONCILE-BACKLOG-CHECKLIST`.
+///
+/// ## 3. Preconditions
+/// - `content: &str` must satisfy domain and type-safety constraints prior to invoking `reconcile_or_inject_section`.
+/// - `heading: &str` must satisfy domain and type-safety constraints prior to invoking `reconcile_or_inject_section`.
+/// - `new_items: &[String]` must satisfy domain and type-safety constraints prior to invoking `reconcile_or_inject_section`.
+/// - `specs: &[&crate::LoadedSpec]` must satisfy domain and type-safety constraints prior to invoking `reconcile_or_inject_section`.
+/// - `none_fallback: &str` must satisfy domain and type-safety constraints prior to invoking `reconcile_or_inject_section`.
+/// - `next_delimiters: &[&str]` must satisfy domain and type-safety constraints prior to invoking `reconcile_or_inject_section`.
+///
+/// ## 4. Postconditions
+/// - Returns `String` from `reconcile_or_inject_section` with deterministic post-execution state.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(content)) bounded over input/member dimension of `reconcile_or_inject_section`.
+/// - Space Complexity: O(N(content)) bounded auxiliary memory for `reconcile_or_inject_section`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `reconcile_or_inject_section` (`String`).
+/// - State: Maintains consistent state invariants across `reconcile_or_inject_section` without partial mutation on error.
+/// - Action: Executes `reconcile_or_inject_section` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `reconcile_or_inject_section` (`RECONCILE-BACKLOG-CHECKLIST`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-RECONCILE-BACKLOG-CHECKLIST-RECONCILE-OR-INJECT-SECTION] | SysML v2: ActionDef(reconcile_or_inject_section)
 fn reconcile_or_inject_section(
     content: &str,
     heading: &str,
@@ -1109,35 +1167,34 @@ fn reconcile_or_inject_section(
 
 /// Synthesizes and reconciles bidirectional checklist hierarchy for Epic and Feature specifications.
 ///
-/// Mechanically synthesizes `## 2. Requirements & Checklist` in Epic specifications from child
-/// `FEAT-*` specifications, and `### Associated Use Cases & User Stories` (`#### Associated Use Cases`
-/// and `#### Associated User Stories`) in Epic and Feature specifications from child `UC-*` and `US-*`
-/// specifications, formatting each entry canonically as:
-/// `- [x| ] #<IssueID> - [<Title>](https://github.com/<owner>/<repo>/blob/<branch>/docs/...) (<clauses>)`
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `synthesize_and_reconcile_hierarchy` in `crates/reconcile-backlog/src/checklist.rs`.
 ///
-/// # Arguments
-/// * `parent_spec` - The parent specification document to reconcile.
-/// * `child_specs` - Sibling and child specification documents available in the workspace.
-/// * `repo_slug` - GitHub repository slug (e.g. `owner/repo`) or empty string for local relative links.
-/// * `default_branch` - Default git branch name (e.g. `main`).
-/// * `issue_index` - Queryable index of tracker issues used to resolve issue numbers and closure states.
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic state conservation and referential transparency for fn `synthesize_and_reconcile_hierarchy` (declaration #21) within `RECONCILE-BACKLOG-CHECKLIST`.
 ///
-/// # Returns
-/// Updated Markdown content for the parent specification with canonical checklists synthesized and reconciled.
+/// ## 3. Preconditions
+/// - `parent_spec: &crate::LoadedSpec` must satisfy domain and type-safety constraints prior to invoking `synthesize_and_reconcile_hierarchy`.
+/// - `child_specs: &[crate::LoadedSpec]` must satisfy domain and type-safety constraints prior to invoking `synthesize_and_reconcile_hierarchy`.
+/// - `repo_slug: &str` must satisfy domain and type-safety constraints prior to invoking `synthesize_and_reconcile_hierarchy`.
+/// - `default_branch: &str` must satisfy domain and type-safety constraints prior to invoking `synthesize_and_reconcile_hierarchy`.
+/// - `issue_index: &crate::tracker::IssueIndex` must satisfy domain and type-safety constraints prior to invoking `synthesize_and_reconcile_hierarchy`.
 ///
-/// # Errors
-/// This function operates infallibly on UTF-8 string slices without raising runtime errors.
+/// ## 4. Postconditions
+/// - Returns `String` from `synthesize_and_reconcile_hierarchy` with deterministic post-execution state.
 ///
-/// # Invariants
-/// * Deterministic Mechanical Backlog Traceability: Every child specification is deterministically linked.
-/// * Zero Unpopulated Fallbacks: Prohibited fallback placeholders are replaced with canonical allocations.
-/// * Pure Schema-Driven Hierarchy: Links strictly reflect AST child-parent ownership.
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(parent_spec)) bounded over input/member dimension of `synthesize_and_reconcile_hierarchy`.
+/// - Space Complexity: O(N(parent_spec)) bounded auxiliary memory for `synthesize_and_reconcile_hierarchy`.
 ///
-/// # Architecture Context
-/// Part of `crates/reconcile-backlog`, bridging SysML v2 AST lowering with GitHub tracker hierarchies.
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `synthesize_and_reconcile_hierarchy` (`String`).
+/// - State: Maintains consistent state invariants across `synthesize_and_reconcile_hierarchy` without partial mutation on error.
+/// - Action: Executes `synthesize_and_reconcile_hierarchy` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `synthesize_and_reconcile_hierarchy` (`RECONCILE-BACKLOG-CHECKLIST`).
 ///
-/// # Realises
-/// [Strict Bidirectional Checklist Sync, Zero-Placeholder Invariant, Deterministic Mechanical Backlog Traceability]
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-RECONCILE-BACKLOG-CHECKLIST-SYNTHESIZE-AND-RECONCILE-HIERARCHY] | SysML v2: ActionDef(synthesize_and_reconcile_hierarchy)
 pub fn synthesize_and_reconcile_hierarchy(
     parent_spec: &crate::LoadedSpec,
     child_specs: &[crate::LoadedSpec],

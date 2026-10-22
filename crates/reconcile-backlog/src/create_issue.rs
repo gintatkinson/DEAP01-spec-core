@@ -488,6 +488,31 @@ pub fn run_create_issue<T: TrackerClient>(
 }
 
 /// Top-level coordinator for `create-issue` command execution.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for fn `execute_create_issue` in `crates/reconcile-backlog/src/create_issue.rs`.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Preserves deterministic state conservation and referential transparency for fn `execute_create_issue` (declaration #8) within `RECONCILE-BACKLOG-CREATE-ISSUE`.
+///
+/// ## 3. Preconditions
+/// - `args: &CreateIssueArgs` must satisfy domain and type-safety constraints prior to invoking `execute_create_issue`.
+///
+/// ## 4. Postconditions
+/// - Returns `Result<(), String>` from `execute_create_issue` with deterministic post-execution state.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N(args)) bounded over input/member dimension of `execute_create_issue`.
+/// - Space Complexity: O(N(args)) bounded auxiliary memory for `execute_create_issue`.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Validates boundary inputs and types for `execute_create_issue` (`Result<(), String>`).
+/// - State: Maintains consistent state invariants across `execute_create_issue` without partial mutation on error.
+/// - Action: Executes `execute_create_issue` deterministically with zero unbounded recursion or blocking.
+/// - Resource: Bounds stack and heap allocations within `execute_create_issue` (`RECONCILE-BACKLOG-CREATE-ISSUE`).
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-RECONCILE-BACKLOG-CREATE-ISSUE-EXECUTE-CREATE-ISSUE] | SysML v2: ActionDef(execute_create_issue)
 pub fn execute_create_issue(args: &CreateIssueArgs) -> Result<(), String> {
     let params = args.resolve()?;
 

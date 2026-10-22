@@ -537,14 +537,62 @@ pub fn validate_source_syntax_for_language(
     lang: SourceLanguage,
 ) -> Result<(), String> {
     let bytes = source.as_bytes();
-    let len = bytes.len();
     let mut idx: usize = 0;
     let mut line: usize = 1;
     let mut col: usize = 1;
     let mut stack: Vec<(u8, usize, usize)> = Vec::new();
+    let mut active_str: Option<(u8, bool, bool, usize, usize)> = None;
+    let mut interp_stack: Vec<((u8, bool, bool, usize, usize), usize)> = Vec::new();
     let is_dart = lang == SourceLanguage::Dart;
 
     while let Some(&b) = bytes.get(idx) {
+        if let Some((quote, is_triple, is_raw, open_line, open_col)) = active_str {
+            if !is_raw && b == b'\\' {
+                idx = idx.saturating_add(2);
+                col = col.saturating_add(2);
+                continue;
+            }
+            if is_dart && !is_raw && b == b'$' && bytes.get(idx.saturating_add(1)) == Some(&b'{') {
+                interp_stack.push(((quote, is_triple, is_raw, open_line, open_col), stack.len()));
+                stack.push((b'{', line, col.saturating_add(1)));
+                active_str = None;
+                idx = idx.saturating_add(2);
+                col = col.saturating_add(2);
+                continue;
+            }
+            if is_triple {
+                if b == quote
+                    && bytes.get(idx.saturating_add(1)) == Some(&quote)
+                    && bytes.get(idx.saturating_add(2)) == Some(&quote)
+                {
+                    active_str = None;
+                    idx = idx.saturating_add(3);
+                    col = col.saturating_add(3);
+                    continue;
+                }
+            } else if b == quote {
+                active_str = None;
+                idx = idx.saturating_add(1);
+                col = col.saturating_add(1);
+                continue;
+            }
+            if b == b'\n' {
+                if quote == b'\'' && !is_triple {
+                    return Err(format!(
+                        "{}:{}:{}: syntax error: unclosed single-quoted string at line {}, column {}",
+                        file_label, open_line, open_col, open_line, open_col
+                    ));
+                }
+                line = line.saturating_add(1);
+                col = 1;
+                idx = idx.saturating_add(1);
+                continue;
+            }
+            col = col.saturating_add(1);
+            idx = idx.saturating_add(1);
+            continue;
+        }
+
         if b == b'\n' {
             line = line.saturating_add(1);
             col = 1;
@@ -594,7 +642,7 @@ pub fn validate_source_syntax_for_language(
             continue;
         }
 
-        // Rust raw string literal `r#"..."#` or `r"..."`
+        // Rust raw string literal `r#"..."#`
         if !is_dart && b == b'r' {
             let mut scan = idx.saturating_add(1);
             let mut hashes: usize = 0;
@@ -641,136 +689,46 @@ pub fn validate_source_syntax_for_language(
             }
         }
 
+        let is_raw_quote = idx > 0
+            && bytes.get(idx.saturating_sub(1)) == Some(&b'r')
+            && (idx < 2
+                || bytes
+                    .get(idx.saturating_sub(2))
+                    .map(|&p| !p.is_ascii_alphanumeric() && p != b'_')
+                    .unwrap_or(true));
+
         // Triple-quoted string in Dart (`"""..."""` or `'''...'''`)
         if is_dart
             && (b == b'"' || b == b'\'')
             && bytes.get(idx.saturating_add(1)) == Some(&b)
             && bytes.get(idx.saturating_add(2)) == Some(&b)
         {
-            let quote = b;
-            let open_line = line;
-            let open_col = col;
+            active_str = Some((b, true, is_raw_quote, line, col));
             idx = idx.saturating_add(3);
             col = col.saturating_add(3);
-            let mut closed = false;
-            while let Some(&qb) = bytes.get(idx) {
-                if qb == b'\\' {
-                    idx = idx.saturating_add(2);
-                    col = col.saturating_add(2);
-                    continue;
-                }
-                if qb == quote
-                    && bytes.get(idx.saturating_add(1)) == Some(&quote)
-                    && bytes.get(idx.saturating_add(2)) == Some(&quote)
-                {
-                    idx = idx.saturating_add(3);
-                    col = col.saturating_add(3);
-                    closed = true;
-                    break;
-                }
-                if qb == b'\n' {
-                    line = line.saturating_add(1);
-                    col = 1;
-                } else {
-                    col = col.saturating_add(1);
-                }
-                idx = idx.saturating_add(1);
-            }
-            if !closed {
-                return Err(format!(
-                    "{}:{}:{}: syntax error: unclosed triple-quoted string at line {}, column {}",
-                    file_label, open_line, open_col, open_line, open_col
-                ));
-            }
             continue;
         }
 
         // Double-quoted string literal `"..."`
         if b == b'"' {
-            let open_line = line;
-            let open_col = col;
+            active_str = Some((b'"', false, is_raw_quote, line, col));
             idx = idx.saturating_add(1);
             col = col.saturating_add(1);
-            let mut closed = false;
-            while let Some(&qb) = bytes.get(idx) {
-                if qb == b'\\' {
-                    idx = idx.saturating_add(2);
-                    col = col.saturating_add(2);
-                    continue;
-                }
-                if qb == b'"' {
-                    idx = idx.saturating_add(1);
-                    col = col.saturating_add(1);
-                    closed = true;
-                    break;
-                }
-                if qb == b'\n' {
-                    line = line.saturating_add(1);
-                    col = 1;
-                } else {
-                    col = col.saturating_add(1);
-                }
-                idx = idx.saturating_add(1);
-            }
-            if !closed {
-                return Err(format!(
-                    "{}:{}:{}: syntax error: unclosed string literal at line {}, column {}",
-                    file_label, open_line, open_col, open_line, open_col
-                ));
-            }
             continue;
         }
 
         // Single-quoted literal: in Dart `'...'` is a string; in Rust `'c'` is a char or `'a` is a lifetime
         if b == b'\'' {
             if is_dart {
-                let open_line = line;
-                let open_col = col;
+                active_str = Some((b'\'', false, is_raw_quote, line, col));
                 idx = idx.saturating_add(1);
                 col = col.saturating_add(1);
-                let mut closed = false;
-                while let Some(&qb) = bytes.get(idx) {
-                    if qb == b'\\' {
-                        idx = idx.saturating_add(2);
-                        col = col.saturating_add(2);
-                        continue;
-                    }
-                    if qb == b'\'' {
-                        idx = idx.saturating_add(1);
-                        col = col.saturating_add(1);
-                        closed = true;
-                        break;
-                    }
-                    if qb == b'\n' {
-                        break;
-                    }
-                    col = col.saturating_add(1);
-                    idx = idx.saturating_add(1);
-                }
-                if !closed {
-                    return Err(format!(
-                        "{}:{}:{}: syntax error: unclosed single-quoted string at line {}, column {}",
-                        file_label, open_line, open_col, open_line, open_col
-                    ));
-                }
                 continue;
             } else {
-                // Rust: check if this is a char literal `'x'` or `'\...'`
-                if bytes.get(idx.saturating_add(1)) == Some(&b'\\') {
-                    let mut scan = idx.saturating_add(2);
-                    while scan < len && scan < idx.saturating_add(12) {
-                        if bytes.get(scan) == Some(&b'\'') {
-                            let step = scan.saturating_add(1).saturating_sub(idx);
-                            idx = scan.saturating_add(1);
-                            col = col.saturating_add(step);
-                            break;
-                        }
-                        scan = scan.saturating_add(1);
-                    }
-                    continue;
-                } else if bytes.get(idx.saturating_add(2)) == Some(&b'\'') {
-                    idx = idx.saturating_add(3);
-                    col = col.saturating_add(3);
+                // Rust: check if this is a char literal `'x'`, `'\...'`, or multi-byte UTF-8 char literal
+                if let Some(char_len) = source.get(idx..).and_then(single_char_literal_byte_len) {
+                    idx = idx.saturating_add(char_len);
+                    col = col.saturating_add(char_len);
                     continue;
                 }
                 // Otherwise it is a Rust lifetime like `'a` or `'static`
@@ -788,6 +746,14 @@ pub fn validate_source_syntax_for_language(
             match stack.pop() {
                 Some((open_b, open_line, open_col)) if open_b == expected_open => {
                     let _matched = (open_line, open_col);
+                    if b == b'}' {
+                        if let Some(&(saved_str, saved_stack_len)) = interp_stack.last() {
+                            if stack.len() == saved_stack_len {
+                                interp_stack.pop();
+                                active_str = Some(saved_str);
+                            }
+                        }
+                    }
                 }
                 Some((open_b, open_line, open_col)) => {
                     return Err(format!(
@@ -819,6 +785,20 @@ pub fn validate_source_syntax_for_language(
 
         idx = idx.saturating_add(1);
         col = col.saturating_add(1);
+    }
+
+    if let Some((quote, is_triple, _, open_line, open_col)) = active_str {
+        let kind_label = if is_triple {
+            "triple-quoted string"
+        } else if quote == b'\'' {
+            "single-quoted string"
+        } else {
+            "string literal"
+        };
+        return Err(format!(
+            "{}:{}:{}: syntax error: unclosed {} at line {}, column {}",
+            file_label, open_line, open_col, kind_label, open_line, open_col
+        ));
     }
 
     if let Some((open_b, open_line, open_col)) = stack.pop() {
@@ -3948,5 +3928,26 @@ impl ComponentBuffer {
             "Expected line/col diagnostic, got: {}",
             err
         );
+    }
+
+    #[test]
+    fn test_validate_dart_raw_strings_and_interpolated_nested_quotes() {
+        let dart_src = r#"
+class PathFormatter {
+  String normalize(Map<String, String> map) {
+    final sep = r'\';
+    final rawPath = r"C:\path\";
+    final msg = "hello ${map["world"]}!";
+    final msg2 = 'hello ${map['world']}!';
+    return "$sep$rawPath$msg$msg2";
+  }
+}
+"#;
+        validate_source_syntax_for_language(dart_src, "lib/path_formatter.dart", SourceLanguage::Dart)
+            .expect("Dart raw strings ending with backslash and nested interpolation quotes must validate");
+
+        let rust_utf8_char = "pub fn is_up_arrow(ch: char) -> bool {\n    ch == '↑' || ch == '{'\n}\n";
+        validate_source_syntax_for_language(rust_utf8_char, "src/arrow.rs", SourceLanguage::Rust)
+            .expect("Rust multi-byte UTF-8 character literal must validate");
     }
 }
