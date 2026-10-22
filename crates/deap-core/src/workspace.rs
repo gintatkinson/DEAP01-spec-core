@@ -1087,4 +1087,232 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn test_canonical_turn_0_session_initialization_receipt_invariants() -> Result<(), Box<dyn std::error::Error>> {
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(|p| p.parent())
+            .ok_or("repo root")?;
+        if !is_upstream_compiler(repo_root) {
+            return Ok(());
+        }
+
+        let agents_md = fs::read_to_string(repo_root.join("AGENTS.md"))?;
+        let constitution_first = fs::read_to_string(repo_root.join("rules/constitution-first.md"))?;
+
+        let required_receipt_elements = [
+            "| Step | Check / Gate | Status | Resolution / Details |",
+            "| **0** | **Repository Classification** | Verified |",
+            "| **1** | **Governance Constitution** | Verified |",
+            "| **2** | **Task Skill On-Demand** | Standby |",
+            "| **3** | **Governance Rules Bundle** | Verified |",
+            "| **4** | **Platform Profile** |",
+            "| **5** | **Baseline Gate** | Bypassed |",
+            "- **Branch**:",
+            "- **Working Tree**:",
+            "- **Role Invariant**:",
+        ];
+
+        for elem in required_receipt_elements {
+            assert!(
+                agents_md.contains(elem),
+                "AGENTS.md must contain canonical receipt element: '{}'",
+                elem
+            );
+            assert!(
+                constitution_first.contains(elem),
+                "rules/constitution-first.md must contain canonical receipt element: '{}'",
+                elem
+            );
+        }
+
+        assert!(
+            agents_md.contains("UPSTREAM_SPEC_CORE_COMPILER")
+                && agents_md.contains("DOWNSTREAM_CUSTOMER_PROJECT"),
+            "AGENTS.md must support both UPSTREAM_SPEC_CORE_COMPILER and DOWNSTREAM_CUSTOMER_PROJECT roles"
+        );
+        assert!(
+            agents_md.contains(".pipeline/upstream"),
+            "AGENTS.md must define role adaptively based on .pipeline/upstream"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_5_point_thought_block_compliance_and_shell_mutation_lock() -> Result<(), Box<dyn std::error::Error>> {
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(|p| p.parent())
+            .ok_or("repo root")?;
+        if !is_upstream_compiler(repo_root) {
+            return Ok(());
+        }
+
+        let agents_md = fs::read_to_string(repo_root.join("AGENTS.md"))?;
+        let user_auth_rule = fs::read_to_string(repo_root.join("rules/user-authorization-lock.md"))?;
+
+        let top_50_lines: String = agents_md
+            .lines()
+            .take(50)
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(
+            top_50_lines.contains("Strict Coordinator Tool Locking & 5-Point Compliance Check")
+                || top_50_lines.contains("5-Point Compliance Check"),
+            "AGENTS.md must define 5-Point Compliance Check in its top section before line 50"
+        );
+
+        let point_identifiers = [
+            "Turn-0 Initialization Gate",
+            "Intent Classification",
+            "User Authorization Lock",
+            "Zero Silent Assumptions",
+            "Coordinator Delegation & Shell Mutation Lock",
+        ];
+
+        for point in point_identifiers {
+            assert!(
+                agents_md.contains(point),
+                "AGENTS.md must define compliance point '{}'",
+                point
+            );
+            assert!(
+                user_auth_rule.contains(point),
+                "rules/user-authorization-lock.md must define compliance point '{}'",
+                point
+            );
+        }
+
+        assert!(
+            user_auth_rule.contains("git status"),
+            "rules/user-authorization-lock.md must whitelist git status"
+        );
+        assert!(
+            user_auth_rule.contains("git rev-parse --show-toplevel"),
+            "rules/user-authorization-lock.md must whitelist git rev-parse --show-toplevel"
+        );
+
+        for locked_cmd in ["cp", "mv", "rm", "tee"] {
+            assert!(
+                user_auth_rule.contains(locked_cmd),
+                "rules/user-authorization-lock.md must explicitly lock mutating command '{}'",
+                locked_cmd
+            );
+        }
+
+        assert!(
+            user_auth_rule.contains("walkthrough.md"),
+            "rules/user-authorization-lock.md must prohibit pre-approval walkthrough.md edits"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_active_rules_bundle_parities_and_budget() -> Result<(), Box<dyn std::error::Error>> {
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(|p| p.parent())
+            .ok_or("repo root")?;
+        if !is_upstream_compiler(repo_root) {
+            return Ok(());
+        }
+
+        let bundle_path = repo_root.join(".pipeline/ACTIVE_RULES_BUNDLE.md");
+        assert!(bundle_path.is_file(), "Active rules bundle must exist at {:?}", bundle_path);
+        let metadata = fs::metadata(&bundle_path)?;
+        let byte_len = metadata.len();
+        let bundle_content = fs::read_to_string(&bundle_path)?;
+        let line_count = bundle_content.lines().count();
+
+        assert!(
+            byte_len < 40_000,
+            "ACTIVE_RULES_BUNDLE.md must be under 40,000 bytes for single-chunk view_file read (got {} bytes)",
+            byte_len
+        );
+        assert!(
+            line_count < 750,
+            "ACTIVE_RULES_BUNDLE.md must be under 750 lines for single-chunk view_file read (got {} lines)",
+            line_count
+        );
+
+        let rule_4 = fs::read_to_string(repo_root.join("rules/constitution-first.md"))?;
+        let rule_11 = fs::read_to_string(repo_root.join("rules/role-boundary-lock.md"))?;
+        let rule_19 = fs::read_to_string(repo_root.join("rules/user-authorization-lock.md"))?;
+
+        // Rule 4 (constitution-first.md) parity
+        assert!(
+            bundle_content.contains("rules/constitution-first.md"),
+            "ACTIVE_RULES_BUNDLE.md must reference rules/constitution-first.md"
+        );
+        for needle in [
+            "AGENTS.md",
+            ".pipeline/constitution.md",
+            "---GOVERNANCE-END---",
+            "UPSTREAM_SPEC_CORE_COMPILER",
+        ] {
+            assert!(
+                rule_4.contains(needle),
+                "rules/constitution-first.md must contain '{}'",
+                needle
+            );
+            assert!(
+                bundle_content.contains(needle),
+                "ACTIVE_RULES_BUNDLE.md must match '{}' from rules/constitution-first.md",
+                needle
+            );
+        }
+
+        // Rule 19 (user-authorization-lock.md) parity
+        assert!(
+            bundle_content.contains("rules/user-authorization-lock.md"),
+            "ACTIVE_RULES_BUNDLE.md must reference rules/user-authorization-lock.md"
+        );
+        for needle in [
+            "git status",
+            "git rev-parse --show-toplevel",
+            "cp",
+            "mv",
+            "rm",
+            "tee",
+            "walkthrough.md",
+        ] {
+            assert!(
+                rule_19.contains(needle),
+                "rules/user-authorization-lock.md must contain '{}'",
+                needle
+            );
+            assert!(
+                bundle_content.contains(needle),
+                "ACTIVE_RULES_BUNDLE.md must match '{}' from rules/user-authorization-lock.md",
+                needle
+            );
+        }
+
+        // Rule 11 (role-boundary-lock.md) parity
+        assert!(
+            bundle_content.contains("rules/role-boundary-lock.md"),
+            "ACTIVE_RULES_BUNDLE.md must reference rules/role-boundary-lock.md"
+        );
+        for needle in [
+            "Coordinator Direct Writing",
+            "walkthrough.md",
+        ] {
+            assert!(
+                rule_11.contains(needle),
+                "rules/role-boundary-lock.md must contain '{}'",
+                needle
+            );
+            assert!(
+                bundle_content.contains(needle),
+                "ACTIVE_RULES_BUNDLE.md must match '{}' from rules/role-boundary-lock.md",
+                needle
+            );
+        }
+
+        Ok(())
+    }
 }

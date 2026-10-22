@@ -1,7 +1,18 @@
 # Project-Scoped Rules
 
+## Strict Coordinator Tool Locking & 5-Point Compliance Check
+Every agent thought block MUST begin with the 5-point Karpathy and Pipeline Compliance Check:
+* **Point 1 (Turn-0 Initialization Gate)**: Have I executed Phase A of the Mandatory Session Initialization Gate (`list_dir` or direct check to detect `.pipeline/upstream/`, `view_file` in full on `.pipeline/constitution.md` and `.pipeline/ACTIVE_RULES_BUNDLE.md`, and read-only `git status --short --branch`) AND emitted the Canonical Session Initialization Receipt Table in this session, OR does my subagent prompt end with `---GOVERNANCE-END---`? (Yes/No -- If No, HALT all other output, planning, and tool calls immediately, execute Phase A right now, and emit the Mandatory Session Initialization Completed table).
+* **Point 2 (Intent Classification)**: Is the user's message a question/inquiry or a direct command?
+* **Point 3 (User Authorization Lock)**: Are the exact target files and changes documented in an approved `implementation_plan.md` AND does the user's latest message explicitly contain `PROCEED` (or `Approved` / `Approve plan`)? (Yes/No -- If No, all modifying tools and mutating `run_command` invocations are strictly locked; writing/updating `implementation_plan.md` after Phase A initialization is the sole permitted file write).
+* **Point 4 (Zero Silent Assumptions)**: Am I making any silent assumptions about the user's intent or workspace state?
+* **Point 5 (Coordinator Delegation & Shell Mutation Lock)**: Does the active skill mandate context-isolated subagent dispatches, OR does this turn create, modify, copy, move, or delete any file other than `implementation_plan.md` (including `walkthrough.md`, governance files, rules, specs, or code)? (If Yes to either, coordinator direct file-writing and shell file mutations via `cp`, `mv`, `rm`, `tee`, `sed -i`, or output redirects `>`/`>>` are strictly locked; all repository writes must be delegated to single-item subagents after `PROCEED`).
+- The coordinator delegation duty binds for all repository source, governance, rules, tooling, and specification writes. All file writes MUST be delegated exclusively to spawned subagents. Pre-approval creation or modification of `walkthrough.md` is strictly prohibited.
+
 ## Repository Role & Scope Classification
-- **Repository Classification:** `UPSTREAM_SPEC_CORE_COMPILER` (Digital Engineering Agent Platform Core Specification Compiler).
+- **Role Detection Invariant**:
+  * **When `.pipeline/upstream/` is present -> `UPSTREAM_SPEC_CORE_COMPILER`**: Digital Engineering Agent Platform Core Specification Compiler. Landing zones (`schema/`, `docs/epics/`, `docs/features/`, `docs/user-stories/`, `docs/use-cases/`) must remain clean landing zones with only `.gitkeep`. Platform profiles (`.pipeline/profiles/*`) are strictly bypassed.
+  * **When `.pipeline/upstream/` is absent -> `DOWNSTREAM_CUSTOMER_PROJECT`**: Downstream Application / Domain Engineering Workspace. Concrete schemas in `schema/` and `.pipeline/schema.sysml` serve as the 100% Single Source of Truth (SSOT). Platform profiles (`.pipeline/profiles/<target_platform>.md`) are loaded on-demand during downstream implementation turns only.
 - **Sentinel Indicator:** The presence of `.pipeline/upstream/` and `skills/spec-orchestrator/` denotes that this repository is the **Upstream Specification Core Compiler**, NOT a downstream customer application workspace or domain template.
 - **Domain Template & Customer Data Boundary:** Domain-specific platforms and customer applications belong in downstream distribution repositories, and must NOT be committed to this upstream specification core compiler repository.
 
@@ -16,15 +27,41 @@
 - **Downstream Workspace Boundary**: Concrete project schemas and specifications reside exclusively in downstream application workspaces initialized from domain distribution templates.
 
 ## Mandatory Session Initialization Gate (Role- & Phase-Scoped Lazy Loading)
-On session startup, before executing file modifications, the coordinator agent MUST execute the following lightweight initialization sequence (spawned single-item subagents that receive a curated prompt terminating with `---GOVERNANCE-END---` skip Steps 0-5 and execute their assigned `SKILL.md` directly):
-0. **Detect Repository Role & Scope (Direct-Path Read)**: Inspect whether `.pipeline/upstream/` exists on disk via direct-path read (`list_dir` or `view_file`). Do not rely on glob or search tools that ignore hidden dot-directories.
+On session startup, before writing any response, plan, or executing file modifications, the coordinator agent MUST execute the following lightweight initialization sequence (spawned single-item subagents that receive a curated prompt terminating with `---GOVERNANCE-END---` skip Steps 0-5 and execute their assigned `SKILL.md` directly):
+
+### Phase A (Unconditional Turn-0 Read-Only Initialization -- Executed Immediately Before Any Response or Plan)
+On session startup, before writing any response, plan, or executing file modifications, the coordinator agent MUST execute Phase A:
+0. **Step 0: Detect Repository Role & Scope (Direct-Path Read)**: Inspect whether `.pipeline/upstream/` exists on disk via direct-path read (`list_dir` or `view_file` or `test -d`). Do not rely on glob or search tools that ignore hidden dot-directories.
    - If present -> `UPSTREAM_SPEC_CORE_COMPILER`
    - If absent -> `DOWNSTREAM_CUSTOMER_PROJECT`
-1. **Read Governance Constitution**: Execute `view_file` on `.pipeline/constitution.md` to ingest the platform-independent functional governance layer and zero-mocking persistence mandates.
-2. **Load Active Task Skill On-Demand**: Execute `view_file` ONLY on the `SKILL.md` relevant to the active task (do NOT preload `skills/feature-driven-implementation/SKILL.md` during specification, research, or upstream compiler maintenance tasks).
-3. **Load Governance Rules**: Execute `view_file` on `.pipeline/ACTIVE_RULES_BUNDLE.md` to ingest the complete, consolidated suite of active governance rules in a single read.
-4. **Conditional Platform Profile Load (Downstream Implementation Phase Only)**: Per `rules/constitution-first.md`, read `.pipeline/profiles/<target_platform>.md` ONLY when implementing downstream application code and ONLY for the workspace's configured target platform. Never read `.pipeline/profiles/flutter.md` during `UPSTREAM_SPEC_CORE_COMPILER` sessions, specification generation, or non-Flutter projects.
-5. **Verify Baseline When Modifying Repository State**: NEVER run `verify-baseline`, `cargo test`, or `flutter test` on session startup/initialization, during read-only questions, or on turns where no tracked source/model files were modified. Run `./target/release/verify-baseline . --no-domain` (or `cargo run --release -p verify-baseline -- . --no-domain` if the release binary has not been built) once per coordinator session prior to implementation or commit gates (never redundantly inside read-only or single-item subagents). The legacy Python and shell tooling (`scripts/verify_downstream_baseline.py`, `reconcile_backlog.py`, `parity_auditor`, `setup_git_hooks.sh`) is permanently retired per Check 32 and Check 33 and MUST NOT be invoked.
+1. **Step 1: Read Governance Constitution**: Execute `view_file` on `.pipeline/constitution.md` to ingest the platform-independent functional governance layer and zero-mocking persistence mandates.
+2. **Step 2: Read-Only Git State Check**: Execute read-only `git status --short --branch` and `git rev-parse --show-toplevel` to empirically verify branch and working tree state.
+3. **Step 3: Read Governance Rules Bundle**: Execute `view_file` on `.pipeline/ACTIVE_RULES_BUNDLE.md` to ingest the complete, consolidated suite of active governance rules in a single read.
+- **Emit Canonical Session Initialization Receipt Table**: Coordinator MUST output the canonical receipt table verbatim:
+
+### Mandatory Session Initialization Completed
+
+The coordinator initialization sequence has executed in accordance with `.pipeline/constitution.md` and `.agents/AGENTS.md`:
+
+| Step | Check / Gate | Status | Resolution / Details |
+| :--- | :--- | :--- | :--- |
+| **0** | **Repository Classification** | Verified | `<UPSTREAM_SPEC_CORE_COMPILER (.pipeline/upstream/ detected) OR DOWNSTREAM_CUSTOMER_PROJECT (.pipeline/upstream/ absent)>` |
+| **1** | **Governance Constitution** | Verified | Loaded `.pipeline/constitution.md` |
+| **2** | **Task Skill On-Demand** | Standby | `<Awaiting active task directive OR Loaded skills/<active-skill>/SKILL.md>` |
+| **3** | **Governance Rules Bundle** | Verified | Loaded `.pipeline/ACTIVE_RULES_BUNDLE.md` (`<N>` active rules) |
+| **4** | **Platform Profile** | `<Bypassed OR Standby>` | `<Not applicable for upstream spec core compiler sessions OR Deferred until downstream implementation phase (.pipeline/profiles/<platform>.md)>` |
+| **5** | **Baseline Gate** | Bypassed | Clean session startup; no tracked source or model files modified |
+
+- **Branch**: `<empirical branch from git status>`
+- **Working Tree**: `<Clean (git status clean) OR Dirty (N files modified/untracked)>`
+- **Role Invariant**: `<Pure schema-driven abstract compiler; clean landing zones maintained. OR Pure schema-driven downstream workspace; .pipeline/schema.sysml is 100% SSOT.>`
+
+Ready for instructions. What task or work package would you like to execute?
+
+### Phase B (Task-Scoped & Post-Approval Pre-Modification Gates)
+2. **Step 2 (Visual Receipt continuity): Load Active Task Skill On-Demand**: Execute `view_file` ONLY on the `SKILL.md` relevant to the active task (do NOT preload `skills/feature-driven-implementation/SKILL.md` during specification, research, or upstream compiler maintenance tasks).
+4. **Step 4: Conditional Platform Profile Load (Downstream Implementation Phase Only)**: Per `rules/constitution-first.md`, read `.pipeline/profiles/<target_platform>.md` ONLY when implementing downstream application code and ONLY for the workspace's configured target platform. Never read `.pipeline/profiles/flutter.md` during `UPSTREAM_SPEC_CORE_COMPILER` sessions, specification generation, or non-Flutter projects.
+5. **Step 5: Verify Baseline When Modifying Repository State**: NEVER run `verify-baseline`, `cargo test`, or `flutter test` on session startup/initialization, during read-only questions, or on turns where no tracked source/model files were modified. Run `./target/release/verify-baseline . --no-domain` (or `cargo run --release -p verify-baseline -- . --no-domain` if the release binary has not been built) once per coordinator session prior to implementation or commit gates (never redundantly inside read-only or single-item subagents). The legacy Python and shell tooling (`scripts/verify_downstream_baseline.py`, `reconcile_backlog.py`, `parity_auditor`, `setup_git_hooks.sh`) is permanently retired per Check 32 and Check 33 and MUST NOT be invoked.
 
 ## Strict Planning Gate (No Execution Without Approved Plan)
 - You are strictly forbidden from creating, modifying, or deleting files in the workspace or dispatching any subagents unless that action is documented in an approved implementation plan.
@@ -80,13 +117,8 @@ On session startup, before executing file modifications, the coordinator agent M
 - During Step 4 verification, the agent MUST run a full compilation build of the application (e.g. `flutter build` or `npm run build` as specified by the platform profile) to ensure it compiles cleanly. Assertions of completion without verified compile output are strictly forbidden.
 
 ## Strict Coordinator Tool Locking & 4-Point Compliance Check
-- Every agent thought block MUST begin with the 4-point Karpathy and Pipeline Compliance Check:
-  * Is the user's message a question/inquiry or a direct command?
-  * Has the user explicitly approved a file-write/command execution for this turn? (Yes/No)
-  * Am I making any silent assumptions about the user's intent?
-  * Does the active skill mandate context-isolated subagent dispatches, **or** does this turn write any repository source or specification file? (If yes to either, coordinator direct file-writing is locked).
-  * Has the Mandatory Initialization Sequence been completed for this session (or is this a curated subagent receiving ---GOVERNANCE-END---)? (Yes/No. If No, halt all other actions and execute initialization immediately).
-- The coordinator delegation duty binds for all repository source, governance, rules, tooling, and specification writes. All file writes MUST be delegated exclusively to spawned subagents.
+- **Compliance Check Reference & Synchronization**: This section is synchronized with and superseded by the top-level `## Strict Coordinator Tool Locking & 5-Point Compliance Check`. Every agent thought block MUST begin with the standardized 5-point Karpathy and Pipeline Compliance Check (Points 1 through 5) defined in that section.
+- **Coordinator Delegation & Shell Mutation Lock**: The coordinator delegation duty binds for all repository source, governance, rules, tooling, and specification writes. All file writes MUST be delegated exclusively to spawned subagents. Shell file mutations via `cp`, `mv`, `rm`, `tee`, `sed -i`, or output redirects `>`/`>>` as well as pre-approval creation or modification of `walkthrough.md` are strictly prohibited.
 - **No Documentation/Installation Drift**: Update installation instructions (`README.md`, installer scripts) whenever rules or directories change. Verify `git diff origin/<branch>` is empty before declaring completion.
 
 ## Atomic Work Execution & Walkthrough Gates

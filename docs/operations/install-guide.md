@@ -32,6 +32,7 @@
    - [4.3 Clean Landing Zone Invariant Distinction](#43-clean-landing-zone-invariant-distinction)
    - [4.4 Platform Profile Bootstrapping (.pipeline/profiles/)](#44-platform-profile-bootstrapping-pipelineprofiles)
    - [4.5 Environment Variables Reference](#45-environment-variables-reference)
+   - [4.6 Downstream Governance & Toolchain Propagation Protocol](#46-downstream-governance--toolchain-propagation-protocol)
 5. [Verification & Quality Gates](#5-verification--quality-gates)
    - [5.1 Running the Native Baseline Verifier](#51-running-the-native-baseline-verifier)
    - [5.2 Running the Specification Verification Gate](#52-running-the-specification-verification-gate)
@@ -250,6 +251,59 @@ The DEAP toolchain and downstream runtimes support the following environment var
 | `FLUTTER_TEST` | *Unset* | When set to `true`, limits database seed rows and accelerates test execution. |
 | `FIRESTORE_EMULATOR_HOST` | *Unset* | Host and port for connecting to the local Firebase Firestore emulator (e.g. `localhost:8080`). |
 | `DEAP_WORKSPACE` | `.` | Absolute or workspace-relative path to the target repository root. |
+
+### 4.6 Downstream Governance & Toolchain Propagation Protocol
+
+#### Scope & Objective
+The Downstream Governance & Toolchain Propagation Protocol establishes the mechanical synchronization process across repository tiers:
+- **Tier 0 (Upstream Specification Core Compiler)**: `DEAP01-spec-core` (authoritative single source of truth for systems engineering metamodels, compiler crates, and verification gates).
+- **Tier 1 (Platform Template Repositories)**: Distribution templates such as `DEAP-profile-flutter-app`, maintaining clean landing zones and verified platform projections.
+- **Tier 2 (Customer Application Workspaces)**: Active engineering workspaces such as `DEAP01-cuas-coa-engine`, consuming concrete SysML schemas and implementing platform projections.
+
+This protocol propagates the unified Turn-0 session initialization receipt, the 5-point Karpathy and Pipeline compliance check, and compiled native Rust binaries from Tier 0 to Tier 1 platform templates and Tier 2 customer workspaces.
+
+#### Synchronized Governance Artifacts
+To maintain uniform agent governance and fail-closed quality gates across all downstream repositories, the following core governance assets must be synchronized from Tier 0:
+- **`AGENTS.md` and symlink `.agents/AGENTS.md`**: Master agent instruction entrypoint containing coordinator tool locking, intent classification, and compliance check protocols.
+- **`.pipeline/constitution.md`**: Platform-independent functional governance constitution and zero-mocking persistence mandates.
+- **`.pipeline/ACTIVE_RULES_BUNDLE.md`**: Consolidated active governance rules bundle ingested in a single read during Turn-0 initialization.
+- **`rules/*.md`**: Granular governance rules, especially:
+  - `rules/constitution-first.md`: Platform profile scoping and loading constraints.
+  - `rules/user-authorization-lock.md`: Plan approval locks and continuous execution gates.
+  - `rules/role-boundary-lock.md`: Coordinator delegation duty and subagent execution boundaries.
+
+#### Precompiled Release Binaries
+Downstream repositories do not rebuild the compiler crates from source; instead, they receive precompiled release binaries built in Tier 0:
+1. Build release binaries in Tier 0 (`DEAP01-spec-core`):
+   ```bash
+   cargo build --release --workspace
+   ```
+2. Copy the resulting binaries into the downstream repository's `target/release/` directory:
+   - `target/release/verify-baseline`
+   - `target/release/compile-sysml`
+   - `target/release/ingest-sysml`
+   - `target/release/assemble-conops`
+   - `target/release/reconcile-backlog`
+3. Ensure binary execution permissions in downstream:
+   ```bash
+   chmod +x target/release/*
+   ```
+
+#### Downstream Verification Command Sequence
+Once governance files and release binaries are staged in the downstream repository, execute the following bootstrap verification sequence in the downstream root:
+```bash
+# In downstream repository root:
+./target/release/verify-baseline setup-hooks .
+./target/release/verify-baseline . --no-domain
+```
+This installs the pre-commit git hook and validates all baseline gates (hygiene, entrypoints, binary executability, syntax, and governance consistency) against the downstream repository.
+
+#### Turn-0 Initialization Expectation
+Every downstream coordinator agent on Turn 0 MUST execute Phase A of the Mandatory Session Initialization Gate:
+1. Detect repository scope by inspecting the presence of `.pipeline/upstream/`. In downstream repositories, `.pipeline/upstream/` is absent, evaluating deterministically to `DOWNSTREAM_CUSTOMER_PROJECT`.
+2. Ingest `.pipeline/constitution.md` and `.pipeline/ACTIVE_RULES_BUNDLE.md`.
+3. Check working tree state via read-only `git status --short --branch`.
+4. Output the verbatim Canonical Session Initialization Receipt Table before planning or coding.
 
 ---
 

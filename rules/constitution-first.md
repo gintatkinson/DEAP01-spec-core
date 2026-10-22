@@ -21,6 +21,29 @@
 - `.pipeline` and `.agents` are hidden directories and generic glob tools may exclude them. You MUST read root `AGENTS.md`, `.pipeline/constitution.md` and `.pipeline/profiles/` directly by their explicit paths. A file absent from this list and hidden from glob is effectively invisible -- that is how the strictest authorization rule came to be missed.
 - Baseline conformance is verified exclusively with the native Rust binary `./target/release/verify-baseline . --no-domain`; the retired `scripts/verify_downstream_baseline.py` MUST NOT be invoked (Check 33).
 
+## Canonical Turn-0 Session Initialization Receipt
+
+On session startup (Turn 0), before executing file modifications or outputting implementation plans, the coordinator agent MUST complete Phase A of the Mandatory Session Initialization Gate and emit the following receipt table verbatim:
+
+### Mandatory Session Initialization Completed
+
+The coordinator initialization sequence has executed in accordance with `.pipeline/constitution.md` and `.agents/AGENTS.md`:
+
+| Step | Check / Gate | Status | Resolution / Details |
+| :--- | :--- | :--- | :--- |
+| **0** | **Repository Classification** | Verified | `<UPSTREAM_SPEC_CORE_COMPILER (.pipeline/upstream/ detected) OR DOWNSTREAM_CUSTOMER_PROJECT (.pipeline/upstream/ absent)>` |
+| **1** | **Governance Constitution** | Verified | Loaded `.pipeline/constitution.md` |
+| **2** | **Task Skill On-Demand** | Standby | `<Awaiting active task directive OR Loaded skills/<active-skill>/SKILL.md>` |
+| **3** | **Governance Rules Bundle** | Verified | Loaded `.pipeline/ACTIVE_RULES_BUNDLE.md` (`<N>` active rules) |
+| **4** | **Platform Profile** | `<Bypassed OR Standby>` | `<Not applicable for upstream spec core compiler sessions OR Deferred until downstream implementation phase (.pipeline/profiles/<platform>.md)>` |
+| **5** | **Baseline Gate** | Bypassed | Clean session startup; no tracked source or model files modified |
+
+- **Branch**: `<empirical branch from git status>`
+- **Working Tree**: `<Clean (git status clean) OR Dirty (N files modified/untracked)>`
+- **Role Invariant**: `<Pure schema-driven abstract compiler; clean landing zones maintained. OR Pure schema-driven downstream workspace; .pipeline/schema.sysml is 100% SSOT.>`
+
+Ready for instructions. What task or work package would you like to execute?
+
 ## Why
 
 The constitution captures non-negotiable project constraints. Without reading it, agents may violate platform rules, skip required test types, use forbidden dependencies, or produce specs that don't conform to domain standards.
