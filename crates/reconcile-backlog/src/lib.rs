@@ -300,9 +300,37 @@ pub fn run_reconciliation<T: TrackerClient>(
     };
     let issue_index = IssueIndex::build(issues.clone());
 
-    // Verify defect test-target contracts for resolved bug issues (Issue #468)
-    if !options.offline {
-        let verified = verify_reconciled_defect_issues(&options.workspace_root, &issues)?;
+    // Verify defect test-target contracts for resolved bug issues in active backlog (Issue #468)
+    if !options.offline && !specs.is_empty() {
+        let mut active_issue_numbers = std::collections::HashSet::new();
+        for spec in &specs {
+            if let Some(id) = spec.frontmatter.issue_id {
+                active_issue_numbers.insert(id);
+            }
+            for line in spec.content.lines() {
+                let trimmed = line.trim();
+                let after_box = if let Some(rest) = trimmed.strip_prefix("- [ ] ") {
+                    rest
+                } else if let Some(rest) = trimmed.strip_prefix("- [x] ") {
+                    rest
+                } else if let Some(rest) = trimmed.strip_prefix("- [X] ") {
+                    rest
+                } else {
+                    continue;
+                };
+                let (opt_num, _) = checklist::extract_checklist_title_and_issue(after_box);
+                if let Some(num) = opt_num {
+                    active_issue_numbers.insert(num);
+                }
+            }
+        }
+
+        let active_issues: Vec<tracker::TrackerIssue> = issues
+            .iter()
+            .filter(|i| active_issue_numbers.contains(&i.number))
+            .cloned()
+            .collect();
+        let verified = verify_reconciled_defect_issues(&options.workspace_root, &active_issues)?;
         summary.defect_targets_verified = verified;
     }
 
@@ -1007,9 +1035,18 @@ fn is_valid_test_target_token(token: &str) -> bool {
 pub fn parse_defect_test_target(issue_body: &str) -> Result<String, String> {
     let mut comment_target: Option<String> = None;
     let mut bullet_target: Option<String> = None;
+    let mut in_code_fence = false;
 
     for line in issue_body.lines() {
         let trimmed = line.trim();
+
+        if trimmed.starts_with("```") {
+            in_code_fence = !in_code_fence;
+            continue;
+        }
+        if in_code_fence {
+            continue;
+        }
 
         if let Some(start_idx) = trimmed.find("<!--") {
             let after_open = &trimmed[start_idx + 4..];
@@ -1017,7 +1054,7 @@ pub fn parse_defect_test_target(issue_body: &str) -> Result<String, String> {
                 let inner = after_open[..end_idx].trim();
                 if let Some(rest) = inner.strip_prefix("test-target:") {
                     let clean = rest.trim().trim_matches('`').trim();
-                    if is_valid_test_target_token(clean) {
+                    if is_valid_test_target_token(clean) && comment_target.is_none() {
                         comment_target = Some(clean.to_string());
                     }
                 }
@@ -1032,7 +1069,7 @@ pub fn parse_defect_test_target(issue_body: &str) -> Result<String, String> {
 
         if let Some(rest) = bullet_rest.strip_prefix("**Test-Target**:") {
             let clean = rest.trim().trim_matches('`').trim();
-            if is_valid_test_target_token(clean) {
+            if is_valid_test_target_token(clean) && bullet_target.is_none() {
                 bullet_target = Some(clean.to_string());
             }
         }
