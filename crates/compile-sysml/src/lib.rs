@@ -31,6 +31,7 @@
 //! Realises: [REQ-COMPILER-SYSML-LIB], [DO-330-TQL-4-LIB]
 
 pub mod docstring;
+pub mod flutter_codegen;
 pub mod lexer;
 pub mod parser;
 pub mod semantic;
@@ -41,6 +42,9 @@ pub use deap_core::sysml_ast::*;
 pub use docstring::{
     inject_dart_file_docstrings, inject_rust_file_docstrings, run_docstring_injection,
     run_extract_source, DocstringExitCode, DocstringInjectionOptions, DocstringInjectionReport,
+};
+pub use flutter_codegen::{
+    emit_flutter_contracts, FlutterCodegenError, FlutterContractOptions, FlutterContractReport,
 };
 pub use lexer::scanner::Scanner;
 pub use lexer::token::{Span, Token, TokenKind};

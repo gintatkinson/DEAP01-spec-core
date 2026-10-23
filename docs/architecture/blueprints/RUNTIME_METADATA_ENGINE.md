@@ -90,8 +90,8 @@ DEAP01-spec-core/
 | Crate | Primary Modules | Responsibility in Metadata & AST Architecture |
 | :--- | :--- | :--- |
 | **`crates/deap-core`** | `src/sysml_ast.rs`, `src/source_ast.rs`, `src/rules.rs`, `src/diagnostics.rs`, `src/markdown.rs`, `src/workspace.rs` | Defines canonical SysML v2 AST models (`PackageDef`, `PartDef`, `PortDef`, `AttributeDef`, `FlowDef`, `ActionDef`, `ConstraintDef`, `RequirementDef`, `StateDef`, `ConnectionDef`, `CalcDef`, `SysmlModel`), multi-format schema discovery (`UnifiedSchemaModelExtractor`, `SupportedSchemaExtension`, `SupportedExtensionsCatalog`), and source AST lowering (`SourceAstItem`, `lower_source_ast_to_package`). |
-| **`crates/compile-sysml`** | `src/lib.rs`, `src/parser/grammar.rs`, `src/semantic/digest.rs`, `src/stpa/`, `src/sync/` | Parses textual SysML v2 models (`SysmlParser`, `parse_sysml_tree`), computes atomic SHA-256 digests (`SchemaDigest`, `FileDigestEntry`, `generate_digest`), synthesizes STPA/FMECA matrices, and executes bidirectional specification sync (`forward_sync_sysml_to_specs`, `reverse_sync_specs_to_sysml`). |
-| **`crates/verify-baseline`** | `src/runner.rs`, `src/checks/parity_gates.rs`, `src/checks/domain_cleanliness_gate.rs` | Enforces 38 deterministic verification gates across AST parity, schema cleanliness, traceability, Mermaid/KaTeX rendering, and defect dossiers. |
+| **`crates/compile-sysml`** | `src/lib.rs`, `src/parser/grammar.rs`, `src/semantic/digest.rs`, `src/stpa/`, `src/sync/`, `src/flutter_codegen.rs` | Parses textual SysML v2 models (`SysmlParser`, `parse_sysml_tree`), computes atomic SHA-256 digests (`SchemaDigest`, `FileDigestEntry`, `generate_digest`), synthesizes STPA/FMECA matrices, executes bidirectional specification sync, and deterministically generates Flutter contracts, seeds, and C-ABI DTOs (`crates/compile-sysml/src/flutter_codegen.rs`). |
+| **`crates/verify-baseline`** | `src/runner.rs`, `src/checks/parity_gates.rs`, `src/checks/domain_cleanliness_gate.rs`, `src/checks/codebase.rs` | Enforces 41 deterministic verification gates across AST parity, schema cleanliness, traceability, Mermaid/KaTeX rendering, defect dossiers, and adversarial AST codebase checks 38-41 (`crates/verify-baseline/src/checks/codebase.rs`). |
 | **`crates/ingest-sysml`** | `src/lib.rs`, `src/main.rs` | Discovers and translates Level 0 specifications (`.sysml`, `.yaml`, `.yml`, `.json`, `.proto`, `.idl`, `.arxml`, `.md`, `.yang`) into `.pipeline/schema.sysml` and `.pipeline/schema-digest.json`. |
 | **`crates/assemble-conops`** | `src/lib.rs`, `src/main.rs` | Assembles hierarchical Concept of Operations and Tactical Mission Intent specification units from pure schema contracts. |
 | **`crates/reconcile-backlog`** | `src/lib.rs`, `src/main.rs` | Synchronizes local Epics, Features, User Stories, Use Cases, and WBS registers with the remote issue tracker. |
@@ -327,6 +327,12 @@ CREATE TABLE type_relations (
 ### 5.3 Direct SysML v2 AST Adapter (`crates/deap-core` & `crates/compile-sysml`)
 - Ingests compiled SysML v2 AST from `.pipeline/schema.sysml` via `compile_sysml::parse_sysml_tree` and verifies SHA-256 integrity via `.pipeline/schema-digest.json` (`compile_sysml::semantic::digest::SchemaDigest`).
 - Extracts `PartDef`, `PortDef`, `ActionDef`, and `ConstraintDef` nodes directly into the runtime `TypeDescriptor` pool.
+
+### 5.4 Option 1C Typed InstanceRecord Views & Zero-Trust C-ABI Bridge (`crates/compile-sysml/src/flutter_codegen.rs`)
+To resolve the tension between dynamic SQLite metadata discovery and compile-time type safety:
+- **Option 1C App Glue Architecture**: `crates/compile-sysml/src/flutter_codegen.rs` deterministically synthesizes `app_flutter/lib/data/seeds/generated_domain_seed.g.dart` (populating all 5 canonical SQLite tables `type_definitions`, `type_attributes`, `type_relations`, `properties`, and `instances` from `.pipeline/schema.sysml` and `topology_data.json`) and typed `InstanceRecord` views in `app_flutter/lib/models/generated_schema_models.g.dart`, realizing `DEAP-BLUEPRINT-APP-GLUE-001` (`docs/designs/option-1c-rust-app-glue-ui-contracts-and-anti-fabrication-blueprint.md`, GitHub Feature Issue `#489`).
+- **Zero-Trust Deterministic Rust C-ABI Bridge**: `compile-sysml` synthesizes `app_flutter/lib/data/generated/solver_bridge.g.dart` providing zero-trust `DeapByteBuffer` FFI bindings to native Rust solvers, realizing `DEAP-BLUEPRINT-CABI-001` (`docs/designs/zero-trust-deterministic-rust-c-abi-blueprint.md`, GitHub Feature Issue `#483`).
+- **Verification Gates**: Validated automatically in `verify-baseline` via `crates/verify-baseline/src/checks/codebase.rs` (Checks 38-41).
 
 ---
 

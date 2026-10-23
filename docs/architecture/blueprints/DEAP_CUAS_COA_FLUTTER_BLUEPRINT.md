@@ -13,7 +13,9 @@ This blueprint (`DEAP-BLUEPRINT-CUAS-COA-002`) designs the **C-UAS Course of Act
 
 ### 1. End-to-End Architecture: Rust Solver Sidecar + Flutter Metadata Console
 
-Instead of writing custom C-UAS screens in Dart, we leverage the exact components already built in `app_flutter/lib/`:
+Instead of writing custom C-UAS screens in Dart, we leverage the exact components already built in `app_flutter/lib/` and bind them through two foundational companion architecture blueprints:
+- **`DEAP-BLUEPRINT-CABI-001`** (`docs/designs/zero-trust-deterministic-rust-c-abi-blueprint.md`, GitHub Feature Issue `#483`): Establishes the 6-layer Zero-Trust Deterministic Rust C-ABI Architecture (`DeapByteBuffer`, `catch_unwind`, CRC32 checksum, `DeapNativeSolverIsolate`), replacing ad-hoc Dart solver arithmetic with deterministic codegen via `crates/compile-sysml/src/flutter_codegen.rs` and parity enforcement via `crates/verify-baseline/src/checks/codebase.rs` (Check 41).
+- **`DEAP-BLUEPRINT-APP-GLUE-001`** (`docs/designs/option-1c-rust-app-glue-ui-contracts-and-anti-fabrication-blueprint.md`, GitHub Feature Issue `#489`): Option 1C Rust-compiled SQLite seed generation (`generated_domain_seed.g.dart`), strongly-typed `InstanceRecord` views (`generated_schema_models.g.dart`), and multi-resolution `1080p` through `6K` UI contract testing (`schema_ui_contract_test.g.dart`).
 
 ```mermaid
 flowchart TD
@@ -187,10 +189,12 @@ Once your current agent finishes stabilizing the upstream `DEAP01-spec-core` rep
 1. **Step 1 -- Upgrade `DEAP-profile-flutter-app` to the Pure-Rust Toolchain:**
    * Synchronize the workspace crates (`crates/deap-core`, `crates/verify-baseline`, `crates/ingest-sysml`, `crates/compile-sysml`, `crates/assemble-conops`, `crates/reconcile-backlog`) and compiled release binaries (`verify-baseline`, `ingest-sysml`, `compile-sysml`, `assemble-conops`, `reconcile-backlog`) along with `AGENTS.md` and `rules/` from `DEAP01-spec-core`.
 
-2. **Step 2 -- Extend `crates/deap-core` and `crates/compile-sysml` for C-UAS COA Evaluation:**
-   * Implement the deterministic Pareto solver and multi-wave stress-tester within `crates/deap-core` and `crates/compile-sysml` that reads `.pipeline/schema.sysml` + scenario JSON/CSV feeds and outputs:
+2. **Step 2 -- Deterministic Contract & Seed Codegen (`compile-sysml --emit-flutter-contracts`):**
+   * Execute `crates/compile-sysml/src/flutter_codegen.rs` via `./target/release/compile-sysml --emit-flutter-contracts app_flutter` to deterministically synthesize `generated_domain_seed.g.dart`, `generated_schema_models.g.dart`, `solver_bridge.g.dart`, and `schema_ui_contract_test.g.dart`.
+   * Implement the deterministic Pareto solver within `crates/compile-sysml` and native domain solver crate, reading `.pipeline/schema.sysml` and scenarios to output:
      1. The 3 stress-tested COAs (`COA-Alpha`, `COA-Bravo`, `COA-Charlie`) with plain-language rationale and `<!-- Source: ... -->` citations.
      2. Updated `app_flutter/assets/properties_db.db.gz` and `app_flutter/assets/logical-layout.json` (and `topology_data.json` for the 3D/2D sector viewport).
 
-3. **Step 3 -- Run the Flutter Test & Golden Suite (`flutter test`):**
-   * Verify all existing widget, unit, FFI, and golden tests in `app_flutter/test/` and `app_flutter/integration_test/` pass against the C-UAS COA seeded database.
+3. **Step 3 -- Run the Flutter Test, Contract & Adversarial Baseline Verification Suite:**
+   * Verify all existing widget, unit, FFI, and golden tests in `app_flutter/test/` pass against the seeded database.
+   * Verify 100% compliance with `crates/verify-baseline/src/checks/codebase.rs` (Checks 38-41: presentation anti-hardcoding, zero-mocking, multi-resolution HUD non-overlap, and C-ABI solver bridge parity).

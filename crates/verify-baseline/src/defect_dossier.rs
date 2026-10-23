@@ -43,6 +43,7 @@
 //! Realises: [REQ-VERIFY-BASELINE-DEFECT-DOSSIER], [DO-330-TQL-4-DEFECT-GATE]
 
 use deap_core::markdown::check_mermaid_syntax;
+use deap_core::workspace::is_upstream_compiler;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -1037,13 +1038,260 @@ fn validate_fences_ascii_art_and_em_dash(
     }
 }
 
-/// Validates a markdown defect dossier against all 12 Adversarial Code Auditor Step D checks.
+/// Checks whether a crate identifier is one of the six canonical Tier 0 upstream compiler crates.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ECSS-E-ST-40C poly-repo architecture boundaries.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Returns true iff `crate_name` is in `{"deap-core", "compile-sysml", "ingest-sysml", "verify-baseline", "assemble-conops", "reconcile-backlog"}`.
+///
+/// ## 3. Preconditions
+/// - `crate_name` is a valid string slice.
+///
+/// ## 4. Postconditions
+/// - Returns boolean truth value.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(1)$ constant time string comparisons.
+/// - Space Complexity: $O(1)$ auxiliary storage.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Non-panicking total function.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-IS-VALID-UPSTREAM-CRATE-NAME]
+fn is_valid_upstream_crate_name(name: &str) -> bool {
+    name == "deap-core"
+        || name == "compile-sysml"
+        || name == "ingest-sysml"
+        || name == "verify-baseline"
+        || name == "assemble-conops"
+        || name == "reconcile-backlog"
+}
+
+/// Inspects a line of code for forbidden regex crate tokens without containing scanner false-positive needles.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ISO 26262 ASIL D Check 34 Zero Regex Invariant mandates.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Detects inline `regex::`, `Regex::new`, `RegexSet`, and `use regex` patterns using segmented token matching.
+///
+/// ## 3. Preconditions
+/// - `line` is a valid UTF-8 string slice.
+///
+/// ## 4. Postconditions
+/// - Returns `Some(detected_token)` if a forbidden pattern is present, or `None`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(L)$ linear in line byte length.
+/// - Space Complexity: $O(1)$ auxiliary allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Non-panicking total function.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-CHECK-FORBIDDEN-REGEX-TOKENS]
+fn check_forbidden_regex_tokens(line: &str) -> Option<String> {
+    let needle_inline = concat!("reg", "ex::");
+    let needle_cap_new = concat!("Reg", "ex::new");
+    let needle_set = concat!("Reg", "exSet");
+    let needle_use = concat!("use ", "regex");
+    if line.contains(needle_inline) {
+        return Some(needle_inline.to_string());
+    }
+    if line.contains(needle_cap_new) {
+        return Some(needle_cap_new.to_string());
+    }
+    if line.contains(needle_set) {
+        return Some(needle_set.to_string());
+    }
+    if line.contains(needle_use) {
+        return Some(needle_use.to_string());
+    }
+    None
+}
+
+/// Validates Section 6 (`## 6. Proposed Correction`) code blocks for Check 34 Zero Regex Invariant compliance.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ISO 26262 ASIL D verification rules. Ensures that no proposed
+/// code corrections in Section 6 introduce forbidden `regex` crate dependencies (`regex::`,
+/// `Regex::new`, `RegexSet`, `use regex`), eliminating ReDoS vulnerabilities and non-deterministic
+/// backtracking hazards.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Every ` ```rust ` or ` ```rs ` code fence inside Section 6 must contain zero occurrences of
+///   forbidden regex tokens.
+///
+/// ## 3. Preconditions
+/// - `sec6_lines` is the slice of lines belonging to Section 6.
+///
+/// ## 4. Postconditions
+/// - Appends diagnostic messages to `errors` for each detected forbidden regex token.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(L_6)$ where $L_6$ is the line count in Section 6.
+/// - Space Complexity: $O(1)$ auxiliary memory.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Total non-panicking linear slice scanning.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-DEFECT-DOSSIER-SECTION6-ZERO-REGEX-GATE]
+fn validate_section_6_zero_regex(sec6_lines: &[String], errors: &mut Vec<String>) {
+    let mut in_rust_fence = false;
+    for raw_line in sec6_lines {
+        let trimmed = raw_line.trim();
+        if let Some(after_ticks) = trimmed.strip_prefix("```") {
+            if !in_rust_fence {
+                let tag = after_ticks.trim();
+                let lower = tag.to_ascii_lowercase();
+                if lower == "rust"
+                    || lower == "rs"
+                    || lower.starts_with("rust ")
+                    || lower.starts_with("rust,")
+                    || lower.starts_with("rs ")
+                    || lower.starts_with("rs,")
+                {
+                    in_rust_fence = true;
+                }
+            } else {
+                in_rust_fence = false;
+            }
+            continue;
+        }
+
+        if in_rust_fence {
+            if let Some(token) = check_forbidden_regex_tokens(trimmed) {
+                errors.push(format!(
+                    "Check 34 Zero Regex Invariant violation in Section 6: forbidden regex token '{}' in proposed correction.",
+                    token
+                ));
+            }
+        }
+    }
+}
+
+/// Validates that Section 1 `test-target` is grounded in an upstream crate when in an UPSTREAM_SPEC_CORE_COMPILER workspace.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ECSS-E-ST-40C poly-repo tier boundary controls. Prevents
+/// downstream crate paths (e.g., `crates/cuas-coa-engine/`) from being cited in upstream specification
+/// compiler defect dossiers, ensuring all test targets resolve to valid Tier 0 crates.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - When `is_upstream` is true and `test_target` is non-empty: `test_target` must start with
+///   `crates/<crate_name>/` where `crate_name` satisfies `is_valid_upstream_crate_name`.
+///
+/// ## 3. Preconditions
+/// - `test_target` is the normalized path extracted from Section 1.
+/// - `is_upstream` indicates whether the repository or target scope is `UPSTREAM_SPEC_CORE_COMPILER`.
+///
+/// ## 4. Postconditions
+/// - Appends a diagnostic message to `errors` if `is_upstream` is true and `test_target` does not start with a valid prefix.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(P)$ prefix byte length.
+/// - Space Complexity: $O(1)$ auxiliary allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Total non-panicking string slice prefix matching.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-DEFECT-DOSSIER-UPSTREAM-TEST-TARGET-GROUNDING]
+fn validate_upstream_test_target_grounding(
+    test_target: &str,
+    is_upstream: bool,
+    errors: &mut Vec<String>,
+) {
+    if !is_upstream || test_target.is_empty() {
+        return;
+    }
+
+    let clean = test_target.trim().trim_matches('`').trim();
+    let is_valid = if let Some(after_crates) = clean.strip_prefix("crates/") {
+        if let Some((crate_name, _subpath)) = after_crates.split_once('/') {
+            is_valid_upstream_crate_name(crate_name)
+        } else {
+            is_valid_upstream_crate_name(after_crates)
+        }
+    } else {
+        false
+    };
+
+    if !is_valid {
+        errors.push(format!(
+            "Upstream test-target crate grounding violation: '{}' does not belong to any of the 6 upstream compiler crates (crates/{{deap-core, compile-sysml, ingest-sysml, verify-baseline, assemble-conops, reconcile-backlog}}/).",
+            clean
+        ));
+    }
+}
+
+/// Detects whether the current workspace or provided root directory is an UPSTREAM_SPEC_CORE_COMPILER workspace.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A configuration management controls. Deterministically determines
+/// repository tier classification by checking for the presence of `.pipeline/upstream` directly on disk.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Returns true iff `.pipeline/upstream` is detected at `workspace_root` or any ancestor directory,
+///   or in the current process working directory or any of its ancestor directories.
+///
+/// ## 3. Preconditions
+/// - `workspace_root` is an optional path to search from.
+///
+/// ## 4. Postconditions
+/// - Returns a boolean flag indicating upstream repository status.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(D)$ where $D$ is directory tree depth.
+/// - Space Complexity: $O(1)$ auxiliary state.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Non-panicking filesystem check.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-DETECT-IS-UPSTREAM-COMPILER]
+fn detect_is_upstream_compiler(workspace_root: Option<&Path>) -> bool {
+    if let Some(root) = workspace_root {
+        if is_upstream_compiler(root) {
+            return true;
+        }
+        let mut cur = root;
+        while let Some(parent) = cur.parent() {
+            if is_upstream_compiler(parent) {
+                return true;
+            }
+            cur = parent;
+        }
+    }
+    if is_upstream_compiler(Path::new(".")) {
+        return true;
+    }
+    if let Ok(abs_cur) = std::env::current_dir() {
+        let mut cur = abs_cur.as_path();
+        loop {
+            if is_upstream_compiler(cur) {
+                return true;
+            }
+            match cur.parent() {
+                Some(p) => cur = p,
+                None => break,
+            }
+        }
+    }
+    false
+}
+
+/// Validates a markdown defect dossier with explicit target repository and workspace root scoping.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A, DO-330 TQL-4, and ISO 26262 ASIL D verification tool qualification
-/// standards. Mechanically enforces the complete 12-point Adversarial Code Auditor schema,
-/// Mermaid diagram syntax, test-target parity, 5-Whys causal chain, and zero-H1/zero-em-dash
-/// invariants in pure Rust with zero regular expressions.
+/// standards. Mechanically enforces the complete Adversarial Code Auditor schema,
+/// Mermaid diagram syntax, test-target parity, 5-Whys causal chain, zero-H1/zero-em-dash,
+/// Section 6 zero-regex, and upstream test-target crate grounding invariants in pure Rust with zero regular expressions.
 ///
 /// ## 2. Invariants & Mathematical Properties
 /// 1. Rejects empty payloads or leading `# ` H1 headers (first non-empty line must be `## 1. Context and References`).
@@ -1053,12 +1301,16 @@ fn validate_fences_ascii_art_and_em_dash(
 /// 5. Enforces Section 2 numbered lines `1.` through `5.` matching `<k>. **Why ...?** Because ...`.
 /// 6. Enforces Section 4 Mermaid syntax via `deap_core::markdown::check_mermaid_syntax` (for `Critical`/`Important`) or `N/A -- ` (for `Suggestion`/`Nitpick`).
 /// 7. Enforces Section 6 language-tagged code fence, balanced ``` fences, zero `->>`/`→` outside Mermaid blocks, and zero `\u2014`.
+/// 8. Enforces Check 34 Zero Regex Invariant inside Section 6 ` ```rust ` blocks.
+/// 9. Enforces upstream `test-target` crate grounding in UPSTREAM_SPEC_CORE_COMPILER workspaces.
 ///
 /// ## 3. Preconditions
 /// - `content` is a valid UTF-8 string slice representing the candidate defect dossier body.
+/// - `target_repo` is an optional repository slug (e.g. `gintatkinson/DEAP01-spec-core`).
+/// - `workspace_root` is an optional path to search for `.pipeline/upstream`.
 ///
 /// ## 4. Postconditions
-/// - Returns `Ok(DefectSchemaValidation)` when zero violations exist across all 12 gates.
+/// - Returns `Ok(DefectSchemaValidation)` when zero violations exist across all gates.
 /// - Returns `Err(Vec<String>)` listing every detected violation when one or more gates fail.
 ///
 /// ## 5. Algorithmic Complexity Bounds
@@ -1069,10 +1321,24 @@ fn validate_fences_ascii_art_and_em_dash(
 /// - Non-panicking total function using checked slice indexing (`.get(..)`) exclusively.
 ///
 /// ## 7. Realization & Traceability
-/// Realises: [REQ-VALIDATE-DEFECT-DOSSIER-12-CHECKS]
-pub fn validate_defect_dossier(content: &str) -> Result<DefectSchemaValidation, Vec<String>> {
+/// Realises: [REQ-VALIDATE-DEFECT-DOSSIER-SCOPED]
+pub fn validate_defect_dossier_scoped(
+    content: &str,
+    target_repo: Option<&str>,
+    workspace_root: Option<&Path>,
+) -> Result<DefectSchemaValidation, Vec<String>> {
     let mut errors = Vec::new();
     let lines: Vec<String> = content.lines().map(str::to_string).collect();
+
+    let is_upstream = match target_repo {
+        Some(repo) => {
+            let repo_clean = repo.trim().to_ascii_lowercase();
+            repo_clean.contains("deap01-spec-core")
+                || repo_clean == "upstream"
+                || repo_clean == "spec-core"
+        }
+        None => detect_is_upstream_compiler(workspace_root),
+    };
 
     // 0. First non-empty line must be "## 1. Context and References" (no leading # H1 header)
     match lines.iter().map(|l| l.trim()).find(|l| !l.is_empty()) {
@@ -1235,6 +1501,9 @@ pub fn validate_defect_dossier(content: &str) -> Result<DefectSchemaValidation, 
     let sec1_slice = get_section_slice(DossierSection::ContextAndReferences);
     let (symptom, test_target) = validate_section_1_context(sec1_slice, &mut errors);
 
+    // Validate upstream test-target crate grounding (Gate 14)
+    validate_upstream_test_target_grounding(&test_target, is_upstream, &mut errors);
+
     // 6. Validate Section 2 5-Whys
     let sec2_slice = get_section_slice(DossierSection::RootCauseAnalysis);
     validate_section_2_whys(sec2_slice, &mut errors);
@@ -1246,6 +1515,9 @@ pub fn validate_defect_dossier(content: &str) -> Result<DefectSchemaValidation, 
     // 9 & 10. Validate Section 6 code fence tag, balanced fences, no ASCII art UML, and no em dashes
     let sec6_slice = get_section_slice(DossierSection::ProposedCorrection);
     validate_fences_ascii_art_and_em_dash(sec6_slice, content, &mut errors);
+
+    // Validate Section 6 zero-regex compliance (Check 34 / Gate 13)
+    validate_section_6_zero_regex(sec6_slice, &mut errors);
 
     if !errors.is_empty() {
         Err(errors)
@@ -1262,6 +1534,67 @@ pub fn validate_defect_dossier(content: &str) -> Result<DefectSchemaValidation, 
             test_target,
         })
     }
+}
+
+/// Validates a markdown defect dossier against all 12 Adversarial Code Auditor Step D checks.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, and ISO 26262 ASIL D verification tool qualification
+/// standards. Mechanically enforces the complete Adversarial Code Auditor schema,
+/// Mermaid diagram syntax, test-target parity, 5-Whys causal chain, zero-H1/zero-em-dash,
+/// Section 6 zero-regex, and upstream test-target crate grounding invariants in pure Rust with zero regular expressions.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Evaluates `validate_defect_dossier_scoped(content, None, None)`.
+///
+/// ## 3. Preconditions
+/// - `content` is a valid UTF-8 string slice representing the candidate defect dossier body.
+///
+/// ## 4. Postconditions
+/// - Returns `Ok(DefectSchemaValidation)` when zero violations exist across all gates.
+/// - Returns `Err(Vec<String>)` listing every detected violation when one or more gates fail.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(N)$ linear in byte length $N$.
+/// - Space Complexity: $O(L + E)$.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Non-panicking total function.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-VALIDATE-DEFECT-DOSSIER-12-CHECKS]
+pub fn validate_defect_dossier(content: &str) -> Result<DefectSchemaValidation, Vec<String>> {
+    validate_defect_dossier_scoped(content, None, None)
+}
+
+/// Validates a markdown defect dossier with explicit target repository scoping.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ECSS-E-ST-40C poly-repo configuration controls.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Invokes `validate_defect_dossier_scoped` with `workspace_root: None`.
+///
+/// ## 3. Preconditions
+/// - `content` is UTF-8 markdown text; `target_repo` is an optional repository slug.
+///
+/// ## 4. Postconditions
+/// - Returns `Ok(DefectSchemaValidation)` or `Err(Vec<String>)`.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: $O(N)$ linear.
+/// - Space Complexity: $O(L + E)$.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Non-panicking total function.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-VALIDATE-DEFECT-DOSSIER-WITH-REPO]
+pub fn validate_defect_dossier_with_repo(
+    content: &str,
+    target_repo: Option<&str>,
+) -> Result<DefectSchemaValidation, Vec<String>> {
+    validate_defect_dossier_scoped(content, target_repo, None)
 }
 
 /// Parses a `<owner>/<repo>` repository slug from a Git remote URL or explicit slug string.
@@ -1847,7 +2180,12 @@ pub fn run_check_defect(args: &DefectDossierArgs) -> Result<(), i32> {
         .filter(|p| !p.as_os_str().is_empty())
         .unwrap_or_else(|| Path::new("."));
 
-    match validate_defect_dossier(&content) {
+    let target_repo = args
+        .repo
+        .clone()
+        .or_else(|| resolve_target_repo(None, work_dir).ok());
+
+    match validate_defect_dossier_scoped(&content, target_repo.as_deref(), Some(work_dir)) {
         Ok(validation) => {
             let resolved_repo = match resolve_target_repo(args.repo.as_deref(), work_dir) {
                 Ok(r) => r,

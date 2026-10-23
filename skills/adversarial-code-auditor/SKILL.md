@@ -47,6 +47,8 @@ Critical and Important findings require a fenced Mermaid diagram (```` ```mermai
 
 ### 1.6 Governance & Invariants
 - **Commit Message Non-Closure Invariant**: Strictly forbid auto-closing keywords (`fix`, `fixes`, `fixed`, `close`, `closes`, `closed`, `resolve`, `resolves`, `resolved` preceding `#<id>`). Use neutral citations `(#<id>)` or `(refs #<id>)` exclusively (`.pipeline/constitution.md:266`).
+- **Zero Regex Invariant (Check 34)**: Proposed corrections in Section 6 (` ```rust ` blocks) MUST NOT use the `regex` crate (`regex::`, `Regex::new`, `RegexSet`, `use regex`). Propose deterministic linear slice, char, or token scanning exclusively.
+- **Domain Cleanliness Invariant (Check 19)**: In upstream compiler crates (`crates/*`), proposed corrections MUST remain completely domain-agnostic with zero hardcoded customer domain tokens. All entity IDs, labels, attributes, and ports must be dynamically extracted from schema and topology contracts at runtime.
 
 ## 2. Output Format
 
@@ -83,6 +85,8 @@ Every finding MUST match this skeleton character-for-character in section header
 
 ## 6. Proposed Correction
 
+<!-- MUST NOT use regex (Check 34: deterministic linear slice/char scanning, no regex crate). MUST be domain-agnostic for upstream crates (Check 19). -->
+
 ```[language]
 [code]
 ```
@@ -107,10 +111,11 @@ FILE_LOCATION: [path]:[line-line]
 
 ### Step C -- Write
 1. Write `.pipeline/defects/<NAME>.md` starting directly on line 1 with `## 1. Context and References` (never add a leading `# ` H1 inside the body).
-2. Populate all 7 sections and `## Audit Source`, ensuring `<!-- test-target: <path> -->` and `- **Test-Target**: \`<path>\`` cite the identical executable Rust test target path under `crates/`.
+2. Populate all 7 sections and `## Audit Source`, ensuring `<!-- test-target: <path> -->` and `- **Test-Target**: \`<path>\`` cite the identical executable Rust test target path under `crates/` (in upstream workspaces, MUST belong to one of the 6 upstream compiler crates).
+3. In Section 6 (`Proposed Correction`), strictly mandate Check 34 (Zero Regex Invariant: deterministic linear slice/char scanning, no regex crate) and Check 19 (Zero domain tokens in upstream crates; domain-agnostic).
 
 ### Step D & E -- Verify, Persist & Publish (Closed-Loop Native Rust Gate)
-1. ALWAYS execute the native Rust verification and publishing gate autonomously with `BypassSandbox: true` without prompting or asking permission from the user (running `gh` inside the macOS sandbox without `BypassSandbox: true` fails TLS certificate verification `x509: "api.github.com" certificate is not trusted`):
+1. ALWAYS execute the native Rust verification and publishing gate autonomously inside the standard sandbox (running `gh` inside the standard sandbox executes cleanly; never set sandbox bypass options, and never invoke `security add-trusted-cert` or macOS Keychain commands):
    ```bash
    ./target/release/verify-baseline check-defect .pipeline/defects/<NAME>.md --repo "[REPO]" --title "[AUDIT] [file.ext]: <description>" --publish
    ```

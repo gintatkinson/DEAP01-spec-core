@@ -535,10 +535,11 @@ fn test_adversarial_code_auditor_skill_minimized_and_identical() {
         "SKILL.md must delegate verification, persistence, and publishing to verify-baseline check-defect"
     );
     assert!(
-        content_a.contains("BypassSandbox: true")
+        !content_a.contains("BypassSandbox: true")
+            && content_a.contains("standard sandbox")
             && content_a.contains("[CLOSED-LOOP VERIFIED]")
             && content_a.contains("--dry-run"),
-        "SKILL.md must mandate autonomous BypassSandbox: true execution, default publishing unless --dry-run, and hard failure unless [CLOSED-LOOP VERIFIED] is emitted"
+        "SKILL.md must forbid BypassSandbox: true, require standard sandbox, default publishing unless --dry-run, and hard failure unless [CLOSED-LOOP VERIFIED] is emitted"
     );
     assert!(
         !content_a.contains('\u{2014}'),
@@ -679,3 +680,126 @@ fn test_run_check_defect_publishes_by_default_without_publish_flag_and_fails_clo
         "run_check_defect with publish: false and dry_run: false must attempt GitHub publication by default and return Err(1) on failure"
     );
 }
+
+#[test]
+fn test_rejects_regex_in_section_6_rust_blocks() {
+    let base = sample_valid_critical_dossier();
+    let pat_regex_colons = ["reg", "ex::"].concat();
+    let pat_regex_new = ["Reg", "ex::new"].concat();
+    let pat_regex_set = ["Reg", "exSet"].concat();
+    let pat_use_regex = ["use", " ", "reg", "ex"].concat();
+    let ident_re = ["Reg", "ex"].concat();
+
+    // 1. Rejection of regex colons in ```rust block
+    let snippet_1 = format!(
+        "```rust\npub fn parse_text(input: &str) -> bool {{\n    let re = {}{}::new(r\"^[a-z]+$\").unwrap();\n    re.is_match(input)\n}}\n```",
+        pat_regex_colons, ident_re
+    );
+    let regex_path = base.replace(
+        "```cpp\nint32_t bridge_get_last_error(bridge_handle_t handle, char* out, int32_t size) {\n  if (!out || size <= 0) return BRIDGE_ERR_MEMORY;\n  return BRIDGE_OK;\n}\n```",
+        &snippet_1,
+    );
+    let res1 = validate_defect_dossier(&regex_path);
+    assert!(res1.is_err(), "Must reject regex colons in Section 6 rust block");
+    let errs1 = res1.unwrap_err().join("\n");
+    assert!(
+        errs1.contains("Check 34") || errs1.contains("regex"),
+        "Expected Check 34 / regex violation, got: {}",
+        errs1
+    );
+
+    // 2. Rejection of constructor
+    let snippet_2 = format!(
+        "```rust\npub fn parse_text(input: &str) -> bool {{\n    let re = {}(\"^abc\").unwrap();\n    true\n}}\n```",
+        pat_regex_new
+    );
+    let regex_new = base.replace(
+        "```cpp\nint32_t bridge_get_last_error(bridge_handle_t handle, char* out, int32_t size) {\n  if (!out || size <= 0) return BRIDGE_ERR_MEMORY;\n  return BRIDGE_OK;\n}\n```",
+        &snippet_2,
+    );
+    let res2 = validate_defect_dossier(&regex_new);
+    assert!(res2.is_err(), "Must reject constructor in Section 6 rust block");
+
+    // 3. Rejection of RegexSet
+    let snippet_3 = format!(
+        "```rust\npub fn parse_set() {{\n    let set = {}::new(&[\"a\", \"b\"]).unwrap();\n}}\n```",
+        pat_regex_set
+    );
+    let regex_set = base.replace(
+        "```cpp\nint32_t bridge_get_last_error(bridge_handle_t handle, char* out, int32_t size) {\n  if (!out || size <= 0) return BRIDGE_ERR_MEMORY;\n  return BRIDGE_OK;\n}\n```",
+        &snippet_3,
+    );
+    let res3 = validate_defect_dossier(&regex_set);
+    assert!(res3.is_err(), "Must reject RegexSet in Section 6 rust block");
+
+    // 4. Rejection of use regex
+    let snippet_4 = format!(
+        "```rust\n{}::{};\npub fn helper() {{}}\n```",
+        pat_use_regex, ident_re
+    );
+    let use_regex = base.replace(
+        "```cpp\nint32_t bridge_get_last_error(bridge_handle_t handle, char* out, int32_t size) {\n  if (!out || size <= 0) return BRIDGE_ERR_MEMORY;\n  return BRIDGE_OK;\n}\n```",
+        &snippet_4,
+    );
+    let res4 = validate_defect_dossier(&use_regex);
+    assert!(res4.is_err(), "Must reject use regex in Section 6 rust block");
+
+    // 5. Valid Rust code without regex passes
+    let valid_rust = base.replace(
+        "```cpp\nint32_t bridge_get_last_error(bridge_handle_t handle, char* out, int32_t size) {\n  if (!out || size <= 0) return BRIDGE_ERR_MEMORY;\n  return BRIDGE_OK;\n}\n```",
+        "```rust\npub fn parse_text_deterministic(input: &str) -> bool {\n    input.starts_with(\"abc\")\n}\n```",
+    );
+    let res5 = validate_defect_dossier(&valid_rust);
+    assert!(res5.is_ok(), "Valid zero-regex Rust block must pass");
+}
+
+#[test]
+fn test_rejects_downstream_crate_paths_in_upstream_workspace() {
+    let base = sample_valid_critical_dossier();
+
+    // 1. Downstream crate cuas-coa-engine must be rejected in UPSTREAM_SPEC_CORE_COMPILER
+    let downstream = base
+        .replace(
+            "<!-- test-target: crates/verify-baseline/tests/defect_dossier_tests.rs -->",
+            "<!-- test-target: crates/cuas-coa-engine/src/lib.rs -->",
+        )
+        .replace(
+            "- **Test-Target**: `crates/verify-baseline/tests/defect_dossier_tests.rs`",
+            "- **Test-Target**: `crates/cuas-coa-engine/src/lib.rs`",
+        );
+    let res_downstream = validate_defect_dossier(&downstream);
+    assert!(
+        res_downstream.is_err(),
+        "Must reject downstream crates/cuas-coa-engine/ path in UPSTREAM_SPEC_CORE_COMPILER"
+    );
+    let errs = res_downstream.unwrap_err().join("\n");
+    assert!(
+        errs.contains("upstream") || errs.contains("grounding"),
+        "Expected upstream crate grounding error, got: {}",
+        errs
+    );
+
+    // 2. All 6 canonical upstream crates must pass
+    for crate_name in [
+        "deap-core",
+        "compile-sysml",
+        "ingest-sysml",
+        "verify-baseline",
+        "assemble-conops",
+        "reconcile-backlog",
+    ] {
+        let valid_upstream = base
+            .replace(
+                "crates/verify-baseline/tests/defect_dossier_tests.rs",
+                &format!("crates/{}/tests/test_foo.rs", crate_name),
+            );
+        let res = validate_defect_dossier(&valid_upstream);
+        assert!(
+            res.is_ok(),
+            "Expected valid upstream crate '{}' to pass, got: {:?}",
+            crate_name,
+            res.err()
+        );
+    }
+}
+

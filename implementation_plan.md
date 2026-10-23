@@ -1,188 +1,148 @@
-# Implementation Plan: Session Initialization & Governance Architecture Remediation
+# Implementation Plan: Zero-Trust Rust C-ABI Blueprint, Option 1C Full Solution Blueprint, Rust Adversarial Auditor Upgrade & Rust Compiler/Verifier Implementation (`#483`–`#487`)
 
-## 1. Problem Statement & Root Cause Analysis
+## 1. Objective & Complete Scope
 
-Across the Digital Engineering Agent Platform (DEAP) ecosystem, autonomous coordinator agents operating in both upstream compiler (`UPSTREAM_SPEC_CORE_COMPILER`) and downstream application (`DOWNSTREAM_CUSTOMER_PROJECT`) workspaces exhibit systematic initialization failures and governance drift:
+This implementation plan preserves **100% of the originally planned Work Packages 1, 2, and 3** and integrates the **Rust Adversarial Auditor upgrades (`defect_dossier.rs` + `#484`–`#487`)** and **Native Rust Codegen & AST Gate implementations (`crates/compile-sysml` + `crates/verify-baseline`)** so that Rust performs the heavy lifting deterministically in milliseconds.
 
-1. **The "Before Executing File Modifications" Deferral Trap**:
-   `AGENTS.md` (§ `Mandatory Session Initialization Gate`) currently states: *"On session startup, before executing file modifications, the coordinator agent MUST execute..."*. Agents interpret "before executing file modifications" as authorization to defer Steps 0-3 until after an `implementation_plan.md` is approved, leaving Turn-0 responses and planning ungrounded in constitutional invariants.
-2. **Coupling Read-Only Startup with Locked Execution**:
-   `AGENTS.md` bundles Steps 0-3 (pure `read_file`, `list_dir`, and read-only inspection) into the same sequence as Step 5 (`./target/release/verify-baseline . --no-domain`). Because `rules/verification-required.md` strictly forbids running `verify-baseline` on startup/read-only turns and `rules/user-authorization-lock.md` locks `run_command` prior to `PROCEED`, agents defer the entire 0-5 block.
-3. **4-Point vs. 5-Point Thought-Block Drift & Placement**:
-   `AGENTS.md` places `Strict Coordinator Tool Locking & 4-Point Compliance Check` near the bottom of the file with 5 bullets, whereas `rules/user-authorization-lock.md` defines only 4 bullets and omits the initialization gate check. Furthermore, because it is located at the bottom of `AGENTS.md`, agents often stop reading or fail to prioritize it before taking action.
-4. **Artifact & Shell Mutation Loopholes (`walkthrough.md` and `cp`/`mv`/`tee`)**:
-   Agents frequently treat `walkthrough.md` as an exempt scratchpad to write during planning, or invoke shell commands like `cp`, `mv`, `tee`, or redirection (`>`, `>>`) as loopholes to circumvent file editor locks.
-5. **Missing Canonical Initialization Receipt in Downstream Projects**:
-   Downstream repositories fail to emit the structured `Mandatory Session Initialization Completed` status table on Turn 0 because:
-   - Neither `AGENTS.md` nor `rules/constitution-first.md` formally codifies the Markdown receipt table contract.
-   - `AGENTS.md` hardcodes `Repository Classification: UPSTREAM_SPEC_CORE_COMPILER` at line 4, which directly contradicts Step 0 when copied to downstream repositories where `.pipeline/upstream/` is absent.
-   - `rules/user-authorization-lock.md` locks all shell commands prior to `PROCEED` without an explicit read-only inspection whitelist (`git status --short --branch`, `git rev-parse --show-toplevel`, `ls`), preventing coordinators from empirically populating the `Branch` and `Working Tree` fields in the receipt table.
+**All execution across every work package is delegated 100% to context-isolated single-item subagents running strictly inside the standard sandbox (`BypassSandbox` is strictly forbidden, guaranteeing zero IDE permission popups).**
 
----
-
-## 2. Remediation Architecture & Invariants
-
-To eliminate these failure modes permanently across all tiers without breaking downstream compatibility or existing Rust verification gates, this implementation plan establishes:
-
-1. **Role-Adaptive Classification**:
-   `AGENTS.md` dynamically defines `UPSTREAM_SPEC_CORE_COMPILER` (when `.pipeline/upstream/` is present) and `DOWNSTREAM_CUSTOMER_PROJECT` (when `.pipeline/upstream/` is absent), preserving required keywords for `verify-baseline` while remaining 100% accurate in both repository contexts.
-2. **Two-Phase Initialization Gate**:
-   - **Phase A (Unconditional Turn-0 Startup)**: Steps 0, 1, 3, and read-only git state check executed immediately on Turn 0 before any plan or prose response, followed by immediate emission of the Canonical Session Initialization Receipt Table.
-   - **Phase B (Task-Scoped & Post-Approval Pre-Modification Gates)**: Step 2 (Task Skill on-demand load), Step 4 (Platform Profile load in downstream implementation phases only), and Step 5 (`verify-baseline` pre-commit gate executed only after `PROCEED` when tracked files are modified).
-3. **Elevated & Synchronized 5-Point Compliance Gate**:
-   Placed at the **very top of `AGENTS.md`** (immediately under `# Project-Scoped Rules`, prior to `## Repository Role & Scope Classification`), with 100% synchronization in `rules/user-authorization-lock.md` and lower section anchors preserved.
-4. **Inspection Whitelist & Mutation Lock**:
-   `rules/user-authorization-lock.md` and `rules/role-boundary-lock.md` explicitly whitelist read-only commands (`git status`, `git branch --show-current`, `git rev-parse --show-toplevel`, `git diff`, `ls`, `test -d`, `test -e`) on Turn 0, while explicitly locking `walkthrough.md` and shell file mutations (`cp`, `mv`, `rm`, `tee`, `sed -i`, `>`, `>>`) prior to `PROCEED`.
-5. **Native Rust TDD Verification**:
-   New Rust unit tests in `crates/deap-core/src/workspace.rs` validating all new structural invariants, receipt table specifications, 5-point checks, and bundle size constraints (<40,000 bytes, <750 lines).
+### Planned Execution Sequence
+1. **Work Package 0 -- Upgrade Adversarial Auditor in Rust (`defect_dossier.rs`), File Auditor Defect & Sanitize `#484`–`#487`**:
+   - Move adversarial dossier validation rules into Rust (`crates/verify-baseline/src/defect_dossier.rs`) so `verify-baseline check-defect` mechanically enforces:
+     - **Gate 13 (Section 6 Rust AST & Invariant Validator)**: Rejects forbidden `regex` crate usage (`regex::`, `Regex::new`, `RegexSet`, `use regex` -- Check 34) and hardcoded customer domain strings (Check 19) inside Section 6 ` ```rust ` blocks before any dossier can be persisted or published.
+     - **Gate 14 (Target-Repo Crate & Check-Number Collision Validator)**: Rejects downstream `test-target` crate paths (such as `crates/cuas-coa-engine/src/lib.rs`) when targeting `UPSTREAM_SPEC_CORE_COMPILER` (`DEAP01-spec-core`), requiring one of the 6 upstream crates (`deap-core`, `compile-sysml`, `ingest-sysml`, `verify-baseline`, `assemble-conops`, `reconcile-backlog`), and rejects colliding `Check <N>` numbers in proposed corrections.
+   - File `.pipeline/defects/DEFECT_AUDITOR_SECTION6_ZERO_REGEX_AND_UPSTREAM_TARGET.md` via `./target/release/verify-baseline check-defect`, update `.agents/skills/adversarial-code-auditor/SKILL.md` (removing `BypassSandbox: true`), and sanitize live GitHub issues `#484`, `#485`, `#486`, and `#487` so their Section 6 Rust code is 100% zero-regex, domain-agnostic, and aligned to `Checks 38..=41`.
+2. **Work Package 1 (First Priority) -- Author `docs/designs/zero-trust-deterministic-rust-c-abi-blueprint.md` (`DEAP-BLUEPRINT-CABI-001`) & Sync GitHub Feature Issue `#483` (Addressing `#484`)**:
+   - Author the complete `DEAP-BLUEPRINT-CABI-001` blueprint detailing the 6-layer Zero-Trust Deterministic Rust C-ABI Solver Bridge Architecture (`#![forbid(unsafe_code)]` on `solver.rs`, `catch_unwind` on `ffi.rs`, `DEAP_SCHEMA_HASH` SHA-256 handshake, IEEE 802.3 CRC32 `DeapByteBuffer`, `NativeFinalizer` guard, `DeapNativeSolverIsolate` worker isolate, and `compile-sysml` generation of `app_flutter/lib/data/generated/solver_bridge.g.dart` from SysML `port def`/`item def`/`calc def` AST nodes to eliminate the 5,971-line hand-written Dart bridge in `#484`), and synchronize GitHub Feature Issue `#483`.
+3. **Work Package 2 (Second Priority) -- Author `docs/designs/option-1c-rust-app-glue-ui-contracts-and-anti-fabrication-blueprint.md` (`DEAP-BLUEPRINT-APP-GLUE-001`) & Register GitHub Feature Issue (Addressing `#485`–`#487`)**:
+   - Author the complete `DEAP-BLUEPRINT-APP-GLUE-001` blueprint detailing:
+     - **Option 1C Universal 5-Table SQLite Seed & Typed `InstanceRecord` Views (`#485`)**: `compile-sysml` deterministic generation of `app_flutter/lib/data/seeds/generated_domain_seed.g.dart` (seeding `type_definitions`, `type_attributes`, `type_relations`, `properties`, and `instances` from `.pipeline/schema.sysml` + `topology_data.json` with zero legacy telecom rows) and `app_flutter/lib/models/generated_schema_models.g.dart`.
+     - **Multi-Resolution (`1920x1080` through `6K` `6016x3384`) UI & Spatial Contract Test Generator (`#486`)**: `compile-sysml` deterministic generation of `app_flutter/test/generated/schema_ui_contract_test.g.dart` sweeping all 6 canonical viewports (`FHD_1080P_1X`, `QHD_1440P_1X`, `UHD_4K_1X`, `UHD_4K_2X`, `XDR_6K_1X`, `XDR_6K_2X`) and enforcing the 5 mathematical invariants (`RenderFlex` overflow trap, viewport containment, $O(K^2)$ pairwise 2D `Rect.overlaps == false`, proportional split ratios / $\ge 44 \times 44\text{ dp}$ hit targets, and exhaustive topology node `tester.tap` SQLite transitions with `tearDownAll` disposal).
+     - **`verify-baseline` Native Rust Adversarial & Anti-Fabrication AST Gates (`Checks 38..=41` in `crates/verify-baseline/src/checks/codebase.rs`)**: Moving the 4 adversarial code audit checks into native Rust so `verify-baseline` executes them automatically in `< 50 ms`.
+   - Register the tracked GitHub Feature Issue for `DEAP-BLUEPRINT-APP-GLUE-001` via `./target/release/reconcile-backlog create-issue`.
+4. **Work Package 3 -- Implement Native Rust Codegen (`crates/compile-sysml`) & Native Rust Adversarial AST Gates Checks 38–41 (`crates/verify-baseline`)**:
+   - **Subagent 3A (`Rust Verification Engineer -- Checks 38-41 in crates/verify-baseline`)**: Implements `crates/verify-baseline/src/checks/codebase.rs` and wires **Check 38** (`#487` Presentation Anti-Hardcoding AST Gate), **Check 39** (`#486` Zero-Mocking Test AST & SQLite Disposal Gate), **Check 40** (`#486` Interactive Gesture, `1080p`–`6K` Viewport & Pairwise 2D HUD Non-Overlap Gate), and **Check 41** (`#483`/`#484`/`#485` Track B C-ABI Solver Bridge SSOT & 5-Table SQLite Seed Parity Gate) into `crates/verify-baseline/src/runner.rs` with full TDD RED-GREEN unit tests.
+   - **Subagent 3B (`Rust Compiler Engineer -- Flutter & C-ABI Codegen in crates/compile-sysml`)**: Implements `crates/compile-sysml/src/flutter_codegen.rs` (wired into `crates/compile-sysml/src/lib.rs` and `main.rs` via `--emit-flutter-contracts`) to deterministically emit `generated_domain_seed.g.dart`, `generated_schema_models.g.dart`, `solver_bridge.g.dart` (plus C-ABI `ffi.rs`), and the 6-viewport (`1920x1080` through `6016x3384`) `schema_ui_contract_test.g.dart` with full TDD RED-GREEN unit tests.
+5. **Work Package 4 -- Synchronize Canonical Blueprint Cross-References, Master Skills, Verify Baseline & Push to `origin/main`**:
+   - Synchronize canonical blueprint cross-references in `DEAP_POLY_REPO_BINARY_DISTRIBUTION_ARCHITECTURE.md`, `RUNTIME_METADATA_ENGINE.md`, `PERSISTENCE_ARCHITECTURE.md`, and `DEAP_CUAS_COA_FLUTTER_BLUEPRINT.md`, plus `.agents/skills/adversarial-code-auditor/SKILL.md` and `.agents/skills/feature-driven-implementation/SKILL.md`.
+   - Build release binaries (`cargo build --release`), run `./target/release/verify-baseline . --no-domain` and `cargo test --workspace`, commit atomically, push to `origin/main`, and verify `git diff origin/main` is empty.
 
 ---
 
-## 3. Work Package Decomposition (Single-Item Subagent Execution)
+## 2. Detailed Work Package Specifications (100% Subagent Delegated)
 
-Following project governance, all file modifications and Rust implementations will be executed serially by context-isolated single-item subagents once this plan is approved with `PROCEED`.
-
-### Work Package 1: Elevate & Synchronize the 5-Point Thought-Block Gate (`AGENTS.md` & `rules/user-authorization-lock.md`)
-- **Assigned Subagent Role**: `Governance Engineer -- Thought-Block Standardization`
+### Work Package 0: Upgrade Adversarial Auditor in Rust (`defect_dossier.rs`), File Auditor Defect & Sanitize `#484`–`#487`
+- **Assigned Subagent Role**: `Rust Adversarial Auditor Engineer -- Dossier AST Gate & Issue Sanitization`
+- **Active Skill**: `/Users/perkunas/jail/DEAP01-spec-core/.agents/skills/adversarial-code-auditor/SKILL.md` and `/Users/perkunas/jail/DEAP01-spec-core/.agents/skills/debug-protocol/SKILL.md`
 - **Target Files**:
-  - `AGENTS.md`
-  - `rules/user-authorization-lock.md`
+  - `.pipeline/defects/DEFECT_AUDITOR_SECTION6_ZERO_REGEX_AND_UPSTREAM_TARGET.md`
+  - `crates/verify-baseline/src/defect_dossier.rs`
+  - `crates/verify-baseline/tests/defect_dossier_tests.rs`
+  - `.agents/skills/adversarial-code-auditor/SKILL.md`
 - **Detailed Specifications**:
-  1. Insert `## Strict Coordinator Tool Locking & 5-Point Compliance Check` at the very top of `AGENTS.md` (lines 2-25, immediately below `# Project-Scoped Rules` and above `## Repository Role & Scope Classification`).
-  2. Standardize the 5 points identically across `AGENTS.md` and `rules/user-authorization-lock.md`:
-     - **Point 1 (Turn-0 Initialization Gate)**: Have I executed Phase A of the Mandatory Session Initialization Gate (`list_dir` or direct check to detect `.pipeline/upstream/`, `view_file` in full on `.pipeline/constitution.md` and `.pipeline/ACTIVE_RULES_BUNDLE.md`, and read-only `git status --short --branch`) AND emitted the Canonical Session Initialization Receipt Table in this session, OR does my subagent prompt end with `---GOVERNANCE-END---`? (Yes/No -- If No, HALT all other output, planning, and tool calls immediately, execute Phase A right now, and emit the Mandatory Session Initialization Completed table).
-     - **Point 2 (Intent Classification)**: Is the user's message a question/inquiry or a direct command?
-     - **Point 3 (User Authorization Lock)**: Are the exact target files and changes documented in an approved `implementation_plan.md` AND does the user's latest message explicitly contain `PROCEED` (or `Approved` / `Approve plan`)? (Yes/No -- If No, all modifying tools and mutating `run_command` invocations are strictly locked; writing/updating `implementation_plan.md` after Phase A initialization is the sole permitted file write).
-     - **Point 4 (Zero Silent Assumptions)**: Am I making any silent assumptions about the user's intent or workspace state?
-     - **Point 5 (Coordinator Delegation & Shell Mutation Lock)**: Does the active skill mandate context-isolated subagent dispatches, OR does this turn create, modify, copy, move, or delete any file other than `implementation_plan.md` (including `walkthrough.md`, governance files, rules, specs, or code)? (If Yes to either, coordinator direct file-writing and shell file mutations via `cp`, `mv`, `rm`, `tee`, `sed -i`, or output redirects `>`/`>>` are strictly locked; all repository writes must be delegated to single-item subagents after `PROCEED`).
-  3. In `AGENTS.md`, keep the lower anchor heading `## Strict Coordinator Tool Locking & 4-Point Compliance Check` synchronized as an alias/reference pointing to the primary top-level 5-point check, ensuring backwards compatibility for any tests or tools asserting that heading string.
-  4. In `rules/user-authorization-lock.md`, update the Hard Constraints to enforce the 5-point check and explicitly ban pre-approval creation or modification of `walkthrough.md`.
-
-### Work Package 2: Make `Repository Role & Scope Classification` Role-Adaptive & Enforce Canonical Turn-0 Initialization Receipt Table (`AGENTS.md` & `rules/constitution-first.md`)
-- **Assigned Subagent Role**: `Governance Engineer -- Initialization Architecture`
-- **Target Files**:
-  - `AGENTS.md`
-  - `rules/constitution-first.md`
-- **Detailed Specifications**:
-  1. In `AGENTS.md` (§ `Repository Role & Scope Classification`), replace the static upstream classification with role-adaptive definitions:
-     - **When `.pipeline/upstream/` is present -> `UPSTREAM_SPEC_CORE_COMPILER`**: Digital Engineering Agent Platform Core Specification Compiler. Landing zones (`schema/`, `docs/epics/`, `docs/features/`, `docs/user-stories/`, `docs/use-cases/`) must remain clean landing zones with only `.gitkeep`. Platform profiles (`.pipeline/profiles/*`) are strictly bypassed.
-     - **When `.pipeline/upstream/` is absent -> `DOWNSTREAM_CUSTOMER_PROJECT`**: Downstream Application / Domain Engineering Workspace. Concrete schemas in `schema/` and `.pipeline/schema.sysml` serve as the 100% Single Source of Truth (SSOT). Platform profiles (`.pipeline/profiles/<target_platform>.md`) are loaded on-demand during downstream implementation turns only.
-     - Preserve sentinel keywords (`UPSTREAM_SPEC_CORE_COMPILER`, `DOWNSTREAM_CUSTOMER_PROJECT`, `.pipeline/upstream/`, `skills/spec-orchestrator/`).
-  2. In `AGENTS.md`, split `## Mandatory Session Initialization Gate` into:
-     - **Phase A (Unconditional Turn-0 Read-Only Initialization -- Executed Immediately Before Any Response or Plan)**:
-       - Step 0: Detect Repository Role & Scope via direct-path check for `.pipeline/upstream/`.
-       - Step 1: Read `.pipeline/constitution.md` in full via `view_file`.
-       - Step 2: Read `.pipeline/ACTIVE_RULES_BUNDLE.md` in full via `view_file` (with Task Skill on-demand visual slot).
-       - Read-only Git state check: `git status --short --branch` and `git rev-parse --show-toplevel`.
-       - Emit Canonical Session Initialization Receipt Table.
-     - **Phase B (Task-Scoped & Post-Approval Pre-Modification Gates)**:
-       - Load active `SKILL.md` on-demand when a task is assigned.
-       - Load `.pipeline/profiles/<target_platform>.md` only in `DOWNSTREAM_CUSTOMER_PROJECT` during downstream implementation phases.
-       - Baseline verification: run `./target/release/verify-baseline . --no-domain` only after `PROCEED` prior to implementation or commit gates (never on Turn-0 startup or read-only turns).
-  3. In both `AGENTS.md` and `rules/constitution-first.md`, formally document the Canonical Turn-0 Initialization Receipt Table template contract:
-
-````markdown
-### Mandatory Session Initialization Completed
-
-The coordinator initialization sequence has executed in accordance with `.pipeline/constitution.md` and `.agents/AGENTS.md`:
-
-| Step | Check / Gate | Status | Resolution / Details |
-| :--- | :--- | :--- | :--- |
-| **0** | **Repository Classification** | Verified | `<UPSTREAM_SPEC_CORE_COMPILER (.pipeline/upstream/ detected) OR DOWNSTREAM_CUSTOMER_PROJECT (.pipeline/upstream/ absent)>` |
-| **1** | **Governance Constitution** | Verified | Loaded `.pipeline/constitution.md` |
-| **2** | **Task Skill On-Demand** | Standby | `<Awaiting active task directive OR Loaded skills/<active-skill>/SKILL.md>` |
-| **3** | **Governance Rules Bundle** | Verified | Loaded `.pipeline/ACTIVE_RULES_BUNDLE.md` (`<N>` active rules) |
-| **4** | **Platform Profile** | `<Bypassed OR Standby>` | `<Not applicable for upstream spec core compiler sessions OR Deferred until downstream implementation phase (.pipeline/profiles/<platform>.md)>` |
-| **5** | **Baseline Gate** | Bypassed | Clean session startup; no tracked source or model files modified |
-
-- **Branch**: `<empirical branch from git status>`
-- **Working Tree**: `<Clean (git status clean) OR Dirty (N files modified/untracked)>`
-- **Role Invariant**: `<Pure schema-driven abstract compiler; clean landing zones maintained. OR Pure schema-driven downstream workspace; .pipeline/schema.sysml is 100% SSOT.>`
-
-Ready for instructions. What task or work package would you like to execute?
-````
-
-### Work Package 3: Clarify Turn-0 Read-Only Inspection Whitelist vs. Mutation Lock (`rules/user-authorization-lock.md` & `rules/role-boundary-lock.md`)
-- **Assigned Subagent Role**: `Governance Engineer -- Tool Authorization Enforcement`
-- **Target Files**:
-  - `rules/user-authorization-lock.md`
-  - `rules/role-boundary-lock.md`
-- **Detailed Specifications**:
-  1. In `rules/user-authorization-lock.md`:
-     - Add explicit Turn-0 Read-Only Workspace Inspection Whitelist: during Turn-0 initialization and diagnostic inquiries, read-only commands (`git status`, `git status --short --branch`, `git branch --show-current`, `git rev-parse --show-toplevel`, `git diff`, `ls`, `test -d`, `test -e`) are authorized without requiring prior `PROCEED`, specifically enabling empirical population of the `Branch` and `Working Tree` fields.
-     - Add explicit State-Mutating Shell Command Lock: all file creation, copying, moving, deleting, or stream redirection commands (`cp`, `mv`, `rm`, `tee`, `sed -i`, `>`, `>>`) as well as build/test commands (`cargo`, `flutter`, `npm`, `git commit`, `git push`, `verify-baseline`) are strictly locked until an `implementation_plan.md` is approved with `PROCEED`.
-     - Add explicit Prohibition of Pre-Approval `walkthrough.md` writes: `walkthrough.md` is exclusively a post-implementation verification artifact and must never be created or edited prior to plan approval and subagent completion.
-  2. In `rules/role-boundary-lock.md`:
-     - Clarify that the coordinator direct file-writing lock applies to `walkthrough.md` and shell file mutations (`cp`, `mv`, `tee`), which cannot be used to bypass subagent delegation.
-
-### Work Package 4: Synchronize `.pipeline/ACTIVE_RULES_BUNDLE.md` and `.agents/AGENTS.md`
-- **Assigned Subagent Role**: `Governance Engineer -- Manifest Parity & Symlink Maintenance`
-- **Target Files**:
-  - `.pipeline/ACTIVE_RULES_BUNDLE.md`
-  - `.agents/AGENTS.md` (or symlink)
-- **Detailed Specifications**:
-  1. Update `.pipeline/ACTIVE_RULES_BUNDLE.md` sections for:
-     - Rule 4: `rules/constitution-first.md`
-     - Rule 11: `rules/role-boundary-lock.md`
-     - Rule 19: `rules/user-authorization-lock.md`
-     ensuring 100% verbatim parity with the individual rule files under `rules/`.
-  2. Verify that the total size of `.pipeline/ACTIVE_RULES_BUNDLE.md` remains strictly under 40,000 bytes and under 750 lines (monitored by `crates/deap-core/src/workspace.rs:972-979`).
-  3. Check `.agents/AGENTS.md`: ensure `.agents/AGENTS.md` exists as a symbolic link pointing to `../AGENTS.md` (or valid mirrored file), ensuring Check 14 passes under any entrypoint lookup.
-
-### Work Package 5: Native Rust TDD Enforcement in `crates/deap-core` and `crates/verify-baseline`
-- **Assigned Subagent Role**: `Systems Software Engineer -- Rust TDD Specialist`
-- **Target Files**:
-  - `crates/deap-core/src/workspace.rs`
-- **Detailed Specifications**:
-  1. **RED Phase**:
-     - Author new Rust unit tests in `crates/deap-core/src/workspace.rs`:
-       - `test_canonical_turn_0_session_initialization_receipt_invariants`: Verifies that `AGENTS.md` and `rules/constitution-first.md` define both `UPSTREAM_SPEC_CORE_COMPILER` and `DOWNSTREAM_CUSTOMER_PROJECT` receipt specifications and the exact Markdown receipt table schema.
-       - `test_5_point_thought_block_compliance_and_shell_mutation_lock`: Verifies that `AGENTS.md` and `rules/user-authorization-lock.md` specify all 5 points of the compliance check, explicitly whitelist read-only inspection commands, and lock shell mutations (`cp`, `mv`, `rm`, `tee`) and `walkthrough.md`.
-       - `test_active_rules_bundle_parities_and_budget`: Verifies 100% verbatim parity between `rules/user-authorization-lock.md`, `rules/constitution-first.md`, `rules/role-boundary-lock.md` and their respective sections in `.pipeline/ACTIVE_RULES_BUNDLE.md`.
-     - Execute `cargo test -p deap-core` to verify that the tests fail (RED) before governance documents are updated.
-  2. **GREEN Phase**:
-     - Coordinate with WP1-WP4 to apply all governance document updates.
-     - Re-run `cargo test --workspace` to verify all tests pass (GREEN).
-     - Run `./target/release/verify-baseline . --no-domain` to confirm all 28+ mechanical gates pass.
-  3. **REFACTOR Phase**:
-     - Review docstrings, ensure formatting cleanliness, and verify zero compiler warnings.
-
-### Work Package 6: Downstream Repository Propagation Plan
-- **Assigned Subagent Role**: `DevOps & Release Engineer -- Toolchain Distribution`
-- **Target Files**:
-  - `docs/operations/install-guide.md` (or release notes)
-- **Detailed Specifications**:
-  1. Document the exact downstream propagation steps for `DEAP-profile-flutter-app` (Tier 1) and `DEAP01-cuas-coa-engine` (Tier 2):
-     - Synchronize updated governance assets: `AGENTS.md`, `.pipeline/constitution.md`, `.pipeline/ACTIVE_RULES_BUNDLE.md`, and `rules/*.md`.
-     - Build release binaries in Tier 0: `cargo build --release --workspace`.
-     - Copy the 5 precompiled release binaries (`verify-baseline`, `compile-sysml`, `ingest-sysml`, `assemble-conops`, `reconcile-backlog`) from `target/release/` to downstream `target/release/`.
-     - Verify downstream execution: run `./target/release/verify-baseline . --no-domain` in downstream workspaces to confirm 0 errors.
+  1. Author `.pipeline/defects/DEFECT_AUDITOR_SECTION6_ZERO_REGEX_AND_UPSTREAM_TARGET.md` (7-section dossier with `test-target: crates/verify-baseline/tests/defect_dossier_tests.rs`) and publish it via `./target/release/verify-baseline check-defect ... --publish` inside the standard sandbox.
+  2. Write failing RED tests in `crates/verify-baseline/tests/defect_dossier_tests.rs` and implement in `crates/verify-baseline/src/defect_dossier.rs`:
+     - **Section 6 Rust Zero-Regex Gate**: Scan every ` ```rust ` code block in `## 6. Proposed Correction` and reject `regex::`, `Regex::new`, `RegexSet`, or `use regex` (Check 34 enforcement at dossier validation time).
+     - **Upstream `test-target` Crate Grounding Gate**: When validating against `UPSTREAM_SPEC_CORE_COMPILER` (`DEAP01-spec-core`), verify that `test-target` starts with one of the 6 valid upstream crate paths (`crates/deap-core/`, `crates/compile-sysml/`, `crates/ingest-sysml/`, `crates/verify-baseline/`, `crates/assemble-conops/`, `crates/reconcile-backlog/`), rejecting downstream crate paths such as `crates/cuas-coa-engine/src/lib.rs`.
+  3. Update `.agents/skills/adversarial-code-auditor/SKILL.md` to document the new Rust gates and remove `BypassSandbox: true` so subagents never trigger IDE permission popups.
+  4. Update GitHub Issues `#484`, `#485`, `#486`, and `#487` via `./target/release/verify-baseline check-defect ... --issue <ID> --publish` so their `test-target` paths reference `crates/verify-baseline/src/runner.rs`, their check numbers are `Check 38` (`#487`), `Check 39` & `Check 40` (`#486`), and `Check 41` (`#484` & `#485`), and their Section 6 Rust snippets are 100% zero-regex and domain-agnostic.
 
 ---
 
-## 4. Subagent Dispatch Matrix
-
-| Work Package | Subagent Type | Role Title | Key Target Files | Trailing Authorization |
-| :--- | :--- | :--- | :--- | :--- |
-| **WP5 (RED)** | `self` | `Rust TDD Engineer (RED Phase)` | `crates/deap-core/src/workspace.rs` | `PROCEED` |
-| **WP1** | `self` | `Governance Engineer (5-Point Check)` | `AGENTS.md`, `rules/user-authorization-lock.md` | `PROCEED` |
-| **WP2** | `self` | `Governance Engineer (Init Receipt)` | `AGENTS.md`, `rules/constitution-first.md` | `PROCEED` |
-| **WP3** | `self` | `Governance Engineer (Tool Whitelist)` | `rules/user-authorization-lock.md`, `rules/role-boundary-lock.md` | `PROCEED` |
-| **WP4** | `self` | `Governance Engineer (Parity & Bundle)` | `.pipeline/ACTIVE_RULES_BUNDLE.md`, `.agents/AGENTS.md` | `PROCEED` |
-| **WP5 (GREEN)** | `self` | `Rust TDD Engineer (GREEN Phase)` | `crates/deap-core/src/workspace.rs` | `PROCEED` |
-| **WP6** | `self` | `Release Distribution Engineer` | `docs/operations/install-guide.md` | `PROCEED` |
+### Work Package 1 (First Priority): Author Zero-Trust Deterministic Rust C-ABI Blueprint (`DEAP-BLUEPRINT-CABI-001`) & Sync Issue `#483`
+- **Assigned Subagent Role**: `Systems Safety Architect -- Zero-Trust Rust C-ABI Blueprint`
+- **Active Skill**: `/Users/perkunas/jail/DEAP01-spec-core/.agents/skills/schema-specification-engineering/SKILL.md`
+- **Target File**:
+  - `docs/designs/zero-trust-deterministic-rust-c-abi-blueprint.md`
+- **Detailed Specifications**:
+  1. Author `docs/designs/zero-trust-deterministic-rust-c-abi-blueprint.md` (`DEAP-BLUEPRINT-CABI-001`, linked to Feature `#483` and Defect `#484`):
+     - **Section 1 (Executive Summary & 3-Tier Poly-Repo Allocation Matrix)**: Exact allocation across Tier 0 (`DEAP01-spec-core`), Tier 1 (`DEAP-profile-flutter-app`), and Tier 2 (`DEAP01-<domain>-engine`), plus coexistence of Tier 1 C++ Rendering FFI (`cesium_native_bridge/src/bridge.cpp`) and Tier 2 Rust Solver C-ABI FFI (`crates/<domain-engine>/src/ffi.rs`).
+     - **Section 2 (Hazard Analysis & Threat Model)**: **H-CABI-01** (Cross-FFI Rust Panic Unwinding UB), **H-CABI-02** (Cross-Isolate Pointer Aliasing, UAF & Double-Free), **H-CABI-03** (Schema/ABI Version Skew), and **H-CABI-04** (5,971-Line Hand-Coded Dart Formula Drift & UI Thread Frame Drops from `#484`).
+     - **Section 3 (The 6-Layer Zero-Trust Deterministic Rust C-ABI Architecture)**:
+       - Layer 1: `#![forbid(unsafe_code)]` on `crates/<domain-engine>/src/solver.rs` and all upstream crates; `unsafe` isolated strictly to the ~80-line deterministic `ffi.rs` shim.
+       - Layer 2: `std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| ...))` panic barrier on every `extern "C"` function (`DeapFfiStatus::InternalPanic = 5`).
+       - Layer 3: Compile-Time & Runtime `DEAP_SCHEMA_HASH: u64` (SHA-256 of `.pipeline/schema.sysml` + `topology_data.json`) and `DEAP_ABI_VERSION = 1` handshake (`DeapFfiStatus::SchemaVersionMismatch = 2`).
+       - Layer 4: Copy-In / Copy-Out flat checksummed `#[repr(C)] DeapByteBuffer { ptr, len, cap, crc32, status }` with IEEE 802.3 CRC32 verification, `MAX_FFI_PAYLOAD_BYTES = 16_777_216` (16 MiB), immediate copy into Dart `Uint8List` inside `try / finally { deap_free_buffer(buf); }`, and Tier 1 `NativeFinalizer` safety net.
+       - Layer 5: Dedicated Background Worker Isolate (`DeapNativeSolverIsolate`) using `TransferableTypedData` and deterministic watchdog timer.
+       - Layer 6: `compile-sysml --emit-dart-bridge` generating `app_flutter/lib/data/generated/solver_bridge.g.dart` from SysML `port def` / `item def` / `calc def` AST nodes (`CoaBundlePort`, `EngagementPairingPort`, `InterlockAnnunciatorPort`, `FaultInjectionPort`), paired with `verify-baseline` Check 41 (`check_41_solver_bridge_and_sqlite_seed_parity_gate`).
+     - **Section 4–7**: Formal C99 header (`include/deap_solver_abi.h`), Rust `ffi.rs` & `solver.rs` reference implementations, Dart `dart:ffi` bindings, Mermaid `sequenceDiagram`, `stateDiagram-v2`, and `classDiagram`, 4-Dimension Failure Mode Matrix, Given-When-Then Acceptance Criteria (**REQ-CABI-01**..**05**), and TDD Fault-Injection Test Matrix (**TEST-CABI-01**..**06**).
+  2. Synchronize `docs/designs/zero-trust-deterministic-rust-c-abi-blueprint.md` with GitHub Feature Issue `#483` via `gh issue edit 483 --body-file docs/designs/zero-trust-deterministic-rust-c-abi-blueprint.md` and verify via `gh issue view 483`.
 
 ---
 
-## 5. Verification & Acceptance Criteria
+### Work Package 2 (Second Priority): Author Complete Option 1C Solution Architecture Blueprint (`DEAP-BLUEPRINT-APP-GLUE-001`) & Register GitHub Feature Issue
+- **Assigned Subagent Role**: `Compiler & UI Verification Architect -- Option 1C Solution Blueprint`
+- **Active Skill**: `/Users/perkunas/jail/DEAP01-spec-core/.agents/skills/schema-specification-engineering/SKILL.md`
+- **Target File**:
+  - `docs/designs/option-1c-rust-app-glue-ui-contracts-and-anti-fabrication-blueprint.md`
+- **Detailed Specifications**:
+  1. Author `docs/designs/option-1c-rust-app-glue-ui-contracts-and-anti-fabrication-blueprint.md` (`DEAP-BLUEPRINT-APP-GLUE-001`, linked to `#483` and addressing `#484`, `#485`, `#486`, `#487`):
+     - **Section 1 (Executive Summary & Option 1C Architectural Resolution)**: Full comparison of Option 1A vs. Option 1B vs. Option 1C and the 3-Tier Poly-Repo Allocation Matrix.
+     - **Section 2 (Part I -- Option 1C Universal 5-Table SQLite Seed & Typed `InstanceRecord` Views in `crates/compile-sysml`, addressing `#485`)**:
+       - `app_flutter/lib/data/seeds/generated_domain_seed.g.dart` + `assets/properties_db.db.gz`: Deterministic synthesis from `.pipeline/schema.sysml` + `topology_data.json` populating all 5 canonical Tier 1 SQLite tables (`type_definitions`, `type_attributes`, `type_relations`, `properties`, `instances`) in `< 2 ms` for `:memory:` tests and production boot, eliminating missing nodes (`ASSET-RADAR-MAST-04`, `ASSET-COMM-GATEWAY-05`), parameter drift, and legacy telecom bloat.
+       - `app_flutter/lib/models/generated_schema_models.g.dart`: Immutable typed Dart `extension type` / view projections over `InstanceRecord` + `TypeDescriptor`, SysML `inv` `[min..max]` validators, `SchemaEntityIds`, and `SchemaWidgetKeys`.
+     - **Section 3 (Part II -- Multi-Resolution `1920x1080` through `6K` `6016x3384` Immutable UI & Spatial Contract Test Suite in `crates/compile-sysml`, addressing `#486`)**:
+       - `app_flutter/test/generated/schema_ui_contract_test.g.dart`: Loops across all 6 canonical viewports:
+         1. `FHD_1080P_1X` (`1920 x 1080 @ dpr 1.0`, logical `1920 x 1080`)
+         2. `QHD_1440P_1X` (`2560 x 1440 @ dpr 1.0`, logical `2560 x 1440`)
+         3. `UHD_4K_1X` (`3840 x 2160 @ dpr 1.0`, logical `3840 x 2160`)
+         4. `UHD_4K_2X` (`3840 x 2160 @ dpr 2.0`, logical `1920 x 1080`)
+         5. `XDR_6K_1X` (`6016 x 3384 @ dpr 1.0`, logical `6016 x 3384`)
+         6. `XDR_6K_2X` (`6016 x 3384 @ dpr 2.0`, logical `3008 x 1692`)
+       - Enforces the 5 mathematical contract invariants: (1) zero `RenderFlex`/`FlutterError` overflow across all 6 viewports and resize sweeps, (2) full viewport containment, (3) $O(K^2)$ pairwise 2D `rectA.overlaps(rectB) == false` across all HUD overlays and split panes, (4) proportional split ratios (`defaultRatio` +/- 2% unless clamped by `minPaneSize`) and MIL-STD-1472H $\ge 44 \times 44\text{ dp}$ tactile hit targets, and (5) exhaustive topology entity `tester.tap(...)` SQLite-to-Inspector transitions with deterministic `tearDownAll` SQLite handle disposal.
+     - **Section 4 (Part III -- `verify-baseline` Native Rust Adversarial & Anti-Fabrication AST Gates Checks 38–41 in `crates/verify-baseline/src/checks/codebase.rs`)**:
+       - **Check 38 (`#487`)**: `check_38_presentation_anti_hardcoding_ast_gate` (zero-regex, dynamic schema/topology-driven).
+       - **Check 39 (`#486`)**: `check_39_zero_mocking_test_ast_gate` (zero-regex test AST scanner for mock/fake classes, empty stubs, and missing `tearDownAll` disposal).
+       - **Check 40 (`#486`)**: `check_40_interactive_gesture_and_hud_non_overlap_gate` (enforcing `schema_ui_contract_test.g.dart` 6-viewport parity, banning shallow `probeWidgetKey` and direct `bridge.*` mutations inside `testWidgets`, and enforcing `assertPairwiseHudNonOverlap`).
+       - **Check 41 (`#483`, `#484`, `#485`)**: `check_41_solver_bridge_and_sqlite_seed_parity_gate` (enforcing thin C-ABI solver bridge delegation and 100% bijective topology-to-SQLite 5-table seed parity).
+     - **Section 5–6**: Mermaid `flowchart TD`, `sequenceDiagram`, and `classDiagram`, 4-Dimension Failure Mode Matrix, Given-When-Then Acceptance Criteria, and TDD Test Matrix.
+  2. Register the GitHub Feature Issue via `./target/release/reconcile-backlog create-issue --body-file docs/designs/option-1c-rust-app-glue-ui-contracts-and-anti-fabrication-blueprint.md --label feature --title "[FEATURE] Option 1C Rust-Compiled SQLite Seed, Typed InstanceRecord Views, 1080p-6K Contract Tests & Anti-Fabrication Gates"` and verify via `gh issue view`.
 
-- [ ] **Thought-Block Compliance**: The 5-point check is located at lines 2-25 of `AGENTS.md` and identically in `rules/user-authorization-lock.md`.
-- [ ] **Role-Adaptive Classification**: `AGENTS.md` supports both `UPSTREAM_SPEC_CORE_COMPILER` and `DOWNSTREAM_CUSTOMER_PROJECT` without hardcoded conflict.
-- [ ] **Two-Phase Initialization Gate**: Phase A (Turn-0 read-only startup) is cleanly separated from Phase B (pre-commit gate and on-demand loads).
-- [ ] **Canonical Turn-0 Receipt Contract**: Mandated table template is documented and matches in both `AGENTS.md` and `rules/constitution-first.md`.
-- [ ] **Inspection Whitelist**: Read-only `git status`, `git branch`, `git rev-parse`, `ls` are explicitly permitted on Turn 0 in `rules/user-authorization-lock.md`.
-- [ ] **Mutation Locks**: Shell mutations (`cp`, `mv`, `rm`, `tee`, `>`, `>>`) and `walkthrough.md` edits are explicitly locked prior to `PROCEED`.
-- [ ] **Rules Bundle Parity & Size Budget**: `.pipeline/ACTIVE_RULES_BUNDLE.md` matches `rules/*.md` exactly, remaining <40,000 bytes and <750 lines.
-- [ ] **Native Rust Tests**: `cargo test --workspace` passes with 0 failures, including new RED-to-GREEN regression assertions.
-- [ ] **Baseline Gate**: `./target/release/verify-baseline . --no-domain` passes with 0 errors.
-- [ ] **Zero Em Dashes**: Zero occurrences of Unicode `\u2014` across all modified files and commit logs.
+---
+
+### Work Package 3: Implement Native Rust Codegen (`crates/compile-sysml`) & Native Rust Adversarial AST Gates Checks 38–41 (`crates/verify-baseline`)
+- **Subagent 3A (`Rust Verification Engineer -- Checks 38-41 in crates/verify-baseline`)**:
+  - **Active Skill**: `/Users/perkunas/jail/DEAP01-spec-core/.agents/skills/feature-driven-implementation/SKILL.md`
+  - **Target Files**:
+    - `crates/verify-baseline/src/checks/codebase.rs`
+    - `crates/verify-baseline/src/checks/mod.rs`
+    - `crates/verify-baseline/src/runner.rs`
+  - **Deliverables**:
+    1. Write failing RED unit tests in `crates/verify-baseline/src/checks/codebase.rs` (using `tempfile::TempDir` fixtures) for Checks 38, 39, 40, and 41 covering every failure mode in `#484`–`#487`.
+    2. Implement `check_38_presentation_anti_hardcoding_ast_gate`, `check_39_zero_mocking_test_ast_gate`, `check_40_interactive_gesture_and_hud_non_overlap_gate`, and `check_41_solver_bridge_and_sqlite_seed_parity_gate` in `crates/verify-baseline/src/checks/codebase.rs` using 100% zero-regex, domain-agnostic Rust with 7-section safety docstrings, re-export in `crates/verify-baseline/src/checks/mod.rs`, and wire Checks 38–41 into `crates/verify-baseline/src/runner.rs`.
+    3. Verify all positive and negative unit tests pass (`cargo test -p verify-baseline`).
+- **Subagent 3B (`Rust Compiler Engineer -- Flutter & C-ABI Codegen in crates/compile-sysml`)**:
+  - **Active Skill**: `/Users/perkunas/jail/DEAP01-spec-core/.agents/skills/feature-driven-implementation/SKILL.md`
+  - **Target Files**:
+    - `crates/compile-sysml/src/flutter_codegen.rs`
+    - `crates/compile-sysml/src/lib.rs`
+    - `crates/compile-sysml/src/main.rs`
+  - **Deliverables**:
+    1. Write failing RED unit tests in `crates/compile-sysml/src/flutter_codegen.rs` testing deterministic generation of `generated_domain_seed.g.dart` (5 canonical SQLite tables), `generated_schema_models.g.dart` (typed `InstanceRecord` views + `DEAP_SCHEMA_HASH`), `solver_bridge.g.dart` (C-ABI + SysML port/item DTOs), and `schema_ui_contract_test.g.dart` (6-viewport `1920x1080` through `6016x3384` contract suite).
+    2. Implement `crates/compile-sysml/src/flutter_codegen.rs` with 100% 7-section safety docstrings and zero regex, expose in `crates/compile-sysml/src/lib.rs`, and wire `--emit-flutter-contracts <DIR>` into `crates/compile-sysml/src/main.rs`.
+    3. Verify `cargo test -p compile-sysml` passes with zero failures.
+
+---
+
+### Work Package 4: Synchronize Canonical Blueprints, Rebuild Release Binaries, Verify Baseline & Push to `origin/main`
+- **Assigned Subagent Role**: `Governance & Verification Engineer -- Blueprint Grounding & Remote Sync`
+- **Active Skill**: `/Users/perkunas/jail/DEAP01-spec-core/.agents/skills/project-constitution/SKILL.md`
+- **Target Files**:
+  - `docs/architecture/blueprints/DEAP_POLY_REPO_BINARY_DISTRIBUTION_ARCHITECTURE.md`
+  - `docs/architecture/blueprints/RUNTIME_METADATA_ENGINE.md`
+  - `docs/architecture/blueprints/PERSISTENCE_ARCHITECTURE.md`
+  - `docs/architecture/blueprints/DEAP_CUAS_COA_FLUTTER_BLUEPRINT.md`
+  - `.agents/skills/feature-driven-implementation/SKILL.md`
+- **Deliverables**:
+  1. Synchronize canonical blueprint cross-references to `docs/designs/zero-trust-deterministic-rust-c-abi-blueprint.md` (`#483`), `docs/designs/option-1c-rust-app-glue-ui-contracts-and-anti-fabrication-blueprint.md`, `crates/compile-sysml/src/flutter_codegen.rs`, and `crates/verify-baseline/src/checks/codebase.rs` (strictly satisfying Check 37 `check_blueprint_grounding` now that those `.rs` files exist on disk!).
+  2. Build release binaries (`cargo build --release`), run `./target/release/verify-baseline . --no-domain` and `cargo test --workspace` (verifying 100% pass across Checks 10 through 41), commit atomically, push to `origin/main`, and verify `git diff origin/main` is empty.
+
+---
+
+## 3. Verification & Acceptance Criteria
+
+- [ ] **WP0**: `defect_dossier.rs` enforces Section 6 Rust zero-regex and upstream `test-target` crate grounding; new defect dossier filed; `#484`–`#487` sanitized on GitHub; `BypassSandbox: true` removed from `adversarial-code-auditor/SKILL.md`.
+- [ ] **WP1**: `docs/designs/zero-trust-deterministic-rust-c-abi-blueprint.md` (`DEAP-BLUEPRINT-CABI-001`) authored and synced with GitHub Feature Issue `#483`.
+- [ ] **WP2**: `docs/designs/option-1c-rust-app-glue-ui-contracts-and-anti-fabrication-blueprint.md` (`DEAP-BLUEPRINT-APP-GLUE-001`) authored and registered as a GitHub Feature Issue via `./target/release/reconcile-backlog create-issue`.
+- [ ] **WP3**: Native Rust `crates/verify-baseline/src/checks/codebase.rs` (Checks 38–41) and `crates/compile-sysml/src/flutter_codegen.rs` (`--emit-flutter-contracts`) implemented with passing RED-GREEN unit tests.
+- [ ] **WP4**: Canonical blueprints updated, `./target/release/verify-baseline . --no-domain` and `cargo test --workspace` pass with 0 errors, and `git diff origin/main` is empty.

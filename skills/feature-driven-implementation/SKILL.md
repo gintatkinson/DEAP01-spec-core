@@ -76,6 +76,11 @@ If the feature involves unfamiliar frameworks, rapidly-evolving libraries, or ne
 ### Step 2: Checkout & Plan Review ("The Grill")
 1. Checkout a dedicated feature branch from the default branch resolved from configuration using the environment-configured checkout command and branch naming conventions (e.g. resolved dynamically from configuration):
 2. **Platform Scoping:** The feature spec is platform-independent (functional). Apply the target platform from the implementation profile (`.pipeline/profiles/<platform>.md`, loaded in Step 1) to translate the abstract UML-mapped functional specifications into concrete platform-specific design decisions. This is where framework-specific libraries, language choices, structural patterns, and test frameworks are chosen.
+   - **Deterministic Contract & Seed Codegen (`compile-sysml --emit-flutter-contracts`)**: For Flutter applications, synthesize native seeds and typed contracts prior to vertical slice implementation:
+     ```bash
+     ./target/release/compile-sysml --emit-flutter-contracts app_flutter
+     ```
+     This deterministically synthesizes `generated_domain_seed.g.dart` (5-table SQLite seed), `generated_schema_models.g.dart` (typed `InstanceRecord` views + `DEAP_SCHEMA_HASH`), `solver_bridge.g.dart` (Zero-Trust C-ABI `DeapByteBuffer` DTOs), and `schema_ui_contract_test.g.dart` (6-viewport `1920x1080` through `6K` contract suite).
 3. Create/update `implementation_plan.md` outlining a **complete vertical slice** conforming to the architectural layers defined in the target platform profile (e.g., database, serialization, API, logic, or UI presentation layers):
    - **Architectural Layers:** Map the UML classes, components, operations, and attributes to their corresponding layer locations in the target codebase stack.
    - **Layout Engine Alignment:** Ensure the plan specifies CSS Container Queries (`@container`), flexbox/grid layout models, resizable split containers, and high-density standards matching `.pipeline/constitution.md` and the platform profile.
@@ -238,7 +243,12 @@ If a test fails with an unexpected error during Step 3, follow the 4-phase debug
 ### Step 4: Verification & Testing
 1. **Assertion-Based Automation:** When writing or updating tests, do not rely on basic smoke tests. Add explicit assertions that query return values, object states, or output trees for the presence of the new fields or data properties. For any modified domain models, mandate regression assertions on existing tests for operations on modified domain models to verify field preservation through every constructor, `copyWith`, and `valueWriter` path.
 2. **Full Compilation Build:** Run local tests and run a full compilation build of the entire application (e.g. `flutter build` or `npm run build` as specified by the platform profile) to ensure it compiles without errors and is completely ready to run.
-3. **Baseline Verification Gate:** Mandate running `./target/release/verify-baseline . --spec-only` as a blocking gate before completing any implementation task.
+3. **Baseline Verification & Codebase AST Gates (Checks 38-41):**
+   Mandate running `./target/release/verify-baseline . --no-domain` (or `--spec-only` during specification phases) as a blocking gate before completing any implementation task. For Flutter applications, `verify-baseline` mechanically enforces:
+   - **Check 38 (Presentation Anti-Hardcoding AST Gate)**: Rejects un-interpolated domain instance strings, hardcoded telemetry literals, and static boolean row builder arguments in `app_flutter/lib/features/`.
+   - **Check 39 (Zero-Mocking Test AST & SQLite Disposal Gate)**: Rejects mock/fake classes and empty stubs in `test/`, and enforces proper `tearDownAll` SQLite disposal.
+   - **Check 40 (Interactive Gesture, 1080p-6K Viewport & Pairwise 2D HUD Non-Overlap Gate)**: Enforces `schema_ui_contract_test.g.dart` multi-resolution contract tests across all 6 viewports (`1920x1080` through `6016x3384`) and bans shallow test helpers.
+   - **Check 41 (Track B C-ABI Solver Bridge SSOT & 5-Table SQLite Seed Parity Gate)**: Enforces thin C-ABI delegation and bijective 5-table SQLite seed parity between schemas and `generated_domain_seed.g.dart`.
 4. **Evidence of Completion:** Paste actual raw test output / build output as proof. Do not summarize -- show the raw output.
 5. Provide **precise, step-by-step human manual testing instructions** in the verification section. The instructions must guide the user on exactly what commands, scripts, or interface interactions to execute, what inputs to feed, and what specific output (e.g., payload, log entry, UI state change, database record) to inspect to verify correctness.
 6. **Independent Subagent Validation Check (or Single-Agent Fallback Self-Audit):**

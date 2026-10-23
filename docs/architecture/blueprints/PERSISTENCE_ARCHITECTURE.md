@@ -100,9 +100,9 @@ DEAP01-spec-core/
 | Crate | Key Modules | Responsibility | Dependencies |
 | :--- | :--- | :--- | :--- |
 | **`crates/deap-core`** | `crates/deap-core/src/sysml_ast.rs`, `crates/deap-core/src/lib.rs`, `crates/deap-core/src/diagnostics.rs` | Authoritative SysML v2 AST metamodel (`SysmlModel`, `PackageDef`, `PartDef`, `PortDef`, `ActionDef`, `StateDef`, `RequirementDef`, `HazardDef`), deterministic persistence (`AstPersistenceEngine`), content-addressed caching (`IncrementalAstCache`), token-bounded slicing (`AstSlice`), runtime metadata descriptors (`TypeDescriptor`, `FieldDescriptor`), and CoT audit records (`CotAuditRecord`, `CotAuditLog`). | `serde`, `serde_json`, `walkdir`, `chrono`, `uuid` |
-| **`crates/compile-sysml`** | `crates/compile-sysml/src/lib.rs`, `crates/compile-sysml/src/semantic/digest.rs`, `crates/compile-sysml/src/sync/forward.rs` | Lexical/syntactic SysML v2 compiler, atomic schema digest generation (`SchemaDigest`, `write_atomic`), unified 8-pillar STPA/FMECA synthesis, MBD contract export, and bidirectional Markdown specification synchronization (`forward_sync_sysml_to_specs`, `reverse_sync_specs_to_sysml`). | `deap-core`, `serde`, `serde_json`, `walkdir`, `chrono`, `clap` |
+| **`crates/compile-sysml`** | `crates/compile-sysml/src/lib.rs`, `crates/compile-sysml/src/flutter_codegen.rs`, `crates/compile-sysml/src/semantic/digest.rs`, `crates/compile-sysml/src/sync/forward.rs` | Lexical/syntactic SysML v2 compiler, atomic schema digest generation (`SchemaDigest`, `write_atomic`), unified 8-pillar STPA/FMECA synthesis, MBD contract export, bidirectional Markdown specification synchronization (`forward_sync_sysml_to_specs`, `reverse_sync_specs_to_sysml`), and deterministic generation of Flutter contracts, seeds, and C-ABI DTOs (`crates/compile-sysml/src/flutter_codegen.rs`). | `deap-core`, `serde`, `serde_json`, `walkdir`, `chrono`, `clap` |
 | **`crates/ingest-sysml`** | `crates/ingest-sysml/src/lib.rs`, `crates/ingest-sysml/src/main.rs` | Level 0 multi-format schema and source code AST ingestion engine lowering `.sysml`, `.yaml`, `.json`, `.proto`, `.idl`, `.arxml`, `.yang`, `.rs`, and `.dart` into `.pipeline/schema.sysml` and `.pipeline/schema-digest.json`. | `deap-core`, `compile-sysml`, `serde`, `serde_json`, `walkdir`, `clap` |
-| **`crates/verify-baseline`** | `crates/verify-baseline/src/runner.rs`, `crates/verify-baseline/src/checks/structural.rs`, `crates/verify-baseline/src/checks/parity_gates.rs` | Fail-closed baseline verification runner executing Checks 10 through 37 across structural hygiene, Mermaid/KaTeX syntax, STPA safety integrity, Level 1C ICD completeness, and blueprint grounding, emitting `DefectDossier` artifacts to `.pipeline/defects/`. | `deap-core`, `compile-sysml`, `serde`, `serde_json`, `walkdir`, `chrono`, `clap` |
+| **`crates/verify-baseline`** | `crates/verify-baseline/src/runner.rs`, `crates/verify-baseline/src/checks/structural.rs`, `crates/verify-baseline/src/checks/parity_gates.rs`, `crates/verify-baseline/src/checks/codebase.rs` | Fail-closed baseline verification runner executing Checks 10 through 41 across structural hygiene, codebase AST gates (Checks 38-41: anti-hardcoding, zero-mocking, viewport contracts, and solver bridge parity), Mermaid/KaTeX syntax, STPA safety integrity, Level 1C ICD completeness, and blueprint grounding, emitting `DefectDossier` artifacts to `.pipeline/defects/`. | `deap-core`, `compile-sysml`, `serde`, `serde_json`, `walkdir`, `chrono`, `clap` |
 | **`crates/assemble-conops`** | `crates/assemble-conops/src/main.rs` | Deterministic assembler and verifier for hierarchical Concept of Operations (`docs/conops/`) and Tactical Mission Intent specification units. | `deap-core`, `compile-sysml`, `serde`, `serde_json`, `walkdir`, `clap` |
 | **`crates/reconcile-backlog`** | `crates/reconcile-backlog/src/lib.rs`, `crates/reconcile-backlog/src/main.rs` | Deterministic frontmatter parser, checklist reconciler, and GitHub/GitLab issue synchronization engine. | `deap-core`, `serde`, `serde_json`, `walkdir`, `clap` |
 
@@ -310,6 +310,12 @@ impl SysmlModel {
 }
 ```
 
+### 3.3 Option 1C Universal SQLite Seed & C-ABI Solver Persistence Integration
+To bind the zero-ephemeral relational persistence tier to presentation clients without manual DTO maintenance:
+- **Option 1C App Glue Codegen**: `compile-sysml --emit-flutter-contracts` (`crates/compile-sysml/src/flutter_codegen.rs`) deterministically synthesizes `app_flutter/lib/data/seeds/generated_domain_seed.g.dart` (populating all 5 canonical SQLite tables `type_definitions`, `type_attributes`, `type_relations`, `properties`, and `instances`) and `app_flutter/lib/models/generated_schema_models.g.dart` conforming to `DEAP-BLUEPRINT-APP-GLUE-001` (`docs/designs/option-1c-rust-app-glue-ui-contracts-and-anti-fabrication-blueprint.md`, GitHub Feature Issue `#489`).
+- **Zero-Trust C-ABI Memory Lifecycle**: Buffer serialization, memory ownership, and FFI panic barriers are governed by `DEAP-BLUEPRINT-CABI-001` (`docs/designs/zero-trust-deterministic-rust-c-abi-blueprint.md`, GitHub Feature Issue `#483`).
+- **Mechanical Parity Verification**: Validated deterministically by `crates/verify-baseline/src/checks/codebase.rs` under Check 41 (`check_41_solver_bridge_and_sqlite_seed_parity_gate`).
+
 ---
 
 ## 4. Zero-Ephemeral Artifact Lifecycle & File Flow
@@ -329,7 +335,7 @@ sequenceDiagram
     Core->>Compile: Slice AST via AstSlice ("<= 4,096 tokens") and AstPersistenceEngine
     Compile->>Compile: Atomic write .pipeline/schema.sysml and .pipeline/schema-digest.json
     Compile->>Compile: Synthesize docs/epics/, docs/features/, docs/safety/STPA_MATRIX.md
-    Compile->>Verify: Execute verify-baseline Checks 10..37
+    Compile->>Verify: Execute verify-baseline Checks 10..41
     Verify-->>User: Verified 0 errors and 0-byte remote git diff
 ```
 
@@ -375,7 +381,7 @@ To eliminate race conditions, corrupted partial writes, and unintended overwrite
 
 ### 6.1 Semantic Acceptance Gate
 In strict compliance with repository governance, verification of the persistence architecture is performed exclusively via native Rust unit tests and end-to-end semantic acceptance binaries:
-- **Baseline Verification**: `./target/release/verify-baseline . --no-domain` (`crates/verify-baseline/src/runner.rs`) executes Checks 10 through 37 with exit code 0.
+- **Baseline Verification**: `./target/release/verify-baseline . --no-domain` (`crates/verify-baseline/src/runner.rs`) executes Checks 10 through 41 with exit code 0.
 - **AST & Digest Integrity Check**: `crates/compile-sysml/src/semantic/digest.rs` and Check 31 (`check_dual_schema_ssot_parity` in `crates/verify-baseline/src/checks/parity_gates.rs`) enforce cryptographic hash and structural AST parity between `schema/`, `.pipeline/schema.sysml`, and `.pipeline/schema-digest.json`.
 - **Pure Rust Workspace Test Suite**: Verification executes exclusively via compiled Rust binaries (`cargo test --workspace`), enforced by Check 32 and Check 33 in `crates/verify-baseline/src/checks/structural.rs`.
 - **Zero Em Dash Invariant**: This blueprint contains 0 Unicode em dashes (`\u2014`), using ASCII `--` or `-` exclusively.

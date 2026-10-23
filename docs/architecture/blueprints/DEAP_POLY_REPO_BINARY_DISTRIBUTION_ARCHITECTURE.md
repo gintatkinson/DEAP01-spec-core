@@ -92,7 +92,9 @@ flowchart TD
     - `crates/verify-baseline/src/checks/structural.rs`
     - `crates/verify-baseline/src/checks/docstring_gate.rs`
     - `crates/compile-sysml/src/docstring.rs`
+    - `crates/compile-sysml/src/flutter_codegen.rs`
     - `crates/compile-sysml/src/lib.rs`
+    - `crates/verify-baseline/src/checks/codebase.rs`
     - `crates/ingest-sysml/src/main.rs`
     - `crates/assemble-conops/src/main.rs`
     - `crates/reconcile-backlog/src/lib.rs`
@@ -265,6 +267,15 @@ Three mechanical checks enforce tier boundaries and prevent regression:
 - In upstream: Enforces presence and structural grounding of all 13 canonical architecture blueprints in `CanonicalArchitectureBlueprint::ALL`.
 - In downstream: Automatically returns `Ok(())` when `docs/architecture/blueprints/` is absent.
 
+### 5.4 Checks 38-41: Native Rust Adversarial AST & Contract Verification Gates (`crates/verify-baseline/src/checks/codebase.rs`)
+- **Check 38**: Presentation Anti-Hardcoding AST Gate (`check_38_presentation_anti_hardcoding_ast_gate`). Dynamically verifies zero un-interpolated domain strings in `app_flutter/lib/features/`.
+- **Check 39**: Zero-Mocking Test AST & SQLite Disposal Gate (`check_39_zero_mocking_test_ast_gate`). Rejects mock classes, stubs, and ensures `tearDownAll` disposal.
+- **Check 40**: Interactive Gesture, 1080p-6K Viewport & Pairwise 2D HUD Non-Overlap Gate (`check_40_interactive_gesture_and_hud_non_overlap_gate`). Enforces multi-resolution contract tests from 1080p through 6K.
+- **Check 41**: Track B C-ABI Solver Bridge SSOT & 5-Table SQLite Seed Parity Gate (`check_41_solver_bridge_and_sqlite_seed_parity_gate`). Enforces thin C-ABI delegation and bijective 5-table SQLite seed parity.
+- **Companion Architecture Blueprints**:
+  - `DEAP-BLUEPRINT-CABI-001` (`docs/designs/zero-trust-deterministic-rust-c-abi-blueprint.md`, GitHub Feature Issue `#483`): Zero-Trust Deterministic Rust C-ABI Architecture across Tier 0, Tier 1, and Tier 2.
+  - `DEAP-BLUEPRINT-APP-GLUE-001` (`docs/designs/option-1c-rust-app-glue-ui-contracts-and-anti-fabrication-blueprint.md`, GitHub Feature Issue `#489`): Option 1C Rust-Compiled SQLite Seed, Typed InstanceRecord Views, 1080p-6K Contract Tests & Anti-Fabrication Gates.
+
 ---
 
 ## 6. Grounding Traceability Matrix
@@ -275,10 +286,14 @@ Three mechanical checks enforce tier boundaries and prevent regression:
 | Tier 0 Lexer & Comment Stripper | `crates/deap-core/src/source_ast.rs` | Unit Tests & Check 36 |
 | Tier 0 Core Exports | `crates/deap-core/src/lib.rs` | Workspace Compilation |
 | Compiler Docstring Gate | `crates/compile-sysml/src/docstring.rs` | Docstring Injection Tests |
+| Flutter Contracts & C-ABI Codegen | `crates/compile-sysml/src/flutter_codegen.rs` | Unit Tests & Check 41 |
 | Poly-Repo Mechanical Check 12 | `crates/deap-core/src/workspace.rs` | Check 12 Unit & Baseline Tests |
 | Poly-Repo Mechanical Check 15 | `crates/deap-core/src/workspace.rs` | Check 15 Unit & Baseline Tests |
 | Blueprint Structural Gate | `crates/verify-baseline/src/checks/structural.rs` | Check 37 Verification |
 | Check 36 Lexer Gate | `crates/verify-baseline/src/checks/docstring_gate.rs` | Check 36 Unit Tests |
+| Adversarial AST Checks 38-41 | `crates/verify-baseline/src/checks/codebase.rs` | Checks 38-41 Unit & Baseline Tests |
+| Zero-Trust Rust C-ABI Blueprint | `docs/designs/zero-trust-deterministic-rust-c-abi-blueprint.md` (`DEAP-BLUEPRINT-CABI-001`) | GitHub Feature Issue `#483` |
+| Option 1C App Glue Blueprint | `docs/designs/option-1c-rust-app-glue-ui-contracts-and-anti-fabrication-blueprint.md` (`DEAP-BLUEPRINT-APP-GLUE-001`) | GitHub Feature Issue `#489` |
 
 ---
 

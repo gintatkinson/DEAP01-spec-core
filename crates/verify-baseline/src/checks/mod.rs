@@ -29,6 +29,7 @@
 //! ## 7. Realization & Traceability
 //! Realises: [REQ-VERIFY-BASELINE-CHECKS-MOD], [DO-330-TQL-4-CHECKS-MOD]
 
+pub mod codebase;
 pub mod docstring_gate;
 pub mod domain_cleanliness_gate;
 pub mod math_katex;
@@ -38,6 +39,7 @@ pub mod safety_stpa;
 pub mod structural;
 pub mod wbs_integrity;
 
+pub use codebase::*;
 pub use docstring_gate::*;
 pub use domain_cleanliness_gate::*;
 pub use math_katex::check_latex_katex_syntax;

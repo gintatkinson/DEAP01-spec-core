@@ -133,6 +133,10 @@ struct Cli {
     #[arg(long, value_name = "PACKAGE")]
     slice_package: Option<String>,
 
+    /// Emit deterministic Flutter and C-ABI contracts (seeds, models, solver bridge, and UI tests)
+    #[arg(long, value_name = "FLUTTER_DIR")]
+    emit_flutter_contracts: Option<PathBuf>,
+
     /// Path to documentation directory
     #[arg(long, default_value = "docs/")]
     docs: PathBuf,
@@ -172,7 +176,7 @@ struct Cli {
 /// ## 2. Invariants & Mathematical Properties
 /// - Exclusive mode dispatch: exactly one operational branch executes per CLI invocation in priority
 ///   order (`--inject-safety-docstrings`, `--extract-source`, `--export-mbd`, `--slice-package`,
-///   `--stpa-transpile`, `--stpa`, `--forward-sync`, `--reverse-sync`, `--compile`).
+///   `--emit-flutter-contracts`, `--stpa-transpile`, `--stpa`, `--forward-sync`, `--reverse-sync`, `--compile`).
 /// - Fail-closed termination: any operational error exits immediately with a non-zero status code.
 ///
 /// ## 3. Preconditions
@@ -292,6 +296,53 @@ fn main() {
             }
             Err(e) => {
                 eprintln!("Error slicing package '{}': {}", target_pkg, e);
+                process::exit(1);
+            }
+        }
+    }
+
+    // 0e. Deterministic Flutter and C-ABI Contract Emission
+    if let Some(ref target_dir) = cli.emit_flutter_contracts {
+        let pkg = match load_schema_package_for_cli(cli.schema.clone().or_else(|| cli.file.clone())) {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("{}", e);
+                process::exit(1);
+            }
+        };
+        let model = flatten_package_to_model(pkg, None);
+
+        let topology_path = target_dir.join("assets").join("topology_data.json");
+        let topology_json = if topology_path.is_file() {
+            fs::read_to_string(&topology_path).ok()
+        } else {
+            let alt_path = target_dir.join("app_flutter").join("assets").join("topology_data.json");
+            if alt_path.is_file() {
+                fs::read_to_string(&alt_path).ok()
+            } else {
+                None
+            }
+        };
+
+        match compile_sysml::flutter_codegen::emit_flutter_contracts(
+            target_dir,
+            &model,
+            topology_json.as_deref(),
+        ) {
+            Ok(report) => {
+                println!(
+                    "[Flutter Codegen] Successfully emitted contracts (schema hash: 0x{:016X}) to '{}':",
+                    report.schema_hash,
+                    target_dir.display()
+                );
+                println!("  - Domain seed:      {}", report.seed_path.display());
+                println!("  - Schema models:    {}", report.models_path.display());
+                println!("  - Solver bridge:    {}", report.solver_bridge_path.display());
+                println!("  - UI contract test: {}", report.ui_contract_test_path.display());
+                process::exit(0);
+            }
+            Err(e) => {
+                eprintln!("Error emitting Flutter contracts: {}", e);
                 process::exit(1);
             }
         }
@@ -929,5 +980,19 @@ mod tests {
             .slice_package_subsystem("FlightPkg", 4096)
             .expect("slice should succeed");
         assert_eq!(slice.parts.len(), 1);
+    }
+
+    #[test]
+    fn test_cli_emit_flutter_contracts_flag() {
+        use super::*;
+        let cli = Cli::parse_from(vec![
+            "compile-sysml",
+            "--emit-flutter-contracts",
+            "app_flutter",
+        ]);
+        assert_eq!(
+            cli.emit_flutter_contracts,
+            Some(PathBuf::from("app_flutter"))
+        );
     }
 }
