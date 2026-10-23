@@ -166,17 +166,17 @@ impl Default for ReconcileOptions {
 /// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C safety objectives for struct `ReconcileSummary` in `crates/reconcile-backlog/src/lib.rs`.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Preserves structural type invariants for struct `ReconcileSummary` across member set `[total_specs_scanned: usize, frontmatters_updated: usize, checklists_updated: usize, placeholders_purged: usize, remote_issues_synced: usize]`.
+/// - Preserves structural type invariants for struct `ReconcileSummary` across member set `[total_specs_scanned: usize, frontmatters_updated: usize, checklists_updated: usize, placeholders_purged: usize, remote_issues_synced: usize, defect_targets_verified: usize]`.
 ///
 /// ## 3. Preconditions
-/// - Caller supplies well-formed values for `ReconcileSummary` members (`total_specs_scanned: usize, frontmatters_updated: usize, checklists_updated: usize, placeholders_purged: usize, remote_issues_synced: usize`).
+/// - Caller supplies well-formed values for `ReconcileSummary` members (`total_specs_scanned: usize, frontmatters_updated: usize, checklists_updated: usize, placeholders_purged: usize, remote_issues_synced: usize, defect_targets_verified: usize`).
 ///
 /// ## 4. Postconditions
 /// - Defines the authoritative `ReconcileSummary` representation for struct `ReconcileSummary`.
 ///
 /// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: O(M(5)) bounded over input/member dimension of `ReconcileSummary`.
-/// - Space Complexity: O(M(5)) bounded auxiliary memory for `ReconcileSummary`.
+/// - Time Complexity: O(M(6)) bounded over input/member dimension of `ReconcileSummary`.
+/// - Space Complexity: O(M(6)) bounded auxiliary memory for `ReconcileSummary`.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
 /// - Interface: Validates boundary inputs and types for `ReconcileSummary` (`ReconcileSummary`).
@@ -193,6 +193,7 @@ pub struct ReconcileSummary {
     pub checklists_updated: usize,
     pub placeholders_purged: usize,
     pub remote_issues_synced: usize,
+    pub defect_targets_verified: usize,
 }
 
 /// Discovers and loads all markdown specs in standard docs directories.
@@ -292,12 +293,18 @@ pub fn run_reconciliation<T: TrackerClient>(
     summary.total_specs_scanned = specs.len();
 
     // Step 1: Fetch tracker issues if available
-    let issues = if options.offline {
+    let issues = if options.offline && options.provider != "offline" {
         Vec::new()
     } else {
         tracker.fetch_all_issues()?
     };
-    let issue_index = IssueIndex::build(issues);
+    let issue_index = IssueIndex::build(issues.clone());
+
+    // Verify defect test-target contracts for resolved bug issues (Issue #468)
+    if !options.offline {
+        let verified = verify_reconciled_defect_issues(&options.workspace_root, &issues)?;
+        summary.defect_targets_verified = verified;
+    }
 
     // Step 2: Hierarchy synthesis, frontmatter reconciliation, and placeholder purge
     let repo_slug = options.repo.clone()
@@ -351,13 +358,20 @@ pub fn run_reconciliation<T: TrackerClient>(
 
         // Step 3: Reconcile checklists
         let (reconciled_body, check_count) = reconcile_checklist_content(&spec.content, |issue_num, item_title| {
-            if let Some(num) = issue_num {
-                if let Some(issue) = issue_index.by_number.get(&num) {
-                    return Some(issue.is_resolved());
+            let issue = issue_num
+                .and_then(|num| issue_index.by_number.get(&num))
+                .or_else(|| issue_index.find_issue(None, item_title));
+
+            if let Some(iss) = issue {
+                if iss.is_resolved() {
+                    if is_bug_issue(iss) && iss.state.eq_ignore_ascii_case("open") {
+                        if validate_issue_resolution_transition(&options.workspace_root, iss, None).is_err() {
+                            return Some(false);
+                        }
+                    }
+                    return Some(true);
                 }
-            }
-            if let Some(issue) = issue_index.find_issue(None, item_title) {
-                return Some(issue.is_resolved());
+                return Some(false);
             }
             None
         });
@@ -921,6 +935,499 @@ pub fn project_body_for_tracker(
     }
 
     projected
+}
+
+/// Validates whether a defect test-target candidate token is well-formed, non-empty, and free of placeholders.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ISO 26262 ASIL D safety objectives for validating candidate test-target strings.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Rejects empty strings, bracketed placeholder markers (`[path]`, `<path>`), TODO/TBD tokens, and whitespace.
+///
+/// ## 3. Preconditions
+/// - `token: &str` contains valid UTF-8 string data.
+///
+/// ## 4. Postconditions
+/// - Returns `true` if and only if token constitutes a syntactically valid defect test-target file path.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(K) where K is byte length of `token`.
+/// - Space Complexity: O(1) auxiliary memory.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Evaluates arbitrary candidate string slices safely without panicking.
+/// - State: Zero side effects.
+/// - Action: Deterministic non-backtracking predicate.
+/// - Resource: Zero heap allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-RECONCILE-BACKLOG-IS-VALID-TEST-TARGET-TOKEN] | Issue #468
+fn is_valid_test_target_token(token: &str) -> bool {
+    !token.is_empty()
+        && !token.starts_with('[')
+        && !token.ends_with(']')
+        && !token.starts_with('<')
+        && !token.ends_with('>')
+        && !token.eq_ignore_ascii_case("todo")
+        && !token.eq_ignore_ascii_case("tbd")
+        && !token.chars().any(char::is_whitespace)
+}
+
+/// Deterministically parses and validates defect test-target HTML comments and markdown bullet annotations from an issue description.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ISO 26262 ASIL D traceability mandates for Issue #468.
+/// Enforces machine-readable parity between hidden HTML comments and human-readable Markdown bullets.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Requires both `<!-- test-target: <path> -->` and `- **Test-Target**: <path>` (or `* **Test-Target**:`) to be present.
+/// - Requires normalized path tokens to be non-empty, non-placeholder, whitespace-free, and identical ($C = B$).
+/// - Employs deterministic linear string scanning with zero regular expressions (`Check 34`).
+///
+/// ## 3. Preconditions
+/// - `issue_body: &str` contains valid UTF-8 Markdown text.
+///
+/// ## 4. Postconditions
+/// - Returns `Ok(String)` containing the verified relative target path if both annotations match.
+/// - Returns `Err(String)` describing the specific discrepancy if missing, malformed, or mismatched.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) linear scan over byte length of `issue_body`.
+/// - Space Complexity: O(M) bounded heap allocation for extracted target path string.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Rejects placeholder values (`[path]`, `<path>`, `TODO`, `TBD`) and tokens with whitespace.
+/// - State: Pure function with zero shared mutable state or side effects.
+/// - Action: Deterministic non-backtracking scanner.
+/// - Resource: Bounded memory allocation proportional to path string length.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-RECONCILE-BACKLOG-PARSE-DEFECT-TEST-TARGET] | Issue #468
+pub fn parse_defect_test_target(issue_body: &str) -> Result<String, String> {
+    let mut comment_target: Option<String> = None;
+    let mut bullet_target: Option<String> = None;
+
+    for line in issue_body.lines() {
+        let trimmed = line.trim();
+
+        if let Some(start_idx) = trimmed.find("<!--") {
+            let after_open = &trimmed[start_idx + 4..];
+            if let Some(end_idx) = after_open.find("-->") {
+                let inner = after_open[..end_idx].trim();
+                if let Some(rest) = inner.strip_prefix("test-target:") {
+                    let clean = rest.trim().trim_matches('`').trim();
+                    if is_valid_test_target_token(clean) {
+                        comment_target = Some(clean.to_string());
+                    }
+                }
+            }
+        }
+
+        let bullet_rest = trimmed
+            .strip_prefix("- ")
+            .or_else(|| trimmed.strip_prefix("* "))
+            .map(str::trim_start)
+            .unwrap_or(trimmed);
+
+        if let Some(rest) = bullet_rest.strip_prefix("**Test-Target**:") {
+            let clean = rest.trim().trim_matches('`').trim();
+            if is_valid_test_target_token(clean) {
+                bullet_target = Some(clean.to_string());
+            }
+        }
+    }
+
+    match (comment_target, bullet_target) {
+        (Some(c), Some(b)) => {
+            if c == b {
+                Ok(c)
+            } else {
+                Err(format!(
+                    "Section 1 test-target mismatch (#468): HTML comment has '{}' but '- **Test-Target**:' bullet has '{}'.",
+                    c, b
+                ))
+            }
+        }
+        (None, Some(_)) => Err("Section 1 missing mandatory '<!-- test-target: <path> -->' annotation (Check 12 / #468).".to_string()),
+        (Some(_), None) => Err("Section 1 missing mandatory '- **Test-Target**:' bullet with valid path (Check 5 / Check 12 / #468).".to_string()),
+        (None, None) => Err("Defect issue body contains neither valid HTML comment nor bullet test-target (Check 12 / #468).".to_string()),
+    }
+}
+
+/// Extracts the verified test-target path from a defect issue body by delegating to `parse_defect_test_target`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and Check 34 Zero Regex standards for defect test-target verification under Issue #468.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Guarantees identical result and error conditions as `parse_defect_test_target`.
+///
+/// ## 3. Preconditions
+/// - `issue_body: &str` contains valid UTF-8 string data representing an issue description.
+///
+/// ## 4. Postconditions
+/// - Returns `Ok(String)` with verified target path when both HTML comment and bullet annotations are present and identical.
+/// - Returns `Err(String)` explaining why the defect issue description cannot be resolved otherwise.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(N) bounded over byte length of `issue_body`.
+/// - Space Complexity: O(M) bounded auxiliary heap allocation.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Safe evaluation of arbitrary markdown strings without panic.
+/// - State: Stateless delegation.
+/// - Action: Linear token scanning without recursion.
+/// - Resource: Bounded heap allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-RECONCILE-BACKLOG-EXTRACT-DEFECT-TEST-TARGET] | Issue #468
+pub fn extract_defect_test_target(issue_body: &str) -> Result<String, String> {
+    parse_defect_test_target(issue_body)
+}
+
+/// Verifies that a defect test target file exists under `crates/` and passes `cargo test`.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, ISO 26262 ASIL D, and ECSS-E-ST-40C verification mandates
+/// for Issue #468 and Check 14 / Check 34. Guarantees that defect issues cannot resolve without empirical
+/// demonstration of passing tests in the specified Rust source target.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Enforces that `test_target` is a normalized, relative workspace path strictly rooted under `crates/`.
+/// - Strictly rejects directory traversal components (`..`), relative components (`.`), empty segments (`//`),
+///   and backslashes (`\`).
+/// - Enforces that `test_target` terminates with `.rs` and resides under `crates/<pkg>/src/` or `crates/<pkg>/tests/`.
+/// - Enforces that `<repo_root>/<test_target>` exists as a regular file on disk prior to invoking Cargo.
+/// - Resolves the target package and executes `--test <bin>` for integration tests or `--lib` for unit tests.
+/// - Fails closed on any non-zero exit status, compiler error, or subprocess spawn failure.
+///
+/// ## 3. Preconditions
+/// - `repo_root: &Path` points to a valid workspace root containing `Cargo.toml`.
+/// - `test_target: &str` specifies a workspace-relative file path string.
+///
+/// ## 4. Postconditions
+/// - Returns `Ok(())` if and only if target file exists, conforms to all path constraints, and `cargo test` terminates with status 0.
+/// - Returns `Err(String)` with diagnostic path validation or compiler/test output on any failure.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(S + T) where S is the length of `test_target` and T is Cargo compilation and test execution duration.
+/// - Space Complexity: O(P) bounded auxiliary memory for path tokenization and subprocess output buffers.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Rejects empty paths, paths outside `crates/`, directory traversal (`..`), non-normalized paths,
+///   paths not ending in `.rs`, paths outside `src/` or `tests/`, and missing target files.
+/// - State: Read-only verification; introduces zero modifications to repository files.
+/// - Action: Subprocess execution with explicit error propagation and captured output.
+/// - Resource: Cargo process execution governed by host OS process limits.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-RECONCILE-BACKLOG-VERIFY-DEFECT-TEST-TARGET] | Issue #468
+pub fn verify_defect_test_target(repo_root: &Path, test_target: &str) -> Result<(), String> {
+    let clean = test_target.trim().trim_matches('`').trim().trim_start_matches("./");
+    if clean.is_empty() {
+        return Err("Defect test-target path is empty (Check 12 / #468).".to_string());
+    }
+
+    // 1. Enforce zero backslashes (canonical forward slashes only)
+    if clean.contains('\\') {
+        return Err(format!(
+            "Defect test-target '{}' cannot contain backslash separators (Check 14 / #468).",
+            clean
+        ));
+    }
+
+    // 2. Enforce strict directory traversal rejection (no '..' anywhere)
+    if clean.contains("..") {
+        return Err(format!(
+            "Defect test-target '{}' cannot contain directory traversal '..' components (Check 14 / #468).",
+            clean
+        ));
+    }
+
+    // 3. Enforce normalized path components (no empty segments, no '.', no '..')
+    for segment in clean.split('/') {
+        if segment == ".." {
+            return Err(format!(
+                "Defect test-target '{}' cannot contain directory traversal '..' components (Check 14 / #468).",
+                clean
+            ));
+        }
+        if segment == "." {
+            return Err(format!(
+                "Defect test-target '{}' cannot contain relative directory '.' components (Check 14 / #468).",
+                clean
+            ));
+        }
+        if segment.is_empty() {
+            return Err(format!(
+                "Defect test-target '{}' cannot contain empty path components or consecutive slashes (Check 14 / #468).",
+                clean
+            ));
+        }
+    }
+
+    // 4. Enforce std::path::Component invariants for defense-in-depth
+    for component in Path::new(clean).components() {
+        match component {
+            std::path::Component::ParentDir => {
+                return Err(format!(
+                    "Defect test-target '{}' cannot contain directory traversal '..' components (Check 14 / #468).",
+                    clean
+                ));
+            }
+            std::path::Component::CurDir => {
+                return Err(format!(
+                    "Defect test-target '{}' cannot contain relative directory '.' components (Check 14 / #468).",
+                    clean
+                ));
+            }
+            std::path::Component::RootDir | std::path::Component::Prefix(_) => {
+                return Err(format!(
+                    "Defect test-target '{}' must be a relative workspace path under crates/ (Check 14 / #468).",
+                    clean
+                ));
+            }
+            std::path::Component::Normal(_) => {}
+        }
+    }
+
+    // 5. Must reside strictly under crates/
+    if !clean.starts_with("crates/") {
+        return Err(format!(
+            "Defect test-target '{}' must reside under crates/ directory (Check 14 / #468).",
+            clean
+        ));
+    }
+
+    // 6. Must be a Rust source file (.rs)
+    if !clean.ends_with(".rs") {
+        return Err(format!(
+            "Defect test-target '{}' must be a Rust source file ending with '.rs' (Check 14 / #468).",
+            clean
+        ));
+    }
+
+    // 7. Verify file exists on disk under repo_root
+    let target_path = repo_root.join(clean);
+    if !target_path.is_file() {
+        return Err(format!(
+            "Defect test-target file '{}' does not exist on disk under repo root '{}'.",
+            clean,
+            repo_root.display()
+        ));
+    }
+
+    // 8. Parse path structure: crates/<pkg>/src/... or crates/<pkg>/tests/...
+    let after_crates = clean.strip_prefix("crates/").unwrap();
+    let parts: Vec<&str> = after_crates.split('/').collect();
+    if parts.len() < 3 || parts[0].is_empty() {
+        return Err(format!(
+            "Invalid defect test-target path structure: '{}' (must specify a file under crates/<pkg>/src/ or crates/<pkg>/tests/) (Check 14 / #468).",
+            clean
+        ));
+    }
+    let pkg_name = parts[0];
+    let dir_kind = parts[1];
+
+    if dir_kind != "src" && dir_kind != "tests" {
+        return Err(format!(
+            "Defect test-target '{}' must reside under crates/{}/src/ or crates/{}/tests/ (Check 14 / #468).",
+            clean, pkg_name, pkg_name
+        ));
+    }
+
+    let is_tests_dir = dir_kind == "tests";
+    let test_bin = if is_tests_dir {
+        Path::new(parts[2])
+            .file_stem()
+            .and_then(|s| s.to_str())
+    } else {
+        None
+    };
+
+    let manifest_path = repo_root.join("Cargo.toml");
+    let mut cmd = Command::new("cargo");
+    cmd.arg("test");
+    if manifest_path.is_file() {
+        cmd.arg("--manifest-path").arg(&manifest_path);
+    }
+    cmd.arg("-p").arg(pkg_name);
+
+    if let Some(t_bin) = test_bin {
+        cmd.arg("--test").arg(t_bin);
+    } else {
+        cmd.arg("--lib");
+    }
+
+    cmd.current_dir(repo_root);
+
+    let output = cmd.output().map_err(|e| {
+        format!("Failed to spawn 'cargo test' for defect test-target '{}': {}", clean, e)
+    })?;
+
+    if !output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!(
+            "'cargo test' for defect test-target '{}' failed (exit status: {:?}):\nSTDOUT:\n{}\nSTDERR:\n{}",
+            clean,
+            output.status.code(),
+            stdout,
+            stderr
+        ));
+    }
+
+    Ok(())
+}
+
+/// Determines whether a tracker issue represents a defect or bug by inspecting its labels.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ISO 26262 ASIL D safety classification standards for Issue #468.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Inspects normalized issue labels for case-insensitive `"bug"` or `"defect"`.
+///
+/// ## 3. Preconditions
+/// - `issue: &tracker::TrackerIssue` is a well-formed issue reference.
+///
+/// ## 4. Postconditions
+/// - Returns `true` if the issue possesses a bug or defect label; `false` otherwise.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(L) where L is the count of labels on the issue.
+/// - Space Complexity: O(1) auxiliary memory.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Safe non-panicking label inspection across arbitrary label representations.
+/// - State: Read-only evaluation.
+/// - Action: Linear iteration over label collection.
+/// - Resource: Zero heap allocations.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-RECONCILE-BACKLOG-IS-BUG-ISSUE] | Issue #468
+pub fn is_bug_issue(issue: &tracker::TrackerIssue) -> bool {
+    issue.labels.iter().any(|l| {
+        let n = tracker::normalize_label(l.name());
+        n == "bug" || n == "defect"
+    })
+}
+
+/// Validates whether an issue is permitted to transition to or remain in a resolved status under Issue #468.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A and ISO 26262 ASIL D safety objectives for gating defect resolution transitions.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Bug issues transitioning to or residing in a resolved state MUST have matching test-targets that pass `cargo test`.
+/// - Non-bug issues (feature, epic, user-story, use-case, chore) are permitted to resolve without test-target annotations.
+///
+/// ## 3. Preconditions
+/// - `repo_root: &Path` points to workspace containing `Cargo.toml`.
+/// - `issue: &tracker::TrackerIssue` is well-formed.
+/// - `target_label: Option<&str>` indicates optional prospective label being evaluated.
+///
+/// ## 4. Postconditions
+/// - Returns `Ok(())` if transition is allowed; `Err(String)` if blocked.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: Bounded by linear parse scan and `cargo test` execution duration.
+/// - Space Complexity: O(P) auxiliary memory for test execution buffers.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Fails closed on any parse error, missing file, or test failure.
+/// - State: Zero side effects on issue or repository state.
+/// - Action: Deterministic sequential validation gate.
+/// - Resource: Bounded process executions.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-RECONCILE-BACKLOG-VALIDATE-ISSUE-RESOLUTION-TRANSITION] | Issue #468
+pub fn validate_issue_resolution_transition(
+    repo_root: &Path,
+    issue: &tracker::TrackerIssue,
+    target_label: Option<&str>,
+) -> Result<(), String> {
+    let is_transitioning_to_resolved = target_label
+        .map(tracker::is_resolved_label)
+        .unwrap_or_else(|| issue.is_resolved());
+
+    if !is_transitioning_to_resolved {
+        return Ok(());
+    }
+
+    if !is_bug_issue(issue) {
+        return Ok(());
+    }
+
+    let body = issue.body.as_deref().unwrap_or("");
+    let test_target = extract_defect_test_target(body).map_err(|e| {
+        format!(
+            "Cannot transition bug issue #{} ('{}') to resolved: {}",
+            issue.number, issue.title, e
+        )
+    })?;
+
+    verify_defect_test_target(repo_root, &test_target).map_err(|e| {
+        format!(
+            "Cannot transition bug issue #{} ('{}') to resolved: {}",
+            issue.number, issue.title, e
+        )
+    })?;
+
+    Ok(())
+}
+
+/// Validates that all bug issues marked as resolved in the active backlog satisfy their defect test-target verification gate.
+///
+/// ## 1. Safety Intent & Regulatory Scope
+/// Conforms to DO-178C Level A, DO-330 TQL-4, and ISO 26262 ASIL D safety objectives for Issue #468.
+/// Ensures that no defect issue in the active backlog claims resolved status without a passing test target.
+///
+/// ## 2. Invariants & Mathematical Properties
+/// - Scans issues bearing the `"bug"` or `"defect"` label in the open state with a resolved label.
+/// - Delegates to `validate_issue_resolution_transition` for fail-closed validation.
+/// - Historical closed defects (`state == "closed"`) are exempted from active test-target verification.
+/// - Returns the total count of verified defect targets in the active backlog.
+///
+/// ## 3. Preconditions
+/// - `repo_root: &Path` references a valid workspace root.
+/// - `issues: &[tracker::TrackerIssue]` contains tracker issues.
+///
+/// ## 4. Postconditions
+/// - Returns `Ok(usize)` with the count of successfully verified defect targets in the active backlog.
+/// - Returns `Err(String)` if any resolved bug in the active backlog fails test-target verification.
+///
+/// ## 5. Algorithmic Complexity Bounds
+/// - Time Complexity: O(K * T) where K is active resolved bug issue count and T is test runtime.
+/// - Space Complexity: O(1) auxiliary heap memory beyond error strings.
+///
+/// ## 6. Failure Modes & Fault Tolerance
+/// - Interface: Safely iterates through issue list without panicking.
+/// - State: Read-only verification.
+/// - Action: Fails closed on any defect regression.
+/// - Resource: Bounded process executions.
+///
+/// ## 7. Realization & Traceability
+/// Realises: [REQ-RECONCILE-BACKLOG-VERIFY-RECONCILED-DEFECT-ISSUES] | Issue #468
+pub fn verify_reconciled_defect_issues(
+    repo_root: &Path,
+    issues: &[tracker::TrackerIssue],
+) -> Result<usize, String> {
+    let mut verified_count = 0;
+    for issue in issues {
+        let has_resolved_label = issue.labels.iter().any(|l| tracker::is_resolved_label(l.name()));
+        if is_bug_issue(issue) && issue.state.eq_ignore_ascii_case("open") && has_resolved_label {
+            validate_issue_resolution_transition(repo_root, issue, None).map_err(|e| {
+                format!(
+                    "Defect issue #{} ('{}') in active backlog claims resolved status but failed test-target verification: {}",
+                    issue.number, issue.title, e
+                )
+            })?;
+            verified_count += 1;
+        }
+    }
+    Ok(verified_count)
 }
 
 #[cfg(test)]

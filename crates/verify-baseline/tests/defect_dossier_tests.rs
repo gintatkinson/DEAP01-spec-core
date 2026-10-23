@@ -9,8 +9,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use verify_baseline::checks::audit_source_purity;
 use verify_baseline::defect_dossier::{
     derive_defect_title, extract_file_basename, parse_github_repo_slug, resolve_target_repo,
-    run_check_defect, validate_defect_dossier, validate_defect_title, verify_closed_loop_payload,
-    DefectDossierArgs,
+    run_check_defect, validate_defect_dossier, validate_defect_dossier_scoped,
+    validate_defect_title, verify_closed_loop_payload, DefectDossierArgs,
 };
 
 struct ScopedTempWorkspace {
@@ -802,4 +802,480 @@ fn test_rejects_downstream_crate_paths_in_upstream_workspace() {
         );
     }
 }
+
+// ============================================================================
+// Gate 13 & Gate 14 Unit Test Suite (Issue #488 / WP1)
+// ============================================================================
+
+/// Verifies that Gate 13 rejects forbidden customer domain tokens in Section 6 Rust blocks
+/// when targeting upstream compiler crates.
+#[test]
+fn test_gate_13_rejects_domain_tokens_in_section_6_for_upstream_target() {
+    let base = sample_valid_critical_dossier();
+
+    let forbidden_tokens = [
+        "ASSET-",
+        "SECTOR-",
+        "INTERCEPTORS",
+        "RADAR-",
+        "EW-JAM-",
+        "alphaCovOffset",
+        "cuas",
+        "reserveBoostPct",
+        "extraDensityPenalty",
+        "paretoScore",
+        "_buildCandidates",
+        "bridge.relockInterlock(",
+    ];
+
+    for &token in &forbidden_tokens {
+        let snippet = format!(
+            "```rust\npub fn candidate_correction() {{\n    let _val = \"{}\";\n}}\n```",
+            token
+        );
+        let dossier = base.replace(
+            "```cpp\nint32_t bridge_get_last_error(bridge_handle_t handle, char* out, int32_t size) {\n  if (!out || size <= 0) return BRIDGE_ERR_MEMORY;\n  return BRIDGE_OK;\n}\n```",
+            &snippet,
+        );
+
+        let res = validate_defect_dossier(&dossier);
+        assert!(
+            res.is_err(),
+            "Gate 13 must reject domain token '{}' in Section 6 for upstream target",
+            token
+        );
+        let errs = res.unwrap_err().join("\n");
+        assert!(
+            errs.contains("Check 19") || errs.contains("domain") || errs.contains(token),
+            "Expected Check 19 / domain violation message for '{}', got: {}",
+            token,
+            errs
+        );
+    }
+}
+
+/// Verifies that Gate 13 accepts clean, domain-agnostic Rust code in Section 6 for upstream targets.
+#[test]
+fn test_gate_13_accepts_clean_rust_block_for_upstream_target() {
+    let base = sample_valid_critical_dossier();
+    let clean_snippet = "```rust\npub fn sanitize_identifier(raw: &str) -> String {\n    raw.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '_').collect()\n}\n```";
+    let dossier = base.replace(
+        "```cpp\nint32_t bridge_get_last_error(bridge_handle_t handle, char* out, int32_t size) {\n  if (!out || size <= 0) return BRIDGE_ERR_MEMORY;\n  return BRIDGE_OK;\n}\n```",
+        clean_snippet,
+    );
+
+    let res = validate_defect_dossier(&dossier);
+    assert!(
+        res.is_ok(),
+        "Gate 13 must accept clean Rust correction without regex or domain tokens: {:?}",
+        res.err()
+    );
+}
+
+/// Verifies that Gate 13 allows customer domain tokens in Section 6 when targeting a downstream repository.
+#[test]
+fn test_gate_13_allows_domain_tokens_in_section_6_for_downstream_target() {
+    let base = sample_valid_critical_dossier();
+    let downstream_snippet = "```rust\npub fn candidate_correction() {\n    let _val = \"ASSET-RADAR-01\";\n}\n```";
+    let dossier = base
+        .replace(
+            "<!-- test-target: crates/verify-baseline/tests/defect_dossier_tests.rs -->",
+            "<!-- test-target: app_flutter/test/domain_test.dart -->",
+        )
+        .replace(
+            "- **File**: `cesium_native_bridge/src/bridge.cpp:56-61`",
+            "- **File**: `app_flutter/lib/features/tactical/radar_view.dart:42-50`",
+        )
+        .replace(
+            "- **Test-Target**: `crates/verify-baseline/tests/defect_dossier_tests.rs`",
+            "- **Test-Target**: `app_flutter/test/domain_test.dart`",
+        )
+        .replace(
+            "FILE_LOCATION: cesium_native_bridge/src/bridge.cpp:56",
+            "FILE_LOCATION: app_flutter/lib/features/tactical/radar_view.dart:42",
+        )
+        .replace(
+            "```cpp\nint32_t bridge_get_last_error(bridge_handle_t handle, char* out, int32_t size) {\n  if (!out || size <= 0) return BRIDGE_ERR_MEMORY;\n  return BRIDGE_OK;\n}\n```",
+            downstream_snippet,
+        );
+
+    let res = validate_defect_dossier_scoped(
+        &dossier,
+        Some("deap01-cuas-coa-engine"),
+        None,
+    );
+    assert!(
+        res.is_ok(),
+        "Gate 13 must allow customer domain tokens in Section 6 when targeting downstream repository: {:?}",
+        res.err()
+    );
+}
+
+/// Verifies that Gate 14 rejects non-existent or invalid upstream crate test targets.
+#[test]
+fn test_gate_14_rejects_non_existent_or_invalid_upstream_crate() {
+    let base = sample_valid_critical_dossier();
+
+    // 1. Invalid crate name (e.g. non-canonical crate name)
+    let invalid_crate_dossier = base
+        .replace(
+            "<!-- test-target: crates/verify-baseline/tests/defect_dossier_tests.rs -->",
+            "<!-- test-target: crates/nonexistent-compiler-crate/src/lib.rs -->",
+        )
+        .replace(
+            "- **Test-Target**: `crates/verify-baseline/tests/defect_dossier_tests.rs`",
+            "- **Test-Target**: `crates/nonexistent-compiler-crate/src/lib.rs`",
+        );
+    let res_invalid = validate_defect_dossier(&invalid_crate_dossier);
+    assert!(
+        res_invalid.is_err(),
+        "Gate 14 must reject invalid upstream crate name"
+    );
+    let errs_invalid = res_invalid.unwrap_err().join("\n");
+    assert!(
+        errs_invalid.contains("grounding") || errs_invalid.contains("compiler crates"),
+        "Expected grounding error for invalid crate, got: {}",
+        errs_invalid
+    );
+
+    // 2. Test-target not under crates/ in an upstream workspace
+    let non_crate_dossier = base
+        .replace(
+            "<!-- test-target: crates/verify-baseline/tests/defect_dossier_tests.rs -->",
+            "<!-- test-target: docs/epics/EPIC_01.md -->",
+        )
+        .replace(
+            "- **Test-Target**: `crates/verify-baseline/tests/defect_dossier_tests.rs`",
+            "- **Test-Target**: `docs/epics/EPIC_01.md`",
+        );
+    let res_non_crate = validate_defect_dossier(&non_crate_dossier);
+    assert!(
+        res_non_crate.is_err(),
+        "Gate 14 must reject non-crate test-target in upstream workspace"
+    );
+
+    // 3. Non-existent crate directory on disk in scoped workspace
+    let tmp = ScopedTempWorkspace::new("gate14_missing_crate");
+    fs::create_dir_all(tmp.root.join(".pipeline")).expect("create .pipeline");
+    fs::write(tmp.root.join(".pipeline").join("upstream"), "").expect("create upstream sentinel");
+    // Do NOT create crates/compile-sysml
+    let missing_crate_dossier = base
+        .replace(
+            "crates/verify-baseline/tests/defect_dossier_tests.rs",
+            "crates/compile-sysml/tests/test_missing.rs",
+        );
+    let res_missing = validate_defect_dossier_scoped(
+        &missing_crate_dossier,
+        Some("deap01-spec-core"),
+        Some(&tmp.root),
+    );
+    assert!(
+        res_missing.is_err(),
+        "Gate 14 must reject test-target whose crate directory does not exist on disk"
+    );
+    let errs_missing = res_missing.unwrap_err().join("\n");
+    assert!(
+        errs_missing.contains("exist") || errs_missing.contains("grounding"),
+        "Expected missing directory error, got: {}",
+        errs_missing
+    );
+}
+
+/// Verifies that Gate 14 rejects defect dossiers proposing a new Check <N> number
+/// that collides with an assigned canonical check in runner.rs with a different title.
+#[test]
+fn test_gate_14_rejects_colliding_check_number_with_different_title() {
+    let base = sample_valid_critical_dossier();
+
+    let collisions = [
+        ("Check 34: Custom Code Analyzer Gate", "Check 34"),
+        ("Check 19: Flight Envelope Map Gate", "Check 19"),
+        ("Check 11: Extra Trailing Whitespace Gate", "Check 11"),
+        ("Check 36: Unused Parameter Linter", "Check 36"),
+        ("Check 41: SQLite Connection Pool Guard", "Check 41"),
+    ];
+
+    for (colliding_proposal, check_id) in &collisions {
+        let snippet = format!(
+            "### {}\n\n```rust\npub fn fix() {{}}\n```",
+            colliding_proposal
+        );
+        let dossier = base.replace(
+            "```cpp\nint32_t bridge_get_last_error(bridge_handle_t handle, char* out, int32_t size) {\n  if (!out || size <= 0) return BRIDGE_ERR_MEMORY;\n  return BRIDGE_OK;\n}\n```",
+            &snippet,
+        );
+
+        let res = validate_defect_dossier(&dossier);
+        assert!(
+            res.is_err(),
+            "Gate 14 must reject proposed collision '{}' colliding with canonical {}",
+            colliding_proposal,
+            check_id
+        );
+        let errs = res.unwrap_err().join("\n");
+        assert!(
+            errs.contains("Gate 14") || errs.contains("collid") || errs.contains(check_id),
+            "Expected Gate 14 collision error for '{}', got: {}",
+            colliding_proposal,
+            errs
+        );
+    }
+
+    // Also verify rejection when collision is proposed in Section 1 Symptom
+    let symptom_collision = base.replace(
+        "- **Symptom**: Dart FFI caller reads garbage or crashes after calling bridge_get_last_error when another thread concurrently calls bridge_shutdown on the same handle.",
+        "- **Symptom**: Proposes Check 34: Fast String Parser which collides with Zero Regex Invariant.",
+    );
+    let res_symptom = validate_defect_dossier(&symptom_collision);
+    assert!(
+        res_symptom.is_err(),
+        "Gate 14 must reject proposed Check 34 collision in Section 1 symptom"
+    );
+    let errs_symptom = res_symptom.unwrap_err().join("\n");
+    assert!(
+        errs_symptom.contains("collid") || errs_symptom.contains("Check 34"),
+        "Expected collision error in symptom, got: {}",
+        errs_symptom
+    );
+}
+
+/// Verifies that Gate 14 accepts clean dossiers citing canonical checks with their correct title
+/// or proposing unassigned check numbers (e.g. Check 42).
+#[test]
+fn test_gate_14_accepts_clean_dossier_with_canonical_or_non_colliding_check() {
+    let base = sample_valid_critical_dossier();
+
+    // 1. Dossier citing canonical Check 34 with its correct canonical title passes
+    let canonical_citation = base.replace(
+        "```cpp\nint32_t bridge_get_last_error(bridge_handle_t handle, char* out, int32_t size) {\n  if (!out || size <= 0) return BRIDGE_ERR_MEMORY;\n  return BRIDGE_OK;\n}\n```",
+        "### Check 34: Zero Regex Invariant\n\n```rust\npub fn deterministic_fix() -> bool { true }\n```",
+    );
+    let res_canonical = validate_defect_dossier(&canonical_citation);
+    assert!(
+        res_canonical.is_ok(),
+        "Dossier citing canonical Check 34 with correct title must pass: {:?}",
+        res_canonical.err()
+    );
+
+    // 2. Dossier proposing a brand-new, unassigned check number (e.g. Check 42) passes
+    let new_check_proposal = base.replace(
+        "```cpp\nint32_t bridge_get_last_error(bridge_handle_t handle, char* out, int32_t size) {\n  if (!out || size <= 0) return BRIDGE_ERR_MEMORY;\n  return BRIDGE_OK;\n}\n```",
+        "### Check 42: Upstream Kernel Memory Safety Boundary Gate\n\n```rust\npub fn kernel_boundary_guard() -> bool { true }\n```",
+    );
+    let res_new_check = validate_defect_dossier(&new_check_proposal);
+    assert!(
+        res_new_check.is_ok(),
+        "Dossier proposing unassigned Check 42 must pass: {:?}",
+        res_new_check.err()
+    );
+
+    // 3. Standard clean dossier without any proposed check passes
+    let clean_dossier = base.replace(
+        "```cpp\nint32_t bridge_get_last_error(bridge_handle_t handle, char* out, int32_t size) {\n  if (!out || size <= 0) return BRIDGE_ERR_MEMORY;\n  return BRIDGE_OK;\n}\n```",
+        "```rust\npub fn standard_correction() -> bool { true }\n```",
+    );
+    let res_clean = validate_defect_dossier(&clean_dossier);
+    assert!(
+        res_clean.is_ok(),
+        "Standard clean dossier must pass: {:?}",
+        res_clean.err()
+    );
+}
+
+/// Integration Test 1: Verifies that all 6 dogfood defect dossiers in .pipeline/defects/
+/// pass full scoped validation with real file paths and real workspace root.
+#[test]
+fn test_persisted_dogfood_dossiers_pass_scoped_validation_with_real_paths() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(|p| p.parent())
+        .expect("repo root");
+
+    let dogfood_dossiers = [
+        "DEFECT_DOCSTRING_REGRESSION.md",
+        "DEFECT_AUDITOR_466.md",
+        "DEFECT_AUDITOR_467.md",
+        "DEFECT_AUDITOR_468.md",
+        "DEFECT_ZERO_PYTHON_REFERENCES.md",
+        "DEFECT_RULE_20_INIT_LOOP_AND_WP_CONTAMINATION.md",
+    ];
+
+    for name in &dogfood_dossiers {
+        let dossier_path = repo_root.join(".pipeline/defects").join(name);
+        assert!(dossier_path.is_file(), "Dogfood dossier file must exist: {}", dossier_path.display());
+
+        let content = fs::read_to_string(&dossier_path)
+            .unwrap_or_else(|e| panic!("Failed to read {}: {}", dossier_path.display(), e));
+
+        // 1. Validate with explicit upstream repository slug and workspace root
+        let res_scoped = validate_defect_dossier_scoped(
+            &content,
+            Some("gintatkinson/DEAP01-spec-core"),
+            Some(repo_root),
+        );
+        assert!(
+            res_scoped.is_ok(),
+            "Dogfood dossier {} failed scoped validation with repo root: {:?}",
+            name,
+            res_scoped.err()
+        );
+
+        // 2. Validate passing parent directory (.pipeline/defects) as workspace root
+        // Verifies that ancestor traversal resolves the true workspace root
+        let res_parent = validate_defect_dossier_scoped(
+            &content,
+            Some("gintatkinson/DEAP01-spec-core"),
+            Some(&repo_root.join(".pipeline/defects")),
+        );
+        assert!(
+            res_parent.is_ok(),
+            "Dogfood dossier {} failed validation when passing .pipeline/defects: {:?}",
+            name,
+            res_parent.err()
+        );
+    }
+}
+
+/// Integration Test 2: Verifies CLI execution of run_check_defect with --dry-run
+/// against each of the 6 persisted dogfood dossiers in .pipeline/defects/.
+#[test]
+fn test_cli_run_check_defect_dry_run_on_dogfood_dossiers() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(|p| p.parent())
+        .expect("repo root");
+
+    let dogfood_dossiers = [
+        "DEFECT_DOCSTRING_REGRESSION.md",
+        "DEFECT_AUDITOR_466.md",
+        "DEFECT_AUDITOR_467.md",
+        "DEFECT_AUDITOR_468.md",
+        "DEFECT_ZERO_PYTHON_REFERENCES.md",
+        "DEFECT_RULE_20_INIT_LOOP_AND_WP_CONTAMINATION.md",
+    ];
+
+    for name in &dogfood_dossiers {
+        let dossier_path = repo_root.join(".pipeline/defects").join(name);
+        let args = DefectDossierArgs {
+            body_file: Some(dossier_path),
+            title: None,
+            repo: Some("gintatkinson/DEAP01-spec-core".to_string()),
+            label: Some("bug".to_string()),
+            provider: "github".to_string(),
+            dry_run: true,
+            publish: false,
+            issue: None,
+            target: None,
+        };
+
+        let res = run_check_defect(&args);
+        assert_eq!(
+            res,
+            Ok(()),
+            "run_check_defect --dry-run failed for dogfood dossier: {}",
+            name
+        );
+    }
+}
+
+/// Integration Test 3: Verifies Gate 13 rejection of all casing and delimiter variations
+/// of forbidden customer domain tokens in Section 6 Rust blocks for upstream targets.
+#[test]
+fn test_gate_13_rejects_casing_and_delimiter_variations_for_upstream_target() {
+    let base = sample_valid_critical_dossier();
+
+    let casing_variations = [
+        // cuas variants
+        ("cUAS", "cuas"),
+        ("cUas", "cuas"),
+        ("CuAs", "cuas"),
+        ("CUas", "cuas"),
+        ("c_uas", "cuas"),
+        ("C-UAS", "cuas"),
+        ("c-uas", "cuas"),
+        ("C_UAS", "cuas"),
+        // lowercase and mixed-case prefixes
+        ("asset-", "ASSET-"),
+        ("Asset-", "ASSET-"),
+        ("asset_alpha", "ASSET-"),
+        ("sector-", "SECTOR-"),
+        ("Sector-", "SECTOR-"),
+        ("sector_01", "SECTOR-"),
+        ("radar-", "RADAR-"),
+        ("Radar-", "RADAR-"),
+        ("radar_mast", "RADAR-"),
+        ("ew-jam-", "EW-JAM-"),
+        ("ew_jam_", "EW-JAM-"),
+        ("interceptors", "INTERCEPTORS"),
+        ("interceptor", "INTERCEPTORS"),
+        // camelCase and snake_case solver params
+        ("alphacovoffset", "alphaCovOffset"),
+        ("alpha_cov_offset", "alphaCovOffset"),
+        ("reserveboostpct", "reserveBoostPct"),
+        ("reserve_boost_pct", "reserveBoostPct"),
+        ("extradensitypenalty", "extraDensityPenalty"),
+        ("extra_density_penalty", "extraDensityPenalty"),
+        ("paretoscore", "paretoScore"),
+        ("pareto_score", "paretoScore"),
+        ("buildcandidates", "_buildCandidates"),
+        ("build_candidates", "_buildCandidates"),
+    ];
+
+    for &(token, canonical) in &casing_variations {
+        let snippet = format!(
+            "```rust\npub fn probe() {{\n    let _tok = \"{}\";\n}}\n```",
+            token
+        );
+        let dossier = base.replace(
+            "```cpp\nint32_t bridge_get_last_error(bridge_handle_t handle, char* out, int32_t size) {\n  if (!out || size <= 0) return BRIDGE_ERR_MEMORY;\n  return BRIDGE_OK;\n}\n```",
+            &snippet,
+        );
+
+        let res = validate_defect_dossier(&dossier);
+        assert!(
+            res.is_err(),
+            "Gate 13 must reject token casing variation '{}' (expected '{}')",
+            token,
+            canonical
+        );
+        let errs = res.unwrap_err().join("\n");
+        assert!(
+            errs.contains("Check 19") || errs.contains("domain"),
+            "Expected Check 19 domain violation for '{}', got: {}",
+            token,
+            errs
+        );
+    }
+}
+
+/// Integration Test 4: Verifies that Mermaid sequence diagrams referencing Check <N> numbers
+/// in arrows and lifelines are immune to Gate 14 check collision false positives.
+#[test]
+fn test_gate_14_ignores_check_citations_inside_code_fences_and_mermaid_diagrams() {
+    let base = sample_valid_critical_dossier();
+
+    // Embed Mermaid diagram containing Check 39 and Check 40 citations in sequence arrows
+    let mermaid_with_checks = r#"```mermaid
+sequenceDiagram
+    participant Verifier as verify-baseline
+    participant Runner as flutter test
+    Verifier->>Runner: Check 39: Scan test/ & integration_test/ AST for Mock/Fake/Stub classes
+    Verifier->>Runner: Check 40: Verify tester.tap() on all interactive keys & pairwise 2D Rect.overlaps == false
+```"#;
+
+    let target_diagram = "```mermaid\nsequenceDiagram\n    participant T1 as Thread 1 (Get Error)\n    participant T2 as Thread 2 (Shutdown)\n    T1->>T2: Concurrent execution\n    Note over T1: Acquires mutex, extracts c_str pointer p, releases mutex\n    Note over T2: Acquires mutex, erases BridgeState, deallocates string backing p\n    T1-->>T2: Dereferences p (Use-After-Free)\n```";
+    assert!(base.contains(target_diagram), "sample_valid_critical_dossier must contain target diagram");
+    let dossier = base.replace(target_diagram, mermaid_with_checks);
+    let res = validate_defect_dossier(&dossier);
+    assert!(
+        res.is_ok(),
+        "Mermaid sequence diagram with Check citations must NOT trigger Gate 14 collision: {:?}",
+        res.err()
+    );
+}
+
+
+
+
+
 

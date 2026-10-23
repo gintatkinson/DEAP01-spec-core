@@ -117,6 +117,10 @@ struct Cli {
     /// Filter to run a specific audit gate
     #[arg(long)]
     gate: Option<String>,
+
+    /// Dry run mode: execute verification checks without persisting defect dossiers to disk
+    #[arg(long)]
+    dry_run: bool,
 }
 
 /// Executes deterministic enum `Subcommands` within `crates/verify-baseline/src/main.rs`.
@@ -245,6 +249,7 @@ fn main() {
             spec_only: cli.spec_only,
             only: cli.only,
             gate: cli.gate,
+            dry_run: cli.dry_run,
         };
 
         if let Err(()) = run(&options) {

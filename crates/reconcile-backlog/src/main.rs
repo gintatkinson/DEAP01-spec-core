@@ -220,6 +220,7 @@ fn main() {
                 println!("  - Frontmatter issue IDs updated: {}", summary.frontmatters_updated);
                 println!("  - Checklist items reconciled:   {}", summary.checklists_updated);
                 println!("  - Placeholder blocks purged:     {}", summary.placeholders_purged);
+                println!("  - Defect test-targets verified:  {}", summary.defect_targets_verified);
                 if !options.offline {
                     println!("  - Remote issues synced:          {}", summary.remote_issues_synced);
                 }
