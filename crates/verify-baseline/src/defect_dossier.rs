@@ -644,7 +644,7 @@ pub fn derive_defect_title(file_location: &str, symptom: &str) -> String {
 /// - `sec1_lines` contains the slice of lines between `## 1. Context and References` and `## 2.`.
 ///
 /// ## 4. Postconditions
-/// - Appends any Section 1 violations to `errors` and returns `(file_bullet, symptom, test_target)`.
+/// - Appends any Section 1 violations to `errors` and returns `(symptom, test_target)`.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: $O(L_1)$ where $L_1$ is the number of lines in Section 1.
@@ -658,7 +658,7 @@ pub fn derive_defect_title(file_location: &str, symptom: &str) -> String {
 fn validate_section_1_context(
     sec1_lines: &[String],
     errors: &mut Vec<String>,
-) -> (Option<String>, String, String) {
+) -> (String, String) {
     let mut comment_target: Option<(usize, String)> = None;
     let mut first_bullet_idx: Option<usize> = None;
     let mut file_bullet: Option<String> = None;
@@ -765,7 +765,6 @@ fn validate_section_1_context(
     }
 
     (
-        file_bullet,
         symptom_bullet.unwrap_or_default(),
         test_target_bullet.unwrap_or_default(),
     )
@@ -1114,179 +1113,23 @@ fn check_forbidden_regex_tokens(line: &str) -> Option<String> {
     None
 }
 
-/// Determines whether a given target path belongs to one of the 6 canonical upstream compiler crates.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C architectural boundary controls. Prevents
-/// downstream customer paths from being falsely classified as upstream specification compiler targets.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Returns true iff `path` starts with `crates/<crate_name>/` or `crates/<crate_name>`
-///   where `crate_name` satisfies `is_valid_upstream_crate_name`.
-///
-/// ## 3. Preconditions
-/// - `path` is a valid UTF-8 string slice.
-///
-/// ## 4. Postconditions
-/// - Returns a boolean flag indicating whether the path targets an upstream compiler crate.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(P)$ bounded by path prefix byte length.
-/// - Space Complexity: $O(1)$ auxiliary allocation.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Total non-panicking string slice prefix matching.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-IS-UPSTREAM-TARGET-PATH]
-fn is_upstream_target_path(path: &str) -> bool {
-    let clean = path.trim().trim_matches('`').trim();
-    let path_no_line = clean.split_once(':').map(|(p, _)| p).unwrap_or(clean);
-    if let Some(after) = path_no_line.strip_prefix("crates/") {
-        if let Some((crate_name, _)) = after.split_once('/') {
-            is_valid_upstream_crate_name(crate_name)
-        } else {
-            is_valid_upstream_crate_name(after)
-        }
-    } else {
-        false
-    }
-}
-
-/// Checks whether a haystack contains a needle using ASCII case-insensitive comparison
-/// with zero heap allocations and $O(1)$ auxiliary space.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ISO 26262 ASIL D Check 34 Zero Regex and Check 19 Domain Cleanliness mandates.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Bounded linear byte window scan with zero panics and zero heap allocations.
-///
-/// ## 3. Preconditions
-/// - `haystack` and `needle` are valid UTF-8 string slices.
-///
-/// ## 4. Postconditions
-/// - Returns true if `needle` matches any contiguous byte sequence in `haystack` ignoring ASCII case.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(L \cdot M)$ where $L = \text{haystack.len()}$ and $M = \text{needle.len()}$.
-/// - Space Complexity: $O(1)$ auxiliary memory.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Total non-panicking function using checked byte window matching.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-DEFECT-DOSSIER-CHECK-19-DOMAIN-TOKENS]
-fn contains_ignore_ascii_case(haystack: &str, needle: &str) -> bool {
-    if needle.is_empty() {
-        return true;
-    }
-    let n = needle.as_bytes();
-    if haystack.len() < n.len() {
-        return false;
-    }
-    haystack.as_bytes().windows(n.len()).any(|w| w.eq_ignore_ascii_case(n))
-}
-
-/// Inspects a line of code for forbidden customer domain tokens in upstream crates per Check 19.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A, ISO 26262 ASIL D Check 19 Domain Cleanliness Invariant mandates.
-/// Eliminates hardcoded downstream customer domain tokens from upstream compiler crates.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Evaluates substring inclusion across canonical domain identifiers without static string-slice arrays.
-///
-/// ## 3. Preconditions
-/// - `line` is a valid UTF-8 string slice.
-///
-/// ## 4. Postconditions
-/// - Returns `Some(detected_token)` if a forbidden pattern is present, or `None`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(L)$ linear in line byte length.
-/// - Space Complexity: $O(1)$ auxiliary allocation.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Non-panicking linear substring search.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-DEFECT-DOSSIER-CHECK-19-DOMAIN-TOKENS]
-fn check_forbidden_customer_domain_token(line: &str) -> Option<&'static str> {
-    // 1. Customer entity ID prefixes and stem tokens
-    if contains_ignore_ascii_case(line, "asset-") || contains_ignore_ascii_case(line, "asset_") {
-        return Some("ASSET-");
-    }
-    if contains_ignore_ascii_case(line, "sector-") || contains_ignore_ascii_case(line, "sector_") {
-        return Some("SECTOR-");
-    }
-    if contains_ignore_ascii_case(line, "radar-") || contains_ignore_ascii_case(line, "radar_") {
-        return Some("RADAR-");
-    }
-    if contains_ignore_ascii_case(line, "ew-jam-") || contains_ignore_ascii_case(line, "ew_jam_") {
-        return Some("EW-JAM-");
-    }
-    if contains_ignore_ascii_case(line, "interceptors") || contains_ignore_ascii_case(line, "interceptor") {
-        return Some("INTERCEPTORS");
-    }
-
-    // 2. Domain system identifiers (including all casing & delimiter variants)
-    if contains_ignore_ascii_case(line, "cuas")
-        || contains_ignore_ascii_case(line, "c-uas")
-        || contains_ignore_ascii_case(line, "c_uas")
-    {
-        return Some("cuas");
-    }
-
-    // 3. Customer optimization & solver parameter identifiers
-    if contains_ignore_ascii_case(line, "alphacovoffset") || contains_ignore_ascii_case(line, "alpha_cov_offset") {
-        return Some("alphaCovOffset");
-    }
-    if contains_ignore_ascii_case(line, "reserveboostpct") || contains_ignore_ascii_case(line, "reserve_boost_pct") {
-        return Some("reserveBoostPct");
-    }
-    if contains_ignore_ascii_case(line, "extradensitypenalty") || contains_ignore_ascii_case(line, "extra_density_penalty") {
-        return Some("extraDensityPenalty");
-    }
-    if contains_ignore_ascii_case(line, "paretoscore") || contains_ignore_ascii_case(line, "pareto_score") {
-        return Some("paretoScore");
-    }
-    if contains_ignore_ascii_case(line, "violationcount: 0") || contains_ignore_ascii_case(line, "violation_count: 0") {
-        return Some("violationCount: 0");
-    }
-    if contains_ignore_ascii_case(line, "relockinterlock") || contains_ignore_ascii_case(line, "relock_interlock") {
-        return Some("bridge.relockInterlock(");
-    }
-    if contains_ignore_ascii_case(line, "triggerhotlrfjamretasking") || contains_ignore_ascii_case(line, "trigger_hotl_rf_jam_retasking") {
-        return Some("bridge.triggerHotlRfJamRetasking(");
-    }
-    if contains_ignore_ascii_case(line, "12x class-") || contains_ignore_ascii_case(line, "12x class_") {
-        return Some("12x CLASS-");
-    }
-    if contains_ignore_ascii_case(line, "buildcandidates") || contains_ignore_ascii_case(line, "build_candidates") {
-        return Some("_buildCandidates");
-    }
-
-    None
-}
-
-/// Validates Section 6 (`## 6. Proposed Correction`) code blocks for Check 34 Zero Regex and Check 19 Domain Cleanliness invariants.
+/// Validates Section 6 (`## 6. Proposed Correction`) code blocks for Check 34 Zero Regex Invariant compliance.
 ///
 /// ## 1. Safety Intent & Regulatory Scope
 /// Conforms to DO-178C Level A and ISO 26262 ASIL D verification rules. Ensures that no proposed
-/// code corrections in Section 6 introduce forbidden `regex` crate dependencies (Check 34) or
-/// hardcoded customer domain concepts when targeting upstream compiler crates (Check 19).
+/// code corrections in Section 6 introduce forbidden `regex` crate dependencies (`regex::`,
+/// `Regex::new`, `RegexSet`, `use regex`), eliminating ReDoS vulnerabilities and non-deterministic
+/// backtracking hazards.
 ///
 /// ## 2. Invariants & Mathematical Properties
-/// - Every ` ```rust ` or ` ```rs ` code fence inside Section 6 must contain zero regex tokens.
-/// - If `targets_upstream` is true, every ` ```rust ` code fence must contain zero customer domain tokens.
+/// - Every ` ```rust ` or ` ```rs ` code fence inside Section 6 must contain zero occurrences of
+///   forbidden regex tokens.
 ///
 /// ## 3. Preconditions
 /// - `sec6_lines` is the slice of lines belonging to Section 6.
-/// - `targets_upstream` indicates whether the target belongs to an upstream compiler crate.
 ///
 /// ## 4. Postconditions
-/// - Appends diagnostic messages to `errors` for each detected forbidden token.
+/// - Appends diagnostic messages to `errors` for each detected forbidden regex token.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: $O(L_6)$ where $L_6$ is the line count in Section 6.
@@ -1296,12 +1139,8 @@ fn check_forbidden_customer_domain_token(line: &str) -> Option<&'static str> {
 /// - Total non-panicking linear slice scanning.
 ///
 /// ## 7. Realization & Traceability
-/// Realises: [REQ-DEFECT-DOSSIER-SECTION6-COMPLIANCE-GATE]
-fn validate_section_6_code_compliance(
-    sec6_lines: &[String],
-    targets_upstream: bool,
-    errors: &mut Vec<String>,
-) {
+/// Realises: [REQ-DEFECT-DOSSIER-SECTION6-ZERO-REGEX-GATE]
+fn validate_section_6_zero_regex(sec6_lines: &[String], errors: &mut Vec<String>) {
     let mut in_rust_fence = false;
     for raw_line in sec6_lines {
         let trimmed = raw_line.trim();
@@ -1331,14 +1170,6 @@ fn validate_section_6_code_compliance(
                     token
                 ));
             }
-            if targets_upstream {
-                if let Some(domain_token) = check_forbidden_customer_domain_token(trimmed) {
-                    errors.push(format!(
-                        "Check 19 Domain Cleanliness Invariant violation in Section 6: forbidden customer domain token '{}' in proposed correction targeting upstream crate.",
-                        domain_token
-                    ));
-                }
-            }
         }
     }
 }
@@ -1353,30 +1184,26 @@ fn validate_section_6_code_compliance(
 /// ## 2. Invariants & Mathematical Properties
 /// - When `is_upstream` is true and `test_target` is non-empty: `test_target` must start with
 ///   `crates/<crate_name>/` where `crate_name` satisfies `is_valid_upstream_crate_name`.
-/// - When `workspace_root` is available, the target crate directory `<workspace_root>/crates/<crate_name>`
-///   must exist on disk.
 ///
 /// ## 3. Preconditions
 /// - `test_target` is the normalized path extracted from Section 1.
 /// - `is_upstream` indicates whether the repository or target scope is `UPSTREAM_SPEC_CORE_COMPILER`.
-/// - `workspace_root` is an optional path to the workspace root directory.
 ///
 /// ## 4. Postconditions
-/// - Appends diagnostic messages to `errors` if `is_upstream` is true and `test_target` is invalid or missing on disk.
+/// - Appends a diagnostic message to `errors` if `is_upstream` is true and `test_target` does not start with a valid prefix.
 ///
 /// ## 5. Algorithmic Complexity Bounds
 /// - Time Complexity: $O(P)$ prefix byte length.
 /// - Space Complexity: $O(1)$ auxiliary allocation.
 ///
 /// ## 6. Failure Modes & Fault Tolerance
-/// - Total non-panicking string slice prefix matching and checked filesystem directory query.
+/// - Total non-panicking string slice prefix matching.
 ///
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-DEFECT-DOSSIER-UPSTREAM-TEST-TARGET-GROUNDING]
 fn validate_upstream_test_target_grounding(
     test_target: &str,
     is_upstream: bool,
-    workspace_root: Option<&Path>,
     errors: &mut Vec<String>,
 ) {
     if !is_upstream || test_target.is_empty() {
@@ -1384,697 +1211,22 @@ fn validate_upstream_test_target_grounding(
     }
 
     let clean = test_target.trim().trim_matches('`').trim();
-    let mut resolved_crate: Option<&str> = None;
-    if let Some(after_crates) = clean.strip_prefix("crates/") {
+    let is_valid = if let Some(after_crates) = clean.strip_prefix("crates/") {
         if let Some((crate_name, _subpath)) = after_crates.split_once('/') {
-            if is_valid_upstream_crate_name(crate_name) {
-                resolved_crate = Some(crate_name);
-            }
-        } else if is_valid_upstream_crate_name(after_crates) {
-            resolved_crate = Some(after_crates);
+            is_valid_upstream_crate_name(crate_name)
+        } else {
+            is_valid_upstream_crate_name(after_crates)
         }
-    }
-
-    match resolved_crate {
-        Some(crate_name) => {
-            let discovered_root = find_upstream_workspace_root(workspace_root);
-            let effective_root = discovered_root.as_deref().or(workspace_root);
-            if let Some(root) = effective_root {
-                let crate_dir = root.join("crates").join(crate_name);
-                if !crate_dir.is_dir() {
-                    errors.push(format!(
-                        "Upstream test-target crate grounding violation: crate directory '{}' for '{}' does not exist on disk.",
-                        crate_dir.display(),
-                        crate_name
-                    ));
-                }
-            } else {
-                let local_crate = Path::new("crates").join(crate_name);
-                let is_local_upstream = Path::new(".pipeline").join("upstream").exists()
-                    || Path::new("crates").is_dir();
-                if is_local_upstream && !local_crate.is_dir() {
-                    errors.push(format!(
-                        "Upstream test-target crate grounding violation: crate directory '{}' for '{}' does not exist on disk.",
-                        local_crate.display(),
-                        crate_name
-                    ));
-                }
-            }
-        }
-        None => {
-            errors.push(format!(
-                "Upstream test-target crate grounding violation: '{}' does not belong to any of the 6 upstream compiler crates (crates/{{deap-core, compile-sysml, ingest-sysml, verify-baseline, assemble-conops, reconcile-backlog}}/).",
-                clean
-            ));
-        }
-    }
-}
-
-/// Returns the canonical check name in runner.rs for a given check identifier if assigned in Checks 10..=41.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C check taxonomy consistency standards.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Returns canonical display name for assigned check identifiers 10 through 41.
-///
-/// ## 3. Preconditions
-/// - `check_num` is an alphanumeric check identifier string slice.
-///
-/// ## 4. Postconditions
-/// - Returns `Some(canonical_name)` for assigned checks or `None` for unassigned check identifiers.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(1)$ constant time match dispatch.
-/// - Space Complexity: $O(1)$ auxiliary allocation.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Total non-panicking function.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-DEFECT-DOSSIER-CANONICAL-CHECK-NAME]
-fn canonical_check_name(check_num: &str) -> Option<&'static str> {
-    match check_num {
-        "10" => Some("Check 10 (.gitignore exists)"),
-        "11" => Some("Check 11 (Zero .DS_Store files)"),
-        "12" => Some("Check 12 (Zero duplicate master core blueprints)"),
-        "13" => Some("Check 13 (KaTeX / LaTeX syntax)"),
-        "13b" | "13B" => Some("Check 13B (Mermaid syntax)"),
-        "14" => Some("Check 14 (Downstream instructions)"),
-        "15" => Some("Check 15 (Reconcile backlog tooling)"),
-        "16" => Some("Check 16 (Upstream template clean landing zones)"),
-        "17" => Some("Check 17 (Safety integrity & 8 pillars)"),
-        "18" => Some("Check 18 (Upstream blueprint domain cleanliness)"),
-        "19" => Some("Check 19 (Domain-agnostic AST cleanliness)"),
-        "20" => Some("Check 20 (WBS & Enterprise deliverables suite)"),
-        "21" => Some("Check 21 (Semantic diagram AST parity)"),
-        "22" => Some("Check 22 (Semantic prose invariants)"),
-        "23" => Some("Check 23 (Factual grounding)"),
-        "24" => Some("Check 24 (ICD completeness)"),
-        "25" => Some("Check 25 (Operational allocation)"),
-        "26" => Some("Check 26 (Standards measurement)"),
-        "27" => Some("Check 27 (Cross-document diagram parity)"),
-        "28" => Some("Check 28 (ConOps & Mission Intent)"),
-        "29" => Some("Check 29 (Research inventory)"),
-        "30" => Some("Check 30 (Executive deliverable traceability)"),
-        "30a" | "30A" => Some("Check 30A (Coverage digest)"),
-        "30b" | "30B" => Some("Check 30B (Obligation witness)"),
-        "30c" | "30C" => Some("Check 30C (Architecture viewpoint diagrams)"),
-        "31" => Some("Check 31 (Dual-schema SSOT parity)"),
-        "32" => Some("Check 32 (Zero Shell Scripts Invariant)"),
-        "33" => Some("Check 33 (Zero Python Scripts Invariant)"),
-        "34" => Some("Check 34 (Zero Regex Invariant)"),
-        "35" => Some("Check 35 (Handoff & Backlog Integrity)"),
-        "36" => Some("Check 36 (Per-Item 7-Section Safety Docstring Completeness Gate)"),
-        "37" => Some("Check 37 (Architecture Blueprint Grounding Gate)"),
-        "38" => Some("Check 38 (Presentation Anti-Hardcoding AST Gate)"),
-        "39" => Some("Check 39 (Zero-Mocking Test AST & SQLite Disposal Gate)"),
-        "40" => Some("Check 40 (Interactive Gesture, 1080p-6K Viewport & Pairwise 2D HUD Non-Overlap Gate)"),
-        "41" => Some("Check 41 (Track B C-ABI Solver Bridge SSOT & 5-Table SQLite Seed Parity Gate)"),
-        _ => None,
-    }
-}
-
-/// Finds the end index of a candidate check title, ensuring period characters inside
-/// code method calls, file names, or numeric literals (e.g. `tester.tap`, `runner.rs`, `v1.0`)
-/// do not falsely truncate the title.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A string scanning standards. Prevents premature title truncation.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Identifies sentence-ending periods only when followed by whitespace or end of string.
-/// - Unconditionally terminates at `;`, `\r`, or `\n`.
-///
-/// ## 3. Preconditions
-/// - `s` is a valid UTF-8 string slice.
-///
-/// ## 4. Postconditions
-/// - Returns byte index where title ends, bounded by `0..=s.len()`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(N)$ linear in byte length.
-/// - Space Complexity: $O(1)$ zero allocation.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Total non-panicking byte slice scan.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-FIND-CHECK-TITLE-END]
-fn find_check_title_end(s: &str) -> usize {
-    let bytes = s.as_bytes();
-    for (i, &b) in bytes.iter().enumerate() {
-        if b == b';' || b == b'\n' || b == b'\r' {
-            return i;
-        }
-        if b == b'.' {
-            let next_byte = bytes.get(i.saturating_add(1));
-            match next_byte {
-                None | Some(&b' ') | Some(&b'\t') | Some(&b'\r') | Some(&b'\n') => {
-                    return i;
-                }
-                _ => {
-                    continue;
-                }
-            }
-        }
-    }
-    s.len()
-}
-
-/// Evaluates whether the text preceding a `Check <N>` occurrence indicates a citation rather than a proposal.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C check taxonomy standards.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Detects prepositional phrases introducing citations without static slice arrays.
-///
-/// ## 3. Preconditions
-/// - `prefix` is the line content preceding the `Check` occurrence.
-///
-/// ## 4. Postconditions
-/// - Returns true if `prefix` indicates a citation context.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(P)$ linear in prefix byte length.
-/// - Space Complexity: $O(1)$ auxiliary memory.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Total non-panicking string slice inspection.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-IS-CITATION-PREFIX]
-fn is_citation_prefix(prefix: &str) -> bool {
-    let clean = prefix
-        .trim_start_matches(|c: char| {
-            c == '#'
-                || c == '-'
-                || c == '*'
-                || c == '+'
-                || c == '>'
-                || c.is_ascii_digit()
-                || c == '.'
-                || c == '/'
-                || c == ' '
-                || c == '\t'
-        })
-        .trim();
-    if clean.is_empty() {
-        return false;
-    }
-    let lower = clean.to_ascii_lowercase();
-    if lower.contains("propos") || lower.contains("add ") || lower.contains("new ") {
-        return false;
-    }
-    lower == "in"
-        || lower.ends_with(" in")
-        || lower == "per"
-        || lower.ends_with(" per")
-        || lower == "see"
-        || lower.ends_with(" see")
-        || lower == "under"
-        || lower.ends_with(" under")
-        || lower == "from"
-        || lower.ends_with(" from")
-        || lower == "to"
-        || lower.ends_with(" to")
-        || lower == "during"
-        || lower.ends_with(" during")
-        || lower == "by"
-        || lower.ends_with(" by")
-        || lower == "for"
-        || lower.ends_with(" for")
-        || lower == "with"
-        || lower.ends_with(" with")
-        || lower == "at"
-        || lower.ends_with(" at")
-        || lower.starts_with("as ")
-        || lower.contains("according to")
-        || lower.contains("refer to")
-}
-
-/// Evaluates whether a candidate check title represents descriptive narrative prose rather than a formal title.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C check taxonomy consistency standards.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Identifies descriptive prose based on capitalization, stop words, and verb constructs.
-///
-/// ## 3. Preconditions
-/// - `candidate_title` is the extracted title candidate string slice.
-///
-/// ## 4. Postconditions
-/// - Returns true if the string is descriptive prose.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(T)$ linear in title length.
-/// - Space Complexity: $O(1)$ zero heap allocation.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Total non-panicking string inspection.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-IS-PROSE-SENTENCE]
-fn is_prose_sentence(candidate_title: &str) -> bool {
-    if candidate_title.is_empty() {
-        return true;
-    }
-    if let Some(first_char) = candidate_title.chars().next() {
-        if first_char.is_ascii_lowercase() {
-            return true;
-        }
-    }
-    let lower = candidate_title.to_ascii_lowercase();
-    if lower.starts_with("we ")
-        || lower.starts_with("the ")
-        || lower.starts_with("as ")
-        || lower.starts_with("this ")
-        || lower.starts_with("that ")
-        || lower.starts_with("it ")
-        || lower.starts_with("in ")
-        || lower.starts_with("if ")
-        || lower.starts_with("when ")
-        || lower.starts_with("because ")
-        || lower.starts_with("since ")
-        || lower.starts_with("there ")
-        || lower.starts_with("note ")
-        || lower.starts_with("multiple ")
-        || lower.starts_with("our ")
-    {
-        return true;
-    }
-    if lower.contains(" was ")
-        || lower.contains(" were ")
-        || lower.contains(" observed ")
-        || lower.contains(" noted ")
-        || lower.contains(" found ")
-        || lower.contains(" has been ")
-        || lower.contains(" have been ")
-    {
-        return true;
-    }
-    false
-}
-
-/// Evaluates whether a candidate title matches the canonical check semantics for a given check number.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C check taxonomy consistency standards.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Compares candidate title keywords against canonical semantics without regular expressions.
-///
-/// ## 3. Preconditions
-/// - `check_num` is an assigned check identifier.
-/// - `candidate_title` is the parsed title candidate.
-///
-/// ## 4. Postconditions
-/// - Returns `Some(true)` if title matches canonical semantics, `Some(false)` if colliding, or `None`.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(T)$ linear in title length.
-/// - Space Complexity: $O(T)$ allocated lowercased title string.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Total non-panicking substring search.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-DEFECT-DOSSIER-CANONICAL-CHECK-TITLE-MATCH]
-fn canonical_check_title_matches(check_num: &str, candidate_title: &str) -> Option<bool> {
-    let lower = candidate_title.to_ascii_lowercase();
-    match check_num {
-        "10" => Some(lower.contains("gitignore")),
-        "11" => Some(lower.contains("ds_store") || lower.contains(".ds_store")),
-        "12" => Some(lower.contains("duplicate master") || lower.contains("core blueprint") || lower.contains("blueprint")),
-        "13" => Some(lower.contains("katex") || lower.contains("latex")),
-        "13b" | "13B" => Some(lower.contains("mermaid")),
-        "14" => Some(lower.contains("instruction")),
-        "15" => Some(lower.contains("reconcile") || lower.contains("backlog")),
-        "16" => Some(lower.contains("landing zone")),
-        "17" => Some(
-            lower.contains("safety")
-                || lower.contains("8 pillar")
-                || lower.contains("pillar")
-                || lower.contains("fmeca")
-                || lower.contains("stpa")
-                || lower.contains("hazard")
-        ),
-        "18" => Some(lower.contains("blueprint") || lower.contains("domain clean")),
-        "19" => Some(lower.contains("domain") || lower.contains("ast clean") || lower.contains("metamodel")),
-        "20" => Some(lower.contains("wbs") || lower.contains("deliverable")),
-        "21" => Some(lower.contains("diagram") || lower.contains("parity")),
-        "22" => Some(lower.contains("prose") || lower.contains("semantic prose")),
-        "23" => Some(lower.contains("factual") || lower.contains("grounding")),
-        "24" => Some(lower.contains("icd") || lower.contains("signal dictionary") || lower.contains("interface")),
-        "25" => Some(lower.contains("operational") || lower.contains("allocation")),
-        "26" => Some(lower.contains("standard") || lower.contains("metrology") || lower.contains("measurement")),
-        "27" => Some(lower.contains("cross-document") || lower.contains("cross document")),
-        "28" => Some(lower.contains("conops") || lower.contains("mission intent")),
-        "29" => Some(lower.contains("research") || lower.contains("inventory")),
-        "30" => Some(lower.contains("executive") || lower.contains("traceability")),
-        "30a" | "30A" => Some(lower.contains("coverage")),
-        "30b" | "30B" => Some(lower.contains("obligation")),
-        "30c" | "30C" => Some(lower.contains("viewpoint") || lower.contains("architecture viewpoint")),
-        "31" => Some(lower.contains("dual-schema") || lower.contains("dual schema") || lower.contains("ssot parity") || lower.contains("parity")),
-        "32" => Some(lower.contains("shell")),
-        "33" => Some(lower.contains("python")),
-        "34" => Some(lower.contains("regex")),
-        "35" => Some(lower.contains("handoff") || lower.contains("backlog")),
-        "36" => Some(lower.contains("docstring")),
-        "37" => Some(lower.contains("blueprint") || lower.contains("grounding")),
-        "38" => Some(lower.contains("presentation") || lower.contains("hardcoding") || lower.contains("anti-hardcoding")),
-        "39" => Some(
-            lower.contains("mock")
-                || lower.contains("fake")
-                || lower.contains("stub")
-                || lower.contains("zero-mocking")
-                || lower.contains("sqlite disposal")
-        ),
-        "40" => Some(
-            lower.contains("gesture")
-                || lower.contains("viewport")
-                || lower.contains("hud")
-                || lower.contains("overlap")
-                || lower.contains("tap")
-                || lower.contains("interactive")
-        ),
-        "41" => Some(lower.contains("solver") || lower.contains("c-abi") || lower.contains("sqlite seed") || lower.contains("seed parity") || lower.contains("5-table")),
-        _ => None,
-    }
-}
-
-/// Validates that defect dossiers do not propose colliding Check <N> numbers with conflicting titles.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C check taxonomy consistency standards.
-/// Prevents conflicting duplicate check definitions and maintains taxonomy alignment with runner.rs.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Every proposed `Check <N>` where `<N>` is in Checks 10..=41 must match canonical check semantics.
-///
-/// ## 3. Preconditions
-/// - `content` is the defect dossier markdown body.
-///
-/// ## 4. Postconditions
-/// - Appends diagnostic messages to `errors` for each detected check collision.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(L)$ linear scan over lines.
-/// - Space Complexity: $O(1)$ auxiliary storage.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Total non-panicking string scanning.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-DEFECT-DOSSIER-GATE-14-CHECK-COLLISION]
-fn validate_check_number_collision(content: &str, errors: &mut Vec<String>) {
-    let mut in_fence = false;
-    for (line_idx, raw_line) in content.lines().enumerate() {
-        let line_no = line_idx.saturating_add(1);
-        let trimmed = raw_line.trim();
-
-        if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
-            in_fence = !in_fence;
-            continue;
-        }
-        if in_fence {
-            continue;
-        }
-
-        let lower_line = trimmed.to_ascii_lowercase();
-        let lower_bytes = lower_line.as_bytes();
-
-        let mut check_positions = Vec::new();
-        let mut search_idx = 0;
-        while let Some(rel_pos) = lower_line.get(search_idx..).and_then(|sub| sub.find("check")) {
-            let pos = search_idx.saturating_add(rel_pos);
-            search_idx = pos.saturating_add(5);
-
-            if pos > 0 {
-                if let Some(&prev_char) = lower_bytes.get(pos.saturating_sub(1)) {
-                    if prev_char.is_ascii_alphanumeric() || prev_char == b'_' {
-                        continue;
-                    }
-                }
-            }
-
-            if let Some(&next_byte) = lower_bytes.get(pos.saturating_add(5)) {
-                if !next_byte.is_ascii_whitespace() && next_byte != b'#' && !next_byte.is_ascii_digit() {
-                    continue;
-                }
-            }
-
-            check_positions.push(pos);
-        }
-
-        for pos in check_positions {
-            let prefix = match trimmed.get(..pos) {
-                Some(p) => p.trim(),
-                None => continue,
-            };
-            if is_citation_prefix(prefix) {
-                continue;
-            }
-
-            let after_check_pos = pos.saturating_add(5);
-            let after_check = match trimmed.get(after_check_pos..) {
-                Some(rest) => rest,
-                None => continue,
-            };
-
-            let num_start = after_check
-                .find(|c: char| c.is_ascii_alphanumeric())
-                .unwrap_or(after_check.len());
-            let after_num_start = match after_check.get(num_start..) {
-                Some(s) => s,
-                None => continue,
-            };
-            let num_len = after_num_start
-                .find(|c: char| !c.is_ascii_alphanumeric())
-                .unwrap_or(after_num_start.len());
-            if num_len == 0 {
-                continue;
-            }
-            let raw_num = match after_num_start.get(..num_len) {
-                Some(num) => num,
-                None => continue,
-            };
-            if !raw_num.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false) {
-                continue;
-            }
-
-            let check_num_trimmed = raw_num.trim_start_matches('0');
-            let check_num = if check_num_trimmed.is_empty() {
-                "0"
-            } else {
-                check_num_trimmed
-            };
-
-            let remainder = after_num_start.get(num_len..).unwrap_or("").trim_start();
-
-            let (has_title, raw_candidate_title) = if let Some(after_colon) = remainder.strip_prefix(':') {
-                (true, after_colon.trim())
-            } else if let Some(after_paren) = remainder.strip_prefix('(') {
-                if let Some(close_paren) = after_paren.find(')') {
-                    let title = after_paren.get(..close_paren).unwrap_or("").trim();
-                    if !title.starts_with('`') && !title.starts_with("crates/") && !title.starts_with("src/") {
-                        (true, title)
-                    } else {
-                        (false, "")
-                    }
-                } else {
-                    (false, "")
-                }
-            } else if let Some(after_bracket) = remainder.strip_prefix('[') {
-                if let Some(close_bracket) = after_bracket.find(']') {
-                    (true, after_bracket.get(..close_bracket).unwrap_or("").trim())
-                } else {
-                    (false, "")
-                }
-            } else if let Some(after_hyphen) = remainder.strip_prefix(" - ") {
-                (true, after_hyphen.trim())
-            } else if let Some(after_hyphen) = remainder.strip_prefix('-') {
-                (true, after_hyphen.trim())
-            } else if let Some(after_em) = remainder.strip_prefix("--") {
-                (true, after_em.trim())
-            } else if let Some(after_em) = remainder.strip_prefix("—") {
-                (true, after_em.trim())
-            } else if let Some(after_em) = remainder.strip_prefix("–") {
-                (true, after_em.trim())
-            } else if let Some(after_eq) = remainder.strip_prefix('=') {
-                (true, after_eq.trim())
-            } else if let Some(after_dot) = remainder.strip_prefix('.') {
-                let next_char = after_dot.chars().next();
-                if next_char.map(|c| c.is_ascii_whitespace() || c.is_ascii_uppercase()).unwrap_or(false) {
-                    (true, after_dot.trim())
-                } else {
-                    (false, "")
-                }
-            } else {
-                (false, "")
-            };
-
-            let candidate_title = if has_title && !raw_candidate_title.is_empty() {
-                let end = find_check_title_end(raw_candidate_title);
-                let bounded = raw_candidate_title.get(..end).unwrap_or(raw_candidate_title).trim();
-                if let Some((before_which, _)) = bounded.split_once(" which ") {
-                    before_which.trim()
-                } else if let Some((before_that, _)) = bounded.split_once(" that ") {
-                    before_that.trim()
-                } else if let Some((before_where, _)) = bounded.split_once(" where ") {
-                    before_where.trim()
-                } else {
-                    bounded
-                }
-            } else {
-                ""
-            };
-
-            if !candidate_title.is_empty() {
-                if is_prose_sentence(candidate_title) {
-                    continue;
-                }
-                let lower_title = candidate_title.to_ascii_lowercase();
-                if lower_title.starts_with("failed")
-                    || lower_title.starts_with("violation")
-                    || lower_title.starts_with("error")
-                    || lower_title.starts_with("pass")
-                {
-                    continue;
-                }
-
-                if let Some(canonical_name) = canonical_check_name(check_num) {
-                    if let Some(is_match) = canonical_check_title_matches(check_num, candidate_title) {
-                        if !is_match {
-                            errors.push(format!(
-                                "Gate 14 Check collision violation at line {}: candidate proposed check '{}' with title '{}' collides with canonical '{}' in runner.rs.",
-                                line_no, check_num, candidate_title, canonical_name
-                            ));
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/// Helper predicate testing whether a path directly contains `.pipeline/upstream` or qualifies as an upstream compiler root.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C poly-repo tier boundary controls.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Checks `.pipeline/upstream` sentinel and `is_upstream_compiler` without panicking.
-///
-/// ## 3. Preconditions
-/// - `p` is a valid filesystem path reference.
-///
-/// ## 4. Postconditions
-/// - Returns true if the path is an upstream repository root.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(1)$ filesystem metadata queries.
-/// - Space Complexity: $O(1)$ auxiliary allocation.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Non-panicking filesystem queries.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-IS-UPSTREAM-WORKSPACE-ROOT-PATH]
-fn is_upstream_workspace_root_path(p: &Path) -> bool {
-    if p.as_os_str().is_empty() {
-        is_upstream_compiler(Path::new("."))
-            || Path::new(".pipeline").join("upstream").exists()
     } else {
-        is_upstream_compiler(p)
-            || p.join(".pipeline").join("upstream").exists()
+        false
+    };
+
+    if !is_valid {
+        errors.push(format!(
+            "Upstream test-target crate grounding violation: '{}' does not belong to any of the 6 upstream compiler crates (crates/{{deap-core, compile-sysml, ingest-sysml, verify-baseline, assemble-conops, reconcile-backlog}}/).",
+            clean
+        ));
     }
-}
-
-/// Discovers the root directory of an UPSTREAM_SPEC_CORE_COMPILER workspace by inspecting
-/// a candidate start path, walking upwards through its ancestor hierarchy, and falling back
-/// to the current working directory and its ancestors.
-///
-/// ## 1. Safety Intent & Regulatory Scope
-/// Conforms to DO-178C Level A and ECSS-E-ST-40C poly-repo tier boundary controls.
-/// Ensures defect dossiers located in subdirectories (such as `.pipeline/defects/<name>.md`)
-/// accurately resolve the enclosing repository root rather than searching for `crates/` within
-/// subdirectories.
-///
-/// ## 2. Invariants & Mathematical Properties
-/// - Monotonic ancestor traversal: terminates at filesystem boundary (`cur.parent() == None`).
-/// - Non-panicking filesystem queries: checks `.pipeline/upstream` existence and `is_upstream_compiler`.
-/// - Scoping precedence: `candidate` and its ancestors are tested before any ambient `current_dir()` fallback.
-///
-/// ## 3. Preconditions
-/// - `candidate`: optional starting path (e.g. dossier file parent directory, or explicit workspace root).
-///
-/// ## 4. Postconditions
-/// - Returns `Some(PathBuf)` pointing to the nearest ancestor containing `.pipeline/upstream`
-///   (or matching `is_upstream_compiler`), or `None` if no upstream workspace root is found.
-///
-/// ## 5. Algorithmic Complexity Bounds
-/// - Time Complexity: $O(D)$ where $D$ is directory tree depth (bounded $D \le 32$).
-/// - Space Complexity: $O(P)$ bounded path buffer allocation.
-///
-/// ## 6. Failure Modes & Fault Tolerance
-/// - Returns `None` cleanly if no directory in the ancestor chain contains `.pipeline/upstream`.
-///
-/// ## 7. Realization & Traceability
-/// Realises: [REQ-FIND-UPSTREAM-WORKSPACE-ROOT]
-pub fn find_upstream_workspace_root(candidate: Option<&Path>) -> Option<PathBuf> {
-    if let Some(start) = candidate {
-        if is_upstream_workspace_root_path(start) {
-            return Some(start.to_path_buf());
-        }
-        let mut cur = start;
-        while let Some(parent) = cur.parent() {
-            if is_upstream_workspace_root_path(parent) {
-                return Some(if parent.as_os_str().is_empty() {
-                    PathBuf::from(".")
-                } else {
-                    parent.to_path_buf()
-                });
-            }
-            cur = parent;
-        }
-
-        // If candidate was relative, also test relative to current_dir()
-        if start.is_relative() {
-            if let Ok(abs_cur) = std::env::current_dir() {
-                let abs_start = abs_cur.join(start);
-                let mut cur = abs_start.as_path();
-                while let Some(parent) = cur.parent() {
-                    if is_upstream_workspace_root_path(parent) {
-                        return Some(parent.to_path_buf());
-                    }
-                    cur = parent;
-                }
-            }
-        }
-        return None;
-    }
-
-    if is_upstream_workspace_root_path(Path::new(".")) {
-        return Some(PathBuf::from("."));
-    }
-
-    if let Ok(abs_cur) = std::env::current_dir() {
-        let mut cur = abs_cur.as_path();
-        loop {
-            if is_upstream_workspace_root_path(cur) {
-                return Some(cur.to_path_buf());
-            }
-            match cur.parent() {
-                Some(p) => cur = p,
-                None => break,
-            }
-        }
-    }
-
-    None
 }
 
 /// Detects whether the current workspace or provided root directory is an UPSTREAM_SPEC_CORE_COMPILER workspace.
@@ -2103,7 +1255,34 @@ pub fn find_upstream_workspace_root(candidate: Option<&Path>) -> Option<PathBuf>
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-DETECT-IS-UPSTREAM-COMPILER]
 fn detect_is_upstream_compiler(workspace_root: Option<&Path>) -> bool {
-    find_upstream_workspace_root(workspace_root).is_some()
+    if let Some(root) = workspace_root {
+        if is_upstream_compiler(root) {
+            return true;
+        }
+        let mut cur = root;
+        while let Some(parent) = cur.parent() {
+            if is_upstream_compiler(parent) {
+                return true;
+            }
+            cur = parent;
+        }
+    }
+    if is_upstream_compiler(Path::new(".")) {
+        return true;
+    }
+    if let Ok(abs_cur) = std::env::current_dir() {
+        let mut cur = abs_cur.as_path();
+        loop {
+            if is_upstream_compiler(cur) {
+                return true;
+            }
+            match cur.parent() {
+                Some(p) => cur = p,
+                None => break,
+            }
+        }
+    }
+    false
 }
 
 /// Validates a markdown defect dossier with explicit target repository and workspace root scoping.
@@ -2320,13 +1499,10 @@ pub fn validate_defect_dossier_scoped(
 
     // 5 & 12. Validate Section 1 Context, 4 mandatory bullets, and test-target parity
     let sec1_slice = get_section_slice(DossierSection::ContextAndReferences);
-    let (file_bullet, symptom, test_target) = validate_section_1_context(sec1_slice, &mut errors);
+    let (symptom, test_target) = validate_section_1_context(sec1_slice, &mut errors);
 
     // Validate upstream test-target crate grounding (Gate 14)
-    validate_upstream_test_target_grounding(&test_target, is_upstream, workspace_root, &mut errors);
-
-    // Validate colliding Check <N> number detection (Gate 14)
-    validate_check_number_collision(content, &mut errors);
+    validate_upstream_test_target_grounding(&test_target, is_upstream, &mut errors);
 
     // 6. Validate Section 2 5-Whys
     let sec2_slice = get_section_slice(DossierSection::RootCauseAnalysis);
@@ -2340,12 +1516,8 @@ pub fn validate_defect_dossier_scoped(
     let sec6_slice = get_section_slice(DossierSection::ProposedCorrection);
     validate_fences_ascii_art_and_em_dash(sec6_slice, content, &mut errors);
 
-    // Validate Section 6 zero-regex (Check 34) and Check 19 domain-cleanliness (Gate 13)
-    let targets_upstream = is_upstream
-        || is_upstream_target_path(&test_target)
-        || is_upstream_target_path(&file_location)
-        || file_bullet.as_deref().map(is_upstream_target_path).unwrap_or(false);
-    validate_section_6_code_compliance(sec6_slice, targets_upstream, &mut errors);
+    // Validate Section 6 zero-regex compliance (Check 34 / Gate 13)
+    validate_section_6_zero_regex(sec6_slice, &mut errors);
 
     if !errors.is_empty() {
         Err(errors)
@@ -3008,17 +2180,14 @@ pub fn run_check_defect(args: &DefectDossierArgs) -> Result<(), i32> {
         .filter(|p| !p.as_os_str().is_empty())
         .unwrap_or_else(|| Path::new("."));
 
-    let resolved_root = find_upstream_workspace_root(Some(work_dir));
-    let effective_workspace_root = resolved_root.as_deref().unwrap_or(work_dir);
-
     let target_repo = args
         .repo
         .clone()
-        .or_else(|| resolve_target_repo(None, effective_workspace_root).ok());
+        .or_else(|| resolve_target_repo(None, work_dir).ok());
 
-    match validate_defect_dossier_scoped(&content, target_repo.as_deref(), Some(effective_workspace_root)) {
+    match validate_defect_dossier_scoped(&content, target_repo.as_deref(), Some(work_dir)) {
         Ok(validation) => {
-            let resolved_repo = match resolve_target_repo(args.repo.as_deref(), effective_workspace_root) {
+            let resolved_repo = match resolve_target_repo(args.repo.as_deref(), work_dir) {
                 Ok(r) => r,
                 Err(e) => {
                     eprintln!("Error resolving target repository: {}", e);

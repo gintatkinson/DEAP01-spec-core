@@ -80,7 +80,6 @@ pub struct BaselineOptions {
     pub spec_only: bool,
     pub only: Option<String>,
     pub gate: Option<String>,
-    pub dry_run: bool,
 }
 
 /// Detects whether `repo_root` contains concrete specification markdown files under `docs/`.
@@ -244,13 +243,6 @@ pub fn has_clean_landing_zones(repo_root: &Path) -> bool {
 /// ## 7. Realization & Traceability
 /// Realises: [REQ-RUNNER-WRITE-DEFECT-DOSSIER]
 pub fn write_defect_dossier(repo_root: &Path, check_name: &str, errors: &[String]) {
-    if std::env::var("DEAP_VERIFY_DRY_RUN")
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or(false)
-    {
-        return;
-    }
-
     let defects_dir = repo_root.join(".pipeline").join("defects");
     if let Err(err) = fs::create_dir_all(&defects_dir) {
         eprintln!(
@@ -351,12 +343,6 @@ pub fn write_defect_dossier(repo_root: &Path, check_name: &str, errors: &[String
 /// Realises: [REQ-RUNNER-EXECUTE-ALL-CHECKS]
 #[allow(clippy::result_unit_err)]
 pub fn run(options: &BaselineOptions) -> Result<(), ()> {
-    if options.dry_run {
-        std::env::set_var("DEAP_VERIFY_DRY_RUN", "1");
-    } else {
-        std::env::remove_var("DEAP_VERIFY_DRY_RUN");
-    }
-
     let repo_root = options
         .destination
         .canonicalize()
